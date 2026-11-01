@@ -2674,6 +2674,10 @@ def _main(argv=None, *, requested_refresh):
             carried_progress = collect_sft_progress(saved_training)
             checkpoint_options['source_correction_binding'] = saved_options.get('source_correction_binding')
             checkpoint_options['source_correction_history'] = list(saved_options.get('source_correction_history') or [])
+            if saved_options.get('_objective_required_visits'):
+                minima=checkpoint_options.setdefault('_objective_required_visits',{})
+                for ident,minimum in saved_options['_objective_required_visits'].items():
+                    minima[ident]=max(int(minima.get(ident,0)),int(minimum))
             checkpoint_options['held_correction_binding'] = saved_options.get('held_correction_binding')
             checkpoint_options['held_correction_history'] = list(saved_options.get('held_correction_history') or [])
             checkpoint_options['foundation_qualification_history'] = list(

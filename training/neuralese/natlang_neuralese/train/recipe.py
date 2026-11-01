@@ -1054,6 +1054,45 @@ def _source_correction_continuation(old, new):
             or proof.get('row_bindings_sha256') != dependencies[1]['sha256']):
         return False
     excluded = {'native_graphs', 'continued_native_graphs', role}
+    if proof.get('static_native_context_correction') and old.get('ce_supervision_policy') != new.get('ce_supervision_policy'):
+        from .native_supervision import load_policy
+        from .own_output_supervision import continuation_identity, identity, policy_objective
+        old_ce=old.get('ce_supervision_policy');new_ce=new.get('ce_supervision_policy')
+        if not isinstance(old_ce,dict) or not isinstance(new_ce,dict):return False
+        before_policy=load_policy(old_ce);after_policy=load_policy(new_ce)
+        before_objective=policy_objective(before_policy);after_objective=policy_objective(after_policy)
+        if ({key:value for key,value in before_objective.items() if key!='family_balance'} !=
+            {key:value for key,value in after_objective.items() if key!='family_balance'}):
+            raise ValueError('static context source correction changed own-output arithmetic')
+        before_balance=before_objective.get('family_balance') or {};after_balance=after_objective.get('family_balance') or {}
+        if ({key:value for key,value in before_balance.items() if key!='map'} !=
+            {key:value for key,value in after_balance.items() if key!='map'} or before_balance.get('key')!='logical-family'):
+            raise ValueError('static context source correction changed family weighting')
+        from .native_logical_families import checked as checked_family_map
+        from .native_source_correction import _proof_file
+        from ..common.jsonio import open_jsonl_text
+        before_map=json.loads(checked_family_map(before_balance['map']).read_text())
+        after_map=json.loads(checked_family_map(after_balance['map']).read_text())
+        if (before_map.get('source_sha256')!=old['native_graphs']['sha256']
+            or after_map.get('source_sha256')!=new['native_graphs']['sha256']):
+            raise ValueError('static context family maps do not bind the exact sources')
+        before_rows={item['id']:item for item in before_map.get('rows',[])}
+        after_rows={item['id']:item for item in after_map.get('rows',[])}
+        if (len(before_rows)!=len(before_map.get('rows',[])) or len(after_rows)!=len(after_map.get('rows',[]))
+            or set(before_rows)!=set(after_rows)):raise ValueError('static context family map row inventory changed')
+        with open_jsonl_text(_proof_file(path,proof['row_bindings_path'])) as stream:
+            corrections={item['id']:item for line in stream if line.strip() for item in [json.loads(line)]}
+        for ident,prior in before_rows.items():
+            current=after_rows[ident];entry=corrections.get(ident)
+            if prior['family']!=current['family'] or (prior['binding']!=current['binding'] and
+                (not entry or entry.get('disposition')!='corrected' or entry.get('old_binding')!=prior['binding']
+                 or entry.get('new_binding')!=current['binding'])):
+                raise ValueError('static context family membership or row binding changed outside its correction')
+        continuation_identity({'supervision_objective':identity(before_objective)},after_policy)
+        declared_inventory=after_policy.get('inventory') or []
+        if not any(item.get('sha256')==new['native_graphs']['sha256'] for item in declared_inventory):
+            raise ValueError('static context CE policy does not bind the corrected source')
+        excluded.add('ce_supervision_policy')
     # A foundation role sharing the train input must follow that exact source;
     # an independently bound foundation stays unchanged below.
     if old.get('foundation_native_graphs') == old.get('native_graphs'):

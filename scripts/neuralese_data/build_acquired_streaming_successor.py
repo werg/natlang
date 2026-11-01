@@ -180,9 +180,17 @@ def receipt_protection_digest(receipt):
 
 def predecessor_collision_count(screen, predecessor, old_rows):
     """Authenticate explicitly retained predecessor versions, never rename collisions."""
+    if screen.get('predecessor_rebase'):
+        from scripts.neuralese_data.rebase_acquired_pending_partition import verify_rebase
+        original, previous, previous_rows=verify_rebase(screen,predecessor)
+        return predecessor_collision_count(original,previous['path'],previous_rows)
     if screen.get('pending_partition'):
         from scripts.neuralese_data.partition_acquired_context_pending import verify_partition
         original, _ = verify_partition(screen, predecessor)
+        return predecessor_collision_count(original, predecessor, old_rows)
+    if screen.get('static_context_correction'):
+        from scripts.neuralese_data.transform_acquired_ordinary_context import verify_context_correction
+        original, _ = verify_context_correction(screen, predecessor)
         return predecessor_collision_count(original, predecessor, old_rows)
     reference = screen.get('predecessor_collision_filter')
     if reference is None:
@@ -225,9 +233,19 @@ def prepare_source_stage(predecessor_receipt, screen_receipt, output, *, paralle
     predecessor_path, screen_path = (Path(p).resolve(strict=True) for p in (predecessor_receipt, screen_receipt))
     predecessor_identity, screen_identity = bind(predecessor_path), bind(screen_path)
     previous, screen = read(predecessor_path), read(screen_path)
+    partition_screen, partition_predecessor=screen,predecessor_path
+    if screen.get('predecessor_rebase'):
+        from scripts.neuralese_data.rebase_acquired_pending_partition import verify_rebase
+        partition_screen, previous_ref, _=verify_rebase(screen,predecessor_path)
+        partition_predecessor=previous_ref['path']
+    if screen.get('pending_partition') and screen.get('static_context_correction'):
+        raise ValueError('source preparation cannot combine unrelated custody transitions')
     if screen.get('pending_partition'):
         from scripts.neuralese_data.partition_acquired_context_pending import verify_partition
-        verify_partition(screen, predecessor_path)
+        verify_partition(partition_screen, partition_predecessor)
+    if screen.get('static_context_correction'):
+        from scripts.neuralese_data.transform_acquired_ordinary_context import verify_context_correction
+        verify_context_correction(screen, predecessor_path)
     output = Path(output).resolve()
     if output.exists():
         raise ValueError('source preparation output must be a fresh immutable directory')
@@ -469,7 +487,7 @@ def verify_conversion_custody(coverage, screen, screen_program):
         'conversion_receipts': len(coverage['receipts']),
         'historical_converter_review': historical_review, 'historically_reviewed_receipts': reviewed_receipts,
         'screen_input_receipts_sha256': screen['input_receipts']['sha256'],
-        'scope': 'bound converter emits one text node and no decision readouts; screen reports an input-only filter'}
+        'scope': 'reviewed original converter emitted one text node; separately authenticated derived transitions may alter that representation'}
 
 
 def predecessor_mass_census(previous, predecessor_path, objective, *, seen=()):
@@ -541,12 +559,29 @@ def build(predecessor_receipt, screen_receipt, census_receipt, output, *, share=
         (predecessor_receipt, screen_receipt, census_receipt))
     previous, screen, census = map(read, (predecessor_path, screen_path, census_path))
     pending_count = 0
+    static_rows = {}
+    partition_screen, partition_predecessor=screen,predecessor_path
+    if screen.get('predecessor_rebase'):
+        from scripts.neuralese_data.rebase_acquired_pending_partition import verify_rebase
+        partition_screen, previous_ref, _=verify_rebase(screen,predecessor_path)
+        partition_predecessor=previous_ref['path']
+        if census.get('predecessor_rebase')!=screen['predecessor_rebase']:
+            raise ValueError('rebased pending census does not bind its exact transition')
+    elif census.get('predecessor_rebase'):
+        raise ValueError('rebased census lacks its screen')
+    if screen.get('pending_partition') and screen.get('static_context_correction'):
+        raise ValueError('successor cannot combine unrelated custody transitions')
     if screen.get('pending_partition'):
         from scripts.neuralese_data.partition_acquired_context_pending import verify_partition, verify_partition_census
-        _, pending_count = verify_partition(screen, predecessor_path)
+        _, pending_count = verify_partition(partition_screen, partition_predecessor)
         verify_partition_census(screen, census)
     elif census.get('pending_partition'):
         raise ValueError('pending census lacks its partitioned screen')
+    if screen.get('static_context_correction'):
+        from scripts.neuralese_data.transform_acquired_ordinary_context import verify_context_correction
+        _, static_rows = verify_context_correction(screen, predecessor_path, census)
+    elif census.get('static_context_correction'):
+        raise ValueError('static correction census lacks its screen')
     output = Path(output).resolve()
     if output.exists():
         raise ValueError('successor output must be a fresh immutable directory')
@@ -684,10 +719,12 @@ def build(predecessor_receipt, screen_receipt, census_receipt, output, *, share=
         raise ValueError('predecessor source prefix changed')
     additions = []
     for signal, entry in zip(rows, new_source.entries[previous['rows']:], strict=True):
+        static_native = signal['id'] in static_rows and read(checked(screen['static_context_correction'], 'static context correction')).get('representation')=='static-native'
         if (signal['id'] != entry['id'] or signal['forward_tokens'] != entry['forward_tokens']
                 or signal['raw_positive_tokens'] != entry['supervised_tokens']
-                or signal['source_groups'] != list(entry['groups']) or entry.get('communication')
-                or entry.get('producer_consumer') or entry.get('external_state_consumption')):
+                or signal['source_groups'] != list(entry['groups'])
+                or bool(entry.get('communication')) != static_native
+                or bool(entry.get('producer_consumer')) != static_native or entry.get('external_state_consumption')):
             raise ValueError('indexed acquired graph differs from its completed census or native classification')
         additions.append({'id': entry['id'], 'binding': entry['binding'], 'family': family})
     new_map_path = output / 'families.json'

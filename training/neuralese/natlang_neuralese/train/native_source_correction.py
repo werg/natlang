@@ -236,6 +236,11 @@ def source_correction_dependencies(reference):
     target_mask = proof.get('target_mask_correction')
     if target_mask is not None:
         dependencies.extend(_validate_target_mask_correction(path, proof, target_mask))
+    static_context = proof.get('static_native_context_correction')
+    if static_context is not None:
+        from .native_static_context_correction import verify_static_context_correction
+        _, static_dependencies = verify_static_context_correction(path, static_context)
+        dependencies.extend(static_dependencies)
     source_map_ref = proof.get('source_map')
     if source_map_ref is not None:
         source_map_path = _proof_file(path, source_map_ref.get('path', ''))
@@ -810,6 +815,12 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
                     raise ValueError('source correction row ledger repeats or omits an id')
                 rows[row_id] = row
     corrected, eligibility_decreased, deferred, added = set(), set(), set(), set()
+    static_context = proof.get('static_native_context_correction')
+    static_rows = {}
+    if static_context is not None:
+        from .native_static_context_correction import verify_static_context_correction
+        static_rows, _ = verify_static_context_correction(path, static_context)
+    static_used = set()
     changes = []
     counts = dict(training.get('exposure_counts') or {})
     quotas = dict(training.get('required_visits') or {})
@@ -819,6 +830,13 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
         if row_id not in quotas and row_id in (source_frame.get('required_visits') or {}):
             quotas[row_id] = source_frame['required_visits'][row_id]
     options = training.get('options') or {}
+    if static_rows:
+        from .own_output_supervision import identity, policy_objective
+        policy_ref=static_context['ce_policy']
+        policy_path=_proof_file(path,policy_ref['path'])
+        static_identity=identity(policy_objective(json.loads(policy_path.read_text())))
+        if (options.get('supervision_objective') or {}).get('sha256')!=static_identity['sha256']:
+            raise ValueError('static context correction objective differs from the earned supervision policy')
     prior_communication = set(options.get('_communication_ids') or [])
     current_communication = set(current_communication_ids)
     epochs = float(options.get('epochs', 1))
@@ -863,11 +881,15 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
                         or type(row.get('old_communication')) is not bool
                         or row['old_communication'] is not old_communication):
                     raise ValueError('pending replacement lacks its exact pinned old row class: ' + row_id)
+            static = static_rows.get(row_id)
+            ordinary_static = (static is not None and not old_communication and static.get('old_binding')==old
+                               and static.get('new_binding')==new and counts.get(row_id,0)==0)
             if (row_id not in current_bindings or current_bindings[row_id] != new
-                    or new_origins.get(row_id) != new_sha or not old_communication
+                    or new_origins.get(row_id) != new_sha or not (old_communication or ordinary_static)
                     or row_id not in current_communication
                     or old == new):
                 raise ValueError('source correction replacement is not an exact changed communication row: ' + row_id)
+            if ordinary_static:static_used.add(row_id)
             corrected.add(row_id)
             if row_id in pending:
                 pending.pop(row_id)
@@ -937,6 +959,8 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
         else:
             raise ValueError('source correction row disposition is unsupported')
 
+    if static_used!=set(static_rows):
+        raise ValueError('static context correction evidence does not exactly cover ordinary replacements')
     changed_active = {key for key, value in old_bindings.items()
                       if current_bindings.get(key) not in (None, value)}
     removed_active = set(old_bindings) - set(current_bindings)
@@ -979,11 +1003,21 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
         new_counts[row_id] = 0
         new_quotas[row_id] = _fresh_quota(epochs, current_positions[row_id], len(current_order),
                                           communication=row_id in current_communication)
+        if row_id in static_used:
+            policy=options.get('communication_quota_policy') or {}
+            minimum=policy.get('visits',1)
+            if type(minimum) is not int or minimum<1:
+                raise ValueError('static context correction has an invalid communication minimum')
+            new_quotas[row_id]=max(new_quotas[row_id],minimum)
     for row_id in deferred:
         new_counts.setdefault(row_id, int(counts.get(row_id, 0)))
     result['exposure_counts'] = new_counts
     result['required_visits'] = new_quotas
     result['options'] = dict(options)
+    if static_used:
+        objective_quotas=dict(result['options'].get('_objective_required_visits') or {})
+        for row_id in static_used:objective_quotas[row_id]=new_quotas[row_id]
+        result['options']['_objective_required_visits']=objective_quotas
     for option_key in ('_communication_ids', '_producer_consumer_ids'):
         if option_key in result['options']:
             result['options'][option_key] = [key for key in current_order if key in current_communication]
@@ -1003,6 +1037,9 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
         'optimizer_rng_weights': 'preserved',
         'at_global_step': int(training.get('global_step', training.get('step', 0))),
         'new_corrected_row_exposure_added': 0,
+        **({'static_native_context_rows': sorted(static_used),
+            'static_native_context_required_visits': {row_id:new_quotas[row_id] for row_id in sorted(static_used)}}
+           if static_used else {}),
     }
     new_history.append(record)
     result['options']['source_correction_history'] = new_history
@@ -1039,6 +1076,7 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
             frame_counts[row_id] = 0
             frame_quotas[row_id] = _fresh_quota(epochs, current_positions[row_id], len(current_order),
                                                 communication=row_id in current_communication)
+            if row_id in static_used:frame_quotas[row_id]=new_quotas[row_id]
         frame['exposure_counts'] = frame_counts
         frame['required_visits'] = frame_quotas
         frame['pending_source_rows'] = dict(pending)
@@ -1048,6 +1086,10 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
         frame_options['source_correction_history'] = list(new_history)
         frame_options['source_correction_binding'] = ref
         frame_options['foundation_qualification_history'] = list(qualification_history)
+        if static_used:
+            frame_objective_quotas=dict(frame_options.get('_objective_required_visits') or {})
+            for row_id in static_used:frame_objective_quotas[row_id]=new_quotas[row_id]
+            frame_options['_objective_required_visits']=frame_objective_quotas
         for option_key in ('_communication_ids', '_producer_consumer_ids'):
             if option_key in frame_options:
                 frame_options[option_key] = [key for key in current_order if key in current_communication]

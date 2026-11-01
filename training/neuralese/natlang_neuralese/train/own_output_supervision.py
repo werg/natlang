@@ -516,6 +516,12 @@ def graph_weights(row, objective, *, factor_report=None):
     if row.get('tokenizer_fingerprint') != role_tokens['tokenizer_fingerprint']:
         raise ValueError('own-output role tokens belong to a different tokenizer than this graph')
     conversion = row.get('conversion') or {}
+    if conversion.get('static_native_context') is not None:
+        from ..data.static_native_context import static_supervision
+        return static_supervision(row, objective)
+    if conversion.get('ordinary_context_windows') is not None:
+        from ..data.ordinary_context_windows import window_supervision
+        return window_supervision(row, objective)
     nodes = row['nodes']
     raw_nodes = [node['target_weights'] for node in nodes]
     suffixes = _node_suffixes(row, raw_nodes)

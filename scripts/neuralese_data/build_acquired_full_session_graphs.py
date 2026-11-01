@@ -123,6 +123,10 @@ def runtime_bindings(root=None):
         'builder': Path(__file__).resolve(),
         'text_corpus': package / 'data' / 'text_corpus.py',
         'native_graph_conversion': package / 'data' / 'native_graph_conversion.py',
+        'ordinary_context_windows': package / 'data' / 'ordinary_context_windows.py',
+        'static_native_context': package / 'data' / 'static_native_context.py',
+        'ordinary_window_objective': package / 'train' / 'own_output_supervision.py',
+        'ordinary_window_schema': package / 'data' / 'native_graph_schema.py',
         'prompt_rendering': package / 'data' / 'prompt_rendering.py',
         'serve_chat': package / 'serve' / 'chat.py',
         'jsonio': package / 'common' / 'jsonio.py',
@@ -152,7 +156,7 @@ _LOADED_RUNTIME_BINDING = runtime_bindings()
 def checked_loaded_runtime():
     current = runtime_bindings()
     if current != _LOADED_RUNTIME_BINDING:
-        raise ValueError("converter runtime files changed after the process loaded; restart conversion")
+        raise ValueError('converter runtime files changed after the process loaded; restart conversion')
     return current
 
 
@@ -479,8 +483,29 @@ def _sync_concat(destination, inputs):
         raise
 
 
+def _bound_acquired_graph(graph, tokenizer, fingerprint, max_context_tokens, context_overlap):
+    """Use full-row supervision before deriving bounded native context or windows."""
+    if all(len(node.get('token_ids') or ()) <= max_context_tokens for node in graph.get('nodes',())):
+        return graph
+    from natlang_neuralese.train.own_output_supervision import default_objective
+    from natlang_neuralese.data.ordinary_context_windows import window_ordinary_row
+    from natlang_neuralese.data.static_native_context import graphify
+    objective, reason = default_objective(tokenizer, tokenizer_fingerprint=fingerprint)
+    if objective is None:
+        raise ValueError('long ordinary conversion needs its exact own-output objective: '+str(reason))
+    try:
+        bounded,_ = graphify(graph,objective,max_tokens=max_context_tokens,consumer_context=max(2,context_overlap),
+                             state_tokens=min(16,max_context_tokens-1))
+    except ValueError as error:
+        if not str(error).startswith(('invalid static native context geometry', 'effective target distribution cannot use',
+                                      'target-bearing consumer and imported states exceed')):
+            raise
+        bounded,_ = window_ordinary_row(graph,objective,max_tokens=max_context_tokens,overlap=context_overlap)
+    return bounded
+
+
 def session_graphs(value, tokenizer, *, source_fingerprint, expanded_fingerprint, split,
-                   explicit_history_reasoning_policy=None):
+                   explicit_history_reasoning_policy=None, max_context_tokens=262144, context_overlap=1024):
     """Keep the full session and add packets only for reasoning hidden by serving."""
     if (value.get('schema') != 'natlang.normalized-agent-trajectory/1'
             or value.get('whole_trajectory') is not True or value.get('windowed') is not False):
@@ -569,7 +594,7 @@ def session_graphs(value, tokenizer, *, source_fingerprint, expanded_fingerprint
         'auxiliary_reasoning_assistant_ordinals': auxiliary_reasoning_ordinals,
         'truncated': False}
     graph['conversion']['acquired_session'] = {**provenance, 'view': 'whole-trajectory'}
-    yield graph
+    yield _bound_acquired_graph(graph,tokenizer,expanded_fingerprint,max_context_tokens,context_overlap)
     for ordinal, index in enumerate(assistants):
         if ordinal not in auxiliary_reasoning_ordinals:
             continue
@@ -581,7 +606,7 @@ def session_graphs(value, tokenizer, *, source_fingerprint, expanded_fingerprint
             'view': 'full-prefix-reasoning-target', 'assistant_turn': ordinal,
             'whole_view_reasoning_coverage': reasoning_coverage[str(ordinal)],
             'history_reasoning_policy': history_policy}
-        yield graph
+        yield _bound_acquired_graph(graph,tokenizer,expanded_fingerprint,max_context_tokens,context_overlap)
 
 
 def _tokenizer_rendering_configuration(tokenizer):
@@ -662,11 +687,17 @@ def main(argv=None, *, prepared=None):
     parser.add_argument('--decision-hold', type=Path, action='append', required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--chunk-sessions', type=int, default=100)
+    parser.add_argument('--max-context-tokens', type=int, default=262144,
+        help='architecture-bound per-node ordinary text window limit; smaller values are allowed')
+    parser.add_argument('--context-overlap', type=int, default=1024,
+        help='original predecessor tokens repeated as zero-weight context between text windows')
     parser.add_argument('--history-reasoning-policy', choices=('keep',), default=None,
         help='explicitly render prior assistant reasoning in the complete trajectory')
     args = parser.parse_args(argv)
     if args.chunk_sessions <= 0:
         raise ValueError('--chunk-sessions must be a positive integer')
+    if not 2 <= args.max_context_tokens <= 262144 or not 1 <= args.context_overlap < args.max_context_tokens:
+        raise ValueError('ordinary context window limit/overlap are invalid')
     # A callable invocation releases ownership on every success/error path.
     with acquire_output_lease(args.output):
         return _convert(args, prepared)
@@ -735,6 +766,8 @@ def _convert(args, prepared):
         'prepared_tokenizer': prepared.binding,
         'runtime': {'files': runtime['files'], 'fingerprint': runtime['fingerprint']},
         'chunk_sessions': args.chunk_sessions,
+        'ordinary_context_window_policy': {'schema':'natlang.static-native-context-or-windows/1',
+            'max_tokens':args.max_context_tokens,'overlap':args.context_overlap,'state_tokens':16},
         'held_group_closure_sha256': canonical_json_sha256_hex(sorted(held))}
     if repair_binding is not None:
         binding['source_syntax_repair'] = repair_binding
@@ -827,7 +860,8 @@ def _convert(args, prepared):
         split = 'test' if groups & held else 'train'
         for graph in session_graphs(value, tokenizer, source_fingerprint=source_fp,
                                     expanded_fingerprint=expanded_fp, split=split,
-                                    explicit_history_reasoning_policy=prepared_profile):
+                                    explicit_history_reasoning_policy=prepared_profile,
+                                    max_context_tokens=args.max_context_tokens,context_overlap=args.context_overlap):
             writers[split].write(graph)
             shard_counts['graphs:'+split] += 1
             if graph.get('conversion', {}).get('acquired_session', {}).get('view') == 'full-prefix-reasoning-target':

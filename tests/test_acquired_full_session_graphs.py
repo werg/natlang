@@ -179,8 +179,8 @@ def test_loaded_runtime_rejects_changed_files(monkeypatch):
     from scripts.neuralese_data import build_acquired_full_session_graphs as builder
     original = builder._LOADED_RUNTIME_BINDING
     assert builder.checked_loaded_runtime() == original
-    monkeypatch.setattr(builder, "runtime_bindings", lambda: {**original, "fingerprint": "changed"})
-    with pytest.raises(ValueError, match="changed after the process loaded"):
+    monkeypatch.setattr(builder, 'runtime_bindings', lambda: {**original, 'fingerprint': 'changed'})
+    with pytest.raises(ValueError, match='changed after the process loaded'):
         builder.checked_loaded_runtime()
 
 
@@ -189,6 +189,10 @@ def test_runtime_resume_fingerprint_is_independent_of_checkout_path(tmp_path):
     first=tmp_path/'checkout-a';second=tmp_path/'checkout-b'
     names=['training/neuralese/natlang_neuralese/data/text_corpus.py',
         'training/neuralese/natlang_neuralese/data/native_graph_conversion.py',
+        'training/neuralese/natlang_neuralese/data/ordinary_context_windows.py',
+        'training/neuralese/natlang_neuralese/data/static_native_context.py',
+        'training/neuralese/natlang_neuralese/data/native_graph_schema.py',
+        'training/neuralese/natlang_neuralese/train/own_output_supervision.py',
         'training/neuralese/natlang_neuralese/data/prompt_rendering.py',
         'training/neuralese/natlang_neuralese/serve/chat.py',
         'training/neuralese/natlang_neuralese/common/jsonio.py',

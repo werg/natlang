@@ -36,6 +36,26 @@ def _rolling_endpoint_snapshots(declaration, parent, child, *, verify_current_en
     if (not isinstance(before.get('model_config_sha256'),str) or len(before['model_config_sha256'])!=64
             or before['model_config_sha256']!=after.get('model_config_sha256')):
         raise ValueError('rolling SFT endpoint snapshots changed model configuration without proof')
+    corrected={}; correction_ref=declaration.get('source_correction')
+    if correction_ref is not None:
+        from ..train.native_source_correction import source_correction_dependencies, _proof_file
+        from ..train.native_static_context_correction import verify_static_context_correction
+        from ..common.jsonio import open_jsonl_text
+        correction_path=_verify_historical_file_ref(correction_ref)
+        correction=json.loads(correction_path.read_text())
+        source_correction_dependencies(correction_ref)
+        graph_pairs,_=verify_static_context_correction(correction_path,correction.get('static_native_context_correction'))
+        with open_jsonl_text(_proof_file(correction_path,correction['row_bindings_path'])) as stream:
+            ledger=[json.loads(line) for line in stream if line.strip()]
+        corrected={row['id']:row for row in ledger if row.get('id') in graph_pairs}
+        if (len(corrected)!=len(graph_pairs) or set(corrected)!=set(graph_pairs)
+            or any(row.get('disposition')!='corrected' or row.get('old_communication') is not False
+                   or row.get('old_binding')!=graph_pairs[ident]['old_binding']
+                   or row.get('new_binding')!=graph_pairs[ident]['new_binding'] for ident,row in corrected.items())):
+            raise ValueError('rolling endpoint static correction ledger differs from verified graph pairs')
+        correction_stage=correction.get('stage_id')
+        if correction_stage not in before['sft_frames'] or correction_stage not in after['sft_frames']:
+            raise ValueError('rolling endpoint static correction names another SFT stage')
     stages={}
     for stage,old in before['sft_frames'].items():
         new=after['sft_frames'].get(stage)
@@ -45,14 +65,20 @@ def _rolling_endpoint_snapshots(declaration, parent, child, *, verify_current_en
         old_quota=old.get('required_visits');new_quota=new.get('required_visits')
         old_count=old.get('exposure_counts');new_count=new.get('exposure_counts')
         old_pending=old.get('pending_source_rows') or {};new_pending=new.get('pending_source_rows') or {}
+        stage_corrected=corrected if correction_ref is not None and stage==correction_stage else {}
+        retained_order=[key for key in old_order if key not in stage_corrected] if isinstance(old_order,list) else []
         if (not all(isinstance(x,dict) for x in (old_bind,new_bind,old_quota,new_quota,old_count,new_count,old_pending,new_pending))
                 or not isinstance(old_order,list) or not isinstance(new_order,list)
-                or new_order[:len(old_order)]!=old_order or len(old_order)!=len(old_bind)
+                or new_order[:len(retained_order)]!=retained_order or len(old_order)!=len(old_bind)
                 or set(old_order)!=set(old_bind) or len(new_order)!=len(new_bind) or set(new_order)!=set(new_bind)
                 or old.get('held_row_bindings')!=new.get('held_row_bindings')):
             raise ValueError('rolling SFT endpoint changed old order or held bindings')
         for key,expected in old_bind.items():
-            if new_bind.get(key)!=expected:
+            if key in stage_corrected:
+                row=stage_corrected[key]
+                if expected!=row['old_binding'] or new_bind.get(key)!=row['new_binding'] or old_count.get(key,0)!=0:
+                    raise ValueError('rolling SFT endpoint static correction changed its exact zero-exposure parent')
+            elif new_bind.get(key)!=expected:
                 raise ValueError('rolling SFT endpoint changed an earned source row binding')
         for key,row in old_pending.items():
             expected=row.get('binding') if isinstance(row,dict) else None
@@ -61,9 +87,21 @@ def _rolling_endpoint_snapshots(declaration, parent, child, *, verify_current_en
                 raise ValueError('rolling SFT endpoint changed a pending source row binding')
         for key,required in old_quota.items():
             old_value=old_count.get(key,0);new_value=new_count.get(key,0)
-            if (type(required) is not int or required<0 or new_quota.get(key)!=required
+            new_required=new_quota.get(key)
+            quota_matches=(type(required) is int and type(new_required) is int and new_required>=required) if key in stage_corrected else new_required==required
+            if (type(required) is not int or required<0 or not quota_matches
                     or type(old_value) is not int or old_value<0 or type(new_value) is not int or new_value<old_value):
                 raise ValueError('rolling SFT endpoint changed an old quota or decreased exposure')
+        if stage_corrected:
+            old_source=(old.get('source_receipts') or [None])[0] or {};new_source=(new.get('source_receipts') or [None])[0] or {}
+            history=new.get('source_correction_history') or [];binding_ref=new.get('source_correction_binding') or {}
+            record=next((item for item in reversed(history) if item.get('proof_sha256')==correction_ref.get('sha256')),None)
+            if (old_source.get('sha256')!=(correction.get('prior_source') or {}).get('sha256')
+                or new_source.get('sha256')!=(correction.get('current_source') or {}).get('sha256')
+                or binding_ref.get('sha256')!=correction_ref.get('sha256') or not isinstance(record,dict)
+                or set(record.get('static_native_context_rows') or [])!=set(stage_corrected)
+                or record.get('static_native_context_required_visits')!={key:new_quota[key] for key in sorted(stage_corrected)}):
+                raise ValueError('rolling SFT endpoint lacks exact static correction source, history or quota custody')
         old_held=(old.get('source_receipts') or [None,None])[-1]
         new_held=(new.get('source_receipts') or [None,None])[-1]
         if not isinstance(old_held,dict) or not isinstance(new_held,dict) or old_held.get('sha256')!=new_held.get('sha256'):
@@ -74,6 +112,7 @@ def _rolling_endpoint_snapshots(declaration, parent, child, *, verify_current_en
     if not stages:raise ValueError('rolling SFT endpoint contains no carried SFT obligations')
     return {'schema':'natlang.rolling-sft-endpoint-custody-proof/1',
         'parent':declaration['parent'],'successor':declaration['successor'],'stages':stages,
+        **({'source_correction':correction_ref,'corrected_rows':sorted(corrected)} if correction_ref is not None else {}),
         'scope':'recomputed exact retained-parent to actual-successor metadata; no intermediate row state inferred'}
 
 
@@ -263,8 +302,15 @@ def _interrupted_segment_custody(endpoint, intermediate_proof, parent, child):
     for label, before, after, before_ref, after_ref in (
             ('parent_to_intermediate', parent, middle, endpoint['parent'], middle_ref),
             ('intermediate_to_successor', middle, child, middle_ref, endpoint['successor'])):
-        proof = _rolling_endpoint_snapshots({'schema':'natlang.rolling-sft-endpoint-snapshots/1',
-            'parent':before_ref, 'successor':after_ref}, before, after, verify_current_endpoints=False)
+        segment={'schema':'natlang.rolling-sft-endpoint-snapshots/1','parent':before_ref, 'successor':after_ref}
+        if endpoint.get('source_correction'):
+            earlier=json.loads(_verify_historical_file_ref(before_ref).read_text())['sft_frames']
+            later=json.loads(_verify_historical_file_ref(after_ref).read_text())['sft_frames']
+            if any(any(((later.get(stage) or {}).get('source_row_bindings') or {}).get(key)!=value
+                       for key,value in (frame.get('source_row_bindings') or {}).items())
+                   for stage,frame in earlier.items()):
+                segment['source_correction']=endpoint['source_correction']
+        proof = _rolling_endpoint_snapshots(segment, before, after, verify_current_endpoints=False)
         endpoint.setdefault('interrupted_segments', {})[label] = proof['stages']
     return endpoint
 
