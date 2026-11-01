@@ -306,7 +306,8 @@ def test_normal_trace_metadata_cost_has_no_added_tensor_artifacts(tmp_path,monke
 
 
 @pytest.mark.parametrize('family',['lfm'])
-def test_actual_view_chunk_failure_keeps_template_inputs_and_prior_completed_chunk(tmp_path,monkeypatch,family):
+@pytest.mark.parametrize('bounded', [False, True])
+def test_actual_view_chunk_failure_keeps_template_inputs_and_prior_completed_chunk(tmp_path,monkeypatch,family,bounded):
     import threading,urllib.request
     from natlang_neuralese.serve.http import serve
     from natlang_neuralese.rl.native_replay import compile_replay,replay_logps
@@ -328,6 +329,7 @@ def test_actual_view_chunk_failure_keeps_template_inputs_and_prior_completed_chu
     thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
     try:
         body={'value':' '.join(['t5']*8),'window':3,'system':'t4','x_natlang_native_protocol_recovery':True}
+        if bounded: body['budget'] = {'max_requests': 2, 'max_tokens': 128}
         request=urllib.request.Request(f'http://127.0.0.1:{server.server_address[1]}/v1/neuralese/view',
             data=json.dumps(body).encode(),headers={'content-type':'application/json','x-natlang-owner':'view-owner'})
         try:
@@ -338,6 +340,9 @@ def test_actual_view_chunk_failure_keeps_template_inputs_and_prior_completed_chu
             assert response.status==200
             result=json.loads(response.read())
         assert 'id' not in result and len(result['source_turns'])==2
+        if bounded:
+            assert result['budget_usage'] == {'requests': 2, 'tokens': sum(
+                turn['response']['usage']['completion_tokens'] for turn in result['source_turns'])}
         first,last=result['source_turns']
         assert len(first['response']['x_natlang_rl_capture']['writes'])==1
         assert not last['response']['x_natlang_rl_capture']['writes']

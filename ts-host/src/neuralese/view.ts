@@ -20,7 +20,7 @@ import { neuraleseRef, textToParts, type NeuraleseRef } from '../native/neurales
 import type { NeuraleseStore } from '../native/neuralese-store.js';
 import { activeSystemPrompts, softenText, type SystemPromptBank } from '../native/system-prompts.js';
 import { fetchModel } from '../model/chat-completion.js';
-import { neuraleseServerInfo, serves } from '../model/neuralese-info.js';
+import { neuraleseServerInfo, serves, type NeuraleseServerInfo } from '../model/neuralese-info.js';
 import { requestNativeStateBindings, requestNativeStateIds } from '../model/neuralese-server.js';
 import { currentFrame } from '../runtime/context.js';
 import { graphNode, traceFor, blockInput, producerScopeForTrace } from '../native/graph.js';
@@ -33,8 +33,9 @@ export const VIEW_TYPE = 'Neuralese<string>';
 export type ViewSite = { value: string; instructions?: string };
 /** Runs view's Neuralese instance on one value, or answers undefined to keep the crisp preview. */
 export type NativeViewTurn = { messages: unknown[]; tools: unknown[]; template: Record<string, unknown>;
-  response: { x_natlang_rl_capture: { schema: string; policy: Record<string, string>; prompt: { kind: string; token_ids?: number[]; id?: string; native_identity?: Record<string, string> }[]; generated_inputs: { token_id: number; input_role: string }[]; writes: { state_id: string; raw_state_id?: string; native_identity: Record<string, string>; payload_own_begin: number; payload_own_end: number }[] }; native_state: { blocks: { id: string }[] } } };
-export type Viewer = (site: ViewSite) => Promise<NeuraleseRef | undefined>;
+  response: { usage?: { completion_tokens?: number }; x_natlang_rl_capture: { schema: string; policy: Record<string, string>; prompt: { kind: string; token_ids?: number[]; id?: string; native_identity?: Record<string, string> }[]; generated_inputs: { token_id: number; input_role: string }[]; writes: { state_id: string; raw_state_id?: string; native_identity: Record<string, string>; payload_own_begin: number; payload_own_end: number }[] }; native_state: { blocks: { id: string }[] } } };
+export type Viewer = ((site: ViewSite, budget?: { maxRequests: number | null; maxTokens: number | null;
+  onUsage: (usage: { requests: number; tokens: number }) => void }) => Promise<NeuraleseRef | undefined>) & { budgeted?: true };
 
 /** View's Neuralese instance on a Neuralese server, with the soft body from `bank` when it has it. `window` caps the
  * value tokens of one write site (default: the server's, from the model's context). */
@@ -42,29 +43,51 @@ export function serverViewer(options: { endpoint: string; headers?: Record<strin
   bank?: SystemPromptBank; window?: number; onSourceTurns?: (turns: NativeViewTurn[]) => void | Promise<void> }): Viewer {
   const base = options.endpoint.replace(/\/$/, '');
   const info = neuraleseServerInfo(options.endpoint, { headers: options.headers });
-  return async site => {
+  const viewer: Viewer = async (site, budget) => {
     const bank = activeSystemPrompts(options.bank);
     const softened = bank?.size ? softenText(VIEW_PROMPT, bank) : VIEW_PROMPT;
     const system = softened === VIEW_PROMPT ? VIEW_PROMPT : textToParts(softened);
-    const server = await info;
+    let server: NeuraleseServerInfo;
+    try { server = await info; } catch (error) { budget?.onUsage({ requests: 0, tokens: 0 }); throw error; }
     if ((server.native_state as { enabled?: boolean } | undefined)?.enabled) {
-      if (!serves(server, 'view')) throw Object.assign(new Error('neuralese-view-unavailable: use a native server with the shared view stage'), { code: 'neuralese-view-unavailable' });
-      if (!options.store?.putNativeState || !options.store.getNativeState)
+      if (!serves(server, 'view')) { budget?.onUsage({ requests: 0, tokens: 0 }); throw Object.assign(new Error('neuralese-view-unavailable: use a native server with the shared view stage'), { code: 'neuralese-view-unavailable' }); }
+      if (budget && !serves(server, 'view.budget/1')) { budget.onUsage({ requests: 0, tokens: 0 }); throw new Error('neuralese-view-budget-unavailable: server does not advertise bounded view execution'); }
+      if (!options.store?.putNativeState || !options.store.getNativeState) {
+        budget?.onUsage({ requests: 0, tokens: 0 });
         throw new Error('neuralese-native-archive-unavailable: native views need a native-capable archive');
+      }
       const client = { endpoint: options.endpoint, headers: options.headers, store: options.store, info: server };
-      await restoreNativeInputs(client, system);
+      try { await restoreNativeInputs(client, system); } catch (error) { budget?.onUsage({ requests: 0, tokens: 0 }); throw error; }
       // model-call-kind: view-write -- training/model-call-kinds.json
       const response = await fetchModel(`${base}/v1/neuralese/view`, { method: 'POST',
         headers: { 'content-type': 'application/json', ...options.headers },
         body: JSON.stringify({ value: site.value, ...(site.instructions ? { instructions: site.instructions } : {}), system,
+          ...(budget ? { budget: { max_requests: budget.maxRequests, max_tokens: budget.maxTokens } } : {}),
           ...(server.capabilities?.includes('native.protocol-recovery')?{x_natlang_native_protocol_recovery:true}:{}),
           ...(options.window ? { window: options.window } : {}) }) });
       if (!response.ok) throw new Error(`native view failed (${response.status}): ${(await response.text()).slice(0, 1000)}`);
-      const result = await response.json() as { id?: string; source_turns?: NativeViewTurn[]; x_natlang_native_failure?:unknown };
-      if (!Array.isArray(result.source_turns) || !result.source_turns.length)
+      const result = await response.json() as { id?: string; source_turns?: NativeViewTurn[]; x_natlang_native_failure?:unknown;
+        budget_exhausted?: boolean; budget_error?: string; budget_usage?: { requests: number; tokens: number } };
+      if (!Array.isArray(result.source_turns) || (!result.source_turns.length && !result.budget_exhausted && !result.budget_error))
         throw new Error('neuralese-view-source-integrity: native views must preserve every actual chunk and combine turn');
+      if (budget) {
+        const usage = result.budget_usage, counts = result.source_turns.map(turn => turn.response?.usage?.completion_tokens);
+        if (!usage || !Number.isSafeInteger(usage.requests) || !Number.isSafeInteger(usage.tokens) || usage.requests < 0 || usage.tokens < 0 ||
+            counts.some(count => !Number.isSafeInteger(count) || count! < 0) || usage.requests !== counts.length ||
+            usage.tokens !== counts.reduce<number>((sum, count) => sum + count!, 0)) {
+          await options.onSourceTurns?.(result.source_turns);
+          throw Object.assign(new Error('neuralese-view-budget-integrity: missing or inconsistent exact usage'),
+            { native_source_turns: result.source_turns });
+        }
+        budget.onUsage(usage);
+        if ((budget.maxRequests !== null && usage.requests > budget.maxRequests) ||
+            (budget.maxTokens !== null && usage.tokens > budget.maxTokens))
+          { await options.onSourceTurns?.(result.source_turns); throw Object.assign(
+            new Error('neuralese-view-budget-integrity: view exceeded its reserved allowance'), { native_source_turns: result.source_turns }); }
+      }
       const trace = traceFor(currentFrame()?.parentCallId);
       const written = new Set<string>();
+      try {
       for (const [index, turn] of result.source_turns.entries()) {
         const receipt = turn.response?.x_natlang_rl_capture;
         if (!['natlang.native-rl-sampling/2', 'natlang.native-rl-sampling/3','natlang.native-rl-sampling/4'].includes(receipt?.schema) || !Array.isArray(receipt.writes))
@@ -84,7 +107,8 @@ export function serverViewer(options: { endpoint: string; headers?: Record<strin
               throw new Error('neuralese-view-source-integrity: decoded observation differs from the consuming policy');
         }
         const node = graphNode(trace, 'model_turn', { turn: index + 1, calls: failure?[]:['return_result'],
-          temperature: 1, seed: null, source_kind: 'native-view', source_turn: turn },
+          temperature: 1, seed: null, source_kind: 'native-view', native_identity: receipt.policy,
+          completion_tokens: turn.response.usage?.completion_tokens ?? null, source_turn: turn },
           importBindings.map(binding => blockInput(binding.id, binding.path, binding.source_occurrence,
             producerScopeForTrace(trace))));
         for (const write of receipt.writes) {
@@ -109,6 +133,18 @@ export function serverViewer(options: { endpoint: string; headers?: Record<strin
             node ? [{ node, port: 'turn' }] : []);
         }
       }
+      } catch (error) {
+        await options.onSourceTurns?.(result.source_turns);
+        if (error instanceof Error) Object.assign(error, { native_source_turns: result.source_turns });
+        throw error;
+      }
+      if (result.budget_exhausted || result.budget_error) {
+        await options.onSourceTurns?.(result.source_turns);
+        if (result.id !== undefined) throw Object.assign(new Error('neuralese-view-budget-integrity: incomplete view claimed a final value'),
+          { native_source_turns: result.source_turns });
+        if (result.budget_error) throw new Error(`neuralese-view-budget-integrity: ${result.budget_error}`);
+        return undefined;
+      }
       const failed=nativeProtocolFailure(result.source_turns.at(-1)!.response);
       if(failed){
         if(result.id!==undefined||canonical(failed)!==canonical(result.x_natlang_native_failure))
@@ -123,7 +159,9 @@ export function serverViewer(options: { endpoint: string; headers?: Record<strin
         throw new Error('neuralese-view-source-integrity: native view returned a non-native artifact ID');
       return neuraleseRef(VIEW_TYPE, result.id);
     }
+    budget?.onUsage({ requests: 0, tokens: 0 });
     throw Object.assign(new Error('neuralese-native-state-unavailable: view requires a native state producer and consumer'),
       { code: 'neuralese-native-state-unavailable' });
   };
+  return Object.assign(viewer, { budgeted: true as const });
 }

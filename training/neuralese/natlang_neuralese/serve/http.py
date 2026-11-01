@@ -40,7 +40,7 @@ def block_ids(value) -> set[str]:
 # (`neuralese-<capability>-unavailable`); this server serves every capability it lists.
 NATIVE_CAPABILITIES = sorted([
     "chat", "chat.stream", "decide", "score", "grad", "grad.order2", "optim", "native.adapters", "adapters.create", "guidance", "guidance.check", "native.text-write", "native.init-body", "parts.value-type", "render", "store", "store.native-state", "store.native-tensor-artifact",
-    "native.protocol-recovery", "store.owners", "template", "template.argument-path", "template.value-type", "view"])
+    "native.protocol-recovery", "store.owners", "template", "template.argument-path", "template.value-type", "view", "view.budget/1"])
 
 
 def completion_limit(body: dict) -> int:
@@ -295,30 +295,45 @@ def make_handler(engine: Engine):
                         except (ValueError, TypeError, RuntimeError) as error:
                             raise RequestError('neuralese-native-adapter-invalid', str(error)) from error
                 if self.path == "/v1/neuralese/view":
-                    from ..view import INSTRUCTIONS, REPLY_TOKENS, PART_MARGIN, TEMPLATE, TOOLS, view_site, write_view
+                    from ..view import INSTRUCTIONS, REPLY_TOKENS, PART_MARGIN, TEMPLATE, TOOLS, ViewBudget, ViewBudgetExhausted, view_site, write_view
 
                     body = self._object()
+                    try:
+                        budget = ViewBudget(body['budget']) if 'budget' in body else None
+                    except ValueError as error:
+                        raise RequestError('neuralese-view-budget', str(error)) from error
 
                     class ViewModelFailure(Exception):
                         pass
                     source_turns = []
                     def write(messages):
                         # The template write of view's body: the reply forced to return_result, its value written.
+                        limit = engine.max_block + REPLY_TOKENS
+                        if budget is not None:
+                            limit = budget.begin(limit)
                         request = GenerationRequest(messages=messages, tools=TOOLS, template=dict(TEMPLATE),
-                                                    max_tokens=engine.max_block + REPLY_TOKENS,
+                                                    max_tokens=limit,
                                                     temperature=1.0, rl_capture=True,
                                                     native_protocol_recovery=body.get('x_natlang_native_protocol_recovery') is True,
                                                     native_store_owner=self._owner)
                         response = engine.submit(request).result()
                         receipt = response.get("x_natlang_rl_capture")
-                        if not isinstance(receipt, dict) or receipt.get("schema") not in {"natlang.native-rl-sampling/2", "natlang.native-rl-sampling/3", "natlang.native-rl-sampling/4"}:
-                            raise RequestError("neuralese-view-source", "native view must retain its actual template sampling receipt")
                         source_turns.append({"messages": messages, "tools": TOOLS, "template": dict(TEMPLATE),
                                              "response": response})
+                        if budget is not None:
+                            budget.finish(response, limit)
+                        if not isinstance(receipt, dict) or receipt.get("schema") not in {"natlang.native-rl-sampling/2", "natlang.native-rl-sampling/3", "natlang.native-rl-sampling/4"}:
+                            if budget is not None:
+                                raise ValueError('native view must retain its actual template sampling receipt')
+                            raise RequestError("neuralese-view-source", "native view must retain its actual template sampling receipt")
                         if response.get("x_natlang_native_failure") is not None:
                             raise ViewModelFailure()
                         blocks = (response.get("native_state") or {}).get("blocks") or []
                         if not blocks:
+                            if budget is not None and budget.max_tokens is not None and budget.tokens >= budget.max_tokens:
+                                raise ViewBudgetExhausted()
+                            if budget is not None:
+                                raise ValueError('a view write produced no block')
                             raise RequestError("neuralese-view", "a view write produced no block")
                         return blocks[0]["id"]
 
@@ -338,10 +353,21 @@ def make_handler(engine: Engine):
                                                   window, fits=fits)
                     except ViewModelFailure:
                         return self._json(200, {'x_natlang_native_failure':source_turns[-1]['response']['x_natlang_native_failure'],
-                            'source_turns':source_turns,'window':window})
+                            'source_turns':source_turns,'window':window, **({'budget_usage': budget.usage()} if budget else {})})
+                    except ViewBudgetExhausted:
+                        return self._json(200, {'budget_exhausted': True, 'budget_usage': budget.usage(),
+                                                'source_turns': source_turns, 'window': window})
+                    except Exception as error:
+                        if budget is None:
+                            raise
+                        known = len(source_turns) == budget.requests and all(
+                            type((turn['response'].get('usage') or {}).get('completion_tokens')) is int and
+                            turn['response']['usage']['completion_tokens'] >= 0 for turn in source_turns)
+                        return self._json(200, {'budget_error': str(error), 'source_turns': source_turns, 'window': window,
+                                                **({'budget_usage': budget.usage()} if known else {})})
                     record = engine.store.get_native_state(block)
                     return self._json(201, {**record.meta(), "parts": parts, "window": window,
-                                           "source_turns": source_turns})
+                                           "source_turns": source_turns, **({'budget_usage': budget.usage()} if budget else {})})
                 if self.path == "/v1/neuralese/guidance/check":
                     from .guidance import Guide
 

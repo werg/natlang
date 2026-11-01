@@ -522,16 +522,33 @@ export class NativeToolAgent {
       try { text = JSON.stringify(value); } catch { text = undefined; }
       if (text === undefined || value instanceof FileHandle) continue;
       const instructions = listingViewInstructions(field.name, formatType(field.type), typeof lam.body === 'string' ? lam.body.replace(/\n+$/, '') : '');
+      const budget = this.options.modelBudget;
+      const bounded = budget && (budget.maxRequests !== undefined || budget.maxTokens !== undefined);
+      let reservation: Awaited<ReturnType<ModelBudget['reserveBatch']>>;
+      let usage: { requests: number; tokens: number } | undefined;
       try {
-        const written = await view({ value: text, instructions });
+        if (bounded && !view.budgeted) throw new NeuraleseUnsupportedError('view backend does not support graph budget allowances');
+        reservation = bounded ? await budget.reserveBatch(session.runtime.signal) : undefined;
+        if (bounded && !reservation) throw new NeuraleseUnsupportedError('graph model request or token budget exhausted before view');
+        const written = await view({ value: text, instructions }, reservation ? { maxRequests: reservation.maxRequests,
+          maxTokens: reservation.maxTokens, onUsage: reported => { usage = reported;
+            session.runtime.trace.emit('view_budget', { call_id: session.runtime.currentCallId ?? null, argument: field.name,
+              requests: reported.requests, completion_tokens: reported.tokens }); } } : undefined);
         if (written) {
           out[field.name] = written.$neuralese.id;
           session.runtime.trace.emit('view', { call_id: session.runtime.currentCallId ?? null, argument: field.name,
             representation: 'neuralese', block: written.$neuralese.id, chars: text.length });
         }
       } catch (error) {
+        const sourceTurns = (error as { native_source_turns?: unknown } | null)?.native_source_turns;
         session.runtime.trace.emit('view', { call_id: session.runtime.currentCallId ?? null, argument: field.name,
-          representation: 'neuralese', error: String((error as Error)?.message ?? error).slice(0, 300) });
+          representation: 'neuralese', error: String((error as Error)?.message ?? error).slice(0, 300),
+          ...(Array.isArray(sourceTurns) ? { source_turns: sourceTurns } : {}) });
+      } finally {
+        if (reservation && !usage) session.runtime.trace.emit('view_budget', { call_id: session.runtime.currentCallId ?? null,
+          argument: field.name, requests: null, completion_tokens: null, conservative_reservation: {
+            requests: reservation.maxRequests, completion_tokens: reservation.maxTokens } });
+        reservation?.finish(usage);
       }
     }
     return out;

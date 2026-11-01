@@ -286,7 +286,8 @@ export type NeuraleseRuntimeOptions = {
    * listing shows a view of each argument it would cut off, written for the receiving call's instructions
    * (prompt.ts `listingViewInstructions`), while the variable keeps the whole value.
    */
-  view?: (site: { value: string; instructions?: string }) => Promise<NeuraleseRef | undefined>;
+  view?: ((site: { value: string; instructions?: string }, budget?: { maxRequests: number | null; maxTokens: number | null;
+    onUsage: (usage: { requests: number; tokens: number }) => void }) => Promise<NeuraleseRef | undefined>) & { budgeted?: true };
 };
 
 /**

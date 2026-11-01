@@ -682,7 +682,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     port: { dialect: nativePort.dialect, ...(nativePort.forcedText ? { forcedText: true as const } : {}),
       write: async (...args: Parameters<typeof nativePort.write>) => {
         if (!nativePort.forcedText) throw new Error('graph model budget cannot bound this Neuralese writer: it does not declare forced text');
-        if (!task.modelBudget.reserveForcedText()) throw new Error('graph model request budget exhausted before Neuralese text writer');
+        if (!await task.modelBudget.reserveForcedText(frame.signal ?? task.signal)) throw new Error('graph model request budget exhausted before Neuralese text writer');
         runtime?.trace.emit('model_auxiliary_request', { call_id: callId, kind: 'forced-text-writer', completion_tokens: 0 });
         return nativePort.write(...args);
       } } } : nativeOptions;

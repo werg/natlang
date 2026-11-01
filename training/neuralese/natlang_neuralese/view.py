@@ -48,6 +48,44 @@ REPLY_TOKENS = 64
 PART_MARGIN = 32
 
 
+class ViewBudgetExhausted(Exception):
+    """No further view write fits the caller's remaining allowance."""
+
+
+class ViewBudget:
+    """A view's exact count of model requests and reported sampled completion tokens."""
+
+    def __init__(self, allowance: dict):
+        if not isinstance(allowance, dict) or set(allowance) != {'max_requests', 'max_tokens'}:
+            raise ValueError('view budget requires max_requests and max_tokens')
+        for key, value in allowance.items():
+            if value is not None and (type(value) is not int or value < 0):
+                raise ValueError(f'{key} must be a non-negative integer or null')
+        self.max_requests, self.max_tokens = allowance['max_requests'], allowance['max_tokens']
+        self.requests = 0
+        self.tokens = 0
+
+    def begin(self, requested: int) -> int:
+        if self.max_requests is not None and self.requests >= self.max_requests:
+            raise ViewBudgetExhausted()
+        remaining = None if self.max_tokens is None else self.max_tokens - self.tokens
+        if remaining is not None and remaining <= 0:
+            raise ViewBudgetExhausted()
+        self.requests += 1
+        return requested if remaining is None else min(requested, remaining)
+
+    def finish(self, response: dict, limit: int) -> None:
+        used = (response.get('usage') or {}).get('completion_tokens')
+        if type(used) is not int or used < 0:
+            raise ValueError('view response has no exact non-negative completion token usage')
+        self.tokens += used
+        if used > limit:
+            raise ValueError('view response exceeded its allocated completion tokens')
+
+    def usage(self) -> dict:
+        return {'requests': self.requests, 'tokens': self.tokens}
+
+
 def _purpose(instructions: str | None) -> str:
     return f"instructions:\n{instructions}\n\n" if instructions else ""
 

@@ -173,9 +173,9 @@ natlang: classify handed off from lfm-latest to dgx-qwen
 A wrong but well-typed answer is not a failure; escalation does not catch it. A handoff does not reset limits:
 `limits.maxModelRequests` and `limits.maxModelTokens` bound ordinary model requests and generated tokens across a task's
 invocation graph, including concurrent children; forced source-text writes count as requests with zero sampled tokens.
-The optional native `view` endpoint can issue multiple sampled chunk and combine requests without accepting a graph
-allowance or reporting usage to the budget. Those requests are not included: do not configure `view` when strict
-graph-wide limits are required. Cross-model soft inputs are rendered from their exact stored
+Native views reserve the remaining shared allowance, limit each chunk or combine write, and return exact usage even
+when the allowance ends partway through a view. Servers must advertise `view.budget/1` to run views under these limits;
+an older server keeps the ordinary argument preview. Cross-model soft inputs are rendered from their exact stored
 source text with provenance; missing source text and model-specific adapters stop the handoff with a diagnostic.
 Use only an owner-authorized fallback profile; each turn retains its actual actor identity.
 
