@@ -1223,20 +1223,27 @@ class RecoveryExportQueue:
             if not isinstance(digest,str) or len(digest)!=64 or any(x not in '0123456789abcdef' for x in digest):
                 raise ValueError('invalid recovery closure digest')
             target=self.destination/'closure'/digest
-            cache=self.state.setdefault('closure_cache',{})
-            if target.exists():
-                st=target.stat();identity=[st.st_dev,st.st_ino,st.st_size,st.st_mtime_ns,st.st_ctime_ns]
-                if cache.get(digest)!=identity and file_sha256(target)!=digest:
-                    raise ValueError('existing independent recovery closure differs')
-            else:
-                target.parent.mkdir(parents=True,exist_ok=True)
-                copied=self.copier(source,target)
-                if copied['sha256'] != digest:
-                    raise ValueError('recovery closure source differs from declared identity')
-                st=target.stat();identity=[st.st_dev,st.st_ino,st.st_size,st.st_mtime_ns,st.st_ctime_ns]
-            with self.cond:
-                cache[digest]=identity
-                self._persist()
+            lock_dir=target.parent/'.locks';lock_dir.mkdir(parents=True,exist_ok=True)
+            import fcntl
+            fd=os.open(lock_dir/(digest+'.lock'),os.O_CREAT|os.O_RDWR|getattr(os,'O_NOFOLLOW',0),0o600)
+            try:
+                fcntl.flock(fd,fcntl.LOCK_EX)
+                if target.is_symlink():raise ValueError('independent recovery blob cannot be a symlink')
+                cache=self.state.setdefault('closure_cache',{})
+                if target.exists():
+                    st=target.stat();identity=[st.st_dev,st.st_ino,st.st_size,st.st_mtime_ns,st.st_ctime_ns]
+                    if cache.get(digest)!=identity and file_sha256(target)!=digest:
+                        raise ValueError('existing independent recovery closure differs')
+                else:
+                    copied=self.copier(source,target)
+                    if copied['sha256'] != digest:
+                        raise ValueError('recovery closure source differs from declared identity')
+                    st=target.stat();identity=[st.st_dev,st.st_ino,st.st_size,st.st_mtime_ns,st.st_ctime_ns]
+                with self.cond:
+                    cache[digest]=identity
+                    self._persist()
+            finally:
+                os.close(fd)
             result.append({'role':item['role'],'source':str(source),'sha256':digest,'path':str(target),'file_identity':identity})
         return result
 
