@@ -24,6 +24,11 @@ mkdir -p "$OUT/ir" "$OUT/turns" "$OUT/logs"
 if [ -n "${SKIP_DONE_IN:-}" ]; then
   [ -n "${SKIP_DONE_RECEIPT:-}" ] || { echo "predecessor receipt required" >&2; exit 2; }
   python3 "$(dirname "${BASH_SOURCE[0]}")/port_predecessor_receipt.py" verify "$SKIP_DONE_IN" "$SKIP_DONE_RECEIPT"
+  python3 - "$SKIP_DONE_IN" "$SKIP_DONE_RECEIPT" "$OUT/predecessor-binding.json" <<'PYCODE'
+import hashlib,json,sys
+from pathlib import Path
+p=Path(sys.argv[2]).resolve(); Path(sys.argv[3]).write_text(json.dumps({'schema':'natlang.port-predecessor-binding/1','path':str(p),'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'source':str(Path(sys.argv[1]).resolve())},sort_keys=True)+'\n')
+PYCODE
 fi
 # Cleanup and shard publication require one live driver for this output tree.
 # Children inherit the descriptor, so a replacement waits for surviving work too.
