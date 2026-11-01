@@ -10,6 +10,10 @@ bytes before publishing; original actor and full-state custody remain unchanged.
 The peer cache is a performance hint, not a recovery or training qualification.
 Keep actual bases while a transfer consumes them; missing cached bases use full
 transfer, while corrupt bases are diagnosed rather than silently accepted.
+Prepare the transport under its exact target serving Python runtime. Its source
+inventory is authenticated independently of tensor equality: a transport prepared
+on newer main cannot be loaded by an older pinned evaluator. Preserve failed
+launch evidence and rebuild with the intended runtime; never weaken that check.
 Preserve readback receipts and avoid rewriting already matching metadata while
 actors use it. A full3.46GB view64→75 reconstruction verified a138.6MB delta
 (4.01% of full size). This is measured transport saving, not model improvement.

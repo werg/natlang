@@ -40,6 +40,20 @@ def fixture(tmp_path,monkeypatch,*,append=False):
     return SimpleNamespace(**locals())
 
 
+@pytest.mark.parametrize('explicit',[False,True])
+def test_sft_continuation_wires_resident_admission_by_default(tmp_path,monkeypatch,explicit):
+    from natlang_neuralese.rl.native_supervised import continuation_config
+    from natlang_neuralese.train.recipe import load_recipe
+    f=fixture(tmp_path,monkeypatch);config=copy.deepcopy(f.config)
+    if not explicit:config.pop('resident_data_directory')
+    stage=load_recipe(config['production_recipe'])['stages'][0]
+    result,_=continuation_config(config,stage,checkpoint=str(f.checkpoint),out=f.production)
+    expected=str(f.directory if explicit else f.production/'resident-data')
+    assert result['resident_data_directory']==expected
+    assert result['trainer_parameters']['resident_data_directory']==expected
+    assert result['checkpoint']==str(f.checkpoint)
+
+
 @pytest.mark.parametrize('append',[False,True])
 def test_actual_prepared_source_and_operational_commit_preserve_parent_debt(tmp_path,monkeypatch,append):
     f=fixture(tmp_path,monkeypatch,append=append);before=Path(f.config['checkpoint']).read_bytes()

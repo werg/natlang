@@ -153,12 +153,17 @@ def continuation_config(config,stage,*,checkpoint,out):
         from ..model.native_checkpoint_control import publication_trainer_parameters
         parameters.update(publication_trainer_parameters(config['native_checkpoint_publication']))
     parameters.setdefault('refresh_at_checkpoint', True)
+    if stage['kind'] == 'native_state_sft':
+        parameters.setdefault('resident_data_directory', config.get('resident_data_directory')
+                              or str(Path(out).resolve() / 'resident-data'))
     parameters['stage_id']=stage['id']
     parameters['recipe_binding']=native_recipe_binding(Path(config['production_recipe']),recipe_lineage(config))
     result={**config,'recipe_lineage_sha256':parameters['recipe_binding']['lineage_sha256'],'mandatory_sft_only':True,'out':str(Path(out).resolve()),'checkpoint':checkpoint,
         'production_stage':stage['id'],'trainer_parameters':parameters,
         'seed_native_graphs':sources['native_graphs']['path'],
         'held_native_graphs':sources['held_native_graphs']['path']}
+    if parameters.get('resident_data_directory'):
+        result['resident_data_directory'] = parameters['resident_data_directory']
     bind_seed_parameters(result,parameters)
     bind_seed_sources(result,sources)
     bind_seed_objective(result,stage['kind'],sources)
