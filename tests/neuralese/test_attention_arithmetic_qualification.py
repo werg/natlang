@@ -41,9 +41,12 @@ def test_observer_restores_complete_capacity_execution_identity(monkeypatch, cur
     from types import SimpleNamespace
     from natlang_neuralese.eval import native_memory
     monkeypatch.setattr(native_memory, 'memory_runtime', lambda device: {'device': device})
+    monkeypatch.setenv('NATLANG_NATIVE_COMPILE', '1')
+    monkeypatch.setattr(torch.backends.cuda.matmul, 'allow_bf16_reduced_precision_reduction', True)
     identity = {'model_config': {'architecture': 'lfm2'}, 'batch_graphs': 1,
         'batch_tokens': 65536, 'checkpoint_layers': True, 'chunk_tokens': 1024,
         'checkpoint_input_offload': False, 'runtime': {'device': 'cpu'},
+        'execution_arithmetic': {'native_compile': '0', 'bf16_reduced_precision_reduction': False},
         'fp8': {'kind': 'off', 'recipe': 'delayed', 'amax_history_len': 16,
                 'input_gradient_precision': None}}
     if current:

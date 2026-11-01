@@ -4,9 +4,20 @@ This is diagnostic plumbing, not a choice of training policy or arithmetic.
 Keep the observer's actual model settings and its identity reconstruction equal.
 """
 from types import SimpleNamespace
+import os
+import torch
 
 
 def restore_qualification_execution(model, identity, *, device='cuda'):
+    arithmetic = identity.get('execution_arithmetic')
+    if arithmetic is not None:
+        if (not isinstance(arithmetic, dict)
+                or set(arithmetic) != {'native_compile', 'bf16_reduced_precision_reduction'}
+                or arithmetic['native_compile'] not in ('0', '1')
+                or type(arithmetic['bf16_reduced_precision_reduction']) is not bool):
+            raise ValueError('invalid qualification execution arithmetic')
+        os.environ['NATLANG_NATIVE_COMPILE'] = arithmetic['native_compile']
+        torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction = arithmetic['bf16_reduced_precision_reduction']
     args = SimpleNamespace(**{key: identity[key] for key in (
         'batch_graphs', 'batch_tokens', 'checkpoint_layers', 'chunk_tokens',
         'checkpoint_input_offload')},
