@@ -46,8 +46,10 @@ def recover(state_path, *, report_ref, receipt_ref, custody_ref, qualification_r
                 or (q.get('complete_gradient_qualification') or {}).get('passed') is not True):
             raise ValueError('direct SFT recovery requires actual checkpoint-bound gradient qualification')
         score = read(evaluation.get('score'))
+        evaluation_binding = read(evaluation.get('binding'))
         if (evaluation.get('schema') != 'natlang.direct-sft-evaluation/1'
                 or evaluation.get('checkpoint_sha256') != child['sha256']
+                or evaluation_binding.get('checkpoint_sha256') != child['sha256']
                 or score.get('cases') != 4 or score.get('step') != child['global_step']):
             raise ValueError('direct SFT recovery requires the recorded four-case outcome check')
         if out.exists(): raise ValueError('direct SFT recovery receipt already exists')
