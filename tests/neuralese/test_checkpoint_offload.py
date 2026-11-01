@@ -140,7 +140,7 @@ def test_the_link_swap_never_leaves_a_dangling_link_or_replaces_a_changed_file(t
     assert path.is_symlink() and path.read_bytes() == dest.read_bytes()
 
 
-def test_superseded_copy_discards_partial_without_replacing_verified_mirror(tmp_path, monkeypatch):
+def test_explicitly_cancelled_copy_discards_partial_without_replacing_verified_mirror(tmp_path, monkeypatch):
     source = write(tmp_path / 'checkpoint.pt', b'x' * 4096)
     mirror = write(tmp_path / 'mirror.pt', b'previous-verified')
     old = mirror.read_bytes()
@@ -157,7 +157,7 @@ def test_superseded_copy_discards_partial_without_replacing_verified_mirror(tmp_
     assert mirror.read_bytes() == old and not list(tmp_path.glob('*.offload.part'))
 
 
-def test_superseded_copy_is_cancelled_during_full_readback_hash(tmp_path, monkeypatch):
+def test_explicit_copy_cancellation_also_checks_full_readback_hash(tmp_path, monkeypatch):
     source = write(tmp_path / 'checkpoint.pt', b'x' * 4096)
     mirror = write(tmp_path / 'mirror.pt', b'previous-verified')
     old = mirror.read_bytes()

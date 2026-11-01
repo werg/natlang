@@ -21,8 +21,8 @@ Crash consistency: the NVMe path is always the old regular file or a symlink to 
 and made durable first, never a dangling link. Stale ``.offload.part``/``.offload-link`` files of a crash are removed
 when a directory is next swept. Foreign partial copies (``<mirror>.part``) are never touched; a file with one is
 skipped. An offload failure is an event (stdout and ``<out>/checkpoint-offload.jsonl``), never a training failure; the
-failed file remains queued for retry. New pending writes of one path supersede older pending generations. Active copies
-retain their inode pin until complete, while a newer pending generation is processed next.
+failed file remains queued for retry. New pending writes of one path supersede older pending generations. An active
+copy is a protected backup and retains its inode pin until completion; its newest queued successor follows it.
 
 The mirror is used only when its root lies on a mounted filesystem other than the source's (never a directory on the
 same NVMe, e.g. inside a container without the mount). Settings (recorded in ``checkpoint-policy.json``):
@@ -708,16 +708,6 @@ def _pending_id(descriptor: Path) -> str | None:
         return None
 
 
-def _latest_pending(root: Path) -> bool:
-    for descriptor in _queue_files(root):
-        try:
-            if json.loads(descriptor.read_text()).get('role') == 'latest':
-                return True
-        except (OSError, ValueError):
-            continue
-    return False
-
-
 def _owner_unit(root: Path) -> str:
     return OWNER_UNIT + '-' + hashlib.sha256(str(root.resolve()).encode()).hexdigest()[:10]
 
@@ -846,11 +836,9 @@ def _offload_pinned(job: dict, settings: OffloadSettings, copier=None) -> dict:
             elif prune:
                 record = local_copy(pin, mirror, prune)
             else:
-                descriptor = Path(job['queue_root']) / 'pending' / f"{job['key']}.json"
-                root = Path(job['queue_root'])
-                record = verified_copy(pin, mirror, cancel=lambda: (
-                    _pending_id(descriptor) != job['id'] or
-                    (role == 'archive' and _latest_pending(root))))
+                # Active copies are protected backups. New generations replace
+                # only the pending descriptor and follow this pinned copy.
+                record = verified_copy(pin, mirror)
             record = dict(record, source=str(path), source_identity=list(job['source_identity']),
                           source_pin=str(pin), time=time.time())
             write_record(mirror, record)
