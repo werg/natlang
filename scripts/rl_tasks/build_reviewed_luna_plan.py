@@ -364,6 +364,7 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
                diversity_manifest: Path | None = None,
                case_ids: set[str] | None = None,
                judge_model: dict[str, str] | None = None,
+               reasoning_effort: str = 'low',
                protected: ProtectedWorlds | None = None) -> dict:
     source = source.resolve(strict=True)
     verification = verification.resolve(strict=True)
@@ -374,6 +375,8 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
             not isinstance(max_model_requests, int) or max_model_requests < 1 or
             not isinstance(case_seconds, int) or case_seconds < 1):
         raise ValueError('turn, model-request, and case-time limits must be positive integers')
+    if reasoning_effort not in dispatcher.ALLOWED_REASONING:
+        raise ValueError(f'reasoning_effort must be one of {sorted(dispatcher.ALLOWED_REASONING)}')
     runtime_receipt = runtime / 'frozen-runtime.json'
     if not runtime_receipt.is_file():
         raise ValueError(f'frozen runtime receipt missing: {runtime_receipt}')
@@ -472,7 +475,7 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
         'storage_root': str(storage_root),
         'launch_record': str(campaign_root / 'dispatch/launch.json'), 'authority': str(authority),
         'provider': 'openai-codex', 'model_id': 'gpt-6-luna', 'model_concurrency': 1,
-        'slots': slots, 'execution_plans': True, 'reasoning_effort': 'low',
+        'slots': slots, 'execution_plans': True, 'reasoning_effort': reasoning_effort,
         'resource_policy': {
             'schema': 'natlang.teacher_execution_resource_policy/1',
             'resumable': False, 'backfill': False,
@@ -543,6 +546,7 @@ def main() -> None:
     parser.add_argument('--max-turns', type=int, default=60)
     parser.add_argument('--max-model-requests', type=int, default=384)
     parser.add_argument('--case-seconds', type=int, default=1800)
+    parser.add_argument('--reasoning-effort', choices=sorted(dispatcher.ALLOWED_REASONING), default='low')
     parser.add_argument('--case-id', action='append', dest='case_ids',
                         help='select an exact authenticated public TRAIN row ID; repeat for multiple rows')
     parser.add_argument('--seed', type=int, default=20261031)
@@ -559,6 +563,7 @@ def main() -> None:
                          slots=args.slots,
                          max_turns=args.max_turns, max_model_requests=args.max_model_requests,
                          case_seconds=args.case_seconds,
+                         reasoning_effort=args.reasoning_effort,
                          seed=args.seed, intake_receipt=args.intake_receipt,
                          diversity_manifest=args.diversity_manifest,
                          case_ids=set(args.case_ids) if args.case_ids else None,

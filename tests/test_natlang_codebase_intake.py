@@ -428,12 +428,13 @@ def test_plan_builder_emits_unapproved_full_prompt_plan_and_pins_inventory(tmp_p
         output=output, inventory_output=tmp_path / 'inventory.json',
         selected_source=tmp_path / 'selected.jsonl', protection_receipt=tmp_path / 'protection.json',
         max_cases=2, slots=1, max_turns=12, max_model_requests=24, case_seconds=300,
-        seed=7, intake_receipt=intake_receipt, protected=Protected(),
+        seed=7, intake_receipt=intake_receipt, protected=Protected(), reasoning_effort='medium',
     )
     plan = json.loads(output.read_text())
     assert report['status'] == 'prepared_unapproved'
     assert plan['root_approved'] is False
     assert plan['slots'] == 1 and plan['prompt_rendering'] == 'full'
+    assert plan['reasoning_effort'] == 'medium'
     assert (plan['max_turns'], plan['max_model_requests'], plan['case_seconds']) == (12, 24, 300)
     assert plan['resource_policy']['resumable'] is False
     assert plan['resource_policy']['backfill'] is False
