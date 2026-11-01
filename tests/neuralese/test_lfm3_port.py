@@ -482,3 +482,35 @@ def test_fresh_shared_native_step_matches_independent_hf_cached_decode():
             actual = native_step(shared, ids[:, start:stop], native_cache)
             native_cache = actual['cache']
             torch.testing.assert_close(shared.logits(actual['h_final']), expected.logits, atol=2e-5, rtol=2e-5)
+
+
+def test_fresh_shared_packed_ordinary_graphs_match_independent_hf_and_keep_context_private():
+    from natlang_neuralese.model.lfm3_port import Lfm3PortBackbone
+    from natlang_neuralese.model.shared_state import SharedStateModel, Invocation, compile_graph
+    reference = tiny_lfm3_hf(window=4)
+    native_weights = copy.deepcopy(reference)
+    port = Lfm3PortBackbone(native_weights, ControlTokens(62, 63), markers=False)
+    shared = SharedStateModel(port, (60, 61, 62, 63), native_norm_execution='stable-v1').eval()
+    first=(3,4,5,6,7,8,9,10,11)
+    second=(3,4,5,6,7,20,21,22,23,24,25)
+    plan=compile_graph([Invocation('first',first),Invocation('second',second)])
+    from natlang_neuralese.data.native_graph import parse_graph, SCHEMA
+    from natlang_neuralese.train.native_prefix_packing import pack_causal_prefixes
+    examples=[parse_graph({'schema':SCHEMA,'id':str(i),'split':'train','source_groups':[str(i)],
+                 'tokenizer_fingerprint':'f'*64,'nodes':[{'name':'root','token_ids':list(tokens),
+                 'target_weights':[0.]+[1.]*(len(tokens)-1)}]},tokenizer_fingerprint='f'*64)
+              for i,tokens in enumerate((first,second))]
+    packed,maps=pack_causal_prefixes(examples)
+    assert packed.token_count < sum(len(tokens) for tokens in (first,second))
+    changed=compile_graph([Invocation('first',tuple(reversed(first))),Invocation('second',second)])
+    with torch.no_grad():
+        result=shared.logits(shared(plan)['h_final'])
+        packed_result=shared.logits(shared(packed)['h_final'])
+        changed_result=shared.logits(shared(changed)['h_final'])
+        expected_first=reference(torch.tensor([first])).logits
+        expected_second=reference(torch.tensor([second])).logits
+    torch.testing.assert_close(packed_result[:,list(maps[0])],expected_first,atol=2e-5,rtol=2e-5)
+    torch.testing.assert_close(packed_result[:,list(maps[1])],expected_second,atol=2e-5,rtol=2e-5)
+    torch.testing.assert_close(result[:,:len(first)],expected_first,atol=2e-5,rtol=2e-5)
+    torch.testing.assert_close(result[:,len(first):],expected_second,atol=2e-5,rtol=2e-5)
+    torch.testing.assert_close(changed_result[:,len(first):],result[:,len(first):],atol=0,rtol=0)
