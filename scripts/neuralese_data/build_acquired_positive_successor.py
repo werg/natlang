@@ -173,7 +173,7 @@ def load_positive_rows(screen_path, expected_protection):
     return screen_path, screen, coverage_path, coverage, rows, protected, builder_path
 
 
-def load_prepared_rows(derivation_receipt_path: Path, expected_protection: str):
+def load_prepared_rows(derivation_receipt_path: Path, expected_protection: str, *, derivation_program: Path | None = None):
     """Load an independently verified, immutable acquired-graph derivation."""
     derivation_receipt_path = Path(derivation_receipt_path).resolve(strict=True)
     derivation = read_json(derivation_receipt_path)
@@ -181,7 +181,7 @@ def load_prepared_rows(derivation_receipt_path: Path, expected_protection: str):
             or derivation.get("status") != "derived; not source admission or learner exposure"
             or derivation.get("training_admission") is True):
         raise ValueError("prepared source is not a supported non-admitted derivation")
-    derivation_program = Path(derivation["derivation_program"]["path"]).resolve(strict=True)
+    derivation_program = (derivation_program or Path(derivation["derivation_program"]["path"])).resolve(strict=True)
     if sha256_file_hex(derivation_program) != derivation["derivation_program"]["sha256"]:
         raise ValueError("prepared source derivation program differs from its receipt")
     verification_path = derivation_receipt_path.parent / "independent-verification.json"
@@ -305,7 +305,7 @@ def load_prepared_rows(derivation_receipt_path: Path, expected_protection: str):
 
 
 def build(predecessor_dir: Path, screen_path: Path | None, output_dir: Path,
-          prepared_graph_derivation: Path | None = None):
+          prepared_graph_derivation: Path | None = None, *, derivation_program: Path | None = None):
     predecessor_dir = Path(predecessor_dir).resolve(strict=True)
     output_dir = Path(output_dir).resolve()
     if output_dir.exists():
@@ -339,7 +339,7 @@ def build(predecessor_dir: Path, screen_path: Path | None, output_dir: Path,
             raise ValueError("choose either a source screen or a prepared derivation")
         (screen_path, screen, coverage_path, coverage, qualified_rows, _, screen_builder_path,
             graph_path, tokenizer_fingerprint, source_evidence, source_target_tokens,
-            source_forward_tokens) = load_prepared_rows(prepared_graph_derivation, protection.digest)
+            source_forward_tokens) = load_prepared_rows(prepared_graph_derivation, protection.digest, derivation_program=derivation_program)
     else:
         if screen_path is None:
             raise ValueError("a source screen or prequalified derivation is required")
@@ -553,6 +553,7 @@ def main():
     parser.add_argument("--predecessor-dir", required=True)
     parser.add_argument("--screen-receipt")
     parser.add_argument("--prepared-graph-derivation")
+    parser.add_argument("--derivation-program", type=Path, help="Exact archived program for a historical derivation; recorded SHA stays mandatory")
     parser.add_argument("--output-dir", required=True)
     args = parser.parse_args()
     if bool(args.screen_receipt) == bool(args.prepared_graph_derivation):
@@ -560,7 +561,8 @@ def main():
     print(json.dumps(build(Path(args.predecessor_dir),
         Path(args.screen_receipt) if args.screen_receipt else None,
         Path(args.output_dir),
-        Path(args.prepared_graph_derivation) if args.prepared_graph_derivation else None),
+        Path(args.prepared_graph_derivation) if args.prepared_graph_derivation else None,
+        derivation_program=args.derivation_program),
         indent=2, sort_keys=True))
 
 

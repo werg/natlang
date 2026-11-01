@@ -17,29 +17,31 @@ sys.path.insert(0, str(ROOT))
 
 from natlang_neuralese.common.custody import ProtectedWorlds, world_identities
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_file_hex
-from natlang_neuralese.common.jsonio import open_jsonl_text, write_json_durable
+from natlang_neuralese.common.jsonio import open_jsonl_text, write_json_durable, write_bytes_durable
 from scripts.neuralese_data.build_acquired_full_session_graphs import prepare_tokenizer
 from scripts.neuralese_data.derive_acquired_bash_context_226_v4 import ANNOTATION, CALL_RE, FUNCTION_RE, PARAMETER_RE
 from natlang_neuralese.train.own_output_supervision import label_roles, role_tokens_from_tokenizer
 
 
-TOKENIZER_ROOT = Path("/home/werg/.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd")
+TOKENIZER_ROOT = Path.home() / ".cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd"
 EXPECTED_PROTECTION = "8ed08f067c6a9715e5f48d73bf1d5ddf5d3c07501ee100c83b361c7ae7407ef7"
-
-
-def sha(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for block in iter(lambda: f.read(1024 * 1024), b""):
-            h.update(block)
-    return h.hexdigest()
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("derivation_dir", type=Path)
+    ap.add_argument("--derivation-program", type=Path, help="Exact archived program for a historical receipt; its recorded SHA remains mandatory")
+    ap.add_argument("--output", type=Path, help="Fresh verification receipt; an existing receipt is never overwritten")
     args = ap.parse_args()
     derivation_dir = args.derivation_dir.resolve(strict=True)
+    output = args.output or derivation_dir / "independent-verification.json"
+    if output.exists():
+        raise ValueError("verification receipts are immutable; choose a fresh --output")
+    verifier_program = output.with_name(output.stem + "-verifier-program.py")
+    if verifier_program.exists():
+        raise ValueError("verifier snapshot already exists; choose a fresh --output")
+    write_bytes_durable(verifier_program, Path(__file__).read_bytes())
+    verifier_program.chmod(0o444)
     receipt_path = derivation_dir / "receipt.json"
     receipt = json.loads(receipt_path.read_text())
     if receipt.get("schema") != "natlang.acquired-bash-context-derivation/1":
@@ -48,14 +50,14 @@ def main() -> None:
         raise ValueError("derivation makes an invalid admission/exposure claim")
     source_path = Path(receipt["source_graph_artifact"]["path"]).resolve(strict=True)
     out_path = Path(receipt["output"]["path"]).resolve(strict=True)
-    if sha(source_path) != receipt["source_graph_artifact"]["sha256"]:
+    if sha256_file_hex(source_path) != receipt["source_graph_artifact"]["sha256"]:
         raise ValueError("source screened graph bytes changed")
-    if sha(out_path) != receipt["output"]["sha256"]:
+    if sha256_file_hex(out_path) != receipt["output"]["sha256"]:
         raise ValueError("derived graph bytes changed")
-    if sha(receipt_path) != hashlib.sha256(receipt_path.read_bytes()).hexdigest():
+    if sha256_file_hex(receipt_path) != hashlib.sha256(receipt_path.read_bytes()).hexdigest():
         raise ValueError("receipt changed during read")
-    program = Path(receipt["derivation_program"]["path"]).resolve(strict=True)
-    if sha(program) != receipt["derivation_program"]["sha256"]:
+    program = (args.derivation_program or Path(receipt["derivation_program"]["path"])).resolve(strict=True)
+    if sha256_file_hex(program) != receipt["derivation_program"]["sha256"]:
         raise ValueError("derivation program differs from receipt")
     protection = ProtectedWorlds.load()
     if protection.digest != EXPECTED_PROTECTION or protection.digest != receipt[
@@ -237,10 +239,11 @@ def main() -> None:
     verification = {
         "schema": "natlang.acquired-bash-context-independent-verification/1",
         "status": "verified derivation integrity; not source admission or learner exposure",
-        "derivation_receipt": {"path": str(receipt_path), "sha256": sha(receipt_path)},
-        "verifier_program": {"path": str(Path(__file__).resolve()), "sha256": sha(Path(__file__).resolve())},
-        "source_graph_artifact": {"path": str(source_path), "sha256": sha(source_path)},
-        "derived_graph_artifact": {"path": str(out_path), "sha256": sha(out_path)},
+        "derivation_receipt": {"path": str(receipt_path), "sha256": sha256_file_hex(receipt_path)},
+        "verified_derivation_program": {"path": str(program), "sha256": sha256_file_hex(program)},
+        "verifier_program": {"path": str(verifier_program.resolve()), "sha256": sha256_file_hex(verifier_program)},
+        "source_graph_artifact": {"path": str(source_path), "sha256": sha256_file_hex(source_path)},
+        "derived_graph_artifact": {"path": str(out_path), "sha256": sha256_file_hex(out_path)},
         "current_protected_worlds_digest": protection.digest,
         "screened_source_rows": source_rows, "derived_rows": derived_rows,
         "validated_strict_calls": output_calls, "call_profile": dict(call_profile),
@@ -248,7 +251,7 @@ def main() -> None:
         "removed_empty_parameter_occurrences": 25,
         "preserved_other_tokens_and_weights": True,
     }
-    write_json_durable(derivation_dir / "independent-verification.json", verification)
+    write_json_durable(output, verification)
     print(json.dumps(verification, sort_keys=True))
 
 

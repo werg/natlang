@@ -275,7 +275,7 @@ def build(predecessor_dir: Path, screen_path: Path, output_dir: Path):
         raise ValueError("predecessor and current full protection union do not match")
 
     from scripts.neuralese_data.build_acquired_full_session_graphs import prepare_tokenizer
-    tokenizer_root = "/home/werg/.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd"
+    tokenizer_root = str(Path.home() / ".cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd")
     source_tokenizer = prepare_tokenizer(tokenizer_root, history_reasoning_policy="keep").tokenizer
     output_dir.mkdir(parents=True)
     filtered_graph_path = output_dir / "native-graphs.jsonl"

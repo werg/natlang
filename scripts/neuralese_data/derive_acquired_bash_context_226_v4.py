@@ -21,15 +21,16 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "training/neuralese"))
 sys.path.insert(0, str(ROOT))
 
+from natlang_neuralese.common.paths import resolve as machine_resolve
 from natlang_neuralese.common.custody import ProtectedWorlds, world_identities
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_file_hex
-from natlang_neuralese.common.jsonio import open_jsonl_text, write_json_durable, write_jsonl_text
+from natlang_neuralese.common.jsonio import open_jsonl_text, write_json_durable, write_jsonl_text, write_bytes_durable
 from scripts.neuralese_data.build_acquired_full_session_graphs import prepare_tokenizer
 from natlang_neuralese.train.own_output_supervision import label_roles, role_tokens_from_tokenizer
 
 
-SCREEN = Path("/home/werg/data/dgxops/acquired-current-protection-screen-20261101/receipt.json")
-TOKENIZER_ROOT = Path("/home/werg/.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd")
+SCREEN = machine_resolve("data_nvme", "dgxops/acquired-current-protection-screen-20261101/receipt.json")
+TOKENIZER_ROOT = Path.home() / ".cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd"
 EXPECTED_PROTECTION = "8ed08f067c6a9715e5f48d73bf1d5ddf5d3c07501ee100c83b361c7ae7407ef7"
 EXPECTED_SCREEN_ROWS = 760
 EXPECTED_TOOL_GRAPHS = 226
@@ -59,6 +60,10 @@ def main() -> None:
     args = ap.parse_args()
     out = args.output.resolve()
     out.mkdir(parents=True, exist_ok=False)
+    # Receipts bind immutable program bytes, not a mutable main-checkout file.
+    program_path = out / "derivation-program.py"
+    write_bytes_durable(program_path, Path(__file__).read_bytes())
+    program_path.chmod(0o444)
     screen_path = SCREEN.resolve(strict=True)
     screen = json.loads(screen_path.read_text())
     if screen.get("schema") != "natlang.acquired-current-protection-screen/1":
@@ -317,7 +322,7 @@ def main() -> None:
         "ordered_source_graph_ids_sha256": graph_ids.hexdigest(),
         "ordered_derived_graph_row_sha256": graph_row_digest.hexdigest(),
         "output": output_ref,
-        "derivation_program": file_ref(Path(__file__)),
+        "derivation_program": file_ref(program_path),
     }
     write_json_durable(out / "receipt.json", receipt)
     print(json.dumps(receipt, sort_keys=True))
