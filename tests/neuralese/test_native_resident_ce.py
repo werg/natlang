@@ -317,6 +317,54 @@ def test_resident_logical_family_extension_preserves_old_rows_and_records_transi
         extension_policy(old['stage_inputs']['sft'],new['stage_inputs']['sft'],prior_train=before,candidate_train=after)
 
 
+def test_resident_decision_factor_requires_exact_audited_source_target_and_predecessor(tmp_path):
+    from natlang_neuralese.data.native_sources import NativeGraphSource
+    from natlang_neuralese.train.own_output_supervision import identity, policy_objective
+    from test_own_output_supervision import objective
+    paths, old, new = fixture(tmp_path)
+    before = NativeGraphSource(paths['old_train'], 'tokenizer-sha', required_split='train')
+    after = NativeGraphSource(paths['train'], 'tokenizer-sha', required_split='train')
+
+    def family_map(path, source):
+        write_json(path, {'schema':'natlang.logical-family-map/1', 'source_sha256':source.file_sha256,
+            'rows':[{'id':entry['id'], 'binding':entry['binding'], 'family':'ordinary'} for entry in source.entries]})
+        return resident.binding(path)
+    oldmap = family_map(tmp_path/'old-map.json', before)
+    newmap = family_map(tmp_path/'new-map.json', after)
+    family = lambda ref: {'key':'logical-family','max_scale':8.,'normalization':'bounded-mean-one/1','map':ref}
+    olddoc = json.loads(paths['old_ce'].read_text())
+    newdoc = json.loads(paths['new_ce'].read_text())
+    olddoc['objective'] = objective(mass='token', family_balance=family(oldmap))
+    signature = 'a' * 64
+    factor = {'row_kind':'source_pairing','node_name':'producer','target_sha256':signature,'scale':.01}
+    newdoc['objective'] = objective(mass='token', family_balance=family(newmap), decision_factors=[factor])
+    newdoc['objective_transition'] = {'from':identity(policy_objective(olddoc))['sha256']}
+    audit_path = tmp_path/'target-audit.json'
+    write_json(audit_path, {'schema':'natlang.big2-program-template-repetition-audit/1',
+        'source':{'sha256':resident.sha(paths['old'])},
+        'top_producer_templates':[{'key':signature,'count':7}]})
+    newdoc['decision_factor_evidence'] = {'schema':'natlang.own-output-decision-factor-evidence/1',
+        'predecessor_objective_sha256':identity(policy_objective(olddoc))['sha256'],
+        'source_manifest':resident.binding(paths['train']),
+        'factors':[{'spec':factor,'audit':resident.binding(audit_path),'observed_occurrences':7}]}
+    write_json(paths['old_ce'], olddoc);write_json(paths['new_ce'], newdoc)
+    old['stage_inputs']['sft']['ce_supervision_policy']={**resident.binding(paths['old_ce']),'binding':'ce'}
+    new['stage_inputs']['sft']['ce_supervision_policy']={**resident.binding(paths['new_ce']),'binding':'ce'}
+    assert extension_policy(old['stage_inputs']['sft'],new['stage_inputs']['sft'],
+                            prior_train=before,candidate_train=after)['objective']['decision_factors']==[factor]
+
+    for damage in ('factor', 'audit_hash', 'source'):
+        broken = copy.deepcopy(newdoc)
+        if damage == 'factor': broken['objective']['decision_factors'][0]['scale'] = .02
+        elif damage == 'audit_hash': broken['decision_factor_evidence']['factors'][0]['audit']['sha256'] = '0' * 64
+        else: broken['decision_factor_evidence']['source_manifest']['sha256'] = '0' * 64
+        write_json(paths['new_ce'], broken)
+        new['stage_inputs']['sft']['ce_supervision_policy']={**resident.binding(paths['new_ce']),'binding':'ce'}
+        with pytest.raises(ValueError):
+            extension_policy(old['stage_inputs']['sft'],new['stage_inputs']['sft'],
+                             prior_train=before,candidate_train=after)
+
+
 def test_same_source_declared_objective_transition_requires_exact_predecessor(tmp_path):
     from natlang_neuralese.data.native_sources import NativeGraphSource
     from natlang_neuralese.train.own_output_supervision import identity,policy_objective

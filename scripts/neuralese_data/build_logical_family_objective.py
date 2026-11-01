@@ -175,8 +175,9 @@ def _leaf_mass(item):
         for line in io.TextIOWrapper(raw, encoding='utf8'):
             if line.strip():
                 row = json.loads(line)
-                weights, _ = graph_weights(row, _OBJECTIVE)
-                out.append((row['id'], float(sum(weights))))
+                factors = {}
+                weights, _ = graph_weights(row, _OBJECTIVE, factor_report=factors)
+                out.append((row['id'], float(sum(weights)), factors))
     return index, out
 
 
@@ -185,8 +186,9 @@ def _chunk_masses(lines):
     output=[]
     for line in lines:
         row=json.loads(line)
-        weights,_=graph_weights(row,_OBJECTIVE)
-        output.append((row['id'],float(sum(weights))))
+        factors={}
+        weights,_=graph_weights(row,_OBJECTIVE,factor_report=factors)
+        output.append((row['id'],float(sum(weights)),factors))
     return output
 
 
@@ -272,10 +274,22 @@ def main():
     if [m[0] for m in masses] != [r['id'] for r in rows]:
         raise ValueError('census row order differs from the family map')
     mass, count, zero = collections.Counter(), collections.Counter(), collections.Counter()
-    for (_, m), f in zip(masses, families):
-        mass[f] += m
+    factor_report = collections.defaultdict(lambda: {'decisions': 0, 'target_positions': 0,
+        'own_output_mass_before': 0., 'own_output_mass_after': 0., 'scale': None, 'families': {}})
+    for (_, row_mass, row_factors), f in zip(masses, families):
+        mass[f] += row_mass
         count[f] += 1
-        zero[f] += m == 0
+        zero[f] += row_mass == 0
+        for key, values in row_factors.items():
+            target = factor_report[key]
+            if target['scale'] not in (None, values['scale']):
+                raise ValueError('a decision factor changed scale during census')
+            target['scale'] = values['scale']
+            for name in ('decisions', 'target_positions', 'own_output_mass_before', 'own_output_mass_after'):
+                target[name] += values[name]
+            family_detail = target['families'].setdefault(f, {'decisions': 0, 'own_output_mass_after': 0.})
+            family_detail['decisions'] += values['decisions']
+            family_detail['own_output_mass_after'] += values['own_output_mass_after']
     total = sum(mass.values())
     missing = sorted(set(targets) - set(mass))
     extra = sorted(set(mass) - set(targets))
@@ -284,22 +298,37 @@ def main():
     # A declared family absent from this manifest gets no mass; the remaining targets are renormalized.
     present = {f: t for f, t in targets.items() if mass.get(f)}
     scales, capped = capped_scales(present, {f: mass[f] for f in present}, cap)
+    written_scales = {f: round(v, 6) for f, v in sorted(scales.items())}
+    scaled_mass_total = sum(written_scales[f] * mass[f] for f in written_scales)
+    if (any(value > cap for value in written_scales.values())
+            or abs(scaled_mass_total - total) > max(1e-6, total * 2e-6)):
+        raise ValueError('rounded logical family scales violate the declared cap or mean-one total mass')
+    for report in factor_report.values():
+        report['effective_share_by_family'] = {
+            family: detail['own_output_mass_after'] * written_scales[family] / scaled_mass_total
+            for family, detail in sorted(report['families'].items())}
+    expected_factors = {f"{item['row_kind']}/{item['node_name']}/{item['target_sha256']}"
+                        for item in _OBJECTIVE.get('decision_factors', [])}
+    if expected_factors - factor_report.keys():
+        raise ValueError(f"declared decision factors matched no source targets: {sorted(expected_factors - factor_report.keys())}")
     census = {'schema': 'natlang.own-output-mass-census/1', 'manifest': bind(manifest_path), 'rows': len(rows),
               'policy': bind(out / 'census-policy.json'), 'objective_without_family_scales': True,
               'families': {f: {'rows': count[f], 'zero_mass_rows': zero[f], 'unscaled_mass': mass[f],
                                'unscaled_share': mass[f] / total} for f in sorted(mass)},
+              'decision_factors': {key: factor_report[key] for key in sorted(factor_report)},
               'unscaled_mass_total': total}
     (out / 'census.json').write_text(json.dumps(census, indent=1) + '\n')
     policy = json.loads(json.dumps(ce))
     policy['objective']['family_balance'] = {'key': 'logical-family', 'max_scale': cap, 'normalization': 'declared/1',
                                              'map': bind(out / 'families.json'),
-                                             'scales': {f: round(v, 6) for f, v in sorted(scales.items())}}
+                                             'scales': written_scales}
     (out / 'ce-policy.json').write_text(json.dumps(policy, indent=1, sort_keys=True) + '\n')
     receipt = {'schema': 'natlang.logical-family-objective/1', 'train_sources': bind(manifest_path),
                'base_ce_policy': bind(Path(args.ce_policy)), 'targets': bind(Path(args.targets)),
                'target_shares': targets, 'absent_families': missing, 'capped_families': capped, 'max_scale': cap, 'map': bind(out / 'families.json'),
                'census': bind(out / 'census.json'), 'ce_policy': bind(out / 'ce-policy.json'), 'scales': scales,
-               'effective_shares': {f: scales[f] * mass[f] / total for f in scales},
+               'effective_shares': {f: written_scales[f] * mass[f] / total for f in written_scales},
+               'effective_share_sum': scaled_mass_total / total,
                'rule': None if family_map_input else [[p.pattern, f] for p, f in FAMILY_RULES],
                'family_map_input': family_map_input,
                'feature_inputs': feature_bindings, 'feature_classified_rows': len(overrides)}

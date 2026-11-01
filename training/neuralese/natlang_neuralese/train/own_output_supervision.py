@@ -52,6 +52,12 @@ per-token eligibility mask:
 7. Optional family balance multiplies each training graph's normalized loss
    by a bounded census-derived scale so each declared task family contributes
    equally in expectation (mean scale 1, capped at ``max_scale``).
+8. Optional ``decision_factors`` multiply exact fully supervised token spans
+   before family balancing. Each factor is bound to a row kind, node name and
+   SHA-256 over target token IDs and span positions; other decisions in the
+   same graph keep their own weights. This supports a recorded objective
+   correction for an over-repeated exact target without dropping its graph or
+   weakening a distinct consumer decision.
 
 ``mass: 'token'`` (the default for new runs, 2026-10-29) replaces steps 3 and 5: a decision's mass is the number of
 its eligible reply tokens (reasoning keeps its ``reasoning_share`` of that mass), invocations and graphs are not
@@ -65,8 +71,10 @@ invocation mass and its exact identity.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 import math
 import re
+import struct
 
 from ..common.hashing import canonical_json_sha256_hex
 from ..data.native_graph_schema import NativeGraphExample
@@ -180,6 +188,34 @@ def _family_balance(value):
     return result
 
 
+def _decision_factors(value):
+    """Exact target-span multipliers for repeated emitted decisions.
+
+    A factor is scoped to a source row kind and node name, then matched against
+    the SHA-256 of its fully supervised raw token spans. Other decisions in the
+    graph retain their original weights.
+    """
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ValueError('decision_factors must be a list')
+    result, seen = [], set()
+    for item in value:
+        if (not isinstance(item, dict) or set(item) != {'row_kind', 'node_name', 'target_sha256', 'scale'}
+                or item['row_kind'] not in ('source_pairing', 'source_chain', 'ordinary')
+                or not isinstance(item['node_name'], str) or not item['node_name']
+                or not isinstance(item['target_sha256'], str) or not _SHA.fullmatch(item['target_sha256'])
+                or type(item['scale']) not in (int, float) or not math.isfinite(item['scale'])
+                or not 0 < item['scale'] <= 1):
+            raise ValueError('decision factor needs row_kind, node_name, exact target SHA-256, and scale in (0, 1]')
+        key = (item['row_kind'], item['node_name'], item['target_sha256'])
+        if key in seen:
+            raise ValueError('decision factors repeat an exact row/node/target binding')
+        seen.add(key)
+        result.append({**item, 'scale': float(item['scale'])})
+    return result
+
+
 def resolve(declaration):
     """Canonical objective declaration; ``None`` is the historical row-weight objective."""
     if declaration is None:
@@ -194,7 +230,7 @@ def resolve(declaration):
     if name != NAME:
         raise ValueError(f'unknown supervision objective {name!r}')
     allowed = {'name', 'reasoning_share', 'reasoning_markers', 'family_balance', 'role_tokens', 'decision_readout',
-               'mass', 'decision_tokens', 'token_reference', *_FIXED}
+               'mass', 'decision_tokens', 'token_reference', 'decision_factors', *_FIXED}
     if set(declaration) - allowed:
         raise ValueError('unknown own-output objective fields: ' + ', '.join(sorted(set(declaration) - allowed)))
     mass = declaration.get('mass', 'invocation')
@@ -223,10 +259,13 @@ def resolve(declaration):
     readout = declaration.get('decision_readout', DECISION_READOUT)
     if readout != 'off' and readout != DECISION_READOUT:
         raise ValueError(f"decision_readout is {DECISION_READOUT!r} (default) or 'off'")
-    return {'name': NAME, 'reasoning_share': float(share), 'reasoning_markers': markers, **fixed_fields, **token_mass,
+    result = {'name': NAME, 'reasoning_share': float(share), 'reasoning_markers': markers, **fixed_fields, **token_mass,
             'decision_readout': readout if readout == 'off' else dict(DECISION_READOUT),
             'family_balance': _family_balance(declaration.get('family_balance')),
             'role_tokens': _role_tokens(declaration.get('role_tokens'))}
+    if 'decision_factors' in declaration:
+        result['decision_factors'] = _decision_factors(declaration['decision_factors'])
+    return result
 
 
 def identity(objective):
@@ -443,7 +482,27 @@ def _node_suffixes(row, raw_nodes):
     return [0] * len(raw_nodes)
 
 
-def graph_weights(row, objective):
+def _raw_target_span_signature(ids, raw):
+    """Hash exact positions and token IDs of fully supervised source target spans."""
+    if len(ids) != len(raw):
+        raise ValueError('target signature token/weight lengths differ')
+    spans, begin = [], None
+    for position, weight in enumerate(raw):
+        if weight >= 1.0 and begin is None:
+            begin = position
+        if begin is not None and (weight < 1.0 or position == len(raw) - 1):
+            end = position if weight < 1.0 else position + 1
+            spans.append((begin, end))
+            begin = None
+    digest = hashlib.sha256()
+    for begin, end in spans:
+        digest.update(struct.pack('<QQ', begin, end))
+        for token in ids[begin:end]:
+            digest.update(struct.pack('<I', token))
+    return digest.hexdigest(), spans
+
+
+def graph_weights(row, objective, *, factor_report=None):
     """Own-output weights and categories for a complete authenticated native graph row (all nodes, flat)."""
     role_tokens = objective['role_tokens']
     if row.get('tokenizer_fingerprint') != role_tokens['tokenizer_fingerprint']:
@@ -458,6 +517,11 @@ def graph_weights(row, objective):
     if type(opening) is not int or opening < 0:
         raise ValueError('runtime-opening assistant turns must be a nonnegative integer')
     think = _think_ids(role_tokens)
+    row_kind = ('source_pairing' if row.get('source_pairing') else
+                'source_chain' if row.get('source_chain') else
+                'ordinary' if ordinary else None)
+    decision_factors = {(item['row_kind'], item['node_name'], item['target_sha256']): item['scale']
+                        for item in objective.get('decision_factors', [])}
     weights, categories = [], []
     for index, (node, raw, suffix) in enumerate(zip(nodes, raw_nodes, suffixes)):
         ids = node['token_ids']
@@ -478,6 +542,25 @@ def graph_weights(row, objective):
         node_weights, node_categories = sequence_weights(labels, ids, eligible,
             reasoning_share=objective['reasoning_share'], reasoning_markers=objective['reasoning_markers'],
             think_ids=think, mass=objective.get('mass', 'invocation'))
+        if row_kind is not None and decision_factors:
+            signature, spans = _raw_target_span_signature(ids, raw)
+            factor = decision_factors.get((row_kind, node.get('name'), signature))
+            if factor is not None:
+                before = sum(sum(node_weights[begin:end]) for begin, end in spans)
+                if before <= 0:
+                    raise ValueError('decision factor matched a raw target span with no effective own-output mass')
+                for begin, end in spans:
+                    for position in range(begin, end):
+                        node_weights[position] *= factor
+                if factor_report is not None:
+                    key = f'{row_kind}/{node.get("name")}/{signature}'
+                    item = factor_report.setdefault(key, {'decisions': 0, 'target_positions': 0,
+                                                          'own_output_mass_before': 0.,
+                                                          'own_output_mass_after': 0., 'scale': factor})
+                    item['decisions'] += 1
+                    item['target_positions'] += sum(end - begin for begin, end in spans)
+                    item['own_output_mass_before'] += before
+                    item['own_output_mass_after'] += before * factor
         weights.extend(node_weights)
         categories.extend(node_categories)
     return weights, categories

@@ -200,6 +200,47 @@ def test_ordinary_rows_target_only_their_suffix_and_invocations_are_balanced():
     assert sum(weights[:len(many)]) == pytest.approx(1.) and sum(weights[len(many):]) == pytest.approx(1.)
 
 
+def test_exact_source_pairing_decision_factor_reduces_only_the_bound_target_span():
+    producer = turn(USER, [40, 40]) + turn(ASSISTANT, [41, 42, 43, 44])
+    consumer = turn(USER, [40]) + turn(ASSISTANT, [46, 47])
+    producer_weights = [0.] * len(producer)
+    target_begin = len(producer) - 5
+    producer_weights[target_begin:] = [1.] * (len(producer) - target_begin)
+    consumer_weights = [0.] * len(consumer)
+    consumer_begin = len(consumer) - 3
+    consumer_weights[consumer_begin:] = [1.] * (len(consumer) - consumer_begin)
+    row = {'schema': SCHEMA, 'id': 'paired-factor', 'split': 'train', 'source_groups': ['group'],
+           'tokenizer_fingerprint': FP, 'source_pairing': {'edge_id': 'bound-edge'},
+           'nodes': [{'name': 'producer', 'token_ids': producer, 'target_weights': producer_weights},
+                     {'name': 'consumer', 'token_ids': consumer, 'target_weights': consumer_weights}]}
+    producer_sig, _ = own._raw_target_span_signature(producer, producer_weights)
+    baseline, _ = own.graph_weights(row, objective(mass='token'))
+    correction = {'row_kind': 'source_pairing', 'node_name': 'producer',
+                  'target_sha256': producer_sig, 'scale': .2}
+    factor_report = {}
+    corrected, _ = own.graph_weights(row, objective(mass='token', decision_factors=[correction]),
+                                      factor_report=factor_report)
+    producer_size = len(producer)
+    assert sum(baseline[:producer_size]) > 0
+    assert sum(corrected[:producer_size]) == pytest.approx(.2 * sum(baseline[:producer_size]))
+    assert sum(corrected[producer_size:]) == pytest.approx(sum(baseline[producer_size:]))
+    assert all(value == 0 for value in corrected[:target_begin])
+    assert all(value == 0 for value in corrected[producer_size:consumer_begin])
+    report = factor_report[f"source_pairing/producer/{producer_sig}"]
+    assert report['decisions'] == 1 and report['target_positions'] == len(producer) - target_begin
+    assert report['own_output_mass_after'] == pytest.approx(.2 * report['own_output_mass_before'])
+
+    # A same-text target outside the declared source row/node class keeps its full mass.
+    ordinary = {**row, 'source_pairing': None, 'nodes': [row['nodes'][0]]}
+    ordinary['conversion'] = {'role_interpretation': 'whole-trajectory-chat-roles'}
+    ordinary_weights, _ = own.graph_weights(ordinary, objective(mass='token', decision_factors=[{
+        'row_kind': 'source_pairing', 'node_name': 'producer', 'target_sha256': producer_sig, 'scale': .2}]))
+    assert sum(ordinary_weights) == pytest.approx(sum(baseline[:producer_size]))
+    with pytest.raises(ValueError, match='decision factor'):
+        objective(decision_factors=[{'row_kind': 'source_pairing', 'node_name': 'producer',
+                                     'target_sha256': producer_sig, 'scale': 0.}])
+
+
 def test_family_scales_equalize_families_with_a_bound_and_unit_mean():
     entries = [{'id': f'a{i}', 'groups': ['fam:a:x']} for i in range(8)] + \
               [{'id': 'b0', 'groups': ['fam:b:y']}, {'id': 'c0', 'groups': ['other']}]

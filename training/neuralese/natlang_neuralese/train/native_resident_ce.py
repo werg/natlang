@@ -11,6 +11,59 @@ def _public(policy):
     return {key:value for key,value in policy.items() if not key.startswith('_')}
 
 
+def _validate_decision_factor_evidence(policy, prior_objective, candidate_objective, train_binding):
+    """Authenticate a new exact target-span objective factor before a resident transition."""
+    import json
+    from ..common.hashing import sha256_file_hex
+    from .own_output_supervision import identity, policy_objective
+
+    evidence = policy.get('decision_factor_evidence')
+    source_manifest = evidence.get('source_manifest') if isinstance(evidence, dict) else None
+    if (not isinstance(evidence, dict)
+            or set(evidence) != {'schema', 'predecessor_objective_sha256', 'source_manifest', 'factors'}
+            or evidence.get('schema') != 'natlang.own-output-decision-factor-evidence/1'
+            or evidence.get('predecessor_objective_sha256') != identity(policy_objective(prior_objective))['sha256']
+            or not isinstance(source_manifest, dict)
+            or source_manifest.get('sha256') != train_binding.get('sha256')
+            or Path(source_manifest.get('path', '')).resolve() != Path(train_binding['path']).resolve()
+            or not isinstance(evidence.get('factors'), list)):
+        raise ValueError('new decision factors lack their exact predecessor and source evidence')
+    manifest_path = Path(train_binding['path']).resolve(strict=True)
+    if sha256_file_hex(manifest_path) != train_binding['sha256']:
+        raise ValueError('decision factor evidence source manifest changed')
+    from .recipe import native_graph_payload_dependencies
+    sources = {source.get('sha256') for source in native_graph_payload_dependencies(manifest_path)}
+    old_factors = (prior_objective.get('objective') or {}).get('decision_factors', [])
+    new_factors = (candidate_objective.get('objective') or {}).get('decision_factors', [])
+    additions = new_factors[len(old_factors):]
+    if (new_factors[:len(old_factors)] != old_factors or not additions
+            or len(evidence['factors']) != len(additions)):
+        raise ValueError('decision factor evidence does not describe a pure additive objective extension')
+    for spec, proof in zip(additions, evidence['factors'], strict=True):
+        if (not isinstance(proof, dict) or set(proof) != {'spec', 'audit', 'observed_occurrences'}
+                or proof['spec'] != spec or type(proof['observed_occurrences']) is not int
+                or proof['observed_occurrences'] <= 0):
+            raise ValueError('decision factor proof does not bind the exact factor and observed target count')
+        audit_binding = proof['audit']
+        if (not isinstance(audit_binding, dict) or set(audit_binding) not in ({'path', 'sha256'},
+                {'path', 'sha256', 'bytes'}) or ('bytes' in audit_binding and
+                type(audit_binding.get('bytes')) is not int)):
+            raise ValueError('decision factor audit must bind path and SHA-256, with optional byte size')
+        audit_path = Path(audit_binding['path']).resolve(strict=True)
+        if (('bytes' in audit_binding and audit_path.stat().st_size != audit_binding['bytes'])
+                or sha256_file_hex(audit_path) != audit_binding['sha256']):
+            raise ValueError('decision factor audit bytes differ from the evidence binding')
+        audit = json.loads(audit_path.read_bytes())
+        if (audit.get('schema') != 'natlang.big2-program-template-repetition-audit/1'
+                or audit.get('source', {}).get('sha256') not in sources
+                or spec.get('row_kind') != 'source_pairing' or spec.get('node_name') != 'producer'):
+            raise ValueError('decision factor audit is not a source-bound Big2 producer repetition audit')
+        matches = [item for item in audit.get('top_producer_templates', [])
+                   if item.get('key') == spec.get('target_sha256')]
+        if len(matches) != 1 or matches[0].get('count') != proof['observed_occurrences']:
+            raise ValueError('decision factor does not match the exact audited producer target and frequency')
+
+
 def extension_policy(old, new, *, prior_train=None, candidate_train=None):
     """Load a complete, additive CE declaration without changing prior intent.
 
@@ -29,7 +82,8 @@ def extension_policy(old, new, *, prior_train=None, candidate_train=None):
         raise ValueError('resident CE append is not a declared data continuation')
     prior, policy = load_policy(before), load_policy(after)
     a, b = _public(prior), _public(policy)
-    excluded = {'sources', 'source_contract', 'inventory', 'first_row_observations', 'prior_inventory_correction'}
+    excluded = {'sources', 'source_contract', 'inventory', 'first_row_observations', 'prior_inventory_correction',
+                'decision_factor_evidence'}
     old_objective,new_objective=a.get('objective'),b.get('objective')
     declared_transition = ((old_objective or {}).get('family_balance',{}).get('normalization') == 'bounded-mean-one/1' and (new_objective or {}).get('family_balance',{}).get('normalization') == 'declared/1')
     if same_source and not declared_transition:
@@ -43,6 +97,15 @@ def extension_policy(old, new, *, prior_train=None, candidate_train=None):
         if old_family.get('key')!='logical-family' or new_family.get('key')!='logical-family':
             raise ValueError('resident CE objective change is not a logical-family map extension')
         old_map=old_family.pop('map',None);new_map=new_family.pop('map',None)
+        old_factors = left.pop('decision_factors', [])
+        new_factors = right.pop('decision_factors', [])
+        factor_addition = old_factors != new_factors
+        if factor_addition:
+            _validate_decision_factor_evidence(policy, prior, policy, new['native_graphs'])
+            if new_factors[:len(old_factors)] != old_factors:
+                raise ValueError('resident decision factors must be an append-only exact objective extension')
+        elif a.get('decision_factor_evidence') != b.get('decision_factor_evidence'):
+            raise ValueError('resident source append changed historical decision-factor evidence')
         if same_source and old_map != new_map:
             raise ValueError('same-source objective transition cannot change family labels')
         # A declared objective transition may replace row-count balancing with
