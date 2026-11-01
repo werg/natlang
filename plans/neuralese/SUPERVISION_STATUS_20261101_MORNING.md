@@ -1,3 +1,62 @@
+## Live supervision update, 2026-11-01 23:21 CET
+
+- Previous goal turn was progress: verified escalation integration, recovered
+  exact67 custody and prepared source367540. This turn fixed actual launcher
+  and publication defects; the objective remains active.
+- Focused67 evaluation completed4/4 on cases56/96/104/120 with exact0f8a serving
+  runtime, full prompt and identical limits. Local copied evidence and summary:
+  W/ops/pop67-newrecipe-regressions-{evidence,completed}-1101. Remaining12 cases
+  now run on Pop in pop67-newrecipe-remaining12-runtime0f8a-1101.service.
+  Four-case success is not a full-packet capability result. Old72-to75 losses
+  were on307946 rows, before the new45785/13809 acquired additions; do not blame
+  those later sources. Actual sampled rows/gradient causes remain under inquiry.
+- Direct SFT resident default exposed a real integration gap: no recipe-plan.json
+  existed, so the353731 retry failed after qualification but before SGD.
+  903f66898 initializes and validates resident authority before allocation;
+  70 initial targeted tests passed and the remaining fixture's two cases passed
+  after correcting its invalid recipe. Three new authority tests are included.
+  No different runtime/recipe plan is silently replaced.
+- Corrected runtime then hit a second genuine gap: immutable custody filenames
+  keyed only by checkpoint SHA collided when the snapshotter source changed.
+  1378d54bc namespaces evidence by snapshotter SHA;3 targeted custody tests pass.
+  Earlier snapshots remain immutable. Current frozen runtime is
+  W/runtime-earned67-resident-ffn-v2-1101 (commit1378d54bc).
+- Typed interrupted64-to67 publication now exists (276c66b5e,80d4c05fa,ece82183f),
+  with54 recovery tests and actual67 verification. Central verification freshly
+  derives metadata from retained full bytes, rejecting mutually forged snapshots.
+  Independent full67 is W/ops/earned67-immutable-parent-1101/checkpoint.pt,
+  SHA0c8e75f6bb775cd108191fbd35884e5835050a726ffe112b266be851fe2ee8fc.
+  Exact declaration: ops/earned67-crash-recovery-1101/interrupted-window-declaration.json.
+  No completed successor report exists yet; no publication was invented. Keep
+  the retained67 full checkpoint and both snapshots for future central replay.
+- Source367540's largest graph has524650 KV slots. FFN4096 alone still exceeded
+  110GiB during its actual capacity gate, before SGD. Root killed that failed
+  probe after guard TERM to release memory, with saved67 intact. All13809 novel
+  graphs, measured effective targets and recipe obligations remain retained.
+  Grouped-layer activation checkpointing is being implemented/tested by the one
+  bounded Terra helper; no actual memory saving is claimed yet.
+- Useful353731 continuation restarted in
+  lfm3-earned67-source353731-stable-v2-1101.service, fixed80GiB memory,180s stop
+  grace; controls ops/earned67-source353731-stable-v2-1101. Exact67 weights,
+  optimizer/RNG/exposure restored; correct resident plan and new custody namespace
+  are in use. Both maximum single-graph cases passed by23:20:39; packed capacity
+  and actual68 SGD still need verification. No new earned update claimed.
+- Recovery-tree resumption e0171bb82 passed23 targeted tests. Old qualifier was
+  preempted for GPU admission after staging its source tree; its obsolete queued
+  request was explicitly canceled. New active qualifier
+  qualify-recovery-best64-resume-tree-1101 uses frozen scriptfd2dba162f3e4d55,
+  the exact original draft, retained64 SHA, environment fixture and independently
+  reverified source tree native-full-recovery-restore-d54ylsws. It reruns all
+  isolated smoke checks; no completed qualification claimed.
+- Private64 export remains active in private W&B runulcvvcya, without a sandbox.
+  Runtime has fresh workstation GET verification; full64 upload/readback remains
+  unfinished. Diagnostic full70 is being independently copied/read back on the
+  external drive before replacing its internal duplicate with a symlink. This
+  frees asynchronous checkpoint room without deleting its full optimizer state.
+  Latest observed internal57GiB free; do not weaken40GiB floor. Actual source67
+  mirror queue and CPU acquired conversion remain supervised. Paid generation
+  stays paused; no cloud GPU allocation or recurring entitlement probe started.
+
 ## Live supervision update, 2026-11-01 22:57 CET
 
 - Owner-requested bounded execution-efficiency rewards and live inference
