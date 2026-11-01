@@ -339,7 +339,7 @@ def native_policy_parameter_contract():
         'rank','recipe_binding','seed','share_causal_prefixes','softmax_numerics','stage_id',
         'task_eval','task_eval_every','weight_decay','weight_ema','latent_ns',
         'qualify_training_backend','native_participant','diloco','diloco_new_outer',
-        'standalone_diloco_parent',
+        'standalone_diloco_parent','coefficient_optimizer',
     }
     sft_only = {
         'communication_min_visits','pending_focus','pending_native_sources',
