@@ -77,18 +77,20 @@ def test_pending_rebase_preserves_family_and_verifies_exact_correction(tmp_path,
         p=tmp_path/name;p.write_text(json.dumps(value));return bind(p)
     oldmap=write('old-map.json',{'source_sha256':'old','rows':[{'id':'x','binding':'before','family':'general-agent'}]})
     newmap=write('new-map.json',{'source_sha256':'new','rows':[{'id':'x','binding':'after','family':'general-agent'}]})
-    prior=write('prior.json',{'source':{'sha256':'old'},'family_map':oldmap,'current_protection_digest':'p'})
+    ce=write('ce.json',{'objective':None});new_ce=write('new-ce.json',{'objective':None})
+    prior=write('prior.json',{'source':{'sha256':'old'},'family_map':oldmap,'ce_policy':ce,'current_protection_digest':'p'})
     ledger=tmp_path/'ledger.jsonl';ledger.write_text(json.dumps({'id':'x','old_binding':'before','new_binding':'after','disposition':'corrected'})+'\n')
     correction=write('correction.json',{'prior_source':{'sha256':'old'},'current_source':{'sha256':'new'},
        'static_native_context_correction':{'schema':'validated-by-source-correction'},'row_bindings_path':str(ledger),
        'row_bindings_sha256':hashlib.sha256(ledger.read_bytes()).hexdigest()})
-    current=write('current.json',{'source':{'sha256':'new'},'family_map':newmap,'source_correction':correction,'current_protection_digest':'p'})
+    current=write('current.json',{'source':{'sha256':'new'},'family_map':newmap,'ce_policy':new_ce,'source_correction':correction,'current_protection_digest':'p'})
     partition=write('partition.json',{'predecessor':prior,'protected_worlds_sha256':'p'})
     screen=write('screen.json',{'pending_partition':partition,'output':{'rows':2}})
     census=write('census.json',{'screen':screen,'pending_partition':partition})
     monkeypatch.setattr(tool,'source_correction_dependencies',lambda ref:[])
     result=tool.rebase(screen['path'],census['path'],current['path'],tmp_path/'rebased')
     assert result['corrected_ids']==['x']
+    assert json.loads((tmp_path/'rebased/census.json').read_text())['ce_policy']==new_ce
     updated=json.loads((tmp_path/'rebased/screen.json').read_text())
     assert tool.verify_rebase(updated,current['path'])[1]==prior
     (tmp_path/'new-map.json').write_text('{}')

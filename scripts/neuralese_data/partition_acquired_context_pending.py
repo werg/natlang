@@ -105,10 +105,18 @@ def verify_partition(screen, predecessor):
 
 def verify_partition_census(screen, census):
     proof=_read(screen['pending_partition']);original=_read(proof['original_census'])
+    expected_policy=original.get('ce_policy');expected_objective=original.get('objective_sha256')
+    if screen.get('predecessor_rebase'):
+        from scripts.neuralese_data.rebase_acquired_pending_partition import verify_rebase
+        from natlang_neuralese.train.own_output_supervision import policy_objective
+        rebase=_read(screen['predecessor_rebase'])
+        verify_rebase(screen,rebase['current_predecessor']['path'])
+        predecessor=_read(rebase['current_predecessor']);expected_policy=predecessor['ce_policy']
+        expected_objective=canonical_json_sha256_hex(policy_objective(_read(expected_policy)))
     if (original.get('schema')!='natlang.acquired-effective-learning-census/1' or original.get('training_admission') is not False
         or original.get('screen',{}).get('sha256')!=proof['original_screen']['sha256']
         or original.get('row_signals')!=proof['original_row_signals'] or census.get('pending_partition')!=screen['pending_partition']
-        or census.get('ce_policy')!=original.get('ce_policy') or census.get('objective_sha256')!=original.get('objective_sha256')
+        or census.get('ce_policy')!=expected_policy or census.get('objective_sha256')!=expected_objective
         or census.get('builder')!=original.get('builder')):
         raise ValueError('position pending census changed original objective custody')
     pending={x['id']:x for x in proof['pending_rows']};seen=set();count=0

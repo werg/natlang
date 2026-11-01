@@ -27,6 +27,16 @@ def verify_rebase(screen, predecessor):
         or (correction.get('current_source') or {}).get('sha256')!=(current.get('source') or {}).get('sha256')
         or not correction.get('static_native_context_correction')):
         raise ValueError('pending predecessor rebase lacks exact static source correction')
+    from natlang_neuralese.train.own_output_supervision import policy_objective
+    old_objective=policy_objective(_read(previous['ce_policy']));new_objective=policy_objective(_read(current['ce_policy']))
+    if ({k:v for k,v in old_objective.items() if k!='family_balance'}!={k:v for k,v in new_objective.items() if k!='family_balance'}
+        or {k:v for k,v in (old_objective.get('family_balance') or {}).items() if k!='map'}!=
+           {k:v for k,v in (new_objective.get('family_balance') or {}).items() if k!='map'}):
+        raise ValueError('pending predecessor rebase changed effective objective or family scales')
+    for objective,receipt in ((old_objective,previous),(new_objective,current)):
+        balance=objective.get('family_balance') or {}
+        if balance.get('key')=='logical-family' and (balance.get('map') or {}).get('sha256')!=(receipt.get('family_map') or {}).get('sha256'):
+            raise ValueError('pending predecessor rebase CE policy uses another family map')
     old=_read(previous['family_map']);new=_read(current['family_map'])
     if (old.get('source_sha256')!=previous['source']['sha256'] or new.get('source_sha256')!=current['source']['sha256']):
         raise ValueError('pending predecessor family maps belong to other sources')
@@ -73,7 +83,10 @@ def rebase(screen_path,census_path,new_predecessor,output):
     updated=copy.deepcopy(screen);updated['predecessor_rebase']=bind(proof_path)
     verify_rebase(updated,new_predecessor)
     screen_out=output/'screen.json';write_json_durable(screen_out,updated)
-    new_census={**census,'screen':bind(screen_out),'predecessor_rebase':bind(proof_path)}
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+    from natlang_neuralese.train.own_output_supervision import policy_objective
+    new_census={**census,'screen':bind(screen_out),'predecessor_rebase':bind(proof_path),
+        'ce_policy':current['ce_policy'],'objective_sha256':canonical_json_sha256_hex(policy_objective(_read(current['ce_policy'])))}
     write_json_durable(output/'census.json',new_census)
     return proof
 
