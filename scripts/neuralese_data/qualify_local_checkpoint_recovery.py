@@ -66,7 +66,7 @@ def _host_contract():
     return result
 
 
-def qualify(draft, checkpoint, scratch_parent, output_plan, qualification_path, evidence_path):
+def qualify(draft, checkpoint, scratch_parent, output_plan, qualification_path, evidence_path, environment_scratch=None):
     draft=Path(draft).resolve(strict=True);checkpoint=Path(checkpoint).resolve(strict=True)
     output_plan=Path(output_plan).resolve();qualification_path=Path(qualification_path).resolve();evidence_path=Path(evidence_path).resolve()
     if any(path.exists() for path in (output_plan,qualification_path,evidence_path)):
@@ -90,8 +90,11 @@ def qualify(draft, checkpoint, scratch_parent, output_plan, qualification_path, 
         return Path(blobs[(items[0]['path'],items[0]['sha256'])]['path'])
     runtime_archive=find('runtime',restore['runtime_archive']);environment_archive=find('environment',restore['environment_archive']);stdlib_archive=find('system-python',restore['system_python_archive'])
     asset_archives=[(item,find('task-assets',item['archive'])) for item in restore['asset_archives']]
-    with tempfile.TemporaryDirectory(prefix='native-full-recovery-restore-',dir=scratch_parent) as tmp:
+    environment_scratch=Path(environment_scratch or scratch_parent).resolve(strict=True)
+    with (tempfile.TemporaryDirectory(prefix='native-full-recovery-restore-',dir=scratch_parent) as tmp,
+          tempfile.TemporaryDirectory(prefix='native-recovery-environment-',dir=environment_scratch) as environment_tmp):
         root=Path(tmp);tree=root/'tree';tree.mkdir();source_map={}
+        environment_root=Path(environment_tmp)
         archives={str(runtime_archive),str(environment_archive),str(stdlib_archive),*(str(archive) for _,archive in asset_archives)}
         for item in base_closure:
             blob=Path(blobs[(item['path'],item['sha256'])]['path'])
@@ -104,7 +107,7 @@ def qualify(draft, checkpoint, scratch_parent, output_plan, qualification_path, 
             source_map[str(Path(item['path']).resolve())]=str(target)
         write_json_durable(root/'.natlang-source-map.json',{'schema':'natlang.staged-source-map/1','paths':source_map})
         runtime_manifest=extract_archive(runtime_archive,root/'restored-runtime')
-        env_manifest=extract_archive(environment_archive,root/'restored-environment',environment=True)
+        env_manifest=extract_archive(environment_archive,environment_root,environment=True)
         stdlib_manifest=extract_archive(stdlib_archive,root/'restored-stdlib')
         asset_roots={}
         for index,(item,archive) in enumerate(asset_archives):
@@ -116,7 +119,7 @@ def qualify(draft, checkpoint, scratch_parent, output_plan, qualification_path, 
         os.symlink(root/'restored-stdlib'/'runtime',system_home/'lib/python3.12')
         interpreter_source=Path(source_map[restore['interpreter_path']]);interpreter=root/'python-bin/python3.12';interpreter.parent.mkdir()
         shutil.copyfile(interpreter_source,interpreter);interpreter.chmod(0o755)
-        venv=root/'restored-environment/venv';(venv/'bin/python').unlink();(venv/'bin/python').symlink_to(interpreter)
+        venv=environment_root/'venv';(venv/'bin/python').unlink();(venv/'bin/python').symlink_to(interpreter)
         node_source=Path(source_map[restore['node_path']]);node=root/'node-bin/node';node.parent.mkdir();shutil.copyfile(node_source,node);node.chmod(0o755)
         runtime=root/'restored-runtime/runtime';base=_mapped_path(tree,restore['base_path'])
         if not base.is_dir():raise ValueError('restored model base is missing')
@@ -185,7 +188,7 @@ print('RECOVERY_SMOKE='+json.dumps({'custody':recovery_training_custody(state),'
         used=[]
         for raw in set(smoke['mapped_executables'])|set(node_mapped):
             path=Path(raw)
-            if path.is_relative_to(root) or path==checkpoint:continue
+            if path.is_relative_to(root) or path.is_relative_to(environment_root) or path==checkpoint:continue
             if raw not in allowed or file_sha256(path)!=allowed[raw]:raise ValueError('unbound host executable or library in restored process: '+raw)
             used.append({'path':raw,'sha256':allowed[raw]})
         evidence={'schema':'natlang.local-recovery-restore-evidence/1','checkpoint':{'path':str(checkpoint),'sha256':checkpoint_sha},
@@ -211,7 +214,7 @@ print('RECOVERY_SMOKE='+json.dumps({'custody':recovery_training_custody(state),'
 
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('--draft-plan',required=True);p.add_argument('--checkpoint',required=True);p.add_argument('--scratch-parent',required=True);p.add_argument('--output-plan',required=True);p.add_argument('--qualification',required=True);p.add_argument('--evidence',required=True)
-    a=p.parse_args();print(json.dumps(qualify(a.draft_plan,a.checkpoint,a.scratch_parent,a.output_plan,a.qualification,a.evidence)),flush=True)
+    p=argparse.ArgumentParser();p.add_argument('--draft-plan',required=True);p.add_argument('--checkpoint',required=True);p.add_argument('--scratch-parent',required=True);p.add_argument('--environment-scratch');p.add_argument('--output-plan',required=True);p.add_argument('--qualification',required=True);p.add_argument('--evidence',required=True)
+    a=p.parse_args();print(json.dumps(qualify(a.draft_plan,a.checkpoint,a.scratch_parent,a.output_plan,a.qualification,a.evidence,a.environment_scratch)),flush=True)
 
 if __name__=='__main__':main()
