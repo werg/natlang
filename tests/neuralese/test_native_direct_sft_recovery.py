@@ -320,3 +320,22 @@ def test_production_session_reconciliation_accepts_bound_launch_parent_when_pref
         report_ref=f['report_ref'],training_receipt_ref=f['receipt_ref'],checkpoint_ref=f['checkpoint_ref'],
         successor_config_ref=f['next_config_ref'],out=f['out'])
     assert result['prepared_only'] is True
+
+
+def test_completed_direct_sft_refresh_requires_exact_multiupdate_delta(tmp_path):
+    from natlang_neuralese.rl.native_direct_sft_recovery import publish_completed
+    def file(name,data):
+        path=tmp_path/name;path.write_text(json.dumps(data));return binding(path)
+    parent=file('multi-parent',{'old':True});child=file('multi-child',{'new':True})
+    state=tmp_path/'multi-state.json';state.write_text(json.dumps({'phase':'awaiting_semantic_refresh','checkpoint':parent['path'],'pending_native_checkpoint':child['path'],'round':11,'trained_rounds':11}))
+    boundary={'kind':'semantic-refresh','reached':True,'new_optimizer_updates':3,'checkpoint_sha256':child['sha256']}
+    report=file('multi-report',{'numerics_ok':True,'checkpoint_sha256':child['sha256'],'continuation_boundary':boundary})
+    receipt=file('multi-receipt',{'checkpoint':{'sha256':child['sha256']},'continuation':{'checkpoint_sha256':parent['sha256']}})
+    common={'optimizer_present':True,'rng_present':True}
+    custody_data={'schema':'natlang.earned-sft-checkpoint-custody/1','parent':parent|common|{'global_step':53},'successor':child|common|{'global_step':57},'old_bindings_and_quotas_preserved':True,'old_exposure_not_decreased':True}
+    custody=file('multi-custody',custody_data)
+    with pytest.raises(ValueError,match='qualified full-state custody'):
+        publish_completed(state,report_ref=report,receipt_ref=receipt,custody_ref=custody,out=tmp_path/'multi-out')
+    boundary['new_optimizer_updates']=4; report=file('multi-report',{'numerics_ok':True,'checkpoint_sha256':child['sha256'],'continuation_boundary':boundary})
+    publish_completed(state,report_ref=report,receipt_ref=receipt,custody_ref=custody,out=tmp_path/'multi-out')
+    result=json.loads(state.read_text());assert result['checkpoint']==child['path'] and result['trained_rounds']==11

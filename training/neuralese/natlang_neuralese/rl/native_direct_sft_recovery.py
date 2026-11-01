@@ -636,6 +636,7 @@ def publish_completed(state_path, *, report_ref, receipt_ref, custody_ref, out):
         state=json.loads(state_path.read_text());report,receipt,custody=map(read,(report_ref,receipt_ref,custody_ref))
         parent,child=custody['parent'],custody['successor'];parent_path,child_path=_bound(parent),_bound(child)
         boundary=report.get('continuation_boundary') or {}
+        updates=boundary.get('new_optimizer_updates')
         state_parent=Path(state['checkpoint']).resolve()
         parent_matches=state_parent==parent_path
         receipt_parents={parent['sha256']}
@@ -653,10 +654,11 @@ def publish_completed(state_path, *, report_ref, receipt_ref, custody_ref, out):
                 or custody.get('schema')!='natlang.earned-sft-checkpoint-custody/1'
                 or custody.get('old_bindings_and_quotas_preserved') is not True
                 or custody.get('old_exposure_not_decreased') is not True
-                or child['global_step']!=parent['global_step']+1
+                or type(updates) is not int or updates<1
+                or child['global_step']!=parent['global_step']+updates
                 or not all(x.get('optimizer_present') and x.get('rng_present') for x in (parent,child))
                 or boundary.get('kind')!='semantic-refresh' or boundary.get('reached') is not True
-                or boundary.get('new_optimizer_updates')!=1 or boundary.get('checkpoint_sha256')!=child['sha256']
+                or boundary.get('checkpoint_sha256')!=child['sha256']
                 or report.get('checkpoint_sha256')!=child['sha256']
                 or receipt.get('checkpoint',{}).get('sha256')!=child['sha256']
                 or receipt.get('continuation',{}).get('checkpoint_sha256') not in receipt_parents
