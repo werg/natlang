@@ -107,6 +107,7 @@ def test_whole_policy_stop_restart_preserves_all_moments_rng_and_exposure(tmp_pa
     assert len(list((tmp_path/'resume/policies').glob('*/policy.json')))==1
     assert len(list((tmp_path/'resume/training-state').glob('*.pt')))==1
     saved=torch.load(tmp_path/'resume/checkpoint.pt',weights_only=False)
+    assert saved['checkpoint_layer_group_size']==4
     assert sum(item['visits'] for item in saved['obligations'])==1
     from natlang_neuralese.model.native_coefficient_policy import policy_dependencies
     pending_items=policy_dependencies(partial['policy']['path'])
@@ -119,6 +120,7 @@ def test_whole_policy_stop_restart_preserves_all_moments_rng_and_exposure(tmp_pa
     engine.store.close();engine.store=TensorStore(tmp_path/'restart-store')
     resumed=train(engine,out=tmp_path/'portable-resume',**{**options,'policy':partial['policy']['path']})
     assert resumed['step']==4 and resumed['completed'] and resumed['qualification_complete']
+    assert torch.load(tmp_path/'portable-resume/checkpoint.pt',weights_only=False)['checkpoint_layer_group_size']==4
     assert len(evaluations)==1
     final=restore_policy(engine,resumed['policy']['path'])
     final_closure={entry['sha256']:__import__('pathlib').Path(entry['path']) for entry in policy_dependencies(resumed['policy']['path'])}

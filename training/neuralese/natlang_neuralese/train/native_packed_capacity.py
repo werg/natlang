@@ -379,10 +379,15 @@ def oversize_execution_identity(model, optimizer, *, args, backend, objective_bi
         hardware['capability']=list(torch.cuda.get_device_capability(device))
         hardware['total_bytes']=int(torch.cuda.get_device_properties(device).total_memory)
     hardware['cuda_budget_gb']=os.environ.get('NATLANG_CUDA_MEMORY_GB')
+    from ..common.checkpoint_offload import checkpoint_input_storage_options
+    checkpoint_storage=checkpoint_input_storage_options(model.port)
     return {'schema':'natlang.native-oversize-execution-identity/1',
         'sha256':canonical_json_sha256_hex({'code':code,'params':params,'hardware':hardware,
             'backend':backend.configuration() if backend is not None else {'enabled':False},
             'checkpoint_layers':bool(args.checkpoint_layers),'chunk_tokens':int(args.chunk_tokens),
+            'checkpoint_layer_group_size':getattr(model.port,'checkpoint_layer_group_size',1),
+            'ffn_chunk_tokens':getattr(model.port,'ffn_chunk_tokens',0),
+            'checkpoint_storage':checkpoint_storage,
             'cotangent_mode':'plain' if getattr(args,'cotangent_accumulator_backend',None)=='plain' else 'vjp',
             'retained_gradients':int(args.accumulate_batches)>1,'production_packing':True,
             'quantization':getattr(args,'quantization',None),
@@ -391,6 +396,8 @@ def oversize_execution_identity(model, optimizer, *, args, backend, objective_bi
             'share_causal_prefixes':bool(getattr(model,'share_causal_prefixes',False)),
             'objective':objective_binding}),
         'code':code,'parameter_signature_sha256':canonical_json_sha256_hex(params),
+        'checkpoint_layer_group_size':getattr(model.port,'checkpoint_layer_group_size',1),
+        'ffn_chunk_tokens':getattr(model.port,'ffn_chunk_tokens',0), 'checkpoint_storage':checkpoint_storage,
         'hardware':hardware,'backend':backend.configuration() if backend is not None else {'enabled':False},
         'objective':objective_binding}
 

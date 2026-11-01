@@ -365,6 +365,10 @@ def _forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None 
     convolution_indices = {}
     attention_workspace = None
     checkpointed = bool(getattr(port, 'checkpoint_layers', False)) and torch.is_grad_enabled()
+    group_size = getattr(port, 'checkpoint_layer_group_size', 1)
+    if type(group_size) is not int or group_size < 1:
+        raise ValueError('checkpoint layer group size must be a positive integer')
+    pending_layers = []
     for i, layer in enumerate(port.layers):
         attention = port.is_attention(i)
         gated_delta = _is_gated_delta(port, i)
@@ -472,29 +476,63 @@ def _forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None 
             return (*result, layer_kl) if channel is not None else result
 
         if checkpointed:
+            pending_layers.append((run_layer, external_i, 4 if gated_delta else 2 if attention else 1))
+            if len(pending_layers) < group_size and i + 1 < len(port.layers):
+                continue
+            # Freeze callbacks and import counts: backward may run after the
+            # surrounding Python loop has advanced or returned.
+            group = tuple(pending_layers)
+            pending_layers = []
+            imports = tuple(value for _, layer_imports, _ in group for value in layer_imports)
+            sizes = tuple(len(layer_imports) for _, layer_imports, _ in group)
+            def run_group(value, *group_imports, group=group, sizes=sizes):
+                offset = 0
+                captured = []
+                group_kls = []
+                for (function, _, _), size in zip(group, sizes):
+                    result = function(value, *group_imports[offset:offset + size])
+                    offset += size
+                    if channel is not None:
+                        group_kls.append(result[-1])
+                        result = result[:-1]
+                    value = result[0]
+                    if retain_states:
+                        captured.extend(result[1:])
+                result = (value, *captured)
+                return (*result, *group_kls) if channel is not None else result
             # Dynamic torch.compile fallback must not change saved tensors
             # between forward and recompute. Preserve stable fused norm kernels.
             if getattr(port, 'native_norm_execution', 'source-v1') == 'stable-v1':
-                function=run_layer
-                def stable_norm_layer(*args, function=function):
+                function=run_group
+                def stable_norm_group(*args, function=function):
                     from ..maple.model import eager_rms_norm
                     with eager_rms_norm(compiled_only=True):
                         return function(*args)
-                run_layer=stable_norm_layer
+                run_group=stable_norm_group
             from .native_adapters import capture_native_checkpoint_execution
-            run_layer = capture_native_checkpoint_execution(run_layer)
+            run_group = capture_native_checkpoint_execution(run_group)
             from torch.utils.checkpoint import checkpoint
             checkpoint = getattr(port, 'activation_checkpoint', checkpoint)
-            updated = checkpoint(run_layer, h, *external_i, use_reentrant=False,
+            updated = checkpoint(run_group, h, *imports, use_reentrant=False,
                                  preserve_rng_state=getattr(port, 'checkpoint_preserve_rng', True))
+            if channel is not None:
+                for layer_kl in updated[-len(group):]:
+                    channel_kl = layer_kl if channel_kl is None else channel_kl + layer_kl
+                updated = updated[:-len(group)]
+            h = updated[0]
+            if retain_states:
+                offset = 1
+                for _, _, count in group:
+                    state.append(updated[offset:offset + count])
+                    offset += count
         else:
             updated = run_layer(h, *external_i)
-        if channel is not None:
-            channel_kl = updated[-1] if channel_kl is None else channel_kl + updated[-1]
-            updated = updated[:-1]
-        h = updated[0]
-        if retain_states:
-            state.append(updated[1:])
+            if channel is not None:
+                channel_kl = updated[-1] if channel_kl is None else channel_kl + updated[-1]
+                updated = updated[:-1]
+            h = updated[0]
+            if retain_states:
+                state.append(updated[1:])
     return {'h_final': h, 'states': tuple(state), 'plan': plan,
             **({'import_channel': {'sources': channel.sources, 'kl': channel_kl,
                                    'imported_rows': len(channel.imported)}} if channel is not None else {}),

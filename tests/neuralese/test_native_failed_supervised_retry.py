@@ -251,6 +251,14 @@ def test_corrected_capacity_identity_requires_ffn_chunk_and_exact_runtime(tmp_pa
     verified=({'path':str(tmp_path/'checkpoint.pt'),'sha256':'a'*64}, {'model_config':model})
     assert retry._corrected_request(binding(path),config={'trainer_parameters':parameters,
         'production_stage':'full'},verified_checkpoint=verified,package=package,stage_id='full')==value
+    parameters['checkpoint_layer_group_size']=4;value['identity']['checkpoint_layer_group_size']=4;write(path,value)
+    assert retry._corrected_request(binding(path),config={'trainer_parameters':parameters,
+        'production_stage':'full'},verified_checkpoint=verified,package=package,stage_id='full')==value
+    value['identity']['checkpoint_layer_group_size']=2;write(path,value)
+    with pytest.raises(ValueError,match='checkpoint layer grouping'):
+        retry._corrected_request(binding(path),config={'trainer_parameters':parameters,
+            'production_stage':'full'},verified_checkpoint=verified,package=package,stage_id='full')
+    value['identity']['checkpoint_layer_group_size']=4
     value['identity'].pop('ffn_chunk_tokens');write(path,value)
     with pytest.raises(ValueError,match='packing'):
         retry._corrected_request(binding(path),config={'trainer_parameters':parameters,

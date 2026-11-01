@@ -22,6 +22,9 @@ def tiny(family):
     elif family == 'lfm3':
         from test_lfm3_port import tiny_lfm3
         port = tiny_lfm3()
+    elif family == 'qwen35':
+        from test_qwen35_native import tiny_port
+        port = tiny_port()
     elif family == 'qwen':
         from transformers import Qwen3Config, Qwen3ForCausalLM
         config = Qwen3Config(vocab_size=64, hidden_size=32, intermediate_size=64,
@@ -748,3 +751,136 @@ def test_bf16_convolution_stopped_and_live_imports_keep_distinct_adjoints():
     live=torch.autograd.grad(out[:,6:8].float().sum(),source)[0]
     assert torch.count_nonzero(stopped[:,:4])==0
     assert torch.count_nonzero(live[:,1:3])>0
+
+
+@pytest.mark.parametrize('family', ['lfm', 'lfm3', 'qwen', 'qwen35'])
+@pytest.mark.parametrize('retain_states', [False, True])
+@pytest.mark.parametrize('group_size', [2,3,4,7])
+def test_grouped_checkpoints_preserve_named_gradients_and_boundary_count(family, retain_states, group_size):
+    from torch.utils.checkpoint import checkpoint
+    from natlang_neuralese.model.shared_state import SharedStateModel
+    port=tiny(family);vocab=port.embedding_weight.shape[0]
+    model=SharedStateModel(port,tuple(range(vocab-4,vocab)),rank=4)
+    torch.nn.init.normal_(model.adapter.up.weight,std=.03)
+    plan=graph(); x=torch.randn(1,plan.token_count,port.embedding_weight.shape[1],requires_grad=True)
+    variables=[('input',x),*((name,param) for name,param in model.named_parameters() if param.requires_grad)]
+    def run(group):
+        calls=[];saved=[]
+        def observed(function,*args,**kwargs):
+            calls.append((tuple(args[0].shape),id(args[0])))
+            return checkpoint(function,*args,**kwargs)
+        def pack(tensor):
+            saved.append((id(tensor),tensor.numel()*tensor.element_size()))
+            return tensor
+        port.checkpoint_layers=True;port.checkpoint_layer_group_size=group;port.activation_checkpoint=observed
+        with torch.autograd.graph.saved_tensors_hooks(pack,lambda tensor:tensor):
+            result=model(plan,embeddings=x,retain_states=retain_states)
+        loss=result['h_final'].square().sum()
+        if retain_states:
+            loss=loss+sum(t.float().square().sum()*.01 for layer in result['states'] for t in layer)
+        gradients=torch.autograd.grad(loss,[p for _,p in variables],allow_unused=True)
+        boundary_bytes=sum(size for ident,size in saved if ident in {entry[1] for entry in calls})
+        return result,gradients,calls,boundary_bytes
+    plain,expected,per_layer,per_layer_bytes=run(1)
+    grouped,actual,boundaries,group_bytes=run(group_size)
+    assert len(per_layer)==port.num_layers
+    assert len(boundaries)==(port.num_layers+group_size-1)//group_size
+    assert all(shape==tuple(x.shape) for shape,_ in boundaries)
+    assert group_bytes==len(boundaries)*x.numel()*x.element_size()
+    assert per_layer_bytes==len(per_layer)*x.numel()*x.element_size()
+    torch.testing.assert_close(grouped['h_final'],plain['h_final'],rtol=0,atol=0)
+    assert len(grouped['states'])==len(plain['states'])
+    for grouped_layer,plain_layer in zip(grouped['states'],plain['states']):
+        assert len(grouped_layer)==len(plain_layer)
+        for grouped_value,plain_value in zip(grouped_layer,plain_layer):
+            torch.testing.assert_close(grouped_value,plain_value,rtol=0,atol=0)
+    for got,want in zip(actual,expected):
+        assert (got is None)==(want is None)
+        if got is not None:torch.testing.assert_close(got,want,rtol=1e-5,atol=1e-6)
+
+
+def test_grouped_checkpoint_restores_rng_for_backward(monkeypatch):
+    from natlang_neuralese.model import shared_state
+    from natlang_neuralese.model.shared_state import SharedStateModel
+    port=tiny('lfm');model=SharedStateModel(port,(60,61,62,63),rank=4);plan=graph()
+    original=shared_state._actor_finish
+    def stochastic(*args,**kwargs):
+        output=original(*args,**kwargs)
+        return output+torch.rand_like(output)*.01
+    monkeypatch.setattr(shared_state,'_actor_finish',stochastic)
+    x=torch.randn(1,plan.token_count,32,requires_grad=True)
+    def run(size):
+        torch.manual_seed(1234);port.checkpoint_layers=True;port.checkpoint_layer_group_size=size
+        out=model(plan,embeddings=x,retain_states=False)['h_final']
+        grad=torch.autograd.grad(out.square().sum(),x)[0]
+        return out,grad,torch.rand(4)
+    a,ga,ra=run(1);b,gb,rb=run(4)
+    torch.testing.assert_close(a,b,rtol=0,atol=0)
+    torch.testing.assert_close(ga,gb,rtol=0,atol=0)
+    assert torch.equal(ra,rb)
+
+
+@pytest.mark.parametrize('family',['lfm','lfm3','qwen35'])
+def test_grouped_checkpoint_preserves_external_native_state_gradients(family):
+    from natlang_neuralese.model.shared_state import SharedStateModel,capture_invocation_span
+    from natlang_neuralese.model.state_block import NativeStateBlock
+    port=tiny(family);vocab=port.embedding_weight.shape[0]
+    model=SharedStateModel(port,tuple(range(vocab-4,vocab)),rank=4)
+    torch.nn.init.normal_(model.adapter.up.weight,std=.03)
+    produced=model(compile_graph([Invocation('source',(2,3,4),producing=((0,3),))]))
+    fields=capture_invocation_span(produced,'source',0,3)
+    identity={'checkpoint_sha256':'a'*64,'tokenizer_fingerprint':'b'*64,
+              'embedding_weight_sha256':'c'*64,'architecture':port.config.model_type}
+    delta=torch.nn.Parameter(torch.tensor(.01))
+    layers=tuple({key:value+delta if key!='kind' else value for key,value in layer.items()}
+                 for layer in fields['layers'])
+    block=NativeStateBlock(text='source',**{**fields,'layers':layers},**identity)
+    plan=compile_graph([Invocation('target',(7,8),imports=(ImportSpan(1,'wire',0,3),))],external_sizes={'wire':3})
+    params=[delta,*(p for p in model.parameters() if p.requires_grad)]
+    def run(size):
+        port.checkpoint_layers=True;port.checkpoint_layer_group_size=size
+        result=model(plan,external_blocks={'wire':block},external_identity=identity,retain_states=False)['h_final']
+        grad=torch.autograd.grad(result.square().sum(),params,allow_unused=True,retain_graph=True)
+        return result,grad
+    expected,eg=run(1);actual,ag=run(4)
+    torch.testing.assert_close(actual,expected,rtol=0,atol=0)
+    for a,b in zip(ag,eg):
+        assert (a is None)==(b is None)
+        if a is not None:torch.testing.assert_close(a,b,rtol=1e-5,atol=1e-6)
+    assert ag[0].abs()>0
+
+
+@pytest.mark.parametrize('group_size',[2,4])
+def test_grouped_checkpoint_preserves_higher_order_adapter_gradients(group_size):
+    from natlang_neuralese.model.shared_state import SharedStateModel
+    port=tiny('lfm');model=SharedStateModel(port,(60,61,62,63),rank=4);plan=graph()
+    torch.nn.init.normal_(model.adapter.up.weight,std=.03)
+    x=torch.randn(1,plan.token_count,32,requires_grad=True)
+    def run(size):
+        from natlang_neuralese.common.native_higher_order import reference_arithmetic
+        port.checkpoint_layers=True;port.checkpoint_layer_group_size=size
+        with reference_arithmetic(model,query_chunk_tokens=2):
+            out=model(plan,embeddings=x,retain_states=False)['h_final']
+            first=torch.autograd.grad(out.square().sum(),(x,model.adapter.up.weight),create_graph=True)
+            second=torch.autograd.grad(sum(g.square().sum() for g in first),(x,model.adapter.up.weight))
+        return out,first,second
+    a,fa,sa=run(1);b,fb,sb=run(group_size)
+    torch.testing.assert_close(a,b,rtol=0,atol=0)
+    for x1,x2 in zip((*fa,*sa),(*fb,*sb)):torch.testing.assert_close(x1,x2,rtol=1e-5,atol=1e-6)
+
+
+@pytest.mark.parametrize('family',['lfm','lfm3'])
+@pytest.mark.parametrize('group_size',[2,4])
+def test_grouped_checkpoint_composes_with_token_local_ffn_chunks(family,group_size):
+    port=tiny(family);port.ffn_chunk_tokens=2;port.checkpoint_layers=True;plan=graph()
+    x=torch.randn(1,plan.token_count,port.embedding_weight.shape[1],requires_grad=True)
+    variables=[x,*[p for p in port.parameters() if p.requires_grad]]
+    def run(size):
+        port.checkpoint_layer_group_size=size
+        result=forward_graph(port,plan,embeddings=x,retain_states=False)['h_final']
+        return result,torch.autograd.grad(result.square().sum(),variables,allow_unused=True)
+    a,ga=run(1);b,gb=run(group_size)
+    torch.testing.assert_close(a,b,rtol=0,atol=0)
+    for x1,x2 in zip(ga,gb):
+        assert (x1 is None)==(x2 is None)
+        if x1 is not None:torch.testing.assert_close(x1,x2,rtol=1e-5,atol=1e-6)

@@ -20,7 +20,8 @@ def adapters(engine):
 
 @pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('checkpoint',[False,True])
-def test_layer_major_distinct_actor_graph_matches_cached_and_source_adjoints(tmp_path,monkeypatch,family,checkpoint,backend_recipe=None):
+@pytest.mark.parametrize('group_size',[1,4])
+def test_layer_major_distinct_actor_graph_matches_cached_and_source_adjoints(tmp_path,monkeypatch,family,checkpoint,group_size,backend_recipe=None):
     torch.manual_seed(1711)
     engine=engine_fixture(tmp_path,family)
     model=engine.shared_model
@@ -41,6 +42,7 @@ def test_layer_major_distinct_actor_graph_matches_cached_and_source_adjoints(tmp
             for actor in (source,target)}
     selected=[(actor.id,name,value) for actor in (source,target) for name,value in leaves[actor.id].items()]
     model.port.checkpoint_layers=checkpoint
+    model.port.checkpoint_layer_group_size=group_size
     import natlang_neuralese.model.shared_state as shared
     real_inputs=shared._layer_inputs
     visits=[]

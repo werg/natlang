@@ -285,6 +285,11 @@ def _corrected_request(reference, *, config, verified_checkpoint, package, stage
                 'checkpoint_input_offload','share_causal_prefixes'):
         if key not in identity or identity[key]!=params.get(key,False if key in ('checkpoint_input_offload','share_causal_prefixes') else None):
             raise ValueError('corrected capacity request differs from the future trainer packing: '+key)
+    group=params.get('checkpoint_layer_group_size')
+    if (group is not None and identity.get('checkpoint_layer_group_size',1)!=group
+            or group is None and 'checkpoint_layer_group_size' in identity
+            and identity['checkpoint_layer_group_size']!=4):
+        raise ValueError('corrected capacity request differs from checkpoint layer grouping')
     if config.get('production_stage')!=stage_id:
         raise ValueError('corrected capacity request belongs to another production stage')
     return request

@@ -66,7 +66,23 @@ def _prune_previous_private_policy(previous,current,*,out,protected,qualified):
         else:path.unlink()
 
 
-def _train_locked(engine,*,policy,graphs,objective,out,epochs,optimizer,evaluate,stop=None,backend=None,after_commit=None,evaluate_every=None,held_groups=(),held_row_bindings=None,held_receipts=None):
+def _configure_coefficient_checkpoint_group(port, state, requested):
+    """Carry the actual shared-graph execution and its transition through resume."""
+    from ..train.native_state_sft import configure_checkpoint_layer_group_size
+    previous_group=state.get('checkpoint_layer_group_size',1)
+    saved_group=({'options':{'checkpoint_layer_group_size':state['checkpoint_layer_group_size']}}
+                 if 'checkpoint_layer_group_size' in state else {})
+    group=configure_checkpoint_layer_group_size(port,requested,saved_group)
+    history=list(state.get('checkpoint_layer_group_size_history') or [])
+    if state.get('step',0)>0 and previous_group!=group:
+        history.append({'schema':'natlang.checkpoint-layer-group-transition/1','from':previous_group,'to':group,
+            'at_step':state['step'],'weights_optimizer_rng_exposure':'preserved'})
+    state['checkpoint_layer_group_size']=group
+    state['checkpoint_layer_group_size_history']=history
+    return group
+
+
+def _train_locked(engine,*,policy,graphs,objective,out,epochs,optimizer,evaluate,stop=None,backend=None,after_commit=None,evaluate_every=None,held_groups=(),held_row_bindings=None,held_receipts=None,checkpoint_layer_group_size=None):
     """Commit whole graph updates; resume every owed row without replaying credit.
 
     `evaluate(engine, policy_path, final=...)` executes declared actual held/task
@@ -110,6 +126,7 @@ def _train_locked(engine,*,policy,graphs,objective,out,epochs,optimizer,evaluate
                 'policy':source_binding,'step':0,'obligations':[],'cursor':0,'handle_versions':{},'trained_tokens':0,'stage_start_tokens':0,'stage_start_step':0}
             if (getattr(engine,'native_training_state',None) or {}).get('rng') is not None:
                 state['rng']=engine.native_training_state['rng']
+    _configure_coefficient_checkpoint_group(engine.shared_model.port,state,checkpoint_layer_group_size)
     state.setdefault('trained_tokens',sum(item['sampled_tokens'] for item in state.get('metrics',[])))
     state.pop('metrics',None)
     if state.get('rng') is not None:restore_training_rng_state(state['rng'],engine.device)
@@ -181,6 +198,7 @@ def _train_locked(engine,*,policy,graphs,objective,out,epochs,optimizer,evaluate
         counts.update(cancelled_uncredited_episodes=cancelled,original_obligations_complete=counts['episodes']==counts['required_episodes'])
         report={'schema':'natlang.native-coefficient-training-report/1','completed':complete,
             'stage_kind':'native-coefficient-policy','base_checkpoint_unchanged':True,'step':state['step'],
+            'checkpoint_layer_group_size':state['checkpoint_layer_group_size'],
             'checkpoint':_binding(slot),'policy':state['policy'],'coefficient_policy_sha256':state['actor_policy_sha256'],'exposure':counts,
             'source_rows':[{'key':item['key'],'visits':item['visits'],'required_visits':item['required_visits'],**({'cancelled':item['cancelled']} if item.get('cancelled') else {})} for item in state['obligations']],
             'evaluation':state.get('evaluation'),'qualification_complete':bool(complete and state.get('evaluation',{}).get('passed') is True
@@ -286,9 +304,13 @@ def main(argv=None):
     parser.add_argument('--held-eval-tokens',type=int,default=0)
     parser.add_argument('--chunk-tokens',type=int,default=128)
     parser.add_argument('--checkpoint-layers',action=argparse.BooleanOptionalAction,default=True)
+    parser.add_argument('--checkpoint-layer-group-size',type=int,default=None,
+        help='consecutive layers per checkpoint; defaults to four or inherits the saved choice; one opts out')
     parser.add_argument('--fp8-training',dest='fp8_backend',choices=('off','triton-experts'),default='off')
     parser.add_argument('--fp8-recipe',choices=('delayed','current','current-bf16-dx'),default='delayed')
     args=parser.parse_args(argv)
+    if args.checkpoint_layer_group_size is not None and args.checkpoint_layer_group_size < 1:
+        raise ValueError('checkpoint-layer-group-size must be a positive integer')
     from .native_output_lease import coefficient_output_lease
     with coefficient_output_lease(args.out):
         return _run_cli(args)
@@ -347,7 +369,8 @@ def _run_cli(args):
         report=train(engine,policy=args.coefficient_policy,graphs=[row for _,row in iter_jsonl_rows(args.graphs)],
             objective=args.objective,out=args.out,epochs=args.epochs,optimizer=args.coefficient_optimizer,
             evaluate=evaluate,stop=stop,backend=backend,evaluate_every=args.task_eval_every,
-            held_groups=held.groups,held_row_bindings=held.bindings,held_receipts=held.receipt())
+            held_groups=held.groups,held_row_bindings=held.bindings,held_receipts=held.receipt(),
+            checkpoint_layer_group_size=args.checkpoint_layer_group_size)
         return 0 if report['qualification_complete'] or stop.requested else 1
     finally:
         if engine is not None:engine.store.close()

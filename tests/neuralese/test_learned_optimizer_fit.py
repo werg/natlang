@@ -111,3 +111,21 @@ def test_distillation_objective_pulls_toward_the_target(tmp_path):
     assert value > 0 and float(coefficient.grad.abs().sum()) > 0
     # Distillation pulls toward the target: one gradient step reduces the KL along the planted direction.
     assert float(coefficient.grad[0].sum()) < 0 < float(coefficient.grad[1].sum())
+
+
+def test_adaptation_fit_uses_configured_group_and_preserves_support_gradients(tmp_path):
+    from natlang_neuralese.tune.learned.checkpointing import configure_adaptation_checkpointing
+    engine,bank,view,support,adapters,array,_=planted(tmp_path,0)
+    try:
+        def run(group):
+            configure_adaptation_checkpointing(engine,group)
+            coefficients=torch.full((len(array.slots),len(bank.group_labels)),.02,requires_grad=True)
+            def leaves():
+                return {array.adapter:bank.adapter_tensors(bank.composed_cores(array.slots,coefficients))}
+            value=support.accumulate(adapters,leaves,backward=True)
+            return value,coefficients.grad.clone()
+        a,ga=run(1);b,gb=run(4)
+        assert engine.shared_model.port.checkpoint_layer_group_size==4
+        assert a==b
+        torch.testing.assert_close(ga,gb,rtol=1e-5,atol=1e-7)
+    finally:engine.store.close()

@@ -106,3 +106,23 @@ def test_channel_is_deterministic_through_checkpoint_recompute_and_refuses_the_c
             model(plan)
     with pytest.raises(ValueError, match='positive'):
         ImportChannel(('source',), 0., PRIOR, channel.scales)
+
+
+@pytest.mark.parametrize('retain_states',[False,True])
+def test_grouped_checkpoints_preserve_channel_output_kl_and_all_gradients(retain_states):
+    model,plan,channel=setup('lfm');port=model.port
+    params=[p for p in model.parameters() if p.requires_grad]
+    def run(size):
+        port.checkpoint_layers=True;port.checkpoint_layer_group_size=size
+        with import_channel(channel):
+            out=model(plan,retain_states=retain_states)
+            loss=out['h_final'].square().sum()+out['import_channel']['kl'].sum()
+            if retain_states:loss=loss+sum(x.square().sum()*.01 for layer in out['states'] for x in layer)
+            grads=torch.autograd.grad(loss,params,allow_unused=True)
+        return out,grads
+    a,ga=run(1);b,gb=run(4)
+    torch.testing.assert_close(a['h_final'],b['h_final'],rtol=0,atol=0)
+    torch.testing.assert_close(a['import_channel']['kl'],b['import_channel']['kl'],rtol=0,atol=0)
+    for x,y in zip(ga,gb):
+        assert (x is None)==(y is None)
+        if x is not None:torch.testing.assert_close(x,y,rtol=1e-5,atol=1e-6)

@@ -503,8 +503,9 @@ def test_shared_expert_actor_groups_keep_frame_and_invocation_order(monkeypatch,
 @pytest.mark.parametrize('device', ['cpu', 'cuda'])
 @pytest.mark.parametrize('checkpointed', [False, True])
 @pytest.mark.parametrize('ffn_chunk', [0, 2])
+@pytest.mark.parametrize('group_size', [1, 4])
 def test_branched_graph_complete_bf16_derivatives_against_cached_execution(
-        family, device, checkpointed, ffn_chunk):
+        family, device, checkpointed, ffn_chunk, group_size):
     if device == 'cuda' and not torch.cuda.is_available():
         pytest.skip('CUDA unavailable')
     from test_shared_state import tiny, graph
@@ -520,6 +521,7 @@ def test_branched_graph_complete_bf16_derivatives_against_cached_execution(
     for parameter in model.port.parameters():
         parameter.requires_grad_(True)
     model.port.checkpoint_layers = checkpointed
+    model.port.checkpoint_layer_group_size = group_size
     model.port.ffn_chunk_tokens = ffn_chunk
     with torch.no_grad():
         model.adapter.up.weight.normal_(std=.03)
@@ -534,7 +536,7 @@ def test_branched_graph_complete_bf16_derivatives_against_cached_execution(
         scope = ParameterCotangentScope.for_model(model, mode='vjp')
         scope.__enter__()
         try:
-            out = model(plan, embeddings=x, reference=reference)
+            out = model(plan, embeddings=x, reference=reference, retain_states=False)
             outputs.append(out['h_final'].detach())
             loss = F.cross_entropy(model.logits(out['h_final'])[0].float(), labels)
         except BaseException:

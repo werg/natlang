@@ -122,6 +122,8 @@ def observe_checkpoint(checkpoint, out):
         'observer': binding(__file__), 'model_config': state['model_config'],
         'global_step': training['global_step'], 'stage_step': training['step'],
         'continuation': options.get('continuation'),
+        **({'checkpoint_layer_group_size':options['checkpoint_layer_group_size']}
+           if 'checkpoint_layer_group_size' in options else {}),
         'resident_adoption': options.get('resident_adoption'),
         'source_receipts': training['source_receipts'],
         'source_row_bindings_sha256': digest(rows), 'held_row_bindings_sha256': digest(held),
@@ -213,6 +215,11 @@ def verify_controls(recovery, *, receipt, report, certificate, spec, intent, ide
             or Path(argument('--resident-geometry-qualification')).resolve() != _bound(capacity).resolve()):
         raise ValueError('interrupted recovery lost its existing actual resident capacity')
     observed = json.loads(_bound(recovery['saved_frame_observation']).read_text())
+    actual_group=observed.get('checkpoint_layer_group_size',1)
+    if (type(actual_group) is not int or actual_group < 1
+            or actual_group != identity.get('checkpoint_layer_group_size',1)
+            or args.checkpoint_layer_group_size is not None and args.checkpoint_layer_group_size != actual_group):
+        raise ValueError('interrupted recovery changed its checkpoint layer grouping')
     if (observed.get('schema') != OBSERVATION or observed.get('observer') != binding(__file__)
             or observed.get('checkpoint') != recovery['checkpoint']
             or observed.get('optimizer_and_rng_present') is not True

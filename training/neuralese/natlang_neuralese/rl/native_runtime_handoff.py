@@ -170,6 +170,7 @@ def _ordinary_capacity_authority(authority,record,saved,options,code):
         ('batch_graphs','batch_tokens','checkpoint_layers','chunk_tokens','checkpoint_input_offload')}
     if (identity.get('model_config')!=saved['model_config'] or identity.get('objective') is not None
             or any(identity.get(key)!=value for key,value in expected.items())
+            or identity.get('checkpoint_layer_group_size',1)!=options.get('checkpoint_layer_group_size',1)
             or bool(identity.get('share_causal_prefixes'))!=bool(options.get('share_causal_prefixes'))
             or identity.get('checkpoint_input_offload_directory')!=options.get('checkpoint_input_offload_directory')
             or any(identity.get('fp8',{}).get(key)!=options.get(option) for key,option in

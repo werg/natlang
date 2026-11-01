@@ -50,7 +50,7 @@ def test_observer_restores_complete_capacity_execution_identity(monkeypatch, cur
         'fp8': {'kind': 'off', 'recipe': 'delayed', 'amax_history_len': 16,
                 'input_gradient_precision': None}}
     if current:
-        identity.update(checkpoint_direct_token_limit=10000, ffn_chunk_tokens=4096,
+        identity.update(checkpoint_direct_token_limit=10000, ffn_chunk_tokens=4096, checkpoint_layer_group_size=4,
             cotangent_accumulator_backend='device_fp32', share_causal_prefixes=True,
             checkpoint_input_offload=True, checkpoint_input_offload_directory='/tmp/native-offload')
     model = SimpleNamespace(port=SimpleNamespace())
@@ -58,6 +58,7 @@ def test_observer_restores_complete_capacity_execution_identity(monkeypatch, cur
     assert native_memory.capacity_identity(identity['model_config'], args, None) == identity
     assert model.checkpoint_direct_token_limit == (10000 if current else 0)
     assert model.port.ffn_chunk_tokens == (4096 if current else 0)
+    assert model.port.checkpoint_layer_group_size == (4 if current else 1)
     assert model.native_cotangent_accumulator_backend == ('device_fp32' if current else 'cpu_file')
     assert model.share_causal_prefixes is current
     assert model.port.checkpoint_layers is True

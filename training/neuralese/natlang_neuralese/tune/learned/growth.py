@@ -28,6 +28,8 @@ def source_component(engine, bank, rows, *, source, description, rank=8, steps=2
     from ...data.native_graph_schema import parse_graph
     from ...model.native_adapters import run_native
     require_training_rows(rows)
+    from .checkpointing import configure_adaptation_checkpointing
+    group_size=configure_adaptation_checkpointing(engine)
     adapter = placeholder_adapters(engine, bank, [f'source:{source["name"]}'], owner)[f'source:{source["name"]}']
     R = bank.basis.rank
     cores = {name: torch.zeros(*bank.basis.left[name].shape[:-2], R, R, requires_grad=True) for name in bank.basis.names}
@@ -40,7 +42,7 @@ def source_component(engine, bank, rows, *, source, description, rank=8, steps=2
         total = 0.
         for example in examples:
             def execute(example=example):
-                loss, _ = graph_loss(engine.shared_model, example, checkpoint_layers=False)
+                loss, _ = graph_loss(engine.shared_model, example, checkpoint_layers=True)
                 (loss / len(examples)).backward()
                 return float(loss.detach())
             total += run_native(engine, execute, [{'id': adapter, 'scale': 1.}],
@@ -53,7 +55,7 @@ def source_component(engine, bank, rows, *, source, description, rank=8, steps=2
     key = engine.native_write_text(description)['id']
     component = Component(component_id(source, factors), factors, key, description, {**source, 'kind': 'source-fit'}, tuple(levels))
     component, scale = normalize(component, bank.q)
-    return component, {'losses': losses, 'normalization': scale}
+    return component, {'losses': losses, 'normalization': scale, 'checkpoint_layer_group_size':group_size}
 
 
 def free_tune_component(bank, cores, *, source, description, key, rank=8, levels=('tree', 'folder', 'lambda')):

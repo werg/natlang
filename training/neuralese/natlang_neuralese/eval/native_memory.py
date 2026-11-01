@@ -92,7 +92,7 @@ def _reference_boundary(model, optimizer, backend):
     execution = ('native_shared_execution', 'native_norm_execution',
                  'native_cotangent_accumulator_backend', 'natlang_precision',
                  'native_linear_precision', 'native_attention_precision',
-                 'ffn_chunk_tokens', 'checkpoint_layers', 'checkpoint_direct_token_limit', 'share_causal_prefixes')
+                 'ffn_chunk_tokens', 'checkpoint_layers', 'checkpoint_layer_group_size', 'checkpoint_direct_token_limit', 'share_causal_prefixes')
     owners = (model, model.port, getattr(model.port, 'hf', None))
     modes = [(id(module), module.training, id(type(module).forward),
               id(module.__dict__.get('forward'))) for module in model.modules()]
@@ -438,7 +438,17 @@ def memory_runtime(device):
     return result
 
 
+def _require_checkpoint_group_execution(model, args):
+    declared = getattr(args, 'checkpoint_layer_group_size', 1)
+    actual = getattr(model.port, 'checkpoint_layer_group_size', 1)
+    if type(declared) is not int or declared < 1 or actual != declared:
+        raise ValueError('capacity checkpoint layer grouping differs from actual model execution')
+
+
 def capacity_identity(config,args,backend):
+    group = getattr(args, 'checkpoint_layer_group_size', 1)
+    if type(group) is not int or group < 1:
+        raise ValueError('capacity identity needs the resolved checkpoint layer group size')
     accumulator_backend = getattr(args, 'cotangent_accumulator_backend', None)
     if accumulator_backend is None:
         accumulator_backend = getattr(args, 'native_cotangent_accumulator_backend', 'cpu_file')
@@ -464,6 +474,7 @@ def capacity_identity(config,args,backend):
         **({'checkpoint_input_offload_directory':args.checkpoint_input_offload_directory}
            if getattr(args,'checkpoint_input_offload_directory',None) else {}),'model_config':config,'batch_graphs':args.batch_graphs,'batch_tokens':args.batch_tokens,
         'checkpoint_layers':args.checkpoint_layers,'chunk_tokens':args.chunk_tokens,
+        **({'checkpoint_layer_group_size':group} if group != 1 else {}),
         **({'checkpoint_direct_token_limit':args.checkpoint_direct_token_limit} if getattr(args,'checkpoint_direct_token_limit',0) else {}),
         **({'ffn_chunk_tokens':args.ffn_chunk_tokens}if getattr(args,'ffn_chunk_tokens',0)else {}),
         'checkpoint_input_offload':args.checkpoint_input_offload,
@@ -488,6 +499,7 @@ def _run_one_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoi
     from ..common.checkpoint_offload import configure_checkpoint_input_offload
     if args.checkpoint_input_offload and not args.checkpoint_layers:
         raise ValueError('checkpoint input offload requires activation checkpointing')
+    _require_checkpoint_group_execution(model,args)
     request_path=bound(json.loads(args.memory_qualification))
     request=json.loads(request_path.read_text())
     package=Path(__file__).resolve().parents[1]
@@ -794,6 +806,7 @@ def _resolve_memory_qualification(reference, *, model, optimizer, train, roles, 
         raise ValueError('preference capacity case requires an implemented whole-pair preference objective')
     package = Path(__file__).resolve().parents[1]
     runtime_code_sha = canonical_json_sha256_hex(code_inventory(package))
+    _require_checkpoint_group_execution(model,args)
     identity = capacity_identity(config, args, backend)
     request_key = canonical_json_sha256_hex({
         'descriptor_sha256': binding(descriptor_path)['sha256'],
@@ -916,6 +929,7 @@ def qualify_policy_objective(model,optimizer,train,objective,args,config,*,backe
     from ..common.jsonio import write_json_durable
     from ..common.hashing import canonical_json_sha256_hex as digest
     from ..train.native_resident import binding,bound,code_inventory
+    _require_checkpoint_group_execution(model,args)
     expected=policy_capacity_request(train,objective)
     supplied=getattr(args,'policy_capacity_request',None)
     path=bound(json.loads(supplied)) if supplied else args.out/'policy-capacity-request.json'

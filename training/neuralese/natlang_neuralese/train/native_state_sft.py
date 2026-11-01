@@ -1505,6 +1505,8 @@ def build_parser():
         default=None, help='parameter-cotangent handling: plain autograd with vendor GEMMs (default; a resume '
         'records the transition), or the exact FP32 carrier stored on the device or in CPU files (opt-out)')
     parser.add_argument('--checkpoint-layers', action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument('--checkpoint-layer-group-size', type=int, default=None,
+        help='consecutive layers per nonreentrant checkpoint; defaults to four on new and legacy continuations, or inherits an explicitly saved setting; one selects per-layer checkpoints')
     parser.add_argument('--checkpoint-direct-token-limit', type=int, default=0,
                         help='Skip layer recomputation for compiled physical graphs at or below this size; zero retains uniform checkpointing')
     parser.add_argument('--chunk-tokens', type=int, default=None,
@@ -1571,6 +1573,19 @@ def build_parser():
              '(token mass, reasoning share 0.1, role tokens from the model tokenizer), adopted by continuations through a recorded '
              'objective transition; declared: use exactly the bound CE policy (row weights when it declares none)')
     return parser
+
+
+def configure_checkpoint_layer_group_size(port, requested, saved_training):
+    """Select grouped activation recomputation without changing saved state."""
+    options = saved_training.get('options') or {}
+    prior = options.get('checkpoint_layer_group_size', 1)
+    if type(prior) is not int or prior < 1:
+        raise ValueError('saved checkpoint-layer-group-size must be a positive integer')
+    value = options.get('checkpoint_layer_group_size', 4) if requested is None else requested
+    if type(value) is not int or value < 1:
+        raise ValueError('checkpoint-layer-group-size must be a positive integer')
+    port.checkpoint_layer_group_size = value
+    return value
 
 
 def configure_ffn_chunk_tokens(port, requested, saved_training):
@@ -1784,6 +1799,9 @@ def validate_static_args(args, *, check_output=True):
         raise ValueError('initialize-only requires a fresh output and no checkpoint parent')
     if args.checkpoint_direct_token_limit < 0 or (args.checkpoint_direct_token_limit and not args.checkpoint_layers):
         raise ValueError('checkpoint-direct-token-limit requires a nonnegative limit and enabled layer checkpointing')
+    group = getattr(args, 'checkpoint_layer_group_size', None)
+    if group is not None and (type(group) is not int or group < 1):
+        raise ValueError('checkpoint-layer-group-size must be a positive integer')
     if args.ffn_chunk_tokens is not None and args.ffn_chunk_tokens<0:
         raise ValueError('ffn-chunk-tokens must be a nonnegative integer')
     if args.refresh_after_updates is not None and args.refresh_after_updates < 1:
@@ -2813,6 +2831,17 @@ def _main(argv=None, *, requested_refresh):
     checkpoint_options['checkpoint_input_offload'] = args.checkpoint_input_offload
     args.ffn_chunk_tokens=configure_ffn_chunk_tokens(model.port,args.ffn_chunk_tokens,saved_training)
     checkpoint_options['ffn_chunk_tokens']=args.ffn_chunk_tokens
+    previous_group = saved_options.get('checkpoint_layer_group_size', 1)
+    args.checkpoint_layer_group_size = configure_checkpoint_layer_group_size(
+        model.port, getattr(args, 'checkpoint_layer_group_size', None), saved_training)
+    group_history = list(saved_options.get('checkpoint_layer_group_size_history') or [])
+    if saved_training and previous_group != args.checkpoint_layer_group_size:
+        group_history.append({'schema':'natlang.checkpoint-layer-group-transition/1',
+            'from':previous_group, 'to':args.checkpoint_layer_group_size,
+            'at_global_step':int(saved_training.get('global_step', saved_training.get('step',0)) or 0),
+            'weights_optimizer_rng_exposure':'preserved'})
+    checkpoint_options['checkpoint_layer_group_size'] = args.checkpoint_layer_group_size
+    checkpoint_options['checkpoint_layer_group_size_history'] = group_history
     model.port.checkpoint_layers = args.checkpoint_layers
     model.checkpoint_direct_token_limit = args.checkpoint_direct_token_limit
     model.to(args.device)
@@ -4128,6 +4157,7 @@ def _main(argv=None, *, requested_refresh):
                         'supervised_tokens_per_second': supervised_tokens / max(seconds, 1e-9),
                         'elapsed_seconds': time.time() - started, 'timestamp': time.time(),
                         'checkpoint_step': last_saved_step,
+                        'checkpoint_layer_group_size':model.port.checkpoint_layer_group_size,
                         'communication_exposure': communication_exposure(train.entries, exposure_counts, required_visits)}
             if foundation_priority_ids is not None:
                 progress['foundation_schedule'] = {'communication_batches_per_priority_ordinary': args.foundation_communication_batches,

@@ -49,11 +49,16 @@ _OPEN = []
 def _engine(spec):
     """The exact checkpoint's engine with the operation's durable artifact store (``store``: a directory shared by
     every worker of the operation; one process holds it at a time)."""
+    group = spec.get('checkpoint_layer_group_size')
+    if group is not None and (type(group) is not int or group < 1):
+        raise ValueError('adaptation checkpoint layer group size must be a positive integer')
     import torch
     from ...serve import load_native_engine
     from ...serve.store import TensorStore
     engine = load_native_engine(spec['checkpoint'], base=spec.get('base'), device=spec.get('device', 'cpu'),
                                 dtype=getattr(torch, spec.get('dtype', 'float32')))
+    from .checkpointing import configure_adaptation_checkpointing
+    configure_adaptation_checkpointing(engine, group)
     if spec.get('store'):
         engine.store.close()
         engine.store = TensorStore(spec['store'])
@@ -114,7 +119,7 @@ def bank_init(spec):
     from ..targets import deploy_quantized
     # Targets a required deploy point re-quantizes (LFM3 NVFP4: w1/w2/w3): folded writes there are measured at that
     # precision before a capability claim (targets.DEPLOY_QUANTIZED).
-    _write(spec['out'], {'bank': manifest, 'reports': reports, 'deploy_quantized': deploy_quantized(names, family=family)})
+    _write(spec['out'], {'bank': manifest, 'reports': reports, 'checkpoint_layer_group_size':engine.shared_model.port.checkpoint_layer_group_size, 'deploy_quantized': deploy_quantized(names, family=family)})
     return manifest['snapshot']
 
 

@@ -65,7 +65,8 @@ def fit_labels(pc, *, incoming_states, incoming_adapters=None, init=None, fit=No
     labels = {'mixtures': {s: {'distribution': result['arrays'][s]['distribution'].tolist(),
                                'gain': result['arrays'][s]['gain'].tolist()} for s in pc.scopes},
               'adapters': adapters, 'states': states}
-    report = {'loss': result['loss'], 'support': {s: result['arrays'][s]['support'] for s in pc.scopes}}
+    report = {'loss': result['loss'], 'support': {s: result['arrays'][s]['support'] for s in pc.scopes},
+              'checkpoint_layer_group_size':result['checkpoint_layer_group_size']}
     return labels, report
 
 

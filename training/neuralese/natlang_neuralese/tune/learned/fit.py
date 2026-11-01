@@ -58,6 +58,8 @@ class SupportSet:
         (rebuilt per row so each backward has its own composition graph). Returns the weighted loss value."""
         from ...data.native_graph import graph_loss
         from ...model.native_adapters import adapter_state_input_receipt, run_native
+        from .checkpointing import configure_adaptation_checkpointing
+        configure_adaptation_checkpointing(self.engine)
         total = 0.
         for row in self.rows:
             entries = self.entries(row['binding'], adapters)
@@ -70,7 +72,7 @@ class SupportSet:
                     block, state_id = soft_blocks[key]
                     blocks[name] = block
                     identities[name] = adapter_state_input_receipt(self.engine, block, state_id, target_position_start=0)['source_native_identity']
-                loss, _ = graph_loss(self.engine.shared_model, row['example'], checkpoint_layers=False,
+                loss, _ = graph_loss(self.engine.shared_model, row['example'], checkpoint_layers=True,
                                      external_blocks=blocks or None, external_identity=identities or None)
                 if backward and loss.requires_grad:
                     (loss * row['coefficient']).backward()
@@ -166,6 +168,7 @@ def fit_in_bank(engine, bank, support, arrays, *, soft_states=None, steps=50, le
     new_states = {key: _updated_block(block, values) for key, (block, _, values) in states.items()
                   if key not in fixed_states} if train_states else {}
     return {'schema': FIT_SCHEMA, 'bank': bank.snapshot, 'arrays': out, 'states': new_states,
+            'checkpoint_layer_group_size':support.engine.shared_model.port.checkpoint_layer_group_size,
             'loss': {'continuous': history, 'refined': refined, 'final': fitted_loss}}
 
 

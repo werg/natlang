@@ -36,6 +36,8 @@ def source_gradients(engine, rows, names, *, entries=None, weights=None):
     from ...data.native_graph_schema import parse_graph
     from ...model.native_adapters import run_native, target_parameters
     require_training_rows(rows)
+    from .checkpointing import configure_adaptation_checkpointing
+    configure_adaptation_checkpointing(engine)
     available = target_parameters(engine.shared_model)
     params = [available[name] for name in names]
     totals = {name: torch.zeros(available[name].shape, dtype=torch.float32) for name in names}
@@ -50,7 +52,7 @@ def source_gradients(engine, rows, names, *, entries=None, weights=None):
                 continue
             example = parse_graph(row['graph'], tokenizer_fingerprint=fingerprint)
             def execute():
-                loss, _ = graph_loss(engine.shared_model, example, checkpoint_layers=False)
+                loss, _ = graph_loss(engine.shared_model, example, checkpoint_layers=True)
                 return torch.autograd.grad(loss * weight, params, allow_unused=True)
             for name, grad in zip(names, run_native(engine, execute, entries)):
                 if grad is not None:

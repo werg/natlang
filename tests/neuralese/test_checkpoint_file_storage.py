@@ -92,12 +92,14 @@ def test_checkpoint_repeated_unpack_and_second_derivative_are_exact(tmp_path,dev
 
 @pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('device',['cpu','cuda'])
-def test_both_native_graphs_gradients_next_update_and_rng(tmp_path,family,device):
+@pytest.mark.parametrize('group_size',[1,4])
+def test_both_native_graphs_gradients_next_update_and_rng(tmp_path,family,device,group_size):
     if device=='cuda' and not torch.cuda.is_available():pytest.skip('CUDA unavailable')
     from test_shared_state import tiny
     from natlang_neuralese.model.shared_state import SharedStateModel
     from natlang_neuralese.data.native_graph import parse_graph,graph_loss
     model=SharedStateModel(tiny(family),(58,59,60,61),rank=4).to(device)
+    model.port.checkpoint_layer_group_size=group_size
     reference=copy.deepcopy(model)
     row={'schema':'natlang.neuralese-native-graph/1','id':'file-storage','split':'train',
         'source_groups':['file-storage'],'tokenizer_fingerprint':'a'*64,'nodes':[
