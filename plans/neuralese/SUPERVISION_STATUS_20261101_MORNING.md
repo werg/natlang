@@ -1,3 +1,66 @@
+## Live supervision update, 2026-11-01 18:16 CET
+
+- Owner requested bounded anti-loop rewards and proper inference escalation. Main
+  now includes aa82eaf80 (accepted-stop correction), 7b766a3d2 (whole-graph
+  efficiency) and 7af6e4433 (live inference handoff), pushed to origin/main.
+  Reward/classification tests:89 passed; final efficiency/production tests:87
+  passed; inference build and regression tests:103 passed. These suites overlap;
+  they are not an additive unique-test count. No paid model calls were made.
+- New scoring keeps binary quality separate and caps execution cost at0.05.
+  Cost uses observed calls, generated tokens and identical repeated actions with
+  unchanged observations; unknown tokens stay unknown. Outcome normalization
+  happens before bounded cost. All-success groups can learn small unscaled cost
+  differences; all-failed groups do not learn cheap failure. Production routes
+  efficiency-only success groups to GRPO using a separate spread count. Existing
+  bound rollouts retain their historical reward policy.
+- Critical defect acted on: task_packet.classify_case previously rejected correct
+  intentional blocked/quiesced stops. Round13 board task had oracle acceptance,
+  expected status, honest-stop and stop-evidence checks all true. Interrupted
+  learner before SGD:report step0, new_optimizer_updates0 and consumed_updates0.
+  Original raw data, wrong scores and diagnostic checkpoint remain intact.
+  Authenticated correction changes exactly5 labels (4 student,1 privileged
+  self-hosted teacher), preserving captures/probabilities/actor/source. Corrected
+  student result12/16, total16/20; this is a scoring correction, not capability
+  gain. Original reported8/16 and historical baselines need this caveat until
+  raw-result rescoring is complete; do not silently rewrite historical exposure.
+- Corrected learner resumed from exact unchanged70 under
+  lfm3-reward-corrected70-1101.service, frozen runtime-accepted-stop-1101 (aa82).
+  It reuses the exact completed collection without regeneration and writes to
+  round-000013/learner-reclassified-0db063d0e2144e25. Capacity passed104seconds;
+  actual update_start global70 recorded18:15:12. No newer optimizer credit yet.
+  Proof ops/round13-accepted-stop-reclassification-1101/preparation.json;
+  locked zero-update state reconciliation and launch bindings in
+  ops/reward-corrected-resume-1101. Original state archived there.
+- Inference: explicitly configured fallback chain continues the same live scope,
+  transcript and side effects. Explicit escalate action requires reason, evidence,
+  attempted work and remaining subproblem; driver failure or four unchanged
+  failed actions can hand off automatically. Shared request/output budgets cover
+  concurrent children, handoffs and forced-text writer requests. Budgets never
+  reset. Actual per-turn actor and handoff graph are recorded; unsupported
+  mixed-actor learning is rejected. Cross-model native values use exact source
+  text with provenance; missing source text or model-specific adapters prevent
+  unsafe handoff. Optional native view has an explicit remaining limitation:
+  internal chunk/combine generations expose no allowance/usage and are outside
+  shared budget metering. No stronger-model server was started by these tests.
+- Full integrated runtime-escalation-efficiency-7af6-1101 is frozen, protected
+  union unchanged. Next SFT preparation now targets it, retaining full recipe,
+  semantic-family curriculum and marker-row LR continuation. Draft parent70
+  remains prospective only:final activation must bind the actual earned RL parent.
+- New acquired-family screen finished:45785 positive train graphs, one held/test
+  graph retained, zero current-union exclusions; output1.75GB with verified input
+  hashes and row accounting. Semantic/tool-contract audit, deduplication, source/
+  CE/recipe/geometry admission and actual exposure remain unfinished. Conversion
+  and port streams still operate; paid teacher generation remains paused.
+- Runtime837a independent archive completed703590400bytes, SHA256
+  20282a29f33dc6ba9ffce2efcba4d25f3f2adf10e7d651e6d061ccc65d6985ab,
+  all32602 entries reread. Full recovery70 closure staging is live; this archive
+  alone is not full recovery qualification. Offloader owner exited successfully
+  with empty pending/active queues; external rolling copy has70's expected size,
+  but this observation alone is not a new independent hash/restore claim.
+- Pop exact64 matched evaluator remains active. DGX resumed learner actually
+  uses GPU after capacity initialization; cloud four-account denial remains the
+  last checked result, with no new sandbox allocation.
+
 ## Live supervision update, 2026-11-01 17:24 CET
 
 - Pop's instruction baseline finished6298seconds of evaluation:8 successes,
