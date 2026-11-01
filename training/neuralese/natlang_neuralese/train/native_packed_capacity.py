@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 import contextvars
 from pathlib import Path
 
@@ -49,12 +50,16 @@ def prepare_source(path, tokenizer, roles, out, *, prior=None, checkpoint_rows=0
 
 
 def _rows_digest(entries):
+    started = time.monotonic()
     digest = hashlib.sha256()
     for entry in entries:
         digest.update(json.dumps([entry['id'], entry['binding'], entry['forward_tokens']],
             ensure_ascii=False, separators=(',', ':')).encode('utf8'))
         digest.update(b'\n')
-    return digest.hexdigest()
+    result = digest.hexdigest()
+    print(json.dumps({'kind': 'native_geometry_rows_digest', 'rows': len(entries),
+                      'seconds': time.monotonic() - started, 'sha256': result}), flush=True)
+    return result
 
 
 def geometry_for_source(source, out, *, prior=None, allow_build=False, indexed_geometry=None,
