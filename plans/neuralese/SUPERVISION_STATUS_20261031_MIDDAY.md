@@ -4,6 +4,66 @@ Observation window: 10:43–11:29 CET. Recheck actual processes before acting.
 Primary supervisor: Codex; active goal remains continued capable LFM3 native
 Neuralese/Natlang training, not completion of this status document.
 
+## Supervision and integration, November 1, 01:25 CET
+
+The matched-current-prompt Pop54 case32 check completed with an incorrect empty
+array. Its system616f0fdf/tool44773d8f hashes match checkpoint56's evaluation;
+the earlier successful Pop54 run used system677f86f6/tool3bc0d7ee. The same
+checkpoint and Pop serving geometry therefore changed behavior across the
+runtime/prompt transition. The earlier3/4 versus2/4 comparison does not isolate
+weight regression. Checkpoint56's wrong ownership answer included three people
+from a company whose ownership ended in2020; the exact-answer rejection is valid.
+Protected outputs remain in `ops/pop-dev54-current-prompt-1101-v2`; container
+shutdown was independently confirmed. The first comparison attempt was
+interrupted by an incorrect resumable controller designation; it supplies no
+behavioral outcome. Controller and tunnel ownership were corrected.
+
+Norm replaya19a081db passed strict checkpoint56 complete-gradient qualification:
+input gradients bit-exact, all288 parameter comparisons passed. A single-layer
+8192-by2048 benchmark measured0.601s to0.456s and266MB to168MB, not whole-update
+throughput. Independent review found the higher-order path incorrectly targeted
+frozen inputs/weights;3a26107e6 fixes this with frozen-weight and weight-only
+tests. The first-order path remains the qualified replay arithmetic.
+
+Current on-policy selection is four train tasks, six attempts each, from
+ToolACE-corrected source188bbb8a and checkpoint56. Initial attempts found that
+88 valid curriculum cases use integer `reference.failures` counts. The first
+parser fix then emitted a fact kind absent from its consumers. Independent
+review caught that gap;3a26107e6 uses the supported `reference_failure` kind
+with accurate count wording. Python request round trips for all four selected
+cases and actual TypeScript crisp selection pass. Prior queues and sampled
+partials are preserved, without SGD or sample reuse. Retry2 is active under
+`lfm3-next56-policy-4x6-retry2`; inspect actual outputs before crediting updates.
+
+Checkpoint56 source closure105files/628,026,022bytes is independently verified
+on external storage and Pop, archive SHA8f176f539651c5de5140c179a6920491d09b1723f1781a581f2dc05e8506d6df.
+Its runtime/control archivea19 is independently verified at both destinations,
+SHA297d7c381a518cc6148af107912f0d81747f8f0a6fdf23f0679280f86dec7037.
+This is point-in-time recovery, not a claim to cover later3a runtime controls.
+The full15.3GB checkpoint copy is still running with independent final readback
+required. Its initial1GiB copy cgroup exhausted dirty-cache headroom; the retry
+uses bounded64MiB write flushes,2GiB admission and verified partial-prefix reuse.
+
+Luna's actual telecom execution exposed incorrect receipt argument keys and a
+display-label/canonical-app-id mismatch. The source was corrected against27
+actual read-only host receipts; reusable preflight4cdabe6b4 is committed.
+Do not admit its earlier unsupported-blocker result as positive behavior.
+One reviewed fresh generation slot is being prepared; the supervisor owns
+continuing generation and source admission.
+
+Prepared design-brief membership was audited against189,313 compressed-source
+rows:251 related rows in53 application groups exist, but rerendered IDs carry
+`:prompt-full`, so zero literal ID matches do not establish omission. Thirty-nine
+plain-source rows were outside that initial scan. LunaA owns the bounded
+provenance/target reconciliation and qualification of genuinely missing rows;
+do not append duplicate old renders or call the288-row receipt training exposure.
+
+Cloud entitlement probe at01:22 still denied GPU allocation. Local training
+continues; no live cloud GPU is claimed. Two orphaned historical shell wait loops
+whose handles were not-found and children only sleeps were retired. Bulk source
+conversion remains supervised; new cold-runtime file sharing is reclaiming space
+without deleting runtime paths or changing content.
+
 ## Cleanup and actual progress, November 1, 01:04 CET
 
 Owner-approved MegaToken state deletion is complete (88.5 GiB observed gain).
