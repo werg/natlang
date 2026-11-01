@@ -113,3 +113,48 @@ test('failed native view preserves completed chunk turns and final failure befor
     assert.deepEqual(recorded,turns);assert.ok(await store.getNativeState(artifact.id));
   }finally{await new Promise(resolve=>server.close(resolve));}
 });
+
+test('a malformed templated Neuralese write retries its declared typed readout and retains the failed turn',async()=>{
+  const {createNatlangRuntime,loadVirtualNatlang}=await import('../dist/index.js');
+  const requests=[],traces=[];let calls=0;
+  const bad=failed();
+  // The forced template fed a producer-open marker; the model actually
+  // sampled the stop token before a producer-close marker.
+  const failure={...bad.x_natlang_native_failure,code:'neuralese-native-state-open',
+    message:'neuralese-native-state-open: generation stopped inside a produce span',
+    own_input_count:2,generated_input_count:1};
+  bad.x_natlang_native_failure=failure;
+  bad.x_natlang_rl_capture.protocol_failure=structuredClone(failure);
+  bad.x_natlang_rl_capture.generated_inputs=[{token_id:60,input_role:'ordinary',sample_index:null}];
+  bad.x_natlang_rl_capture.samples=[{index:0,token_id:2,logp:-.5,input_role:'produce',terminal:true,query_own_position:1}];
+  const block='nzs1_'+'a'.repeat(52);
+  const driver=Object.assign(async request=>{
+    requests.push(structuredClone(request));
+    if(calls++===0)return {text:bad.choices[0].message.content,calls:[],completion_tokens:1,
+      protocol_failure:bad.x_natlang_native_failure,raw_response:bad};
+    return {calls:[['return_result',{status:'success',value:[{type:'native_state',id:block}]}]],completion_tokens:1};
+  },{neuralese:true});
+  const fn=loadVirtualNatlang({'writer.nl':'---\nargs: {}\nreturns: Neuralese<string>\nreadout: template\n---\nWrite it.\n'},'writer.nl');
+  const result=await createNatlangRuntime({model:{driver},seed:{mode:'backend'},trace:t=>traces.push(t)}).run(()=>fn());
+  assert.equal(result.$neuralese.id,block);assert.equal(requests.length,2);
+  const expected={call:'return_result',arguments:{status:'success'},value_type:'string',value:'write'};
+  assert.deepEqual(requests[0].template,expected);assert.deepEqual(requests[1].template,expected);
+  assert.equal(requests[1].messages.at(-2).content,bad.choices[0].message.content);
+  assert.equal(requests[1].messages.at(-1).content,nativeProtocolFeedback(bad.x_natlang_native_failure));
+  assert.equal(traces.flatMap(t=>t.events).filter(e=>e.kind==='model_protocol_failure').length,1);
+});
+
+
+test('an ordinary decode-template failure keeps the existing untemplated repair',async()=>{
+  const {createNatlangRuntime,loadVirtualNatlang}=await import('../dist/index.js');
+  const requests=[];let calls=0;const bad=failed();
+  const driver=Object.assign(async request=>{
+    requests.push(structuredClone(request));
+    if(calls++===0)return {text:bad.choices[0].message.content,calls:[],completion_tokens:1,
+      protocol_failure:bad.x_natlang_native_failure,raw_response:bad};
+    return {calls:[['return_result',{status:'success',value:'fixed'}]],completion_tokens:1};
+  },{neuralese:true});
+  const fn=loadVirtualNatlang({'reader.nl':'---\nargs: {}\nreturns: string\nreadout: template\n---\nRead it.\n'},'reader.nl');
+  assert.equal(await createNatlangRuntime({model:{driver},seed:{mode:'backend'}}).run(()=>fn()),'fixed');
+  assert.equal(requests[0].template.value,'decode');assert.equal(requests[1].template,undefined);
+});

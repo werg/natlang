@@ -1396,6 +1396,9 @@ export class NativeToolAgent {
     const deadline = this.options.maxSeconds === undefined ? null : Date.now() + this.options.maxSeconds * 1000;
     let tokens = 0, turns = 0, failureRepairs = 0, refinementRepairs = 0, lastRefinementFailure = '';
     let consecutiveEmptyEosWithoutResult = 0;
+    // A malformed producer span is not a rejected typed value: retry the
+    // declared write readout on the same call, with the failure preserved.
+    let retryProtocolWriteTemplate = false;
     // A model that repeats the same action and gets the same failure back is stuck (greedy decoding reproduces it for
     // ever): the fourth identical failure in a row ends the call instead of running silently without end.
     let repeatedFailure = '', repeatedFailures = 0;
@@ -1483,6 +1486,7 @@ export class NativeToolAgent {
         tool_schema_bytes: new TextEncoder().encode(JSON.stringify(this.options.promptRendering === 'program-header' ? [] : availableTools)).length,
         messages: messages.length });
       let response: ModelTurn;
+      let templatedWriteAttempt = false;
       let graphMessages: readonly unknown[] = messages;
       try {
         // Blocks in the conversation travel as content parts; a backend that cannot carry them fails the call.
@@ -1496,11 +1500,13 @@ export class NativeToolAgent {
         // Template readout: the call's first reply is its return_result, the value written as a block (a Neuralese
         // result) or decoded; the opening and the reply keep the trajectory format, and a rejected value falls back to
         // ordinary turns.
-        const template = turns === 0 && session.lam.readout === 'template' && availableTools === allTools &&
+        const template: ModelTurnRequest['template'] = (turns === 0 || retryProtocolWriteTemplate) && session.lam.readout === 'template' && availableTools === allTools &&
           session.lam.type.kind === 'lambda' && supportsNeuralese(this.driver) ? { call: 'return_result',
             arguments: { status: 'success' },
             value_type: session.lam.type.returns.kind === 'neuralese' && !(session.lam.type.returns.element.kind === 'prim' && session.lam.type.returns.element.name === 'string') ? 'unknown' as const : 'string' as const,
             value: session.lam.type.returns.kind === 'neuralese' ? 'write' as const : 'decode' as const } : undefined;
+        templatedWriteAttempt = template?.value === 'write';
+        retryProtocolWriteTemplate = false;
         if (template) session.runtime.trace.emit('template_readout', { call_id: callId, value: template.value });
         const observer = this.options.onDelta, turn = turns + 1;
         const turnOptions: ModelTurnOptions | undefined = observer || this.driver.requiresResultContract ? {
@@ -1580,6 +1586,7 @@ export class NativeToolAgent {
         // Neither a parsed prefix call nor an unfinished block becomes a result.
         messages.push({role:'assistant',content:response.text??'',...thought(response.reasoning)},
           {role:'user',content:nativeProtocolFeedback(failure)});
+        retryProtocolWriteTemplate = templatedWriteAttempt;
         continue;
       }
       response = await this.decodeNeuralese(response, session, turns, turnNode, availableTools === allTools || lastTurn);
