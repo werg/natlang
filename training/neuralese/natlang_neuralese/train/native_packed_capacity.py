@@ -611,6 +611,21 @@ def checkpoint_overlap_barrier(policy, micro_batches, baseline):
     return oversized
 
 
+def capacity_parent_sha(policy, base_sha256):
+    """Read a committed parent without accepting a racing async replacement."""
+    from ..common.hashing import sha256_file_hex_cached
+    for attempt in range(3):
+        if not policy.slot.exists():return base_sha256
+        try:return sha256_file_hex_cached(policy.slot)
+        except RuntimeError as error:
+            if not str(error).startswith('file changed while hashing:') or attempt==2:
+                raise
+            # Keep normal asynchronous overlap. Only a checked read that
+            # actually raced waits for the pending commit and retries fresh.
+            policy.drain_async()
+    raise AssertionError('unreachable capacity parent retry')
+
+
 def qualify_oversize_batches(model, optimizer, micro_batches, *, args, backend, precision,
                              source_path, checkpoint_sha256, global_step, baseline,
                              objective=None, objective_binding=None, prior_frontier=(),

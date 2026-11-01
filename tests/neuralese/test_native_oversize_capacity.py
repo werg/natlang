@@ -537,3 +537,35 @@ def test_capacity_dominance_requires_padded_attention_and_node_layout():
     legacy=group(1000,1200,1024,[(1000,1200,1,1,0)],20)
     del legacy['graphs'][0]['node_shapes']
     assert not _one_group_dominates(legacy,group(900,1000,1024,[(900,1000,1,1,0)],10))
+
+
+def test_capacity_parent_read_retries_a_racing_commit_without_relaxing_checks(tmp_path,monkeypatch):
+    from types import SimpleNamespace
+    from natlang_neuralese.train.native_packed_capacity import capacity_parent_sha
+    from natlang_neuralese.common import hashing
+    slot=tmp_path/'checkpoint.pt';slot.write_bytes(b'checkpoint')
+    calls=[];drains=[]
+    def checked(path):
+        calls.append(path)
+        if len(calls)==1:raise RuntimeError('file changed while hashing: '+str(path))
+        return 'verified-new-parent'
+    monkeypatch.setattr(hashing,'sha256_file_hex_cached',checked)
+    policy=SimpleNamespace(slot=slot,drain_async=lambda:drains.append(True))
+    assert capacity_parent_sha(policy,'base')=='verified-new-parent'
+    assert calls==[slot,slot] and drains==[True]
+
+
+def test_capacity_parent_read_bounds_retries_and_preserves_other_errors(tmp_path,monkeypatch):
+    from types import SimpleNamespace
+    from natlang_neuralese.train.native_packed_capacity import capacity_parent_sha
+    from natlang_neuralese.common import hashing
+    slot=tmp_path/'checkpoint.pt';slot.write_bytes(b'checkpoint');calls=[]
+    def changing(path):
+        calls.append(path);raise RuntimeError('file changed while hashing: '+str(path))
+    policy=SimpleNamespace(slot=slot,drain_async=lambda:None)
+    monkeypatch.setattr(hashing,'sha256_file_hex_cached',changing)
+    with pytest.raises(RuntimeError,match='file changed'):capacity_parent_sha(policy,'base')
+    assert len(calls)==3
+    def broken(path):raise RuntimeError('unrelated failure')
+    monkeypatch.setattr(hashing,'sha256_file_hex_cached',broken)
+    with pytest.raises(RuntimeError,match='unrelated'):capacity_parent_sha(policy,'base')

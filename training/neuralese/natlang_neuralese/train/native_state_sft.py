@@ -3977,10 +3977,13 @@ def _main(argv=None, *, requested_refresh):
                     break
             # A newly larger complete graph is measured on this very model
             # with the selected QAT point and actual cotangent path before SGD.
-            from .native_packed_capacity import qualify_oversize_batches
+            from .native_packed_capacity import qualify_oversize_batches, capacity_parent_sha
             oversize_proof = None
             try:
-                current_parent_sha=sha256_file_hex_cached(policy.slot) if policy.slot.exists() else config['base_inventory_sha256']
+                # Ordinary batches need no new capacity proof or checkpoint
+                # read. A background writer may replace the slot concurrently.
+                current_parent_sha=(capacity_parent_sha(policy,config['base_inventory_sha256'])
+                                    if oversized_update else None)
                 if envelope_match is not None:
                     # Recheck actual selected QAT point and available device headroom after calibration.
                     current_memory=_capacity_memory_context(next(model.parameters()).device)

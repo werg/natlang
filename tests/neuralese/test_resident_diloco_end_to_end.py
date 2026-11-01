@@ -1,5 +1,5 @@
 """Exercise real trainer, resident transaction and HTTP outer recovery together."""
-import copy,json,socket,threading,time
+import copy,json,os,socket,threading,time
 import pytest,torch
 from pathlib import Path
 from test_native_model import tiny_source
@@ -21,6 +21,8 @@ def test_native_resident_append_crash_with_real_outer(tmp_path,monkeypatch):
     base=tmp_path/'base';tiny_source(base)
     _,_,roles,config=load_native_model(base,dtype=torch.float32,rank=4)
     ident={'model_config':config,'batch_graphs':1,'batch_tokens':0,'checkpoint_layers':True,'chunk_tokens':1024,'checkpoint_input_offload':False,'cotangent_accumulator_backend':'plain','share_causal_prefixes':True,'fp8':{'kind':'off','recipe':'delayed','amax_history_len':16,'input_gradient_precision':None},'runtime':{'torch':torch.__version__,'cuda':torch.version.cuda,'device':'cpu'}}
+    ident['execution_arithmetic']={'native_compile':os.environ.get('NATLANG_NATIVE_COMPILE','1'),
+        'bf16_reduced_precision_reduction':torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction}
     paths,directory,manager,newrecipe=setup(tmp_path,config['tokenizer_fingerprint'],roles.ids,ident,manifest_train=True)
     # The appended manifest retains the exact first leaf, plus one new graph.
     extra=tmp_path/'extra.jsonl';row=graph('c');row.update(split='train',tokenizer_fingerprint=config['tokenizer_fingerprint']);extra.write_text(json.dumps(row)+'\n')
@@ -58,6 +60,7 @@ def test_native_resident_append_crash_with_real_outer(tmp_path,monkeypatch):
             patch.setattr(trainer.CheckpointPolicy,'due',due);patch.setattr(resident.ResidentAdoption,'poll',crash)
             with pytest.raises(Crash):trainer.main(argv)
         assert resident.current(directory)
+        argv[argv.index('--continue-from')+1]=str(out/'checkpoint.pt')
         assert trainer.main(argv)==0
         final=torch.load(out/'checkpoint.pt',weights_only=False)
         assert final['training']['exposure_counts']=={'a':1,'b':1,'c':1}
