@@ -313,3 +313,24 @@ def test_copy_child_inherits_blob_and_owner_locks(tmp_path, monkeypatch):
     offload.verified_recovery_blob(source, target, sha(source), owner_fd=owner.fileno())
     assert target.read_bytes() == source.read_bytes() and len(calls) == 1
     owner.close()
+
+
+def test_inherited_owner_lock_survives_parent_close(tmp_path):
+    import fcntl, subprocess, sys
+    path = tmp_path / 'owner.lock'
+    owner = path.open('w')
+    fcntl.flock(owner, fcntl.LOCK_EX)
+    child = subprocess.Popen([sys.executable, '-c', 'import sys; sys.stdin.read()'],
+                             stdin=subprocess.PIPE, pass_fds=(owner.fileno(),))
+    try:
+        owner.close()
+        with path.open('w') as contender:
+            with pytest.raises(BlockingIOError):
+                fcntl.flock(contender, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        child.stdin.close()
+        assert child.wait(timeout=5) == 0
+        with path.open('w') as contender:
+            fcntl.flock(contender, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    finally:
+        if child.poll() is None:
+            child.kill(); child.wait()
