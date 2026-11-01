@@ -45,6 +45,21 @@ def test_cap_redistributes_mass_without_exceeding_eight():
     assert plan['effective_shares'][FAMILY] > .07  # cap makes the requested share infeasible
 
 
+def test_repeated_admission_extends_existing_family_without_erasing_prior_mass():
+    prior={'families':{name:{'unscaled_mass':100.} for name in ('coding','native-communication','natlang',FAMILY)},
+        'unscaled_mass_total':400.}
+    scales={name:1. for name in prior['families']}
+    plan=scales_for_append(prior,scales,50.,share=.25)
+    assert plan['unscaled_mass'][FAMILY]==150.
+    assert plan['previous_effective_mass'][FAMILY]==100.
+    assert plan['total_unscaled_mass']==450. and plan['total_effective_mass']==pytest.approx(450.)
+    assert plan['effective_shares'][FAMILY]==pytest.approx(.25)
+    assert all(value==1. for value in scales.values())
+    capped=scales_for_append(prior,scales,500000.,share=.25)
+    assert max(capped['scales'].values())<=8 and capped['capped_families']
+    assert capped['total_effective_mass']==pytest.approx(capped['total_unscaled_mass'])
+
+
 @pytest.mark.parametrize('new_mass', [0, -1, float('inf'), float('nan')])
 def test_invalid_new_mass_is_rejected(new_mass):
     with pytest.raises(ValueError, match='finite positive'):

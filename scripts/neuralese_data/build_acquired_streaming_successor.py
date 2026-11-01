@@ -232,10 +232,11 @@ def scales_for_append(census, old_scales, new_mass, *, share=0.07, cap=8.0, fami
     if not isinstance(cap, (int, float)) or not math.isfinite(cap) or cap < 1:
         raise ValueError('family cap must be finite and at least one')
     families = census.get('families') or {}
-    if not set(families) <= set(old_scales) or family in old_scales:
+    if not set(families) <= set(old_scales) or (family in old_scales and family not in families):
         raise ValueError('predecessor census and declared family set differ')
+    if type(new_mass) not in (int,float) or not math.isfinite(new_mass) or new_mass<=0:
+        raise ValueError('new family contribution needs finite positive unscaled token mass')
     mass = {name: item.get('unscaled_mass') for name, item in families.items()}
-    mass[family] = new_mass
     if any(type(value) not in (int, float) or not math.isfinite(value) or value <= 0 for value in mass.values()):
         raise ValueError('every family needs finite positive unscaled token mass')
     if any(type(value) not in (int, float) or not math.isfinite(value) or not 0 < value <= cap
@@ -244,8 +245,13 @@ def scales_for_append(census, old_scales, new_mass, *, share=0.07, cap=8.0, fami
     if not math.isclose(sum(mass[f] for f in families), census.get('unscaled_mass_total', -1), rel_tol=1e-10, abs_tol=1e-6):
         raise ValueError('predecessor family mass total differs from census')
     previous_effective = {name: mass[name] * old_scales[name] for name in families}
-    previous_total = sum(previous_effective.values())
-    targets = {name: (1 - share) * value / previous_total for name, value in previous_effective.items()}
+    # Repeated admissions extend the same logical family. Preserve its old mass
+    # and historical objective; allocate the requested share to old+new members.
+    mass[family] = mass.get(family,0)+new_mass
+    others={name:value for name,value in previous_effective.items() if name!=family}
+    previous_total = sum(others.values())
+    if previous_total<=0:raise ValueError('requested family share needs other existing families')
+    targets = {name: (1 - share) * value / previous_total for name, value in others.items()}
     targets[family] = share
     scales, capped = capped_scales(targets, mass, cap)
     total = sum(mass.values())
