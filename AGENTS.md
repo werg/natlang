@@ -148,6 +148,14 @@ It observes; the checkpoint writer enforces allocation. Preserve live
 
 ## Supervision and genuinely diverse Luna generation (owner, 2026-10-31)
 
+Owner follow-up2026-11-01: subscription teacher generation is for genuinely
+useful work. Up to six workers is a ceiling, not a utilization target. Bind
+generation to specific missing Natlang/Neuralese behaviors, review complete
+graphs and actual verification outcomes, and measure useful admitted yield
+against requests/tokens. Repeated failures do not justify unchanged retries or
+automatic expansion. Keep source conversion and on-policy local rollouts
+distinct from paid external generation; preserve exact actor provenance.
+
 Codex resumes supervision from `plans/neuralese/SUPERVISION_HANDOFF_20261031.md`.
 Resume Luna dataset and trajectory generation with **up to six concurrent Luna
 workers**. This supersedes the one-worker cap and the LFM3 prohibition on new
