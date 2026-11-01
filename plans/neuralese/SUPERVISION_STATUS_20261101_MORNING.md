@@ -1,3 +1,56 @@
+## Live supervision update, 2026-11-01 16:49 CET
+
+- Actual SFT66 window has earned optimizer updates67,68,69. The scheduled
+  protected four-case task evaluation at SFT stage step12/global69 is now active
+  in `sd-r1/learner/task-eval/step-0000012`; its GPU work is intentional behavior
+  qualification, not an idle learner. Final requested update70 remains pending.
+- Exact66 parent custody preparation finished successfully after fixing an
+  operational cache script that tried to JSON-encode the whole tensor-bearing
+  SFT frame. `ops/completed-sft66-window-publication-1101/parent-frame.json`
+  caches only source/exposure metadata, with optimizer/RNG presence established
+  from the actual full decode. The script
+  `ops/prepare-sft66-completed-publication-1101.py --publish-completed` must run
+  only after the real completed refresh; it compares exact bindings/quotas and
+  nondecreasing exposure and uses the central publisher. No publication yet.
+- New frozen `runtime-next70-837a-1101` built successfully, protected union
+  unchanged. Prepared next on-policy controls in `ops/next70-onpolicy-307946-1101/`
+  include5110 source-resume/no-loss-best fixes and the synchronized prompt table.
+  They still require actual post-publication preflight and launch; preparation
+  grants no exposure or runtime-adoption credit.
+- Independent64 full-state copy/readback completed16:36:38, SHA256
+  `6df3598619d4d97c3b9e14b4c62158f06fc8806c33e1bb72532084d782e0ab64`.
+  Root pinned the exact external inode under
+  `/mnt/external/natlang-independent-recovery-20261101/earned64-matched-eval/`
+  before the mutable rolling mirror can replace it. The canonical retained64
+  evaluation path now links to that immutable pin, freeing another15.33GB.
+  Receipt `ops/relocate-verified64-off-nvme-1101.json`. Actual64 inference-only
+  transport preparation is live under0f8a, matching Pop's baseline runtime.
+  The SATA disk is busy; actor export is not yet complete or staged on Pop.
+- Removed the redundant queued loss-best66 archive and its two aliases after
+  checking its identity against canonical66, its separate latest backup job and
+  the actual owner working another key. Canonical66 and recovery job remain.
+  Receipt `ops/retired-loss-best-aliases-1101/round12-best66-retirement.json`.
+  This avoids another15.32GB duplicate export, not equivalent physical disk savings.
+- Acquired conversion shard0 is terminal success; shard1 and port conversion
+  continue. Newly completed D15/D32 receipts contain source-reported positive
+  sessions, requiring inventory, full output verification and current protection/
+  quality screening before any source append. The reusable inventory command is
+  `scripts/neuralese_data/audit_acquired_conversion_coverage.py`; actual inventory
+  unit `inventory-ready-acquired-conversions-1101` writes coverage-v3. Six custody
+  tests pass, including wrong export, broken size/count and false admission.
+  This command inventories receipt bytes and declared sizes; it does not certify
+  output hashes, graph quality or training admission.
+
+The actual saved student-rollout audit is
+`ops/rl-student-success-history-1101.json`. Production `sd-r1` rounds0–12 scored
+1/2,9/32,11/32,4/32,7/32,12/48,21/72,39/72,70/96,60/96,11/16,7/16,14/16.
+Teacher additions are excluded; unresolved attempts remain in denominators.
+Round10 includes the subsequently withdrawn underspecified ToolACE collection.
+Task mix and limits changed (600→3600 seconds;16→32 requests), so these ratios
+are not a matched capability curve. Stopped historical `jolt-r1` trained rounds
+scored2/2,0/32,7/32,8/48,9/48,9/48,20/72; its abandoned round1 attempt also
+collected14/32 but was not its trained successor. Never blend branches/retries.
+
 ## Live supervision update, 2026-11-01 16:36 CET
 
 This update supersedes earlier instantaneous observations below.
