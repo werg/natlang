@@ -717,7 +717,8 @@ def _claim_queue(plan, identity, slot, case):
     claim_id = f"{identity['campaign_id']}-case-{index:06d}"
     queue = slot_root / 'claims' / claim_id / 'queue.jsonl'
     entry = {
-        'key': claim_id, 'source': identity['source'], 'jobs': str(slot_root / 'jobs'),
+        'key': claim_id, 'campaign_id': identity['campaign_id'],
+        'source': identity['source'], 'jobs': str(slot_root / 'jobs'),
         'output': str(slot_root / 'results' / f'case-{index:06d}.results.jsonl'),
         'index': index, 'count': 1, 'seed': case['seed'],
         'log': str(slot_root / 'collector-logs' / f'case-{index:06d}.log'),

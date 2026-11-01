@@ -10,16 +10,21 @@ import scripts.run_bonsai_queue as queue_module
 from scripts.run_bonsai_queue import run_queue, local_decode_progress as read_local_decode_progress
 
 
-def test_journal_spool_root_is_bound_to_jobs_campaign():
+def test_journal_spool_root_uses_authenticated_campaign_id_not_storage_basename():
     from scripts.run_bonsai_queue import _approved_journal_spool_root
-    campaign = 'campaign-a'
+    campaign = 'luna-campaign-a'
+    storage_name = 'campaign-a'
     jobs = str(Path(queue_module.resolve_machine_path('data_hdd')) /
-               'natlang-luna-campaigns' / campaign / 'slot-01' / 'jobs')
+               'natlang-luna-campaigns' / storage_name / 'slot-01' / 'jobs')
     approved = _approved_journal_spool_root(
-        queue_module.resolve_machine_path('data_nvme', 'natlang-teacher-journal-spool', campaign), jobs)
+        queue_module.resolve_machine_path('data_nvme', 'natlang-teacher-journal-spool', campaign), jobs, campaign)
     assert approved.endswith('/natlang-teacher-journal-spool/' + campaign)
     with pytest.raises(ValueError, match='configured data_nvme'):
-        _approved_journal_spool_root('/tmp/unbound-spool', jobs)
+        _approved_journal_spool_root('/tmp/unbound-spool', jobs, campaign)
+    with pytest.raises(ValueError, match='configured data_nvme'):
+        _approved_journal_spool_root(
+            queue_module.resolve_machine_path('data_nvme', 'natlang-teacher-journal-spool', storage_name),
+            jobs, campaign)
 
 ROOT = Path(__file__).resolve().parents[1]
 TS_HOST = ROOT / 'ts-host'

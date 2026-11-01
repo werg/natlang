@@ -102,6 +102,7 @@ def test_reviewed_plan_validates_runtime_tree_and_all_identity_pins(reviewed_pla
     assert [row['index'] for row in identity['cases']] == [0, 1, 2]
     entry, *_ = dispatcher._claim_queue(plan, identity, 1, identity['cases'][0])
     assert entry['prompt_rendering'] == 'full'
+    assert entry['campaign_id'] == plan['campaign_id']
 
 
 @pytest.mark.parametrize('policy', [None, {},

@@ -51,10 +51,15 @@ def judge_arguments(entry, teacher_model_id):
     return ['--judge-model-id', judge['model_id'], '--judge-' + transports[0], judge[transports[0]]]
 
 
-def _approved_journal_spool_root(spool_root, jobs_dir):
-    """Bind local hot journals to the configured NVMe campaign namespace."""
-    jobs = Path(jobs_dir).expanduser().resolve()
-    campaign_id = jobs.parent.parent.name
+def _approved_journal_spool_root(spool_root, jobs_dir, campaign_id):
+    """Bind local hot journals to the authenticated campaign identity.
+
+    The external campaign directory can have a storage-safe basename that
+    differs from the dispatch campaign ID. Never infer the latter from a path.
+    """
+    if (not isinstance(campaign_id, str) or not campaign_id
+            or Path(campaign_id).name != campaign_id or campaign_id in {'.', '..'}):
+        raise ValueError('journal spool needs the authenticated campaign_id from its queue')
     expected = resolve_machine_path('data_nvme', 'natlang-teacher-journal-spool', campaign_id).expanduser().resolve()
     actual = Path(spool_root).expanduser().resolve()
     if actual != expected:
@@ -672,9 +677,11 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
     queue, journal, runtime = map(Path, (queue, journal, runtime))
     if journal_spool_root is not None:
         first_entry = next((json.loads(line) for line in jsonl_lines(queue) if line.strip()), None)
-        if not first_entry or not isinstance(first_entry.get('jobs'), str):
-            raise ValueError('journal spool needs a source-bound queue jobs directory')
-        journal_spool_root = _approved_journal_spool_root(journal_spool_root, first_entry['jobs'])
+        if (not first_entry or not isinstance(first_entry.get('jobs'), str)
+                or not isinstance(first_entry.get('campaign_id'), str)):
+            raise ValueError('journal spool needs source-bound jobs and authenticated campaign_id')
+        journal_spool_root = _approved_journal_spool_root(
+            journal_spool_root, first_entry['jobs'], first_entry['campaign_id'])
     if provider_request_config is not None:
         if not provider:
             raise ValueError('provider request config requires an explicit provider')
