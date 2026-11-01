@@ -44,6 +44,38 @@ def checkpoint_base_files(base,state):
         base,(state.get('model_config') or {}).get('base_inventory'),state.get('backbone_state'))
 
 
+def snapshot_control(path, directory, repo):
+    """Seal exact committed helper bytes under a content-addressed immutable name."""
+    import hashlib,tempfile
+    source=Path(path).resolve(strict=True);repo=Path(repo).resolve(strict=True)
+    relative=source.relative_to(repo).as_posix()
+    commit=subprocess.check_output(['git','-C',str(repo),'rev-parse','HEAD'],text=True).strip()
+    committed=subprocess.check_output(['git','-C',str(repo),'show',f'{commit}:{relative}'])
+    before=source.stat();data=source.read_bytes();after=source.stat()
+    identity=lambda s:(s.st_dev,s.st_ino,s.st_size,s.st_mtime_ns,s.st_ctime_ns)
+    if identity(before)!=identity(after) or data!=committed:
+        raise ValueError('recovery helper differs from its committed source: '+str(source))
+    digest=hashlib.sha256(data).hexdigest();directory=Path(directory);directory.mkdir(parents=True,exist_ok=True)
+    target=directory/(digest+'-'+source.name)
+    if not target.exists():
+        fd,name=tempfile.mkstemp(prefix='.control-',dir=directory)
+        try:
+            with os.fdopen(fd,'wb') as out:out.write(data);out.flush();os.fsync(out.fileno())
+            os.chmod(name,0o400)
+            try:os.link(name,target)
+            except FileExistsError:pass
+        finally:Path(name).unlink(missing_ok=True)
+        dfd=os.open(directory,os.O_DIRECTORY);os.fsync(dfd);os.close(dfd)
+    if target.is_symlink() or file_sha256_for_control(target)!=digest or target.stat().st_mode & 0o222:
+        raise ValueError('recovery helper snapshot is not immutable or differs')
+    return {'path':str(target),'sha256':digest,'source_path':str(source),'source_commit':commit}
+
+
+def file_sha256_for_control(path):
+    import hashlib
+    with open(path,'rb') as source:return hashlib.file_digest(source,'sha256').hexdigest()
+
+
 def build(args):
     config_path=Path(args.config).resolve(strict=True);config=json.loads(config_path.read_text())
     state_path=Path(args.controller_state).resolve(strict=True);checkpoint=Path(args.checkpoint).resolve(strict=True)
@@ -94,7 +126,9 @@ def build(args):
         raise ValueError('checkpoint lacks its exact active recipe binding')
     recipe=Path(binding['path']).resolve(strict=True);add(recipe,'controls',binding['sha256'])
     for ref in recipe_file_dependencies(recipe):add(ref['path'],'controls',ref['sha256'])
-    for path in args.control:add(path,'controls')
+    verifier=Path(__file__).resolve().with_name('verify_local_recovery_export.py')
+    for path in args.control:
+        if Path(path).resolve(strict=True)!=verifier:add(path,'controls')
     base=Path(config['base']).resolve(strict=True)
     if options.get('base') and Path(options['base']).resolve(strict=True)!=base:
         raise ValueError('controller template and checkpoint base differ')
@@ -115,11 +149,14 @@ def build(args):
     runtime=add(args.runtime_archive,'runtime');environment=add(args.environment_archive,'environment');stdlib=add(args.system_python_archive,'system-python')
     assets=add(args.asset_archive,'task-assets');assets_v3=add(args.asset_v3_archive,'task-assets')
     for path in args.archive_receipt:add(path,'controls')
-    for path in (Path(__file__).resolve(),Path(args.qualifier).resolve()):add(path,'controls')
+    repo=Path(__file__).resolve().parents[2]
+    snapshots=[snapshot_control(path,Path(args.journal_directory)/'control-snapshots',repo)
+               for path in (Path(__file__).resolve(),Path(args.qualifier).resolve(),verifier)]
+    for snapshot in snapshots:add(snapshot['path'],'controls',snapshot['sha256'])
     config_ref={'path':str(controller_config),'sha256':sha(controller_config)}
     plan={'schema':'natlang.local-full-recovery-plan/1','session':args.session,'destination':str(Path(args.destination).resolve()),
           'journal_directory':str(Path(args.journal_directory).resolve()),'controller':{'state_path':str(state_path),'config':config_ref},
-          'inputs':inputs,'additional_inputs':additional,'closure':closure,
+          'inputs':inputs,'additional_inputs':additional,'closure':closure,'control_snapshot':snapshots,
           'require_static_contract':True,'sft_static_contract':recovery_static_sft_contract(training),
           'restore':{'runtime_archive':runtime['path'],'environment_archive':environment['path'],'system_python_archive':stdlib['path'],
                      'base_path':str(base),'node_path':str(node),'interpreter_path':str(interpreter),

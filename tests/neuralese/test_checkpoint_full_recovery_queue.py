@@ -11,6 +11,12 @@ def sha(path):return hashlib.sha256(path.read_bytes()).hexdigest()
 def attach_qualification(plan,path):
     from natlang_neuralese.train.checkpoint_offload import recovery_closure_identity
     plan.setdefault('require_static_contract',True);plan.setdefault('sft_static_contract',{})
+    if 'control_snapshot' not in plan:
+        plan['control_snapshot']=[]
+        for name in ('build_local_recovery_plan.py','qualify_local_checkpoint_recovery.py','verify_local_recovery_export.py'):
+            helper=path.parent/('snapshot-'+name);helper.write_bytes(name.encode())
+            ref={'path':str(helper),'sha256':sha(helper),'source_path':'/test/'+name,'source_commit':'0'*40}
+            plan['control_snapshot'].append(ref);plan['closure'].append({'role':'controls','path':ref['path'],'sha256':ref['sha256']})
     old=plan.get('restore_qualification')
     if old:plan['closure']=[x for x in plan['closure'] if not (x['role']=='controls' and x['path']==old['path'] and x['sha256']==old['sha256'])]
     evidence_path=path.with_name(path.stem+'-evidence.json')
@@ -19,7 +25,7 @@ def attach_qualification(plan,path):
     if not any(x['path']==str(evidence_path) for x in plan['closure']):plan['closure'].append({'role':'controls',**evidence_ref})
     plan['restore_qualification']={'path':str(path),'sha256':'0'*64}
     checks={key:True for key in ('all_payloads_reread','source_closure_resolved','environment_imports','tokenizer_loaded','checkpoint_full_state_loaded','checkpoint_plan_custody','node_collector_imported','task_assets_read')}
-    write_json_durable(path,{'schema':'natlang.local-recovery-restore-qualification/1','status':'passed','checkpoint':{'sha256':'a'*64,'training_custody':{'source_roots':[plan['inputs']['train'],plan['inputs']['held']],'ce':plan['inputs']['ce']}},'inputs':plan['inputs'],'require_static_contract':plan.get('require_static_contract'),'sft_static_contract':plan.get('sft_static_contract'),'restore':plan.get('restore'),'additional_inputs':plan.get('additional_inputs',[]),'controller_config':plan.get('controller',{}).get('config'),'closure_identity':recovery_closure_identity(plan),'checks':checks,'evidence':{key:evidence_ref for key in checks}})
+    write_json_durable(path,{'schema':'natlang.local-recovery-restore-qualification/1','status':'passed','checkpoint':{'sha256':'a'*64,'training_custody':{'source_roots':[plan['inputs']['train'],plan['inputs']['held']],'ce':plan['inputs']['ce']}},'inputs':plan['inputs'],'require_static_contract':plan.get('require_static_contract'),'sft_static_contract':plan.get('sft_static_contract'),'control_snapshot':plan.get('control_snapshot'),'restore':plan.get('restore'),'additional_inputs':plan.get('additional_inputs',[]),'controller_config':plan.get('controller',{}).get('config'),'closure_identity':recovery_closure_identity(plan),'checks':checks,'evidence':{key:evidence_ref for key in checks}})
     plan['restore_qualification']['sha256']=sha(path)
     plan['closure'].append({'role':'controls',**plan['restore_qualification']})
     return plan

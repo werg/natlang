@@ -233,6 +233,7 @@ print('RECOVERY_SMOKE='+json.dumps({'custody':recovery_training_custody(state),'
                    'checkpoint':{'sha256':checkpoint_sha,'training_custody':smoke['custody']},
                    'require_static_contract':plan.get('require_static_contract'),
                    'sft_static_contract':plan.get('sft_static_contract'),
+                   'control_snapshot':plan.get('control_snapshot'),
                    'closure_identity':recovery_closure_identity(plan),'restore':plan['restore'],
                    'additional_inputs':plan.get('additional_inputs',[]),'controller_config':plan['controller']['config'],'checks':checks,
                    'evidence':{name:evidence_ref for name in checks},'host_contract':evidence['host_contract']}

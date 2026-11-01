@@ -881,6 +881,17 @@ def validate_recovery_plan_shape(plan):
             raise ValueError('invalid recovery closure binding')
     if not {'runtime','environment','system-python','system-libraries','node','interpreter','base','tokenizer','task-assets','controls','sources'} <= {item['role'] for item in closure}:
         raise ValueError('recovery closure lacks a required runtime, environment, system, base, tokenizer, task asset, control or source role')
+    snapshots=plan.get('control_snapshot')
+    required_helpers={'build_local_recovery_plan.py','qualify_local_checkpoint_recovery.py','verify_local_recovery_export.py'}
+    if (not isinstance(snapshots,list) or len(snapshots)!=3
+            or {Path(x.get('source_path','')).name for x in snapshots if isinstance(x,dict)}!=required_helpers):
+        raise ValueError('recovery plan needs immutable committed helper snapshots')
+    for snapshot in snapshots:
+        if (set(snapshot)!={'path','sha256','source_path','source_commit'}
+                or not re.fullmatch(r'[0-9a-f]{40}',snapshot.get('source_commit',''))
+                or not any(item['role']=='controls' and item['path']==snapshot['path']
+                           and item['sha256']==snapshot['sha256'] for item in closure)):
+            raise ValueError('recovery helper snapshot is not exactly bound')
     inputs=plan.get('inputs')
     if not isinstance(inputs,dict) or set(inputs)!={'train','foundation','held','ce'}:
         raise ValueError('recovery plan needs exact train, foundation, held and CE bindings')
@@ -960,6 +971,7 @@ def validate_restore_qualification(plan):
             or value.get('controller_config')!=plan['controller']['config']
             or value.get('require_static_contract')!=plan.get('require_static_contract')
             or value.get('sft_static_contract')!=plan.get('sft_static_contract')
+            or value.get('control_snapshot')!=plan.get('control_snapshot')
             or not isinstance(checkpoint.get('sha256'),str) or not re.fullmatch(r'[0-9a-f]{64}',checkpoint['sha256'])
             or custody.get('source_roots')!=[plan['inputs']['train'],plan['inputs']['held']]
             or custody.get('ce')!=plan['inputs']['ce']

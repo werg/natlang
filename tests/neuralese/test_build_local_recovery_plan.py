@@ -25,3 +25,21 @@ def test_full_checkpoint_requires_only_pinned_config_and_tokenizer(tmp_path):
     (tmp_path/'tokenizer.json').write_bytes(b'changed')
     with pytest.raises(ValueError,match='differs'):
         checkpoint_base_files(tmp_path,state)
+
+
+def test_control_snapshot_survives_source_edit_and_rejects_dirty_capture(tmp_path):
+    import subprocess
+    from pathlib import Path
+    import pytest
+    from scripts.neuralese_data.build_local_recovery_plan import snapshot_control
+    repo=tmp_path/'repo';repo.mkdir()
+    subprocess.run(['git','init','-q',str(repo)],check=True)
+    source=repo/'qualify_local_checkpoint_recovery.py';source.write_text('committed\n')
+    subprocess.run(['git','-C',str(repo),'add',source.name],check=True)
+    subprocess.run(['git','-C',str(repo),'-c','user.name=Test','-c','user.email=test@example.invalid','commit','-qm','initial'],check=True)
+    snapshot=snapshot_control(source,tmp_path/'snapshots',repo)
+    assert Path(snapshot['path']).read_text()=='committed\n'
+    source.write_text('new uncommitted work\n')
+    assert Path(snapshot['path']).read_text()=='committed\n'
+    with pytest.raises(ValueError,match='differs from its committed source'):
+        snapshot_control(source,tmp_path/'snapshots',repo)
