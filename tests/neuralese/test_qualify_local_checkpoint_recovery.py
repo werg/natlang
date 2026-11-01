@@ -23,6 +23,28 @@ def test_extracts_and_validates_runtime_archive(tmp_path):
     assert (tmp_path/'restore/runtime/module.py').read_text()=='value=4\n'
 
 
+def test_reuses_matching_fixture_without_rewriting_and_rejects_extra_module(tmp_path):
+    root=tmp_path/'source';root.mkdir();(root/'module.py').write_text('value=4\n')
+    archive=tmp_path/'runtime.tar';seal(root,archive,tmp_path/'receipt.json')
+    dest=tmp_path/'restore';extract_archive(archive,dest)
+    module=dest/'runtime/module.py';before=module.stat()
+    extract_archive(archive,dest)
+    assert module.stat().st_ino==before.st_ino
+    assert module.stat().st_mtime_ns==before.st_mtime_ns
+    (dest/'runtime/unbound.py').write_text('extra code')
+    with pytest.raises(ValueError,match='unbound member'):
+        extract_archive(archive,dest)
+
+
+def test_reused_fixture_must_match_archive_bytes(tmp_path):
+    root=tmp_path/'source';root.mkdir();(root/'module.py').write_text('value=4\n')
+    archive=tmp_path/'runtime.tar';seal(root,archive,tmp_path/'receipt.json')
+    dest=tmp_path/'restore';extract_archive(archive,dest)
+    (dest/'runtime/module.py').write_text('value=5\n')
+    with pytest.raises(ValueError,match='differs from archive'):
+        extract_archive(archive,dest)
+
+
 def test_restore_rejects_escaping_archive_and_nonabsolute_source(tmp_path):
     archive=tmp_path/'bad.tar'
     with tarfile.open(archive,'w') as tar:

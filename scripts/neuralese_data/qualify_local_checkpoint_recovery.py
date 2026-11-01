@@ -7,7 +7,7 @@ checkpoint loader, a staged graph loader, and the Node collector import. It
 never changes the original checkpoint or any live control.
 """
 from __future__ import annotations
-import argparse,hashlib,json,os,shutil,subprocess,tarfile,tempfile
+import argparse,contextlib,fcntl,hashlib,json,os,shutil,subprocess,tarfile,tempfile
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 from scripts.coreweave.private_export_guard import CacheBoundedReader
@@ -37,8 +37,19 @@ def extract_archive(archive_path, destination, *, environment=False):
                     raise ValueError('unexpected or duplicate restore archive member')
                 if not (member.isfile() or member.isdir() or member.issym()):
                     raise ValueError('unsupported restore archive member')
-                archive.extract(member,destination,filter=allow)
                 path=destination/member.name
+                # Revalidate every existing file against the archive stream;
+                # avoid rewriting tens of thousands of already correct files.
+                filtered=allow(member, str(destination))
+                if member.isfile() and path.is_file() and not path.is_symlink() and path.stat().st_size == member.size:
+                    digest=hashlib.sha256()
+                    with archive.extractfile(member) as incoming:
+                        for block in iter(lambda:incoming.read(1024*1024),b''):digest.update(block)
+                    if file_sha256(path)!=digest.hexdigest():
+                        raise ValueError('existing recovery fixture differs from archive: '+member.name)
+                    os.chmod(path,filtered.mode & 0o7777)
+                else:
+                    archive.extract(member,destination,filter=allow)
                 if member.issym():observed[member.name]={'name':member.name,'link':member.linkname}
                 elif member.isdir():observed[member.name]={'name':member.name,'directory':True,'mode':member.mode & 0o7777}
                 else:observed[member.name]={'name':member.name,'bytes':member.size,'sha256':file_sha256(path)}
@@ -50,6 +61,13 @@ def extract_archive(archive_path, destination, *, environment=False):
         if value['name'] in expected:raise ValueError('duplicate archive manifest entry')
         expected[value['name']]=value
     if observed!=expected:raise ValueError('restored archive members differ from exact inventory')
+    # Reusing an extracted tree must not permit an extra executable module to
+    # participate in the restore outside the authenticated archive inventory.
+    for path in (destination/prefix.rstrip('/')).rglob('*'):
+        name=path.relative_to(destination).as_posix()
+        if name not in expected and not (path.is_dir() and not path.is_symlink()
+                and any(item.startswith(name+'/') for item in expected)):
+            raise ValueError('unbound member in recovery fixture: '+name)
     return manifest
 
 
@@ -108,7 +126,15 @@ def copy_closure_blobs(base_closure, store):
     return dict(results[index] for index in sorted(results))
 
 
-def qualify(draft, checkpoint, scratch_parent, output_plan, qualification_path, evidence_path, environment_scratch=None):
+@contextlib.contextmanager
+def locked_fixture(path):
+    path=Path(path);path.mkdir(parents=True,exist_ok=True)
+    with (path/'.restore.lock').open('a') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        yield str(path)
+
+
+def qualify(draft, checkpoint, scratch_parent, output_plan, qualification_path, evidence_path, environment_scratch=None, environment_fixture=None):
     draft=Path(draft).resolve(strict=True);checkpoint=Path(checkpoint).resolve(strict=True)
     output_plan=Path(output_plan).resolve();qualification_path=Path(qualification_path).resolve();evidence_path=Path(evidence_path).resolve()
     if any(path.exists() for path in (output_plan,qualification_path,evidence_path)):
@@ -135,14 +161,16 @@ def qualify(draft, checkpoint, scratch_parent, output_plan, qualification_path, 
         return Path(blobs[(items[0]['path'],items[0]['sha256'])]['path'])
     runtime_archive=find('runtime',restore['runtime_archive']);environment_archive=find('environment',restore['environment_archive']);stdlib_archive=find('system-python',restore['system_python_archive'])
     asset_archives=[(item,find('task-assets',item['archive'])) for item in restore['asset_archives']]
+    fixture=(Path(environment_fixture).resolve(strict=True) if environment_fixture else
+             environment_scratch/'recovery-fixtures'/canonical_json_sha256_hex(restore))
     with (tempfile.TemporaryDirectory(prefix='native-full-recovery-restore-',dir=scratch_parent) as tmp,
-          tempfile.TemporaryDirectory(prefix='native-recovery-environment-',dir=environment_scratch) as environment_tmp):
+          locked_fixture(fixture) as environment_tmp):
         root=Path(tmp);tree=root/'tree';tree.mkdir();source_map={}
         environment_root=Path(environment_tmp)
         # Keep hardlinked source objects on the export filesystem, while all
         # disposable extracted payloads use the explicitly selected scratch
         # filesystem. This avoids thousands of synchronous cold-disk writes.
-        payload_root=environment_root/'payload';payload_root.mkdir()
+        payload_root=environment_root/'payload';payload_root.mkdir(exist_ok=True)
         archives={str(runtime_archive),str(environment_archive),str(stdlib_archive),*(str(archive) for _,archive in asset_archives)}
         for item in base_closure:
             blob=Path(blobs[(item['path'],item['sha256'])]['path'])
@@ -162,12 +190,14 @@ def qualify(draft, checkpoint, scratch_parent, output_plan, qualification_path, 
         for index,(item,archive) in enumerate(asset_archives):
             temporary=payload_root/f'restored-assets-{index}';extract_archive(archive,temporary)
             asset_roots[item['env']]=bind_restored_asset(tree,item['original_root'],temporary/'runtime')
-        system_home=payload_root/'system-python';(system_home/'lib').mkdir(parents=True)
-        os.symlink(payload_root/'restored-stdlib'/'runtime',system_home/'lib/python3.12')
-        interpreter_source=Path(source_map[restore['interpreter_path']]);interpreter=payload_root/'python-bin/python3.12';interpreter.parent.mkdir()
+        system_home=payload_root/'system-python';(system_home/'lib').mkdir(parents=True,exist_ok=True)
+        library=system_home/'lib/python3.12'
+        if library.is_symlink():library.unlink()
+        os.symlink(payload_root/'restored-stdlib'/'runtime',library)
+        interpreter_source=Path(source_map[restore['interpreter_path']]);interpreter=payload_root/'python-bin/python3.12';interpreter.parent.mkdir(exist_ok=True)
         shutil.copyfile(interpreter_source,interpreter);interpreter.chmod(0o755)
         venv=environment_root/'venv';(venv/'bin/python').unlink();(venv/'bin/python').symlink_to(interpreter)
-        node_source=Path(source_map[restore['node_path']]);node=payload_root/'node-bin/node';node.parent.mkdir();shutil.copyfile(node_source,node);node.chmod(0o755)
+        node_source=Path(source_map[restore['node_path']]);node=payload_root/'node-bin/node';node.parent.mkdir(exist_ok=True);shutil.copyfile(node_source,node);node.chmod(0o755)
         runtime=payload_root/'restored-runtime/runtime';base=_mapped_path(tree,restore['base_path'])
         if not base.is_dir():raise ValueError('restored model base is missing')
         env=dict(os.environ,**asset_roots,CUDA_VISIBLE_DEVICES='',PYTHONNOUSERSITE='1',PYTHONDONTWRITEBYTECODE='1',
@@ -273,6 +303,7 @@ print('RECOVERY_SMOKE='+json.dumps({'custody':recovery_training_custody(state),'
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--draft-plan',required=True);p.add_argument('--checkpoint',required=True);p.add_argument('--scratch-parent',required=True);p.add_argument('--environment-scratch');p.add_argument('--output-plan',required=True);p.add_argument('--qualification',required=True);p.add_argument('--evidence',required=True)
-    a=p.parse_args();print(json.dumps(qualify(a.draft_plan,a.checkpoint,a.scratch_parent,a.output_plan,a.qualification,a.evidence,a.environment_scratch)),flush=True)
+    p.add_argument('--environment-fixture',help='Reuse an interrupted extracted fixture; every archived member is independently reverified under an exclusive lease')
+    a=p.parse_args();print(json.dumps(qualify(a.draft_plan,a.checkpoint,a.scratch_parent,a.output_plan,a.qualification,a.evidence,a.environment_scratch,a.environment_fixture)),flush=True)
 
 if __name__=='__main__':main()
