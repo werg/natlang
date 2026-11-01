@@ -103,8 +103,14 @@ def test_scan_never_follows_symlinks_and_maps_archived_files_to_their_source(tmp
     assert totals[str(tmp_path)]['symlink']['files'] == 1
 
 
-def test_sync_revisions_are_ask_tier_and_an_approved_revision_directory_is_removed_whole(tmp_path):
+def test_sync_revisions_are_ask_tier_and_an_approved_revision_directory_is_removed_whole(tmp_path, monkeypatch):
     import argparse
+    # Exercise real classification and deletion inside the fixture, without
+    # crawling the workstation's production registries or live recovery trees.
+    monkeypatch.setattr(retention, 'registered_files', lambda _policy: set())
+    monkeypatch.setattr(retention, 'reference_text', lambda _policy: '')
+    monkeypatch.setattr(retention, 'active_state', lambda _roots: NO_ACTIVITY)
+    monkeypatch.setattr(retention.archiver, 'open_paths', lambda: set())
     revision = tmp_path / '.sync-history' / '2026-10-03T15-30-16'
     (revision / 'runs' / 'x').mkdir(parents=True)
     (revision / 'runs' / 'x' / 'old.jsonl').write_bytes(b'z' * 1000)
