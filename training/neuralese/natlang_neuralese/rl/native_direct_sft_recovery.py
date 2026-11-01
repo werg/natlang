@@ -761,10 +761,47 @@ def publish_completed(state_path, *, report_ref, receipt_ref, custody_ref, out):
                 and Path(operation_parent.get('path','')).resolve()==parent_path
                 and operation_parent.get('global_step')==parent.get('global_step')))
         historical_parent_proof=None
+        rolling_parent_alias_proof=None
         if parent_matches:
             # Ordinary publication: the exact parent bytes still occupy their
             # pinned path, so freshly verify them as before.
             parent_path=_bound(parent)
+        elif not same_slot:
+            # A controller may retain its RL checkpoint under the round path
+            # while explicitly adopting the exact same bytes into the rolling
+            # SFT output slot.  The trainer then truthfully names that rolling
+            # slot as its immediate operation parent, although state.checkpoint
+            # still names the round path.  Accept only the most recent recorded
+            # rolling-resume transition, with both paths and hashes matching,
+            # and freshly read back the retained round checkpoint.  The rolling
+            # slot itself now contains the child and cannot prove its old bytes.
+            rolling_history=state.get('rolling_sft_resume_history') or []
+            if not rolling_history and parent_path==child_path:
+                raise ValueError('rolling SFT parent alias has no registered transition')
+            if rolling_history:
+                alias=rolling_history[-1]
+                if (not isinstance(alias,dict)
+                        or alias.get('schema')!='natlang.rolling-sft-resume/1'
+                        or Path(alias.get('checkpoint_path','')).resolve()!=parent_path
+                        or parent_path!=child_path
+                        or Path(alias.get('previous_checkpoint_path','')).resolve()!=state_parent
+                        or alias.get('checkpoint_sha256')!=parent.get('sha256')
+                        or alias.get('previous_checkpoint_sha256')!=parent.get('sha256')
+                        or operation_parent is None or not operation_parent_matches):
+                    raise ValueError('rolling SFT parent alias is not the exact latest registered transition')
+                retained_parent=_strong_binding(state_parent)
+                if retained_parent['sha256']!=parent.get('sha256'):
+                    raise ValueError('retained RL parent bytes differ from the registered rolling alias')
+                rolling_parent_alias_proof={
+                    'schema':'natlang.rolling-sft-parent-alias-proof/1',
+                    'registered_transition':alias,
+                    'state_checkpoint_source':retained_parent,
+                    'operation_parent':{'path':str(parent_path),'sha256':parent['sha256'],
+                        'global_step':parent['global_step']},
+                    'rolling_slot_contains_child':True,
+                    'same_checkpoint_bytes_and_step':True,
+                }
+                parent_matches=True
         elif same_slot:
             # Same-slot publication: the child has atomically replaced the
             # parent's bytes. Authenticate the parent from the last committed
@@ -840,8 +877,11 @@ def publish_completed(state_path, *, report_ref, receipt_ref, custody_ref, out):
             raise ValueError('SFT refresh publication lacks exact qualified full-state custody')
         if out.exists():raise ValueError('SFT refresh publication intent already exists')
         result={'schema':'natlang.direct-sft-refresh-publication/1',
-                'parent':(binding(parent_path) if historical_parent_proof is None else historical_parent_proof['identity']),
+                'parent':(historical_parent_proof['identity'] if historical_parent_proof is not None else
+                          {'path':str(parent_path),'sha256':parent['sha256'],'global_step':parent['global_step']}
+                          if rolling_parent_alias_proof is not None else binding(parent_path)),
                 'historical_parent_proof':historical_parent_proof,
+                'rolling_parent_alias_proof':rolling_parent_alias_proof,
                 'checkpoint':binding(child_path),
                 'report':report_ref,'receipt':receipt_ref,'custody':custody_ref,'stage_completion_granted':False,
                 'behavioral_qualification_granted':False,'additional_training_credit':0}

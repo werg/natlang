@@ -245,6 +245,82 @@ def test_completed_refresh_rejects_rl_parent_without_operation_parent_receipt(tm
             custody_ref=fixture['custody'],out=fixture['out'])
 
 
+def test_completed_refresh_accepts_exact_registered_rolling_alias_of_rl_parent(tmp_path):
+    from natlang_neuralese.rl.native_direct_sft_recovery import publish_completed
+    def file(name, data):
+        path=tmp_path/name;path.parent.mkdir(parents=True,exist_ok=True)
+        path.write_text(json.dumps(data,sort_keys=True));return binding(path)
+    round_parent=file('round-11/learner/checkpoint.pt',{'step':63,'optimizer':'kept','rng':'kept'})
+    rolling=tmp_path/'production/learner/checkpoint.pt';rolling.parent.mkdir(parents=True)
+    rolling.write_bytes(Path(round_parent['path']).read_bytes())
+    rolling_parent=binding(rolling)
+    assert rolling_parent['sha256']==round_parent['sha256']
+    state_path=tmp_path/'production/state.json'
+    alias={'schema':'natlang.rolling-sft-resume/1','checkpoint_path':str(rolling.resolve()),
+        'checkpoint_sha256':rolling_parent['sha256'],'previous_checkpoint_path':round_parent['path'],
+        'previous_checkpoint_sha256':round_parent['sha256']}
+    state_path.write_text(json.dumps({'phase':'awaiting_semantic_refresh',
+        'checkpoint':round_parent['path'],'pending_native_checkpoint':str(rolling),
+        'rolling_sft_resume_history':[alias]}))
+    parent=rolling_parent|{'global_step':63,'optimizer_present':True,'rng_present':True}
+    rolling.write_text(json.dumps({'step':67,'optimizer':'updated','rng':'updated'}))
+    child=binding(rolling)|{'global_step':67,'optimizer_present':True,'rng_present':True}
+    report=file('report.json',{'numerics_ok':True,'checkpoint_sha256':child['sha256'],
+        'continuation_boundary':{'kind':'semantic-refresh','reached':True,'new_optimizer_updates':4,
+            'checkpoint_sha256':child['sha256']}})
+    receipt=file('receipt.json',{'checkpoint':{'sha256':child['sha256']},
+        'continuation':{'checkpoint_sha256':parent['sha256']},
+        'operation_parent':{'path':rolling_parent['path'],'sha256':rolling_parent['sha256'],'global_step':63}})
+    custody=file('custody.json',{'schema':'natlang.earned-sft-checkpoint-custody/1',
+        'parent':parent,'successor':child,'old_bindings_and_quotas_preserved':True,
+        'old_exposure_not_decreased':True})
+    (tmp_path/'production/controller.lock').touch()
+    result=publish_completed(state_path,report_ref=report,receipt_ref=receipt,custody_ref=custody,
+        out=tmp_path/'publication')
+    proof=result['rolling_parent_alias_proof']
+    assert result['parent']=={'path':str(rolling.resolve()),'sha256':rolling_parent['sha256'],'global_step':63}
+    assert proof['schema']=='natlang.rolling-sft-parent-alias-proof/1'
+    assert proof['state_checkpoint_source']['path']==round_parent['path']
+    assert proof['state_checkpoint_source']['sha256']==rolling_parent['sha256']
+    assert proof['same_checkpoint_bytes_and_step'] is True
+
+
+@pytest.mark.parametrize('tamper', ['missing-history','wrong-path','wrong-hash'])
+def test_completed_refresh_rejects_unregistered_or_mismatched_rolling_alias(tmp_path,tamper):
+    from natlang_neuralese.rl.native_direct_sft_recovery import publish_completed
+    def file(name, data):
+        path=tmp_path/name;path.parent.mkdir(parents=True,exist_ok=True)
+        path.write_text(json.dumps(data,sort_keys=True));return binding(path)
+    round_parent=file('round/checkpoint.pt',{'step':63})
+    rolling=tmp_path/'prod/checkpoint.pt';rolling.parent.mkdir(parents=True)
+    rolling.write_bytes(Path(round_parent['path']).read_bytes())
+    parent_bind=binding(rolling)
+    alias={'schema':'natlang.rolling-sft-resume/1','checkpoint_path':str(rolling.resolve()),
+        'checkpoint_sha256':parent_bind['sha256'],'previous_checkpoint_path':round_parent['path'],
+        'previous_checkpoint_sha256':round_parent['sha256']}
+    if tamper=='wrong-path':alias['checkpoint_path']=str(tmp_path/'elsewhere')
+    if tamper=='wrong-hash':alias['previous_checkpoint_sha256']='f'*64
+    history=[] if tamper=='missing-history' else [alias]
+    state=tmp_path/'prod/state.json';state.write_text(json.dumps({'phase':'awaiting_semantic_refresh',
+        'checkpoint':round_parent['path'],'pending_native_checkpoint':str(rolling),
+        'rolling_sft_resume_history':history}))
+    parent=parent_bind|{'global_step':63,'optimizer_present':True,'rng_present':True}
+    rolling.write_text(json.dumps({'step':67}));child=binding(rolling)|{'global_step':67,
+        'optimizer_present':True,'rng_present':True}
+    report=file('report.json',{'checkpoint_sha256':child['sha256'],
+        'continuation_boundary':{'kind':'semantic-refresh','reached':True,'new_optimizer_updates':4,
+            'checkpoint_sha256':child['sha256']}})
+    receipt=file('receipt.json',{'checkpoint':{'sha256':child['sha256']},
+        'continuation':{'checkpoint_sha256':parent['sha256']},
+        'operation_parent':{'path':parent_bind['path'],'sha256':parent_bind['sha256'],'global_step':63}})
+    custody=file('custody.json',{'schema':'natlang.earned-sft-checkpoint-custody/1',
+        'parent':parent,'successor':child,'old_bindings_and_quotas_preserved':True,
+        'old_exposure_not_decreased':True})
+    (tmp_path/'prod/controller.lock').touch()
+    with pytest.raises(ValueError,match='rolling SFT parent alias'):
+        publish_completed(state,report_ref=report,receipt_ref=receipt,custody_ref=custody,out=tmp_path/'publication')
+
+
 def _session_reconciliation_fixture(tmp_path):
     from natlang_neuralese.rl.native_direct_sft_recovery import _strong_binding, _strong_path_binding, _session_control
     from natlang_neuralese.common.hashing import canonical_json_sha256_hex
