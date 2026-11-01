@@ -164,6 +164,29 @@ def test_text_row_conversion_preserves_full_tokens_and_exact_target_boundary():
     assert graph['conversion']['source_record_ids'] == ['ordinary']
 
 
+def test_source_twin_identity_treats_strings_as_atoms_and_normalizes_collections():
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+
+    options = dict(source_tokenizer_fingerprint='a' * 64, tokenizer=AsciiTokenizer(),
+                   expanded_tokenizer_fingerprint='b' * 64)
+    source = row('identity', 'prompt and target')
+    source['source_twin_id'] = 'ab'
+    atomic = text_row_graph(source, **options)['conversion']['source_twin_id']
+    assert atomic == canonical_json_sha256_hex(['ab'])
+
+    source['source_twin_id'] = 'ba'
+    anagram = text_row_graph(source, **options)['conversion']['source_twin_id']
+    assert anagram == canonical_json_sha256_hex(['ba'])
+    assert anagram != atomic
+
+    source['source_twin_id'] = ['b', 'a']
+    assert text_row_graph(source, **options)['conversion']['source_twin_id'] == canonical_json_sha256_hex(['a', 'b'])
+    source['source_twin_id'] = {'b', 'a'}
+    assert text_row_graph(source, **options)['conversion']['source_twin_id'] == canonical_json_sha256_hex(['a', 'b'])
+    source['source_twin_id'] = ['a', 'a', 'b']
+    assert text_row_graph(source, **options)['conversion']['source_twin_id'] == canonical_json_sha256_hex(['a', 'a', 'b'])
+
+
 class ChatRoleAsciiTokenizer(AsciiTokenizer):
     special = ('<|im_start|>', '<|im_sep|>', '<|im_end|>', '<tool_response>', '</tool_response>',
                '<think>', '</think>', 'system', 'user', 'assistant', 'tool')
@@ -207,6 +230,11 @@ def test_whole_trajectory_conversion_reuses_exact_role_weight_policy():
         'supervision': 'whole-trajectory', 'source_record_ids': ['record:1', 'record:2']}
     graph = whole_trajectory_text_row_graph(source, source_tokenizer_fingerprint='a' * 64,
         tokenizer=tokenizer, expanded_tokenizer_fingerprint='b' * 64)
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+    source['source_twin_id'] = 'trajectory-identity'
+    assert whole_trajectory_text_row_graph(source, source_tokenizer_fingerprint='a' * 64,
+        tokenizer=tokenizer, expanded_tokenizer_fingerprint='b' * 64)['conversion']['source_twin_id'] == \
+        canonical_json_sha256_hex(['trajectory-identity'])
     example = parse_graph(graph, tokenizer_fingerprint='b' * 64)
     role_ids = {tokenizer.convert_tokens_to_ids(name): name for name in ('system', 'user', 'assistant', 'tool')}
     prefixes = tuple(tuple(tokenizer(prefix)['input_ids']) for prefix in ('\n<tool_response>', '\n\n<tool_response>'))

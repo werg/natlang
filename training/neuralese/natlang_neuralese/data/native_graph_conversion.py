@@ -84,6 +84,26 @@ def _prompt_view(row: Mapping[str, Any]) -> dict:
     return {"prompt_view": view} if view else {}
 
 
+def _normalized_twin_identity(value: Any, *, fallback: Any) -> list[str]:
+    """Normalize twin identity values without treating an identifier string as an iterable.
+
+    A string is one identity atom. Collections retain their supplied members, then
+    sort their string forms so list, tuple, and set order does not affect the
+    digest. In particular, list duplicates remain meaningful and are not
+    fabricated from the characters of a string.
+    """
+    selected = value or fallback
+    if isinstance(selected, str):
+        members = [selected]
+    elif isinstance(selected, (list, tuple, set, frozenset)):
+        members = list(selected)
+    else:
+        raise ValueError("source twin identity must be a string or a collection of identities")
+    if not members:
+        raise ValueError("source twin identity cannot be empty")
+    return sorted(str(member) for member in members)
+
+
 def text_row_graph(row: Mapping[str, Any], *, source_tokenizer_fingerprint: str,
                    tokenizer, expanded_tokenizer_fingerprint: str,
                    context_weight: float = 0.05,
@@ -155,8 +175,9 @@ def text_row_graph(row: Mapping[str, Any], *, source_tokenizer_fingerprint: str,
         from ..train.own_output_supervision import conversion_weights
         weights, objective_policy = conversion_weights(ids, [weight > 0 for weight in weights], objective,
             tokenizer=tokenizer, tokenizer_fingerprint=expanded_tokenizer_fingerprint, suffix=boundary)
-    twin = row.get("source_twin_id") or row.get("source_record_ids") or [identifier]
-    twin_id = canonical_json_sha256_hex(sorted(str(value) for value in twin))
+    twin = _normalized_twin_identity(row.get("source_twin_id"),
+                                     fallback=row.get("source_record_ids") or [identifier])
+    twin_id = canonical_json_sha256_hex(twin)
     return {
         "schema": SCHEMA,
         "id": "text:" + identifier,
@@ -425,8 +446,8 @@ def whole_trajectory_text_row_graph(row: Mapping[str, Any], *, source_tokenizer_
     source_records = row.get('source_record_ids') or [identifier]
     if not isinstance(source_records, list) or not source_records:
         raise ValueError('whole-trajectory provenance needs source record identities')
-    twin = row.get('source_twin_id') or source_records
-    twin_id = canonical_json_sha256_hex(sorted(str(value) for value in twin))
+    twin = _normalized_twin_identity(row.get('source_twin_id'), fallback=source_records)
+    twin_id = canonical_json_sha256_hex(twin)
     role_policy = {'name': 'whole-trajectory-context-feedback-failed-turns-v2',
                    'context_weight': context_weight, 'feedback_weight': feedback_weight,
                    'reasoning_weight': 1.0, 'reply_weight': 1.0, 'failed_assistant_weight': 0.0,
