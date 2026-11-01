@@ -69,11 +69,12 @@ def _compile_loaded_episode(loaded,renderer,*,tokenizer_fingerprint):
         terminal=next((i for i,token in enumerate(target) if token in renderer.stop_ids),None)
         if terminal is not None:target=target[:terminal]
         spans=[]; cursor=0
+        if target.count(renderer.role_tokens.produce_open)!=len(item['native_text_spans']) or target.count(renderer.role_tokens.produce_close)!=len(item['native_text_spans']):raise ValueError('producer marker inventory differs from authenticated target spans')
         for x in item['native_text_spans']:
             bodyids=renderer.tokenizer(x['text'],add_special_tokens=False,split_special_tokens=True)['input_ids']
             needle=[renderer.role_tokens.produce_open,*bodyids,renderer.role_tokens.produce_close]
             hits=[i for i in range(cursor,len(target)-len(needle)+1) if target[i:i+len(needle)]==needle]
-            if len(hits)!=1:raise ValueError('producer target span is not uniquely token aligned')
+            if not hits:raise ValueError('producer target span is not token aligned in source order')
             pos=hits[0]; cursor=pos+len(needle); spans.append((x,len(own)+pos+1,len(own)+pos+1+len(bodyids)))
         actions.append({'own':own,'target':target,'imports':imported});target_spans.append(spans)
     inline={}; by_action={}
