@@ -125,6 +125,33 @@ def test_alias_masks_exclude_source_private_prefix_and_future():
     assert len(plan.slot_sources) > plan.token_count
 
 
+def test_writer_open_keeps_own_prefix_while_import_exposes_only_producer_span():
+    from natlang_neuralese.model.shared_state import SharedStateModel, native_step, capture_invocation_span
+    port = tiny('lfm')
+    model = SharedStateModel(port, (60, 61, 62, 63), rank=4).eval()
+    torch.nn.init.normal_(model.adapter.up.weight, std=0.03)
+    def sequence(prefix):
+        own = (*prefix, 60, 9, 61)
+        plan = compile_graph([Invocation('writer', own, producing=((3, 4),)),
+                              Invocation('consumer', (11, 12), imports=(ImportSpan(0, 'writer', 3, 4),))])
+        graph = model(plan)
+        cache = native_step(model, torch.tensor([list(prefix)]))['cache']
+        opened = native_step(model, torch.tensor([[60]]), cache)
+        torch.testing.assert_close(opened['h_final'][0, 0], graph['h_final'][0, 2], atol=3e-6, rtol=2e-5)
+        body = native_step(model, torch.tensor([[9]]), opened['cache'], producing=True)
+        torch.testing.assert_close(body['h_final'][0, 0], graph['h_final'][0, 3], atol=3e-6, rtol=2e-5)
+        captured = capture_invocation_span(graph, 'writer', 3, 4)
+        assert captured['token_ids'].tolist() == [9]
+        visible = {plan.slot_sources[s] for s in plan.attention_mask('cpu')[0, 0, 5].nonzero().flatten().tolist()}
+        assert not ({0, 1, 2, 4} & visible)
+        assert 3 in visible
+        return model.logits(opened['h_final']).detach(), body['h_final'].detach()
+    first_logits, first_body = sequence((2, 3))
+    changed_logits, changed_body = sequence((4, 5))
+    assert not torch.allclose(first_logits, changed_logits)
+    assert not torch.allclose(first_body, changed_body)
+
+
 @pytest.mark.parametrize('bad', [
     [Invocation('a', (1,), imports=(ImportSpan(0, 'a', 0, 1),))],
     [Invocation('a', (1,)), Invocation('b', (2,), imports=(ImportSpan(0, 'a', 0, 1),))],
