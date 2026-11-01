@@ -4,10 +4,13 @@ import json
 import os
 import hashlib
 import stat
+import threading
 from .hashing import sha256_file_hex, sha256_file_hex_cached
 
 
 _DEPENDENCY_RECEIPT = 'runtime-dependencies.json'
+_NATIVE_RUNTIME_CACHE_LOCK = threading.RLock()
+_NATIVE_RUNTIME_CACHE = {}
 
 
 def _dependency_tree(path):
@@ -381,6 +384,69 @@ def assemble_protected_runtime_inputs(predecessor, destination, *, bound_files=(
             'evaluation_packets':packets, 'bound_files':controls, 'protected_worlds_sha256':worlds.digest}
 
 
+def _native_tree_fingerprint(root, pool=None, cached_files=None):
+    """Cheap five-field snapshot used only to reuse an already byte-verified tree."""
+    records, pool_records = [], []
+    cached_files = cached_files or {}
+    for directory, dirs, names in os.walk(root, followlinks=False):
+        folder = Path(directory)
+        folder_stat = folder.stat()
+        records.append((folder.relative_to(root).as_posix() or '.', 'directory',
+                        folder_stat.st_dev, folder_stat.st_ino, folder_stat.st_size,
+                        folder_stat.st_mtime_ns, folder_stat.st_ctime_ns,
+                        stat.S_IMODE(folder_stat.st_mode)))
+        kept_dirs = []
+        for name in sorted(dirs):
+            item = folder / name
+            if item.is_symlink():
+                resolved = item.resolve(strict=True)
+                if not resolved.is_relative_to(root):
+                    raise ValueError('native runtime symlink escapes its root: ' + str(item))
+                info = item.lstat()
+                records.append((item.relative_to(root).as_posix(), 'symlink',
+                    info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns,
+                    info.st_ctime_ns, os.readlink(item), str(resolved)))
+            else:
+                kept_dirs.append(name)
+        dirs[:] = kept_dirs
+        for name in sorted(names):
+            item = folder / name
+            relative = item.relative_to(root).as_posix()
+            if item.is_symlink():
+                resolved = item.resolve(strict=True)
+                if not resolved.is_relative_to(root):
+                    raise ValueError('native runtime symlink escapes its root: ' + str(item))
+                info = item.lstat()
+                records.append((relative, 'symlink', info.st_dev, info.st_ino,
+                    info.st_size, info.st_mtime_ns, info.st_ctime_ns,
+                    os.readlink(item), str(resolved)))
+                continue
+            if not item.is_file():
+                raise ValueError('native runtime contains a non-file entry: ' + str(item))
+            info = item.stat()
+            mode = stat.S_IMODE(info.st_mode)
+            if mode & 0o222:
+                raise ValueError('native runtime contains a writable file: ' + relative)
+            row = (relative, 'file', info.st_dev, info.st_ino, info.st_size,
+                   info.st_mtime_ns, info.st_ctime_ns, mode)
+            if pool is not None and relative in cached_files:
+                digest = cached_files[relative]
+                blob = pool / digest[:2] / f'{digest}.{mode:o}'
+                try:
+                    blob_info = blob.stat()
+                    blob_signature = (blob_info.st_dev, blob_info.st_ino,
+                                      blob_info.st_size, blob_info.st_mtime_ns,
+                                      blob_info.st_ctime_ns)
+                except FileNotFoundError:
+                    blob_signature = None
+                pool_records.append((relative, blob_signature,
+                    blob_signature is not None and (blob_info.st_dev, blob_info.st_ino,
+                        blob_info.st_size) == (info.st_dev, info.st_ino, info.st_size)))
+            records.append(row)
+    from .hashing import canonical_json_sha256_hex
+    return canonical_json_sha256_hex(records), canonical_json_sha256_hex(pool_records)
+
+
 def immutable_native_runtime_tree(path, *, verify_bound_inputs=True):
     """Verify a protected native-runtime closure and derive its portable tree identity.
 
@@ -406,6 +472,7 @@ def immutable_native_runtime_tree(path, *, verify_bound_inputs=True):
     bound = closure.get('bound_files')
     if not isinstance(bound, list) or not bound:
         raise ValueError('native runtime closure has no bound source inputs')
+    bound_signatures = []
     if verify_bound_inputs:
         seen = set()
         for item in bound:
@@ -415,10 +482,29 @@ def immutable_native_runtime_tree(path, *, verify_bound_inputs=True):
                 raise ValueError('native runtime has malformed or duplicate bound inputs')
             seen.add(item['path'])
             source = Path(item['path']).resolve(strict=True)
+            before = source.stat()
             if sha256_file_hex_cached(source, trust_archive_receipt=False) != item['sha256']:
                 raise ValueError('native runtime bound source input changed: ' + str(source))
+            info = source.stat()
+            if (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns) != (
+                    info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns):
+                raise ValueError('native runtime bound source input changed during verification: ' + str(source))
+            bound_signatures.append((str(source), info.st_dev, info.st_ino, info.st_size,
+                                     info.st_mtime_ns, info.st_ctime_ns))
     pool_path = storage.get('pool')
     pool = Path(pool_path).resolve(strict=True) if isinstance(pool_path, str) and Path(pool_path).is_dir() else None
+    closure_sha = sha256_file_hex(closure_path)
+    storage_sha = sha256_file_hex(storage_path)
+    with _NATIVE_RUNTIME_CACHE_LOCK:
+        cached = _NATIVE_RUNTIME_CACHE.get(str(root))
+    fingerprint, pool_fingerprint = _native_tree_fingerprint(
+        root, pool, cached[1]['files'] if cached is not None else None)
+    cache_key = (closure_sha, storage_sha, tuple(bound_signatures), fingerprint,
+                 pool_fingerprint, str(pool) if pool else None)
+    if cached is not None and cached[0] == cache_key:
+        result = dict(cached[1])
+        result['files'] = dict(cached[1]['files'])
+        return result
     entries, file_hashes = [], {}
     count = size = 0
     for directory, dirs, names in os.walk(root, followlinks=False):
@@ -470,15 +556,23 @@ def immutable_native_runtime_tree(path, *, verify_bound_inputs=True):
     if count != storage['files'] or size != storage['logical_bytes']:
         raise ValueError('native runtime tree differs from its adjacent storage receipt')
     from .hashing import canonical_json_sha256_hex
-    return {
+    result = {
         'schema': 'natlang.immutable-native-runtime-tree/1',
         'root': str(root),
         'commit': closure['commit'],
-        'closure_sha256': sha256_file_hex(closure_path),
-        'storage_receipt_sha256': sha256_file_hex(storage_path),
+        'closure_sha256': closure_sha,
+        'storage_receipt_sha256': storage_sha,
         'tree_sha256': canonical_json_sha256_hex(entries),
         'files': file_hashes,
         'file_count': count,
         'logical_bytes': size,
         'pool_verified': pool is not None,
     }
+    final_fingerprint, final_pool_fingerprint = _native_tree_fingerprint(root, pool, file_hashes)
+    if final_fingerprint != fingerprint:
+        raise ValueError('native runtime changed during inventory verification')
+    cache_key = (closure_sha, storage_sha, tuple(bound_signatures), final_fingerprint,
+                 final_pool_fingerprint, str(pool) if pool else None)
+    with _NATIVE_RUNTIME_CACHE_LOCK:
+        _NATIVE_RUNTIME_CACHE[str(root)] = (cache_key, result)
+    return result

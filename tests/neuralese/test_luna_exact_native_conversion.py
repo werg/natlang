@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT))
 from scripts.neuralese_data.build_luna_exact_native_conversion import (
     _protected_runtime_binding, _runtime_row_digest,
 )
+from natlang_neuralese.common import runtime_inventory
 from natlang_neuralese.common.runtime_inventory import immutable_native_runtime_tree
 
 
@@ -64,6 +65,32 @@ def test_protected_runtime_input_closure_requires_complete_pool_seal(tmp_path):
     assert result["commit"] == "1" * 40
     assert result["file_count"] == storage["files"]
     assert immutable_native_runtime_tree(runtime)["pool_verified"] is True
+
+    # The first check authenticates every runtime byte. Repeated rows in one
+    # loader process may reuse that proof only while the five-field file/pool
+    # snapshot, closure, storage receipt, and bound inputs remain unchanged.
+    original_hash = runtime_inventory.sha256_file_hex_cached
+    checked_runtime_files = []
+    with runtime_inventory._NATIVE_RUNTIME_CACHE_LOCK:
+        runtime_inventory._NATIVE_RUNTIME_CACHE.pop(str(runtime.resolve()), None)
+
+    def count_runtime_hashes(path, **kwargs):
+        candidate = Path(path)
+        if candidate.is_relative_to(runtime):
+            checked_runtime_files.append(candidate)
+        return original_hash(path, **kwargs)
+
+    runtime_inventory.sha256_file_hex_cached = count_runtime_hashes
+    try:
+        first_cached = immutable_native_runtime_tree(runtime)
+        first_runtime_hash_count = len(checked_runtime_files)
+        checked_runtime_files.clear()
+        second_cached = immutable_native_runtime_tree(runtime)
+        assert first_cached["tree_sha256"] == second_cached["tree_sha256"]
+        assert first_runtime_hash_count == storage["files"]
+        assert checked_runtime_files == []
+    finally:
+        runtime_inventory.sha256_file_hex_cached = original_hash
 
     storage_path = runtime.with_name(runtime.name + ".storage.json")
     storage_path.write_text(__import__("json").dumps({**storage, "logical_bytes": storage["logical_bytes"] + 1}))
