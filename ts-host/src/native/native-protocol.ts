@@ -60,7 +60,10 @@ export function nativeProtocolFailure(response: unknown): NativeProtocolFailure 
   return structuredClone(failure) as NativeProtocolFailure;
 }
 
-export function nativeProtocolFeedback(failure: NativeProtocolFailure): string {
+export function nativeProtocolFeedback(failure: NativeProtocolFailure, templatedWrite = false): string {
+  if (templatedWrite) return `${failure.code}: The typed native writer already opened a producer span. ` +
+    'Write its body, then emit <|/neuralese_produce|> before ending the reply. ' +
+    'Do not emit an end-of-turn token while the producer span is open.';
   return `${failure.code}: This reply has an incomplete or misplaced Neuralese delimiter. Rewrite the complete reply. ` +
     'If this function returns Neuralese<T>, return the ordinary value of T directly: plain text for string, or JSON for an object. ' +
     'The runtime writes that value as Neuralese; do not put Neuralese delimiters inside the returned string. ' +

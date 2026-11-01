@@ -1500,7 +1500,8 @@ export class NativeToolAgent {
         // Template readout: the call's first reply is its return_result, the value written as a block (a Neuralese
         // result) or decoded; the opening and the reply keep the trajectory format, and a rejected value falls back to
         // ordinary turns.
-        const template: ModelTurnRequest['template'] = (turns === 0 || retryProtocolWriteTemplate) && session.lam.readout === 'template' && availableTools === allTools &&
+        const template: ModelTurnRequest['template'] = (turns === 0 || retryProtocolWriteTemplate) && session.lam.readout === 'template' &&
+          (availableTools === allTools || (retryProtocolWriteTemplate && lastTurn)) &&
           session.lam.type.kind === 'lambda' && supportsNeuralese(this.driver) ? { call: 'return_result',
             arguments: { status: 'success' },
             value_type: session.lam.type.returns.kind === 'neuralese' && !(session.lam.type.returns.element.kind === 'prim' && session.lam.type.returns.element.name === 'string') ? 'unknown' as const : 'string' as const,
@@ -1585,7 +1586,7 @@ export class NativeToolAgent {
         // Record the actual non-executable reply before the same call repairs it.
         // Neither a parsed prefix call nor an unfinished block becomes a result.
         messages.push({role:'assistant',content:response.text??'',...thought(response.reasoning)},
-          {role:'user',content:nativeProtocolFeedback(failure)});
+          {role:'user',content:nativeProtocolFeedback(failure,templatedWriteAttempt)});
         retryProtocolWriteTemplate = templatedWriteAttempt;
         continue;
       }

@@ -140,7 +140,7 @@ test('a malformed templated Neuralese write retries its declared typed readout a
   const expected={call:'return_result',arguments:{status:'success'},value_type:'string',value:'write'};
   assert.deepEqual(requests[0].template,expected);assert.deepEqual(requests[1].template,expected);
   assert.equal(requests[1].messages.at(-2).content,bad.choices[0].message.content);
-  assert.equal(requests[1].messages.at(-1).content,nativeProtocolFeedback(bad.x_natlang_native_failure));
+  assert.equal(requests[1].messages.at(-1).content,nativeProtocolFeedback(bad.x_natlang_native_failure,true));
   assert.equal(traces.flatMap(t=>t.events).filter(e=>e.kind==='model_protocol_failure').length,1);
 });
 
@@ -164,15 +164,15 @@ test('repeated malformed writes retain every failure and retry the typed templat
   const requests=[];let calls=0;const bad=failed();
   const driver=Object.assign(async request=>{
     requests.push(structuredClone(request));
-    if(calls++<2)return {text:bad.choices[0].message.content,calls:[],completion_tokens:1,
+    if(calls++<3)return {text:bad.choices[0].message.content,calls:[],completion_tokens:1,
       protocol_failure:bad.x_natlang_native_failure,raw_response:bad};
     return {calls:[['return_result',{status:'success',value:[{type:'native_state',id:'nzs1_'+'a'.repeat(52)}]}]],completion_tokens:1};
   },{neuralese:true});
   const fn=loadVirtualNatlang({'writer.nl':'---\nargs: {}\nreturns: Neuralese<string>\nreadout: template\n---\nWrite it.\n'},'writer.nl');
-  await createNatlangRuntime({model:{driver},seed:{mode:'backend'}}).run(()=>fn());
-  assert.equal(requests.length,3);
+  await createNatlangRuntime({model:{driver,maxTurns:4},seed:{mode:'backend'}}).run(()=>fn());
+  assert.equal(requests.length,4);
   assert.ok(requests.every(request=>request.template?.value==='write'));
-  const feedback=nativeProtocolFeedback(bad.x_natlang_native_failure);
-  assert.equal(requests[2].messages.filter(message=>message.role==='user'&&message.content===feedback).length,2);
-  assert.equal(requests[2].messages.filter(message=>message.role==='assistant'&&message.content===bad.choices[0].message.content).length,2);
+  const feedback=nativeProtocolFeedback(bad.x_natlang_native_failure,true);
+  assert.equal(requests[3].messages.filter(message=>message.role==='user'&&message.content===feedback).length,3);
+  assert.equal(requests[3].messages.filter(message=>message.role==='assistant'&&message.content===bad.choices[0].message.content).length,3);
 });
