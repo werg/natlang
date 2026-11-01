@@ -292,6 +292,29 @@ def _one_group_dominates(measured, candidate):
     return all(t <= old[i][0] and k <= old[i][1] for i,(t,k) in enumerate(new))
 
 
+def _nondominated_group_indices(groups):
+    """Measure only actual groups that cover all requested sequential groups."""
+    selected=[]
+    for i, group in enumerate(groups):
+        covered=False
+        for j, other in enumerate(groups):
+            if i == j or not _one_group_dominates(other, group):
+                continue
+            # Equal geometry retains the first actual group deterministically.
+            if not _one_group_dominates(group, other) or j < i:
+                covered=True
+                break
+        if not covered:
+            selected.append(i)
+    coverage=[]
+    for group in groups:
+        matches=[j for j in selected if _one_group_dominates(groups[j], group)]
+        if not matches:
+            raise ValueError('capacity selection does not cover a requested group')
+        coverage.append(min(matches, key=lambda j:groups[j]['forward_tokens']+groups[j]['kv_slots']))
+    return selected, coverage
+
+
 def _capacity_memory_context(device):
     import torch
     from .trajectory_state import available_system_memory_bytes
@@ -583,12 +606,15 @@ def qualify_oversize_batches(model, optimizer, micro_batches, *, args, backend, 
                 source_path=source_path,execution_identity=execution_identity,precision=precision,
                 effective_layout=effective_layout,current_memory=memory_context,
                 checkpoint_sha256=checkpoint_sha256,global_step=global_step)
+    selected_indices, coverage_indices = _nondominated_group_indices(candidate_groups)
+    measured_batches = [batches[index] for index in selected_indices]
+    measured_groups = [candidate_groups[index] for index in selected_indices]
     named=getattr(optimizer,'_native_named_parameters',list(model.named_parameters()))
     prior={id(parameter):(parameter,parameter.grad) for _,parameter in named if parameter.grad is not None}
     for parameter,_ in prior.values():parameter.grad=None
     try:
         mode='plain' if getattr(args,'cotangent_accumulator_backend',None)=='plain' else 'vjp'
-        report=qualify_capacity(model,optimizer,batches,backend=backend,
+        report=qualify_capacity(model,optimizer,measured_batches,backend=backend,
             checkpoint_layers=args.checkpoint_layers,chunk_tokens=args.chunk_tokens,
             checkpoint_sha256=checkpoint_sha256,source_binding=binding(source_path),
             production_packing=True,retained_gradients=args.accumulate_batches>1,
@@ -598,7 +624,10 @@ def qualify_oversize_batches(model, optimizer, micro_batches, *, args, backend, 
     record={'schema':'natlang.native-oversize-live-capacity/1','global_step':global_step,
             'parent_checkpoint_sha256':checkpoint_sha256,'source':binding(source_path),
             'baseline':baseline,'model_boundary':'current-live-model-before-update',
-            'candidate_groups':candidate_groups,'memory_context':memory_context,
+            'candidate_groups':measured_groups,'requested_candidate_groups':candidate_groups,
+            'requested_group_coverage':[{'requested_index':i,'measured_index':selected_indices.index(j)}
+                                        for i,j in enumerate(coverage_indices)],
+            'memory_context':memory_context,
             'execution_identity':execution_identity,'effective_layout':effective_layout,
             'objective':objective_binding,
             'capacity':report,'passed':report['passed'],'optimizer_updates':0,'earned_exposure':0,

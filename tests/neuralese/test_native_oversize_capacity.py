@@ -471,3 +471,52 @@ def test_multi_envelope_receipt_binds_every_sequential_case(tmp_path):
     assert [x['measured_case_id'] for x in record['case_matches']]==['case1','case2']
     assert [x['envelope_source']['sha256'] for x in record['case_matches']]==['1','2']
     assert [x['candidate_group'] for x in record['case_matches']]==groups
+
+
+def test_oversize_gate_selects_actual_nondominated_groups_without_inventing_maxima():
+    from natlang_neuralese.train.native_packed_capacity import _nondominated_group_indices
+    def group(spec):
+        graphs=[{'id':str(i),'forward_tokens':t,'kv_slots':k} for i,(t,k) in enumerate(spec)]
+        return {'graphs':graphs,'forward_tokens':sum(t for t,k in spec),
+                'kv_slots':sum(k for t,k in spec),'graph_count':len(spec)}
+    groups=[group([(41015,42289)]),group([(45772,45954)]),group([(63438,64500)]),
+            group([(33403,33678)]),group([(56666,58730)])]
+    selected,coverage=_nondominated_group_indices(groups)
+    assert selected==[2] and coverage==[2]*5
+    # Crossing per-graph geometry cannot be turned into a synthetic maximum.
+    groups=[group([(100,110)]),group([(90,120)]),group([(40,40),(40,40)])]
+    selected,coverage=_nondominated_group_indices(groups)
+    assert selected==[0,1,2] and coverage==[0,1,2]
+    selected,coverage=_nondominated_group_indices([groups[0],groups[0]])
+    assert selected==[0] and coverage==[0,0]
+
+
+def test_live_gate_measures_one_actual_dominator_and_records_all_requested(tmp_path,monkeypatch):
+    from natlang_neuralese.train import native_packed_capacity as capacity
+    from natlang_neuralese.eval import native_memory
+    model=torch.nn.Linear(2,2);optimizer=SimpleNamespace(_native_named_parameters=list(model.named_parameters()))
+    source=tmp_path/'source.json';source.write_text('{}')
+    monkeypatch.setattr(capacity,'_capacity_memory_context',lambda device:{'device_type':'cpu',
+        'free_bytes_at_probe':None,'total_bytes':None,'host_available_bytes':8<<30})
+    lengths=[(41,42),(63,64),(56,58)]
+    batches=[[SimpleNamespace(id=str(i),plan=SimpleNamespace(token_count=t,slot_sources=range(k)))]
+             for i,(t,k) in enumerate(lengths)]
+    seen=[]
+    def qualify(model,optimizer,selected,**kwargs):
+        seen.extend(selected)
+        return {'passed':True,'optimizer_updates':0,'production_packing':True,'whole_graphs':True,
+                'cpu_and_all_cuda_rng_restored':True,'task_quality_qualified':False,'qat_point':None,
+                'cases':[{'status':'passed','forward_tokens':63,'kv_slots':64,'example_ids':['1'],
+                          'cuda_incremental_peak_allocated_bytes':0,'cuda_incremental_peak_reserved_bytes':0,
+                          'host_incremental_peak_bytes':0}]}
+    monkeypatch.setattr(native_memory,'qualify_capacity',qualify)
+    args=SimpleNamespace(checkpoint_layers=True,chunk_tokens=16,cotangent_accumulator_backend='plain',
+                         accumulate_batches=1,out=tmp_path)
+    ref=capacity.qualify_oversize_batches(model,optimizer,batches,args=args,backend=None,precision=None,
+        source_path=source,checkpoint_sha256='a'*64,global_step=59,
+        baseline={'forward_tokens':10,'kv_slots':10},execution_identity={'sha256':'a'})
+    record=json.loads(open(ref['path']).read())
+    assert seen==[batches[1]]
+    assert len(record['candidate_groups'])==1 and len(record['requested_candidate_groups'])==3
+    assert [c['measured_index'] for c in record['requested_group_coverage']]==[0,0,0]
+    assert len(capacity.load_oversize_capacity_frontier([{'proof':ref}]))==1
