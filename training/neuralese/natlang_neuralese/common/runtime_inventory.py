@@ -11,6 +11,36 @@ from .hashing import sha256_file_hex, sha256_file_hex_cached
 _DEPENDENCY_RECEIPT = 'runtime-dependencies.json'
 _NATIVE_RUNTIME_CACHE_LOCK = threading.RLock()
 _NATIVE_RUNTIME_CACHE = {}
+_BOUND_SOURCE_HASH_CACHE = {}
+
+
+def _verified_bound_source_hash(path):
+    """Reuse only a hash previously read from this exact five-field file state."""
+    source = Path(path).resolve(strict=True)
+    before = source.stat()
+    signature = (before.st_dev, before.st_ino, before.st_size,
+                 before.st_mtime_ns, before.st_ctime_ns)
+    cache_key = str(source)
+    with _NATIVE_RUNTIME_CACHE_LOCK:
+        cached = _BOUND_SOURCE_HASH_CACHE.get(cache_key)
+    if cached is not None and cached[0] == signature:
+        digest = cached[1]
+    else:
+        digest = sha256_file_hex_cached(source, trust_archive_receipt=False)
+        after_hash = source.stat()
+        after_signature = (after_hash.st_dev, after_hash.st_ino, after_hash.st_size,
+                           after_hash.st_mtime_ns, after_hash.st_ctime_ns)
+        if signature != after_signature:
+            raise ValueError('native runtime bound source input changed during verification: ' + str(source))
+        with _NATIVE_RUNTIME_CACHE_LOCK:
+            _BOUND_SOURCE_HASH_CACHE[cache_key] = (signature, digest)
+        return source, signature, digest
+    after_lookup = source.stat()
+    after_signature = (after_lookup.st_dev, after_lookup.st_ino, after_lookup.st_size,
+                       after_lookup.st_mtime_ns, after_lookup.st_ctime_ns)
+    if signature != after_signature:
+        raise ValueError('native runtime bound source input changed during cached verification: ' + str(source))
+    return source, signature, digest
 
 
 def _dependency_tree(path):
@@ -481,16 +511,10 @@ def immutable_native_runtime_tree(path, *, verify_bound_inputs=True):
                     or item['path'] in seen):
                 raise ValueError('native runtime has malformed or duplicate bound inputs')
             seen.add(item['path'])
-            source = Path(item['path']).resolve(strict=True)
-            before = source.stat()
-            if sha256_file_hex_cached(source, trust_archive_receipt=False) != item['sha256']:
+            source, signature, digest = _verified_bound_source_hash(item['path'])
+            if digest != item['sha256']:
                 raise ValueError('native runtime bound source input changed: ' + str(source))
-            info = source.stat()
-            if (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns) != (
-                    info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns):
-                raise ValueError('native runtime bound source input changed during verification: ' + str(source))
-            bound_signatures.append((str(source), info.st_dev, info.st_ino, info.st_size,
-                                     info.st_mtime_ns, info.st_ctime_ns))
+            bound_signatures.append((str(source), *signature))
     pool_path = storage.get('pool')
     pool = Path(pool_path).resolve(strict=True) if isinstance(pool_path, str) and Path(pool_path).is_dir() else None
     closure_sha = sha256_file_hex(closure_path)
