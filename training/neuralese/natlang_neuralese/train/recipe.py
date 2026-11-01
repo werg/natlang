@@ -1081,7 +1081,15 @@ def _source_correction_continuation(old, new):
         if (len(before_rows)!=len(before_map.get('rows',[])) or len(after_rows)!=len(after_map.get('rows',[]))
             or set(before_rows)!=set(after_rows)):raise ValueError('static context family map row inventory changed')
         with open_jsonl_text(_proof_file(path,proof['row_bindings_path'])) as stream:
-            corrections={item['id']:item for line in stream if line.strip() for item in [json.loads(line)]}
+            correction_rows=[json.loads(line) for line in stream if line.strip()]
+        corrections={item['id']:item for item in correction_rows}
+        if len(corrections)!=len(correction_rows):raise ValueError('static context correction ledger repeats a row')
+        from .native_static_context_correction import verify_static_context_correction
+        static_pairs,_=verify_static_context_correction(path,proof['static_native_context_correction'])
+        if (set(corrections)!=set(static_pairs) or any(item.get('disposition')!='corrected'
+            or item.get('old_binding')!=static_pairs[ident]['old_binding']
+            or item.get('new_binding')!=static_pairs[ident]['new_binding'] for ident,item in corrections.items())):
+            raise ValueError('static context correction ledger differs from authenticated graph pairs')
         for ident,prior in before_rows.items():
             current=after_rows[ident];entry=corrections.get(ident)
             if prior['family']!=current['family'] or (prior['binding']!=current['binding'] and

@@ -95,8 +95,12 @@ def reconcile_geometry(entries,old_rows,old_geo,ledger,corrected_ids,corrected_s
     old_values={row['id']:value for row,value in zip(old_rows,old_geo['kv_slots'],strict=True)}
     return old_by_id,[corrected_slots[e['id']] if e['id'] in selected else old_values[e['id']] for e in entries]
 
-def finalize(preparation, predecessor, output):
+def finalize(preparation, predecessor, output, *, preparation_sha256=None, predecessor_sha256=None):
     prep_path=Path(preparation).resolve(strict=True);prior_path=Path(predecessor).resolve(strict=True)
+    prep_binding=bind(prep_path);prior_binding=bind(prior_path)
+    if ((preparation_sha256 is not None and prep_binding['sha256']!=preparation_sha256)
+        or (predecessor_sha256 is not None and prior_binding['sha256']!=predecessor_sha256)):
+        raise ValueError('static source finalization input receipt changed')
     prep=read(prep_path);prior=read(prior_path);output=Path(output).absolute()
     if output.exists() or output.is_symlink():raise ValueError('finalization output must be fresh')
     require_output_headroom(output)
@@ -184,7 +188,8 @@ def finalize(preparation, predecessor, output):
     find=lambda r:next(s for s in r['stages'] if s['id']==proof['stage_id'])
     old_roles=resolve_stage_inputs(old_recipe,find(old_recipe),{});new_roles=resolve_stage_inputs(new_recipe,find(new_recipe),{})
     if not _source_correction_continuation(old_roles,new_roles):raise ValueError('static corrected recipe lacks its exact authenticated source/CE transition')
-    if ProtectedWorlds.load().digest!=protection.digest:raise ValueError('protected-world union changed during static source finalization')
+    if (ProtectedWorlds.load().digest!=protection.digest or bind(prep_path)!=prep_binding or bind(prior_path)!=prior_binding):
+        raise ValueError('protected-world union or input receipt changed during static source finalization')
     result={'schema':'natlang.acquired-streaming-source-successor/1','status':'static source-ce-recipe-geometry prepared; no training admission',
         'training_admission':False,'predecessor':bind(prior_path),'source':bind(source_path),'rows':len(entries),
         'predecessor_rows':len(entries),'new_rows':0,'family_map':bind(family_path),'ce_policy':bind(policy_path),
@@ -200,6 +205,8 @@ def finalize(preparation, predecessor, output):
     return result
 
 def main():
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--preparation',type=Path,required=True);p.add_argument('--predecessor',type=Path,required=True);p.add_argument('--output',type=Path,required=True)
-    a=p.parse_args();print(json.dumps(finalize(a.preparation,a.predecessor,a.output),sort_keys=True))
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--preparation',type=Path,required=True);p.add_argument('--preparation-sha256',required=True)
+    p.add_argument('--predecessor',type=Path,required=True);p.add_argument('--predecessor-sha256',required=True);p.add_argument('--output',type=Path,required=True)
+    a=p.parse_args();print(json.dumps(finalize(a.preparation,a.predecessor,a.output,
+        preparation_sha256=a.preparation_sha256,predecessor_sha256=a.predecessor_sha256),sort_keys=True))
 if __name__=='__main__':main()

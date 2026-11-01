@@ -210,6 +210,7 @@ def test_static_recipe_transition_requires_preserved_family_membership(tmp_path,
     import natlang_neuralese.train.native_source_correction as correction
     import natlang_neuralese.train.native_supervision as supervision
     import natlang_neuralese.train.native_logical_families as families
+    import natlang_neuralese.train.native_static_context_correction as static_correction
     from natlang_neuralese.train.own_output_supervision import identity,policy_objective
     prior=_receipt('/old','old',["x"],['old-leaf']);current=_receipt('/new','new',["x"],['new-leaf'])
     proof_path=_write_proof(tmp_path,prior,current,[_row('x','old-binding','new-binding','old-leaf','new-leaf','corrected',old_communication=False)])
@@ -217,6 +218,7 @@ def test_static_recipe_transition_requires_preserved_family_membership(tmp_path,
     digest=lambda p:hashlib.sha256(p.read_bytes()).hexdigest()
     row_path=tmp_path/'source-correction-rows.jsonl'
     monkeypatch.setattr(correction,'source_correction_dependencies',lambda ref:[{'path':str(proof_path)},{'path':str(row_path),'sha256':digest(row_path)}])
+    monkeypatch.setattr(static_correction,'verify_static_context_correction',lambda *a:({'x':{'old_binding':'old-binding','new_binding':'new-binding'}},[]))
     old_map=tmp_path/'old-map.json';new_map=tmp_path/'new-map.json'
     old_map.write_text(json.dumps({'source_sha256':'old','rows':[{'id':'x','binding':'old-binding','family':'general-agent'}]}))
     new_map.write_text(json.dumps({'source_sha256':'new','rows':[{'id':'x','binding':'new-binding','family':'general-agent'}]}))

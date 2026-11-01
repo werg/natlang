@@ -73,6 +73,7 @@ def test_pending_rebase_preserves_family_and_verifies_exact_correction(tmp_path,
     import json,hashlib
     from scripts.neuralese_data import rebase_acquired_pending_partition as tool
     from scripts.neuralese_data.partition_acquired_context_pending import bind
+    import natlang_neuralese.train.native_static_context_correction as static_correction
     def write(name,value):
         p=tmp_path/name;p.write_text(json.dumps(value));return bind(p)
     oldmap=write('old-map.json',{'source_sha256':'old','rows':[{'id':'x','binding':'before','family':'general-agent'}]})
@@ -88,6 +89,7 @@ def test_pending_rebase_preserves_family_and_verifies_exact_correction(tmp_path,
     screen=write('screen.json',{'pending_partition':partition,'output':{'rows':2}})
     census=write('census.json',{'screen':screen,'pending_partition':partition})
     monkeypatch.setattr(tool,'source_correction_dependencies',lambda ref:[])
+    monkeypatch.setattr(static_correction,'verify_static_context_correction',lambda *a:({'x':{'old_binding':'before','new_binding':'after'}},[]))
     result=tool.rebase(screen['path'],census['path'],current['path'],tmp_path/'rebased')
     assert result['corrected_ids']==['x']
     assert json.loads((tmp_path/'rebased/census.json').read_text())['ce_policy']==new_ce

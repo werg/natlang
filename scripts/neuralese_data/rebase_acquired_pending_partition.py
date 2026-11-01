@@ -47,6 +47,11 @@ def verify_rebase(screen, predecessor):
         rows=[json.loads(line) for line in stream if line.strip()]
     changes={r['id']:r for r in rows}
     if len(changes)!=len(rows) or any(r.get('disposition')!='corrected' for r in rows):raise ValueError('rebase correction ledger is invalid')
+    from natlang_neuralese.train.native_static_context_correction import verify_static_context_correction
+    graph_pairs,_=verify_static_context_correction(correction_path,correction['static_native_context_correction'])
+    if (set(changes)!=set(graph_pairs) or any(row.get('old_binding')!=graph_pairs[ident]['old_binding']
+        or row.get('new_binding')!=graph_pairs[ident]['new_binding'] for ident,row in changes.items())):
+        raise ValueError('pending predecessor rebase ledger differs from authenticated graph pairs')
     changed=set()
     for ident,old_row in before.items():
         new_row=after[ident]
