@@ -4,6 +4,63 @@ Observation window: 10:43–11:29 CET. Recheck actual processes before acting.
 Primary supervisor: Codex; active goal remains continued capable LFM3 native
 Neuralese/Natlang training, not completion of this status document.
 
+## Current observation, November 1, 04:37 CET
+
+The previous learner completed real SGD through global step67 and exited 0.
+Its full parent is `7e6fe64d9ddb84265d9959a1be13b0b23e53736a01a8c2a823d530978bd99ce3`
+(15,296,304,610 bytes; local step13; 189390 source rows). Decreasing loss and
+earned steps remain progress evidence, not demonstrated task capability lift.
+
+`lfm3-sft67-resident-189394-v2-1101.service` was actually admitted at04:33:20.
+Its real CPU continuation preflight passed with restored optimizer/RNG and four
+complete appended graphs; the GPU runtime then confirmed the same append and
+is running its actual capacity gates. Do not credit step68 before its update.
+The exact launch, parent, source roles and preflight are bound under
+`/home/werg/data/lfm3-rl-dgx-20261029/ops/resident-189394-63c/` (the directory
+name is historical; the actual runtime is **1022e1c9d**). Its 76GiB ledger and
+CUDA budgets retain the checkpoint/capacity safeguards. This fits measured
+host-plus-CUDA peaks while allowing the independent CPU recovery qualification
+to keep its 24GiB claim. The ordinary five-minute admission ramp temporarily
+delays lower-priority builds; no GPU sandbox is available: the live entitlement
+monitor again received provider GPU-creation denial at04:22.
+
+The new source is the immutable v2 receipt at
+`/mnt/external/natlang-luna-campaigns/relational-v7-two-ops-v3-20261101/native-ce-mixed-v7-v5-plus4-v2/receipt.json`,
+SHA `f03c251ccf13cb2102a367f17c1088808016492cef8f56a92017d13fa5200ee0`.
+Two current Luna full graphs and two historical full graphs move train and
+foundation roles together; held is unchanged. Only one of the current graphs
+has native consumer edges; ordinary complete graphs are not native edges.
+Pop's capture actor and tunnel were stopped after both captures completed.
+
+The runtime now includes capacity-envelope reuse, persistent lifetime memory
+peaks, and checks for SIGTERM/SIGUSR2 after long pre-update gates. The last stop
+exposed a real bug: a signal during a checkpoint drain was not rechecked before
+another update. Three targeted interruption/rollback tests passed after fixing
+it. A separate compiler bug wrapped the object in
+`repository.search(...).hits` with `finite()` instead of its resulting array.
+The composed iterable fix passed the scope/compiler and actual migration tests.
+Additional Neuralese compiler failures are still under investigation; full
+check-main is **not green**. Ten resident source tests now pass after their
+capacity fixtures were updated to bind actual arithmetic settings.
+
+Another 760 D13/D14 source-confirmed positive train trajectories passed current
+protection screening and independent readback (28,770,117 forward tokens).
+They are being prepared for the next explicit source append; they are not yet
+learner exposure. D32 source completion is not semantic gold. The conversion
+units remain active; earlier launcher exit0 observations were not final shard
+completion. TAT-QA now has three distinct versioned workpaper operations with
+typed writer/consumer paths; scripted collector transport proves the edge, but
+actual Luna behavior and training admission still need qualification. Dataset
+rights metadata was corrected to CC-BY-4.0, distinct from the code's MIT license.
+
+Independent environment/runtime/asset archives have readback receipts, including
+real isolated torch/transformers/numpy imports. Complete step59 recovery is
+still being exercised; the strong export queue is **not qualified or installed**.
+The manual step59 pin remains protected. Background checkpoint copies previously
+used idle I/O class and starved under sustained external-disk traffic; the shared
+default and actual live recovery copy children now use best-effort class2/prio7.
+Keep independent full56/full58 and SD52 fallback copies while qualification runs.
+
 ## Actual continuation, source admission and writer diagnosis, November 1, 02:52 CET
 
 The previous supervision turn made concrete progress: obsolete state retirement
