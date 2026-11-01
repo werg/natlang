@@ -30,6 +30,23 @@ def test_controller_future_controls_keep_recipe_and_geometry_bindings():
         {'kind':'pending_focus','path':'/focus','sha256':None}]
 
 
+def test_reused_process_observation_requires_same_controller_and_runtime(tmp_path):
+    import hashlib,json,pytest
+    from scripts.neuralese_data.build_local_recovery_plan import reuse_process_observation
+    config=tmp_path/'config';config.write_text('controller')
+    runtime=tmp_path/'runtime';runtime.write_text('runtime')
+    digest=lambda p:hashlib.sha256(p.read_bytes()).hexdigest()
+    prior=tmp_path/'plan';prior.write_text(json.dumps({'controller':{'config':{'sha256':digest(config)}},
+        'closure':[{'role':'runtime','sha256':digest(runtime)},
+                   {'role':'system-libraries','path':'/lib/observed'}],
+        'process_observation':{'pid':17,'start_ticks':'42'}}))
+    mappings,observation=reuse_process_observation(prior,config,runtime)
+    assert mappings=={'/lib/observed'} and observation['original']['pid']==17
+    assert observation['prior_plan']['sha256']==digest(prior)
+    runtime.write_text('different')
+    with pytest.raises(ValueError,match='does not bind'):reuse_process_observation(prior,config,runtime)
+
+
 def test_inventories_real_process_and_executable_dependencies():
     assert os.path.realpath(sys.executable) in mapped_executables(os.getpid())
     libraries=ldd_files(sys.executable)

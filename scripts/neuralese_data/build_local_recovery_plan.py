@@ -76,6 +76,22 @@ def controller_future_controls(config):
     return result
 
 
+def reuse_process_observation(prior_path, config_path, runtime_archive):
+    prior_path=Path(prior_path).resolve(strict=True);prior=json.loads(prior_path.read_text())
+    config_ref=(prior.get('controller') or {}).get('config') or {}
+    runtime_refs=[item for item in prior.get('closure',[]) if item.get('role')=='runtime']
+    if (config_ref.get('sha256')!=sha(Path(config_path)) or len(runtime_refs)!=1 or
+            runtime_refs[0].get('sha256')!=sha(Path(runtime_archive)) or
+            not isinstance(prior.get('process_observation'),dict)):
+        raise ValueError('prior process observation does not bind this controller and runtime')
+    mappings={item['path'] for item in prior['closure'] if item.get('role')=='system-libraries'}
+    if not mappings:raise ValueError('prior process observation has no executable mappings')
+    observation={'prior_plan':{'path':str(prior_path),'sha256':sha(prior_path)},
+        'original':prior['process_observation'],
+        'scope':'reused same-controller and same-runtime point-in-time observation; not a live-process lease'}
+    return mappings,observation
+
+
 def checkpoint_base_files(base,state):
     return _checkpoint_bound_config_inventory(
         base,(state.get('model_config') or {}).get('base_inventory'),state.get('backbone_state'))
@@ -141,13 +157,17 @@ def build(args):
         raise ValueError('recovery builder source changed after it was loaded')
     # Capture the actual process mappings before potentially slow checkpoint
     # and source reads; a short-lived trainer may exit during those reads.
-    proc_stat=Path('/proc')/str(args.trainer_pid)/'stat'
-    start_before=proc_stat.read_text().rsplit(')',1)[1].split()[19]
-    trainer_mappings=mapped_executables(args.trainer_pid)
-    if proc_stat.read_text().rsplit(')',1)[1].split()[19]!=start_before:
-        raise ValueError('trainer process changed while inventorying mappings')
-    process_observation={'pid':args.trainer_pid,'start_ticks':start_before,'time_unix':time.time(),
-                         'scope':'point-in-time executable mappings; not a live-process lease'}
+    prior_process_path=getattr(args,'process_proof_plan',None)
+    if prior_process_path:
+        trainer_mappings,process_observation=reuse_process_observation(prior_process_path,config_path,args.runtime_archive)
+    else:
+        proc_stat=Path('/proc')/str(args.trainer_pid)/'stat'
+        start_before=proc_stat.read_text().rsplit(')',1)[1].split()[19]
+        trainer_mappings=mapped_executables(args.trainer_pid)
+        if proc_stat.read_text().rsplit(')',1)[1].split()[19]!=start_before:
+            raise ValueError('trainer process changed while inventorying mappings')
+        process_observation={'pid':args.trainer_pid,'start_ticks':start_before,'time_unix':time.time(),
+                             'scope':'point-in-time executable mappings; not a live-process lease'}
     state_path=Path(args.controller_state).resolve(strict=True);checkpoint=Path(args.checkpoint).resolve(strict=True)
     before=checkpoint.stat();state=CheckpointPolicy.load(checkpoint);after=checkpoint.stat()
     ident=lambda st:(st.st_dev,st.st_ino,st.st_size,st.st_mtime_ns,st.st_ctime_ns)
@@ -198,6 +218,7 @@ def build(args):
             (add_ce if item['kind']=='ce' else add_source)(item)
     controller_config=Path(args.controller_config).resolve(strict=True)
     add(config_path,'controls');add(controller_config,'controls');add(args.asset_guard,'controls');add(args.asset_inventory,'controls')
+    if prior_process_path:add(prior_process_path,'controls',process_observation['prior_plan']['sha256'])
     if config.get('cases'):add(config['cases'],'controls',logical=True)
     if config.get('history_reasoning_binding_path'):
         add(config['history_reasoning_binding_path'],'controls',config.get('history_reasoning_binding_sha256'),logical=True)
@@ -261,7 +282,8 @@ def main():
     p=argparse.ArgumentParser()
     for name in ('config','controller-config','controller-state','checkpoint','runtime','venv','runtime-archive','environment-archive','system-python-archive','asset-archive','asset-v3-archive','asset-root','asset-v3-root','asset-guard','asset-inventory','node','interpreter','sample-graph','tokenizer-fingerprint','destination','journal-directory','session','qualifier','output'):
         p.add_argument('--'+name,required=True)
-    p.add_argument('--trainer-pid',required=True,type=int);p.add_argument('--control',action='append',default=[]);p.add_argument('--archive-receipt',action='append',default=[])
+    group=p.add_mutually_exclusive_group(required=True);group.add_argument('--trainer-pid',type=int);group.add_argument('--process-proof-plan')
+    p.add_argument('--control',action='append',default=[]);p.add_argument('--archive-receipt',action='append',default=[])
     p.add_argument('--historical-program-receipt',action='append',default=[])
     a=p.parse_args();print(json.dumps(build(a)),flush=True)
 
