@@ -4,6 +4,28 @@ Observation window: 10:43–11:29 CET. Recheck actual processes before acting.
 Primary supervisor: Codex; active goal remains continued capable LFM3 native
 Neuralese/Natlang training, not completion of this status document.
 
+## Live correction, November 1, 07:42 CET
+
+The actual round10 materialized ToolACE3509 still exposes `sequences:any`,
+without nested argument fields, although main's converter and a fully qualified
+train-only successor had already been fixed. The new52 launch accidentally reused
+the older assembled case file. All four outcomes from that task are invalid
+capability/learning evidence. The corrected source already exists at
+`/home/werg/data/broad-rl-tasks-20261031/toolace-full-schema-successor-20261031/cases.jsonl`
+(SHA188bbb8aa607ffe7183cd98c9c97c954dfb84a89f22f98380468d645b595e32a).
+This is a cutover defect, not a reason to redo the qualified1500 reference runs.
+
+Both actual live learner and seed commands are now fail-closed, using their
+verified update-launch reread, while healthy collectors finish. No model update
+has occurred. The original config and exact malformed task are preserved under
+`ops/onpolicy52-current-20261101/`, with
+`invalid-toolace-update-hold.json` and `actual-stale-toolace-contract.json`.
+An authenticated complete-group withdrawal must preserve original collection
+receipts and sampled evidence; production resumes on sound remaining groups,
+then switches future collection to the qualified schema successor. A durable
+preflight guard must reject stale ToolACE schema contracts before collection.
+The temporary hold is unfinished work until that cutover is verified.
+
 ## Current observation, November 1, 07:39 CET
 
 The actual production parent is clean SD-R1 step52, full SHA
