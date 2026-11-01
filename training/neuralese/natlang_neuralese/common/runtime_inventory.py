@@ -14,6 +14,34 @@ _NATIVE_RUNTIME_CACHE = {}
 _BOUND_SOURCE_HASH_CACHE = {}
 
 
+def _sha256_file_five_field(path):
+    """Hash bytes once while proving the resolved file kept its five-field identity."""
+    source = Path(path).resolve(strict=True)
+    before = source.stat()
+    signature = (before.st_dev, before.st_ino, before.st_size,
+                 before.st_mtime_ns, before.st_ctime_ns)
+    if not stat.S_ISREG(before.st_mode):
+        raise ValueError('verified runtime input is not a regular file: ' + str(source))
+    hasher = hashlib.sha256()
+    with source.open('rb') as handle:
+        opened = os.fstat(handle.fileno())
+        opened_signature = (opened.st_dev, opened.st_ino, opened.st_size,
+                            opened.st_mtime_ns, opened.st_ctime_ns)
+        if opened_signature != signature:
+            raise ValueError('verified runtime input changed before hashing: ' + str(source))
+        for chunk in iter(lambda: handle.read(1024 * 1024), b''):
+            hasher.update(chunk)
+        closed = os.fstat(handle.fileno())
+    after = source.stat()
+    final_signature = (after.st_dev, after.st_ino, after.st_size,
+                       after.st_mtime_ns, after.st_ctime_ns)
+    closed_signature = (closed.st_dev, closed.st_ino, closed.st_size,
+                        closed.st_mtime_ns, closed.st_ctime_ns)
+    if signature != final_signature or signature != closed_signature:
+        raise ValueError('verified runtime input changed while hashing: ' + str(source))
+    return signature, hasher.hexdigest()
+
+
 def _verified_bound_source_hash(path):
     """Reuse only a hash previously read from this exact five-field file state."""
     source = Path(path).resolve(strict=True)
@@ -26,11 +54,8 @@ def _verified_bound_source_hash(path):
     if cached is not None and cached[0] == signature:
         digest = cached[1]
     else:
-        digest = sha256_file_hex_cached(source, trust_archive_receipt=False)
-        after_hash = source.stat()
-        after_signature = (after_hash.st_dev, after_hash.st_ino, after_hash.st_size,
-                           after_hash.st_mtime_ns, after_hash.st_ctime_ns)
-        if signature != after_signature:
+        verified_signature, digest = _sha256_file_five_field(source)
+        if signature != verified_signature:
             raise ValueError('native runtime bound source input changed during verification: ' + str(source))
         with _NATIVE_RUNTIME_CACHE_LOCK:
             _BOUND_SOURCE_HASH_CACHE[cache_key] = (signature, digest)
@@ -563,7 +588,13 @@ def immutable_native_runtime_tree(path, *, verify_bound_inputs=True):
             mode = stat.S_IMODE(info.st_mode)
             if mode & 0o222:
                 raise ValueError('native runtime contains a writable file: ' + relative)
-            digest = sha256_file_hex_cached(item, trust_archive_receipt=False)
+            resolved = item.resolve(strict=True)
+            if not resolved.is_relative_to(root):
+                raise ValueError('native runtime file escapes its root: ' + str(item))
+            verified_signature, digest = _sha256_file_five_field(resolved)
+            if verified_signature != (info.st_dev, info.st_ino, info.st_size,
+                                      info.st_mtime_ns, info.st_ctime_ns):
+                raise ValueError('native runtime file changed before hashing: ' + relative)
             if pool is not None:
                 blob = pool / digest[:2] / f'{digest}.{mode:o}'
                 try:

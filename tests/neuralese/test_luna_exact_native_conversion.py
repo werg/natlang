@@ -71,22 +71,22 @@ def test_protected_runtime_input_closure_requires_complete_pool_seal(tmp_path):
     # The first check authenticates every runtime byte. Repeated rows in one
     # loader process may reuse that proof only while the five-field file/pool
     # snapshot, closure, storage receipt, and bound inputs remain unchanged.
-    original_hash = runtime_inventory.sha256_file_hex_cached
+    original_hash = runtime_inventory._sha256_file_five_field
     checked_runtime_files = []
     checked_bound_sources = []
     with runtime_inventory._NATIVE_RUNTIME_CACHE_LOCK:
         runtime_inventory._NATIVE_RUNTIME_CACHE.pop(str(runtime.resolve()), None)
         runtime_inventory._BOUND_SOURCE_HASH_CACHE.pop(str(bound_source.resolve()), None)
 
-    def count_runtime_hashes(path, **kwargs):
+    def count_runtime_hashes(path):
         candidate = Path(path)
         if candidate.is_relative_to(runtime):
             checked_runtime_files.append(candidate)
         if candidate == bound_source.resolve():
             checked_bound_sources.append(candidate)
-        return original_hash(path, **kwargs)
+        return original_hash(path)
 
-    runtime_inventory.sha256_file_hex_cached = count_runtime_hashes
+    runtime_inventory._sha256_file_five_field = count_runtime_hashes
     try:
         first_cached = immutable_native_runtime_tree(runtime)
         first_runtime_hash_count = len(checked_runtime_files)
@@ -100,7 +100,7 @@ def test_protected_runtime_input_closure_requires_complete_pool_seal(tmp_path):
         assert first_bound_hash_count == 1
         assert checked_bound_sources == []
     finally:
-        runtime_inventory.sha256_file_hex_cached = original_hash
+        runtime_inventory._sha256_file_five_field = original_hash
 
     storage_path = runtime.with_name(runtime.name + ".storage.json")
     storage_path.write_text(__import__("json").dumps({**storage, "logical_bytes": storage["logical_bytes"] + 1}))
@@ -129,20 +129,20 @@ def test_protected_runtime_input_closure_requires_complete_pool_seal(tmp_path):
     second_bound_source.write_text("reviewed source bytes\n")
     bound_link.unlink()
     bound_link.symlink_to(second_bound_source)
-    original_hash = runtime_inventory.sha256_file_hex_cached
+    original_hash = runtime_inventory._sha256_file_five_field
     checked_retarget = []
 
-    def count_retarget_hash(path, **kwargs):
+    def count_retarget_hash(path):
         if Path(path) == second_bound_source.resolve():
             checked_retarget.append(Path(path))
-        return original_hash(path, **kwargs)
+        return original_hash(path)
 
-    runtime_inventory.sha256_file_hex_cached = count_retarget_hash
+    runtime_inventory._sha256_file_five_field = count_retarget_hash
     try:
         immutable_native_runtime_tree(runtime)
         assert checked_retarget == [second_bound_source.resolve()]
     finally:
-        runtime_inventory.sha256_file_hex_cached = original_hash
+        runtime_inventory._sha256_file_five_field = original_hash
     module.chmod(0o644)
     module.write_text('export function nativeRowDigest(_row) { return "b".repeat(64); }\n')
     module.chmod(0o444)
