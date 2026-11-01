@@ -4,7 +4,73 @@ Observation window: 10:43–11:29 CET. Recheck actual processes before acting.
 Primary supervisor: Codex; active goal remains continued capable LFM3 native
 Neuralese/Natlang training, not completion of this status document.
 
-## Current observation, November 1, 06:07 CET
+## Current observation, November 1, 07:39 CET
+
+The actual production parent is clean SD-R1 step52, full SHA
+`4be241a84b96d4c336b01c390da69122134389b784874a45fddeaf6818786784`.
+`lfm3-onpolicy52-current-jolt-r10-v3-1101.service` is actively collecting
+round10 from that exact checkpoint with the full explanatory prompt and whole
+execution graphs. Four train tasks have four samples each, served by eight
+collectors initially. Several collectors have completed; remaining logic-task
+samples have durable replies and active decoding. No new policy update is yet
+credited. Reusing the real SD-R1 controller retains its ten earned updates;
+there is no invented state reset or credit from the diagnostic SFT branch.
+Controls: `/home/werg/data/lfm3-rl-dgx-20261029/ops/onpolicy52-current-20261101/`.
+The planned bounded round must be followed by an explicit SFT continuation;
+`mandatory_sft_only:false` alone does not implement SFT/RL interleaving.
+
+The corrected SFT diagnostic branch saved global74/local20, SHA
+`011ce8dfa91b58c1ff0e0d4fde89965c912d1033cf749cbeb0db2ed711572885`.
+Its final real update included49 graphs, six communication graphs and125033/34
+producer targets. This verifies the fresh-frontier scheduling repair: appended
+coding data no longer consumes consecutive coding-only updates ahead of the
+joint mixture. The unit stopped cleanly after save and evaluation; no75 is
+claimed. Saved state is retained under `ops/protocol-52-74-1101/diagnostic74.pt`.
+
+Controlled identical-request replay gave valid read_code from52 and malformed
+prose inside eval from74. That request uses an older system prompt. Live74 used
+a newer system prompt and gave valid read_code; all tool schemas match. Thus
+this is evidence of prompt-sensitive weight-dependent regression, not proof of
+universal collapse or an unexplained restore numerical discrepancy. Current-prompt
+74 and corrected72 each scored2/4 on the small development packet. Pop52's
+baseline packet was ineligible: one success, one mismatch and two unresolved
+infrastructure/time outcomes. Do not report it as a scored1/4 comparison.
+We choose52 for production outcome learning while diagnosing SFT data/objective;
+74's decreasing loss and correct save are insufficient behavioral qualification.
+
+The full190154-row recipe remains prepared (source24e23bd7..., CEcda27b40...,
+recipebb769519..., protected union8ed08f06...). Its new SFT-branch exposure is
+not credited to production52. A two-whole-graph initial idiom-focus proposal is
+prepared but not applied: it contains useful idioms and native edges along with
+noisy speculative/self-correcting targets. Broader semantic review is ongoing;
+full production-source and native producer/consumer obligations remain intact.
+
+Independent recovery: full72 was downloaded and freshly hashed on Pop. The
+external bootstrap was decoded as step69, **not70**; its full readback passed
+and its isolated184-object closure restore is still actively verifying inputs.
+Neither transfer proof nor this diagnostic parent activates the strong production
+recovery queue. Prepare the next recovery plan for actual52/its earned successor.
+The actual9b runtime has a verified tar archive and a verified Pop copy.
+
+TAT-QA v16 generation is terminal. Inventory case0 is exact accepted with a
+whole-child audit; native capture/admission remains. Sales case1 exposes a real
+source/oracle currency contradiction and is excluded pending repair. Rate case2
+has an accepted final result but a blocked typed-read child under its old frozen
+runtime, so final acceptance alone does not admit the graph. Commits863d59dcc
+andd71f8bcc5 implement authenticated real nested typed readout and downstream
+materialization coverage. Scripted tests passed; actual Native training graph
+qualification and fresh teacher campaigns still remain. ContractNLI references
+are being repaired where their scripted fixture omitted agreementIds or assumed
+a nonexistent companion path; these are harness defects, not model failures.
+
+Current resource observations: local GPU is decoding useful on-policy samples;
+Pop evaluation actors are stopped. Internal free space is110GiB, external342GiB.
+MegaToken run state is absent on both drives and disposable recovery staging is
+removed. CoreWeave entitlement remains unavailable with a launch hold against
+stale cloud controls. Focused checks pass; the broad check-main suite is still
+not fully green and must not be represented as qualified.
+
+## Historical observation, November 1, 06:07 CET
 
 The latest saved production parent is global72/local18, SHA
 `a36125a2b2051dab81a7fa01de65110c07f97a930574f4914e3d44b4b58084a8`.

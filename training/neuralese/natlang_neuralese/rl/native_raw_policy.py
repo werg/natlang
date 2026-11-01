@@ -118,7 +118,7 @@ def prepare_raw_policy(checkpoint, *, base, tokenizer_out, require_optimizer=Tru
         tied=interface.get('output_rows') is None,
         extra_input_rows=interface.get('extra_input_rows'), extra_output_rows=interface.get('extra_output_rows'))
     identity = native_tensor_identity(proxy, config, checkpoint_sha256=sha256_file_hex_cached(checkpoint))
-    tokenizer = AutoTokenizer.from_pretrained(base, local_files_only=True)
+    tokenizer = AutoTokenizer.from_pretrained(base, local_files_only=True, trust_remote_code=False)
     from ..serve.chat import bind_history_reasoning
     bind_history_reasoning(tokenizer, policy=config.get('history_reasoning_policy'), require_declared=True,
                            allow_transition=config.get('history_reasoning_policy') is not None)

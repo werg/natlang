@@ -72,6 +72,25 @@ a blanket ban on nested `nl`. Raw targets' syntactic validity alone does not
 prove useful teaching. See the exact replay, full1,261-earned-graph audit and
 classification receipts under the current `loghub-append-stage` directory.
 
+## Current production selection and prompt-sensitive SFT diagnosis (2026-11-01)
+
+The subsequent corrected SFT branch through74 is also held for diagnostics;
+production outcome learning resumes from earned SD-R1 step52 and its actual
+controller history. Do not count diagnostic SFT exposure as exposure in52.
+The controlled52/74 first-request comparison used an older system prompt;
+live74 used a newer prompt with identical tool schemas. Preserve that distinction:
+it demonstrates prompt-sensitive weight-dependent bad behavior, not universal
+capability collapse or a proven live/restore arithmetic defect. Complete current
+prompt task outcomes and unresolved infrastructure results remain separate.
+
+Continue early full-prompt whole-graph JOLT+ interleaved with explicitly scheduled
+joint SFT, retaining the complete190154-row recipe and native producer/consumer
+obligations. A bounded RL round and a prepared SFT template do not establish
+an operational interleaver. Audit whole teacher graphs before admission: an
+accepted final answer does not erase blocked or contract-violating children.
+Repair task/oracle contradictions from public source contracts, never by
+teaching guesses that happen to satisfy hidden gold.
+
 ## Machine-wide storage and bounded run state (owner, 2026-10-31)
 
 Account for all project roots and shared stores, not just Natlang's data directory.
