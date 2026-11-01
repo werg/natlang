@@ -30,3 +30,23 @@ Receipts are under `/home/werg/data/lfm3-rl-dgx-20261029/ops/`:
 `megatoken-deletion-20261031.json`,
 `recovery-workspace-relocation-v2-20261031.json`, and
 `obsolete-derived-retirement-1101.json`.
+
+Further verified retirements removed local step54/55 checkpoint aliases only
+after fresh full SHA readbacks of the independent Pop copies, and obsolete
+SD8/JOLT42 states after verifying the useful SD52 fallback on Pop. Raw rollouts,
+logs, task results and the rejected final72 diagnostic remain. The temporary
+step58 export pin was released after complete external readback; step59's
+pending recovery pin remains protected. These operations have separate receipts:
+`retire-local54-verified-peer-1101.json`,
+`retire-local55-verified-peer-1101.json`,
+`retire-superseded-rl-states-1101.json`, and
+`release-verified58-pin-1101.json` in the same operations directory.
+
+The internal drive had approximately 99GiB available at04:38 CET. This is an
+observation, not a permanent allowance: live full-state reservations and exports
+still count against the 40GiB operating floor. A background checkpoint copier
+also held an unlinked old full checkpoint open; its owner has now exited. The
+shared copy default was corrected from idle I/O class to best-effort class2,
+priority7, because idle copies starved during sustained conversion traffic.
+Complete independent recovery qualification remains in progress; do not retire
+its source pins on the strength of an archive enqueue or partial copy.
