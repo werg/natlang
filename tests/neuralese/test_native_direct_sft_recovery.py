@@ -47,11 +47,11 @@ def test_completed_refresh_accepts_authenticated_same_rolling_slot(tmp_path):
     def file(name, data):
         p=tmp_path/name;p.write_text(json.dumps(data));return binding(p)
     parent=file('parent-pin',{'old':True});child=file('rolling',{'new':True})
-    prior=file('prior',{'schema':'natlang.direct-sft-refresh-publication/1','checkpoint':{'path':child['path'],'sha256':parent['sha256']}})
+    prior=file('prior',{'schema':'natlang.direct-sft-refresh-publication/1','parent':{'sha256':'older'},'checkpoint':{'path':child['path'],'sha256':parent['sha256']}})
     state=tmp_path/'state.json';state.write_text(json.dumps({'phase':'awaiting_semantic_refresh','checkpoint':child['path'],'pending_native_checkpoint':child['path'],'direct_sft_refresh_history':[prior]}))
     boundary={'kind':'semantic-refresh','reached':True,'new_optimizer_updates':1,'checkpoint_sha256':child['sha256']}
     report=file('report',{'numerics_ok':True,'checkpoint_sha256':child['sha256'],'continuation_boundary':boundary})
-    receipt=file('receipt',{'checkpoint':{'sha256':child['sha256']},'continuation':{'checkpoint_sha256':parent['sha256']}})
+    receipt=file('receipt',{'checkpoint':{'sha256':child['sha256']},'continuation':{'checkpoint_sha256':'older'}})
     common={'optimizer_present':True,'rng_present':True};custody=file('custody',{'schema':'natlang.earned-sft-checkpoint-custody/1','parent':parent|common|{'global_step':58},'successor':child|common|{'global_step':59},'old_bindings_and_quotas_preserved':True,'old_exposure_not_decreased':True})
     publish_completed(state,report_ref=report,receipt_ref=receipt,custody_ref=custody,out=tmp_path/'publication')
     assert json.loads(state.read_text())['checkpoint']==child['path']
