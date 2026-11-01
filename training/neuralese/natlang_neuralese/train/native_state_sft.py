@@ -3220,6 +3220,12 @@ def _main(argv=None, *, requested_refresh):
                 'parent_checkpoint_sha256':sha256_file_hex_cached(args.standalone_diloco_parent),
                 'at_global_step':global_step,'original_cursor':cursor,'optimizer_rng_exposure':'preserved'}
     from .native_pending_focus import dependencies as focus_dependencies, resolve as resolve_focus, promote as promote_focus, active_for_operation
+    from .native_source_frontier import extend as extend_frontier, pending as pending_frontier
+    frontier_options = (resume or {}).get('options') or saved_options or {}
+    frontier_history = extend_frontier(frontier_options.get('fresh_source_frontier_history'),
+        [ident for ident in source_order if ident in appended_ids] if objective is None else [],
+        source_row_bindings, source_sha256=train.file_sha256, global_step=global_step)
+    checkpoint_options['fresh_source_frontier_history'] = frontier_history
     focus_history=saved_focus_history
     focus_request=None;focus_record=None;focus_active=set()
     focus_enabled=active_for_operation(ordinary_sft=objective is None,explicit_request=args.pending_focus)
@@ -3256,10 +3262,14 @@ def _main(argv=None, *, requested_refresh):
                         for ident in item.get('added_ids',[]) if ident in required_visits
                         and exposure_counts.get(ident,0)<required_visits[ident]}
     focus_ids |= policy_focus_ids
-    if focus_record:
+    frontier_ids = pending_frontier(frontier_history, source_row_bindings, exposure_counts,
+                                    checkpoint_options.get('withdrawal_history') or []) if objective is None else set()
+    focus_ids |= frontier_ids
+    if focus_ids:
         pending_batches=promote_focus(pending_batches,train.entries,focus_ids)
+    if focus_record:
         focus_record['consumed']=[x for x in focus_record['initial_credits'] if x in focus_active and exposure_counts.get(x,0)>focus_record['initial_credits'][x]]
-        if not focus_ids:focus_record['state']='complete'
+        if not pending_focus_ids():focus_record['state']='complete'
     # Record the ordering change while preserving all checkpointed row credits.
     from .native_diversity import cohort_head_merge, stream_windows
     if urgent_cohort_ids is None:
@@ -3586,6 +3596,11 @@ def _main(argv=None, *, requested_refresh):
                         checkpoint_options['source_predecessors'] = {
                             'continued_native_graphs': source_receipts[0]['sha256'],
                             'continued_held_native_graphs': source_receipts[1]['sha256']}
+                    resident_new_ids = [entry['id'] for entry in expanded[0].entries
+                                        if entry['id'] not in source_row_bindings] if objective is None else []
+                    frontier_history = extend_frontier(frontier_history, resident_new_ids, expanded[0].bindings,
+                        source_sha256=expanded[0].file_sha256, global_step=global_step)
+                    checkpoint_options['fresh_source_frontier_history'] = frontier_history
                     train, held = expanded
                     from .native_resident_ce import adopt_policy_update
                     ce_update = adopt_policy_update(resident.ce_policy_update, current_binding=ce_binding,
@@ -3688,8 +3703,13 @@ def _main(argv=None, *, requested_refresh):
                         focus_record['withdrawn']=focus_withdrawn
                         if focus_record['state']=='complete':focus_active=set()
                         focus_ids=pending_focus_ids()
-                        pending_batches=promote_focus(pending_batches,train.entries,focus_ids)
                         if not focus_ids:focus_record['state']='complete'
+                    else:
+                        focus_ids=set()
+                    focus_ids |= pending_frontier(frontier_history, source_row_bindings, exposure_counts,
+                                                  checkpoint_options.get('withdrawal_history') or [])
+                    if focus_ids:
+                        pending_batches=promote_focus(pending_batches,train.entries,focus_ids)
                     if urgent_cohort_ids is None:
                         from .native_cohort_schedule import source_cohort_ids
                         urgent_cohort_ids=source_cohort_ids(train)
