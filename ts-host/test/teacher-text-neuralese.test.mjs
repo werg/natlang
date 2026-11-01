@@ -16,6 +16,13 @@ const [{ definitionProject }, { collectBatch, nativeJobRunner, defaultToolSurfac
   load('teacher/native-materializer.js')]);
 
 const sha256 = value => createHash('sha256').update(value, 'utf8').digest('hex');
+const base32 = bytes => {
+  const alphabet = 'abcdefghijklmnopqrstuvwxyz234567'; let bits = 0, value = 0, out = '';
+  for (const byte of bytes) { value = (value << 8) | byte; bits += 8;
+    while (bits >= 5) { out += alphabet[(value >>> (bits - 5)) & 31]; bits -= 5; } }
+  if (bits) out += alphabet[(value << (5 - bits)) & 31];
+  return out;
+};
 const canonical = value => Array.isArray(value) ? `[${value.map(canonical).join(',')}]` :
   value && typeof value === 'object' ? `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b))
     .map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(',')}}` : JSON.stringify(value);
@@ -331,6 +338,12 @@ test('teacher-text typed read binding rejects altered IDs, declared types, write
     call_id: 'case/producer-1', result_type: 'Neuralese<string>', source_kind: 'typed-text-result',
     type_aliases: { InspectionNote: 'string' },
   } });
+  const bodySha = sha256(body);
+  const idMaterial = canonical({ type: 'Neuralese<string>', body_sha256: bodySha,
+    producer_call_id: 'case/producer-1', ordinal: 1 });
+  assert.equal(metadata.id, `nzt1_${base32(createHash('sha256').update(idMaterial, 'utf8').digest())}`,
+    'platform-neutral digest preserves the existing teacher-text content address');
+  assert.equal(metadata.producer.text_body_sha256, bodySha);
   const writer = 'case/producer-1#node-4';
   transport.runtime.teacherText.recordWriter(metadata.id, writer);
   const block = transport.runtime.teacherText.get(metadata.id);

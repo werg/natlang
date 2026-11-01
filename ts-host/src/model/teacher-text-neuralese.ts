@@ -1,5 +1,5 @@
 /** Explicit provider transport for teacher-only Neuralese values represented by exact text, never vectors. */
-import { createHash } from 'node:crypto';
+import { digest, hexDigest } from '../native/hash.js';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { MemoryNeuraleseStore, type NeuraleseBlockMeta } from '../native/neuralese-store.js';
 import type { NeuraleseRuntimeOptions } from '../native/neuralese.js';
@@ -27,7 +27,7 @@ export type TeacherTextNeuralese = { runtime: NeuraleseRuntimeOptions;
     learned_vectors: false; qualification_certificate: false; training_admission: false;
     tokenizer: { kind: 'provider-native-unspecified'; ids_claimed: false } } };
 
-const hex = (text: string): string => createHash('sha256').update(text, 'utf8').digest('hex');
+const hex = hexDigest;
 const base32 = (bytes: Uint8Array): string => {
   const alphabet = 'abcdefghijklmnopqrstuvwxyz234567'; let bits = 0, value = 0, out = '';
   for (const byte of bytes) { value = (value << 8) | byte; bits += 8;
@@ -87,8 +87,8 @@ export function createTeacherTextNeuralese(): TeacherTextNeuralese {
       const producerCall = producer.call_id;
       if (typeof producerCall !== 'string' || !producerCall) throw new Error('teacher-text writer requires its actual producing invocation');
       const bodySha = hex(text), ordinal = ++writeOrdinal;
-      const id = 'nzt1_' + base32(createHash('sha256').update(canonical({ type, body_sha256: bodySha,
-        producer_call_id: producerCall, ordinal }), 'utf8').digest());
+      const id = 'nzt1_' + base32(digest(canonical({ type, body_sha256: bodySha,
+        producer_call_id: producerCall, ordinal })));
       const rawAliases = producer.type_aliases && typeof producer.type_aliases === 'object' && !Array.isArray(producer.type_aliases) ?
         producer.type_aliases as Record<string, unknown> : undefined;
       const typeAliases = rawAliases && Object.fromEntries(Object.entries(rawAliases).map(([name, source]) => {
