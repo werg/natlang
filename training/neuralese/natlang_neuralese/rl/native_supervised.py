@@ -345,8 +345,16 @@ def execute(config,state,state_path,control):
     if control is not None:values['_run_control']=control
     if config.get('before_update'):run_command(config['before_update'],values)
     state.update(phase='updating_mandatory_sft',pending_update_kind='mandatory_sft')
-    command=prepare_seed_command(config,directory,values,state,state_path)
-    run_command(command,values)
+    try:
+        command=prepare_seed_command(config,directory,values,state,state_path)
+        run_command(command,values)
+    except BaseException as error:
+        # Preserve the selected parent and any on-disk progress for explicit
+        # recovery; an exception never implies a completed optimizer update.
+        state.update(phase='mandatory_sft_pending',
+            last_sft_failure={'type':type(error).__name__,'message':str(error)[:1000]})
+        write_json_durable(state_path,state)
+        raise
     checkpoint=directory/'checkpoint.pt'
     if not checkpoint.is_file() or not report_path.is_file():
         if control is not None and control.stop.requested:

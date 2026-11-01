@@ -382,3 +382,21 @@ def test_foundation_flag_cannot_replace_actual_current_weight_qualification(tmp_
     config['trainer_parameters']['epochs']=.5
     with pytest.raises(ValueError,match='exposure quota'):
         supervised.qualified_foundation_handoff(config,checkpoint,report)
+
+
+def test_direct_sft_command_failure_is_recorded_as_pending(tmp_path, monkeypatch):
+    import json
+    from natlang_neuralese.rl import native_supervised as supervised, production
+    parent=tmp_path/'parent.pt';parent.write_bytes(b'parent')
+    state={'checkpoint':str(parent),'phase':'collect','round':3}
+    path=tmp_path/'state.json'
+    config={'out':str(tmp_path),'trainer_parameters':{}}
+    monkeypatch.setattr(supervised,'prepare_seed_command',lambda *args,**kwargs:['fail'])
+    def fail(*args,**kwargs):raise RuntimeError('startup guard failed')
+    monkeypatch.setattr(production,'run_command',fail)
+    import pytest
+    with pytest.raises(RuntimeError,match='startup guard failed'):
+        supervised.execute(config,state,path,None)
+    saved=json.loads(path.read_text())
+    assert saved['phase']=='mandatory_sft_pending' and saved['checkpoint']==str(parent)
+    assert saved['last_sft_failure']['type']=='RuntimeError' and saved['round']==3
