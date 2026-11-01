@@ -1,5 +1,8 @@
 # Supervision status, 2026-10-31 midday
 
+Current continuation: [November 1 morning status](SUPERVISION_STATUS_20261101_MORNING.md).
+This file retains earlier observations; use the dated current status and live checks.
+
 Observation window: 10:43–11:29 CET. Recheck actual processes before acting.
 Primary supervisor: Codex; active goal remains continued capable LFM3 native
 Neuralese/Natlang training, not completion of this status document.
