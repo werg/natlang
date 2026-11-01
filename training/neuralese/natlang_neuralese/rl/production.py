@@ -1331,6 +1331,15 @@ def run(config_path, *, rounds=None, stop=None):
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         state_path = out / 'state.json'
         state = json.loads(state_path.read_text()) if state_path.exists() else initial_controller_state(initial)
+        reconciliation=state.get('production_session_reconciliation') or {}
+        if reconciliation.get('applied') is True:
+            expected=reconciliation.get('successor_config') or {}
+            from ..common.hashing import sha256_file_hex
+            config_path_resolved=config_path.resolve(strict=True)
+            actual={'path':str(config_path_resolved),'bytes':config_path_resolved.stat().st_size,
+                    'sha256':sha256_file_hex(config_path_resolved)}
+            if actual!=expected:
+                raise ValueError('production session reconciliation requires its exact successor config')
         if state_path.exists():normalize_legacy_completed_update(state,state_path)
         write_json_durable(state_path, state)
         if initial.get('mandatory_sft_only'):
