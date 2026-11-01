@@ -40,3 +40,17 @@ def test_static_receipt_rejects_changed_graph_before_loading_runtime(tmp_path):
     receipt=tmp_path/'receipt.json';receipt.write_text(json.dumps({'schema':'natlang.luna-static-episode-build/1','training_admission':False,'graph':{'path':str(graph),'sha256':'0'*64},'audit':{'path':str(audit),'sha256':hashlib.sha256(audit.read_bytes()).hexdigest()}}))
     with pytest.raises(ValueError,match='bound artifact changed'):
         MODULE._verify_episode(receipt,object(),'1'*64)
+
+
+def test_big2_predecessor_requires_every_sealed_binding(tmp_path):
+    import hashlib
+    keys=('source_predecessor','source_successor','ce_policy','recipe','geometry','objective_census','family_map')
+    refs={}
+    for key in keys:
+        path=tmp_path/key;path.write_text(key)
+        refs[key]={'path':str(path),'sha256':hashlib.sha256(path.read_bytes()).hexdigest()}
+    receipt={'schema':'natlang.big2-sft-source-append/1','training_admission':False,'optimizer_exposure':False,'rows':298507,**refs}
+    assert MODULE._normalize_base_receipt(receipt)['source']==refs['source_successor']
+    (tmp_path/'objective_census').write_text('changed')
+    with pytest.raises(ValueError,match='binding changed'):
+        MODULE._normalize_base_receipt(receipt)

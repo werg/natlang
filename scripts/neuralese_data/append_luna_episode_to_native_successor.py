@@ -230,6 +230,24 @@ def _verify_static_episode(receipt_path, protection, tokenizer):
         'raw_binding':_bind(raw_path),'audit_binding':_bind(audit_path),'raw':raw,'program':program,
         'protection_disposition':disposition,'classification':classification,'parsed':parsed}
 
+
+def _normalize_base_receipt(receipt):
+    """Accept a sealed Big2 append using its actual published field names."""
+    if receipt.get('schema')!='natlang.big2-sft-source-append/1':return receipt
+    if (receipt.get('training_admission') is not False or receipt.get('optimizer_exposure') is not False
+        or not isinstance(receipt.get('rows'),int) or receipt['rows']<1
+        or not isinstance(receipt.get('objective_census'),dict)):
+        raise ValueError('Big2 predecessor is not fully qualified and unadopted')
+    for key in ('source_predecessor','source_successor','ce_policy','recipe','geometry','objective_census','family_map'):
+        ref=receipt.get(key)
+        if not isinstance(ref,dict) or not ref.get('path') or not ref.get('sha256'):
+            raise ValueError('Big2 predecessor lacks bound '+key)
+        path=Path(ref['path']).resolve(strict=True)
+        if sha256_file_hex(path)!=ref['sha256'] or ('bytes' in ref and path.stat().st_size!=ref['bytes']):
+            raise ValueError('Big2 predecessor binding changed: '+key)
+    return {**receipt,'schema':'natlang.luna-native-successor-append/1',
+            'source':receipt['source_successor'],'status':'source-ce-recipe-geometry-qualified-not-published'}
+
 def build(base_dir, episode_receipt, output_dir):
     base_dir = Path(base_dir).resolve(strict=True)
     output_dir = Path(output_dir).resolve()
@@ -237,7 +255,7 @@ def build(base_dir, episode_receipt, output_dir):
         raise ValueError("successor output is immutable; choose a fresh path")
     base_receipt_path = base_dir / "receipt.json"
     base_receipt_binding = _bind(base_receipt_path)
-    base_receipt = _read(base_receipt_path)
+    base_receipt = _normalize_base_receipt(_read(base_receipt_path))
     if (base_receipt.get("schema") not in {"natlang.native-quality-successor/1", "natlang.luna-native-successor-append/1"}
             or base_receipt.get("training_admission") is not False
             or base_receipt.get("status") != "source-ce-recipe-geometry-qualified-not-published"):
