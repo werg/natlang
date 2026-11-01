@@ -613,3 +613,41 @@ def test_completed_refresh_accepts_only_bound_unearned_stage_replacement(tmp_pat
     assert _completed_refresh_obligations(custody,parent)
     record['old_graph_visits']=1
     assert not _completed_refresh_obligations(custody,parent)
+
+
+@pytest.mark.parametrize('defect',[None,'unreviewed-binding','quota-loss','wrong-parent','missing-digest','wrong-source','missing-addition'])
+def test_completed_refresh_accepts_only_bound_source_correction(tmp_path,defect):
+    from natlang_neuralese.rl.native_direct_sft_recovery import _completed_refresh_obligations
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex as digest
+    from natlang_neuralese.train.native_resident import binding
+    def save(name,obj):
+        p=tmp_path/name;p.write_text(json.dumps(obj));return binding(p)
+    prior=save('prior.json',{'old':True});current=save('current.json',{'new':True})
+    rows=tmp_path/'rows.jsonl';rows.write_text(json.dumps({'id':'repair','old_binding':'old','new_binding':'new','disposition':'eligibility-decreased'})+'\n'+json.dumps({'id':'addition','new_binding':'added','disposition':'added'})+'\n')
+    proof=save('proof.json',{'schema':'natlang.native-source-correction/1',
+        'prior_source':{**prior,'rows':2},'current_source':{**current,'rows':3},
+        'row_bindings_path':rows.name,'row_bindings_sha256':binding(rows)['sha256']})
+    parent={'sha256':'a'*64,'rows':2,'train_source_sha256':prior['sha256'],
+        'bindings_sha256':'b'*64,'quota_sha256':'c'*64,'visits_sha256':'d'*64}
+    child={'sha256':'e'*64,'rows':3,'train_source_sha256':current['sha256'],
+        'bindings_sha256':'f'*64,'quota_sha256':'1'*64,'visits_sha256':'2'*64}
+    verification={'schema':'natlang.earned-sft-source-transition-verification/1',
+        'parent_sha256':parent['sha256'],'successor_sha256':child['sha256'],'proof':proof,
+        'parent_source_sha256':prior['sha256'],'successor_source_sha256':current['sha256'],
+        'old_quotas_preserved':True,'old_exposure_preserved':True,'old_rows':2,'new_rows':3,
+        'changed_bindings':[{'id':'repair','binding_before':'old','binding_after':'new'}],
+        'added_rows':1,'added_ids_sha256':digest(['addition'])}
+    for side,checkpoint in [('before',parent),('after',child)]:
+        for kind,key in [('bindings','bindings_sha256'),('quotas','quota_sha256'),('visits','visits_sha256')]:
+            verification[kind+'_'+side+'_sha256']=checkpoint[key]
+    if defect=='unreviewed-binding':verification['changed_bindings'][0]['binding_after']='invented'
+    elif defect=='quota-loss':verification['old_quotas_preserved']=False
+    elif defect=='wrong-parent':verification['parent_sha256']='3'*64
+    elif defect=='missing-digest':parent.pop('bindings_sha256');verification.pop('bindings_before_sha256')
+    elif defect=='wrong-source':child['train_source_sha256']='4'*64
+    elif defect=='missing-addition':verification['added_rows']=0
+    custody={'old_bindings_and_quotas_preserved':False,'old_obligations_transition':'authenticated-source-correction',
+        'source_correction_transition':{'schema':'natlang.earned-sft-source-correction-custody/1',
+            'parent_sha256':parent['sha256'],'successor_sha256':child['sha256'],'proof':proof,
+            'verification':save('verification.json',verification)}}
+    assert _completed_refresh_obligations(custody,parent,child) is (defect is None)

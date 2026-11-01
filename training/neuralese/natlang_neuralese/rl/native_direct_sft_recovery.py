@@ -718,9 +718,11 @@ def recover(state_path, *, report_ref, receipt_ref, custody_ref, qualification_r
         return result
 
 
-def _completed_refresh_obligations(custody, parent):
+def _completed_refresh_obligations(custody, parent, child=None):
     """Accept preserved quotas or an explicitly verified zero-exposure replacement."""
     if custody.get('old_bindings_and_quotas_preserved') is True:return True
+    if custody.get('old_obligations_transition')=='authenticated-source-correction':
+        return _corrected_refresh_obligations(custody,parent,child)
     record=custody.get('unearned_replacement') or {}
     if (custody.get('old_obligations_transition')!='unearned-sft-supersession-verified'
         or record.get('schema')!='natlang.unearned-sft-source-replacement/1'
@@ -735,6 +737,54 @@ def _completed_refresh_obligations(custody, parent):
         return (source.get('parent_sha256')==parent['sha256'] and source.get('old_stage')==record.get('old_stage')
             and source.get('old_source_sha256')==record.get('old_source_sha256')
             and source.get('new_source_sha256')==record.get('new_source_sha256'))
+    except (KeyError,TypeError,ValueError,OSError):return False
+
+
+def _corrected_refresh_obligations(custody,parent,child):
+    """Bind a reviewed row repair without pretending its old binding survived."""
+    import re
+    from ..common.hashing import canonical_json_sha256_hex
+    try:
+        record=custody['source_correction_transition']
+        if (child is None or record.get('schema')!='natlang.earned-sft-source-correction-custody/1'
+                or record.get('parent_sha256')!=parent['sha256']
+                or record.get('successor_sha256')!=child['sha256']):return False
+        proof_path=_bound(record['proof']);proof=json.loads(proof_path.read_text())
+        verified=json.loads(_bound(record['verification']).read_text())
+        if (proof.get('schema')!='natlang.native-source-correction/1'
+                or verified.get('schema')!='natlang.earned-sft-source-transition-verification/1'
+                or verified.get('proof')!=record['proof']
+                or verified.get('parent_sha256')!=parent['sha256']
+                or verified.get('successor_sha256')!=child['sha256']
+                or verified.get('old_quotas_preserved') is not True
+                or verified.get('old_exposure_preserved') is not True):return False
+        for side,checkpoint in (('before',parent),('after',child)):
+            for kind,key in (('bindings','bindings_sha256'),('quotas','quota_sha256'),('visits','visits_sha256')):
+                value=checkpoint.get(key)
+                if (not isinstance(value,str) or re.fullmatch('[a-f0-9]{64}',value) is None
+                        or verified.get(kind+'_'+side+'_sha256')!=value):return False
+        rows_path=proof_path.parent/proof['row_bindings_path']
+        rows=[json.loads(line) for line in _bound({'path':str(rows_path),
+            'sha256':proof['row_bindings_sha256']}).read_text().splitlines() if line.strip()]
+        if len({row['id'] for row in rows})!=len(rows):return False
+        changed=[{'id':row['id'],'binding_before':row['old_binding'],'binding_after':row['new_binding']}
+            for row in rows if row.get('old_binding') and row.get('new_binding')
+            and row['old_binding']!=row['new_binding']]
+        additions=sorted(row['id'] for row in rows if row.get('disposition')=='added')
+        if (verified.get('changed_bindings')!=changed
+                or verified.get('added_rows')!=len(additions)
+                or verified.get('added_ids_sha256')!=canonical_json_sha256_hex(additions)
+                or verified.get('old_rows')!=parent['rows']
+                or verified.get('new_rows')!=child['rows']
+                or child['rows']!=parent['rows']+len(additions)
+                or proof['prior_source']['rows']!=parent['rows']
+                or proof['current_source']['rows']!=child['rows']
+                or parent.get('train_source_sha256')!=proof['prior_source']['sha256']
+                or child.get('train_source_sha256')!=proof['current_source']['sha256']
+                or verified.get('parent_source_sha256')!=proof['prior_source']['sha256']
+                or verified.get('successor_source_sha256')!=proof['current_source']['sha256']):return False
+        _bound(proof['prior_source']);_bound(proof['current_source'])
+        return True
     except (KeyError,TypeError,ValueError,OSError):return False
 
 
@@ -862,7 +912,7 @@ def publish_completed(state_path, *, report_ref, receipt_ref, custody_ref, out):
         if (state.get('phase')!='awaiting_semantic_refresh' or not parent_matches
                 or Path(state.get('pending_native_checkpoint','')).resolve()!=child_path
                 or custody.get('schema')!='natlang.earned-sft-checkpoint-custody/1'
-                or not _completed_refresh_obligations(custody,parent)
+                or not _completed_refresh_obligations(custody,parent,child)
                 or custody.get('old_exposure_not_decreased') is not True
                 or type(updates) is not int or updates<1
                 or child['global_step']!=parent['global_step']+updates
