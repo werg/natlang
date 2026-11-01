@@ -71,9 +71,15 @@ replay() {
   if nice -n 15 "$NODE" --max-old-space-size=6144 "$TS/replay-port-record-calls.mjs" "$shard" "$tmp/x" > "$OUT/logs/$f.$n.replay.log" 2>&1; then
     # Interrupted compression can leave .tmp files. Only this locked owner may
     # replace them, and the summary is committed only after BOTH streams succeed.
-    if zstd -q -f -T1 -6 --rm "$tmp/x.turns.jsonl" -o "$dst.turns.jsonl.zst.tmp" &&
+    # Replays stream compressed journals directly, avoiding gigabytes of
+    # repeated prompt writes/reads on the external HDD.
+    if [ ! -s "$tmp/x.turns.jsonl.zst" ] || [ ! -s "$tmp/x.rows.jsonl.zst" ]; then
+      echo "shard publication failed: $shard; no completion summary committed" >&2
+      rm -rf "$tmp"; return 1
+    fi
+    if mv "$tmp/x.turns.jsonl.zst" "$dst.turns.jsonl.zst.tmp" &&
+       mv "$tmp/x.rows.jsonl.zst" "$dst.rows.jsonl.zst.tmp" &&
        mv "$dst.turns.jsonl.zst.tmp" "$dst.turns.jsonl.zst" &&
-       zstd -q -f -T1 -6 --rm "$tmp/x.rows.jsonl" -o "$dst.rows.jsonl.zst.tmp" &&
        mv "$dst.rows.jsonl.zst.tmp" "$dst.rows.jsonl.zst" &&
        python3 -c 'import json,sys; s=json.load(open(sys.argv[1])); s["runtime"]=json.loads(sys.argv[2]); json.dump(s, open(sys.argv[1], "w"), indent=1)' "$tmp/x.summary.json" "$RUNTIME" &&
        mv "$tmp/x.summary.json" "$dst.summary.json"; then

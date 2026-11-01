@@ -16,23 +16,14 @@ def replay_fixture(tmp_path, *, fail_rows=False):
     guard.chmod(0o755)
     node = tmp_path / 'node'
     node.write_text('''#!/usr/bin/python3
-import json, pathlib, sys
+import json, os, pathlib, subprocess, sys
 p = pathlib.Path(sys.argv[-1])
-p.with_suffix('.turns.jsonl').write_text('{"action":"kept"}\\n')
-p.with_suffix('.rows.jsonl').write_text('{"target":"kept"}\\n')
+for name, body in [('turns', '{"action":"kept"}\\n'), ('rows', '{"target":"kept"}\\n')]:
+ if name == 'rows' and os.environ.get('FAIL_ROWS') == '1': sys.exit(42)
+ subprocess.run(['/usr/bin/zstd','-q','-o',str(p)+'.'+name+'.jsonl.zst'],input=body.encode(),check=True)
 p.with_suffix('.summary.json').write_text(json.dumps({'cases':1}))
 ''')
     node.chmod(0o755)
-    binaries = tmp_path / 'bin'
-    binaries.mkdir()
-    compressor = binaries / 'zstd'
-    compressor.write_text('''#!/bin/sh
-if [ "${FAIL_ROWS:-}" = 1 ]; then
-  for arg in "$@"; do case "$arg" in *.rows.jsonl) exit 42;; esac; done
-fi
-exec /usr/bin/zstd "$@"
-''')
-    compressor.chmod(0o755)
     out = tmp_path / 'out'
     (out / 'tmp').mkdir(parents=True)
     (out / 'logs').mkdir()
@@ -48,7 +39,7 @@ exec /usr/bin/zstd "$@"
     shell = function + '\nreplay "$1"\n'
     env = {**os.environ, 'REPO': str(repo), 'OUT': str(out), 'NODE': str(node),
            'TS': str(tmp_path), 'RUNTIME': '{"dist_commit":"test"}',
-           'PATH': str(binaries) + ':' + os.environ['PATH'], 'FAIL_ROWS': str(int(fail_rows))}
+           'FAIL_ROWS': str(int(fail_rows))}
     return shell, env, shard, dst
 
 
@@ -69,7 +60,7 @@ def test_compression_failure_cannot_publish_completion(tmp_path):
     result = subprocess.run(['bash', '-c', shell, 'test', str(shard)], env=env, capture_output=True, text=True)
     assert result.returncode != 0
     assert not Path(str(dst) + '.summary.json').exists()
-    assert 'no completion summary committed' in result.stderr
+    assert 'replay failed' in result.stderr
 
 
 def test_false_old_summary_is_replayed(tmp_path):
