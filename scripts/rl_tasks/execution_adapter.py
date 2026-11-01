@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file
+from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file, sha256_hex
 
 
 def verify_runtime_tree(*, root: Path, manifest_path: Path, manifest_sha256: str) -> dict:
@@ -36,7 +36,7 @@ def verify_runtime_tree(*, root: Path, manifest_path: Path, manifest_sha256: str
             actual.add(path.relative_to(root).as_posix())
     if actual != set(expected):
         raise ValueError('runtime dependency tree file set differs from its manifest')
-    tree_digest = hashlib.sha256(json.dumps(sorted(expected.items()), separators=(',', ':')).encode()).hexdigest()
+    tree_digest = sha256_hex(json.dumps(sorted(expected.items()), separators=(',', ':')).encode())
     return {'root': str(root), 'manifest_path': str(manifest_path), 'manifest_sha256': manifest_sha256,
             'tree_sha256': tree_digest, 'file_count': len(expected),
             'total_bytes': sum((root / relative).stat().st_size for relative in expected),
