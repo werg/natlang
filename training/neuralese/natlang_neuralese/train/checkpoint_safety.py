@@ -20,6 +20,14 @@ class CheckpointSpaceUnavailable(CheckpointReserveError):
     """An authenticated atomic write is temporarily short of reserved disk space."""
 
 
+# Large learners reserve a little extra in the same pending inode before an
+# optimizer update. Controller and snapshot metadata can grow between that
+# reservation and serialization, even when tensor geometry is unchanged.
+_PERSISTENT_HEADROOM_THRESHOLD = 64 * 1024 * 1024
+_PERSISTENT_METADATA_HEADROOM = 16 * 1024 * 1024
+_PERSISTENT_ALLOCATION_ALIGNMENT = 4096
+
+
 def checkpoint_size_upper_bound(state, *, margin=1.2, minimum_overhead=16 * 1024 * 1024):
     """Bound the next serialization without materializing another checkpoint copy.
 
@@ -373,22 +381,26 @@ class PersistentCheckpointReservation:
         # Only allocations completed by this owner count. An existing inode's
         # size (or aggregate st_blocks) cannot prove its logical range is
         # allocated after a crash: admit the whole bound conservatively.
-        additional = max(0, bound - self._allocated_bound)
+        capacity = bound
+        if bound > self._allocated_bound and bound >= _PERSISTENT_HEADROOM_THRESHOLD:
+            capacity = ((bound + _PERSISTENT_METADATA_HEADROOM + _PERSISTENT_ALLOCATION_ALIGNMENT - 1)
+                        // _PERSISTENT_ALLOCATION_ALIGNMENT * _PERSISTENT_ALLOCATION_ALIGNMENT)
+        additional = max(0, capacity - self._allocated_bound)
         if additional:
             transfer = self.transfer_bytes
             if transfer is None:
                 factor = float(os.environ.get('NATLANG_CHECKPOINT_TRANSFER_HEADROOM_FACTOR', '1.0'))
                 if not math.isfinite(factor) or factor < 0:
                     raise ValueError('checkpoint transfer headroom factor must be finite and nonnegative')
-                transfer = math.ceil(bound * factor)
+                transfer = math.ceil(capacity * factor)
             with CheckpointWriteAdmission(self.target, additional, transfer_bytes=transfer,
                                           minimum_free_bytes=self.minimum_free_bytes):
-                os.posix_fallocate(self._fd, 0, bound)
+                os.posix_fallocate(self._fd, 0, capacity)
                 os.fsync(self._fd)
         else:
-            os.posix_fallocate(self._fd, 0, bound)
+            os.posix_fallocate(self._fd, 0, capacity)
             os.fsync(self._fd)
-        self._allocated_bound = max(self._allocated_bound, bound)
+        self._allocated_bound = max(self._allocated_bound, capacity)
         self.bound = bound
         return self
 

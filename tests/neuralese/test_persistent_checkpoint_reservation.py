@@ -140,6 +140,77 @@ def test_unexpected_growth_extends_same_reserved_inode(tmp_path):
     owner.close()
 
 
+def test_preallocated_metadata_growth_commits_after_free_space_falls_below_floor(tmp_path, monkeypatch):
+    from collections import namedtuple
+    from natlang_neuralese.train import checkpoint_safety
+
+    # Scale the production threshold and headroom down for a small real
+    # allocation, while keeping the real size estimator and atomic writer.
+    monkeypatch.setattr(checkpoint_safety, '_PERSISTENT_HEADROOM_THRESHOLD', 32 * 1024)
+    monkeypatch.setattr(checkpoint_safety, '_PERSISTENT_METADATA_HEADROOM', 16 * 1024)
+    estimate = checkpoint_safety.checkpoint_size_upper_bound
+    monkeypatch.setattr(checkpoint_safety, 'checkpoint_size_upper_bound',
+                        lambda state: estimate(state, minimum_overhead=0))
+    previous = {'step': 70, 'metadata': 'x' * 50000}
+    current = {'step': 71, 'metadata': 'x' * 52627}
+    old_bound = checkpoint_safety.checkpoint_size_upper_bound(previous)
+    new_bound = checkpoint_safety.checkpoint_size_upper_bound(current)
+    assert new_bound - old_bound == 3153
+    usage = namedtuple('usage', 'total used free')
+    floor = 40 * 1024**3
+    monkeypatch.setattr(checkpoint_safety.shutil, 'disk_usage', lambda _: usage(floor * 2, 0, floor * 2))
+    path = tmp_path / 'checkpoint.pt'
+    owner = PersistentCheckpointReservation(path, transfer_bytes=0, minimum_free_bytes=floor).acquire(old_bound)
+    inode = owner.pending.stat().st_ino
+    allocated = owner._allocated_bound
+    assert allocated >= old_bound + 16 * 1024
+    assert owner.pending.stat().st_blocks * 512 >= allocated
+    monkeypatch.setattr(checkpoint_safety.shutil, 'disk_usage', lambda _: usage(floor * 2, floor + 1, floor - 1))
+    atomic_checkpoint(path, current, reservation=owner)
+    assert path.stat().st_ino == inode
+    assert path.stat().st_size <= new_bound
+    assert torch.load(path, weights_only=True) == current
+    owner.close()
+
+
+def test_large_reservation_adds_bounded_aligned_headroom_but_small_reservation_does_not(tmp_path, monkeypatch):
+    calls = []
+    def record_allocation(fd, offset, length):
+        calls.append((offset, length))
+        os.ftruncate(fd, offset + length)
+    monkeypatch.setattr(os, 'posix_fallocate', record_allocation)
+    small = reservation(tmp_path / 'small.pt').acquire(1024)
+    assert calls[-1] == (0, 1024)
+    small.close()
+    bound = 64 * 1024 * 1024 + 123
+    large = reservation(tmp_path / 'large.pt').acquire(bound)
+    capacity = calls[-1][1]
+    assert calls[-1][0] == 0 and capacity % 4096 == 0
+    assert 16 * 1024 * 1024 <= capacity - bound < 16 * 1024 * 1024 + 4096
+    assert large.bound == bound and large._allocated_bound == capacity
+    large.close()
+
+
+def test_growth_past_preallocated_headroom_still_requires_admission(tmp_path, monkeypatch):
+    from collections import namedtuple
+    from natlang_neuralese.train import checkpoint_safety
+    monkeypatch.setattr(checkpoint_safety, '_PERSISTENT_HEADROOM_THRESHOLD', 32 * 1024)
+    monkeypatch.setattr(checkpoint_safety, '_PERSISTENT_METADATA_HEADROOM', 16 * 1024)
+    floor = 40 * 1024**3
+    usage = namedtuple('usage', 'total used free')
+    monkeypatch.setattr(checkpoint_safety.shutil, 'disk_usage', lambda _: usage(floor * 2, 0, floor * 2))
+    path = tmp_path / 'checkpoint.pt'
+    torch.save({'step': 70}, path)
+    owner = PersistentCheckpointReservation(path, transfer_bytes=0, minimum_free_bytes=floor).acquire(64 * 1024)
+    pending_inode = owner.pending.stat().st_ino
+    monkeypatch.setattr(checkpoint_safety.shutil, 'disk_usage', lambda _: usage(floor * 2, floor + 1, floor - 1))
+    with pytest.raises(checkpoint_safety.CheckpointSpaceUnavailable):
+        owner.acquire(owner._allocated_bound + 1)
+    assert owner.pending.stat().st_ino == pending_inode
+    assert torch.load(path, weights_only=True) == {'step': 70}
+    owner.close()
+
+
 def test_fresh_composite_native_optimizer_lazy_bound():
     from natlang_neuralese.train.optim import PortMuonAdamW
     ordinary = torch.nn.Parameter(torch.ones(4, dtype=torch.bfloat16))

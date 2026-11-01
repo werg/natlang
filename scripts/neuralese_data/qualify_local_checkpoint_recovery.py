@@ -117,6 +117,9 @@ def qualify(draft, checkpoint, scratch_parent, output_plan, qualification_path, 
     plan['closure']=[*plan['closure'],{'role':'controls',**plan['restore_qualification']}]
     validate_recovery_plan_shape(plan);validate_recovery_plan_dependencies(plan,require_restore=False)
     store=Path(plan['destination']).resolve(strict=True);scratch_parent=Path(scratch_parent).resolve(strict=True)
+    environment_scratch=Path(environment_scratch or scratch_parent).resolve(strict=True)
+    if not scratch_parent.is_dir() or not environment_scratch.is_dir():
+        raise ValueError('recovery scratch parents must be existing directories')
     if store.stat().st_dev!=scratch_parent.stat().st_dev:
         raise ValueError('recovery qualification scratch must share the independent destination filesystem')
     def checkpoint_identity():
@@ -132,7 +135,6 @@ def qualify(draft, checkpoint, scratch_parent, output_plan, qualification_path, 
         return Path(blobs[(items[0]['path'],items[0]['sha256'])]['path'])
     runtime_archive=find('runtime',restore['runtime_archive']);environment_archive=find('environment',restore['environment_archive']);stdlib_archive=find('system-python',restore['system_python_archive'])
     asset_archives=[(item,find('task-assets',item['archive'])) for item in restore['asset_archives']]
-    environment_scratch=Path(environment_scratch or scratch_parent).resolve(strict=True)
     with (tempfile.TemporaryDirectory(prefix='native-full-recovery-restore-',dir=scratch_parent) as tmp,
           tempfile.TemporaryDirectory(prefix='native-recovery-environment-',dir=environment_scratch) as environment_tmp):
         root=Path(tmp);tree=root/'tree';tree.mkdir();source_map={}
