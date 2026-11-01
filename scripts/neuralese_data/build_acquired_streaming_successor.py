@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import json
 import math
 import os
@@ -25,7 +26,7 @@ sys.path.insert(0, str(ROOT))
 
 from natlang_neuralese.common.custody import ProtectedWorlds, world_identities
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_file_hex_cached
-from natlang_neuralese.common.jsonio import write_json_durable
+from natlang_neuralese.common.jsonio import write_json_durable, write_bytes_durable
 from natlang_neuralese.train import native_packed_capacity as capacity
 from natlang_neuralese.train.native_resident_ce import extension_policy
 from natlang_neuralese.train.native_supervision import load_policy
@@ -37,6 +38,24 @@ from scripts.neuralese_data.build_logical_family_objective import capped_scales
 SCHEMA = 'natlang.acquired-streaming-source-successor/1'
 FAMILY = 'general-agent'
 PREPARED_SCHEMA = 'natlang.acquired-streaming-source-preparation/1'
+MODULE_SOURCE_BYTES = Path(__file__).read_bytes()
+
+
+def sealed_builder(directory):
+    digest = hashlib.sha256(MODULE_SOURCE_BYTES).hexdigest()
+    target = Path(directory) / ('builder-' + digest + '.py')
+    if target.exists():
+        if target.read_bytes() != MODULE_SOURCE_BYTES: raise ValueError('sealed builder bytes differ')
+    else: write_bytes_durable(target, MODULE_SOURCE_BYTES)
+    return bind(target)
+
+
+def checked_preparation_builder(prepared_path, reference):
+    """An exact preserved source copy survives edits to its original checkout."""
+    try: return bind(checked(reference, 'prepared source builder'))
+    except (OSError, ValueError):
+        target = Path(prepared_path).parent / ('builder-' + reference['sha256'] + '.py')
+        return bind(checked({**reference, 'path': str(target)}, 'preserved prepared source builder'))
 
 
 def bind(path):
@@ -264,7 +283,7 @@ def prepare_source_stage(predecessor_receipt, screen_receipt, output, *, paralle
         'graph': {'path': str(graph_path), 'sha256': graph_ref['sha256'], 'bytes': graph_ref['bytes']},
         'rows': len(new_source.entries), 'new_rows': graph_ref['rows'], 'tokenizer': tokenizer, 'roles': roles,
         'protection_digest': protection.digest, 'geometry_scan': scan, 'parallel_index': parallel_proof,
-        'builder': bind(Path(__file__))}
+        'builder': sealed_builder(output)}
     write_json_durable(output / 'receipt.json', result)
     return result
 
@@ -403,16 +422,29 @@ def verify_conversion_custody(coverage, screen, screen_program):
     builder = bind(ROOT / 'scripts/neuralese_data/build_acquired_full_session_graphs.py')
     conversion = bind(ROOT / 'training/neuralese/natlang_neuralese/data/native_graph_conversion.py')
     graph_writer = bind(ROOT / 'scripts/neuralese_data/build_native_graph_text_corpus.py')
-    inventory = []
+    inventory = []; historical_review = None; reviewed_receipts = 0
     for entry in coverage.get('receipts', []):
         receipt_path = checked({'path': entry['receipt'], 'sha256': entry['receipt_sha256']}, 'conversion receipt')
         receipt = read(receipt_path)
         files = (receipt.get('runtime') or {}).get('files') or {}
+        accepted_builder, accepted_conversion = builder['sha256'], conversion['sha256']
+        if (receipt.get('builder_sha256') != accepted_builder
+                or files.get('native_graph_conversion', {}).get('sha256') != accepted_conversion):
+            if historical_review is None:
+                from scripts.neuralese_data.review_acquired_converter_equivalence import review
+                historical_review = review(ROOT)
+            if historical_review:
+                allowed = lambda key: {ref['sha256'] for ref in historical_review['files'][key].values()}
+                if (receipt.get('builder_sha256') in allowed('builder')
+                        and files.get('native_graph_conversion', {}).get('sha256') in allowed('conversion')):
+                    accepted_builder = receipt['builder_sha256']
+                    accepted_conversion = files['native_graph_conversion']['sha256']
+                    reviewed_receipts += 1
         if (receipt.get('schema') != 'natlang.acquired-full-session-graphs/1'
                 or receipt.get('training_admission') is not False
-                or receipt.get('builder_sha256') != builder['sha256']
-                or entry.get('builder_sha256') != builder['sha256']
-                or files.get('native_graph_conversion', {}).get('sha256') != conversion['sha256']
+                or receipt.get('builder_sha256') != accepted_builder
+                or entry.get('builder_sha256') != accepted_builder
+                or files.get('native_graph_conversion', {}).get('sha256') != accepted_conversion
                 or files.get('graph_writer', {}).get('sha256') != graph_writer['sha256']
                 or receipt.get('outputs') != entry.get('outputs') or receipt.get('counts') != entry.get('counts')
                 or receipt.get('source_record_count') != entry.get('source_record_count')
@@ -428,6 +460,7 @@ def verify_conversion_custody(coverage, screen, screen_program):
     return {'converter': builder, 'graph_conversion': conversion, 'graph_writer': graph_writer, 'screen_program': screen_code,
         'screen_program_binding_scope': 'program supplied alongside receipt; the original screen receipt does not bind program bytes',
         'conversion_receipts': len(coverage['receipts']),
+        'historical_converter_review': historical_review, 'historically_reviewed_receipts': reviewed_receipts,
         'screen_input_receipts_sha256': screen['input_receipts']['sha256'],
         'scope': 'bound converter emits one text node and no decision readouts; screen reports an input-only filter'}
 
@@ -598,7 +631,7 @@ def build(predecessor_receipt, screen_receipt, census_receipt, output, *, share=
             raise ValueError('prepared source receipt does not bind the exact predecessor and screen')
         new_source_path = checked(prepared.get('source'), 'prepared source')
         prepared_geometry_path = checked(prepared.get('geometry'), 'prepared geometry')
-        checked(prepared.get('builder'), 'prepared source builder')
+        prepared_builder = checked_preparation_builder(prepared_path, prepared['builder'])
         parallel_proof = None
         if prepared.get('parallel_index'):
             parallel_proof_path = checked(prepared['parallel_index'], 'parallel source index proof')
@@ -724,8 +757,9 @@ def build(predecessor_receipt, screen_receipt, census_receipt, output, *, share=
         'family_census': prepared_policy['_family_census'], 'objective_transition': transition,
         'geometry_scan': geometry_scan, 'current_protection_digest': protection.digest,
         'prepared_source': bind(prepared_source_receipt) if prepared_source_receipt else None,
+        'prepared_source_builder': prepared_builder if prepared_source_receipt else None,
         'roles': {key: new_roles.get(key) for key in ('native_graphs', 'foundation_native_graphs', 'held_native_graphs')},
-        'builder': bind(Path(__file__)), 'limitations': ['No local oracle replay or behavioral qualification was performed.',
+        'builder': sealed_builder(output), 'limitations': ['No local oracle replay or behavioral qualification was performed.',
             'Source-curated labels, including diagnosis labels, remain source evidence; no learner exposure is claimed.',
             'Recipe parameters are inherited from the source predecessor; reconcile them with the actual live learner and runtime before an operational continuation.']}
     receipt = output / 'receipt.json'; write_json_durable(receipt, result)

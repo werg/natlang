@@ -1,0 +1,30 @@
+{
+  "schema": "natlang.acquired-converter-full-session-equivalence/1",
+  "files": {
+    "builder": {
+      "historical": {
+        "path": "/home/werg/data/lfm3-rl-dgx-20261029/ops/acquired-historical-converter-review-1101/builder-historical.py",
+        "sha256": "2dbffc5c52f1aa954394305f0b088ea1413c74910b19311a0ea8899d9987ce8b",
+        "bytes": 50730,
+        "commit": "bb61df6fd75e2eb98be04fd60e0e649b8ce01f80"
+      },
+      "current": {
+        "path": "scripts/neuralese_data/build_acquired_full_session_graphs.py",
+        "sha256": "ee2b8452e678975e2802e0da9b1b1279ff4a326f1d856305a09c4cac0bc23581"
+      }
+    },
+    "conversion": {
+      "historical": {
+        "path": "/home/werg/data/lfm3-rl-dgx-20261029/ops/acquired-historical-converter-review-1101/conversion-historical.py",
+        "sha256": "d5a9297c45c21d35bb85c2fe324b515e3a2ab93300bc22a83ddd77028d35dd5c",
+        "bytes": 47577,
+        "commit": "19bae18db010660779e0288fa4bb3589ce0f47d0"
+      },
+      "current": {
+        "path": "training/neuralese/natlang_neuralese/data/native_graph_conversion.py",
+        "sha256": "9f482f664ee8e89ad60f4ebddbdcd30bab42ceb5d0fbe1bc4fedbfcac52996ae"
+      }
+    }
+  },
+  "scope": "Committed full-session graphs only: session_graphs unchanged; source_twin_id absent from constructed input rows; twin normalization therefore retains the same list fallback. Empty-attempt lifecycle changes do not alter committed graph rendering. Current native parser, screening, effective-loss census and target verification remain mandatory."
+}

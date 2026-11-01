@@ -52,6 +52,17 @@ def test_repeated_mass_admission_recovers_sealed_append_and_rejects_unearned_mas
         module.predecessor_mass_census(previous,path,objective)
 
 
+def test_preparation_uses_exact_preserved_builder_after_checkout_changes(tmp_path):
+    from scripts.neuralese_data import build_acquired_streaming_successor as module
+    source=tmp_path/'builder.py';source.write_text('actual preparation code')
+    reference=module.bind(source);prepared=tmp_path/'receipt.json';prepared.write_text('{}')
+    preserved=tmp_path/('builder-'+reference['sha256']+'.py');preserved.write_bytes(source.read_bytes())
+    source.write_text('new checkout implementation')
+    assert module.checked_preparation_builder(prepared,reference)==module.bind(preserved)
+    preserved.write_text('wrong historical copy')
+    with pytest.raises(ValueError):module.checked_preparation_builder(prepared,reference)
+
+
 def test_capacity_descriptor_matches_strict_runtime_contract():
     from scripts.neuralese_data.build_acquired_streaming_successor import sft_capacity_descriptor
     source={'path': '/source', 'sha256': 'a'*64}
