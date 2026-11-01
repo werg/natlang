@@ -244,10 +244,11 @@ def test_initial_foundation_accepts_pair_only_complete_cohort_but_rejects_weaker
     verify_initial_foundation_cohort(train,weaker,already_declared=True)
 
 
-def test_actual_sft_foundation_stops_before_ordinary_and_shared_resume_consumes_only_deficits(tmp_path):
+def test_actual_sft_foundation_stops_before_ordinary_and_shared_resume_consumes_only_deficits(tmp_path,monkeypatch):
     from test_native_model import tiny_source
     from natlang_neuralese.model.native_model import load_native_model,SHARED_CHECKPOINT_SCHEMA
-    from natlang_neuralese.train.native_state_sft import main
+    from natlang_neuralese.train import native_state_sft as trainer
+    main=trainer.main
     from natlang_neuralese.train.loop import capture_training_rng_state
     base=tmp_path/'base';tiny_source(base)
     _,_,roles,config=load_native_model(base,dtype=torch.float32,rank=4)
@@ -256,6 +257,14 @@ def test_actual_sft_foundation_stops_before_ordinary_and_shared_resume_consumes_
     manifest=source_manifest(tmp_path,ordinary,[authenticated_pair('real',roles=roles.ids,fingerprint=fp)])
     held=tmp_path/'held.jsonl'
     held.write_text(json.dumps(dict(graph('held'),split='test',tokenizer_fingerprint=fp))+'\n')
+    original_save=trainer._save
+    def save_with_capacity_high_water(*args,**kwargs):
+        options=dict(kwargs['options'])
+        options['_cuda_lifetime_peak_reserved_bytes']=max(
+            int(options.get('_cuda_lifetime_peak_reserved_bytes') or 0),5<<30)
+        kwargs['options']=options
+        return original_save(*args,**kwargs)
+    monkeypatch.setattr(trainer,'_save',save_with_capacity_high_water)
     out=tmp_path/'sft'
     args=['--base',str(base),'--dtype','float32','--rank','4','--device','cpu',
         '--native-graphs',str(manifest),'--foundation-native-graphs',str(manifest),
@@ -265,6 +274,7 @@ def test_actual_sft_foundation_stops_before_ordinary_and_shared_resume_consumes_
     assert main(args)==0
     first=torch.load(out/'checkpoint.pt',weights_only=False)
     frame=first['training']
+    assert frame['options']['_cuda_lifetime_peak_reserved_bytes']==5<<30
     assert frame['exposure_counts']=={'a':0,'b':0,'lfm:real':1}
     report=json.loads((out/'report.json').read_text())
     assert not report['completed'] and report['communication_foundation']['complete']
@@ -300,9 +310,19 @@ def test_actual_sft_foundation_stops_before_ordinary_and_shared_resume_consumes_
     assert main(next_args)==0
     final=torch.load(resumed/'checkpoint.pt',weights_only=False)['training']
     assert final['exposure_counts']=={'a':1,'b':1,'lfm:real':1}
+    assert final['options']['_cuda_lifetime_peak_reserved_bytes']==5<<30
     assert final['step']==3 and final['global_step']==12
     assert progress_obligations(final['sft_progress'])['complete']
     assert json.loads((resumed/'report.json').read_text())['completed']
+    from natlang_neuralese.train import trajectory_state
+    from natlang_neuralese.train.checkpoint_safety import native_async_snapshot_headroom
+    monkeypatch.setattr(torch.cuda,'is_initialized',lambda:True)
+    monkeypatch.setattr(torch.cuda,'max_memory_reserved',lambda:1000)
+    monkeypatch.setattr(torch.cuda,'memory_reserved',lambda:500)
+    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda:1<<40)
+    dummy_optimizer=torch.optim.AdamW([torch.nn.Parameter(torch.ones(2))])
+    admission=native_async_snapshot_headroom({'training':final},dummy_optimizer)
+    assert admission['device_peak_reserved_bytes']==5<<30
 
 
 def test_readiness_foundation_is_explicit_and_checks_full_admitted_cohort(tmp_path):
