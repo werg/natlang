@@ -82,11 +82,62 @@ def _mapped_path(tree, absolute):
 def bind_restored_asset(tree, original_root, extracted_root):
     """Expose a separately extracted, verified asset tree at its restored path."""
     target=_mapped_path(tree,original_root);target.parent.mkdir(parents=True,exist_ok=True)
-    if target.exists() or target.is_symlink():raise ValueError('restored task asset root collides with another artifact')
     source=Path(extracted_root).resolve(strict=True)
     if not source.is_dir():raise ValueError('restored task asset payload is not a directory')
-    target.symlink_to(source,target_is_directory=True)
+    if target.is_symlink():
+        if target.resolve(strict=True)!=source:raise ValueError('restored task asset root collides with another artifact')
+    elif target.exists():raise ValueError('restored task asset root collides with another artifact')
+    else:target.symlink_to(source,target_is_directory=True)
     return str(target)
+
+
+def validate_restored_source_tree(root, base_closure, blobs, archives, asset_targets, *, prior_identities=None):
+    """Freshly verify a resumed tree, including every member and link target."""
+    root=Path(root).resolve(strict=True);tree=root/'tree'
+    if tree.is_symlink() or not tree.is_dir():raise ValueError('restored source tree is missing or a symlink')
+    files={};links={}
+    for item in base_closure:
+        blob=Path(blobs[(item['path'],item['sha256'])]['path'])
+        if str(blob) in archives:continue
+        target=_mapped_path(tree,item['path'])
+        if target in files and files[target][1]!=item['sha256']:
+            raise ValueError('conflicting restored source path')
+        files[target]=(blob,item['sha256'])
+    for original,source in asset_targets.items():
+        target=_mapped_path(tree,original)
+        if target in files or target in links:raise ValueError('restored asset collides with source')
+        links[target]=Path(source).resolve(strict=True)
+    allowed=set(files)|set(links);directories={tree}
+    for target in allowed:
+        p=target.parent
+        while p!=tree:
+            if tree not in p.parents:raise ValueError('restored source escaped tree')
+            directories.add(p);p=p.parent
+    seen=set();identities={}
+    for current,dirnames,filenames in os.walk(tree,followlinks=False):
+        current=Path(current)
+        for name in dirnames+filenames:
+            path=current/name
+            if path.is_symlink():
+                if path not in links or path.resolve(strict=True)!=links[path]:
+                    raise ValueError('unbound or changed link in restored source tree')
+                seen.add(path)
+            elif path.is_dir():
+                if path not in directories:raise ValueError('unbound directory in restored source tree')
+            elif path.is_file():
+                if path not in files:raise ValueError('unbound file in restored source tree')
+                blob,digest=files[path]
+                if not os.path.samefile(path,blob):raise ValueError('restored source is not the independent closure blob')
+                if prior_identities is None:
+                    identities[str(path)]=_checked_hash(path,digest)['identity']
+                else:
+                    identities[str(path)]=_identity(path)
+                    if identities[str(path)]!=prior_identities.get(str(path)):
+                        raise ValueError('resumed source tree changed during isolated restore')
+                seen.add(path)
+            else:raise ValueError('unsupported member in restored source tree')
+    if seen!=allowed:raise ValueError('restored source tree is incomplete')
+    return identities
 
 
 def add_historical_program_routes(source_map,historical):
@@ -219,7 +270,7 @@ def publish_checked_evidence(plan, draft, checkpoint, output_plan, qualification
     return {'plan':{'path':str(output_plan),'sha256':file_sha256(output_plan)},'qualification':plan['restore_qualification'],'evidence':evidence_ref}
 
 
-def qualify(draft, checkpoint, scratch_parent, output_plan, qualification_path, evidence_path, environment_scratch=None, environment_fixture=None, resume_evidence_sha256=None):
+def qualify(draft, checkpoint, scratch_parent, output_plan, qualification_path, evidence_path, environment_scratch=None, environment_fixture=None, resume_evidence_sha256=None, resume_source_tree=None, resume_checkpoint_sha256=None):
     draft=Path(draft).resolve(strict=True);checkpoint=Path(checkpoint).resolve(strict=True)
     output_plan=Path(output_plan).resolve();qualification_path=Path(qualification_path).resolve();evidence_path=Path(evidence_path).resolve()
     if not resume_evidence_sha256 and any(path.exists() for path in (output_plan,qualification_path,evidence_path)):
@@ -231,6 +282,10 @@ def qualify(draft, checkpoint, scratch_parent, output_plan, qualification_path, 
     if _identity(draft)!=draft_binding['identity']:raise ValueError('recovery draft changed while reading')
     plan['closure']=[*plan['closure'],{'role':'controls',**plan['restore_qualification']}]
     validate_recovery_plan_shape(plan);validate_recovery_plan_dependencies(plan,require_restore=False)
+    if resume_evidence_sha256 and (resume_source_tree or resume_checkpoint_sha256):
+        raise ValueError('sealed evidence publication cannot also resume a source tree')
+    if bool(resume_source_tree) != bool(resume_checkpoint_sha256):
+        raise ValueError('resumed source tree requires an exact checkpoint SHA256')
     if resume_evidence_sha256:
         return publish_checked_evidence(plan,draft,checkpoint,output_plan,qualification_path,evidence_path,resume_evidence_sha256)
     store=Path(plan['destination']).resolve(strict=True);scratch_parent=Path(scratch_parent).resolve(strict=True)
@@ -243,6 +298,8 @@ def qualify(draft, checkpoint, scratch_parent, output_plan, qualification_path, 
         stat=checkpoint.stat();return (stat.st_dev,stat.st_ino,stat.st_size,stat.st_mtime_ns,stat.st_ctime_ns)
     checkpoint_before=checkpoint_identity();checkpoint_sha=file_sha256(checkpoint)
     if checkpoint_identity()!=checkpoint_before:raise ValueError('recovery checkpoint changed while hashing')
+    if resume_source_tree and checkpoint_sha!=resume_checkpoint_sha256:
+        raise ValueError('resumed source tree checkpoint differs from expected SHA256')
     restored_checkpoint=stage_restore_checkpoint(checkpoint,store,checkpoint_sha)
     if checkpoint_identity()!=checkpoint_before:raise ValueError('recovery checkpoint changed during independent staging')
     placeholder=plan['restore_qualification'];base_closure=[x for x in plan['closure'] if not (x['role']=='controls' and x['path']==placeholder['path'] and x['sha256']==placeholder['sha256'])]
@@ -256,26 +313,56 @@ def qualify(draft, checkpoint, scratch_parent, output_plan, qualification_path, 
     asset_archives=[(item,find('task-assets',item['archive'])) for item in restore['asset_archives']]
     fixture=(Path(environment_fixture).resolve(strict=True) if environment_fixture else
              environment_scratch/'recovery-fixtures'/canonical_json_sha256_hex(restore))
-    with (tempfile.TemporaryDirectory(prefix='native-full-recovery-restore-',dir=scratch_parent) as tmp,
-          locked_fixture(fixture) as environment_tmp):
-        root=Path(tmp);tree=root/'tree';tree.mkdir();source_map={}
+    if resume_source_tree:
+        resume_root=Path(resume_source_tree)
+        if resume_root.is_symlink():raise ValueError('resumed source tree must not be a symlink')
+        resume_root=resume_root.resolve(strict=True)
+        if resume_root.parent!=scratch_parent or not resume_root.is_dir():
+            raise ValueError('resumed source tree must be an existing direct child of scratch parent')
+        root_context=locked_fixture(resume_root)
+    else:
+        root_context=tempfile.TemporaryDirectory(prefix='native-full-recovery-restore-',dir=scratch_parent)
+    with (root_context as tmp, locked_fixture(fixture) as environment_tmp,
+          tempfile.TemporaryDirectory(prefix='native-recovery-run-',dir=environment_scratch) as run_tmp):
+        root=Path(tmp);tree=root/'tree';source_map={}
+        if resume_source_tree:
+            staged_plan=root/'restore-plan.json'
+            if staged_plan.is_symlink() or not staged_plan.is_file():
+                raise ValueError('resumed source tree plan is missing or a symlink')
+            staged_plan_binding=_checked_hash(staged_plan)
+            if json.loads(staged_plan.read_text())!=plan or _identity(staged_plan)!=staged_plan_binding['identity']:
+                raise ValueError('resumed source tree plan differs from current exact plan')
+        else:tree.mkdir()
         environment_root=Path(environment_tmp)
         # Keep hardlinked source objects on the export filesystem, while all
         # disposable extracted payloads use the explicitly selected scratch
         # filesystem. This avoids thousands of synchronous cold-disk writes.
         payload_root=environment_root/'payload';payload_root.mkdir(exist_ok=True)
         archives={str(runtime_archive),str(environment_archive),str(stdlib_archive),*(str(archive) for _,archive in asset_archives)}
+        if resume_source_tree:
+            asset_targets={item['original_root']:payload_root/f'restored-assets-{index}'/'runtime'
+                           for index,(item,_) in enumerate(asset_archives)}
+            staged_identities=validate_restored_source_tree(root,base_closure,blobs,archives,asset_targets)
         for item in base_closure:
             blob=Path(blobs[(item['path'],item['sha256'])]['path'])
             if str(blob) in archives:continue
             target=_mapped_path(tree,item['path']);target.parent.mkdir(parents=True,exist_ok=True)
             if target.exists():
-                if file_sha256(target)!=item['sha256']:raise ValueError('conflicting restored source path')
+                if not resume_source_tree and file_sha256(target)!=item['sha256']:
+                    raise ValueError('conflicting restored source path')
             else:os.link(blob,target)
             source_map[item['path']]=str(target)
             source_map[str(Path(item['path']).resolve())]=str(target)
         add_historical_program_routes(source_map,plan.get('historical_programs',[]))
-        write_json_durable(root/'.natlang-source-map.json',{'schema':'natlang.staged-source-map/1','paths':source_map})
+        mapping={'schema':'natlang.staged-source-map/1','paths':source_map}
+        mapping_path=root/'.natlang-source-map.json'
+        if resume_source_tree:
+            if mapping_path.is_symlink() or not mapping_path.is_file():
+                raise ValueError('resumed source map is missing or a symlink')
+            mapping_binding=_checked_hash(mapping_path)
+            if json.loads(mapping_path.read_text())!=mapping or _identity(mapping_path)!=mapping_binding['identity']:
+                raise ValueError('resumed source map differs from current exact closure')
+        else:write_json_durable(mapping_path,mapping)
         runtime_manifest=extract_archive(runtime_archive,payload_root/'restored-runtime')
         env_manifest=extract_archive(environment_archive,environment_root,environment=True)
         stdlib_manifest=extract_archive(stdlib_archive,payload_root/'restored-stdlib')
@@ -295,8 +382,8 @@ def qualify(draft, checkpoint, scratch_parent, output_plan, qualification_path, 
         if not base.is_dir():raise ValueError('restored model base is missing')
         env=dict(os.environ,**asset_roots,CUDA_VISIBLE_DEVICES='',PYTHONNOUSERSITE='1',PYTHONDONTWRITEBYTECODE='1',
                  PYTHONHOME=str(system_home),PYTHONPATH=str(runtime/'training/neuralese')+':'+str(runtime),
-                 NATLANG_REPO=str(runtime),NATLANG_HASH_CACHE=str(root/'hash-cache.jsonl'),
-                 HF_HUB_OFFLINE='1',NATLANG_ROW_INDEX_CACHE=str(root/'row-index'))
+                 NATLANG_REPO=str(runtime),NATLANG_HASH_CACHE=str(Path(run_tmp)/'hash-cache.jsonl'),
+                 HF_HUB_OFFLINE='1',NATLANG_ROW_INDEX_CACHE=str(Path(run_tmp)/'row-index'))
         env.pop('VIRTUAL_ENV',None);env.pop('LD_LIBRARY_PATH',None)
         code=r'''import json,sys
 from pathlib import Path
@@ -332,7 +419,8 @@ for line in Path('/proc/self/maps').read_text().splitlines():
 print('RECOVERY_SMOKE='+json.dumps({'custody':recovery_training_custody(state),'tokenizer_fingerprint':config['tokenizer_fingerprint'],'train_dependencies':len(train_deps),'held_dependencies':len(held_deps),'sample_id':example.id,'sample_classification':classification,'mapped_executables':sorted(set(mapped))}),flush=True)
 '''
         train=Path(source_map[plan['inputs']['train']['path']]);held=Path(source_map[plan['inputs']['held']['path']]);sample=Path(source_map[restore['sample_graph']])
-        staged_plan=root/'restore-plan.json';write_json_durable(staged_plan,plan)
+        staged_plan=root/'restore-plan.json'
+        if not resume_source_tree:write_json_durable(staged_plan,plan)
         command=[str(venv/'bin/python'),'-c',code,restored_checkpoint['path'],str(base),str(train),str(held),str(sample),restore['tokenizer_fingerprint'],str(root/'.natlang-source-map.json'),str(staged_plan)]
         py=subprocess.run(command,cwd=runtime,env=env,capture_output=True,text=True,timeout=1800)
         if py.returncode:raise RuntimeError('restored native checkpoint smoke failed: '+py.stderr[-5000:])
@@ -354,7 +442,7 @@ print('RECOVERY_SMOKE='+json.dumps({'custody':recovery_training_custody(state),'
         for name,original in expected_roots.items():
             if asset_inventory['roots'][name].get('path')!=original:raise ValueError('task asset original root differs')
             asset_inventory['roots'][name]['path']=asset_roots[name]
-        staged_inventory=root/'restored-asset-inventory.json';write_json_durable(staged_inventory,asset_inventory)
+        staged_inventory=Path(run_tmp)/'restored-asset-inventory.json';write_json_durable(staged_inventory,asset_inventory)
         asset_env=dict(env,**asset_roots)
         guard=Path(source_map[restore['asset_guard']])
         asset_result=subprocess.run([str(node),str(guard),str(staged_inventory)],cwd=runtime,env=asset_env,capture_output=True,text=True,timeout=120)
@@ -370,6 +458,12 @@ print('RECOVERY_SMOKE='+json.dumps({'custody':recovery_training_custody(state),'
             if path.is_relative_to(root) or path.is_relative_to(environment_root) or path==checkpoint:continue
             if raw not in allowed or file_sha256(path)!=allowed[raw]:raise ValueError('unbound host executable or library in restored process: '+raw)
             used.append({'path':raw,'sha256':allowed[raw]})
+        if resume_source_tree:
+            if (_identity(staged_plan)!=staged_plan_binding['identity']
+                    or _identity(mapping_path)!=mapping_binding['identity']):
+                raise ValueError('resumed source controls changed during isolated restore')
+            validate_restored_source_tree(root,base_closure,blobs,archives,asset_targets,
+                                          prior_identities=staged_identities)
         evidence={'schema':'natlang.local-recovery-restore-evidence/1','checkpoint':{'path':str(checkpoint),'sha256':checkpoint_sha},
                   'independent_checkpoint':restored_checkpoint,
                   'inputs':plan['inputs'],'sample':smoke,'node_collector':str(collector.relative_to(runtime)),
@@ -398,6 +492,8 @@ def main():
     p=argparse.ArgumentParser();p.add_argument('--draft-plan',required=True);p.add_argument('--checkpoint',required=True);p.add_argument('--scratch-parent',required=True);p.add_argument('--environment-scratch');p.add_argument('--output-plan',required=True);p.add_argument('--qualification',required=True);p.add_argument('--evidence',required=True)
     p.add_argument('--environment-fixture',help='Reuse an interrupted extracted fixture; every archived member is independently reverified under an exclusive lease')
     p.add_argument('--resume-evidence-sha256',help='Finish publication from this exact previously sealed successful restore evidence')
-    a=p.parse_args();print(json.dumps(qualify(a.draft_plan,a.checkpoint,a.scratch_parent,a.output_plan,a.qualification,a.evidence,a.environment_scratch,a.environment_fixture,a.resume_evidence_sha256)),flush=True)
+    p.add_argument('--resume-source-tree',help='Reuse a fully staged interrupted source tree after exact plan and file verification; rerun isolated smoke')
+    p.add_argument('--resume-checkpoint-sha256',help='Exact current checkpoint SHA256 required with --resume-source-tree')
+    a=p.parse_args();print(json.dumps(qualify(a.draft_plan,a.checkpoint,a.scratch_parent,a.output_plan,a.qualification,a.evidence,a.environment_scratch,a.environment_fixture,a.resume_evidence_sha256,a.resume_source_tree,a.resume_checkpoint_sha256)),flush=True)
 
 if __name__=='__main__':main()

@@ -30,8 +30,10 @@ def test_restored_assets_can_live_on_separate_scratch_and_reject_collision(tmp_p
     target=bind_restored_asset(tree,'/original/assets',payload)
     assert (Path(target)/'data.txt').read_text()=='verified asset'
     assert Path(target).is_symlink()
+    assert bind_restored_asset(tree,'/original/assets',payload)==target
+    other=tmp_path/'other';other.mkdir()
     with pytest.raises(ValueError,match='collides'):
-        bind_restored_asset(tree,'/original/assets',payload)
+        bind_restored_asset(tree,'/original/assets',other)
 
 
 def test_extracts_and_validates_runtime_archive(tmp_path):
@@ -162,3 +164,150 @@ def test_sealed_restore_publication_retries_without_restore_and_rejects_changed_
         q.publish_checked_evidence(copy.deepcopy(plan),draft,checkpoint,output,qualification,evidence_path,sha)
     with pytest.raises(ValueError,match='changed'):
         q.publish_checked_evidence(copy.deepcopy(plan),draft,checkpoint,output,qualification,evidence_path,'0'*64)
+
+
+@pytest.mark.parametrize('tamper', ['none', 'changed', 'replacement', 'extra', 'extra-dir', 'missing', 'asset-link'])
+def test_resumed_source_tree_rechecks_exact_bytes_links_and_inventory(tmp_path, tamper):
+    import hashlib, os
+    from scripts.neuralese_data.qualify_local_checkpoint_recovery import validate_restored_source_tree
+    root=tmp_path/'root';tree=root/'tree';tree.mkdir(parents=True)
+    blob=tmp_path/'store/closure/blob';blob.parent.mkdir(parents=True);blob.write_bytes(b'authenticated bytes')
+    sha=hashlib.sha256(blob.read_bytes()).hexdigest()
+    target=tree/'source/file';target.parent.mkdir();os.link(blob,target)
+    assets=tmp_path/'fixture/runtime';assets.mkdir(parents=True)
+    link=tree/'assets';link.symlink_to(assets,target_is_directory=True)
+    closure=[{'role':'source','path':'/source/file','sha256':sha}]
+    blobs={('/source/file',sha):{'path':str(blob)}}
+    if tamper=='changed': target.write_bytes(b'forged bytes')
+    if tamper=='replacement': target.unlink();target.write_bytes(b'authenticated bytes')
+    if tamper=='extra': (tree/'unbound.py').write_text('untrusted')
+    if tamper=='extra-dir': (tree/'unbound').mkdir()
+    if tamper=='missing': target.unlink()
+    if tamper=='asset-link':
+        other=tmp_path/'other';other.mkdir();link.unlink();link.symlink_to(other,target_is_directory=True)
+    if tamper=='none':
+        before=target.stat(); identities=validate_restored_source_tree(root,closure,blobs,set(),{'/assets':assets})
+        assert identities[str(target)] == [before.st_dev,before.st_ino,before.st_size,before.st_mtime_ns,before.st_ctime_ns]
+        assert target.stat().st_ino==before.st_ino and target.stat().st_ctime_ns==before.st_ctime_ns
+    else:
+        with pytest.raises(ValueError):validate_restored_source_tree(root,closure,blobs,set(),{'/assets':assets})
+
+
+def test_resumed_source_tree_requires_bound_checkpoint_and_cannot_mix_evidence(tmp_path, monkeypatch):
+    from scripts.neuralese_data import qualify_local_checkpoint_recovery as q
+    draft=tmp_path/'draft.json';draft.write_text(json.dumps({'closure':[]}))
+    checkpoint=tmp_path/'checkpoint';checkpoint.write_bytes(b'checkpoint')
+    monkeypatch.setattr(q,'validate_recovery_plan_shape',lambda plan:None)
+    monkeypatch.setattr(q,'validate_recovery_plan_dependencies',lambda plan,**kwargs:None)
+    args=(draft,checkpoint,tmp_path,tmp_path/'output',tmp_path/'qualification',tmp_path/'evidence')
+    with pytest.raises(ValueError,match='requires an exact checkpoint'):
+        q.qualify(*args,resume_source_tree=tmp_path/'tree')
+    with pytest.raises(ValueError,match='cannot also resume'):
+        q.qualify(*args,resume_source_tree=tmp_path/'tree',resume_checkpoint_sha256='a'*64,resume_evidence_sha256='b'*64)
+
+
+def test_resumed_tree_rechecks_identity_and_inventory_after_smoke(tmp_path):
+    import hashlib, os
+    from scripts.neuralese_data.qualify_local_checkpoint_recovery import validate_restored_source_tree
+    root=tmp_path/'root';tree=root/'tree';tree.mkdir(parents=True)
+    blob=tmp_path/'blob';blob.write_bytes(b'unchanged')
+    digest=hashlib.sha256(blob.read_bytes()).hexdigest()
+    target=tree/'input';os.link(blob,target)
+    closure=[{'role':'sources','path':'/input','sha256':digest}]
+    blobs={('/input',digest):{'path':str(blob)}}
+    before=validate_restored_source_tree(root,closure,blobs,set(),{})
+    assert validate_restored_source_tree(root,closure,blobs,set(),{},prior_identities=before)==before
+    (tree/'injected').write_text('unexpected')
+    with pytest.raises(ValueError,match='unbound'):
+        validate_restored_source_tree(root,closure,blobs,set(),{},prior_identities=before)
+    (tree/'injected').unlink();target.write_bytes(b'altered')
+    with pytest.raises(ValueError,match='changed during'):
+        validate_restored_source_tree(root,closure,blobs,set(),{},prior_identities=before)
+
+
+def test_resumed_tree_rejects_wrong_checkpoint_before_staging(tmp_path,monkeypatch):
+    from scripts.neuralese_data import qualify_local_checkpoint_recovery as q
+    store=tmp_path/'store';store.mkdir()
+    draft=tmp_path/'draft.json';draft.write_text(json.dumps({'closure':[],'destination':str(store)}))
+    checkpoint=tmp_path/'checkpoint';checkpoint.write_bytes(b'actual checkpoint')
+    monkeypatch.setattr(q,'validate_recovery_plan_shape',lambda plan:None)
+    monkeypatch.setattr(q,'validate_recovery_plan_dependencies',lambda plan,**kwargs:None)
+    def unexpected(*args):raise AssertionError('staging must not run')
+    monkeypatch.setattr(q,'stage_restore_checkpoint',unexpected)
+    with pytest.raises(ValueError,match='checkpoint differs'):
+        q.qualify(draft,checkpoint,tmp_path,tmp_path/'output',tmp_path/'qualification',tmp_path/'evidence',
+                  resume_source_tree=tmp_path/'tree',resume_checkpoint_sha256='0'*64)
+
+
+@pytest.mark.parametrize('tamper', ['none','plan','source-map'])
+def test_resume_uses_verified_existing_tree_and_always_reruns_isolated_checks(tmp_path, monkeypatch, tamper):
+    import hashlib, os
+    from types import SimpleNamespace
+    from scripts.neuralese_data import qualify_local_checkpoint_recovery as q
+    monkeypatch.setattr(q,'validate_recovery_plan_shape',lambda plan:None)
+    monkeypatch.setattr(q,'validate_recovery_plan_dependencies',lambda plan,**kwargs:None)
+    store=tmp_path/'store';store.mkdir();scratch=tmp_path/'scratch';scratch.mkdir()
+    fixture=tmp_path/'environment';fixture.mkdir();source=tmp_path/'source';source.mkdir()
+    checkpoint=tmp_path/'checkpoint';checkpoint.write_bytes(b'actual checkpoint')
+    checkpoint_sha=hashlib.sha256(checkpoint.read_bytes()).hexdigest()
+    names={'runtime':'runtime.tar','environment':'venv.tar','system-python':'stdlib.tar',
+           'interpreter':'python','node':'node','base':'model','sources':'train',
+           'held':'held','sample':'sample','asset-inventory':'inventory','asset-guard':'guard'}
+    refs={};closure=[]
+    for role,name in names.items():
+        path=source/name
+        path.write_text('{"roots":{}}' if role=='asset-inventory' else role)
+        digest=hashlib.sha256(path.read_bytes()).hexdigest()
+        refs[role]=str(path);closure.append({'role':role,'path':str(path),'sha256':digest})
+        blob=store/'closure'/digest;blob.parent.mkdir(exist_ok=True);blob.write_bytes(path.read_bytes())
+    restore={'runtime_archive':refs['runtime'],'environment_archive':refs['environment'],
+        'system_python_archive':refs['system-python'],'asset_archives':[],
+        'interpreter_path':refs['interpreter'],'node_path':refs['node'],'base_path':str(source),
+        'sample_graph':refs['sample'],'tokenizer_fingerprint':'a'*64,
+        'asset_inventory':refs['asset-inventory'],'asset_guard':refs['asset-guard']}
+    draft=tmp_path/'draft.json';qualification=tmp_path/'qualification';output=tmp_path/'output';evidence=tmp_path/'evidence'
+    plan={'destination':str(store),'closure':closure,'restore':restore,'historical_programs':[],
+          'inputs':{'train':{'path':refs['sources']},'held':{'path':refs['held']}}}
+    draft.write_text(json.dumps(plan));staged={**plan,'closure':closure+[{'role':'controls','path':str(qualification),'sha256':'0'*64}],
+        'restore_qualification':{'path':str(qualification),'sha256':'0'*64}}
+    root=scratch/'interrupted';tree=root/'tree';tree.mkdir(parents=True)
+    mapping={}
+    for row in closure:
+        if row['role'] in ('runtime','environment','system-python'):continue
+        target=q._mapped_path(tree,row['path']);target.parent.mkdir(parents=True,exist_ok=True)
+        os.link(store/'closure'/row['sha256'],target)
+        mapping[row['path']]=str(target);mapping[str(Path(row['path']).resolve())]=str(target)
+    (root/'restore-plan.json').write_text(json.dumps(staged))
+    (root/'.natlang-source-map.json').write_text(json.dumps({'schema':'natlang.staged-source-map/1','paths':mapping}))
+    def extract(archive,destination,*,environment=False):
+        destination=Path(destination)
+        if environment:
+            (destination/'venv/bin').mkdir(parents=True,exist_ok=True)
+            link=destination/'venv/bin/python'
+            if not link.exists() and not link.is_symlink():link.symlink_to('/usr/bin/python3')
+        else:
+            (destination/'runtime/ts-host/dist/teacher').mkdir(parents=True,exist_ok=True)
+            (destination/'runtime/ts-host/dist/teacher/collector.js').write_text('')
+        return {'schema':'archive'}
+    monkeypatch.setattr(q,'extract_archive',extract)
+    calls=[]
+    def run(command,**kwargs):
+        calls.append(command)
+        if '-c' in command:stdout='RECOVERY_SMOKE='+json.dumps({'mapped_executables':[],'custody':{}})+'\n'
+        elif '--input-type=module' in command:stdout='NODE_RECOVERY='+json.dumps('')+'\n'
+        else:stdout='assets checked'
+        return SimpleNamespace(returncode=0,stdout=stdout,stderr='')
+    monkeypatch.setattr(q.subprocess,'run',run)
+    monkeypatch.setattr(q,'publish_checked_evidence',lambda *args:{'status':'published'})
+    if tamper=='plan':(root/'restore-plan.json').write_text('{}')
+    if tamper=='source-map':(root/'.natlang-source-map.json').write_text('{}')
+    args=(draft,checkpoint,scratch,output,qualification,evidence)
+    kwargs={'environment_fixture':fixture,'resume_source_tree':root,'resume_checkpoint_sha256':checkpoint_sha}
+    if tamper!='none':
+        with pytest.raises(ValueError,match='differs'):q.qualify(*args,**kwargs)
+        assert calls==[]
+        return
+    result=q.qualify(*args,**kwargs)
+    assert result=={'status':'published'} and len(calls)==3
+    assert '-c' in calls[0] and '--input-type=module' in calls[1]
+    assert root.is_dir() and (root/'restore-plan.json').is_file()
