@@ -128,7 +128,8 @@ def load_verified_luna_teacher_turn(audit_path, record_id, *, replay_messages, r
     audit_schema = audit.get("schema")
     supported_audits = {"natlang.luna-v6-teacher-text-python-ingestion-audit/1",
                         "natlang.luna-v8-provider-native-ingestion-audit/1",
-                        "natlang.luna-provider-native-ingestion-audit/1"}
+                        "natlang.luna-provider-native-ingestion-audit/1",
+                        "natlang.luna-provider-native-exact-ingestion-audit/1"}
     if audit_schema not in supported_audits:
         raise ValueError("provider teacher source audit schema is unsupported")
     raw_binding = audit.get("raw_results") or {}
@@ -163,12 +164,15 @@ def load_verified_luna_teacher_turn(audit_path, record_id, *, replay_messages, r
                           and (item.get("projection") or {}).get("sha256") == regrade["sha256"]]
         if len(bound_regrades) != 1:
             raise ValueError("v8 provider source regrade is not in the exact closed source manifest")
-    elif audit_schema == "natlang.luna-provider-native-ingestion-audit/1":
+    elif audit_schema in {"natlang.luna-provider-native-ingestion-audit/1",
+                          "natlang.luna-provider-native-exact-ingestion-audit/1"}:
         # Generic current path: bind the actual closed provider snapshot, full
         # decision materialization, reviewed plan/runtime, and protection
         # projection. The judged outcome remains the raw provider result; this
         # branch does not manufacture a regrade.
         required = ("provider_source_manifest", "decision_cache", "protection", "conversion_builder")
+        if audit_schema == "natlang.luna-provider-native-exact-ingestion-audit/1":
+            required = (*required, "decision_cache_receipt")
         for name in required:
             binding = audit.get(name) or {}
             if not isinstance(binding.get("path"), str) or not isinstance(binding.get("sha256"), str):
@@ -190,31 +194,56 @@ def load_verified_luna_teacher_turn(audit_path, record_id, *, replay_messages, r
                 or manifest.get("training_admission") is not False
                 or manifest.get("training_exposure") is not False
                 or manifest.get("oracle_regrades") != []
-                or source.get("path") != raw_binding.get("path")
-                or source.get("sha256") != raw_binding.get("sha256")
                 or manifest.get("model") != "gpt-6-luna"
                 or manifest.get("provider") != "openai-codex"):
             raise ValueError("provider source manifest differs from the exact closed Luna source")
         manifest_results = [item.get("result") or {} for item in manifest.get("results") or []]
-        if not manifest_results or not any(item.get("sha256") == raw_binding.get("sha256")
-                                           for item in manifest_results):
+        if audit_schema == "natlang.luna-provider-native-exact-ingestion-audit/1":
+            original_result = audit.get("original_result") or {}
+            if (not isinstance(original_result.get("path"), str)
+                    or not isinstance(original_result.get("sha256"), str)
+                    or not isinstance(original_result.get("bytes"), int)
+                    or not any(item.get("path") == original_result.get("path")
+                               and item.get("sha256") == original_result.get("sha256")
+                               and item.get("bytes") == original_result.get("bytes")
+                               for item in manifest_results)
+                    or audit.get("oracle_level") != "exact"
+                    or audit.get("exact_oracle_claimed") is not True
+                    or audit.get("training_admission") is not False):
+                raise ValueError("exact audit does not bind its original exact result and disposition")
+            receipt_ref = audit.get("decision_cache_receipt") or {}
+            decision_receipt = json.loads(_read_bound(receipt_ref.get("path"), receipt_ref.get("sha256")))
+            decision_data = _read_bound(audit["decision_cache"]["path"], audit["decision_cache"]["sha256"])
+            if (decision_receipt.get("schema") != "natlang.verified-teacher-decision-materialization/1"
+                    or decision_receipt.get("output_sha256") != audit.get("decision_cache_output_sha256")
+                    or _sha(decision_data) != decision_receipt.get("output_sha256")):
+                raise ValueError("exact audit decision cache differs from its materializer receipt")
+            protection_ref = audit.get("protection") or {}
+            protection = json.loads(_read_bound(protection_ref.get("path"), protection_ref.get("sha256")))
+            if (protection.get("schema") != "natlang.training-protection-projection/1"
+                    or audit.get("current_protection_digest", {}).get("source_review_sha256") is None):
+                raise ValueError("exact audit has no current source-protection projection")
+        elif not manifest_results or not any(item.get("sha256") == raw_binding.get("sha256")
+                                             for item in manifest_results):
             raise ValueError("closed source manifest does not list this exact result digest")
         if ((manifest.get("plan") or {}).get("path") != plan_binding.get("path")
                 or (manifest.get("plan") or {}).get("sha256") != plan_binding.get("sha256")
                 or plan.get("root_approved") is not True
                 or plan.get("model_id") != "gpt-6-luna"
                 or plan.get("provider") != "openai-codex"
-                or plan.get("judge_model") != {"model_id": "gpt-6-sol", "provider": "openai-codex"}
+                or (audit_schema == "natlang.luna-provider-native-ingestion-audit/1"
+                    and plan.get("judge_model") != {"model_id": "gpt-6-sol", "provider": "openai-codex"})
                 or plan.get("runtime") != runtime_path
                 or plan.get("runtime_receipt_sha256") != runtime_binding.get("receipt_sha256")
                 or (plan.get("artifact_hashes") or {}).get(str(Path(runtime_path) / "frozen-runtime.json"))
                    != runtime_binding.get("receipt_sha256")):
-            raise ValueError("provider source plan does not bind the reviewed actor, Sol judge, and runtime")
+            raise ValueError("provider source plan does not bind the reviewed actor and runtime")
     raw_row_id = record_id.rsplit(":decision:", 1)[0]
     raw = _jsonl_by_id(raw_bytes, raw_row_id)
     record = _jsonl_by_id(converted_bytes, record_id)
     if audit_schema in {"natlang.luna-v8-provider-native-ingestion-audit/1",
-                        "natlang.luna-provider-native-ingestion-audit/1"}:
+                        "natlang.luna-provider-native-ingestion-audit/1",
+                        "natlang.luna-provider-native-exact-ingestion-audit/1"}:
         raw_regrade = ((raw.get("source_regrade") or {}).get("receipt") or {})
         if audit_schema == "natlang.luna-v8-provider-native-ingestion-audit/1":
             if (audit.get("task_id") != raw.get("id")
@@ -224,17 +253,44 @@ def load_verified_luna_teacher_turn(audit_path, record_id, *, replay_messages, r
                 raise ValueError("v8 provider source audit does not bind this exact source row and Sol regrade")
         elif (audit.get("task_id") != raw.get("id")
                 or (record.get("source_ref") or {}).get("trajectory_id") != raw.get("id")
-                or audit.get("oracle_level") != "judged"
-                or audit.get("exact_oracle_claimed") is not False
                 or audit.get("training_admission") is not False
-                or audit.get("oracle_judge") != {"model_id": "gpt-6-sol", "provider": "openai-codex"}
-                or (raw.get("outcome", {}).get("oracle") or {}).get("level") != "judged"
-                or (raw.get("outcome", {}).get("oracle") or {}).get("accepted") is not True):
-            raise ValueError("provider source audit does not bind the exact Sol-judged Luna result")
-        judge_starts = [item for item in (raw.get("request_telemetry") or {}).get("starts") or []
-                        if item.get("role") == "judge" and item.get("purpose") == "judge"]
-        if len(judge_starts) != 1 or judge_starts[0].get("status") != "completed":
-            raise ValueError("provider source row does not record one completed independent judge call")
+                or record.get("outcome", {}).get("accepted") is not True):
+            raise ValueError("provider source audit does not bind its accepted Luna result")
+        if audit_schema == "natlang.luna-provider-native-exact-ingestion-audit/1":
+            exact_oracle = (raw.get("outcome", {}).get("oracle") or {})
+            original_result = audit.get("original_result") or {}
+            original_rows = [json.loads(line) for line in
+                             _read_bound(original_result.get("path"), original_result.get("sha256")).splitlines()
+                             if line.strip()]
+            manifest = json.loads(_read_bound(audit["provider_source_manifest"]["path"],
+                                              audit["provider_source_manifest"]["sha256"]))
+            if (exact_oracle.get("accepted") is not True or exact_oracle.get("level") != "exact"
+                    or raw.get("outcome", {}).get("accepted") is not True
+                    or audit.get("oracle_level") != "exact" or audit.get("exact_oracle_claimed") is not True
+                    or record.get("outcome", {}).get("oracle", {}).get("level") != "exact"
+                    or record.get("training_admission", {}).get("oracle_level") != "exact"
+                    or len(original_rows) != 1 or original_rows[0] != raw
+                    or not any((entry.get("result") or {}).get("path") == original_result.get("path")
+                               and (entry.get("result") or {}).get("sha256") == original_result.get("sha256")
+                               for entry in manifest.get("results") or [])):
+                raise ValueError("exact provider source differs from its accepted raw result and decision")
+            from ..common.custody import ProtectedWorlds
+            program = (raw.get("task") or {}).get("program_ir") or {}
+            if (program.get("split") != "train"
+                    or ProtectedWorlds.load().check(program).get("split") != "train"
+                    or program != ((record.get("task") or {}).get("program_ir") or {})):
+                raise ValueError("exact provider source is not the same currently protected train program")
+        else:
+            if (audit.get("oracle_level") != "judged"
+                    or audit.get("exact_oracle_claimed") is not False
+                    or audit.get("oracle_judge") != {"model_id": "gpt-6-sol", "provider": "openai-codex"}
+                    or (raw.get("outcome", {}).get("oracle") or {}).get("level") != "judged"
+                    or (raw.get("outcome", {}).get("oracle") or {}).get("accepted") is not True):
+                raise ValueError("provider source audit does not bind the exact Sol-judged Luna result")
+            judge_starts = [item for item in (raw.get("request_telemetry") or {}).get("starts") or []
+                            if item.get("role") == "judge" and item.get("purpose") == "judge"]
+            if len(judge_starts) != 1 or judge_starts[0].get("status") != "completed":
+                raise ValueError("provider source row does not record one completed independent judge call")
     if (raw.get("version") != "natlang.teacher_trajectory.native/1"
             or (raw.get("provenance") or {}).get("model") != "gpt-6-luna"
             or (raw.get("provenance") or {}).get("provider") != "openai-codex"
@@ -400,6 +456,24 @@ def load_verified_luna_teacher_turn(audit_path, record_id, *, replay_messages, r
                 or set(source_groups) != set(upstream_groups) | {case_id}
                 or protected.check(program_ir).get("split") != "train"):
             raise ValueError("provider source groups lack one exact current protected-world train disposition")
+    elif audit_schema == "natlang.luna-provider-native-exact-ingestion-audit/1":
+        protection_path = (audit.get("protection") or {}).get("path")
+        protection_digest = (audit.get("protection") or {}).get("sha256")
+        if not isinstance(protection_path, str) or not isinstance(protection_digest, str):
+            raise ValueError("exact provider source lacks its current protection projection")
+        protection = json.loads(_read_bound(protection_path, protection_digest))
+        from ..common.custody import ProtectedWorlds
+        protected = ProtectedWorlds.load()
+        if (protection.get("schema") != "natlang.training-protection-projection/1"
+                or protection.get("source_review_sha256") != audit.get("current_protection_digest", {}).get(
+                    "source_review_sha256")):
+            raise ValueError("exact provider protection projection differs from its recorded current source review")
+        case_id = program_ir.get("id")
+        upstream_groups = program_ir.get("source_groups")
+        if (program_ir.get("split") != "train" or not isinstance(upstream_groups, list)
+                or not upstream_groups or set(source_groups) != set(upstream_groups) | {case_id}
+                or protected.check(program_ir).get("split") != "train"):
+            raise ValueError("exact provider source groups lack a current protected train disposition")
     else:
         protection_path = next((path for path, digest in (plan.get("artifact_hashes") or {}).items()
                                 if path.endswith("/protection-v2.json")), None)

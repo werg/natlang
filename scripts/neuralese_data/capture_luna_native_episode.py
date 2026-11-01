@@ -129,8 +129,10 @@ def main():
     dtype = {"bfloat16": torch.bfloat16, "float16": torch.float16, "float32": torch.float32}[args.dtype]
     audit_path = Path(args.audit).resolve(strict=True)
     audit = json.loads(audit_path.read_bytes())
-    if audit.get("schema") != "natlang.luna-provider-native-ingestion-audit/1":
-        raise ValueError("episode capture requires the generic authenticated Luna source audit")
+    audit_schema = audit.get("schema")
+    if audit_schema not in {"natlang.luna-provider-native-ingestion-audit/1",
+                            "natlang.luna-provider-native-exact-ingestion-audit/1"}:
+        raise ValueError("episode capture requires an authenticated Luna source audit")
     converted_path = Path(audit["python_corpus_conversion"]["path"]).resolve(strict=True)
     converted_bytes = converted_path.read_bytes()
     if sha256_hex(converted_bytes) != audit["python_corpus_conversion"]["sha256"]:
@@ -293,8 +295,10 @@ def main():
             "partial_turn_count": len(captures), "partial_turns_complete": True,
             "graph_path": str(graph_path), "graph_sha256": sha256_hex(graph_bytes),
             "native_graph_invocations": len(example.plan.invocations),
-            "source_groups": graph["source_groups"], "oracle_level": "judged",
-            "exact_oracle_claimed": False, "training_admission": False}
+            "source_groups": graph["source_groups"],
+            "oracle_level": "exact" if audit_schema.endswith("exact-ingestion-audit/1") else "judged",
+            "exact_oracle_claimed": audit_schema.endswith("exact-ingestion-audit/1"),
+            "training_admission": False}
         receipt_path = output / "receipt.json"
         receipt_path.write_bytes(canonical_json_bytes(receipt) + b"\n")
         print(json.dumps({"receipt": str(receipt_path), **receipt}, indent=2))
