@@ -4,6 +4,47 @@ Observation window: 10:43–11:29 CET. Recheck actual processes before acting.
 Primary supervisor: Codex; active goal remains continued capable LFM3 native
 Neuralese/Natlang training, not completion of this status document.
 
+## Actual correction progress, November 1, 07:55 CET
+
+The round10 collector is terminal and the live hold stopped the attempted update
+before native_stage started. Parent remains52; controller's pending-update intent
+is not an earned optimizer step. Preserve its original20 rows (16 student and4
+privileged teacher), score and journals. Math/GSM groups each have4/4 student
+successes plus their privileged attempts. ToolACE's complete group is invalid.
+Knights/knaves has three successes and one unscored infrastructure failure:
+`neuralese-native-grad-invalid` could not resolve a real nested child writer.
+It is not a timeout or semantic negative. The pending authenticated projection
+retains groups0/3, including their teacher custody; groups1/2 remain original
+diagnostic evidence. Its controller transition must explicitly replace the
+unexecuted original pending update, rather than letting active_update_round
+silently restore the old20 rows.
+
+Commit12d8b2fa9 fixes the actual standalone collector's parent/child producer-scope
+split without sharing task budgets or weakening unrelated-writer rejection.
+Three focused real collector/scope tests and the Node build passed. The failed
+partial lacks established complete child sampling receipts/final outcome, so no
+salvage or policy credit is claimed. Durable child partial capture is being
+investigated separately. Deploy the fix in the next qualified runtime.
+
+The GPU is productively running a clean52 current-prompt baseline to resolve the
+incomplete Pop comparison while required withdrawal code is prepared. Its unit
+is `clean52-local-current-dev-idle-window-1101`; outputs under
+`ops/clean52-local-current-dev-1101/` remain protected development observations.
+It is interruptible in favor of useful corrected training, not a dedicated GPU
+reserved indefinitely for evaluation.
+
+Three Luna generation workers are now dispatched for the actual current
+ContractNLI final2 source (revision39cfd671...), using the frozen typed-read runtime
+bdc38d70... and independent Sol judging. Exact plan/source/reference validation
+passed before launch; planac832021... and root-review.json are under
+`/mnt/external/natlang-luna-campaigns/contractnli-final2-readout-sol-20261101/`.
+The actual unit is `contractnli-final2-readout-sol-20261101`, non-resumable by
+memory-ledger policy. A first differently named launcher was rejected before
+claims/provider calls and is not a generation attempt. Typed readout materializes
+in tests, but full native training admission still requires actual capture.
+TAT-QA v18 corrects the public currency request and adds an unsupported-USD
+negative; source references/teacher plan are not yet qualified or launched.
+
 ## Live correction, November 1, 07:42 CET
 
 The actual round10 materialized ToolACE3509 still exposes `sequences:any`,
