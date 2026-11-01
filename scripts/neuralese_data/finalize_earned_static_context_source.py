@@ -153,6 +153,14 @@ def finalize(preparation, predecessor, output, *, preparation_sha256=None, prede
     current_parser=canonical_json_sha256_hex({name:sha256_file_hex_cached(package/name) for name in names})
     if ident.get('parser_policy_sha256')!=current_parser:raise ValueError('source parser changed; migrate geometry before reuse')
     output.mkdir()
+    if index_proof.get('index'):
+        from natlang_neuralese.common.jsonio import write_bytes_durable
+        cached_index=index_proof['index'];sealed_index=output/'unchanged-source-index.pkl'
+        write_bytes_durable(sealed_index,checked(cached_index,'verified unchanged source index').read_bytes())
+        sealed_ref=bind(sealed_index)
+        if sealed_ref['sha256']!=cached_index['sha256']:
+            raise ValueError('sealed unchanged source index differs from verified cache')
+        index_proof={**index_proof,'performance_cache':cached_index,'index':sealed_ref}
     family_path=output/'families.json';write_json_durable(family_path,{'schema':'natlang.logical-family-map/1',
         'source_sha256':prep['train_source']['sha256'],'rows':[{'id':e['id'],'binding':e['binding'],'family':old_by_id[e['id']]['family']} for e in entries]})
     geometry_path=output/'geometry.json';write_json_durable(geometry_path,{'schema':'natlang.native-packed-geometry/1','identity':ident,

@@ -63,7 +63,8 @@ def test_finalizer_builds_bound_source_geometry_policy_and_receipt(tmp_path,monk
     monkeypatch.setattr(tool,'require_output_headroom',lambda _:None)
     monkeypatch.setattr(tool.ProtectedWorlds,'load',lambda:SimpleNamespace(digest='p'))
     monkeypatch.setattr(tool,'source_correction_dependencies',lambda _:[])
-    monkeypatch.setattr(tool,'seed_unchanged_index',lambda *a:{'rows':0,'scope':'fixture'})
+    cached_index=write('cached-index.json',{'fixture':'exact'})
+    monkeypatch.setattr(tool,'seed_unchanged_index',lambda *a:{'rows':0,'scope':'fixture','index':cached_index})
     monkeypatch.setattr(tool,'policy_objective',lambda policy:policy['objective'])
     monkeypatch.setattr(tool,'identity',lambda obj:{'name':'test','sha256':'a'*64})
     monkeypatch.setattr(tool,'load_policy',lambda ref:json.loads(Path(ref['path']).read_text()))
@@ -80,6 +81,8 @@ def test_finalizer_builds_bound_source_geometry_policy_and_receipt(tmp_path,monk
     assert new_map['rows']==[{'id':'a','binding':'new-a','family':'general-agent'}]
     new_geo=json.loads(Path(result['geometry']['path']).read_text())
     assert new_geo['kv_slots'][0]>0 and new_geo['source']['sha256']==new_source['sha256']
+    sealed=result['unchanged_source_index_proof']['index']
+    assert sealed['path']!=cached_index['path'] and sealed['sha256']==cached_index['sha256']
 
 
 def test_seed_index_reuses_only_byte_identical_authenticated_rows(tmp_path,monkeypatch):
