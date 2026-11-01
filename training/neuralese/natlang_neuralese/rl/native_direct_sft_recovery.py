@@ -783,7 +783,7 @@ def publish_completed(state_path, *, report_ref, receipt_ref, custody_ref, out):
             prior_parent=prior.get('parent') or {}
             prior_is_immediate=(Path(prior_checkpoint.get('path','')).resolve()==child_path
                 and prior_checkpoint.get('sha256')==parent.get('sha256'))
-            if not prior_is_immediate and not operation_parent_matches:
+            if not prior_is_immediate and (operation_parent is None or not operation_parent_matches):
                 raise ValueError('last SFT publication does not prove the exact overwritten parent identity')
             prior_report_ref=prior.get('report') or {};prior_receipt_ref=prior.get('receipt') or {}
             prior_custody_ref=prior.get('custody') or {}

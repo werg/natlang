@@ -225,6 +225,26 @@ def test_completed_refresh_accepts_rl_checkpoint_as_immediate_parent(tmp_path):
     assert result['historical_parent_proof']['reported_continuation_ancestor_sha256']==fixture['root_sha']
 
 
+def test_completed_refresh_rejects_rl_parent_without_operation_parent_receipt(tmp_path):
+    from natlang_neuralese.rl.native_direct_sft_recovery import publish_completed
+    fixture=_same_slot_publication_fixture(tmp_path)
+    fixture['rolling'].write_text(json.dumps({'step':59,'rl_parent':True}))
+    rl_parent=binding(fixture['rolling'])|{'global_step':59,'optimizer_present':True,'rng_present':True}
+    fixture['rolling'].write_text(json.dumps({'step':63,'sft_child':True}));child=binding(fixture['rolling'])
+    receipt_path=Path(fixture['receipt']['path']);receipt=json.loads(receipt_path.read_text())
+    receipt['checkpoint']['sha256']=child['sha256'];receipt.pop('operation_parent')
+    receipt_path.write_text(json.dumps(receipt));fixture['receipt']=binding(receipt_path)
+    report_path=Path(fixture['report']['path']);report=json.loads(report_path.read_text())
+    report['checkpoint_sha256']=child['sha256'];report['continuation_boundary']['checkpoint_sha256']=child['sha256']
+    report_path.write_text(json.dumps(report));fixture['report']=binding(report_path)
+    custody_path=Path(fixture['custody']['path']);custody=json.loads(custody_path.read_text())
+    custody['parent']=rl_parent;custody['successor']=child|{'global_step':63,'optimizer_present':True,'rng_present':True}
+    custody_path.write_text(json.dumps(custody));fixture['custody']=binding(custody_path)
+    with pytest.raises(ValueError,match='exact overwritten parent identity'):
+        publish_completed(fixture['state'],report_ref=fixture['report'],receipt_ref=fixture['receipt'],
+            custody_ref=fixture['custody'],out=fixture['out'])
+
+
 def _session_reconciliation_fixture(tmp_path):
     from natlang_neuralese.rl.native_direct_sft_recovery import _strong_binding, _strong_path_binding, _session_control
     from natlang_neuralese.common.hashing import canonical_json_sha256_hex
