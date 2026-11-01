@@ -169,6 +169,7 @@ def build(args):
     if output.exists():raise ValueError('draft recovery plan already exists')
     write_json_durable(output,plan)
     return {'path':str(output),'sha256':sha(output),'files':len(closure),'checkpoint_step':training.get('global_step'),
+            'qualifier_snapshot':next(item for item in snapshots if item['source_path']==str(Path(args.qualifier).resolve(strict=True))),
             'checkpoint_observation_only':True,'status':'draft-awaiting-independent-restore-qualification'}
 
 

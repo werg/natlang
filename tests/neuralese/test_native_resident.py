@@ -1687,3 +1687,195 @@ def test_transient_candidate_dependency_keeps_same_request_retryable(tmp_path):
     assert manager.poll(13,candidate_check=unavailable) is None
     assert not manager.rejected and resident.current(directory) is None
     assert manager.poll(14,candidate_check=lambda *args:None)[0].ordered_ids()==['a','b','c']
+
+
+def test_resident_append_with_strong_queue_saves_and_restores_actual_updates(tmp_path,monkeypatch):
+    """Real manager, SGD, full-state queue and restore; archive anchor is a test fixture."""
+    import tempfile,time,torch
+    from test_checkpoint_full_recovery_queue import attach_qualification
+    from natlang_neuralese.train import checkpoint_offload
+    from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
+    from natlang_neuralese.train.checkpoint_offload import recovery_static_sft_contract,require_recovery_candidate
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
+    paths,directory,manager,recipe=setup(tmp_path)
+    out=tmp_path/'learner';out.mkdir();bind=resident.binding
+    runtime=tmp_path/'recovery-runtime';runtime.write_text('test runtime')
+    controller=tmp_path/'controller.json';write_json(controller,{'phase':'updating','checkpoint':str(out/'checkpoint.pt'),'round':1,'offset':0,'trained_rounds':1})
+    inputs={'train':bind(paths['old']),'foundation':None,'held':bind(paths['held']),'ce':None}
+    model=torch.nn.Linear(2,2);optimizer=torch.optim.SGD(model.parameters(),lr=.1,momentum=.9)
+    def update():
+        optimizer.zero_grad();torch.nn.functional.cross_entropy(model(torch.tensor([[1.,0.],[0.,1.]])),torch.tensor([0,1])).backward();optimizer.step()
+    update()
+    frame={'source_row_bindings':manager.train.bindings,'source_row_order':manager.train.ordered_ids(),
+           'held_row_bindings':manager.held.bindings,'required_visits':{'a':1,'b':1},'source_hash':'old',
+           'source_receipts':[inputs['train'],inputs['held']],'options':{'native_graphs':inputs['train']['path'],
+           'held_native_graphs':inputs['held']['path'],'foundation_native_graphs':None,'ce_supervision_policy_binding':None},
+           'exposure_counts':{'a':1,'b':1}}
+    def training(step,source,bindings,counts,quota,adoption=None):
+        options={'native_graphs':source['path'],'foundation_native_graphs':None,'held_native_graphs':inputs['held']['path'],
+                 'ce_supervision_policy_binding':None}
+        if adoption:options['resident_adoption']=adoption
+        f={**frame,'source_row_bindings':bindings,'source_row_order':list(bindings),'source_receipts':[source,inputs['held']],
+           'required_visits':quota,'exposure_counts':counts,'options':options,'source_hash':source['sha256']}
+        return {'global_step':step,'optimizer':optimizer.state_dict(),'rng':{'torch':torch.get_rng_state()},
+                'source_receipts':[source,inputs['held']],'source_row_bindings':bindings,'held_row_bindings':manager.held.bindings,
+                'exposure_counts':counts,'options':options,'sft_progress':{'sft':f}}
+    with tempfile.TemporaryDirectory(dir='/dev/shm') as destination:
+        roles=('runtime','environment','system-python','system-libraries','node','interpreter','base','tokenizer','task-assets','controls')
+        closure=[{'role':role,**bind(runtime)} for role in roles]+[{'role':'sources',**inputs['train']},{'role':'sources',**inputs['held']}]
+        plan={'schema':'natlang.local-full-recovery-plan/1','session':'tiny','destination':destination,'journal_directory':str(out/'recovery'),
+              'controller':{'state_path':str(controller),'config':bind(runtime)},'inputs':inputs,'closure':closure,
+              'require_static_contract':True,'sft_static_contract':recovery_static_sft_contract(training(1,inputs['train'],manager.train.bindings,{'a':1,'b':1},{'a':1,'b':1}))}
+        plan['restore']={'runtime_archive':str(runtime),'environment_archive':str(runtime),'system_python_archive':str(runtime),'base_path':str(tmp_path),
+            'node_path':str(runtime),'interpreter_path':str(runtime),'sample_graph':str(paths['old']),'tokenizer_fingerprint':'a'*64,
+            'asset_guard':str(runtime),'asset_inventory':str(runtime),'asset_archives':[{'env':'NATLANG_RL_TASK_ASSETS','original_root':str(tmp_path/'a'),'archive':str(runtime)},{'env':'NATLANG_RL_TASK_ASSETS_V3','original_root':str(tmp_path/'b'),'archive':str(runtime)}]}
+        attach_qualification(plan,tmp_path/'anchor-proof.json');plan_path=tmp_path/'anchor-plan.json';write_json(plan_path,plan)
+        ref=bind(plan_path);catalog=out/'checkpoint-recovery-plan.json';write_json(catalog,{'schema':'natlang.local-full-recovery-catalog/1','controller_config':bind(runtime),'initial_plan':ref,'plans':[ref]})
+        monkeypatch.setenv('NATLANG_REQUIRE_FULL_RECOVERY','1');monkeypatch.setenv('NATLANG_RECOVERY_CONTROL_SHA',resident.sha(runtime))
+        policy=CheckpointPolicy(out);initial={'model_state':model.state_dict(),'training':training(1,inputs['train'],manager.train.bindings,{'a':1,'b':1},{'a':1,'b':1})};policy.save(initial)
+        resident.prepare(directory,recipe,'sft',tokenizer_fingerprint='tokenizer-sha',role_ids=())
+        def candidate(train,held,payload,ce,declarations):
+            roles=resident.physical(payload['plan']['stage_inputs']['sft']);candidate_inputs={'train':{k:roles['native_graphs'][k] for k in ('path','sha256')},'foundation':None,'held':{k:roles['held_native_graphs'][k] for k in ('path','sha256')},'ce':None}
+            try:require_recovery_candidate(catalog,candidate_inputs,payload=payload,active_plan=policy.recovery_queue.plan,resident_directory=directory)
+            except (ValueError,OSError,KeyError,TypeError) as error:
+                policy.recovery_queue.schedule_resident_append(catalog,payload,directory);raise resident.ResidentRetry(str(error)) from error
+        assert manager.poll(1,candidate_check=candidate) is None
+        thread=policy.recovery_queue.append_thread;assert thread is not None;thread.join(timeout=30);assert not thread.is_alive()
+        assert policy.recovery_queue.state['append_staging']['status']=='staged',policy.recovery_queue.state.get('append_staging')
+        # A stale object must delay adoption, then be independently rechecked
+        # and republished under a new immutable intent without losing history.
+        intent_ref=policy.recovery_queue.state['append_staging']['intent'];intent=json.loads(Path(intent_ref['path']).read_text())
+        staged=json.loads(Path(intent['staged_closure']['path']).read_text());blob=Path(staged['objects'][0]['path']);st=blob.stat()
+        import os
+        os.utime(blob,ns=(st.st_atime_ns,st.st_mtime_ns+1))
+        assert manager.poll(1,candidate_check=candidate) is None
+        retry=policy.recovery_queue.append_thread;retry.join(timeout=30);assert not retry.is_alive()
+        assert policy.recovery_queue.state['append_staging']['status']=='staged',policy.recovery_queue.state.get('append_staging')
+        assert json.loads(catalog.read_text())['append_intent_history'][-1]['binding']==intent_ref
+        adopted=manager.poll(1,candidate_check=candidate);assert adopted is not None
+        new=bind(paths['new']);adoption={'generation':manager.generation,'directory':str(directory.resolve()),'history':manager.state['history']}
+        before=training(1,new,manager.train.bindings,{'a':1,'b':1,'c':0},{'a':1,'b':1,'c':1},adoption)
+        policy.save({'model_state':model.state_dict(),'training':before})
+        assert CheckpointPolicy.load(policy.slot)['training']['exposure_counts']['c']==0
+        update();after=training(2,new,manager.train.bindings,{'a':1,'b':1,'c':1},{'a':1,'b':1,'c':1},adoption)
+        policy.save({'model_state':model.state_dict(),'training':after});queue=policy.recovery_queue
+        deadline=time.monotonic()+30
+        while (not queue.state.get('latest_verified') or queue.state['latest_verified']['global_step']!=2) and time.monotonic()<deadline:time.sleep(.05)
+        assert queue.state.get('latest_verified',{}).get('global_step')==2,queue.state.get('last_error')
+        receipt=json.loads(Path(queue.state['latest_verified']['path']).read_text());restored=CheckpointPolicy.load(receipt['checkpoint']['path'])
+        assert restored['training']['exposure_counts']=={'a':1,'b':1,'c':1}
+        assert torch.equal(restored['model_state']['weight'],model.state_dict()['weight'])
+        assert restored['training']['optimizer']['state'] and torch.equal(restored['training']['rng']['torch'],after['rng']['torch'])
+        verified_ref=queue.state['latest_verified'];policy.close();queue.close()
+        checkpoint_offload._RECOVERY_QUEUES.pop(str(policy.slot.resolve()))
+        # The independent verifier must not reopen original source files.
+        for path in paths.values():path.unlink()
+        from scripts.neuralese_data.verify_local_recovery_export import verify
+        assert verify(verified_ref['path'],verified_ref['sha256'])['global_step']==2
+
+
+@pytest.mark.parametrize('crash_after_commit',[False,True])
+def test_native_trainer_resident_append_with_strong_recovery_queue(tmp_path,monkeypatch,crash_after_commit):
+    """The native trainer commits an actual zero-visit transition before its next SGD."""
+    import tempfile,time,torch
+    from test_native_model import tiny_source
+    from test_checkpoint_full_recovery_queue import attach_qualification
+    from natlang_neuralese.model.native_model import load_native_model
+    from natlang_neuralese.train import native_state_sft as trainer,checkpoint_offload
+    from natlang_neuralese.train.checkpoint_offload import recovery_static_sft_contract,recovery_queue_for
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'));monkeypatch.setenv('NATLANG_CHECKPOINT_OFFLOAD','0')
+    base=tmp_path/'base';tiny_source(base);_,_,roles,config=load_native_model(base,dtype=torch.float32,rank=4)
+    import os
+    identity={'execution_arithmetic':{'native_compile':os.environ.get('NATLANG_NATIVE_COMPILE','1'),
+        'bf16_reduced_precision_reduction':torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction},
+        'model_config':config,'batch_graphs':1,'batch_tokens':0,'checkpoint_layers':True,'chunk_tokens':1024,
+        'checkpoint_input_offload':False,'cotangent_accumulator_backend':'plain','share_causal_prefixes':True,
+        'fp8':{'kind':'off','recipe':'delayed','amax_history_len':16,'input_gradient_precision':None},
+        'runtime':{'torch':torch.__version__,'cuda':torch.version.cuda,'device':'cpu'}}
+    paths,directory,manager,recipe=setup(tmp_path,config['tokenizer_fingerprint'],roles.ids,identity)
+    out=directory.parent/'sft';runtime=tmp_path/'runtime-anchor';runtime.write_text('fixture runtime')
+    controller=tmp_path/'controller-state.json';write_json(controller,{'phase':'updating','checkpoint':str(out/'checkpoint.pt'),'round':1,'offset':0,'trained_rounds':1})
+    prepared=[];queue_holder=[];anchor_holder=[];transition_observed=[];guard_calls=[];original_due=trainer.CheckpointPolicy.due;original_save=trainer.CheckpointPolicy.save
+    original_guard=checkpoint_offload.require_recovery_candidate
+    def checked_guard(*args,**kwargs):
+        guard_calls.append(True);return original_guard(*args,**kwargs)
+    monkeypatch.setattr(checkpoint_offload,'require_recovery_candidate',checked_guard)
+    with tempfile.TemporaryDirectory(dir='/dev/shm') as destination:
+        def due(policy,step,**kwargs):
+            if step==1 and not prepared:
+                prepared.append(resident.prepare(directory,recipe,'sft',tokenizer_fingerprint=config['tokenizer_fingerprint'],role_ids=roles.ids))
+            return original_due(policy,step,**kwargs)
+        def save(policy,state,**kwargs):
+            event=original_save(policy,state,**kwargs)
+            if queue_holder and state['training']['global_step']==1 and state['training']['options'].get('resident_adoption'):
+                saved=trainer.CheckpointPolicy.load(policy.slot)
+                assert saved['training']['exposure_counts']['c']==0
+                def exact(a,b):
+                    if torch.is_tensor(a):assert torch.equal(a,b)
+                    elif isinstance(a,dict):
+                        assert a.keys()==b.keys()
+                        for key in a:exact(a[key],b[key])
+                    elif isinstance(a,(list,tuple)):
+                        assert len(a)==len(b)
+                        for left,right in zip(a,b):exact(left,right)
+                    else:assert a==b
+                exact(saved['training']['optimizer'],anchor_holder[0]['training']['optimizer'])
+                exact(saved['training']['rng'],anchor_holder[0]['training']['rng'])
+                transition_observed.append(True)
+            if state['training']['global_step']!=1 or queue_holder:return event
+            policy.drain_async()
+            training=state['training'];refs=training['source_receipts'];options=training['options']
+            inputs={'train':{k:refs[0][k] for k in ('path','sha256')},'held':{k:refs[1][k] for k in ('path','sha256')},
+                    'foundation':None,'ce':options.get('ce_supervision_policy_binding')}
+            assert inputs['ce'] is None and options.get('foundation_native_graphs') is None
+            bind=resident.binding; fixed=('runtime','environment','system-python','system-libraries','node','interpreter','base','tokenizer','task-assets','controls')
+            closure=[{'role':role,**bind(runtime)} for role in fixed]+[{'role':'sources',**inputs['train']},{'role':'sources',**inputs['held']}]
+            plan={'schema':'natlang.local-full-recovery-plan/1','session':'native-tiny','destination':destination,'journal_directory':str(out/'recovery'),
+                  'controller':{'state_path':str(controller),'config':bind(runtime)},'inputs':inputs,'closure':closure,'require_static_contract':True,
+                  'sft_static_contract':recovery_static_sft_contract(training)}
+            plan['restore']={'runtime_archive':str(runtime),'environment_archive':str(runtime),'system_python_archive':str(runtime),'base_path':str(tmp_path),
+                 'node_path':str(runtime),'interpreter_path':str(runtime),'sample_graph':str(paths['old']),'tokenizer_fingerprint':config['tokenizer_fingerprint'],
+                 'asset_guard':str(runtime),'asset_inventory':str(runtime),'asset_archives':[{'env':'NATLANG_RL_TASK_ASSETS','original_root':str(tmp_path/'a'),'archive':str(runtime)},{'env':'NATLANG_RL_TASK_ASSETS_V3','original_root':str(tmp_path/'b'),'archive':str(runtime)}]}
+            # A real native checkpoint load anchors the fixture; the archive evidence itself is simulated.
+            restored=trainer.CheckpointPolicy.load(policy.slot);assert restored['training']['global_step']==1
+            anchor_holder.append(restored)
+            attach_qualification(plan,tmp_path/'native-anchor-proof.json');plan_path=tmp_path/'native-anchor-plan.json';write_json(plan_path,plan)
+            ref=bind(plan_path);catalog=out/'checkpoint-recovery-plan.json';write_json(catalog,{'schema':'natlang.local-full-recovery-catalog/1','controller_config':bind(runtime),'initial_plan':ref,'plans':[ref]})
+            monkeypatch.setenv('NATLANG_REQUIRE_FULL_RECOVERY','1');monkeypatch.setenv('NATLANG_RECOVERY_CONTROL_SHA',resident.sha(runtime))
+            policy.recovery_plan=catalog;policy.recovery_queue=recovery_queue_for(policy.slot,catalog,state);queue_holder.append(policy.recovery_queue)
+            policy.recovery_queue.submit(policy.slot,state,event)
+            request=json.loads(resident.bound(json.loads((directory/'pending.json').read_text())).read_text())
+            policy.recovery_queue.schedule_resident_append(catalog,request['payload'],directory)
+            thread=policy.recovery_queue.append_thread;thread.join(timeout=30);assert not thread.is_alive()
+            assert policy.recovery_queue.state.get('append_staging',{}).get('status')=='staged',policy.recovery_queue.state.get('append_staging')
+            return event
+        monkeypatch.setattr(trainer.CheckpointPolicy,'due',due);monkeypatch.setattr(trainer.CheckpointPolicy,'save',save)
+        argv=['--base',str(base),'--dtype','float32','--rank','4','--device','cpu','--native-graphs',str(paths['old']),
+              '--held-native-graphs',str(paths['held']),'--epochs','1','--eval-every','1','--checkpoint-every','1','--out',str(out),
+              '--resident-data-directory',str(directory),'--resident-geometry-qualification',str(tmp_path/'geometry-capacity.json'),
+              '--recipe-binding',json.dumps(manager.recipe_binding),'--stage-id','sft']
+        if crash_after_commit:
+            original_poll=resident.ResidentAdoption.poll
+            class Crash(BaseException):pass
+            def crash_poll(self,*args,**kwargs):
+                result=original_poll(self,*args,**kwargs)
+                if result is not None:raise Crash()
+                return result
+            with monkeypatch.context() as crash_patch:
+                crash_patch.setattr(resident.ResidentAdoption,'poll',crash_poll)
+                with pytest.raises(Crash):trainer.main(argv)
+            assert resident.current(directory) is not None
+            assert trainer.CheckpointPolicy.load(out/'checkpoint.pt')['training']['global_step']==1
+        assert trainer.main(argv)==0
+        assert transition_observed and guard_calls
+        actual=trainer.CheckpointPolicy.load(out/'checkpoint.pt');assert actual['training']['global_step']==3
+        assert actual['training']['exposure_counts']=={'a':1,'b':1,'c':1}
+        queue=queue_holder[0];deadline=time.monotonic()+30
+        while (not queue.state.get('latest_verified') or queue.state['latest_verified']['global_step']!=3) and time.monotonic()<deadline:time.sleep(.05)
+        assert queue.state.get('latest_verified',{}).get('global_step')==3,queue.state.get('last_error')
+        ref=queue.state['latest_verified'];queue.close();checkpoint_offload._RECOVERY_QUEUES.pop(str((out/'checkpoint.pt').resolve()))
+        receipt=json.loads(Path(ref['path']).read_text());restored=trainer.CheckpointPolicy.load(receipt['checkpoint']['path'])
+        assert restored['training']['exposure_counts']==actual['training']['exposure_counts']
+        assert restored['training']['optimizer'].keys()==actual['training']['optimizer'].keys()
+        from scripts.neuralese_data.verify_local_recovery_export import verify
+        assert verify(ref['path'],ref['sha256'])['global_step']==3

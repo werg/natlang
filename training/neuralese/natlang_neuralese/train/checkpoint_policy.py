@@ -284,6 +284,15 @@ class CheckpointPolicy:
         also published as the best (``publish_best``); a stop write passes no metric."""
         if type(async_allowed) is not bool:
             raise TypeError('async checkpoint boundary permission must be an explicit boolean')
+        if self.recovery_queue is not None:
+            from .checkpoint_offload import _read_recovery_selection
+            try:_read_recovery_selection(self.recovery_plan,state)
+            except ValueError:
+                options=((state.get('training') or {}).get('options') or {})
+                directory=(options.get('resident_adoption') or {}).get('directory')
+                if not directory:raise
+                from .native_recovery_append import finalize_staged_append
+                finalize_staged_append(self.recovery_plan,self.recovery_queue.plan,state,directory)
         writer_error = None
         if self._async_writer is not None:
             try:

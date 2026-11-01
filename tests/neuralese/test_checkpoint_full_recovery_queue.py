@@ -59,7 +59,7 @@ def test_coalesced_pins_recovery_and_verified_copy(setup):
     assert q._export_one() and q.state['inflight'] is None and q.state['latest_verified']['global_step']==2
     assert not q.pin.exists()
     r=json.loads(Path(q.state['latest_verified']['path']).read_text());assert r['full_state'] and r['independent_readback'] and Path(r['checkpoint']['path']).read_bytes()==b'full state 2'
-    assert len(r['closure'])==14
+    assert len(r['closure'])==len(plan['closure'])+1
     q.close()
 
 
@@ -164,6 +164,7 @@ def test_policy_automatically_submits_only_after_commit(tmp_path,monkeypatch):
             self.seen.append((Path(path).read_bytes(),state['training']['global_step']))
     record=Recorder();(tmp_path/'checkpoint-recovery-plan.json').write_text('{}')
     monkeypatch.setattr(checkpoint_offload,'recovery_queue_for',lambda slot,plan,state=None:record)
+    monkeypatch.setattr(checkpoint_offload,'_read_recovery_selection',lambda plan,state=None:{})
     policy=CheckpointPolicy(tmp_path);policy.save({'training':{'global_step':3,'optimizer':{'x':1},'rng':{'x':1}}});policy.close()
     assert len(record.seen)==1 and record.seen[0][1]==3 and record.seen[0][0]
 
@@ -364,7 +365,8 @@ def test_export_verifier_uses_only_independent_bytes(setup, monkeypatch):
     ref=q.state['latest_verified']; q.close()
     for item in plan['closure']:
         Path(item['path']).unlink(missing_ok=True)
-    monkeypatch.setattr(verifier,'validate_full_recovery_checkpoint',lambda path,custody:None)
+    monkeypatch.setattr(verifier,'validate_full_recovery_checkpoint',lambda path,custody:{})
+    monkeypatch.setattr(verifier,'_plan_matches_checkpoint',lambda plan,state:True)
     result=verifier.verify(ref['path'],ref['sha256'])
     assert result['global_step']==1
     receipt=json.loads(Path(ref['path']).read_text()); Path(receipt['closure'][0]['path']).write_bytes(b'tampered')
@@ -424,3 +426,116 @@ def test_direct_queue_submit_rejects_changed_static_quota(setup):
     with pytest.raises(ValueError,match='static SFT contract'):
         q.submit(slot,state,{'previous_preserved_until_replace':True})
     assert not q.pin.exists();q.close()
+
+
+def test_prospective_append_intent_binds_owner_sources_and_execution(setup):
+    from copy import deepcopy
+    from natlang_neuralese.train.native_recovery_append import validate_append_intent
+    _,old=setup;new=deepcopy(old)
+    source=Path(old['inputs']['train']['path']).parent/'appended';source.write_bytes(b'appended')
+    ref={'path':str(source),'sha256':sha(source)}
+    new['inputs']['train']=ref;new['inputs']['foundation']=ref
+    new['closure'].append({'role':'sources',**ref})
+    new['additional_inputs']=[{'kind':'source',**old['inputs']['train']}]
+    roles={'native_graphs':ref,'foundation_native_graphs':ref,'held_native_graphs':old['inputs']['held'],
+           'ce_supervision_policy':old['inputs']['ce']}
+    payload={'stage_id':'joint','predecessor':'old-generation','prior_train':old['inputs']['train'],
+             'prior_held':old['inputs']['held'],'train':ref,'held':old['inputs']['held'],
+             'plan':{'stage_inputs':{'joint':roles}}}
+    options={'stage_id':'joint','predecessor_generation':'old-generation',
+             'predecessor_validator':lambda p:None,'successor_validator':lambda p:None}
+    intent=validate_append_intent(old,new,payload,**options)
+    assert intent['inputs']==new['inputs'] and 'prospective only' in intent['scope']
+    changed=deepcopy(new);changed['closure'][0]['sha256']='b'*64
+    with pytest.raises(ValueError,match='execution closure'):
+        validate_append_intent(old,changed,payload,**options)
+    changed=deepcopy(payload);changed['prior_train']['sha256']='b'*64
+    with pytest.raises(ValueError,match='predecessor sources'):
+        validate_append_intent(old,new,changed,**options)
+
+
+def test_resident_transition_seals_actual_successor_without_fake_restore(setup, monkeypatch):
+    from copy import deepcopy
+    import shutil
+    from natlang_neuralese.train import checkpoint_offload as offload
+    from natlang_neuralese.train.native_recovery_append import seal_append_transition
+    slot,old=setup;old_path=slot.parent/'old-qualified.json';write_json_durable(old_path,old);old_ref={'path':str(old_path),'sha256':sha(old_path)}
+    new=deepcopy(old);source=slot.parent/'next-source';source.write_bytes(b'next')
+    ref={'path':str(source),'sha256':sha(source)};new['inputs']['train']=new['inputs']['foundation']=ref
+    new['closure'].append({'role':'sources',**ref});new['additional_inputs']=[{'kind':'source',**old['inputs']['train']}]
+    roles={'native_graphs':ref,'foundation_native_graphs':ref,'held_native_graphs':old['inputs']['held'],'ce_supervision_policy':old['inputs']['ce']}
+    payload={'stage_id':'joint','predecessor':'old-generation','prior_train':old['inputs']['train'],'prior_held':old['inputs']['held'],'train':ref,'held':old['inputs']['held'],'plan':{'stage_inputs':{'joint':roles}}}
+    payload.update(entries_sha256='c'*64,held_entries_sha256='d'*64)
+    from natlang_neuralese.train.native_resident import digest
+    committed={'schema':'natlang.native-resident-adoption/1','generation':digest(payload),'payload':payload,
+               'validation':{'entries_sha256':'c'*64,'held_entries_sha256':'d'*64},'at_global_step':3}
+    draft_path=slot.parent/'successor-draft.json';write_json_durable(draft_path,new);draft_ref={'path':str(draft_path),'sha256':sha(draft_path)}
+    blobs=Path(new['destination'])/'closure';blobs.mkdir(exist_ok=True);objects=[]
+    for digest_value in sorted({item['sha256'] for item in new['closure']}):
+        item=next(item for item in new['closure'] if item['sha256']==digest_value);target=blobs/digest_value;shutil.copyfile(item['path'],target);s=target.stat()
+        objects.append({'path':str(target),'sha256':digest_value,'identity':[s.st_dev,s.st_ino,s.st_size,s.st_mtime_ns,s.st_ctime_ns]})
+    stage_path=slot.parent/'staged.json';write_json_durable(stage_path,{'schema':'natlang.local-recovery-staged-closure/1','plan_sha256':RecoveryExportQueue._plan_digest(new),'objects':objects});stage_ref={'path':str(stage_path),'sha256':sha(stage_path)}
+    wrapper_path=slot.parent/'intent.json';write_json_durable(wrapper_path,{'schema':'natlang.local-recovery-resident-append-intent/1','predecessor_plan':old_ref,'successor_draft':draft_ref,'staged_closure':stage_ref,'predecessor_generation':'old-generation','generation':digest(payload),'resident_directory':str(slot.parent)});wrapper_ref={'path':str(wrapper_path),'sha256':sha(wrapper_path)}
+    current_path=slot.parent/'resident-current.json';write_json_durable(current_path,committed);current_ref={'path':str(current_path),'sha256':sha(current_path)}
+    state={'training':{'global_step':3,'optimizer':{'m':1},'rng':{'r':1},'source_receipts':[ref,old['inputs']['held']],
+           'options':{'native_graphs':ref['path'],'foundation_native_graphs':ref['path'],'held_native_graphs':old['inputs']['held']['path'],'ce_supervision_policy_binding':old['inputs']['ce']}}}
+    result=seal_append_transition(old_ref,new,payload,committed,state,stage_id='joint',predecessor_generation='old-generation',
+        proof_directory=slot.parent/'proof',extra_controls=(wrapper_ref,stage_ref,draft_ref,current_ref),predecessor_validator=lambda p:None,successor_validator=lambda p:None)
+    assert seal_append_transition(old_ref,new,payload,committed,state,stage_id='joint',predecessor_generation='old-generation',
+        proof_directory=slot.parent/'proof',extra_controls=(wrapper_ref,stage_ref,draft_ref,current_ref),predecessor_validator=lambda p:None,successor_validator=lambda p:None)==result
+    plan=json.loads(Path(result['path']).read_text());proof=json.loads(Path(plan['restore_qualification']['path']).read_text())
+    assert proof['mode']=='resident-append/1' and 'successor checkpoint/export must be independently verified' in proof['scope']
+    monkeypatch.setattr(offload,'validate_recovery_plan_dependencies',lambda p,**kwargs:None)
+    offload.validate_restore_qualification(plan)
+    # Rebind every enclosing hash after tampering, so validation exercises the
+    # transition semantics rather than merely noticing a changed file digest.
+    proof_path=Path(plan['restore_qualification']['path']);proof=json.loads(proof_path.read_text())
+    evidence_path=Path(proof['transition_evidence']['path']);evidence=json.loads(evidence_path.read_text())
+    old_evidence_sha=proof['transition_evidence']['sha256'];evidence['actual_global_step']+=1;write_json_durable(evidence_path,evidence)
+    proof['transition_evidence']['sha256']=sha(evidence_path)
+    for item in plan['closure']:
+        if item['path']==str(evidence_path) and item['sha256']==old_evidence_sha:item['sha256']=proof['transition_evidence']['sha256']
+    proof['closure_identity']=offload.recovery_closure_identity(plan)
+    old_proof_sha=plan['restore_qualification']['sha256'];write_json_durable(proof_path,proof);plan['restore_qualification']['sha256']=sha(proof_path)
+    for item in plan['closure']:
+        if item['path']==str(proof_path) and item['sha256']==old_proof_sha:item['sha256']=plan['restore_qualification']['sha256']
+    with pytest.raises(ValueError,match='transition proof differs|not been committed'):offload.validate_restore_qualification(plan)
+    bad=deepcopy(committed);bad['generation']='wrong'
+    with pytest.raises(ValueError,match='not been committed'):
+        seal_append_transition(old_ref,new,payload,bad,state,stage_id='joint',predecessor_generation='old-generation',
+            proof_directory=slot.parent/'bad',extra_controls=(wrapper_ref,stage_ref,draft_ref,current_ref),predecessor_validator=lambda p:None,successor_validator=lambda p:None)
+
+
+def test_staged_append_closure_rejects_changed_objects(setup):
+    import shutil
+    from natlang_neuralese.train.native_recovery_append import validate_staged_closure
+    _,plan=setup;root=Path(plan['destination'])/'closure';root.mkdir(exist_ok=True);objects=[]
+    for digest in sorted({item['sha256'] for item in plan['closure']}):
+        source=next(Path(item['path']) for item in plan['closure'] if item['sha256']==digest)
+        target=root/digest;shutil.copyfile(source,target);s=target.stat()
+        objects.append({'path':str(target),'sha256':digest,'identity':[s.st_dev,s.st_ino,s.st_size,s.st_mtime_ns,s.st_ctime_ns]})
+    receipt={'schema':'natlang.local-recovery-staged-closure/1','plan_sha256':RecoveryExportQueue._plan_digest(plan),'objects':objects}
+    validate_staged_closure(plan,receipt)
+    Path(objects[0]['path']).write_bytes(b'changed')
+    with pytest.raises(ValueError,match='changed since independent readback'):
+        validate_staged_closure(plan,receipt)
+
+
+def test_queue_close_keeps_owner_until_staging_worker_exits(setup,monkeypatch):
+    import threading,time
+    from natlang_neuralese.train import native_recovery_append as append
+    slot,plan=setup;started=threading.Event();release=threading.Event()
+    def delayed(queue,catalog,payload,directory,*,stop_requested):
+        started.set();assert release.wait(5)
+        assert stop_requested()
+        raise RuntimeError('stopped')
+    monkeypatch.setattr(append,'stage_append_intent',delayed)
+    q=RecoveryExportQueue(slot,plan,start_worker=False,plan_validator=lambda p:None,checkpoint_validator=lambda p,c:None)
+    q.schedule_resident_append(slot.parent/'catalog',{'x':1},slot.parent);assert started.wait(5)
+    q.close()
+    with pytest.raises(BlockingIOError):
+        RecoveryExportQueue(slot,plan,start_worker=False,plan_validator=lambda p:None,checkpoint_validator=lambda p,c:None)
+    release.set();deadline=time.monotonic()+5
+    while not q._owner.closed and time.monotonic()<deadline:time.sleep(.01)
+    assert q._owner.closed
+    replacement=RecoveryExportQueue(slot,plan,start_worker=False,plan_validator=lambda p:None,checkpoint_validator=lambda p,c:None);replacement.close()

@@ -3295,7 +3295,6 @@ def _main(argv=None, *, requested_refresh):
     focus_ids |= policy_focus_ids
     frontier_ids = pending_frontier(frontier_history, source_row_bindings, exposure_counts,
                                     checkpoint_options.get('withdrawal_history') or []) if objective is None else set()
-    focus_ids |= frontier_ids
     if focus_ids:
         pending_batches=promote_focus(pending_batches,train.entries,focus_ids)
     if focus_record:
@@ -3321,6 +3320,14 @@ def _main(argv=None, *, requested_refresh):
         checkpoint_options['communication_quota_policy']['interleave']='sustained-packed-batch-proportional/1'
     if policy_focus_ids:
         pending_batches=promote_focus(pending_batches,train.entries,policy_focus_ids)
+    frontier_ids -= focus_ids
+    if frontier_ids:
+        from .native_source_frontier import interleave_batches
+        pending_batches=interleave_batches(pending_batches,train.entries,frontier_ids,schedule_offset=global_step,priority_ids=focus_ids)
+        history=checkpoint_options.setdefault('fresh_source_frontier_interleave_history',[])
+        if not any(item.get('source_sha256')==train.file_sha256 for item in history):
+            history.append({'schema':'natlang.native-frontier-interleave/1','source_sha256':train.file_sha256,
+                            'global_step':global_step,'period':5,'earned_visits_granted':0})
     if args.continuation_preflight_only:
         receipt={'schema':'natlang.native-continuation-cpu-preflight/1','passed':True,
             'parent_sha256':sha256_file_hex_cached(args.continue_from),'global_step':global_step,
@@ -3405,7 +3412,7 @@ def _main(argv=None, *, requested_refresh):
     if args.refresh_at_checkpoint and args.refresh_after_updates is None and not (args.checkpoint_every or args.checkpoint_seconds):
         raise ValueError('semantic refresh needs a declared checkpoint step/time cadence')
     schedule = stream_windows(train, [[batch] for batch in pending_batches], priority_ids=foundation_priority_ids,
-                                      cohort_ids=urgent_cohort_ids, rotation_index=rotation_index, focus_ids=focus_ids,
+                                      cohort_ids=urgent_cohort_ids, rotation_index=rotation_index, focus_ids=focus_ids|frontier_ids,
                                       urgent_cohort_fairness=args.urgent_cohort_fairness, ordinary_cohort_fairness=args.ordinary_cohort_fairness, communication_cohort_fairness=args.communication_cohort_fairness)
     resident = None
     if args.resident_data_directory is not None:
@@ -3421,10 +3428,22 @@ def _main(argv=None, *, requested_refresh):
             resident.plan['stage_inputs'][args.stage_id].get('ce_supervision_policy'))
         if resident.state:
             checkpoint_options['resident_adoption'] = {'generation': resident.generation,
-                'history': resident.state['history']}
+                'history': resident.state['history'],'directory':str(resident.directory.resolve())}
             checkpoint_options['source_predecessors'] = {
                 'continued_native_graphs': resident.state['payload']['prior_train']['sha256'],
                 'continued_held_native_graphs': resident.state['payload']['prior_held']['sha256']}
+            prior_generation=((((resume or {}).get('options') or {}).get('resident_adoption') or {}).get('generation'))
+            if policy.recovery_queue is not None and prior_generation!=resident.generation:
+                # A crash may leave the resident commit ahead of the rolling
+                # checkpoint. Seal and save that metadata before any new SGD.
+                _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
+                    global_step=global_step, epoch=epoch, cursor=cursor, source_receipts=source_receipts,
+                    source_hash=source_hash, source_row_bindings=source_row_bindings,
+                    held_row_bindings=held_row_bindings, exposure_counts=exposure_counts,
+                    rng=capture_training_rng_state(args.device), metrics=metrics,
+                    architecture=config['architecture'], options={**checkpoint_options, '_source_row_order':source_order},
+                    fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
+                last_saved_step=step
     # A no-update continuation still needs its own durable checkpoint, and an
     # explicitly changed optimizer algorithm must be saved even at a completed
     # exposure boundary. Neither operation earns another graph visit.
@@ -3600,8 +3619,10 @@ def _main(argv=None, *, requested_refresh):
                             'foundation':recovery_ref(roles.get('foundation_native_graphs')),
                             'held':recovery_ref(roles['held_native_graphs']),
                             'ce':recovery_ref(roles.get('ce_supervision_policy'))}
-                        try:require_recovery_candidate(policy.recovery_plan,candidate_inputs)
+                        try:require_recovery_candidate(policy.recovery_plan,candidate_inputs,payload=payload,
+                            active_plan=policy.recovery_queue.plan,resident_directory=resident.directory)
                         except (ValueError,OSError,KeyError,TypeError) as error:
+                            policy.recovery_queue.schedule_resident_append(policy.recovery_plan,payload,resident.directory)
                             raise ResidentRetry('resident source awaits its exact restore-qualified recovery plan: '+str(error)) from error
                     checked = packed_candidate_check(candidate_train,candidate_held,payload,candidate_ce,declarations) if args.memory_qualification and objective is None else None
                     if diloco is not None and getattr(diloco,'contract_sha256',None) is not None:
@@ -3637,7 +3658,7 @@ def _main(argv=None, *, requested_refresh):
                             raise
                         pending_role_contract['identity']=identity
                     return checked
-                needs_candidate_check = bool((args.memory_qualification and objective is None) or (diloco is not None and getattr(diloco,'contract_sha256',None) is not None))
+                needs_candidate_check = bool(policy.recovery_queue is not None or (args.memory_qualification and objective is None) or (diloco is not None and getattr(diloco,'contract_sha256',None) is not None))
                 expanded = resident.poll(global_step,candidate_check=resident_candidate_check) if needs_candidate_check else resident.poll(global_step)
                 if expanded is not None:
                     if pending_role_contract:
@@ -3717,7 +3738,8 @@ def _main(argv=None, *, requested_refresh):
                     for key in source_row_bindings:
                         exposure_counts.setdefault(key, 0)
                     checkpoint_options.update(native_graphs=str(train.path), held_native_graphs=str(held.path), recipe_binding=args.recipe_binding,
-                        resident_adoption={'generation': resident.generation, 'history': resident.state['history']})
+                        resident_adoption={'generation': resident.generation, 'history': resident.state['history'],
+                                           'directory':str(resident.directory.resolve())})
                     checkpoint_options['_communication_ids'] = [entry['id'] for entry in train.entries if entry.get('communication')]
                     checkpoint_options['_producer_consumer_ids'] = [entry['id'] for entry in train.entries
                         if entry.get('producer_consumer', entry.get('communication', False))]
@@ -3758,8 +3780,8 @@ def _main(argv=None, *, requested_refresh):
                         if not focus_ids:focus_record['state']='complete'
                     else:
                         focus_ids=set()
-                    focus_ids |= pending_frontier(frontier_history, source_row_bindings, exposure_counts,
-                                                  checkpoint_options.get('withdrawal_history') or [])
+                    frontier_ids = pending_frontier(frontier_history, source_row_bindings, exposure_counts,
+                                                    checkpoint_options.get('withdrawal_history') or [])
                     if focus_ids:
                         pending_batches=promote_focus(pending_batches,train.entries,focus_ids)
                     if urgent_cohort_ids is None:
@@ -3771,6 +3793,14 @@ def _main(argv=None, *, requested_refresh):
                         from .native_diversity import sustained_communication_interleave
                         pending_batches=sustained_communication_interleave(train.entries,pending_batches,
                             focus_ids=focus_ids,schedule_offset=global_step)
+                    frontier_ids -= focus_ids
+                    if frontier_ids:
+                        from .native_source_frontier import interleave_batches
+                        pending_batches=interleave_batches(pending_batches,train.entries,frontier_ids,schedule_offset=global_step,priority_ids=focus_ids)
+                        history=checkpoint_options.setdefault('fresh_source_frontier_interleave_history',[])
+                        if not any(item.get('source_sha256')==train.file_sha256 for item in history):
+                            history.append({'schema':'natlang.native-frontier-interleave/1','source_sha256':train.file_sha256,
+                                            'global_step':global_step,'period':5,'earned_visits_granted':0})
                     if args.memory_qualification and objective is None:
                         # The committed source can change actual packed KV topology.
                         # Qualify the transformed schedule before the next update.
@@ -3792,9 +3822,20 @@ def _main(argv=None, *, requested_refresh):
                     batches_left = len(pending_batches)
                     target_rows = sum(required_visits.values())
                     schedule = stream_windows(train, [[batch] for batch in pending_batches], priority_ids=foundation_priority_ids,
-                                                      cohort_ids=urgent_cohort_ids, rotation_index=rotation_index, focus_ids=focus_ids,
+                                                      cohort_ids=urgent_cohort_ids, rotation_index=rotation_index, focus_ids=focus_ids|frontier_ids,
                                                       urgent_cohort_fairness=args.urgent_cohort_fairness,
                                                       ordinary_cohort_fairness=args.ordinary_cohort_fairness, communication_cohort_fairness=args.communication_cohort_fairness)
+                    if policy.recovery_queue is not None:
+                        # Seal the actual metadata transition and save the full
+                        # predecessor state with zero new visits before SGD.
+                        _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
+                            global_step=global_step, epoch=epoch, cursor=cursor, source_receipts=source_receipts,
+                            source_hash=source_hash, source_row_bindings=source_row_bindings,
+                            held_row_bindings=held_row_bindings, exposure_counts=exposure_counts,
+                            rng=capture_training_rng_state(args.device), metrics=metrics,
+                            architecture=config['architecture'], options={**checkpoint_options, '_source_row_order':source_order},
+                            fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
+                        last_saved_step=step;metadata_dirty=False
             if anneal is not None:
                 # The branch ends after its declared updates, whatever data remains in the stage.
                 total_end = min(total_end, step + anneal.remaining(global_step))

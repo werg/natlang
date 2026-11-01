@@ -853,6 +853,7 @@ def validate_full_recovery_checkpoint(path, expected):
     state=CheckpointPolicy.load(path)
     if recovery_training_custody(state)!=expected:
         raise ValueError('independent checkpoint full-state custody differs')
+    return state
 
 
 def validate_recovery_plan_shape(plan):
@@ -955,11 +956,58 @@ def recovery_closure_identity(plan):
     return canonical_json_sha256_hex(sorted(values,key=lambda x:(x['role'],x['path'],x['sha256'])))
 
 
-def validate_restore_qualification(plan):
+def validate_restore_qualification(plan, _seen=None):
     reference=plan['restore_qualification'];path=Path(reference['path']).resolve(strict=True)
     if file_sha256(path)!=reference['sha256']:
         raise ValueError('recovery restore qualification binding changed')
     value=json.loads(path.read_text());checks=value.get('checks') or {}
+    if value.get('mode')=='resident-append/1':
+        from .native_recovery_append import validate_append_intent,validate_committed_record,validate_staged_closure
+        seen=set() if _seen is None else set(_seen)
+        if reference['sha256'] in seen or len(seen)>=128:raise ValueError('recovery transition proof chain is cyclic or too long')
+        seen.add(reference['sha256'])
+        available={(item['path'],item['sha256']) for item in plan['closure'] if item['role']=='controls'}
+        def bound_ref(ref):
+            if (not isinstance(ref,dict) or set(ref)!={'path','sha256'} or (ref['path'],ref['sha256']) not in available
+                    or file_sha256(Path(ref['path']).resolve(strict=True))!=ref['sha256']):
+                raise ValueError('recovery append evidence is not exactly retained')
+            return json.loads(Path(ref['path']).read_text())
+        predecessor=bound_ref(value.get('predecessor_plan'));evidence=bound_ref(value.get('transition_evidence'))
+        validate_recovery_plan_shape(predecessor);validate_recovery_plan_dependencies(predecessor,require_restore=False)
+        validate_restore_qualification(predecessor,seen)
+        committed=evidence.get('committed') or {};intent=evidence.get('intent') or {};payload=committed.get('payload')
+        draft=bound_ref(evidence.get('successor_draft'))
+        staged_intent=bound_ref(evidence.get('staged_intent'));staged=bound_ref(evidence.get('staged_closure'))
+        staged_draft=bound_ref(evidence.get('staged_draft'))
+        committed_snapshot=bound_ref(evidence.get('resident_current'))
+        if (committed_snapshot!=committed or staged_draft!=draft or staged_intent.get('schema')!='natlang.local-recovery-resident-append-intent/1'
+                or staged_intent.get('predecessor_plan')!=value.get('predecessor_plan')
+                or staged_intent.get('successor_draft')!=evidence.get('staged_draft')
+                or staged_intent.get('staged_closure')!=evidence.get('staged_closure')
+                or staged_intent.get('generation')!=intent.get('generation')
+                or staged_intent.get('predecessor_generation')!=intent.get('predecessor_generation')):
+            raise ValueError('recovery append staging intent differs')
+        validate_staged_closure(draft,staged)
+        recomputed=validate_append_intent(predecessor,draft,payload,stage_id=intent.get('stage_id'),
+            predecessor_generation=intent.get('predecessor_generation'),predecessor_validator=lambda _:None,
+            successor_validator=lambda p:validate_recovery_plan_dependencies(p,require_restore=False))
+        validate_committed_record(committed,payload,intent.get('generation'),evidence.get('actual_global_step'))
+        if (value.get('schema')!='natlang.local-recovery-restore-qualification/1' or value.get('status')!='passed'
+                or value.get('inputs')!=plan['inputs'] or value.get('restore')!=plan.get('restore')
+                or value.get('additional_inputs',[])!=plan.get('additional_inputs',[])
+                or value.get('controller_config')!=plan['controller']['config']
+                or value.get('require_static_contract') is not True or value.get('sft_static_contract')!=plan['sft_static_contract']
+                or value.get('control_snapshot')!=plan.get('control_snapshot') or value.get('closure_identity')!=recovery_closure_identity(plan)
+                or evidence.get('schema')!='natlang.local-recovery-resident-transition/1' or intent!=recomputed
+                or any(draft.get(key)!=plan.get(key) for key in ('inputs','restore','controller','control_snapshot','additional_inputs','session','destination','journal_directory'))
+                or not {(x['role'],x['path'],x['sha256']) for x in draft['closure']} <= {(x['role'],x['path'],x['sha256']) for x in plan['closure']}
+                or committed.get('generation')!=intent['generation'] or not committed.get('validation')
+                or committed.get('at_global_step')!=evidence.get('actual_global_step')
+                or evidence.get('actual_static_contract')!=plan['sft_static_contract']
+                or set(checks)!={'predecessor_restore_anchor','resident_commit_validated','successor_metadata_validated'}
+                or not all(item is True for item in checks.values())):
+            raise ValueError('recovery resident transition proof differs')
+        return
     required=('all_payloads_reread','source_closure_resolved','environment_imports','tokenizer_loaded',
               'checkpoint_full_state_loaded','checkpoint_plan_custody','node_collector_imported','task_assets_read')
     evidence=value.get('evidence') or {}
@@ -1082,6 +1130,9 @@ class RecoveryExportQueue:
         self.cond = threading.Condition()
         self.closed = False
         self.thread = None
+        self.append_thread = None
+        self.append_generation = None
+        self.append_retry_after = 0.0
         if self.state_path.exists():
             self.state = json.loads(self.state_path.read_text())
             if (self.state.get('schema') != 'natlang.local-full-recovery-journal/1'
@@ -1445,13 +1496,49 @@ class RecoveryExportQueue:
                     self._persist()
                     self.cond.wait(timeout=30)
 
+    def schedule_resident_append(self,catalog_path,payload,resident_directory):
+        """Stage one validated prospective append without blocking optimizer work."""
+        from .native_resident import digest
+        payload=json.loads(json.dumps(payload))
+        generation=digest(payload)
+        with self.cond:
+            if self.closed:return
+            if self.append_thread is not None and self.append_thread.is_alive():return
+            if self.append_generation==generation and time.monotonic()<self.append_retry_after:return
+            self.append_generation=generation
+            def worker():
+                from .native_recovery_append import stage_append_intent
+                try:
+                    ref=stage_append_intent(self,catalog_path,payload,resident_directory,stop_requested=lambda:self.closed)
+                    with self.cond:
+                        if self.closed:return
+                        self.state['append_staging']={'generation':generation,'status':'staged','intent':ref}
+                        self._persist()
+                except Exception as error:
+                    with self.cond:
+                        if not self.closed:
+                            self.append_retry_after=time.monotonic()+30
+                            self.state['append_staging']={'generation':generation,'status':'failed',
+                                'error_type':type(error).__name__,'error':str(error)[:500]}
+                            self._persist()
+            self.append_thread=threading.Thread(target=worker,name='recovery-resident-staging',daemon=True)
+            self.append_thread.start()
+
     def close(self):
         with self.cond:
             self.closed=True
             self.cond.notify_all()
         if self.thread is not None:
             self.thread.join()
-        self._owner.close()
+        if self.append_thread is not None and self.append_thread.is_alive():
+            # Keep the owner lock until in-flight staging children have exited;
+            # closing the policy must not leave an unowned writer racing a new
+            # recovery process.  Staging notices ``closed`` and publishes no
+            # intent after shutdown.
+            def release_after_staging():
+                self.append_thread.join();self._owner.close()
+            threading.Thread(target=release_after_staging,name='recovery-staging-close',daemon=True).start()
+        else:self._owner.close()
 
 
 def _read_bound_recovery_bytes(reference):
@@ -1544,10 +1631,15 @@ def _read_recovery_selection(plan_path, state=None):
     return matches[0]
 
 
-def require_recovery_candidate(plan_path, inputs):
+def require_recovery_candidate(plan_path, inputs, *, payload=None, active_plan=None, resident_directory=None):
     """Require a closed staged plan without selecting it for an older checkpoint."""
     plans,_=_read_recovery_catalog(plan_path)
     matches=[plan for plan in plans if plan.get('inputs')==inputs]
+    if not matches and payload is not None and active_plan is not None and resident_directory is not None:
+        from .native_recovery_append import find_staged_append_intent
+        intent,draft,_=find_staged_append_intent(plan_path,active_plan,payload,resident_directory)
+        if draft['inputs']!=inputs:raise ValueError('resident append intent input roles differ')
+        return intent
     if len(matches)!=1:raise ValueError('resident source has no unique staged recovery plan')
     validate_recovery_plan_dependencies(matches[0])
     return matches[0]['restore_qualification']
