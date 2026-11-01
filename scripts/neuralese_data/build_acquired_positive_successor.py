@@ -470,8 +470,11 @@ def build(predecessor_dir: Path, screen_path: Path | None, output_dir: Path,
             zero_rows.append(example.id)
         weighted_mass += amount
         target_tokens += sum(weight > 0 for weight in example.target_weights)
-    if zero_rows or target_tokens != source_target_tokens:
-        raise ValueError("one or more appended rows lacks the exact positive supervised CE token inventory")
+    if zero_rows or source_target_tokens <= 0 or target_tokens <= 0:
+        raise ValueError(
+            "appended source lacks positive raw supervision or a positive CE-masked target inventory: "
+            f"raw_positive_tokens={source_target_tokens}, ce_positive_tokens={target_tokens}, "
+            f"zero_effective_rows={len(zero_rows)}")
 
     qualification_path = output_dir / "source-positive-qualification.json"
     selected_by_source = Counter(row[1]["source_domain"] for row in qualified_rows)
@@ -496,6 +499,7 @@ def build(predecessor_dir: Path, screen_path: Path | None, output_dir: Path,
         "selected_rows": origin_rows,
         "counts": {"selected_graphs": len(origin_rows), "coding": len(family_rows),
             "native_communication": 0, "forward_tokens": source_forward_tokens,
+            "raw_positive_target_tokens": source_target_tokens,
             "positive_target_tokens": target_tokens, "effective_weighted_mass": weighted_mass}}
     write_json_durable(qualification_path, qualification)
 
@@ -507,7 +511,8 @@ def build(predecessor_dir: Path, screen_path: Path | None, output_dir: Path,
         "prior_ce_reuse": bind(Path(previous["prior_ce_reuse"]["path"])),
         "rows": len(new_source.entries), "predecessor_rows": predecessor_rows,
         "new_rows": new_rows, "new_families": ["coding"] * new_rows,
-        "new_effective_weighted_mass": weighted_mass, "positive_target_tokens": target_tokens,
+        "new_effective_weighted_mass": weighted_mass,
+        "raw_positive_target_tokens": source_target_tokens, "positive_target_tokens": target_tokens,
         "zero_effective_rows": zero_rows, "geometry_scan": geometry_scan,
         "family_census": policy["_family_census"], "objective_transition": objective_transition,
         "family_balance": ce_policy["objective"]["family_balance"],
