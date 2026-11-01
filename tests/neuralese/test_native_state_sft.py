@@ -27,6 +27,74 @@ def test_native_data_continuation_only_adds_exact_rows():
         append_only_rows(prior, _row_bindings([changed, old[1]]), label='training-source')
 
 
+def test_unstarted_update_stop_restores_cursor_rng_optimizer_and_lr_schedules(monkeypatch):
+    from natlang_neuralese.train import native_state_sft as trainer
+
+    group={'lr':0.0125,'qat_latent_lr':0.025}
+    class Optimizer:
+        def __init__(self):self.zeroed=False
+        def zero_grad(self,*,set_to_none):
+            assert set_to_none is True
+            self.zeroed=True
+    class Schedule:
+        def __init__(self, values):self.values=values;self.restored=False
+        def restore(self):
+            self.restored=True
+            group['lr'],group['qat_latent_lr']=self.values
+    warmup=Schedule((0.05,0.1))
+    anneal=Schedule((0.2,0.4))
+    optimizer=Optimizer(); restored=[]
+    monkeypatch.setattr(trainer,'restore_training_rng_state',
+        lambda state,device:restored.append((state,device)))
+    assert trainer._restore_unstarted_update(optimizer=optimizer,previous_cursor=17,
+        rng_state={'seed':3},device='cpu',warmup=warmup,anneal=anneal)==17
+    assert warmup.restored and anneal.restored and optimizer.zeroed
+    assert group=={'lr':0.2,'qat_latent_lr':0.4}
+    assert restored==[({'seed':3},'cpu')]
+
+
+def test_sigterm_during_capacity_gate_cancels_fetched_batch_before_sgd(tmp_path,monkeypatch):
+    import json
+    import os
+    import signal
+    import torch
+    from test_native_serve import _tiny_source
+    from natlang_neuralese.model.native_model import load_native_model
+    from natlang_neuralese.train import native_state_sft as trainer
+    from natlang_neuralese.train import native_packed_capacity
+
+    base=tmp_path/'base';_tiny_source(base)
+    _,_,_,config=load_native_model(base,dtype=torch.float32,rank=4)
+    paths={}
+    for split in ('train','test'):
+        row=dict(graph(split),split=split,source_groups=[split],
+            tokenizer_fingerprint=config['tokenizer_fingerprint'])
+        paths[split]=tmp_path/(split+'.jsonl')
+        paths[split].write_text(json.dumps(row)+'\n')
+    out=tmp_path/'run';updates=[];scaled_rates=[]
+    def stop_during_gate(model,optimizer,micro_batches,**kwargs):
+        from natlang_neuralese.train.optim_restore import _children
+        scaled_rates.extend(group['lr'] for _,child in _children(optimizer) for group in child.param_groups)
+        os.kill(os.getpid(),signal.SIGTERM)
+        return None
+    monkeypatch.setattr(native_packed_capacity,'qualify_oversize_batches',stop_during_gate)
+    monkeypatch.setattr(trainer,'native_training_update',
+        lambda *args,**kwargs:updates.append(True))
+    argv=['--base',str(base),'--dtype','float32','--rank','4','--device','cpu',
+        '--native-graphs',str(paths['train']),'--held-native-graphs',str(paths['test']),
+        '--epochs','2','--eval-every','1000','--lr-warmup','4','--out',str(out)]
+    assert trainer.main(argv)==0
+    assert scaled_rates and not updates
+    saved=torch.load(out/'checkpoint.pt',map_location='cpu',weights_only=False)['training']
+    assert saved['step']==0 and saved['global_step']==0
+    assert saved['cursor']==0 and saved['exposure_counts']=={'train':0}
+    assert saved['rng'] is not None
+    report=json.loads((out/'report.json').read_text())
+    assert report['completed'] is False
+    assert report['continuation_boundary']['new_optimizer_updates']==0
+    assert report['continuation_boundary']['operational_stop_signals'][0]['signal']=='SIGTERM'
+
+
 def test_decoded_parent_metadata_is_released_before_restored_model_checks(tmp_path, monkeypatch):
     import gc
     import json

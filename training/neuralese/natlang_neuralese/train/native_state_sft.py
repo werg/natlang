@@ -1168,6 +1168,23 @@ def _cadence_async_checkpoint_allowed(*, requested, oversized_update, oversize_p
         and before_final_update and not stop_requested and not refresh_due)
 
 
+def _restore_unstarted_update(*, optimizer, previous_cursor, rng_state, device, warmup=None, anneal=None):
+    """Undo schedule-side effects after a stop arrives before optimizer work starts.
+
+    Fetching advances the schedule and capacity/QAT gates can be long. If an
+    operational stop arrives during those gates, the fetched batch has earned
+    no exposure and must be replayed from the previous cursor on resume.
+    """
+    if warmup is not None:
+        warmup.restore()
+    if anneal is not None:
+        anneal.restore()
+    if optimizer is not None:
+        optimizer.zero_grad(set_to_none=True)
+    restore_training_rng_state(rng_state, device)
+    return previous_cursor
+
+
 def _save(policy, model, optimizer, *, config, identity, step, epoch, cursor, source_receipts,
           source_hash, source_row_bindings, held_row_bindings, exposure_counts, global_step, rng, metrics,
           architecture, options, fp8_state=None, sft_progress=None, async_allowed=False, reserve_only=False):
@@ -3840,6 +3857,12 @@ def _main(argv=None, *, requested_refresh):
                 policy,model,micro_batches,oversize_limits,
                 frontier=oversize_frontier,
                 execution_identity=oversize_execution_identity_record,precision=planned_precision,backend=backend)
+            if policy.signaled:
+                cursor = _restore_unstarted_update(optimizer=optimizer, previous_cursor=previous_cursor,
+                    rng_state=fetch_rng, device=args.device, warmup=warmup, anneal=anneal)
+                print(json.dumps({'kind':'native_phase','phase':'stop_before_update','gate':'oversize_preflight',
+                    'global_step':global_step,'cursor':cursor,'received_signals':policy.stop.received}),flush=True)
+                break
             indices = [index for item in fetched for index in item[1]]
             pass_end = any(item[2] for item in fetched)
             batch = [example for micro in micro_batches for example in micro]
@@ -3865,6 +3888,12 @@ def _main(argv=None, *, requested_refresh):
                             collect_accuracy=False, allow_communication_prefixes=backend is None))
                 finally:
                     restore_training_rng_state(calibration_rng, args.device)
+                if policy.signaled:
+                    cursor = _restore_unstarted_update(optimizer=optimizer, previous_cursor=previous_cursor,
+                        rng_state=fetch_rng, device=args.device, warmup=warmup, anneal=anneal)
+                    print(json.dumps({'kind':'native_phase','phase':'stop_before_update','gate':'qat_calibration',
+                        'global_step':global_step,'cursor':cursor,'received_signals':policy.stop.received}),flush=True)
+                    break
             # A newly larger complete graph is measured on this very model
             # with the selected QAT point and actual cotangent path before SGD.
             from .native_packed_capacity import qualify_oversize_batches
@@ -3913,9 +3942,29 @@ def _main(argv=None, *, requested_refresh):
                     remember_oversize_capacity_proof(oversize_frontier, oversize_proof)
                     checkpoint_options['oversize_capacity_frontier'] = serialize_oversize_capacity_frontier(
                         oversize_frontier)
+            if policy.signaled:
+                cursor = _restore_unstarted_update(optimizer=optimizer, previous_cursor=previous_cursor,
+                    rng_state=fetch_rng, device=args.device, warmup=warmup, anneal=anneal)
+                print(json.dumps({'kind':'native_phase','phase':'stop_before_update','gate':'oversize_qualification',
+                    'global_step':global_step,'cursor':cursor,'received_signals':policy.stop.received}),flush=True)
+                break
             # Continue locally while peers boot; pause only if unmerged residual
             # reaches the configured offline-history bound.
             if diloco is not None and not diloco.await_update_capacity(stop_requested=lambda: policy.signaled):
+                if policy.signaled:
+                    cursor = _restore_unstarted_update(optimizer=optimizer, previous_cursor=previous_cursor,
+                        rng_state=fetch_rng, device=args.device, warmup=warmup, anneal=anneal)
+                    print(json.dumps({'kind':'native_phase','phase':'stop_before_update','gate':'diloco_capacity',
+                        'global_step':global_step,'cursor':cursor,'received_signals':policy.stop.received}),flush=True)
+                break
+            # The signal can arrive while a capacity proof, QAT calibration or
+            # DiLoCo handoff is running. Observe it again at the final boundary
+            # before any native forward/backward/optimizer work starts.
+            if policy.signaled:
+                cursor = _restore_unstarted_update(optimizer=optimizer, previous_cursor=previous_cursor,
+                    rng_state=fetch_rng, device=args.device, warmup=warmup, anneal=anneal)
+                print(json.dumps({'kind':'native_phase','phase':'stop_before_update','gate':'final_pre_update',
+                    'global_step':global_step,'cursor':cursor,'received_signals':policy.stop.received}),flush=True)
                 break
             exception_boundary_safe = False
             print(json.dumps({'kind':'native_phase','phase':'update_start','global_step':global_step}),flush=True)
@@ -4491,6 +4540,8 @@ def _main(argv=None, *, requested_refresh):
         'new_optimizer_updates':step-resumed_step, 'checkpoint_sha256':checkpoint_sha}
     if requested_refresh.received:
         continuation_boundary['requested_signals'] = requested_refresh.received
+    if policy.stop.received:
+        continuation_boundary['operational_stop_signals'] = policy.stop.received
     foundation_ready = bool(foundation_boundary and runtime_report.get('passed') is True and task_receipt_ok)
     qualification_schedule = {'policy':'at-boundary','request':None,'requested':False,
         'candidate':bool(foundation and foundation.get('complete') is True),
