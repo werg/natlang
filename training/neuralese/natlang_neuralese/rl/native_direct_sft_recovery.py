@@ -65,3 +65,40 @@ def recover(state_path, *, report_ref, receipt_ref, custody_ref, qualification_r
         next_state.setdefault('interrupted_sft_recovery_history', []).append(binding(out))
         write_json_durable(state_path, next_state)
         return result
+
+
+def publish_completed(state_path, *, report_ref, receipt_ref, custody_ref, out):
+    """Publish a qualified finite SFT refresh without claiming stage completion."""
+    from .native_raw_rounds import _published_checkpoint_state
+    from ..train.native_operation_report import supervised_progress_numerics_ok
+    state_path,out=Path(state_path).resolve(),Path(out).resolve()
+    def read(ref): return json.loads(_bound(ref).read_text())
+    with (state_path.parent/'controller.lock').open('a') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        state=json.loads(state_path.read_text());report,receipt,custody=map(read,(report_ref,receipt_ref,custody_ref))
+        parent,child=custody['parent'],custody['successor'];parent_path,child_path=_bound(parent),_bound(child)
+        boundary=report.get('continuation_boundary') or {}
+        if (state.get('phase')!='awaiting_semantic_refresh' or Path(state['checkpoint']).resolve()!=parent_path
+                or Path(state.get('pending_native_checkpoint','')).resolve()!=child_path
+                or custody.get('schema')!='natlang.earned-sft-checkpoint-custody/1'
+                or custody.get('old_bindings_and_quotas_preserved') is not True
+                or custody.get('old_exposure_not_decreased') is not True
+                or child['global_step']!=parent['global_step']+1
+                or not all(x.get('optimizer_present') and x.get('rng_present') for x in (parent,child))
+                or boundary.get('kind')!='semantic-refresh' or boundary.get('reached') is not True
+                or boundary.get('new_optimizer_updates')!=1 or boundary.get('checkpoint_sha256')!=child['sha256']
+                or report.get('checkpoint_sha256')!=child['sha256']
+                or receipt.get('checkpoint',{}).get('sha256')!=child['sha256']
+                or receipt.get('continuation',{}).get('checkpoint_sha256')!=parent['sha256']
+                or not supervised_progress_numerics_ok(report,{'sha256':child['sha256']})):
+            raise ValueError('SFT refresh publication lacks exact qualified full-state custody')
+        if out.exists():raise ValueError('SFT refresh publication intent already exists')
+        result={'schema':'natlang.direct-sft-refresh-publication/1','parent':binding(parent_path),'checkpoint':binding(child_path),
+                'report':report_ref,'receipt':receipt_ref,'custody':custody_ref,'stage_completion_granted':False,
+                'behavioral_qualification_granted':False,'additional_training_credit':0}
+        write_json_durable(out,result)
+        next_state=_published_checkpoint_state(state,{'path':str(child_path),'sha256':child['sha256']})
+        for key in ('pending_native_checkpoint','pending_native_round_dir','pending_update_kind'):next_state.pop(key,None)
+        next_state.setdefault('direct_sft_refresh_history',[]).append(binding(out))
+        write_json_durable(state_path,next_state)
+        return result

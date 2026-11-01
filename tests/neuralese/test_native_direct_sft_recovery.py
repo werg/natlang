@@ -25,3 +25,18 @@ def test_direct_sft_recovery_preserves_history_and_rejects_unqualified(tmp_path)
     saved=json.loads(state.read_text());assert saved['checkpoint']==child['path'] and saved['phase']=='collect'
     assert (saved['round'],saved['offset'],saved['trained_rounds'])==(11,57,11)
     assert json.loads((tmp_path/'result').read_text())['stage_completion_granted'] is False
+
+
+def test_completed_direct_sft_refresh_publishes_only_qualified_pending_child(tmp_path):
+    from natlang_neuralese.rl.native_direct_sft_recovery import publish_completed
+    def file(name, data):
+        p=tmp_path/name;p.write_text(json.dumps(data));return binding(p)
+    parent=file('parent',{'old':True});child=file('child',{'new':True})
+    state=tmp_path/'state.json';state.write_text(json.dumps({'phase':'awaiting_semantic_refresh','checkpoint':parent['path'],'pending_native_checkpoint':child['path'],'round':12,'offset':57,'trained_rounds':12}))
+    boundary={'kind':'semantic-refresh','reached':True,'new_optimizer_updates':1,'checkpoint_sha256':child['sha256']}
+    report=file('report',{'numerics_ok':True,'checkpoint_sha256':child['sha256'],'continuation_boundary':boundary})
+    receipt=file('receipt',{'checkpoint':{'sha256':child['sha256']},'continuation':{'checkpoint_sha256':parent['sha256']}})
+    common={'optimizer_present':True,'rng_present':True};custody=file('custody',{'schema':'natlang.earned-sft-checkpoint-custody/1','parent':parent|common|{'global_step':57},'successor':child|common|{'global_step':58},'old_bindings_and_quotas_preserved':True,'old_exposure_not_decreased':True})
+    publish_completed(state,report_ref=report,receipt_ref=receipt,custody_ref=custody,out=tmp_path/'publication')
+    s=json.loads(state.read_text());assert s['phase']=='collect' and s['checkpoint']==child['path'] and 'pending_native_checkpoint' not in s
+    assert (s['round'],s['offset'],s['trained_rounds'])==(12,57,12)
