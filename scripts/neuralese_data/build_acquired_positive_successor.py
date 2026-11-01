@@ -260,7 +260,7 @@ def load_prepared_rows(derivation_receipt_path: Path, expected_protection: str):
             if row_target_tokens <= 0:
                 raise ValueError("prepared graph has no positive supervised targets")
             positive_target_tokens += row_target_tokens
-            forward_tokens += len(example.token_ids)
+            forward_tokens += sum(len(node.get("token_ids", [])) for node in graph.get("nodes", []))
             case = {"id": ident, "split": "train", "source_ids": [
                 (graph.get("conversion") or {}).get("source_row_id", "")],
                 "source_groups": graph.get("source_groups") or [],
@@ -351,7 +351,8 @@ def build(predecessor_dir: Path, screen_path: Path | None, output_dir: Path,
             "source_graphs": bind(graph_path)}
         source_target_tokens = sum(sum(weight > 0 for weight in row[2].target_weights)
             for row in qualified_rows)
-        source_forward_tokens = sum(len(row[2].token_ids) for row in qualified_rows)
+        source_forward_tokens = sum(sum(len(node.get("token_ids", [])) for node in row[0].get("nodes", []))
+            for row in qualified_rows)
     new_rows = len(qualified_rows)
     if new_rows <= 0:
         raise ValueError("source derivation has no qualified graphs")
