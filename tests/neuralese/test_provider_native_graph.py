@@ -79,6 +79,43 @@ def test_luna_episode_retains_distinct_context_only_read_receipts():
             "request_sha256": "5" * 64, "response_sha256": "6" * 64})
 
 
+def test_luna_ordinary_episode_compiles_complete_multiturn_graph_without_native_reads():
+    identity = {"checkpoint_sha256": "a" * 64, "tokenizer_fingerprint": "b" * 64}
+    captures = []
+    for index, (invocation, parent, call_id) in enumerate((
+            ("case/root", None, None), ("case/root/child", "case/root", "call-1"))):
+        receipt = {"source_row_id": "teacher-program:ordinary-case",
+            "source_row_sha256": "c" * 64, "source_file_sha256": "d" * 64,
+            "trace_sha256": "e" * 64, "plan_sha256": "f" * 64,
+            "runtime_receipt_sha256": "1" * 64, "source_groups": ["sql-db:fixture"],
+            "split": "train", "actor": {"model": "gpt-6-luna"},
+            "source_turn_index": index, "source_turn_sha256": str(index) * 64,
+            "target_sha256": "2" * 64, "target_supervision": True,
+            "typed_text_writes": [], "typed_text_inputs": [], "invocation_id": invocation,
+            "parent_invocation_id": parent, "call_id": call_id}
+        capture = {"schema": "natlang.native-teacher-forced-capture/1",
+            "teacher_source_receipt": receipt, "policy": identity,
+            "prompt": [{"kind": "tokens", "token_ids": [10 + index, 20 + index]}],
+            "generated_inputs": [{"token_id": 30 + index}, {"token_id": 40 + index}]}
+        captures.append({"source_receipt": receipt, "capture": capture,
+            "loaded": {"native_text_spans": [], "typed_text_bodies": []},
+            "response": {}, "native_identity": identity, "encoder_bindings": [],
+            "encoder_states": []})
+
+    graph, example = native_graph_from_luna_episode(captures)
+
+    assert len(graph["nodes"]) == 2
+    assert len(example.plan.invocations) == 2
+    assert len(graph["teacher_episode_actions"]) == 2
+    assert all(not action["consumer_native_block_ids"] for action in graph["teacher_episode_actions"])
+    assert graph["teacher_text_encoders"] == []
+    assert [receipt["invocation_id"] for receipt in graph["teacher_source_receipts"]] == [
+        "case/root", "case/root/child"]
+    assert [receipt["parent_invocation_id"] for receipt in graph["teacher_source_receipts"]] == [
+        None, "case/root"]
+    assert sum(weight > 0 for weight in example.target_weights) == 4
+
+
 def test_luna_provider_return_result_wrapper_rewrites_to_bound_native_span():
     body = '{"kind":"evidence","lineIds":[292]}'
     wrapped = "<|neuralese|>" + body + "<|/neuralese|>"

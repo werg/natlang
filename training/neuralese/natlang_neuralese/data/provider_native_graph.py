@@ -335,8 +335,6 @@ def native_graph_from_luna_episode(captures):
     state_by_teacher = {teacher_id: all_state_by_teacher[teacher_id] for teacher_id in binding_by_teacher}
     bindings = list(binding_by_teacher.values())
     states = [state_by_teacher[binding["teacher_block_id"]] for binding in bindings]
-    if not bindings and not inline_by_teacher:
-        raise ValueError("Luna episode has no authenticated typed text producer/consumer path")
     from ..serve.store import native_state_id
     writer_nodes, writer_invocations = [], []
     for binding, block in zip(bindings, states):
