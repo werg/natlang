@@ -111,6 +111,32 @@ def _relative(a, b):
     return float((a - b).norm() / b.norm().clamp_min(1e-30))
 
 
+def test_lfm3_norm_clone_uses_its_own_weights_and_dtype():
+    model = _model('lfm3')
+    clone = copy.deepcopy(model)
+    original_norm = model.port.layers[0].operator_norm
+    copied_norm = clone.port.layers[0].operator_norm
+    assert copied_norm.forward.__self__ is copied_norm
+    assert copied_norm._native_original_forward.__self__ is copied_norm
+    x = torch.randn(1, 5, original_norm.weight.numel())
+    torch.testing.assert_close(original_norm(x), copied_norm(x))
+    with torch.no_grad(): copied_norm.weight.mul_(2)
+    torch.testing.assert_close(copied_norm(x), 2 * original_norm(x))
+    model.zero_grad(set_to_none=True); clone.zero_grad(set_to_none=True)
+    copied_norm(x).sum().backward()
+    assert copied_norm.weight.grad is not None and original_norm.weight.grad is None
+    before = original_norm.weight.detach().clone()
+    optimizer = torch.optim.AdamW(clone.parameters(), lr=.001)
+    optimizer.step()
+    assert torch.equal(original_norm.weight, before)
+    assert copied_norm.weight in optimizer.state and original_norm.weight not in optimizer.state
+    saved = copy.deepcopy(optimizer.state_dict())
+    assert saved['state'] and all('step' in state for state in saved['state'].values())
+    clone.to(torch.bfloat16)
+    assert copied_norm(x.to(torch.bfloat16)).dtype == torch.bfloat16
+    assert original_norm.weight.dtype == torch.float32
+
+
 @pytest.mark.parametrize('device', ['cpu', 'cuda'])
 @pytest.mark.parametrize('family', ['lfm3', 'lfm'])
 @pytest.mark.parametrize('mode,policy_loss', [('rft', None), ('grpo', JOLT)])

@@ -116,6 +116,15 @@ class _RowwiseNormAdjoint(torch.autograd.Function):
         dx = torch.cat(list(reversed(parts)), dim=0).reshape(x.shape)
         return dx, dweight, None
 
+def _native_rowwise_forward(module, x):
+    """Bound method: cloning a model must rebind both the norm and its original forward."""
+    original_forward = module._native_original_forward
+    if (torch.is_grad_enabled() and x.is_cuda and x.dtype == torch.bfloat16
+            and (x.requires_grad or module.weight.requires_grad)):
+        return _RowwiseNormAdjoint.apply(x, module.weight, original_forward)
+    return rowwise_norm_forward(original_forward, x)
+
+
 def configure_norm_execution(model, profile=None):
     """Absent legacy declarations retain source constructor/recompute dispatch."""
     selected = 'source-v1' if profile is None else profile
@@ -129,16 +138,11 @@ def configure_norm_execution(model, profile=None):
                 and type(module).__name__ in {'RMSNorm', 'Lfm2RMSNorm', 'Lfm3RMSNorm'}
                 and isinstance(getattr(module, 'weight', None), torch.nn.Parameter)
                 and not module.__dict__.get('native_rowwise_norm', False)):
-            original = module.forward
-            def forward(x, original_forward=original, norm=module):
-                # Build one custom adjoint rather than one autograd slice graph
-                # per 128 rows. The latter scatters each slice into a full-size
-                # zero tensor and repeatedly adds those tensors during backward.
-                if (torch.is_grad_enabled() and x.is_cuda and x.dtype == torch.bfloat16
-                        and (x.requires_grad or norm.weight.requires_grad)):
-                    return _RowwiseNormAdjoint.apply(x, norm.weight, original_forward)
-                return rowwise_norm_forward(original_forward, x)
-            module.forward = forward
+            from types import MethodType
+            # Store a bound method instead of a closure over this instance: Python's
+            # deepcopy rebinds both methods to the copied module and its weights.
+            module._native_original_forward = module.forward
+            module.forward = MethodType(_native_rowwise_forward, module)
             module.native_rowwise_norm = True
     model.native_norm_execution = selected
     model.port.native_norm_execution = selected
