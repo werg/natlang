@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { analyzeEvalSnippet } from '../dist/compiler/eval-check.js';
 import { compileModule } from '../dist/runtime/modules.js';
-import { compileScopeSnippet } from '../dist/scope-compiler.js';
+import { compileScopeSnippet, SCOPE_RUNTIME_PRELUDE } from '../dist/scope-compiler.js';
+import ts from 'typescript';
 import { neuraleseRef } from '../dist/native/neuralese.js';
 import { makeGuidedSoftIterateCase } from '../scripts/inline-curriculum/semantic-iterate-worlds-v15-soft-guided-builder.mjs';
 import { worlds } from '../scripts/inline-curriculum/semantic-iterate-worlds-v15-data.mjs';
@@ -31,10 +32,12 @@ test('generated guided soft scaffold compiles marker guidance as literal templat
   const executable = compileScopeSnippet(snippet, { inputBindings: ['priorNotes'], neuralese: true,
     analyze: text => analyzeEvalSnippet(text, evalScope) });
   assert.equal(executable.ok, true, JSON.stringify(executable.diagnostics));
-  const run = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
-    `${executable.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
-    output => output.result, { readNeuralese: async () => 'computed next note' });
-  return run({ priorNotes: neuraleseRef('Neuralese<string>', 'nzs1_ffffffffffffffffffffffffffffffffffffffffffffffffffff') }, {}, {}).then(value => {
-    assert.equal(value, 'computed next note');
+  const prelude = ts.transpileModule(SCOPE_RUNTIME_PRELUDE,
+    { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  let output;
+  const run = new Function('__live', `${prelude}\n${executable.program}; return ${executable.entrypoint};`)(
+    { readNeuralese: async () => 'computed next note', finish: value => { output = value; } });
+  return run({ priorNotes: neuraleseRef('Neuralese<string>', 'nzs1_ffffffffffffffffffffffffffffffffffffffffffffffffffff') }, {}, {}).then(() => {
+    assert.equal(output.result, 'computed next note');
   });
 });

@@ -220,12 +220,36 @@ def _resume_source_arguments(config,directory,values,*,parameters=None):
     resident=current(resident_directory) if resident_directory else None
     selected=(resident['payload'] if resident and resident['payload']['stage_id']==stage else None)
     omitted={}
+    retired_correction=None
     for role,name,index in roles:
         flag='--'+role.replace('_','-')
         if not present(flag):continue
         target=(selected['train' if index==0 else 'held'] if selected else binding(config[name]))
         bound(target)
         if target['sha256']!=receipts[index].get('sha256'):continue
+        if role=='continued_native_graphs' and present('--source-correction'):
+            correction=binding(config['source_correction'])
+            history=(training.get('options') or {}).get('source_correction_history') or []
+            if not any(item.get('proof_sha256')==correction['sha256'] for item in history):
+                # An unapplied correction still needs its declared predecessor.
+                continue
+            from ..train.native_source_correction import apply_source_correction
+            model=saved['model_config']
+            _,replay=apply_source_correction(training,correction['path'],
+                model_id=model['architecture']+':'+model['base_inventory_sha256'],stage_id=stage,
+                current_source_receipt=receipts[0],current_bindings=training['source_row_bindings'],
+                current_order=training['source_row_order'],current_communication_ids=(),
+                protected_held={'current_receipt':receipts[1],
+                                'current_bindings':training.get('held_row_bindings') or {}})
+            if replay.get('changed') is not False:
+                raise ValueError('supervised retry correction was not already committed')
+            for args in argument_lists:
+                cursor=0
+                while cursor<len(args):
+                    if args[cursor]=='--source-correction':del args[cursor:cursor+2]
+                    elif args[cursor].startswith('--source-correction='):del args[cursor]
+                    else:cursor+=1
+            retired_correction=correction
         for args in argument_lists:
             cursor=0
             while cursor<len(args):
@@ -238,7 +262,9 @@ def _resume_source_arguments(config,directory,values,*,parameters=None):
     if binding(checkpoint)!=reference:raise ValueError('supervised retry checkpoint changed during source verification')
     if not omitted:return command,None
     return command,{'checkpoint':reference,'stage_id':stage,'source_frame':source_frame,
-                    'already_current_sources':omitted}
+                    'already_current_sources':omitted,
+                    **({'retired_committed_source_correction':retired_correction}
+                       if retired_correction is not None else {})}
 
 
 def prepare_seed_command(config,directory,values,state,state_path,*,parameters=None):

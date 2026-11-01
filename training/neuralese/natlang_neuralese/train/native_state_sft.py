@@ -1215,9 +1215,8 @@ def _save(policy, model, optimizer, *, config, identity, step, epoch, cursor, so
           source_hash, source_row_bindings, held_row_bindings, exposure_counts, global_step, rng, metrics,
           architecture, options, fp8_state=None, sft_progress=None, async_allowed=False, reserve_only=False):
     metrics['checkpoint_selection'] = {'continuation':'newest-full-state',
-        'raw_ce_best_export':not bool(options.get('ce_supervision_active')),
-        'quality_policy':'supervisor-task-and-declared-target-evidence' if options.get('ce_supervision_active')
-            else 'legacy-raw-ce-optional-export'}
+        'raw_ce_best_export':False,
+        'quality_policy':'supervisor-task-and-declared-target-evidence'}
     diloco = options.get('_diloco_learner')
     weight_ema = options.get('_weight_ema')
     quantization = options.get('_quantization')
@@ -1247,9 +1246,9 @@ def _save(policy, model, optimizer, *, config, identity, step, epoch, cursor, so
     if reserve_only:
         policy.reserve_next(state, optimizer)
         return
-    # Raw historical CE can be prompt dominated and is not the declared new
-    # objective. Never let it silently nominate a best-policy export.
-    metric = None if options.get('ce_supervision_active') else metrics.get('held', {}).get('loss')
+    # Neither static CE nor a changing policy/privileged loss nominates a
+    # behavioral best. Those aliases also pin and export redundant full states.
+    metric = None
     # Preserve the synchronous CheckpointPolicy API for callers and test
     # adapters which predate async checkpoints. The extra arguments are only
     # meaningful when a cadence save was explicitly admitted asynchronously.

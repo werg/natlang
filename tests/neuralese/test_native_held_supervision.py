@@ -181,7 +181,8 @@ def test_no_observed_suffix_target_is_explicitly_unmeasured_not_zero_loss():
     assert result['additional_ce']['target']['measured_examples'] == 0
 
 
-def test_actual_shared_sft_held_metrics_no_held_exposure_or_raw_best(tmp_path):
+@pytest.mark.parametrize("use_ce_policy",[False,True])
+def test_actual_shared_sft_held_metrics_no_held_exposure_or_raw_best(tmp_path,use_ce_policy):
     from test_native_serve import _tiny_source
     from natlang_neuralese.model.native_model import load_native_model
     from natlang_neuralese.train import native_state_sft as stage
@@ -197,14 +198,18 @@ def test_actual_shared_sft_held_metrics_no_held_exposure_or_raw_best(tmp_path):
     declaration.write_text(json.dumps(build([train],legacy_pair_context_weight=.05,held_sources=[held])))
     out = tmp_path/'run'
     assert stage.main(['--base',str(base),'--dtype','float32','--rank','4','--device','cpu',
-        '--native-graphs',str(train),'--held-native-graphs',str(held),'--ce-supervision-policy',str(declaration),
+        '--native-graphs',str(train),'--held-native-graphs',str(held),
+        *(['--ce-supervision-policy',str(declaration)] if use_ce_policy else []),
         '--epochs','1','--eval-every','1','--checkpoint-every','1','--out',str(out)]) == 0
     state = torch.load(out/'checkpoint.pt',weights_only=False)['training']
     assert state['exposure_counts'] == {'mass:ordinary':1}
     assert state['optimizer'] and state['rng']
     metric = state['metrics']['held']
     assert metric['source_sha256'] == sha256_file_hex(held)
-    assert metric['additional_ce']['target']['measured_examples'] == 1
-    assert metric['additional_ce_policy']['sha256'] == sha256_file_hex(declaration)
+    if use_ce_policy:
+        assert metric['additional_ce']['target']['measured_examples'] == 1
+        assert metric['additional_ce_policy']['sha256'] == sha256_file_hex(declaration)
+    else:
+        assert metric['examples'] == 1 and metric['loss'] is not None
     assert not (out/'best-checkpoint.pt').exists()
     assert state['metrics']['checkpoint_selection']['raw_ce_best_export'] is False

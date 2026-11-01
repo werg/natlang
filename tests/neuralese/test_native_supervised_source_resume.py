@@ -181,3 +181,25 @@ def test_rl_resume_uses_exact_carried_sft_receipts_without_credit_or_parent_chan
     assert ('--continued-native-graphs' in command) is new_source
     assert (directory/'checkpoint.pt').read_bytes()==raw
     assert carried['exposure_counts']=={'row':17}
+
+
+@pytest.mark.parametrize('committed',[False,True])
+def test_current_correction_and_predecessor_retire_together_only_after_exact_replay(tmp_path,committed):
+    config,values,directory,state,targets=fixture(tmp_path)
+    ledger=tmp_path/'rows.jsonl';ledger.write_text('')
+    proof=tmp_path/'correction.json';proof.write_text(json.dumps({'schema':'natlang.native-source-correction/1',
+        'model_id':'lfm2:'+('a'*64),'stage_id':'full','prior_source':binding(targets[2]),
+        'current_source':binding(targets[0]),'row_bindings_path':ledger.name,'row_bindings_sha256':binding(ledger)['sha256']}))
+    ref=binding(proof);frame=state['training'];frame.update(source_row_bindings={'row':'binding'},source_row_order=['row'])
+    if committed:
+        frame['options'].update(source_correction_binding=ref,source_correction_history=[{
+            'proof_sha256':ref['sha256'],'prior_source':binding(targets[2]),'current_source':binding(targets[0])}])
+    carried=copy.deepcopy(frame);state['training'].update(options={'stage_id':'rl'},identity={'objective':{'kind':'native-policy'}},sft_progress={'full':carried})
+    state['model_config']['base_inventory_sha256']='a'*64
+    torch.save(state,directory/'checkpoint.pt');raw=(directory/'checkpoint.pt').read_bytes()
+    config['source_correction']=str(proof);config['seed_command']+=['--source-correction','{source_correction}']
+    command,reuse=supervised._resume_source_arguments(config,directory,values)
+    assert ('--source-correction' in command) is not committed
+    assert ('--continued-native-graphs' in command) is not committed
+    if committed:assert reuse['retired_committed_source_correction']==ref
+    assert (directory/'checkpoint.pt').read_bytes()==raw

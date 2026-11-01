@@ -317,7 +317,7 @@ test('a for...of over a missing value names the loop and the fallback', async ()
   const { session } = open({ type: '() => number', instructions: 'Count.', codebase: {} });
   const missing = await session.applyAsync('eval', { code: 'let total = 0;\nfor (const m of "no digits".match(/\\d/g)) total++;\ntotal' });
   assert.equal(missing.kind, 'error');
-  assert.match(missing.text, /`for \.\.\. of` iterates an array, string, Map or Set, but got null/);
+  assert.ok(missing.text.startsWith('`for (… of "no digits".match(/\\d/g))` iterates an array, string, Map or Set, but got null.'));
   assert.match(missing.text, /\?\? \[\]/);
   const plain = await session.applyAsync('eval', { code: 'const o = { a: 1 };\nlet n = 0;\nfor (const k of o as any) n++;\nn' });
   assert.match(plain.text, /got a plain object; iterate Object\.keys, Object\.values or Object\.entries of it/);
