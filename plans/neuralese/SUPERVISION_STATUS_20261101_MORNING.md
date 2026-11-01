@@ -1,3 +1,54 @@
+## Live supervision update, 2026-11-01 16:36 CET
+
+This update supersedes earlier instantaneous observations below.
+
+- Current-policy whole-graph JOLT+ round12 completed64→66 with two actual SGD
+  updates. Sixteen student rollouts scored14 correct across two Math level2
+  groups, MultiHiertt and HotpotQA. Different tasks from round11; this is not a
+  matched capability gain. Exact66 full state is
+  `sd-r1/round-000012/learner/checkpoint.pt`, SHA256
+  `2ef1eb0075cc9cccea67151370f5d9d3587bc388c635ded32f5f9260e4c5a06c`.
+- Joint SFT resumed from66 under frozen5110afd1d as
+  `lfm3-joint-sft66-fixed-retirement-1101.service`, requesting four updates.
+  Actual67 update and full local checkpoint completed; the next update is live.
+  The307946-row recipe remains comprehensive, including native communication.
+  Preparation for completed-window custody/publication is already running:
+  `ops/prepare-sft66-completed-publication-1101.py --prepare-parent`.
+  Publication remains an explicit checked operation after the true refresh boundary.
+- SFT-after-RL now reads its named carried SFT frame. A committed source repair
+  retires together with its predecessor CLI argument only after authenticated
+  central replay proves it already committed. Actual66 CPU preflight passed;
+  the rejected startup performed no SGD. Native SFT/RL no longer export states
+  selected by minimum loss; selection follows actual behavior.
+- The first67 save exposed insufficient headroom for the next reserved write.
+  Root retained the verified external63 full state and replaced its redundant
+  local canonical file with a symlink to those exact bytes, after checking no open
+  consumers, original source identity and current external presence/size/mtime.
+  This freed15.31GB and training resumed without lowering the40GiB floor.
+  Receipt: `ops/relocate-verified63-off-nvme-1101.json`. This is a relocation using
+  the15:48 independent readback, not a new complete external hash verification.
+  Independent61 and63 full-state exports are verified;64 export is still active
+  in its readback phase.66/67 are locally durable, not yet claimed independent.
+- Pop is actively running the16-program fresh-instruction baseline evaluation
+  under the matched0f8a Torch runtime. GPU utilization was77%,6471MiB used at
+  the latest check. No final score yet. The retained exact64 evaluation parent
+  awaits a small inference-only export; do not transfer another15GB full state
+  onto Pop's limited root filesystem.
+- Twelve clean code-only worktrees were removed after proving their patches
+  already integrated on main and checking current process/control references.
+  Four data/dependency-bearing trees remain, including protected evaluation
+  packets. Receipt: `ops/worktree-retirement-1101.json`. No branch history lost.
+- Paid teacher generation remains paused; fresh process, service and timer checks
+  found no worker or automatic generation restart. Existing source conversion,
+  training and recovery continue. Last one-case Luna attempt exposed a contradictory
+  oracle and yielded no admitted positive. Repair contracts before more paid calls.
+- Current runtime guidance outgrew the exported prompt-piece table. Regenerated
+  the table with historical texts preserved and refreshed the mock builtin prompt
+  fixture. Seven Node prompt tests and seven Python rendering/serving tests pass.
+  Full production prompts are unchanged by this table repair; header rendering
+  now recognizes current generic guidance consistently. Frozen historical runs
+  retain their exact artifacts; new runtimes include the corrected table.
+
 ## Live supervision update, 2026-11-01 15:47 CET
 
 This update supersedes the earlier instantaneous observations below.

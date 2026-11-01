@@ -7,7 +7,10 @@ SGD on it. An authenticated target repair changes a row binding; preserve its
 old exposure and quota, record the exact correction, and never claim unchanged
 bindings. Completed SFT publication supports the typed correction custody proof
 in `rl/native_direct_sft_recovery.py`. A carried SFT frame owns its own train/held
-receipts and bindings; a surrounding RL frame describes different data. Keep
+receipts and bindings; a surrounding RL frame describes different data. A consumed
+source correction and its predecessor CLI argument retire together only after
+authenticated central replay proves the correction already committed. An
+uncommitted correction retains both strict inputs. Keep
 manifest SHA256 and the combined trainer source identity distinct. Stage custody
 preparation before a learner finishes, and cache verified extraction artifacts
 so a corrected review script does not repeatedly decode full checkpoints.
@@ -18,6 +21,12 @@ replacement requires a fresh checked read, with a bounded retry and writer drain
 never weaken file-identity checks. Distributed resumes bind the actual earned
 rolling bytes while retaining the coordinator's original seed or exact allowed
 role identity. Changing other fixed controls still requires its proper transition.
+
+Native SFT/RL export current recovery states, not minimum-loss aliases. Loss
+across changing data and objectives cannot qualify a production parent; avoid
+duplicating full-state backup traffic for loss-selected aliases. Keep the
+exported prompt-piece table synchronized with runtime guidance and retain
+historical pieces for recorded-source rendering.
 
 ## Native numerical and observation custody (engineering, 2026-10-31 evening)
 
