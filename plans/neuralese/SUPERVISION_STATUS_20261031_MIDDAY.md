@@ -16,15 +16,25 @@ still required. Cold file sharing completed across26 inactive runtime snapshots;
 paths/content remain, internal free space is about56GiB. Receipt:
 `ops/cold-runtime-file-sharing-1101.json`.
 
-Actual terminal capture inspection exposed why earlier updates were outcome-only:
-backbone production explicitly set its guidance writer to `off`, and the six
-active checkpoint55 objective episodes all recorded refusal `the actor recorded
-no guidance for this episode`. Request fields alone did not establish captured
-guidance. Commit8a1a71738 enables the existing native writer for both roles while
-retaining crisp selection; role controls and frozen Node guidance tests passed.
-Retry3 uses that runtime and is generating fresh checkpoint56 trajectories.
-Do not credit privileged JOLT+ until actual authored blocks survive conversion
-and the learner computes its privileged terms. No new SGD beyond56 is claimed.
+The six active checkpoint55 objective episodes all recorded refusal `the actor
+recorded no guidance for this episode`; that update was outcome-only. An initial
+diagnosis incorrectly blamed the writer-off setting alone. Actual attempt2
+checkpoint56 captures do contain `rl_sampling.privileged` text-twin blocks with
+writer off; `guidance:false` means no import into the student, not no capture.
+The TypeScript runtime explicitly implements this text-twin fallback.
+
+Commit8a1a71738 enabled native writers, but actual retry3 failed to progress
+beyond its writer children: all12 initial replies emitted an unclosed produce
+span inside literal tool markup (`neuralese-native-state-open`), followed by
+writer-side repair attempts. Zero solver episodes completed. It was stopped
+before SGD; partials remain diagnostic. Actual native writer behavior is not
+qualified by its11 Node mechanism tests. Repair work continues while the exact
+3a runtime is used to finish the missing sample of attempt2's row001. Five of
+six row001 samples and one row003 sample were complete, not one complete group.
+Only after the sixth finishes and its privileged conversion is verified may
+that group's actual text-twin terms be credited. Do not silently discard other
+groups' unfinished obligations or relabel these blocks as native authored state.
+No new SGD beyond56 is claimed at this observation.
 
 Luna sourcev25 completed27 sampled action turns with17 named invocations and two
 authenticated typed `FaultDiagnosis` teacher-text writes/11reads. Two authorized
