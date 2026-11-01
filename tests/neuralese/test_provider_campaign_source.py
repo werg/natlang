@@ -204,8 +204,9 @@ def test_historical_dispatch_attestation_uses_local_digest_override(tmp_path, mo
     }) + '\n')
     calls = []
 
-    def validator(path, expected, *, digest_fn=None):
+    def validator(path, expected, *, digest_fn=None, verification_root=None):
         calls.append(digest_fn)
+        assert verification_root == repo
         if len(calls) == 1:
             raise ValueError(f'Missing or changed reviewed artifact pin: {target}')
         assert digest_fn(target) == historical_sha

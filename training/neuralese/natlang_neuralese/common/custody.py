@@ -173,10 +173,13 @@ _PROTECTED_REGISTRY_CACHE = {}
 def _custody_file_identity(path):
     """Five-field identity including a symlink's lexical and resolved targets."""
     lexical = Path(path).absolute()
-    resolved = lexical.resolve(strict=True)
-    link_stat = lexical.lstat()
-    target_stat = resolved.stat()
-    link_target = os.readlink(lexical) if stat.S_ISLNK(link_stat.st_mode) else None
+    try:
+        resolved = lexical.resolve(strict=True)
+        link_stat = lexical.lstat()
+        target_stat = resolved.stat()
+        link_target = os.readlink(lexical) if stat.S_ISLNK(link_stat.st_mode) else None
+    except (OSError, RuntimeError) as error:
+        raise CustodyError(f'protected custody source {lexical} is not readable; custody fails closed') from error
     return (str(lexical), str(resolved), link_target,
             link_stat.st_dev, link_stat.st_ino, link_stat.st_size,
             link_stat.st_mtime_ns, link_stat.st_ctime_ns,

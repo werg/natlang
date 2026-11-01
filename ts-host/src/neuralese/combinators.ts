@@ -294,6 +294,7 @@ export async function readNeuraleseForCurrentTask(value: unknown): Promise<unkno
     [{ node: writerNode, port: 'args', block: ref.id }]);
     const { invokeDefinition } = await import('../runtime/kernel.js');
     const elementType = formatType(declared.element);
+    // model-call-kind: runtime-authored-call (typed teacher-text Neuralese readout) -- training/model-call-kinds.json
     return invokeDefinition(frame, {
       id: 'natlang:teacher-text-read/1', name: 'natlang.read',
       body: 'Read the supplied Neuralese value. Return exactly the value it contains in its declared element type. ' +

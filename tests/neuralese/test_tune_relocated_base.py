@@ -36,7 +36,7 @@ def test_relocated_checkpoint_runs_actual_tune_fit_and_rejects_wrong_snapshot(tm
     shutil.copytree(tmp_path / 'base', wrong)
     with (wrong / 'config.json').open('a') as stream:
         stream.write(' ')
-    with pytest.raises(ValueError, match='base inventory differs'):
+    with pytest.raises(ValueError, match='local config/tokenizer inventory differs from the checkpoint-bound pinned base'):
         load_native_engine(str(checkpoint), base=str(wrong), device='cpu', dtype=torch.float32)
 
 
