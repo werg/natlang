@@ -1,3 +1,40 @@
+## Live supervision update, 2026-11-01 19:40 CET
+
+- Bounded whole-graph efficiency rewards and live inference escalation are on
+  main and pushed. Native view generations now share graph request/token budgets
+  (953138a6e), closing the limitation recorded below. The fallback must be an
+  explicitly authorized configured profile; no stronger server or paid generation
+  was started. Correct completion dominates; all-failed groups receive no cheap
+  failure preference. See docs/NATIVE_MODELS.md for configuration and semantics.
+- Earned full state advanced70→72 by corrected RL, then72→75 by joint SFT.
+  Canonical full75 SHA256 f93905f4d2c5ad000b9375732b4b89dfe74d490e3c2cbc0c4912067731b2e815,
+  SFT step16. Marker input-row LR0.001 actually ran. Producer authoring has not
+  yet been behaviorally qualified. A failed checkpoint reservation lost one
+  earlier in-memory update; c724db683 adds physical metadata headroom before SGD.
+- New source353731 includes45785 screened acquired rows. Complete census finds
+  295563403 effective positive tokens and88495603 unscaled loss mass; assistant
+  context is unsupervised. All1387 diagnosis targets exactly match source labels.
+  Generic CE/source/geometry preparation completed; these facts are not outcomes.
+- Learner lfm3-acquired353731-from75-1101 launched19:39:47 with frozen
+  runtime-acquired-finite-resume-1101 (3f445d0bb) and controls
+  W/ops/acquired-live353731-after75-v4-1101. Exact rolling75 is bound while old
+  controller72 remains authenticated; no manual state advancement or fabricated
+  SGD credit. Source adoption and first new SGD remain to be checked.
+- Semantic refresh now interrupts evaluation and avoids new evaluation work.
+  Finite deliberately stopped training can resume without granting runtime or
+  behavioral readiness;22 targeted tests pass. Consumed source correction is
+  authenticated against the actual parent and retired for the new append.
+- Matched scored Pop baseline0 vs trained64:8/14 vs11/14, three gains and no
+  observed regressions. Two unresolved original pairs remain separate. Both are
+  being rerun under identical longer wall allowance; baseline side finished,
+  trained64 side active at19:39. Do not report a completed16-case comparison.
+- Recovery70 archive extraction and CPU restore succeeded, but final qualification
+  failed file identity because unlinking another hardlink changed ctime. Strict
+  check retained; sole-link pin is now stable and verified reusable fixture remains.
+  No full recovery70 qualification claimed. Retry still required, along with
+  checking independently exported progress for the latest75 parent.
+- Internal free72GiB, external162GiB at19:39. Paid generation remains paused.
+
 ## Live supervision update, 2026-11-01 18:16 CET
 
 - Owner requested bounded anti-loop rewards and proper inference escalation. Main
