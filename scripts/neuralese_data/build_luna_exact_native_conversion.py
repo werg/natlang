@@ -8,9 +8,7 @@ capturer's complete invocation graph and decision chain independently bound.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
-import os
 from pathlib import Path
 import subprocess
 import sys
@@ -80,69 +78,14 @@ def _protected_runtime_binding(runtime: Path, receipt_runtime: dict) -> dict:
         receipt_sha = sha256_file_hex(frozen_receipt)
         closure_binding = {"kind": "frozen-runtime", "receipt_sha256": receipt_sha}
     else:
-        closure_path = runtime / "runtime-input-closure.json"
-        storage_path = runtime.with_name(runtime.name + ".storage.json")
-        if not closure_path.is_file() or not storage_path.is_file():
-            raise ValueError("separate decision materializer must be an immutable frozen runtime")
-        closure = json.loads(closure_path.read_bytes())
-        storage = json.loads(storage_path.read_bytes())
-        if (closure.get("schema") != "natlang.protected-runtime-input-closure/1"
-                or Path(closure.get("destination", "")).resolve() != runtime
-                or not isinstance(closure.get("commit"), str) or len(closure["commit"]) != 40
-                or storage.get("schema") != "natlang.immutable-runtime-file-pool/1"
-                or not isinstance(storage.get("pool"), str)
-                or not isinstance(closure.get("bound_files"), list) or not closure["bound_files"]):
-            raise ValueError("separate conversion runtime lacks a valid protected closure and pool receipt")
-        seen_bound = set()
-        for binding in closure["bound_files"]:
-            if (not isinstance(binding, dict) or not isinstance(binding.get("path"), str)
-                    or not isinstance(binding.get("sha256"), str) or len(binding["sha256"]) != 64
-                    or binding["path"] in seen_bound):
-                raise ValueError("protected conversion runtime has malformed/duplicate bound inputs")
-            seen_bound.add(binding["path"])
-            bound_path = Path(binding["path"]).resolve(strict=True)
-            if sha256_file_hex(bound_path) != binding["sha256"]:
-                raise ValueError("protected conversion runtime bound input changed: " + str(bound_path))
-        pool = Path(storage["pool"]).resolve(strict=True)
-        count = size = 0
-        inventory = hashlib.sha256()
-        for directory, dirs, names in os.walk(runtime, followlinks=False):
-            dirs[:] = sorted(name for name in dirs if not (Path(directory) / name).is_symlink())
-            for name in sorted(names):
-                path = Path(directory) / name
-                rel = path.relative_to(runtime).as_posix()
-                if path.is_symlink():
-                    inventory.update(f"{rel}\0link\0{os.readlink(path)}\n".encode())
-                    continue
-                if not path.is_file():
-                    continue
-                mode = path.stat().st_mode & 0o777
-                if mode & 0o222:
-                    raise ValueError("conversion runtime contains a writable file: " + rel)
-                digest = sha256_file_hex(path)
-                blob = pool / digest[:2] / f"{digest}.{mode:o}"
-                try:
-                    blob_stat, file_stat = blob.stat(), path.stat()
-                except FileNotFoundError as error:
-                    raise ValueError("conversion runtime file is not sealed in its declared pool: " + rel) from error
-                if ((blob_stat.st_dev, blob_stat.st_ino, blob_stat.st_size)
-                        != (file_stat.st_dev, file_stat.st_ino, file_stat.st_size)):
-                    raise ValueError("conversion runtime file differs from its immutable pool blob: " + rel)
-                inventory.update(f"{rel}\0{digest}\n".encode())
-                count += 1
-                size += file_stat.st_size
-        if count != storage.get("files") or size != storage.get("logical_bytes"):
-            raise ValueError("conversion runtime file tree differs from its immutable pool receipt")
-        closure_binding = {
-            "kind": "protected-runtime-input-closure",
-            "receipt_sha256": sha256_file_hex(closure_path),
-            "storage_receipt_sha256": sha256_file_hex(storage_path),
-            "tree_sha256": inventory.hexdigest(),
-            "files": count,
-            "logical_bytes": size,
-            "commit": closure["commit"],
-        }
-        frozen_files = None
+        from natlang_neuralese.common.runtime_inventory import immutable_native_runtime_tree
+        tree = immutable_native_runtime_tree(runtime)
+        frozen_files = tree["files"]
+        closure_binding = {"kind": tree["schema"], "closure_sha256": tree["closure_sha256"],
+            "storage_receipt_sha256": tree["storage_receipt_sha256"],
+            "tree_sha256": tree["tree_sha256"], "file_count": tree["file_count"],
+            "logical_bytes": tree["logical_bytes"], "pool_verified": tree["pool_verified"],
+            "commit": tree["commit"]}
     host_root = runtime if (runtime / "dist/teacher/native-materializer.js").is_file() else runtime / "ts-host"
     if not (host_root / "dist/teacher/native-materializer.js").is_file():
         raise ValueError("separate conversion runtime lacks its native materializer")

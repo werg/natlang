@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import sys
 from pathlib import Path
 
@@ -12,7 +13,7 @@ sys.path.insert(0, str(ROOT))
 from scripts.neuralese_data.build_luna_exact_native_conversion import (
     _protected_runtime_binding, _runtime_row_digest,
 )
-from scripts.runtime_file_pool import seal_runtime_tree
+from natlang_neuralese.common.runtime_inventory import immutable_native_runtime_tree
 
 
 def test_materializer_row_digest_uses_exact_separately_bound_runtime_asset(tmp_path):
@@ -43,19 +44,44 @@ def test_protected_runtime_input_closure_requires_complete_pool_seal(tmp_path):
                          "sha256": hashlib.sha256(bound_source.read_bytes()).hexdigest()}],
     }))
     pool = tmp_path / "pool"
-    storage = seal_runtime_tree(runtime, pool)
+    inventory = []
+    logical_bytes = 0
+    for path in (runtime / "runtime-input-closure.json", module):
+        path.chmod(0o444)
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        blob = pool / digest[:2] / f"{digest}.444"
+        blob.parent.mkdir(parents=True, exist_ok=True)
+        os.link(path, blob)
+        inventory.append(path)
+        logical_bytes += path.stat().st_size
+    storage = {"schema": "natlang.immutable-runtime-file-pool/1", "pool": str(pool),
+               "files": len(inventory), "logical_bytes": logical_bytes}
     (runtime.with_name(runtime.name + ".storage.json")).write_text(__import__("json").dumps(storage))
     receipt_runtime = {"dist/teacher/native-materializer.js": hashlib.sha256(module.read_bytes()).hexdigest()}
 
     result = _protected_runtime_binding(runtime, receipt_runtime)
-    assert result["kind"] == "protected-runtime-input-closure"
+    assert result["kind"] == "natlang.immutable-native-runtime-tree/1"
     assert result["commit"] == "1" * 40
-    assert result["files"] == storage["files"]
+    assert result["file_count"] == storage["files"]
+    assert immutable_native_runtime_tree(runtime)["pool_verified"] is True
+
+    storage_path = runtime.with_name(runtime.name + ".storage.json")
+    storage_path.write_text(__import__("json").dumps({**storage, "logical_bytes": storage["logical_bytes"] + 1}))
+    with pytest.raises(ValueError, match="storage receipt"):
+        immutable_native_runtime_tree(runtime)
+    storage_path.write_text(__import__("json").dumps(storage))
+
+    outside = tmp_path / "outside.txt"
+    outside.write_text("outside")
+    (runtime / "escape-link").symlink_to(outside)
+    with pytest.raises(ValueError, match="escapes its root"):
+        immutable_native_runtime_tree(runtime)
+    (runtime / "escape-link").unlink()
 
     module.chmod(0o644)
     with pytest.raises(ValueError, match="writable file"):
         _protected_runtime_binding(runtime, receipt_runtime)
     module.chmod(0o444)
     bound_source.write_text("changed source bytes\n")
-    with pytest.raises(ValueError, match="bound input changed"):
+    with pytest.raises(ValueError, match="bound source input changed"):
         _protected_runtime_binding(runtime, receipt_runtime)

@@ -379,3 +379,106 @@ def assemble_protected_runtime_inputs(predecessor, destination, *, bound_files=(
             'corpus_registry_sha256':sha256_file_hex(registry),
             'protected_registry_sha256':sha256_file_hex(destination/'training/protected-worlds.json'),
             'evaluation_packets':packets, 'bound_files':controls, 'protected_worlds_sha256':worlds.digest}
+
+
+def immutable_native_runtime_tree(path, *, verify_bound_inputs=True):
+    """Verify a protected native-runtime closure and derive its portable tree identity.
+
+    The adjacent pool receipt is bound as metadata, but a snapshot exported as an
+    ordinary tar remains verifiable without access to the creator machine's pool.
+    When that pool is present, every runtime file must still be its exact pool
+    hardlink. Symlinks are recorded and may not escape the runtime root.
+    """
+    root = Path(path).resolve(strict=True)
+    closure_path = root / 'runtime-input-closure.json'
+    storage_path = root.with_name(root.name + '.storage.json')
+    if closure_path.is_symlink() or storage_path.is_symlink():
+        raise ValueError('native runtime closure receipts must be regular files')
+    closure = json.loads(closure_path.read_bytes())
+    storage = json.loads(storage_path.read_bytes())
+    if (closure.get('schema') != 'natlang.protected-runtime-input-closure/1'
+            or Path(closure.get('destination', '')).resolve() != root
+            or not isinstance(closure.get('commit'), str) or len(closure['commit']) != 40
+            or storage.get('schema') != 'natlang.immutable-runtime-file-pool/1'
+            or not isinstance(storage.get('files'), int)
+            or not isinstance(storage.get('logical_bytes'), int)):
+        raise ValueError('native runtime closure or adjacent storage receipt is malformed')
+    bound = closure.get('bound_files')
+    if not isinstance(bound, list) or not bound:
+        raise ValueError('native runtime closure has no bound source inputs')
+    if verify_bound_inputs:
+        seen = set()
+        for item in bound:
+            if (not isinstance(item, dict) or not isinstance(item.get('path'), str)
+                    or not isinstance(item.get('sha256'), str) or len(item['sha256']) != 64
+                    or item['path'] in seen):
+                raise ValueError('native runtime has malformed or duplicate bound inputs')
+            seen.add(item['path'])
+            source = Path(item['path']).resolve(strict=True)
+            if sha256_file_hex(source) != item['sha256']:
+                raise ValueError('native runtime bound source input changed: ' + str(source))
+    pool_path = storage.get('pool')
+    pool = Path(pool_path).resolve(strict=True) if isinstance(pool_path, str) and Path(pool_path).is_dir() else None
+    entries, file_hashes = [], {}
+    count = size = 0
+    for directory, dirs, names in os.walk(root, followlinks=False):
+        folder = Path(directory)
+        relative_folder = folder.relative_to(root).as_posix() or '.'
+        entries.append({'path': relative_folder, 'kind': 'directory',
+                        'mode': stat.S_IMODE(folder.stat().st_mode)})
+        kept_dirs = []
+        for name in sorted(dirs):
+            item = Path(directory) / name
+            if item.is_symlink():
+                resolved = item.resolve(strict=True)
+                if not resolved.is_relative_to(root):
+                    raise ValueError('native runtime symlink escapes its root: ' + str(item))
+                entries.append({'path': item.relative_to(root).as_posix(), 'kind': 'symlink',
+                                'target': os.readlink(item)})
+            else:
+                kept_dirs.append(name)
+        dirs[:] = kept_dirs
+        for name in sorted(names):
+            item = Path(directory) / name
+            relative = item.relative_to(root).as_posix()
+            if item.is_symlink():
+                resolved = item.resolve(strict=True)
+                if not resolved.is_relative_to(root):
+                    raise ValueError('native runtime symlink escapes its root: ' + str(item))
+                entries.append({'path': relative, 'kind': 'symlink', 'target': os.readlink(item)})
+                continue
+            if not item.is_file():
+                raise ValueError('native runtime contains a non-file entry: ' + str(item))
+            info = item.stat()
+            mode = stat.S_IMODE(info.st_mode)
+            if mode & 0o222:
+                raise ValueError('native runtime contains a writable file: ' + relative)
+            digest = sha256_file_hex(item)
+            if pool is not None:
+                blob = pool / digest[:2] / f'{digest}.{mode:o}'
+                try:
+                    blob_info = blob.stat()
+                except FileNotFoundError as error:
+                    raise ValueError('native runtime file is absent from its declared pool: ' + relative) from error
+                if (blob_info.st_dev, blob_info.st_ino, blob_info.st_size) != (info.st_dev, info.st_ino, info.st_size):
+                    raise ValueError('native runtime file differs from its declared pool: ' + relative)
+            file_hashes[relative] = digest
+            entries.append({'path': relative, 'kind': 'file', 'bytes': info.st_size,
+                            'mode': mode, 'sha256': digest})
+            count += 1
+            size += info.st_size
+    if count != storage['files'] or size != storage['logical_bytes']:
+        raise ValueError('native runtime tree differs from its adjacent storage receipt')
+    from .hashing import canonical_json_sha256_hex
+    return {
+        'schema': 'natlang.immutable-native-runtime-tree/1',
+        'root': str(root),
+        'commit': closure['commit'],
+        'closure_sha256': sha256_file_hex(closure_path),
+        'storage_receipt_sha256': sha256_file_hex(storage_path),
+        'tree_sha256': canonical_json_sha256_hex(entries),
+        'files': file_hashes,
+        'file_count': count,
+        'logical_bytes': size,
+        'pool_verified': pool is not None,
+    }
