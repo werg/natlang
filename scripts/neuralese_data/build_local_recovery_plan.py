@@ -39,6 +39,20 @@ def mapped_executables(pid):
     return output
 
 
+def controller_declared_inputs(config):
+    """Inventory future source obligations separately from earned checkpoint state."""
+    result=[];seen=set()
+    for key,kind in (('seed_native_graphs','source'),('foundation_native_graphs','source'),
+                     ('held_native_graphs','source'),('ce_supervision_policy','ce')):
+        value=config.get(key)
+        if not value:continue
+        if not isinstance(value,str):raise ValueError('controller source must be a path: '+key)
+        path=Path(value).resolve(strict=True);item={'kind':kind,'path':str(path),'sha256':sha(path)}
+        identity=(kind,item['path'],item['sha256'])
+        if identity not in seen:result.append(item);seen.add(identity)
+    return result
+
+
 def checkpoint_base_files(base,state):
     return _checkpoint_bound_config_inventory(
         base,(state.get('model_config') or {}).get('base_inventory'),state.get('backbone_state'))
@@ -136,8 +150,19 @@ def build(args):
         previous=(frame.get('options') or {}).get('foundation_native_graphs')
         if previous and not any(kind=='source' and path==previous for kind,path,_ in declared):
             path=Path(previous).resolve(strict=True);item={'kind':'source','path':str(path),'sha256':sha(path)};additional.append(item);declared.add(('source',item['path'],item['sha256']));add_source(item)
+    # The controller may have qualified future stages which are not yet earned
+    # in this checkpoint. Preserve their complete dependencies without crediting
+    # any visits or changing the checkpoint's active source/frame identity.
+    for item in controller_declared_inputs(config):
+        identity=tuple(item[k] for k in ('kind','path','sha256'))
+        if identity not in declared:
+            additional.append(item);declared.add(identity)
+            (add_ce if item['kind']=='ce' else add_source)(item)
     controller_config=Path(args.controller_config).resolve(strict=True)
     add(config_path,'controls');add(controller_config,'controls');add(args.asset_guard,'controls');add(args.asset_inventory,'controls')
+    if config.get('cases'):add(config['cases'],'controls')
+    if config.get('history_reasoning_binding_path'):
+        add(config['history_reasoning_binding_path'],'controls',config.get('history_reasoning_binding_sha256'))
     binding=options.get('recipe_binding')
     if isinstance(binding,str):binding=json.loads(binding)
     if not isinstance(binding,dict) or not binding.get('path') or not binding.get('sha256'):

@@ -2,6 +2,20 @@ import os,sys
 from scripts.neuralese_data.build_local_recovery_plan import ldd_files,mapped_executables
 
 
+def test_controller_future_source_obligations_are_separate_and_deduplicated(tmp_path):
+    import hashlib
+    from scripts.neuralese_data.build_local_recovery_plan import controller_declared_inputs
+    train=tmp_path/'future.json';train.write_text('future source')
+    held=tmp_path/'held.json';held.write_text('held source')
+    ce=tmp_path/'ce.json';ce.write_text('future policy')
+    result=controller_declared_inputs({'seed_native_graphs':str(train),
+        'foundation_native_graphs':str(train),'held_native_graphs':str(held),
+        'ce_supervision_policy':str(ce)})
+    assert result==[{'kind':'source','path':str(train),'sha256':hashlib.sha256(train.read_bytes()).hexdigest()},
+                    {'kind':'source','path':str(held),'sha256':hashlib.sha256(held.read_bytes()).hexdigest()},
+                    {'kind':'ce','path':str(ce),'sha256':hashlib.sha256(ce.read_bytes()).hexdigest()}]
+
+
 def test_inventories_real_process_and_executable_dependencies():
     assert os.path.realpath(sys.executable) in mapped_executables(os.getpid())
     libraries=ldd_files(sys.executable)
