@@ -35,8 +35,10 @@ Further verified retirements removed local step54/55 checkpoint aliases only
 after fresh full SHA readbacks of the independent Pop copies, and obsolete
 SD8/JOLT42 states after verifying the useful SD52 fallback on Pop. Raw rollouts,
 logs, task results and the rejected final72 diagnostic remain. The temporary
-step58 export pin was released after complete external readback; step59's
-pending recovery pin remains protected. These operations have separate receipts:
+step58 export pin was released after complete external readback. The unused
+step59 pin was subsequently retired after its recovery exercise was abandoned
+and live-consumer checks passed; the actual newer recovery bootstrap remains
+protected. These operations have separate receipts:
 `retire-local54-verified-peer-1101.json`,
 `retire-local55-verified-peer-1101.json`,
 `retire-superseded-rl-states-1101.json`, and
@@ -50,3 +52,17 @@ shared copy default was corrected from idle I/O class to best-effort class2,
 priority7, because idle copies starved during sustained conversion traffic.
 Complete independent recovery qualification remains in progress; do not retire
 its source pins on the strength of an archive enqueue or partial copy.
+
+Follow-up at 06:03 CET: the older `/mnt/external/megatoken-runs` copy is
+also deleted. Only three small run configuration files were retained in the
+operations receipts directory; `/mnt/external/megatoken-job-workspaces` was
+not treated as disposable run state. Its contents may include unique work.
+The external deletion receipt is `external-megatoken-deletion-1101.json`;
+the unused step59 pin retirement is `retire-unused59-pin-1101.json`.
+
+The latest filesystem observation is approximately 80 GiB free internally and
+346 GiB externally. Concurrent checkpoint and recovery writes change these
+numbers. The remaining historical workspace retains unique edits, source data,
+Git recovery references and required recovery artifacts; completed duplicate
+restore trees, raw archive duplicates, derived caches and integrated worktrees
+have already been removed.
