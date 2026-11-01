@@ -13,6 +13,42 @@ def _public(policy):
     return {key:value for key,value in policy.items() if not key.startswith('_')}
 
 
+def _validate_historical_observations(observations, old_observations, declared, old_active,
+                                      correction_decl, correction, checked):
+    """Keep the separate target-mask and prior-quarantine custody chains exact."""
+    remaining = list(observations)
+    if correction_decl is not None:
+        old_leaf = correction_decl.get('source_leaf_before') or {}
+        new_leaf = correction_decl.get('source_leaf_after') or {}
+        matched = [item for item in remaining if item.get('path') == old_leaf.get('path')
+                   and item.get('sha256') == old_leaf.get('sha256')]
+        if matched and (len(matched) != 1 or matched[0] not in old_observations
+                or (str(Path(new_leaf.get('path', '')).resolve()), new_leaf.get('sha256')) not in declared):
+            raise ValueError('resident CE historical observation is not the authenticated target-mask replacement')
+        for item in matched:
+            checked(item)
+            remaining.remove(item)
+    if remaining:
+        if not isinstance(correction, dict) or not isinstance(correction.get('quality_receipt'), dict):
+            raise ValueError('resident CE historical observations lack their quarantine proof')
+        receipt = json.loads(checked(correction['quality_receipt']).read_text())
+        if (receipt.get('schema') != 'natlang.nested-semantic-child-quarantine-receipt/1'
+                or receipt.get('source_manifest_sha256') != correction.get('historical_source_sha256')
+                or receipt.get('successor_manifest_sha256') != correction.get('active_source_sha256')):
+            raise ValueError('resident CE historical observation quarantine identities differ')
+        replacements = receipt.get('source_replacements') or {}
+        for item in remaining:
+            replacement = replacements.get(item['path'])
+            if (item not in old_observations or not isinstance(replacement, dict)
+                    or replacement.get('source_sha256') != item.get('sha256')
+                    or (str(Path(replacement.get('successor_path', '')).resolve()),
+                        replacement.get('successor_sha256')) not in old_active
+                    or (str(Path(replacement.get('successor_path', '')).resolve()),
+                        replacement.get('successor_sha256')) not in declared):
+                raise ValueError('resident CE historical observation is not an authenticated active replacement')
+            checked(item)
+
+
 def _validate_decision_factor_evidence(policy, prior_objective, candidate_objective, train_binding):
     """Authenticate a new exact target-span objective factor before a resident transition."""
     import json
@@ -320,38 +356,8 @@ def extension_policy(old, new, *, prior_train=None, candidate_train=None):
     elif correction is not None and correction != a.get('prior_inventory_correction'):
         raise ValueError('resident CE prior inventory correction is not applicable')
     if historical_observations:
-        # Preserve earlier observations only when the same bound quarantine
-        # or exact target-mask correction proves each old leaf was replaced.
-        if correction_decl is not None:
-            old_leaf = correction_decl.get('source_leaf_before') or {}
-            new_leaf = correction_decl.get('source_leaf_after') or {}
-            for item in historical_observations:
-                if (item not in old_observations
-                        or item.get('path') != old_leaf.get('path')
-                        or item.get('sha256') != old_leaf.get('sha256')
-                        or (str(Path(new_leaf.get('path', '')).resolve()),
-                            new_leaf.get('sha256')) not in declared):
-                    raise ValueError('resident CE historical observation is not the authenticated target-mask replacement')
-                checked(item)
-        else:
-            if not isinstance(correction, dict) or not isinstance(correction.get('quality_receipt'), dict):
-                raise ValueError('resident CE historical observations lack their quarantine proof')
-            receipt = json.loads(checked(correction['quality_receipt']).read_text())
-            if (receipt.get('schema') != 'natlang.nested-semantic-child-quarantine-receipt/1'
-                    or receipt.get('source_manifest_sha256') != correction.get('historical_source_sha256')
-                    or receipt.get('successor_manifest_sha256') != correction.get('active_source_sha256')):
-                raise ValueError('resident CE historical observation quarantine identities differ')
-            replacements = receipt.get('source_replacements') or {}
-            for item in historical_observations:
-                replacement = replacements.get(item['path'])
-                if (item not in old_observations or not isinstance(replacement, dict)
-                        or replacement.get('source_sha256') != item.get('sha256')
-                        or (str(Path(replacement.get('successor_path', '')).resolve()),
-                            replacement.get('successor_sha256')) not in old_active
-                        or (str(Path(replacement.get('successor_path', '')).resolve()),
-                            replacement.get('successor_sha256')) not in declared):
-                    raise ValueError('resident CE historical observation is not an authenticated active replacement')
-                checked(item)
+        _validate_historical_observations(historical_observations, old_observations, declared, old_active,
+                                          correction_decl, correction, checked)
     top_inventory = b.get('inventory')
     if top_inventory is not None and (len(top_inventory) != 1 or
             checked(top_inventory[0]) != checked(train) or top_inventory[0]['sha256'] != train['sha256']):

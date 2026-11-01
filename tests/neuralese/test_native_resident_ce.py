@@ -498,3 +498,27 @@ def test_target_mask_transition_checks_ledger_after_loading_family_maps(tmp_path
     monkeypatch.setattr(native_logical_families,'load_map',reached_map_validation)
     with pytest.raises(RuntimeError,match='reached validated family map'):
         module.extension_policy(old,new,prior_train=object(),candidate_train=object())
+
+
+def test_historical_target_mask_and_quarantine_observations_keep_separate_custody(tmp_path):
+    from natlang_neuralese.train.native_resident_ce import _validate_historical_observations
+    target={'path':str(tmp_path/'target-old'),'sha256':'a'*64}
+    historical={'path':str(tmp_path/'quarantine-old'),'sha256':'b'*64}
+    target_new={'path':str(tmp_path/'target-new'),'sha256':'c'*64}
+    quarantine_new={'path':str(tmp_path/'quarantine-new'),'sha256':'d'*64}
+    receipt=tmp_path/'quarantine.json';write_json(receipt,{
+        'schema':'natlang.nested-semantic-child-quarantine-receipt/1',
+        'source_manifest_sha256':'prior','successor_manifest_sha256':'after',
+        'source_replacements':{historical['path']:{'source_sha256':historical['sha256'],
+            'successor_path':quarantine_new['path'],'successor_sha256':quarantine_new['sha256']}}})
+    correction={'historical_source_sha256':'prior','active_source_sha256':'after',
+                'quality_receipt':{'path':str(receipt)}}
+    declaration={'source_leaf_before':target,'source_leaf_after':target_new}
+    declared={(target_new['path'],target_new['sha256']),(quarantine_new['path'],quarantine_new['sha256'])}
+    prior={(quarantine_new['path'],quarantine_new['sha256'])}
+    checked=lambda item:Path(item['path'])
+    _validate_historical_observations([target,historical],[target,historical],declared,prior,declaration,correction,checked)
+    with pytest.raises(ValueError,match='target-mask replacement'):
+        _validate_historical_observations([target,historical],[target,historical],declared-{(target_new['path'],target_new['sha256'])},prior,declaration,correction,checked)
+    with pytest.raises(ValueError,match='active replacement'):
+        _validate_historical_observations([target,historical],[target,historical],declared,prior-{(quarantine_new['path'],quarantine_new['sha256'])},declaration,correction,checked)
