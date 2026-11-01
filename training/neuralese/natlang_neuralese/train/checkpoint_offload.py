@@ -637,7 +637,7 @@ def update_policy_record(out, **fields) -> dict:
 
 # The background worker -------------------------------------------------------------------------------------------
 def _lower_priority(pid: int) -> None:
-    """nice 19 and the idle I/O class (best effort)."""
+    """Use low CPU and best-effort I/O priority without starving recovery."""
     try:
         os.setpriority(os.PRIO_PROCESS, pid, 19)
     except OSError:
@@ -645,13 +645,13 @@ def _lower_priority(pid: int) -> None:
     number = {'x86_64': 251, 'aarch64': 30}.get(platform.machine())
     if number is not None:
         try:
-            ctypes.CDLL(None, use_errno=True).syscall(number, 1, pid, 3 << 13)  # IOPRIO_WHO_PROCESS, CLASS_IDLE
+            ctypes.CDLL(None, use_errno=True).syscall(number, 1, pid, (2 << 13) | 7)  # IOPRIO_WHO_PROCESS, CLASS_BE, lowest priority
         except (OSError, AttributeError):
             pass
 
 
 def child_copy(path, dest, prune=False, *, lock_fds=()) -> dict:
-    """``local_copy`` in a child process at idle priority: the trainer keeps its GIL and its I/O share."""
+    """Run ``local_copy`` in a low-priority child without starving storage I/O."""
     process = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), {True: 'prune', 'auto': 'prune-auto'}.get(prune, 'copy'),
                                 str(path), str(dest)],
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, pass_fds=tuple(lock_fds))
