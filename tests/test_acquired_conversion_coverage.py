@@ -64,3 +64,13 @@ def test_duplicate_exports_rejected(tmp_path):
     manifest.write_text(json.dumps(document))
     with pytest.raises(ValueError, match='duplicate exports'):
         inventory(manifest, root)
+
+
+def test_filtered_inventory_does_not_claim_unselected_source_coverage(tmp_path):
+    manifest, root, _, _, _ = conversion(tmp_path)
+    result = inventory(manifest, root, sources={'D15'})
+    assert result['manifest_exports'] == 1
+    assert result['expected_exports'] == 0
+    assert result['source_filter'] == ['D15']
+    assert result['complete_receipts'] == 0
+    assert not result['per_source']

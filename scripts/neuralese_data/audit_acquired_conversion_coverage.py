@@ -19,16 +19,19 @@ from scripts.neuralese_data.convert_acquired_sessions_student import output_dir
 from natlang_neuralese.common.jsonio import write_json_durable
 
 
-def inventory(exports_path: Path, root: Path) -> dict:
+def inventory(exports_path: Path, root: Path, *, sources: set[str] | None = None) -> dict:
     raw = exports_path.read_bytes()
     exports = json.loads(raw)['exports']
     if len(exports) != len(set(exports)):
         raise ValueError('duplicate exports in acquisition manifest')
-    rows, errors, pending = [], [], 0
+    rows, errors, pending, selected = [], [], 0, 0
     buckets: dict[str, Counter] = {}
     for export in exports:
         directory = output_dir(root, export)
         source = directory.relative_to(root).parts[0]
+        if sources is not None and source not in sources:
+            continue
+        selected += 1
         bucket = buckets.setdefault(source, Counter())
         path = directory / 'receipt.json'
         if not path.exists():
@@ -78,7 +81,8 @@ def inventory(exports_path: Path, root: Path) -> dict:
     return {'schema': 'natlang.acquired-session-conversion-coverage-audit/1',
             'verification_scope': 'Receipt bytes and declared output presence/size; not output hash verification or training admission. Point-in-time inventory of completed exports.',
             'exports_manifest': str(exports_path), 'exports_manifest_sha256': hashlib.sha256(raw).hexdigest(),
-            'current_output_root': str(root), 'expected_exports': len(exports),
+            'current_output_root': str(root), 'expected_exports': selected,
+            'manifest_exports': len(exports), 'source_filter': sorted(sources) if sources is not None else None,
             'complete_receipts': len(rows), 'pending': pending, 'errors': errors,
             'per_source': {k: dict(v) for k, v in buckets.items()}, 'receipts': rows}
 
@@ -88,10 +92,12 @@ def main():
     parser.add_argument('--exports', required=True, type=Path)
     parser.add_argument('--root', required=True, type=Path)
     parser.add_argument('--out', required=True, type=Path)
+    parser.add_argument('--source', action='append', help='Inventory only these source labels; the exact filter and complete manifest identity remain recorded')
     args = parser.parse_args()
     if args.out.exists():
         raise ValueError('refusing to overwrite an earlier inventory')
-    result = inventory(args.exports.resolve(strict=True), args.root.resolve(strict=True))
+    result = inventory(args.exports.resolve(strict=True), args.root.resolve(strict=True),
+                       sources=set(args.source) if args.source else None)
     write_json_durable(args.out, result)
     print(json.dumps({k: v for k, v in result.items() if k != 'receipts'}), flush=True)
     if result['errors']:
