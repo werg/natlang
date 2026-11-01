@@ -1199,8 +1199,15 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
         lowerNodes(node.statement);
         return;
       }
-      primitive.push({ start: at.start, end: at.start, text: node.awaitModifier ? '__natlang_finiteAsync(' : '__natlang_finite(' },
-        { start: at.end, end: at.end, text: `, ${JSON.stringify(loopLabel(analysisSource.slice(at.start, at.end)))})` });
+      // Compose the entire iterable after its calls/readouts have been lowered.
+      // Independent insertions at a shared offset can otherwise put finite()
+      // around the receiver of `.hits`, rather than around the resulting array.
+      lowerNodes(node.expression);
+      primitive.push({ ...at, composed: true,
+        text: `${node.awaitModifier ? '__natlang_finiteAsync' : '__natlang_finite'}(${lowerSpan(at.start, at.end)}, ` +
+          `${JSON.stringify(loopLabel(analysisSource.slice(at.start, at.end)))})` });
+      lowerNodes(node.statement);
+      return;
     }
     // A counted loop reads its bound once, when the loop starts, and checks that the counter advances toward it.
     if (ts.isForStatement(node) && node.initializer && ts.isVariableDeclarationList(node.initializer) &&

@@ -3,7 +3,26 @@ import { test } from 'node:test';
 import { compileScopeSnippet, SCOPE_COMPILE_VERSION, SCOPE_RUNTIME_PRELUDE } from '../dist/scope-compiler.js';
 
 import ts from 'typescript';
+import { finite, finiteAsync } from '../dist/runtime/lowered.js';
 const prelude = ts.transpileModule(SCOPE_RUNTIME_PRELUDE, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+
+test('finite loops consume complete service-result expressions after call ownership lowering', async () => {
+  for (const modifier of ['', 'await ']) {
+    const compiled = compileScopeSnippet(
+      `const found = []; for (const query of queries) for ${modifier}(const hit of repository.search(query).hits) found.push(hit.path); return found;`,
+      { inputBindings: ['queries'], serviceBindings: ['repository'] });
+    assert.equal(compiled.ok, true, JSON.stringify(compiled.diagnostics));
+    const requests = [];
+    let output;
+    const live = { finite, finiteAsync, services: { repository: { search(query) {
+      requests.push(query); return { hits: [{ path: query + '.ts' }] };
+    } } }, finish: value => { output = value; } };
+    const entry = Function('__live', `${prelude}\n${compiled.program}\nreturn ${compiled.entrypoint};`)(live);
+    await entry({ queries: ['first', 'second'] }, {}, {});
+    assert.deepEqual(output.result, ['first.ts', 'second.ts']);
+    assert.deepEqual(requests, ['first', 'second']);
+  }
+});
 
 /** Run a compiled program under the runtime contract: helpers and output flow through `__live`. */
 function load(result) {
