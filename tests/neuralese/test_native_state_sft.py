@@ -1713,6 +1713,11 @@ def test_refresh_only_boundary_does_not_force_task_window(tmp_path,monkeypatch,r
         # Request after the real optimizer update, with both cadence options far
         # away: the saved weights/moments/RNG/exposure must still reach refresh.
         argv+=['--refresh-after-updates','1000','--checkpoint-every','1000']
+        if refresh=='signal':
+            # Both held and task cadence are due immediately after this real
+            # update; the refresh must win before either starts.
+            argv+=['--task-eval-every','1']
+            monkeypatch.setattr(trainer,'_evaluate_cadence',lambda *a,**k: pytest.fail('held evaluation started after refresh'))
         update=trainer.native_training_update
         expected_state={}
         def request_after_update(*args,**kwargs):
@@ -1751,6 +1756,62 @@ def test_refresh_only_boundary_does_not_force_task_window(tmp_path,monkeypatch,r
         assert calls and all(final for _,final in calls)
         assert report['completed'] is True
         assert report['metrics']['held']['scope']=='full'
+
+
+@pytest.mark.parametrize('where',['held','task'])
+def test_requested_refresh_interrupts_running_evaluation_and_saves_update(tmp_path,monkeypatch,where):
+    import json, os, signal, torch
+    from test_native_serve import _tiny_source as tiny_source
+    from natlang_neuralese.model.native_model import load_native_model
+    from natlang_neuralese.train import native_state_sft as trainer
+    from natlang_neuralese.eval import task_cadence
+    base=tmp_path/'base';tiny_source(base)
+    _,_,_,config=load_native_model(base,dtype=torch.float32,rank=4)
+    paths={}
+    for split in ('train','test'):
+        row=dict(graph(split),split=split,source_groups=[split],tokenizer_fingerprint=config['tokenizer_fingerprint'])
+        paths[split]=tmp_path/(split+'.jsonl');paths[split].write_text(json.dumps(row)+'\n')
+    calls=[]
+    update=trainer.native_training_update; expected_rng={}
+    def capture_update(*args,**kwargs):
+        result=update(*args,**kwargs)
+        expected_rng.update(trainer.capture_training_rng_state('cpu'))
+        return result
+    monkeypatch.setattr(trainer,'native_training_update',capture_update)
+    def make_task(spec,out,engine,**kwargs):
+        def cadence(step,*,final=False):
+            calls.append('task')
+            assert where=='task'
+            os.kill(os.getpid(),signal.SIGUSR2)
+            assert kwargs['stop_requested']()
+            torch.rand(3)
+            return None  # An interrupted, unscored task window.
+        return SimpleNamespace(engine=engine,cadence=cadence)
+    monkeypatch.setattr(task_cadence,'TaskEval',make_task)
+    evaluate=trainer._evaluate_cadence
+    def evaluate_held(*args,**kwargs):
+        calls.append('held')
+        if where=='held':
+            os.kill(os.getpid(),signal.SIGUSR2)
+            assert kwargs['stop_requested']()
+            torch.rand(3)
+        return evaluate(*args,**kwargs)
+    monkeypatch.setattr(trainer,'_evaluate_cadence',evaluate_held)
+    out=tmp_path/'run'
+    assert trainer.main(['--base',str(base),'--dtype','float32','--rank','4','--device','cpu',
+        '--native-graphs',str(paths['train']),'--held-native-graphs',str(paths['test']),
+        '--epochs','2','--checkpoint-every','1000','--eval-every','1',
+        '--task-eval-every','1','--out',str(out),
+        '--task-eval',json.dumps({'packet':{'path':'unused','sha256':'s'},'cases':[0]})])==0
+    report=json.loads((out/'report.json').read_text())
+    assert calls==(['held'] if where=='held' else ['held','held','task'])
+    assert report['continuation_boundary']['reached'] and not report['completed']
+    saved=torch.load(out/'checkpoint.pt',weights_only=False)['training']
+    assert saved['exposure_counts']=={'train':1}
+    assert saved['rng']['python_rng']==expected_rng['python_rng']
+    assert torch.equal(saved['rng']['torch_rng'],expected_rng['torch_rng'])
+    if where=='held':assert report['metrics']['held']['operationally_interrupted'] is True
+    assert json.loads((out/'native-runtime-certificate.json').read_text())['deferred'] is True
 
 
 def test_current_held_coverage_retention_is_exact_and_does_not_reuse_certificates():
