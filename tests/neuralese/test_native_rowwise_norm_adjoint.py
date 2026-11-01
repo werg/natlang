@@ -1,4 +1,5 @@
 import torch
+import pytest
 from torch import nn
 
 from natlang_neuralese.model.native_parameter_precision import configure_norm_execution, rowwise_norm_forward
@@ -16,7 +17,8 @@ class Lfm3RMSNorm(nn.Module):
         return self.weight * value.to(x.dtype)
 
 
-def test_rowwise_norm_uses_single_adjoint_and_preserves_values_and_gradients(monkeypatch):
+@pytest.mark.parametrize("rows", [14, 128, 129, 270, 511])
+def test_rowwise_norm_uses_single_adjoint_and_preserves_values_and_gradients(monkeypatch, rows):
     # Exercise the CUDA dispatch geometry on CPU without allocating a second GPU model.
     monkeypatch.setattr(torch.Tensor, 'is_cuda', property(lambda _: True))
     torch.manual_seed(10)
@@ -30,7 +32,7 @@ def test_rowwise_norm_uses_single_adjoint_and_preserves_values_and_gradients(mon
     model = type('Model', (), {})()
     model.port = Port()
     configure_norm_execution(model)
-    x = torch.randn(1, 270, 8, dtype=torch.bfloat16, requires_grad=True)
+    x = torch.randn(1, rows, 8, dtype=torch.bfloat16, requires_grad=True)
     incoming = torch.randn_like(x)
     actual = layer(x)
     assert type(actual.grad_fn).__name__ == '_RowwiseNormAdjointBackward'
