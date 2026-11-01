@@ -154,7 +154,7 @@ def reconcile_production_session(state_path, config_path, *, plan_ref,
 
     stable_artifacts={'runtime_manifest','production_recipe','train_source','rl_cases','held_source',
                       'ce_policy','tokenizer_manifest','base_manifest','source_admission',
-                      'protection_union','continuation_preflight'}
+                      'protection_union','continuation_preflight','checkpoint_audit'}
     artifacts=successor.get('artifacts')
     if not isinstance(artifacts,dict) or set(artifacts)!=stable_artifacts:
         raise ValueError('successor plan lacks exact runtime/source/CE/held/protection bindings')
@@ -164,12 +164,49 @@ def reconcile_production_session(state_path, config_path, *, plan_ref,
             or not isinstance(immediate_parent['sha256'],str) or len(immediate_parent['sha256'])!=64
             or type(immediate_parent['global_step']) is not int or immediate_parent['global_step']<0):
         raise ValueError('successor plan lacks the exact immediate checkpoint parent observation')
-    preflight=json.loads(Path(artifacts['continuation_preflight']['path']).read_text())
-    if (preflight.get('schema')!='natlang.native-continuation-cpu-preflight/1'
-            or preflight.get('passed') is not True
-            or preflight.get('parent_sha256')!=immediate_parent['sha256']
-            or preflight.get('global_step')!=immediate_parent['global_step']):
-        raise ValueError('successor preflight does not prove its exact immediate checkpoint parent')
+    parent_proof=json.loads(Path(artifacts['continuation_preflight']['path']).read_text())
+    if parent_proof.get('schema')=='natlang.native-continuation-cpu-preflight/1':
+        parent_ok=(parent_proof.get('passed') is True
+            and parent_proof.get('parent_sha256')==immediate_parent['sha256']
+            and parent_proof.get('global_step')==immediate_parent['global_step'])
+    elif parent_proof.get('schema')=='natlang.live-runtime-adoption/1':
+        # The original preflight file may be the learner's rolling slot and can
+        # be overwritten after launch. The immutable launch receipt records its
+        # hash and the exact parent from which the actual SFT continuation ran.
+        manifest_ref=parent_proof.get('manifest') or {}
+        manifest_path=_verify_strong_ref(manifest_ref)
+        manifest=json.loads(manifest_path.read_text())
+        launch_parent=parent_proof.get('parent') or {}
+        source_ref=parent_proof.get('source') or {}
+        argv=manifest.get('argv') or []
+        def option_value(option):
+            if not isinstance(argv,list) or argv.count(option)!=1:return None
+            index=argv.index(option)
+            return argv[index+1] if index+1<len(argv) else None
+        launch_preflight=parent_proof.get('preflight') or {}
+        manifest_parent=manifest.get('parent') or {}
+        manifest_source=manifest.get('source') or {}
+        parent_ok=(manifest.get('schema')=='natlang.native-live-source-runtime-continuation/1'
+            and parent_proof.get('status','').startswith('checks passed')
+            and launch_parent.get('sha256')==immediate_parent['sha256']
+            and launch_parent.get('global_step')==immediate_parent['global_step']
+            and launch_parent.get('path')==manifest_parent.get('path')
+            and launch_parent.get('sha256')==manifest_parent.get('sha256')
+            and launch_parent.get('global_step')==manifest_parent.get('global_step')
+            and source_ref.get('path')==artifacts['train_source']['path']
+            and source_ref.get('sha256')==artifacts['train_source'].get('sha256')
+            and source_ref.get('bytes')==artifacts['train_source'].get('bytes')
+            and source_ref.get('path')==manifest_source.get('path')
+            and source_ref.get('sha256')==manifest_source.get('sha256')
+            and source_ref.get('bytes')==manifest_source.get('bytes')
+            and option_value('--continue-from')==launch_parent.get('path')
+            and option_value('--continued-native-graphs')==source_ref.get('path')
+            and isinstance(launch_preflight.get('path'),str)
+            and isinstance(launch_preflight.get('sha256'),str) and len(launch_preflight['sha256'])==64
+            and parent_proof.get('runtime_commit')==manifest.get('runtime_commit'))
+    else:parent_ok=False
+    if not parent_ok:
+        raise ValueError('successor preflight or launch evidence does not prove its exact immediate checkpoint parent')
 
     # Recompute runtime and source custody from their actual receipts. Caller
     # booleans such as `status: passed` are declarations, not evidence.
@@ -292,9 +329,30 @@ def reconcile_production_session(state_path, config_path, *, plan_ref,
                 or not isinstance(receipt['mandatory_sft'].get('stages'),dict)):
             raise ValueError('saved checkpoint has no structured unfinished-SFT obligations')
         active_source_sha=artifacts['train_source']['sha256']
-        if not any(stage.get('train_source_sha256')==active_source_sha
-                for stage in receipt['mandatory_sft']['stages'].values() if isinstance(stage,dict)):
+        matching_stages=[stage for stage in receipt['mandatory_sft']['stages'].values()
+            if isinstance(stage,dict) and stage.get('train_source_sha256')==active_source_sha]
+        if not matching_stages:
             raise ValueError('saved checkpoint SFT obligations do not include the planned train source')
+        audit=json.loads(Path(artifacts['checkpoint_audit']['path']).read_text())
+        audit_parent=audit.get('parent') or {};audit_exposure=audit.get('source_exposure') or {}
+        stage_sources={stage.get('source_hash') for stage in matching_stages}
+        observed_groups=audit_exposure
+        if (audit.get('schema')!='natlang.earned-full-parent-cutover-audit/1'
+                or audit.get('status')!='actual saved fullstate verified; not a capability qualification'
+                or audit_parent.get('path')!=str(checkpoint)
+                or audit_parent.get('sha256')!=checkpoint_ref['sha256']
+                or audit_parent.get('bytes')!=checkpoint_ref['bytes']
+                or type(audit_parent.get('global_step')) is not int
+                or audit_parent['global_step']!=immediate_parent['global_step']+1
+                or audit_parent.get('source_rows')!=exposure.get('train_rows')
+                or audit_parent.get('source_hash') not in stage_sources
+                or audit.get('optimizer_present') is not True or audit.get('rng_present') is not True
+                or set(observed_groups)!={'226','534'}
+                or any(not isinstance(item,dict) or item.get('rows')!=int(group)
+                    or type(item.get('visits')) is not int or item['visits']<0 or item['visits']>item['rows']
+                    or item.get('visited_rows')!=item['visits'] for group,item in observed_groups.items())
+                or sum(item['visits'] for item in observed_groups.values())>exposure.get('consumed_rows',0)):
+            raise ValueError('independent full-checkpoint audit does not bind the saved 73 parent and actual source visits')
         progress=state.get('last_learner_progress') or {}
         # A direct SFT owner may advance the shared checkpoint after the
         # controller's last state write. Preserve that older controller view as

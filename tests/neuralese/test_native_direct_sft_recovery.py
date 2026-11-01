@@ -70,7 +70,9 @@ def _session_reconciliation_fixture(tmp_path):
     out=tmp_path/'production';out.mkdir()
     checkpoint=write('production/learner/checkpoint.pt','saved full model optimizer RNG and exposure bytes')
     cp=ref(checkpoint)
-    ancestor='1'*64;immediate='2'*64
+    ancestor='1'*64
+    launch_parent_path=write('production/learner/parent72.pt','authenticated immediate predecessor bytes')
+    immediate=_strong_binding(launch_parent_path)['sha256']
     mandatory={'schema':'natlang.native-sft-progress/1','complete':False,'remaining_graph_visits':17,
         'stages':{'next':{'complete':False,'remaining_graph_visits':17}},'source_sha256':'train-source-sha'}
     state_data={'schema':'natlang.rl-production-state/1','phase':'awaiting_semantic_refresh',
@@ -116,7 +118,7 @@ def _session_reconciliation_fixture(tmp_path):
         'training_receipt':{'path':str(report_path),'sha256':report_ref['sha256']},
         'continuation':{'checkpoint_sha256':ancestor},'continuation_boundary':report['continuation_boundary'],
         'native_identity':{'checkpoint_sha256':cp['sha256']},'mandatory_sft':mandatory,
-        'exposure':{'consumed_updates':3,'supervised_token_visits':11}}
+        'exposure':{'consumed_updates':3,'supervised_token_visits':11,'consumed_rows':37,'train_rows':190154}}
     receipt_path=write('production/learner/native-training-receipt.json',receipt);receipt_ref=ref(receipt_path)
     artifacts={}
     runtime_root=tmp_path/'runtime';runtime_root.mkdir()
@@ -132,6 +134,7 @@ def _session_reconciliation_fixture(tmp_path):
     tokenizer_dir=tmp_path/'assets/tokenizer';write('assets/tokenizer/tokenizer.json','tokenizer bytes')
     train_path=write('assets/train.json','train manifest')
     mandatory['stages']['next']['train_source_sha256']=ref(train_path)['sha256']
+    mandatory['stages']['next']['source_hash']='sourcehash'
     report['mandatory_sft']=mandatory
     write('production/learner/report.json',report)
     report_ref=ref(report_path)
@@ -155,6 +158,13 @@ def _session_reconciliation_fixture(tmp_path):
     admission_path=write('assets/admission.json',{'schema':'natlang.acquired-positive-graph-successor/1',
         'source':ref(train_path),'recipe':ref(recipe_path),'ce_policy':ref(ce_path),
         'current_protection_digest':ProtectedWorlds.load().digest})
+    checkpoint_audit=write('assets/checkpoint-audit.json',{'schema':'natlang.earned-full-parent-cutover-audit/1',
+        'status':'actual saved fullstate verified; not a capability qualification',
+        'optimizer_present':True,'rng_present':True,
+        'parent':{'path':str(checkpoint),'sha256':cp['sha256'],'bytes':cp['bytes'],'global_step':73,
+            'source_hash':'sourcehash','source_rows':190154},
+        'source_exposure':{'226':{'rows':226,'visited_rows':20,'visits':20},
+            '534':{'rows':534,'visited_rows':17,'visits':17}}})
     paths={'runtime_manifest':runtime_closure,
         'production_recipe':recipe_path,
         'train_source':train_path,'rl_cases':write('assets/cases.jsonl','{}\n'),
@@ -162,6 +172,7 @@ def _session_reconciliation_fixture(tmp_path):
         'tokenizer_manifest':tokenizer_dir,'base_manifest':write('assets/base.json','base identity'),
         'source_admission':admission_path,
         'protection_union':runtime_closure,
+        'checkpoint_audit':checkpoint_audit,
         'continuation_preflight':write('assets/preflight.json',{'schema':'natlang.native-continuation-cpu-preflight/1',
             'passed':True,'parent_sha256':immediate,'global_step':72})}
     artifacts={key:ref(path) for key,path in paths.items()}
@@ -186,7 +197,8 @@ def _session_reconciliation_fixture(tmp_path):
     plan_path=write('plan.json',plan)
     return {'state_path':state_path,'old_config_path':old_config_path,'state_before':ref(state_path),
         'checkpoint_ref':cp,'report_ref':report_ref,'receipt_ref':receipt_ref,'next_config_ref':next_config_ref,
-        'plan_ref':ref(plan_path),'out':tmp_path/'transaction','out_path':out}
+        'plan_ref':ref(plan_path),'out':tmp_path/'transaction','out_path':out,
+        'launch_parent_path':launch_parent_path,'immediate_parent_sha256':immediate}
 
 
 def test_production_session_reconciliation_stages_and_applies_exact_earned_checkpoint(tmp_path,monkeypatch):
@@ -265,3 +277,46 @@ def test_production_session_reconciliation_rejects_stale_state_and_parent_prefli
         reconcile_production_session(f['state_path'],f['old_config_path'],plan_ref=f['plan_ref'],
             report_ref=f['report_ref'],training_receipt_ref=f['receipt_ref'],checkpoint_ref=f['checkpoint_ref'],
             successor_config_ref=f['next_config_ref'],out=f['out'])
+
+
+def test_production_session_reconciliation_accepts_bound_launch_parent_when_preflight_was_overwritten(tmp_path):
+    from natlang_neuralese.rl.native_direct_sft_recovery import reconcile_production_session, _strong_binding
+    f=_session_reconciliation_fixture(tmp_path)
+    plan=json.loads(Path(f['plan_ref']['path']).read_text())
+    train_ref=plan['successor']['artifacts']['train_source']
+    checkpoint=f['checkpoint_ref']
+    manifest=tmp_path/'actual-launch.json'
+    launch_parent_path=f['launch_parent_path']
+    immediate=f['immediate_parent_sha256']
+    manifest.write_text(json.dumps({'schema':'natlang.native-live-source-runtime-continuation/1',
+        'parent':{'path':str(launch_parent_path),'sha256':immediate,'global_step':72},
+        'source':train_ref,'runtime_commit':'test-commit',
+        'argv':['python','-m','natlang_neuralese.train.native_state_sft','--continue-from',str(launch_parent_path),
+            '--objective-continuation','--continued-native-graphs',train_ref['path']]}))
+    old_preflight=tmp_path/'previous-preflight.json'
+    old_preflight.write_text(json.dumps({'schema':'natlang.native-continuation-cpu-preflight/1',
+        'passed':True,'parent_sha256':'2'*64,'global_step':72}))
+    launch=tmp_path/'launch-receipt.json'
+    launch.write_text(json.dumps({'schema':'natlang.live-runtime-adoption/1','status':'checks passed; launching actual GPU trainer',
+        'manifest':_strong_binding(manifest),'preflight':_strong_binding(old_preflight),
+        'parent':{'path':str(launch_parent_path),'sha256':immediate,'global_step':72},
+        'runtime_commit':'test-commit','source':train_ref}))
+    plan['successor']['artifacts']['continuation_preflight']=_strong_binding(launch)
+    plan_path=Path(f['plan_ref']['path']);plan_path.write_text(json.dumps(plan,sort_keys=True))
+    f['plan_ref']=_strong_binding(plan_path)
+    valid_launch=launch.read_text()
+    bad_receipt=json.loads(valid_launch);bad_receipt['source']['sha256']='f'*64
+    launch.write_text(json.dumps(bad_receipt))
+    plan['successor']['artifacts']['continuation_preflight']=_strong_binding(launch)
+    plan_path.write_text(json.dumps(plan,sort_keys=True));f['plan_ref']=_strong_binding(plan_path)
+    with pytest.raises(ValueError,match='preflight or launch evidence'):
+        reconcile_production_session(f['state_path'],f['old_config_path'],plan_ref=f['plan_ref'],
+            report_ref=f['report_ref'],training_receipt_ref=f['receipt_ref'],checkpoint_ref=f['checkpoint_ref'],
+            successor_config_ref=f['next_config_ref'],out=f['out'])
+    launch.write_text(valid_launch)
+    plan['successor']['artifacts']['continuation_preflight']=_strong_binding(launch)
+    plan_path.write_text(json.dumps(plan,sort_keys=True));f['plan_ref']=_strong_binding(plan_path)
+    result=reconcile_production_session(f['state_path'],f['old_config_path'],plan_ref=f['plan_ref'],
+        report_ref=f['report_ref'],training_receipt_ref=f['receipt_ref'],checkpoint_ref=f['checkpoint_ref'],
+        successor_config_ref=f['next_config_ref'],out=f['out'])
+    assert result['prepared_only'] is True
