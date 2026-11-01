@@ -1,4 +1,4 @@
-// A profile's `escalate` teacher answers a call its student fails (calls/tiers.ts tiers 1 and 0), announced on stderr.
+// A configured fallback continues a failed live invocation, announced with actual actor identities.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import http from 'node:http';
@@ -50,7 +50,7 @@ test('a call the student fails is answered by the escalation profile, and --esca
     assert.equal(escalated.code, 0, escalated.err);
     assert.equal(escalated.out.trim(), '42');
     assert.ok(student.requests.length >= 1 && teacher.requests.length >= 1);
-    assert.match(escalated.err, /answer failed on student \(.*\); answered by teacher/);
+    assert.match(escalated.err, /answer handed off from student-model to external:teacher-model/);
     const before = teacher.requests.length;
     const direct = await run(['call', 'answer.nl', '--inputs', 'inputs.json', '--escalate', 'none'], env, directory);
     assert.notEqual(direct.code, 0);

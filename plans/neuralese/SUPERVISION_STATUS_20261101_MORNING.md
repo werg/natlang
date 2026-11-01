@@ -1,3 +1,59 @@
+## Live supervision update, 2026-11-01 21:43 CET
+
+- Bounded efficiency and live inference escalation are integrated and pushed.
+  Commit06a44b1b9 fixes actual optimizer scaling for wholly efficiency-only
+  updates, including Muon in-backward steps;71 helper integration tests passed.
+  Outcome/privileged mixed objectives keep their ordinary learning rates; their
+  efficiency contribution is not separately bounded in parameter space. The
+  actual corrected round13 has20 zero outcome advantages and privileged twins,
+  so this optimizer finding does not explain that round's observed behavior.
+  Root review passed71 Python replay/marker/isolation tests in49.43seconds.
+  Inference passed22 tests plus the corrected CLI test: old expectation described
+  a whole-task retry instead of the new actor-identified live handoff. Initial review was CPU
+  oversubscribed (83threads), so it was stopped and restarted with2 OpenMP threads.
+  No paid generation or new teacher server.
+- Matched75 completed9/16, versus64's11 demonstrated successes. Four64 successes
+  failed75 (56,96,104,120);75 gained24 and88. Only75 had a native writer probe
+  first, so Pop is rerunning those four regressions on a fresh75 server without
+  a probe:pop75-clean-regressions-1101. It is active, not yet a result. Tiny CPU
+  isolation tests found no writer failure contamination; GPU confound remains
+  under investigation. Preserve all original evaluation files and wall policies.
+- Stopped diagnostic joint branch after two actual79-to81 updates; durable81 SHA
+  be9f878252827357cd9ac9fd25b462ebc290fba60a5da7ccee23f9f51fdb85b7.
+  Do not continue this branch merely because loss fell. Exact64 is retained
+  independently on external storage, and its custody snapshot proves307946 source
+  rows,460 SFT graph visits, optimizer/RNG and committed correctionc7.
+- Launched lfm3-best64-joint353731-1101 at21:43:12 from exact64 full-state parent,
+  preserving64 exposure and excluding discarded65-to81 branch exposure. New
+  lineage W/sd-r2-best64-1101; controls ops/best64-joint-restart-1101. Complete
+  source353731 and all current geometry/CE/recipe obligations retained. Already
+  committedc7 control removed;307946 append predecessor retained because64 has
+  not yet adopted353731. OrdinaryLR1e-6, marker rows.01, reasoning rows.0001.
+  Runtime runtime-best64-efficient-escalation-1101 is committed1e50ee9e7 with
+  protected union unchanged. Actual native_data_append21:45:59 confirms307946 plus45785 rows and restored
+  optimizer. First new SGD not yet observed; check startup now.
+  Initial runtime sealing used a cross-device hardlink pool and failed; corrected
+  same-filesystem isolated pool sealed successfully without touching live inputs.
+- New completed conversion screen has14569 eligible train graphs and288 held/test
+  rows; raw token counts are not effective loss or training admission. Census
+  census-acquired-completed1943-1101 completed:77668398 effective positive tokens,
+  35688677 unscaled loss mass, zero empty-effective rows; not yet deduplicated
+  against admitted data. Fixed receipt field mismatch
+  with strict conflict rejection (1e50ee9e7,13 tests); geometry now reaches actual
+  parsing and rejects duplicate graph identities. Preserve the failed preparation
+  directory. Next work: compare exact production bindings with353731, retain
+  unchanged duplicate custody, investigate changed-ID collisions, then prepare a
+  fresh filtered source/census/geometry. No duplicate admission or renamed IDs.
+- Actual79 full state remains pinned at independent-recovery/earned79-stable-source
+  with a1c1501f963e16c56e5e0a321c2eb66d1fbf788bf6746e569165be99d3210922.
+  Stopped79 recovery qualification when79 became diagnostic. Recovery improvements
+  b9f45ce67 retain independently loaded bytes, reusable fixtures and sealed success
+  evidence. New selected lineage still needs complete independent recovery closure;
+  raw full-state mirrors and runtime archives alone are not that qualification.
+- Last disk observation21:42: internal84GiB free, external126GiB free. Keep40GiB
+  floor and independently verified parents. Paid generation remains paused;
+  cloud four-account GPU denial remains today's one-time checked observation.
+
 ## Live supervision update, 2026-11-01 19:56 CET
 
 - Previous goal turn was progress: production reward/escalation integration,
