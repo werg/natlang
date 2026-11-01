@@ -554,7 +554,11 @@ def test_tiny_native_sft_update_checkpoint_and_exact_resume(tmp_path):
     interrupted = torch.load(slot, map_location='cpu', weights_only=False)
     assert interrupted['training']['epoch'] == 1
     assert interrupted['training']['global_step'] == 1
+    from natlang_neuralese.train.native_resident import binding
+    immediate_parent=binding(slot)
     run(split_out, 2, slot)
+    operation_parent=json.loads((split_out/'native-training-receipt.json').read_text())['operation_parent']
+    assert operation_parent=={'path':str(slot.resolve()),'sha256':immediate_parent['sha256'],'global_step':1}
     run(continuous_out, 2)
     resumed = torch.load(slot, map_location='cpu', weights_only=False)
     continuous = torch.load(continuous_out / 'checkpoint.pt', map_location='cpu', weights_only=False)

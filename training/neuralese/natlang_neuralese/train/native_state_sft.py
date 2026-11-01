@@ -2054,6 +2054,17 @@ def _main(argv=None, *, requested_refresh):
         loaded_snapshot = sha256_file_hex_cached(args.continue_from if parent_continuation else policy.slot)
         if loaded_snapshot not in snapshot_ancestors:
             snapshot_ancestors.append(loaded_snapshot)
+        # The long-lived `continuation` option is objective ancestry and can
+        # intentionally outlive several SFT/RL handoffs. Record this invocation's
+        # exact immediate checkpoint separately for publication custody.
+        operation_parent_path=(Path(args.continue_from) if args.continue_from and not policy.slot.exists()
+                               else policy.slot)
+        operation_parent_state=resume or shared_resume or {}
+        checkpoint_options['operation_parent']={
+            'path':str(operation_parent_path.resolve()),
+            'sha256':sha256_file_hex_cached(operation_parent_path),
+            'global_step':int(operation_parent_state.get('global_step',operation_parent_state.get('step',0))),
+        }
     checkpoint_options['native_snapshot_ancestors'] = snapshot_ancestors
     checkpoint_options['foundation_declaration_recovery_history'] = list(
         saved_options.get('foundation_declaration_recovery_history') or [])
@@ -4682,6 +4693,7 @@ def _main(argv=None, *, requested_refresh):
         'checkpoint': {'path': str(policy.slot.resolve()), 'sha256': report['checkpoint_sha256'],
                        'schema': CHECKPOINT_SCHEMA},
         'native_identity': model_identity, 'continuation': checkpoint_options.get('continuation'),
+        'operation_parent':checkpoint_options.get('operation_parent'),
         'runtime_certificate': {'path': str(runtime_path.resolve()),
                                 'sha256': sha256_file_hex_cached(runtime_path),
                                 'passed': runtime_report.get('passed') is True},

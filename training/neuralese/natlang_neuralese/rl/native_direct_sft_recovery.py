@@ -73,6 +73,84 @@ def _verify_historical_file_ref(reference):
     return Path(reference['path']).resolve(strict=True)
 
 
+def _authenticated_refresh_publication(reference, seen=None):
+    """Verify one publication and any historical continuation ancestor it cites."""
+    seen=set() if seen is None else set(seen)
+    path=_verify_historical_file_ref(reference)
+    if str(path) in seen:raise ValueError('historical SFT publication chain contains a cycle')
+    seen.add(str(path))
+    publication_binding=_strong_binding(path)
+    publication=json.loads(path.read_text())
+    if publication.get('schema')!='natlang.direct-sft-refresh-publication/1':
+        raise ValueError('historical SFT chain contains a non-publication artifact')
+    parent=publication.get('parent') or {};checkpoint=publication.get('checkpoint') or {}
+    if (not isinstance(parent.get('sha256'),str) or len(parent['sha256'])!=64
+            or not isinstance(checkpoint.get('sha256'),str) or len(checkpoint['sha256'])!=64
+            or not isinstance(parent.get('path'),str) or not isinstance(checkpoint.get('path'),str)):
+        raise ValueError('historical SFT publication omits exact checkpoint identities')
+    report_ref=publication.get('report') or {};receipt_ref=publication.get('receipt') or {}
+    custody_ref=publication.get('custody') or {}
+    report=json.loads(_verify_historical_file_ref(report_ref).read_text())
+    receipt=json.loads(_verify_historical_file_ref(receipt_ref).read_text())
+    custody=json.loads(_verify_historical_file_ref(custody_ref).read_text())
+    boundary=report.get('continuation_boundary') or {}
+    custody_parent=custody.get('parent') or {};successor=custody.get('successor') or {}
+    continuation=(receipt.get('continuation') or {}).get('checkpoint_sha256')
+    operation_parent=receipt.get('operation_parent')
+    operation_parent_matches=(operation_parent is None or
+        (isinstance(operation_parent,dict)
+            and operation_parent.get('sha256')==custody_parent.get('sha256')
+            and Path(operation_parent.get('path','')).resolve()==Path(custody_parent.get('path','')).resolve()
+            and operation_parent.get('global_step')==custody_parent.get('global_step')))
+    if (custody.get('schema')!='natlang.earned-sft-checkpoint-custody/1'
+            or Path(custody_parent.get('path','')).resolve()!=Path(parent['path']).resolve()
+            or custody_parent.get('sha256')!=parent['sha256']
+            or Path(successor.get('path','')).resolve()!=Path(checkpoint['path']).resolve()
+            or successor.get('sha256')!=checkpoint['sha256']
+            or not successor.get('optimizer_present') or not successor.get('rng_present')
+            or not operation_parent_matches
+            or report.get('checkpoint_sha256')!=checkpoint['sha256']
+            or boundary.get('checkpoint_sha256')!=checkpoint['sha256']
+            or boundary.get('kind')!='semantic-refresh' or boundary.get('reached') is not True
+            or type(boundary.get('new_optimizer_updates')) is not int or boundary['new_optimizer_updates']<1
+            or receipt.get('checkpoint',{}).get('sha256')!=checkpoint['sha256']
+            or not isinstance(continuation,str) or len(continuation)!=64):
+        raise ValueError('historical SFT publication report/receipt/custody do not prove its checkpoint transition')
+    authenticated_ancestors={parent['sha256']}
+    if continuation!=parent['sha256']:
+        proof=publication.get('historical_parent_proof') or {}
+        ancestor=proof.get('prior_continuation_ancestor') or {}
+        ancestor_ref=proof.get('publication') or ancestor.get('publication') or {}
+        ancestor_publication=_authenticated_refresh_publication(ancestor_ref,seen)
+        ancestor_pub=ancestor_publication['publication']
+        proof_operation_parent=proof.get('operation_parent') or {}
+        operation_parent_proves_link=(
+            proof_operation_parent.get('sha256')==parent['sha256']
+            and Path(proof_operation_parent.get('path','')).resolve()==Path(parent['path']).resolve()
+            and proof_operation_parent.get('global_step')==custody_parent.get('global_step'))
+        publication_parent_proves_link=(ancestor_pub.get('checkpoint',{}).get('sha256')==parent['sha256'])
+        if (proof.get('schema')!='natlang.historical-sft-parent-proof/1'
+                or proof.get('bytes_verified_currently') is not False
+                or (proof.get('identity') or {}).get('path')!=parent['path']
+                or (proof.get('identity') or {}).get('sha256')!=parent['sha256']
+                or (proof.get('identity') or {}).get('global_step')!=custody_parent.get('global_step')
+                or proof.get('reported_continuation_ancestor_sha256')!=continuation
+                or ancestor.get('sha256')!=continuation
+                or not (publication_parent_proves_link or operation_parent_proves_link)
+                or continuation not in ancestor_publication['authenticated_ancestors']
+                or proof.get('report')!=ancestor_pub.get('report')
+                or proof.get('receipt')!=ancestor_pub.get('receipt')
+                or proof.get('custody')!=ancestor_pub.get('custody')):
+            raise ValueError('historical SFT continuation ancestor is not linked by the ordered publication chain')
+        authenticated_ancestors.update(ancestor_publication['authenticated_ancestors'])
+        authenticated_ancestors.add(continuation)
+    else:
+        authenticated_ancestors.add(continuation)
+    return {'binding':publication_binding,'publication':publication,'report':report,
+        'receipt':receipt,'custody':custody,'continuation_sha256':continuation,
+        'authenticated_ancestors':authenticated_ancestors}
+
+
 def _verify_artifact_ref(reference):
     if not isinstance(reference,dict) or not isinstance(reference.get('path'),str):
         raise ValueError('session artifact needs an exact file/tree binding')
@@ -676,6 +754,12 @@ def publish_completed(state_path, *, report_ref, receipt_ref, custody_ref, out):
         parent_path=Path(parent.get('path','')).resolve()
         same_slot=(state_parent==child_path and parent_path==child_path)
         parent_matches=state_parent==parent_path and not same_slot
+        operation_parent=receipt.get('operation_parent')
+        operation_parent_matches=(operation_parent is None or
+            (isinstance(operation_parent,dict)
+                and operation_parent.get('sha256')==parent.get('sha256')
+                and Path(operation_parent.get('path','')).resolve()==parent_path
+                and operation_parent.get('global_step')==parent.get('global_step')))
         historical_parent_proof=None
         if parent_matches:
             # Ordinary publication: the exact parent bytes still occupy their
@@ -693,63 +777,51 @@ def publish_completed(state_path, *, report_ref, receipt_ref, custody_ref, out):
             if set(prior_ref) not in ({'path','sha256'},{'path','sha256','bytes'}):
                 raise ValueError('same-slot SFT history has an invalid last publication reference')
             prior_path=Path(prior_ref['path']).resolve(strict=True)
-            prior_binding=_strong_binding(prior_path)
-            if (prior_binding['sha256']!=prior_ref['sha256']
-                    or ('bytes' in prior_ref and prior_binding['bytes']!=prior_ref['bytes'])):
-                raise ValueError('last SFT publication history changed after its recorded transition')
-            prior=json.loads(prior_path.read_text())
-            if prior.get('schema')!='natlang.direct-sft-refresh-publication/1':
-                raise ValueError('last SFT history entry is not a completed refresh publication')
+            authenticated_prior=_authenticated_refresh_publication(prior_ref)
+            prior_binding=authenticated_prior['binding'];prior=authenticated_prior['publication']
             prior_checkpoint=prior.get('checkpoint') or {}
             prior_parent=prior.get('parent') or {}
-            if (Path(prior_checkpoint.get('path','')).resolve()!=child_path
-                    or prior_checkpoint.get('sha256')!=parent.get('sha256')):
+            prior_is_immediate=(Path(prior_checkpoint.get('path','')).resolve()==child_path
+                and prior_checkpoint.get('sha256')==parent.get('sha256'))
+            if not prior_is_immediate and not operation_parent_matches:
                 raise ValueError('last SFT publication does not prove the exact overwritten parent identity')
             prior_report_ref=prior.get('report') or {};prior_receipt_ref=prior.get('receipt') or {}
             prior_custody_ref=prior.get('custody') or {}
-            prior_report=json.loads(_verify_historical_file_ref(prior_report_ref).read_text())
-            prior_receipt=json.loads(_verify_historical_file_ref(prior_receipt_ref).read_text())
-            prior_custody=json.loads(_verify_historical_file_ref(prior_custody_ref).read_text())
-            prior_boundary=prior_report.get('continuation_boundary') or {}
+            prior_report=authenticated_prior['report'];prior_receipt=authenticated_prior['receipt']
+            prior_custody=authenticated_prior['custody']
             prior_successor=(prior_custody.get('successor') or {})
-            prior_custody_parent=(prior_custody.get('parent') or {})
-            prior_receipt_parent=((prior_receipt.get('continuation') or {}).get('checkpoint_sha256'))
-            if (prior_custody.get('schema')!='natlang.earned-sft-checkpoint-custody/1'
-                    or prior_custody_parent.get('sha256')!=prior_parent.get('sha256')
-                    or Path(prior_custody_parent.get('path','')).resolve()!=Path(prior_parent.get('path','')).resolve()
-                    or Path(prior_successor.get('path','')).resolve()!=child_path
+            if (prior_is_immediate and (Path(prior_successor.get('path','')).resolve()!=child_path
                     or prior_successor.get('sha256')!=parent.get('sha256')
-                    or prior_successor.get('global_step')!=parent.get('global_step')
-                    or not prior_successor.get('optimizer_present') or not prior_successor.get('rng_present')
-                    or prior_report.get('checkpoint_sha256')!=parent.get('sha256')
-                    or prior_boundary.get('checkpoint_sha256')!=parent.get('sha256')
-                    or prior_boundary.get('kind')!='semantic-refresh'
-                    or prior_boundary.get('reached') is not True
-                    or type(prior_boundary.get('new_optimizer_updates')) is not int
-                    or prior_boundary['new_optimizer_updates']<1
-                    or prior_receipt.get('checkpoint',{}).get('sha256')!=parent.get('sha256')
-                    or prior_receipt_parent!=prior_parent.get('sha256')):
-                raise ValueError('last SFT publication report/receipt/custody do not prove its saved parent')
-            prior_continuation_sha=prior_parent.get('sha256')
+                    or prior_successor.get('global_step')!=parent.get('global_step'))):
+                raise ValueError('last SFT publication custody does not prove the immediate parent step')
+            # If RL ran between SFT windows, the last direct-SFT publication is
+            # an objective ancestor rather than the immediate rolling parent.
+            # The new trainer receipt authenticates that immediate parent; the
+            # ordered SFT publication chain authenticates the preserved root.
+            ancestors=set(authenticated_prior['authenticated_ancestors'])
+            lineage_binding=prior_binding;lineage_publication=prior
+            reported_ancestor=(receipt.get('continuation') or {}).get('checkpoint_sha256')
+            if reported_ancestor not in ancestors | {parent['sha256']}:
+                raise ValueError('SFT receipt continuation is not the exact parent or its authenticated publication ancestor')
             historical_parent_proof={
                 'schema':'natlang.historical-sft-parent-proof/1',
                 'identity':{'path':str(child_path),'sha256':parent['sha256'],
                             'global_step':parent['global_step']},
                 'bytes_verified_currently':False,
-                'publication':prior_binding,
-                'report':prior_report_ref,'receipt':prior_receipt_ref,'custody':prior_custody_ref,
-                'prior_continuation_ancestor':{'sha256':prior_continuation_sha,
-                    'publication':prior_binding,'receipt':prior_receipt_ref},
+                'publication':lineage_binding,
+                'report':lineage_publication.get('report'),
+                'receipt':lineage_publication.get('receipt'),
+                'custody':lineage_publication.get('custody'),
+                'prior_continuation_ancestor':{'sha256':reported_ancestor,
+                    'publication':lineage_binding,'receipt':lineage_publication.get('receipt')},
+                'reported_continuation_ancestor_sha256':reported_ancestor,
+                'operation_parent':{'path':str(parent_path),'sha256':parent['sha256'],
+                    'global_step':parent['global_step']},
             }
             parent_matches=True
         receipt_parents={parent['sha256']}
         if historical_parent_proof is not None:
-            receipt_parents.add(historical_parent_proof['prior_continuation_ancestor']['sha256'])
-            reported_ancestor=(receipt.get('continuation') or {}).get('checkpoint_sha256')
-            if reported_ancestor!=parent['sha256']:
-                if reported_ancestor!=historical_parent_proof['prior_continuation_ancestor']['sha256']:
-                    raise ValueError('SFT receipt continuation is not the exact parent or its authenticated publication ancestor')
-                historical_parent_proof['reported_continuation_ancestor_sha256']=reported_ancestor
+            receipt_parents.update(authenticated_prior['authenticated_ancestors'])
         if (state.get('phase')!='awaiting_semantic_refresh' or not parent_matches
                 or Path(state.get('pending_native_checkpoint','')).resolve()!=child_path
                 or custody.get('schema')!='natlang.earned-sft-checkpoint-custody/1'
@@ -762,6 +834,7 @@ def publish_completed(state_path, *, report_ref, receipt_ref, custody_ref, out):
                 or boundary.get('checkpoint_sha256')!=child['sha256']
                 or report.get('checkpoint_sha256')!=child['sha256']
                 or receipt.get('checkpoint',{}).get('sha256')!=child['sha256']
+                or not operation_parent_matches
                 or receipt.get('continuation',{}).get('checkpoint_sha256') not in receipt_parents
                 or not supervised_progress_numerics_ok(report,{'sha256':child['sha256']})):
             raise ValueError('SFT refresh publication lacks exact qualified full-state custody')

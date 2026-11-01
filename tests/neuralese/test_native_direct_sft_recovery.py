@@ -70,7 +70,8 @@ def _same_slot_publication_fixture(tmp_path):
     rolling.write_text(json.dumps({'step':61,'new':True}))
     child=binding(rolling);parent=prior_child|common|{'global_step':57}
     receipt=file('receipt',{'checkpoint':{'sha256':child['sha256']},
-        'continuation':{'checkpoint_sha256':old_parent['sha256']}})
+        'continuation':{'checkpoint_sha256':old_parent['sha256']},
+        'operation_parent':{'path':str(rolling.resolve()),'sha256':historical_sha,'global_step':57}})
     boundary={'kind':'semantic-refresh','reached':True,'new_optimizer_updates':4,'checkpoint_sha256':child['sha256']}
     report=file('report',{'numerics_ok':True,'checkpoint_sha256':child['sha256'],'continuation_boundary':boundary})
     custody=file('custody',{'schema':'natlang.earned-sft-checkpoint-custody/1','parent':parent,
@@ -80,12 +81,14 @@ def _same_slot_publication_fixture(tmp_path):
         'pending_native_checkpoint':str(rolling)});state.write_text(json.dumps(saved))
     return {'state':state,'report':report,'receipt':receipt,'custody':custody,
         'out':tmp_path/'publication','historical_sha':historical_sha,'rolling':rolling,
-        'prior_publication':tmp_path/'prior-publication'}
+        'root_sha':old_parent['sha256'],'prior_publication':tmp_path/'prior-publication'}
 
 
 def test_completed_refresh_accepts_authenticated_same_rolling_slot(tmp_path):
     from natlang_neuralese.rl.native_direct_sft_recovery import publish_completed
     fixture=_same_slot_publication_fixture(tmp_path)
+    def file(root,name,data):
+        path=root/name;path.write_text(json.dumps(data));return binding(path)
     before=json.loads(fixture['state'].read_text())
     result=publish_completed(fixture['state'],report_ref=fixture['report'],receipt_ref=fixture['receipt'],
         custody_ref=fixture['custody'],out=fixture['out'])
@@ -106,10 +109,28 @@ def test_completed_refresh_accepts_authenticated_same_rolling_slot(tmp_path):
     assert proof['reported_continuation_ancestor_sha256']==json.loads(
         Path(fixture['receipt']['path']).read_text())['continuation']['checkpoint_sha256']
     assert result['checkpoint']['sha256']==binding(fixture['rolling'])['sha256']
+    # Second same-slot update proves the ordered 53 -> 57 -> 61 -> 65 chain.
+    state=json.loads(fixture['state'].read_text());state.update({'phase':'awaiting_semantic_refresh',
+        'pending_native_checkpoint':str(fixture['rolling'])});fixture['state'].write_text(json.dumps(state))
+    parent61=result['checkpoint']|{'global_step':61,'optimizer_present':True,'rng_present':True}
+    fixture['rolling'].write_text(json.dumps({'step':65,'second_sft_child':True}));child65=binding(fixture['rolling'])
+    receipt65=file(tmp_path,'receipt-65',{'checkpoint':{'sha256':child65['sha256']},
+        'continuation':{'checkpoint_sha256':fixture['root_sha']},
+        'operation_parent':{'path':parent61['path'],'sha256':parent61['sha256'],'global_step':61}})
+    report65=file(tmp_path,'report-65',{'numerics_ok':True,'checkpoint_sha256':child65['sha256'],
+        'continuation_boundary':{'kind':'semantic-refresh','reached':True,'new_optimizer_updates':4,
+            'checkpoint_sha256':child65['sha256']}})
+    custody65=file(tmp_path,'custody-65',{'schema':'natlang.earned-sft-checkpoint-custody/1',
+        'parent':parent61,'successor':child65|{'global_step':65,'optimizer_present':True,'rng_present':True},
+        'old_bindings_and_quotas_preserved':True,'old_exposure_not_decreased':True})
+    result65=publish_completed(fixture['state'],report_ref=report65,receipt_ref=receipt65,
+        custody_ref=custody65,out=tmp_path/'publication-65')
+    assert result65['parent']['sha256']==parent61['sha256']
+    assert result65['checkpoint']['sha256']==child65['sha256']
+    assert result65['historical_parent_proof']['reported_continuation_ancestor_sha256']==fixture['root_sha']
 
 
 def test_completed_refresh_rejects_missing_or_nonlast_same_slot_history(tmp_path):
-    import copy
     from natlang_neuralese.rl.native_direct_sft_recovery import publish_completed
     fixture=_same_slot_publication_fixture(tmp_path)
     state=json.loads(fixture['state'].read_text());state['direct_sft_refresh_history']=[]
@@ -122,7 +143,7 @@ def test_completed_refresh_rejects_missing_or_nonlast_same_slot_history(tmp_path
     stale.write_text(json.dumps({'schema':'natlang.direct-sft-refresh-publication/1',
         'checkpoint':{'path':str(fixture['rolling'].resolve()),'sha256':'f'*64}}))
     state['direct_sft_refresh_history'].append(binding(stale));fixture['state'].write_text(json.dumps(state))
-    with pytest.raises(ValueError,match='overwritten parent identity'):
+    with pytest.raises(ValueError,match='omits exact checkpoint identities'):
         publish_completed(fixture['state'],report_ref=fixture['report'],receipt_ref=fixture['receipt'],
             custody_ref=fixture['custody'],out=fixture['out'])
 
@@ -140,7 +161,7 @@ def test_completed_refresh_rejects_tampered_historical_evidence_and_parent_step(
     custody=json.loads(Path(fixture['custody']['path']).read_text());custody['parent']['global_step']=56
     Path(fixture['custody']['path']).write_text(json.dumps(custody))
     fixture['custody']=binding(Path(fixture['custody']['path']))
-    with pytest.raises(ValueError,match='do not prove its saved parent'):
+    with pytest.raises(ValueError,match='immediate parent step'):
         publish_completed(fixture['state'],report_ref=fixture['report'],receipt_ref=fixture['receipt'],
             custody_ref=fixture['custody'],out=fixture['out'])
 
@@ -164,6 +185,44 @@ def test_completed_refresh_rejects_unrelated_same_slot_continuation_ancestor(tmp
     with pytest.raises(ValueError,match='not the exact parent or its authenticated publication ancestor'):
         publish_completed(fixture['state'],report_ref=fixture['report'],receipt_ref=fixture['receipt'],
             custody_ref=fixture['custody'],out=fixture['out'])
+
+
+def test_completed_refresh_rejects_operation_parent_mismatch(tmp_path):
+    from natlang_neuralese.rl.native_direct_sft_recovery import publish_completed
+    fixture=_same_slot_publication_fixture(tmp_path)
+    receipt_path=Path(fixture['receipt']['path']);receipt=json.loads(receipt_path.read_text())
+    receipt['operation_parent']['sha256']='f'*64
+    receipt_path.write_text(json.dumps(receipt));fixture['receipt']=binding(receipt_path)
+    with pytest.raises(ValueError,match='qualified full-state custody'):
+        publish_completed(fixture['state'],report_ref=fixture['report'],receipt_ref=fixture['receipt'],
+            custody_ref=fixture['custody'],out=fixture['out'])
+
+
+def test_completed_refresh_accepts_rl_checkpoint_as_immediate_parent(tmp_path):
+    from natlang_neuralese.rl.native_direct_sft_recovery import publish_completed
+    fixture=_same_slot_publication_fixture(tmp_path)
+    # An RL update replaced the rolling slot after the last SFT publication.
+    fixture['rolling'].write_text(json.dumps({'step':59,'rl_parent':True}))
+    rl_parent=binding(fixture['rolling'])|{'global_step':59,'optimizer_present':True,'rng_present':True}
+    child_data={'step':63,'sft_child':True};fixture['rolling'].write_text(json.dumps(child_data))
+    child=binding(fixture['rolling'])
+    receipt_path=Path(fixture['receipt']['path']);receipt=json.loads(receipt_path.read_text())
+    receipt['checkpoint']['sha256']=child['sha256']
+    receipt['operation_parent']={'path':rl_parent['path'],'sha256':rl_parent['sha256'],'global_step':59}
+    receipt_path.write_text(json.dumps(receipt));fixture['receipt']=binding(receipt_path)
+    report_path=Path(fixture['report']['path']);report=json.loads(report_path.read_text())
+    report['checkpoint_sha256']=child['sha256'];report['continuation_boundary'].update(
+        {'new_optimizer_updates':4,'checkpoint_sha256':child['sha256']})
+    report_path.write_text(json.dumps(report));fixture['report']=binding(report_path)
+    custody_path=Path(fixture['custody']['path']);custody=json.loads(custody_path.read_text())
+    custody['parent']=rl_parent;custody['successor']=child|{'global_step':63,'optimizer_present':True,'rng_present':True}
+    custody_path.write_text(json.dumps(custody));fixture['custody']=binding(custody_path)
+    result=publish_completed(fixture['state'],report_ref=fixture['report'],receipt_ref=fixture['receipt'],
+        custody_ref=fixture['custody'],out=fixture['out'])
+    assert result['parent']['sha256']==rl_parent['sha256']
+    assert result['parent']['global_step']==59
+    assert result['checkpoint']['sha256']==child['sha256']
+    assert result['historical_parent_proof']['reported_continuation_ancestor_sha256']==fixture['root_sha']
 
 
 def _session_reconciliation_fixture(tmp_path):
