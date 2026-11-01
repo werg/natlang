@@ -158,3 +158,21 @@ test('an ordinary decode-template failure keeps the existing untemplated repair'
   assert.equal(await createNatlangRuntime({model:{driver},seed:{mode:'backend'}}).run(()=>fn()),'fixed');
   assert.equal(requests[0].template.value,'decode');assert.equal(requests[1].template,undefined);
 });
+
+test('repeated malformed writes retain every failure and retry the typed template each time',async()=>{
+  const {createNatlangRuntime,loadVirtualNatlang}=await import('../dist/index.js');
+  const requests=[];let calls=0;const bad=failed();
+  const driver=Object.assign(async request=>{
+    requests.push(structuredClone(request));
+    if(calls++<2)return {text:bad.choices[0].message.content,calls:[],completion_tokens:1,
+      protocol_failure:bad.x_natlang_native_failure,raw_response:bad};
+    return {calls:[['return_result',{status:'success',value:[{type:'native_state',id:'nzs1_'+'a'.repeat(52)}]}]],completion_tokens:1};
+  },{neuralese:true});
+  const fn=loadVirtualNatlang({'writer.nl':'---\nargs: {}\nreturns: Neuralese<string>\nreadout: template\n---\nWrite it.\n'},'writer.nl');
+  await createNatlangRuntime({model:{driver},seed:{mode:'backend'}}).run(()=>fn());
+  assert.equal(requests.length,3);
+  assert.ok(requests.every(request=>request.template?.value==='write'));
+  const feedback=nativeProtocolFeedback(bad.x_natlang_native_failure);
+  assert.equal(requests[2].messages.filter(message=>message.role==='user'&&message.content===feedback).length,2);
+  assert.equal(requests[2].messages.filter(message=>message.role==='assistant'&&message.content===bad.choices[0].message.content).length,2);
+});
