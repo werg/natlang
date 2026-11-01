@@ -60,3 +60,23 @@ def test_rowwise_norm_adjoint_preserves_higher_order(monkeypatch):
     grad, = torch.autograd.grad(out, ref, incoming, create_graph=True)
     expected, = torch.autograd.grad(grad.float().sum(), ref)
     torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
+
+@pytest.mark.parametrize("train_input,train_weight", [(True, False), (False, True)])
+def test_rowwise_norm_higher_order_with_frozen_input_or_weight(monkeypatch, train_input, train_weight):
+    monkeypatch.setattr(torch.Tensor, 'is_cuda', property(lambda _: True))
+    from natlang_neuralese.model.native_parameter_precision import _RowwiseNormAdjoint
+    layer = Lfm3RMSNorm()
+    layer.weight.requires_grad_(train_weight)
+    x = torch.randn(1, 9, 8, dtype=torch.bfloat16, requires_grad=train_input)
+    incoming = torch.randn_like(x)
+    y = _RowwiseNormAdjoint.apply(x, layer.weight, layer.forward)
+    target = x if train_input else layer.weight
+    actual, = torch.autograd.grad(y, target, incoming, create_graph=True)
+    out = rowwise_norm_forward(layer.forward, x)
+    expected, = torch.autograd.grad(out, target, incoming, create_graph=True)
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+    if train_input:
+        actual2, = torch.autograd.grad(actual.float().sum(), x)
+        expected2, = torch.autograd.grad(expected.float().sum(), x)
+        torch.testing.assert_close(actual2, expected2, rtol=0, atol=0)

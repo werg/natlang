@@ -54,8 +54,12 @@ class _RowwiseNormAdjoint(torch.autograd.Function):
             # Preserve the ordinary differentiable path for higher derivatives.
             with torch.enable_grad():
                 output = rowwise_norm_forward(original, x)
-                return (*torch.autograd.grad(output, (x, weight), gradient,
-                                             create_graph=True, allow_unused=True), None)
+                targets = tuple(t for t in (x, weight) if t.requires_grad)
+                values = iter(torch.autograd.grad(output, targets, gradient,
+                                                  create_graph=True, allow_unused=True))
+                dx = next(values) if x.requires_grad else None
+                dweight = next(values) if weight.requires_grad else None
+                return dx, dweight, None
         rows = x.reshape(-1, x.shape[-1])
         grads = gradient.reshape(-1, gradient.shape[-1])
         parts = []

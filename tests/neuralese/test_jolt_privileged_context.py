@@ -582,7 +582,9 @@ def test_reference_failure_count_is_not_an_attempt_list():
     case = train_case()
     case.setdefault('curriculum', {}).setdefault('reference', {})['failures'] = 1
     _, facts = case_facts(case, custody=custody())
-    assert any(f.kind == 'reference_failure_count' and '1 failure.' in f.text for f in facts)
+    fact = next(f for f in facts if f.kind == 'reference_failure' and '1 failure.' in f.text)
+    from natlang_neuralese.rl.privileged_context import fact_from_request
+    assert fact_from_request(fact_request(fact)) == fact
     case['curriculum']['reference']['failures'] = -1
     with pytest.raises(ValueError, match='nonnegative count'):
         case_facts(case, custody=custody())

@@ -351,7 +351,7 @@ def case_facts(case, *, custody, teacher_trajectories=(), attempt_feedback=()):
         add('expected_effects', f'Required effect on {service}: {_text(effect)}')
     failures = reference.get('failures')
     if type(failures) is int and failures >= 0:
-        add('reference_failure_count', f'The reference execution recorded {failures} failure' + ('.' if failures == 1 else 's.'))
+        add('reference_failure', f'The reference execution recorded {failures} failure' + ('.' if failures == 1 else 's.'))
     elif failures is None or isinstance(failures, list):
         for failure in failures or []:
             add('reference_failure', f'A verified wrong attempt to avoid: {_text(failure)}')
