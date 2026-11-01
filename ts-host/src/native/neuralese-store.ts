@@ -747,5 +747,7 @@ export class MemoryNeuraleseStore implements NeuraleseStore {
  */
 export interface NeuralesePort {
   readonly dialect: string;
+  /** The writer forces the supplied source text and does not sample completion tokens. */
+  readonly forcedText?: true;
   write(text: string, options?: { type?: string; producer?: Record<string, unknown>; truncated?: boolean }): Promise<NeuraleseBlockMeta>;
 }

@@ -18,6 +18,7 @@ import { CompilationCache } from '../calls/compilations.js';
 import { decisionScorer } from '../native/decision.js';
 import { readerDialect } from '../native/neuralese.js';
 import { RefinementChecker, JUDGE_CALL_INSTRUCTIONS, callJudge, decisionJudge, type RefinementJudge, type RefinementSettings, type VerdictCache } from '../native/refinement.js';
+import { ModelBudget } from '../native/model-budget.js';
 
 /** How far stored compilations may serve calls: not at all, compared in the background only, or served. */
 export type SpecializationMode = 'off' | 'shadow' | 'on';
@@ -76,6 +77,8 @@ export type LiveSink = (event: LiveEvent) => void;
 export type Decision<T> = { value: T; probabilities: { value: T; probability: number }[]; confidence: number; scored: boolean };
 
 export type NatlangLimits = { maxEpisodes?: number; maxDepth?: number; maxActions?: number; maxToolCalls?: number;
+  /** Total model requests and completion tokens across this task's complete invocation graph. */
+  maxModelRequests?: number; maxModelTokens?: number;
   /** Wall-clock limit for one task. */
   timeoutMs?: number };
 
@@ -102,6 +105,8 @@ export type NatlangRuntimeOptions = {
    * for judgments, a large one for authoring); without an entry of that name it runs on `model`.
    */
   models?: Record<string, ModelDriver | ModelConfig>;
+  /** Ordered, explicitly named model profiles available for a live invocation handoff. */
+  escalation?: { models: string[]; enabled?: boolean };
   /** Drive interpreter sessions directly instead of through a model (fixtures, replay, tests). */
   agent?: import('../native/runtime.js').NativeAgent;
   /** Typed host services, available to callable-folder code via `natlang:services` and to eval as named bindings. */
@@ -219,6 +224,7 @@ export class NatlangTask {
   readonly serviceScopes: Record<string, string[]>;
   readonly signal: AbortSignal;
   readonly episodeBudget: { limit?: number; used: number };
+  readonly modelBudget: ModelBudget;
   readonly traces: InvocationTrace[] = [];
   private readonly executionOccurrenceCounts = new Map<string, number>();
   readonly programView: ProgramView;
@@ -340,6 +346,7 @@ export class NatlangTask {
     const externalSignal = options.signal ?? runtime.options.signal;
     this.signal = externalSignal ? AbortSignal.any([externalSignal, this.abort.signal]) : this.abort.signal;
     this.episodeBudget = { limit: runtime.options.limits?.maxEpisodes, used: 0 };
+    this.modelBudget = new ModelBudget(runtime.options.limits?.maxModelRequests, runtime.options.limits?.maxModelTokens);
     const timeout = runtime.options.limits?.timeoutMs;
     if (timeout !== undefined) this.timer = setTimeout(() => this.cancel(new Error('natlang task timed out')), timeout);
     this.traceSink = options.trace;
@@ -402,7 +409,8 @@ export class NatlangTask {
     const judgeOf = (name: string | undefined, config: ModelConfig | undefined): RefinementJudge | undefined => {
       if (!config) return undefined;
       const id = config.id ?? (config.driver as { model?: string }).model ?? (config.driver.name || 'model');
-      const scorer = decisionScorer(config.driver);
+      // A scorer cannot reserve a bounded completion allowance. Route bounded graphs through an ordinary child call.
+      const scorer = this.modelBudget.maxRequests === undefined && this.modelBudget.maxTokens === undefined ? decisionScorer(config.driver) : undefined;
       if (scorer) return decisionJudge(scorer, { id });
       // No scoring: run `holds` as an ordinary natural-language call on that model (needs the calling frame).
       return frame ? callJudge(async (value, predicate, signal) => {

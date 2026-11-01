@@ -624,7 +624,9 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
       const native=nativeRecording?{schema:'natlang.native-recorded-turn/1' as const,kind:'generation' as const,id:`native-turn:${globalThis.crypto.randomUUID()}`,
         sampling:structuredClone(capture!),retry:meta?.retry??0,...(meta?.invocation_id?{invocation_id:meta.invocation_id}:{})}:undefined;
       if(native)reply.x_natlang_native_recorded_turn=native.id;
-      if(message)recorder.record({messages:structuredClone((nativeRecording?preparedMessages:body.messages) as unknown[]),
+      const recordingId = native?.id ?? `model-turn:${globalThis.crypto.randomUUID()}`;
+      if(message)reply.x_natlang_recorded_turn = recordingId;
+      if(message)recorder.record({recording_id:recordingId,messages:structuredClone((nativeRecording?preparedMessages:body.messages) as unknown[]),
         tools:body.tools?structuredClone(body.tools as unknown[]):undefined,reply:structuredClone(message),
         blocks:structuredClone((((reply.native_state as Json|undefined)?.blocks??[]) as Json[])),
         ...(adapters.length?{adapters:[...adapters]}:{}),

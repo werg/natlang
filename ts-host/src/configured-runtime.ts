@@ -8,7 +8,7 @@
  *
  * It selects the profile (config.json; `profile`, NATLANG_PROFILE or the default), runs a tuned program on the exact
  * checkpoint its active release was tuned on and serves that release, starts and stops natlang-owned model servers,
- * wires a profile's `escalate` teacher through the tiered engine, and reports each of these on `log` in one line.
+ * wires a profile's `escalate` chain into live invocation handoffs, and reports each on `log` in one line.
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
@@ -16,7 +16,6 @@ import type { ProgramDescriptor } from './adaptation/types.js';
 import { currentRelease } from './adaptation/weights/release.js';
 import { bindAdaptation } from './adaptation/compatibility.js';
 import type { AdaptationArtifact } from './adaptation/types.js';
-import { TierEngine } from './calls/tiers.js';
 import type { DecisionRequest, ModelTurnOptions, ModelTurnRequest } from './contracts.js';
 import { buildProject } from './compiler/node-project.js';
 import { executorIdentityForChoice, loadModelConfiguration, resolveModelChoice, type LoadedModelConfiguration,
@@ -46,7 +45,7 @@ export type NatlangRuntimeConfiguration = {
   program?: ProgramDescriptor;
   /** false runs the selected model untuned (`--no-weights`). */
   weights?: boolean;
-  /** A profile that answers calls the model fails, or false; default: the profile's `escalate`. */
+  /** A profile to continue a handoff, or false; default: the profile's `escalate`. */
   escalate?: string | false;
   /** An adaptation artifact to bind to the program and executor. */
   adaptation?: AdaptationArtifact;
@@ -152,37 +151,53 @@ export async function runtimeModel(choice: ResolvedModelChoice, driver: ModelDri
     promptRendering: choice.promptRendering ?? 'full', driver }, ...(seed ? { seed } : {}) };
 }
 
-/**
- * Escalation (a profile's `escalate`): every function runs on the selected model as the student tier, and a call it
- * fails (an error, or a budget or turn limit) runs again on the teacher profile (calls/tiers.ts tiers 1 and 0). Each
- * escalation is announced in one line and recorded with the call.
- */
+/** Load only explicitly named profiles, following their bounded, cycle-free handoff chain. */
 async function escalation(name: string | undefined, selected: LoadedModelConfiguration, student: NatlangRuntimeOptions['model'],
   configuration: NatlangRuntimeConfiguration, log: NodeJS.WritableStream) {
   if (!name || !student) return undefined;
-  if (name === selected.name) throw new Error(`profile ${name} cannot escalate to itself`);
+  const config = existsSync(selected.configPath) ? JSON.parse(readFileSync(selected.configPath, 'utf8')) as
+    { profiles?: Record<string, unknown> } : {};
+  const seen = new Set([selected.name]);
+  const actors = new Set([executorIdentityForChoice(selected.choice).id]);
+  const models: NonNullable<NatlangRuntimeOptions['models']> = {};
+  const names: string[] = [], closers: (() => Promise<void>)[] = [];
   const environment = configuration.environment ?? process.env;
-  const teacher = loadModelConfiguration(name, {}, environment);
-  const session = createResolvedModelSession(teacher.choice, environment, log,
-    configuration.ensureRuntime ? { ensureRuntime: configuration.ensureRuntime } : {});
-  const { model } = await runtimeModel(teacher.choice, sessionDriver(session));
-  // The tier engine's own trace names no attempt; the recorded root call is the task's latest attempt of the function.
-  const roots: string[] = [], attempts = new Map<string, string>();
-  const notice: TraceSink = (trace: InvocationTrace) => {
-    const deopt = trace.events.find(event => event.kind === 'tier_deopt' && event.tier === 'tier1' && event.reason_kind !== 'guard');
-    if (!deopt) {
-      if (trace.parentCallId === null) attempts.set(`${trace.taskId}\0${trace.name}`, trace.callId);
-      return;
+  // Process-level selection overrides choose the initial actor only. They must not rewrite an explicitly named fallback.
+  const fallbackEnvironment = { ...environment };
+  for (const key of ['NATLANG_PROFILE', 'NATLANG_PROVIDER', 'NATLANG_SERVER', 'NATLANG_MODEL', 'NATLANG_CONCURRENCY']) delete fallbackEnvironment[key];
+  try {
+    while (name && name !== 'none') {
+      if (seen.has(name)) throw new Error(`escalation profile cycle at ${JSON.stringify(name)}`);
+      if (seen.size > 16) throw new Error('escalation profile chain exceeds 16 fallbacks');
+      if (!config.profiles || !Object.hasOwn(config.profiles, name) || !config.profiles[name] ||
+          typeof config.profiles[name] !== 'object' || Array.isArray(config.profiles[name]))
+        throw new Error(`escalation profile ${JSON.stringify(name)} is not explicitly configured`);
+      seen.add(name);
+      const profile = loadModelConfiguration(name, {}, fallbackEnvironment);
+      const actor = executorIdentityForChoice(profile.choice).id;
+      if (actors.has(actor)) throw new Error(`escalation profile ${JSON.stringify(name)} repeats actor ${JSON.stringify(actor)}`);
+      actors.add(actor);
+      const session = createResolvedModelSession(profile.choice, fallbackEnvironment, log,
+        configuration.ensureRuntime ? { ensureRuntime: configuration.ensureRuntime } : {});
+      closers.push(() => session.close());
+      const loaded = (await runtimeModel(profile.choice, sessionDriver(session))).model!;
+      models[name] = typeof loaded === 'function' ? { driver: loaded, id: actor } : { ...loaded, id: actor };
+      names.push(name);
+      name = profile.profile.escalate;
     }
-    const attempt = trace.parentCallId === null ? attempts.get(`${trace.taskId}\0${String(deopt.function)}`) : undefined;
-    if (attempt) roots.push(attempt);
-    const served = trace.events.some(event => event.kind === 'tier_served' && event.tier === 'tier0');
-    log.write(`natlang: ${String(deopt.function)} failed on ${selected.name} (${String(deopt.reason ?? deopt.reason_kind).split('\n')[0]!.slice(0, 160)}); ` +
-      `${served ? `answered by ${name}` : `${name} failed too`}. Record the right answer with natlang traces good|fix\n`);
+  } catch (error) {
+    for (const close of closers) await close().catch(() => undefined);
+    throw error;
+  }
+  const roots: string[] = [];
+  const notice: TraceSink = (trace: InvocationTrace) => {
+    const handoffs = trace.events.filter(event => event.kind === 'model_escalation');
+    if (!handoffs.length) return;
+    if (trace.parentCallId === null && trace.outcome === 'done') roots.push(trace.callId);
+    for (const handoff of handoffs) log.write(`natlang: ${trace.name} handed off from ${String(handoff.from)} to ${String(handoff.to)}\n`);
   };
-  return { options: { models: { student, teacher: model! },
-    tiers: new TierEngine({ functions: { '*': { tier1: { model: 'student' }, tier0: { model: 'teacher' } } } }) },
-    notice, roots, close: () => session.close() };
+  return { options: { models, escalation: { models: names } }, notice, roots,
+    close: async () => { for (const close of closers) await close(); } };
 }
 
 const traceSinks = (...sinks: (TraceSink | undefined)[]): Pick<NatlangRuntimeOptions, 'trace'> => {

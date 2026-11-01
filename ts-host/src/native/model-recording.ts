@@ -10,10 +10,16 @@ export type NativeWriteOccurrence={index:number;id:string;node:string};
 export type NativeReadOccurrence={index:number;id:string;source_state_id:string;node:string;source:string;stop_gradient?:true};
 export type NativeTurnGraphBinding={graph_turn:string;written_nodes:Record<string,string>;read_bindings:Record<string,string>;
   written_occurrences?:NativeWriteOccurrence[];read_occurrences?:NativeReadOccurrence[]};
-export type NativeRecordedTurn={schema:'natlang.native-recorded-turn/1';id:string;
+export type RecordedActor = { id: string; revision: string | null };
+export type NativeRecordedTurn={schema:'natlang.native-recorded-turn/1';id:string; actor?: RecordedActor;
   invocation_id?:string;retry:number;graph?:NativeTurnGraphBinding} & (
     {kind:'generation';sampling:Record<string,unknown>} | {kind:'decision';decision:Record<string,unknown>});
 export type RecordedTurn = {
+  readonly recording_id?: string;
+  /** The actual actor and graph occurrence for this turn; invocation manifests name the initial actor. */
+  readonly actor?: RecordedActor;
+  readonly initial_actor?: RecordedActor;
+  readonly graph_turn?: string;
   readonly messages: unknown[];
   readonly tools?: unknown[];
   /** The assistant message as the server returned it: content and tool-call arguments may hold block parts. */
@@ -37,6 +43,7 @@ export type NativeStateBinding = { readonly id: string; readonly stop_gradient?:
 
 export interface TurnRecorder {
   record(turn: RecordedTurn): void;
+  linkTurn?(id:string,graphTurn:string):void;
   linkNativeTurn?(id:string,graphTurn:string):void;
   recordGraphNode?(event:Record<string,unknown>):void;
   nativeStateWriter?(id:string):string|undefined;
@@ -122,6 +129,16 @@ export class ModelTurnRecorder implements TurnRecorder {
   linkNativeTurn(id:string,graphTurn:string):void{
     if(!this.turns.some(turn=>turn.native?.id===id))throw Object.assign(new Error('neuralese-native-grad-invalid: native graph link has no exact recorded model turn'),{code:'neuralese-native-grad-invalid'});
     this.bindNativeTurn(id,graphTurn);
+    this.linkTurn(id, graphTurn);
+  }
+  linkTurn(id:string,graphTurn:string):void {
+    const index = this.turns.findIndex(turn => turn.recording_id === id || turn.native?.id === id);
+    if (index < 0) throw Object.assign(new Error('neuralese-native-grad-invalid: graph link has no recorded model turn'), { code: 'neuralese-native-grad-invalid' });
+    const node = this.graphNodes.get(graphTurn), actor = node?.actor as RecordedActor | undefined;
+    const initial = node?.initial_actor as RecordedActor | undefined;
+    if (node?.kind !== 'model_turn') throw Object.assign(new Error('neuralese-native-grad-invalid: recorded turn has no graph model turn'), { code: 'neuralese-native-grad-invalid' });
+    this.turns[index] = { ...this.turns[index]!, graph_turn: graphTurn, ...(actor ? { actor: structuredClone(actor) } : {}),
+      ...(initial ? { initial_actor: structuredClone(initial) } : {}) };
   }
   private bindNativeTurn(id:string,graphTurn:string):void {
     const previous=this.nativeLinks.get(id);
@@ -146,7 +163,11 @@ export class ModelTurnRecorder implements TurnRecorder {
         throw Object.assign(new Error('neuralese-native-grad-invalid: native receipt does not match its actual model-turn occurrence'),{code:'neuralese-native-grad-invalid'});
       const capture=turn.native!.kind==='generation'?turn.native!.sampling:turn.native!.decision;
       const binding=nativeCaptureGraphBinding(graphTurn,capture,this.graphNodes);
-      return {...structuredClone(turn),native:{...structuredClone(turn.native!),graph:binding}};
+      const actor = modelNode.actor as RecordedActor | undefined;
+      if (actor && (typeof actor.id !== 'string' || !actor.id || !(actor.revision === null || typeof actor.revision === 'string')))
+        throw Object.assign(new Error('neuralese-native-grad-invalid: model turn has an invalid actor'), { code: 'neuralese-native-grad-invalid' });
+      return {...structuredClone(turn), ...(actor ? { actor: structuredClone(actor) } : {}), graph_turn: graphTurn,
+        native:{...structuredClone(turn.native!), ...(actor ? { actor: structuredClone(actor) } : {}), graph:binding}};
     });
   }
   /** Turns recorded since the previous claim. */

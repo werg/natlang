@@ -45,9 +45,10 @@ import { failureFeedback, type RefinementChecker, type RefinementFailure, type R
 import { containsRefinement } from './types.js';
 import { DECISION_SYSTEM_PROMPT, decisionPrompt, decisionScorer, finiteValues, softmax } from './decision.js';
 import type { NeuraleseBlockMeta } from './neuralese-store.js';
-import {activeRecorder} from './model-recording.js';
+import {activeRecorder, activeNativeAdapters, activeNativeStates} from './model-recording.js';
 import { hexDigest } from './hash.js';
 import { activeSystemPrompts, softenMessages, renderPromptMessages, type PromptRendering } from './system-prompts.js';
+import type { ModelBudget } from './model-budget.js';
 
 /** The code tools, as offered. Kept here so data collected under earlier wording can be migrated to it exactly. */
 export const READ_CODE_DESCRIPTION = 'Inspect a named item this call can use but does not show: source of a function in the program\'s codebase; ' +
@@ -112,7 +113,8 @@ export type NativeModelDriver = ((request: ModelTurnRequest, signal?: AbortSigna
   /** Scripted host drivers may ask to route fixed answers by the actual native return contract. */
   readonly requiresResultContract?: boolean;
   /** Optional decision readout (contracts.ts `DecisionRequest`); without it the call runs the tool loop. */
-  decide?: DecisionScorer };
+  decide?: DecisionScorer;
+  neuraleseRuntime?: () => Promise<NeuraleseRuntimeOptions | undefined> };
 
 const tool = (name: string, description: string, properties: Record<string, unknown>, required: string[]) => ({
   type: 'function', function: { name, description, parameters: { type: 'object', properties,
@@ -444,6 +446,11 @@ export class NativeToolAgent {
   readonly proposals: Record<string, unknown>[] = [];
   constructor(readonly driver: NativeModelDriver,
     readonly options: { maxTurns?: number; maxTokens?: number; turnTokens?: number;
+      actor?: { id: string; revision: string | null };
+      fallbacks?: { name: string; id: string; revision?: string; driver: NativeModelDriver;
+        promptRendering?: PromptRendering; temperature?: number; turnTokens?: number; contextTokens?: number | null;
+        guidance?: boolean | { repeat?: number; syntax?: boolean; retries?: number; tools?: string[] } }[];
+      modelBudget?: ModelBudget;
       temperature?: number; maxSeconds?: number; promptRendering?: PromptRendering; systemPrompt?: string | (() => string);
       programGuidance?: NativeProgramGuidance; authoredTextGuidance?: AuthoredTextGuidance;
       maxFailureRepairs?: number;
@@ -536,14 +543,56 @@ export class NativeToolAgent {
     return bank?.size && supportsNeuralese(this.driver) ? softenMessages(messages, bank) : [...messages];
   }
 
+  /** Re-encode foreign soft values from their authenticated source text, never their tensors or adapters. */
+  private async handoffText(session: NativeSession, encoded: unknown[], actor: string): Promise<{ messages: unknown[]; inputs: { node: string; port: string }[] }> {
+    const inputs: { node: string; port: string }[] = [];
+    const rewrite = async (value: unknown, argument: boolean): Promise<unknown> => {
+      if (!Array.isArray(value)) return value;
+      if (!value.every(part => part && typeof part === 'object' && ['text', 'native_state', 'teacher_text'].includes((part as { type?: string }).type ?? ''))) return value;
+      const pieces: string[] = [];
+      for (const part of value as { type: string; text?: string; id?: string; source_occurrence?: string }[]) {
+        if (part.type === 'text') { pieces.push(part.text ?? ''); continue; }
+        const id = part.id!;
+        const artifact = part.type === 'native_state' ? await this.options.neuralese?.store.getNativeState?.(id) : undefined;
+        const teacher = this.options.neuralese?.teacherText?.get(id);
+        const source = artifact?.metadata.text ?? teacher?.body;
+        if (typeof source !== 'string' || !source.length)
+          throw new NeuraleseUnsupportedError(`handoff cannot re-encode ${id}: exact source text is unavailable`);
+        const node = graphNode(session.runtime.trace, 'literal', { call_id: session.runtime.options.runId,
+          source_kind: 'cross-model-source-text', block: id, text_sha256: hexDigest(source), target_actor: actor,
+          ...(artifact ? { source_identity: { architecture: artifact.metadata.architecture,
+            checkpoint_sha256: artifact.metadata.checkpoint_sha256, tokenizer_fingerprint: artifact.metadata.tokenizer_fingerprint,
+            embedding_weight_sha256: artifact.metadata.embedding_weight_sha256 } } : {}),
+          ...(teacher ? { source_call_id: teacher.producer_call_id, source_text_sha256: teacher.body_sha256 } : {}),
+          ...(part.source_occurrence ? { source_occurrence: part.source_occurrence } : {}) },
+          [blockInput(id, 'source', part.source_occurrence, producerScopeForTrace(session.runtime.trace))]);
+        if (node) inputs.push({ node, port: 'source_text' });
+        pieces.push(argument ? JSON.stringify(source).slice(1, -1) : source);
+      }
+      return pieces.join('');
+    };
+    const messages = await Promise.all(encoded.map(async message => {
+      if (!message || typeof message !== 'object') return message;
+      const item = message as Record<string, unknown>;
+      const calls = Array.isArray(item.tool_calls) ? await Promise.all(item.tool_calls.map(async call => {
+        if (!call || typeof call !== 'object') return call;
+        const c = call as Record<string, unknown>, fn = c.function as Record<string, unknown> | undefined;
+        return fn ? { ...c, function: { ...fn, arguments: await rewrite(fn.arguments, true) } } : call;
+      })) : undefined;
+      return { ...item, content: await rewrite(item.content, false), ...(calls ? { tool_calls: calls } : {}) };
+    }));
+    return { messages, inputs };
+  }
+
   /** Record only actually completed native writes, even when the containing turn failed. */
-  private async nativeWriteOrigins(response: ModelTurn, session: NativeSession, turn: number, turnNode?: string): Promise<Map<string,string[]>> {
+  private async nativeWriteOrigins(response: ModelTurn, session: NativeSession, turn: number, turnNode?: string,
+    neuralese = this.options.neuralese): Promise<Map<string,string[]>> {
     const nativeBlocks = (response.raw_response?.native_state as { blocks?: Record<string, unknown>[] } | undefined)?.blocks ?? [];
     const producer = {call_id:session.runtime.currentCallId??null,turn};
     const nativeOrigins=new Map<string,string[]>();
     for (const block of nativeBlocks.filter(block => typeof block.id === 'string')) {
       const id = block.id as string;
-      const artifact = await this.options.neuralese?.store.getNativeState?.(id);
+      const artifact = await neuralese?.store.getNativeState?.(id);
       if (!artifact) throw new Error(`native-state producer artifact ${id} was not archived before the agent turn`);
       const tokenIds = artifact?.tensors.token_ids;
       const embeddings = artifact?.tensors.embeddings;
@@ -565,6 +614,57 @@ export class NativeToolAgent {
       if(node)nativeOrigins.set(id,[...(nativeOrigins.get(id)??[]),node]);
     }
     return nativeOrigins;
+  }
+
+  /** A foreign actor's output crosses back into this invocation as source text, not foreign KV state. */
+  private async handoffOutput(response: ModelTurn, session: NativeSession, turn: number, turnNode: string | undefined,
+    driver: NativeModelDriver, actor: string): Promise<ModelTurn> {
+    const neuralese = await driver.neuraleseRuntime?.();
+    if (!neuralese) throw new NeuraleseUnsupportedError('fallback native output has no accessible source store');
+    const origins = await this.nativeWriteOrigins(response, session, turn, turnNode, neuralese);
+    const rendered = new Map<string, string>();
+    const sourceText = async (id: string, occurrence?: string): Promise<string> => {
+      const cached = rendered.get(`${id}\0${occurrence ?? ''}`);
+      if (cached !== undefined) return cached;
+      const artifact = await neuralese.store.getNativeState?.(id) ?? await this.options.neuralese?.store.getNativeState?.(id);
+      if (!artifact || !artifact.metadata.text) throw new NeuraleseUnsupportedError(`fallback native output ${id} has no exact source text`);
+      const writers = origins.get(id) ?? [];
+      if (!occurrence && writers.length > 1) throw new NeuraleseUnsupportedError(`fallback native output ${id} has ambiguous producer occurrences`);
+      const source = occurrence ?? writers[0];
+      graphNode(session.runtime.trace, 'literal', { call_id: session.runtime.options.runId,
+        source_kind: 'cross-model-output-source-text', block: id, turn: turnNode, text_sha256: hexDigest(artifact.metadata.text),
+        source_actor: actor, target_actor: this.options.actor?.id ?? null,
+        source_identity: { architecture: artifact.metadata.architecture, checkpoint_sha256: artifact.metadata.checkpoint_sha256,
+          tokenizer_fingerprint: artifact.metadata.tokenizer_fingerprint, embedding_weight_sha256: artifact.metadata.embedding_weight_sha256 } },
+        [blockInput(id, 'source', source, producerScopeForTrace(session.runtime.trace))]);
+      rendered.set(`${id}\0${occurrence ?? ''}`, artifact.metadata.text);
+      return artifact.metadata.text;
+    };
+    const replace = async (value: unknown): Promise<unknown> => {
+      if (typeof value === 'string') {
+        const parts = runtimeTextToParts(value);
+        if (!parts.some(part => part.type === 'native_state')) return value;
+        return (await Promise.all(parts.map(part => part.type === 'native_state' ? sourceText(part.id, part.source_occurrence) :
+          part.type === 'text' ? part.text : Promise.reject(new NeuraleseUnsupportedError('foreign teacher-text output is unavailable'))))).join('');
+      }
+      if (Array.isArray(value)) {
+        if (value.length && value.every(part => part && typeof part === 'object' &&
+          ['text', 'native_state'].includes(String((part as { type?: unknown }).type))))
+          return (await Promise.all(value.map(part => (part as { type: string }).type === 'text' ?
+            String((part as { text?: unknown }).text ?? '') : sourceText(String((part as { id?: unknown }).id),
+              (part as { source_occurrence?: string }).source_occurrence)))).join('');
+        return Promise.all(value.map(replace));
+      }
+      if (value && typeof value === 'object') return Object.fromEntries(await Promise.all(Object.entries(value).map(async ([key, child]) => [key, await replace(child)])));
+      return value;
+    };
+    const raw = response.raw_response;
+    const choices = raw?.choices;
+    return { ...response, ...(response.text === undefined ? {} : { text: await replace(response.text) as string }),
+      ...(response.calls ? { calls: await Promise.all(response.calls.map(async ([name, args]) => [name, await replace(args) as Record<string, unknown>])) } : {}),
+      raw_calls: undefined,
+      ...(raw ? { raw_response: { ...raw, ...(Array.isArray(choices) ? { choices: await replace(choices) } : {}),
+        native_state: { ...((raw.native_state as Record<string, unknown> | undefined) ?? {}), blocks: [] } } } : {}) };
   }
 
   /**
@@ -701,7 +801,8 @@ export class NativeToolAgent {
    * [message, part] in the request; a server that reports payload positions gives token positions), and the
    * `model_turn` with its sampling settings and the tool calls it chose.
    */
-  private async modelTurnNode(session: NativeSession, messages: readonly unknown[], response: ModelTurn, turn: number, readout?: 'decision'): Promise<string | undefined> {
+  private async modelTurnNode(session: NativeSession, messages: readonly unknown[], response: ModelTurn, turn: number, readout?: 'decision',
+    actor = this.options.actor, extraInputs: { node: string; port: string }[] = [], temperature = this.options.temperature): Promise<string | undefined> {
     const trace = session.runtime.trace;
     const callId = session.runtime.options.runId;
     const turnId = `${callId}#turn${turn}`;
@@ -873,12 +974,13 @@ export class NativeToolAgent {
       if (remaining.length)
         throw new Error('neuralese-native-grad-invalid: request graph contains native reads absent from the captured model prompt');
     }
-    return graphNode(trace, 'model_turn', { call_id: callId, turn, ...(readout?{readout}:{}), temperature: readout?null:this.options.temperature ?? null,
+    return graphNode(trace, 'model_turn', { call_id: callId, turn, ...(readout?{readout}:{}), ...(actor ? { actor } : {}),
+      ...(this.options.actor ? { initial_actor: this.options.actor } : {}), temperature: readout?null:temperature ?? null,
       seed: readout || session.runtime.seedPolicy.mode === 'backend' ? null : deriveSeed(session.runtime.seedPolicy.root!,
         runSeedKey(session.runtime.options), session.lam.attempts, 'model-turn', turn - 1),
       completion_tokens: response.completion_tokens ?? null, text_chars: (response.text ?? '').length,
       calls: (response.calls ?? []).map(call => Array.isArray(call) ? call[0] : (call as { name?: string }).name ?? null) },
-      [{ node: invocationNodeId(callId), port: 'invocation' }, ...reads.map(({node,port})=>({node,port}))], turnId);
+      [{ node: invocationNodeId(callId), port: 'invocation' }, ...reads.map(({node,port})=>({node,port})), ...extraInputs], turnId);
   }
 
   private toolsScope(session: NativeSession): any[] {
@@ -901,6 +1003,10 @@ export class NativeToolAgent {
             description: 'For success, provide a value of the declared return type, or omit it only to return the exact complete result already staged.' },
           reason: { type: 'string', description: 'For "blocked": what is missing. For "failed": why it cannot be done.' } }, ['status']),
     ];
+    if (this.options.fallbacks?.length) tools.splice(1, 0, tool('escalate',
+      'Hand this executing call to the next configured model when you cannot reliably finish. State the evidence and work already done; the next model continues in this same scope and must not repeat completed effects.',
+      { reason: { type: 'string' }, evidence: { type: 'string' }, attempted_work: { type: 'string' },
+        remaining_subproblem: { type: 'string' } }, ['reason', 'evidence', 'attempted_work', 'remaining_subproblem']));
     const ownCode = Object.keys(session.lam.codebase).length > 0;
     // Built-in documentation is always there to read, so read_code is always offered; editing needs code of the program's own.
     const readCode = tool('read_code', canGenerateNl(session.runtime.frame) ? READ_CODE_DESCRIPTION :
@@ -1312,7 +1418,7 @@ export class NativeToolAgent {
     // Blocks of `.nz` files loaded without a store (compiled imports, companion folders) join this runtime's store.
     if (this.options.neuralese?.store) await adoptImportedNativeArtifacts(this.options.neuralese.store);
     // The context budget sizes compaction and, from the start (the opening's reads included), the tool-output page.
-    const budget = this.options.contextTokens === undefined ? await defaultContextBudget(this.driver) : this.options.contextTokens;
+    let budget = this.options.contextTokens === undefined ? await defaultContextBudget(this.driver) : this.options.contextTokens;
     session.pages.budget = shownCharsFor(budget);
     // Fixed for the whole call, so the server can reuse its prompt cache across turns.
     let adaptedSystem: string | undefined;
@@ -1362,13 +1468,15 @@ export class NativeToolAgent {
     const guidancePolicy = trainingGuidance?.policyOf(session.lam, session.runtime.currentCallId ?? null);
     const guidanceConsumer = !!trainingGuidance && !guidancePolicy && !trainingGuidance.insidePolicy(session);
     let guidanceRequest: Record<string, unknown> | undefined, guidanceReady = false;
-    const decided = await this.decisionReadout(session, messages, guidance);
+    // A decision scorer has no reply-token reservation contract or handoff tool. Use the ordinary loop when either is needed.
+    const decided = (this.options.fallbacks?.length || this.options.modelBudget?.maxRequests !== undefined ||
+      this.options.modelBudget?.maxTokens !== undefined) ? false : await this.decisionReadout(session, messages, guidance);
     if (decided !== false) return decided;
     const openingLength = messages.length;
     // Prompt tokens per character of request, calibrated from the server's reported prompt size.
     let tokensPerChar = 1 / 3.5;
-    const requestChars = (tools: unknown[]) => JSON.stringify(renderPromptMessages(messages, this.options.promptRendering)).length +
-      JSON.stringify(this.options.promptRendering === 'program-header' ? [] : tools).length;
+    const requestChars = (tools: unknown[]) => JSON.stringify(renderPromptMessages(messages, currentRendering)).length +
+      JSON.stringify(currentRendering === 'program-header' ? [] : tools).length;
     // Tool call id -> index in session.transcript, for compaction stubs.
     // Messages compaction never touches: the opening, and the latest compaction note once there is one.
     let protectedLength = openingLength;
@@ -1395,6 +1503,42 @@ export class NativeToolAgent {
     const maxTurns = this.options.maxTurns, maxTokens = this.options.maxTokens;
     const deadline = this.options.maxSeconds === undefined ? null : Date.now() + this.options.maxSeconds * 1000;
     let tokens = 0, turns = 0, failureRepairs = 0, refinementRepairs = 0, lastRefinementFailure = '';
+    let fallbackIndex = 0;
+    let currentDriver = this.driver;
+    let currentActor = this.options.actor ?? { id: this.driver.name || 'model', revision: null };
+    let currentRendering = this.options.promptRendering;
+    let currentTemperature = this.options.temperature;
+    let currentGuidance = this.options.guidance;
+    let currentTurnTokens = this.options.turnTokens;
+    let handoffNode: string | undefined;
+    const switchModel = (report: { reason: string; evidence: string; attempted_work: string; remaining_subproblem: string }): string | undefined => {
+      const next = this.options.fallbacks?.[fallbackIndex];
+      if (!next) return 'escalation unavailable: no configured fallback remains';
+      if (this.options.modelBudget && !this.options.modelBudget.hasRemaining()) return 'graph model request or token budget exhausted';
+      if (adapterCells(session.lam).length || activeNativeAdapters().length || activeNativeStates().length ||
+          session.runtime.frame?.weights?.effective.length || session.runtime.frame?.weights?.soft)
+        return 'escalation unavailable: this invocation has model-specific adapters or implicit soft weights';
+      const from = currentActor.id;
+      currentDriver = next.driver;
+      currentActor = { id: next.id, revision: next.revision ?? null };
+      currentRendering = next.promptRendering;
+      currentTemperature = next.temperature;
+      currentGuidance = next.guidance;
+      currentTurnTokens = next.turnTokens === undefined ? this.options.turnTokens : this.options.turnTokens === undefined ?
+        next.turnTokens : Math.min(this.options.turnTokens, next.turnTokens);
+      if (next.contextTokens !== undefined && next.contextTokens !== null)
+        budget = budget === null ? next.contextTokens : Math.min(budget, next.contextTokens);
+      statedWindow = null; tokensPerChar = 1 / 3.5; compactedAt = 0;
+      session.pages.budget = shownCharsFor(budget);
+      fallbackIndex++;
+      session.runtime.trace.emit('model_escalation', { call_id: session.runtime.currentCallId ?? null, from, to: currentActor.id,
+        profile: next.name, report, turn: turns });
+      handoffNode = graphNode(session.runtime.trace, 'combinator', { call_id: session.runtime.options.runId,
+        operation: 'model-escalation', from, to: currentActor.id, actor: currentActor, profile: next.name, report },
+        [{ node: invocationNodeId(session.runtime.options.runId), port: 'invocation' },
+          ...(turns ? [{ node: `${session.runtime.options.runId}#turn${turns}`, port: 'handoff-request' }] : [])]);
+      return undefined;
+    };
     let consecutiveEmptyEosWithoutResult = 0;
     // A malformed producer span is not a rejected typed value: retry the
     // declared write readout on the same call, with the failure preserved.
@@ -1409,13 +1553,24 @@ export class NativeToolAgent {
         reason: 'repeated_failed_action', evidence: 'four_identical_actions_with_identical_failures' });
       return `model_incomplete: repeated_failed_action (the same action failed the same way 4 times in a row: ${signature.slice(signature.indexOf('\n') + 1, signature.indexOf('\n') + 241)})`;
     };
+    const handoffStuck = (evidence: string): string | undefined => {
+      if (fallbackIndex >= (this.options.fallbacks?.length ?? 0)) return evidence;
+      const report = { reason: 'Repeated action made no progress', evidence: evidence.slice(0, 1200),
+        attempted_work: 'The same action failed identically four times; inspect the existing transcript.',
+        remaining_subproblem: 'Complete the current invocation without repeating failed actions or completed effects.' };
+      const failure = switchModel(report);
+      if (failure) return failure;
+      repeatedFailure = ''; repeatedFailures = 0;
+      messages.push({ role: 'user', content: `The previous actor made no progress. Continue this invocation from its existing scope and transcript. ${JSON.stringify(report)}` });
+      return undefined;
+    };
     const timedOut = () => deadline !== null && Date.now() >= deadline;
     const exhausted = () => (maxTurns !== undefined && turns >= maxTurns) ||
       (maxTokens !== undefined && tokens >= maxTokens) || timedOut();
     const allowance = (): number | null => {
       const remaining = maxTokens === undefined ? null : maxTokens - tokens;
-      if (this.options.turnTokens === undefined) return remaining;
-      return remaining === null ? this.options.turnTokens : Math.min(this.options.turnTokens, remaining);
+      if (currentTurnTokens === undefined) return remaining;
+      return remaining === null ? currentTurnTokens : Math.min(currentTurnTokens, remaining);
     };
     while (true) {
       if (exhausted()) return 'episode turn, token, or wall-clock budget exhausted';
@@ -1426,7 +1581,9 @@ export class NativeToolAgent {
       // On the last turn of a budget only return_result is offered: the call ends with a result or an honest
       // blocked or failed status, not by running out.
       const lastTurn = maxTurns !== undefined && maxTurns - turns === 1;
-      const allTools = this.tools(session);
+      const allTools = this.tools(session).filter(item => fallbackIndex < (this.options.fallbacks?.length ?? 0) ||
+        (item as { function?: { name?: string } }).function?.name !== 'escalate');
+      session.rememberOfferedTools(allTools);
       const only = (name: string) => allTools.filter(tool => String((tool as { function?: { name?: string } }).function?.name) === name);
       const estimate = (tools: unknown[]) => requestChars(tools) * tokensPerChar;
       // Near the context budget the model compacts the conversation itself: the next turn offers only
@@ -1483,26 +1640,36 @@ export class NativeToolAgent {
       }
       const started = performance.now();
       session.runtime.trace.emit('model_request', { call_id: callId, phase: 'start', turn: turns + 1,
-        tool_schema_bytes: new TextEncoder().encode(JSON.stringify(this.options.promptRendering === 'program-header' ? [] : availableTools)).length,
+        actor: currentActor,
+        tool_schema_bytes: new TextEncoder().encode(JSON.stringify(currentRendering === 'program-header' ? [] : availableTools)).length,
         messages: messages.length });
       let response: ModelTurn;
       let templatedWriteAttempt = false;
       let graphMessages: readonly unknown[] = messages;
+      let reencodedInputs: { node: string; port: string }[] = [];
+      let reservation: Awaited<ReturnType<ModelBudget['reserve']>>;
+      let calledDriver = false;
+      let exceededGraphReservation = false;
       try {
         // Blocks in the conversation travel as content parts; a backend that cannot carry them fails the call.
-        const encoded = encodeMessages(this.softened(renderPromptMessages(messages, this.options.promptRendering)));
+        const rendered = renderPromptMessages(messages, currentRendering);
+        const encoded = encodeMessages(fallbackIndex ? rendered : this.softened(rendered));
+        if (fallbackIndex && encoded.blocks) {
+          const reencoded = await this.handoffText(session, encoded.messages, currentActor.id);
+          encoded.messages = reencoded.messages; encoded.blocks = 0; reencodedInputs = reencoded.inputs;
+        }
         graphMessages = encoded.messages;
-        if (encoded.blocks && !supportsNeuralese(this.driver))
+        if (encoded.blocks && !supportsNeuralese(currentDriver))
           throw new NeuraleseUnsupportedError('this model backend cannot carry Neuralese blocks');
         const adapters = adapterCells(session.lam);
-        if (adapters.length && !supportsNeuralese(this.driver))
+        if (adapters.length && !supportsNeuralese(currentDriver))
           throw new NeuraleseUnsupportedError('this model backend cannot apply weight adapters');
         // Template readout: the call's first reply is its return_result, the value written as a block (a Neuralese
         // result) or decoded; the opening and the reply keep the trajectory format, and a rejected value falls back to
         // ordinary turns.
         const template: ModelTurnRequest['template'] = (turns === 0 || retryProtocolWriteTemplate) && session.lam.readout === 'template' &&
           (availableTools === allTools || (retryProtocolWriteTemplate && lastTurn)) &&
-          session.lam.type.kind === 'lambda' && supportsNeuralese(this.driver) ? { call: 'return_result',
+          session.lam.type.kind === 'lambda' && supportsNeuralese(currentDriver) && !fallbackIndex ? { call: 'return_result',
             arguments: { status: 'success' },
             value_type: session.lam.type.returns.kind === 'neuralese' && !(session.lam.type.returns.element.kind === 'prim' && session.lam.type.returns.element.name === 'string') ? 'unknown' as const : 'string' as const,
             value: session.lam.type.returns.kind === 'neuralese' ? 'write' as const : 'decode' as const } : undefined;
@@ -1510,9 +1677,9 @@ export class NativeToolAgent {
         retryProtocolWriteTemplate = false;
         if (template) session.runtime.trace.emit('template_readout', { call_id: callId, value: template.value });
         const observer = this.options.onDelta, turn = turns + 1;
-        const turnOptions: ModelTurnOptions | undefined = observer || this.driver.requiresResultContract ? {
+        const turnOptions: ModelTurnOptions | undefined = observer || currentDriver.requiresResultContract ? {
           ...(observer ? { onDelta: (delta: ModelTurnDelta) => { streamed = true; observer(turn, delta); } } : {}),
-          ...(this.driver.requiresResultContract ? { acceptsResult: (value: unknown): boolean => {
+          ...(currentDriver.requiresResultContract ? { acceptsResult: (value: unknown): boolean => {
             if (session.lam.type.kind !== 'lambda') return false;
             try {
               const type = session.lam.type.returns;
@@ -1525,14 +1692,14 @@ export class NativeToolAgent {
         const turnRequest: ModelTurnRequest = { ...(callId ? { invocation_id: callId } : {}), ...(adapters.length ? { adapters } : {}),
           ...(session.executionOccurrence() ? { native_execution_occurrence: session.executionOccurrence() } : {}),
           ...(template ? { template } : {}),
-          ...(this.options.guidance && supportsGuidance(this.driver) ? { guidance: this.options.guidance } : {}),
-          ...(guidanceRequest ? { privileged_context: guidanceRequest } : {}),
-          ...(guidancePolicy ? { guidance_policy: guidancePolicy } : {}),
-          messages: encoded.messages, tools: this.options.promptRendering === 'program-header' ? [] : availableTools,
-          ...(this.options.promptRendering === 'program-header' ? { response_tools: availableTools } : {}),
+          ...(currentGuidance && supportsGuidance(currentDriver) ? { guidance: currentGuidance } : {}),
+          ...(!fallbackIndex && guidanceRequest ? { privileged_context: guidanceRequest } : {}),
+          ...(!fallbackIndex && guidancePolicy ? { guidance_policy: guidancePolicy } : {}),
+          messages: encoded.messages, tools: currentRendering === 'program-header' ? [] : availableTools,
+          ...(currentRendering === 'program-header' ? { response_tools: availableTools } : {}),
           // A turn that offers one tool it must use (the compaction turn, the last turn) requires a tool call.
-          ...(availableTools !== allTools && this.options.promptRendering !== 'program-header' ? { tool_choice: 'required' as const } : {}),
-          ...(this.options.temperature === undefined ? {} : { temperature: this.options.temperature }),
+          ...(availableTools !== allTools && currentRendering !== 'program-header' ? { tool_choice: 'required' as const } : {}),
+          ...(currentTemperature === undefined ? {} : { temperature: currentTemperature }),
           seed: session.runtime.seedPolicy.mode === 'backend' ? null :
             deriveSeed(session.runtime.seedPolicy.root!, runSeedKey(session.runtime.options), session.lam.attempts, 'model-turn', turns),
           max_tokens: statedWindow === null ? limit :
@@ -1540,13 +1707,23 @@ export class NativeToolAgent {
         // Drivers read the invocation's tuned stack from the current frame when called; browsers keep no frame
         // across the awaits above, so the call starts inside its own frame on every platform.
         // model-call-kind: tool-loop-turn -- training/model-call-kinds.json
-        response = await runInFrame(session.runtime.frame, () => turnOptions ? this.driver(turnRequest, session.runtime.signal, turnOptions) :
-          this.driver(turnRequest, session.runtime.signal));
+        reservation = await this.options.modelBudget?.reserve(turnRequest.max_tokens ?? null, session.runtime.signal);
+        if (this.options.modelBudget && !reservation) return 'graph model request or token budget exhausted';
+        if (reservation) turnRequest.max_tokens = reservation.limit;
+        calledDriver = true;
+        response = await runInFrame(session.runtime.frame, () => turnOptions ? currentDriver(turnRequest, session.runtime.signal, turnOptions) :
+          currentDriver(turnRequest, session.runtime.signal));
+        exceededGraphReservation = reservation?.limit !== null && reservation?.limit !== undefined &&
+          response.completion_tokens !== undefined && response.completion_tokens > reservation.limit;
+        reservation?.finish(response.completion_tokens);
+        reservation = undefined;
         streamed = false;
       } catch (error) {
+        reservation?.finish();
         // What the failed request streamed belongs to an abandoned attempt, whether the turn is taken again or not.
         if (streamed) { streamed = false; this.options.onDelta!(turns + 1, { type: 'reset' }); }
         session.runtime.trace.emit('model_request', { call_id: callId, phase: 'error', turn: turns + 1,
+          actor: currentActor,
           duration_ms: Math.round(performance.now() - started),
           error: `${error instanceof Error ? error.name : 'Error'}: ${error instanceof Error ? error.message : String(error)}` });
         // A server that refuses the request as too long says how long it was: learn the true size and take the turn
@@ -1558,10 +1735,20 @@ export class NativeToolAgent {
           if (measured.window !== null) statedWindow = measured.window;
           continue;
         }
+        if (calledDriver && !(error instanceof NeuraleseUnsupportedError) && !session.runtime.signal?.aborted && fallbackIndex < (this.options.fallbacks?.length ?? 0)) {
+          const report = { reason: 'model request failed', evidence: `The model driver failed (${error instanceof Error ? error.name : 'error'}).`,
+            attempted_work: 'See the existing invocation transcript.', remaining_subproblem: 'Continue the current call from its existing scope.' };
+          const failure = switchModel(report);
+          if (failure) return failure;
+          messages.push({ role: 'user', content: `The previous model request failed. Continue the existing call without repeating completed effects. ${JSON.stringify(report)}` });
+          continue;
+        }
+        if (error instanceof NeuraleseUnsupportedError && fallbackIndex) return `escalation unavailable: ${error.message}`;
         throw error;
       }
       overflowRetries = 0;
       session.runtime.trace.emit('model_request', { call_id: callId, phase: 'end', turn: turns + 1,
+        actor: currentActor,
         duration_ms: Math.round(performance.now() - started),
         prompt_tokens: response.prompt_tokens ?? null, completion_tokens: response.completion_tokens ?? null,
         ...(response.cached_tokens !== undefined ? { cached_tokens: response.cached_tokens } : {}),
@@ -1569,14 +1756,34 @@ export class NativeToolAgent {
         ...(response.scheduling ? { batch_id: response.scheduling.batch_id, batch_size: response.scheduling.batch_size,
           in_flight: response.scheduling.in_flight, queue_wait_ms: response.scheduling.queue_wait_ms,
           schedule_priority: response.scheduling.priority } : {}) });
-      const turnNode = await this.modelTurnNode(session, graphMessages, response, turns + 1);
+      const turnNode = await this.modelTurnNode(session, graphMessages, response, turns + 1, undefined, currentActor,
+        [...reencodedInputs, ...(handoffNode ? [{ node: handoffNode, port: 'handoff' }] : [])], currentTemperature);
+      const recorder = activeRecorder();
+      const recordedTurn = response.raw_response?.x_natlang_recorded_turn;
+      const recordedNative = response.raw_response?.x_natlang_native_recorded_turn;
+      if (turnNode && typeof recordedTurn === 'string' && recordedTurn !== recordedNative) recorder?.linkTurn?.(recordedTurn, turnNode);
+      if (recorder && !supportsNeuralese(currentDriver)) recorder.record({ messages: structuredClone(graphMessages) as unknown[],
+        tools: structuredClone(availableTools), actor: { ...currentActor },
+        ...(this.options.actor ? { initial_actor: { ...this.options.actor } } : {}), ...(turnNode ? { graph_turn: turnNode } : {}),
+        reply: { role: 'assistant', content: response.text ?? null,
+          ...(response.raw_calls ? { tool_calls: structuredClone(response.raw_calls) } : response.calls?.length ? {
+            tool_calls: response.calls.map(([name, args], index) => ({ id: `call_${turns + 1}_${index}`, type: 'function',
+              function: { name, arguments: JSON.stringify(args) } })) } : {}) }, blocks: [] });
       if (response.prompt_tokens !== undefined && sentChars > 0) tokensPerChar = response.prompt_tokens / sentChars;
       turns++;
       session.runtime.checkInterruption();
+      if (exceededGraphReservation) {
+        await this.nativeWriteOrigins(response, session, turns, turnNode,
+          fallbackIndex ? await currentDriver.neuraleseRuntime?.() : this.options.neuralese);
+        const recorded = response.raw_response?.x_natlang_native_recorded_turn;
+        if (turnNode && typeof recorded === 'string') activeRecorder()?.linkNativeTurn?.(recorded, turnNode);
+        return 'graph model token budget exceeded by model response';
+      }
       if(response.protocol_failure){
         const failure=nativeProtocolFailure(response.raw_response);
         if(!failure)throw new Error('neuralese-native-protocol-integrity: failed turn lost its server receipt');
-        await this.nativeWriteOrigins(response,session,turns,turnNode);
+        await this.nativeWriteOrigins(response,session,turns,turnNode,
+          fallbackIndex ? await currentDriver.neuraleseRuntime?.() : this.options.neuralese);
         const recorded=response.raw_response?.x_natlang_native_recorded_turn;
         if(turnNode&&typeof recorded==='string')activeRecorder()?.linkNativeTurn?.(recorded,turnNode);
         tokens+=response.completion_tokens===undefined?limit??0:Math.max(1,response.completion_tokens);
@@ -1589,6 +1796,21 @@ export class NativeToolAgent {
           {role:'user',content:nativeProtocolFeedback(failure,templatedWriteAttempt)});
         retryProtocolWriteTemplate = templatedWriteAttempt;
         continue;
+      }
+      const containsForeignState = (value: unknown): boolean => typeof value === 'string' ? nativeStateSentinelIds(value).length > 0 :
+        Array.isArray(value) ? (value.length > 0 && value.every(part => part && typeof part === 'object' &&
+          ['text', 'native_state'].includes(String((part as { type?: unknown }).type))) &&
+          value.some(part => (part as { type?: unknown }).type === 'native_state')) || value.some(containsForeignState) :
+        !!value && typeof value === 'object' && Object.values(value).some(containsForeignState);
+      if (fallbackIndex && (((response.raw_response?.native_state as { blocks?: unknown[] } | undefined)?.blocks?.length ?? 0) > 0 ||
+          containsForeignState(response.text) || containsForeignState(response.calls) || containsForeignState(response.raw_response?.choices))) {
+        try { response = await this.handoffOutput(response, session, turns, turnNode, currentDriver, currentActor.id); }
+        catch (error) {
+          const recorded = response.raw_response?.x_natlang_native_recorded_turn;
+          if (turnNode && typeof recorded === 'string') activeRecorder()?.linkNativeTurn?.(recorded, turnNode);
+          if (error instanceof NeuraleseUnsupportedError) return `escalation unavailable: ${error.message}`;
+          throw error;
+        }
       }
       response = await this.decodeNeuralese(response, session, turns, turnNode, availableTools === allTools || lastTurn);
       const recordedNativeTurn=response.raw_response?.x_natlang_native_recorded_turn;
@@ -1673,6 +1895,32 @@ export class NativeToolAgent {
           { ...original, id: typeof original.id === 'string' && original.id ? original.id : `call_${turns}_${i}` } :
           { id: `call_${turns}_${i}`, type: 'function', function: { name, arguments: JSON.stringify(args) } };
       });
+      if (calls.some(([name]) => name === 'escalate')) {
+        const report = calls[0]?.[1];
+        const keys = ['reason', 'evidence', 'attempted_work', 'remaining_subproblem'] as const;
+        const valid = availableTools.some(item => (item as { function?: { name?: string } }).function?.name === 'escalate') &&
+          calls.length === 1 && calls[0]?.[0] === 'escalate' && report &&
+          Object.keys(report).length === keys.length && keys.every(key => typeof report[key] === 'string' && !!(report[key] as string).trim());
+        session.turn = turns; session.turnReasoning = response.reasoning;
+        const action = session.hostAction(calls[0]![0], report ?? {}, () => {
+          const failure = fallbackIndex >= (this.options.fallbacks?.length ?? 0) ? 'escalation unavailable: no configured fallback remains' :
+            !valid ? 'escalate must be offered as the only action and include all four nonempty report fields' :
+            switchModel(report as { reason: string; evidence: string; attempted_work: string; remaining_subproblem: string });
+          return failure ? { kind: 'rejected', text: failure } : { kind: 'ok', text:
+            'Handoff accepted. Continue this same invocation from its existing scope and transcript. Do not repeat completed effects.' };
+        }, String(raw[0]!.id));
+        const failure = action.kind === 'ok' ? undefined : action.text;
+        messages.push({ role: 'assistant', content: '', tool_calls: raw.slice(0, 1), ...thought(response.reasoning) },
+          { role: 'tool', tool_call_id: String(raw[0]!.id), content: action.text });
+        if (action.kind === 'budget') return action.text;
+        if (failure?.startsWith('escalation unavailable:') || failure?.startsWith('graph model ')) return failure;
+        if (failure) {
+          const repeated = stuck(`${JSON.stringify(calls)}\n${failure}`);
+          if (repeated) { const stuckFailure = handoffStuck(repeated); if (stuckFailure) return stuckFailure; continue; }
+          if (++failureRepairs > (this.options.maxFailureRepairs ?? Infinity)) return failure;
+        }
+        continue;
+      }
       const results: NativeResult[] = [];
       let refinementFailures: RefinementFailure[] | undefined;
       session.turn = turns;
@@ -1731,7 +1979,7 @@ export class NativeToolAgent {
       }
       if (session.failureSerial > previousFailureSerial) {
         const repeated = stuck(`${JSON.stringify(calls)}\n${session.failureDebug?.message ?? results.at(-1)?.text ?? ''}`);
-        if (repeated) return repeated;
+        if (repeated) { const failure = handoffStuck(repeated); if (failure) return failure; continue; }
         if (++failureRepairs > (repairLimit ?? Infinity))
           return `eval repair limit reached: ${session.failureDebug?.message ?? 'failure'}`;
         continue;
@@ -1743,7 +1991,7 @@ export class NativeToolAgent {
       const failed = results.find(result => ['rejected', 'refused'].includes(result.kind));
       if (failed) {
         const repeated = stuck(`${JSON.stringify(calls)}\n${failed.text}`);
-        if (repeated) return repeated;
+        if (repeated) { const failure = handoffStuck(repeated); if (failure) return failure; continue; }
         if (++failureRepairs > (repairLimit ?? Infinity)) return `repair limit reached: ${failed.text}`;
         continue;
       }

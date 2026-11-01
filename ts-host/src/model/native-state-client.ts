@@ -187,7 +187,7 @@ export async function nativeStateWritePort(options: NativeClientOptions): Promis
   if (!native?.enabled || !native.architecture || !serves(info, 'native.text-write'))
     return failure('neuralese-native-text-write-unavailable', 'configure a native server with forced text producer support');
   const dialect = `native-state/${native.architecture}`;
-  return { dialect, async write(text, extra = {}) {
+  return { dialect, forcedText: true, async write(text, extra = {}) {
     return (await nativeTextOperation({ ...options, info }, 'write-text', { text, ...extra })).meta;
   } };
 }

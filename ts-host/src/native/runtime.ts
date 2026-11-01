@@ -1432,6 +1432,15 @@ export class NativeSession {
       (this.runtime.options.maxToolCalls !== undefined && this.toolCalls >= this.runtime.options.maxToolCalls);
   }
 
+  /** Record an agent-owned control action under the same action and transcript custody as other tools. */
+  hostAction(name: string, args: Record<string, unknown>, execute: () => NativeResult, toolCallId?: string): NativeResult {
+    this.runtime.checkInterruption();
+    if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' }, toolCallId);
+    if (this.actionLimitReached()) return this.record(name, args, { kind: 'budget', text: 'action or tool-call budget exhausted' }, toolCallId);
+    this.toolCalls++; this.actions++; this.lam.steps++;
+    return this.record(name, args, execute(), toolCallId);
+  }
+
   /** The session's callable tree, rebuilt when a codebase edit publishes a new revision. */
   callables(): Record<string, unknown> {
     if (this.callableCache?.codebase !== this.lam.codebase)
@@ -1446,8 +1455,11 @@ export class NativeSession {
       event.kind === 'model_turn' && event.call_id === callId && typeof event.node === 'string');
     const input = sourceEvent ? { node: sourceEvent.node as string, port: 'result-source' } :
       { node: invocationNodeId(this.runtime.options.runId), port: 'typed-result-source' };
+    const reencoded = sourceEvent ? this.runtime.trace.events.filter(event => event.kind === 'literal' &&
+      event.source_kind === 'cross-model-output-source-text' && event.turn === sourceEvent.node &&
+      event.text_sha256 === hexDigest(text) && typeof event.node === 'string') : [];
     const ref = await this.runtime.writeNeuraleseText(text, wanted, { sourceKind, source, markerContext: 'return-result',
-      inputs: [input], typeAliases: typeAliasesFromEnv(this.env),
+      inputs: [input, ...reencoded.map(event => ({ node: event.node as string, port: 'reencoded-source' }))], typeAliases: typeAliasesFromEnv(this.env),
       ...(resultPath ? { resultPath: ['return', ...resultPath] } : {}) });
     return coerce(ref, wanted, this.env, 'return');
   }

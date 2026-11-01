@@ -660,9 +660,38 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     (nativeReader ? view.nativeGuidance() : undefined) : undefined;
   const selectedAuthoredGuidance = eligibleGuidance && !selectedNativeGuidance && !nativeReader && view.guidance() && view.program?.id ?
     authoredTextGuidance(view.guidance(), view.program.id) : undefined;
+  const handoffNames = task.runtime.options.escalation?.enabled === false ? [] : task.runtime.options.escalation?.models ?? [];
+  if (new Set(handoffNames).size !== handoffNames.length) throw new Error('escalation model chain contains a cycle');
+  const configuredModels = task.runtime.options.models ?? {};
+  const fallbacks = handoffNames.map(name => {
+    const configured = configuredModels[name];
+    if (!configured) throw new Error(`escalation model ${JSON.stringify(name)} is not explicitly configured`);
+    const config = typeof configured === 'function' ? { driver: configured } : configured;
+    return { ...config, name, id: config.id ?? name };
+  });
+  if (fallbacks.some((fallback, index) => fallbacks.slice(0, index).some(previous =>
+    previous.id === fallback.id || previous.driver === fallback.driver)))
+    throw new Error('escalation model chain repeats an actor');
+  const primaryActorId = model ? model.id ?? (model.driver as { model?: string }).model ?? executorModel(task) ?? model.driver.name ?? 'model' : undefined;
+  const currentFallback = fallbacks.findIndex(fallback => fallback.driver === model?.driver || fallback.id === primaryActorId);
+  const remainingFallbacks = fallbacks.slice(currentFallback + 1).filter(fallback => fallback.driver !== model?.driver && fallback.id !== primaryActorId);
+  const nativeOptions = task.runtime.options.neuralese;
+  const nativePort = nativeOptions?.port;
+  const boundedModels = task.modelBudget.maxRequests !== undefined || task.modelBudget.maxTokens !== undefined;
+  const budgetedNeuralese = nativePort && boundedModels && !nativeOptions.teacherText ? { ...nativeOptions,
+    port: { dialect: nativePort.dialect, ...(nativePort.forcedText ? { forcedText: true as const } : {}),
+      write: async (...args: Parameters<typeof nativePort.write>) => {
+        if (!nativePort.forcedText) throw new Error('graph model budget cannot bound this Neuralese writer: it does not declare forced text');
+        if (!task.modelBudget.reserveForcedText()) throw new Error('graph model request budget exhausted before Neuralese text writer');
+        runtime?.trace.emit('model_auxiliary_request', { call_id: callId, kind: 'forced-text-writer', completion_tokens: 0 });
+        return nativePort.write(...args);
+      } } } : nativeOptions;
   const agent = model ? new NativeToolAgent(model.driver, {
+    actor: { id: primaryActorId!,
+      revision: model.revision ?? null },
+    fallbacks: remainingFallbacks, modelBudget: task.modelBudget,
     systemPrompt: () => task.systemPrompt() + (addendum ? `\n\n${addendum}` : ''),
-    neuralese: task.runtime.options.neuralese,
+    neuralese: budgetedNeuralese,
     programGuidance: selectedNativeGuidance,
     authoredTextGuidance: selectedAuthoredGuidance,
     maxTurns: model.maxTurns, maxTokens: model.maxTokens, turnTokens: model.turnTokens, temperature: model.temperature,
@@ -684,7 +713,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     seedId: task.definitionSeedId(descriptor?.key ?? (owner ?? '') + ':' + definition.id),
     sourceRevision: definition.revision, parentCallId: frame.parentCallId, signal: frame.signal ?? task.signal,
     frame: childFrame, services, declarations: task.serviceDeclarations, serviceScopes: task.serviceScopes,
-    neuralese: task.runtime.options.neuralese, returnErrorText: task.runtime.platform.returnErrorText,
+    neuralese: budgetedNeuralese, returnErrorText: task.runtime.platform.returnErrorText,
     manifest: { definition_id: definition.id, definition_name: definition.name, task_id: task.id,
       sibling_ordinal:siblingOrdinal,
       ...(parentOccurrence&&typeof parentOccurrence==='object'?{parent_occurrence:structuredClone(parentOccurrence)}:{}),

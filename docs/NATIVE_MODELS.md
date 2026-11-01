@@ -160,16 +160,24 @@ own explicit setting.
 "lfm-latest": { "native": { ... }, "escalate": "dgx-qwen" }
 ```
 
-With `escalate` (or `--escalate PROFILE`; `--escalate none` turns it off), every function runs on the profile's model
-as the student tier, and a call it fails (an error, a budget or turn limit) runs again on the named profile, through
-the tiered engine (`calls/tiers.ts`, tiers 1 and 0). Each escalation prints one line and is recorded with the call:
+With `escalate` (or `--escalate PROFILE`; `--escalate none` turns it off), the running model can call `escalate`
+with its reason, evidence, attempted work and remaining subproblem. A failed model request also hands off when a
+fallback is available. The next explicitly configured profile continues the same invocation, scope and transcript;
+committed effects are not replayed. A profile may name its own fallback, forming a bounded, cycle-free chain. Each
+handoff prints one line and records the actors and report in the call graph:
 
 ```
-natlang: classify failed on lfm-latest (model turn limit reached); answered by dgx-qwen. Record the right answer with natlang traces good|fix
+natlang: classify handed off from lfm-latest to dgx-qwen
 ```
 
-A wrong but well-typed answer is not a failure; escalation does not catch it. Use only an owner-authorized
-teacher profile (AGENTS.md); escalated answers are teacher outputs with their own actor identity.
+A wrong but well-typed answer is not a failure; escalation does not catch it. A handoff does not reset limits:
+`limits.maxModelRequests` and `limits.maxModelTokens` bound ordinary model requests and generated tokens across a task's
+invocation graph, including concurrent children; forced source-text writes count as requests with zero sampled tokens.
+The optional native `view` endpoint can issue multiple sampled chunk and combine requests without accepting a graph
+allowance or reporting usage to the budget. Those requests are not included: do not configure `view` when strict
+graph-wide limits are required. Cross-model soft inputs are rendered from their exact stored
+source text with provenance; missing source text and model-specific adapters stop the handoff with a diagnostic.
+Use only an owner-authorized fallback profile; each turn retains its actual actor identity.
 
 When the run ends, the input of each escalated root call of a program function joins that program's
 `tune.examples.jsonl`, without an expected result (the teacher's answer is not a verified oracle), in a group

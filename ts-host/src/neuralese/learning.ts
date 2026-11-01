@@ -58,6 +58,40 @@ export class LearningError extends Error {
   constructor(readonly code: string, message: string) { super(`${code}: ${message}`); this.name = 'LearningError'; }
 }
 
+/** Current likelihood objectives have one target actor; a handoff is not a sample from that actor. */
+function assertLearningActors(turns: readonly RecordedTurn[], where: string): void {
+  const key = (actor: NonNullable<RecordedTurn['actor']>) => JSON.stringify([actor.id, actor.revision]);
+  const known = new Set<string>();
+  let unknown = false;
+  for (const turn of turns) {
+    const actor = turn.actor ?? turn.native?.actor;
+    if (!actor) { unknown = true; continue; }
+    if (typeof actor.id !== 'string' || !actor.id || !(actor.revision === null || typeof actor.revision === 'string'))
+      throw new LearningError('learning-mixed-actor', `${where} has an invalid actor identity`);
+    known.add(key(actor));
+    if (turn.initial_actor && key(turn.initial_actor) !== key(actor))
+      throw new LearningError('learning-mixed-actor', `${where} includes a foreign handoff actor`);
+  }
+  if (known.size > 1 || (known.size > 0 && unknown))
+    throw new LearningError('learning-mixed-actor', `${where} cannot combine different or unknown actors`);
+}
+
+function assertNativeLearningActor(rec: ModelTurnRecorder, turns: readonly RecordedTurn[], identity: NativeModelIdentity): void {
+  assertLearningActors(turns, 'native replay');
+  if ([...rec.graphNodes.values()].some(node => node.kind === 'combinator' && node.operation === 'model-escalation'))
+    throw new LearningError('learning-mixed-actor', 'native replay cannot train a graph containing a model handoff');
+  for (const turn of turns) {
+    if (!turn.native) continue;
+    const capture = turn.native.kind === 'generation' ? turn.native.sampling : turn.native.decision;
+    const binding = capture.adapter_binding as { base_native_identity?: NativeModelIdentity } | undefined;
+    const policy = binding?.base_native_identity ?? capture.policy as NativeModelIdentity | undefined;
+    // Legacy records without per-turn actor metadata retain their historical replay behavior.
+    if (!policy && !(turn.actor ?? turn.native.actor)) continue;
+    if (!policy || !nativeModelIdentityEqual(policy, identity))
+      throw new LearningError('learning-foreign-actor', 'native replay policy does not match the target checkpoint identity');
+  }
+}
+
 // Recording ------------------------------------------------------------------------------------------
 class Recorder extends ModelTurnRecorder {}
 
@@ -269,6 +303,7 @@ export const objectives = {
   async policyGradient(samples: readonly { trajectory: Trajectory; reward: number }[], options: { baseline?: 'mean' | number } = {}): Promise<Loss> {
     if (!samples.length) throw new LearningError('learning-reward', 'objectives.policyGradient needs at least one sample');
     if (samples.some(sample => !Number.isFinite(sample.reward))) throw new LearningError('learning-reward', 'objectives.policyGradient: rewards must be finite numbers');
+    assertLearningActors(samples.flatMap(sample => sample.trajectory.turns), 'policy gradient');
     const baseline = typeof options.baseline === 'number' ? options.baseline :
       samples.reduce((sum, sample) => sum + sample.reward, 0) / samples.length;
     const terms: Term[] = [];
@@ -283,6 +318,7 @@ export const objectives = {
   },
   /** Negative log-probability of a recorded trajectory: its sampled tokens, producer spans included. */
   async logLikelihood(trajectory: Trajectory, weight = 1): Promise<Loss> {
+    assertLearningActors(trajectory.turns, 'log likelihood');
     return new Loss(trajectory.turns.map(turn => ({ kind: 'logLikelihood', messages: turn.messages, tools: turn.tools,
       target: turn.reply, weight, likelihood_law: 'model-conditional', ...adapted(turn) })));
   },
@@ -647,6 +683,7 @@ async function evaluate<A>(service: LearningService, f: (a: A) => Promise<Loss>,
     if (!targetInfo) throw new LearningError('learning-native-target', 'native derivative target inventory is missing');
     const turns = [...rec.turns, ...rec.nested];
     const nativeTurns = rec.nativeTurns();
+    assertNativeLearningActor(rec, turns, targetInfo.identity);
     const byTurnId = new Map(nativeTurns.map(turn => [turn.native!.id, turn.native!]));
     const exactTurns = turns.filter(turn => turn.native).map(turn => ({ ...structuredClone(turn), native: byTurnId.get(turn.native!.id)! }));
     const events = structuredClone([...rec.graphNodes.values()]);
@@ -839,6 +876,7 @@ async function evaluateRecordedNative(service: LearningService, f: () => Promise
   if (!(loss instanceof Loss)) throw new LearningError('learning-not-a-loss', 'native graph learning must return a Loss from objectives');
   if (!loss.terms.length) return { loss: Object.assign(loss, { value: 0 }), gradient: null };
   const nativeTurns = rec.nativeTurns();
+  assertNativeLearningActor(rec, [...rec.turns, ...rec.nested], nativeIdentity);
   const byId = new Map(nativeTurns.map(turn => [turn.native!.id, turn.native!]));
   const turns = [...rec.turns, ...rec.nested].filter(turn => turn.native)
     .map(turn => ({ ...structuredClone(turn), native: byId.get(turn.native!.id)! }));

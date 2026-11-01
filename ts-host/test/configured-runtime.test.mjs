@@ -28,6 +28,27 @@ async function chatServer(reply) {
 
 const collect = () => { const lines = []; return { lines, stream: new Writable({ write(chunk, _e, done) { lines.push(String(chunk)); done(); } }) }; };
 
+test('an unknown escalation profile cannot silently resolve to the default backend', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'natlang-configured-'));
+  try {
+    writeFileSync(join(directory, 'config.json'), JSON.stringify({ defaultProfile: 'student', profiles: {
+      student: { endpoint: 'http://127.0.0.1:1', model: 'student', escalate: 'missing' } } }));
+    const environment = { ...process.env, NATLANG_CONFIG_HOME: directory, NATLANG_CALL_STORE: 'off' };
+    await assert.rejects(natlangRuntime({ environment, log: collect().stream }), /escalation profile "missing" is not explicitly configured/);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('profile escalation cycles fail before a model request', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'natlang-configured-'));
+  try {
+    writeFileSync(join(directory, 'config.json'), JSON.stringify({ defaultProfile: 'student', profiles: {
+      student: { endpoint: 'http://127.0.0.1:1', model: 'student', escalate: 'expert' },
+      expert: { endpoint: 'http://127.0.0.1:2', model: 'expert', escalate: 'student' } } }));
+    const environment = { ...process.env, NATLANG_CONFIG_HOME: directory, NATLANG_CALL_STORE: 'off' };
+    await assert.rejects(natlangRuntime({ environment, log: collect().stream }), /escalation profile cycle/);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
 test('a host runs functions on the configured profile, with escalation, and close() ends every session', async () => {
   const student = await chatServer(() => null), teacher = await chatServer(() => '42');
   const directory = mkdtempSync(join(tmpdir(), 'natlang-configured-'));
@@ -44,7 +65,7 @@ test('a host runs functions on the configured profile, with escalation, and clos
     const answer = loadNatlang(join(directory, 'answer.nl'));
     assert.equal(await natlang.runtime.run(() => answer('six times seven')), 42);
     assert.ok(teacher.requests.length >= 1);
-    assert.match(log.lines.join(''), /answer failed on student .*answered by teacher/);
+    assert.match(log.lines.join(''), /answer handed off from .*student-model to .*teacher-model/);
     await natlang.close();
     await natlang.close();   // idempotent
 
