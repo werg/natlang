@@ -229,7 +229,7 @@ def load_positive_rows(screen_path, expected_protection, filtered_path, source_t
                 selected_context_audit["graphs_with_source_shell_harness_text"] += user_context["has_source_shell_harness_text"]
                 selected_context_audit["graphs_with_bash_fenced_context"] += user_context["source_bash_fenced_context_count"] > 0
                 selected_context_audit["user_bash_fenced_contexts"] += user_context["source_bash_fenced_context_count"]
-                output.write(line if line.endswith("\n") else line + "\n")
+                output.write((line if line.endswith("\n") else line + "\n").encode("utf-8"))
         output.flush()
         os.fsync(output.fileno())
     if total_rows != EXPECTED_SCREEN_ROWS or screened_domains != Counter({"D13": 604, "D14": 156}):
