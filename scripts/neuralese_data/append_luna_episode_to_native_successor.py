@@ -66,6 +66,24 @@ def _jsonl(path):
     return [json.loads(line) for line in Path(path).read_text().splitlines() if line.strip()]
 
 
+def _teacher_actor_binding(raw, raw_binding):
+    """Bind the actual external teacher separately from the student encoder."""
+    provenance = raw.get("provenance") or {}
+    if (provenance.get("model") != "gpt-6-luna"
+            or provenance.get("collection_role") != "teacher"
+            or not isinstance(provenance.get("provider"), str)
+            or not isinstance(provenance.get("transport"), str)):
+        raise ValueError("raw result lacks authenticated Luna teacher provenance")
+    return {
+        "model": provenance["model"],
+        "provider": provenance["provider"],
+        "transport": provenance["transport"],
+        "collection_role": provenance["collection_role"],
+        "reasoning_effort": (provenance.get("pi_options") or {}).get("reasoningEffort"),
+        "raw_result": raw_binding,
+    }
+
+
 def _verify_episode(receipt_path, protection, tokenizer):
     receipt_path = Path(receipt_path).resolve(strict=True)
     receipt_binding = _bind(receipt_path)
@@ -307,7 +325,11 @@ def build(base_dir, episode_receipt, output_dir):
             "supervised_turns": episode["receipt"]["target_supervised_turns"],
             "supervised_tokens": supervised_tokens,
             "encoder_target_weights": 0},
-        "teacher_actor": episode["receipt"]["actor_runtime_identity"],
+        # The raw collector actor is the teacher.  `actor_runtime_identity` in
+        # the native assembly receipt instead identifies the student-side
+        # encoder that re-encoded the authenticated teacher text.  Keep both
+        # roles explicit; never label the encoder checkpoint as the teacher.
+        "teacher_actor": _teacher_actor_binding(episode["raw"], episode["raw_binding"]),
         "student_encoder": {"checkpoint_sha256": episode["receipt"]["native_checkpoint_sha256"],
             "tokenizer_fingerprint": episode["receipt"]["tokenizer_fingerprint"],
             "serving_config_identity_sha256": episode["receipt"]["serving_config_identity_sha256"]}}
