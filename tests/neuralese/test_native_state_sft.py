@@ -457,7 +457,10 @@ def test_stop_during_final_update_or_evaluation_saves_without_starting_collector
         return result
     def save(policy, *args, **kwargs):
         result = original_save(policy, *args, **kwargs)
-        if stop_at == 'checkpoint':policy.stop.requested = True
+        # Capacity/recovery setup may save the zero-update parent. This case
+        # exercises stopping after the earned update has been checkpointed.
+        if stop_at == 'checkpoint' and kwargs['step'] > 0:
+            policy.stop.requested = True
         return result
     def forbidden_collector(*args, **kwargs):
         raise AssertionError('stop must not launch a task collector')

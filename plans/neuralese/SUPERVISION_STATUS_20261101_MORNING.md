@@ -1,4 +1,39 @@
-## Live supervision update, 2026-11-01 13:02 CET
+## Live supervision update, 2026-11-01 14:58 CET
+
+This update supersedes the earlier instantaneous observations below.
+
+- Actual whole-graph JOLT+ round11 completed from61 through63: 16 rollouts,
+  seven correct outcomes, twenty training graph records and two optimizer updates.
+  These records do not count as SFT visits. Actual parent is
+  `sd-r1/round-000011/learner/checkpoint.pt`, SHA256
+  `11a8d12453bd75ffa4130da2fc9ab4bcdc35569163f303a8cee3520989e55585`.
+  Controller is at round12/collect; the rolling SFT slot still contains61.
+- Actual63 protected development evaluation finished2/4, all four terminal;
+  no protocol, repetition, budget or infrastructure failures. This matches61's
+  small development score and does not establish general capability lift.
+- The corrected307946-row successor passed fresh full CE census, source/held,
+  correction, geometry and actual63 saved-frame transition checks. All420 earned
+  SFT visits and optimizer/RNG custody survive;9437 additions have zero visits.
+  Final controls are `ops/semantic-keyword-filter-audit-1101/qualified-successor-v8/`;
+  exact63 preflight is the adjacent `earned63-correction-preflight.json`.
+  No adoption or new-source training has occurred yet. Full-model capacity
+  qualification remains required. Root is preparing checkpoint-preserving adoption.
+- Paid teacher generation is paused: live process/service/timer checks found no
+  active generation. The last one-case Luna run exposed an oracle contradiction
+  and supplied no admitted positive data; raw evidence is preserved. Repair and
+  verify public task contracts before spending more requests. Worker count is a
+  ceiling; measure admitted useful yield against requests and tokens.
+- Independent61 external full-state export and full readback are verified in
+  `ops/export-earned61-external-1101.json`. Latest63 export is still being checked;
+  an active offloader alone does not prove independently recoverable63.
+- NVMe has62GiB free; external volume273GiB free. Keep the40GiB internal floor.
+  Three source converters and the offloader are running; none remains frozen.
+  GPU is idle while adoption controls are prepared. Resume useful training promptly.
+- A targeted stop test injected its checkpoint stop into the initial zero-update
+  recovery save. It now targets an earned checkpoint explicitly; all four stop
+  scenarios pass. Broader check-main failures remain under investigation.
+
+## Earlier live supervision update, 2026-11-01 13:02 CET
 
 This section supersedes the instantaneous observations below.
 
