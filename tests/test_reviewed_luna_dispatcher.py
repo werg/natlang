@@ -181,6 +181,18 @@ def test_worker_slot_reservations_atomically_enforce_global_six_cap(tmp_path, mo
     assert {row['campaign'] for row in state['luna_worker_reservations']} == {'campaign-a', 'campaign-b'}
 
 
+def test_reservation_recognizes_relative_dispatcher_argv(tmp_path, monkeypatch):
+    plan_path = str(tmp_path / 'plan.json')
+    plan_sha = 'b' * 64
+    monkeypatch.setattr(dispatcher, '_proc_argv', lambda pid: [
+        '.venv-neuralese/bin/python', 'scripts/run_reviewed_luna_dispatcher.py',
+        plan_path, '--sha256', plan_sha])
+    row = {'dispatcher_pid': os.getpid(), 'plan_path': plan_path, 'plan_sha256': plan_sha,
+           'queue': '/missing/queue.jsonl', 'journal': '/missing/journal.jsonl', 'runtime': '/runtime'}
+
+    assert dispatcher._reservation_is_live(row)
+
+
 def test_reviewed_runner_binds_spool_root(reviewed_plan, tmp_path):
     plan_path, plan_sha, campaign_root, raw = reviewed_plan
     plan, identity = dispatcher.validate_plan(plan_path, plan_sha)

@@ -718,7 +718,13 @@ def _reservation_is_live(row):
     argv = _proc_argv(pid) if type(pid) is int and pid > 0 else []
     plan_path = row.get('plan_path')
     plan_sha256 = row.get('plan_sha256')
-    dispatcher_live = bool(argv and str(DISPATCHER) in argv and plan_path in argv and
+    script_matches = any(
+        token == str(DISPATCHER) or
+        (Path(token).name == DISPATCHER.name and
+         Path('/proc', str(pid), 'cwd').resolve().joinpath(token).resolve() == DISPATCHER)
+        for token in argv
+    ) if argv and type(pid) is int else False
+    dispatcher_live = bool(script_matches and plan_path in argv and
                             '--sha256' in argv and plan_sha256 in argv)
     if dispatcher_live:
         return True
