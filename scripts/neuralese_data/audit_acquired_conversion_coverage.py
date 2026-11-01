@@ -45,7 +45,11 @@ def inventory(exports_path: Path, root: Path) -> dict:
             receipt = json.loads(payload)
             if receipt.get('training_admission') is not False:
                 raise ValueError('conversion receipt claims training admission')
-            if Path(receipt['export_receipt']['path']).resolve() != Path(export).resolve():
+            # Most receipts already name the manifest path exactly. Avoid repeated
+            # SATA symlink walks for those; resolve only a real alias mismatch.
+            recorded_export = Path(receipt['export_receipt']['path'])
+            expected_export = Path(export)
+            if recorded_export != expected_export and recorded_export.resolve() != expected_export.resolve():
                 raise ValueError('receipt belongs to a different acquired export')
             outputs = receipt['outputs']
             for output in outputs:
