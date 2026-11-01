@@ -56,6 +56,15 @@ likelihood attribution. No paid generation is implied by configuring this machin
 
 ## Source continuations and asynchronous checkpoints (engineering, 2026-11-01)
 
+Direct supervised continuations initialize and validate their resident recipe
+plan before allocating the model. A configured resident directory alone is not
+an initialized source-update authority. Preserve committed resident generations;
+never replace a different recipe/runtime plan to get a launch through. Rolling
+checkpoint custody snapshots are namespaced by the actual snapshotter identity
+as well as the full checkpoint SHA, so corrected runtimes retain prior evidence
+without colliding with it. Interrupted-window publication derives custody from
+retained full checkpoint bytes; matching metadata files alone do not prove it.
+
 Checkpoint reservation covers post-update metadata growth before SGD, including
 the second asynchronous snapshot inode. A preallocated tensor payload alone is
 insufficient: a 3,153-byte estimate increase exhausted admission below the free
