@@ -1,7 +1,19 @@
 import io,json,tarfile
+from pathlib import Path
 import pytest
 from scripts.neuralese_data.archive_local_recovery_runtime import seal
-from scripts.neuralese_data.qualify_local_checkpoint_recovery import extract_archive,_mapped_path
+from scripts.neuralese_data.qualify_local_checkpoint_recovery import extract_archive,_mapped_path,bind_restored_asset
+
+
+def test_restored_assets_can_live_on_separate_scratch_and_reject_collision(tmp_path):
+    tree=tmp_path/'external-tree';tree.mkdir()
+    payload=tmp_path/'local-scratch'/'runtime';payload.mkdir(parents=True)
+    (payload/'data.txt').write_text('verified asset')
+    target=bind_restored_asset(tree,'/original/assets',payload)
+    assert (Path(target)/'data.txt').read_text()=='verified asset'
+    assert Path(target).is_symlink()
+    with pytest.raises(ValueError,match='collides'):
+        bind_restored_asset(tree,'/original/assets',payload)
 
 
 def test_extracts_and_validates_runtime_archive(tmp_path):

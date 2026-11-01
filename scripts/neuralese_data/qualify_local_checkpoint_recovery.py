@@ -59,6 +59,16 @@ def _mapped_path(tree, absolute):
     return tree/value.relative_to('/')
 
 
+def bind_restored_asset(tree, original_root, extracted_root):
+    """Expose a separately extracted, verified asset tree at its restored path."""
+    target=_mapped_path(tree,original_root);target.parent.mkdir(parents=True,exist_ok=True)
+    if target.exists() or target.is_symlink():raise ValueError('restored task asset root collides with another artifact')
+    source=Path(extracted_root).resolve(strict=True)
+    if not source.is_dir():raise ValueError('restored task asset payload is not a directory')
+    target.symlink_to(source,target_is_directory=True)
+    return str(target)
+
+
 def add_historical_program_routes(source_map,historical):
     """Route a preserved original program identity to its exact archived bytes."""
     for item in historical:
@@ -127,6 +137,10 @@ def qualify(draft, checkpoint, scratch_parent, output_plan, qualification_path, 
           tempfile.TemporaryDirectory(prefix='native-recovery-environment-',dir=environment_scratch) as environment_tmp):
         root=Path(tmp);tree=root/'tree';tree.mkdir();source_map={}
         environment_root=Path(environment_tmp)
+        # Keep hardlinked source objects on the export filesystem, while all
+        # disposable extracted payloads use the explicitly selected scratch
+        # filesystem. This avoids thousands of synchronous cold-disk writes.
+        payload_root=environment_root/'payload';payload_root.mkdir()
         archives={str(runtime_archive),str(environment_archive),str(stdlib_archive),*(str(archive) for _,archive in asset_archives)}
         for item in base_closure:
             blob=Path(blobs[(item['path'],item['sha256'])]['path'])
@@ -139,22 +153,20 @@ def qualify(draft, checkpoint, scratch_parent, output_plan, qualification_path, 
             source_map[str(Path(item['path']).resolve())]=str(target)
         add_historical_program_routes(source_map,plan.get('historical_programs',[]))
         write_json_durable(root/'.natlang-source-map.json',{'schema':'natlang.staged-source-map/1','paths':source_map})
-        runtime_manifest=extract_archive(runtime_archive,root/'restored-runtime')
+        runtime_manifest=extract_archive(runtime_archive,payload_root/'restored-runtime')
         env_manifest=extract_archive(environment_archive,environment_root,environment=True)
-        stdlib_manifest=extract_archive(stdlib_archive,root/'restored-stdlib')
+        stdlib_manifest=extract_archive(stdlib_archive,payload_root/'restored-stdlib')
         asset_roots={}
         for index,(item,archive) in enumerate(asset_archives):
-            temporary=root/f'restored-assets-{index}';extract_archive(archive,temporary)
-            target=_mapped_path(tree,item['original_root']);target.parent.mkdir(parents=True,exist_ok=True)
-            if target.exists():raise ValueError('restored task asset root collides with another artifact')
-            os.rename(temporary/'runtime',target);asset_roots[item['env']]=str(target)
-        system_home=root/'system-python';(system_home/'lib').mkdir(parents=True)
-        os.symlink(root/'restored-stdlib'/'runtime',system_home/'lib/python3.12')
-        interpreter_source=Path(source_map[restore['interpreter_path']]);interpreter=root/'python-bin/python3.12';interpreter.parent.mkdir()
+            temporary=payload_root/f'restored-assets-{index}';extract_archive(archive,temporary)
+            asset_roots[item['env']]=bind_restored_asset(tree,item['original_root'],temporary/'runtime')
+        system_home=payload_root/'system-python';(system_home/'lib').mkdir(parents=True)
+        os.symlink(payload_root/'restored-stdlib'/'runtime',system_home/'lib/python3.12')
+        interpreter_source=Path(source_map[restore['interpreter_path']]);interpreter=payload_root/'python-bin/python3.12';interpreter.parent.mkdir()
         shutil.copyfile(interpreter_source,interpreter);interpreter.chmod(0o755)
         venv=environment_root/'venv';(venv/'bin/python').unlink();(venv/'bin/python').symlink_to(interpreter)
-        node_source=Path(source_map[restore['node_path']]);node=root/'node-bin/node';node.parent.mkdir();shutil.copyfile(node_source,node);node.chmod(0o755)
-        runtime=root/'restored-runtime/runtime';base=_mapped_path(tree,restore['base_path'])
+        node_source=Path(source_map[restore['node_path']]);node=payload_root/'node-bin/node';node.parent.mkdir();shutil.copyfile(node_source,node);node.chmod(0o755)
+        runtime=payload_root/'restored-runtime/runtime';base=_mapped_path(tree,restore['base_path'])
         if not base.is_dir():raise ValueError('restored model base is missing')
         env=dict(os.environ,**asset_roots,CUDA_VISIBLE_DEVICES='',PYTHONNOUSERSITE='1',PYTHONDONTWRITEBYTECODE='1',
                  PYTHONHOME=str(system_home),PYTHONPATH=str(runtime/'training/neuralese')+':'+str(runtime),
