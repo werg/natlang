@@ -88,6 +88,34 @@ def build(raw_path, decisions_path, provider_source_path, plan_path, runtime_pat
             "raw source program must match exactly one row in the reviewed selected train source"
         )
     selected_program_index = selected_matches[0]
+    protection = json.loads(protection_bytes)
+    selected_receipts = protection.get("selected_receipts") or []
+    if (protection.get("schema") != "natlang.luna-codebase-protection-preflight/1"
+            or protection.get("selected_train_rows") != len(selected_rows)
+            or len(selected_receipts) != len(selected_rows)):
+        raise ValueError("protection projection must cover every selected train program exactly once")
+    receipts_by_id = {}
+    for item in selected_receipts:
+        if not isinstance(item, dict) or not isinstance(item.get("case_id"), str):
+            raise ValueError("selected train protection receipt is malformed")
+        receipts_by_id.setdefault(item["case_id"], []).append(item)
+    selected_protection_by_index = []
+    for index, program in enumerate(selected_rows):
+        if not isinstance(program, dict):
+            raise ValueError("selected train program is not an object")
+        case_id = program.get("id")
+        candidates = receipts_by_id.get(case_id, [])
+        if (program.get("split") != "train" or len(candidates) != 1
+                or candidates[0].get("source_groups") != program.get("source_groups")
+                or candidates[0].get("excluded") is not False
+                or candidates[0].get("quality_status") != "ready"
+                or (candidates[0].get("receipt") or {}).get("split") != "train"
+                or (candidates[0].get("receipt") or {}).get("protected_sha256")
+                    != protection.get("protected_worlds_digest")):
+            raise ValueError("selected train program lacks its exact ready protection receipt")
+        selected_protection_by_index.append(candidates[0])
+    if set(receipts_by_id) != {program.get("id") for program in selected_rows}:
+        raise ValueError("protection projection contains an unmatched selected program receipt")
     judge_starts = [item for item in (raw.get("request_telemetry") or {}).get("starts") or []
                     if item.get("role") == "judge" and item.get("purpose") == "judge"]
     if len(judge_starts) != 1 or judge_starts[0].get("status") != "completed":
@@ -95,11 +123,6 @@ def build(raw_path, decisions_path, provider_source_path, plan_path, runtime_pat
     plan_protection_sha = (plan.get("artifact_hashes") or {}).get(protection_binding["path"])
     if plan_protection_sha != protection_binding["sha256"]:
         raise ValueError("protection projection is not the exact artifact reviewed by the plan")
-    protection = json.loads(protection_bytes)
-    if (protection.get("schema") != "natlang.luna-codebase-protection-preflight/1"
-            or protection.get("selected_train_rows") != 1):
-        raise ValueError("protection projection does not establish one selected train world")
-
     plan_runtime = Path(plan["runtime"]).resolve(strict=True)
     runtime_receipt_path = plan_runtime / "frozen-runtime.json"
     runtime_binding, _ = bound(runtime_receipt_path)
@@ -209,6 +232,7 @@ def build(raw_path, decisions_path, provider_source_path, plan_path, runtime_pat
             "source_sha256": selected_digest,
             "row_index": selected_program_index,
             "program_id": raw_program.get("id") if isinstance(raw_program, dict) else None,
+            "protection_receipt": selected_protection_by_index[selected_program_index],
         },
         "runtime": {"path": str(plan_runtime), "receipt_sha256": runtime_binding["sha256"]},
         "provider_source_manifest": {"path": source_binding["path"], "sha256": source_binding["sha256"]},

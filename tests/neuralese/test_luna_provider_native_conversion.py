@@ -31,9 +31,12 @@ def _fixture(tmp_path, *, raw_override=None, decision_index=0, judge="gpt-6-sol"
     protection_path = tmp_path / "protection.json"
     protection_bytes = _write(protection_path, {
         "schema": "natlang.luna-codebase-protection-preflight/1",
-        "selected_train_rows": 1,
-        "selected_receipts": [{"case_id": program["id"], "source_groups": groups,
-            "receipt": {"split": "train", "protected_sha256": "p" * 64}}],
+        "protected_worlds_digest": "p" * 64,
+        "selected_train_rows": len(selected_programs),
+        "selected_receipts": [{"case_id": selected["id"], "source_groups": selected["source_groups"],
+            "excluded": False, "quality_status": "ready",
+            "receipt": {"split": "train", "protected_sha256": "p" * 64}}
+            for selected in selected_programs],
     })
     raw = {
         "version": "natlang.teacher_trajectory.native/1", "id": "teacher-case",
@@ -85,6 +88,16 @@ def _build(paths):
         paths["runtime"], paths["protection"], paths["output"])
 
 
+def _rebind_protection(paths, protection):
+    protection_bytes = _write(paths["protection"], protection)
+    plan = json.loads(paths["plan"].read_bytes())
+    plan["artifact_hashes"][str(paths["protection"].resolve())] = sha256_hex(protection_bytes)
+    plan_bytes = _write(paths["plan"], plan)
+    source = json.loads(paths["source"].read_bytes())
+    source["plan"]["sha256"] = sha256_hex(plan_bytes)
+    _write(paths["source"], source)
+
+
 def test_generic_audit_serializes_one_complete_judged_provider_episode(tmp_path):
     paths = _fixture(tmp_path)
     _build(paths)
@@ -96,6 +109,7 @@ def test_generic_audit_serializes_one_complete_judged_provider_episode(tmp_path)
     assert audit["training_admission"] is False
     assert audit["selected_train_program"]["row_index"] == 0
     assert audit["selected_train_program"]["program_id"] == "codebase:test:world"
+    assert audit["selected_train_program"]["protection_receipt"]["case_id"] == "codebase:test:world"
 
 
 def test_generic_audit_binds_matching_program_among_multiple_selected_rows(tmp_path):
@@ -107,6 +121,7 @@ def test_generic_audit_binds_matching_program_among_multiple_selected_rows(tmp_p
     audit = json.loads((paths["output"] / "ingestion-audit.json").read_bytes())
     assert audit["selected_train_program"]["row_index"] == 1
     assert audit["selected_train_program"]["program_id"] == "codebase:test:world"
+    assert audit["selected_train_program"]["protection_receipt"]["case_id"] == "codebase:test:world"
 
 
 def test_generic_audit_rejects_ambiguous_duplicate_selected_program(tmp_path):
@@ -121,6 +136,27 @@ def test_generic_audit_rejects_program_absent_from_selected_source(tmp_path):
         {"id": "codebase:other:world", "split": "train", "source_groups": ["other:train"]},
     ])
     with pytest.raises(ValueError, match="exactly one row"):
+        _build(paths)
+
+
+def test_generic_audit_rejects_missing_selected_world_protection_receipt(tmp_path):
+    other = {"id": "codebase:other:world", "split": "train", "source_groups": ["other:train"]}
+    program = {"id": "codebase:test:world", "split": "train", "source_groups": ["upstream:train:world"]}
+    paths = _fixture(tmp_path, selected_programs=[other, program])
+    protection = json.loads(paths["protection"].read_bytes())
+    protection["selected_receipts"] = protection["selected_receipts"][:1]
+    protection["selected_train_rows"] = 1
+    _rebind_protection(paths, protection)
+    with pytest.raises(ValueError, match="cover every selected train program"):
+        _build(paths)
+
+
+def test_generic_audit_rejects_selected_receipt_with_changed_source_groups(tmp_path):
+    paths = _fixture(tmp_path)
+    protection = json.loads(paths["protection"].read_bytes())
+    protection["selected_receipts"][0]["source_groups"] = ["other:train"]
+    _rebind_protection(paths, protection)
+    with pytest.raises(ValueError, match="exact ready protection receipt"):
         _build(paths)
 
 
