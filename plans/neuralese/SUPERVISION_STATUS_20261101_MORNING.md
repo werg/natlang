@@ -1,3 +1,60 @@
+## Live supervision update, 2026-11-01 22:57 CET
+
+- Owner-requested bounded execution-efficiency rewards and live inference
+  escalation are integrated on main. Fresh final verification passed all23
+  inference, learning-custody and CLI tests (verify-live-escalation-final-1101).
+  Correct completion dominates; all-failed groups do not prefer cheap failure.
+  Inference preserves invocation scope, completed effects, authority, budgets,
+  graph ancestry and actual actor identity through configured fallback profiles.
+  No paid teacher was started. Usage is documented in docs/NATIVE_MODELS.md.
+- Fresh focused comparisons on Pop isolate the four observed regressions:
+  cases56/96/104/120 were4/4 at64,3/4 at70,4/4 at72 and0/4 at75.
+  Thus those losses arose in72-to75 joint SFT, not70-to72 corrected JOLT+.
+  These four cases do not establish72's full-packet score. New-lineage67 is
+  currently being evaluated on that same protected four-case packet under the
+  identical0f8a runtime. saved72-sft-resume-metadata-audit-1101.json preserves
+  the actual carried SFT ordering/cursor for deeper cause investigation.
+- New353731 run committed three updates64-to67, with full optimizer/RNG and
+  exposure. Interior cadence evaluation interrupted its bounded window; the
+  registered native SIGQUIT diagnostic then crashed during stack dumping.
+  1ae0c7957 replaces it with a Python-boundary handler and defers interior
+  evaluation;12 targeted tests passed. Never SIGQUIT the old native handler.
+  Saved67 SHA0c8e75f6bb775cd108191fbd35884e5835050a726ffe112b266be851fe2ee8fc
+  has sealed custody under ops/earned67-crash-recovery-1101. Controller still
+  retains64: typed interrupted-window publication remains required, with no
+  fabricated successful report. Rolling resume explicitly binds both parents.
+- All13809 novel completed acquired graphs are qualified in successor367540.
+  Retained760 colliding IDs use their older qualified versions, not renamed
+  duplicates. Complete effective-target census,2205 diagnosis verifications,
+  historical converter AST equivalence and geometry are proved. Repeated
+  appends now preserve measured objective mass and sealed builder bytes.
+  Package: external acquired-novel13809-qualified-successor-20261101-v1.
+- Successor367540 has an actual workstation memory blocker: its restored
+  complete-graph capacity check passed the reference then exceeded96GiB,
+  reaching119342628864 bytes with4773437440 available. Ledger stopped it
+  before SGD (76GiB attempt also failed). Increasing the claim again is not
+  a fix. Preserve all new data/obligations; improve whole-graph memory handling.
+  Useful work is being resumed from exact67 on unchanged353731 source via
+  lfm3-earned67-source353731-resident-1101, fixed80GiB claim and180s stop
+  grace, runtime-earned67-safe-evaluation-recovery-1101. Verify actual startup
+  and SGD; a launch acknowledgement is not earned progress. New controls are
+  ops/earned67-source353731-recovery-1101. task_eval_every0 keeps Pop monitoring
+  separate; complete evaluation spec and full production obligations remain.
+- Independent fallback64 closure qualification remains active and has reached
+  actual isolated restored-model/source loading. Private export runs without
+  any sandbox, W&B private run werg/natlang/ulcvvcya. Runtime archive has a
+  fresh workstation GET verification; full64 multipart upload/readback is
+  ongoing. Neither is yet a qualified complete private recovery closure.
+- Stopped inherited hourly four-account sandbox-create poller: owner requested
+  a one-time whitelist check. All last probes denied; no probe allocation was
+  left. Cloud run remains held on obsolete launch controls. Training entitlement
+  is not assumed. Paid generation remains paused; CPU acquired conversion
+  continues. No new helper strands were opened.
+- Reclaimed internal duplicates only after exact external SHA checks: full81
+  and actor70 view now resolve to retained verified copies, saving18.8GB.
+  Latest disk observation: internal73GiB free, external104GiB free. Preserve
+ 40GiB internal floor, full67 and independently verified fallback64 dependencies.
+
 ## Live supervision update, 2026-11-01 21:43 CET
 
 - Bounded efficiency and live inference escalation are integrated and pushed.
