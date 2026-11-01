@@ -95,6 +95,13 @@ def reconcile_geometry(entries,old_rows,old_geo,ledger,corrected_ids,corrected_s
     old_values={row['id']:value for row,value in zip(old_rows,old_geo['kv_slots'],strict=True)}
     return old_by_id,[corrected_slots[e['id']] if e['id'] in selected else old_values[e['id']] for e in entries]
 
+
+def prune_replaced_recipe_bindings(recipe, replaced):
+    """Drop only replaced names that no stage still references."""
+    used={name for stage in recipe['stages'] for name in (stage.get('inputs') or {}).values() if isinstance(name,str)}
+    for name in replaced:
+        if name not in used:recipe['input_bindings'].pop(name,None)
+
 def finalize(preparation, predecessor, output, *, preparation_sha256=None, predecessor_sha256=None):
     prep_path=Path(preparation).resolve(strict=True);prior_path=Path(predecessor).resolve(strict=True)
     prep_binding=bind(prep_path);prior_binding=bind(prior_path)
@@ -175,14 +182,19 @@ def finalize(preparation, predecessor, output, *, preparation_sha256=None, prede
         'scope':'prior measured mass retained exactly; every changed graph has independently replayed effective supervision'})
     mass_receipt=output/'objective-census-receipt.json';write_json_durable(mass_receipt,{'schema':'natlang.measured-mass-append-receipt/1',
         'census':bind(mass_path),'map':bind(family_path),'builder':bind(Path(__file__))})
-    descriptor=output/'sft-capacity-descriptor.json';write_json_durable(descriptor,sft_capacity_descriptor(bind(source_path),bind(geometry_path)))
+    descriptor=output/'sft-capacity-descriptor.json';write_json_durable(descriptor,sft_capacity_descriptor(bind(source_path),
+        {k:v for k,v in bind(geometry_path).items() if k!='bytes'}))
     old_recipe_path=checked(prior['recipe'],'predecessor recipe');recipe=read(old_recipe_path)
     stage=next(s for s in recipe['stages'] if s['id']==proof['stage_id']);inputs=stage['inputs'];bindings=recipe['input_bindings']
+    replaced={inputs.get(role) for role in ('native_graphs','foundation_native_graphs','continued_native_graphs',
+                                            'source_correction','ce_supervision_policy')}
     def assign(role,name,ref):bindings[name]={k:v for k,v in ref.items() if k!='bytes'};inputs[role]=name
     assign('native_graphs','static_context_train',bind(source_path));assign('foundation_native_graphs','static_context_train',bind(source_path))
     assign('continued_native_graphs','static_context_previous',bind(old_source));assign('source_correction','static_context_correction',bind(correction_path))
     assign('ce_supervision_policy','static_context_ce_policy',bind(policy_path))
-    stage['parameters']['sft_packed_geometry']=bind(geometry_path);stage['parameters']['memory_qualification']={k:v for k,v in bind(descriptor).items() if k!='bytes'}
+    prune_replaced_recipe_bindings(recipe,replaced)
+    stage['parameters']['sft_packed_geometry']={k:v for k,v in bind(geometry_path).items() if k!='bytes'}
+    stage['parameters']['memory_qualification']={k:v for k,v in bind(descriptor).items() if k!='bytes'}
     recipe_path=output/'recipe-continuation.json';write_json_durable(recipe_path,recipe)
     old_recipe=load_recipe(old_recipe_path);new_recipe=load_recipe(recipe_path)
     find=lambda r:next(s for s in r['stages'] if s['id']==proof['stage_id'])

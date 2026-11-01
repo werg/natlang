@@ -114,3 +114,10 @@ def test_seed_index_reuses_only_byte_identical_authenticated_rows(tmp_path,monke
     assert proof['rows']==1 and row_index.load(Path(proof['index']['path']))['entries']==[entries[0]]
     Path(remaining['path']).write_bytes(b'corrupt')
     with pytest.raises(ValueError,match='differs from its binding'):tool.seed_unchanged_index(prep,{'source':source},geometry,entries)
+
+
+def test_replaced_recipe_bindings_are_removed_only_when_unreferenced():
+    from scripts.neuralese_data.finalize_earned_static_context_source import prune_replaced_recipe_bindings
+    recipe={'input_bindings':{'old':{},'shared':{},'new':{}},'stages':[{'inputs':{'native_graphs':'new'}},{'inputs':{'held_native_graphs':'shared'}}]}
+    prune_replaced_recipe_bindings(recipe,{'old','shared'})
+    assert set(recipe['input_bindings'])=={'shared','new'}
