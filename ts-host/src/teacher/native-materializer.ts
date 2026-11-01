@@ -1517,8 +1517,7 @@ function providerExpandedReadContexts(source: Dict, row: NativeRow, sourceRowSha
             idWrites.length !== 1 || transport.schema !== 'natlang.teacher-text-neuralese-transport/1' ||
             transport.mode !== 'teacher-text/1' || transport.learned_vectors !== false ||
             transport.qualification_certificate !== false || transport.training_admission !== false ||
-            (transport.raw_response_sha256 !== undefined &&
-              transport.raw_response_sha256 !== sourceStep?.raw_response_sha256) ||
+            transport.raw_response_sha256 !== sourceStep?.raw_response_sha256 ||
             typeof sourceStep?.raw_response_sha256 !== 'string' ||
             entry?.completion_status !== 'done' || entry.completion_source !== 'execution_graph' ||
             host.kind !== 'host_capture' || host.capture_kind !== 'invocation_output' || host.call_id !== event.call_id ||

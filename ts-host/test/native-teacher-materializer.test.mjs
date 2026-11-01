@@ -1919,6 +1919,11 @@ test('teacher-text eval-finish typed JSON is linked only through its exact write
   assert.equal(reads[0].block.body, body);
   assert.equal(reads[0].learned_vectors, false);
 
+  const missingTransportResponse = structuredClone(row);
+  delete missingTransportResponse.trajectory[0].model_response.transport_provenance.raw_response_sha256;
+  assert.equal(materializeNativeRows([missingTransportResponse]).turns[1].source_ref.provider_expanded_read_contexts,
+    undefined, 'a missing transport/raw-response join cannot authenticate a typed JSON writer');
+
   const wrongWriter = structuredClone(row);
   wrongWriter.outcome.execution_graph.find(event => event.kind === 'block_read').inputs[0].node = `${producer}#wrong`;
   assert.equal(materializeNativeRows([wrongWriter]).turns[1].source_ref.provider_expanded_read_contexts,
