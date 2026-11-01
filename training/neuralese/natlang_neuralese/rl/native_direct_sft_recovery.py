@@ -80,13 +80,13 @@ def publish_completed(state_path, *, report_ref, receipt_ref, custody_ref, out):
         boundary=report.get('continuation_boundary') or {}
         state_parent=Path(state['checkpoint']).resolve()
         parent_matches=state_parent==parent_path
-        receipt_parent=parent['sha256']
+        receipt_parents={parent['sha256']}
         # A rolling slot is atomically replaced after its prior checkpoint was
         # independently pinned. Bind that prior identity to the last publication.
         if not parent_matches and state_parent==child_path:
             history=state.get('direct_sft_refresh_history') or []
             prior=read(history[-1]) if history else {}
-            receipt_parent=prior.get('parent',{}).get('sha256')
+            receipt_parents.update(read(ref).get('parent',{}).get('sha256') for ref in history)
             parent_matches=(prior.get('schema')=='natlang.direct-sft-refresh-publication/1'
                             and prior.get('checkpoint',{}).get('path')==str(child_path)
                             and prior.get('checkpoint',{}).get('sha256')==parent['sha256'])
@@ -101,7 +101,7 @@ def publish_completed(state_path, *, report_ref, receipt_ref, custody_ref, out):
                 or boundary.get('new_optimizer_updates')!=1 or boundary.get('checkpoint_sha256')!=child['sha256']
                 or report.get('checkpoint_sha256')!=child['sha256']
                 or receipt.get('checkpoint',{}).get('sha256')!=child['sha256']
-                or receipt.get('continuation',{}).get('checkpoint_sha256')!=receipt_parent
+                or receipt.get('continuation',{}).get('checkpoint_sha256') not in receipt_parents
                 or not supervised_progress_numerics_ok(report,{'sha256':child['sha256']})):
             raise ValueError('SFT refresh publication lacks exact qualified full-state custody')
         if out.exists():raise ValueError('SFT refresh publication intent already exists')
