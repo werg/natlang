@@ -70,11 +70,15 @@ def main():
     parser.add_argument('--file-pool', type=Path,
                         help='alternate immutable pool; use an isolated pool while existing snapshots have checked readers')
     args=parser.parse_args()
+    # Resolve moving refs once. Otherwise an agent commit during assembly can
+    # make the receipt name a different commit from the bytes actually archived.
+    commit = subprocess.check_output(['git', 'rev-parse', '--verify', '--end-of-options',
+                                      args.commit + '^{commit}'], text=True).strip()
     bindings=json.loads(args.control_bindings.read_text())
     if not isinstance(bindings,list) or not bindings:
         raise ValueError('runtime assembly requires declared actual control and prompt bindings')
     args.out.mkdir(parents=True,exist_ok=False)
-    archive=subprocess.Popen(['git','archive',args.commit],stdout=subprocess.PIPE)
+    archive=subprocess.Popen(['git','archive',commit],stdout=subprocess.PIPE)
     try:
         subprocess.run(['tar','-x','-C',str(args.out)],stdin=archive.stdout,check=True)
     finally:
@@ -87,7 +91,7 @@ def main():
     receipt=assemble_protected_runtime_inputs(args.predecessor,args.out,bound_files=bindings)
     receipt['node_dependencies'] = {**node, 'collector_module_import': 'passed'}
     receipt['node_build'] = node_build
-    receipt['commit']=subprocess.check_output(['git','rev-parse',args.commit],text=True).strip()
+    receipt['commit']=commit
     (args.out/'runtime-input-closure.json').write_text(json.dumps(receipt,indent=2,sort_keys=True)+'\n')
     storage=seal_runtime_tree(args.out,pool=args.file_pool)
     storage_receipt=args.out.with_name(args.out.name+'.storage.json')
