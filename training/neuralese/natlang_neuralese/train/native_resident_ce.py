@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import copy
+import hashlib
+import json
 from pathlib import Path
 
 from .native_supervision import load_policy
@@ -83,7 +85,69 @@ def extension_policy(old, new, *, prior_train=None, candidate_train=None):
     prior, policy = load_policy(before), load_policy(after)
     a, b = _public(prior), _public(policy)
     excluded = {'sources', 'source_contract', 'inventory', 'first_row_observations', 'prior_inventory_correction',
-                'decision_factor_evidence'}
+                'decision_factor_evidence', 'source_correction'}
+    source_correction = b.get('source_correction')
+    prior_source_correction = a.get('source_correction')
+    if prior_source_correction is not None and source_correction != prior_source_correction:
+        raise ValueError('resident CE source correction history was changed or removed')
+    correction_decl = None
+    if source_correction is not None:
+        if (not isinstance(source_correction, dict)
+                or set(source_correction) not in ({'path', 'sha256'}, {'path', 'sha256', 'bytes'})):
+            raise ValueError('resident source correction reference is malformed')
+        from .native_source_correction import source_correction_dependencies
+        source_correction_dependencies(source_correction)
+        correction_path = Path(source_correction['path']).resolve(strict=True)
+        correction_doc = json.loads(correction_path.read_bytes())
+        correction_decl = correction_doc.get('target_mask_correction')
+        if correction_decl is None:
+            raise ValueError('resident source correction has no target-mask transition')
+        if correction_doc.get('schema') != 'natlang.native-source-correction/1':
+            raise ValueError('resident source correction schema differs')
+        if prior_source_correction is None and (
+                correction_doc.get('prior_source', {}).get('sha256') != old.get('native_graphs', {}).get('sha256')
+                or correction_doc.get('current_source', {}).get('sha256') != new.get('native_graphs', {}).get('sha256')):
+            raise ValueError('resident source correction does not bind the exact predecessor and successor manifests')
+        if prior_source_correction is None:
+            # The map proof alone is not enough: bind its exposure ledger to
+            # the exact in-place row and every graph appended in this source
+            # transaction. This prevents an unrelated mask review from
+            # authorizing changed supervision or hidden additions.
+            from ..common.jsonio import open_jsonl_text
+            from .native_source_correction import _origins
+            rows_path = Path(correction_doc['row_bindings_path'])
+            if not rows_path.is_absolute():
+                rows_path = correction_path.parent / rows_path
+            ledger = []
+            with open_jsonl_text(rows_path) as stream:
+                ledger = [json.loads(line) for line in stream if line.strip()]
+            if (not isinstance(previous.get('rows'), list) or not isinstance(current.get('rows'), list)
+                    or len(previous['rows']) > len(current['rows'])):
+                raise ValueError('target-mask CE transition lacks complete ordered logical-family rows')
+            before_ids = [row.get('id') for row in previous['rows']]
+            after_ids = [row.get('id') for row in current['rows']]
+            before_origin = _origins(correction_doc['prior_source'], before_ids)
+            after_origin = _origins(correction_doc['current_source'], after_ids)
+            target_id = correction_decl['graph_id']
+            target_rows = [row for row in ledger if row.get('disposition') == 'eligibility-decreased']
+            added_rows = [row for row in ledger if row.get('disposition') == 'added']
+            expected_added = current['rows'][len(previous['rows']):]
+            if (len(target_rows) != 1 or target_rows[0].get('id') != target_id
+                    or target_id not in before_origin or target_id not in after_origin
+                    or target_rows[0].get('old_binding') != correction_decl.get('binding_before')
+                    or target_rows[0].get('new_binding') != correction_decl.get('binding_after')
+                    or target_rows[0].get('old_source_sha256') != before_origin[target_id]
+                    or target_rows[0].get('new_source_sha256') != after_origin[target_id]
+                    or target_rows[0].get('old_communication') is not False
+                    or [row.get('id') for row in added_rows] != [entry['id'] for entry in expected_added]
+                    or any(row.get('new_binding') != entry['binding']
+                           or row.get('new_source_sha256') != after_origin.get(entry['id'])
+                           for row, entry in zip(added_rows, expected_added, strict=True))
+                    or len(ledger) != 1 + len(expected_added)):
+                raise ValueError('resident source correction ledger does not bind the exact mask and appended rows')
+        if (source_correction.get('sha256') != hashlib.sha256(correction_path.read_bytes()).hexdigest()
+                or ('bytes' in source_correction and source_correction['bytes'] != correction_path.stat().st_size)):
+            raise ValueError('resident source correction receipt changed')
     old_objective,new_objective=a.get('objective'),b.get('objective')
     declared_transition = ((old_objective or {}).get('family_balance',{}).get('normalization') == 'bounded-mean-one/1' and (new_objective or {}).get('family_balance',{}).get('normalization') == 'declared/1')
     if same_source and not declared_transition:
@@ -125,8 +189,26 @@ def extension_policy(old, new, *, prior_train=None, candidate_train=None):
                 or previous.get('source_sha256')!=old['native_graphs']['sha256']
                 or current.get('source_sha256')!=new['native_graphs']['sha256']
                 or not isinstance(previous.get('rows'),list) or not isinstance(current.get('rows'),list)
-                or current['rows'][:len(previous['rows'])]!=previous['rows']):
+                or len(current['rows']) < len(previous['rows'])):
             raise ValueError('resident logical-family extension changed prior source row families')
+        prior_map_rows = previous['rows']
+        current_prefix = current['rows'][:len(prior_map_rows)]
+        if current_prefix != prior_map_rows:
+            if correction_decl is None:
+                raise ValueError('resident logical-family extension changed prior source row families')
+            changed = [index for index, (left_row, right_row) in enumerate(
+                zip(prior_map_rows, current_prefix, strict=True)) if left_row != right_row]
+            declaration = correction_decl
+            if len(changed) != 1:
+                raise ValueError('resident source correction changed more than its exact target-mask row')
+            index = changed[0]
+            before_row, after_row = prior_map_rows[index], current_prefix[index]
+            if (before_row.get('id') != declaration.get('graph_id')
+                    or after_row.get('id') != declaration.get('graph_id')
+                    or before_row.get('binding') != declaration.get('binding_before')
+                    or after_row.get('binding') != declaration.get('binding_after')
+                    or before_row.get('family') != after_row.get('family')):
+                raise ValueError('resident source correction changed an unrelated logical-family row')
         if (prior_train is None)!=(candidate_train is None):raise ValueError('resident logical-family source validation needs both sources')
         if prior_train is not None:
             load_map(old_map,prior_train);load_map(new_map,candidate_train)
@@ -174,12 +256,30 @@ def extension_policy(old, new, *, prior_train=None, candidate_train=None):
             or bc.get('active_source_count') != len({key[1] for key in actual})):
         raise ValueError('resident CE contract does not bind the complete appended source DAG')
     old_active = identities(ac.get('active_sources', []))
-    if not old_active.keys() <= declared.keys():
-        raise ValueError('resident CE contract removed prior active source custody')
+    missing_active = old_active.keys() - declared.keys()
+    if missing_active:
+        if correction_decl is None:
+            raise ValueError('resident CE contract removed prior active source custody')
+        old_leaf = correction_decl.get('source_leaf_before') or {}
+        new_leaf = correction_decl.get('source_leaf_after') or {}
+        expected_old = (str(Path(old_leaf.get('path', '')).resolve()), old_leaf.get('sha256'))
+        expected_new = (str(Path(new_leaf.get('path', '')).resolve()), new_leaf.get('sha256'))
+        old_matches = {key for key in missing_active if key == expected_old}
+        new_matches = {key for key in declared.keys() - old_active.keys() if key == expected_new}
+        if len(missing_active) != 1 or len(old_matches) != 1 or len(new_matches) != 1:
+            raise ValueError('resident CE correction does not replace exactly its reviewed source leaf')
     old_observations, new_observations = a.get('first_row_observations', []), b.get('first_row_observations', [])
-    if (not isinstance(old_observations, list) or not isinstance(new_observations, list)
-            or any(item not in new_observations for item in old_observations)):
-        raise ValueError('resident CE append removed a prior first-row observation')
+    if not isinstance(old_observations, list) or not isinstance(new_observations, list):
+        raise ValueError('resident CE first-row observations are malformed')
+    removed_observations = [item for item in old_observations if item not in new_observations]
+    if removed_observations:
+        if correction_decl is None:
+            raise ValueError('resident CE append removed a prior first-row observation')
+        old_leaf = correction_decl.get('source_leaf_before') or {}
+        if (len(removed_observations) != 1
+                or removed_observations[0].get('path') != old_leaf.get('path')
+                or removed_observations[0].get('sha256') != old_leaf.get('sha256')):
+            raise ValueError('resident CE correction removed an unrelated source observation')
     historical_observations = []
     for item in new_observations:
         if not isinstance(item, dict) or not isinstance(item.get('path'), str):
@@ -223,26 +323,38 @@ def extension_policy(old, new, *, prior_train=None, candidate_train=None):
         raise ValueError('resident CE prior inventory correction is not applicable')
     if historical_observations:
         # Preserve earlier observations only when the same bound quarantine
-        # proves each old leaf was replaced by an active successor leaf.
+        # or exact target-mask correction proves each old leaf was replaced.
         import json
-        if not isinstance(correction, dict) or not isinstance(correction.get('quality_receipt'), dict):
-            raise ValueError('resident CE historical observations lack their quarantine proof')
-        receipt = json.loads(checked(correction['quality_receipt']).read_text())
-        if (receipt.get('schema') != 'natlang.nested-semantic-child-quarantine-receipt/1'
-                or receipt.get('source_manifest_sha256') != correction.get('historical_source_sha256')
-                or receipt.get('successor_manifest_sha256') != correction.get('active_source_sha256')):
-            raise ValueError('resident CE historical observation quarantine identities differ')
-        replacements = receipt.get('source_replacements') or {}
-        for item in historical_observations:
-            replacement = replacements.get(item['path'])
-            if (item not in old_observations or not isinstance(replacement, dict)
-                    or replacement.get('source_sha256') != item.get('sha256')
-                    or (str(Path(replacement.get('successor_path', '')).resolve()),
-                        replacement.get('successor_sha256')) not in old_active
-                    or (str(Path(replacement.get('successor_path', '')).resolve()),
-                        replacement.get('successor_sha256')) not in declared):
-                raise ValueError('resident CE historical observation is not an authenticated active replacement')
-            checked(item)
+        if correction_decl is not None:
+            old_leaf = correction_decl.get('source_leaf_before') or {}
+            new_leaf = correction_decl.get('source_leaf_after') or {}
+            for item in historical_observations:
+                if (item not in old_observations
+                        or item.get('path') != old_leaf.get('path')
+                        or item.get('sha256') != old_leaf.get('sha256')
+                        or (str(Path(new_leaf.get('path', '')).resolve()),
+                            new_leaf.get('sha256')) not in declared):
+                    raise ValueError('resident CE historical observation is not the authenticated target-mask replacement')
+                checked(item)
+        else:
+            if not isinstance(correction, dict) or not isinstance(correction.get('quality_receipt'), dict):
+                raise ValueError('resident CE historical observations lack their quarantine proof')
+            receipt = json.loads(checked(correction['quality_receipt']).read_text())
+            if (receipt.get('schema') != 'natlang.nested-semantic-child-quarantine-receipt/1'
+                    or receipt.get('source_manifest_sha256') != correction.get('historical_source_sha256')
+                    or receipt.get('successor_manifest_sha256') != correction.get('active_source_sha256')):
+                raise ValueError('resident CE historical observation quarantine identities differ')
+            replacements = receipt.get('source_replacements') or {}
+            for item in historical_observations:
+                replacement = replacements.get(item['path'])
+                if (item not in old_observations or not isinstance(replacement, dict)
+                        or replacement.get('source_sha256') != item.get('sha256')
+                        or (str(Path(replacement.get('successor_path', '')).resolve()),
+                            replacement.get('successor_sha256')) not in old_active
+                        or (str(Path(replacement.get('successor_path', '')).resolve()),
+                            replacement.get('successor_sha256')) not in declared):
+                    raise ValueError('resident CE historical observation is not an authenticated active replacement')
+                checked(item)
     top_inventory = b.get('inventory')
     if top_inventory is not None and (len(top_inventory) != 1 or
             checked(top_inventory[0]) != checked(train) or top_inventory[0]['sha256'] != train['sha256']):

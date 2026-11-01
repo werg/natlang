@@ -7,6 +7,7 @@ corrected communication rows begin with fresh exposure debt.
 from __future__ import annotations
 
 import json
+import hashlib
 import math
 from pathlib import Path
 
@@ -232,6 +233,9 @@ def source_correction_dependencies(reference):
         {'path': str(path), 'sha256': digest, 'bytes': path.stat().st_size},
         {'path': str(rows_path), 'sha256': rows_sha, 'bytes': rows_path.stat().st_size},
     ]
+    target_mask = proof.get('target_mask_correction')
+    if target_mask is not None:
+        dependencies.extend(_validate_target_mask_correction(path, proof, target_mask))
     source_map_ref = proof.get('source_map')
     if source_map_ref is not None:
         source_map_path = _proof_file(path, source_map_ref.get('path', ''))
@@ -282,6 +286,133 @@ def source_correction_dependencies(reference):
                                      'bytes': dependency[0].stat().st_size})
                 seen.add(str(dependency[0]))
     return dependencies
+
+
+def _validate_target_mask_correction(proof_path, proof, declaration):
+    """Validate a same-ID ordinary graph correction against its exact mask build.
+
+    This transition permits only a reviewed zeroing of target weights in one
+    existing train row. It verifies that the source leaf is otherwise
+    unchanged, preserving row identity and forward tokens. Exposure is handled
+    separately by ``apply_source_correction`` and starts fresh for the changed
+    row while its previous visits remain in the correction history.
+    """
+    from ..common.jsonio import open_jsonl_text
+    from ..data.native_graph_quality import mask_exact_target_spans
+
+    if declaration.get('schema') != 'natlang.native-target-mask-correction/1':
+        raise ValueError('native target-mask correction schema differs')
+    treatment_ref = declaration.get('source_treatment') or {}
+    treatment_path = _proof_file(proof_path, treatment_ref.get('path', ''))
+    treatment_sha = sha256_file_hex_cached(treatment_path)
+    if (treatment_sha != treatment_ref.get('sha256')
+            or ('bytes' in treatment_ref and treatment_ref['bytes'] != treatment_path.stat().st_size)):
+        raise ValueError('native target-mask source-treatment receipt changed')
+    treatment = json.loads(treatment_path.read_text())
+    if treatment.get('schema') != 'natlang.native-target-mask-source-treatment/1':
+        raise ValueError('native target-mask source-treatment schema differs')
+
+    def checked_ref(value, label):
+        if not isinstance(value, dict) or not isinstance(value.get('path'), str):
+            raise ValueError(f'native target-mask {label} reference is malformed')
+        path = _proof_file(proof_path, value['path'])
+        digest = sha256_file_hex_cached(path)
+        if digest != value.get('sha256') or ('bytes' in value and path.stat().st_size != value['bytes']):
+            raise ValueError(f'native target-mask {label} changed')
+        return path, digest
+
+    review_path, review_sha = checked_ref(declaration.get('review'), 'review')
+    mask_path, mask_sha = checked_ref(declaration.get('mask_output'), 'masked graph')
+    review = json.loads(review_path.read_text())
+    mask_receipt = review.get('mask_receipt') or {}
+    graph_id = declaration.get('graph_id')
+    old_binding = declaration.get('binding_before')
+    new_binding = declaration.get('binding_after')
+    old_leaf = declaration.get('source_leaf_before') or {}
+    new_leaf = declaration.get('source_leaf_after') or {}
+    old_leaf_path = Path(old_leaf.get('path', '')).resolve(strict=True)
+    new_leaf_path = Path(new_leaf.get('path', '')).resolve(strict=True)
+    if (sha256_file_hex_cached(old_leaf_path) != old_leaf.get('sha256')
+            or sha256_file_hex_cached(new_leaf_path) != new_leaf.get('sha256')
+            or ('bytes' in old_leaf and old_leaf_path.stat().st_size != old_leaf['bytes'])
+            or ('bytes' in new_leaf and new_leaf_path.stat().st_size != new_leaf['bytes'])):
+        raise ValueError('native target-mask source leaf bytes changed')
+    treatment_old = treatment.get('source_leaf_before') or {}
+    treatment_new = treatment.get('source_leaf_after') or {}
+    if (not isinstance(graph_id, str) or not graph_id
+            or mask_receipt.get('id') != graph_id
+            or mask_receipt.get('binding_before') != old_binding
+            or mask_receipt.get('binding_after') != new_binding
+            or treatment.get('graph_id') != graph_id
+            or treatment.get('binding_before') != old_binding
+            or treatment.get('binding_after') != new_binding
+            or _binding(old_leaf) != _binding(treatment_old)
+            or _binding(new_leaf) != _binding(treatment_new)
+            or treatment.get('mask_review', {}).get('sha256') != review_sha
+            or treatment.get('mask_output', {}).get('sha256') != mask_sha
+            or _binding(treatment.get('original_manifest')) != _binding(proof.get('prior_source'))
+            or _binding(treatment.get('successor_manifest')) != _binding(proof.get('current_source'))
+            or review.get('source', {}).get('graph_file_sha256') != old_leaf.get('sha256')
+            or Path(review.get('source', {}).get('graph_file', '')).resolve() != old_leaf_path
+            or treatment.get('rows_before') != treatment.get('rows_after')
+            or treatment.get('changed_rows') != 1):
+        raise ValueError('native target-mask correction differs from its exact review or leaf transformation')
+
+    masked_rows = []
+    with open_jsonl_text(mask_path) as stream:
+        for line in stream:
+            if line.strip():
+                masked_rows.append(json.loads(line))
+    if len(masked_rows) != 1 or masked_rows[0].get('id') != graph_id:
+        raise ValueError('native target-mask artifact must contain exactly the reviewed graph')
+    before_rows = {}
+    with open_jsonl_text(old_leaf['path']) as stream:
+        for line in stream:
+            if line.strip():
+                row = json.loads(line)
+                if row.get('id') in before_rows:
+                    raise ValueError('native target-mask source leaf repeats a graph ID')
+                before_rows[row['id']] = row
+    after_rows = {}
+    with open_jsonl_text(new_leaf['path']) as stream:
+        for line in stream:
+            if line.strip():
+                row = json.loads(line)
+                if row.get('id') in after_rows:
+                    raise ValueError('native target-mask corrected leaf repeats a graph ID')
+                after_rows[row['id']] = row
+    if (len(before_rows) != treatment.get('rows_before')
+            or len(after_rows) != treatment.get('rows_after')
+            or before_rows.keys() != after_rows.keys()
+            or graph_id not in before_rows
+            or after_rows[graph_id] != masked_rows[0]
+            or sum(before_rows[key] != after_rows[key] for key in before_rows) != 1
+            or treatment.get('unchanged_rows') != len(before_rows) - 1):
+        raise ValueError('native target-mask source leaf contains changes outside the exact reviewed row')
+    target = before_rows[graph_id]
+    row_sha = lambda value: hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    if (target.get('split') != 'train' or target.get('tokenizer_fingerprint') != masked_rows[0].get('tokenizer_fingerprint')
+            or row_sha(target) != mask_receipt.get('row_sha256_before')
+            or row_sha(masked_rows[0]) != mask_receipt.get('row_sha256_after')):
+        raise ValueError('native target-mask source rows differ from the reviewed exact train row')
+    reviewed_spans = [{**span, 'expected_token_ids_sha256': span.get('token_ids_sha256')}
+                      for span in (mask_receipt.get('spans') or [])]
+    derived, derived_receipt = mask_exact_target_spans(target,
+        tokenizer_fingerprint=target['tokenizer_fingerprint'], expected_id=graph_id,
+        expected_binding=old_binding, spans=reviewed_spans)
+    if (derived != masked_rows[0] or derived_receipt.get('binding_after') != new_binding
+            or derived_receipt.get('row_sha256_before') != mask_receipt.get('row_sha256_before')
+            or derived_receipt.get('row_sha256_after') != mask_receipt.get('row_sha256_after')):
+        raise ValueError('native target-mask source transformation cannot be replayed exactly')
+    return [
+        {'path': str(treatment_path), 'sha256': treatment_sha, 'bytes': treatment_path.stat().st_size},
+        {'path': str(review_path), 'sha256': review_sha, 'bytes': review_path.stat().st_size},
+        {'path': str(mask_path), 'sha256': mask_sha, 'bytes': mask_path.stat().st_size},
+        {'path': str(Path(old_leaf['path']).resolve()), 'sha256': old_leaf['sha256'],
+         'bytes': Path(old_leaf['path']).stat().st_size},
+        {'path': str(Path(new_leaf['path']).resolve()), 'sha256': new_leaf['sha256'],
+         'bytes': Path(new_leaf['path']).stat().st_size},
+    ]
 
 
 def validate_held_correction_history(options, *, held_receipt):
@@ -513,7 +644,7 @@ def _propagate_held_correction_to_frames(progress, *, held, proof, proof_path,
 
 def _propagate_source_correction_to_carried_frames(progress, *, stage_id, prior_receipt,
         current_receipt, prior_bindings, current_bindings, current_order,
-        current_communication_ids, corrected, deferred, added, pending,
+        current_communication_ids, corrected, eligibility_decreased, deferred, added, pending,
         protected_held=None, proof=None, proof_path=None):
     """Rebind other saved SFT cursors that consumed the exact prior source.
 
@@ -546,7 +677,8 @@ def _propagate_source_correction_to_carried_frames(progress, *, stage_id, prior_
             raise ValueError('carried frame exposure inventory differs from corrected source: '+frame_id)
         options = dict(frame.get('options') or {})
         epochs = float(options.get('epochs', 1))
-        prior_frame_exposure = {key: int(counts.get(key, 0)) for key in corrected | deferred}
+        prior_frame_exposure = {key: int(counts.get(key, 0))
+                                for key in corrected | eligibility_decreased | deferred}
 
         # Current source order is authoritative. Preserve earned counts for
         # unchanged IDs, start corrected/new IDs at zero, and remove only the
@@ -580,13 +712,14 @@ def _propagate_source_correction_to_carried_frames(progress, *, stage_id, prior_
                 options[option_key] = [key for key in current_order if key in communication_ids]
         frame['options'] = options
 
-        if corrected or added or deferred:
+        if corrected or eligibility_decreased or added or deferred:
             frame['completed_foundations'] = []
         progress[frame_id] = frame
         transitions.append({'stage_id': frame_id,
             'prior_exposure': prior_frame_exposure,
             'weights_optimizer_rng': 'preserved',
             'corrected_rows_reexposed': sorted(corrected),
+            'eligibility_decreased_rows_exposure_preserved': sorted(eligibility_decreased),
             'deferred_rows': sorted(deferred),
             'new_rows_unexposed': sorted(added)})
     return transitions
@@ -599,10 +732,12 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
 
     The proof's JSONL row ledger has records with ``id``, ``old_binding``,
     ``new_binding``, ``old_source_sha256``, ``new_source_sha256`` and
-    ``disposition`` (``corrected``, ``deferred``, or ``added``). Corrected IDs
-    are stable; only their row bindings change. Deferred rows keep their old
-    bindings and visit debt in the pending ledger until a later correction
-    proof. Any unrelated appended rows are explicitly bound as ``added``.
+    ``disposition`` (``corrected``, ``eligibility-decreased``, ``deferred``,
+    or ``added``). Corrected communication IDs start fresh exposure. A reviewed
+    same-ID ordinary eligibility decrease preserves row position, exposure,
+    and required visits. Deferred rows keep their old bindings and visit debt
+    in the pending ledger until a later correction proof. Any unrelated
+    appended rows are explicitly bound as ``added``.
     """
     from ..common.jsonio import open_jsonl_text
 
@@ -674,7 +809,7 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
                 if not isinstance(row_id, str) or row_id in rows:
                     raise ValueError('source correction row ledger repeats or omits an id')
                 rows[row_id] = row
-    corrected, deferred, added = set(), set(), set()
+    corrected, eligibility_decreased, deferred, added = set(), set(), set(), set()
     changes = []
     counts = dict(training.get('exposure_counts') or {})
     quotas = dict(training.get('required_visits') or {})
@@ -688,6 +823,11 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
     current_communication = set(current_communication_ids)
     epochs = float(options.get('epochs', 1))
     current_positions = {row_id: index for index, row_id in enumerate(current_order)}
+    target_mask_correction = proof.get('target_mask_correction')
+    in_place_mask_ids = ({target_mask_correction['graph_id']}
+                         if isinstance(target_mask_correction, dict) else set())
+    if len(in_place_mask_ids) > 1:
+        raise ValueError('one source correction proof may mask only one ordinary graph in place')
     for row_id, row in rows.items():
         disposition = row.get('disposition')
         old = row.get('old_binding')
@@ -725,7 +865,8 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
                     raise ValueError('pending replacement lacks its exact pinned old row class: ' + row_id)
             if (row_id not in current_bindings or current_bindings[row_id] != new
                     or new_origins.get(row_id) != new_sha or not old_communication
-                    or row_id not in current_communication or old == new):
+                    or row_id not in current_communication
+                    or old == new):
                 raise ValueError('source correction replacement is not an exact changed communication row: ' + row_id)
             corrected.add(row_id)
             if row_id in pending:
@@ -735,6 +876,29 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
                 'old_source_sha256': old_sha, 'new_source_sha256': new_sha,
                 'prior_exposure': int(counts.get(row_id, 0)),
                 'prior_required_visits': int(quotas.get(row_id, 0)),
+            })
+        elif disposition == 'eligibility-decreased':
+            new = row.get('new_binding')
+            new_sha = row.get('new_source_sha256')
+            declaration = target_mask_correction
+            if (row_id not in in_place_mask_ids or declaration is None
+                    or active_old is None
+                    or row_id not in current_bindings or current_bindings[row_id] != new
+                    or new_origins.get(row_id) != new_sha
+                    or row_id in prior_communication or row_id in current_communication
+                    or declaration.get('binding_before') != old
+                    or declaration.get('binding_after') != new
+                    or declaration.get('source_leaf_before', {}).get('sha256') != old_sha
+                    or declaration.get('source_leaf_after', {}).get('sha256') != new_sha
+                    or old == new):
+                raise ValueError('eligibility decrease is not the exact reviewed ordinary target-mask row: ' + row_id)
+            eligibility_decreased.add(row_id)
+            changes.append({
+                'id': row_id, 'old_binding': old, 'new_binding': new,
+                'old_source_sha256': old_sha, 'new_source_sha256': new_sha,
+                'prior_exposure': int(counts.get(row_id, 0)),
+                'prior_required_visits': int(quotas.get(row_id, 0)),
+                'exposure_preserved': True,
             })
         elif disposition == 'deferred':
             if row_id in current_bindings or row.get('new_binding') is not None:
@@ -776,9 +940,9 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
     changed_active = {key for key, value in old_bindings.items()
                       if current_bindings.get(key) not in (None, value)}
     removed_active = set(old_bindings) - set(current_bindings)
-    corrected_active = corrected & set(old_bindings)
+    corrected_active = (corrected | eligibility_decreased) & set(old_bindings)
     deferred_active = deferred & set(old_bindings)
-    actual_added = set(current_bindings) - set(old_bindings) - corrected
+    actual_added = set(current_bindings) - set(old_bindings) - corrected - eligibility_decreased
     if (changed_active != corrected_active or removed_active != deferred_active
             or actual_added != added):
         raise ValueError('source correction ledger does not exactly cover changed/removed rows')
@@ -788,15 +952,16 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
     # replacement can be appended after the unchanged old-order prefix. The
     # row ledger binds those identities and prior exposure below; unchanged
     # earned rows still keep their exact positional prefix.
-    retained_order = [key for key in old_order if key not in deferred and key not in corrected]
+    retained_order = [key for key in old_order
+                      if key not in deferred and key not in ((corrected | eligibility_decreased) - in_place_mask_ids)]
     if current_order[:len(retained_order)] != retained_order:
         raise ValueError('source correction reordered earned rows or inserted before their prefix')
     if not set(current_bindings).issuperset(set(old_bindings) - deferred):
         raise ValueError('source correction removed an undeclared original row')
     if any(current_bindings[key] != old_bindings[key] for key in old_bindings
-           if key not in corrected and key not in deferred):
+           if key not in corrected and key not in eligibility_decreased and key not in deferred):
         raise ValueError('source correction changed an undeclared row binding')
-    if not corrected and not deferred:
+    if not corrected and not eligibility_decreased and not deferred:
         raise ValueError('source correction has neither a replacement nor an explicit deferred obligation')
 
     result = dict(training)
@@ -806,7 +971,7 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
     result['pending_source_rows'] = pending
     new_counts = dict(counts)
     new_quotas = dict(quotas)
-    for row_id in set(current_bindings) - set(old_bindings) - set(corrected):
+    for row_id in set(current_bindings) - set(old_bindings) - set(corrected) - set(eligibility_decreased):
         new_counts.setdefault(row_id, 0)
         new_quotas.setdefault(row_id, _fresh_quota(epochs, current_positions[row_id], len(current_order),
                                                     communication=row_id in current_communication))
@@ -827,11 +992,14 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
         'proof_path': str(path), 'proof_sha256': proof_sha,
         'model_id': model_id,
         'prior_source': prior_ref, 'current_source': current_ref,
-        'stage_id': stage_id, 'corrected_rows': changes,
+        'stage_id': stage_id,
+        'corrected_rows': [item for item in changes if not item.get('exposure_preserved')],
+        'eligibility_decreased_rows': [item for item in changes if item.get('exposure_preserved')],
         'deferred_rows': sorted(deferred), 'added_rows': sorted(added),
         'deferred_row_classes': {row_id:(pending.get(row_id) or {}).get('communication')
             for row_id in sorted(deferred)},
-        'old_target_exposure_retired': True,
+        'old_target_exposure_retired': bool(corrected),
+        'eligibility_decrease_preserves_exposure': sorted(eligibility_decreased),
         'optimizer_rng_weights': 'preserved',
         'at_global_step': int(training.get('global_step', training.get('step', 0))),
         'new_corrected_row_exposure_added': 0,
@@ -863,7 +1031,7 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
         frame['source_receipts'] = [current_source_receipt, *(frame.get('source_receipts') or [])[1:]]
         frame_counts = dict(frame.get('exposure_counts') or {})
         frame_quotas = dict(frame.get('required_visits') or {})
-        for row_id in set(current_bindings) - set(old_bindings) - set(corrected):
+        for row_id in set(current_bindings) - set(old_bindings) - set(corrected) - set(eligibility_decreased):
             frame_counts.setdefault(row_id, 0)
             frame_quotas.setdefault(row_id, _fresh_quota(epochs, current_positions[row_id], len(current_order),
                                                           communication=row_id in current_communication))
@@ -955,6 +1123,7 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
         current_receipt=current_source_receipt, prior_bindings=old_bindings,
         current_bindings=current_bindings, current_order=current_order,
         current_communication_ids=current_communication_ids, corrected=corrected,
+        eligibility_decreased=eligibility_decreased,
         deferred=deferred, added=added, pending=pending,
         protected_held=protected_held, proof=proof, proof_path=path)
     held_transitions = []
@@ -996,6 +1165,9 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
         result['options']['source_correction_history'][-1]['held_frame_transitions'] = held_transitions
     if protected_held_rows:
         record['protected_held_rows'] = protected_held_rows
-    return result, {'changed': True, 'proof_sha256': proof_sha,
-                    'corrected_rows': len(corrected), 'deferred_rows': len(deferred),
-                    'added_rows': len(added), 'protected_held_rows': protected_held_rows}
+    summary = {'changed': True, 'proof_sha256': proof_sha,
+               'corrected_rows': len(corrected), 'deferred_rows': len(deferred),
+               'added_rows': len(added), 'protected_held_rows': protected_held_rows}
+    if eligibility_decreased:
+        summary['eligibility_decreased_rows'] = len(eligibility_decreased)
+    return result, summary

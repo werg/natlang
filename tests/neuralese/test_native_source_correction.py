@@ -168,6 +168,96 @@ def test_corrected_rows_may_move_after_the_unchanged_earned_prefix(tmp_path):
     assert len(source_correction_dependencies({'path': str(proof), 'sha256': _sha(proof)})) == 2
 
 
+def test_same_id_ordinary_target_mask_preserves_row_exposure_and_topology(tmp_path):
+    from natlang_neuralese.data.native_graph_quality import mask_exact_target_spans
+    from natlang_neuralese.data.native_sources import NativeGraphSource
+
+    fingerprint = 'f' * 64
+    graph = {'schema': 'natlang.neuralese-native-graph/1', 'id': 'ordinary-mask',
+        'split': 'train', 'source_groups': ['mask-fixture'], 'tokenizer_fingerprint': fingerprint,
+        'nodes': [{'name': 'answer', 'token_ids': [11, 12, 13, 14],
+                   'target_weights': [0.0, 1.0, 1.0, 1.0]}]}
+    old_leaf = tmp_path / 'old.jsonl'
+    old_leaf.write_text(json.dumps(graph, sort_keys=True, separators=(',', ':')) + '\n')
+    old_source = NativeGraphSource(old_leaf, fingerprint, required_split='train')
+    old_binding = old_source.bindings[graph['id']]
+    import hashlib
+    token_hash = hashlib.sha256(json.dumps([12, 13], separators=(',', ':')).encode()).hexdigest()
+    masked, mask_receipt = mask_exact_target_spans(graph, tokenizer_fingerprint=fingerprint,
+        expected_id=graph['id'], expected_binding=old_binding,
+        spans=[{'node': 'answer', 'token_start': 1, 'token_stop': 3,
+                'expected_positive_tokens': 2, 'expected_token_ids_sha256': token_hash}])
+    new_leaf = tmp_path / 'corrected.jsonl'
+    new_leaf.write_text(json.dumps(masked, sort_keys=True, separators=(',', ':')) + '\n')
+    new_source = NativeGraphSource(new_leaf, fingerprint, required_split='train')
+    new_binding = new_source.bindings[graph['id']]
+    masked_path = tmp_path / 'mask.jsonl'
+    masked_path.write_text(json.dumps(masked, sort_keys=True, separators=(',', ':')) + '\n')
+    review_path = tmp_path / 'review.json'
+    review = {'mask_receipt': mask_receipt,
+        'source': {'graph_file': str(old_leaf.resolve()), 'graph_file_sha256': _sha(old_leaf)}}
+    review_path.write_text(json.dumps(review, sort_keys=True))
+    leaf_before = {'path': str(old_leaf.resolve()), 'sha256': _sha(old_leaf), 'bytes': old_leaf.stat().st_size}
+    leaf_after = {'path': str(new_leaf.resolve()), 'sha256': _sha(new_leaf), 'bytes': new_leaf.stat().st_size}
+    treatment_path = tmp_path / 'treatment.json'
+    treatment = {'schema': 'natlang.native-target-mask-source-treatment/1',
+        'source_leaf_before': leaf_before, 'source_leaf_after': leaf_after,
+        'original_manifest': {'path': str(old_leaf.resolve()), 'sha256': _sha(old_leaf)},
+        'successor_manifest': {'path': str(new_leaf.resolve()), 'sha256': _sha(new_leaf)},
+        'graph_id': graph['id'], 'binding_before': old_binding, 'binding_after': new_binding,
+        'mask_review': {'path': str(review_path.resolve()), 'sha256': _sha(review_path)},
+        'mask_output': {'path': str(masked_path.resolve()), 'sha256': _sha(masked_path)},
+        'rows_before': 1, 'rows_after': 1, 'unchanged_rows': 0, 'changed_rows': 1}
+    treatment_path.write_text(json.dumps(treatment, sort_keys=True))
+
+    prior = {'path': str(old_leaf.resolve()), 'sha256': _sha(old_leaf), 'rows': 1,
+        'sources': [{'path': str(old_leaf.resolve()), 'sha256': _sha(old_leaf), 'rows': 1,
+                    'id': graph['id']}]}
+    current = {'path': str(new_leaf.resolve()), 'sha256': _sha(new_leaf), 'rows': 1,
+        'sources': [{'path': str(new_leaf.resolve()), 'sha256': _sha(new_leaf), 'rows': 1,
+                    'id': graph['id']}]}
+    ledger = tmp_path / 'rows.jsonl'
+    ledger.write_text(json.dumps({'id': graph['id'], 'old_binding': old_binding,
+        'new_binding': new_binding, 'old_source_sha256': _sha(old_leaf),
+        'new_source_sha256': _sha(new_leaf), 'disposition': 'eligibility-decreased',
+        'old_communication': False}) + '\n')
+    proof_path = tmp_path / 'correction.json'
+    proof = {'schema': SCHEMA, 'model_id': 'lfm3:' + 'a' * 64,
+        'stage_id': 'native_joint_sft_v4', 'prior_source': prior, 'current_source': current,
+        'row_bindings_path': ledger.name, 'row_bindings_sha256': _sha(ledger),
+        'target_mask_correction': {'schema': 'natlang.native-target-mask-correction/1',
+            'graph_id': graph['id'], 'binding_before': old_binding, 'binding_after': new_binding,
+            'source_leaf_before': leaf_before, 'source_leaf_after': leaf_after,
+            'source_treatment': {'path': treatment_path.name, 'sha256': _sha(treatment_path)},
+            'review': {'path': review_path.name, 'sha256': _sha(review_path)},
+            'mask_output': {'path': masked_path.name, 'sha256': _sha(masked_path)}}}
+    proof_path.write_text(json.dumps(proof, sort_keys=True))
+    frame = {'source_receipts': [prior], 'source_row_bindings': {graph['id']: old_binding},
+        'source_row_order': [graph['id']], 'exposure_counts': {graph['id']: 3},
+        'required_visits': {graph['id']: 7}, 'options': {'epochs': 2, '_communication_ids': []},
+        'global_step': 12, 'optimizer': {'state': 'kept'}, 'rng': {'state': 'kept'},
+        'weights': {'state': 'kept'}, 'completed_foundations': []}
+    result, summary = apply_source_correction(frame, proof_path,
+        model_id='lfm3:' + 'a' * 64, stage_id='native_joint_sft_v4',
+        current_source_receipt=current, current_bindings={graph['id']: new_binding},
+        current_order=[graph['id']], current_communication_ids=[])
+    assert summary['eligibility_decreased_rows'] == 1
+    assert result['source_row_order'] == [graph['id']]
+    assert result['source_row_bindings'][graph['id']] == new_binding
+    assert result['exposure_counts'][graph['id']] == 3
+    assert result['required_visits'][graph['id']] == 7
+    assert result['optimizer'] is frame['optimizer'] and result['rng'] is frame['rng']
+    assert result['weights'] is frame['weights'] and result['global_step'] == 12
+    assert source_correction_dependencies({'path': str(proof_path), 'sha256': _sha(proof_path)})
+
+    tampered = copy.deepcopy(proof)
+    tampered['target_mask_correction']['binding_after'] = '0' * 64
+    tampered_path = tmp_path / 'tampered-correction.json'
+    tampered_path.write_text(json.dumps(tampered, sort_keys=True))
+    with pytest.raises(ValueError, match='exact review|exact train row|replayed exactly'):
+        source_correction_dependencies({'path': str(tampered_path), 'sha256': _sha(tampered_path)})
+
+
 def test_pending_row_can_be_corrected_later_without_losing_original_debt(tmp_path):
     import torch
 
