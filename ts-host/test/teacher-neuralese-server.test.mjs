@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { mkdtemp, mkdir, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -84,7 +84,7 @@ test('interrupted collector replays a sampled guided decision without another re
   } finally { await new Promise(resolve => server.close(resolve)); await rm(directory,{recursive:true,force:true}); }
 });
 
-for (const missingOnReplay of [false, true]) test(`interrupted collector hydrates exact saved native writes before replay (missing=${missingOnReplay})`, async () => {
+for (const {missingOnReplay,namedChild} of [{missingOnReplay:false,namedChild:false},{missingOnReplay:true,namedChild:false},{missingOnReplay:false,namedChild:true}]) test(`interrupted collector hydrates exact saved native writes before replay (missing=${missingOnReplay}, named=${namedChild})`, async () => {
   const directory = await mkdtemp(join(tmpdir(), 'native-replay-custody-'));
   const remote = new MemoryNeuraleseStore();
   const block = await remote.putNativeState(nativeStateFixture());
@@ -93,7 +93,7 @@ for (const missingOnReplay of [false, true]) test(`interrupted collector hydrate
   const sampling = { schema: 'natlang.native-rl-sampling/1', fixture: 'exact-retained-receipt',
     prompt: [{ kind: 'native_state', id: rawBlock.id, source_state_id: rawBlock.id }],
     writes: [{ state_id: block.id, raw_state_id: rawBlock.id }] };
-  const rootCode = 'const seed: Neuralese<string> = await nl<Neuralese<string>>`Write a note.`();\n' +
+  const rootCode = (namedChild ? 'const seed: Neuralese<string> = await check_assumption();\n' : 'const seed: Neuralese<string> = await nl<Neuralese<string>>`Write a note.`();\n') +
     'const reader: Neuralese<(prior: Neuralese<string>) => Promise<string>> = nl.with<string>({})`Read the note and answer ok.`;\n' +
     'return await reader(seed);';
   const requests = [], gets = [];
@@ -130,6 +130,7 @@ for (const missingOnReplay of [false, true]) test(`interrupted collector hydrate
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   try {
     const project = definitionProject('valueflow', { returns: 'string', instructions: 'Pass a note to the reader.' });
+    if (namedChild) project.files['valueflow/check_assumption.nl']='---\nargs: {}\nreturns: Neuralese<string>\n---\nWrite a note.\n';
     const record = { version: 'natlang.program/2', id: 'retained-native-value-flow', kind: 'lambda_source', source: 'test',
       split: 'train', source_ids: ['retained-native-value-flow'], source_groups: ['test:retained-native-flow'], license: 'test',
       semantics: { root: project.root, files: project.files, inputs: {}, expected: 'ok', operation: 'exact' } };
@@ -142,6 +143,17 @@ for (const missingOnReplay of [false, true]) test(`interrupted collector hydrate
     const first = await collectBatch([{ index: 0, record }], config, nativeJobRunner(config), interruptedRun.signal);
     assert.equal(interrupted, true, 'fixture really interrupted after the producer response was saved');
     assert.deepEqual(first.missing, [0], 'aborted first collector leaves its saved prefix unfinished');
+    const partialName=(await readdir(config.jobs)).find(name=>name.endsWith('.partial.json'));
+    const partial=JSON.parse(await readFile(join(config.jobs,partialName),'utf8'));
+    const producer=partial.turns.find(turn=>turn.response?.raw_response?.x_natlang_rl_capture);
+    assert.ok(producer, 'the interrupted journal retains the actual child sampler receipt');
+    assert.notEqual(producer.invocation_id,partial.turns[0].invocation_id);
+    assert.deepEqual(producer.response.raw_response.x_natlang_rl_capture,sampling);
+    const snapshot=partial.evidence_snapshots.at(-1);
+    const evidence=(await readFile(join(config.jobs,snapshot.path),'utf8')).trim().split('\n').map(JSON.parse);
+    assert.ok(evidence.some(item=>item.payload.kind==='provider_exchange' &&
+      item.payload.invocation_id===producer.invocation_id && item.payload.response?.raw_response?.x_natlang_rl_capture),
+      'the child provider exchange is durably recorded before interruption');
     const beforeReplay = gets.length;
     const result = await collectBatch([{ index: 0, record }], config, nativeJobRunner(config));
     assert.equal(result.completed, missingOnReplay ? 0 : 1, JSON.stringify({ result, gets, beforeReplay, requests: requests.length }));

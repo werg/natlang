@@ -8,17 +8,19 @@ test('standalone collector retains a nested native writer for its parent model t
   const store=new MemoryNeuraleseStore();
   const neuralese={store,port:createNativeStateFixturePort(store),dialect:'native-state/fixture'};
   const record={version:'natlang.program/2',id:'collector-parent-scope',kind:'lambda_source',split:'train',
-    semantics:{root:'solve.nl',files:{'solve.nl':'---\nargs: {}\nreturns: string\n---\nCall a child to write a memo, then finish.\n'},inputs:{},expected:'done'}};
-  let index=0;
-  const driver=Object.assign(async()=>{
-    index++;
-    if(index===1)return {calls:[['eval',{code:'const memo = await nl<Neuralese<string>>`Write a concise memo.`(); memo;',finish:false}]]};
+    semantics:{root:'solve.nl',files:{'solve.nl':'---\nargs: {}\nreturns: string\n---\nCall check_assumption to write a memo, then finish.\n', 'solve/check_assumption.nl':'---\nargs: {}\nreturns: Neuralese<string>\n---\nWrite a concise memo.\n'},inputs:{},expected:'done'}};
+  let index=0; const requests=[];
+  const driver=Object.assign(async(request)=>{
+    requests.push(request); index++;
+    if(index===1)return {calls:[['eval',{code:'const memo = await check_assumption(); memo;',finish:false}]]};
     if(index===2)return {calls:[['return_result',{status:'success',value:'child memo'}]]};
     return {calls:[['return_result',{status:'success',value:'done'}]]};
   },{neuralese:true});
   const result=await executeProgram(record,driver,{systemPrompt:'Use the provided tools.',contextTokens:8192,
     maxTurns:8,rootSeed:19,runId:'collector-parent-scope-run',neuralese});
   assert.equal(result.outcome.accepted,true);
+  assert.equal(requests.length,3);
+  assert.notEqual(requests[1].invocation_id,requests[0].invocation_id,'nested provider turn uses the instrumented collector driver');
   const graph=result.outcome.execution_graph;
   const writer=graph.find(event=>event.kind==='block_write'&&event.format==='native-state');
   const read=graph.find(event=>event.kind==='block_read'&&event.block===writer?.block);
