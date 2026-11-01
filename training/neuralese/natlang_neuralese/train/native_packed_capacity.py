@@ -480,18 +480,25 @@ def serialize_oversize_capacity_frontier(frontier):
 
 def _find_oversize_envelope(frontier, candidate_groups, *, execution_identity, precision,
                             effective_layout, current_memory):
-    choices=[]
-    for entry in frontier or ():
-        record=entry['record'];case=entry['case'];measured=entry['group']
-        if not _profile_shape_compatible(record,execution_identity=execution_identity,
-                precision=precision,effective_layout=effective_layout,current_memory=current_memory):
-            continue
-        if not _incremental_headroom_covers(case,current_memory):continue
-        if all(_one_group_dominates(measured,candidate) for candidate in candidate_groups):
-            choices.append((measured['forward_tokens']+measured['kv_slots'],entry))
-    if not choices:return None
-    entry=min(choices,key=lambda item:item[0])[1]
-    return entry['proof'],entry['record'],entry['case'],entry['group']
+    # Microbatches execute sequentially. Each must be covered by one complete
+    # measured case; different microbatches may use different measured cases.
+    # Never construct an artificial envelope from independent maxima.
+    matches=[]
+    for candidate in candidate_groups:
+        choices=[]
+        for entry in frontier or ():
+            record=entry['record'];case=entry['case'];measured=entry['group']
+            if not _profile_shape_compatible(record,execution_identity=execution_identity,
+                    precision=precision,effective_layout=effective_layout,current_memory=current_memory):
+                continue
+            if not _incremental_headroom_covers(case,current_memory):continue
+            if _one_group_dominates(measured,candidate):
+                choices.append((measured['forward_tokens']+measured['kv_slots'],entry))
+        if not choices:return None
+        entry=min(choices,key=lambda item:item[0])[1]
+        matches.append((entry['proof'],entry['record'],entry['case'],entry['group']))
+    return matches or None
+
 
 
 def record_oversize_envelope_reuse(args, *, match, candidate_groups, source_path,
@@ -500,7 +507,12 @@ def record_oversize_envelope_reuse(args, *, match, candidate_groups, source_path
     from ..common.hashing import canonical_json_sha256_hex
     from ..common.jsonio import write_json_durable
     from .native_resident import binding
-    source_reference,source_record,source_case,measured=match
+    source_reference,source_record,source_case,measured=match[0]
+    assert len(match)==len(candidate_groups)
+    case_matches=[{'candidate_group':candidate,'envelope_source':ref,
+        'envelope_source_global_step':record['global_step'],'measured_group':group,
+        'measured_case_id':case.get('id')}
+        for candidate,(ref,record,case,group) in zip(candidate_groups,match,strict=True)]
     reuse={'schema':'natlang.native-oversize-capacity-envelope-reuse/1',
         'global_step':global_step,'parent_checkpoint_sha256':checkpoint_sha256,
         'source':binding(source_path),'execution_identity':execution_identity,
@@ -510,8 +522,9 @@ def record_oversize_envelope_reuse(args, *, match, candidate_groups, source_path
         'memory_context':current_memory,'candidate_groups':candidate_groups,
         'envelope_source':source_reference,'envelope_source_global_step':source_record['global_step'],
         'measured_group':measured,'measured_case_id':source_case.get('id'),
+        'case_matches':case_matches,
         'passed':True,'optimizer_updates':0,'earned_exposure':0,
-        'scope':'candidate is bounded componentwise by one complete measured group; no independent maxima combined'}
+        'scope':'candidate is bounded componentwise by one complete measured group per sequential microbatch; no independent maxima combined'}
     path=Path(args.out)/'oversize-capacity-reuse'/(canonical_json_sha256_hex(reuse)+'.json')
     path.parent.mkdir(parents=True,exist_ok=True)
     if not path.exists():write_json_durable(path,reuse)

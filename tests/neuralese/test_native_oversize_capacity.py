@@ -429,3 +429,45 @@ def test_known_envelope_skips_async_drain_but_unknown_execution_drains(tmp_path,
         {'forward_tokens':10,'kv_slots':10},frontier=history,execution_identity={'sha256':'different'},
         precision=None,backend=None)
     assert oversized and match is None and policy.drains==1
+
+
+def test_sequential_oversize_groups_each_reuse_own_complete_measured_case():
+    from natlang_neuralese.train.native_packed_capacity import _find_oversize_envelope
+    identity={'sha256':'a'}
+    layout={'share_causal_prefixes':True,'allow_communication_prefixes':True}
+    memory={'device_type':'cpu','total_bytes':None,'host_available_bytes':8 << 30}
+    def group(spec):
+        graphs=[{'id':str(i),'forward_tokens':t,'kv_slots':k} for i,(t,k) in enumerate(spec)]
+        return {'graphs':graphs,'forward_tokens':sum(t for t,k in spec),
+                'kv_slots':sum(k for t,k in spec),'graph_count':len(spec)}
+    def entry(name,shape):
+        return {'proof':{'path':name,'sha256':'x'},'record':{'execution_identity':identity,
+            'effective_layout':layout,'memory_context':memory,'global_step':1,
+            'capacity':{'qat_point':None}},'group':group(shape),
+            'case':{'id':name,'host_incremental_peak_bytes':0}}
+    frontier=[entry('single',[(300,310)]),entry('pair',[(60,70),(60,70)])]
+    args=dict(execution_identity=identity,precision=None,effective_layout=layout,current_memory=memory)
+    result=_find_oversize_envelope(frontier,[group([(200,210)]),group([(50,60),(50,60)])],**args)
+    assert [entry[0]['path'] for entry in result]==['single','pair']
+    # No individual measured pair covers these shapes: do not combine maxima
+    # from different cases, and do not treat a single graph as two graphs.
+    assert _find_oversize_envelope(frontier,[group([(75,80),(75,80)])],**args) is None
+    assert _find_oversize_envelope(frontier,[group([(200,210)])],**{**args,'execution_identity':{'sha256':'other'}}) is None
+
+
+def test_multi_envelope_receipt_binds_every_sequential_case(tmp_path):
+    from natlang_neuralese.train.native_packed_capacity import record_oversize_envelope_reuse
+    source=tmp_path/'source';source.write_text('source')
+    groups=[{'graphs':[{'id':'a','forward_tokens':2,'kv_slots':2}],
+             'forward_tokens':2,'kv_slots':2,'graph_count':1},
+            {'graphs':[{'id':'b','forward_tokens':4,'kv_slots':4}],
+             'forward_tokens':4,'kv_slots':4,'graph_count':1}]
+    matches=[({'path':str(tmp_path/'p1'),'sha256':'1'}, {'global_step':4}, {'id':'case1'}, groups[0]),
+             ({'path':str(tmp_path/'p2'),'sha256':'2'}, {'global_step':5}, {'id':'case2'}, groups[1])]
+    ref=record_oversize_envelope_reuse(SimpleNamespace(out=tmp_path),match=matches,
+        candidate_groups=groups,source_path=source,execution_identity={'sha256':'a'},
+        precision=None,effective_layout={},current_memory={},checkpoint_sha256='b',global_step=6)
+    record=json.loads(open(ref['path']).read())
+    assert [x['measured_case_id'] for x in record['case_matches']]==['case1','case2']
+    assert [x['envelope_source']['sha256'] for x in record['case_matches']]==['1','2']
+    assert [x['candidate_group'] for x in record['case_matches']]==groups
