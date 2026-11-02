@@ -153,3 +153,19 @@ def test_cuda_rowwise_norm_bounds_output_peak_and_preserves_exact_adjoints(weigh
         new_peak = torch.cuda.max_memory_allocated() - before
         assert torch.equal(result.cpu(), expected_cpu)
         assert new_peak <= old_peak - output_bytes // 2
+
+
+def test_preallocated_norm_input_adjoint_retains_concatenated_layout(monkeypatch):
+    from natlang_neuralese.model.native_parameter_precision import _RowwiseNormAdjoint
+    monkeypatch.setattr(torch.Tensor, 'is_cuda', property(lambda _: True))
+    layer = Lfm3RMSNorm()
+    x = torch.randn(8, 1025, dtype=torch.bfloat16).t().detach().requires_grad_(True)
+    assert not x.is_contiguous()
+    incoming = torch.randn_like(x)
+    output = _RowwiseNormAdjoint.apply(x, layer.weight, layer.forward)
+    dx, dw = torch.autograd.grad(output, (x, layer.weight), incoming)
+    expected = concatenated_norm_reference(layer.forward, x)
+    ref_dx, ref_dw = torch.autograd.grad(expected, (x, layer.weight), incoming)
+    assert dx.is_contiguous()
+    for a, b in ((output, expected), (dx, ref_dx), (dw, ref_dw)):
+        assert torch.equal(a, b)

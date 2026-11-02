@@ -106,7 +106,8 @@ class _RowwiseNormAdjoint(torch.autograd.Function):
             return dx, dweight, None
         rows = x.reshape(-1, x.shape[-1])
         grads = gradient.reshape(-1, gradient.shape[-1])
-        dx = torch.empty_like(rows)
+        # cat returned contiguous rows even when its input slices were strided.
+        dx = rows.new_empty(rows.shape)
         dweight = None
         # Autograd visits concatenated pieces in reverse creation order.
         for start in reversed(range(0, rows.shape[0], 128)):
