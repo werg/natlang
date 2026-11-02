@@ -3264,11 +3264,22 @@ def _main(argv=None, *, requested_refresh):
         from ..eval.native_memory import run_prepared
         memory_check = run_prepared(model,optimizer,train,roles,config,args,backend=backend,objective=objective,
             checkpoint_sha256=sha256_file_hex_cached(args.continue_from if parent_continuation else policy.slot)
-                if parent_continuation or policy.slot.exists() else config['base_inventory_sha256'])
+                if parent_continuation or policy.slot.exists() else config['base_inventory_sha256'],
+            prior_proofs=(((resume or {}).get('options') or {}).get('memory_qualification') or {}).get('measured_proofs', ()))
         if not args.resident_geometry_qualification:
             raise ValueError('explicit memory qualification produced no usable physical capacity certificate')
+        from .native_resident import binding as capacity_proof_binding
+        capacity_checks = memory_check.get('checks', [memory_check])
+        measured_proofs = []
+        for check in capacity_checks:
+            if not check.get('passed') or not check.get('request') or not check.get('parent_checkpoint_sha256'):
+                continue
+            reuse = check.get('capacity_reuse')
+            measured_proofs.append(reuse['measured_proof'] if reuse else capacity_proof_binding(
+                args.out/'memory-qualifications'/check['request']['sha256']/check['parent_checkpoint_sha256']/'proof.json'))
         checkpoint_options['memory_qualification'] = {'passed':memory_check['passed'],
-            'request':memory_check['request'],'parent_checkpoint_sha256':memory_check['parent_checkpoint_sha256']}
+            'request':memory_check['request'],'parent_checkpoint_sha256':memory_check['parent_checkpoint_sha256'],
+            'measured_proofs':measured_proofs}
         checkpoint_options['checkpoint_input_offload'] = args.checkpoint_input_offload
         checkpoint_options['checkpoint_input_offload_directory'] = args.checkpoint_input_offload_directory
         checkpoint_options['resident_geometry_qualification'] = (str(args.resident_geometry_qualification)

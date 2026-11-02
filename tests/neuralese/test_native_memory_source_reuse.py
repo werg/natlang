@@ -111,3 +111,68 @@ def test_loaded_source_cannot_be_reinterpreted_for_another_contract(tmp_path, mo
         memory.run_prepared(model, optimizer, train, roles, config, args,
                             backend=None, checkpoint_sha256='a'*64)
     assert not list(args.out.rglob('proof.json'))
+
+
+def test_dense_continuation_reuses_authenticated_measurement_after_fresh_parity(tmp_path, monkeypatch):
+    from natlang_neuralese.train import native_packed_capacity as packed
+    model, optimizer, train, roles, config, args, request_path = active_request(tmp_path, monkeypatch)
+    config = {**config, 'architecture': 'lfm3'}
+    request = json.loads(request_path.read_text())
+    request['identity'] = memory.capacity_identity(config, args, None)
+    request_path.write_text(json.dumps(request))
+    args.memory_qualification = json.dumps(resident.binding(request_path))
+    monkeypatch.setattr(memory, '_dense_capacity_reuse_supported', lambda *a: True)
+    identity = {'execution': 'dense', 'optimizer': packed.optimizer_shape_identity(model, optimizer)}
+    monkeypatch.setattr(packed, 'oversize_execution_identity', lambda *a, **kw: identity)
+    monkeypatch.setattr(packed, '_capacity_memory_context', lambda device: {'device_type':'cpu', 'host_available_bytes': 1 << 40})
+    monkeypatch.setattr(packed, '_incremental_headroom_covers', lambda row, context: True)
+    first = memory.run_prepared(model, optimizer, train, roles, config, args,
+                                backend=None, checkpoint_sha256='a'*64)
+    proof = resident.binding(args.out/'memory-qualifications'/first['request']['sha256']/('a'*64)/'proof.json')
+    calls = []
+    monkeypatch.setattr(memory, 'qualify_capacity', lambda *a, **kw: pytest.fail('full graph was repeated'))
+    monkeypatch.setattr(memory, 'offload_numerical_parity', lambda *a, **kw: (calls.append('parity'), {'passed':True})[1])
+    second = memory.run_prepared(model, optimizer, train, roles, config, args,
+                                 backend=None, checkpoint_sha256='b'*64, prior_proofs=[proof])
+    assert calls == ['parity']
+    assert second['passed'] and second['capacity_reuse']['measured_proof'] == proof
+    assert second['capacity']['parent_checkpoint_sha256'] == 'a'*64
+    assert second['parent_checkpoint_sha256'] == 'b'*64
+
+    # A changed proof cannot authorize another continuation.
+    Path(proof['path']).write_text('{}')
+    measured = []
+    def remeasure(*a, **kw):
+        measured.append(True)
+        return first['capacity']
+    monkeypatch.setattr(memory, 'qualify_capacity', remeasure)
+    third = memory.run_prepared(model, optimizer, train, roles, config, args,
+                                backend=None, checkpoint_sha256='c'*64, prior_proofs=[proof])
+    assert third['passed'] and measured == [True] and not third.get('capacity_reuse')
+
+
+def test_optimizer_shape_identity_tracks_state_and_parameter_partition():
+    from natlang_neuralese.train.native_packed_capacity import optimizer_shape_identity
+    from natlang_neuralese.model.shared_state import SharedStateModel
+    from test_shared_state import tiny
+    model = SharedStateModel(tiny('lfm'), (58,59,60,61), rank=4)
+    optimizer = torch.optim.Adam(model.parameters())
+    before = optimizer_shape_identity(model, optimizer)
+    parameter = next(model.parameters())
+    optimizer.state[parameter]['moment'] = torch.zeros_like(parameter)
+    after = optimizer_shape_identity(model, optimizer)
+    assert before != after
+    optimizer.state[parameter]['moment'].fill_(3)
+    assert optimizer_shape_identity(model, optimizer) == after
+
+
+def test_file_scratch_reuse_requires_measured_peak_and_storage_headroom(tmp_path, monkeypatch):
+    from natlang_neuralese.train import checkpoint_safety
+    import shutil
+    monkeypatch.setattr(checkpoint_safety, 'checkpoint_minimum_free_bytes', lambda path: 100)
+    monkeypatch.setattr(shutil, 'disk_usage', lambda path: type('Space', (), {'free': 2 << 30})())
+    assert not memory._scratch_headroom_covers([{}], str(tmp_path))
+    cases = [{'checkpoint_input_offload': {'peak_live_bytes': 1 << 20}}]
+    assert memory._scratch_headroom_covers(cases, str(tmp_path))
+    monkeypatch.setattr(shutil, 'disk_usage', lambda path: type('Space', (), {'free': 1000})())
+    assert not memory._scratch_headroom_covers(cases, str(tmp_path))

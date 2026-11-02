@@ -337,6 +337,9 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
                 row['cuda_start_reserved_bytes']=cuda_start_reserved
                 row['cuda_peak_includes_preexisting_allocations']=True
                 row['host_after']=_host_memory()
+                hook=getattr(model.port,'activation_checkpoint',None)
+                if callable(getattr(hook,'snapshot',None)):
+                    row['checkpoint_input_offload']=hook.snapshot()
                 host_stats=getattr(torch.cuda.memory,'host_memory_stats',None)
                 row['pinned_host_allocator'] = ({key:value for key,value in host_stats().items()
                     if key in {'allocated_bytes.current','allocated_bytes.peak','active_bytes.current','active_bytes.peak'}}
@@ -506,7 +509,32 @@ def capacity_identity(config,args,backend):
                'input_gradient_precision':getattr(backend,'input_gradient_precision',None)}}
 
 
-def _run_one_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoint_sha256,objective=None,reference_reuse=None,index_validation=None):
+def _dense_capacity_reuse_supported(model, config, objective):
+    from ..model.lfm3_port import Lfm3PortBackbone
+    return (objective is None and config.get('architecture') == 'lfm3'
+            and type(model.port) is Lfm3PortBackbone
+            and getattr(model.port.config, 'model_type', None) == 'lfm3'
+            and not any(getattr(module, 'experts', None) is not None for module in model.modules()))
+
+
+def _scratch_headroom_covers(cases, directory):
+    if not directory:
+        return True
+    import shutil
+    from ..train.checkpoint_safety import checkpoint_minimum_free_bytes
+    peaks = [(case.get('checkpoint_input_offload') or {}).get('peak_live_bytes') for case in cases]
+    if any(type(peak) is not int or peak < 0 for peak in peaks):
+        return False
+    try:
+        free = shutil.disk_usage(directory).free
+        floor = checkpoint_minimum_free_bytes(Path(directory)/'tensor.bin')
+        needed = max(peaks)
+        return free >= floor + needed + max(1 << 30, (needed + 3)//4)
+    except (OSError, ValueError):
+        return False
+
+
+def _run_one_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoint_sha256,objective=None,reference_reuse=None,index_validation=None,prior_proofs=()):
     """Called once at the normal restore boundary, before any new optimizer step.
 
     Failed novel source checks cannot stop useful SGD on the existing source.
@@ -589,6 +617,44 @@ def _run_one_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoi
         if any(row['id'] in train.bindings for row in selected):
             raise ValueError('active source still has a failed whole-graph memory qualification')
         return previous
+    # Only the dense LFM3 implementation is known to have weight-independent
+    # allocation geometry. All other architectures must measure their graphs.
+    from ..train.native_packed_capacity import (oversize_execution_identity,
+        _capacity_memory_context, _incremental_headroom_covers)
+    execution = None
+    if _dense_capacity_reuse_supported(model, config, objective):
+        execution = oversize_execution_identity(model, optimizer, args=args, backend=backend,
+                                                 objective_binding=None)
+    current_memory = _capacity_memory_context(next(model.parameters()).device)
+    prior_capacity = None
+    if execution is not None:
+        for reference in prior_proofs:
+            try:
+                prior_path = bound(reference)
+                previous = json.loads(prior_path.read_text())
+                capacity = previous.get('capacity') or {}
+                if (previous.get('passed') is not True or previous.get('request') != result['request']
+                        or previous.get('identity') != identity or previous.get('runtime_code_sha256') != code_sha
+                        or previous.get('capacity_execution_identity') != execution
+                        or previous.get('capacity_reuse') is not None
+                        or capacity.get('passed') is not True or capacity.get('whole_graphs') is not True
+                        or capacity.get('optimizer_updates') != 0
+                        or capacity.get('parent_checkpoint_sha256') != previous.get('parent_checkpoint_sha256')
+                        or capacity.get('source') != request['source']
+                        or capacity.get('retained_accumulation_gradients') != (getattr(args,'accumulate_batches',1)>1)
+                        or capacity.get('cotangent_mode') != _cotangent_mode(args)
+                        or [row.get('id') for row in capacity.get('cases', [])] != [row['id'] for row in selected]
+                        or len(capacity.get('cases') or []) != len(selected)
+                        or not _scratch_headroom_covers(capacity.get('cases') or [], getattr(args,'checkpoint_input_offload_directory',None))
+                        or any(row.get('status') != 'passed' or not _incremental_headroom_covers(row,current_memory)
+                               for row in capacity['cases'])):
+                    continue
+                prior_capacity = (reference, previous)
+                break
+            except (OSError, ValueError, KeyError, TypeError):
+                continue
+    result['capacity_execution_identity'] = execution
+    result['capacity_memory_context'] = current_memory
     try:
         def measure_reference():
             example=next(train.iter_indices([ref_index]))
@@ -608,10 +674,27 @@ def _run_one_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoi
                 invocation,model=model,optimizer=optimizer,backend=backend,
                 request=result['request'],operation=measure_reference)
         if result['numerical_reference']['passed']:
-            examples=list(source.iter_indices([row['index'] for row in selected]))
-            result['capacity']=qualify_capacity(model,optimizer,examples,backend=backend,chunk_tokens=args.chunk_tokens,
-                checkpoint_layers=args.checkpoint_layers,checkpoint_sha256=checkpoint_sha256,source_binding=request['source'],objective=objective,
-                retained_gradients=getattr(args,'accumulate_batches',1)>1,cotangent_mode=_cotangent_mode(args))
+            current_memory = _capacity_memory_context(next(model.parameters()).device)
+            if prior_capacity is not None and not _scratch_headroom_covers(prior_capacity[1]['capacity']['cases'], getattr(args,'checkpoint_input_offload_directory',None)):
+                prior_capacity = None
+            if prior_capacity is not None and not all(
+                    _incremental_headroom_covers(row, current_memory)
+                    for row in prior_capacity[1]['capacity']['cases']):
+                prior_capacity = None
+            if prior_capacity is not None:
+                reference, previous = prior_capacity
+                if json.loads(bound(reference).read_text()) != previous:
+                    raise ValueError('measured capacity proof changed during qualification')
+                result['capacity'] = previous['capacity']
+                result['capacity_reuse'] = {'measured_proof':reference,
+                    'measured_parent_checkpoint_sha256':previous['parent_checkpoint_sha256'],
+                    'current_parent_checkpoint_sha256':checkpoint_sha256,
+                    'memory_context':current_memory}
+            else:
+                examples=list(source.iter_indices([row['index'] for row in selected]))
+                result['capacity']=qualify_capacity(model,optimizer,examples,backend=backend,chunk_tokens=args.chunk_tokens,
+                    checkpoint_layers=args.checkpoint_layers,checkpoint_sha256=checkpoint_sha256,source_binding=request['source'],objective=objective,
+                    retained_gradients=getattr(args,'accumulate_batches',1)>1,cotangent_mode=_cotangent_mode(args))
             result['passed']=result['capacity']['passed']
     except (RuntimeError,FloatingPointError,MemoryError) as error:
         if isinstance(error,CapacityStateChangedError):raise
@@ -843,7 +926,7 @@ def _resolve_memory_qualification(reference, *, model, optimizer, train, roles, 
         identity=identity, runtime_code_sha256=runtime_code_sha, request_path=request_path)
 
 
-def run_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoint_sha256,objective=None):
+def run_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoint_sha256,objective=None,prior_proofs=()):
     """Independent source cohorts share one restored parent and retain each pass.
 
     A novel larger cohort failing must not discard capacity already established
@@ -858,7 +941,7 @@ def run_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoint_sh
         try:
             args.memory_qualification=json.dumps(request)
             return _run_one_prepared(model,optimizer,train,roles,config,args,
-                backend=backend,checkpoint_sha256=checkpoint_sha256,objective=objective)
+                backend=backend,checkpoint_sha256=checkpoint_sha256,objective=objective,prior_proofs=prior_proofs)
         finally:
             args.memory_qualification=original
     if not isinstance(requests,list) or not requests:
@@ -904,7 +987,7 @@ def run_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoint_sh
             args.memory_qualification=json.dumps(canonical_request)
             checks.append(_run_one_prepared(model,optimizer,train,roles,config,args,
                 backend=backend,checkpoint_sha256=checkpoint_sha256,objective=objective,
-                reference_reuse=reference_reuse,index_validation=index_validation))
+                reference_reuse=reference_reuse,index_validation=index_validation,prior_proofs=prior_proofs))
             if 'numerical_reference' in checks[-1] and not (checks[-1]['numerical_reference'] or {}).get('passed'):
                 break  # Failed exact-reference qualification cannot certify a later cohort.
     finally:

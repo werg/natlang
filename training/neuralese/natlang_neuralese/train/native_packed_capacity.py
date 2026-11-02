@@ -368,6 +368,36 @@ def _capacity_memory_context(device):
             **({'ledger_available_bytes':available} if available is not None else {})}
 
 
+def optimizer_shape_identity(model, optimizer):
+    """Describe optimizer storage and parameter partitions without reading tensor values."""
+    import torch
+    from .optim_restore import _children
+    from ..common.hashing import canonical_json_sha256_hex
+    named = list(getattr(optimizer, '_native_named_parameters', model.named_parameters()))
+    names = {id(parameter): name for name, parameter in named}
+    def shape(value):
+        if torch.is_tensor(value):
+            return {'shape':list(value.shape), 'stride':list(value.stride()),
+                    'dtype':str(value.dtype), 'device':str(value.device), 'layout':str(value.layout)}
+        if isinstance(value, dict):
+            return {str(key):shape(item) for key,item in sorted(value.items(), key=lambda item:str(item[0]))}
+        if isinstance(value, (tuple,list)):
+            return [shape(item) for item in value]
+        if value is None or type(value) in (bool,int,float,str):
+            return {'type':type(value).__name__}
+        raise TypeError('unsupported optimizer state in capacity identity')
+    children=[]
+    for name, child in _children(optimizer):
+        groups=[]
+        for group in child.param_groups:
+            groups.append({'parameters':[names[id(parameter)] for parameter in group['params']],
+                           'options':{key:value for key,value in group.items() if key not in ('params','lr','initial_lr')}})
+        state={names[id(parameter)]:shape(value) for parameter,value in child.state.items()}
+        children.append({'name':name, 'type':type(child).__module__+'.'+type(child).__qualname__,
+                         'groups':groups, 'state':state})
+    return canonical_json_sha256_hex(children)
+
+
 def oversize_execution_identity(model, optimizer, *, args, backend, objective_binding):
     """Bind the memory execution path; parameter values may change, shapes may not."""
     from ..common.hashing import canonical_json_sha256_hex
@@ -375,8 +405,18 @@ def oversize_execution_identity(model, optimizer, *, args, backend, objective_bi
     import torch
     package=Path(__file__).resolve().parents[1]
     code=code_inventory(package)
-    params=[(name,tuple(parameter.shape),str(parameter.dtype),bool(parameter.requires_grad))
+    params=[(name,tuple(parameter.shape),tuple(parameter.stride()),str(parameter.dtype),str(parameter.device),bool(parameter.requires_grad))
             for name,parameter in getattr(optimizer,'_native_named_parameters',model.named_parameters())]
+    module_signature=[]
+    roots=(('model',model),('backbone',getattr(model.port,'hf',model.port)))
+    for root_name,root in roots:
+        for name,module in (root.named_modules() if hasattr(root,'named_modules') else ()):
+            forward=module.__dict__.get('forward')
+            function=getattr(forward,'__func__',forward)
+            module_signature.append((root_name,name,type(module).__module__,type(module).__qualname__,
+                None if function is None else (getattr(function,'__module__',None),getattr(function,'__qualname__',None))))
+    buffers=[(name,tuple(buffer.shape),tuple(buffer.stride()),str(buffer.dtype),str(buffer.device))
+             for name,buffer in model.named_buffers()]
     device=next(model.parameters()).device
     hardware={'device':str(device),'torch':torch.__version__,'cuda':torch.version.cuda}
     if device.type=='cuda':
@@ -387,13 +427,13 @@ def oversize_execution_identity(model, optimizer, *, args, backend, objective_bi
     from ..common.checkpoint_offload import checkpoint_input_storage_options
     checkpoint_storage=checkpoint_input_storage_options(model.port)
     return {'schema':'natlang.native-oversize-execution-identity/1',
-        'sha256':canonical_json_sha256_hex({'code':code,'params':params,'hardware':hardware,
+        'sha256':canonical_json_sha256_hex({'code':code,'params':params,'optimizer_shape':optimizer_shape_identity(model,optimizer),'modules':module_signature,'buffers':buffers,'hardware':hardware,
             'backend':backend.configuration() if backend is not None else {'enabled':False},
             'checkpoint_layers':bool(args.checkpoint_layers),'chunk_tokens':int(args.chunk_tokens),
             'checkpoint_layer_group_size':getattr(model.port,'checkpoint_layer_group_size',1),
             'ffn_chunk_tokens':getattr(model.port,'ffn_chunk_tokens',0),
             'checkpoint_storage':checkpoint_storage,
-            'cotangent_mode':'plain' if getattr(args,'cotangent_accumulator_backend',None)=='plain' else 'vjp',
+            'cotangent_mode':'plain' if (getattr(args,'cotangent_accumulator_backend',None) or getattr(args,'native_cotangent_accumulator_backend',None))=='plain' else 'vjp',
             'retained_gradients':int(args.accumulate_batches)>1,'production_packing':True,
             'quantization':getattr(args,'quantization',None),
             'fp8_training':getattr(args,'fp8_training',None),
