@@ -851,6 +851,7 @@ def test_interrupted_rolling_window_binds_retained_snapshot_launch_and_telemetry
     if tamper in ('none','alias','rolling-alias'):
         result=_rolling_intermediate_window(*args)
         assert result['intermediate_updates']==3 and result['intermediate_checkpoint_bytes_verified_currently'] is True
+        assert result['intermediate']['path'] == str(slot)
     else:
         with pytest.raises(ValueError): _rolling_intermediate_window(*args)
     if tamper not in ('checkpoint','alias-corrupt'):
