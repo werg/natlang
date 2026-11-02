@@ -25,3 +25,17 @@ def test_parallel_census_reuses_actual_parser_and_effective_weight_census(tmp_pa
     assert slots>=entry['forward_tokens'] and decisions==0
     assert signal['eligible'] and signal['category_mass'].get('context',0)==0
     assert review['forward_tokens']==entry['forward_tokens']
+
+
+def test_sample_contains_only_actual_effective_positive_tokens():
+    import hashlib
+    from natlang_neuralese.train.own_output_supervision import graph_weights
+    graph=row()
+    graph['id']=next(str(i) for i in range(100000)
+        if int(hashlib.sha256(str(i).encode()).hexdigest()[:8],16)%512==0)
+    obj=objective(mass='token')
+    review=content_review(graph,obj)
+    actual=[token for node in graph['nodes'] for token in node['token_ids']]
+    weights,_=graph_weights(graph,obj)
+    expected=[token for token,weight in zip(actual,weights,strict=True) if weight>0][:8192]
+    assert [token for run in review['sample']['effective_positive_token_segments'] for token in run]==expected
