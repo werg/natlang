@@ -1,5 +1,23 @@
 # Main goal: keep moving forward (owner, 2026-10-11)
 
+## Preserve admitted policy identity across ordinary resumes (engineering, 2026-11-02)
+
+An unchanged CE objective resumes with its exact admitted policy binding,
+including historical objective-transition declarations. The objective resolver
+recognizes an already-adopted objective and records no new transition. Removing
+an inert declaration changes the policy hash and can incorrectly re-admit a
+quota basis measured against an older source/exposure frame. Do not weaken the
+quota guard: preserve the admitted bytes, or measure and declare a real new
+objective continuation against the actual earned frame.
+
+Smaller SFT accumulation adopts the all-group optimizer update budget: scale
+ordinary backbone and interface LR/latent LR by actual scored graph count over
+the earned reference window, capped at one. Fixed loss normalization alone does
+not bound normalized Muon/Adam parameter updates. Bind the reference to verified
+row exposure deltas and the complete TRAIN scoring census. Preserve historical
+reference/source custody across admitted appends. This bounds the LR budget;
+it does not reproduce the larger batch's optimizer or scheduling trajectory.
+
 ## Reuse dense physical capacity, recheck current numerics (engineering, 2026-11-02)
 
 Dense LFM3 continuations retain authenticated measured capacity-proof references

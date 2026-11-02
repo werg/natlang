@@ -1,3 +1,46 @@
+## Live supervision update, 2026-11-02 13:54 CET
+
+- First comprehensive-source SFT update committed successfully at13:18. Exact
+  full-state checkpoint is global68, SHA
+  `433e3ad44bdeb1c9785d6d93af37b3b2b852d902ae1e017975cf934697156263`,
+  under `sft401692-file-g2-104g-from-bf95-1102/learner/checkpoint.pt`.
+  It earned37 graph visits (24 communication),84343 supervised tokens;
+  total SFT visits605/1142578. Task capability is still unmeasured.
+- Full actual-model CUDA runtime17 numerical certificate passed13:24:36,
+  unchanged forward1e-4/gradient1e-5 tolerances, bounded conv/FFN branches
+  exercised. Actual current FFN adjoints use BF16 tensors through IEEE mode;
+  the separate BF16-rounded FP32 optimization is not a current speedup.
+- Runtime17 includes all-group scored-graph LR budgeting. Actual earned
+  reference is37 graphs, not nominal accumulation or64 packed rows. Independent
+  budget/recipe/quota tests:22 passed. Accumulation4 and refresh1 shorten the
+  update/interleave window while retaining all401692 rows and quota obligations.
+- First runtime17 continuation failed before SGD at13:38:56. The preparation
+  operator removed an already-consumed objective_transition field, changing
+  the CE hash and triggering initial quota admission against its historical
+ 353731-row parent. Root fixed the operator to preserve the original exact
+  admitted policy bytes. No weights or exposure were lost. New preparation
+  `ops/earned-sft-throughput-v17-r3-1102` passed13:52:33 (13.3GiB peak).
+- Corrected owner `lfm3-earned68-throughput-v17-r3-1102.service` launched13:53:15;
+  actual child1187610 confirmed live. It uses the frozen runtime as cwd and
+  runtime/PYTHONPATH authority,104GiB ledger,40GiB scratch floor, original CE
+  binding and exact earned68 state. Admission/actual next optimizer advancement
+  remain to verify; process launch is not earned progress.
+- Exact ZIP recovery delta completed13:45:15:3236074324 payload bytes reproduce
+  every15386502534 target byte against retained BF95 full state. Private export
+  and independent downloaded-payload/full-target hash verification are running
+  as `publish-earned-sft68-exact-recovery-1102.service`; not yet complete.
+- Runtime17 archive/readback is running. New actor view SHA
+  `a870a59832784d590b3a9a85098b9fd7ffb2149b49860b602e12c65f5b7f72be`
+  is prepared; exact transfer and runtime sync to Pop are running. Pop storage
+  cleanup preserves stopped-container logs/metadata and any changed writable
+  state, and targets a retrievable unused llama.cpp image. Protected development
+  cases0,32,88,112 will compare actual SFT68 behavior; no evaluation success
+  or capability gain is claimed yet.
+- Reward/escalation verification passed32 Python and25 inference/CLI/actor
+  custody tests. Correct task outcome dominates bounded waste costs/reporting
+  credit; escalation preserves live scope/effects and graph budgets. Mixed
+  actors cannot be admitted as same-policy RL.
+
 ## Live supervision update, 2026-11-02 12:48 CET
 
 - All eight actual oversize/QAT groups passed; the last completed12:35:48. The
