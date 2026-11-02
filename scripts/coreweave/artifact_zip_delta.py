@@ -2,18 +2,20 @@
 """Exact, bounded ZIP-payload deltas for independently bound immutable artifacts.
 
 The receipt is an artifact: distribute it with its own independently bound SHA.
-Copy ranges are selected only after hashing both actual compressed entry payloads.
-Headers, descriptors, central directory, pickle and other changed bytes are inline.
+Entry payloads use exact copies, compressed XOR, or compressed inline bytes.
+Headers, descriptors and the central directory remain inline.
 """
 from __future__ import annotations
 import argparse, hashlib, json, os, re, struct, tempfile, zipfile, zlib
 from pathlib import Path
 try:
-    from .artifact_delta import CHUNK, digest_file, identity, publish
+    from .artifact_delta import CHUNK, digest_file, identity, publish, xor_bytes
 except ImportError:
-    from artifact_delta import CHUNK, digest_file, identity, publish
+    from artifact_delta import CHUNK, digest_file, identity, publish, xor_bytes
 
-SCHEMA='natlang.artifact-zip-delta/1'
+SCHEMA_V1='natlang.artifact-zip-delta/1'
+SCHEMA='natlang.artifact-zip-delta/2'
+SUPPORTED_SCHEMAS=(SCHEMA_V1,SCHEMA)
 HEX=re.compile(r'[0-9a-f]{64}\Z')
 FLOOR=40*1024**3
 
@@ -54,6 +56,32 @@ def range_hash(f,offset,size):
     return h.hexdigest()
 
 
+def entry_choices(base, target, prior, offset, size):
+    """Measure both encodings in one bounded pass, without scratch files."""
+    base_offset,base_size=prior[:2]
+    base.seek(base_offset);target.seek(offset)
+    source_hash,target_hash=hashlib.sha256(),hashlib.sha256()
+    raw,zxor=zlib.compressobj(1),zlib.compressobj(1)
+    raw_bytes=xor_size=0
+    remaining=size;base_remaining=base_size
+    while remaining:
+        block=target.read(min(CHUNK,remaining))
+        if not block:raise ValueError('short artifact range')
+        take=min(len(block),base_remaining)
+        old=base.read(take)
+        if len(old)!=take:raise ValueError('short base range')
+        source_hash.update(old);target_hash.update(block)
+        raw_bytes+=len(raw.compress(block))
+        xor_size+=len(zxor.compress(xor_bytes(block,old)))
+        remaining-=len(block);base_remaining-=take
+    while base_remaining:
+        old=base.read(min(CHUNK,base_remaining))
+        if not old:raise ValueError('short base range')
+        source_hash.update(old);base_remaining-=len(old)
+    raw_bytes+=len(raw.flush());xor_size+=len(zxor.flush())
+    return raw_bytes,xor_size,source_hash.hexdigest(),target_hash.hexdigest()
+
+
 def build(base,target,out,*,min_free_bytes=FLOOR):
     base,target=Path(base).resolve(strict=True),Path(target).resolve(strict=True)
     out=Path(out).resolve();out.mkdir(parents=True,exist_ok=True)
@@ -65,33 +93,56 @@ def build(base,target,out,*,min_free_bytes=FLOOR):
     base_sha,target_sha=digest_file(base),digest_file(target)
     fd,pending=tempfile.mkstemp(prefix='.zip-delta-',dir=out)
     try:
-        ops=[]; copied=0
+        ops=[]; copied=0; xored=0
         with os.fdopen(fd,'wb') as writer,base.open('rb') as a,target.open('rb') as b:
+            def write(data):
+                if data:
+                    require_free(out,min_free_bytes+len(data))
+                    writer.write(data)
             def inline(start,end):
                 if start==end:return
                 begin=writer.tell();compressor=zlib.compressobj(1)
                 for data in stream_range(b,start,end-start):
-                    require_free(out,min_free_bytes+len(data))
-                    writer.write(compressor.compress(data))
-                writer.write(compressor.flush())
+                    write(compressor.compress(data))
+                write(compressor.flush())
                 ops.append({'kind':'inline','offset':begin,'bytes':writer.tell()-begin,'output_bytes':end-start})
             cursor=0
             for name,(offset,size,method) in sorted(new.items(),key=lambda item:item[1][0]):
                 if offset<cursor:raise ValueError('overlapping ZIP entry payloads')
                 prior=old.get(name)
-                # data.pkl is metadata and may change; compare every candidate afresh.
-                if not size or prior is None or prior[1:]!=(size,method):continue
-                actual=range_hash(b,offset,size)
-                if actual!=range_hash(a,prior[0],size):continue
+                if not size or prior is None:continue
+                if prior[1]==size:
+                    actual=range_hash(b,offset,size)
+                    if actual==range_hash(a,prior[0],size):
+                        inline(cursor,offset)
+                        ops.append({'kind':'copy','offset':prior[0],'bytes':size,'sha256':actual})
+                        copied+=size;cursor=offset+size
+                        continue
+                inline_size,xor_size,old_hash,actual=entry_choices(a,b,prior,offset,size)
                 inline(cursor,offset)
-                ops.append({'kind':'copy','offset':prior[0],'bytes':size,'sha256':actual})
-                copied+=size;cursor=offset+size
+                if xor_size < inline_size:
+                    begin=writer.tell();compressor=zlib.compressobj(1)
+                    a.seek(prior[0]);remaining=prior[1]
+                    for block in stream_range(b,offset,size):
+                        take=min(len(block),remaining);base_block=a.read(take)
+                        if len(base_block)!=take:raise ValueError('short base range')
+                        remaining-=take;write(compressor.compress(xor_bytes(block,base_block)))
+                    write(compressor.flush())
+                    if writer.tell()-begin!=xor_size:raise ValueError('XOR encoding changed during construction')
+                    ops.append({'kind':'xor','offset':begin,'bytes':xor_size,'output_bytes':size,
+                        'base_offset':prior[0],'base_bytes':prior[1],
+                        'base_sha256':old_hash,'sha256':actual})
+                    xored+=size
+                else:
+                    begin=writer.tell();inline(offset,offset+size)
+                    if writer.tell()-begin!=inline_size:raise ValueError('inline encoding changed during construction')
+                cursor=offset+size
             inline(cursor,before[1][2]);writer.flush();os.fsync(writer.fileno())
         if [identity(base),identity(target)]!=before:raise ValueError('delta input changed during encoding')
         value={'schema':SCHEMA,'base':{'sha256':base_sha,'bytes':before[0][2]},
                'target':{'sha256':target_sha,'bytes':before[1][2]},
                'payload':{'path':payload.name,'sha256':digest_file(pending),'bytes':Path(pending).stat().st_size},
-               'copied_bytes':copied,'operations':ops}
+               'copied_bytes':copied,'xored_bytes':xored,'operations':ops}
         publish(pending,payload)
         fd,meta=tempfile.mkstemp(prefix='.zip-receipt-',dir=out)
         try:
@@ -99,7 +150,7 @@ def build(base,target,out,*,min_free_bytes=FLOOR):
             publish(meta,receipt)
         finally:Path(meta).unlink(missing_ok=True)
         return {'path':str(receipt),'sha256':digest_file(receipt),'target':value['target'],
-                'payload':value['payload'],'copied_bytes':copied,'operations':len(ops)}
+                'payload':value['payload'],'copied_bytes':copied,'xored_bytes':xored,'operations':len(ops)}
     finally:Path(pending).unlink(missing_ok=True)
 
 
@@ -113,7 +164,8 @@ def verify(base,manifest,*,expected_sha256,expected_bytes,expected_manifest_sha2
     raw=manifest.read_bytes()
     if hashlib.sha256(raw).hexdigest()!=expected_manifest_sha256:raise ValueError('receipt hash differs')
     value=json.loads(raw)
-    if value.get('schema')!=SCHEMA or value.get('target')!={'sha256':expected_sha256,'bytes':expected_bytes}:
+    schema=value.get('schema')
+    if schema not in SUPPORTED_SCHEMAS or value.get('target')!={'sha256':expected_sha256,'bytes':expected_bytes}:
         raise ValueError('target binding differs')
     ref=value['payload'];name=ref['path']
     if not isinstance(name,str) or Path(name).name!=name or name in ('.','..'):raise ValueError('invalid payload path')
@@ -144,16 +196,32 @@ def verify(base,manifest,*,expected_sha256,expected_bytes,expected_manifest_sha2
                     rh=hashlib.sha256()
                     for data in stream_range(a,offset,size):rh.update(data);emit(data)
                     if rh.hexdigest()!=op['sha256']:raise ValueError('base range hash differs')
-                elif op.get('kind')=='inline':
+                elif op.get('kind') in ('inline','xor'):
+                    is_xor=op.get('kind')=='xor'
                     expected=op.get('output_bytes')
                     if offset!=inline_cursor or offset+size>before[2][2] or type(expected)!=int or expected<=0:raise ValueError('invalid inline range')
+                    if is_xor:
+                        base_offset,base_size=op.get('base_offset'),op.get('base_bytes')
+                        if (schema!=SCHEMA or type(base_offset)!=int or base_offset<0 or type(base_size)!=int
+                                or base_size<0 or base_offset+base_size>before[0][2]
+                                or not valid_hash(op.get('base_sha256')) or not valid_hash(op.get('sha256'))):
+                            raise ValueError('invalid XOR base range')
+                        if range_hash(a,base_offset,base_size)!=op['base_sha256']:
+                            raise ValueError('XOR base range hash differs')
+                        a.seek(base_offset);base_remaining=base_size;output_hash=hashlib.sha256()
                     inline_cursor+=size;decoder=zlib.decompressobj();n=0
                     for block in stream_range(p,offset,size):
                         while block:
                             data=decoder.decompress(block,min(CHUNK,expected-n+1));block=decoder.unconsumed_tail
-                            n+=len(data);emit(data)
+                            n+=len(data)
                             if n>expected or decoder.unused_data:raise ValueError('invalid inline compressed data')
+                            if is_xor:
+                                take=min(len(data),base_remaining);old=a.read(take)
+                                if len(old)!=take:raise ValueError('short XOR base range')
+                                base_remaining-=take;data=xor_bytes(data,old);output_hash.update(data)
+                            emit(data)
                     if not decoder.eof or n!=expected:raise ValueError('incomplete inline data')
+                    if is_xor and output_hash.hexdigest()!=op['sha256']:raise ValueError('XOR output hash differs')
                 else:raise ValueError('unknown delta operation')
         if inline_cursor!=before[2][2] or count!=expected_bytes or h.hexdigest()!=expected_sha256:raise ValueError('reconstructed target differs')
         if [identity(base),identity(manifest),identity(payload)]!=before:raise ValueError('delta input changed during reconstruction')

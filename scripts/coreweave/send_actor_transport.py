@@ -65,7 +65,7 @@ print(json.dumps({'target_sha256':actual,'base':hint,'base_present':bool(hint an
                 if not zip_receipt.exists():artifact_zip_delta.build(hint['sender_view'],local_view,zip_cache)
                 zip_delta=json.loads(zip_receipt.read_text())
                 ref=zip_delta['payload'];payload=zip_cache/'payload.zlib'
-                if (zip_delta.get('schema')!=artifact_zip_delta.SCHEMA
+                if (zip_delta.get('schema') not in artifact_zip_delta.SUPPORTED_SCHEMAS
                         or zip_delta['base']['sha256']!=hint['sha256']
                         or digest_file(hint['sender_view'])!=hint['sha256']
                         or zip_delta['target']!={'sha256':view['sha256'],'bytes':view['bytes']}

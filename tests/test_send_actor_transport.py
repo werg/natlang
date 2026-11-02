@@ -121,3 +121,32 @@ def test_zip_peer_base_tampering_rejects_reconstruction(tmp_path,local_peer):
     with pytest.raises(RuntimeError,match='base binding differs'):sender.send(p,sha,'peer',str(peer))
     target=peer/json.loads(p.read_text())['source']['sha256']/json.loads(p.read_text())['view']['path']
     assert not target.exists()
+
+
+def test_sender_reuses_schema1_zip_cache(tmp_path,local_peer,monkeypatch):
+    data=os.urandom(1024*1024)
+    old=zip_bytes(os.urandom(100),data);new=zip_bytes(os.urandom(117),data)
+    p,sha,_=transport(tmp_path/'old-v1',old);peer=tmp_path/'peer';sender.send(p,sha,'peer',str(peer))
+    p,sha,view=transport(tmp_path/'new-v1',new)
+    cache=p.parent/'.transfer-deltas'/(binding(old)+'-'+binding(new))/'zip'
+    base=json.loads((peer/'.natlang-actor-transfer.json').read_text())['sender_view']
+    sender.artifact_zip_delta.build(base,view,cache)
+    receipt=cache/'receipt.json';value=json.loads(receipt.read_text())
+    assert not any(op['kind']=='xor' for op in value['operations'])
+    value['schema']=sender.artifact_zip_delta.SCHEMA_V1;value.pop('xored_bytes')
+    receipt.write_text(json.dumps(value))
+    def no_rebuild(*args,**kwargs):raise AssertionError('legacy receipt should be reused')
+    monkeypatch.setattr(sender.artifact_zip_delta,'build',no_rebuild)
+    result=sender.send(p,sha,'peer',str(peer))
+    assert result['mode']=='zip-payload-zlib'
+    assert Path(result['verified']['receiver_view']).read_bytes()==new
+
+
+def test_sender_uses_zip_xor_for_changed_tensor_payload(tmp_path,local_peer):
+    data=os.urandom(1024*1024);changed=bytearray(data);changed[12000:12005]=b'hello'
+    old=zip_bytes(b'old',data);new=zip_bytes(b'new longer metadata',bytes(changed))
+    p,sha,_=transport(tmp_path/'old-changed',old);peer=tmp_path/'peer';sender.send(p,sha,'peer',str(peer))
+    p,sha,_=transport(tmp_path/'new-changed',new)
+    result=sender.send(p,sha,'peer',str(peer))
+    assert result['mode']=='zip-payload-zlib' and result['payload_bytes']<len(new)*.05
+    assert Path(result['verified']['receiver_view']).read_bytes()==new
