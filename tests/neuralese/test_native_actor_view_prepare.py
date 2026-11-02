@@ -250,6 +250,15 @@ def test_owner_transport_and_explicit_release_require_verified_full_source(tmp_p
         receipt.write_text(json.dumps({'schema':'natlang.local-full-recovery-export/1','full_state':True,
             'independent_readback':True,'source_identity':{'device':st.st_dev,'inode':st.st_ino,'size':st.st_size,'mtime_ns':st.st_mtime_ns},
             'checkpoint':_fresh_file_binding(recovered)}))
+        actual_write=owner.write_json_durable;failed=[]
+        def crash_after_retirement(path,value):
+            if Path(path).name=='standalone-retention-consumer-leases.json' and not failed:
+                failed.append(True);raise OSError('interrupted release')
+            return actual_write(path,value)
+        monkeypatch.setattr(owner,'write_json_durable',crash_after_retirement)
+        with pytest.raises(OSError,match='interrupted release'):
+            owner.release_pending(journal,recovery_ref=_fresh_file_binding(receipt),transport_ref=transport,delivery_ref=_fresh_file_binding(delivery))
+        assert pin.exists() and (journal/'actor-view-pending.json').exists()
         result=owner.release_pending(journal,recovery_ref=_fresh_file_binding(receipt),transport_ref=transport,delivery_ref=_fresh_file_binding(delivery))
     assert result['source_sha256']==record['source']['sha256'] and not pin.exists()
     assert not (journal/'actor-view-pending.json').exists()
