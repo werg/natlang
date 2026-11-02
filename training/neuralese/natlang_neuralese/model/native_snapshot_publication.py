@@ -27,7 +27,7 @@ def require_versions_unchanged(versions):
         raise ValueError('actor snapshot source changed during the primary checkpoint write')
 
 
-def publish_saved_snapshot(queue,slot,snapshot):
+def publish_saved_snapshot(queue,slot,snapshot,*,reservation=None):
     """Use one durable pending owner pin and the existing recovery lease ledger.
 
     A ready/pending pin remains leased until explicit, independently verified
@@ -51,7 +51,7 @@ def publish_saved_snapshot(queue,slot,snapshot):
             if current.get('full_source_pinned') is not True or not Path(current['pin']).is_file():
                 raise ValueError('incomplete actor-view source pin requires recovery before another update')
             return {'status':'deferred','reason':'bounded actor-view owner pin is occupied','pending':str(pointer)}
-        with checkpoint_target_lock(slot):
+        with checkpoint_target_lock(slot,reservation=reservation):
             st=slot.stat();signature=(st.st_dev,st.st_ino,st.st_size,st.st_mtime_ns)
             if not stat.S_ISREG(st.st_mode):raise ValueError('full checkpoint must be a regular file')
             source=_fresh_file_binding(slot);sha=source['sha256']

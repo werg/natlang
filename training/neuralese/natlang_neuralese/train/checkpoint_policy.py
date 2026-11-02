@@ -283,7 +283,7 @@ class CheckpointPolicy:
                 'schema':'natlang.native-async-checkpoint-admission/1',
                 'mode':mode, **admission}
 
-    def _after_save(self, state, event, *, metric, higher_is_better):
+    def _after_save(self, state, event, *, metric, higher_is_better, reservation=None):
         if self.recovery_queue is not None:
             from .checkpoint_offload import recovery_queue_for
             self.recovery_queue = recovery_queue_for(self.slot, self.recovery_plan, state)
@@ -293,7 +293,9 @@ class CheckpointPolicy:
             self.on_saved(self.slot, state, event)
         if state.get('schema') == 'natlang.neuralese-native-checkpoint/1':
             from ..model.native_snapshot_publication import publish_saved_snapshot
-            event['actor_snapshot_view']=publish_saved_snapshot(self.recovery_queue,self.slot,state)
+            owner=reservation if reservation is not None else self._persistent_reservation
+            if owner is not None and owner._lock_fd is None:owner=None
+            event['actor_snapshot_view']=publish_saved_snapshot(self.recovery_queue,self.slot,state,reservation=owner)
         self.last_saved_monotonic = time.monotonic()
         better = metric is not None and (self.best_metric is None or (
             metric > self.best_metric if higher_is_better else metric < self.best_metric))
@@ -395,7 +397,8 @@ class CheckpointPolicy:
                     event['bytes'] = stat.st_size
                     self._record_committed(snapshot)
                     event['async_pending'] = False
-                    self._after_save(snapshot, event, metric=metric, higher_is_better=higher_is_better)
+                    self._after_save(snapshot, event, metric=metric, higher_is_better=higher_is_better,
+                                     reservation=spare if spare is not None else reserved_writer)
                     if spare is not None:
                         self._reservation_roles(None, spare)
                 try:

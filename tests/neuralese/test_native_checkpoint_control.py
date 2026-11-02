@@ -446,7 +446,14 @@ def bridge_publication_fixture(parent, tmp_path, monkeypatch, *, fail_derivative
 def test_actual_save_bridge_and_controller_publication_never_decodes_or_copies_actor(parent,tmp_path,monkeypatch):
     from natlang_neuralese.rl import native_bridge as bridge
     original=CheckpointPolicy.load
-    monkeypatch.setattr(CheckpointPolicy,'load',lambda *a,**kw:pytest.fail('full checkpoint decode on publication path'))
+    def reject_full_decode(path,*args,**kwargs):
+        # Model-only derivative readback is required; decoding a full source
+        # for metadata publication would still violate this test's contract.
+        assert Path(path).name.startswith('.actor-view-'), 'full checkpoint decode on publication path'
+        result=original(path,*args,**kwargs)
+        assert result.get('inference_only') and result.get('optimizer_pruned')
+        return result
+    monkeypatch.setattr(CheckpointPolicy,'load',reject_full_decode)
     request,result_path,result,expected,policy=bridge_publication_fixture(parent,tmp_path,monkeypatch)
     assert result.get('checkpoint_publication')
     assert policy.events[-1]['checkpoint_publication']['passed']

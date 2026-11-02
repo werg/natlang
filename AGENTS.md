@@ -1,5 +1,25 @@
 # Main goal: keep moving forward (owner, 2026-10-11)
 
+## Actor publication shares the live checkpoint reservation lock (engineering, 2026-11-02)
+
+Post-commit actor-view pinning must reuse the exact live target lock owned by
+an async checkpoint's spare reservation. Opening that lock path again conflicts
+with the process's own flock. Validate the passed reservation target and lock
+inode, retain its lifetime lock after pinning, and bind the captured async spare
+rather than racing a mutable policy reference. A synchronous committed reservation
+may already be closed; use ordinary locking then. Keep model-only derivative
+readback distinct from decoding a full checkpoint for metadata publication.
+
+## Rollback retains exact source-adoption execution authority (engineering, 2026-11-02)
+
+A zero-SGD source-adopted checkpoint can still require its matching external
+execution-transition controller and selection proof. A trained successor may
+have folded that admission into its saved history; rolling back to the original
+candidate does not inherit the successor's authority. Snapshot and bind the
+actual original source-controller bytes and exact selected candidate. Preserve
+the startup guard; do not clear pending markers or borrow a different parent's
+admission to force a resume.
+
 ## BF16 SFT occurrence custody and semantic target quality (engineering, 2026-11-02)
 
 Physical prefix aliasing changed BF16 SFT cotangent accumulation and actual

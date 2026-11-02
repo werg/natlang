@@ -272,6 +272,7 @@ def test_checkpoint_policy_default_publishes_from_its_committed_owner_state(tmp_
     monkeypatch.setattr(checkpoint_safety,'native_async_snapshot_headroom',lambda *args,**kwargs:{'eligible':True})
     policy=CheckpointPolicy(tmp_path/'learner',prune_best=False,async_checkpoint=asynchronous)
     try:
+        policy.reserve_next(state,torch.optim.AdamW([state['backbone_state']['weight']]))
         event=policy.save(state,async_allowed=asynchronous,async_optimizer=object() if asynchronous else None)
         policy.drain_async()
         pending=json.loads((tmp_path/'learner/actor-view-owner/actor-view-pending.json').read_text())
@@ -329,3 +330,25 @@ def test_cuda_committed_owner_view_survives_live_update_with_aliases(tmp_path, a
         assert publication['source_sha256'] == first_source_sha(policy.slot)
     finally:
         policy.close()
+
+
+def test_snapshot_pin_reuses_only_live_exact_checkpoint_lock(tmp_path):
+    from natlang_neuralese.train.checkpoint_safety import (
+        PersistentCheckpointReservation, checkpoint_target_lock, CheckpointReserveError)
+    target=tmp_path/'checkpoint.pt'
+    owner=PersistentCheckpointReservation(target)
+    owner.acquire(4096)
+    try:
+        with checkpoint_target_lock(target,reservation=owner):
+            with pytest.raises(BlockingIOError):
+                with checkpoint_target_lock(target):pass
+        # A publication hook must not release the trainer's lifetime lock.
+        with pytest.raises(BlockingIOError):
+            with checkpoint_target_lock(target):pass
+        with pytest.raises(CheckpointReserveError,match='same slot'):
+            with checkpoint_target_lock(tmp_path/'other.pt',reservation=owner):pass
+        owner.discard_uncommitted()
+    finally:owner.close()
+    with pytest.raises(CheckpointReserveError,match='live'):
+        with checkpoint_target_lock(target,reservation=owner):pass
+    with checkpoint_target_lock(target):pass

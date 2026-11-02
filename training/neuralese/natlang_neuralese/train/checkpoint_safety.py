@@ -257,11 +257,25 @@ class CheckpointWriteAdmission:
 
 
 @contextmanager
-def checkpoint_target_lock(target):
+def checkpoint_target_lock(target, *, reservation=None):
     """Exclude other cooperating writers while a target has a live owner."""
     target = Path(target)
     target.parent.mkdir(parents=True, exist_ok=True)
     lock = target.with_name(target.name + '.reservation.lock')
+    if reservation is not None:
+        # The persistent writer owns this lock across updates, including its
+        # post-commit hooks. Reuse its open file description without unlocking
+        # it; opening the same pathname again would conflict with our own lock.
+        fd = reservation._lock_fd
+        if reservation.target.resolve() != target.resolve() or fd is None:
+            raise CheckpointReserveError('checkpoint lock owner must be live and target the same slot')
+        held = os.fstat(fd)
+        current = lock.stat(follow_symlinks=False)
+        if not stat.S_ISREG(held.st_mode) or (held.st_dev, held.st_ino) != (current.st_dev, current.st_ino):
+            raise CheckpointReserveError('checkpoint lock owner inode changed')
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        yield
+        return
     fd = os.open(lock, os.O_CREAT | os.O_RDWR | getattr(os, 'O_NOFOLLOW', 0), 0o600)
     try:
         if not stat.S_ISREG(os.fstat(fd).st_mode):

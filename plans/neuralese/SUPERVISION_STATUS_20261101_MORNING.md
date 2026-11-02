@@ -1,3 +1,89 @@
+## Checkpoint hook correction and actual Pop evaluation, 2026-11-02 22:52 CET
+
+- Full main check exposed15 Python failures:14 real resident/async save failures
+  because the new actor-view hook reacquired the checkpoint target lock while an
+  async spare still owned it, plus one outdated test rejecting even required
+  model-only derivative readback. Main now reuses the exact live reservation
+  lock owner, validates its target/inode, and retains the lifetime lock. Async
+  callbacks bind their captured spare, rather than racing the mutable policy
+  reference. Closed synchronous reservations use ordinary fresh locking.
+  Targeted187 tests across checkpoint controls, actor views, source-classification
+  append, relative quantum and resident training passed53.67seconds. Additional
+  exclusion/incorrect-owner and actual CUDA sync/async tests are running.
+- Requested semantic SIGTERM handoff22:51:15 on actual R34 owner and learner,
+  before any new SGD was observed. Preserve any committed zero-SGD handoff and
+  measured capacity, then launch the corrected frozen runtime. No force kill,
+  new optimizer exposure or trained68 is claimed. Actual request receipt:
+  `ops/r34-checkpoint-lock-corrective-handoff-1102.json`.
+- Pop R34 actor became ready22:48:18 and protected16-case evaluation actually
+  started. Unit `expanded-dev16-quality-parent-r34-1102.service`;5GiB container
+  plus0.25GiB host-controller admission,7.2GiB separate GPU budget. Reserve and
+  protected packet remain unchanged. Current score is incomplete.
+- Actual R34 private closure completed22:50:28 with complete fresh DGX GETs:
+  `private-recovery-20261101/runtime34-actual-continuation-capsule-1102.json`,
+  SHAad263a491a086cf091a799ad7d76389792c4d1eeaea4770061d40838c6146e71.
+  It binds actual admitted100GiB config, restored FFN controller/selection,
+  selected67/diagnostic72 full-recovery capsules, matched protected outcomes,
+  frozen runtime/archive, completed startup capacity and full-size actor delivery.
+  No full training/source restore rehearsal or newly earned SGD is claimed.
+
+## Actual production selection and R34 continuation, 2026-11-02 22:49 CET
+
+- Fresh matched protected16-case evaluation under identical frozenR19 and serving
+  controls scored selected full67 parent71c3eb45 at12/16 and five-JOLT-update
+  full72 candidatee382ce6d at11/16. Candidate gained case104 and lost24/120;
+  case120 omitted a required program effect. No causal explanation or measured
+  noise bound is established. Preserve72 for diagnostics; production resumes
+  the better demonstrated67 parent. Decision receipt:
+  `ops/behavior-parent-reselection-2157-1102.json`. All held outputs remain
+  protected; do not admit them as training data.
+- R30 was stopped21:58 without any committed successor checkpoint. Uncommitted
+  gradients are not earned73. The old conditional earned73/R31 operator below
+  is superseded and must not be run. Its completed six oversized capacity cases
+  and full72 recovery remain retained. Qualified cleanup removed only the zero
+  future-checkpoint reservation and abandoned activation scratch, recovering
+  about52GB; receipt `ops/stopped-r30-unearned-storage-cleanup-1102.json`.
+- Actual DGX owner `lfm3-best67-r34-admitted-100g-1102.service` started22:16:22,
+  controller3074985 and learner3082822. Actual controls are
+  `ops/best67-joint-r34-bf16-g2-a16-1102/config-100g-admitted.json`;
+  output `best67-joint-r34-bf16-g2-a16-admitted-1102`;
+  runtime `runtime-native-norm-output-v34-1102`, commitd377b30e5.
+  All401623 corrected graphs and source quotas, native dependencies, selected
+  parent optimizer/RNG and earned exposure are retained. Explicit BF16 capability
+  objective disables inherited inline QAT. Grouping2, accumulation16 and refresh1
+  earn the selected SFT frame's own missing scored-graph anchor. Then promptly
+  continue accumulation4/16-update windows using that actual earned reference.
+- Startup correctly rejected missing external FFN admission on the zero-SGD
+  source-adopted parent. Restored the exact immutable source-controller snapshot
+  and selection authority in the actual admitted config; the guard remains.
+  Initial failed startup earned no SGD. Do not reuse original config.json or
+  config-100g.json, which lack that restoration.
+- Actual100GiB memory admission preserves6GiB reserve and40GiB disk floor.
+  Largest524650-token graph and packed cases passed; six actual next-update
+  oversized cases began22:43:50. No new optimizer update is yet claimed.
+  Current capacity is remeasured under actual runtime and headroom; prior
+  physical-alias capacity results do not substitute for original occurrences.
+- New bounded norm output/adjoint implementation retains exact original BF16
+  gain fan-in, higher-derivative behavior and contiguous adjoints. Combined48
+  targeted tests passed. Additional actual CUDA head128 and hidden2048 width
+  window-boundary tests passed8/8 at22:41:13. Full repository check is still
+  active: Python GPU suite passed26 with9 skips; TypeScript tests are running.
+  No full-suite green or end-to-end training speedup is claimed yet.
+- Full-size source71 CUDA actor-view serialization/readback qualified with
+  bitwise selected values, actual source provenance and storage aliases; view
+  delivery to Pop independently hash-verified22:36:40. Runtime34 archive and
+  closure installed and verified there. This is model-only inference delivery,
+  not full-state recovery. New R34 protected baseline had not started because
+  its initial6GiB host reservation was rejected; actual5GiB container plus
+  controller allowance is now being admitted without reducing GPU allocation,
+  host reserve, disk floor or task packet. Verify actual actor readiness.
+- Runtime34 private control/archive export remains unfinished. Full67 and
+  diagnostic72 independently downloadable exact full-state capsules are already
+  verified; the older R33 preparation capsule does not cover actual R34 controls.
+- Fresh owner-requested GPU checks22:44–22:46 still deny GPU entitlement on
+  cw1–cw4; no allocations were created. Receipt
+  `ops/four-cw-accounts-once-1102-2244.json`. Local learner remains useful.
+
 ## CUDA owner-view validation and next continuation operator, 2026-11-02 21:15 CET
 
 - Snapshot-derived actor publication now passed an actual CUDA check in both
