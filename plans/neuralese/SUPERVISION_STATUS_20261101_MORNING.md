@@ -1,3 +1,62 @@
+## Earned72 BF16 continuation and protected baseline, 2026-11-02 21:06 CET
+
+- Actual active DGX learner is `lfm3-earned72-bf16-g2-a16-r30-1102.service`,
+  started20:54:25. Config `ops/earned-jolt72-joint-r30-bf16-g2-a16-1102/config.json`;
+  actual frozen runtime remains `runtime-native-single-rotary-v26-1102`,
+  main06cf79a15. All401623 corrected graphs, whole native dependencies, exact
+  source quotas and inherited optimizer/RNG/exposure remain. Initial accumulation16
+  and refresh1 capture the saved SFT frame's missing scored-graph reference;
+  promptly continue accumulation4/16-update windows after the actual earned anchor.
+  Source e382ce6d/global72 is still the newest earned full checkpoint. No new
+  optimizer step is claimed from initialization or capacity qualification.
+- G3/R27 failed before SGD at the later normalization allocation. G2/R28
+  passed the largest524650-token source case in1323.614seconds and two packed
+  cases. R30 reuses that exact immutable BF16 proof under unchanged source,
+  parent and runtime bindings; its two packed cases passed at20:59:48. First
+  fetched16-microbatch update contains six additional oversized graphs whose
+  actual BF16 memory checks are running (first292425tokens since20:59:54).
+  A largest-source proof does not establish every dynamic packed graph fits.
+- R28's inherited QAT selected FP8/mix0.0761300555 and began six large cases
+  before SGD. Root deliberately stopped that run20:48:14 with no earned update.
+  Current capability continuation explicitly uses `--quantization off`: current
+  serving is BF16 and no early capability gain from this quantized objective has
+  been measured. Prior calibration/history remains in full72; normal setup
+  records its removal from the active objective. This exclusion leaves the full
+  joint native/ordinary recipe and BF16 stochastic rounding intact. FrozenR26
+  lacks the recipe whitelist entry, so the actual seed argv explicitly binds
+  this control; maince9b07734 fixes recipe support and prevents SFT quantization
+  defaults leaking into unsupported preference/RL stages.33 targeted tests passed.
+- Full72 private recovery COMPLETED20:10:01, actual complete15,417,358,994-byte
+  decoded target stream verified by a fresh workstation private GET, zero running
+  sandboxes. Capsule `private-recovery-20261101/earned-jolt72-e382ce6dedbbb042-exact-delta-capsule-1102.json`,
+  SHAdf788acdb082ecbf68fbde398e331ea3f8434ec57bf40d069b7fb0ffb9739f7e.
+  Retain local3,740,763,581-byte exact delta and raw72 while the learner consumes
+  it. Full training restore rehearsal is not claimed. R28 continuation/source
+  closure separately completed20:26:09; R30 BF16 controls supplement is now in
+  `publish-earned72-r30-source-closure-1102.service` and must be checked complete.
+- Expanded protected16-family selected-parent baseline COMPLETED: global67/
+  71c3eb45 under runtime19/full prompt/2048 prefill and prefix/.25GiB cache,
+  FP32 BF16 reduction, one worker:12/16 task successes,4 semantic mismatches,
+  zero budget/infrastructure/invalid-action/repetition/unresolved outcomes.
+  Receipt `ops/pop-expanded-dev16-parent67-runtime19-completed-1102.json`.
+  No improvement claim versus the older partial base0 result under another runtime.
+- Matched full16-family global72/JOLT successor comparison is now active on Pop:
+  `expanded-dev16-jolt72-r19-1102.service`, actor ready21:05:11. Same protected
+  packet, case indices, runtime and serving geometry. Keep outputs out of training.
+  Prior matched four-case result was2/4 for both parents; broad lift is unproven.
+- Current root code commits include the prepared snapshot-derived actor views,
+  bounded asynchronous evaluator and private full-state proof-based source-pin
+  release. CPU checks passed; actual CUDA/full-size publication and Pop delivery
+  remain to qualify before deploying this default in a new frozen runtime.
+  CurrentR30 has not silently adopted those unqualified changes.
+- Unused R28 all-zero future-checkpoint reservation (~19GB) and abandoned locked
+  file-offload scratch (~4.79GB) were cleaned through qualified APIs. R30's real
+  next-checkpoint reservation is allocated and protected; its additional live
+  scratch explains subsequent internal free-space reduction. Keep40GiB floor.
+- Latest owner-requested GPU retest21:01–21:03 CET: cw1,cw2,cw3,cw4 all still
+  denied GPU entitlement; zero allocations. Receipt
+  `ops/four-cw-accounts-once-1102-2103.json`. No automatic cloud retry was enabled.
+
 ## Three-layer continuation and recovered storage, 2026-11-02 20:00 CET
 
 - R26 G4 capacity also FAILED before SGD at19:41:53. It passed the old RoPE
