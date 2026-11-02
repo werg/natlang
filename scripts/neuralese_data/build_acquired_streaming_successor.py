@@ -71,11 +71,13 @@ def sft_capacity_descriptor(source, geometry):
 def bind_successor_recipe_inputs(recipe, predecessor, successor, policy):
     """Bind actual stage roles even when the predecessor used different key names."""
     stage=next(item for item in recipe['stages'] if item['id']=='native_joint_sft_v4')
-    replaced={stage['inputs'].get(role) for role in ('native_graphs','foundation_native_graphs',
-        'continued_native_graphs','ce_supervision_policy')}
-    for name,reference in (('v4_previous_train_graphs',predecessor),('v4_train_graphs',successor),('v4_ce_policy',policy)):
+    old_train=stage['inputs'].get('native_graphs')
+    if not isinstance(old_train,str) or stage['inputs'].get('foundation_native_graphs') != old_train:
+        raise ValueError('successor requires the existing shared named train/foundation binding')
+    replaced={stage['inputs'].get(role) for role in ('continued_native_graphs','ce_supervision_policy')}
+    for name,reference in ((old_train,successor),('v4_previous_train_graphs',predecessor),('v4_ce_policy',policy)):
         recipe['input_bindings'][name]={k:v for k,v in reference.items() if k!='bytes'}
-    stage['inputs'].update({'native_graphs':'v4_train_graphs','foundation_native_graphs':'v4_train_graphs',
+    stage['inputs'].update({'native_graphs':old_train,'foundation_native_graphs':old_train,
         'continued_native_graphs':'v4_previous_train_graphs','ce_supervision_policy':'v4_ce_policy'})
     used={name for item in recipe['stages'] for name in (item.get('inputs') or {}).values() if isinstance(name,str)}
     for name in replaced:
@@ -569,7 +571,8 @@ def predecessor_mass_census(previous, predecessor_path, objective, *, seen=()):
 
 
 def build(predecessor_receipt, screen_receipt, census_receipt, output, *, share=0.07, prepared_source_receipt=None,
-          diagnosis_verification=None, diagnosis_program=None, family=FAMILY, screen_program=None):
+          diagnosis_verification=None, diagnosis_program=None, family=FAMILY, screen_program=None,
+          reviewed_preparation_builder_sha256=None):
     predecessor_path, screen_path, census_path = map(lambda p: Path(p).resolve(strict=True),
         (predecessor_receipt, screen_receipt, census_receipt))
     previous, screen, census = map(read, (predecessor_path, screen_path, census_path))
@@ -588,7 +591,27 @@ def build(predecessor_receipt, screen_receipt, census_receipt, output, *, share=
         raise ValueError('successor cannot combine unrelated custody transitions')
     if screen.get('pending_partition'):
         from scripts.neuralese_data.partition_acquired_context_pending import verify_partition, verify_partition_census
-        _, pending_count = verify_partition(partition_screen, partition_predecessor)
+        if reviewed_preparation_builder_sha256 is None:
+            _, pending_count = verify_partition(partition_screen, partition_predecessor)
+        else:
+            if not prepared_source_receipt:
+                raise ValueError('reviewed partition reuse requires an exact prepared receipt')
+            prepared_early_path = Path(prepared_source_receipt).resolve(strict=True)
+            prepared_early = read(prepared_early_path)
+            builder_ref = checked_preparation_builder(prepared_early_path, prepared_early['builder'])
+            if (builder_ref['sha256'] != reviewed_preparation_builder_sha256
+                    or prepared_early.get('schema') != PREPARED_SCHEMA
+                    or prepared_early.get('training_admission') is not False
+                    or prepared_early.get('screen') != bind(screen_path)
+                    or prepared_early.get('predecessor') != bind(predecessor_path)):
+                raise ValueError('reviewed source preparation does not authenticate this partition')
+            partition = read(checked(partition_screen['pending_partition'], 'prepared partition proof'))
+            if (partition.get('schema') != 'natlang.acquired-position-pending-partition/1'
+                    or partition.get('predecessor') != bind(partition_predecessor)
+                    or partition.get('active_graph') != partition_screen.get('output')
+                    or type((partition.get('pending_graph') or {}).get('rows')) is not int):
+                raise ValueError('reviewed prepared partition controls differ')
+            pending_count = partition['pending_graph']['rows']
         verify_partition_census(screen, census)
     elif census.get('pending_partition'):
         raise ValueError('pending census lacks its partitioned screen')
@@ -821,6 +844,7 @@ def build(predecessor_receipt, screen_receipt, census_receipt, output, *, share=
         'geometry_scan': geometry_scan, 'current_protection_digest': protection.digest,
         'prepared_source': bind(prepared_source_receipt) if prepared_source_receipt else None,
         'prepared_source_builder': prepared_builder if prepared_source_receipt else None,
+        'reviewed_preparation_partition_reuse': reviewed_preparation_builder_sha256,
         'roles': {key: new_roles.get(key) for key in ('native_graphs', 'foundation_native_graphs', 'held_native_graphs')},
         'builder': sealed_builder(output), 'limitations': ['No local oracle replay or behavioral qualification was performed.',
             'Source-curated labels, including diagnosis labels, remain source evidence; no learner exposure is claimed.',
@@ -838,6 +862,7 @@ def main():
     parser.add_argument('--prepare-source-only', action='store_true')
     parser.add_argument('--parallel-workers', type=int)
     parser.add_argument('--prepared-source-receipt', type=Path)
+    parser.add_argument('--reviewed-preparation-builder-sha256', help='Reuse a previously reviewed preparation partition check; staged only, revalidate at activation')
     parser.add_argument('--diagnosis-verification', type=Path)
     parser.add_argument('--diagnosis-program', type=Path)
     parser.add_argument('--screen-program', type=Path)
@@ -857,7 +882,8 @@ def main():
         result = build(args.predecessor_receipt, args.screen_receipt, args.census_receipt,
                        args.output_dir, share=args.new_family_share, prepared_source_receipt=args.prepared_source_receipt,
                        diagnosis_verification=args.diagnosis_verification, diagnosis_program=args.diagnosis_program,
-                       family=args.family, screen_program=args.screen_program)
+                       family=args.family, screen_program=args.screen_program,
+                       reviewed_preparation_builder_sha256=args.reviewed_preparation_builder_sha256)
     print(json.dumps(result, indent=2, sort_keys=True))
 
 

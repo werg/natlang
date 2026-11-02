@@ -223,9 +223,24 @@ def test_successor_recipe_rebinds_roles_from_static_predecessor_without_dropping
         'ce_supervision_policy':'static_ce','source_correction':'static_proof','held_native_graphs':'held'}}]}
     stage=bind_successor_recipe_inputs(recipe,{'path':'old','sha256':'a','bytes':1},
         {'path':'new','sha256':'b','bytes':2},{'path':'ce','sha256':'c','bytes':3})
-    assert stage['inputs']['native_graphs']==stage['inputs']['foundation_native_graphs']=='v4_train_graphs'
+    assert stage['inputs']['native_graphs']==stage['inputs']['foundation_native_graphs']=='static_train'
     assert recipe['input_bindings'][stage['inputs']['native_graphs']]=={'path':'new','sha256':'b'}
     assert recipe['input_bindings'][stage['inputs']['continued_native_graphs']]=={'path':'old','sha256':'a'}
     assert stage['inputs']['source_correction']=='static_proof' and stage['inputs']['held_native_graphs']=='held'
-    assert not {'static_train','static_ce','older'}&set(recipe['input_bindings'])
+    assert not {'static_ce','older'}&set(recipe['input_bindings'])
     assert {'static_proof','held'}<=set(recipe['input_bindings'])
+
+
+def test_shared_named_binding_stays_valid_for_recipe_continuation():
+    from natlang_neuralese.train.recipe import _data_continuation
+    old={'native_graphs':{'path':'old','sha256':'a','binding':'static_train'},
+         'foundation_native_graphs':{'path':'old','sha256':'a','binding':'static_train'},
+         'held_native_graphs':{'path':'held','sha256':'h','binding':'held'},
+         'source_correction':{'path':'proof','sha256':'p','binding':'proof'}}
+    new={**old,'native_graphs':{'path':'new','sha256':'b','binding':'static_train'},
+         'foundation_native_graphs':{'path':'new','sha256':'b','binding':'static_train'},
+         'continued_native_graphs':{'path':'old','sha256':'a','binding':'previous'}}
+    assert _data_continuation(old,new)
+    new['native_graphs']['binding']='renamed'
+    new['foundation_native_graphs']['binding']='renamed'
+    assert not _data_continuation(old,new)
