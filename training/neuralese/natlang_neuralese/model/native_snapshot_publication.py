@@ -65,6 +65,7 @@ def publish_saved_snapshot(queue,slot,snapshot):
             pin=slot.with_name('.'+slot.name+'.actor-view-source-'+sha)
             record={'schema':'natlang.actor-view-owner-pin/1','status':'acquiring','source':source,
                     'pin':str(pin),'step':snapshot.get('step'),'lease':{'role':role,'consumer_id':consumer,'identity':identity},
+                    'source_identity':{'device':st.st_dev,'inode':st.st_ino,'size':st.st_size,'mtime_ns':st.st_mtime_ns},
                     'training_resume':False,'full_source_pinned':False}
             write_json_durable(pointer,record)
             try:
@@ -105,7 +106,10 @@ def retry_pending(root):
             raise ValueError('actor view has no retryable pinned source')
         actual=_fresh_file_binding(pin)
         if any(actual[k]!=record['source'][k] for k in ('sha256','bytes')):raise ValueError('actor view source pin changed')
-        st=pin.stat();signature=(st.st_dev,st.st_ino,st.st_size,st.st_mtime_ns)
+        st=pin.stat()
+        if record.get('source_identity')!={'device':st.st_dev,'inode':st.st_ino,'size':st.st_size,'mtime_ns':st.st_mtime_ns}:
+            raise ValueError('actor view source pin inode changed')
+        signature=(st.st_dev,st.st_ino,st.st_size,st.st_mtime_ns)
         state=CheckpointPolicy.load(pin)
         try:result=write_snapshot_actor_view(pin,root/'actor-views',snapshot=state,decoded_source_stat=signature)
         except Exception as error:
@@ -114,7 +118,7 @@ def retry_pending(root):
         return record
 
 
-def release_pending(root,*,recovery_ref,transport_ref,delivery_ref):
+def release_pending(root,*,recovery_ref,transport_ref,delivery_ref,recovery_export_ref=None):
     """Release only after actual full recovery and exact actor transport readback."""
     import hashlib
     from .native_composite import _durable_immutable
@@ -128,11 +132,15 @@ def release_pending(root,*,recovery_ref,transport_ref,delivery_ref):
         record=json.loads(pointer.read_text());recovery=read(recovery_ref);transport=read(transport_ref);delivery=read(delivery_ref)
         source=record['source'];view=record.get('view',{}).get('view_receipt',{})
         saved=recovery.get('checkpoint') or {}
-        if (record.get('status')!='ready' or record.get('full_source_pinned') is not True
-                or recovery.get('schema')!='natlang.local-full-recovery-export/1'
+        private=recovery.get('schema')=='natlang.private-exact-earned-SFT-recovery/1'
+        if private:
+            _verify_private_reconstruction(recovery,recovery_ref,recovery_export_ref,source)
+        elif (recovery.get('schema')!='natlang.local-full-recovery-export/1'
                 or recovery.get('full_state') is not True or recovery.get('independent_readback') is not True
                 or saved.get('sha256')!=source['sha256'] or saved.get('bytes')!=source['bytes']
-                or _fresh_file_binding(saved['path'])['sha256']!=source['sha256']
+                or _fresh_file_binding(saved['path'])['sha256']!=source['sha256']):
+            raise ValueError('actor owner release lacks verified independent full recovery')
+        if (record.get('status')!='ready' or record.get('full_source_pinned') is not True
                 or transport.get('schema')!='natlang.native-actor-transport/1'
                 or transport.get('source',{}).get('sha256')!=source['sha256']
                 or transport.get('view_receipt',{}).get('sha256')!=view.get('sha256')
@@ -143,7 +151,9 @@ def release_pending(root,*,recovery_ref,transport_ref,delivery_ref):
             raise ValueError('actor owner release requires exact independent full recovery and actor readback')
         lease=record['lease'];role=lease['role']
         release={'schema':'natlang.actor-view-owner-release/1','source_sha256':source['sha256'],
-                 'view_receipt':view,'recovery':recovery_ref,'transport':transport_ref,'delivery':delivery_ref}
+                 'view_receipt':view,'recovery':recovery_ref,'transport':transport_ref,'delivery':delivery_ref,
+                 'source_pin_identity':record.get('source_identity'),
+                 **({'recovery_export':recovery_export_ref} if private else {})}
         raw=(json.dumps(release,sort_keys=True,indent=2)+'\n').encode();digest=hashlib.sha256(raw).hexdigest()
         proof_path=root/'actor-view-releases'/(digest+'.json')
         pin=Path(record['pin'])
@@ -151,8 +161,10 @@ def release_pending(root,*,recovery_ref,transport_ref,delivery_ref):
             actual=_fresh_file_binding(pin)
             if actual['sha256']!=source['sha256'] or actual['bytes']!=source['bytes']:
                 raise ValueError('actor owner full-source pin changed')
-            ps=pin.stat();recovered=Path(saved['path']).stat()
-            if (recovered.st_dev==ps.st_dev or recovery.get('source_identity')!={
+            ps=pin.stat()
+            if record.get('source_identity')!={'device':ps.st_dev,'inode':ps.st_ino,'size':ps.st_size,'mtime_ns':ps.st_mtime_ns}:
+                raise ValueError('actor owner source inode identity differs')
+            if not private and (Path(saved['path']).stat().st_dev==ps.st_dev or recovery.get('source_identity')!={
                     'device':ps.st_dev,'inode':ps.st_ino,'size':ps.st_size,'mtime_ns':ps.st_mtime_ns}):
                 raise ValueError('actor owner release recovery is not independent of its exact source inode')
         elif not proof_path.is_file() or proof_path.read_bytes()!=raw:
@@ -191,6 +203,9 @@ def prepare_pending_transport(root):
             raise ValueError('actor view owner has no ready pinned view')
         ledger=json.loads((root/'standalone-retention-consumer-leases.json').read_text())
         if record['lease'] not in ledger.get('leases',[]):raise ValueError('actor view owner lease is missing')
+        st=Path(record['pin']).stat()
+        if record.get('source_identity')!={'device':st.st_dev,'inode':st.st_ino,'size':st.st_size,'mtime_ns':st.st_mtime_ns}:
+            raise ValueError('actor view owner source inode changed')
         reference=record['view']['view_receipt'];proof,source,view=_actor_view_files(record['pin'],reference)
         if any(source[k]!=record['source'][k] for k in ('sha256','bytes')):
             raise ValueError('actor view owner source changed')
@@ -203,3 +218,101 @@ def prepare_pending_transport(root):
         target=Path(reference['path']).parent/(hashlib.sha256(raw).hexdigest()+'.transport.json')
         _durable_immutable(target,raw)
         return _file_binding(target)
+
+
+def _verify_private_reconstruction(capsule, capsule_ref, export_ref, source):
+    """Rejoin the private publisher journal, decoded readback, and base/codec closure."""
+    import math
+    if export_ref is None:raise ValueError('private reconstruction requires its bound publisher journal')
+    if _fresh_file_binding(export_ref['path'])!=export_ref:raise ValueError('private recovery publisher journal changed')
+    state=json.loads(Path(export_ref['path']).read_text())
+    target={'sha256':source['sha256'],'bytes':source['bytes']}
+    if (capsule.get('schema')!='natlang.private-exact-earned-SFT-recovery/1'
+            or capsule.get('complete_target_stream_verified') is not True
+            or capsule.get('training_restore_qualified') is not False
+            or capsule.get('target')!=target or not isinstance(capsule.get('run'),str) or not capsule['run']
+            or state.get('schema')!='natlang.private-native-admission-evidence/1'
+            or state.get('complete') is not True or state.get('run')!=capsule['run'] or state.get('target')!=target
+            or (state.get('capsule') or {}).get('sha256')!=capsule_ref['sha256']
+            or (state.get('capsule') or {}).get('bytes')!=capsule_ref['bytes']
+            or (state.get('capsule') or {}).get('role')!='earned-SFT-exact-full-state-private-capsule'):
+        raise ValueError('private reconstruction capsule or publisher binding differs')
+    objects=state.get('objects') or {}
+    def verified(ref):
+        obj=objects.get(ref['sha256']) or {};get=obj.get('owner_get') or {};parts=obj.get('parts')
+        if (obj.get('phase')!='independently-verified' or obj.get('bytes')!=ref['bytes']
+                or get.get('sha256')!=ref['sha256'] or get.get('bytes')!=ref['bytes']
+                or get.get('mechanism')!='complete private GET on DGX; no sandbox'
+                or type(get.get('unix')) not in (int,float) or not math.isfinite(get['unix'])
+                or not isinstance(parts,list) or not parts):
+            raise ValueError('private reconstruction dependency lacks independent GET evidence')
+        offset=0
+        for index,part in enumerate(parts):
+            if (part.get('index')!=index or part.get('offset')!=offset
+                    or part.get('name')!=f"blobs/{ref['sha256']}.p{index:04d}"
+                    or type(part.get('bytes')) is not int or part['bytes']<=0
+                    or not isinstance(part.get('sha256'),str) or len(part['sha256'])!=64):
+                raise ValueError('private reconstruction multipart custody differs')
+            offset+=part['bytes']
+        if offset!=ref['bytes']:raise ValueError('private reconstruction multipart length differs')
+    verified(capsule_ref)
+    files=capsule.get('files')
+    if not isinstance(files,list):raise ValueError('private reconstruction lacks dependency inventory')
+    def role(name,*,multiple=False):
+        found=[item for item in files if isinstance(item,dict) and item.get('role')==name]
+        if not found or (not multiple and len(found)!=1):raise ValueError('private reconstruction dependency role differs')
+        for item in found:
+            verified(item)
+            obj=objects[item['sha256']]
+            if obj.get('source')!=item.get('original_path') or obj.get('role')!=item.get('role'):
+                raise ValueError('private reconstruction producer lineage differs')
+        return found if multiple else found[0]
+    local=role('local-full-state-reconstruction-capsule');delta=role('exact-full-state-delta-receipt')
+    payload=role('exact-full-state-delta-payload');readback=role('independent-private-full-target-stream-readback')
+    parent=role('retained-private-BF95-base-capsule');decoders=role('exact-reconstruction-decoder',multiple=True)
+    if len(decoders)<2:raise ValueError('private reconstruction lacks its complete decoder closure')
+    def local_json(item):
+        path=Path(item['original_path']).resolve(strict=True);actual=_fresh_file_binding(path)
+        if actual['sha256']!=item['sha256'] or actual['bytes']!=item['bytes']:
+            raise ValueError('private reconstruction local evidence changed')
+        return json.loads(path.read_text())
+    local_capsule=local_json(local);delta_receipt=local_json(delta);stream=local_json(readback);parent_capsule=local_json(parent)
+    for item in decoders:
+        path=Path(item['original_path']).resolve(strict=True);actual=_fresh_file_binding(path)
+        if actual['sha256']!=item['sha256'] or actual['bytes']!=item['bytes']:
+            raise ValueError('private reconstruction decoder changed')
+    base=capsule.get('base')
+    if (local_capsule.get('schema')!='natlang.local-exact-checkpoint-reconstruction/1'
+            or local_capsule.get('all_full_state_bytes_verified') is not True or local_capsule.get('target')!=target
+            or {k:(local_capsule.get('base') or {}).get(k) for k in ('sha256','bytes')}!=base
+            or (local_capsule.get('receipt') or {}).get('sha256')!=delta['sha256']
+            or (local_capsule.get('payload') or {}).get('sha256')!=payload['sha256']
+            or (local_capsule.get('retained_independent_private_base_capsule') or {}).get('sha256')!=parent['sha256']
+            or {(x.get('sha256'),x.get('bytes')) for x in local_capsule.get('decoders',[])}
+                !={(x['sha256'],x['bytes']) for x in decoders}
+            or delta_receipt.get('schema') not in ('natlang.artifact-zip-delta/1','natlang.artifact-zip-delta/2')
+            or delta_receipt.get('target')!=target or delta_receipt.get('base')!=base
+            or (delta_receipt.get('payload') or {}).get('sha256')!=payload['sha256']
+            or (delta_receipt.get('payload') or {}).get('bytes')!=payload['bytes']
+            or stream.get('sha256')!=target['sha256'] or stream.get('bytes')!=target['bytes']
+            or stream.get('path') is not None or stream.get('receipt_sha256')!=delta['sha256']
+            or stream.get('payload_get_sha256')!=payload['sha256'] or stream.get('payload_get_bytes')!=payload['bytes']
+            or type(stream.get('verified_unix')) not in (int,float) or not math.isfinite(stream['verified_unix'])
+            or parent_capsule.get('schema')!='natlang.exact-native-execution-recovery-capsule/1'
+            or parent_capsule.get('run')!=capsule['run']
+            or not any(item.get('target')==base for item in (parent_capsule.get('targets') or {}).values())):
+        raise ValueError('private reconstruction target, base, decoder or streamed readback differs')
+    base_target=next(item for item in parent_capsule['targets'].values() if item.get('target')==base)
+    required=[parent_capsule['base'],base_target['payload'],base_target['receipt']]
+    presence=stream.get('base_private_presence')
+    if not isinstance(presence,list):raise ValueError('private reconstruction lacks base presence')
+    observed={item.get('name'):(item.get('bytes'),item.get('http_status')) for item in presence if isinstance(item,dict)}
+    for ref in required:
+        remaining=ref['bytes'];index=0
+        while remaining:
+            size=min(1024**3,remaining);name=f"blobs/{ref['sha256']}.p{index:04d}"
+            if observed.get(name) not in ((size,200),(size,206)):
+                raise ValueError('private reconstruction base dependency was not observed')
+            remaining-=size;index+=1
+    if _fresh_file_binding(export_ref['path'])!=export_ref or _fresh_file_binding(capsule_ref['path'])!=capsule_ref:
+        raise ValueError('private reconstruction evidence changed during verification')
