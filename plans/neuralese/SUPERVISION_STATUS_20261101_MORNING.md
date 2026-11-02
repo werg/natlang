@@ -1,3 +1,65 @@
+## Live supervision update, 2026-11-02 15:55 CET
+
+- No production learner is currently running. The runtime17 controller was
+  stopped14:27:59 after behavioral regression, completed its current update,
+  saved diagnostic global69 (5fc60ab2), and terminated14:29:30. Neither SFT68
+  (433e3ad4) nor SFT69 is a production parent. BF95 global67 (bf95bec4) remains
+  selected. SFT68 completed the protected four-case packet1/4; BF95 passed
+  case88 under that same runtime17 in103.95seconds. Held traces remain excluded
+  from training. Evidence is under ops/protected-sft68-runtime17-evaluation-1102
+  and ops/protected-bf95-runtime17-case88-r2-1102; regression hold updated.
+- TRAIN supervision review:7768 applicable ticket graphs,77 rough candidates,
+  69 AST-confirmed semantic keyword/regex substitutes and8 false positives.
+  Exact filtering completed:401692→401623 graphs, all retained binding/order
+  unchanged, no group-level collateral. All69 are ordinary Natlang graphs;
+  one had an earned visit, which is retained as history. No whole-corpus quality
+  claim or causal attribution from this small target subset. Source receipt:
+  ops/semantic-ticket-quality-successor-1102/source-filter-receipt.json.
+- Full source/CE/family-map/quota/correction recipe preparation passed15:40:17.
+  Its quota basis matches BF95's actual353731-row/568-visit SFT frame exactly.
+  Independent mass calculation preserves mean-one weighting and cap8 (maximum
+  scale4.72471). New source and foundation roles move together; protected held
+  SHA5053ab2b remains unchanged. Runtime19 recipe additionally carries actual
+  group2/file-offload/FFN1024/batch16384/accumulation4/all-group-budget controls,
+  rather than inheriting obsolete source-recipe memory settings. No stage
+  completion or new data exposure is claimed by preparation.
+- Fixed an actual BF16 SFT optimizer-equivalence bug: physical prefix merging
+  altered gradient accumulation; retaining original occurrences and exact primal
+  reuse restores both exact two-update tests. Capacity geometry now follows the
+  same predicate; old shared-graph measurements are invalid for this branch.
+  Frozen runtime19 at3aa2df68 includes this correction. Actual BF95 full-model
+  CUDA certificate passed15:49:20 with forward1e-4/gradient1e-5, no SGD. This
+  remains separate from complete large-graph capacity and task capability.
+- Current admitted CPU job adopt-bf95-quality-source-zero-sgd-1102.service
+  (24GiB) is preparing a full, independently rederived source adoption using
+  canonical main6f066e5bb and its physically reserved40GiB-floor writer. Output
+  ops/bf95-quality-source-zero-sgd-1102; not yet a published/trained parent.
+  Verify its actual result before launching; do not resume diagnostic weights.
+- Observed full-check failures were repaired with targeted follow-ups: resident
+  custody/source continuation, coefficient admission, numerical replay fixtures,
+  BF16 optimizer equivalence, held-policy expectations, setup metadata lifetime,
+  large-CUDA test budgeting, call-kind coverage and scorer path relocation.
+  Root's independent combined regression set passed68 checks; actual large
+  addressing tests passed4/4 under13GiB. Helper targeted suites are committed
+  on main; full-check historical43 failures are not silently described as a
+  fresh all-green full suite. Main is pushed through6f066e5bb.
+- Storage: unused Docker cache retirement freed about4GiB initially. Attempted
+  image archiving unexpectedly created daemon-side staging, was stopped before
+  image removal, and temporary staging fully cleared. The subsequent unused
+  image retirement retains pinned base digest, image inspect/history, package
+  versions and available repair source; it is rebuild evidence, not an exact
+  archive. Current compression job compress-cold-partial-evidence-r2-1102 holds
+  old lane controller locks and replaces cold diagnostic evidence journals with
+  exact SHA/byte-verified zstd copies and restore receipts. Complete results,
+  partial task state, checkpoints and training sources are retained. Last
+  observed internal free63GiB, increasing; verify final measured headroom before
+  allocating full-state copies, next checkpoint and long-graph input scratch.
+- Next: finish actual zero-SGD verification; independently export its recovery
+  controls; qualify actual large BF16 graphs under runtime19; prepare fresh
+  on-policy full-prompt whole-graph JOLT+ from the selected corrected parent;
+  interleave useful SFT with all remaining obligations. No CoreWeave allocation
+  or paid Luna generation is active. Keep GPU/Pop work useful after admission.
+
 ## Live supervision update, 2026-11-02 13:54 CET
 
 - First comprehensive-source SFT update committed successfully at13:18. Exact

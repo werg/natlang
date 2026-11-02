@@ -1,5 +1,29 @@
 # Main goal: keep moving forward (owner, 2026-10-11)
 
+## BF16 SFT occurrence custody and semantic target quality (engineering, 2026-11-02)
+
+Physical prefix aliasing changed BF16 SFT cotangent accumulation and actual
+optimizer updates. Ordinary BF16 SFT now retains original gradient occurrences
+while reusing independently qualified fixed-linear primals. Capacity uses the
+same execution predicate. Old physically shared capacity evidence does not
+qualify the larger original-row geometry; remeasure actual complete graphs.
+The existing forward/gradient tolerances remain unchanged.
+
+SFT68 (433e3ad4) and its stopped SFT69 successor (5fc60ab2) are diagnostics,
+not production parents. SFT68 scored1/4 on protected development; BF95 still
+passes case88 under the same runtime17 where SFT68 failed. Continue from the
+better demonstrated BF95 state after actual source/runtime admission, without
+claiming the sole cause of that regression is established.
+
+The TRAIN-only semantic-ticket review found69 complete graphs supervising
+keyword/regex substitutes for semantic judgment; eight other candidates were
+false positives. Corrected401623-row sources preserve every other graph's
+binding/order and held data. One removed graph had an earned visit; preserve it
+as historical exposure. This targeted review does not certify the entire corpus.
+Do not fabricate replacements or relabel historical actor provenance. Bind
+Python reviewer, JS checker and actual TypeScript parser dependencies, and
+apply authenticated ordinary/native whole-graph deferrals to the actual parent.
+
 ## Preserve admitted policy identity across ordinary resumes (engineering, 2026-11-02)
 
 An unchanged CE objective resumes with its exact admitted policy binding,
