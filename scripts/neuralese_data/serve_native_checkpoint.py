@@ -161,6 +161,31 @@ def main() -> None:
         engine.stop()
 
 
+def attest_sglang_source(python, fork, pythonpath=''):
+    """Bind the interpreter's actual package to the clean, pinned fork before launch."""
+    import os
+    import subprocess
+    env = {**os.environ, 'PYTHONPATH': pythonpath}
+    probe = subprocess.run([python, '-c',
+        'import importlib.util, pathlib; s=importlib.util.find_spec("sglang"); '
+        'print(pathlib.Path(s.origin).resolve())'], env=env, check=True, text=True, capture_output=True)
+    package = Path(probe.stdout.strip())
+    if package.name != '__init__.py' or package.parent.name != 'sglang':
+        raise RuntimeError('SGLang interpreter did not resolve a source package')
+    repository = package.parent.parent.parent
+    def git(*arguments):
+        return subprocess.run(['git', '-C', str(repository), *arguments], check=True,
+                              text=True, capture_output=True).stdout.strip()
+    if Path(git('rev-parse', '--show-toplevel')).resolve() != repository.resolve():
+        raise RuntimeError('SGLang source is not a fork checkout')
+    actual = git('rev-parse', 'HEAD')
+    if actual != fork['commit']:
+        raise RuntimeError(f'SGLang source commit {actual} differs from pinned {fork["commit"]}')
+    if git('status', '--porcelain', '--untracked-files=all', '--', 'python/sglang'):
+        raise RuntimeError('SGLang package source has uncommitted or untracked changes')
+    return {'commit': actual, 'package': str(package), 'python': str(Path(python).resolve())}
+
+
 def launch_sglang(engine, args, checkpoint):
     """Export the checkpoint for SGLang (cached by SHA-256), start the fork's server and bind the front to it."""
     import os
@@ -171,6 +196,7 @@ def launch_sglang(engine, args, checkpoint):
     root = Path(__file__).resolve().parents[2]
     fork = json.loads((root / 'training/neuralese/sglang-fork.json').read_text())
     python = args.sglang_python or fork['python']
+    source = attest_sglang_source(python, fork, os.environ.get('NATLANG_SGLANG_PYTHONPATH', ''))
     export_dir = args.hf_export_dir or ((args.store_dir or checkpoint.parent) / 'sglang-hf' / args.checkpoint_sha256[:16])
     manifest = export_loaded(engine.shared_model, engine.tokenizer, engine.role_tokens, engine.model_config,
                              checkpoint=checkpoint, checkpoint_sha256=args.checkpoint_sha256, out_dir=export_dir)
@@ -187,7 +213,7 @@ def launch_sglang(engine, args, checkpoint):
                '--cuda-graph-max-bs-decode', str(args.sglang_max_running),
                '--incremental-streaming-output', '--stream-interval', '8',
                '--skip-tokenizer-init', '--trust-remote-code', *args.sglang_arg]
-    print(json.dumps({'event': 'sglang_launch', 'command': command, 'export': manifest}), flush=True)
+    print(json.dumps({'event': 'sglang_launch', 'command': command, 'export': manifest, 'source': source}), flush=True)
     # FlashInfer JIT-compiles kernels: the fork venv's ninja and the CUDA toolkit's nvcc on PATH.
     cuda = os.environ.get('CUDA_HOME', '/usr/local/cuda')
     path = os.pathsep.join([str(Path(python).parent), cuda + '/bin', os.environ.get('PATH', '')])
