@@ -161,7 +161,8 @@ def test_sealed_replay_rejects_collection_bound_to_other_actor(tmp_path):
         validate_fresh_sealed_replay({},request,replay,identity=identity,roles=None)
 
 
-def test_selected_publication_preserves_old_round_and_never_counts_an_update(tmp_path, monkeypatch):
+@pytest.mark.parametrize('qualification_has_size', [True, False])
+def test_selected_publication_preserves_old_round_and_never_counts_an_update(tmp_path, monkeypatch, qualification_has_size):
     import hashlib, json
     from natlang_neuralese.train import native_execution_transition as tx
     from natlang_neuralese.common import custody
@@ -185,7 +186,10 @@ def test_selected_publication_preserves_old_round_and_never_counts_an_update(tmp
     evidence=write('evidence.json',{'collection_proof':collection,'collection_request':request,'dev_candidate':scores[0],
         'dev_parent':scores[1]})
     qual_ref=write('qualified.json',{'q':1})
-    report={'candidate':candidate,'evidence':evidence,'protection_root':str(tmp_path),
+    qualified_candidate = dict(candidate)
+    if not qualification_has_size:
+        qualified_candidate.pop('bytes')
+    report={'candidate':qualified_candidate,'evidence':evidence,'protection_root':str(tmp_path),
             'protected_development':{'role':'protected-development'}}
     checked={'proof':{'parent':old,'checkpoint':child,'actor_identity':{'old':{},'new':{}}},
              'publication':{'proof':inner}}
@@ -200,6 +204,13 @@ def test_selected_publication_preserves_old_round_and_never_counts_an_update(tmp
     prior=json.loads(state.read_text());state.write_text(json.dumps({**prior,'partial_checkpoint':partial['path']}))
     with pytest.raises(ValueError,match='different earned partial'):
         tx.publish_selected(state,qualification_ref=qual_ref,out=tmp_path/'blocked.json',decision_reason='paired review')
+    for field in ('active_update_round', 'partial_update_round'):
+        state.write_text(json.dumps({**prior, field:0}))
+        with pytest.raises(ValueError, match='pending update'):
+            tx.publish_selected(state,qualification_ref=qual_ref,out=tmp_path/'blocked-zero.json',decision_reason='paired review')
+    state.write_text(json.dumps({**prior,'execution_transition_candidate':{**candidate,'bytes':candidate['bytes']+1}}))
+    with pytest.raises(ValueError, match='declared size'):
+        tx.publish_selected(state,qualification_ref=qual_ref,out=tmp_path/'blocked-size.json',decision_reason='paired review')
     state.write_text(json.dumps(prior))
     result=tx.publish_selected(state,qualification_ref=qual_ref,out=tmp_path/'selected.json',decision_reason='paired review')
     changed=json.loads(state.read_text())

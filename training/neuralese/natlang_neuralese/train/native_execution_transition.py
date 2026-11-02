@@ -611,10 +611,14 @@ def publish_selected(state_path, *, qualification_ref, out, decision_reason):
             raise ValueError('controller changed while qualifying the execution candidate')
         if state.get('phase') not in {'stopped_collecting','requested_stop'}:
             raise ValueError('execution selection requires the stopped collector boundary')
-        if (state.get('active_update_round') or state.get('pending_native_checkpoint')
+        registered = state.get('execution_transition_candidate')
+        if (not isinstance(registered, dict)
+                or registered.get('sha256') != qualification['candidate'].get('sha256')
+                or checked_path(registered) != checked_path(qualification['candidate'])):
+            raise ValueError('execution selection conflicts with the registered candidate')
+        if (state.get('active_update_round') is not None or state.get('pending_native_checkpoint')
                 or state.get('pending_native_round_dir') or state.get('active_update_partial')
-                or state.get('partial_update_round')
-                or state.get('execution_transition_candidate') != qualification['candidate']):
+                or state.get('partial_update_round') is not None):
             raise ValueError('execution selection conflicts with a pending update or candidate')
         if Path(state['checkpoint']).resolve(strict=True) != Path(candidate['parent']['path']).resolve(strict=True):
             raise ValueError('execution candidate no longer descends from the owner head')
