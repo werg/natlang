@@ -310,3 +310,87 @@ def test_scratch_honors_stronger_checkpoint_floor(tmp_path,monkeypatch):
     monkeypatch.setenv('NATLANG_CHECKPOINT_MIN_FREE_BYTES',str(50*1024**3))
     store=CheckpointFileStore(tmp_path)
     assert store.minimum_free_bytes==50*1024**3
+
+
+def test_reserved_arena_protects_graph_owned_inputs_and_reuses_only_released_ranges(tmp_path,monkeypatch):
+    import mmap
+    monkeypatch.setenv('NATLANG_CHECKPOINT_MIN_FREE_BYTES','0')
+    store=CheckpointFileStore(tmp_path,pin_memory=False)
+    page=mmap.PAGESIZE
+    store.reserve_arena(2*page)
+    assert (store.path/'arena.bin').stat().st_blocks*512>=2*page
+    first=torch.arange(8,dtype=torch.float64)
+    second=first[::2]
+    a=store.pack(first);b=store.pack(second)
+    assert a.offset!=b.offset and not list(store.path.glob('tensor-*'))
+    first.fill_(100)
+    torch.testing.assert_close(a.unpack(),torch.arange(8,dtype=torch.float64),rtol=0,atol=0)
+    torch.testing.assert_close(b.unpack(),torch.arange(8,dtype=torch.float64)[::2],rtol=0,atol=0)
+    with pytest.raises(RuntimeError,match='arena exhausted'):store.pack(torch.ones(2))
+    with pytest.raises(ValueError,match='live graph'):store.release_arena()
+    old=a.offset;a.cleanup()
+    c=store.pack(torch.full((3,),7.))
+    assert c.offset==old
+    torch.testing.assert_close(b.unpack(),torch.arange(8,dtype=torch.float64)[::2],rtol=0,atol=0)
+    b.cleanup();c.cleanup();store.release_arena()
+    assert not (store.path/'arena.bin').exists()
+
+
+def test_reserved_scratch_and_future_checkpoint_compete_above_same_floor(tmp_path,monkeypatch):
+    import shutil
+    from natlang_neuralese.train.checkpoint_safety import PersistentCheckpointReservation, CheckpointSpaceUnavailable
+    monkeypatch.setenv('NATLANG_CHECKPOINT_TRANSFER_HEADROOM_FACTOR','0')
+    floor=shutil.disk_usage(tmp_path).free-6*1024*1024
+    monkeypatch.setenv('NATLANG_CHECKPOINT_MIN_FREE_BYTES',str(floor))
+    future=PersistentCheckpointReservation(tmp_path/'checkpoint.pt',transfer_bytes=0,minimum_free_bytes=floor)
+    future.acquire(4*1024*1024)
+    store=CheckpointFileStore(tmp_path/'scratch',pin_memory=False)
+    try:
+        with pytest.raises(CheckpointSpaceUnavailable):store.reserve_arena(4*1024*1024)
+        assert not (store.path/'arena.bin').exists()
+        assert future.pending.stat().st_blocks*512>=4*1024*1024
+    finally:future.discard_uncommitted()
+
+
+def test_scratch_peak_uses_exact_oversize_measured_cases(tmp_path):
+    import hashlib
+    from natlang_neuralese.train.native_state_sft import _measured_checkpoint_scratch_peak
+    def ref(path):return {'path':str(path),'sha256':hashlib.sha256(path.read_bytes()).hexdigest()}
+    def report(peak):return {'passed':True,'cases':[{'checkpoint_input_offload':{'peak_live_bytes':peak}}]}
+    base={'passed':True,'capacity':report(100)}
+    measured=tmp_path/'measured.json';measured.write_text(json.dumps({'passed':True,'capacity':report(700)}))
+    reuse=tmp_path/'reuse.json';reuse.write_text(json.dumps({'schema':'natlang.native-oversize-capacity-envelope-reuse/1',
+        'passed':True,'case_matches':[{'envelope_source':ref(measured)}]}))
+    assert _measured_checkpoint_scratch_peak(base,ref(reuse))==700
+    measured.write_text('{}')
+    with pytest.raises(ValueError):_measured_checkpoint_scratch_peak(base,ref(reuse))
+    with pytest.raises(ValueError,match='measured file peak'):
+        _measured_checkpoint_scratch_peak({'passed':True,'capacity':{'passed':True,'cases':[{}]}},None)
+
+
+def test_reserved_arena_retains_checkpoint_inputs_for_higher_derivatives(tmp_path,monkeypatch):
+    from types import SimpleNamespace
+    monkeypatch.setenv('NATLANG_CHECKPOINT_MIN_FREE_BYTES','0')
+    port=SimpleNamespace(activation_checkpoint=checkpoint)
+    wrapper=configure_checkpoint_input_offload(port,enabled=True,pin_memory=False,directory=tmp_path)
+    wrapper.file_store.reserve_arena(1<<20)
+    x=torch.randn(12,dtype=torch.float64,requires_grad=True)
+    y=x.detach().clone().requires_grad_()
+    result=wrapper(lambda v:v.sin().square(),x,use_reentrant=False).sum()
+    baseline=checkpoint(lambda v:v.sin().square(),y,use_reentrant=False).sum()
+    grad=torch.autograd.grad(result,x,create_graph=True)[0]
+    expected=torch.autograd.grad(baseline,y,create_graph=True)[0]
+    torch.testing.assert_close(grad,expected,rtol=0,atol=0)
+    second=torch.autograd.grad(grad.sum(),x)[0]
+    expected_second=torch.autograd.grad(expected.sum(),y)[0]
+    torch.testing.assert_close(second,expected_second,rtol=0,atol=0)
+
+
+def test_failed_arena_copy_does_not_retain_a_live_slot(tmp_path,monkeypatch):
+    monkeypatch.setenv('NATLANG_CHECKPOINT_MIN_FREE_BYTES','0')
+    store=CheckpointFileStore(tmp_path,pin_memory=False)
+    store.reserve_arena(8192)
+    monkeypatch.setattr(store,'copy_to_file',lambda *args:(_ for _ in ()).throw(OSError('copy failed')))
+    with pytest.raises(OSError,match='copy failed'):store.pack(torch.ones(4))
+    assert store.snapshot()['live_bytes']==0 and store.snapshot()['live_files']==0
+    store.release_arena()

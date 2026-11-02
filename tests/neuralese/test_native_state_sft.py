@@ -1678,7 +1678,7 @@ def test_held_failure_preserves_completed_optimizer_rng_and_exposure_for_exact_r
         equal(actual[key], expected[key])
 
 
-@pytest.mark.parametrize('refresh',['checkpoint','relative','relative-interior','signal','stop','complete','complete-relative','reservation-signal'])
+@pytest.mark.parametrize('refresh',['checkpoint','relative','relative-interior','signal','stop','complete','complete-relative','reservation-signal','file-arena'])
 def test_refresh_only_boundary_does_not_force_task_window(tmp_path,monkeypatch,refresh):
     import json
     import torch
@@ -1711,6 +1711,18 @@ def test_refresh_only_boundary_does_not_force_task_window(tmp_path,monkeypatch,r
             argv[-1]='2'
         argv+=['--task-eval-every','1']
         monkeypatch.setattr(trainer,'_evaluate_cadence',lambda *a,**k: pytest.fail('held evaluation started at automatic refresh'))
+    elif refresh=='file-arena':
+        from natlang_neuralese.common.checkpoint_file_storage import CheckpointFileStore
+        original_reserve=CheckpointFileStore.reserve_arena
+        arenas=[]
+        def capture_arena(self,size):
+            result=original_reserve(self,size)
+            arenas.append((result,(self.path/'arena.bin').stat().st_blocks*512))
+            return result
+        monkeypatch.setattr(CheckpointFileStore,'reserve_arena',capture_arena)
+        argv[argv.index('--epochs')+1]='3'
+        argv+=['--checkpoint-input-offload','--checkpoint-input-offload-directory',str(tmp_path/'scratch'),
+               '--refresh-after-updates','2']
     elif refresh=='reservation-signal':
         import os, signal
         from natlang_neuralese.train.checkpoint_safety import PersistentCheckpointReservation, CheckpointSpaceUnavailable
@@ -1751,13 +1763,15 @@ def test_refresh_only_boundary_does_not_force_task_window(tmp_path,monkeypatch,r
         assert not calls
         assert report['completed'] is False
         assert report['continuation_boundary']['reached'] is (refresh!='stop')
-        expected_updates=2 if refresh=='relative-interior' else 1
+        expected_updates=2 if refresh in ('relative-interior','file-arena') else 1
         assert report['continuation_boundary']['new_optimizer_updates']==expected_updates
         assert torch.load(out/'checkpoint.pt',weights_only=False)['training']['exposure_counts']=={'train':expected_updates}
         if refresh in ('checkpoint','relative'):
             certificate=json.loads((out/'native-runtime-certificate.json').read_text())
             assert certificate['deferred'] and not certificate['passed']
             assert certificate['reason']=='semantic refresh; qualification deferred until resume'
+        if refresh=='file-arena':
+            assert len(arenas)==2 and all(allocated>=bound for bound,allocated in arenas)
         if refresh=='reservation-signal':
             assert len(attempts)==2
             assert report['continuation_boundary']['requested_signals'][0]['signal']=='SIGUSR2'
@@ -1863,3 +1877,28 @@ def test_communication_exposure_uses_only_assigned_shard():
 
 # Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
 pytestmark = pytest.mark.usefixtures('per_batch_native_updates')
+
+
+def test_full_scratch_arena_fails_before_any_optimizer_update(tmp_path,monkeypatch):
+    import json, torch
+    from test_native_serve import _tiny_source
+    from natlang_neuralese.model.native_model import load_native_model
+    from natlang_neuralese.train import native_state_sft as trainer
+    from natlang_neuralese.train.checkpoint_safety import CheckpointSpaceUnavailable
+    from natlang_neuralese.common.checkpoint_file_storage import CheckpointFileStore
+    base=tmp_path/'base';_tiny_source(base)
+    _,_,_,config=load_native_model(base,dtype=torch.float32,rank=4)
+    paths={}
+    for split in ('train','test'):
+        row=dict(graph(split),split=split,source_groups=[split],tokenizer_fingerprint=config['tokenizer_fingerprint'])
+        paths[split]=tmp_path/(split+'.jsonl');paths[split].write_text(json.dumps(row)+'\n')
+    monkeypatch.setattr(CheckpointFileStore,'reserve_arena',lambda *a,**k:(_ for _ in ()).throw(CheckpointSpaceUnavailable('scratch full')))
+    monkeypatch.setattr(trainer,'native_training_update',lambda *a,**k:pytest.fail('optimizer work started'))
+    argv=['--base',str(base),'--dtype','float32','--rank','4','--device','cpu',
+          '--native-graphs',str(paths['train']),'--held-native-graphs',str(paths['test']),
+          '--epochs','1','--checkpoint-input-offload','--checkpoint-input-offload-directory',str(tmp_path/'scratch'),
+          '--out',str(tmp_path/'run')]
+    with pytest.raises(CheckpointSpaceUnavailable,match='scratch full'):trainer.main(argv)
+    checkpoint=tmp_path/'run/checkpoint.pt'
+    if checkpoint.exists():
+        assert torch.load(checkpoint,weights_only=False)['training']['global_step']==0

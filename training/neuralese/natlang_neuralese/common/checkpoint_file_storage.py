@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import fcntl
 import json
+import mmap
 import os
 from pathlib import Path
 import shutil
@@ -16,8 +17,9 @@ SCHEMA = 'natlang.checkpoint-input-store/1'
 PREFIX = 'natlang-checkpoint-input-'
 
 
-def _remove_store(path, lock):
+def _remove_store(path, lock, arena_holder):
     try:
+        if arena_holder[0] is not None:os.close(arena_holder[0])
         shutil.rmtree(path)
     finally:
         lock.close()
@@ -60,6 +62,42 @@ class SavedFileTensor:
         return restored.as_strided(self.shape, self.stride)
 
 
+def _release_arena_tensor(store, offset, length, size):
+    with store.lock:
+        store.arena_free.append((offset,length))
+        store.arena_free.sort()
+        merged=[]
+        for start,span in store.arena_free:
+            if merged and merged[-1][0]+merged[-1][1]==start:
+                prior,amount=merged[-1];merged[-1]=(prior,amount+span)
+            else:merged.append((start,span))
+        store.arena_free=merged
+        store.counters['live_bytes']-=size
+        store.counters['live_files']-=1
+
+
+class ArenaSavedTensor:
+    def __init__(self, store, offset, length, tensor, size, span):
+        self.store,self.offset,self.length=store,offset,length
+        self.shape,self.dtype,self.device=tuple(tensor.shape),tensor.dtype,tensor.device
+        self.stride,self.numel,self.size=tuple(tensor.stride()),span,size
+        self.cleanup=weakref.finalize(self,_release_arena_tensor,store,offset,length,size)
+
+    def unpack(self):
+        mapping=mmap.mmap(self.store.arena_fd,self.size,access=mmap.ACCESS_WRITE,offset=self.offset)
+        try:
+            mapped=torch.frombuffer(mapping,dtype=self.dtype,count=self.numel)
+            try:restored=self.store.restore(mapped,self.device)
+            finally:del mapped
+        finally:
+            mapping.close()
+        os.posix_fadvise(self.store.arena_fd,self.offset,self.size,os.POSIX_FADV_DONTNEED)
+        with self.store.lock:
+            self.store.counters['read_bytes']+=self.size
+            self.store.counters['unpacks']+=1
+        return restored.as_strided(self.shape,self.stride)
+
+
 class CheckpointFileStore:
     def __init__(self, directory, *, pin_memory=True, transfer_chunk_bytes=64 << 20):
         if type(pin_memory) is not bool:
@@ -79,6 +117,10 @@ class CheckpointFileStore:
         self.pin_memory = pin_memory
         self.transfer_chunk_bytes = transfer_chunk_bytes
         self.transfer_buffer = None
+        self.arena_fd = None
+        self.arena_holder = [None]
+        self.arena_size = 0
+        self.arena_free = []
         self.counters = dict(written_bytes=0, read_bytes=0, live_bytes=0,
                              peak_live_bytes=0, live_files=0, packs=0, unpacks=0,
                              pinned_transfer_bytes=0, pinned_pack_chunks=0,
@@ -106,7 +148,73 @@ class CheckpointFileStore:
             lease = (self.path / '.lock').open('a+b')
             fcntl.flock(lease, fcntl.LOCK_EX | fcntl.LOCK_NB)
             (self.path / 'store.json').write_text(json.dumps({'schema': SCHEMA}))
-            self.cleanup = weakref.finalize(self, _remove_store, self.path, lease)
+            self.cleanup = weakref.finalize(self, _remove_store, self.path, lease, self.arena_holder)
+
+    def reserve_arena(self, size):
+        """Physically own the measured scratch bound before optimizer work."""
+        if type(size) is not int or size<1:
+            raise ValueError('checkpoint scratch arena needs a positive byte bound')
+        page=mmap.PAGESIZE
+        size=(size+page-1)//page*page
+        with self.lock:
+            if self.arena_fd is not None:
+                if self.counters['live_files']:
+                    raise ValueError('cannot resize checkpoint scratch while graphs retain inputs')
+                if self.arena_size>=size:return self.arena_size
+                os.close(self.arena_fd);self.arena_fd=None;self.arena_holder[0]=None
+                (self.path/'arena.bin').unlink()
+                self.arena_size=0;self.arena_free=[]
+            fd=os.open(self.path/'arena.bin',os.O_CREAT|os.O_EXCL|os.O_RDWR,0o600)
+            try:
+                from ..train.checkpoint_safety import CheckpointWriteAdmission
+                with CheckpointWriteAdmission(self.path/'arena.bin',write_bound_bytes=size,
+                        transfer_bytes=0,minimum_free_bytes=self.minimum_free_bytes):
+                    os.posix_fallocate(fd,0,size)
+                    os.fsync(fd)
+            except BaseException:
+                os.close(fd);(self.path/'arena.bin').unlink(missing_ok=True)
+                raise
+            self.arena_fd=fd;self.arena_holder[0]=fd;self.arena_size=size;self.arena_free=[(0,size)]
+            return size
+
+    def release_arena(self):
+        """Release only a fully idle arena; retained graphs keep their storage."""
+        with self.lock:
+            if self.arena_fd is None:return
+            if self.counters['live_files']:
+                raise ValueError('checkpoint scratch arena still belongs to a live graph')
+            os.close(self.arena_fd);self.arena_fd=None;self.arena_holder[0]=None
+            (self.path/'arena.bin').unlink()
+            self.arena_size=0;self.arena_free=[]
+
+    def _arena_pack(self,tensor,span,size):
+        page=mmap.PAGESIZE
+        length=(size+page-1)//page*page
+        with self.lock:
+            for index,(offset,available) in enumerate(self.arena_free):
+                if available>=length:
+                    if available==length:self.arena_free.pop(index)
+                    else:self.arena_free[index]=(offset+length,available-length)
+                    break
+            else:raise RuntimeError('measured checkpoint scratch arena exhausted before graph completion')
+            self.counters['live_bytes']+=size;self.counters['live_files']+=1
+            self.counters['peak_live_bytes']=max(self.counters['peak_live_bytes'],self.counters['live_bytes'])
+        try:
+            mapping=mmap.mmap(self.arena_fd,size,access=mmap.ACCESS_WRITE,offset=offset)
+            try:
+                mapped=torch.frombuffer(mapping,dtype=tensor.dtype,count=span)
+                source=tensor.detach().as_strided((span,),(1,),storage_offset=tensor.storage_offset())
+                try:self.copy_to_file(mapped,source)
+                finally:del mapped,source
+                mapping.flush()
+            finally:mapping.close()
+            os.posix_fadvise(self.arena_fd,offset,size,os.POSIX_FADV_DONTNEED)
+            with self.lock:
+                self.counters['written_bytes']+=size;self.counters['packs']+=1
+            return ArenaSavedTensor(self,offset,length,tensor,size,span)
+        except BaseException:
+            _release_arena_tensor(self,offset,length,size)
+            raise
 
     def _staging(self, dtype):
         # One byte buffer is reused across dtypes. A file holder must never
@@ -163,6 +271,8 @@ class CheckpointFileStore:
         # ordinary device copy does; never copy the unused storage prefix.
         span = 1 + sum((length - 1) * stride for length, stride in zip(tensor.shape, tensor.stride()))
         size = span * tensor.element_size()
+        if self.arena_fd is not None:
+            return self._arena_pack(tensor,span,size)
         fd, name = tempfile.mkstemp(prefix='tensor-', suffix='.bin', dir=self.path)
         path = Path(name)
         try:
@@ -198,10 +308,10 @@ class CheckpointFileStore:
 
     @staticmethod
     def unpack(saved):
-        return saved.unpack() if isinstance(saved, SavedFileTensor) else saved
+        return saved.unpack() if isinstance(saved, (SavedFileTensor,ArenaSavedTensor)) else saved
 
     def snapshot(self):
         with self.lock:
             return {'storage': 'file', 'minimum_free_bytes': self.minimum_free_bytes, 'directory': self.directory,
                     'pin_memory': self.pin_memory,
-                    'transfer_chunk_bytes': self.transfer_chunk_bytes, **self.counters}
+                    'transfer_chunk_bytes': self.transfer_chunk_bytes, 'arena_bytes':self.arena_size, **self.counters}

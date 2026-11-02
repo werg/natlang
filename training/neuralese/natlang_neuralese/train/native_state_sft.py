@@ -399,6 +399,37 @@ class _BoundedUpdateProfile:
                                'cuda_timing_scope': 'current stream', 'phases': phases})
 
 
+def _measured_checkpoint_scratch_peak(memory_check, oversize_proof):
+    """Read successful whole-graph scratch measurements for this update."""
+    from .native_resident import bound
+    reports=[]
+    for check in (memory_check or {}).get('checks',[memory_check] if memory_check else []):
+        if check and check.get('passed') is True:reports.append(check.get('capacity') or {})
+    if oversize_proof:
+        proof=json.loads(bound(oversize_proof).read_text())
+        if proof.get('passed') is not True:raise ValueError('oversize scratch evidence did not pass')
+        if proof.get('schema')=='natlang.native-oversize-live-capacity/1':
+            reports.append(proof.get('capacity') or {})
+        elif proof.get('schema')=='natlang.native-oversize-capacity-envelope-reuse/1':
+            refs=[item['envelope_source'] for item in proof.get('case_matches') or []]
+            if not refs:raise ValueError('oversize scratch reuse lacks measured cases')
+            for ref in refs:
+                source=json.loads(bound(ref).read_text())
+                if source.get('passed') is not True:raise ValueError('oversize scratch source did not pass')
+                reports.append(source.get('capacity') or {})
+        else:raise ValueError('unsupported oversize scratch evidence')
+    peaks=[]
+    for report in reports:
+        if report.get('passed') is not True:raise ValueError('scratch capacity report did not pass')
+        cases=report.get('cases') or []
+        if not cases:raise ValueError('scratch capacity report lacks whole-graph cases')
+        for case in cases:
+            peak=(case.get('checkpoint_input_offload') or {}).get('peak_live_bytes')
+            if type(peak) is not int or peak<0:raise ValueError('scratch capacity lacks measured file peak')
+            peaks.append(peak)
+    return max(peaks) if peaks else None
+
+
 def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_layers=True,
                            chunk_tokens=128, objective=None, precision=None, accumulate=(), sft_update_reference=None):
     """One shared complete production update, also used by throughput diagnostics.
@@ -3329,6 +3360,7 @@ def _main(argv=None, *, requested_refresh):
             forward_atol=args.forward_atol, gradient_atol=args.gradient_atol, device=args.device)
         checkpoint_options['training_backend_check'] = backend_check
         write_json(args.out / 'training-backend-check.json', backend_check)
+    memory_check = None
     if args.memory_qualification and not args.continuation_preflight_only:
         from ..eval.native_memory import run_prepared
         memory_check = run_prepared(model,optimizer,train,roles,config,args,backend=backend,objective=objective,
@@ -3860,6 +3892,7 @@ def _main(argv=None, *, requested_refresh):
                 needs_candidate_check = bool(policy.recovery_queue is not None or (args.memory_qualification and objective is None) or (diloco is not None and getattr(diloco,'contract_sha256',None) is not None))
                 expanded = resident.poll(global_step,candidate_check=resident_candidate_check) if needs_candidate_check else resident.poll(global_step)
                 if expanded is not None:
+                    memory_check = None  # changed source needs fresh actual-window scratch evidence
                     if pending_role_contract:
                         diloco.switch_role_contract(pending_role_contract['identity'])
                     schedule.close()
@@ -4040,6 +4073,8 @@ def _main(argv=None, *, requested_refresh):
                 total_end = min(total_end, step + anneal.remaining(global_step))
             if policy.signaled or step >= total_end:
                 break
+            if args.checkpoint_input_offload_directory:
+                model.port.activation_checkpoint.file_store.release_arena()
             # Reserve the exact future checkpoint inode before any optimizer
             # work; after each commit this reacquires blocks before proceeding.
             reserved = _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
@@ -4203,6 +4238,36 @@ def _main(argv=None, *, requested_refresh):
                     'global_step':global_step,'cursor':cursor,
                     'received_signals':[*policy.stop.received,*requested_refresh.received]}),flush=True)
                 break
+            if args.checkpoint_input_offload_directory:
+                try:
+                    from ..eval.native_memory import _dense_capacity_reuse_supported
+                    scratch_peak=(_measured_checkpoint_scratch_peak(memory_check,oversize_proof)
+                        if memory_check is not None and _dense_capacity_reuse_supported(model,config,objective) else None)
+                    if scratch_peak is None:
+                        from ..eval.native_memory import qualify_capacity
+                        from .native_resident import binding as scratch_source_binding
+                        named=getattr(optimizer,'_native_named_parameters',list(model.named_parameters()))
+                        prior_grads=[(parameter,parameter.grad) for _,parameter in named if parameter.grad is not None]
+                        for parameter,_ in prior_grads:parameter.grad=None
+                        try:
+                            measured=qualify_capacity(model,optimizer,micro_batches,backend=backend,
+                                checkpoint_layers=args.checkpoint_layers,chunk_tokens=args.chunk_tokens,
+                                checkpoint_sha256=current_parent_sha or lineage_checkpoint_sha or config['base_inventory_sha256'],
+                                source_binding=scratch_source_binding(train.path),objective=objective,
+                                production_packing=True,retained_gradients=args.accumulate_batches>1,
+                                cotangent_mode='plain' if args.cotangent_accumulator_backend=='plain' else 'vjp',
+                                precision=precision_pass)
+                        finally:
+                            for parameter,gradient in prior_grads:parameter.grad=gradient
+                        scratch_peak=_measured_checkpoint_scratch_peak({'passed':measured.get('passed'),
+                                                                        'capacity':measured},None)
+                        if scratch_peak is None:raise ValueError('actual graph scratch capacity qualification failed')
+                    scratch_bound=max(1,scratch_peak)+max(1<<20,(scratch_peak+3)//4)
+                    model.port.activation_checkpoint.file_store.reserve_arena(scratch_bound)
+                except BaseException:
+                    cursor = _restore_unstarted_update(optimizer=optimizer, previous_cursor=previous_cursor,
+                        rng_state=fetch_rng, device=args.device, warmup=warmup, anneal=anneal)
+                    raise
             # Continue locally while peers boot; pause only if unmerged residual
             # reaches the configured offline-history bound.
             if diloco is not None and not diloco.await_update_capacity(
@@ -4650,6 +4715,16 @@ def _main(argv=None, *, requested_refresh):
             loop_error_tb = close_error.__traceback__
         else:
             loop_error.add_note(f'schedule.close() also failed: {type(close_error).__name__}: {close_error}')
+    # Release only idle scratch before final checkpoint/report publication;
+    # live autograd holders retain their arena and make the exit fail closed.
+    if args.checkpoint_input_offload_directory:
+        try:
+            model.port.activation_checkpoint.file_store.release_arena()
+        except BaseException as scratch_error:
+            if loop_error is None:
+                loop_error=scratch_error;loop_error_tb=scratch_error.__traceback__
+            else:
+                loop_error.add_note(f'checkpoint scratch release also failed: {type(scratch_error).__name__}: {scratch_error}')
     # This drain belongs to exceptional and normal exits alike. A failed close
     # must not bypass writer ownership or erase the original training error.
     writer_error = None
