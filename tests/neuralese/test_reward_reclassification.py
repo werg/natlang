@@ -203,3 +203,29 @@ def test_existing_admission_matches_selected_source_before_resume(tmp_path, tamp
     if tamper == 'none': _verify_existing_rl_admission(tmp_path, rollout, policy, loss)
     else:
         with pytest.raises(ValueError): _verify_existing_rl_admission(tmp_path, rollout, policy, loss)
+
+
+def test_coefficient_admission_binds_actual_policy_and_base(tmp_path):
+    from natlang_neuralese.rl.production import _verify_existing_rl_admission
+    def put(name, data):
+        path=tmp_path/name; path.write_text(data)
+        return path,hashlib.sha256(path.read_bytes()).hexdigest()
+    rollout,rhash=put('rollouts.jsonl','rollout')
+    _,ghash=put('rl-native-graphs.jsonl','graphs')
+    _,ohash=put('rl-native-objective.json','objective')
+    policy,phash=put('policy.json','coefficient')
+    binding={'path':str(policy),'sha256':phash}
+    receipt={'schema':'natlang.native-rl-admission/1','base_native_identity':{'checkpoint_sha256':'base'},
+             'behavior_policy_sha256':'invocation-identity','coefficient_policy':binding,
+             'rollouts':{str(rollout):rhash},'native_graphs_sha256':ghash,'objective_sha256':ohash}
+    path=tmp_path/'rl-data-receipt.json';path.write_text(json.dumps(receipt))
+    _verify_existing_rl_admission(tmp_path,rollout,'base',None,binding)
+    with pytest.raises(ValueError):
+        _verify_existing_rl_admission(tmp_path,rollout,'other',None,binding)
+    receipt.pop('coefficient_policy');path.write_text(json.dumps(receipt))
+    with pytest.raises(ValueError,match='coefficient actor'):
+        _verify_existing_rl_admission(tmp_path,rollout,'base',None,binding)
+    receipt['coefficient_policy']=binding;path.write_text(json.dumps(receipt))
+    policy.write_text('changed')
+    with pytest.raises(ValueError,match='policy bytes'):
+        _verify_existing_rl_admission(tmp_path,rollout,'base',None,binding)

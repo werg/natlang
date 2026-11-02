@@ -122,7 +122,7 @@ def test_declared_policy_does_not_select_raw_prompt_ce_best_export(active,monkey
         exposure_counts={'train':2},global_step=2,rng={'rng':'exact'},metrics={'held':{'loss':.1}},
         architecture='lfm',options={'ce_supervision_active':active})
     state,metric = saved[0]
-    assert metric is None if active else metric == .1
+    assert metric is None
     assert state['training']['optimizer'] == {'moments':'exact'}
     assert state['training']['rng'] == {'rng':'exact'}
     assert state['training']['exposure_counts'] == {'train':2}

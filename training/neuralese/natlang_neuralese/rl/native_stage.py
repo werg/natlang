@@ -216,7 +216,10 @@ def main(argv=None):
             args.foundation_communication_batches, args.refresh_foundation_readiness,
             args.resident_data_directory, args.resident_geometry_qualification)):
         raise ValueError('SFT source controls cannot be applied to a native RL stage')
-    args.learner_resume = None if (args.out / 'native-rl-completed-operation.json').exists() else _partial_learner_resume(args)
+    # Coefficient checkpoints have their own authenticated state and resume path.
+    args.learner_resume = (None if args.coefficient_policy is not None or
+                           (args.out / 'native-rl-completed-operation.json').exists()
+                           else _partial_learner_resume(args))
     operation_request = _completed_operation_request(args, trainer, raw_argv)
     from contextlib import nullcontext
     from .native_output_lease import coefficient_output_lease
@@ -446,7 +449,9 @@ def _admit_and_train(args,trainer,*,operation_request=None):
         transition_path=None
     write_json_durable(args.out/'rl-data-receipt.json', {
         'schema': 'natlang.native-rl-admission/1',
-        **({'base_native_identity':objective['base_native_identity'],'behavior_policy_sha256':objective['behavior_policy_sha256']}
+        **({'base_native_identity':objective['base_native_identity'],'behavior_policy_sha256':objective['behavior_policy_sha256'],
+               'coefficient_policy':{'path':str(args.coefficient_policy.resolve(strict=True)),
+                                     'sha256':sha256_file_hex_cached(args.coefficient_policy)}}
            if args.coefficient_policy is not None else {'policy':objective['policy']}), 'mode': args.rl_mode,
         **({'policy_loss': objective['policy_loss']} if 'policy_loss' in objective else {}),
         'rollouts': {str(path.resolve()): sha256_file_hex_cached(path) for path in args.rollouts},

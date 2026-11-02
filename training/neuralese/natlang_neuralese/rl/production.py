@@ -38,12 +38,19 @@ def _active_reclassified_rollouts(state, report, values, round_dir):
     return corrected
 
 
-def _verify_existing_rl_admission(stage_out, rollouts, policy, policy_loss):
+def _verify_existing_rl_admission(stage_out, rollouts, policy, policy_loss, coefficient=None):
     """Check a resumed admission before allowing any learner command."""
     from ..common.hashing import sha256_file_hex
     admission = json.loads((stage_out / 'rl-data-receipt.json').read_text())
     rollout = Path(rollouts).resolve(strict=True)
-    admitted_policy = (admission.get('policy') or {}).get('checkpoint_sha256', admission.get('behavior_policy_sha256'))
+    admitted_policy = (admission.get('policy') or {}).get('checkpoint_sha256')
+    if coefficient is not None:
+        coefficient_path=Path(coefficient['path']).resolve(strict=True)
+        if sha256_file_hex(coefficient_path)!=coefficient['sha256']:
+            raise ValueError('RL coefficient policy bytes changed')
+        if admission.get('coefficient_policy')!={'path':str(coefficient_path),'sha256':coefficient['sha256']}:
+            raise ValueError('RL admission coefficient actor differs')
+        admitted_policy=(admission.get('base_native_identity') or {}).get('checkpoint_sha256')
     if (admission.get('schema') != 'natlang.native-rl-admission/1'
             or admission.get('policy_loss') != policy_loss or admitted_policy != policy
             or admission.get('rollouts') != {str(rollout): sha256_file_hex(rollout)}
@@ -1776,7 +1783,9 @@ def run(config_path, *, rounds=None, stop=None):
                 saved_progress=json.loads(learner_report.read_text()) if learner_report.is_file() else {}
                 saved_receipt = stage_out / 'rl-data-receipt.json'
                 if mode == 'grpo' and saved_receipt.is_file():
-                    _verify_existing_rl_admission(stage_out, values['rollouts'], policy, policy_loss)
+                    _verify_existing_rl_admission(stage_out, values['rollouts'], policy, policy_loss,
+                        {'path':values['coefficient_policy'],'sha256':values['coefficient_policy_sha256']}
+                        if config.get('coefficient_policy') else None)
                 already_complete=bool((saved_progress.get('completed') and
                     (not (config.get('coefficient_policy') and mode!='seed') or saved_progress.get('qualification_complete') is True))
                     or qualified_seed_boundary(config,mode,saved_progress,stage_out/'checkpoint.pt'))
