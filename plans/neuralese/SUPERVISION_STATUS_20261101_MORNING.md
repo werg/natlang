@@ -1,3 +1,30 @@
+## Immediate restart correction, 2026-11-02 19:18 CET
+
+- R24 first launch FAILED BEFORE SGD at the SFT update-budget guard. Its
+  inherited explicit reference belonged to diagnostic433e SFT68, whereas the
+  actual earned72 saved SFT frame is global67 and has no captured reference.
+  This is a real stale launch-control defect, not a CUDA capacity failure.
+- Actual frame options verified by mmap inspection: accumulation16,
+  batch_tokens32768, no earned scored-graph reference. Corrected launch
+  `ops/earned-jolt72-joint-r25-g4-a16-1102/config.json` retains accumulation16
+  for its first actual complete-recipe update, removes that invalid reference,
+  and requests refresh after one update. The normal trainer captures an actual
+  current-lineage scored-graph anchor at this earned update. Promptly continue
+  with accumulation4/16-update windows using the captured anchor. Do not
+  transplant a diagnostic branch's anchor or weaken the reference guard.
+- R25 service `lfm3-earned72-joint-g4-a16-r25-1102` is LIVE since19:17:12,
+  actual runtime remains frozenR24/main1d3a09067. Full-model G4 certificate
+  passed at actual72 weights (forward1e-4, gradient1e-5), zero SGD. Source
+  capacity qualification and actual optimizer advancement remain unproven.
+- Backup attempt using RAM payload was stopped before publication to admit
+  the corrected GPU job; no private72 recovery was earned. Incomplete codec
+  scratch was cleaned by its own finally block. Actual restarted backup
+  `preserve-earned72-private-fullstate-r3-1102` uses bounded8GiB host and a
+  local compressed payload, preserving pinned raw72. Physical scratch and
+  checkpoint reservations remain authoritative; don't claim export completion
+  before fresh private GET/decoded target readback. Both new runtime20/24 TARs
+  were built locally and remain for publication.
+
 ## Live supervision update, 2026-11-02 19:10 CET
 
 - Latest owner-requested one-time GPU creation probes: cw1/cw2/cw3/cw4 all
