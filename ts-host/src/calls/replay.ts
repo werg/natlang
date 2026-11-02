@@ -132,9 +132,9 @@ export type ReplayOutcome = { value?: unknown; error?: string; observed: Observe
  * calls it makes run live (on the runtime's model) under the same services, with compilations off.
  */
 export async function replay(runtime: NatlangRuntime, run: (args: Record<string, unknown>) => unknown, args: Record<string, unknown>,
-  effects: readonly RecordedEffect[], options: { serviceNames?: string[]; captureNames?: string[];
+  effects: readonly RecordedEffect[], options: { serviceNames?: string[]; captureNames?: string[]; strictSequence?: boolean;
     taskOptions?: { auditOf?: string; name?: string } } = {}): Promise<ReplayOutcome> {
-  const services = new ReplayServices(effects, options.serviceNames);
+  const services = new ReplayServices(effects, options.serviceNames, { strictSequence: options.strictSequence });
   const before = Object.fromEntries((options.captureNames ?? []).map(name => [name, args[name]]));
   const folder = args.folder as { folder?: Folder } | undefined;
   let value: unknown, error: string | undefined;
