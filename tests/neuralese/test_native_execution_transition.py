@@ -111,12 +111,14 @@ def test_numerical_gate_rejects_cpu_or_wrong_policy_before_certificate_admission
 
 def test_protected_dev_behavior_binds_packet_and_reports_per_case_changes(tmp_path, monkeypatch):
     import json, hashlib
+    from pathlib import Path
     from types import SimpleNamespace
-    from natlang_neuralese.eval import native_state
+    from natlang_neuralese.eval import portable_task_evidence
     from natlang_neuralese.common.custody import ProtectedWorlds
     from natlang_neuralese.train import native_execution_transition as transition
-    monkeypatch.setattr(native_state,'validate_task_execution_receipt',lambda receipt, identity:
-        receipt.get('native_identity')==identity and receipt.get('passed') is True)
+    monkeypatch.setattr(portable_task_evidence,'validate',lambda receipt, identity, packet_path:
+        {'score':json.loads(Path(receipt['score_path']).read_text())} if receipt.get('native_identity')==identity
+        and receipt.get('passed') is True else (_ for _ in ()).throw(ValueError('bad actor')))
     packet_path=tmp_path/'packet/cases.jsonl';packet_path.parent.mkdir();packet_path.write_text('case')
     packet=hashlib.sha256(packet_path.read_bytes()).hexdigest()
     monkeypatch.setattr(transition,'DEV_PACKET_SHA256',packet)
@@ -172,10 +174,14 @@ def test_selected_publication_preserves_old_round_and_never_counts_an_update(tmp
     rollouts=write('source/rollouts.jsonl',{'x':1})
     collection=write('source/sealed.json',{'files':{'collection-binding.json':binding,'rollouts.jsonl':rollouts}})
     request=write('source/request.json',{'cases':cases['path']})
-    scores=[write('dev-'+x+'.json',{'score_path':write('score-'+x+'.json',{'score':x})['path']}) for x in ('new','old')]
-    for index,ref in enumerate(scores):
-        val=json.loads(open(ref['path']).read());val['score_sha256']=hashlib.sha256(open(val['score_path'],'rb').read()).hexdigest()
-        path=__import__('pathlib').Path(ref['path']);path.write_text(json.dumps(val));scores[index]={'path':str(path),'sha256':hashlib.sha256(path.read_bytes()).hexdigest(),'bytes':path.stat().st_size}
+    from natlang_neuralese.eval.portable_task_evidence import FILES, SCHEMA
+    scores=[]
+    for label in ('new','old'):
+        files={}
+        for name in FILES:
+            ref=write('dev-'+label+'/'+name,{'fixture':label})
+            files[name]={'sha256':ref['sha256'],'bytes':ref['bytes']}
+        scores.append(write('dev-'+label+'/evidence.json',{'schema':SCHEMA,'files':files}))
     evidence=write('evidence.json',{'collection_proof':collection,'collection_request':request,'dev_candidate':scores[0],
         'dev_parent':scores[1]})
     qual_ref=write('qualified.json',{'q':1})

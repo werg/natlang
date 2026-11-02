@@ -324,7 +324,7 @@ def validate_dev_behavior(candidate, baseline, *, candidate_identity, baseline_i
     from pathlib import Path
     from ..common.custody import ProtectedWorlds
     from ..common.hashing import sha256_file_hex
-    from ..eval.native_state import validate_task_execution_receipt
+    from ..eval.portable_task_evidence import validate as validate_portable_task
     from ..rl.native_direct_sft_recovery import _verify_historical_file_ref
     root = Path(protection_root).resolve(strict=True)
     packet = _verify_historical_file_ref(packet_ref)
@@ -344,24 +344,8 @@ def validate_dev_behavior(candidate, baseline, *, candidate_identity, baseline_i
                for item in source.get('packets', []) if item.get('id') == DEV_PACKET_ID]
     if len(records) != 1 or records[0].get('cases_sha256') != DEV_PACKET_SHA256:
         raise ValueError('development packet is absent from the current protected-worlds union')
-    for receipt, identity in ((candidate,candidate_identity),(baseline,baseline_identity)):
-        if (not isinstance(receipt, dict) or receipt.get('schema') != 'natlang.native-task-execution-receipt/2'
-                or not validate_task_execution_receipt(receipt, identity)):
-            raise ValueError('development behavior lacks an independently validated complete task receipt')
-    scores = []
-    for receipt in (candidate, baseline):
-        path = Path(receipt['score_path']).resolve(strict=True)
-        before = path.stat()
-        score = json.loads(path.read_text())
-        after = path.stat()
-        digest = sha256_file_hex(path)
-        final = path.stat()
-        signature = lambda st: (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns)
-        if (signature(before) != signature(after) or signature(after) != signature(final)
-                or digest != receipt.get('score_sha256')):
-            raise ValueError('development task score changed while checking behavior')
-        scores.append(score)
-    new, old = scores
+    new = validate_portable_task(candidate,identity=candidate_identity,packet_path=packet)['score']
+    old = validate_portable_task(baseline,identity=baseline_identity,packet_path=packet)['score']
     if (new.get('packet_sha256') != DEV_PACKET_SHA256 or old.get('packet_sha256') != DEV_PACKET_SHA256
             or new.get('case_indices') != old.get('case_indices')
             or [row.get('id') for row in new.get('cases_detail', [])]
@@ -451,7 +435,7 @@ def qualify_candidate(publication_ref, evidence_ref, *, protection_root):
     validate_numerical_certificate(read('runtime_certificate'), identity=identity, model_config=config)
     validate_fresh_sealed_replay(evidence['collection_proof'], evidence['collection_request'],
                                  evidence['replay_probe'], identity=identity, roles=roles)
-    dev = validate_dev_behavior(read('dev_candidate'), read('dev_parent'), candidate_identity=identity,
+    dev = validate_dev_behavior(evidence['dev_candidate'], evidence['dev_parent'], candidate_identity=identity,
                                 baseline_identity=previous, packet_ref=evidence['dev_packet'],
                                 protection_root=protection_root)
     # Recheck both the evidence envelope and every bound record after the long
@@ -582,8 +566,14 @@ def publish_selected(state_path, *, qualification_ref, out, decision_reason):
                                         manifest=manifest)
             refs.append({'path':str(path), 'sha256':entry['sha256'], 'bytes':entry['bytes']})
     for name in ('dev_candidate','dev_parent'):
-        task = json.loads(_verify_historical_file_ref(evidence[name]).read_text())
-        refs.append({'path':task['score_path'],'sha256':task['score_sha256']})
+        task_path = _verify_historical_file_ref(evidence[name])
+        task = json.loads(task_path.read_text())
+        from ..eval.portable_task_evidence import FILES, SCHEMA
+        if task.get('schema') != SCHEMA or set(task.get('files',{})) != set(FILES):
+            raise ValueError('invalid portable development evidence')
+        for filename in FILES:
+            item=task['files'][filename]
+            refs.append({'path':str(task_path.parent/filename),'sha256':item['sha256'],'bytes':item['bytes']})
     from .native_readiness import _bound
     def checked_path(ref):
         path = _bound(ref)
