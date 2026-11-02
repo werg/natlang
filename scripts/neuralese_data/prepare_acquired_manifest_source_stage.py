@@ -7,6 +7,8 @@ learner, or claim a behavioral qualification.
 import argparse
 import hashlib
 import json
+import os
+import sys
 from pathlib import Path
 
 from natlang_neuralese.common.custody import ProtectedWorlds
@@ -191,6 +193,22 @@ def prepare(predecessor_path, combined_path, census_path, output, *, reviewed_ce
     return result
 
 
+def finalization_argv(predecessor,combined,census,prepared,output,semantic,runtimes):
+    """Execute the canonical CE/recipe builder in a fresh process after durable source preparation."""
+    if not output or not semantic or not runtimes:
+        raise ValueError('chained finalization requires an output, full sample review and reviewed converter runtimes')
+    if Path(output).exists():raise ValueError('chained finalization output already exists')
+    checked(bind(semantic),'chained semantic review')
+    for root in runtimes:
+        if not Path(root).is_dir():raise ValueError('reviewed converter runtime directory is missing')
+    argv=[sys.executable,str(Path(__file__).with_name('build_acquired_streaming_successor.py')),
+        '--predecessor-receipt',str(predecessor),'--screen-receipt',str(combined),
+        '--census-receipt',str(census),'--prepared-source-receipt',str(prepared),
+        '--semantic-review',str(semantic),'--new-family-share','0.07','--output-dir',str(output)]
+    for root in runtimes:argv.extend(['--reviewed-converter-runtime',str(root)])
+    return argv
+
+
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--predecessor-receipt', required=True)
@@ -198,10 +216,19 @@ def main():
     p.add_argument('--census-receipt', required=True)
     p.add_argument('--out', required=True)
     p.add_argument('--reviewed-census-builder-sha256')
+    p.add_argument('--finalize-output')
+    p.add_argument('--semantic-review')
+    p.add_argument('--reviewed-converter-runtime',action='append')
     a=p.parse_args()
+    argv=(finalization_argv(a.predecessor_receipt,a.combined_receipt,a.census_receipt,
+        Path(a.out)/'receipt.json',a.finalize_output,a.semantic_review,a.reviewed_converter_runtime)
+        if a.finalize_output else None)
+    if argv is None and (a.semantic_review or a.reviewed_converter_runtime):
+        p.error('semantic review and converter runtimes require --finalize-output')
     result=prepare(a.predecessor_receipt,a.combined_receipt,a.census_receipt,a.out,
         reviewed_census_builder_sha256=a.reviewed_census_builder_sha256)
-    print(json.dumps({'rows':result['rows'],'new_rows':result['new_rows'],'training_admission':False}))
+    print(json.dumps({'rows':result['rows'],'new_rows':result['new_rows'],'training_admission':False}),flush=True)
+    if argv is not None:os.execv(argv[0],argv)
 
 
 if __name__ == '__main__': main()

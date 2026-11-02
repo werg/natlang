@@ -83,3 +83,14 @@ def test_manifest_stage_rejects_forged_geometry_even_if_census_is_self_consisten
     altered=write(tmp_path/'bad-census.json',bad)
     with pytest.raises(ValueError,match='bindings or geometry'):
         stage.prepare(pred['path'],combined['path'],altered['path'],tmp_path/'out')
+
+
+def test_chained_finalization_binds_review_and_uses_fresh_canonical_builder(tmp_path):
+    semantic=tmp_path/'semantic.json';semantic.write_text('{}');runtime=tmp_path/'runtime';runtime.mkdir()
+    argv=stage.finalization_argv('pred','combined','census','prepared',tmp_path/'new',semantic,[runtime])
+    assert argv[1].endswith('/build_acquired_streaming_successor.py')
+    assert argv[argv.index('--prepared-source-receipt')+1]=='prepared'
+    assert argv[argv.index('--new-family-share')+1]=='0.07'
+    assert argv[argv.index('--reviewed-converter-runtime')+1]==str(runtime)
+    with pytest.raises(ValueError,match='requires an output'):
+        stage.finalization_argv('p','c','x','s',tmp_path/'new',None,[runtime])
