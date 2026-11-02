@@ -520,3 +520,26 @@ def test_started_append_moves_only_the_declared_shared_train_foundation_input():
     assert not _data_continuation(old,{**new,'continued_native_graphs':ref('wrong','d','prior')})
     distinct={**old,'foundation_native_graphs':{**old_train,'binding':'separate'}}
     assert not _data_continuation(distinct,new)
+
+
+def test_native_sft_quantization_optout_survives_recipe_to_trainer(tmp_path):
+    from natlang_neuralese.train.native_state_sft import build_parser
+    recipe = native_declared()
+    recipe['stages'][0]['parameters']['quantization'] = 'off'
+    path = tmp_path / 'recipe.json'
+    path.write_text(json.dumps(recipe))
+    loaded = load_recipe(path)
+    argv = stage_parameter_args(loaded['stages'][0]['parameters'])
+    parsed = build_parser().parse_args(argv + [
+        '--native-graphs', 'train.json', '--held-native-graphs', 'held.json', '--out', str(tmp_path/'run')])
+    assert parsed.quantization == 'off'
+
+
+def test_sft_quantization_default_does_not_leak_into_preference_stage():
+    from natlang_neuralese.train.recipe import HANDLERS, effective_stage_parameters
+    stage = {'kind': 'native_offline_preference', 'parameters': {}}
+    recipe = {'stage_parameter_defaults': {
+        'native_state_sft': {'quantization': 'off', 'epochs': 2}}}
+    assert effective_stage_parameters(stage, {}, recipe) == {'epochs': 2}
+    for kind in ('native_state_rl', 'native_offline_preference'):
+        assert 'quantization' not in HANDLERS[kind]['parameters']

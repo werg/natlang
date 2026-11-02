@@ -31,7 +31,7 @@ HANDLERS = {
                          'optional_inputs': {'continue_from', 'continued_native_graphs', 'continued_held_native_graphs', 'source_predecessor_retirement', 'foundation_native_graphs', 'foundation_declaration_recovery', 'withdrawn_native_graphs', 'retired_native_withdrawal', 'retired_native_withdrawal_set', 'standalone_diloco_parent', 'diloco_new_outer', 'pending_native_sources', 'pending_focus', 'unavailable_native_sources', 'source_classification_migration', 'source_correction', 'ce_supervision_policy'},
                          'parameters': {'base', 'rank', 'dtype', 'native_linear_precision', 'native_attention_precision', 'epochs', 'batch_graphs', 'batch_tokens', 'accumulate_batches', 'sft_update_budget_reference', 'learning_rate', 'weight_decay',
                              'latent_ns', 'muon_rounding', 'eval_every', 'held_eval_tokens', 'held_eval_graphs', 'held_final_policy', 'checkpoint_every', 'checkpoint_seconds', 'async_checkpoint', 'checkpoint_layers', 'checkpoint_layer_group_size', 'checkpoint_direct_token_limit', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'chunk_tokens', 'ffn_chunk_tokens', 'communication_min_visits',
-                             'fp8_training', 'fp8_recipe', 'fp8_amax_history_len', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'native_ordinary_precision', 'native_norm_execution', 'native_shared_execution', 'history_reasoning_policy', 'seed', 'task_eval', 'objective_continuation',
+                             'quantization', 'fp8_training', 'fp8_recipe', 'fp8_amax_history_len', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'native_ordinary_precision', 'native_norm_execution', 'native_shared_execution', 'history_reasoning_policy', 'seed', 'task_eval', 'objective_continuation',
                              'task_eval_every', 'forward_atol', 'gradient_atol', 'qualify_training_backend', 'resident_geometry_qualification', 'memory_qualification', 'sft_packed_geometry', 'communication_foundation', 'foundation_communication_batches', 'urgent_cohort_fairness', 'ordinary_cohort_fairness', 'communication_cohort_fairness', 'pending_rotation_anchor', 'refresh_at_checkpoint', 'refresh_foundation_readiness', 'refresh_after_updates', 'learn_reasoning_boundaries', 'share_causal_prefixes', 'cotangent_accumulator_backend', 'optimizer_state_storage', 'diloco', 'lr_warmup', 'weight_ema', 'matrix_telemetry'}, 'result': 'checkpoint.pt'},
 
 }
@@ -213,7 +213,7 @@ HANDLERS['native_state_rl'] = {
     'module': 'natlang_neuralese.rl.native_stage',
     'required_inputs': {'rollouts', 'held_native_graphs', 'continue_from'},
     'optional_inputs': {'rl_block_bundle'},
-    'parameters': set(HANDLERS['native_state_sft']['parameters']) |
+    'parameters': (set(HANDLERS['native_state_sft']['parameters']) - {'quantization'}) |
         {'rl_tokenizer', 'rl_mode', 'rl_policy_loss', 'native_participant'},
     'result': 'checkpoint.pt'}
 
@@ -222,7 +222,7 @@ HANDLERS['native_offline_preference'] = {
     'required_inputs':{'native_graphs','held_native_graphs','objective_spec'},
     'optional_inputs':{'continue_from','continued_native_graphs','continued_held_native_graphs','pending_native_sources'},
     'parameters':(set(HANDLERS['native_state_sft']['parameters']) -
-        {'communication_foundation','foundation_communication_batches','refresh_foundation_readiness'}) |
+        {'communication_foundation','foundation_communication_batches','refresh_foundation_readiness','quantization'}) |
         {'preference_beta','preference_margin'},
     'result':'checkpoint.pt'}
 
