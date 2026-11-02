@@ -434,7 +434,17 @@ def _grouped_dense_mm(a_ptr, rows_ptr, w_ptr, out_ptr, block_expert_ptr,
         else:
             w = tl.load(w_ptr + expert * stride_we + k_idx[:, None] * stride_inner + offs_n[None, :] * stride_outer,
                         mask=(k_idx[:, None] < K) & n_mask[None, :], other=0.0)
-        if DOT_PRECISION == "bf16x6":
+        if DOT_PRECISION == "bf16x3_exact_weight":
+            # The caller has just rounded the FP32 weight through BF16. Its
+            # residual terms are therefore identically zero for finite values.
+            ah = a.to(tl.bfloat16)
+            bh = w.to(tl.bfloat16)
+            am = (a - ah.to(tl.float32)).to(tl.bfloat16)
+            al = (a - ah.to(tl.float32) - am.to(tl.float32)).to(tl.bfloat16)
+            acc += tl.dot(al, bh)
+            acc += tl.dot(am, bh)
+            acc += tl.dot(ah, bh)
+        elif DOT_PRECISION == "bf16x6":
             ah = a.to(tl.bfloat16)
             bh = w.to(tl.bfloat16)
             am = (a - ah.to(tl.float32)).to(tl.bfloat16)
@@ -505,7 +515,7 @@ def _dense_mm(a, rows, weight, plan: Plan, transpose: bool, *, precision="ieee",
     # Fixed per dtype, never per call size. Measured on the GB10 (Mellum's projections, 16k tokens, top-8 of 64):
     # 256-column tiles 1.4-1.6x the 128-column ones; 64- and 128-row blocks equal.
     BN, BK, tuning = (64, 32, dict(num_warps=4, num_stages=2)) if ieee else (256, 64, dict(num_warps=8, num_stages=2))
-    if a.dtype == torch.float32 and precision in {"tf32", "tf32x3", "bf16x6"}:
+    if a.dtype == torch.float32 and precision in {"tf32", "tf32x3", "bf16x6", "bf16x3_exact_weight"}:
         BN, BK, tuning = 128, 32, dict(num_warps=4, num_stages=3)
     grid = (plan.blocks, triton.cdiv(N, BN))
     # For the one-matrix path `a` is a valid device pointer but is never read
@@ -746,8 +756,12 @@ class _InvariantLinear(torch.autograd.Function):
         # BF16-forward uses a FP32 straight-through adjoint through rounded
         # operands. Rounding incoming state adjoints again made an identical
         # flat/cached forward acquire branch-dependent backward discontinuities.
-        backward_w = w.to(torch.bfloat16).float() if w.dtype == torch.float32 and ctx.precision == 'bf16' else w
-        backward_precision = 'ieee' if ctx.precision == 'bf16' else ctx.precision
+        rounded_fp32_weight = w.dtype == torch.float32 and ctx.precision == 'bf16'
+        backward_w = w.to(torch.bfloat16).float() if rounded_fp32_weight else w
+        # This private precision is justified by the conversion immediately
+        # above, never by a claim about arbitrary caller-provided FP32 weights.
+        backward_precision = ('bf16x3_exact_weight' if rounded_fp32_weight and grad.dtype == torch.float32
+                              else 'ieee' if ctx.precision == 'bf16' else ctx.precision)
         dx = invariant_input_gradient(grad, backward_w, precision=backward_precision) if ctx.needs_input_grad[0] else None
         dw = None
         if ctx.needs_input_grad[1]:
