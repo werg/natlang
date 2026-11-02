@@ -1,3 +1,93 @@
+## Live supervision update, 2026-11-02 07:01 CET
+
+- This goal turn made concrete progress: independently qualified and selected the
+  arithmetic-corrected earned67, integrated quota-aware401685 controls, fixed real
+  publication/QAT/recovery-control defects, and launched the corrected SFT owner.
+  No new production optimizer step is verified yet. Do not describe qualification,
+  source admission or a live process as SGD/capability improvement.
+- Actual latest DGX owner: lfm3-quota401685-native-ffn-sft-v5-1102.service,
+  MainPID4051195 at07:00:48. Config ops/next401685-quota-ffn-sft-v5-1102/config.json;
+  runtime-native-quota-replay-v5-1102 is exact commit7e960120a. Same rolling output
+  sft401685-quota-ffn-1102/learner is reused; parent remains fullbf95 at earned67.
+  Inspect this actual unit/child/log, actual optimizer advancement and checkpoint
+  commit before claiming training. A four-update refresh is an interleave window,
+  not a reduced total recipe. Continue complete joint SFT and early whole-graph
+  RL, preserving all quotas and actual on-policy actor identities.
+- Previous v4 owner lfm3-quota401685-native-ffn-sft-1102 FAILED before SGD. It
+  restored optimizer/RNG, admitted47954 rows (353731->401685), and passed every
+  capacity case, then inline precision rejected the canonical FFN instance
+  forward. No checkpoint/report or earned update exists from that attempt.
+  Failure state is retained as an immutable control-input snapshot. New v5 has a
+  distinct resident authority and preserves the old plan/evidence; never replace
+  a plan to conceal a runtime change.
+- Fix7e960120a supports only the exact declared native FFN wrapper, applies
+  effective quantized operands without replacing invariant GEMM arithmetic, keeps
+  unknown overrides rejected, and avoids training-only vendor FP4 GEMMs for
+  canonical projections. Precision installation now precedes packed qualification.
+  Verification:26 passed/1 skipped inline/quantization suite;5 CPU/CUDA value,
+  profile-restoration and unknown-forward cases;2 actual CUDA whole-graph FP8/
+  NVFP4 optimizer-update cases. Counts overlap. These tiny-fixture updates are
+  tests, not earned production training. Precision has not been opted out.
+- Execution selection completed after fixing reference identity comparison:
+  registered refs had optional bytes while qualified refs omitted it. b1565cf19
+  now authenticates actual path/hash/declared size and rejects active round0.
+  de0289426 avoids repeated tensor comparisons after exact current identity checks;
+  8f664956a shares one fresh byte read within each nested admission operation,
+  rechecking device/inode/size/mtime/ctime at every reuse. Independent operations
+  still start fresh. Actual sequential readers populate the strict physical hash
+  cache. Execution/recovery tests77 passed; hash-cache15 passed. 03ebf03a5 retains
+  immutable controller snapshots across later head publications;25 targeted cases
+  passed. All these commits through7e960120a are pushed to origin/main.
+- Actual selected publication: ops/native67-ffn-qualified-selection-1102/
+  selected-publication.json SHA4d78e8b1c01909521870818f88927a5474f02945fc4e281ee615f50258932e0e.
+  Selection advanced the unearned collection cursor0->1, not optimizer exposure.
+  bf95 checkpoint preserves exact weights/optimizer/RNG/exposure; original21b4 and
+  failed source-v1 captures remain diagnostic. Candidate replay passes13190 actual
+  communicating actions at max9.54e-7. Protected development remains parent4/4 vs
+  candidate3/4; the explicit selection reason accepts this narrow disadvantage
+  to fix demonstrated replay error. Never claim nonregression or capability lift.
+- New actual source/CE launch was checked: native/foundation both401685;
+  continued predecessor remains separately named; consumed source-correction flag
+  is absent; interface LR.0001, backbone LR1e-6, full prompt, actual execution
+  admission and resident authority are bound. Quota-aware coefficient scales are
+  coding.3949664/general.1800956/Native1.8688841/Natlang4.7221286. Remaining planned
+  token-loss shares are12.3704/7/39.3949/41.2347%; not gradient or realized mixture.
+- Reclaimed11945770680 bytes of generated SGLang weights and15405316870 bytes by
+  verified bf95 external relocation. Actual selected-publication/continuation
+  verification passed through the alias before deleting its internal rollback.
+  Proof ops/next401685-quota-ffn-sft-1102/qualified-candidate-relocation.json.
+  An earlier deliberately interrupted relocation restored the original and is
+  separately retained. Internal free~76GiB, external~55GiB. Preserve40/50GiB
+  floors and checkpoint reserve accounting; external headroom is too small for
+  another full15GB mirror, so future export/retention needs attention promptly.
+- Private original recovery remains202/202 qualified64 dependencies/full67 GET.
+  Exact source67/bf95 reconstruction capsule remains verified. New v4 admission
+  capsule finished59 files with private PUT and complete workstation GET, including
+  complete native collection/state artifacts, numerical/replay/development evidence,
+  controls and710164480-byte runtime archive. Capsule
+  private-recovery-20261101/quota-native-admission-capsule-1102.json,
+  SHAbf6e1ce5d0ed3d344a4497fb80dd976695d2c8db27bd6ff30fd10c7c1d8cbf98.
+  This covers the v4 attempt; v5 runtime/controls and the complete new source-data
+  closure STILL need independent export/restore coverage. Do not call this latest
+  full training recovery or a qualified successor checkpoint.
+- Pop has a live baseline owner pop-native-ffn-sft-baseline-1102.service (launched
+ 07:00), evaluating unchanged bf95 on the actual SFT cadence cases[0,32,88,112].
+  It uses exact already-verified52af serving runtime/transport; disclose that
+  difference from upcoming v5 serving. No paid calls. The earlier paired four-case
+  comparison completed and both actors stopped. New runtimev4 was separately
+  staged to Pop with4.97MB file transfer (hardlink reuse), and its Python inventory,
+  closure and compiled collector were independently checked; receipt
+  ops/pop-native-quota-runtime-readback-1102.json. Do not assume v5 is staged.
+- Next: inspect actual v5 startup/QAT/capacity and any failure immediately; verify
+  real SGD and durable save, then interleave fresh actual-checkpoint whole-graph
+  RL instead of waiting for full SFT. Resolve storage and independently export
+  every earned replacement plus exact sources/runtime/controls. Rebase/capacity
+  qualify the seven long graphs after actual quota-aware adoption;472 original
+  rendering obligations are resolved quality exclusions, not missing good data.
+  SGLang still lacks whole-model qualification; latest forkf0aae211c9 is pushed
+  to natlang/natlang. No cloud allocation, entitlement polling or paid generation
+  was restarted.
+
 ## Live supervision update, 2026-11-02 06:25 CET
 
 - Previous goal turn freshly verified 23 escalation/CLI/learning tests and 62
