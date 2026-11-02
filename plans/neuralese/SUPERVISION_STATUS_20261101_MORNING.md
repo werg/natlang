@@ -1,3 +1,19 @@
+## Initial focus role wired; graph payload recovery complete, 2026-11-03 00:39 CET
+
+- Final launch preparation found one more real wiring gap: the supported recipe
+  role pending_focus was absent from native_supervised.SOURCE_ARGUMENTS. Initial
+  controllers silently omitted it even though resident adoption supported it.
+  It is now emitted through the actual seed command and cleared when absent from
+  the next stage.48 targeted supervised/source-resume tests passed, including
+  flag replacement and removal for pending_focus; required quick checks passed.
+  The fresh restart must assert its actual --pending-focus and bound config path.
+- Current graph payload recovery completed:220 independently workstation-GET-
+  verified objects,5111226867B including focus controls and capsule. All213 unique
+  graph manifest/payload/map files are included. Capsule:
+  `private-recovery-20261101/current-graph-payload-closure-capsule-1103.json`.
+  Full training restore remains unqualified: base/runtime and external admission
+  evidence are separate dependencies; no new checkpoint or SGD is claimed.
+
 ## Full schedule qualifies after first-visit reader fix, 2026-11-03 00:37 CET
 
 - Root cause: promotion applies only to each focused row's first missing visit,
