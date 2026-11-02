@@ -136,7 +136,7 @@ def appended_manifest(source_path, graph_path, graph_ref):
     return manifest
 
 
-def prepare_parallel_leaf(graph_path, graph_ref, tokenizer, roles, old_ids, output, *, workers):
+def prepare_parallel_leaf(graph_path, graph_ref, tokenizer, roles, old_ids, output, *, workers, audit=None, on_review=None):
     """Build the standard row cache using only the actual production parser in ordered workers."""
     from natlang_neuralese.common import row_index
     from natlang_neuralese.data import native_sources
@@ -153,7 +153,11 @@ def prepare_parallel_leaf(graph_path, graph_ref, tokenizer, roles, old_ids, outp
            'policy_sha256': policy, 'kind': 'native-graphs', 'pair_model': None, 'role_ids': list(roles)}
     before = file_signature(graph_path)
     entries, observed, seen, decisions = [], {}, set(), 0
-    for entry, slots, count in parallel_rows(graph_path, tokenizer, roles, workers=workers, max_pending=workers * 2):
+    for item in parallel_rows(graph_path, tokenizer, roles, workers=workers, max_pending=workers * 2,audit=audit):
+        entry,slots,count=item[:3]
+        if audit is not None:
+            if on_review is None:raise ValueError('audited parser needs a review consumer')
+            on_review(item[3],item[4])
         if entry['id'] in old_ids or entry['id'] in seen:
             raise ValueError('parallel source repeats a predecessor or new graph identity')
         seen.add(entry['id']); entries.append(entry); observed[(entry['id'], entry['binding'])] = slots
@@ -161,6 +165,13 @@ def prepare_parallel_leaf(graph_path, graph_ref, tokenizer, roles, old_ids, outp
         if len(entries) % 512 == 0:
             print(json.dumps({'kind': 'parallel_native_source_index', 'rows': len(entries),
                               'expected': graph_ref['rows'], 'workers': workers}), flush=True)
+    return finish_parallel_leaf_index(graph_path,graph_ref,entries,observed,decisions,output,workers=workers,
+        before=before,code_path=code_path,code_ref=code_ref,policy=policy,parser_code=parser_code,key=key)
+
+
+def finish_parallel_leaf_index(graph_path,graph_ref,entries,observed,decisions,output,*,workers,before,code_path,code_ref,policy,parser_code,key):
+    """Publish and verify the canonical index after production-parser workers finish."""
+    from natlang_neuralese.common import row_index
     if file_signature(graph_path) != before or len(entries) != graph_ref['rows'] or bind(code_path) != code_ref:
         raise ValueError('parallel source, builder or expected row count changed during indexing')
     if decisions:

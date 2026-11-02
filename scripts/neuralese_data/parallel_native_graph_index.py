@@ -18,10 +18,12 @@ from natlang_neuralese.data.native_sources import NativeGraphSource
 from natlang_neuralese.data.native_graph_schema import communication_classification
 
 _WORKER_SOURCE = None
+_WORKER_AUDIT = None
 
 
-def _init(tokenizer, roles):
-    global _WORKER_SOURCE
+def _init(tokenizer, roles, audit=None):
+    global _WORKER_SOURCE, _WORKER_AUDIT
+    _WORKER_AUDIT=audit
     source = NativeGraphSource.__new__(NativeGraphSource)
     source.kind = 'native-graphs'
     source.pair_model = None
@@ -39,10 +41,14 @@ def _parse_line(line):
     entry = {'id': example.id, 'groups': example.source_groups, 'binding': binding,
              'supervised_tokens': sum(weight > 0 for weight in example.target_weights),
              'forward_tokens': example.plan.token_count, **communication_classification(example)}
-    return entry, len(example.plan.slot_sources), len(example.decisions)
+    base=(entry,len(example.plan.slot_sources),len(example.decisions))
+    if _WORKER_AUDIT is None:return base
+    from scripts.neuralese_data.audit_acquired_learning_signal import row_signal
+    from scripts.neuralese_data.acquired_content_review import content_review
+    return (*base,row_signal(row,_WORKER_AUDIT),content_review(row,_WORKER_AUDIT))
 
 
-def parallel_rows(path, tokenizer, roles, *, workers=2, max_pending=4, row_limit=None):
+def parallel_rows(path, tokenizer, roles, *, workers=2, max_pending=4, row_limit=None, audit=None):
     """Yield exact native index rows in source order with a bounded raw-line queue."""
     if type(workers) is not int or not 1 <= workers <= 4 or type(max_pending) is not int or not workers <= max_pending <= 8:
         raise ValueError('parallel index needs 1..4 workers and a bounded queue of at most 8')
@@ -50,16 +56,17 @@ def parallel_rows(path, tokenizer, roles, *, workers=2, max_pending=4, row_limit
         raise ValueError('row limit must be positive')
     seen = set()
     with ProcessPoolExecutor(max_workers=workers, mp_context=multiprocessing.get_context('spawn'),
-                             initializer=_init, initargs=(tokenizer, tuple(roles))) as pool:
+                             initializer=_init, initargs=(tokenizer, tuple(roles),audit)) as pool:
         pending = deque()
         def result(future):
-            entry, slots, decisions = future.result()
+            value=future.result()
+            entry, slots, decisions = value[:3]
             if entry['id'] in seen:
                 raise ValueError(f"duplicate example id {entry['id']!r}")
             if slots < 1:
                 raise ValueError('packed geometry requires positive KV slots')
             seen.add(entry['id'])
-            return entry, slots, decisions
+            return value
         with open_jsonl_text(Path(path)) as source:
             for line in source:
                 if not line.strip():
