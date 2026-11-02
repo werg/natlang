@@ -259,6 +259,18 @@ def _pretty_json_sha256(value: dict) -> str:
 
 def _verify_existing_fit_outputs(out: Path, actor: dict, previous_root: Path,
                                  current_root: Path, prior_inputs: set[str]) -> list[dict]:
+    def score_semantics(report, runtime_root):
+        # The classifier's absolute location changes with a frozen runtime.
+        # Authenticate the actual file before comparing its content identity;
+        # retain the full original report for receipts and diagnosis.
+        classification = report.get('classification') or {}
+        path = Path(classification.get('path', '')).resolve(strict=True)
+        path.relative_to(Path(runtime_root).resolve(strict=True))
+        if sha256_file_hex(path) != classification.get('sha256'):
+            raise ValueError('cached evaluation classifier binding changed')
+        return {**report, 'classification': {
+            key: value for key, value in classification.items() if key != 'path'}}
+
     fits = []
     for fit_path in sorted(out.glob('*-fit.json')):
         name = fit_path.name[:-len('-fit.json')]
@@ -272,7 +284,7 @@ def _verify_existing_fit_outputs(out: Path, actor: dict, previous_root: Path,
         # The rows already exist, so compare old and new score semantics without rerunning the collector.
         old_report = _score_on_runtime(previous_root, target)
         new_report = _score_on_runtime(current_root, target)
-        if old_report != new_report or fit.get('successes') != new_report.get('successes') or \
+        if score_semantics(old_report, previous_root) != score_semantics(new_report, current_root) or fit.get('successes') != new_report.get('successes') or \
                 fit.get('scored') != new_report.get('scored'):
             raise ValueError(f'cached evaluation {name} changes under the current scorer')
         fits.append({'name': name, 'fit_sha256': sha256_file_hex(fit_path),

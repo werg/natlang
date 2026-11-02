@@ -1724,11 +1724,11 @@ export class NativeToolAgent {
             Math.max(1, Math.min(limit ?? statedWindow, statedWindow - Math.ceil(estimate(availableTools)) - REPLY_MARGIN)) };
         // Drivers read the invocation's tuned stack from the current frame when called; browsers keep no frame
         // across the awaits above, so the call starts inside its own frame on every platform.
-        // model-call-kind: tool-loop-turn -- training/model-call-kinds.json
         reservation = await this.options.modelBudget?.reserve(turnRequest.max_tokens ?? null, session.runtime.signal);
         if (this.options.modelBudget && !reservation) return 'graph model request or token budget exhausted';
         if (reservation) turnRequest.max_tokens = reservation.limit;
         calledDriver = true;
+        // model-call-kind: tool-loop-turn -- training/model-call-kinds.json
         response = await runInFrame(session.runtime.frame, () => turnOptions ? currentDriver(turnRequest, session.runtime.signal, turnOptions) :
           currentDriver(turnRequest, session.runtime.signal));
         exceededGraphReservation = reservation?.limit !== null && reservation?.limit !== undefined &&

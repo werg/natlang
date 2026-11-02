@@ -6,6 +6,7 @@ import torch
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason='requires actual CUDA large-address allocation')
+@pytest.mark.gpu_heavy
 def test_grouped_dense_reads_and_writes_64bit_strides():
     from natlang_neuralese.maple.fused_moe import _grouped_dense_mm
 
@@ -28,6 +29,7 @@ def test_grouped_dense_reads_and_writes_64bit_strides():
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason='requires actual CUDA large-address allocation')
+@pytest.mark.gpu_heavy
 def test_ordered_dense_gradient_reads_beyond_32bit_element_offset():
     from natlang_neuralese.maple.fused_moe import _ordered_dense_weight_gradient
 

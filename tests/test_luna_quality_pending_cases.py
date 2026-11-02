@@ -59,7 +59,7 @@ def test_intake_preserves_world_quality_disposition(tmp_path):
 
     worlds = [{
         'id': 'pending-source-row', 'group_id': 'world-a', 'task_family': 'consent',
-        'operation': 'reconcile.nl', 'task': 'Respect missing authority.', 'inputs': {'state': {}},
+        'operation': 'reconcile.nl', 'task': 'Respect missing authority.', 'inputs': {'state': {'events': []}},
         'expected': {'status': 'blocked'}, 'oracle': 'exact',
         'source_groups': ['incident-dataset:world-a'],
         'quality_status': 'quality_pending_paid_action_authority',
@@ -67,7 +67,7 @@ def test_intake_preserves_world_quality_disposition(tmp_path):
     }, {
         'id': 'dev-control-row', 'group_id': 'world-dev', 'task_family': 'control',
         'operation': 'triage/inspectEvidence.nl', 'task': 'Inspect the dev control.',
-        'inputs': {'state': {}}, 'expected': {'status': 'control'},
+        'inputs': {'state': {'events': []}}, 'expected': {'status': 'control'},
         'oracle': {'level': 'judged', 'rubric': 'Check the control.'},
         'source_groups': ['incident-dataset:world-dev'],
     }]

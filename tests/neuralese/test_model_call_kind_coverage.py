@@ -19,7 +19,7 @@ AUDIT = ROOT / REGISTRY['audit']
 # Lines that issue a request to the executing model, or author a natlang call the runtime runs on it.
 MODEL_ENDPOINT = r'/v1/(?:chat/completions|natlang/score|neuralese/(?:decide|decide_many|view|native-states/))'
 SITE_PATTERNS = (
-    re.compile(r'\bthis\.driver\('),                     # the agent's own turn
+    re.compile(r'\b(?:this\.driver|currentDriver)\('),     # the executing actor, including live handoffs
     re.compile(r'\.driver \?\? this\.driver\)\('),       # a turn on an optional second driver
     re.compile(r'\b(?:decide|scorer)\(\{\s*messages'),   # a scoring request
     re.compile(r'fetchModel\(.*' + MODEL_ENDPOINT),       # a direct request to a model endpoint
@@ -48,6 +48,7 @@ def sites():
 
 def test_the_scan_recognizes_each_form_of_model_call():
     calls = ["response = await this.driver(turnRequest, signal);",
+             "response = await currentDriver(turnRequest, signal);",
              "const answer = await (review.driver ?? this.driver)({ messages: fork,",
              "scores = await decide({ messages: encoded.messages, options: replies },",
              "const scores = await scorer({ messages, options: ['true', 'false'] }, signal);",

@@ -15,6 +15,7 @@ import os
 import re
 import sys
 import tempfile
+import subprocess
 from collections import Counter
 from pathlib import Path
 
@@ -23,7 +24,8 @@ from natlang_neuralese.common.jsonio import open_jsonl_text
 
 
 NL_CALL = re.compile(r'\bnl\s*(?:<|\.|`|\()')
-SEMANTIC_TICKET_WORD = re.compile(r'\b(?:resolv\w*|fix\w*|customer|confirm\w*)\b', re.I)
+SEMANTIC_TICKET_WORD = re.compile(
+    r'\b(?:resolv\w*|fix\w*|customer|confirm\w*|cancel\w*|churn\w*|leav\w*|quit\w*|switch\w*|alternativ\w*|renew\w*|blocked|work|closed|declined)\b', re.I)
 JS_REGEX_LITERAL = re.compile(r'/(?:\\.|[^/\\\n]){1,300}/[gimsuy]*')
 # The child receives a ticket and is itself the semantic judgment boundary.
 # Literal substring checks are a bypass regardless of which template phrase
@@ -72,14 +74,60 @@ def action_code(turn: dict) -> str:
     return '\n'.join(codes)
 
 
-def semantic_ticket_bypass(turn: dict) -> bool:
+class SemanticTicketCodeChecker:
+    """One bounded, serial Node parser for a complete review, with no per-turn startup."""
+    def __enter__(self):
+        root = Path(__file__).resolve().parents[2]
+        self.dependencies = [
+            {'path': str(path), 'sha256': digest(path)} for path in (
+                Path(__file__).resolve(),
+                Path(__file__).with_name('semantic_ticket_code_check.mjs').resolve(),
+                root / 'ts-host/node_modules/typescript/lib/typescript.js',
+            )]
+        self.process = subprocess.Popen(
+            ['node', str(Path(__file__).with_name('semantic_ticket_code_check.mjs'))],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+        return self
+
+    def __call__(self, code):
+        self.process.stdin.write(json.dumps({'code': code, 'semanticPattern': SEMANTIC_TICKET_WORD.pattern}) + '\n')
+        self.process.stdin.flush()
+        line = self.process.stdout.readline()
+        if not line:
+            raise RuntimeError('semantic ticket syntax checker exited without a result')
+        return json.loads(line)
+
+    def __exit__(self, *_):
+        self.process.stdin.close()
+        try:
+            status = self.process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            self.process.kill()
+            self.process.wait()
+            raise RuntimeError('semantic ticket syntax checker did not shut down')
+        finally:
+            self.process.stdout.close()
+        if status:
+            raise RuntimeError(f'semantic ticket syntax checker failed: {status}')
+        if any(digest(Path(ref['path'])) != ref['sha256'] for ref in self.dependencies):
+            raise RuntimeError('semantic ticket reviewer dependencies changed during review')
+
+
+def semantic_ticket_bypass(turn: dict, checker=None) -> bool:
     """Catch exact crisp substitutes inside the child asked to judge ticket prose."""
-    if (turn.get('task_family') != 'curriculum_folder_criteria_reducer' or
+    if (turn.get('task_family') not in {
+            'curriculum_folder_criteria_reducer', 'curriculum_workbench_tickets', 'workbench_tickets'} or
             not turn.get('source_ref', {}).get('parent_invocation_id')):
         return False
     code = action_code(turn)
-    return (bool(JS_KEYWORD_TEST.search(code) or JS_REGEX_CONSTRUCTOR.search(code)) or
-            any(SEMANTIC_TICKET_WORD.search(literal) for literal in JS_REGEX_LITERAL.findall(code)))
+    suspected = (bool(JS_KEYWORD_TEST.search(code) or JS_REGEX_CONSTRUCTOR.search(code)) or
+                 any(SEMANTIC_TICKET_WORD.search(literal) for literal in JS_REGEX_LITERAL.findall(code)))
+    if not suspected:
+        return False
+    if checker is not None:
+        return bool(checker(code)['evidence'])
+    with SemanticTicketCodeChecker() as parser:
+        return bool(parser(code)['evidence'])
 
 
 def hold_reason(family: str, code: str, inline: str | None = None,
@@ -116,7 +164,7 @@ def main() -> None:
     args = parser.parse_args()
 
     parents = {}
-    with open_jsonl_text(args.turns) as stream:
+    with SemanticTicketCodeChecker() as checker, open_jsonl_text(args.turns) as stream:
         for line in stream:
             if not line.strip():
                 continue
@@ -139,7 +187,7 @@ def main() -> None:
                     parent['requirements'] != requirements):
                 raise ValueError(f'parent source identity changed across decisions: {parent_id}')
             parent['codes'].append(action_code(turn))
-            parent['semantic_ticket_bypass'] |= semantic_ticket_bypass(turn)
+            parent['semantic_ticket_bypass'] |= semantic_ticket_bypass(turn, checker)
 
     held = {}
     by_reason = Counter()
@@ -163,6 +211,7 @@ def main() -> None:
     write_once(args.out, body)
     receipt = {
         'schema': 'natlang.teacher-action-shape-quarantine/1',
+        'reviewer_dependencies': checker.dependencies,
         'training_admission': False,
         'source': str(args.turns), 'source_sha256': digest(args.turns),
         'quarantine': str(args.out), 'quarantine_sha256': digest(args.out),

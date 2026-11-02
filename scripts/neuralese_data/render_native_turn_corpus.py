@@ -61,16 +61,6 @@ sys.path.insert(0, str(ROOT / 'scripts' / 'neuralese_data'))
 
 SCHEMA = 'natlang.native-turn-render/1'
 RENDERINGS = ('full', 'program-header', 'whole-trajectory')
-# The Search/OWL selection checkpoint was committed while selection and
-# rendering shared one source file. Accept this exact legacy file binding once
-# the selector inputs below validate byte-for-byte; render-only code changes
-# must not force a 658k-row reselection.
-LEGACY_SELECTOR_FILE_SHA256 = {'797e534147c258b5453c146365e53763133ac45ec468193b66fba442419bdccf'}
-# The one legacy full-file selector hash above may migrate only while the
-# current selector implementation still has this independently reviewed
-# semantic fingerprint. This prevents the legacy file allowlist from silently
-# authorizing a later selector-policy change.
-LEGACY_SELECTOR_SEMANTICS_SHA256 = '69f7da7f1dc08c01ca9deb554f0275072c82e2666615d60a166e9c105eeb804b'
 # One explicit migration witness for the active Search/OWL v3 renderer. Its
 # historic bindings used canonical-checkout path labels even when the new
 # renderer is run from a frozen checkout elsewhere.
@@ -678,26 +668,7 @@ def select(args, shard_dir: Path, state_path: Path, binding: dict):
         if existing.get('schema') != 'natlang.native-turn-selection-checkpoint/1':
             raise ValueError('selection state is complete legacy data, not an incremental checkpoint')
         if existing.get('binding') != binding:
-            previous = existing.get('binding')
-            compatible = False
-            if isinstance(previous, dict):
-                previous_options = previous.get('options') or {}
-                old_selector_sha = previous_options.get('selector_code_sha256')
-                candidate = dict(previous)
-                candidate_options = dict(previous_options)
-                candidate_options['selector_code_sha256'] = binding['options']['selector_code_sha256']
-                candidate['options'] = candidate_options
-                candidate.pop('sha256', None)
-                candidate['sha256'] = sha(canonical(candidate).encode())
-                compatible = (old_selector_sha in LEGACY_SELECTOR_FILE_SHA256
-                              and binding['options']['selector_code_sha256'] == LEGACY_SELECTOR_SEMANTICS_SHA256
-                              and candidate == binding)
-            if not compatible:
-                raise ValueError('selection checkpoint inputs or selector semantics changed')
-            # Record the narrower selector binding atomically. The selected
-            # frame table and source frontier are unchanged.
-            existing['binding'] = binding
-            write_json_durable(state_path, existing)
+            raise ValueError('selection checkpoint inputs or selector semantics changed')
         omissions, counts = existing['omissions'], Counter(existing['counts'])
         strata = defaultdict(set, {key: set(values) for key, values in existing['strata'].items()})
         blocked, protected_cache = existing['blocked'], existing['protected']

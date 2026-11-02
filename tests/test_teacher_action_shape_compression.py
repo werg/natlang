@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -66,7 +67,35 @@ def test_child_ticket_keyword_bypass_holds_only_its_parent(tmp_path):
                     '--turns', str(source), '--out', str(tmp_path / 'holds.jsonl'),
                     '--review', str(review)], check=True)
     result = json.loads(review.read_text())
+    import hashlib
+    assert len(result['reviewer_dependencies']) == 3
+    for reference in result['reviewer_dependencies']:
+        assert hashlib.sha256(Path(reference['path']).read_bytes()).hexdigest() == reference['sha256']
     assert result['held_parent_ids'] == {
         'regex-child': 'semantic_ticket_judgment_crisp_bypass',
         'keyword-child': 'semantic_ticket_judgment_crisp_bypass',
     }
+
+
+@pytest.mark.parametrize('family', ['curriculum_workbench_tickets', 'workbench_tickets'])
+def test_churn_child_cannot_substitute_keywords_for_semantic_judgment(family):
+    from scripts.neuralese_data.audit_teacher_action_shape import semantic_ticket_bypass
+    turn = {'task_family': family, 'source_ref': {'parent_invocation_id': 'root'},
+            'target': {'tool_calls': [{'function': {'arguments': json.dumps({
+                'code': 'return /cancel|leave|switch(?:ing)? to another/i.test(text);'})}}]}}
+    assert semantic_ticket_bypass(turn)
+    # A typed child answer and crisp computation at the root remain eligible.
+    turn['source_ref'] = {}
+    assert not semantic_ticket_bypass(turn)
+
+
+def test_semantic_screen_ignores_slashes_inside_nl_templates_paths_and_comments():
+    from scripts.neuralese_data.audit_teacher_action_shape import semantic_ticket_bypass
+    turn = {'task_family': 'curriculum_workbench_tickets', 'source_ref': {'parent_invocation_id': 'root'},
+            'target': {'tool_calls': [{'function': {'arguments': json.dumps({'code':
+                'const path = "tickets/fix.md"; /* /cancel|leave/i.test(text) */ '
+                'return await nl<boolean>`Does this suggest leave/switch providers or cancellation/non-renewal?`(text);'})}}]}}
+    assert not semantic_ticket_bypass(turn)
+    turn['source_ref'] = {'parent_invocation_id': 'root'}
+    turn['target']['tool_calls'][0]['function']['arguments'] = json.dumps({'code': 'return true;'})
+    assert not semantic_ticket_bypass(turn)

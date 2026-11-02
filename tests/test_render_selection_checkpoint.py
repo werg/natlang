@@ -112,7 +112,7 @@ def test_selection_checkpoint_rejects_changed_source_bytes(tmp_path):
         select(args, checkpoint_dir, tmp_path / 'selection-state.json', selection_input_binding(args))
 
 
-def test_legacy_whole_renderer_hash_migrates_only_when_all_selection_inputs_match(tmp_path):
+def test_old_whole_renderer_hash_cannot_authorize_current_selection(tmp_path):
     source = tmp_path / 'input.jsonl'
     source.write_text(json.dumps(_row('a0', 'pa')) + '\n')
     args = _args([source])
@@ -133,39 +133,16 @@ def test_legacy_whole_renderer_hash_migrates_only_when_all_selection_inputs_matc
     state['binding'] = legacy
     state_path.write_text(json.dumps(state))
 
-    select(args, shard_dir, state_path, binding)
-    migrated = json.loads(state_path.read_text())
-    assert migrated['binding'] == binding
-    selected = [row for path in sorted(shard_dir.glob('*.jsonl.zst')) for row in _decode(path)]
-    assert selected == [_row('a0', 'pa')]
+    with pytest.raises(ValueError, match='inputs or selector semantics changed'):
+        select(args, shard_dir, state_path, binding)
+    assert json.loads(state_path.read_text())['binding'] == legacy
 
 
-def test_selector_binding_includes_split_aliases_and_legacy_migration_is_semantic_pinned(tmp_path, monkeypatch):
+def test_selector_binding_includes_split_aliases(tmp_path, monkeypatch):
     source = tmp_path / 'input.jsonl'
     source.write_text(json.dumps(_row('a0', 'pa')) + '\n')
     args = _args([source])
     original = selection_input_binding(args)
-    assert original['options']['selector_code_sha256'] == renderer.LEGACY_SELECTOR_SEMANTICS_SHA256
     monkeypatch.setattr(renderer, 'HELD_SPLIT_ALIASES', (*renderer.HELD_SPLIT_ALIASES, 'qa'))
     changed = selection_input_binding(args)
     assert changed['options']['selector_code_sha256'] != original['options']['selector_code_sha256']
-
-    monkeypatch.setattr(renderer, 'HELD_SPLIT_ALIASES', ('validation', 'valid', 'val', 'dev'))
-    binding = selection_input_binding(args)
-    monkeypatch.setattr(renderer, 'LEGACY_SELECTOR_SEMANTICS_SHA256', '0' * 64)
-    shard_dir, state_path = tmp_path / 'selected', tmp_path / 'selection-state.json'
-    shard_dir.mkdir()
-    select(args, shard_dir, state_path, binding)
-    state = json.loads(state_path.read_text())
-    legacy = dict(state['binding'])
-    legacy_options = dict(legacy['options'])
-    legacy_options['selector_code_sha256'] = '797e534147c258b5453c146365e53763133ac45ec468193b66fba442419bdccf'
-    legacy['options'] = legacy_options
-    legacy.pop('sha256', None)
-    from natlang_neuralese.common.jsonio import canonical_json_str
-    from natlang_neuralese.common.hashing import sha256_hex
-    legacy['sha256'] = sha256_hex(canonical_json_str(legacy).encode())
-    state['binding'] = legacy
-    state_path.write_text(json.dumps(state))
-    with pytest.raises(ValueError, match='inputs or selector semantics changed'):
-        select(args, shard_dir, state_path, binding)
