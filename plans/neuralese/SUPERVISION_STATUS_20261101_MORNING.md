@@ -1,3 +1,57 @@
+## Live supervision update, 2026-11-02 12:11 CET
+
+- The complete524650-token/524782-KV backward passed12:02:57 in1342.09s,
+  with CUDA peak allocated72,795,395,584 bytes and reserved77,603,012,608.
+  Its immutable proof is under the current learner's
+  `memory-qualifications/75af12cab316c852c8dceb199a3cb8f18dc69d46dad61449f8cad92c910d5725/`
+  `bf95bec416a1bb062999baa85df3f0d692220ef88575c22099dce008877c8960/proof.json`.
+  The scratch cleared after backward. The two normal packed16k checks passed
+  next; `capacity_complete` was logged12:04:05 and32 actual microbatches fetched.
+  This is capacity evidence, not SGD or capability lift.
+- The live owner remains the runtime14/group2/file/104GiB service below. Before
+  the first optimizer update, it is now measuring the eight nondominated actual
+  oversize groups from that window under the real BF16 QAT point. First group
+  is292425 tokens, started12:05:43. These differ from the initial largest-source
+  and normal-packed checks. Do not describe the first new optimizer step as
+  committed until its real telemetry/checkpoint proves it. Keep the advancing
+  GPU process; do not restart merely because a large backward has sparse logs.
+- Pop's real diagnostic finished12:03:35 and its owner/container are stopped.
+  Both eager and plain replay passed for96 actual sampled producer tokens and
+  one three-option sampled decision consuming a typed-text native state. Maximum
+  probability-log difference was6.45169e-6, under unchanged1e-4. This closes the
+  missing decision-forward/replay observation; it does not establish backward
+  qualification, a completed Natlang task or capability improvement. Local raw
+  evidence and sealed file hashes:
+  `ops/pop-native-bf95-decision-replay-v15-1102/portable-evidence.json`.
+- BF95 view reuse completed within its4GiB ledger. The identical3.46GB view was
+  reused; the runtime15 transport changed and reached Pop with zero model-payload
+  transfer. Pop currently has14GiB physical RAM, not32GiB. Its10GiB launch was
+  correctly denied; measured headroom admitted5.5GiB with a5GiB container, and
+  the diagnostic completed successfully. Do not inherit oversized requests.
+- The exact live runtime14/control export completed11:57:58:14files and capsule
+  SHA3f38c5e2d59cd139d0d0602e23c378bf8e050502f8b355ffabce38a21bab28b1,
+  with full independent DGX GETs and no sandbox. Runtime15 was also archived and
+  all32761 members independently reread. Its diagnostic plus initial capacity
+  proofs are now exporting through `export-capacity-decision-evidence-v15-1102`;
+  verify its actual completion in the corresponding private-recovery status.
+- Both old derived actor views were retired after fresh full external checkpoint
+  hashing, freeing6,915,613,686 bytes. The second canonical full checkpoint is
+  under `natlang-active-lineage/home/data/`, not the initially assumed independent
+  recovery path. The failed path lookup did not delete its view; corrected resume
+  completed12:06:06. Receipt:
+  `ops/retired-old-actor-views-fullstates-1102.json`.
+- Four obsolete local runtime tar copies were retired12:10:49 after matching
+  prior full private readbacks, fresh private object presence, retained frozen
+  source directories and no live consumer, freeing2,835,793,920 bytes. Current
+ 14/15 archives remain. See `ops/retired-superseded-runtime-tars-1102.json`;
+  no source/full-checkpoint/held data was deleted. This creates headroom for the
+  concurrent rolling slot, next reserved checkpoint inode and long-graph scratch
+  while retaining the40GiB floor.
+- All helper commits throughd09130055 and supervision40612d81e are on origin/main.
+  The repository quick check passed under a2GiB ledger; its earlier1GiB request
+  gave Node only a512MiB heap and failed with an explicit V8 heap exhaustion.
+  No code defect was inferred from that undersized verification allocation.
+
 ## Live supervision update, 2026-11-02 11:58 CET
 
 - The production parent remains the exact BF95 global67 full state. The matched
