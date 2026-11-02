@@ -1,3 +1,29 @@
+## CUDA owner-view validation and next continuation operator, 2026-11-02 21:15 CET
+
+- Snapshot-derived actor publication now passed an actual CUDA check in both
+  synchronous and asynchronous save modes. The fixture mutates live BF16 weights
+  immediately after save, then verifies committed selected values bitwise and
+  shared transposed/sliced storage offsets. Actual background mode is asserted,
+  without forcing memory admission. Two CUDA tests passed in1.72s; the complete
+  actor-view preparation file passed18 tests in5.27s,852.7MiB host peak.
+  Unit `qualify-snapshot-owner-file-1102-2113.service`. This validates the CUDA
+  ownership/transfer primitive, not full15GB model save/Pop delivery throughput.
+  Main's hook is still absent from frozenR26; full-size operational qualification
+  remains required before a runtime cutover. Do not label it deployed or complete.
+- Compiled conditional preparation operator:
+  `ops/prepare-earned73-g2-a4-window16-r31-1102.py`. It requires the actual R30
+  owner to be terminal, completed semantic handoff with exactly one earned
+  optimizer update, finite full73 state and its actual captured SFT-frame anchor.
+  It preserves all source/quota/optimizer/RNG obligations, explicitly retains
+  BF16-only controls, changes accumulation16 to4 and refresh1 to16, keeps the
+  final task gate, and prepares a new controller without replaying prior work.
+  Run under24GiB metadata admission after the learner exits; it is not run or
+  validated against a nonexistent73 yet. Normal startup qualification remains.
+- R30 first oversized292425-token whole graph passed21:10:23 in629.224seconds;
+  second290623-token case is running. Global72 is still the last earned state.
+  Pop matched expanded16-case global72 evaluation remains active; do not infer
+  its final score from incomplete cases. Full check waiter remains pending.
+
 ## Recovery supplement and verification follow-through, 2026-11-02 21:09 CET
 
 - R30 controls capsule completed21:06:15 with fresh private workstation GETs:

@@ -297,3 +297,35 @@ def test_primary_checkpoint_mutation_rejects_actor_publication_but_keeps_full_co
         assert policy.slot.exists() and CheckpointPolicy.load(policy.slot)['training']['optimizer']
         assert not (tmp_path/'learner/actor-view-owner/actor-view-pending.json').exists()
     finally:policy.close()
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA checkpoint-owner transfer')
+@pytest.mark.parametrize('asynchronous', [False, True])
+def test_cuda_committed_owner_view_survives_live_update_with_aliases(tmp_path, asynchronous):
+    from natlang_neuralese.model.native_bundle import _same_values_bounded
+    source = tiny_complete(tmp_path)
+    state = CheckpointPolicy.load(source)
+    weight = torch.arange(2048 * 1024, device='cuda', dtype=torch.float32).reshape(2048, 1024).to(torch.bfloat16)
+    state['backbone_state'] = {'weight': weight, 'transpose': weight.t(), 'offset': weight[1:, 3:]}
+    state['interface_state'] = {'adapter': torch.arange(8, device='cuda', dtype=torch.float32)}
+    expected = {key: value.cpu().clone() for key, value in state['backbone_state'].items()}
+    optimizer = torch.optim.AdamW([weight])
+    policy = CheckpointPolicy(tmp_path/'learner', prune_best=False, async_checkpoint=asynchronous)
+    try:
+        event = policy.save(state, async_allowed=asynchronous, async_optimizer=optimizer)
+        # The next live update must not alter the committed source or detached view.
+        weight.add_(4)
+        policy.drain_async()
+        if asynchronous:
+            assert event['async_mode'] == 'background'
+        publication = event['actor_snapshot_view']
+        assert publication['status'] == 'ready'
+        view = load_actor_view(policy.slot, publication['view_receipt'])
+        restored = view['backbone_state']
+        _same_values_bounded(expected, restored)
+        assert restored['weight'].untyped_storage().data_ptr() == restored['transpose'].untyped_storage().data_ptr()
+        assert restored['offset'].storage_offset() == 1027
+        assert restored['transpose'].stride() == (1, 1024)
+        assert publication['source_sha256'] == first_source_sha(policy.slot)
+    finally:
+        policy.close()
