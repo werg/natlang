@@ -3,13 +3,13 @@ from contextlib import nullcontext
 import pytest
 import torch
 from torch import nn
-from test_native_inline_qat import base, graph, model_with_points
+from test_native_inline_qat import base, graph, loss_of, model_with_points
 
 
 @pytest.mark.parametrize('device', ['cpu', pytest.param('cuda', marks=pytest.mark.skipif(
     not torch.cuda.is_available(), reason='CUDA unavailable'))])
 @pytest.mark.parametrize('backend', ['plain', 'vjp'])
-@pytest.mark.parametrize('qat', [False, True])
+@pytest.mark.parametrize('qat', [None, 'fp8', 'nvfp4'])
 def test_lfm3_nested_graph_checkpoint_preserves_all_gradients(base, device, backend, qat, monkeypatch):
     from natlang_neuralese.model import lfm2_port
     from natlang_neuralese.model.native_weight_carrier import ParameterCotangentScope, plain_training_arithmetic
@@ -18,7 +18,10 @@ def test_lfm3_nested_graph_checkpoint_preserves_all_gradients(base, device, back
     model.port.checkpoint_layers = True
     model.port.checkpoint_layer_group_size = 4
     model.port.ffn_chunk_tokens = 2
-    plan = graph().plan
+    example = graph()
+    plan = example.plan
+    if qat == 'nvfp4':
+        quantization.calibrate(lambda batch: loss_of(model, batch[0]), [[example]], 0)
     for p in model.parameters(): p.requires_grad_(True)
     params = tuple(p for p in model.parameters() if p.requires_grad)
     source = torch.randn(1, plan.token_count, model.port.embedding_weight.shape[1], device=device,
@@ -29,7 +32,7 @@ def test_lfm3_nested_graph_checkpoint_preserves_all_gradients(base, device, back
         x=source.detach().clone().requires_grad_()
         scope=(ParameterCotangentScope.for_model(model,mode='vjp',accumulator_backend='device_fp32' if device=='cuda' else 'cpu_file')
                if backend=='vjp' else plain_training_arithmetic())
-        precision=quantization.context('fp8', .5) if qat else nullcontext()
+        precision=quantization.context(qat, .5) if qat else nullcontext()
         with scope, precision:
             out=model(plan,embeddings=x,retain_states=False)['h_final']
             grads=torch.autograd.grad(out, (x,*params), upstream, allow_unused=True)
