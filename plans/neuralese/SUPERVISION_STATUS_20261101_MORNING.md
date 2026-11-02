@@ -18,9 +18,12 @@
   capacity qualification and actual optimizer advancement remain unproven.
 - Backup attempt using RAM payload was stopped before publication to admit
   the corrected GPU job; no private72 recovery was earned. Incomplete codec
-  scratch was cleaned by its own finally block. Actual restarted backup
+  scratch was found still allocated after stop: the supervisor verified its
+  terminal owner/no manifest and retired only that unpublished1.665GB temporary
+  at19:19:55; receipt `ops/retired-unpublished-ram-delta-temporary-1102.json`. Actual restarted backup
   `preserve-earned72-private-fullstate-r3-1102` uses bounded8GiB host and a
-  local compressed payload, preserving pinned raw72. Physical scratch and
+  local compressed payload, preserving pinned raw72. The actual backup service
+  started19:18:28 after memory admission. Physical scratch and
   checkpoint reservations remain authoritative; don't claim export completion
   before fresh private GET/decoded target readback. Both new runtime20/24 TARs
   were built locally and remain for publication.
