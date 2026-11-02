@@ -206,9 +206,8 @@ def verify(base,manifest,*,expected_sha256,expected_bytes,expected_manifest_sha2
                                 or base_size<0 or base_offset+base_size>before[0][2]
                                 or not valid_hash(op.get('base_sha256')) or not valid_hash(op.get('sha256'))):
                             raise ValueError('invalid XOR base range')
-                        if range_hash(a,base_offset,base_size)!=op['base_sha256']:
-                            raise ValueError('XOR base range hash differs')
-                        a.seek(base_offset);base_remaining=base_size;output_hash=hashlib.sha256()
+                        a.seek(base_offset);base_remaining=base_size
+                        base_hash=hashlib.sha256();output_hash=hashlib.sha256()
                     inline_cursor+=size;decoder=zlib.decompressobj();n=0
                     for block in stream_range(p,offset,size):
                         while block:
@@ -218,10 +217,18 @@ def verify(base,manifest,*,expected_sha256,expected_bytes,expected_manifest_sha2
                             if is_xor:
                                 take=min(len(data),base_remaining);old=a.read(take)
                                 if len(old)!=take:raise ValueError('short XOR base range')
-                                base_remaining-=take;data=xor_bytes(data,old);output_hash.update(data)
+                                base_remaining-=take;base_hash.update(old)
+                                data=xor_bytes(data,old);output_hash.update(data)
                             emit(data)
                     if not decoder.eof or n!=expected:raise ValueError('incomplete inline data')
-                    if is_xor and output_hash.hexdigest()!=op['sha256']:raise ValueError('XOR output hash differs')
+                    if is_xor:
+                        # A shorter target still authenticates the entire old range.
+                        while base_remaining:
+                            old=a.read(min(CHUNK,base_remaining))
+                            if not old:raise ValueError('short XOR base range')
+                            base_remaining-=len(old);base_hash.update(old)
+                        if base_hash.hexdigest()!=op['base_sha256']:raise ValueError('XOR base range hash differs')
+                        if output_hash.hexdigest()!=op['sha256']:raise ValueError('XOR output hash differs')
                 else:raise ValueError('unknown delta operation')
         if inline_cursor!=before[2][2] or count!=expected_bytes or h.hexdigest()!=expected_sha256:raise ValueError('reconstructed target differs')
         if [identity(base),identity(manifest),identity(payload)]!=before:raise ValueError('delta input changed during reconstruction')

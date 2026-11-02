@@ -185,3 +185,45 @@ def test_xor_stream_trailing_bytes_rejected_after_payload_rebinding(tmp_path):
     with pytest.raises(ValueError,match='compressed data'):
         delta.verify(base,receipt,expected_sha256=delta.digest_file(target),expected_bytes=target.stat().st_size,
                      expected_manifest_sha256=delta.digest_file(receipt),min_free_bytes=0)
+
+
+def test_xor_range_is_read_once_after_whole_base_hash(tmp_path,monkeypatch):
+    old=_fixture_bytes(501,36000);new=bytearray(old[:-7000]);new[41]^=1
+    base,target=tmp_path/'base',tmp_path/'target'
+    make(base,b'base',old);make(target,b'target',new)
+    result=delta.build(base,target,tmp_path/'patch',min_free_bytes=0)
+    receipt=Path(result['path']);value=json.loads(receipt.read_text())
+    xor_ops=[op for op in value['operations'] if op['kind']=='xor']
+    assert xor_ops and any(op['base_bytes']>op['output_bytes'] for op in xor_ops)
+    expected_reads=base.stat().st_size+sum(op['bytes'] for op in value['operations'] if op['kind']=='copy')+sum(op['base_bytes'] for op in xor_ops)
+    real_open=Path.open;reads=[]
+    class CountReads:
+        def __init__(self,stream):self.stream=stream
+        def __enter__(self):return self
+        def __exit__(self,*args):return self.stream.__exit__(*args)
+        def __getattr__(self,name):return getattr(self.stream,name)
+        def read(self,*args):
+            data=self.stream.read(*args);reads.append(len(data));return data
+    def open_counted(path,*args,**kwargs):
+        stream=real_open(path,*args,**kwargs)
+        return CountReads(stream) if path.resolve()==base.resolve() and args and args[0]=='rb' else stream
+    args=dict(expected_sha256=delta.digest_file(target),expected_bytes=target.stat().st_size,
+              expected_manifest_sha256=result['sha256'],min_free_bytes=0)
+    monkeypatch.setattr(Path,'open',open_counted)
+    out=tmp_path/'reconstructed';delta.verify(base,receipt,out=out,**args)
+    assert out.read_bytes()==target.read_bytes()
+    assert sum(reads)==expected_reads
+
+
+def test_shorter_target_still_verifies_unused_base_tail(tmp_path):
+    old=_fixture_bytes(502,36000);new=bytearray(old[:-7000]);new[50]^=1
+    base,target=tmp_path/'base',tmp_path/'target'
+    make(base,b'base',old);make(target,b'target',new)
+    result=delta.build(base,target,tmp_path/'patch',min_free_bytes=0)
+    receipt=Path(result['path']);value=json.loads(receipt.read_text())
+    op=next(op for op in value['operations'] if op['kind']=='xor' and op['base_bytes']>op['output_bytes'])
+    data=bytearray(base.read_bytes());data[op['base_offset']+op['base_bytes']-1]^=1;base.write_bytes(data)
+    value['base']['sha256']=delta.digest_file(base);receipt.write_text(json.dumps(value))
+    with pytest.raises(ValueError,match='XOR base range hash differs'):
+        delta.verify(base,receipt,expected_sha256=delta.digest_file(target),expected_bytes=target.stat().st_size,
+            expected_manifest_sha256=delta.digest_file(receipt),min_free_bytes=0)
