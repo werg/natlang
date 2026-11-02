@@ -362,3 +362,22 @@ def test_sft_budget_scales_real_muon_and_adam_displacements(monkeypatch):
         reference=torch.cat([(dict(other.named_parameters())[name].detach()-before[name]).flatten() for name,_ in selected])
         assert reference.norm()>0
         torch.testing.assert_close(actual.norm()/reference.norm(),torch.tensor(.25),rtol=.03,atol=.001)
+
+
+def test_sft_budget_composes_with_warmup_and_restores_nominal_groups(monkeypatch):
+    from natlang_neuralese.train import native_state_sft as trainer
+    from natlang_neuralese.train.lr_anneal import LrWarmup
+    model,optimizer=build();graphs=examples()[:2]
+    nominal=[(group['lr'],group.get('qat_latent_lr')) for group in optimizer.param_groups]
+    warmup=LrWarmup(optimizer,10); assert warmup.scale(4)==.5
+    warmed=[(group['lr'],group.get('qat_latent_lr')) for group in optimizer.param_groups]
+    original=trainer.packed_graph_loss;observed=[]
+    def inspect(*args,**kwargs):
+        observed.append([(group['lr'],group.get('qat_latent_lr')) for group in optimizer.param_groups])
+        return original(*args,**kwargs)
+    monkeypatch.setattr(trainer,'packed_graph_loss',inspect)
+    trainer.native_training_update(model,optimizer,graphs,checkpoint_layers=True,chunk_tokens=3,sft_update_reference=8)
+    assert all(abs(actual[0]-base[0]*.25)<1e-12 for row in observed for actual,base in zip(row,warmed))
+    assert [(group['lr'],group.get('qat_latent_lr')) for group in optimizer.param_groups]==warmed
+    warmup.restore()
+    assert [(group['lr'],group.get('qat_latent_lr')) for group in optimizer.param_groups]==nominal
