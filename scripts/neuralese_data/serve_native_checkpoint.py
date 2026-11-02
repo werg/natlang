@@ -196,7 +196,16 @@ def launch_sglang(engine, args, checkpoint):
     root = Path(__file__).resolve().parents[2]
     fork = json.loads((root / 'training/neuralese/sglang-fork.json').read_text())
     python = args.sglang_python or fork['python']
-    source = attest_sglang_source(python, fork, os.environ.get('NATLANG_SGLANG_PYTHONPATH', ''))
+    if engine.model_config.get('native_linear_precision', 'ieee') != 'ieee':
+        raise ValueError('SGLang native projection requires the ieee native linear policy')
+    if engine.model_config.get('native_shared_execution', 'source-v1') != 'source-v1':
+        raise ValueError('SGLang LFM3 FFN has not qualified this native shared execution policy')
+    # The backend's native projection uses the same frozen serving runtime as
+    # the front. Put it first so an editable or user-installed package cannot
+    # silently substitute a different arithmetic implementation.
+    backend_pythonpath = os.pathsep.join(filter(None, [str(root / 'training/neuralese'),
+        os.environ.get('NATLANG_SGLANG_PYTHONPATH', '')]))
+    source = attest_sglang_source(python, fork, backend_pythonpath)
     export_dir = args.hf_export_dir or ((args.store_dir or checkpoint.parent) / 'sglang-hf' / args.checkpoint_sha256[:16])
     manifest = export_loaded(engine.shared_model, engine.tokenizer, engine.role_tokens, engine.model_config,
                              checkpoint=checkpoint, checkpoint_sha256=args.checkpoint_sha256, out_dir=export_dir)
@@ -218,7 +227,7 @@ def launch_sglang(engine, args, checkpoint):
     cuda = os.environ.get('CUDA_HOME', '/usr/local/cuda')
     path = os.pathsep.join([str(Path(python).parent), cuda + '/bin', os.environ.get('PATH', '')])
     # NATLANG_SGLANG_PYTHONPATH: a fork worktree under test instead of the pinned checkout's editable install.
-    process = subprocess.Popen(command, env={**os.environ, 'PYTHONPATH': os.environ.get('NATLANG_SGLANG_PYTHONPATH', ''),
+    process = subprocess.Popen(command, env={**os.environ, 'PYTHONPATH': backend_pythonpath,
                                              'PATH': path, 'CUDA_HOME': cuda,
                                              'NATLANG_ADAPTER_SLOTS': str(args.sglang_adapter_slots),
                                              'NATLANG_ADAPTER_RANK': str(args.sglang_adapter_rank)},
