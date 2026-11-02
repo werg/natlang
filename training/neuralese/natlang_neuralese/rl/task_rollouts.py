@@ -178,9 +178,10 @@ def execution_efficiency(rollout: dict[str, Any], weight: float | None = None) -
     never part of the cost.
     """
     weight = DEFAULT_EXECUTION_EFFICIENCY_WEIGHT if weight is None else weight
+    from .rollout_math import EXECUTION_EFFICIENCY_POLICY
     counters = execution_efficiency_counters(rollout.get('turns') or [])
     cost = execution_efficiency_cost(**counters, weight=weight)
-    return {**counters, 'cost': cost, 'weight': float(weight),
+    return {**counters, 'cost': cost, 'weight': float(weight), 'policy': EXECUTION_EFFICIENCY_POLICY,
             'failure_report_credit': grounded_failure_report_credit(rollout.get('turns') or [])}
 
 

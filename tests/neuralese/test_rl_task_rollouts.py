@@ -509,7 +509,8 @@ def test_execution_efficiency_uses_observed_whole_graph_counters_and_is_bounded(
          'target': {'tool_calls': [{**action, 'id': 'c'}]}},
     ]})
     assert measured == {'model_calls': 3, 'generated_tokens': 3000, 'repeated_actions': 1,
-                        'cost': pytest.approx(.025625), 'weight': 1.0, 'failure_report_credit': 0.0}
+                        'cost': pytest.approx(.015*3/11+.015*3000/5048+.020/5), 'weight': 1.0,
+                        'policy': 'bounded-rational-v2', 'failure_report_credit': 0.0}
     assert measured['cost'] <= .05
     # The same sampled retry after a changed exact tool response is not evidence of no progress.
     progressed = execution_efficiency({'turns': [
@@ -523,7 +524,7 @@ def test_execution_efficiency_uses_observed_whole_graph_counters_and_is_bounded(
     assert progressed['repeated_actions'] == 0
     unknown = execution_efficiency({'turns': [{'target': {'tool_calls': [action]}}]})
     assert unknown['model_calls'] == 1 and unknown['generated_tokens'] is None
-    assert unknown['cost'] == pytest.approx(.001875)  # call evidence remains usable; token count stays unknown
+    assert unknown['cost'] == pytest.approx(.015/9)  # call evidence remains usable; token count stays unknown
     opted_out = execution_efficiency({'turns': [{'target': {'tool_calls': [action]}}]}, weight=0)
     assert opted_out['cost'] == 0 and opted_out['model_calls'] == 1
 

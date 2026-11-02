@@ -49,3 +49,30 @@ def test_replay_rejects_invented_reporting_credit_before_graph_admission():
         _require_scored_training_episode({'split': 'train', 'policy': {'checkpoint_sha256': 'a'},
             'turns': capture, 'reward': {'quality': 0, 'execution_efficiency': telemetry}},
             {'checkpoint_sha256': 'a'})
+
+
+def test_efficiency_cost_keeps_resolution_at_actual_long_rollout_lengths():
+    from natlang_neuralese.rl.rollout_math import execution_efficiency_cost
+    costs=[execution_efficiency_cost(model_calls=n,generated_tokens=t,repeated_actions=0)
+           for n,t in [(8,6539),(15,13175),(29,19209),(33,20259),(128,1000000)]]
+    assert all(a<b for a,b in zip(costs,costs[1:]))
+    assert all(0<c<.03 for c in costs)
+    assert execution_efficiency_cost(model_calls=1000000,generated_tokens=1000000,repeated_actions=1000000)<.05
+    assert execution_efficiency_cost(model_calls=8,generated_tokens=None,repeated_actions=0)==.0075
+    assert execution_efficiency_cost(model_calls=33,generated_tokens=20259,repeated_actions=0,
+                                    policy='bounded-clipped-v1')==.03
+    with pytest.raises(ValueError,match='unknown execution-efficiency'):
+        execution_efficiency_cost(model_calls=1,generated_tokens=1,repeated_actions=0,policy='invented')
+
+
+def test_new_efficiency_policy_is_bound_and_replay_cannot_reinterpret_legacy():
+    from natlang_neuralese.rl.task_rollouts import execution_efficiency
+    from natlang_neuralese.rl.native_replay import _require_scored_training_episode
+    capture=turns();telemetry=execution_efficiency({'turns':capture})
+    assert telemetry['policy']=='bounded-rational-v2'
+    row={'split':'train','policy':{'checkpoint_sha256':'a'},'turns':capture,
+         'reward':{'quality':0,'execution_efficiency':telemetry}}
+    # Removing a current policy must not let its new cost pass the historical reader.
+    telemetry.pop('policy')
+    with pytest.raises(ValueError,match='cost differs'):
+        _require_scored_training_episode(row,{'checkpoint_sha256':'a'})

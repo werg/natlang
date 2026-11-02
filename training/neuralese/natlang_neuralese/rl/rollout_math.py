@@ -8,6 +8,8 @@ import re
 
 DEFAULT_EXECUTION_EFFICIENCY_WEIGHT = 1.0
 MAX_EXECUTION_EFFICIENCY_COST = 0.05
+EXECUTION_EFFICIENCY_POLICY = 'bounded-rational-v2'
+HISTORICAL_EXECUTION_EFFICIENCY_POLICY = 'bounded-clipped-v1'
 
 
 def group_advantages(rewards: list[float | None], eps: float = 1e-6) -> tuple[list[float | None], dict]:
@@ -97,7 +99,8 @@ def execution_efficiency_counters(turns: list[dict]) -> dict:
 
 
 def execution_efficiency_cost(*, model_calls: int, generated_tokens: int | None,
-                              repeated_actions: int, weight: float = DEFAULT_EXECUTION_EFFICIENCY_WEIGHT) -> float:
+                              repeated_actions: int, weight: float = DEFAULT_EXECUTION_EFFICIENCY_WEIGHT,
+                              policy: str = EXECUTION_EFFICIENCY_POLICY) -> float:
     """Bounded cost from observed whole-episode counters; no elapsed-time or prompt-size terms.
 
     Missing generated-token telemetry contributes no token component and must remain explicitly unknown in the
@@ -108,9 +111,18 @@ def execution_efficiency_cost(*, model_calls: int, generated_tokens: int | None,
             or (generated_tokens is not None and (type(generated_tokens) is not int or generated_tokens < 0))
             or type(weight) not in (int, float) or not math.isfinite(weight) or not 0 <= weight <= 1):
         raise ValueError('invalid execution-efficiency counters or weight')
-    call_cost = 0.015 * min(model_calls, 8) / 8
-    token_cost = 0.0 if generated_tokens is None else 0.015 * min(generated_tokens, 2048) / 2048
-    repeat_cost = 0.020 * min(repeated_actions, 4) / 4
+    if policy == EXECUTION_EFFICIENCY_POLICY:
+        # Keep useful resolution past ordinary trajectory lengths. Hard clipping
+        # made every observed 8--33-call, 6k--20k-token rollout cost exactly .03.
+        scale = lambda count, half: count / (count + half)
+    elif policy == HISTORICAL_EXECUTION_EFFICIENCY_POLICY:
+        # Exact reader for immutable, already scored historical trajectories.
+        scale = lambda count, half: min(count, half) / half
+    else:
+        raise ValueError('unknown execution-efficiency cost policy')
+    call_cost = 0.015 * scale(model_calls, 8)
+    token_cost = 0.0 if generated_tokens is None else 0.015 * scale(generated_tokens, 2048)
+    repeat_cost = 0.020 * scale(repeated_actions, 4)
     return min(MAX_EXECUTION_EFFICIENCY_COST, call_cost + token_cost + repeat_cost) * float(weight)
 
 

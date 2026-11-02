@@ -339,7 +339,7 @@ def test_efficiency_validator_recomputes_claimed_counters_from_turns(generated_t
                                      repeated_actions=repeated_actions, weight=1.)
     rollout = {'split': 'train', 'task_id': 'counter-check', 'policy': {'checkpoint_sha256': 'a' * 64},
         'reward': {'quality': 1, 'execution_efficiency': {'model_calls': 0,
-            'generated_tokens': generated_tokens, 'repeated_actions': repeated_actions, 'cost': cost, 'weight': 1.}},
+            'generated_tokens': generated_tokens, 'repeated_actions': repeated_actions, 'cost': cost, 'weight': 1., 'policy':'bounded-rational-v2'}},
         'turns': []}
     with pytest.raises(ValueError, match='counters differ from captured whole-graph turns'):
         _require_scored_training_episode(rollout, {'checkpoint_sha256': 'a' * 64})
@@ -370,7 +370,8 @@ def test_grpo_objective_records_bonus_after_outcome_centering():
         [expected[0] + .1, expected[1], expected[2]])
 
 
-def test_all_success_cost_objective_binds_the_optimizer_control():
+@pytest.mark.parametrize('cost_policy',[None,'bounded-rational-v2'])
+def test_all_success_cost_objective_binds_the_optimizer_control(cost_policy):
     from natlang_neuralese.rl.native_replay import prepare_objective
     from natlang_neuralese.rl.rollout_math import execution_efficiency_counters,execution_efficiency_cost
     from test_rl_episode_graph import attach_execution_graph
@@ -379,8 +380,8 @@ def test_all_success_cost_objective_binds_the_optimizer_control():
           'sampling':turn['sampling'],'replay':{'raw_calls_retained':True}} for turn in turns]
     counters=execution_efficiency_counters(raw)
     episodes=attach_execution_graph([{'task_id':'cost-only','sample':sample,'split':'train','group':'g',
-        'reward':{'quality':1,'execution_efficiency':{**counters,'weight':weight,
-            'cost':execution_efficiency_cost(**counters,weight=weight)}},
+        'reward':{'quality':1,'execution_efficiency':{**counters,'weight':weight,**({'policy':cost_policy} if cost_policy else {}),
+            'cost':execution_efficiency_cost(**counters,weight=weight,policy=cost_policy or 'bounded-clipped-v1')}},
         'policy':{'checkpoint_sha256':identity['checkpoint_sha256']},'turns':copy.deepcopy(raw)}
         for sample,weight in enumerate((0.,1.))])
     _,spec=prepare_objective(episodes,identity=identity,roles=roles,fetch_block=lambda key:block)

@@ -120,6 +120,14 @@ status, honest stop and its evidence; self-reported difficulty alone earns no
 success credit. Preserve raw results and historical scores when repairing a
 derived classification, and never silently discard earned optimizer updates.
 
+New scores bind `bounded-rational-v2` efficiency policy: call, token and repeat
+components use bounded count/(count+scale) costs, retaining resolution beyond
+eight calls and2048 tokens. Every one of five actual recent trajectories had
+saturated the old .03 call/token cost despite8--33 calls and6539--20259 generated
+tokens. Replay honors the exact clipped-v1 formula for historical rows without
+a policy field; never reinterpret their scores or earned updates. New-policy
+rows bind the explicit identifier and unknown policies fail closed.
+
 New whole-graph RL scoring includes bounded execution-efficiency cost by default:
 at most 0.05 for observed calls, generated tokens and unchanged repeated actions.
 Normalize task outcomes separately; do not amplify tiny cost differences through

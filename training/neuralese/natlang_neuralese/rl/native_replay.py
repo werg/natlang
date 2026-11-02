@@ -1333,7 +1333,7 @@ def _require_scored_training_episode(rollout, identity,*,actors=None):
             raise ValueError('native RL execution-efficiency telemetry is malformed or exceeds its cost cap')
         expected_cost = execution_efficiency_cost(model_calls=efficiency['model_calls'],
             generated_tokens=efficiency['generated_tokens'], repeated_actions=efficiency['repeated_actions'],
-            weight=efficiency['weight'])
+            weight=efficiency['weight'],policy=efficiency.get('policy','bounded-clipped-v1'))
         if not math.isclose(efficiency['cost'], expected_cost, rel_tol=0, abs_tol=1e-12):
             raise ValueError('native RL execution-efficiency cost differs from its captured counters')
         credit = efficiency.get('failure_report_credit')
