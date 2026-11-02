@@ -269,6 +269,7 @@ def qualify_existing(model, tokenizer, roles, config, *, checkpoint_sha256, forw
               gradient_finite and gradient_nonzero and restore_exact and (complete is None or complete['passed']))
     return {'schema': 'natlang.native-runtime-certificate/1', 'passed': passed,
             'checkpoint_sha256': checkpoint_sha256, 'native_identity': identity,
+            'execution_device': str(model.port.embedding_weight.device),
             'forward_max_abs': forward_error, 'consumer_ce_abs': ce_error,
             'consumer_gradient_max_abs': gradient_error, 'incremental_max_abs': incremental_error,
             'channel_restore_exact': restore_exact, 'forward_atol': forward_atol,

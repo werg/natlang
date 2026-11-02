@@ -1987,6 +1987,9 @@ def _main(argv=None, *, requested_refresh):
     previous_norm_declaration = config.get('native_norm_execution')
     previous_shared_declaration=config.get('native_shared_execution')
     previous_shared_execution=config.get('native_shared_execution','source-v1')
+    if ((resume or shared_resume) and args.native_shared_execution == 'ffn-stable-v1'
+            and previous_shared_execution != 'ffn-stable-v1'):
+        raise ValueError('FFN-only execution changes require a zero-SGD candidate and qualification before training')
     if args.native_shared_execution is not None:
         from ..model.shared_execution import configure_shared_execution
         configure_shared_execution(model,args.native_shared_execution)
@@ -2024,6 +2027,8 @@ def _main(argv=None, *, requested_refresh):
     if args.native_attention_precision is not None:
         config['native_attention_precision'] = attention_precision
     saved_training = resume or shared_resume or {}
+    from .native_execution_transition import require_qualified_for_training
+    require_qualified_for_training(saved_training)
     saved_options = saved_training.get('options') or {}
     if type(args.accumulate_batches) is not int or args.accumulate_batches < 1:
         raise ValueError('--accumulate-batches must be a positive integer')

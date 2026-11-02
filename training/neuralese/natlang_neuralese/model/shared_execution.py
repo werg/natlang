@@ -67,6 +67,10 @@ def validate_shared_execution_profile(model,config):
 
 def validate_shared_execution(model,config):
     profile=validate_shared_execution_profile(model,config)
+    if profile == 'ffn-stable-v1' and not any(
+            type(module) is torch.nn.Linear and '.feed_forward.' in name
+            for name, module in model.port.named_modules()):
+        raise ValueError('FFN-only shared execution lost its supported projections')
     for name,module in model.port.named_modules():
         implementation=(_fixed_ffn if type(module)is torch.nn.Linear and '.feed_forward.'in name
             else _fixed_norm if type(module).__name__ in _NORM_TYPES else None)
