@@ -1,3 +1,57 @@
+## Live supervision update, 2026-11-02 17:12 CET
+
+- Production parent is now the independently verified zero-SGD source adoption
+  `71c3eb45594dd866d2c3d935a5577188e7e0750bf39cb2484ebbe8e4c7d9a83b`,
+  preserving BF95 weights/optimizer/RNG at global67. Its actual joint recipe
+  contains401623 graphs after69 quality deferrals and47961 appended rows;
+  deferral does not undo the one historical exposure. Complete target bytes
+  were reconstructed from a fresh private payload GET. Capsule:
+  `private-recovery-20261101/quality-parent-71c3eb45594dd866-exact-delta-capsule-1102.json`.
+- Early full-prompt on-policy JOLT+ collected16 student and4 privileged-context
+  self-teaching attempts from this exact parent. Collection was retained when
+  the first learner correctly rejected a missing execution-admission bridge
+  before SGD. Main3561ced70 verifies the original numerical qualification
+  composed with complete zero-SGD adoption; frozen learner runtime20 uses it,
+  while the actor/collector retain runtime19. Actual replay checks passed.
+- `lfm3-quality-parent-onpolicy-learner20-1102.service` earned global68 and
+  committed its full checkpoint16:48 under
+  `quality-parent-onpolicy-runtime19-1102/round-000000/learner/checkpoint.pt`.
+  First update:4 episodes,5133 supervised tokens,97934 forward tokens; measured
+  update throughput1995 forward tokens/s excludes collection/setup/checkpoint
+  waiting. No communication graph was in that microgroup. All16 sampled task
+  outcomes were successful with efficiency differences; this is not measured
+  capability lift. Full joint SFT obligations remain outstanding.
+- The selected parent's matched runtime19/full-prompt protected development
+  baseline completed on Pop:2/4 cases0,32,88,112, two semantic mismatches, no
+  infrastructure/budget failures. Evidence copied to
+  `ops/protected-quality-parent-runtime19-evaluation-1102`. Evaluate an actual
+  trained successor against this baseline; do not train on these held traces.
+- New global68 input-row changes were independently traced to inherited Adam
+  momentum: BF16 parameters and BF16 moments, no FP32 master for those rows.
+  Assuming zero fresh gradient predicts every one of8192 observed coordinates
+  within the two stochastic-round neighbors. Tiny fresh gradients alone do
+  not demonstrate an erroneous optimizer update. No learning-rate change made.
+- Current learner is waiting before its next update for62.081GB free checkpoint
+  admission. Internal storage has about50GB before replacement-delta growth;
+  external storage cannot receive another15GB while preserving its50GiB floor.
+  New global68 is local-durable but not independently exported yet. Diagnostic
+  SFT69 remains intact. Its first exact-delta encoder was terminated before
+  producing a receipt; only its unusable3.1GB temporary payload was removed.
+  A fresh4GiB-ledger encoder is active as
+  `encode-diagnostic-sft69-exact-recovery-r2-1102.service`. Finish local exact
+  reconstruction and fresh private GET verification before retiring that raw
+  diagnostic checkpoint and its same-inode queue pin. Preserve all other jobs.
+- Cold evidence compaction finished:206 journals,16.523GB raw to5.130GB zstd,
+  each independently decoded/hash checked with restore receipts. Idle exact
+  actor-view duplicates were retired with custody; current actor state and
+  full parent recovery retained. Docker retirement has rebuild evidence, not
+  an exact image archive. No cloud sandbox or paid Luna generation is active.
+- Main670f77bad additionally allows a stop/refresh to cancel a future storage
+  reservation only after the current step is durably committed and no writer
+  or dirty metadata remains.14 targeted tests and the current quick main
+  checks passed. Live frozen runtime20 does not yet contain this change;
+  adopt it through the next recorded continuation, not by mutating its files.
+
 ## Live supervision update, 2026-11-02 15:55 CET
 
 - No production learner is currently running. The runtime17 controller was
