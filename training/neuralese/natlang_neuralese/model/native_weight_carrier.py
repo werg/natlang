@@ -1621,6 +1621,9 @@ def stored_causal_conv1d(operation, x, weight, bias=None, *, activation=None, **
                                           *anchors, *bias_anchors)
 
 
+_FINITE_CONV_INFERENCE_QUERY_CHUNK = 1024
+
+
 def stored_finite_convolution(histories, weight, bias, c):
     """Keep the native finite-history forward and widen its convolution dW."""
     from ..common.native_higher_order import active_reference_arithmetic
@@ -1637,6 +1640,20 @@ def stored_finite_convolution(histories, weight, bias, c):
     anchors = _scope_anchors(weight)
     bias_anchors = _scope_anchors(bias) if bias is not None else ()
     if not anchors and not bias_anchors:
+        # Every query owns its own finite-history reduction. Bounding the
+        # inference-only query dimension avoids materializing the full
+        # [batch, queries, history, channels] FP32 product for long prefill.
+        # Preserve the existing autograd path and its parameter fan-in.
+        if not torch.is_grad_enabled() and histories.shape[1] > _FINITE_CONV_INFERENCE_QUERY_CHUNK:
+            chunks = []
+            for start in range(0, histories.shape[1], _FINITE_CONV_INFERENCE_QUERY_CHUNK):
+                stop = min(start + _FINITE_CONV_INFERENCE_QUERY_CHUNK, histories.shape[1])
+                out = (histories[:, start:stop].contiguous().float() *
+                       weight[:, 0].T.float()[None, None]).sum(2)
+                if bias is not None:
+                    out = out + bias.float()
+                chunks.append(c[:, start:stop] * out.to(c.dtype))
+            return torch.cat(chunks, dim=1)
         out = (histories.contiguous().float() * weight[:, 0].T.float()[None, None]).sum(2)
         if bias is not None:
             out = out + bias.float()
