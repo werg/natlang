@@ -29,7 +29,8 @@ def assess_call(text):
 def review(census_path, output):
     census_path = Path(census_path).resolve(strict=True); census_ref = bind(census_path)
     census = read(census_path)
-    if census.get('schema') != 'natlang.acquired-effective-learning-census/1' or census.get('training_admission') is not False:
+    if census.get('schema') not in ('natlang.acquired-effective-learning-census/1',
+            'natlang.acquired-partial-learning-census/1') or census.get('training_admission') is not False:
         raise ValueError('requires a completed unadmitted source census')
     from transformers import AutoTokenizer
     student = resolve('lfm3'); tokenizer_path = Path(student['path'])
@@ -96,7 +97,8 @@ def review(census_path, output):
     core_native_tools = {'eval','return_result','read_code','read_page','compact_history','escalate'}
     agent_source = Path(__file__).resolve().parents[2]/'ts-host/src/native/agent.ts'
     summary = {'schema':'natlang.acquired-supervised-sample-review/1','training_admission':False,
-        'census':census_ref,'rows_sampled':len(samples),'counts':dict(counts),
+        'census':census_ref,'census_coverage':'partial completed leaves' if 'partial-' in census['schema'] else 'full source',
+        'rows_sampled':len(samples),'counts':dict(counts),
         'complete_call_functions':dict(functions),'sample_source_stores':dict(source_stores),
         'core_native_tools':sorted(core_native_tools),
         'sample_calls_outside_core_native_names':sum(n for name,n in functions.items() if name not in core_native_tools),
