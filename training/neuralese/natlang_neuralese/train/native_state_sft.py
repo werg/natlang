@@ -2508,18 +2508,27 @@ def _main(argv=None, *, requested_refresh):
     if args.source_correction is not None and args.continued_native_graphs is None:
         raise ValueError('native source correction requires its declared predecessor graph source')
     # The active SFT frame, not a surrounding RL frame, owns its reference.
-    reference_options = (resume or {}).get('options') or saved_options
+    reference_options = ((resume.get('options') or {}) if resume is not None else saved_options)
     sft_reference = reference_options.get('sft_update_budget_reference') if objective is None else None
-    if args.sft_update_budget_reference:
+    reference_argument=args.sft_update_budget_reference
+    if reference_argument is None and isinstance(sft_reference,dict) and sft_reference.get('evidence'):
+        reference_argument=json.dumps(sft_reference['evidence'])
+    if reference_argument:
         if objective is not None: raise ValueError('SFT update budget reference is ordinary SFT only')
         from .native_resident import bound
-        reference_binding=json.loads(args.sft_update_budget_reference)
+        reference_binding=json.loads(reference_argument)
         reference_receipt=json.loads(bound(reference_binding).read_text())
         parent_path=args.continue_from if parent_continuation else policy.slot
+        inherited=(isinstance(sft_reference,dict) and sft_reference.get('evidence')==reference_binding)
+        parent_receipts=(resume or {}).get('source_receipts') or []
+        parent_train_sha=parent_receipts[0].get('sha256') if parent_receipts else None
         if (reference_receipt.get('schema')!='natlang.sft-update-budget-reference/1'
-                or (reference_receipt.get('checkpoint_sha256')!=sha256_file_hex_cached(parent_path)
-                    and (not isinstance(sft_reference,dict) or sft_reference.get('evidence')!=reference_binding))
-                or reference_receipt.get('train_sha256')!=source_receipts[0]['sha256']
+                or (not inherited and (reference_receipt.get('checkpoint_sha256')!=sha256_file_hex_cached(parent_path)
+                    or reference_receipt.get('train_sha256')!=parent_train_sha))
+                or (inherited and (sft_reference.get('reference_train_sha256')!=reference_receipt.get('train_sha256')
+                    or sft_reference.get('reference_checkpoint_sha256')!=reference_receipt.get('checkpoint_sha256')
+                    or sft_reference.get('scored_graphs')!=reference_receipt.get('scored_graphs')
+                    or sft_reference.get('reference_global_step')!=reference_receipt.get('global_step')))
                 or type(reference_receipt.get('scored_graphs')) is not int or reference_receipt['scored_graphs']<1):
             raise ValueError('SFT update budget reference differs from the actual earned checkpoint or source')
         delta=json.loads(bound(reference_receipt['row_delta']).read_text())
@@ -2533,6 +2542,9 @@ def _main(argv=None, *, requested_refresh):
                 or sum(row['delta'] for row in records if row['scored'])!=reference_receipt['scored_graphs']):
             raise ValueError('SFT update budget row delta does not match the scored count')
         bound(reference_receipt['predecessor_checkpoint'])
+        if reference_receipt['train_source']['sha256']!=reference_receipt['train_sha256']:
+            raise ValueError('SFT update budget historical source binding differs')
+        bound(reference_receipt['train_source'])
         if (reference_receipt.get('global_step')!=delta.get('global_step')
                 or reference_receipt.get('checkpoint_sha256')!=delta.get('checkpoint_sha256')
                 or reference_receipt.get('train_sha256')!=delta.get('train_sha256')):
@@ -2545,11 +2557,19 @@ def _main(argv=None, *, requested_refresh):
                 raise ValueError('SFT update budget delta differs from the restored earned frame')
         sft_reference={'schema':'natlang.sft-update-budget-reference-state/1',
                        'scored_graphs':reference_receipt['scored_graphs'],'evidence':reference_binding,
-                       'reference_global_step':reference_receipt['global_step']}
+                       'reference_global_step':reference_receipt['global_step'],
+                       'reference_train_sha256':reference_receipt['train_sha256'],
+                       'reference_checkpoint_sha256':reference_receipt['checkpoint_sha256']}
     if sft_reference is not None and (not isinstance(sft_reference,dict)
             or sft_reference.get('schema')!='natlang.sft-update-budget-reference-state/1'
             or type(sft_reference.get('scored_graphs')) is not int or sft_reference['scored_graphs']<1):
         raise ValueError('saved SFT update budget reference is invalid')
+    if sft_reference is not None and sft_reference.get('origin')=='actual-ordinary-sft-update-in-this-checkpoint':
+        from .native_resident import bound
+        source_reference=sft_reference.get('reference_train_source') or {}
+        if source_reference.get('sha256')!=sft_reference.get('reference_train_sha256'):
+            raise ValueError('captured SFT update reference source differs')
+        bound(source_reference)
     if (objective is None and resume and int(reference_options.get('accumulate_batches') or 1)>args.accumulate_batches
             and sft_reference is None):
         raise ValueError('decreasing SFT accumulation requires an earned scored-graph reference')
@@ -4256,12 +4276,17 @@ def _main(argv=None, *, requested_refresh):
                 if sft_reference is None and scored_count:
                     sft_reference={'schema':'natlang.sft-update-budget-reference-state/1',
                                    'scored_graphs':scored_count,'reference_global_step':global_step,
+                                   'reference_train_sha256':source_receipts[0]['sha256'],
+                                   'reference_train_source':{key:source_receipts[0][key] for key in ('path','sha256')},
+                                   'stage_id':args.stage_id or 'native-graph-ce',
+                                   'lineage_parent_checkpoint_sha256':lineage_checkpoint_sha,
                                    'origin':'actual-ordinary-sft-update-in-this-checkpoint'}
                     checkpoint_options['sft_update_budget_reference']=sft_reference
                     checkpoint_options['sft_update_budget_history'].append({
                         'schema':'natlang.sft-update-budget-transition/1','reference':sft_reference,
                         'at_global_step':global_step,'effective':'next ordinary SFT update'})
-                applied=(details[0].get('sft_update_budget') if isinstance(details,list) and details else None)
+                applied=(details[0].get('sft_update_budget') if isinstance(details,list) and details
+                         else details.get('sft_update_budget') if isinstance(details,dict) else None)
                 if applied is not None:checkpoint_options['sft_update_budget_last_update']={**applied,'global_step':global_step}
             for example in batch:
                 exposure_counts[example.id] += 1

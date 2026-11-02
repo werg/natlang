@@ -330,12 +330,45 @@ def test_earned_accumulation_decrease_requires_reference_and_carries_captured_re
     receipt={'schema':'natlang.sft-update-budget-reference/1','checkpoint_sha256':pin['sha256'],
              'train_sha256':delta['train_sha256'],'global_step':delta['global_step'],
              'scored_graphs':sum(row['delta'] for row in rows),'row_delta':binding(delta_path),
-             'predecessor_checkpoint':binding(predecessor)}
+             'predecessor_checkpoint':binding(predecessor),'train_source':binding(paths['train'])}
     proof=tmp_path/'reference.json';proof.write_text(json.dumps(receipt))
-    with_reference=continuation+['--sft-update-budget-reference',json.dumps(binding(proof))]
+    appended=tmp_path/'appended.jsonl'
+    appended.write_text(paths['train'].read_text()+json.dumps(dict(row,id='additional'))+'\n')
+    with_reference=continuation+['--sft-update-budget-reference',json.dumps(binding(proof)),
+                                '--continued-native-graphs',str(paths['train'])]
+    with_reference[with_reference.index('--native-graphs')+1]=str(appended)
     assert trainer.main(with_reference)==0
     explicit=torch.load(slot,weights_only=False,map_location='cpu')['training']
-    assert explicit['options']['sft_update_budget_reference']['evidence']==binding(proof)
+    saved_reference=explicit['options']['sft_update_budget_reference']
+    assert saved_reference['evidence']==binding(proof)
+    assert saved_reference['reference_train_sha256']==receipt['train_sha256']
+    appended_again=tmp_path/'appended-again.jsonl'
+    appended_again.write_text(appended.read_text()+json.dumps(dict(row,id='later'))+'\n')
+    inherited=with_reference.copy()
+    inherited[inherited.index('--native-graphs')+1]=str(appended_again)
+    inherited[inherited.index('--continued-native-graphs')+1]=str(appended)
+    inherited[inherited.index('--epochs')+1]='2'
+    unrelated=tmp_path/'unrelated-reference.json';unrelated.write_text(json.dumps(receipt)+' ')
+    bad=inherited.copy();bad[bad.index('--sft-update-budget-reference')+1]=json.dumps(binding(unrelated))
+    with pytest.raises(ValueError,match='reference differs'):
+        trainer.main(bad)
+    original=proof.read_text();proof.write_text(original+' ')
+    with pytest.raises(ValueError,match='sha|binding|changed'):
+        trainer.main(inherited)
+    proof.write_text(original)
+    assert trainer.main(inherited)==0
+    later=torch.load(slot,weights_only=False,map_location='cpu')['training']
+    assert later['options']['sft_update_budget_reference']==saved_reference
+    implicit=inherited.copy()
+    for flag in ('--sft-update-budget-reference','--continued-native-graphs'):
+        index=implicit.index(flag);del implicit[index:index+2]
+    implicit[implicit.index('--epochs')+1]='3'
+    proof.write_text(original+' ')
+    with pytest.raises(ValueError,match='sha|binding|changed'):
+        trainer.main(implicit)
+    proof.write_text(original)
+    assert trainer.main(implicit)==0
+    assert torch.load(slot,weights_only=False,map_location='cpu')['training']['options']['sft_update_budget_reference']==saved_reference
     torch.save(state,slot)
     assert trainer.main(continuation)==0
     final=torch.load(slot,weights_only=False,map_location='cpu')['training']
@@ -381,3 +414,14 @@ def test_sft_budget_composes_with_warmup_and_restores_nominal_groups(monkeypatch
     assert [(group['lr'],group.get('qat_latent_lr')) for group in optimizer.param_groups]==warmed
     warmup.restore()
     assert [(group['lr'],group.get('qat_latent_lr')) for group in optimizer.param_groups]==nominal
+
+
+def test_sft_budget_control_is_recorded_for_mapping_details(monkeypatch):
+    from natlang_neuralese.train import native_state_sft as trainer
+    model,optimizer=build();graphs=examples()[:1]
+    def loss(model,micro,**kwargs):
+        return sum(p.float().square().sum() for p in model.parameters() if p.requires_grad), {'objective':'fixture'}
+    monkeypatch.setattr(trainer,'packed_graph_loss',loss)
+    _,details=trainer.native_training_update(model,optimizer,graphs,checkpoint_layers=False,sft_update_reference=4)
+    assert details['sft_update_budget']['scored_graphs']==1
+    assert details['sft_update_budget']['multiplier']==.25
