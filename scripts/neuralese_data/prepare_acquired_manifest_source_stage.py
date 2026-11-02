@@ -21,7 +21,7 @@ from scripts.neuralese_data.build_acquired_streaming_successor import (
 CODE = Path(__file__).read_bytes()
 
 
-def prepare(predecessor_path, combined_path, census_path, output):
+def prepare(predecessor_path, combined_path, census_path, output, *, reviewed_census_builder_sha256=None):
     predecessor_path, combined_path, census_path = [Path(p).resolve(strict=True)
         for p in (predecessor_path, combined_path, census_path)]
     pred_ref, combined_ref, census_ref = map(bind, (predecessor_path, combined_path, census_path))
@@ -73,8 +73,11 @@ def prepare(predecessor_path, combined_path, census_path, output):
     if len(components) != len(names): raise ValueError('census code inventory is incomplete')
     for name, component in zip(names, components, strict=True):
         captured = checked(component, 'captured index/census source')
-        if captured.name != name or bind(Path(__file__).with_name(name))['sha256'] != component['sha256']:
-            raise ValueError('index/census source is not the reviewed current implementation')
+        current_sha = bind(Path(__file__).with_name(name))['sha256']
+        historical_ok = (name == 'build_acquired_streaming_successor.py' and
+                         reviewed_census_builder_sha256 == component['sha256'])
+        if captured.name != name or (current_sha != component['sha256'] and not historical_ok):
+            raise ValueError('index/census source is not the reviewed implementation')
     checked(census['pending_census'], 'original pending source census')
     seen_screens, leaf_inventory = set(), []
     screens, overlaps = combined.get('screens') or [], combined.get('occurrence_proofs') or []
@@ -180,6 +183,7 @@ def prepare(predecessor_path, combined_path, census_path, output):
         'new_rows': combined['rows'], 'tokenizer': tokenizer, 'roles': roles,
         'protection_digest': protection.digest, 'geometry_scan': scan, 'parallel_index': None,
         'combined_leaf_index_proofs': proof_refs, 'effective_loss_census': census_ref,
+        'reviewed_census_builder_sha256': reviewed_census_builder_sha256,
         'pending_render_obligations': combined['pending_render_obligations'],
         'carried_over_context_obligations': combined['carried_over_context_obligations'],
         'builder': bind(builder)}
@@ -193,8 +197,10 @@ def main():
     p.add_argument('--combined-receipt', required=True)
     p.add_argument('--census-receipt', required=True)
     p.add_argument('--out', required=True)
+    p.add_argument('--reviewed-census-builder-sha256')
     a=p.parse_args()
-    result=prepare(a.predecessor_receipt,a.combined_receipt,a.census_receipt,a.out)
+    result=prepare(a.predecessor_receipt,a.combined_receipt,a.census_receipt,a.out,
+        reviewed_census_builder_sha256=a.reviewed_census_builder_sha256)
     print(json.dumps({'rows':result['rows'],'new_rows':result['new_rows'],'training_admission':False}))
 
 

@@ -602,12 +602,137 @@ def reviewed_partition_count(prepared_source_receipt, reviewed_preparation_build
     return partition['pending_graph']['rows']
 
 
+def verify_prepared_manifest_leaves(prepared,census,manifest_leaves,prepared_geometry,actual_new_metadata,previous_rows):
+    """Check all physical leaf indexes and actual ordered geometry, without a raw rescan."""
+    refs=prepared.get('combined_leaf_index_proofs') or []
+    if refs!=census.get('leaf_index_proofs') or len(refs)!=len(manifest_leaves):
+        raise ValueError('prepared manifest lacks its exact completed leaf index proofs')
+    offset=0;slots=prepared_geometry.get('kv_slots',[])[previous_rows:]
+    for leaf,reference in zip(manifest_leaves,refs,strict=True):
+        proof=read(checked(reference,'prepared manifest leaf proof'))
+        count=proof.get('rows');end=offset+count if type(count) is int else -1
+        if (proof.get('schema')!='natlang.parallel-native-source-index/1' or type(count) is not int or count<1
+                or proof.get('decision_readouts')!=0
+                or proof.get('source')!={k:leaf[k] for k in ('path','sha256','bytes')}
+                or proof.get('parser_policy_sha256')!=prepared_geometry['identity']['parser_policy_sha256']
+                or canonical_json_sha256_hex(actual_new_metadata[offset:end])!=proof.get('ordered_metadata_sha256')
+                or canonical_json_sha256_hex(slots[offset:end])!=proof.get('ordered_geometry_sha256')):
+            raise ValueError('prepared manifest leaf binding or geometry proof differs')
+        offset=end
+    if offset!=len(actual_new_metadata):raise ValueError('prepared manifest leaf proofs omit rows')
+
+def append_source_policy(policy, graph_path, graph_ref, manifest_leaves, new_source_path):
+    """Declare physical leaf identities for the actual trainer's per-row policy lookup."""
+    if any(item.get('sha256') == graph_ref['sha256'] for item in policy['sources']):
+        raise ValueError('acquired source is already declared in the predecessor CE policy')
+    declarations = ([{'path':str(graph_path),'sha256':graph_ref['sha256'],'bytes':graph_ref['bytes']}]
+        if manifest_leaves is None else [{k:item[k] for k in ('path','sha256','bytes')} for item in manifest_leaves])
+    existing_sources={item['sha256'] for item in policy['sources']}
+    for declaration in declarations:
+        if declaration['sha256'] in existing_sources:raise ValueError('acquired leaf is already declared in predecessor CE policy')
+        existing_sources.add(declaration['sha256'])
+        policy['sources'].append({'sha256':declaration['sha256'],'encoding':'native-row-objectives-v1',
+            'context_weight':policy['source_contract']['default_raw_context_weight']})
+        policy['source_contract']['active_sources'].append(declaration)
+    policy['sources'].sort(key=lambda row: row['sha256'])
+    policy['source_contract']['inventory'] = [bind(new_source_path)]
+    policy['source_contract']['active_source_count'] = len(policy['source_contract']['active_sources'])
+
+def verify_combined_converter_runtimes(census, runtime_roots):
+    """Bind each source converter to its actual reviewed frozen runtime files."""
+    mapping = {
+        'builder':'scripts/neuralese_data/build_acquired_full_session_graphs.py',
+        'text_corpus':'training/neuralese/natlang_neuralese/data/text_corpus.py',
+        'native_graph_conversion':'training/neuralese/natlang_neuralese/data/native_graph_conversion.py',
+        'ordinary_context_windows':'training/neuralese/natlang_neuralese/data/ordinary_context_windows.py',
+        'static_native_context':'training/neuralese/natlang_neuralese/data/static_native_context.py',
+        'ordinary_window_objective':'training/neuralese/natlang_neuralese/train/own_output_supervision.py',
+        'ordinary_window_schema':'training/neuralese/natlang_neuralese/data/native_graph_schema.py',
+        'prompt_rendering':'training/neuralese/natlang_neuralese/data/prompt_rendering.py',
+        'serve_chat':'training/neuralese/natlang_neuralese/serve/chat.py',
+        'jsonio':'training/neuralese/natlang_neuralese/common/jsonio.py',
+        'graph_writer':'scripts/neuralese_data/build_native_graph_text_corpus.py',
+        'tokenizer_provision':'scripts/neuralese_data/build_native_semantic_pairs_e2e.py',
+        'tokenizer_inventory':'training/neuralese/natlang_neuralese/model/native_model.py',
+        'conversion_output_lease':'scripts/neuralese_data/conversion_output_lease.py',
+        'split_group_closure':'scripts/neuralese_data/splits.py',
+        'render_pending_continuation':'scripts/neuralese_data/acquired_session_render_pending_continuation_20261017.json',
+        'source_syntax_repair':'scripts/neuralese_data/acquired_session_syntax_repair.py',
+        'syntax_repair_continuation':'scripts/neuralese_data/acquired_session_syntax_repair_continuation_20261018.json',
+    }
+    roots=[Path(path).resolve(strict=True) for path in runtime_roots or []]
+    if not roots:raise ValueError('manifest append needs its reviewed converter runtimes')
+    runtime_files=[]
+    for root in roots:
+        runtime_files.append({name:bind(root/path) for name,path in mapping.items() if (root/path).is_file()})
+    used={}
+    for history in census.get('source_format_history') or []:
+        converter=read(checked(history['converter'],'manifest source converter'))
+        files=(converter.get('runtime') or {}).get('files') or {}
+        if not files or set(files)-set(mapping) or canonical_json_sha256_hex(files)!=(converter.get('runtime') or {}).get('fingerprint'):
+            raise ValueError('source converter runtime inventory is incomplete')
+        matched=[(root,refs) for root,refs in zip(roots,runtime_files,strict=True)
+                 if all(key in refs and refs[key]['sha256']==value.get('sha256') for key,value in files.items())]
+        if not matched:raise ValueError('source converter has no exact reviewed frozen runtime')
+        root,refs=matched[0]
+        used[str(root)]={'root':str(root),'files':{key:refs[key] for key in files}}
+    if not used:raise ValueError('source converter history is empty')
+    return {'reviewed_runtimes':list(used.values()),'source_histories':len(census['source_format_history']),
+        'scope':'Exact historical converter files and original profile per source; no equivalence or outcome verification claimed.'}
+
+
 def build(predecessor_receipt, screen_receipt, census_receipt, output, *, share=0.07, prepared_source_receipt=None,
           diagnosis_verification=None, diagnosis_program=None, family=FAMILY, screen_program=None,
-          reviewed_preparation_builder_sha256=None):
+          reviewed_preparation_builder_sha256=None, reviewed_converter_runtimes=None, semantic_review=None):
     predecessor_path, screen_path, census_path = map(lambda p: Path(p).resolve(strict=True),
         (predecessor_receipt, screen_receipt, census_receipt))
     previous, screen, census = map(read, (predecessor_path, screen_path, census_path))
+    combined = screen if screen.get('schema') == 'natlang.combined-acquired-screened-delta/1' else None
+    manifest_leaves = None
+    if combined is not None:
+        if not prepared_source_receipt or not semantic_review:
+            raise ValueError('manifest append requires prepared geometry and explicit semantic sample review')
+        preparation = read(checked(bind(prepared_source_receipt),'manifest source preparation'))
+        preparation_builder = checked(preparation.get('builder'),'manifest source preparation builder')
+        expected_builder = ROOT/'scripts/neuralese_data/prepare_acquired_manifest_source_stage.py'
+        if (preparation.get('schema') != PREPARED_SCHEMA or preparation.get('training_admission') is not False
+                or bind(preparation_builder)['sha256'] != bind(expected_builder)['sha256']
+                or preparation.get('effective_loss_census',{}).get('sha256') != bind(census_path)['sha256']
+                or preparation.get('screen',{}).get('sha256') != bind(screen_path)['sha256']
+                or preparation.get('predecessor',{}).get('sha256') != bind(predecessor_path)['sha256']):
+            raise ValueError('manifest source preparation or reviewed builder differs')
+        semantic = read(checked(bind(semantic_review),'semantic sample review'))
+        semantic_builder=checked(semantic.get('builder'),'semantic review builder')
+        checked(semantic.get('decoded_samples'),'semantic review sample corpus')
+        if bind(semantic_builder)['sha256'] != bind(ROOT/'scripts/neuralese_data/review_acquired_supervised_samples.py')['sha256']:
+            raise ValueError('semantic review was not produced by the reviewed sample program')
+        if (semantic.get('schema') != 'natlang.acquired-supervised-sample-review/1'
+                or semantic.get('training_admission') is not False or semantic.get('census_coverage') != 'full source'
+                or semantic.get('census',{}).get('sha256') != bind(census_path)['sha256']
+                or semantic.get('rows_sampled',0) < 1 or semantic.get('counts',{}).get('complete_calls_markup_failed',0)):
+            raise ValueError('manifest source lacks its complete-scope semantic sample review')
+        manifest_path=checked(combined['source'],'combined source manifest')
+        manifest=read(manifest_path);manifest_leaves=manifest.get('sources')
+        if (combined.get('training_admission') is not False or combined.get('predecessor',{}).get('sha256') != bind(predecessor_path)['sha256']
+                or manifest.get('schema') != 'natlang.native-graph-sources/1'
+                or not isinstance(manifest_leaves,list) or len(manifest_leaves) != combined.get('source_leaves')):
+            raise ValueError('combined source does not bind the exact prepared predecessor and leaves')
+        from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import current_protection
+        from scripts.neuralese_data.decision_holds import load_decision_holds
+        quality_path=Path(combined['quality_protection']['path'])
+        hold_paths=sorted((ROOT/'training/decision-holds').glob('*.jsonl'))
+        if (current_protection(quality_path)['proof']!=combined['quality_protection']
+                or load_decision_holds(hold_paths)[1]!=combined['decision_holds']):
+            raise ValueError('combined source quality protection or decision holds changed')
+        for reference in combined.get('screens',[])+combined.get('occurrence_proofs',[]):
+            checked(reference,'combined source protection or occurrence evidence')
+        for reference in combined['pending_render_obligations']['evidence']:
+            checked(reference,'retained render obligation')
+        if combined.get('carried_over_context_obligations'):
+            checked(combined['carried_over_context_obligations']['partition'],'retained context obligation')
+        graph_ref={**bind(manifest_path),'rows':combined['rows'],'tokenizer_fingerprint':combined['tokenizer_fingerprint']}
+        screen={**combined,'schema':'natlang.acquired-current-protection-screen/1','output':graph_ref,
+            'protected_worlds':{'identity_set_sha256':combined['protected_worlds_sha256'],'matches_expected':True}}
     pending_count = 0
     static_rows = {}
     partition_screen, partition_predecessor=screen,predecessor_path
@@ -652,9 +777,14 @@ def build(predecessor_receipt, screen_receipt, census_receipt, output, *, share=
     ce_path = checked(previous.get('ce_policy'), 'predecessor CE policy')
     recipe_path = checked(previous.get('recipe'), 'predecessor recipe')
     checked(census.get('screen'), 'census screen'); checked(census.get('ce_policy'), 'census CE policy')
-    census_builder = checked(census.get('builder'), 'census builder')
-    if census_builder != (ROOT / 'scripts/neuralese_data/audit_acquired_learning_signal.py').resolve(strict=True):
-        raise ValueError('census was not produced by the audited effective-loss program')
+    if combined is None:
+        census_builder = checked(census.get('builder'), 'census builder')
+        if census_builder != (ROOT / 'scripts/neuralese_data/audit_acquired_learning_signal.py').resolve(strict=True):
+            raise ValueError('census was not produced by the audited effective-loss program')
+    else:
+        captured = census.get('code_bindings') or []
+        if len(captured)!=5 or checked(captured[3],'captured effective-loss auditor').name!='audit_acquired_learning_signal.py':
+            raise ValueError('combined census lacks the actual effective-loss auditor')
     signals_path = checked(census.get('row_signals'), 'census row signals')
     if (Path(census['screen']['path']).resolve() != screen_path or census['ce_policy']['sha256'] != previous['ce_policy']['sha256']):
         raise ValueError('completed census does not bind this screen and actual predecessor CE policy')
@@ -673,25 +803,29 @@ def build(predecessor_receipt, screen_receipt, census_receipt, output, *, share=
             or screen.get('protected_worlds', {}).get('identity_set_sha256') != protection.digest
             or screen.get('protected_worlds', {}).get('matches_expected') is not True):
         raise ValueError('current full protected-world union differs from source custody')
-    coverage_path = checked(screen.get('coverage_audit'), 'screen coverage audit')
-    coverage = read(coverage_path)
-    if (coverage.get('schema') != 'natlang.acquired-session-conversion-coverage-audit/1'
-            or coverage.get('exports_manifest_sha256') != screen['coverage_audit'].get('source_manifest_sha256')
-            or coverage.get('complete_receipts') != screen['coverage_audit'].get('complete_receipts')
-            or screen.get('input_receipts', {}).get('count') != sum(len(r.get('outputs', [])) for r in coverage.get('receipts', []))
-            or not isinstance(screen.get('input_receipts', {}).get('sha256'), str)
-            or len(screen['input_receipts']['sha256']) != 64):
-        raise ValueError('screen does not bind the current conversion inventory')
-    accounting = screen.get('accounting') or {}
-    collision_count = predecessor_collision_count(screen, predecessor_path, read(map_path)['rows'])
-    train_count = sum(entry.get('counts', {}).get('graphs:train', 0) for entry in coverage.get('receipts', []))
-    excluded = screen.get('excluded_current_protection')
-    if (not isinstance(excluded, list) or accounting.get('train_graphs_before_current_check') != train_count
-            or accounting.get('current_protected_exclusions') != len(excluded)
-            or train_count - len(excluded) - collision_count - pending_count != screen['output']['rows']
-            or accounting.get('eligible_train_graphs') != screen['output']['rows']):
-        raise ValueError('screened graph counts do not reconcile with receipt inventory and protection exclusions')
-    format_custody = verify_conversion_custody(coverage, screen, screen_program)
+    if combined is not None:
+        coverage_path = screen_path
+        format_custody = verify_combined_converter_runtimes(census, reviewed_converter_runtimes)
+    else:
+        coverage_path = checked(screen.get('coverage_audit'), 'screen coverage audit')
+        coverage = read(coverage_path)
+        if (coverage.get('schema') != 'natlang.acquired-session-conversion-coverage-audit/1'
+                or coverage.get('exports_manifest_sha256') != screen['coverage_audit'].get('source_manifest_sha256')
+                or coverage.get('complete_receipts') != screen['coverage_audit'].get('complete_receipts')
+                or screen.get('input_receipts', {}).get('count') != sum(len(r.get('outputs', [])) for r in coverage.get('receipts', []))
+                or not isinstance(screen.get('input_receipts', {}).get('sha256'), str)
+                or len(screen['input_receipts']['sha256']) != 64):
+            raise ValueError('screen does not bind the current conversion inventory')
+        accounting = screen.get('accounting') or {}
+        collision_count = predecessor_collision_count(screen, predecessor_path, read(map_path)['rows'])
+        train_count = sum(entry.get('counts', {}).get('graphs:train', 0) for entry in coverage.get('receipts', []))
+        excluded = screen.get('excluded_current_protection')
+        if (not isinstance(excluded, list) or accounting.get('train_graphs_before_current_check') != train_count
+                or accounting.get('current_protected_exclusions') != len(excluded)
+                or train_count - len(excluded) - collision_count - pending_count != screen['output']['rows']
+                or accounting.get('eligible_train_graphs') != screen['output']['rows']):
+            raise ValueError('screened graph counts do not reconcile with receipt inventory and protection exclusions')
+        format_custody = verify_conversion_custody(coverage, screen, screen_program)
     old_map = read(map_path)
     if (old_map.get('schema') != 'natlang.logical-family-map/1' or old_map.get('source_sha256') != previous['source']['sha256']
             or len(old_map.get('rows', [])) != previous['rows']):
@@ -756,6 +890,8 @@ def build(predecessor_receipt, screen_receipt, census_receipt, output, *, share=
         new_source = NativeGraphSource(new_source_path, tokenizer, required_split='train', role_ids=roles)
         actual_new_metadata = [{key: value for key, value in entry.items() if key != 'training_priority'}
                                for entry in new_source.entries[previous['rows']:]]
+        if combined is not None:
+            verify_prepared_manifest_leaves(prepared,census,manifest_leaves,prepared_geometry,actual_new_metadata,previous['rows'])
         if parallel_proof and canonical_json_sha256_hex(actual_new_metadata) != parallel_proof['ordered_metadata_sha256']:
             raise ValueError('prepared source row index differs from the parallel parser evidence')
         output.mkdir(parents=True)
@@ -789,14 +925,7 @@ def build(predecessor_receipt, screen_receipt, census_receipt, output, *, share=
     policy['objective']['family_balance']['map'] = {k: v for k, v in bind(new_map_path).items() if k != 'bytes'}
     policy['objective']['family_balance']['scales'] = family_plan['scales']
     policy['objective_transition'] = {'from': previous['objective_transition']['to']['sha256']}
-    if any(item.get('sha256') == graph_ref['sha256'] for item in policy['sources']):
-        raise ValueError('acquired source is already declared in the predecessor CE policy')
-    policy['sources'].append({'sha256': graph_ref['sha256'], 'encoding': 'native-row-objectives-v1',
-        'context_weight': policy['source_contract']['default_raw_context_weight']})
-    policy['sources'].sort(key=lambda row: row['sha256'])
-    policy['source_contract']['inventory'] = [bind(new_source_path)]
-    policy['source_contract']['active_sources'].append({'path': str(graph_path), 'sha256': graph_ref['sha256'], 'bytes': graph_ref['bytes']})
-    policy['source_contract']['active_source_count'] = len(policy['source_contract']['active_sources'])
+    append_source_policy(policy,graph_path,graph_ref,manifest_leaves,new_source_path)
     new_ce_path = output / 'ce-policy.json'; write_json_durable(new_ce_path, policy)
     prepared_policy = prepare_policy(load_policy(bind(new_ce_path)), new_source)
     unscaled_policy = copy.deepcopy(policy); unscaled_policy['objective']['family_balance'] = None
@@ -845,6 +974,9 @@ def build(predecessor_receipt, screen_receipt, census_receipt, output, *, share=
     _, transition = continuation_identity({'supervision_objective': previous['objective_transition']['to']}, extension)
     if file_signature(signals_path) != signals_before or file_signature(graph_path) != graph_before:
         raise ValueError('source or census changed while staging the continuation')
+    if combined is not None and (current_protection(quality_path)['proof']!=combined['quality_protection']
+            or load_decision_holds(hold_paths)[1]!=combined['decision_holds']):
+        raise ValueError('combined source protection changed while staging the continuation')
     result = {'schema': SCHEMA, 'status': 'source-ce-recipe-geometry-qualified-not-published', 'training_admission': False,
         'predecessor': bind(predecessor_path), 'predecessor_source': bind(source_path), 'source_screen': bind(screen_path),
         'coverage_audit': bind(coverage_path), 'effective_loss_census': bind(census_path), 'row_signals': bind(signals_path),
@@ -855,6 +987,8 @@ def build(predecessor_receipt, screen_receipt, census_receipt, output, *, share=
         'predecessor_rows': previous['rows'], 'new_rows': len(rows), 'new_family': family,
         'counts': counts, 'category_mass': masses, 'source_stores': stores, 'family_balance': family_plan,
         'source_format_custody': format_custody,
+        **({'semantic_review':bind(semantic_review),'pending_render_obligations':combined['pending_render_obligations'],
+            'carried_over_context_obligations':combined['carried_over_context_obligations']} if combined else {}),
         'source_diagnosis_target_proof': diagnosis_proof,
         'family_census': prepared_policy['_family_census'], 'objective_transition': transition,
         'geometry_scan': geometry_scan, 'current_protection_digest': protection.digest,
@@ -882,6 +1016,8 @@ def main():
     parser.add_argument('--diagnosis-verification', type=Path)
     parser.add_argument('--diagnosis-program', type=Path)
     parser.add_argument('--screen-program', type=Path)
+    parser.add_argument('--reviewed-converter-runtime', type=Path, action='append')
+    parser.add_argument('--semantic-review', type=Path)
     parser.add_argument('--new-family-share', type=float, default=.07)
     parser.add_argument('--family', default=FAMILY)
     args = parser.parse_args()
@@ -891,15 +1027,17 @@ def main():
         result = prepare_source_stage(args.predecessor_receipt, args.screen_receipt, args.output_dir,
                                       parallel_workers=2 if args.parallel_workers is None else args.parallel_workers)
     else:
-        if not args.census_receipt or not args.screen_program or not args.prepared_source_receipt:
-            parser.error('completed --census-receipt, --prepared-source-receipt and --screen-program are required for the successor')
+        if (not args.census_receipt or not args.prepared_source_receipt or
+                (not args.screen_program and read(args.screen_receipt).get('schema')!='natlang.combined-acquired-screened-delta/1')):
+            parser.error('completed census and prepared source are required; single-screen successors also require --screen-program')
         if args.parallel_workers is not None:
             parser.error('--parallel-workers is only for source preparation')
         result = build(args.predecessor_receipt, args.screen_receipt, args.census_receipt,
                        args.output_dir, share=args.new_family_share, prepared_source_receipt=args.prepared_source_receipt,
                        diagnosis_verification=args.diagnosis_verification, diagnosis_program=args.diagnosis_program,
                        family=args.family, screen_program=args.screen_program,
-                       reviewed_preparation_builder_sha256=args.reviewed_preparation_builder_sha256)
+                       reviewed_preparation_builder_sha256=args.reviewed_preparation_builder_sha256,
+                       reviewed_converter_runtimes=args.reviewed_converter_runtime, semantic_review=args.semantic_review)
     print(json.dumps(result, indent=2, sort_keys=True))
 
 

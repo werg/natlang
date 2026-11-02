@@ -269,3 +269,56 @@ def test_reviewed_partition_reuse_binds_exact_preparation(tmp_path, tamper):
     if tamper=='none': assert reviewed_partition_count(*args)==2
     else:
         with pytest.raises(ValueError): reviewed_partition_count(*args)
+
+
+def test_manifest_policy_declares_each_physical_source_leaf(tmp_path):
+    from scripts.neuralese_data.build_acquired_streaming_successor import append_source_policy
+    path=tmp_path/'manifest.json';path.write_text('{}')
+    policy={'sources':[{'sha256':'old'}], 'source_contract':{'default_raw_context_weight':0.0,'active_sources':[]}}
+    leaves=[{'path':'/source/a','sha256':'a'*64,'bytes':10},{'path':'/source/b','sha256':'b'*64,'bytes':20}]
+    append_source_policy(policy,path,{'sha256':'c'*64,'bytes':2},leaves,path)
+    assert {x['sha256'] for x in policy['sources']}=={'old','a'*64,'b'*64}
+    assert [x['sha256'] for x in policy['source_contract']['active_sources']]==['a'*64,'b'*64]
+    assert policy['source_contract']['active_source_count']==2
+    with pytest.raises(ValueError,match='already declared'):
+        append_source_policy(policy,path,{'sha256':'c'*64,'bytes':2},leaves,path)
+
+
+def test_combined_converter_runtime_must_match_actual_complete_frozen_files(tmp_path):
+    from scripts.neuralese_data.build_acquired_streaming_successor import bind,verify_combined_converter_runtimes
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+    root=tmp_path/'runtime';builder=root/'scripts/neuralese_data/build_acquired_full_session_graphs.py'
+    builder.parent.mkdir(parents=True);builder.write_text('reviewed converter')
+    files={'builder':{'sha256':bind(builder)['sha256']}}
+    converter=tmp_path/'receipt.json';converter.write_text(json.dumps({'runtime':{'files':files,'fingerprint':canonical_json_sha256_hex(files)}}))
+    census={'source_format_history':[{'converter':bind(converter)}]}
+    assert verify_combined_converter_runtimes(census,[root])['source_histories']==1
+    builder.write_text('modified converter')
+    with pytest.raises(ValueError,match='no exact reviewed frozen runtime'):
+        verify_combined_converter_runtimes(census,[root])
+
+
+def test_manifest_leaf_verifier_rejects_forged_metadata_or_geometry(tmp_path):
+    from scripts.neuralese_data.build_acquired_streaming_successor import bind,verify_prepared_manifest_leaves
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+    leaf={'path':'/source/a','sha256':'a'*64,'bytes':10};metadata=[{'id':'a','binding':'b'}]
+    proof={'schema':'natlang.parallel-native-source-index/1','rows':1,'decision_readouts':0,'source':leaf,
+        'parser_policy_sha256':'parser','ordered_metadata_sha256':canonical_json_sha256_hex(metadata),
+        'ordered_geometry_sha256':canonical_json_sha256_hex([5])}
+    path=tmp_path/'proof.json';path.write_text(json.dumps(proof));ref=bind(path)
+    prepared={'combined_leaf_index_proofs':[ref]};census={'leaf_index_proofs':[ref]}
+    geometry={'identity':{'parser_policy_sha256':'parser'},'kv_slots':[3,5]}
+    verify_prepared_manifest_leaves(prepared,census,[leaf],geometry,metadata,1)
+    with pytest.raises(ValueError,match='binding or geometry'):
+        verify_prepared_manifest_leaves(prepared,census,[leaf],geometry,[{'id':'a','binding':'forged'}],1)
+    with pytest.raises(ValueError,match='binding or geometry'):
+        verify_prepared_manifest_leaves(prepared,census,[leaf],{**geometry,'kv_slots':[3,6]},metadata,1)
+
+
+def test_combined_successor_cannot_skip_source_preparation_or_semantic_review(tmp_path):
+    from scripts.neuralese_data.build_acquired_streaming_successor import build
+    pred=tmp_path/'predecessor.json';pred.write_text('{}')
+    screen=tmp_path/'screen.json';screen.write_text(json.dumps({'schema':'natlang.combined-acquired-screened-delta/1'}))
+    census=tmp_path/'census.json';census.write_text('{}')
+    with pytest.raises(ValueError,match='prepared geometry and explicit semantic sample review'):
+        build(pred,screen,census,tmp_path/'out')
