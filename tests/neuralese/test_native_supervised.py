@@ -158,9 +158,13 @@ def test_explicit_preference_capacity_survives_emitted_command_and_prepared_requ
             assert command[2]=='natlang_neuralese.train.native_preference'
             assert command[command.index('--objective-spec')+1]==str(objective_path)
             args=SimpleNamespace(memory_qualification=command[command.index('--memory-qualification')+1],
-                                 out=tmp_path/'job/learner')
+                                 out=tmp_path/'job/learner', checkpoint_layer_group_size=1)
             assert json.loads(args.memory_qualification)==qualification
-            memory.run_prepared(None,None,source,None,{},args,backend=None,
+            model=SimpleNamespace(port=SimpleNamespace(checkpoint_layer_group_size=1))
+            with pytest.raises(ValueError,match='checkpoint layer grouping'):
+                memory._require_checkpoint_group_execution(
+                    SimpleNamespace(port=SimpleNamespace(checkpoint_layer_group_size=2)),args)
+            memory.run_prepared(model,None,source,None,{},args,backend=None,
                 checkpoint_sha256=sha256_file_hex(parent),objective=live_objective)
         else:
             assert '--memory-qualification' in command
