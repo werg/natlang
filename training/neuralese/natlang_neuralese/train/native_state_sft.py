@@ -4065,7 +4065,7 @@ def _main(argv=None, *, requested_refresh):
             try:
                 # Ordinary batches need no new capacity proof or checkpoint
                 # read. A background writer may replace the slot concurrently.
-                current_parent_sha=(capacity_parent_sha(policy,config['base_inventory_sha256'])
+                current_parent_sha=(capacity_parent_sha(policy,lineage_checkpoint_sha or config['base_inventory_sha256'])
                                     if oversized_update else None)
                 if envelope_match is not None:
                     # Recheck actual selected QAT point and available device headroom after calibration.
