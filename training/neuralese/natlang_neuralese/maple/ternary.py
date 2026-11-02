@@ -375,7 +375,8 @@ def _resolve_inline(module, mixes):
         from ..model import nvfp4_gemm
         from ..model.native_weight_carrier import _PLAIN_TRAINING
         # Pass entry runs under no_grad. cuBLASLt's FP4 GEMM wants 16-byte aligned packed rows (K % 32) and N % 16.
-        if (_PLAIN_TRAINING[0] > 0 and w.shape[1] % 32 == 0 and w.shape[0] % 16 == 0
+        if (_PLAIN_TRAINING[0] > 0 and not getattr(module,'_native_projection_force_invariant',False)
+                and w.shape[1] % 32 == 0 and w.shape[0] % 16 == 0
                 and nvfp4_gemm.supported(w.device)):
             global_amax = options.get("global_amax")
             gemm = nvfp4_gemm.weight_operand(w, torch.as_tensor(global_amax if global_amax is not None

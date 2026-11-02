@@ -11,13 +11,15 @@ _NORM_TYPES={'RMSNorm','Lfm2RMSNorm','Lfm3RMSNorm','Qwen2RMSNorm','Qwen3RMSNorm'
 def _fixed_ffn(module,value):
     if hasattr(module,'native_fixed_forward'):
         return module.native_fixed_forward(value)
+    from ..maple.ternary import linear_precision
+    value,weight=linear_precision(module,value)
     if not value.is_cuda:
-        return F.linear(value,module.weight,module.bias)
+        return F.linear(value,weight,module.bias)
     from ..maple.fused_moe import invariant_linear
     shape=value.shape
-    output=invariant_linear(value.reshape(-1,shape[-1]),module.weight,precision='ieee',
+    output=invariant_linear(value.reshape(-1,shape[-1]),weight,precision='ieee',
         allow_plain_fastpath=not getattr(module,'_native_ffn_force_invariant',False))
-    output=output.reshape(*shape[:-1],module.weight.shape[0])
+    output=output.reshape(*shape[:-1],weight.shape[0])
     return output if module.bias is None else output+module.bias
 
 
@@ -67,7 +69,11 @@ def configure_shared_execution(model,profile='source-v1'):
                 module._native_shared_source_forward=module.forward
             module.forward=MethodType(implementation,module)
         elif hasattr(module,'_native_shared_source_forward'):
-            module.forward=module._native_shared_source_forward
+            if implementation is _fixed_ffn and 'native_precision_key' in module.__dict__:
+                from ..maple.ternary import precision_linear_forward
+                module.forward=MethodType(precision_linear_forward,module)
+            else:
+                module.forward=module._native_shared_source_forward
     model.native_shared_execution=profile
     model.port.native_shared_execution=profile
     return profile

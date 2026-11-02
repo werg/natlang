@@ -3453,6 +3453,17 @@ def _main(argv=None, *, requested_refresh):
         print(json.dumps({'continuation_preflight':str(args.out/'continuation-preflight.json'),'passed':True,'global_step':global_step}),flush=True)
         policy.close()
         return 0
+    # Install the real precision wrappers before qualifying packed execution.
+    if (diloco is not None and parent_continuation and not (resume or {}).get('diloco')
+            and getattr(args, 'quantization', None) in (None, '')):
+        saved_quantization_options = _quantization_shard_transition(saved_quantization_options,
+            global_step=global_step, pending_updates=accumulated_updates(len(pending_batches), args.accumulate_batches),
+            stage=args.stage_id or 'native-graph-ce', worker=diloco.worker)
+    quantization = _setup_quantization(args, model, saved_quantization, checkpoint_options,
+        saved_options=saved_quantization_options,
+        default_bind={'stage': args.stage_id or 'native-graph-ce', 'start': global_step,
+                      'end': global_step + max(1, accumulated_updates(len(pending_batches), args.accumulate_batches))}
+        if config.get('source_architecture') == 'lfm3' and objective is None else None)
     if args.memory_qualification and objective is None:
         from .native_packed_capacity import qualify_pending
         from ..eval.native_memory import capacity_identity
@@ -3476,16 +3487,6 @@ def _main(argv=None, *, requested_refresh):
     batches_left = len(pending_batches)
     if step > total_end:
         raise ValueError('native checkpoint update is beyond the declared epoch exposure')
-    if (diloco is not None and parent_continuation and not (resume or {}).get('diloco')
-            and getattr(args, 'quantization', None) in (None, '')):
-        saved_quantization_options = _quantization_shard_transition(saved_quantization_options,
-            global_step=global_step, pending_updates=accumulated_updates(len(pending_batches), args.accumulate_batches),
-            stage=args.stage_id or 'native-graph-ce', worker=diloco.worker)
-    quantization = _setup_quantization(args, model, saved_quantization, checkpoint_options,
-        saved_options=saved_quantization_options,
-        default_bind={'stage': args.stage_id or 'native-graph-ce', 'start': global_step,
-                      'end': global_step + max(1, accumulated_updates(len(pending_batches), args.accumulate_batches))}
-        if config.get('source_architecture') == 'lfm3' and objective is None else None)
     # Retain the last authenticated source-prefix geometry as the boundary
     # for newly larger whole graphs. Only those groups pay a fresh live gate.
     from .native_packed_capacity import oversize_baseline

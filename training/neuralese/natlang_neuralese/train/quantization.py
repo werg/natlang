@@ -440,6 +440,7 @@ class Quantization:
     def _install_inline(self, module, layer_count=None):
         import types
         from ..maple.ternary import InputPrecision, precision_linear_forward
+        from ..model.shared_execution import _fixed_ffn
 
         wanted = {group for point in self.points.values() for group in point['modules']}
         if layer_count is None:
@@ -463,7 +464,10 @@ class Quantization:
                 continue
             if id(child.weight) in seen:
                 continue
-            if 'forward' in child.__dict__ or parametrize.is_parametrized(child, 'weight'):
+            fixed_ffn=(getattr(child.forward,'__func__',None) is _fixed_ffn
+                       and hasattr(child,'_native_shared_source_forward'))
+            if (('forward' in child.__dict__ and not fixed_ffn)
+                    or parametrize.is_parametrized(child, 'weight')):
                 raise ValueError('inline precision needs a plain Linear (no instance forward or parametrization): '
                                  + name)
             seen.add(id(child.weight))
@@ -476,7 +480,11 @@ class Quantization:
                 holder.static = any((c.get('activations') or {}).get('format') == 'nvfp4' for c in configs[group])
                 child.native_precision_input = holder
                 self.inputs[name] = holder
-            child.forward = types.MethodType(precision_linear_forward, child)
+            # The declared native FFN consumes the same effective operands and
+            # retains its invariant GEMM; replacing it would break actor/replay
+            # parity even at the unquantized point.
+            if not fixed_ffn:
+                child.forward = types.MethodType(precision_linear_forward, child)
             selected[name] = (group, leaf, child)
             self.installed[group] = self.installed.get(group, 0) + 1
         for name, (group, leaf, child) in selected.items():
