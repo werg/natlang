@@ -202,11 +202,17 @@ def test_native_policy_gradient_scores_imported_kv_and_finite_convolution(tmp_pa
                 fetch=lambda ident: encode_native_state(store.get_native_state(ident).block))
     bundle = bundle_dir / 'manifest.json'
     spec = tmp_path / 'objective.json'
+    # Construct an actual same-model behavior score for this synthetic graph;
+    # the replay gate must reject arbitrary invented log probabilities.
+    with torch.no_grad():
+        captured = model(example.plan, external_blocks={'prior': block},
+                         external_identity={'prior': identity}, retain_states=False)
+        behavior_logp = model.logits(captured['h_final'][0, 0]).float().log_softmax(-1)[7].item()
     spec.write_text(json.dumps({'schema': 'natlang.native-policy-objective/1', 'kind': 'native-policy',
         'mode': 'rft', 'policy': identity, 'block_bundle': str(bundle),
         'rows': {example.id: {'graph_sha256': canonical_json_sha256_hex(graph_identity(example)),
             'episode_turns': ['consumer'],
-            'actions': [{'query': 0, 'token_id': 7, 'behavior_logp': -2.0,
+            'actions': [{'query': 0, 'token_id': 7, 'behavior_logp': behavior_logp,
                          'temperature': 1.0, 'allowed_token_ids': None}], 'advantage': 1.0}}}))
     engine = _service_engine(shared_model=model, store=store, checkpoint_sha256=identity['checkpoint_sha256'],
         embedding_weight_sha256=identity['embedding_weight_sha256'], model_config={

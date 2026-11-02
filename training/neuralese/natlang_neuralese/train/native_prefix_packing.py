@@ -13,6 +13,12 @@ PREFIX_ARITHMETIC_QUALIFICATION_PATH = 'plans/neuralese/native-prefix-arithmetic
 PREFIX_ARITHMETIC_QUALIFICATION_SHA256 = '9b8ab874c5246ae591fcc970d5910db00a76082202cb0dd4b2a7a6f6699e840d'
 
 
+def ordinary_sft_physical_sharing_enabled(model, requested):
+    """Match learner geometry while retaining BF16 occurrence cotangents."""
+    import torch
+    return bool(requested and model.port.embedding_weight.dtype != torch.bfloat16)
+
+
 def pack_causal_prefixes(examples, *, allow_communication=True):
     """Return (plan, original-token physical row maps), or no applicable reuse."""
     if not examples:

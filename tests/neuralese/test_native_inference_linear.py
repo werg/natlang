@@ -58,7 +58,7 @@ def test_adapted_native_producer_reader_receipts_match_autograd_forward(tmp_path
     adapter,_=nonzero_adapter(engine)
     entries=[{'id':adapter.id,'scale':.75}]
     actual_id,actual=capture_actor(engine,entries,monkeypatch)
-    def reference(x,w,*,precision='ieee',forward_storage_dtype=None,cotangent_anchors=()):
+    def reference(x,w,*,precision='ieee',forward_storage_dtype=None,cotangent_anchors=(),allow_plain_fastpath=True):
         return fused._InvariantLinear.apply(x,w,precision,forward_storage_dtype,*cotangent_anchors)
     monkeypatch.setattr(fused,'invariant_linear',reference)
     expected_id,expected=capture_actor(engine,entries,monkeypatch)

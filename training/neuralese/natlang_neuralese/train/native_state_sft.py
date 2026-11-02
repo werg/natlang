@@ -691,15 +691,13 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
                                  for has, example in zip(targeted, examples)):
         raise ValueError('native graph has no ordinary CE targets; its declared offline/policy objective is required')
     targeted_graphs = sum(targeted)
-    from .native_prefix_packing import pack_causal_prefixes
-    # Exact raw-context aliasing is valid for ordinary SFT in every activation dtype: the original-token maps retain
-    # each graph's own targets and loss normalization, while shared causal states receive the fan-in of their
-    # occurrences' cotangents at KV/convolution gathers. BF16 changes accumulation order, as the already-supported
-    # BF16 policy-prefix path does; its numerical error is checked against an unshared BF16 reference, not hidden by
-    # claiming bitwise equality. Communication graphs remain capability-gated because backend/QAT paths may not
-    # support their imported/adapted suffix operations.
+    from .native_prefix_packing import pack_causal_prefixes, ordinary_sft_physical_sharing_enabled
+    # BF16 physical aliasing changes cotangent accumulation and can change real
+    # optimizer steps. Keep every original SFT row and use the separately
+    # proven fixed-linear primal reuse below, whose custom VJP retains each
+    # occurrence. Capacity must consequently count the actual unshared graph.
     if objective is None:
-        share = bool(share_causal_prefixes)
+        share = ordinary_sft_physical_sharing_enabled(model, share_causal_prefixes)
         allow_communication = share and allow_communication_prefixes
     else:
         supports = getattr(objective, 'shares_causal_prefixes', None)

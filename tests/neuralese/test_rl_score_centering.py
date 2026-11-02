@@ -254,6 +254,14 @@ def test_engine_capture_to_trainer_matches_reference_under_sampler_mismatch(tmp_
         parameter.requires_grad_(True)
     total, mismatch = 0, []
     for example in examples:
+        if not getattr(objective, '_behavior_logprob_probe_done', False):
+            # This fixture deliberately changes sampler logits while claiming
+            # the same actor. Production admission must reject that mismatch.
+            with pytest.raises(ValueError, match='captured policy logprob parity failed'):
+                packed_graph_loss(model, [example], objective=objective)
+            # The remainder tests the off-policy loss formula in isolation;
+            # no production admission or actor qualification is implied.
+            objective._behavior_logprob_probe_done = True
         loss, details = packed_graph_loss(model, [example], objective=objective)
         assert details['policy_loss'] == 'score-centered/1' and torch.isfinite(loss)
         centering = details['score_centering']
@@ -298,6 +306,9 @@ def test_score_centered_requires_top_k_and_grpo_without_it_stays_unchanged(tmp_p
     assert 'policy_loss' not in spec and 'policy_loss' not in objective.binding()
     assert all('behavior_top_k' not in action for row in spec['rows'].values() for action in row['actions'])
     from natlang_neuralese.train.native_state_sft import packed_graph_loss
+    with pytest.raises(ValueError, match='captured policy logprob parity failed'):
+        packed_graph_loss(engine.shared_model, examples, objective=objective)
+    objective._behavior_logprob_probe_done = True  # isolate the GRPO loss after testing the rejection
     loss, details = packed_graph_loss(engine.shared_model, examples, objective=objective)
     assert 'score_centering' not in details and torch.isfinite(loss)
 

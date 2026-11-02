@@ -64,8 +64,11 @@ def test_prefix_logits_loss_and_all_gradients_match_disjoint_packing(family,chec
             torch.testing.assert_close(parameter.grad,other.grad,atol=3e-6,rtol=2e-4,msg=name)
 
 
-def test_bf16_ordinary_sft_reuses_exact_raw_prefixes_with_bounded_gradient_change():
+def test_bf16_ordinary_sft_keeps_original_gradient_occurrences():
+    from natlang_neuralese.train.native_prefix_packing import ordinary_sft_physical_sharing_enabled
     model=SharedStateModel(tiny('lfm').to(dtype=torch.bfloat16),(58,59,60,61),rank=4)
+    assert not ordinary_sft_physical_sharing_enabled(model, True)
+    assert ordinary_sft_physical_sharing_enabled(SharedStateModel(tiny('lfm'),(58,59,60,61),rank=4), True)
     with torch.no_grad():model.adapter.up.weight.normal_(std=.1)
     for parameter in model.port.parameters():parameter.requires_grad_(True)
     reference=copy.deepcopy(model);rows=examples()
@@ -74,7 +77,7 @@ def test_bf16_ordinary_sft_reuses_exact_raw_prefixes_with_bounded_gradient_chang
     unshared,unshared_details=packed_graph_loss(reference,rows,share_causal_prefixes=False,
         checkpoint_layers=False,chunk_tokens=2)
     shared.backward();unshared.backward()
-    assert shared_details[0]['packed_physical_tokens'] < shared_details[0]['original_physical_tokens']
+    assert shared_details[0]['packed_physical_tokens'] == shared_details[0]['original_physical_tokens']
     assert shared_details[0]['supervised_tokens'] == unshared_details[0]['supervised_tokens']
     assert shared_details[0]['readout_forward_rows'] == shared_details[0]['readout_original_rows']
     torch.testing.assert_close(shared.detach(),unshared.detach(),atol=0,rtol=0)
@@ -85,10 +88,7 @@ def test_bf16_ordinary_sft_reuses_exact_raw_prefixes_with_bounded_gradient_chang
             actual.append(parameter.grad.detach().float().flatten())
             expected.append(other.grad.detach().float().flatten())
     actual=torch.cat(actual);expected=torch.cat(expected)
-    relative_error=(actual-expected).norm()/expected.norm().clamp_min(1e-12)
-    cosine=torch.nn.functional.cosine_similarity(actual,expected,dim=0)
-    assert float(relative_error)<.02
-    assert float(cosine)>.999
+    torch.testing.assert_close(actual, expected, atol=0, rtol=0)
 
 
 def test_authenticated_producing_or_imported_graphs_alias_only_initial_raw_context():
