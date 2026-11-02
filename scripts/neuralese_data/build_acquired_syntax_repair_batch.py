@@ -38,9 +38,13 @@ def build(census_ref, existing_exports, output, export_root):
     export_root=Path(export_root);export_root.mkdir(parents=True,exist_ok=False)
     if shutil.disk_usage(export_root).free < 50*1024**3:
         raise ValueError('repair outputs must preserve the external 50 GiB floor')
-    total=Counter();views=[];export_paths=[]
+    total=Counter();views=[];export_paths=[];profiles={}
     for index,entry in enumerate(census['receipts']):
         receipt_path=checked(entry);receipt=json.loads(receipt_path.read_text())
+        converter_ref=receipt['converter_receipt'];converter=json.loads(checked(converter_ref).read_text())
+        profile=converter.get('explicit_history_reasoning_policy')
+        if converter.get('source')!=receipt['source'] or profile not in (None,'keep'):
+            raise ValueError('original source history profile is ambiguous or changed')
         candidate_path=receipt_path.parent/'candidates.json';audit_path=receipt_path.parent/'pending-audit.json'
         if sha256_file_hex(candidate_path)!=receipt['candidate_sha256'] or sha256_file_hex(audit_path)!=receipt['audit_sha256']:
             raise ValueError('candidate or pending audit changed')
@@ -62,7 +66,10 @@ def build(census_ref, existing_exports, output, export_root):
         result=repair.build_repair_view(parent_export_path=parent,candidate_audit_path=cp,pending_audit_path=ap,output_dir=dest)
         total['candidate_rows']+=len(keep);total['selected_sessions']+=result['selected_sessions']
         total['repair_calls']+=result['repair_calls'];total['unresolved_sessions']+=result['unresolved_sessions']
-        export=dest/'export.json';export_paths.append(str(export));views.append({'path':str(export),'sha256':sha256_file_hex(export),
+        export=dest/'export.json';export_paths.append(str(export))
+        if profile is not None:profiles[str(export)]=profile
+        views.append({'path':str(export),'sha256':sha256_file_hex(export),
+            'original_converter_receipt':converter_ref,'history_reasoning_policy':profile,
             'candidate_rows':len(keep),'selected_sessions':result['selected_sessions'],'unresolved_sessions':result['unresolved_sessions']})
         print(json.dumps({'kind':'acquired_syntax_repair_progress','sources':index+1,'of':len(census['receipts']),
                           'selected_sessions':total['selected_sessions']}),flush=True)
@@ -71,7 +78,7 @@ def build(census_ref, existing_exports, output, export_root):
     if total['candidate_rows']+total['existing_excluded']!=census['counts']['fully_bounded_candidates']:
         raise ValueError('repair batch does not account for all exact bounded candidates')
     if sha256_file_hex(census_path)!=census_ref['sha256']:raise ValueError('pending census changed')
-    write_json_durable(output/'exports.json',{'exports':export_paths,'history_reasoning_policy':{p:'keep' for p in export_paths}})
+    write_json_durable(output/'exports.json',{'exports':export_paths,'history_reasoning_policy':profiles})
     result={'schema':'natlang.acquired-syntax-repair-batch/1','training_admission':False,
         'census':census_ref,'existing_views':existing_refs,'counts':dict(total),'views':views,
         'exports':{'path':str(output/'exports.json'),'sha256':sha256_file_hex(output/'exports.json')},
