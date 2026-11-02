@@ -2,16 +2,18 @@
 """Send an exact actor transport, automatically reusing the peer's previous view.
 
 The peer cache is a performance hint, never model identity or training credit.
-Missing bases use a full transfer; an available base uses the smaller of an
-authenticated XOR delta and the complete view. Receipts commit after readback.
+Missing bases use a full transfer. ZIP payload deltas are preferred when small;
+otherwise an authenticated XOR delta or full view is used. Receipts commit after readback.
 """
 from __future__ import annotations
-import argparse,hashlib,json,os,shlex,subprocess,tempfile,time
+import argparse,hashlib,json,os,shlex,subprocess,tempfile,time,zipfile
 from pathlib import Path
 try:
     from scripts.coreweave.artifact_delta import build,digest_file
+    from scripts.coreweave import artifact_zip_delta
 except ModuleNotFoundError:
     from artifact_delta import build,digest_file
+    import artifact_zip_delta
 
 
 def remote(host,code,*args):
@@ -55,16 +57,46 @@ print(json.dumps({'target_sha256':actual,'base':hint,'base_present':bool(hint an
     if probe['target_sha256'] not in (None,view['sha256']):raise ValueError('peer target exists with different bytes; preserve and investigate')
     mode,transferred='already-verified',0
     if probe['target_sha256'] is None:
-        hint=probe['base'];delta=None
+        hint=probe['base'];delta=None;zip_delta=None
         if probe['base_present'] and Path(hint['sender_view']).is_file():
             cache=transport.parent/'.transfer-deltas'/(hint['sha256']+'-'+view['sha256'])
-            receipt=cache/'receipt.json'
-            if not receipt.exists():build(hint['sender_view'],local_view,cache)
-            delta=json.loads(receipt.read_text())
-            if (delta['base']['sha256']!=hint['sha256'] or delta['target']!={'sha256':view['sha256'],'bytes':view['bytes']}
-                    or digest_file(cache/'delta.zlib')!=delta['delta']['sha256']):
-                raise ValueError('cached delta differs from current peer or target binding')
-        if delta and delta['delta']['bytes']<view['bytes']*.85:
+            zip_cache=cache/'zip';zip_receipt=zip_cache/'receipt.json'
+            if zipfile.is_zipfile(hint['sender_view']) and zipfile.is_zipfile(local_view):
+                if not zip_receipt.exists():artifact_zip_delta.build(hint['sender_view'],local_view,zip_cache)
+                zip_delta=json.loads(zip_receipt.read_text())
+                ref=zip_delta['payload'];payload=zip_cache/'payload.zlib'
+                if (zip_delta.get('schema')!=artifact_zip_delta.SCHEMA
+                        or zip_delta['base']['sha256']!=hint['sha256']
+                        or digest_file(hint['sender_view'])!=hint['sha256']
+                        or zip_delta['target']!={'sha256':view['sha256'],'bytes':view['bytes']}
+                        or ref.get('path')!='payload.zlib' or payload.stat().st_size!=ref['bytes']
+                        or digest_file(payload)!=ref['sha256']):
+                    raise ValueError('cached ZIP delta differs from current peer or target binding')
+                if ref['bytes']+zip_receipt.stat().st_size>=view['bytes']*.85:zip_delta=None
+            if zip_delta is None:
+                receipt=cache/'receipt.json'
+                if not receipt.exists():build(hint['sender_view'],local_view,cache)
+                delta=json.loads(receipt.read_text())
+                if (delta['base']['sha256']!=hint['sha256'] or delta['target']!={'sha256':view['sha256'],'bytes':view['bytes']}
+                        or digest_file(cache/'delta.zlib')!=delta['delta']['sha256']):
+                    raise ValueError('cached delta differs from current peer or target binding')
+        if zip_delta:
+            mode='zip-payload-zlib';remote_cache=stage/'.zip-delta'
+            remote(host,"import pathlib,sys,json;pathlib.Path(sys.argv[1]).mkdir(exist_ok=True);print('{}')",remote_cache)
+            for name in ('payload.zlib','receipt.json'):copy(host,zip_cache/name,remote_cache/name)
+            implementation=Path(__file__).with_name('artifact_zip_delta.py');common=Path(__file__).with_name('artifact_delta.py')
+            for path in (implementation,common):copy(host,path,remote_cache/path.name)
+            remote(host,'''import hashlib,json,runpy,sys
+from pathlib import Path
+tool,sha,common,common_sha,base,manifest,manifest_sha,out,digest,size=sys.argv[1:]
+assert hashlib.sha256(Path(tool).read_bytes()).hexdigest()==sha,'decoder source changed'
+assert hashlib.sha256(Path(common).read_bytes()).hexdigest()==common_sha,'decoder dependency changed'
+sys.path.insert(0,str(Path(tool).parent));module=runpy.run_path(tool)
+result=module['verify'](base,manifest,expected_manifest_sha256=manifest_sha,expected_sha256=digest,expected_bytes=int(size),out=out,min_free_bytes=1073741824)
+print(json.dumps(result))
+''',remote_cache/'artifact_zip_delta.py',digest_file(implementation),remote_cache/'artifact_delta.py',digest_file(common),hint['receiver_view'],remote_cache/'receipt.json',digest_file(zip_receipt),target,view['sha256'],view['bytes'])
+            transferred=zip_delta['payload']['bytes']+zip_receipt.stat().st_size
+        elif delta and delta['delta']['bytes']<view['bytes']*.85:
             mode='xor-zlib';remote_cache=stage/'.delta'
             remote(host,"import pathlib,sys,json;pathlib.Path(sys.argv[1]).mkdir(exist_ok=True);print('{}')",remote_cache)
             for name in ('delta.zlib','receipt.json'):copy(host,cache/name,remote_cache/name)
@@ -120,7 +152,8 @@ def main():
     args=vars(p.parse_args());result=send(**args)
     directory=Path(args['transport']).resolve().parent/'transfer-readbacks';directory.mkdir(exist_ok=True)
     result['implementation']={'sender_sha256':digest_file(__file__),
-        'decoder_sha256':digest_file(Path(__file__).with_name('artifact_delta.py'))}
+        'decoder_sha256':digest_file(Path(__file__).with_name('artifact_delta.py')),
+        'zip_decoder_sha256':digest_file(Path(__file__).with_name('artifact_zip_delta.py'))}
     receipt=directory/(str(time.time_ns())+'.json');fd,pending=tempfile.mkstemp(prefix='.readback-',dir=directory)
     try:
         with os.fdopen(fd,'w') as f:json.dump(result,f,indent=2);f.write('\n');f.flush();os.fsync(f.fileno())

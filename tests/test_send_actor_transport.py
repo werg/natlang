@@ -55,3 +55,59 @@ def test_receiver_uses_full_copy_when_previous_sender_cache_is_missing(tmp_path,
     p,sha,view=transport(tmp_path/'first',b'old data'*100);peer=tmp_path/'peer';sender.send(p,sha,'peer',str(peer));view.unlink()
     p,sha,_=transport(tmp_path/'next',b'new data'*100)
     assert sender.send(p,sha,'peer',str(peer))['mode']=='full'
+
+
+def zip_bytes(metadata,tensor):
+    import io,zipfile
+    stream=io.BytesIO()
+    with zipfile.ZipFile(stream,'w',compression=zipfile.ZIP_STORED) as archive:
+        archive.writestr('archive/data.pkl',metadata)
+        archive.writestr('archive/data/0',tensor)
+    return stream.getvalue()
+
+
+def test_shifted_zip_payload_is_preferred_and_retry_reuses_cache(tmp_path,local_peer,monkeypatch):
+    data=os.urandom(2*1024*1024);old=zip_bytes(b'old',data);new=zip_bytes(b'new metadata with shifted offset',data)
+    p,sha,_=transport(tmp_path/'first-zip',old);peer=tmp_path/'peer';sender.send(p,sha,'peer',str(peer))
+    p,sha,_=transport(tmp_path/'next-zip',new)
+    def fail_xor(*args,**kwargs):raise AssertionError('should not build XOR for small ZIP delta')
+    monkeypatch.setattr(sender,'build',fail_xor)
+    result=sender.send(p,sha,'peer',str(peer));assert result['mode']=='zip-payload-zlib'
+    assert result['payload_bytes']<len(new)*.05
+    assert Path(result['verified']['receiver_view']).read_bytes()==new
+    assert sender.send(p,sha,'peer',str(peer))['mode']=='already-verified'
+
+
+def test_corrupt_cached_zip_is_rejected_before_copy(tmp_path,local_peer):
+    data=os.urandom(1024*1024);old=zip_bytes(b'old',data);new=zip_bytes(b'new longer',data)
+    p,sha,_=transport(tmp_path/'first-zip',old);peer=tmp_path/'peer';sender.send(p,sha,'peer',str(peer))
+    p,sha,view=transport(tmp_path/'next-zip',new)
+    old_sha=binding(old);cache=p.parent/'.transfer-deltas'/(old_sha+'-'+binding(new))/'zip'
+    sender.artifact_zip_delta.build(json.loads((peer/'.natlang-actor-transfer.json').read_text())['sender_view'],view,cache)
+    payload=cache/'payload.zlib';payload.write_bytes(payload.read_bytes()+b'bad')
+    with pytest.raises(ValueError,match='cached ZIP delta'):sender.send(p,sha,'peer',str(peer))
+
+
+def test_zip_without_shared_payload_falls_back_to_full(tmp_path,local_peer):
+    old=zip_bytes(b'a',os.urandom(1024*1024));new=zip_bytes(b'longer',os.urandom(1024*1024))
+    p,sha,_=transport(tmp_path/'first-zip',old);peer=tmp_path/'peer';sender.send(p,sha,'peer',str(peer))
+    p,sha,_=transport(tmp_path/'next-zip',new)
+    result=sender.send(p,sha,'peer',str(peer));assert result['mode']=='full'
+    assert Path(result['verified']['receiver_view']).read_bytes()==new
+
+
+def test_interrupted_zip_send_retries_from_verified_cache(tmp_path,local_peer,monkeypatch):
+    data=os.urandom(1024*1024);old=zip_bytes(b'old',data);new=zip_bytes(b'changed-header',data)
+    p,sha,_=transport(tmp_path/'old',old);peer=tmp_path/'peer';sender.send(p,sha,'peer',str(peer))
+    p,sha,_=transport(tmp_path/'new',new)
+    real_copy=sender.copy;failed=[]
+    def interrupted(host,source,target,**kwargs):
+        if Path(source).name=='payload.zlib' and not failed:
+            failed.append(True);raise TimeoutError('synthetic interrupted transfer')
+        return real_copy(host,source,target,**kwargs)
+    monkeypatch.setattr(sender,'copy',interrupted)
+    with pytest.raises(TimeoutError):sender.send(p,sha,'peer',str(peer))
+    def no_rebuild(*args,**kwargs):raise AssertionError('verified ZIP cache should be reused')
+    monkeypatch.setattr(sender.artifact_zip_delta,'build',no_rebuild)
+    result=sender.send(p,sha,'peer',str(peer))
+    assert result['mode']=='zip-payload-zlib' and Path(result['verified']['receiver_view']).read_bytes()==new
