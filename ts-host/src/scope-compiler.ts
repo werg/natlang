@@ -545,6 +545,24 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   };
 
   const parseDiagnostics = (file as unknown as { parseDiagnostics?: readonly ts.DiagnosticWithLocation[] }).parseDiagnostics ?? [];
+  if (parseDiagnostics.length) {
+    // The parser can lose the declaration in `const in = ...`, then
+    // emit cascading punctuation errors. Explain the actual repair instead
+    // of leaving the executor to guess which part of its expression is wrong.
+    const scanner = ts.createScanner(ts.ScriptTarget.Latest, true, ts.LanguageVariant.Standard, file.text);
+    const errorStarts = new Set(parseDiagnostics.map(diagnostic => diagnostic.start));
+    let previous = ts.SyntaxKind.Unknown;
+    for (let token = scanner.scan(); token !== ts.SyntaxKind.EndOfFileToken; token = scanner.scan()) {
+      if ((previous === ts.SyntaxKind.ConstKeyword || previous === ts.SyntaxKind.LetKeyword || previous === ts.SyntaxKind.VarKeyword) &&
+          token >= ts.SyntaxKind.FirstKeyword && token <= ts.SyntaxKind.LastReservedWord &&
+          errorStarts.has(scanner.getTokenPos())) {
+        diagnostics.push({ code: 'typescript-syntax',
+          message: `Reserved word ${JSON.stringify(scanner.getTokenText())} cannot be a variable name. Choose a different name and use it consistently in this eval.`,
+          ...span(scanner.getTokenPos(), scanner.getTokenText().length) });
+      }
+      previous = token;
+    }
+  }
   for (const diagnostic of parseDiagnostics) {
     if (diagnostic.start === undefined) continue;
     diagnostics.push({ code: 'typescript-syntax',

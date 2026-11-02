@@ -220,6 +220,22 @@ test('scope compiler reports syntax errors and injected-binding collisions', () 
   assert.ok(collision.diagnostics.some(item => item.code === 'invalid-binding'));
 });
 
+test('missing variable bindings explain reserved names without confusing property keys or contextual names', () => {
+  for (const keyword of ['in', 'return', 'class', 'for']) {
+    const compiled = compileScopeSnippet(`const ${keyword} = 1;`);
+    assert.equal(compiled.ok, false);
+    const diagnostic = compiled.diagnostics.find(item => item.message.startsWith('Reserved word'));
+    assert.ok(diagnostic, JSON.stringify(compiled.diagnostics));
+    assert.match(diagnostic.message, new RegExp(`"${keyword}".*variable name`));
+    assert.equal(diagnostic.line, 1);
+    assert.equal(diagnostic.column, 7);
+  }
+  const valid = compileScopeSnippet('const { in: incoming } = { in: 1 }; const type = incoming; type');
+  assert.equal(valid.ok, true, JSON.stringify(valid.diagnostics));
+  const unrelated = compileScopeSnippet('const text = "const in = 1"; /* const return = 1 */ const missing = ;');
+  assert.ok(!unrelated.diagnostics.some(item => item.message.startsWith('Reserved word')));
+});
+
 test('scope compiler removes a redundant injected self-alias and records the repair', async () => {
   const compiled = compileScopeSnippet('const ready = ready;\nready.length', { inputBindings: ['ready'] });
   assert.equal(compiled.ok, true, JSON.stringify(compiled.diagnostics));
