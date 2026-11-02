@@ -25,7 +25,24 @@ def content_review(row, objective):
         node_shapes.append({'imports':len(node.get('imports') or []),'producing':bool(node.get('producing')),
                             'roles':node_roles})
     shape=json.dumps(node_shapes,sort_keys=True,separators=(',',':')).encode()
+    sample=None
+    if int(hashlib.sha256(str(row.get('id')).encode()).hexdigest()[:8],16) % 512 == 0:
+        from natlang_neuralese.train.own_output_supervision import graph_weights
+        effective,_=graph_weights(row,objective);offset=0;remaining=8192;segments=[]
+        for node in row.get('nodes') or []:
+            ids=node.get('token_ids') or [];weights=effective[offset:offset+len(ids)];offset+=len(ids)
+            run=[]
+            for token,weight in zip(ids,weights,strict=True):
+                if weight>0 and remaining>0:run.append(token);remaining-=1
+                elif run:segments.append(run);run=[]
+                if remaining==0:break
+            if run:segments.append(run)
+            if remaining==0:break
+        sample={'selection':'sha256(graph-id) modulo 512 equals zero',
+                'effective_positive_token_segments':segments,'token_limit':8192,
+                'possibly_truncated':remaining==0}
     return {'id':row.get('id'),'exact_token_weight_sha256':digest.hexdigest(),
+        'sample':sample,
         'role_structure_sha256':hashlib.sha256(shape).hexdigest(),'role_counts':counts,
         'unknown_role_starts':unknown,'nodes':len(node_shapes),'forward_tokens':total,
         'scope':'exact token/raw-weight identity and visible role topology; no semantic or outcome claim'}
