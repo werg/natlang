@@ -1,5 +1,25 @@
 # Main goal: keep moving forward (owner, 2026-10-11)
 
+## Reuse dense physical capacity, recheck current numerics (engineering, 2026-11-02)
+
+Dense LFM3 continuations retain authenticated measured capacity-proof references
+in the actual SFT frame before releasing restored metadata. A new checkpoint hash
+alone is not a reason to repeat the complete largest-graph backward. Reuse only
+when source/request semantics, parser/index witnesses, runtime, backend,
+parameter and optimizer-storage shapes, execution layout and available memory
+and scratch satisfy the measured contract. Run fresh small numerical/offload
+parity at the current weights. Retain the original measured checkpoint and record
+the current checkpoint separately; reuse is not a new measurement or task lift.
+Historical proofs without complete custody and genuinely changed geometry still
+require measurement. Relocated output/cache paths do not imply changed data, but
+both actual request bindings and unchanged witness identities must verify.
+
+Performance claims follow the actual enabled arithmetic. The BF16-rounded-weight
+three-product adjoint improves a supported BF16 precision branch; it does not
+establish a speedup for the current IEEE FFN recipe. Keep actual mode/dtype branch
+witnesses and full-model gradient qualification. Exploratory kernel tolerances
+must not replace the declared production certificate tolerances.
+
 ## Checkpoint input scratch obeys recovery storage admission (engineering, 2026-11-02)
 
 File-backed activation-checkpoint inputs use the same per-filesystem admission

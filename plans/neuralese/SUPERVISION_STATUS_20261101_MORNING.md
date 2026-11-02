@@ -1,3 +1,59 @@
+## Live supervision update, 2026-11-02 12:48 CET
+
+- All eight actual oversize/QAT groups passed; the last completed12:35:48. The
+  first real401692-source optimizer update began12:35:49 from BF95 global67.
+  Actual child744172 remains live, with GPU utilization observed90% at12:46.
+  No new optimizer completion or committed step68 checkpoint is verified yet.
+- The automatic first-update watcher failed on a journal MESSAGE represented as
+  a byte array, before triggering. Its parser/service binding and child cleanup
+  were repaired, and the primary directly sent SIGUSR2 to verified child744172
+  at12:39:10, after the actual update_start. Signal receipt:
+  `ops/first-update-semantic-refresh-signal-v14-1102.json`. The flag permits the
+  already-bound update to finish, then full-state checkpoint/semantic refresh
+  before another32-microbatch window. Verify completion and bytes; a sent signal
+  is not a saved checkpoint. Do not restart the obsolete watcher.
+- Confirmed a throughput bug: initial full-source capacity used current checkpoint
+  SHA in the proof path and repeated a22-minute complete backward after earned
+  checkpoint changes. Fixed inc6c4486f8/eff498d40. Independent review found and
+  repaired initial integration gaps: reading prior references after resume was
+  cleared, and physical output-path equality preventing relocation. The primary
+  independently passed58 targeted capacity/continuation tests under2GiB,1.8GiB
+  peak. New measured proofs bind dense execution/optimizer shapes and scratch;
+  continuations run fresh numerical parity, preserve original proof provenance,
+  and verify resources. Historical incomplete proofs cannot acquire fake custody.
+- Bounded GB10 and Pop microbenchmarks ruled out a generic bf16x6 switch. A
+  three-product exact-BF16-weight adjoint candidatecbfdf5544 passed existing
+  declared forward1e-4/gradient1e-5 tiny CUDA graph checks and row-split invariance.
+  A stricter exploratory1e-6 comparison failed; it was not the production gate.
+  Current recipe uses IEEE FFN projections, so no production speedup is claimed
+  from this BF16-only branch. Real mode/dtype witnesses and actual earned-parent
+  full-model qualification are still required. Raw measured fixtures/results:
+  `independent-adjoint-20261102/`.
+- New runtime16 atcbfdf5544 is frozen and locally archived, all32726 members
+  independently reread; archive SHA
+  de34cb605f5c15da4429e1914b1b6312a333b73446fcf8e1fce7ece9b16417e6.
+  It has not replaced the current runtime14 learner. Stage the actual earned
+  checkpoint, qualify, then resume without reverting its weights/moments/RNG.
+- Prepared operator `ops/prepare-earned-sft-throughput-continuation-1102.py`
+  requires the actual earned SFT68 checkpoint and SHA. It verifies401692 rows,
+  exact held data and correction history, centrally replays the original353731
+  correction, retires consumed predecessor/CE declarations, preserves objective
+  and exposure, and binds accumulation4/refresh1 in the actual recipe and resident
+  plan. This is a shorter update/interleave window, not reduced recipe completion.
+  Tiny and real-source-control validations passed; actual full-parent validation
+  remains dependent on the new checkpoint. Run with an admitted16GiB CPU budget
+  after the learner releases104GiB, not the tiny test's2GiB assumption.
+- Prepared full-model qualification operator
+  `ops/qualify-earned-sft-runtime16-1102.py` likewise requires the actual earned
+  checkpoint/SHA, preserves1e-4/1e-5 tolerances, forces bounded conv/FFN primitives,
+  and records actual adjoint precision/dtype witnesses. It performs no SGD and
+  does not replace separate complete long-graph capacity or task evaluation.
+- Runtime15 decision/capacity evidence export completed12:13:51,27 files, capsule
+  SHA3ce5d0e7c78921e092a6af329da1d0e421996e3db787bbd0dd1747bfbc982850.
+  Read-only py-spy attachment is blocked by process permissions; sudo is unavailable
+  without a password. No learner privilege or kernel setting was changed; use the
+  prepared in-process qualification witnesses instead of waiting on owner access.
+
 ## Live supervision update, 2026-11-02 12:11 CET
 
 - The complete524650-token/524782-KV backward passed12:02:57 in1342.09s,
