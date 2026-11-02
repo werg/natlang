@@ -1,3 +1,63 @@
+## Live supervision update, 2026-11-02 11:58 CET
+
+- The production parent remains the exact BF95 global67 full state. The matched
+  four-case comparison was BF95 2/4 versus earned68 0/4; diagnostic68 is retained
+  through its independently exported full state and exact local reconstruction
+  capsule. Do not resume68 as production merely because its RL loss/update ran.
+- Current learner owner is
+  `lfm3-bf95-full401692-file-g2-104g-v14-1102.service`, actual child744172,
+  config `ops/bf95-full401692-file-g2-104g-v14-1102/config.json`, frozen runtime14
+  at eb45f6e28. It preserves BF95 optimizer/RNG and568 earned SFT graph visits,
+  admits all401692 rows, and combines group2 checkpointing, bounded convolution
+  and FFN recomputation, physically reserved file-backed inputs, actual plain
+  cotangents and104GiB admitted unified memory. The machine was measured without
+  a competing GPU consumer before increasing the old96GiB shared-machine claim.
+  Bind the40GiB checkpoint floor; do not lower it to pass scratch admission.
+- The runtime13 group2 device-input check failed11:03:20 at a2GiB norm concat.
+  Runtime14 group4/file-input/96GiB failed11:22:47 at another2GiB norm concat.
+  Both were capacity failures before SGD. Current combined group2/file/104GiB
+  complete524650-token backward started11:40:35 and remains live. At11:57 the
+  scratch fell from roughly25GiB to8.1GiB, with actual GPU utilization observed
+  at96%. No completed capacity result or new SFT optimizer update is verified
+  yet. A deferred SIGQUIT requested11:48 has not yielded a Python stack while
+  autograd is inside C++; its absence alone is not a hang or restart reason.
+- Runtime13/source401692 capsule and the85-file group2/matched-development
+  supplement completed independently verified workstation GETs. The exact live
+  runtime14 archive and104GiB controls are now publishing through
+  `export-runtime14-current-controls-1102.service`; its status is
+  `private-recovery-20261101/bf95-runtime14-current-controls-export-1102.json`.
+  Verify completion before treating this supplement as durable. No new successor
+  full-state restore is claimed.
+- Storage cleanup preserved exact information: retired the14.53GB duplicate
+  rest27 input copies only after full hashes matched canonical registered files,
+  replacing the provenance paths with symlinks. Retired6.53GB reconstructible
+  actor-transfer caches and a local diagnostic68 view while retaining its exact
+  full-state representations. Detailed receipts are
+  `ops/retired-rest27-duplicate-input-copy-1102.json` and
+  `ops/retired-reconstructible-actor-transfer-caches-1102.json`.
+  An additional bounded low-priority job checks two older complete external
+  checkpoint hashes before retiring their derived local actor views:
+  `retire-old-actor-views-1102.service`. Keep the mismatched-source75 actor view;
+  its old raw path no longer contains those exact checkpoint bytes.
+- All noncanonical Git worktrees are now removed. Registration implementation
+  354a02a27 uses canonical main and immutable temporary-index publication;
+  independent targeted verification passed23 tests. The final checkout had no
+  live consumer or unique tracked work; linked source/held targets remain.
+  Receipt: `ops/registration-worktree-retirement-1102.json`.
+- Runtime15 at d09130055 is frozen for Pop's pending decision-bearing diagnostic,
+  including a02adb7c0. The earlier13190-token communicating replay contained no
+  decision actions, so it does not qualify option probabilities. Pop's GPU was
+  freshly confirmed idle; runtime15 sync completed. Exact BF95 actor-view reuse
+  is currently running under a4GiB CPU ledger to issue a matching runtime-bound
+  transport without another3.46GB view. Follow its actual result, send the bound
+  metadata, then execute the real producer/write/import/decision replay on Pop.
+  This is diagnostic only, no SGD and no protected answers.
+- Fresh reward/escalation verification passed25 inference/CLI/learning tests
+  plus7 reward tests. Correct completion remains primary; grounded observed-error
+  reports earn at most0.02 with quality still0. Explicit fallback handoff retains
+  the live invocation, effects and budgets; mixed-actor graphs are rejected as
+  same-policy RL. This is mechanism verification, not measured capability lift.
+
 ## Live supervision update, 2026-11-02 11:01 CET
 
 - Matched runtime10 evaluation finished: BF95 parent2/4 versus earned68 successor
