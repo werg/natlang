@@ -356,3 +356,33 @@ def test_replay_admission_checks_all_decisions_and_authenticated_option_branches
                    lambda x:x['decision_positions'][0]['learner_logps'].__setitem__(1,-.8)):
         bad=copy.deepcopy(receipt);mutate(bad)
         with pytest.raises(ValueError):validate_complete_replay_probe(bad,identity=identity,graph_id='g',compiled_replay=replay)
+
+
+@pytest.mark.parametrize('tamper', [None, 'backbone', 'optimizer', 'rng', 'exposure'])
+def test_zero_update_saved_qualification_requires_exact_actual_state(tmp_path, monkeypatch, tamper):
+    import hashlib
+    from natlang_neuralese.train import native_execution_transition as tx
+    source = derive(parent(), parent_sha256='a'*64)
+    source['training']['optimizer']['param_groups'] = [{'lr': .001, 'params': [0]}]
+    candidate = tmp_path/'candidate.pt'; torch.save(source, candidate)
+    reference = {'path': str(candidate), 'sha256': hashlib.sha256(candidate.read_bytes()).hexdigest()}
+    admission = {'path': 'selected.json', 'sha256': 'c'*64}
+    monkeypatch.setattr(tx, 'verify_selected_publication', lambda _: {'proof': {
+        'checkpoint': reference, 'parent': {'sha256': 'a'*64}}})
+    saved = copy.deepcopy(source)
+    saved['training']['options']['native_shared_execution_history'][-1]['qualification'] = {
+        'admission': admission, 'candidate_checkpoint_sha256': reference['sha256']}
+    saved['training']['exposure_counts']['new-unvisited-row'] = 0
+    saved['training']['optimizer']['param_groups'][0]['lr'] = .0001
+    if tamper == 'backbone': saved['backbone_state']['weight'].add_(1)
+    if tamper == 'optimizer': saved['training']['optimizer']['state'].add_(1)
+    if tamper == 'rng': saved['training']['rng']['torch'].add_(1)
+    if tamper == 'exposure': saved['training']['exposure_counts']['row'] += 1
+    path = tmp_path/'saved.pt'; torch.save(saved, path)
+    if tamper is None:
+        assert tx.require_qualified_for_training(saved['training'], checkpoint_path=path) is saved['training']
+        with pytest.raises(ValueError, match='actual checkpoint'):
+            tx.require_qualified_for_training(saved['training'])
+    else:
+        with pytest.raises(ValueError):
+            tx.require_qualified_for_training(saved['training'], checkpoint_path=path)

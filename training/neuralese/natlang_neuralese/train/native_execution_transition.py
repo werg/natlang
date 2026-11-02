@@ -262,9 +262,65 @@ def require_qualified_for_training(training, *, admission_ref=None, checkpoint_p
     if (recorded.get('candidate_checkpoint_sha256') != selection['proof']['checkpoint']['sha256']
             or entry.get('parent_checkpoint_sha256') != selection['proof']['parent']['sha256']
             or type(training.get('global_step', training.get('step'))) is not int
-            or training.get('global_step', training.get('step')) <= entry['at_global_step']):
+            or training.get('global_step', training.get('step')) < entry['at_global_step']):
         raise ValueError('earned checkpoint has invalid execution qualification ancestry')
+    if training.get('global_step', training.get('step')) == entry['at_global_step']:
+        if checkpoint_path is None:
+            raise ValueError('zero-update execution continuation requires its actual checkpoint')
+        _verify_zero_update_continuation(checkpoint_path, selection['proof']['checkpoint'], training)
     return training
+
+
+
+def _optimizer_history(value):
+    """LR is a live recipe control; retain every state tensor and group member."""
+    if isinstance(value, dict):
+        return {key: ([{k: v for k, v in group.items() if k != 'lr'} for group in item]
+                      if key == 'param_groups' else _optimizer_history(item))
+                for key, item in value.items()}
+    if isinstance(value, (tuple, list)):
+        return type(value)(_optimizer_history(item) for item in value)
+    return value
+
+
+@with_historical_file_verification_session
+def _verify_zero_update_continuation(checkpoint_path, candidate_ref, training):
+    """Authenticate a metadata-only save before its first earned optimizer step.
+
+    A saved qualification is not sufficient: independently check the actual full
+    tensors, optimizer history, RNG and positive exposure against the selected candidate.
+    Source appends may add zero-credit rows; no earned visit may change.
+    """
+    from pathlib import Path
+    import torch
+    from .native_zero_sgd_adoption import _same
+    from ..rl.native_direct_sft_recovery import _verify_historical_file_ref
+    path = Path(checkpoint_path).resolve(strict=True)
+    candidate = _verify_historical_file_ref(candidate_ref)
+    def stamp(p):
+        st = p.stat()
+        return st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns
+    observed = stamp(path), stamp(candidate)
+    source = torch.load(candidate, map_location='cpu', weights_only=False, mmap=True)
+    child = torch.load(path, map_location='cpu', weights_only=False, mmap=True)
+    _same(training, child['training'])
+    for key in ('schema', 'model_config', 'backbone_state', 'interface_state'):
+        _same(source[key], child[key])
+    _same(_optimizer_history(source['training']['optimizer']),
+          _optimizer_history(child['training']['optimizer']))
+    _same(source['training']['rng'], child['training']['rng'])
+    step = lambda t: t.get('global_step', t.get('step'))
+    if step(source['training']) != step(child['training']):
+        raise ValueError('zero-update execution continuation changed its earned step')
+    def exposure(state):
+        counts = state.get('exposure_counts')
+        if not isinstance(counts, dict) or any(type(v) is not int or v < 0 for v in counts.values()):
+            raise ValueError('zero-update execution continuation has invalid exposure')
+        return {key: value for key, value in counts.items() if value}
+    if exposure(source['training']) != exposure(child['training']):
+        raise ValueError('zero-update execution continuation changed earned exposure')
+    if observed != (stamp(path), stamp(candidate)):
+        raise ValueError('zero-update execution checkpoint changed during verification')
 
 
 def validate_numerical_certificate(certificate, *, identity, model_config):
