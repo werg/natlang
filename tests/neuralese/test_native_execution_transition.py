@@ -306,3 +306,24 @@ def test_rl_trainer_admission_is_controller_owned(tmp_path):
         bind_seed_execution_admission(['--execution-transition-admission','other'], ref)
     with pytest.raises(ValueError,match='owned by the controller'):
         native_policy_trainer_args({'execution_transition_admission':str(path)}, {}, ref)
+
+
+def test_replay_admission_checks_all_decisions_and_authenticated_option_branches():
+    from types import SimpleNamespace
+    from natlang_neuralese.train.native_execution_transition import validate_complete_replay_probe
+    identity={'checkpoint_sha256':'a'*64}
+    decision={'turn':'decide','chosen':0,'temperature':1.,'option_nodes':['decide:0','decide:1'],
+              'options':[[{'token_id':3,'query':10}],[{'token_id':4,'query':20}]],'behavior_logps':[-.5,-1.]}
+    replay=SimpleNamespace(identity=identity,actions=(),decision_actions=(decision,))
+    row={'decision_index':0,'turn':'decide','chosen':0,'temperature':1.,'option_nodes':['decide:0','decide:1'],
+         'option_token_ids':[[3],[4]],'option_queries':[[10],[20]],'behavior_logps':[-.5,-1.], 'learner_logps':[-.5,-1.], 'deltas':[0.,0.]}
+    receipt={'schema':'natlang.native-policy-behavior-logprob-probe/1','policy':identity,'graph_id':'g',
+        'execution_device':'cuda:0','all_episode_actions':True,'passed':True,'atol':1e-4,
+        'positions':[],'action_count':0,'decision_positions':[row],'decision_count':1,'max_abs_delta':0.}
+    assert validate_complete_replay_probe(receipt,identity=identity,graph_id='g',compiled_replay=replay)
+    for mutate in (lambda x:x['decision_positions'].clear(),
+                   lambda x:x['decision_positions'][0]['option_nodes'].__setitem__(1,'foreign'),
+                   lambda x:x['decision_positions'][0]['option_token_ids'].pop(),
+                   lambda x:x['decision_positions'][0]['learner_logps'].__setitem__(1,-.8)):
+        bad=copy.deepcopy(receipt);mutate(bad)
+        with pytest.raises(ValueError):validate_complete_replay_probe(bad,identity=identity,graph_id='g',compiled_replay=replay)

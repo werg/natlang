@@ -588,7 +588,49 @@ def token_action_logps(model, hidden, actions, *, chunk_tokens=128, readout=None
 _CENTERING_FIELDS = ('rho', 'alpha', 'tail_q', 'tail_p', 'w_y', 'y_in_top_k')
 
 
-def behavior_logprob_probe(model, hidden, actions, *, graph_id, policy, destination=None, limit=16, atol=None):
+def validate_policy_decision_branches(plan, row):
+    """Bind every sampled decision's option coordinates to its actual graph nodes."""
+    from ..data.decision_graph import option_node_name
+    nodes={node.name:(node,offset) for node,offset in zip(plan.invocations,plan.offsets,strict=True)}
+    decisions=row.get('decision_actions') or ()
+    by_turn={}
+    for action in decisions:
+        turn=action.get('turn')
+        if turn in by_turn or turn not in row['episode_turns']:
+            raise ValueError('decision action has an invalid or duplicate episode turn')
+        by_turn[turn]=action
+    episode=set(row['episode_turns'])
+    for turn in episode:
+        prefix=turn+':option:'
+        actual={name for name in nodes if name not in episode and name.startswith(prefix)
+                and name[len(prefix):].isdigit()}
+        action=by_turn.get(turn)
+        if action is None:
+            if actual:raise ValueError('sampled decision option branches lack their action')
+            continue
+        options=action.get('options');names=action.get('option_nodes');prompt=action.get('prompt_tokens')
+        if (not isinstance(options,list) or len(options)<2 or not isinstance(names,list)
+                or names!=[option_node_name(turn,i) for i in range(len(options))]
+                or set(names)!=actual or type(prompt) is not int or prompt<1
+                or len(action.get('behavior_logps',()))!=len(options)):
+            raise ValueError('sampled decision does not cover its complete option graph')
+        prefix_tokens=None;imports=None
+        for name,option in zip(names,options,strict=True):
+            node,offset=nodes[name]
+            if not option or prompt>=len(node.token_ids):raise ValueError('empty decision option branch')
+            if prefix_tokens is None:prefix_tokens=node.token_ids[:prompt];imports=node.imports
+            if node.token_ids[:prompt]!=prefix_tokens or node.imports!=imports:
+                raise ValueError('decision option branches have different prompt or imports')
+            if ([token.get('token_id') for token in option]!=list(node.token_ids[prompt:])
+                    or any(token.get('local_query')!=prompt+i-1 or token.get('query')!=offset+prompt+i-1
+                           or token.get('temperature')!=1. or token.get('allowed_token_ids') is not None
+                           or token.get('banned_token_ids') is not None
+                           for i,token in enumerate(option))):
+                raise ValueError('decision option coordinates differ from their graph')
+
+
+def behavior_logprob_probe(model, hidden, actions, *, graph_id, policy, destination=None, limit=16, atol=None,
+                           decision_actions=(), decision_physical_rows=None):
     """Compare captured behavior scores with the same-model graph's actual masked readout.
 
     ``limit=None`` checks every action of a complete episode. A finite ``atol``
@@ -603,7 +645,7 @@ def behavior_logprob_probe(model, hidden, actions, *, graph_id, policy, destinat
     if atol is not None and (type(atol) not in (int,float) or not math.isfinite(atol) or atol < 0):
         raise ValueError('behavior logprob parity tolerance must be finite and nonnegative')
     chosen=actions if limit is None else actions[:limit]
-    if not chosen:return None
+    if not chosen and not decision_actions:return None
     rows=[]
     # The readout is bounded independently of the length of the real episode.
     with torch.no_grad():
@@ -614,9 +656,29 @@ def behavior_logprob_probe(model, hidden, actions, *, graph_id, policy, destinat
                          'behavior_logp':float(a['behavior_logp']),'learner_logp':float(value),
                          'delta':float(value)-float(a['behavior_logp'])}
                         for i,(a,value) in enumerate(zip(part,current,strict=True)))
-    if any(not all(math.isfinite(r[key]) for key in ('behavior_logp','learner_logp','delta')) for r in rows):
+    decision_rows=[]
+    if decision_actions:
+        from .decision_policy import decision_log_policy
+        with torch.no_grad():
+            for index, action in enumerate(decision_actions):
+                options=action['options']
+                physical=options if decision_physical_rows is None else [
+                    [{**token,'query':decision_physical_rows[token['query']]} for token in option]
+                    for option in options]
+                actual=decision_log_policy(model,hidden,action,queries=physical).float().cpu().tolist()
+                behavior=[float(x) for x in action['behavior_logps']]
+                if len(actual)!=len(behavior):raise ValueError('decision option coverage differs')
+                decision_rows.append({'decision_index':index,'turn':action['turn'],'chosen':action['chosen'],
+                    'temperature':action['temperature'],'option_nodes':list(action['option_nodes']),
+                    'option_token_ids':[[token['token_id'] for token in option] for option in options],
+                    'option_queries':[[token['query'] for token in option] for option in options],
+                    'behavior_logps':behavior,'learner_logps':actual,
+                    'deltas':[float(a)-b for a,b in zip(actual,behavior,strict=True)]})
+    if (any(not all(math.isfinite(r[key]) for key in ('behavior_logp','learner_logp','delta')) for r in rows)
+            or any(not all(math.isfinite(x) for key in ('behavior_logps','learner_logps','deltas') for x in r[key])
+                   for r in decision_rows)):
         raise ValueError('nonfinite captured policy logprob comparison')
-    maximum=max(abs(r['delta']) for r in rows)
+    maximum=max([abs(r['delta']) for r in rows]+[abs(d) for r in decision_rows for d in r['deltas']])
     result={'schema':'natlang.native-policy-behavior-logprob-probe/1','graph_id':graph_id,
             'policy':policy,'execution_device':str(hidden.device),
             'positions':rows,'action_count':len(rows),'all_episode_actions':limit is None,
@@ -625,6 +687,10 @@ def behavior_logprob_probe(model, hidden, actions, *, graph_id, policy, destinat
             'bf16_reduction':os.environ.get('NATLANG_BF16_REDUCTION','default'),
             'scope':('all captured action tokens of one complete graph; no task-quality proof' if limit is None
                      else f'first at most {limit} captured action tokens of one graph; no task-quality proof')}
+    if decision_rows:
+        result.update(decision_positions=decision_rows,decision_count=len(decision_rows))
+        result['scope']=('all captured action tokens and all option probabilities for every sampled decision in one complete graph; no task-quality proof'
+                         if limit is None else 'bounded token actions and all sampled decision option probabilities; no task-quality proof')
     if destination is not None:
         path=Path(destination)
         if path.exists():
@@ -632,9 +698,10 @@ def behavior_logprob_probe(model, hidden, actions, *, graph_id, policy, destinat
                 raise ValueError('policy logprob probe destination already contains different evidence')
         else:write_json_durable(path,result)
     if atol is not None and maximum>atol:
-        worst=max(rows,key=lambda row:abs(row['delta']))
+        worst=max([('token',r['action_index'],abs(r['delta'])) for r in rows]+
+                  [('decision',r['decision_index'],abs(d)) for r in decision_rows for d in r['deltas']],key=lambda x:x[2])
         raise ValueError(f'captured policy logprob parity failed before SGD: graph={graph_id}, '
-                         f'action={worst["action_index"]}, max_abs_delta={maximum:.9g}, atol={atol:.9g}')
+                         f'{worst[0]}_action={worst[1]}, max_abs_delta={maximum:.9g}, atol={atol:.9g}')
     return result
 
 
@@ -1108,11 +1175,15 @@ class NativePolicyObjective:
             if names!=self.invocation_source_names:
                 raise ValueError('native invocation objective actor names differ from exact packed ownership')
         hidden = result['h_final'][0]
+        decision_probe_required=any(row.get('decision_actions') and self.can_compare_behavior_actor(row)
+                                    for row in self.rows.values())
         if (not getattr(self,'_behavior_logprob_probe_done',False)
-                and any(row.get('actions') and self.can_compare_behavior_actor(row) for row in self.rows.values())
-                and not any(self.rows[example.id].get('actions') and self.can_compare_behavior_actor(self.rows[example.id])
+                and any((row.get('actions') or row.get('decision_actions')) and self.can_compare_behavior_actor(row) for row in self.rows.values())
+                and not any((self.rows[example.id].get('decision_actions') if decision_probe_required else
+                             (self.rows[example.id].get('actions') or self.rows[example.id].get('decision_actions')))
+                            and self.can_compare_behavior_actor(self.rows[example.id])
                             for example in context['examples'])):
-            raise ValueError('first native learner forward must include a same-actor episode for pre-SGD logprob parity')
+            raise ValueError('first native learner forward must include a same-actor episode with required decisions for pre-SGD logprob parity')
         losses, count, diagnostics, jolt_parts = [], 0, [], []
         decision_count = 0
         for example in context['examples']:
@@ -1125,6 +1196,7 @@ class NativePolicyObjective:
             from ..common.hashing import canonical_json_sha256_hex
             if canonical_json_sha256_hex(graph_identity(example)) != row['graph_sha256']:
                 raise ValueError('native policy graph/masks differ from admitted objective coordinates')
+            validate_policy_decision_branches(example.plan,row)
             rows = _physical_rows(context, example)
             actions = [{**action, 'query': rows[action['query']],
                         'allowed_token_ids': tuple(action['allowed_token_ids'])
@@ -1136,9 +1208,12 @@ class NativePolicyObjective:
             # including every sampled action in this complete episode. Off-policy
             # continuations have genuinely different weights and cannot use it.
             same_actor=self.can_compare_behavior_actor(row)
-            if same_actor and actions and not getattr(self,'_behavior_logprob_probe_done',False):
+            if (same_actor and (actions or row.get('decision_actions'))
+                    and (not decision_probe_required or row.get('decision_actions'))
+                    and not getattr(self,'_behavior_logprob_probe_done',False)):
                 behavior_logprob_probe(model,hidden,actions,graph_id=example.id,policy=self.identity,
-                    destination=probe,limit=None,atol=1e-4)
+                    destination=probe,limit=None,atol=1e-4,decision_actions=row.get('decision_actions') or (),
+                    decision_physical_rows=rows)
                 self._behavior_logprob_probe_done=True
             parts_before = len(jolt_parts)
             if not actions:

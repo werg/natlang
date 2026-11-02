@@ -346,6 +346,14 @@ def test_sampled_decision_turns_enter_the_whole_episode_policy_objective(tmp_pat
         loss, details = packed_graph_loss(model, [example], objective=objective)
         assert details['sampled_decisions'] == 1 and details['sampled_tokens'] > 0
         row = objective.rows[example.id]
+        from copy import deepcopy
+        from natlang_neuralese.rl.native_replay import validate_policy_decision_branches
+        for mutation in ('omit','foreign','coordinate'):
+            bad=deepcopy(row)
+            if mutation=='omit':bad.pop('decision_actions')
+            elif mutation=='foreign':bad['decision_actions'][0]['option_nodes'][1]='foreign'
+            else:bad['decision_actions'][0]['options'][1][0]['query']+=1
+            with pytest.raises(ValueError):validate_policy_decision_branches(example.plan,bad)
 
         class WithoutDecision(type(objective)):
             def __call__(self, model, result, context):
@@ -364,7 +372,12 @@ def test_sampled_decision_turns_enter_the_whole_episode_policy_objective(tmp_pat
                 return (token_loss * count + decided.sum()) / (count + 1), {}
         reference = WithoutDecision(objective.path)
         reference.bind_actor(engine)
-        expected, _ = packed_graph_loss(model, [example], objective=reference)
+        # This reference deliberately removes the decision term and adds it
+        # back manually; it is not an admissible production objective.
+        reference._behavior_logprob_probe_done=True
+        from unittest.mock import patch
+        with patch('natlang_neuralese.rl.native_replay.validate_policy_decision_branches'):
+            expected, _ = packed_graph_loss(model, [example], objective=reference)
         torch.testing.assert_close(loss, expected, atol=1e-6, rtol=1e-5)
         torch.testing.assert_close(parameter_gradients(model, loss), parameter_gradients(model, expected),
                                    atol=1e-7, rtol=1e-4)
@@ -394,3 +407,34 @@ def test_decision_prompt_parity_with_the_typescript_runtime():
     messages, replies = decision_messages(opening, values)
     assert out['system'] == DECISION_SYSTEM_PROMPT and replies == out['replies']
     assert messages == [{'role': 'system', 'content': out['system']}, opening[1], {'role': 'user', 'content': out['prompt']}]
+
+
+def test_behavior_probe_checks_every_decision_option_before_sgd(monkeypatch):
+    from natlang_neuralese.rl import decision_policy
+    from natlang_neuralese.rl.native_replay import behavior_logprob_probe
+    seen=[]
+    def policy(model,hidden,action,*,queries,chunk_tokens=128):
+        seen.append([item['query'] for option in queries for item in option])
+        return torch.tensor(action['behavior_logps'])
+    monkeypatch.setattr(decision_policy,'decision_log_policy',policy)
+    def action(n):return {'turn':f'd{n}','chosen':0,'temperature':1.,'option_nodes':[f'{n}:0',f'{n}:1'],
+        'behavior_logps':[-.5,-1.], 'options':[[{'query':0,'token_id':3}],[{'query':1,'token_id':4}]]}
+    decisions=[action(0),action(1)]
+    result=behavior_logprob_probe(None,torch.zeros(3,4),[],graph_id='g',policy={},limit=None,atol=1e-4,
+                                  decision_actions=decisions,decision_physical_rows=[2,1])
+    assert result['decision_count']==2 and seen==[[2,1],[2,1]]
+    def wrong(model,hidden,action,*,queries,chunk_tokens=128):
+        return torch.tensor([-.5,-.8] if action['turn']=='d1' else [-.5,-1.])
+    monkeypatch.setattr(decision_policy,'decision_log_policy',wrong)
+    with pytest.raises(ValueError,match='decision_action=1'):
+        behavior_logprob_probe(None,torch.zeros(3,4),[],graph_id='g',policy={},limit=None,atol=1e-4,
+                               decision_actions=decisions,decision_physical_rows=[2,1])
+
+
+def test_capacity_parity_selects_real_decision_episode_before_token_only_episode():
+    from natlang_neuralese.eval.native_memory import policy_parity_first_group
+    from types import SimpleNamespace
+    objective=SimpleNamespace(rows={'tokens':{'actions':[{}]},'decision':{'decision_actions':[{}]}},
+        can_compare_behavior_actor=lambda row:True)
+    request={'entries':[{'id':'tokens','index':0},{'id':'decision','index':1}]}
+    assert policy_parity_first_group(request,objective)==(1,)

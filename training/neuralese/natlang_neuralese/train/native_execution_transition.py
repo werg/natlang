@@ -284,11 +284,15 @@ def validate_complete_replay_probe(receipt, *, identity, graph_id, compiled_repl
             or type(receipt.get('atol')) not in (int,float) or not 0 <= receipt['atol'] <= 1e-4):
         raise ValueError('candidate lacks its exact complete-episode replay probe')
     actions = compiled_replay.actions
+    decisions = getattr(compiled_replay, 'decision_actions', ())
     positions = receipt.get('positions')
-    if (getattr(compiled_replay, 'identity', None) != identity or not actions
-            or getattr(compiled_replay, 'decision_actions', ())
+    decision_positions = receipt.get('decision_positions', [])
+    if (getattr(compiled_replay, 'identity', None) != identity or not (actions or decisions)
             or not isinstance(positions, list) or receipt.get('action_count') != len(actions)
-            or len(positions) != len(actions)):
+            or len(positions) != len(actions) or not isinstance(decision_positions,list)
+            or len(decision_positions)!=len(decisions)
+            or (decisions and receipt.get('decision_count')!=len(decisions))
+            or (not decisions and receipt.get('decision_count',0)!=0)):
         raise ValueError('candidate replay does not cover every sampled graph action')
     errors = []
     for index, (action, row) in enumerate(zip(actions, positions, strict=True)):
@@ -303,6 +307,24 @@ def validate_complete_replay_probe(receipt, *, identity, graph_id, compiled_repl
         if delta != values[2]:
             raise ValueError('candidate replay delta is not its actual log probability difference')
         errors.append(abs(delta))
+    for index,(action,row) in enumerate(zip(decisions,decision_positions,strict=True)):
+        tokens=[[item['token_id'] for item in option] for option in action['options']]
+        behavior=action['behavior_logps']
+        if (not isinstance(row,dict) or row.get('decision_index')!=index
+                or row.get('turn')!=action.get('turn') or row.get('chosen')!=action.get('chosen')
+                or row.get('temperature')!=action.get('temperature')
+                or row.get('option_nodes')!=action.get('option_nodes')
+                or row.get('option_token_ids')!=tokens or row.get('behavior_logps')!=behavior
+                or row.get('option_queries')!=[[item['query'] for item in option] for option in action['options']]
+                or not isinstance(row.get('learner_logps'),list) or not isinstance(row.get('deltas'),list)
+                or len(row['learner_logps'])!=len(behavior) or len(row['deltas'])!=len(behavior)
+                or len(tokens)!=len(behavior)):
+            raise ValueError('candidate decision replay differs from authenticated option branches')
+        for old,current,delta in zip(behavior,row['learner_logps'],row['deltas'],strict=True):
+            if (any(type(x) not in (int,float) or not math.isfinite(x) for x in (old,current,delta))
+                    or current-old!=delta):
+                raise ValueError('candidate decision replay has invalid log probability differences')
+            errors.append(abs(delta))
     maximum = max(errors)
     if maximum != receipt.get('max_abs_delta') or maximum > receipt['atol']:
         raise ValueError('candidate replay exceeds the unchanged 1e-4 parity gate')
