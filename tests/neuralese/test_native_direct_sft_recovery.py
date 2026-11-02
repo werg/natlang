@@ -856,3 +856,51 @@ def test_interrupted_rolling_window_binds_retained_snapshot_launch_and_telemetry
         with pytest.raises(ValueError): _rolling_intermediate_window(*args)
     if tamper not in ('checkpoint','alias-corrupt'):
         assert calls == [(str(alias_path.resolve()) if alias_path else retained['path'], retained['sha256'])]
+def test_scoped_historical_verification_reuses_only_unchanged_exact_bytes(tmp_path, monkeypatch):
+    import hashlib
+    import os
+    import pytest
+    from natlang_neuralese.rl import native_direct_sft_recovery as recovery
+    path=tmp_path/'checkpoint.pt';path.write_bytes(b'full checkpoint')
+    reference={'path':str(path),'sha256':hashlib.sha256(path.read_bytes()).hexdigest(),'bytes':path.stat().st_size}
+    reads=[];original=recovery._strong_binding
+    def observed_read(value):
+        reads.append(str(value))
+        return original(value)
+    monkeypatch.setattr(recovery,'_strong_binding',observed_read)
+    with recovery.historical_file_verification_session():
+        recovery._verify_historical_file_ref(reference)
+        with recovery.historical_file_verification_session():
+            recovery._verify_historical_file_ref(reference)
+        assert len(reads)==1
+        with pytest.raises(ValueError):
+            recovery._verify_historical_file_ref({**reference,'bytes':reference['bytes']+1})
+        assert len(reads)==2
+        st=path.stat();os.utime(path,ns=(st.st_atime_ns,st.st_mtime_ns+1))
+        recovery._verify_historical_file_ref(reference)
+        assert len(reads)==3
+    with recovery.historical_file_verification_session():
+        recovery._verify_historical_file_ref(reference)
+    assert len(reads)==4
+    with recovery.historical_file_verification_session():
+        recovery._verify_historical_file_ref(reference)
+        path.write_bytes(b'evil checkpoint')
+        with pytest.raises(ValueError):recovery._verify_historical_file_ref(reference)
+    assert len(reads)==6
+
+
+def test_fresh_full_read_supplies_exact_physical_digest_to_ordinary_reader(tmp_path, monkeypatch):
+    from natlang_neuralese.rl.native_direct_sft_recovery import _strong_binding
+    from natlang_neuralese.common import checkpoint_digest
+    monkeypatch.setenv('NATLANG_HASH_CACHE', str(tmp_path/'hash-cache.jsonl'))
+    path=tmp_path/'checkpoint.pt';path.write_bytes(b'actual full checkpoint read')
+    reference=_strong_binding(path)
+    def unexpected_rehash(*args, **kwargs):
+        raise AssertionError('ordinary read needlessly rehashed the exact freshly verified inode')
+    monkeypatch.setattr(checkpoint_digest,'sha256_file_hex_cached',unexpected_rehash)
+    assert checkpoint_digest.verified_checkpoint_digest(path)==reference['sha256']
+    path.write_bytes(b'changed full checkpoint bytes')
+    import pytest
+    with pytest.raises(AssertionError, match='needlessly rehashed'):
+        checkpoint_digest.verified_checkpoint_digest(path)
+

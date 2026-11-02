@@ -46,12 +46,7 @@ def verified_checkpoint_digest(path):
     return digest
 
 
-def remember_written_file_digest(path, digest, *, signature):
-    """Cache a full sequential writer's digest for its exact committed inode.
-
-    This is a writer API: callers must have hashed every successfully written
-    byte. It does not authenticate an externally supplied digest receipt.
-    """
+def _remember_verified_file_digest(path, digest, *, signature):
     real = os.path.realpath(path)
     def current():
         return _signature(real)
@@ -64,3 +59,20 @@ def remember_written_file_digest(path, digest, *, signature):
     _record(keys, digest)
     if current() != signature:
         raise RuntimeError('committed checkpoint changed while recording its writer digest')
+
+
+def remember_written_file_digest(path, digest, *, signature):
+    """Cache a full writer's digest; callers must have hashed every written byte.
+
+    This does not authenticate an externally supplied digest receipt.
+    """
+    _remember_verified_file_digest(path, digest, signature=signature)
+
+
+def remember_read_file_digest(path, digest, *, signature):
+    """Cache an actual full sequential read with unchanged before/after identity.
+
+    Call immediately after hashing all bytes, never from a supplied receipt.
+    Subsequent ordinary readers can reuse that exact physical verification.
+    """
+    _remember_verified_file_digest(path, digest, signature=signature)

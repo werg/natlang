@@ -7,6 +7,7 @@ collection before using a new policy for learning.
 from __future__ import annotations
 
 from collections import OrderedDict
+from ..rl.native_direct_sft_recovery import with_historical_file_verification_session
 
 # Repeated admission layers in one process authenticate the same full tensors.
 # Cache only a completed independent comparison, keyed by both exact references
@@ -67,6 +68,7 @@ def verify_states(parent, child, *, parent_sha256):
             'untouched_confirmation': False}
 
 
+@with_historical_file_verification_session
 def verify_files(parent_ref, child_ref):
     """Independently reread and compare full checkpoint bytes and derive both identities."""
     from pathlib import Path
@@ -165,6 +167,7 @@ def publish_diagnostic(state_path, *, proof_ref, out):
         return result
 
 
+@with_historical_file_verification_session
 def verify_candidate_publication(publication_ref):
     """Reauthenticate a held diagnostic candidate and its exact source ancestry."""
     import json
@@ -450,6 +453,7 @@ def validate_fresh_sealed_replay(collection_ref, request_ref, replay_ref, *, ide
     return True
 
 
+@with_historical_file_verification_session
 def qualify_candidate(publication_ref, evidence_ref, *, protection_root):
     """Recompute candidate evidence; never change a controller or its hold."""
     import json
@@ -498,6 +502,7 @@ def qualify_candidate(publication_ref, evidence_ref, *, protection_root):
             'untouched_confirmation':False}
 
 
+@with_historical_file_verification_session
 def verify_qualification(qualification_ref):
     import json
     from ..rl.native_direct_sft_recovery import _verify_historical_file_ref
@@ -511,6 +516,7 @@ def verify_qualification(qualification_ref):
     return checked
 
 
+@with_historical_file_verification_session
 def verify_selected_publication(reference):
     """Recheck a selected transition and its complete diagnostic qualification."""
     import json
@@ -548,6 +554,7 @@ def verify_selected_publication(reference):
             'authenticated_ancestors':[candidate['parent']['sha256'],candidate['checkpoint']['sha256']]}
 
 
+@with_historical_file_verification_session
 def publish_selected(state_path, *, qualification_ref, out, decision_reason):
     """Select an independently qualified candidate under the stopped controller lock."""
     import fcntl

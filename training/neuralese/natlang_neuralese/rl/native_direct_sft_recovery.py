@@ -3,6 +3,9 @@ from __future__ import annotations
 import fcntl
 import copy
 import json
+from contextvars import ContextVar
+from contextlib import contextmanager
+from functools import wraps
 from pathlib import Path
 from ..common.jsonio import write_json_durable
 from ..train.native_resident import binding
@@ -11,6 +14,33 @@ from ..train.native_readiness import _bound
 
 SESSION_RECONCILIATION = 'natlang.rl-production-session-reconciliation/1'
 SESSION_PLAN = 'natlang.rl-production-session-plan/1'
+
+_FILE_VERIFICATION_SESSION = ContextVar('historical_file_verification_session', default=None)
+
+
+@contextmanager
+def historical_file_verification_session():
+    """Share fresh byte verification only within one nested admission operation.
+
+    Every reuse checks the resolved path and device/inode/size/mtime/ctime.
+    Independent operations start empty; normal historical readers remain fresh.
+    """
+    if _FILE_VERIFICATION_SESSION.get() is not None:
+        yield
+        return
+    token = _FILE_VERIFICATION_SESSION.set({})
+    try:
+        yield
+    finally:
+        _FILE_VERIFICATION_SESSION.reset(token)
+
+
+def with_historical_file_verification_session(function):
+    @wraps(function)
+    def verified(*args, **kwargs):
+        with historical_file_verification_session():
+            return function(*args, **kwargs)
+    return verified
 
 
 def _rolling_endpoint_snapshots(declaration, parent, child, *, verify_current_endpoints=True):
@@ -408,6 +438,9 @@ def _strong_binding(path):
     if (before.st_dev,before.st_ino,before.st_size,before.st_mtime_ns,before.st_ctime_ns)!=(
             after.st_dev,after.st_ino,after.st_size,after.st_mtime_ns,after.st_ctime_ns):
         raise ValueError('session reconciliation input changed while hashing')
+    from ..common.checkpoint_digest import remember_read_file_digest
+    remember_read_file_digest(path, digest, signature=(after.st_dev,after.st_ino,after.st_size,
+                                                     after.st_mtime_ns,after.st_ctime_ns))
     return {'path':str(path),'bytes':before.st_size,'sha256':digest}
 
 
@@ -450,11 +483,28 @@ def _verify_historical_file_ref(reference):
             or not isinstance(reference.get('sha256'),str) or len(reference['sha256'])!=64
             or ('bytes' in reference and (type(reference['bytes']) is not int or reference['bytes']<=0))):
         raise ValueError('historical SFT evidence needs an exact path/SHA binding')
-    actual=_strong_binding(reference['path'])
+    path=Path(reference['path']).resolve(strict=True)
+    def signature():
+        st=path.stat()
+        return st.st_dev,st.st_ino,st.st_size,st.st_mtime_ns,st.st_ctime_ns
+    session=_FILE_VERIFICATION_SESSION.get()
+    key=(str(path),reference['sha256'],reference.get('bytes'))
+    before=signature()
+    if session is not None and session.get(key)==before:
+        if (Path(reference['path']).resolve(strict=True)!=path or signature()!=before):
+            raise ValueError('historical SFT evidence changed during verification reuse')
+        return path
+    actual=_strong_binding(path)
     if (actual['sha256']!=reference['sha256']
             or ('bytes' in reference and actual['bytes']!=reference['bytes'])):
         raise ValueError('historical SFT evidence differs from its exact file binding')
-    return Path(reference['path']).resolve(strict=True)
+    if Path(reference['path']).resolve(strict=True)!=path or signature()!=before:
+        raise ValueError('historical SFT evidence changed during verification')
+    if session is not None:
+        if len(session)>=4096:
+            session.pop(next(iter(session)))
+        session[key]=before
+    return path
 
 
 def _authenticated_refresh_publication(reference, seen=None):
