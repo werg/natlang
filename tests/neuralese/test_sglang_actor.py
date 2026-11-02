@@ -24,6 +24,28 @@ def test_decode_record_prefix_of_larger_k():
         decode_record(text, 4)
 
 
+def test_direct_native_endpoint_metrics_include_failures(monkeypatch):
+    import threading
+    from natlang_neuralese.serve.engine import Engine
+    front = object.__new__(SglangEngine)
+    front._sglang_lock = threading.Lock()
+    front.native_endpoint_metrics = {}
+    monkeypatch.setattr(Engine, 'native_write_text', lambda self, text, **kw: (text, kw))
+    assert front.native_write_text('hello', value_type='string', adapters=[]) == (
+        'hello', {'value_type': 'string', 'adapters': []})
+    def fail(*args, **kwargs):
+        raise ValueError('bad input')
+    monkeypatch.setattr(Engine, 'native_init_body', fail)
+    with pytest.raises(ValueError, match='bad input'):
+        front.native_init_body([], None, 'id', 'text')
+    metrics = front.native_endpoint_metrics
+    assert metrics['natlang_native_endpoint_requests_total{endpoint="write_text"}'] == 1
+    assert metrics['natlang_native_endpoint_completed_total{endpoint="write_text"}'] == 1
+    assert metrics['natlang_native_endpoint_requests_total{endpoint="init_body"}'] == 1
+    assert metrics['natlang_native_endpoint_failures_total{endpoint="init_body"}'] == 1
+    assert metrics['natlang_native_endpoint_seconds_total{endpoint="write_text"}'] >= 0
+
+
 def test_routing_sends_neuralese_turns_to_native():
     plain = GenerationRequest(messages=[], temperature=1.0, rl_capture=True, rl_top_k=128, adapters=[])
     assert SglangEngine.sglang_unsupported(plain, [('tokens', [1, 2]), ('privileged', [3])]) is None

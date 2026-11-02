@@ -25,6 +25,7 @@ import itertools
 import json
 import os
 import threading
+import time
 import uuid
 import urllib.error
 import urllib.request
@@ -166,6 +167,7 @@ class SglangEngine(Engine):
         self.sglang_export = export_manifest
         self.sglang_requests = self.sglang_tokens = self.native_fallbacks = self.sglang_state_writes = 0
         self.native_fallback_reasons = {}
+        self.native_endpoint_metrics = {}
         self._sglang_lock = threading.Lock()
         binding = getattr(self, 'rl_policy_binding', None)
         if binding is not None:
@@ -180,7 +182,42 @@ class SglangEngine(Engine):
                 'natlang_native_fallback_requests_total': self.native_fallbacks,
                 'natlang_sglang_native_state_writes_total': self.sglang_state_writes,
                 'natlang_native_model_resident': int(self.__dict__.get('_native_model') is not None),
+                **getattr(self, 'native_endpoint_metrics', {}),
                 **self.native_fallback_reasons}
+
+    def _measure_native_endpoint(self, endpoint, work):
+        """Account for direct native work separately from generation fallbacks."""
+        started = time.monotonic()
+        prefix = 'natlang_native_endpoint'
+        label = '{endpoint="%s"}' % endpoint
+        with self._sglang_lock:
+            metrics = self.native_endpoint_metrics
+            key = prefix + '_requests_total' + label
+            metrics[key] = metrics.get(key, 0) + 1
+        try:
+            result = work()
+        except BaseException:
+            with self._sglang_lock:
+                key = prefix + '_failures_total' + label
+                metrics[key] = metrics.get(key, 0) + 1
+            raise
+        else:
+            with self._sglang_lock:
+                key = prefix + '_completed_total' + label
+                metrics[key] = metrics.get(key, 0) + 1
+            return result
+        finally:
+            with self._sglang_lock:
+                key = prefix + '_seconds_total' + label
+                metrics[key] = metrics.get(key, 0.0) + time.monotonic() - started
+
+    def native_write_text(self, text, *, value_type=None, adapters=None):
+        return self._measure_native_endpoint('write_text', lambda: super(SglangEngine, self).native_write_text(
+            text, value_type=value_type, adapters=adapters))
+
+    def native_init_body(self, messages, tools, placeholder, text, **kwargs):
+        return self._measure_native_endpoint('init_body', lambda: super(SglangEngine, self).native_init_body(
+            messages, tools, placeholder, text, **kwargs))
 
     def start(self):
         super().start()
