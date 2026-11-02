@@ -134,3 +134,55 @@ def test_transport_reuses_view_but_binds_new_runtime(tmp_path,monkeypatch):
     after=json.loads(__import__('pathlib').Path(second['path']).read_text())
     assert before['view']==after['view'] and first['sha256']!=second['sha256']
     assert after['python_runtime']['sha256']=='b'*64
+
+
+def test_snapshot_actor_view_uses_selected_owner_state_without_source_reload(tmp_path,monkeypatch):
+    from natlang_neuralese.model.native_bundle import write_snapshot_actor_view
+    from natlang_neuralese.train import trajectory_state
+    path=tiny_complete(tmp_path);state=CheckpointPolicy.load(path);st=path.stat()
+    signature=(st.st_dev,st.st_ino,st.st_size,st.st_mtime_ns)
+    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda:1024**3)
+    real=CheckpointPolicy.load
+    def load_view_only(candidate,*args,**kwargs):
+        if __import__('pathlib').Path(candidate).resolve()==path.resolve():raise AssertionError('full source reread')
+        return real(candidate,*args,**kwargs)
+    monkeypatch.setattr(CheckpointPolicy,'load',load_view_only)
+    result=write_snapshot_actor_view(path,tmp_path/'snapshot-views',snapshot=state,decoded_source_stat=signature)
+    assert result['maximum_cuda_storage_bytes']==0 and result['tensor_versions_unchanged']
+    view=load_actor_view(path,result['view_receipt'])
+    assert view['step']==12 and 'training' not in view
+
+
+def test_snapshot_actor_view_rejects_insufficient_transfer_headroom(tmp_path,monkeypatch):
+    from natlang_neuralese.model.native_bundle import write_snapshot_actor_view
+    from natlang_neuralese.train import trajectory_state
+    path=tiny_complete(tmp_path);state=CheckpointPolicy.load(path);st=path.stat()
+    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda:0)
+    with pytest.raises(ValueError,match='headroom'):
+        write_snapshot_actor_view(path,tmp_path/'snapshot-views',snapshot=state,
+                                  decoded_source_stat=(st.st_dev,st.st_ino,st.st_size,st.st_mtime_ns))
+
+
+def test_snapshot_view_preserves_storage_aliases_and_rejects_mutation(tmp_path,monkeypatch):
+    from natlang_neuralese.model.native_bundle import write_snapshot_actor_view
+    from natlang_neuralese.train import trajectory_state
+    source=tiny_complete(tmp_path);state=CheckpointPolicy.load(source)
+    storage=torch.arange(64,dtype=torch.float32).reshape(8,8)
+    state['backbone_state']={'weight':storage,'transpose':storage.t()}
+    path=tmp_path/'alias.pt';torch.save(state,path);state=CheckpointPolicy.load(path);st=path.stat()
+    signature=(st.st_dev,st.st_ino,st.st_size,st.st_mtime_ns)
+    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda:1024**3)
+    result=write_snapshot_actor_view(path,tmp_path/'valid',snapshot=state,decoded_source_stat=signature)
+    restored=load_actor_view(path,result['view_receipt'])['backbone_state']
+    assert restored['weight'].untyped_storage().data_ptr()==restored['transpose'].untyped_storage().data_ptr()
+    assert restored['transpose'].stride()==state['backbone_state']['transpose'].stride()
+    storage=state['backbone_state']['weight'].clone()
+    state['backbone_state']={'weight':storage,'transpose':storage.t()}
+    original=trajectory_state.atomic_checkpoint
+    def mutate(*args,**kwargs):
+        original(*args,**kwargs)
+        state['backbone_state']['weight'].view(-1)[0]+=1
+    monkeypatch.setattr(trajectory_state,'atomic_checkpoint',mutate)
+    with pytest.raises(ValueError,match='snapshot tensor changed'):
+        write_snapshot_actor_view(path,tmp_path/'mutated',snapshot=state,decoded_source_stat=signature)
+    assert not list((tmp_path/'mutated'/first_source_sha(path)).glob('*.json'))

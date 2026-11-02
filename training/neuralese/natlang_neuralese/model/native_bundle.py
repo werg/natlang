@@ -50,7 +50,7 @@ def _same_values_bounded(a,b,where='state',*,max_bytes=4*1024*1024):
                     compare(x.narrow(axis,0,middle),y.narrow(axis,0,middle))
                     compare(x.narrow(axis,middle,x.shape[axis]-middle),y.narrow(axis,middle,x.shape[axis]-middle))
                     return
-            left=x.detach().contiguous().reshape(-1);right=y.detach().contiguous().reshape(-1)
+            left=x.detach().to('cpu').contiguous().reshape(-1);right=y.detach().to('cpu').contiguous().reshape(-1)
             try:left,right=left.view(torch.uint8),right.view(torch.uint8)
             except RuntimeError:pass
             if not torch.equal(left,right):raise RuntimeError(f'actor view differs at {where}')
@@ -81,8 +81,70 @@ def _cached_actor_view(source, directory):
     return None
 
 
+def write_snapshot_actor_view(checkpoint,out,*,snapshot,decoded_source_stat):
+    """Serialize the committed owner's exact selected state without reloading the full source.
+
+    This is the bounded serialization primitive; the caller must hold an exact
+    full-source inode pin until its consumer or verified full recovery releases it.
+    """
+    import math,torch
+    from ..train.checkpoint_safety import PersistentCheckpointReservation,checkpoint_size_upper_bound
+    from ..train.trajectory_state import atomic_checkpoint,available_system_memory_bytes
+    from .native_model import CHECKPOINT_SCHEMA
+    source=Path(checkpoint).resolve(strict=True)
+    if snapshot.get('schema')!=CHECKPOINT_SCHEMA or snapshot.get('inference_only') or snapshot.get('optimizer_pruned'):
+        raise ValueError('snapshot view requires a complete native checkpoint')
+    training=snapshot.get('training') or {}
+    if not all(training.get(k) for k in ('optimizer','rng','source_receipts')):
+        raise ValueError('snapshot view lacks optimizer, RNG or source custody')
+    actual=source.stat();signature=(actual.st_dev,actual.st_ino,actual.st_size,actual.st_mtime_ns)
+    if signature!=tuple(decoded_source_stat):raise ValueError('snapshot view source changed after commit')
+    binding=_fresh_file_binding(source)
+    selected={k:snapshot[k] for k in ('schema','model_config','backbone_state','interface_state','step')}
+    if type(selected['step']) is not int or selected['step']<0:raise ValueError('snapshot view has invalid step')
+    selected.update(inference_only=True,optimizer_pruned=True,optimizer_pruned_keys=['training'],
+        inference_source={'schema':'natlang.native-inference-source/1','training_checkpoint_sha256':binding['sha256'],
+                          'training_checkpoint_bytes':binding['bytes'],'step':selected['step']})
+    tensors=[]
+    def visit(value):
+        if isinstance(value,torch.Tensor):
+            if value.layout!=torch.strided or value.is_conj() or value.is_neg():
+                raise ValueError('snapshot view has unsupported tensor storage')
+            tensors.append((value,int(value._version),int(value.untyped_storage().nbytes())))
+        elif isinstance(value,dict):
+            for item in value.values():visit(item)
+        elif isinstance(value,(tuple,list)):
+            for item in value:visit(item)
+    visit(selected)
+    largest=max((size for tensor,_,size in tensors if tensor.device.type!='cpu'),default=0)
+    available=available_system_memory_bytes()
+    required=math.ceil(largest*1.25)+16*1024**2
+    if available is None or available<required:
+        raise ValueError('snapshot view storage transfer exceeds actual host headroom')
+    def unchanged():
+        if any(tensor._version!=version for tensor,version,_ in tensors):
+            raise ValueError('snapshot tensor changed while preparing its view')
+    directory=Path(out).resolve()/binding['sha256'];directory.mkdir(parents=True,exist_ok=True)
+    if _cached_actor_view(source,directory) is not None:
+        result=write_actor_view(source,out,validated_state=snapshot,decoded_source_stat=signature,validate_before_publish=unchanged)
+    else:
+        staged=directory/'.actor-view-snapshot.pt'
+        if not staged.exists():
+            reservation=PersistentCheckpointReservation(staged)
+            try:
+                reservation.acquire(checkpoint_size_upper_bound(selected))
+                atomic_checkpoint(staged,selected,reservation=reservation)
+            finally:reservation.close()
+        unchanged()
+        result=write_actor_view(source,out,validated_state=snapshot,decoded_source_stat=signature,prepared_view=staged,
+                                validate_before_publish=unchanged)
+    return {'view_receipt':result,'source':binding,'maximum_cuda_storage_bytes':largest,
+            'required_host_headroom_bytes':required,'available_host_bytes':available,
+            'tensor_versions_unchanged':True,'training_resume':False}
+
+
 def write_actor_view(checkpoint, out, *, validated_state, decoded_source_stat=None,
-                     prepared_view=None):
+                     prepared_view=None, validate_before_publish=None):
     """Extract exact actor tensors from the exporter's already-validated decode.
 
     The caller must pass the actual state decoded from this immutable source,
@@ -151,6 +213,7 @@ def write_actor_view(checkpoint, out, *, validated_state, decoded_source_stat=No
         if (candidate_after.st_dev,candidate_after.st_ino,candidate_after.st_size,
                 candidate_after.st_mtime_ns,candidate_after.st_ctime_ns) != candidate_signature:
             raise ValueError('actor view temporary output changed during verification')
+        if validate_before_publish is not None:validate_before_publish()
         target = out/(digest+'.pt')
         if cached is None:
             try:os.link(pending,target)
@@ -167,6 +230,7 @@ def write_actor_view(checkpoint, out, *, validated_state, decoded_source_stat=No
     if ((after.st_dev,after.st_ino,after.st_size,after.st_mtime_ns) != signature
             or after.st_ctime_ns != before.st_ctime_ns):
         raise ValueError('actor view source changed during extraction')
+    if validate_before_publish is not None:validate_before_publish()
     receipt = {'schema':ACTOR_VIEW_SCHEMA,'source':source_binding,'view':{
         **_file_binding(target),'path':target.name},'step':selected['step'],
         'model_config':selected['model_config'],'mechanism':mechanism,
