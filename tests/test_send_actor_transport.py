@@ -111,3 +111,13 @@ def test_interrupted_zip_send_retries_from_verified_cache(tmp_path,local_peer,mo
     monkeypatch.setattr(sender.artifact_zip_delta,'build',no_rebuild)
     result=sender.send(p,sha,'peer',str(peer))
     assert result['mode']=='zip-payload-zlib' and Path(result['verified']['receiver_view']).read_bytes()==new
+
+
+def test_zip_peer_base_tampering_rejects_reconstruction(tmp_path,local_peer):
+    data=os.urandom(1024*1024);old=zip_bytes(b'old',data);new=zip_bytes(b'changed-header',data)
+    p,sha,_=transport(tmp_path/'old',old);peer=tmp_path/'peer';first=sender.send(p,sha,'peer',str(peer))
+    peer_base=Path(first['verified']['receiver_view']);raw=bytearray(peer_base.read_bytes());raw[-1]^=1;peer_base.write_bytes(raw)
+    p,sha,_=transport(tmp_path/'new',new)
+    with pytest.raises(RuntimeError,match='base binding differs'):sender.send(p,sha,'peer',str(peer))
+    target=peer/json.loads(p.read_text())['source']['sha256']/json.loads(p.read_text())['view']['path']
+    assert not target.exists()
