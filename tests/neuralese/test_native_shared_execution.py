@@ -202,3 +202,47 @@ def test_ffn_invariant_policy_disables_plain_training_vendor_fastpath(monkeypatc
     monkeypatch.setattr(fused_moe._InvariantLinear,'apply',lambda *args:marker)
     assert fused_moe.invariant_linear(x,weight,allow_plain_fastpath=False) is marker
     assert torch.equal(fused_moe.invariant_linear(x,weight),torch.nn.functional.linear(x,weight))
+
+
+def test_canonical_profile_forces_shared_and_adapter_projection_and_readout(monkeypatch):
+    import torch.nn.functional as F
+    from natlang_neuralese.model import shared_state
+    model, *_ = fixture('lfm')
+    configure_shared_execution(model,'ffn-stable-v1')
+    observed=[]
+    def linear(x, weight, *, precision='ieee', force_invariant=False):
+        observed.append(force_invariant)
+        return F.linear(x,weight)
+    monkeypatch.setattr(shared_state,'_linear_weight',linear)
+    module=next(module for name,module in model.port.named_modules()
+                if type(module) is torch.nn.Linear and '.feed_forward.' not in name)
+    shared_state._linear(module,torch.randn(2,module.in_features,dtype=module.weight.dtype))
+    adapter=model.adapter.down
+    shared_state._linear(adapter,torch.randn(2,adapter.in_features,dtype=adapter.weight.dtype))
+    width=model.port.output_weight.shape[1]
+    model.logits(torch.randn(1,width,dtype=model.port.output_weight.dtype))
+    assert len(observed)>=4 and all(observed)
+    configure_shared_execution(model,'source-v1')
+    observed.clear()
+    shared_state._linear(module,torch.randn(2,module.in_features,dtype=module.weight.dtype))
+    assert observed==[False]
+
+
+def test_canonical_profile_uses_eager_pointwise_even_in_plain_training(monkeypatch):
+    from types import SimpleNamespace
+    from natlang_neuralese.model import shared_state, native_weight_carrier
+    calls=[]
+    monkeypatch.setattr(native_weight_carrier,'plain_training_active',lambda:True)
+    monkeypatch.setenv('NATLANG_NATIVE_COMPILE','1')
+    monkeypatch.setattr(torch,'compile',lambda fn,**kw:(lambda *a,**k:(calls.append('compiled'),fn(*a,**k))[1]))
+    def fn(owner, value):return 'result'
+    wrapped=shared_state._plain_compiled(fn)
+    class PretendCuda(torch.Tensor):
+        @property
+        def is_cuda(self): return True
+    fake_tensor=torch.zeros(1).as_subclass(PretendCuda)
+    assert wrapped(SimpleNamespace(native_shared_execution='ffn-stable-v1'),fake_tensor)=='result'
+    assert wrapped(SimpleNamespace(_native_canonical_pointwise=True),fake_tensor)=='result'
+    assert calls==[]
+    assert wrapped(SimpleNamespace(native_shared_execution='source-v1'),fake_tensor)=='result'
+    assert calls==['compiled']

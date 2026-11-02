@@ -606,7 +606,8 @@ def test_ffn_stable_linear_carrier_preserves_fixed_forward_and_gradients(tmp_pat
     from natlang_neuralese.model.shared_execution import configure_shared_execution, validate_shared_execution
     from natlang_neuralese.model.native_weight_carrier import NativeCarrierLinear
     torch.manual_seed(211)
-    port=nn.Module();port.block=nn.Module();port.block.feed_forward=nn.Sequential(nn.Linear(8,4,bias=False).to(torch.bfloat16))
+    port=nn.Module();port.config=SimpleNamespace(model_type='lfm3')
+    port.block=nn.Module();port.block.feed_forward=nn.Sequential(nn.Linear(8,4,bias=False).to(torch.bfloat16))
     model=SimpleNamespace(port=port)
     configure_shared_execution(model,'ffn-stable-v1')
     original=port.block.feed_forward[0];original_forward=original.forward;parameter=original.weight
@@ -625,3 +626,16 @@ def test_ffn_stable_linear_carrier_preserves_fixed_forward_and_gradients(tmp_pat
         scope.finish()
     assert port.block.feed_forward[0] is original and original.forward == original_forward
     validate_shared_execution(model,{'native_shared_execution':'ffn-stable-v1'})
+
+
+def test_fixed_projection_carrier_forwards_canonical_plain_policy(monkeypatch):
+    from natlang_neuralese.model import native_weight_carrier as carrier
+    module=nn.Linear(4,3,bias=False);module._native_projection_force_invariant=True
+    wrapped=carrier.NativeCarrierLinear(module)
+    seen=[]
+    def stored(x, weight, bias, **kwargs):
+        seen.append(kwargs)
+        return torch.nn.functional.linear(x,weight,bias)
+    monkeypatch.setattr(carrier,'stored_linear',stored)
+    wrapped.native_fixed_forward(torch.ones(2,4))
+    assert seen[0]['fixed'] is True and seen[0]['force_invariant'] is True

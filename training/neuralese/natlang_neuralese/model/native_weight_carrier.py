@@ -1703,14 +1703,16 @@ class NativeCarrierLinear(nn.Linear):
         x, weight = _precision_operands(self, x)
         return stored_linear(x, weight, self.bias, storage_dtype=self.forward_storage_dtype,
                              fixed=self._native_shared_fixed_ffn,
-                             force_invariant=getattr(self, '_native_ffn_force_invariant', False),
+                             force_invariant=(getattr(self, '_native_ffn_force_invariant', False)
+                                              or getattr(self, '_native_projection_force_invariant', False)),
                              precision=getattr(self, 'native_linear_precision', 'ieee'))
 
     def native_fixed_forward(self, x):
         x, weight = _precision_operands(self, x)
         return stored_linear(x, weight, self.bias, storage_dtype=self.forward_storage_dtype,
                              fixed=True, precision=getattr(self, 'native_linear_precision', 'ieee'),
-                             force_invariant=getattr(self, '_native_ffn_force_invariant', False))
+                             force_invariant=(getattr(self, '_native_ffn_force_invariant', False)
+                                              or getattr(self, '_native_projection_force_invariant', False)))
 
 
 def _precision_operands(module, x):

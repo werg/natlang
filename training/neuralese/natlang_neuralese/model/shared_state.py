@@ -279,7 +279,10 @@ def _plain_compiled(function):
     @functools.wraps(function)
     def run(*args, **kwargs):
         from .native_weight_carrier import plain_training_active
-        if (not plain_training_active() or os.environ.get('NATLANG_NATIVE_COMPILE', '1') == '0'
+        owner = args[0] if args else None
+        canonical = (getattr(owner, 'native_shared_execution', 'source-v1') == 'ffn-stable-v1'
+                     or getattr(owner, '_native_canonical_pointwise', False))
+        if (canonical or not plain_training_active() or os.environ.get('NATLANG_NATIVE_COMPILE', '1') == '0'
                 or not any(isinstance(value, torch.Tensor) and value.is_cuda for value in args)):
             return function(*args, **kwargs)
         if not compiled:
@@ -946,16 +949,17 @@ class SharedStateModel(nn.Module):
     def logits(self, h):
         from .readout_storage import readout_weight
         normalized = self.port.final_norm(h)
-        logits = _linear_weight(normalized, readout_weight(self.port, self.port.output_weight, normalized.dtype), precision=getattr(self, "native_linear_precision", "ieee"))
+        force = getattr(self, 'native_shared_execution', 'source-v1') == 'ffn-stable-v1'
+        logits = _linear_weight(normalized, readout_weight(self.port, self.port.output_weight, normalized.dtype), precision=getattr(self, "native_linear_precision", "ieee"), force_invariant=force)
         from .native_weight_carrier import widen_direct_parameter
         rows = widen_direct_parameter(self.input_rows if self.tied else self.output_rows)
         logits = logits.clone()
-        logits[..., list(self.marker_ids)] = _linear_weight(normalized, rows.to(normalized.dtype), precision=getattr(self, "native_linear_precision", "ieee"))
+        logits[..., list(self.marker_ids)] = _linear_weight(normalized, rows.to(normalized.dtype), precision=getattr(self, "native_linear_precision", "ieee"), force_invariant=force)
         if self.token_override_ids:
             extra = widen_direct_parameter(self.extra_input_rows if self.tied else self.extra_output_rows)
             baseline = self.port.output_weight[list(self.token_override_ids)].to(normalized.dtype)
             delta = extra.to(normalized.dtype) - baseline
-            logits[..., list(self.token_override_ids)] += _linear_weight(normalized, delta, precision=getattr(self, 'native_linear_precision', 'ieee'))
+            logits[..., list(self.token_override_ids)] += _linear_weight(normalized, delta, precision=getattr(self, 'native_linear_precision', 'ieee'), force_invariant=force)
         return logits
 
     def forward(self, plan, *, embeddings=None, reference=False, external_blocks=None, external_identity=None, retain_states=True):
@@ -1480,14 +1484,15 @@ def restore_channel_checkpoint(model, state):
     return model
 
 
-def _linear_weight(x, weight, *, precision="ieee"):
+def _linear_weight(x, weight, *, precision="ieee", force_invariant=False):
     from ..common.native_higher_order import active_reference_arithmetic,reference_linear
     if active_reference_arithmetic() is not None:
         return reference_linear(x,weight)
     if x.is_cuda and x.dtype in (torch.float32, torch.bfloat16):
         from ..maple.fused_moe import invariant_linear
         shape = x.shape
-        return invariant_linear(x.reshape(-1, shape[-1]), weight, precision=precision).reshape(*shape[:-1], weight.shape[0])
+        return invariant_linear(x.reshape(-1, shape[-1]), weight, precision=precision,
+                                allow_plain_fastpath=not force_invariant).reshape(*shape[:-1], weight.shape[0])
     if precision != "ieee" and x.dtype == torch.float32:
         raise ValueError("selected native linear arithmetic requires CUDA")
     return F.linear(x, weight)
@@ -1506,7 +1511,8 @@ def _linear(module, x):
         if out is not None:
             return out
         x, weight = linear_precision(module, x)
-    out = _linear_weight(x, weight, precision=getattr(module, "native_linear_precision", "ieee"))
+    out = _linear_weight(x, weight, precision=getattr(module, "native_linear_precision", "ieee"),
+                         force_invariant=getattr(module, '_native_projection_force_invariant', False))
     return out if module.bias is None else out + module.bias
 
 

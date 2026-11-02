@@ -36,10 +36,24 @@ def _fixed_norm(module,value):
 def configure_shared_execution(model,profile='source-v1'):
     if profile not in NATIVE_SHARED_EXECUTIONS:
         raise ValueError('unsupported native shared execution profile: '+str(profile))
+    if (profile == 'ffn-stable-v1'
+            and getattr(getattr(model.port, 'config', None), 'model_type', None) not in ('lfm2', 'lfm3')):
+        raise ValueError('FFN-only shared execution is supported only for LFM dense ports')
     if profile == 'ffn-stable-v1' and not any(
             type(module) is torch.nn.Linear and '.feed_forward.' in name
             for name, module in model.port.named_modules()):
         raise ValueError('FFN-only shared execution requires supported feed-forward projections')
+    # The canonical FFN profile also prevents the plain learner from silently
+    # replacing already-canonical shared projections with vendor GEMMs.
+    # Adapter linears live outside port; they use shared_state._linear too.
+    projection_modules = list(model.port.modules())
+    if getattr(model, 'adapter', None) is not None:
+        projection_modules += list(model.adapter.modules())
+    for module in projection_modules:
+        if type(module) is torch.nn.Linear:
+            module._native_projection_force_invariant = profile == 'ffn-stable-v1'
+        if type(module) is torch.nn.Conv1d:
+            module._native_canonical_pointwise = profile == 'ffn-stable-v1'
     for name,module in model.port.named_modules():
         implementation=(_fixed_ffn if type(module)is torch.nn.Linear and '.feed_forward.'in name
             else _fixed_norm if type(module).__name__ in _NORM_TYPES else None)
@@ -70,10 +84,21 @@ def validate_shared_execution_profile(model,config):
 
 def validate_shared_execution(model,config):
     profile=validate_shared_execution_profile(model,config)
+    if (profile == 'ffn-stable-v1'
+            and getattr(getattr(model.port, 'config', None), 'model_type', None) not in ('lfm2', 'lfm3')):
+        raise ValueError('FFN-only shared execution has an unsupported port')
     if profile == 'ffn-stable-v1' and not any(
             type(module) is torch.nn.Linear and '.feed_forward.' in name
             for name, module in model.port.named_modules()):
         raise ValueError('FFN-only shared execution lost its supported projections')
+    projection_modules = list(model.port.modules())
+    if getattr(model, 'adapter', None) is not None:
+        projection_modules += list(model.adapter.modules())
+    for module in projection_modules:
+        if type(module) is torch.nn.Linear and bool(getattr(module,'_native_projection_force_invariant',False)) != (profile == 'ffn-stable-v1'):
+            raise ValueError('native shared projection invariant policy differs from declared profile')
+        if type(module) is torch.nn.Conv1d and bool(getattr(module,'_native_canonical_pointwise',False)) != (profile == 'ffn-stable-v1'):
+            raise ValueError('native shared pointwise policy differs from declared profile')
     for name,module in model.port.named_modules():
         implementation=(_fixed_ffn if type(module)is torch.nn.Linear and '.feed_forward.'in name
             else _fixed_norm if type(module).__name__ in _NORM_TYPES else None)
