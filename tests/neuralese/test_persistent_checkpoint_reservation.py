@@ -57,6 +57,32 @@ def test_crash_reuse_and_concurrent_owner(tmp_path):
     other.close()
 
 
+@pytest.mark.parametrize('partial_payload',[False,True])
+@pytest.mark.parametrize('same_object',[False,True])
+def test_low_space_resume_reclaims_only_a_fully_zero_old_reserve(tmp_path,monkeypatch,partial_payload,same_object):
+    import shutil
+    from collections import namedtuple
+    from natlang_neuralese.train.checkpoint_safety import CheckpointSpaceUnavailable
+    path=tmp_path/'checkpoint.pt';path.write_bytes(b'last durable parent')
+    bound=1024*1024
+    owner=reservation(path).acquire(bound);inode=owner.pending.stat().st_ino
+    if partial_payload:os.pwrite(owner._fd,b'uncommitted serialization',65536)
+    owner.close()
+    Usage=namedtuple('Usage','total used free')
+    monkeypatch.setattr(shutil,'disk_usage',lambda _:Usage(2*bound,bound+owner.pending.stat().st_size,
+        bound-owner.pending.stat().st_size))
+    retry=owner if same_object else reservation(path)
+    try:
+        if partial_payload:
+            with pytest.raises(CheckpointSpaceUnavailable):retry.acquire(bound)
+            assert owner.pending.read_bytes()[65536:][:25]==b'uncommitted serialization'
+        else:
+            retry.acquire(bound)
+            assert retry.pending.stat().st_ino==inode and retry._allocated_bound>=bound
+        assert path.read_bytes()==b'last durable parent'
+    finally:retry.close()
+
+
 def test_write_failure_preserves_parent_and_reservation(tmp_path, monkeypatch):
     path = tmp_path / 'checkpoint.pt'
     torch.save({'step': 1}, path)

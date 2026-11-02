@@ -393,10 +393,27 @@ class PersistentCheckpointReservation:
                 if not math.isfinite(factor) or factor < 0:
                     raise ValueError('checkpoint transfer headroom factor must be finite and nonnegative')
                 transfer = math.ceil(capacity * factor)
-            with CheckpointWriteAdmission(self.target, additional, transfer_bytes=transfer,
-                                          minimum_free_bytes=self.minimum_free_bytes):
-                os.posix_fallocate(self._fd, 0, capacity)
+            def allocate():
+                with CheckpointWriteAdmission(self.target, additional, transfer_bytes=transfer,
+                                              minimum_free_bytes=self.minimum_free_bytes):
+                    os.posix_fallocate(self._fd, 0, capacity)
+                    os.fsync(self._fd)
+            try:
+                allocate()
+            except CheckpointSpaceUnavailable:
+                # A prior owner may have left a fully allocated unused spare.
+                # Its size/blocks cannot prove its logical allocation, but
+                # admitting that whole range again can double-count it. Only
+                # after checking every byte and its unchanged inode under the
+                # owner lock may we release a zero spare and re-admit fresh
+                # blocks. Preserve any partial serialization and known live
+                # allocations; never relax the disk floor or transfer budget.
+                if self._allocated_bound or not st.st_size or not self._is_empty():
+                    raise
+                os.ftruncate(self._fd,0)
                 os.fsync(self._fd)
+                self.bound=0
+                allocate()
         else:
             os.posix_fallocate(self._fd, 0, capacity)
             os.fsync(self._fd)
@@ -440,13 +457,8 @@ class PersistentCheckpointReservation:
             self.pending.unlink(); self.receipt.unlink(); self._sync_directory()
         self.close()
 
-    def discard_empty(self):
-        """Retire only a verified all-zero spare while its owner lock is held.
-
-        A failed serializer may leave useful bytes in the pending inode. Preserve
-        those bytes even on shutdown; allocation receipts alone prove no absence
-        of checkpoint data.
-        """
+    def _is_empty(self):
+        """Check every byte and the exact exclusively owned inode identity."""
         if self._fd is None:
             return False
         before = self._check_pending_identity()
@@ -463,6 +475,11 @@ class PersistentCheckpointReservation:
             offset += size
         if signature(before) != signature(self._check_pending_identity()):
             raise CheckpointReserveError('spare changed during empty reservation verification')
+        return True
+
+    def discard_empty(self):
+        """Retire only an entirely zero spare; preserve partial serialization."""
+        if not self._is_empty():return False
         self.discard_uncommitted()
         return True
 
@@ -470,6 +487,8 @@ class PersistentCheckpointReservation:
         if self._fd is not None:
             os.close(self._fd)
             self._fd = None
+        self.bound = 0
+        self._allocated_bound = 0
         if self._lock_fd is not None:
             # Duplicated descriptors share one flock ownership. Explicitly
             # unlocking here would also unlock a still-live sibling slot.

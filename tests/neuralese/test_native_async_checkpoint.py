@@ -12,6 +12,15 @@ from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
 from natlang_neuralese.train.trajectory_state import immutable_cpu_snapshot
 
 
+@pytest.fixture(autouse=True)
+def cpu_checkpoint_device_state(monkeypatch):
+    # These states/optimizers are CPU fixtures. RNG capture can initialize CUDA
+    # on a GPU workstation without a measured allocator peak; that must not
+    # silently switch writer lifecycle tests to synchronous fallback. Tests of
+    # device headroom explicitly override these observations below.
+    monkeypatch.setattr(torch.cuda, 'is_initialized', lambda: False)
+
+
 def _full_state(model, optimizer, step, exposure):
     return {'step':step, 'model':model.state_dict(), 'training':{
         'optimizer':optimizer.state_dict(), 'rng':{'python':random.getstate(),
