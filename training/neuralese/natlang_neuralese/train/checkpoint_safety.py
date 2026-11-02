@@ -791,3 +791,25 @@ def save_with_space_retry(save, *, retry_seconds=15, sleep=time.sleep):
             attempt += 1
             print(f'Checkpoint save is waiting for disk space (attempt {attempt}): {error}', flush=True)
             sleep(retry_seconds)
+
+
+def reserve_future_with_space_retry(reserve, *, stop_requested, retry_seconds=15, sleep=time.sleep):
+    """Retry only a future reservation; stop at a caller-proven durable boundary."""
+    import errno
+    if not math.isfinite(retry_seconds) or retry_seconds <= 0:
+        raise ValueError('checkpoint retry interval must be positive and finite')
+    attempt=0
+    while True:
+        if stop_requested():return False
+        try:
+            reserve()
+            return True
+        except (CheckpointSpaceUnavailable,OSError) as error:
+            if isinstance(error,OSError) and error.errno!=errno.ENOSPC:raise
+            attempt+=1
+            print(f'Future checkpoint reservation is waiting for disk space (attempt {attempt}): {error}',flush=True)
+            remaining=retry_seconds
+            while remaining>0:
+                if stop_requested():return False
+                interval=min(1.,remaining)
+                sleep(interval);remaining-=interval

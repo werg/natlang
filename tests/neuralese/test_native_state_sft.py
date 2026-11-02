@@ -1678,7 +1678,7 @@ def test_held_failure_preserves_completed_optimizer_rng_and_exposure_for_exact_r
         equal(actual[key], expected[key])
 
 
-@pytest.mark.parametrize('refresh',['checkpoint','relative','relative-interior','signal','stop','complete','complete-relative'])
+@pytest.mark.parametrize('refresh',['checkpoint','relative','relative-interior','signal','stop','complete','complete-relative','reservation-signal'])
 def test_refresh_only_boundary_does_not_force_task_window(tmp_path,monkeypatch,refresh):
     import json
     import torch
@@ -1711,6 +1711,18 @@ def test_refresh_only_boundary_does_not_force_task_window(tmp_path,monkeypatch,r
             argv[-1]='2'
         argv+=['--task-eval-every','1']
         monkeypatch.setattr(trainer,'_evaluate_cadence',lambda *a,**k: pytest.fail('held evaluation started at automatic refresh'))
+    elif refresh=='reservation-signal':
+        import os, signal
+        from natlang_neuralese.train.checkpoint_safety import PersistentCheckpointReservation, CheckpointSpaceUnavailable
+        acquire=PersistentCheckpointReservation.acquire
+        attempts=[]
+        def unavailable_on_next(self,bound):
+            attempts.append(bound)
+            if len(attempts)==2:
+                os.kill(os.getpid(),signal.SIGUSR2)
+                raise CheckpointSpaceUnavailable('future reservation is full')
+            return acquire(self,bound)
+        monkeypatch.setattr(PersistentCheckpointReservation,'acquire',unavailable_on_next)
     elif refresh=='complete-relative':argv+=['--refresh-after-updates','2']
     elif refresh in('signal','stop'):
         import copy
@@ -1746,6 +1758,9 @@ def test_refresh_only_boundary_does_not_force_task_window(tmp_path,monkeypatch,r
             certificate=json.loads((out/'native-runtime-certificate.json').read_text())
             assert certificate['deferred'] and not certificate['passed']
             assert certificate['reason']=='semantic refresh; qualification deferred until resume'
+        if refresh=='reservation-signal':
+            assert len(attempts)==2
+            assert report['continuation_boundary']['requested_signals'][0]['signal']=='SIGUSR2'
         if refresh in('signal','stop'):
             if refresh=='signal':assert report['continuation_boundary']['requested_signals'][0]['signal']=='SIGUSR2'
             else:

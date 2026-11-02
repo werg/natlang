@@ -397,3 +397,22 @@ def test_committed_state_save_waits_for_space_without_replaying_update():
         save_with_space_retry(lambda: (_ for _ in ()).throw(CheckpointReserveError('unowned')), sleep=waits.append)
     with pytest.raises(OSError):
         save_with_space_retry(lambda: (_ for _ in ()).throw(OSError(errno.EIO, 'io')), sleep=waits.append)
+
+
+def test_future_reservation_can_stop_but_dirty_checkpoint_save_keeps_retrying():
+    from natlang_neuralese.train.checkpoint_safety import (CheckpointSpaceUnavailable,
+        reserve_future_with_space_retry, save_with_space_retry)
+    stopped=[]; attempts=[]
+    def reserve():
+        attempts.append(1)
+        raise CheckpointSpaceUnavailable('no room')
+    def wait(_):stopped.append(True)
+    assert reserve_future_with_space_retry(reserve,stop_requested=lambda:bool(stopped),sleep=wait) is False
+    assert attempts==[1]
+    writes=[]
+    def write():
+        writes.append(1)
+        if len(writes)==1:raise CheckpointSpaceUnavailable('no room')
+        return 'durable'
+    assert save_with_space_retry(write,retry_seconds=.1,sleep=lambda _:None)=='durable'
+    assert len(writes)==2

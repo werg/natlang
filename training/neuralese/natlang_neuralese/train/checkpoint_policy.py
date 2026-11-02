@@ -143,10 +143,10 @@ class CheckpointPolicy:
         if expected and shutil.disk_usage(self.out).free < self.free_factor * expected:
             raise OSError(errno.ENOSPC, 'insufficient space for atomic checkpoint replacement; previous file preserved', str(target))
 
-    def reserve_next(self, state, optimizer):
+    def reserve_next(self, state, optimizer, *, stop_requested=None):
         """Secure the next rolling checkpoint before advancing the optimizer."""
         from .checkpoint_safety import (PersistentCheckpointReservation, checkpoint_size_upper_bound,
-                                        optimizer_state_size_upper_bound, save_with_space_retry)
+                                        optimizer_state_size_upper_bound, save_with_space_retry, reserve_future_with_space_retry)
         self.check_async()
         if self._persistent_reservation is None:
             # Async checkpoints alternate reservation inodes. If the previous
@@ -162,9 +162,14 @@ class CheckpointPolicy:
         lazy = optimizer_state_size_upper_bound(optimizer, lazy=True)
         current = optimizer_state_size_upper_bound(optimizer, lazy=False)
         bound = checkpoint_size_upper_bound(state) + math.ceil(max(0, lazy-current) * 1.2)
-        save_with_space_retry(lambda: self._persistent_reservation.acquire(bound))
+        acquire=lambda: self._persistent_reservation.acquire(bound)
+        if stop_requested is None:
+            save_with_space_retry(acquire)
+        elif not reserve_future_with_space_retry(acquire,stop_requested=stop_requested):
+            return False
         if not self.async_pending:
             self._reservation_roles(None, self._persistent_reservation)
+        return True
 
     def _reservation_roles(self, writer, next_slot):
         def identity(reservation):

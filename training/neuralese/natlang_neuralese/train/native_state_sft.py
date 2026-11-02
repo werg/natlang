@@ -1234,7 +1234,8 @@ def _restore_unstarted_update(*, optimizer, previous_cursor, rng_state, device, 
 
 def _save(policy, model, optimizer, *, config, identity, step, epoch, cursor, source_receipts,
           source_hash, source_row_bindings, held_row_bindings, exposure_counts, global_step, rng, metrics,
-          architecture, options, fp8_state=None, sft_progress=None, async_allowed=False, reserve_only=False):
+          architecture, options, fp8_state=None, sft_progress=None, async_allowed=False, reserve_only=False,
+          reserve_stop_requested=None):
     metrics['checkpoint_selection'] = {'continuation':'newest-full-state',
         'raw_ce_best_export':False,
         'quality_policy':'supervisor-task-and-declared-target-evidence'}
@@ -1265,8 +1266,9 @@ def _save(policy, model, optimizer, *, config, identity, step, epoch, cursor, so
         sft_progress.clear()
         sft_progress.update(state['training']['sft_progress'])
     if reserve_only:
-        policy.reserve_next(state, optimizer)
-        return
+        if reserve_stop_requested is None:
+            return policy.reserve_next(state, optimizer)
+        return policy.reserve_next(state, optimizer, stop_requested=reserve_stop_requested)
     # Neither static CE nor a changing policy/privileged loss nominates a
     # behavioral best. Those aliases also pin and export redundant full states.
     metric = None
@@ -4040,14 +4042,20 @@ def _main(argv=None, *, requested_refresh):
                 break
             # Reserve the exact future checkpoint inode before any optimizer
             # work; after each commit this reacquires blocks before proceeding.
-            _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
+            reserved = _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
                 global_step=global_step, epoch=epoch, cursor=cursor, source_receipts=source_receipts,
                 source_hash=source_hash, source_row_bindings=source_row_bindings,
                 held_row_bindings=held_row_bindings, exposure_counts=exposure_counts,
                 rng=capture_training_rng_state(args.device), metrics=metrics,
                 architecture=config['architecture'], options={**checkpoint_options, '_source_row_order':source_order},
                 fp8_state=backend.extra_state() if backend is not None else None,
-                sft_progress=carried_progress, reserve_only=True)
+                sft_progress=carried_progress, reserve_only=True,
+                reserve_stop_requested=lambda: (policy.signaled or requested_refresh.requested)
+                    and last_saved_step==step and not metadata_dirty and not policy.async_pending
+                    and (policy.last_committed_step==global_step or step==resumed_step))
+            if reserved is False or policy.signaled or requested_refresh.requested:
+                refresh_boundary = refresh_boundary or requested_refresh.requested
+                break
             update_started = time.monotonic()
             fetch_rng = capture_training_rng_state(args.device)
             previous_cursor = cursor
