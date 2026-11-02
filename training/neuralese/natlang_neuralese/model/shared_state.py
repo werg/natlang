@@ -203,7 +203,47 @@ def _convolution_index(plan, width, rows, device):
     return torch.tensor(predecessor, device=device)
 
 
+_BOUNDED_CONVOLUTION_MIN_ROWS = 16384
+
+
 def _convolve(layer, gated, c, plan, rows, *, index=None, noise=None):
+    from ..common.native_higher_order import active_reference_arithmetic
+    if (torch.is_grad_enabled() and gated.dtype in (torch.float64, torch.float32, torch.float16, torch.bfloat16)
+            and c.shape[1] >= _BOUNDED_CONVOLUTION_MIN_ROWS
+            and active_reference_arithmetic() is None):
+        complete = isinstance(rows, range) and rows == range(plan.token_count)
+        if not complete:
+            rows = tuple(rows)
+            if (any(type(row) is not int or not 0 <= row < plan.token_count for row in rows)
+                    or any(a >= b for a, b in zip(rows, rows[1:]))):
+                raise ValueError('convolution rows must be unique physical rows in graph order')
+        width = layer.conv.conv.weight.shape[-1]
+        if index is None:
+            index = _convolution_index(plan, width, rows, gated.device)
+        stop = None
+        if isinstance(index, tuple):
+            index, stop = index
+        elif plan.slot_stops:
+            stop = _convolution_stops(plan, width, rows, gated.device)
+        if noise is not None and not complete:
+            raise ValueError('the import channel applies to the complete graph convolution')
+        if complete:
+            lengths = [len(node.token_ids) for node in plan.invocations if node.token_ids]
+        else:
+            lengths = []
+            previous = None
+            for row in rows:
+                invocation = plan.node_ids[row]
+                if invocation != previous:
+                    lengths.append(0)
+                    previous = invocation
+                lengths[-1] += 1
+        from .bounded_finite_convolution import bounded_finite_convolution
+        return bounded_finite_convolution(layer, gated, c, plan, rows, index, stop, lengths, noise)
+    return _convolve_eager(layer, gated, c, plan, rows, index=index, noise=noise)
+
+
+def _convolve_eager(layer, gated, c, plan, rows, *, index=None, noise=None):
     complete=isinstance(rows,range) and rows==range(plan.token_count)
     if not complete:rows=tuple(rows)
     if not complete and (any(type(row) is not int or not 0<=row<plan.token_count for row in rows) or any(a>=b for a,b in zip(rows,rows[1:]))):
