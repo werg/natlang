@@ -1,3 +1,38 @@
+## Historical JOLT diagnosis and default source-order correction, 2026-11-02 23:07 CET
+
+- Actual train-world review `ops/jolt72-objective-order-review-1102.json` binds
+  original source/objective and all five measured per-update objective summaries.
+  All20 attempts (16 student,4 teacher) solved their four tasks. Quality spread0;
+  efficiency spread4. Actual student advantages are small centered cost differences,
+  not zero (the rewards sidecar's advantage reports quality-only statistics).
+  Student KL scalar contributions were0.022–0.058 versus outcome magnitudes
+  around0.000007–0.000028; final teacher-only update KL0.0801, outcome0.
+  Scalar loss balance does not establish gradient-norm balance or causality.
+- Original source four-episode windows: four groups each containing one task's
+  four student attempts, then one group containing all four teachers. New default
+  mixes proportional role mass and least-recent explicit task identities before
+  sealing; historical replay proposal makes every four-episode source window
+  contain all four tasks, with teacher counts1,1,0,1,1. All original graph objects,
+  actions, custody and objective values stay unchanged. Earned resume prefixes
+  remain exact; actual sealed-order receipt is in rl-data-receipt.json and the
+  separate rl-episode-order.json. Actual packed grouping remains separately
+  measured, not inferred from this source-order receipt.
+- Targeted35 replay/review/order/continuation tests passed; six final order and
+  resume-prefix tests passed;19 actual native-stage/full-update/partial-resume
+  tests passed. Frozen R35 is an SFT continuation and does not yet contain this
+  RL-only improvement; the next actual RL runtime must include it. No RL is
+  currently running and no protected evaluation answer entered these changes.
+- R35 exact archive completed; actual checkpoint-preserving stop remains on
+  R34's third of six oversized cases. The0.1GiB watcher is active and will request
+  preparation after actual termination. The storage observer has been restored
+  and ran successfully; its original delayed request was live through the wrapper
+  service, not an orphaned waiter. Preserve that distinction in future checks.
+- Remaining work before the next RL round: carry authenticated historical task
+  selection observations across the SFT/controller handoff so four easy solved
+  worlds are not treated as unobserved again; collect fresh on-policy attempts
+  from the newly trained selected checkpoint. Do not replay old attempts as
+  current policy or infer a regression cause from the aggregate KL alone.
+
 ## Corrected R35 queued and full-check disposition, 2026-11-02 22:58 CET
 
 - Main d01c1780b pushed: persistent-lock ownership correction and exact head128/

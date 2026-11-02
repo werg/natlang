@@ -139,6 +139,10 @@ def test_native_stage_real_shared_parent_update_and_rejects_stale_actor_replay(t
         assert main(argv) == 0
         return
     assert main(argv) == 0
+    admission=json.loads((tmp_path/'learner/rl-data-receipt.json').read_text())
+    order=json.loads((tmp_path/'learner/rl-episode-order.json').read_text())
+    assert admission['episode_order']==order
+    assert order['episodes']==admission['episodes']
     slot = tmp_path/'learner/checkpoint.pt'
     first_report=(tmp_path/'learner/report.json').read_bytes()
     first_receipt=(tmp_path/'learner/native-training-receipt.json').read_bytes()

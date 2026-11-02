@@ -427,6 +427,8 @@ def _admit_and_train(args,trainer,*,operation_request=None):
     deferred = _defer_long_graphs(args, graphs, objective, share='--no-share-causal-prefixes' not in trainer)
     if not graphs:
         raise ValueError('every admitted native policy episode exceeds --max-graph-forward-tokens')
+    from .episode_order import mix_episodes, order_receipt
+    mix_episodes(graphs,objective)
     from .policy_source_continuation import arrange_and_seal, finish_seal
     transition = arrange_and_seal(args.out, graphs, objective) if args.coefficient_policy is None else None
     if transition is not None:
@@ -447,7 +449,10 @@ def _admit_and_train(args,trainer,*,operation_request=None):
         write_bytes_durable(graph_path, ''.join(json.dumps(row) + '\n' for row in graphs).encode())
         write_json_durable(objective_path, objective)
         transition_path=None
+    episode_order=order_receipt(graphs,objective)
+    write_json_durable(args.out/'rl-episode-order.json',episode_order)
     write_json_durable(args.out/'rl-data-receipt.json', {
+        'episode_order':episode_order,
         'schema': 'natlang.native-rl-admission/1',
         **({'base_native_identity':objective['base_native_identity'],'behavior_policy_sha256':objective['behavior_policy_sha256'],
                'coefficient_policy':{'path':str(args.coefficient_policy.resolve(strict=True)),

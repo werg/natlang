@@ -1,5 +1,21 @@
 # Main goal: keep moving forward (owner, 2026-10-11)
 
+## Policy episode order preserves task and role diversity (engineering, 2026-11-02)
+
+Fresh native policy sources mix complete episodes by explicit task identity and
+proportional student/teacher role mass. Do not group every attempt of one task
+into consecutive updates and leave all privileged teachers as the final update.
+Keep every graph, action, objective term and source custody unchanged. A resumed
+policy source retains its exact earned prefix through arrange_and_seal; only
+newly materialized work can be reordered. Record actual sealed order separately
+from actual packed/update geometry, and report unknown coverage honestly.
+
+The diagnostic five-update72 batch had20/20 correct attempts on four training
+worlds, zero task-outcome spread, small bounded efficiency advantages and mostly
+privileged-KL scalar loss. This is not evidence of task-outcome learning or an
+established cause of the protected12/16-to11/16 change. Preserve its traces and
+use actual broader task behavior when selecting the parent and next curriculum.
+
 ## Actor publication shares the live checkpoint reservation lock (engineering, 2026-11-02)
 
 Post-commit actor-view pinning must reuse the exact live target lock owned by
