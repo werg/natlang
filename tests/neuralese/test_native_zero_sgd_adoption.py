@@ -88,7 +88,8 @@ def test_publication_rederives_checkpoint_and_refuses_forged_full_state(tmp_path
     p=tmp_path/'parent.pt';torch.save(parent,p)
     prior=tmp_path/'old-recipe.json';prior.write_text('{}')
     successor=tmp_path/'new-recipe.json';successor.write_text('{}')
-    monkeypatch.setattr(adoption.shutil,'disk_usage',lambda _:SimpleNamespace(free=100*1024**3))
+    from natlang_neuralese.train import checkpoint_safety
+    monkeypatch.setattr(checkpoint_safety.shutil,'disk_usage',lambda _:SimpleNamespace(free=100*1024**3))
     output=tmp_path/'staged';proof=adoption.prepare(ref(p),prior_recipe=prior,successor_recipe=successor,
         stage_id='native_full_sft',output=output)
     state=tmp_path/'state.json';state.write_text(json.dumps({'checkpoint':str(p),'phase':'awaiting_semantic_refresh','round':4}))
@@ -336,3 +337,32 @@ def test_mixed_static_correction_quality_deferral_and_append_preserves_earned_st
     monkeypatch.setattr(adoption,'_stage_parameters',lambda *args:{'epochs':1.5,'communication_min_visits':6})
     with pytest.raises(ValueError,match='quota settings'):
         adoption.admitted_checkpoint(parent,prior_recipe='old-recipe',successor_recipe='new-recipe',stage_id='native_full_sft')
+
+
+def test_adoption_reserves_checkpoint_and_preserves_failed_serialization(tmp_path,monkeypatch):
+    from natlang_neuralese.train import checkpoint_safety, trajectory_state
+    parent,_,ref=fixture(tmp_path,monkeypatch,carried=True)
+    parent_path=tmp_path/'parent.pt';torch.save(parent,parent_path)
+    prior=tmp_path/'prior-recipe.json';prior.write_text('{}')
+    successor=tmp_path/'next-recipe.json';successor.write_text('{}')
+    monkeypatch.setattr(checkpoint_safety.shutil,'disk_usage',lambda _:SimpleNamespace(free=40*1024**3))
+    low=tmp_path/'low'
+    with pytest.raises(checkpoint_safety.CheckpointSpaceUnavailable):
+        adoption.prepare(ref(parent_path),prior_recipe=prior,successor_recipe=successor,
+                         stage_id='native_full_sft',output=low)
+    assert not (low/'checkpoint.pt').exists()
+    monkeypatch.setattr(checkpoint_safety.shutil,'disk_usage',lambda _:SimpleNamespace(free=100*1024**3))
+    def fail_save(state, stream):
+        assert stream.stream.fileno() >= 0
+        stream.write(b'partial checkpoint')
+        raise RuntimeError('serialization failed')
+    monkeypatch.setattr(trajectory_state.torch,'save',fail_save)
+    failed=tmp_path/'failed'
+    with pytest.raises(RuntimeError,match='serialization failed'):
+        adoption.prepare(ref(parent_path),prior_recipe=prior,successor_recipe=successor,
+                         stage_id='native_full_sft',output=failed)
+    pending=failed/'checkpoint.pt.reserved-pending'
+    assert pending.read_bytes()[:18]==b'partial checkpoint'
+    assert pending.stat().st_blocks*512 >= pending.stat().st_size
+    assert (failed/'checkpoint.pt.reservation.json').is_file()
+    assert not (failed/'checkpoint.pt').exists()

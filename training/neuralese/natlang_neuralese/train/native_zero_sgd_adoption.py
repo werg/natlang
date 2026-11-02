@@ -7,7 +7,6 @@ and compares every value in the resulting full checkpoint to the saved child.
 from __future__ import annotations
 import json
 import os
-import shutil
 from pathlib import Path
 
 SCHEMA = 'natlang.native-zero-sgd-source-adoption/1'
@@ -208,14 +207,20 @@ def prepare(parent_ref, *, prior_recipe, successor_recipe, stage_id, output):
     parent_path=_verify_historical_file_ref(parent_ref)
     prior_ref=_strong_binding(prior_recipe); successor_ref=_strong_binding(successor_recipe)
     output=Path(output).resolve(); output.mkdir(parents=True,exist_ok=False)
-    if shutil.disk_usage(output).free < parent_path.stat().st_size + 40*1024**3:
-        raise ValueError('full checkpoint adoption would breach the 40 GiB floor')
     parent=torch.load(parent_path,map_location='cpu',weights_only=False,mmap=True)
     child,_=admitted_checkpoint(parent,prior_recipe=prior_recipe,successor_recipe=successor_recipe,stage_id=stage_id)
-    pending=output/'checkpoint.pt.pending'; final=output/'checkpoint.pt'
-    with pending.open('xb') as stream:
-        torch.save(child,stream);stream.flush();os.fsync(stream.fileno())
-    os.replace(pending,final)
+    from .checkpoint_safety import PersistentCheckpointReservation, checkpoint_size_upper_bound
+    from .trajectory_state import _atomic_checkpoint
+    final=output/'checkpoint.pt'
+    bound=max(parent_path.stat().st_size,checkpoint_size_upper_bound(child))
+    reservation=PersistentCheckpointReservation(final,minimum_free_bytes=40*1024**3)
+    try:
+        reservation.acquire(bound)
+        _atomic_checkpoint(final,child,write_bound_bytes=bound,reservation=reservation)
+    finally:
+        # A failed serialization retains its owned pending inode and receipt for
+        # diagnosis; never remove partial bytes or an existing recovery state.
+        reservation.close()
     os.chmod(final,0o444)
     directory=os.open(output,os.O_DIRECTORY)
     try:os.fsync(directory)
