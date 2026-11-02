@@ -279,3 +279,34 @@ def test_invalid_transfer_allocation_is_rejected_before_creating_store(tmp_path,
     with pytest.raises(ValueError,match='transfer chunk'):
         CheckpointFileStore(tmp_path,transfer_chunk_bytes=value)
     assert not list(tmp_path.iterdir())
+
+
+def test_file_scratch_refuses_to_spend_recovery_floor_before_mapping(tmp_path,monkeypatch):
+    from natlang_neuralese.train import checkpoint_safety as safety
+    monkeypatch.setenv('NATLANG_CHECKPOINT_MIN_FREE_BYTES',str(40*1024**3))
+    store=CheckpointFileStore(tmp_path)
+    assert store.minimum_free_bytes==40*1024**3
+    from types import SimpleNamespace
+    monkeypatch.setattr(safety.shutil,'disk_usage',lambda p:SimpleNamespace(free=store.minimum_free_bytes+31))
+    monkeypatch.setattr(torch,'from_file',lambda *a,**k:pytest.fail('must reject before mapping or writing'))
+    with pytest.raises(safety.CheckpointSpaceUnavailable):store.pack(torch.ones(8))
+    assert not list(store.path.glob('tensor-*'))
+    assert store.snapshot()['live_bytes']==0
+
+
+def test_physical_scratch_reservation_failure_removes_partial_file(tmp_path,monkeypatch):
+    import errno
+    import natlang_neuralese.common.checkpoint_file_storage as storage
+    store=CheckpointFileStore(tmp_path)
+    def fail(*args):raise OSError(errno.ENOSPC,'physical reservation exhausted')
+    monkeypatch.setattr(storage.os,'posix_fallocate',fail)
+    monkeypatch.setattr(torch,'from_file',lambda *a,**k:pytest.fail('reserve before mapping'))
+    with pytest.raises(OSError,match='physical reservation'):store.pack(torch.ones(8))
+    assert not list(store.path.glob('tensor-*'))
+    assert store.snapshot()['live_files']==0
+
+
+def test_scratch_honors_stronger_checkpoint_floor(tmp_path,monkeypatch):
+    monkeypatch.setenv('NATLANG_CHECKPOINT_MIN_FREE_BYTES',str(50*1024**3))
+    store=CheckpointFileStore(tmp_path)
+    assert store.minimum_free_bytes==50*1024**3

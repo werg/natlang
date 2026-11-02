@@ -70,6 +70,10 @@ class CheckpointFileStore:
         parent = Path(directory).expanduser().resolve()
         parent.mkdir(parents=True, exist_ok=True)
         self.directory = str(parent)
+        from ..train.checkpoint_safety import checkpoint_minimum_free_bytes
+        # Scratch must not consume the recovery writer's disk floor. Honor
+        # any stronger configured floor and share its per-filesystem admission.
+        self.minimum_free_bytes = checkpoint_minimum_free_bytes(parent/'tensor.bin')
         self.lock = threading.Lock()
         self.transfer_lock = threading.Lock()
         self.pin_memory = pin_memory
@@ -162,7 +166,13 @@ class CheckpointFileStore:
         fd, name = tempfile.mkstemp(prefix='tensor-', suffix='.bin', dir=self.path)
         path = Path(name)
         try:
-            os.ftruncate(fd, size)
+            from ..train.checkpoint_safety import CheckpointWriteAdmission
+            with CheckpointWriteAdmission(path, write_bound_bytes=size, transfer_bytes=0,
+                                          minimum_free_bytes=self.minimum_free_bytes):
+                # Physical reservation precedes mmap/copy. Concurrent checkpoint
+                # and scratch writers see these allocated blocks under the same
+                # admission lock; sparse truncate alone cannot protect the floor.
+                os.posix_fallocate(fd, 0, size)
             mapped = torch.from_file(name, shared=True, size=span, dtype=tensor.dtype)
             # Copy logical values directly into file-backed host memory: no
             # accumulated anonymous CPU tensor or serialization storage alias.
@@ -192,6 +202,6 @@ class CheckpointFileStore:
 
     def snapshot(self):
         with self.lock:
-            return {'storage': 'file', 'directory': self.directory,
+            return {'storage': 'file', 'minimum_free_bytes': self.minimum_free_bytes, 'directory': self.directory,
                     'pin_memory': self.pin_memory,
                     'transfer_chunk_bytes': self.transfer_chunk_bytes, **self.counters}

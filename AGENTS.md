@@ -1,5 +1,17 @@
 # Main goal: keep moving forward (owner, 2026-10-11)
 
+## Checkpoint input scratch obeys recovery storage admission (engineering, 2026-11-02)
+
+File-backed activation-checkpoint inputs use the same per-filesystem admission
+lock and configured free-space floor as full-state checkpoint writers. Physically
+reserve each backing file before mmap/copy; a sparse truncate does not protect
+space from concurrent writers. On the DGX continuation bind the40GiB NVMe floor
+explicitly. Keep bounded pinned transfers, exact stride/value/gradient/RNG
+semantics, graph-owned file lifetime and abandoned-store cleanup. The measured
+whole-graph capacity gate must include the actual file-storage path and release
+its scratch before relying on checkpoint-write headroom. Insufficient storage
+fails admission without spending the recovery floor or deleting recovery state.
+
 ## Bound FFN saved activations with full execution custody (engineering, 2026-11-02)
 
 Token-local FFN chunking alone bounds temporaries, not saved expanded activations
