@@ -1,3 +1,66 @@
+## Live supervision update, 2026-11-02 04:23 CET
+
+- Previous goal turn was progress: freshly verified 23 inference escalation and
+  6 reward tests, documented automatic no-progress handoff, and committed57243c05d.
+  This turn corrected actual launch settings, qualified the next full SFT source
+  continuation, reclaimed storage, and started a bounded backend comparison.
+- Actual production owner is lfm3-native67-sourcecorrected-jolt-1102.service,
+  MainPID3316354, four full-prompt native workers on8200. It continues collection,
+  not SGD: state still round0/trained_rounds0. Current full checkpoint SHA
+  21b4ac5ad34b5cf5ddbd280a6002537c672f81b727fc014765d1be94d790f41a
+  is the fully published zero-SGD source correction of selected67; weights,
+  optimizer/RNG and exposure remain unchanged. The earlier SGLang67 service and
+  its captures are diagnostic. Initial native contract2/4 and stream4/4 outcomes
+  are training rollouts, not held capability lift. Corrected68-child69 finished
+  Pop focused evaluation2/4 and remains diagnostic; selected67 remains preferable.
+- Actual next learner is frozen600352e0b and checks all selected-token logps in
+  a complete same-actor episode before backward/SGD, with diagnostic receipt.
+  Do not assume CUDA replay parity passed until that receipt exists. Its resource
+  wrapper stops this supervisor's numerical qualifiers before adopting96GiB.
+- The actual seed parameter map still inherited interface LR.01 despite a.0001
+  recipe. Corrected it to.0001 plus checkpoint group2 and FFN chunk4096; actual
+  RL parameters were already correct. Evidence ops/onpolicy67-native-core-effects-1102/
+  seed-settings-correction-1102.json. No update or capability credit.
+- Direct corrected353731→401685 recipe/CE continuation is prepared in
+  /mnt/external/natlang-lfm3-data-20261028/acquired-401685-direct-corrected-v2-1102.
+  Receipt2474a5b2d96dd9e539ba7d9f957a6770b2e6c1d48b8ae6277cd65c56bf2a9b3b.
+  It preserves actual earned prefix, held roles,472 render and7 context obligations;
+  no unadopted intermediate recipe earns history. The34152-row OpenResearcher
+  increment is upstream-positive general web research, not locally oracle-verified
+  Natlang/coding. Prepared source is not training. Effective one-pass CE shares:
+  native29.39%, general8.16%, coding14.41%, Natlang48.04%; native scale cap8 binds.
+- Next full SFT executable controls are ops/next401685-sft-1102/config.json.
+  Resident plan initialization and actual-parent source/launch qualification passed:
+  actual-parent-launch-qualification.json. The guard authenticated retirement of
+  the already-committed source correction while retaining the actual corrected353731
+  append predecessor. Re-run ops/prepare-next401685-sft-1102.py against the actual
+  selected head after current RL before launch; preserve complete joint obligations.
+- Real checkpoint68 relocation exposed two path/identity bugs: launch output must
+  use its recorded location, and historical proof output must retain that identity,
+  while actual endpoint bytes remain freshly checked. dd3480dc5/565d5c89d fix both.
+  Full recovery suite59 passed, followed by13 targeted cases after final correction.
+  Actual historical publication replay passed on third attempt; prior failures
+  restored original and remain archived. Qualified external alias freed15367458490
+  internal bytes. Evidence ops/earned68-qualified-relocation-1102.json. Internal
+  free81GiB, external70GiB. Diagnostic79 full was separately retired only after
+  verified actor view and metadata compaction; it is no longer resumable.
+- SGLang remains unqualified. Norm, convolution, FFN and attention-gate rounding
+  defects are fixed; newest forkd135d54d9f/main255b68321 uses actual shared native
+  projection for attention and convolution. The earlier marker probe used F.linear,
+  so its vendor-GEMM differences did not prove an actual native marker divergence.
+  Runtime-native-sglang-shared-projection-1102 is sealed. Active qualifier
+  qualify-native67-shared-projection-1102 uses8210/9210 and40GiB; comparison unit
+  compare-native67-shared-projection-1102 waits for readiness, records actual
+  states/probabilities, and stops the qualifier on completion/failure. Receipt
+  ops/native67-shared-projection-qualification-1102/live-comparison.json is pending.
+  This is diagnostic capacity; it must yield to real SGD. Native fast text writer
+  and whole-model backend parity still require qualification.
+- Private export-qualified64-closure-and67-private-v3-1102 is confirmed running.
+  201/202 unique objects verified; selected67 full upload is underway (seven1GiB
+  parts uploaded by04:22). Final full GET remains required. Neither acknowledgment
+  nor this partial upload establishes completed independent recovery. No cloud
+  GPU allocation, paid teacher generation, or entitlement poller was restarted.
+
 ## Live supervision update, 2026-11-02 02:30 CET
 
 - The previous goal turn made concrete progress: reward/escalation verification

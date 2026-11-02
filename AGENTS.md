@@ -1,5 +1,25 @@
 # Main goal: keep moving forward (owner, 2026-10-11)
 
+## Native policy arithmetic and source preparation (engineering, 2026-11-02)
+
+Actual native actors execute `shared_state.native_step`; CUDA BF16 projections
+use the shared invariant kernel. A surrogate `F.linear` probe does not establish
+native actor behavior. SGLang normalization, convolution, FFN and attention-gate
+rounding defects were found and repaired, with a shared-projection candidate
+prepared. Those fixes are not whole-model qualification: compare real states,
+sampled probabilities and complete graph replay before admitting backend rollouts.
+Do not relax numerical tolerances to make incompatible actors pass. New same-actor
+policy updates check every selected-token log probability in a complete episode
+before backward or SGD, retaining the actual checkpoint and diagnostic receipt.
+
+Prepared acquired-source appends do not constitute adoption, exposure or capability
+lift. The 34,152-row OpenResearcher delta is source-reported positive general web
+research, not locally oracle-verified Natlang/coding demonstrations. Preserve that
+identity and the explicit unresolved render/context obligations. Continue directly
+from the actual corrected earned source; unadopted intermediate recipes earn no
+history or stage credit. Reconcile launch parameters against actual stage settings:
+an improved recipe alone does not correct inherited seed parameters.
+
 ## One-time entitlement checks (owner request; operational correction, 2026-11-01)
 
 The four-account GPU-whitelist request was a one-time check. Do not restart the
