@@ -84,7 +84,14 @@ export function recordingServices<T extends Record<string, unknown>>(services: T
         if (key !== undefined && !results) onceResults.set(object, results = new Map());
         if (key !== undefined && results!.has(key)) {
           const earlier = results!.get(key);
-          emit({ phase: 'completed', service: label, method: property, result: 'the result of the earlier identical call (this effect happens once)', seq });
+          if (earlier && typeof (earlier as PromiseLike<unknown>).then === 'function')
+            return Promise.resolve(earlier).then(resolved => {
+              emit({ phase: 'completed', service: label, method: property, result: preview(resolved), seq,
+                exact: { result: resolved, async: true } });
+              return resolved;
+            }, error => { emit({ phase: 'failed', service: label, method: property, error: String(error?.message ?? error), seq }); throw error; });
+          emit({ phase: 'completed', service: label, method: property, result: preview(earlier), seq,
+            exact: { result: earlier, async: false } });
           return earlier;
         }
         try {

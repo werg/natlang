@@ -66,3 +66,19 @@ test('real nested calls record task-wide service request chronology and child cu
     assert.deepEqual(effects.map(effect=>effect.args[0]),['before','child','after']);
   } finally {store.close();rmSync(dir,{recursive:true,force:true});}
 });
+
+test('recorded repeated once-only service results remain exact across replay',async()=>{
+  const { mkdtempSync,rmSync }=await import('node:fs');const { tmpdir }=await import('node:os');
+  const { join }=await import('node:path');const { ONCE_EFFECTS }=await import('../dist/native/effects.js');
+  const { createNatlangRuntime,loadVirtualNatlang,CallStore }=await import('../dist/index.js');
+  const dir=mkdtempSync(join(tmpdir(),'natlang-graph-once-'));const store=CallStore.open(dir);let calls=0,turn=0;
+  try {
+    const service={ [ONCE_EFFECTS]:['lookup'], lookup:async()=>{calls++;return {value:'recorded'};} };
+    const model=async()=>({calls:[turn++===0?['eval',{code:"const a = await orders.lookup(); const b = await orders.lookup(); return a.value + b.value"}]:
+      ['return_result',{status:'success',value:'recordedrecorded'}]]});
+    const root=loadVirtualNatlang({'root.nl':'---\nargs: {}\nreturns: string\n---\nUse the service twice.\n'},'root.nl');
+    assert.equal(await createNatlangRuntime({model,calls:store,services:{orders:service}}).run(()=>root()),'recordedrecorded');
+    assert.equal(calls,1);const [summary]=store.calls();const record=store.call(summary.call_id);
+    assert.deepEqual(subtreeEffects(store,record).map(effect=>effect.result),[{value:'recorded'},{value:'recorded'}]);
+  } finally {store.close();rmSync(dir,{recursive:true,force:true});}
+});

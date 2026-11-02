@@ -65,7 +65,9 @@ export function subtreeEffects(store: ValueSource, record: CallRecord): Recorded
   if (!current) {
     if (records.length > 1 && effects.length > 0)
       throw new ReplayDivergence('historical cross-call effect chronology is unknown');
-    return effects.sort((a,b) => a.effect.order - b.effect.order).map(item => loadEffect(store,item.effect));
+    if (effects.length > 0)
+      throw new ReplayDivergence('historical cached-effect value custody is unknown');
+    return [];
   }
   const orders = new Set<number>();
   for (const {effect} of effects) {
