@@ -11,6 +11,8 @@ from natlang_neuralese.train.checkpoint_offload import file_sha256
 
 def seal(runtime, output, receipt, *, allow_external_file_links=False):
     runtime=Path(runtime).resolve(strict=True);output=Path(output).resolve();receipt=Path(receipt).resolve()
+    if not output.name.endswith('.tar'):
+        raise ValueError('runtime sealing writes an uncompressed .tar; compress and verify its stream separately')
     if output.exists() or receipt.exists():raise ValueError('runtime archive output already exists')
     output.parent.mkdir(parents=True,exist_ok=True);pending=output.with_name(output.name+'.pending')
     if pending.exists():raise ValueError('runtime archive has an existing pending file')
@@ -66,7 +68,7 @@ def seal(runtime, output, receipt, *, allow_external_file_links=False):
         digest=file_sha256(pending);os.replace(pending,output);fd=os.open(output.parent,os.O_DIRECTORY)
         try:os.fsync(fd)
         finally:os.close(fd)
-        result={'schema':'natlang.local-recovery-runtime-archive-receipt/1','source':str(runtime),
+        result={'schema':'natlang.local-recovery-runtime-archive-receipt/1','source':str(runtime),'format':'tar',
                 'archive':{'path':str(output),'sha256':digest,'bytes':output.stat().st_size},
                 'entries':len(entries),'all_members_independently_reread':True,
                 'builder':{'path':str(Path(__file__).resolve()),'sha256':file_sha256(Path(__file__))},

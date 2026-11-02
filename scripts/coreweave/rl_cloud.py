@@ -289,9 +289,18 @@ def cloud_config(run, name):
     spec = run['lineages'][name]
     template = json.loads(Path(spec['template']).read_text())
     old_out = template['out']
-    text = json.dumps(template)
-    runtimes = re.compile(re.escape(str(Path(run['template_runtime']).parent)) + r'/runtime-[0-9a-f]+')
-    text = runtimes.sub(str(Path(run['root']) / 'runtime'), text)
+    runtime = str(Path(run['template_runtime']))
+    cloud_runtime = str(Path(run['root']) / 'runtime')
+    runtime_path = re.compile(re.escape(runtime) + r'(?=$|[/:])')
+    def rebind(value):
+        if isinstance(value, str):
+            return runtime_path.sub(lambda _: cloud_runtime, value)
+        if isinstance(value, list):
+            return [rebind(item) for item in value]
+        if isinstance(value, dict):
+            return {key: rebind(item) for key, item in value.items()}
+        return value
+    text = json.dumps(rebind(template))
     text = text.replace(old_out + '/', str(lineage_dir(run, name)) + '/').replace(f'"{old_out}"', json.dumps(str(lineage_dir(run, name))))
     config = json.loads(text)
     config['out'] = str(lineage_dir(run, name))

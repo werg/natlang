@@ -25,3 +25,11 @@ def test_explicit_system_file_link_is_copied_and_bound(tmp_path):
     with tarfile.open(archive) as tar:
         assert tar.extractfile('runtime/link').read()==b'library'
         manifest=json.load(tar.extractfile('runtime-manifest.json'));assert manifest['entries'][0]['original_link']==str(outside)
+
+
+def test_tar_sealing_refuses_a_misleading_compressed_filename(tmp_path):
+    root=tmp_path/'runtime';root.mkdir();(root/'file').write_text('content')
+    with pytest.raises(ValueError,match='uncompressed .tar'):
+        seal(root,tmp_path/'archive.tar.zst',tmp_path/'receipt.json')
+    assert not (tmp_path/'archive.tar.zst').exists()
+    assert not (tmp_path/'receipt.json').exists()

@@ -1,3 +1,56 @@
+## GPU access restored; priority adoption repair, 2026-11-03 00:21 CET
+
+- Owner-requested one-time create test succeeded on all four accounts, cw1–cw4.
+  Each created one GPU sandbox; all four were independently observed completed
+  after immediate shutdown. No probe allocation remains. Exact receipt:
+  `ops/four-cw-accounts-once-1103-0014.json`. The obsolete fresh-init cloud run
+  remains held while its controls are replaced with the current qualified parent,
+  runtime, full evolving recipe and independently downloadable recovery.
+- Current local owner remains `lfm3-intact67-full-r36-1102.service`, latest actual
+  invocation c552d138066b4147b791ce93622c8e74, controller3563246, learner3563773,
+  started00:18:01. Source71/full67 remains the selected production parent. No
+  optimizer68 or capability improvement is claimed. Completed initial max-source
+  capacity is reused; source/index/packed checks are still progressing.
+- A bound focus prioritizes1024 native producer/consumer rows and1024 teacher
+  program rows. All401623 active graphs and full visit/native obligations remain.
+  Seven long static-log graphs cost268k–525k total graph positions each while
+  supervising only100–109 completion/annotation tokens. This is evidence for
+  scheduling useful behavior first, not deleting full graphs or claiming a
+  context-length violation. `ops/seven-effective-targets-1102.json` records the
+  effective targets; raw masks alone overstate their supervised token count.
+- Initial focus publication was rejected by the actual learner: independently
+  prepared packed geometry was omitted. The rejection is preserved, not bypassed.
+  Corrected request6d4580b8d027dd187ae0af364bf17593c1e32229c9e76a904634145e42775681
+  includes the exact existing unchanged-source sidecar. Publication receipt:
+  `ops/useful-joint-focus-1102/publication-v3-packed-sidecar-1103.json`.
+  Two unearned oversized-qualification attempts were canceled before any SGD;
+  same runtime/output restores the intact parent and reuses completed full-source
+  proof. Actual resident adoption and subsequent optimizer advancement remain
+  to be observed. `ops/r36-unearned-qualification-focus-cutover-v2-1103.json`.
+- Current graph payload closure verified:213 unique files,5108629120B. This
+  includes graph manifests/payloads/maps, not the entire cloud execution closure.
+  `ops/cloud-current-source-inventory-1103.json`. Runtime/base/controller,
+  protected custody and exact external admission dependencies still need staging.
+  Two earlier inventory attempts assumed the wrong receipt fields and failed
+  before any allocation; final inventory uses actual resolved stage inputs.
+- Cloud config rebinding now matches the exact declared runtime, including current
+  descriptive runtime names and colon-separated PYTHONPATH. It preserves other
+  diagnostic runtime paths. Archive sealing now refuses a compressed suffix for
+  its raw tar output and declares format explicitly. Targeted tests16 passed,
+  plus2 final path-list cases. Live R36 runtime is unchanged by these packaging fixes.
+- Pop baseline completed23:42:23: selected full67 scored12/16 under R34, same
+  aggregate as R19. Runtime34 evaluation3227.49seconds versus3224.71seconds on
+  R19 does not demonstrate serving speedup. Diagnostic five-update72 scored11/16
+  under R19; it remains excluded as a production parent. Protected results stay
+  outside training. Pop evaluator exited and removed its container.
+- R36 actual runtime/control closure exported independently23:45:11 with fresh
+  workstation GETs, including the608136658B training-only task packet. Capsule:
+  `private-recovery-20261101/runtime36-actual-continuation-capsule-1102.json`,
+  SHA309bde5f8d05d92ff44f09d21c972400b6a240bcba39109a8f9ebde4c64f9d7f.
+  Source closure/full training restore is still unqualified. The newer focus
+  controls require a supplement after verified adoption. R36 raw tar was named
+  correctly and separately zstd-compressed with verified decoded-stream SHA.
+
 ## Actual R36 restart and bounded cache maintenance, 2026-11-02 23:34 CET
 
 - Corrected runtime `runtime-native-complete-resume-v36-1102`, commit844024109,
