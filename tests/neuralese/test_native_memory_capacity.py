@@ -14,6 +14,23 @@ from test_shared_state import tiny
 from test_native_optimizer_checkpointing import examples,assert_exact
 
 
+def test_allocator_budget_failure_is_recorded_without_mutating_training_state(monkeypatch):
+    from natlang_neuralese.train import memory_policy
+    model=SharedStateModel(tiny('lfm'),(58,59,60,61),rank=4)
+    optimizer,_=make_native_optimizer(model,lr=3e-6,in_backward=True)
+    state=copy.deepcopy(optimizer.state_dict());weights=copy.deepcopy(model.state_dict())
+    rng=torch.get_rng_state().clone()
+    def exhausted(device):raise torch.cuda.OutOfMemoryError('ledger allowance exhausted')
+    monkeypatch.setattr(memory_policy,'enforce_ledger_cuda_limit',exhausted)
+    result=qualify_capacity(model,optimizer,examples()[:1],checkpoint_sha256='a'*64,
+        source_binding={'path':'actual-fixture','sha256':'b'*64})
+    assert result['passed'] is False and result['optimizer_updates']==0
+    assert result['cases'][0]['status']=='out_of_memory'
+    assert 'ledger allowance' in result['cases'][0]['error']
+    assert_exact(state,optimizer.state_dict());assert_exact(weights,model.state_dict())
+    assert torch.equal(rng,torch.get_rng_state())
+
+
 @pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('offload',[False,True])
 def test_actual_capacity_check_releases_gradients_and_preserves_full_state(family,offload):

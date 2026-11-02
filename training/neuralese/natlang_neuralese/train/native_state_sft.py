@@ -457,6 +457,8 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
         for group,rate in rates:group['lr']=rate*efficiency_scale
         from ..model.native_weight_carrier import ParameterCotangentScope, plain_training_arithmetic
         for index, (micro, share) in enumerate(zip(micro_batches, shares)):
+            from .memory_policy import enforce_ledger_cuda_limit
+            enforce_ledger_cuda_limit(next(model.parameters()).device)
             final = index == len(micro_batches) - 1
             if final and profiler is not None:
                 profiler_started=True
@@ -471,6 +473,7 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
             else:
                 scope = ParameterCotangentScope.for_model(model, mode='vjp')
             with scope as cotangents, precision_context, context:
+                enforce_ledger_cuda_limit(next(model.parameters()).device)
                 with (profiler.phase('native_forward_and_readout') if profiler_started else _nullcontext()), \
                      (backend.autocast() if backend is not None else _nullcontext()):
                     loss, details = packed_graph_loss(model, micro,
@@ -1852,6 +1855,8 @@ def main(argv=None):
 
 def _main(argv=None, *, requested_refresh):
     args = build_parser().parse_args(argv)
+    from .memory_policy import configure_native_compilation
+    configure_native_compilation()
     static_specs = validate_static_args(args)
     history_reasoning_transition = None
     if args.foundation_communication_batches is not None and args.foundation_communication_batches < 1:

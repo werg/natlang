@@ -118,6 +118,47 @@ def ledger_claim(unit: str | None = None):
             'discrete_cuda': discrete_cuda, 'source': source}
 
 
+def enforce_ledger_cuda_limit(device):
+    """Turn the current claim into a catchable allocator limit before a forward.
+
+    GB10 host and CUDA allocations share RAM. The environment's GPU-looking
+    number is the whole ledger claim there, so subtract actual host use and the
+    existing claim margin. Without this limit a capacity probe can kill the
+    entire owner before it can report its failed graph or restore its boundary.
+    """
+    import torch
+    device=torch.device(device)
+    if device.type!='cuda':return None
+    claim=ledger_claim()
+    if claim is None:return None
+    total=int(torch.cuda.get_device_properties(device).total_memory)
+    margin=0 if claim['discrete_cuda'] else ledger_claim_margin_bytes(claim['budget_bytes'])
+    limit=min(total,claim['budget_bytes']-claim['host_bytes']-margin)
+    allocated=int(torch.cuda.memory_allocated(device))
+    if limit<=0 or allocated>limit:
+        raise torch.cuda.OutOfMemoryError('current CUDA allocations exceed remaining ledger allowance: '
+            f'limit={limit}, allocated={allocated}, host={claim["host_bytes"]}, '
+            f'claim={claim["budget_bytes"]}, margin={margin}')
+    if int(torch.cuda.memory_reserved(device))>limit:
+        torch.cuda.empty_cache()
+    torch.cuda.set_per_process_memory_fraction(limit/total,device)
+    return {'claim_bytes':claim['budget_bytes'],'host_bytes':claim['host_bytes'],
+            'margin_bytes':margin,'allocator_limit_bytes':limit,'allocated_bytes':allocated,
+            'discrete_cuda':claim['discrete_cuda']}
+
+
+def configure_native_compilation():
+    """Bound default native compiler workers on the shared-memory workstation."""
+    import os
+    claim=ledger_claim()
+    if claim is None or claim['discrete_cuda']:return None
+    workers=int(os.environ.setdefault('TORCHINDUCTOR_COMPILE_THREADS','1'))
+    if workers<1:raise ValueError('native compilation needs a positive worker count')
+    import torch._inductor.config
+    torch._inductor.config.compile_threads=workers
+    return workers
+
+
 # An uncalibrated no-checkpoint forecast is raw geometry; it is trusted only with this much room to spare.
 UNCALIBRATED_NO_CHECKPOINT_FACTOR = 2.0
 

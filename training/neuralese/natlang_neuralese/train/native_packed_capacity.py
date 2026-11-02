@@ -358,9 +358,14 @@ def _capacity_memory_context(device):
                 'host_available_bytes':host_available}
     free,total=torch.cuda.mem_get_info(device)
     allocated=int(torch.cuda.memory_allocated(device));reserved=int(torch.cuda.memory_reserved(device))
+    from .memory_policy import ledger_claim,ledger_reusable_bytes
+    claim=ledger_claim()
+    available=(ledger_reusable_bytes(claim['budget_bytes'],claim['host_bytes'],reserved,allocated,
+               margin_bytes=0 if claim['discrete_cuda'] else None) if claim is not None else None)
     return {'device_type':'cuda','free_bytes_at_probe':int(free),'total_bytes':int(total),
             'allocated_bytes':allocated,'reserved_bytes':reserved,
-            'reusable_cache_bytes':max(0,reserved-allocated),'host_available_bytes':host_available}
+            'reusable_cache_bytes':max(0,reserved-allocated),'host_available_bytes':host_available,
+            **({'ledger_available_bytes':available} if available is not None else {})}
 
 
 def oversize_execution_identity(model, optimizer, *, args, backend, objective_binding):
@@ -437,6 +442,9 @@ def _incremental_headroom_covers(case, current_memory):
         if any(type(value) is not int or value<0 for value in (needed,free,reusable)):
             return False
         if free+reusable < needed+max(1<<30,(needed+3)//4):
+            return False
+        if (current_memory.get('ledger_available_bytes') is not None
+                and current_memory['ledger_available_bytes']<needed+max(1<<30,(needed+3)//4)):
             return False
     elif current_memory.get('device_type')=='cpu':
         needed=0

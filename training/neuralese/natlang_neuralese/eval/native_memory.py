@@ -161,10 +161,13 @@ def _host_memory():
         rows = dict(line.split(':',1) for line in Path('/proc/self/status').read_text().splitlines() if ':' in line)
         for key in ('VmRSS','VmPin','VmLck'):
             result[key+'_bytes'] = int(rows.get(key,'0').split()[0])*1024
-        stat = dict(line.split() for line in Path('/sys/fs/cgroup/memory.stat').read_text().splitlines())
+        cgroup=next(line.split('::',1)[1].strip() for line in Path('/proc/self/cgroup').read_text().splitlines()
+                    if line.startswith('0::'))
+        own=Path('/sys/fs/cgroup')/cgroup.lstrip('/')
+        stat = dict(line.split() for line in (own/'memory.stat').read_text().splitlines())
         result['cgroup_anon_bytes'] = int(stat['anon'])
-        result['cgroup_current_bytes'] = int(Path('/sys/fs/cgroup/memory.current').read_text())
-    except (OSError, ValueError, KeyError):
+        result['cgroup_current_bytes'] = int((own/'memory.current').read_text())
+    except (OSError, ValueError, KeyError, StopIteration):
         pass
     return result
 
@@ -275,6 +278,13 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
             phase='retained-gradient-allocation' if retained_gradients else 'forward'
             host=None
             try:
+                from ..train.memory_policy import enforce_ledger_cuda_limit
+                row['ledger_cuda_limit']=enforce_ledger_cuda_limit(device)
+                print(json.dumps({'kind':'native_capacity_case_geometry','index':case_index,
+                    'example_ids':row['example_ids'],'forward_tokens':row['forward_tokens'],
+                    'kv_slots':row['kv_slots'],'host_before':_host_memory(),
+                    'ledger_cuda_limit':row['ledger_cuda_limit'],
+                    'qat_point':None if precision is None else {'point':precision[1],'mix':float(precision[2])}}),flush=True)
                 if retained_gradients:
                     for _,parameter in named:
                         if parameter.requires_grad:parameter.grad=torch.zeros_like(parameter)
@@ -290,6 +300,9 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
                         cotangent_context = ParameterCotangentScope.for_model(model,mode='vjp')
                     qat_context = precision[0].context(precision[1],precision[2]) if precision is not None else contextlib.nullcontext()
                     with cotangent_context as cotangents, qat_context:
+                        # A newly compiled precision point may have started
+                        # host workers and allocated operand caches on entry.
+                        row['ledger_cuda_limit_after_precision']=enforce_ledger_cuda_limit(device)
                         with backend.autocast() if backend is not None else contextlib.nullcontext():
                             packing = ({'share_causal_prefixes':True}
                                 if getattr(model,'share_causal_prefixes',False) else {})

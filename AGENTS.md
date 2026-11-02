@@ -13,6 +13,17 @@ establish capability lift: the paired four-case development result was parent
 4/4 versus candidate 3/4. Preserve that disadvantage and its false-blocked trace
 in selection evidence; do not call it nonregression or train on protected traces.
 
+Inline precision training composes with the exact declared native FFN forward:
+consume its effective quantized operands and retain invariant projection
+arithmetic. Arbitrary instance forwards remain unsupported. Canonical projections
+must not acquire a training-only vendor FP4 GEMM. Install precision wrappers
+before packed capacity qualification; disabling precision is not the integration
+fix. Execution handoffs retain immutable controller snapshots so later head
+updates cannot invalidate the launch's historical source evidence. Within one
+nested admission operation, a complete fresh byte hash can be reused only while
+resolved path and device/inode/size/mtime/ctime remain unchanged; independent
+operations start fresh.
+
 Loss-mixture reports must account for remaining per-row visit quotas and actual
 earned credits. One-pass token shares substantially understated Native loss mass
 under seven-visit communication quotas. Use the prepared quota-aware 401,685-row

@@ -257,6 +257,9 @@ def test_capacity_envelope_uses_incremental_peak_and_current_reusable_headroom()
         'reusable_cache_bytes':3<<30,'total_bytes':128<<30,'host_available_bytes':6<<30})
     assert not _incremental_headroom_covers(case,{'device_type':'cuda','free_bytes_at_probe':2<<30,
         'reusable_cache_bytes':2<<30,'total_bytes':128<<30,'host_available_bytes':6<<30})
+    assert not _incremental_headroom_covers(case,{'device_type':'cuda','free_bytes_at_probe':20<<30,
+        'reusable_cache_bytes':3<<30,'total_bytes':128<<30,'host_available_bytes':60<<30,
+        'ledger_available_bytes':4<<30})
     assert _incremental_headroom_covers({'host_incremental_peak_bytes':2<<30},
         {'device_type':'cpu','host_available_bytes':5<<30})
     assert not _incremental_headroom_covers({'host_incremental_peak_bytes':2<<30},
