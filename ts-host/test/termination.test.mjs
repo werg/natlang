@@ -154,8 +154,13 @@ test('the loser of a race is stopped when its eval finishes, without failing the
 test('a failed or timed-out eval stops the calls it started', async () => {
   const thrown = await evalCase({ children, settleMs: 2500, code: 'const pending = nl<string>`Answer slowly.`(); throw new Error("boom");' });
   assert.match(thrown.error, /boom/); assert.ok(thrown.elapsedMs < 1800, `${thrown.elapsedMs} ms`); assert.equal(thrown.ticksAfter, 0);
-  const timedOut = await evalCase({ children, timeoutMs: 200, settleMs: 2500, code: 'return await nl<string>`Answer slowly.`();' });
-  assert.match(timedOut.error, /timed out after 200\s*ms/); assert.ok(timedOut.elapsedMs < 1800, `${timedOut.elapsedMs} ms`);
+  const timedOut = await evalCase({ children, timeoutMs: 200, settleMs: 2500,
+    code: 'counter.markEvalStart(); return await nl<string>`Answer slowly.`();' });
+  assert.match(timedOut.error, /timed out after 200\s*ms/);
+  // Time actual eval execution; cold program/type initialization precedes
+  // this deadline and can exceed it on a busy training workstation.
+  assert.equal(typeof timedOut.evalElapsedMs, 'number');
+  assert.ok(timedOut.evalElapsedMs < 1800, `${timedOut.evalElapsedMs} ms in eval (${timedOut.elapsedMs} ms including setup)`);
   assert.equal(timedOut.ticksAfter, 0);
 });
 

@@ -18,8 +18,8 @@ for (const [path, text] of Object.entries(spec.files ?? {})) {
   mkdirSync(dirname(join(root, path)), { recursive: true });
   writeFileSync(join(root, path), text);
 }
-let ticks = 0;
-const counter = { tick: () => { ticks++; return ticks; } };
+let ticks = 0, evalStarted;
+const counter = { tick: () => { ticks++; return ticks; }, markEvalStart: () => { evalStarted = Date.now(); } };
 /** Each call's first turn runs its eval; then it finishes, or fails with the eval's error. */
 const driver = async ({ messages }) => {
   const opening = String(messages[1].content);
@@ -34,12 +34,13 @@ const driver = async ({ messages }) => {
 /** A host stream: services and packages may hand eval code async iterables, which `for await` consumes. */
 const feed = { items: n => (async function* () { for (let i = 1; i <= n; i++) { await new Promise(r => setTimeout(r, 1)); yield i; } })() };
 const runtime = createNatlangRuntime({ model: driver, services: { counter, feed },
-  serviceDeclarations: { counter: 'export function tick(): number;', feed: 'export function items(n: number): AsyncIterable<number>;' } });
+  serviceDeclarations: { counter: 'export function tick(): number; export function markEvalStart(): void;', feed: 'export function items(n: number): AsyncIterable<number>;' } });
 const started = Date.now();
 let outcome;
 try { outcome = { ok: await runtime.run(() => loadNatlang(join(root, 'probe.nl'))()) }; }
 catch (error) { outcome = { error: String(error?.message ?? error) }; }
 const elapsedMs = Date.now() - started, ticksAtReturn = ticks;
+const evalElapsedMs = evalStarted === undefined ? null : Date.now() - evalStarted;
 await new Promise(resolve => setTimeout(resolve, spec.settleMs ?? 0));
-process.stdout.write(JSON.stringify({ ...outcome, ticksAtReturn, ticksAfter: ticks, elapsedMs }) + '\n');
+process.stdout.write(JSON.stringify({ ...outcome, ticksAtReturn, ticksAfter: ticks, elapsedMs, evalElapsedMs }) + '\n');
 process.exit(0);

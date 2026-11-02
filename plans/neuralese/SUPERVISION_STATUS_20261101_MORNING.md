@@ -1,3 +1,40 @@
+## Corrected R35 queued and full-check disposition, 2026-11-02 22:58 CET
+
+- Main d01c1780b pushed: persistent-lock ownership correction and exact head128/
+  hidden2048 norm tests. Targeted187 tests passed; final five sync/async CUDA,
+  reservation and lock-exclusion checks also passed. Quick required checks passed.
+- Frozen corrected runtime `runtime-native-owner-lock-v35-1102`, commitd01c1780b,
+  completed22:52:32, same protected-world union. R35 preparation waiter is live:
+  `watch-r34-terminal-prepare-r35-1102.service`, a0.1GiB actual process
+  observing the old owner every10seconds. It requests28GiB preparation only
+  after that owner is terminal; parking a high-priority28GiB request earlier
+  blocked useful small jobs behind the ledger queue head, so that request was
+  explicitly canceled and replaced. Executable `ops/continue-best67-corrected-owner-r35-1102.py`
+  requires the actual R34 owner terminal and an actual full67 handoff checkpoint,
+  verifies optimizer/RNG, source and native execution qualification, carries
+  measured capacity/history, then requests the corrected100GiB learner through
+  the ledger. It never silently selects another parent on a missing checkpoint.
+  The current requested-stop R34 owner is still completing capacity; first
+  oversized292425-token graph passed22:52:49 in539seconds, second is active.
+  No SGD68 exists yet. Verify the queued operator and actual next learner.
+- Full suite finished22:54:51 with15 Python failures and one TypeScript test
+  failure. Fourteen Python failures were the actual newly fixed resident/async
+  checkpoint lock bug; one asserted that even required compact derivative
+  readback must never happen. All affected files passed the targeted187 tests.
+  Other ordinary Neuralese tests:5861 passed; GPU selection26 passed,9 skipped;
+  TypeScript2562 passed,one failure; conformance/build/layer checks passed.
+  This is not a green full-suite run after the correction.
+- TypeScript failure counted cold program/type setup in a hard1800ms limit for
+  a200ms execution timeout (observed2054ms total). Runtime timeout begins at
+  executeAsync, after program preparation. Added an in-eval service timestamp
+  and assert execution duration instead; preserve the deadline error, child
+  service-effect cancellation check and20-second process deadline. Entire
+  termination file now passed18/18; no production deadline was relaxed.
+- Internal free space now79.7GB after completed test work drained; external
+  remains57.0GB. Keep40GiB internal/50GiB external floors and all full recovery
+  dependencies. Diagnostic72 remains exact local/private recoverable; no raw
+  checkpoint retirement was needed this cycle.
+
 ## Checkpoint hook correction and actual Pop evaluation, 2026-11-02 22:52 CET
 
 - Full main check exposed15 Python failures:14 real resident/async save failures
