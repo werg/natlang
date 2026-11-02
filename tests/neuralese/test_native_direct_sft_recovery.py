@@ -772,7 +772,7 @@ def test_interrupted_update_telemetry_checks_exact_order_and_finite_progress(tmp
             _interrupted_update_telemetry(train_ref, progress_ref, 64, 67)
 
 
-@pytest.mark.parametrize('tamper', ['none', 'alias', 'alias-corrupt', 'alias-path-forgery', 'checkpoint', 'snapshot', 'both-snapshots', 'source', 'journal', 'capacity', 'step'])
+@pytest.mark.parametrize('tamper', ['none', 'alias', 'rolling-alias', 'rolling-alias-forged-journal', 'alias-corrupt', 'alias-path-forgery', 'checkpoint', 'snapshot', 'both-snapshots', 'source', 'journal', 'capacity', 'step'])
 def test_interrupted_rolling_window_binds_retained_snapshot_launch_and_telemetry(tmp_path, tamper, monkeypatch):
     from natlang_neuralese.rl.native_direct_sft_recovery import _rolling_intermediate_window
     def file(name, data, *, raw=False):
@@ -822,6 +822,13 @@ def test_interrupted_rolling_window_binds_retained_snapshot_launch_and_telemetry
         'parent':parent,'config':config,'recipe':recipe,'runtime_receipt':runtime,'roles':roles})
     argv=['python','-m','natlang_neuralese.train.native_state_sft','--continue-from',parent['path'],
           '--out',str(slot.parent),'--recipe-binding',json.dumps({'sha256':recipe['sha256']})]
+    if tamper in ('rolling-alias', 'rolling-alias-forged-journal'):
+        relocated = tmp_path/'external-rolling'/'checkpoint.pt'
+        relocated.parent.mkdir()
+        relocated.write_bytes(Path(retained['path']).read_bytes())
+        slot.symlink_to(relocated)
+        if tamper == 'rolling-alias-forged-journal':
+            argv[argv.index('--out')+1] = str(relocated.parent)
     for role,flag in [('native_graphs','--native-graphs'),('continued_native_graphs','--continued-native-graphs'),
         ('foundation_native_graphs','--foundation-native-graphs'),('held_native_graphs','--held-native-graphs'),
         ('ce_supervision_policy','--ce-supervision-policy')]: argv += [flag,roles[role]['path']]
@@ -841,7 +848,7 @@ def test_interrupted_rolling_window_binds_retained_snapshot_launch_and_telemetry
                                  'global_step':68 if tamper == 'step' else 67}}
     args=({'schema':'natlang.interrupted-sft-intermediate-window/1','evidence':evidence},transition,
           parent,{'path':str(slot)},receipt)
-    if tamper in ('none','alias'):
+    if tamper in ('none','alias','rolling-alias'):
         result=_rolling_intermediate_window(*args)
         assert result['intermediate_updates']==3 and result['intermediate_checkpoint_bytes_verified_currently'] is True
     else:

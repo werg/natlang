@@ -218,7 +218,8 @@ def _interrupted_rolling_window(declaration, transition, parent, child, receipt,
     original = json.loads(_verify_historical_file_ref(original_ref).read_text())
     old_path = Path(historical_previous_path if historical_previous_path is not None
                     else transition.get('previous_checkpoint_path', '')).resolve()
-    rolling = Path(transition.get('checkpoint_path', '')).resolve()
+    recorded_rolling = Path(transition.get('checkpoint_path', '')).absolute()
+    rolling = recorded_rolling.resolve()
     middle_sha = transition.get('checkpoint_sha256')
     middle_step = original.get('global_step')
     if (state_parent is not None and old_path != Path(state_parent).resolve()
@@ -289,7 +290,9 @@ def _interrupted_rolling_window(declaration, transition, parent, child, receipt,
     matching = [argv for argv in commands if isinstance(argv, list)
                 and 'natlang_neuralese.train.native_state_sft' in argv
                 and option(argv, '--continue-from') == str(old_path)
-                and option(argv, '--out') == str(rolling.parent)
+                # The journal records the launch location, not a later storage
+                # relocation. Endpoint bytes are authenticated above.
+                and option(argv, '--out') == str(recorded_rolling.parent)
                 and all(option(argv, flag) == (roles.get(role) or {}).get('path')
                         for role, flag in role_options.items())]
     if len(matching) != 1:
