@@ -604,7 +604,7 @@ def main():
         'protected_exclusions': {'path': 'protection-exclusions.jsonl', 'sha256': qualification['protection_exclusions_sha256'], 'rows': len(excluded)},
         'split_conflicts': {'path': 'split-conflicts.jsonl', 'sha256': qualification['split_conflicts_sha256'], 'rows': len(held_conflicts)},
         'duplicate_views': {'path': 'duplicate-task-views.jsonl', 'sha256': qualification['duplicate_views_sha256'], 'rows': len(candidate_dup_records)},
-        'assets': {'base': 'assets', 'v3': 'assets-v3' if v3_dir else None}}
+        'assets': {'base': 'assets', 'v3': 'assets-v3' if asset_manifest else None}}
     (out / 'receipt.json').write_text(json.dumps(receipt, indent=1) + '\n')
     # Replay every semantic treatment and oracle correction through the collector verifier before publication.
     # Newly admitted rows retain their source verifier receipts above; only changed rows need replay here.
