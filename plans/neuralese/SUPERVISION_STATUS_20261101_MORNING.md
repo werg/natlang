@@ -1,3 +1,46 @@
+## Rotary memory correction and broader baseline, 2026-11-02 19:33 CET
+
+- R25 whole-source G4 capacity FAILED before SGD at19:24. Actual524650-token
+  D16 graph reached90,834,353,152B CUDA allocated peak and failed requesting
+  another4GiB in discarded key rotation during backward recomputation. File
+  scratch peaked12,893,798,400B. No update earned; source72 remains untouched.
+  Exact proof: `earned-jolt72-joint-r25-g4-a16-1102/learner/memory-qualifications/`.
+- Root inspected the traceback: `_rotate` called paired rotation with the same
+  tensor twice and discarded one output. Main06cf79a15 removes this duplicate
+  for supported ports, bounds query work at16384 rows, keeps one complete set
+  of logical-position tables and avoids the unused full-hidden dummy allocation.
+  LFM3's two separate FP32 casts are deliberately retained: sharing one changed
+  BF16 gradients despite identical forward. Custom overrides keep their actual
+  behavior. Helper exact CPU core41passed/4CUDA-skipped, broader81passed/4skipped.
+- Frozen `runtime-native-single-rotary-v26-1102` binds06cf79a15 and the unchanged
+  held-protection union. Actual earned72/G4 full-model numerical check PASSED,
+  forward1e-4/gradient1e-5, no SGD,20.9GiB host peak. Proof:
+  `ops/earned72-g4-r26-numerical-certificate-1102/native-runtime-certificate.json`.
+- Corrected actual learner `lfm3-earned72-joint-g4-a16-r26-1102` started19:32:40,
+  config `ops/earned-jolt72-joint-r26-g4-a16-1102/config.json`. Same complete
+ 401623-row recipe, source72 and accumulation16 bootstrap/reference repair;
+  refresh after one earned update, then promptly change to accumulation4/16
+  resident updates. Full-source capacity and optimizer advancement are still
+  unproven; do not label the numerical check as capacity or capability lift.
+- Pop protected expanded baseline is LIVE since19:28:46, actor ready19:29:06:
+  `expanded-dev16-quality-parent-r19-1102.service`, exact71c3 parent/R19 runtime,
+  one worker/full prompt/2048 prefill+prefix geometry, all16 program families
+  (packet indices0,8,...120). Parent2/4 remains the completed four-case result;
+  new16-case outcomes are not yet complete. All evidence stays protected.
+- Evicted5,296,370,936B of unused public LFM3 NVFP4/GGUF weight cache only,
+  after exact upstream revision/content-SHA+HEAD availability and visible
+  consumer checks. Actual BF16 training base and every dataset/checkpoint kept.
+  Receipt `ops/unused-public-weight-cache-retirement-1102.json`. Central Xet
+  ETags differ from file SHA256; exact content was checked against the upstream
+  LFS SHA. A partial alias-order failure was repaired before the successful
+  eviction; its retained receipt records that attempt. No payload lost there.
+- Independent72 backup is LIVE in `preserve-earned72-private-fullstate-r3-1102`;
+  payload encoding is still running, not private recovery yet. It includes
+  actual old actor/replay controls and corrected current continuation controls.
+  Runtime26 archive publication waits for the actual archive service to finish,
+  not just a partially written file's presence. Pinned full raw72 and all last
+  verified independent parents remain protected. Internal free97.75GB at19:32.
+
 ## Immediate restart correction, 2026-11-02 19:18 CET
 
 - R24 first launch FAILED BEFORE SGD at the SFT update-budget guard. Its

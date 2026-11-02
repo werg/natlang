@@ -24,6 +24,17 @@ Do not fabricate replacements or relabel historical actor provenance. Bind
 Python reviewer, JS checker and actual TypeScript parser dependencies, and
 apply authenticated ordinary/native whole-graph deferrals to the actual parent.
 
+## SFT update-budget references follow the selected SFT frame (engineering, 2026-11-02)
+
+Do not inherit an explicit scored-graph budget receipt from a discarded diagnostic
+branch when preparing a continuation from a different earned parent. The SFT
+frame inside an RL checkpoint owns this reference, not the surrounding RL frame
+or the last launch configuration. Verify the actual saved frame. When it has no
+captured reference, retain its saved accumulation for the first real SFT update,
+let the trainer capture the actual scored-graph anchor, then promptly adopt the
+smaller accumulation with that earned anchor. Do not transplant a diagnostic
+receipt or weaken the source/checkpoint guard to make a launch pass.
+
 ## Preserve admitted policy identity across ordinary resumes (engineering, 2026-11-02)
 
 An unchanged CE objective resumes with its exact admitted policy binding,
