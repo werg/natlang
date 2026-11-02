@@ -57,8 +57,8 @@ def admitted_checkpoint(parent, *, prior_recipe, successor_recipe, stage_id):
     if old.get('held_native_graphs') != new.get('held_native_graphs'):
         raise ValueError('zero-SGD adoption cannot change held data')
     correction=new['source_correction']; proof=json.loads(Path(correction['path']).read_text())
-    if proof.get('protected_held_correction') is not None or not proof.get('static_native_context_correction'):
-        raise ValueError('zero-SGD adoption accepts only the declared static context correction')
+    if proof.get('protected_held_correction') is not None:
+        raise ValueError('zero-SGD adoption cannot change held data')
     current=NativeGraphSource(new['native_graphs']['path'],config['tokenizer_fingerprint'],
                               required_split='train',role_ids=config['marker_ids'])
     source=source_receipt(current)
@@ -83,8 +83,8 @@ def admitted_checkpoint(parent, *, prior_recipe, successor_recipe, stage_id):
         model_id=config['architecture']+':'+config['base_inventory_sha256'],stage_id=stage_id,
         current_source_receipt=source,current_bindings=current.bindings,current_order=current.ordered_ids(),
         current_communication_ids=[entry['id'] for entry in current.entries if entry.get('communication')])
-    if summary.get('changed') is not True or not summary.get('corrected_rows'):
-        raise ValueError('zero-SGD adoption requires actual corrected rows')
+    if summary.get('changed') is not True or not any(summary.get(key) for key in ('corrected_rows','deferred_rows','added_rows')):
+        raise ValueError('zero-SGD adoption requires an actual source change')
     step=int(training.get('global_step',training.get('step',0)))
     old_frames=collect_sft_progress(training)
     new_frames=updated['sft_progress']

@@ -1059,7 +1059,7 @@ def _source_correction_continuation(old, new):
             or proof.get('row_bindings_sha256') != dependencies[1]['sha256']):
         return False
     excluded = {'native_graphs', 'continued_native_graphs', role}
-    if proof.get('static_native_context_correction') and old.get('ce_supervision_policy') != new.get('ce_supervision_policy'):
+    if old.get('ce_supervision_policy') != new.get('ce_supervision_policy'):
         from .native_supervision import load_policy
         from .own_output_supervision import continuation_identity, identity, policy_objective
         old_ce=old.get('ce_supervision_policy');new_ce=new.get('ce_supervision_policy')
@@ -1096,7 +1096,10 @@ def _source_correction_continuation(old, new):
         corrections={item['id']:item for item in correction_rows}
         if len(corrections)!=len(correction_rows):raise ValueError('static context correction ledger repeats a row')
         from .native_static_context_correction import verify_static_context_correction
-        static_pairs,_=verify_static_context_correction(path,proof['static_native_context_correction'])
+        static_reference=proof.get('static_native_context_correction')
+        static_pairs,_=verify_static_context_correction(path,static_reference) if static_reference else ({}, None)
+        if not static_reference and any(item.get('disposition')=='corrected' for item in correction_rows):
+            raise ValueError('quality-only source continuation cannot correct row bindings')
         if any(ident not in corrections or corrections[ident].get('disposition')!='corrected'
             or corrections[ident].get('old_binding')!=pair['old_binding']
             or corrections[ident].get('new_binding')!=pair['new_binding'] for ident,pair in static_pairs.items()):

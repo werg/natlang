@@ -227,7 +227,9 @@ def test_verifier_rejects_identity_changes_during_derivation(tmp_path,monkeypatc
 
 
 @pytest.mark.parametrize('carried',[False,True])
-def test_mixed_static_correction_quality_deferral_and_append_preserves_earned_state(tmp_path,monkeypatch,carried):
+@pytest.mark.parametrize('static_change',[False,True])
+@pytest.mark.parametrize('deferred_comm',[False,True])
+def test_mixed_static_correction_quality_deferral_and_append_preserves_earned_state(tmp_path,monkeypatch,carried,static_change,deferred_comm):
     from natlang_neuralese.data.native_sources import NativeGraphSource
     from natlang_neuralese.train.native_operation_report import source_receipt
     from natlang_neuralese.train.native_supervision import SCHEMA as POLICY_SCHEMA
@@ -240,24 +242,26 @@ def test_mixed_static_correction_quality_deferral_and_append_preserves_earned_st
         value=copy.deepcopy(row());value['id']=name;return value
     keep,deferred,static,old_comm,added,added_comm=(original(name) for name in ('keep','deferred','static','old-comm','added','added-comm'))
     fixed,_=graphify(static,objective(mass='token'),max_tokens=32,consumer_context=6,state_tokens=2)
+    if not static_change: fixed=static
+    if deferred_comm: deferred,_=graphify(deferred,objective(mass='token'),max_tokens=32,consumer_context=6,state_tokens=2)
     old_comm,_=graphify(old_comm,objective(mass='token'),max_tokens=32,consumer_context=6,state_tokens=2)
     added_comm,_=graphify(added_comm,objective(mass='token'),max_tokens=32,consumer_context=6,state_tokens=2)
     old_path=tmp_path/'old.jsonl';new_path=tmp_path/'new.jsonl'
     old_path.write_text(''.join(json.dumps(value)+'\n' for value in (keep,deferred,static,old_comm)))
-    new_path.write_text(''.join(json.dumps(value)+'\n' for value in (keep,old_comm,fixed,added,added_comm)))
+    new_path.write_text(''.join(json.dumps(value)+'\n' for value in ((keep,old_comm,fixed,added,added_comm) if static_change else (keep,fixed,old_comm,added,added_comm))))
     old=NativeGraphSource(old_path,FP,required_split='train',role_ids=(58,59,60,61))
     new=NativeGraphSource(new_path,FP,required_split='train',role_ids=(58,59,60,61))
     old_receipt,new_receipt=source_receipt(old),source_receipt(new)
     def family_rows(source):
         return [{'id':entry['id'],'binding':entry['binding'],
-                 'family':'native-communication' if entry['id'] in ('old-comm','added-comm') else 'general-agent'}
+                 'family':'native-communication' if entry['id'] in (('old-comm','added-comm','deferred') if deferred_comm else ('old-comm','added-comm')) else 'general-agent'}
                 for entry in source.entries]
     old_map=put('old-map.json',{'schema':'natlang.logical-family-map/1','source_sha256':old.file_sha256,'rows':family_rows(old)})
     new_map=put('new-map.json',{'schema':'natlang.logical-family-map/1','source_sha256':new.file_sha256,'rows':family_rows(new)})
     balance={'key':'logical-family','max_scale':8,'normalization':'declared/1','scales':{'general-agent':1.,'native-communication':1.}}
     old_policy={'schema':POLICY_SCHEMA,'sources':[],'objective':{**objective(mass='token'),'family_balance':{**balance,'map':ref(old_map)}}}
     old_ce=put('old-ce.json',old_policy)
-    opts={'stage_id':'native_full_sft','epochs':1.,'_communication_ids':['old-comm'],
+    opts={'stage_id':'native_full_sft','epochs':1.,'_communication_ids':['old-comm']+(['deferred'] if deferred_comm else []),
           'communication_quota_policy':{'stage_id':'native_full_sft','visits':7},
           '_objective_required_visits':{'old-comm':7},
           'supervision_objective':identity(policy_objective(old_policy)),'ce_supervision_policy_binding':ref(old_ce)}
@@ -274,12 +278,14 @@ def test_mixed_static_correction_quality_deferral_and_append_preserves_earned_st
                     candidate_sha256=new.file_sha256,epochs=1.5,communication_min_visits=7)}
     new_ce=put('new-ce.json',new_policy)
     correction_rows=[_row('static',old.bindings['static'],new.bindings['static'],old.file_sha256,new.file_sha256,'corrected',old_communication=False),
-                     _row('deferred',old.bindings['deferred'],None,old.file_sha256,None,'deferred','quality exclusion; source retained',old_communication=False),
+                     _row('deferred',old.bindings['deferred'],None,old.file_sha256,None,'deferred','quality exclusion; source retained',old_communication=deferred_comm),
                      *[_row(key,None,new.bindings[key],None,new.file_sha256,'added') for key in ('added','added-comm')]]
+    if not static_change: correction_rows=correction_rows[1:]
     proof_path=_write_proof(tmp_path,old_receipt,new_receipt,correction_rows)
     pairs=put('pairs.jsonl',{'parent':static,'child':fixed})
     proof=json.loads(proof_path.read_text());proof['static_native_context_correction']={
         'schema':'natlang.static-native-context-source-correction/1','graph_pairs':ref(pairs),'ce_policy':ref(old_ce),'rows':1}
+    if not static_change: del proof['static_native_context_correction']
     proof_path.write_text(json.dumps(proof))
     held={'path':'/held','sha256':'held','binding':'held'}
     old_roles={'native_graphs':{**ref(old_path),'binding':'train'},'held_native_graphs':held,
@@ -297,12 +303,14 @@ def test_mixed_static_correction_quality_deferral_and_append_preserves_earned_st
         'tokenizer_fingerprint':FP,'marker_ids':[58,59,60,61]},'model_state':{'weight':torch.tensor([3.,4.])},'training':training}
     before=copy.deepcopy(parent)
     child,summary=adoption.admitted_checkpoint(parent,prior_recipe='old-recipe',successor_recipe='new-recipe',stage_id='native_full_sft')
-    assert (summary['corrected_rows'],summary['deferred_rows'],summary['added_rows'])==(1,1,2)
+    assert (summary['corrected_rows'],summary['deferred_rows'],summary['added_rows'])==(int(static_change),1,2)
     active=child['training']['sft_progress']['native_full_sft'] if carried else child['training']
     assert active['exposure_counts']=={'keep':1,'deferred':1,'static':0,'old-comm':2,'added':0,'added-comm':0}
     assert active['required_visits']['added-comm']==7 and active['required_visits']['added']==1
-    assert active['required_visits']['old-comm']==7 and active['required_visits']['static']==7
-    assert active['options']['_objective_required_visits']['static']==7
+    assert active['required_visits']['old-comm']==7
+    if static_change:
+        assert active['required_visits']['static']==7
+        assert active['options']['_objective_required_visits']['static']==7
     assert active['pending_source_rows']['deferred']['retired_exposure']['visits']==1
     assert active['options']['quota_aware_ce_history'][-1]['basis']==new_policy['quota_aware_basis']
     adoption._same(before,parent)
