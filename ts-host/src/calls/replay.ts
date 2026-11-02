@@ -56,7 +56,8 @@ export class ReplayServices {
   readonly observed: ObservedEffect[] = [];
   readonly divergences: string[] = [];
   private readonly used = new Set<number>();
-  constructor(readonly effects: readonly RecordedEffect[], names: readonly string[] = []) {
+  constructor(readonly effects: readonly RecordedEffect[], names: readonly string[] = [],
+    private readonly options: { strictSequence?: boolean } = {}) {
     const all = [...new Set([...names, ...effects.map(effect => effect.service)])];
     this.services = Object.fromEntries(all.map(name => [name, new Proxy(Object.create(null), {
       get: (_target, property) => typeof property !== 'string' || property === 'then' ? undefined :
@@ -68,10 +69,18 @@ export class ReplayServices {
     const args = plain(given);
     this.observed.push({ service, method, args });
     const open = (effect: RecordedEffect, at: number) => !this.used.has(at) && effect.service === service && effect.method === method && effect.complete;
-    let index = this.effects.findIndex((effect, at) => open(effect, at) && sameData(effect.args, args));
+    // A source-derived observation sequence may describe stateful services: the
+    // same exact request can return different results after prior actions. In
+    // this explicit mode the next complete observation is the only legal one.
+    let index = this.options.strictSequence ? this.used.size :
+      this.effects.findIndex((effect, at) => open(effect, at) && sameData(effect.args, args));
+    if (this.options.strictSequence) {
+      const expected = this.effects[index];
+      if (!expected || !open(expected, index) || !sameData(expected.args, args)) index = -1;
+    }
     // The same call with its scalars written differently (an id as a number or a string) is answered by the record. It
     // is observed with its own arguments, so the comparison still shows the difference and the judge decides it.
-    if (index < 0) index = this.effects.findIndex((effect, at) => {
+    if (index < 0 && !this.options.strictSequence) index = this.effects.findIndex((effect, at) => {
       try { return open(effect, at) && loose(effect.args) === loose(args); } catch { return false; }
     });
     if (index < 0) {
