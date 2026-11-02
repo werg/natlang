@@ -1393,6 +1393,10 @@ def build_parser():
     parser.add_argument('--foundation-declaration-recovery', type=Path,
                         help='Exact ancestor-bound recovery of an unavailable historical foundation declaration; grants no exposure or qualification')
     parser.add_argument('--source-predecessor-retirement', type=Path, help='Exact earned checkpoint proof retiring a consumed source predecessor')
+    parser.add_argument('--execution-transition-admission', type=Path,
+                        help='Authenticated selected execution-transition publication')
+    parser.add_argument('--execution-transition-admission-sha256',
+                        help='Exact SHA256 of the selected execution-transition publication')
     parser.add_argument('--pending-native-sources', action='append', default=[])
     parser.add_argument('--pending-focus', type=Path, default=None, help='SHA-bound, source-authenticated one-time pending-batch focus request')
     parser.add_argument('--refresh-at-checkpoint', action=argparse.BooleanOptionalAction, default=False,
@@ -2028,7 +2032,17 @@ def _main(argv=None, *, requested_refresh):
         config['native_attention_precision'] = attention_precision
     saved_training = resume or shared_resume or {}
     from .native_execution_transition import require_qualified_for_training
-    require_qualified_for_training(saved_training)
+    if bool(args.execution_transition_admission) != bool(args.execution_transition_admission_sha256):
+        raise ValueError('execution transition admission requires both its path and SHA256')
+    admission = ({'path':str(args.execution_transition_admission.resolve(strict=True)),
+                  'sha256':args.execution_transition_admission_sha256}
+                 if args.execution_transition_admission else None)
+    qualified_training = require_qualified_for_training(saved_training, admission_ref=admission,
+        checkpoint_path=(args.continue_from if parent_continuation else policy.slot) if saved_training else None)
+    if qualified_training is not saved_training:
+        if resume is saved_training: resume = qualified_training
+        if shared_resume is saved_training: shared_resume = qualified_training
+        saved_training = qualified_training
     saved_options = saved_training.get('options') or {}
     if type(args.accumulate_batches) is not int or args.accumulate_batches < 1:
         raise ValueError('--accumulate-batches must be a positive integer')

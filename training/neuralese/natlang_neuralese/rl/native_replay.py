@@ -618,7 +618,8 @@ def behavior_logprob_probe(model, hidden, actions, *, graph_id, policy, destinat
         raise ValueError('nonfinite captured policy logprob comparison')
     maximum=max(abs(r['delta']) for r in rows)
     result={'schema':'natlang.native-policy-behavior-logprob-probe/1','graph_id':graph_id,
-            'policy':policy,'positions':rows,'action_count':len(rows),'all_episode_actions':limit is None,
+            'policy':policy,'execution_device':str(hidden.device),
+            'positions':rows,'action_count':len(rows),'all_episode_actions':limit is None,
             'max_abs_delta':maximum,'atol':atol,'passed':None if atol is None else maximum<=atol,
             'native_compile':os.environ.get('NATLANG_NATIVE_COMPILE','1'),
             'bf16_reduction':os.environ.get('NATLANG_BF16_REDUCTION','default'),

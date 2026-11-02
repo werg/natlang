@@ -494,6 +494,7 @@ def native_policy_parameter_contract():
         'cotangent_accumulator_backend','device','dtype','epochs','eval_every','forward_atol',
         'gradient_atol','held_eval_graphs','held_eval_tokens','held_final_policy',
         'history_reasoning_policy','history_reasoning_binding_path','history_reasoning_binding_sha256',
+        'execution_transition_admission','execution_transition_admission_sha256',
         'interface_row_learning_rate','learned_row_learning_rate','learning_rate','lr_warmup',
         'lr_anneal','matrix_telemetry','memory_qualification','native_ordinary_precision',
         'native_linear_precision','native_attention_precision','native_norm_execution',
@@ -530,7 +531,7 @@ def validate_native_policy_trainer_cli(argv):
                 raise ValueError("unclassified native RL trainer flag: "+token)
 
 
-def native_policy_trainer_args(parameters, expected_native):
+def native_policy_trainer_args(parameters, expected_native, execution_admission=None):
     """Bind sampled-policy admission independently of future ordinary rendering."""
     from ..train.recipe import stage_parameter_args
     # Explicit objective-independent controls: SFT source and scheduling
@@ -539,6 +540,13 @@ def native_policy_trainer_args(parameters, expected_native):
     unknown=set(parameters)-allowed-sft_only
     if unknown:raise ValueError('unclassified native RL trainer parameters: '+', '.join(sorted(unknown)))
     actual={key:value for key,value in parameters.items() if key in allowed}
+    for key in ('execution_transition_admission', 'execution_transition_admission_sha256'):
+        if key in actual:
+            raise ValueError('execution transition admission is owned by the controller state')
+    if execution_admission is not None:
+        from .native_direct_sft_recovery import _verify_historical_file_ref
+        actual['execution_transition_admission'] = str(_verify_historical_file_ref(execution_admission))
+        actual['execution_transition_admission_sha256'] = execution_admission['sha256']
     for key in ('history_reasoning_policy', 'history_reasoning_binding_path',
                 'history_reasoning_binding_sha256'):
         actual.pop(key, None)
@@ -555,6 +563,18 @@ def native_policy_trainer_args(parameters, expected_native):
         actual['history_reasoning_binding_path'] = expected_native['history_reasoning_binding_path']
         actual['history_reasoning_binding_sha256'] = expected_native['history_reasoning_binding_sha256']
     return stage_parameter_args(actual)
+
+
+def bind_seed_execution_admission(argv, execution_admission):
+    """Carry the same controller-owned admission into supervised continuations."""
+    if any(token.split('=',1)[0] in ('--execution-transition-admission',
+            '--execution-transition-admission-sha256') for token in argv):
+        raise ValueError('execution transition admission is owned by the controller state')
+    if execution_admission is None:
+        return argv
+    from .native_direct_sft_recovery import _verify_historical_file_ref
+    return [*argv, '--execution-transition-admission', str(_verify_historical_file_ref(execution_admission)),
+            '--execution-transition-admission-sha256', execution_admission['sha256']]
 
 
 def validate_actor_receipts(receipts, *, policy_id, neuralese_server, expected_native=None, expected_coefficient=None):
@@ -1312,9 +1332,14 @@ def prepare_round_collection(config, state, round_dir, selected_path, selection,
         else:
             values.pop('history_reasoning_binding_path', None)
             values.pop('history_reasoning_binding_sha256', None)
-    values['trainer_args'] = (native_policy_trainer_args(config.get('trainer_parameters', {}), expected_native)
+    if state.get('execution_transition_admission') is not None and expected_native is None:
+        raise ValueError('execution transition admission requires the exact native actor')
+    values['trainer_args'] = (native_policy_trainer_args(config.get('trainer_parameters', {}), expected_native,
+                                                        state.get('execution_transition_admission'))
         if expected_native is not None else stage_parameter_args(config.get('trainer_parameters', {})))
-    values['seed_trainer_args']=stage_parameter_args(config.get('seed_trainer_parameters',config.get('trainer_parameters',{})))
+    values['seed_trainer_args']=bind_seed_execution_admission(
+        stage_parameter_args(config.get('seed_trainer_parameters',config.get('trainer_parameters',{}))),
+        state.get('execution_transition_admission'))
     if config.get('coefficient_policy'):
         policy_path=Path(state.get('coefficient_policy',config['coefficient_policy'])).resolve(strict=True)
         # An already sealed round keeps its original collection actor
@@ -1729,9 +1754,12 @@ def run(config_path, *, rounds=None, stop=None):
                     config[key] = fresh[key]
                 else:
                     config.pop(key, None)
-            values['trainer_args'] = (native_policy_trainer_args(config.get('trainer_parameters', {}), expected_native)
+            values['trainer_args'] = (native_policy_trainer_args(config.get('trainer_parameters', {}), expected_native,
+                                                                state.get('execution_transition_admission'))
                 if expected_native is not None else stage_parameter_args(config.get('trainer_parameters', {})))
-            values['seed_trainer_args'] = stage_parameter_args(config.get('seed_trainer_parameters', config.get('trainer_parameters', {})))
+            values['seed_trainer_args'] = bind_seed_execution_admission(
+                stage_parameter_args(config.get('seed_trainer_parameters', config.get('trainer_parameters', {}))),
+                state.get('execution_transition_admission'))
             state['update_learner_parameters'] = {key: config.get(key) for key in LEARNER_SIDE_KEYS}
             write_json_durable(state_path, state)
             write_json_durable(round_dir / 'learner-parameters.json', state['update_learner_parameters'])

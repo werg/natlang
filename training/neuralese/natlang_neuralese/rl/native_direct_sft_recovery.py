@@ -465,6 +465,15 @@ def _authenticated_refresh_publication(reference, seen=None):
     seen.add(str(path))
     publication_binding=_strong_binding(path)
     publication=json.loads(path.read_text())
+    if publication.get('schema')=='natlang.native-execution-selection-publication/1':
+        from ..train.native_execution_transition import verify_selected_publication
+        checked=verify_selected_publication(reference)
+        proof=checked['proof']
+        return {'binding':publication_binding,'publication':publication,'report':None,'receipt':None,
+                'custody':{'parent':proof['parent'],
+                           'successor':{**proof['checkpoint'],'global_step':proof['global_step']}},
+                'continuation_sha256':proof['parent']['sha256'],
+                'authenticated_ancestors':set(checked['authenticated_ancestors'])}
     if publication.get('schema')=='natlang.direct-sft-zero-adoption-publication/1':
         proof_ref=publication.get('proof') or {}
         proof=json.loads(_verify_historical_file_ref(proof_ref).read_text())
