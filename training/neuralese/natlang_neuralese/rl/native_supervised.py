@@ -167,8 +167,9 @@ def continuation_config(config,stage,*,checkpoint,out):
     if source_state is not None and source_state.is_file():
         source=json.loads(source_state.read_text())
         if source.get('execution_transition_admission') is not None:
-            result['execution_transition_source_controller']={'path':str(source_state.resolve()),
-                'sha256':sha256_file_hex_cached(source_state)}
+            result['execution_transition_source_controller']=snapshot_execution_source_controller(
+                {'path':str(source_state.resolve()),'sha256':sha256_file_hex_cached(source_state)},
+                Path(out)/'control-inputs')
             inherited_execution_admission(result)
     if parameters.get('resident_data_directory'):
         result['resident_data_directory'] = parameters['resident_data_directory']
@@ -176,6 +177,34 @@ def continuation_config(config,stage,*,checkpoint,out):
     bind_seed_sources(result,sources)
     bind_seed_objective(result,stage['kind'],sources)
     return result,sources
+
+
+def snapshot_execution_source_controller(reference, directory):
+    """Keep handoff evidence valid after its live controller advances again."""
+    import hashlib
+    import os
+    import tempfile
+    from ..rl.native_direct_sft_recovery import _verify_historical_file_ref
+    source=_verify_historical_file_ref(reference)
+    raw=source.read_bytes()
+    digest=hashlib.sha256(raw).hexdigest()
+    if digest!=reference['sha256']:
+        raise ValueError('source controller changed while preparing its handoff snapshot')
+    directory=Path(directory).resolve();directory.mkdir(parents=True,exist_ok=True)
+    path=directory/('source-controller-'+digest+'.json')
+    with tempfile.NamedTemporaryFile(dir=directory,delete=False) as stream:
+        temporary=Path(stream.name)
+        stream.write(raw);stream.flush();os.fsync(stream.fileno())
+    try:
+        try:os.link(temporary,path)
+        except FileExistsError:pass
+    finally:temporary.unlink()
+    bound={'path':str(path),'sha256':digest,'bytes':len(raw)}
+    _verify_historical_file_ref(bound)
+    fd=os.open(directory,os.O_DIRECTORY)
+    try:os.fsync(fd)
+    finally:os.close(fd)
+    return bound
 
 
 def inherited_execution_admission(config):

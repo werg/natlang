@@ -427,6 +427,24 @@ def test_execution_admission_handoff_binds_source_controller_and_exact_checkpoin
     with pytest.raises(ValueError):production.initial_controller_state(config)
 
 
+def test_execution_handoff_retains_exact_snapshot_when_live_controller_advances(tmp_path,monkeypatch):
+    from natlang_neuralese.rl import native_supervised as supervised
+    from natlang_neuralese.train import native_execution_transition as transition
+    parent=tmp_path/'parent.pt';parent.write_bytes(b'qualified parent')
+    selected=tmp_path/'selected.json';selected.write_text('{}')
+    admission={'path':str(selected),'sha256':sha256_file_hex(selected)}
+    source=tmp_path/'state.json'
+    source.write_text(json.dumps({'checkpoint':str(parent),'execution_transition_admission':admission}))
+    reference={'path':str(source),'sha256':sha256_file_hex(source)}
+    retained=supervised.snapshot_execution_source_controller(reference,tmp_path/'controls')
+    assert supervised.snapshot_execution_source_controller(reference,tmp_path/'controls')==retained
+    source.write_text(json.dumps({'checkpoint':'a newer earned model'}))
+    monkeypatch.setattr(transition,'verify_selected_publication',lambda value: value==admission or pytest.fail('wrong admission'))
+    assert supervised.inherited_execution_admission({'checkpoint':str(parent),
+        'execution_transition_source_controller':retained})==admission
+    with pytest.raises(ValueError):supervised.snapshot_execution_source_controller(reference,tmp_path/'controls')
+
+
 def test_mandatory_seed_inherits_controller_admission_and_rejects_config_injection(tmp_path,monkeypatch):
     receipt=tmp_path/'selected.json';receipt.write_text('{}')
     ref={'path':str(receipt),'sha256':sha256_file_hex(receipt)}
