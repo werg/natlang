@@ -1,6 +1,44 @@
 from collections import Counter
 from natlang_neuralese.train.native_diversity import cohort_head_merge
 
+
+def test_promoted_mixed_groups_buffer_crossed_rows_without_rewinding_or_repacking():
+    from types import SimpleNamespace
+    from natlang_neuralese.train.native_diversity import stream_windows
+    entries = [row(i, 'a') for i in range(6)]
+    class Source:
+        def __init__(self): self.entries = entries; self.requests = []
+        def iter_indices(self, indices):
+            self.requests.append(list(indices))
+            assert indices == sorted(set(indices))
+            yield from (SimpleNamespace(id=entries[i]['id']) for i in indices)
+    source = Source()
+    batches = [(1, [0, 3], False), (1, [1, 2], False), (1, [4, 5], True)]
+    result = list(stream_windows(source, [[b] for b in batches], cohort_ids=['same'] * 6,
+                                 focus_ids={entries[i]['id'] for i in (0, 1, 4)}))
+    assert source.requests == [[0, 1, 2, 3, 4, 5]]
+    assert [item[:3] for item in result] == batches
+    assert [[x.id for x in item[3]] for item in result] == [[entries[i]['id'] for i in b[1]] for b in batches]
+
+
+def test_monotone_windows_join_transitive_crossings_and_preserve_other_windows():
+    from natlang_neuralese.train.native_diversity import monotone_windows
+    entries = [row(i, 'a') for i in range(7)]
+    batches = [(1, [i], i == 6) for i in (0, 3, 1, 4, 2, 5, 6)]
+    actual = monotone_windows([[b] for b in batches], entries, lambda *args: 'same')
+    assert actual == [[batches[0]], batches[1:5], [batches[5]], [batches[6]]]
+
+
+def test_monotone_windows_reject_unbounded_prefetch_but_allow_one_complete_large_graph():
+    import pytest
+    from natlang_neuralese.train.native_diversity import monotone_windows
+    entries = [row(i, 'a', tokens=100) for i in range(3)]
+    with pytest.raises(ValueError, match='token buffer bound'):
+        monotone_windows([[(1, [2], False)], [(1, [0, 1], True)]], entries,
+                         lambda *args: 'same', max_buffer_tokens=100)
+    assert monotone_windows([[(1, [0], True)]], entries, lambda *args: 'same',
+                            max_buffer_tokens=10) == [[(1, [0], True)]]
+
 def row(i, program, tokens=10):
     return {'id':f'text:teacher-program:{program}:decision:{i}', 'forward_tokens':tokens, 'communication':False, 'training_priority':0}
 

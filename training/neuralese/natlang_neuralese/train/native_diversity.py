@@ -18,6 +18,57 @@ def task_key(entry):
         if len(fields)>1 and fields[0]=='inline-curriculum':return fields[1]
     return None
 
+
+def monotone_windows(grouped, entries, key, *, max_buffer_tokens=1048576):
+    """Join only overlapping reader windows, retaining the exact batch order.
+
+    A mixed packed batch can include an early row from one source and a later
+    row from another. Promoting whole batches can therefore cross a source's
+    next requested row. Read that minimal connected window in source order,
+    then deliver its original batches from the bounded window buffer.
+    """
+    grouped = list(grouped)
+    if type(max_buffer_tokens) is not int or max_buffer_tokens < 1:
+        raise ValueError('source window token bound must be positive')
+    readers = {}
+    largest = 0
+    for position, window in enumerate(grouped):
+        tokens = 0
+        for visit, indices, _ in window:
+            for index in indices:
+                readers.setdefault(key(visit, index, indices), []).append((index, position))
+                tokens += entries[index]['forward_tokens']
+        largest = max(largest, tokens)
+    # Every inverted adjacent pair in a reader's sorted index sequence forbids
+    # a cut between its two windows. Union across readers gives minimal joins.
+    changes = [0] * (len(grouped) + 1)
+    for rows in readers.values():
+        rows.sort()
+        for (left, a), (right, b) in zip(rows, rows[1:]):
+            if left == right:
+                raise ValueError('diverse source repeats an index in one reader')
+            if a > b:
+                changes[b] += 1
+                changes[a] -= 1
+    result = []
+    active = 0
+    pending = []
+    tokens = 0
+    limit = max(max_buffer_tokens, largest)
+    for position, window in enumerate(grouped):
+        pending.extend(window)
+        tokens += sum(entries[index]['forward_tokens'] for _, indices, _ in window for index in indices)
+        if tokens > limit:
+            raise ValueError(f'monotone source window exceeds its token buffer bound: {tokens} > {limit}')
+        active += changes[position]
+        if active == 0:
+            result.append(pending)
+            pending = []
+            tokens = 0
+    if pending or active:
+        raise ValueError('incomplete monotone source window plan')
+    return result
+
 def stream_windows(source, grouped, *, priority_ids=(), cohort_ids=None, rotation_index=None,
                    focus_ids=(), urgent_cohort_fairness=True, ordinary_cohort_fairness=True,
                    communication_cohort_fairness=True):
@@ -34,6 +85,11 @@ def stream_windows(source, grouped, *, priority_ids=(), cohort_ids=None, rotatio
         # cursors can rewind a source after cross-cohort packing.
         cohort=cohort_ids[index] if cohort_ids is not None else None
         return visit,scheduling_rank(e),foundation,cohort,bool(rotation_index is not None and index<rotation_index),focused
+    focused_batches = {id(indices): any(entries[item]['id'] in focus_ids for item in indices)
+                       for window in grouped for _, indices, _ in window}
+    def batch_key(visit, index, indices):
+        return key(visit, index, focused_batches[id(indices)])
+    grouped = monotone_windows(grouped, entries, batch_key)
     requests={};last={}
     for window in grouped:
         parts={}

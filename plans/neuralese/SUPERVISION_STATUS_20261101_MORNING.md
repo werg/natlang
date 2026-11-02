@@ -1,3 +1,30 @@
+## R36 fetch failure and forward-only buffer correction, 2026-11-03 00:31 CET
+
+- Corrected resident generation6d4580b8... committed00:22:58 at global67.
+  Subsequent fetch failed before SGD: reader key for cohort8fdffec3... saw
+  index177115 followed by177095. Focus had promoted intact mixed packed groups;
+  their constituent rows crossed the reader's next index. The monotonicity guard
+  correctly rejected the schedule. R36 saved exceptional-exit full state, then
+  owner terminal-failed00:26. No optimizer68 exists and no earned work was lost.
+  Keep intact source71 as production parent; preserve the metadata-only R36 save
+  and pending actor view for diagnosis/recovery until deliberately retired.
+- Default source streaming now joins the minimal overlapping windows, reads each
+  source forward once, and yields the original complete batches in their exact
+  original order. Metadata planning detects transitive crossings and duplicate
+  rows. Joined buffers are capped at1048576 forward tokens while a preexisting
+  larger single window remains whole. It changes buffering, not training rows,
+  graph dependencies or credits.47 targeted diversity/cohort/focus/stream/frontier
+  tests and required quick checks passed. Actual full pending-plan qualification
+  is running as `check-actual-focus-window-plan-1103.service` before restart.
+- The prepared earned68 continuation correctly refused the failed R36 boundary;
+  do not describe it as ready or launch it. A corrected frozen runtime and fresh
+  source71 continuation with the adopted focus are now required. No cloud learner
+  is allocated while current controls are being corrected.
+- Independent current graph-payload export is live under
+  `export-current-graph-payload-closure-1103.service`, private runulcvvcya. It
+  reuses existing immutable objects and performs fresh complete workstation GETs.
+  Its graph capsule/full dependency completion is not yet claimed.
+
 ## GPU access restored; priority adoption repair, 2026-11-03 00:21 CET
 
 - Owner-requested one-time create test succeeded on all four accounts, cw1–cw4.

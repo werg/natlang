@@ -1,3 +1,14 @@
+## Promoted packed groups retain forward-only source reads (engineering, 2026-11-03)
+
+A focus request can promote whole mixed-source packed batches whose constituent
+rows cross a reader's next index. Keep the exact batches, graph content, quotas
+and order, but merge their minimally overlapping read windows and sort reads
+within that buffer. Source cursors remain strictly monotone and distinct; do not
+rescan compressed sources or suppress the guard. The default merged-window bound
+is1048576 forward tokens, with an already declared larger single window retained
+whole. A plan exceeding its bound must be corrected before SGD. Qualify the actual
+pending schedule, not only small fixtures, before claiming the cutover works.
+
 # Main goal: keep moving forward (owner, 2026-10-11)
 
 ## Digest-cache maintenance stays bounded and off the source filesystem (engineering, 2026-11-02)
