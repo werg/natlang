@@ -173,6 +173,7 @@ class SglangEngine(Engine):
         if binding is not None:
             binding['serving_engine'] = {'engine': 'sglang', 'fork': dict(fork),
                 'hf_export_weights_sha256': export_manifest['weights_sha256'], 'dtype': export_manifest['dtype'],
+                'bf16_reduction': os.environ.get('NATLANG_BF16_REDUCTION', 'fp32-accumulate'),
                 'banned_token_ids': list(self.sglang_banned)}
         return self
 
