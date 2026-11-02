@@ -162,12 +162,39 @@ def continuation_config(config,stage,*,checkpoint,out):
         'production_stage':stage['id'],'trainer_parameters':parameters,
         'seed_native_graphs':sources['native_graphs']['path'],
         'held_native_graphs':sources['held_native_graphs']['path']}
+    result.pop('execution_transition_source_controller',None)
+    source_state=Path(config['out'])/'state.json' if config.get('out') else None
+    if source_state is not None and source_state.is_file():
+        source=json.loads(source_state.read_text())
+        if source.get('execution_transition_admission') is not None:
+            result['execution_transition_source_controller']={'path':str(source_state.resolve()),
+                'sha256':sha256_file_hex_cached(source_state)}
+            inherited_execution_admission(result)
     if parameters.get('resident_data_directory'):
         result['resident_data_directory'] = parameters['resident_data_directory']
     bind_seed_parameters(result,parameters)
     bind_seed_sources(result,sources)
     bind_seed_objective(result,stage['kind'],sources)
     return result,sources
+
+
+def inherited_execution_admission(config):
+    """Authenticate the source controller and its exact parent before handoff."""
+    ref=config.get('execution_transition_source_controller')
+    if ref is None:return None
+    from .native_direct_sft_recovery import _verify_historical_file_ref
+    from ..train.native_execution_transition import verify_selected_publication
+    path=_verify_historical_file_ref(ref)
+    source=json.loads(path.read_text())
+    admission=source.get('execution_transition_admission')
+    if not isinstance(admission,dict):
+        raise ValueError('source controller has no selected execution admission')
+    verify_selected_publication(admission)
+    if (not source.get('checkpoint') or
+            sha256_file_hex_cached(source['checkpoint']) != sha256_file_hex_cached(config['checkpoint'])):
+        raise ValueError('execution admission source controller has a different checkpoint')
+    _verify_historical_file_ref(ref)
+    return admission
 
 
 def stage_pending(adapter,participant,stage,sources,epochs,*,objective=None):
@@ -302,7 +329,9 @@ def prepare_seed_command(config,directory,values,state,state_path,*,parameters=N
     # the actor's argument splice can send unsupported serving flags to SFT.
     from ..train.recipe import stage_parameter_args
     selected=config.get('trainer_parameters',{}) if parameters is None else parameters
-    values['trainer_args']=stage_parameter_args(selected)
+    from .production import bind_seed_execution_admission
+    values['trainer_args']=bind_seed_execution_admission(stage_parameter_args(selected),
+        state.get('execution_transition_admission'))
     values['seed_trainer_args']=list(values['trainer_args'])
     command,reused=_resume_source_arguments(config,directory,values,parameters=parameters)
     if reused is not None:state['resumed_current_source_inputs']=reused

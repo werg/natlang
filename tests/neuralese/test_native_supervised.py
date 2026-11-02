@@ -402,3 +402,36 @@ def test_direct_sft_command_failure_is_recorded_as_pending(tmp_path, monkeypatch
     saved=json.loads(path.read_text())
     assert saved['phase']=='mandatory_sft_pending' and saved['checkpoint']==str(parent)
     assert saved['last_sft_failure']['type']=='RuntimeError' and saved['round']==3
+
+
+def test_execution_admission_handoff_binds_source_controller_and_exact_checkpoint(tmp_path,monkeypatch):
+    from natlang_neuralese.rl import production
+    from natlang_neuralese.train import native_execution_transition as transition
+    parent=tmp_path/'checkpoint';parent.write_bytes(b'exact parent')
+    source=tmp_path/'source';source.mkdir()
+    receipt=tmp_path/'selected.json';receipt.write_text('{}')
+    ref={'path':str(receipt),'sha256':sha256_file_hex(receipt)}
+    state_path=source/'state.json'
+    state_path.write_text(json.dumps({'checkpoint':str(parent),'execution_transition_admission':ref}))
+    monkeypatch.setattr(transition,'verify_selected_publication',lambda value: value == ref or pytest.fail('bad admission'))
+    config={'checkpoint':str(parent),'execution_transition_source_controller':{'path':str(state_path),'sha256':sha256_file_hex(state_path)}}
+    assert production.initial_controller_state(config)['execution_transition_admission']==ref
+    other=tmp_path/'other';other.write_bytes(b'different')
+    with pytest.raises(ValueError,match='different checkpoint'):
+        production.initial_controller_state({**config,'checkpoint':str(other)})
+    state_path.write_text('{}')
+    with pytest.raises(ValueError):production.initial_controller_state(config)
+
+
+def test_mandatory_seed_inherits_controller_admission_and_rejects_config_injection(tmp_path,monkeypatch):
+    receipt=tmp_path/'selected.json';receipt.write_text('{}')
+    ref={'path':str(receipt),'sha256':sha256_file_hex(receipt)}
+    state={'execution_transition_admission':ref}
+    values={'checkpoint':str(tmp_path/'parent')}
+    monkeypatch.setattr(supervised,'_resume_source_arguments',lambda *args,**kwargs: (['trainer','{trainer_args}'],None))
+    config={'trainer_parameters':{},'out':str(tmp_path)}
+    supervised.prepare_seed_command(config,tmp_path,values,state,tmp_path/'state.json')
+    assert values['trainer_args']==['--execution-transition-admission',str(receipt),'--execution-transition-admission-sha256',ref['sha256']]
+    assert values['seed_trainer_args']==values['trainer_args']
+    with pytest.raises(ValueError,match='owned by the controller'):
+        supervised.prepare_seed_command({**config,'trainer_parameters':{'execution_transition_admission':'forged'}},tmp_path,values,state,tmp_path/'state.json')
