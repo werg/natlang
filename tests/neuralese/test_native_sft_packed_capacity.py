@@ -20,14 +20,16 @@ from test_shared_state import tiny
 
 
 @pytest.mark.parametrize('cotangent_backend,expected_mode',[('plain','plain'),('cpu_file','vjp')])
-def test_bf16_capacity_reports_actual_shared_forward_and_slot_geometry(tmp_path, monkeypatch,cotangent_backend,expected_mode):
+def test_bf16_capacity_reports_actual_original_forward_and_slot_geometry(tmp_path, monkeypatch,cotangent_backend,expected_mode):
     from natlang_neuralese.train.native_prefix_packing import pack_causal_prefixes
+    from natlang_neuralese.train.native_state_sft import pack_native_graphs
     path = tmp_path/'train.jsonl'
     path.write_text(json.dumps(graph('a'))+'\n'+json.dumps(graph('b'))+'\n')
     train = NativeGraphSource(path, 'tokenizer-sha', required_split='train')
     batch = list(train.iter_indices([0,1]))
-    expected = pack_causal_prefixes(batch, allow_communication=True)[0]
-    assert expected.token_count < sum(example.plan.token_count for example in batch)
+    shared = pack_causal_prefixes(batch, allow_communication=True)[0]
+    expected = pack_native_graphs(batch)[0]
+    assert shared.token_count < expected.token_count
     model = SharedStateModel(tiny('lfm'), (58,59,60,61), rank=4).to(dtype=torch.bfloat16)
     model.share_causal_prefixes = True
     calls = []
