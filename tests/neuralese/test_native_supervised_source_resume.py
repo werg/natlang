@@ -330,3 +330,33 @@ def test_same_earned_checkpoint_keeps_each_snapshotter_evidence(tmp_path,monkeyp
     left=json.loads(original_bytes);right=json.loads(Path(second['path']).read_text())
     assert left['sft_frames']==right['sft_frames']
     assert left['snapshotter']['sha256']=='a'*64 and right['snapshotter']['sha256']=='b'*64
+
+
+def test_actual_resume_keeps_inactive_historical_visits_outside_active_quota(tmp_path):
+    from test_native_model import tiny_source
+    from natlang_neuralese.model.native_model import load_native_model
+    from natlang_neuralese.data.native_graph import SCHEMA
+    from natlang_neuralese.train import native_state_sft as trainer
+    base=tmp_path/'base';tiny_source(base)
+    _,_,_,config=load_native_model(base,dtype=torch.float32,rank=4)
+    paths=[]
+    for split in ('train','test'):
+        path=tmp_path/(split+'.jsonl');path.write_text(json.dumps({'schema':SCHEMA,'id':split,
+            'split':split,'source_groups':[split],'tokenizer_fingerprint':config['tokenizer_fingerprint'],
+            'nodes':[{'name':'answer','token_ids':[4,5,6],'target_weights':[0,1,1]}]})+'\n');paths.append(path)
+    args=['--base',str(base),'--device','cpu','--dtype','float32','--rank','4',
+          '--native-graphs',str(paths[0]),'--held-native-graphs',str(paths[1]),'--epochs','2',
+          '--eval-every','100','--checkpoint-every','100','--checkpoint-seconds','0','--stage-id','full',
+          '--refresh-after-updates','1']
+    first=tmp_path/'first';assert trainer.main([*args,'--out',str(first)])==0
+    saved=torch.load(first/'checkpoint.pt',weights_only=False)
+    # Explicit historical checkpoint metadata fixture, not observed task credit.
+    saved['training']['exposure_counts']['previously-removed-row']=3
+    saved['training']['sft_progress']['full']['exposure_counts']['previously-removed-row']=3
+    parent=tmp_path/'historical-parent.pt';torch.save(saved,parent)
+    second=tmp_path/'second';assert trainer.main([*args,'--continue-from',str(parent),'--out',str(second)])==0
+    result=torch.load(second/'checkpoint.pt',weights_only=False)['training']
+    assert result['exposure_counts']=={'train':2,'previously-removed-row':3}
+    assert result['sft_progress']['full']['exposure_counts']==result['exposure_counts']
+    assert result['global_step']==saved['training']['global_step']+1
+    assert 'previously-removed-row' not in result['source_row_bindings']

@@ -3064,8 +3064,10 @@ def _main(argv=None, *, requested_refresh):
         else:
             step, epoch, cursor = int(resume['step']), int(resume['epoch']), int(resume['cursor'])
             global_step = int(resume.get('global_step', step))
-            exposure_counts.update({key: int(value) for key, value in (resume.get('exposure_counts') or {}).items()
-                                    if key in exposure_counts})
+            # Source correction keeps removed rows' earned visits as history.
+            # Scheduling reads only current entries; filtering this restored
+            # ledger to active bindings silently erased historical exposure.
+            exposure_counts.update({key: int(value) for key, value in (resume.get('exposure_counts') or {}).items()})
             metrics = dict(resume.get('metrics') or {})
             if restored_progress and (shared_resume is not None
                     or (saved_training.get('options') or {}).get('stage_id')!=args.stage_id

@@ -1,5 +1,26 @@
 # Main goal: keep moving forward (owner, 2026-10-11)
 
+## Removed rows retain earned exposure on resume (engineering, 2026-11-02)
+
+When resuming an existing SFT frame, restore its complete saved exposure ledger,
+including rows no longer in the active source. Scheduling and quotas still use
+only current entries. Filtering saved counts to current bindings silently erased
+one historically trained, quality-deferred row in a zero-update save and correctly
+failed the existing exact-admission guard. Preserve that guard, the intact parent
+and correction evidence. The flawed save is diagnostic; do not continue it or
+pretend historical exposure was undone. Fresh source phases retain their explicit
+separate exposure semantics.
+
+## Task selection observations survive controller handoffs (engineering, 2026-11-02)
+
+Carry authenticated task-selection history by default across supervised/RL
+controller handoffs. Bind an immutable source-controller snapshot and the actual
+training packet; preserve each observation's original actor identity. Transfer
+selector history only: no current-policy likelihoods/rollouts, trained rounds,
+optimizer/exposure credit or behavioral qualification. Exclude absent task worlds
+explicitly when projecting onto the current training packet. Newly sampled
+attempts still come from the actual selected executing checkpoint.
+
 ## Policy episode order preserves task and role diversity (engineering, 2026-11-02)
 
 Fresh native policy sources mix complete episodes by explicit task identity and

@@ -1,3 +1,40 @@
+## Exact exposure guard found resume bug; corrected fresh continuation, 2026-11-02 23:24 CET
+
+- R34 completed all six oversized cases and honored its stop before SGD23:08:54.
+  Full checkpoint saved, then owner exited23:11:44. The automatic R35 preparation
+  ran23:11:53–23:18:10 and correctly failed the exact zero-update exposure guard.
+  Do not restart that operator or call R35 training active.
+- Mmap diagnostic found parent71 had568 positive visits, saved R34 had567.
+  Exactly one previously trained row removed by the semantic quality correction
+  disappeared from top-level exposure_counts. Trainer resume filtered saved
+  counts to active bindings. Source correction intentionally retains those
+  visits and pending-row retired_exposure; the resume filter was wrong.
+  Main now restores the complete existing frame's ledger while scheduling only
+  active entries.64 targeted correction/transition/resume tests passed, including
+  an actual trainer update preserving inactive historical visits. The exposure
+  guard itself remains unchanged. Diagnostic receipt:
+  `ops/r34-zero-update-exposure-diagnosis-1102.json`.
+- Selected production parent remains intact source71/full67, including its one
+  historical quality-deferred visit, original optimizer/RNG and current401623
+  source obligations. R34's flawed zero-update save is diagnostic only; no SGD
+  was earned or lost there. Its capacity/view evidence is retained independently.
+  Prepare next actual runtime from main with this fix, the checkpoint-lock fix,
+  default RL episode mixing and authenticated selector-history handoff. Launch
+  directly from source71 with its original exact external FFN admission; normal
+  startup owns qualification, avoiding a duplicate full metadata validation pass.
+- Selector-history handoff passed48 tests and final29 supervised/history tests.
+  Actual four original actor71 train-world observations are sealed in
+  `ops/historical-selector-observations-ready-1102.json`. The next actual config
+  must carry this binding; it transfers no policy updates or stale rollouts.
+- R35 metadata preparation initially approached28GiB; actual ledger and systemd
+  limit were raised to48GiB, final observed peak44.7GiB. Receipt
+  `ops/r35-preparation-memory-correction-1102.json`. No learner limit changed.
+- Shared digest cache579MB caused a1GiB metadata export OOM; isolated cache
+  export succeeded867.9MiB. A per-path stat compactor was too slow on the
+  external filesystem and was interrupted without replacing the original cache.
+  Fast cache-path classification is running before a bounded cleanup/default
+  is finalized. No successful compaction or default performance claim yet.
+
 ## Historical JOLT diagnosis and default source-order correction, 2026-11-02 23:07 CET
 
 - Actual train-world review `ops/jolt72-objective-order-review-1102.json` binds

@@ -166,6 +166,12 @@ def continuation_config(config,stage,*,checkpoint,out):
     source_state=Path(config['out'])/'state.json' if config.get('out') else None
     if source_state is not None and source_state.is_file():
         source=json.loads(source_state.read_text())
+        if source.get('task_curriculum_history'):
+            from .selection_history import snapshot as snapshot_selection_history
+            selector=snapshot_selection_history(
+                {'path':str(source_state.resolve()),'sha256':sha256_file_hex_cached(source_state)},
+                Path(out)/'control-inputs',config['cases'])
+            if selector is not None:result['task_selection_history']=selector
         if source.get('execution_transition_admission') is not None:
             result['execution_transition_source_controller']=snapshot_execution_source_controller(
                 {'path':str(source_state.resolve()),'sha256':sha256_file_hex_cached(source_state)},

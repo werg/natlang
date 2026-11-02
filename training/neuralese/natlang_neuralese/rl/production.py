@@ -1266,11 +1266,12 @@ def prepare_llama_actor(config, checkpoint, policy_id, raw):
 def initial_controller_state(config):
     from .native_supervised import inherited_execution_admission
     admission=inherited_execution_admission(config)
+    from .selection_history import initial as initial_selection_history
     return {'schema':'natlang.rl-production-state/1','round':0,'offset':0,
         'checkpoint':config['checkpoint'],**({'coefficient_policy':config['coefficient_policy']} if config.get('coefficient_policy') else {}),'trained_rounds':0,'collected_task_ids':[],
         **({'execution_transition_admission':admission} if admission is not None else {}),
         'attempted_task_ids':[],'trained_task_ids':[],'trained_supervised_tokens':0,
-        'trained_target_tokens':0,'production_complete':False}
+        'trained_target_tokens':0,'production_complete':False,**initial_selection_history(config)}
 
 
 def qualified_seed_boundary(config,mode,progress,checkpoint):

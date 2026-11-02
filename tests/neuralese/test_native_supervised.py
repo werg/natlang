@@ -86,7 +86,16 @@ def test_offline_continuation_binds_actual_objective_and_effective_revision(tmp_
                           for name,path in [('train',train),('held',held),('objective',objective)]},'stages':[stage]}))
     config={'recipe_lineage_sha256':'a'*64,'production_recipe':str(recipe),'seed_command':['python','-m','natlang_neuralese.train.native_state_sft',
         '--native-graphs','{seed_native_graphs}','{trainer_args}']}
+    prior=tmp_path/'old-controller';prior.mkdir()
+    cases=tmp_path/'train-cases.jsonl';cases.write_text(json.dumps({'id':'world'})+'\n')
+    observation={'task_id':'world','observed_policy_id':'b'*64,'scored':4,'mean':1.}
+    (prior/'state.json').write_text(json.dumps({'task_curriculum_history':{'world':observation},'offset':3}))
+    config.update(out=str(prior),cases=str(cases))
     declaration,sources=supervised.continuation_config(config,stage,checkpoint='current',out=tmp_path/'out')
+    from natlang_neuralese.rl.production import initial_controller_state
+    restored=initial_controller_state(declaration)
+    assert restored['task_curriculum_history']=={'world':observation}
+    assert restored['trained_rounds']==0 and restored['checkpoint']=='current'
     assert declaration['seed_command'][2]=='natlang_neuralese.train.native_preference'
     assert declaration['trainer_parameters']['recipe_binding']['lineage_sha256']=='a'*64
     assert declaration['trainer_parameters']['recipe_binding']['sha256']==sha256_file_hex(recipe)
