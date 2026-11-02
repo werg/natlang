@@ -27,14 +27,26 @@ def rowwise_norm_forward(original_forward, x):
         return original_forward(x)
     import torch.nn.functional as F
     rows = x.reshape(-1, x.shape[-1])
-    pieces = []
+    # The custom adjoint's forward and serving run without autograd. Keep
+    # only one output allocation there; retaining all pieces before cat
+    # otherwise doubles the whole-trajectory output at the allocation peak.
+    # The differentiable replay retains its original graph/fan-in ordering.
+    differentiable = torch.is_grad_enabled()
+    pieces = [] if differentiable else None
+    output = None
     for start in range(0, rows.shape[0], 128):
         part = rows[start:start + 128]
         count = part.shape[0]
         if count < 128:
             part = F.pad(part, (0, 0, 0, 128 - count))
-        pieces.append(original_forward(part)[:count])
-    return torch.cat(pieces, dim=0).reshape(x.shape)
+        normalized = original_forward(part)[:count]
+        if differentiable:
+            pieces.append(normalized)
+        else:
+            if output is None:
+                output = normalized.new_empty(rows.shape)
+            output[start:start + count].copy_(normalized)
+    return (torch.cat(pieces, dim=0) if differentiable else output).reshape(x.shape)
 
 
 
@@ -94,7 +106,7 @@ class _RowwiseNormAdjoint(torch.autograd.Function):
             return dx, dweight, None
         rows = x.reshape(-1, x.shape[-1])
         grads = gradient.reshape(-1, gradient.shape[-1])
-        parts = []
+        dx = torch.empty_like(rows)
         dweight = None
         # Autograd visits concatenated pieces in reverse creation order.
         for start in reversed(range(0, rows.shape[0], 128)):
@@ -110,11 +122,10 @@ class _RowwiseNormAdjoint(torch.autograd.Function):
                 output = original(value)[:count]
                 targets = (part, weight) if weight.requires_grad else (part,)
                 derivatives = torch.autograd.grad(output, targets, incoming, allow_unused=True)
-            parts.append(derivatives[0])
+            dx[start:start + count].copy_(derivatives[0])
             if weight.requires_grad and derivatives[1] is not None:
                 dweight = derivatives[1] if dweight is None else dweight + derivatives[1]
-        dx = torch.cat(list(reversed(parts)), dim=0).reshape(x.shape)
-        return dx, dweight, None
+        return dx.reshape(x.shape), dweight, None
 
 def _native_rowwise_forward(module, x):
     """Bound method: cloning a model must rebind both the norm and its original forward."""

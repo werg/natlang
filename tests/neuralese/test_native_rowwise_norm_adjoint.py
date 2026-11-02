@@ -17,6 +17,19 @@ class Lfm3RMSNorm(nn.Module):
         return self.weight * value.to(x.dtype)
 
 
+def concatenated_norm_reference(original, x):
+    import torch.nn.functional as F
+    rows = x.reshape(-1, x.shape[-1])
+    pieces = []
+    for start in range(0, len(rows), 128):
+        part = rows[start:start + 128]
+        count = len(part)
+        if count < 128:
+            part = F.pad(part, (0, 0, 0, 128 - count))
+        pieces.append(original(part)[:count])
+    return torch.cat(pieces).reshape(x.shape)
+
+
 @pytest.mark.parametrize("rows", [14, 128, 129, 270, 511])
 def test_rowwise_norm_uses_single_adjoint_and_preserves_values_and_gradients(monkeypatch, rows):
     # Exercise the CUDA dispatch geometry on CPU without allocating a second GPU model.
@@ -104,3 +117,39 @@ def test_batched_lfm3_adjoint_dispatch_and_exact_gradient(monkeypatch, rows, sel
     ref_dx, ref_dw = torch.autograd.grad(reference_output, (reference_input, layer.weight), g)
     torch.testing.assert_close(dx, ref_dx, rtol=0, atol=0)
     torch.testing.assert_close(dw, ref_dw, rtol=0, atol=0)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA rowwise normalization')
+@pytest.mark.parametrize('weight_dtype', [torch.bfloat16, torch.float32])
+def test_cuda_rowwise_norm_bounds_output_peak_and_preserves_exact_adjoints(weight_dtype):
+    from natlang_neuralese.model.native_parameter_precision import _RowwiseNormAdjoint
+    torch.manual_seed(17)
+    layer = Lfm3RMSNorm().to(device='cuda', dtype=weight_dtype)
+    x = torch.randn(1, 8193, 8, device='cuda', dtype=torch.bfloat16, requires_grad=True)
+    incoming = torch.randn(x.shape, device='cuda', dtype=weight_dtype)
+    actual = _RowwiseNormAdjoint.apply(x, layer.weight, layer.forward)
+    dx, dw = torch.autograd.grad(actual, (x, layer.weight), incoming)
+    reference = concatenated_norm_reference(layer.forward, x)
+    ref_dx, ref_dw = torch.autograd.grad(reference, (x, layer.weight), incoming)
+    for a, b in ((actual, reference), (dx, ref_dx), (dw, ref_dw)):
+        assert torch.equal(a, b)
+
+    # A large output with small norm chunks isolates the removed cat copy.
+    large = torch.randn(8192, 256, device='cuda', dtype=torch.bfloat16)
+    layer.weight = nn.Parameter(torch.randn(256, device='cuda', dtype=weight_dtype))
+    with torch.no_grad():
+        torch.cuda.synchronize()
+        before = torch.cuda.memory_allocated()
+        torch.cuda.reset_peak_memory_stats()
+        expected = concatenated_norm_reference(layer.forward, large)
+        old_peak = torch.cuda.max_memory_allocated() - before
+        expected_cpu = expected.cpu()
+        output_bytes = expected.numel() * expected.element_size()
+        del expected
+        torch.cuda.synchronize()
+        before = torch.cuda.memory_allocated()
+        torch.cuda.reset_peak_memory_stats()
+        result = rowwise_norm_forward(layer.forward, large)
+        new_peak = torch.cuda.max_memory_allocated() - before
+        assert torch.equal(result.cpu(), expected_cpu)
+        assert new_peak <= old_peak - output_bytes // 2
