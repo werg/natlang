@@ -1,5 +1,16 @@
 # Main goal: keep moving forward (owner, 2026-10-11)
 
+## Capacity must measure actual learner arithmetic (engineering, 2026-11-02)
+
+Ordinary SFT's prepared capacity and numerical-reference probes previously used
+VJP mode even when the bound learner selected plain cotangents. Both paths now
+resolve the actual backend, including the native backend alias, as policy
+capacity already did. Keep the backend and runtime code bound in capacity
+identity; historical VJP evidence does not establish plain-mode capacity.
+A failed qualification is not an optimizer update. Preserve the actual earned
+checkpoint and test complete graphs under the corrected execution before
+omitting data, increasing budgets or claiming the memory blocker is resolved.
+
 ## Actual replay qualification and quota-aware continuations (engineering, 2026-11-02)
 
 Source-v1 native actor and packed training replay demonstrably disagree: the

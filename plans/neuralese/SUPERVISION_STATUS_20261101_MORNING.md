@@ -1,3 +1,67 @@
+## Live supervision update, 2026-11-02 10:17 CET
+
+This section supersedes older live-state descriptions below; older measurements
+remain historical evidence.
+
+- One real, complete on-policy whole-graph JOLT+ update advanced global67 to68.
+  `early-native67-wholegraph-jolt-1102/learner/checkpoint.pt` SHA
+  `c2c76a248acc79d17be2927f26b442352ab846ccab781c427f49f57074c76690`
+  is the earned full optimizer/RNG/exposure parent. All five train-only Native
+  episodes were retained; replay of 13,190 sampled actions matched within
+  9.54e-7. Training took542.86s with71,168 supervised tokens. These are optimizer
+  facts, not evidence of capability lift. Mandatory SFT retains568 actual graph
+  visits on353731 rows; the prepared additional47961 rows have no earned visits.
+- Root and Terra integrated bounded finite convolution, complete-model gradient
+  qualification and actual communicating-episode replay. Runtime10 is frozen
+  at0e4818df3. Complete-model certificate is
+  `ops/bounded-native68-complete-certificate-1102/native-runtime-certificate.json`;
+  full replay is `ops/native67-bounded-replay-1102/behavior-replay-logprobs.json`.
+  First-order arithmetic is qualified; higher-order replay is functional but not
+  long-context memory-qualified.
+- The full401692-row SFT attempt r2 failed before SGD during initial524650-token
+  memory qualification. Investigation found the ordinary-SFT check and its
+  numerical parity reference used default VJP cotangents while the actual learner
+  uses plain arithmetic. Policy capacity already selected the actual mode.
+  Commit5c2250c9f fixes both paths, shares backend alias resolution and retains
+  existing identity binding;186 targeted tests passed. Runtime11 is frozen from
+  that commit, and r3 preparation is running. Verify actual plain-mode capacity
+  and subsequent earned SGD before claiming this resolves the memory blocker.
+- Current complete source is external
+  `acquired-401692-quota-aware-static-v5-1102/receipt.json`. Seven long contexts
+  were graphified without truncation and keep their original static provenance.
+  Added Native rows retain seven-visit quotas. Quota basis now binds the actual
+  appended candidate (dc70a823e), not an unadopted predecessor. R3 preparation
+  coalesces unearned additions directly against the actual353731-row saved frame
+  with its actual objective, optimizer and568 earned visits. All training and
+  foundation roles move together; protected held inputs stay exact.
+- Pop's unused BF95 derived inference view was removed after confirming no live
+  GPU/container consumer; full BF95 recovery and all baseline traces remain.
+  Pop free space rose7.5->10.69GiB. Actual checkpoint68 development evaluation is
+  now running in `pop-native68-bounded-development-r2-1102.service`; actor ready
+  at10:15:51, cases0/32/88/112, full prompt. Its runtime10 differs from the earlier
+  runtime52af parent67 baseline; report system outcomes, not isolated weight lift.
+- `export-earned68-native-fullstate-1102.service` completed all15 full-checkpoint
+  upload parts at10:12:34 (~6MB/s); independent workstation GET and remaining
+  capsule files must finish before calling this export complete. Runtime9 and
+  original195-source closure have their own verified private exports. Runtime11
+  and new401692 source/control dependencies still require their own export.
+- Both zero-SGD failed capacity full saves were retired only after exact private
+  reconstruction capsules, stream verification and workstation readback. This
+  reclaimed30.77GB while preserving earned68 and BF95 fallback. Internal space
+  is63GiB, external55GiB. Supplemental external checkpoint mirror remains pending
+  against its unchanged50GiB floor. Streaming private backup remains primary.
+- Shared ZIP delta schema2 now compresses changed entries against their actual
+  base. It is the default peer transport choice when smaller. A real full-state
+  earned68-vs-BF95 encoding is running as `native68-zip-delta-v2-1102.service`;
+  independently verify its exact target hash before relying on it. Existing
+  full-checkpoint export continues meanwhile.
+- Escalation/reporting implementation2cdfb070a is pushed and included in these
+  frozen continuations. Explicit or terminal inability reports can hand off to
+  configured fallback actors with the same scope, effects and graph budget.
+  Small grounded reporting credit is recomputed during whole-graph replay;
+  quality remains0 on failures and mixed-actor captures cannot masquerade as
+  same-policy rollouts. No external paid teacher or cloud sandbox was started.
+
 ## Live supervision update, 2026-11-02 08:33 CET
 
 - Owner-requested escalation/reporting changes now run through the real inference
