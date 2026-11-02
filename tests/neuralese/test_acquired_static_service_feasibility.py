@@ -21,3 +21,13 @@ def test_rejects_missing_result_and_undeclared_tool():
     errors=inspect_session(row)['structural_pairing_errors']
     assert any('declared tool schema' in x for x in errors)
     assert any('lack a recorded observation' in x for x in errors)
+
+
+def test_repeated_call_arguments_with_distinct_observations_are_not_collapsed():
+    row=sample();again=copy.deepcopy(row['trajectory']['messages'])
+    again[0]['tool_calls'][0]['id']='b';again[1]['tool_call_id']='b';again[1]['content']='changed observation'
+    row['trajectory']['messages'].extend(again)
+    result=inspect_session(row)
+    assert result['repeated_identical_calls']==1
+    assert result['repeated_call_keys_with_different_observations']==1
+    assert [x['result'] for x in result['observations']]==['original observation','changed observation']

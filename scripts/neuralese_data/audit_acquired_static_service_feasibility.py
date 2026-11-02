@@ -54,10 +54,16 @@ def inspect_session(row):
     if ids != [item['call_id'] for item in calls]:
         errors.append('recorded observation order differs from call order; parallel effects need explicit custody')
     repeated=Counter(canonical_json_sha256_hex([item['name'],item['arguments']]) for item in calls)
+    outcomes={}
+    for item in observations:
+        key=canonical_json_sha256_hex([item['name'],item['arguments']])
+        outcomes.setdefault(key,set()).add(canonical_json_sha256_hex(item['result']))
+    varied=sum(len(values)>1 for values in outcomes.values())
     return {'source_id':trajectory['id'],'normalized_session_sha256':canonical_json_sha256_hex(row),
         'messages':len(trajectory['messages']),'declared_tool_names':sorted(definitions),
         'tool_calls':len(calls),'tool_observations':len(observations),'tool_call_names':dict(names),
         'repeated_identical_calls':sum(n-1 for n in repeated.values() if n>1),
+        'repeated_call_keys_with_different_observations':varied,
         'structural_pairing_errors':errors,'source_outcome':trajectory.get('outcome'),
         'schema_check':'not yet performed; source declarations are preserved, not assumed correct',
         'requirements':['Validate the complete declared JSON schemas and exact source arguments.',
@@ -93,7 +99,7 @@ def main():
     p.add_argument('--row-index',type=int,default=0);p.add_argument('--out',required=True)
     a=p.parse_args();result=audit(a.converter_receipt,a.out,row_index=a.row_index)
     print(json.dumps({k:result[k] for k in ('source_id','tool_calls','tool_observations','tool_call_names',
-        'repeated_identical_calls','structural_pairing_errors','training_admission')},sort_keys=True))
+        'repeated_identical_calls','repeated_call_keys_with_different_observations','structural_pairing_errors','training_admission')},sort_keys=True))
 
 
 if __name__=='__main__':main()

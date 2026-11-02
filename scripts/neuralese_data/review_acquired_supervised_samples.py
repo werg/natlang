@@ -93,9 +93,14 @@ def review(census_path, output):
     sample_path = output / 'decoded-supervised-samples.jsonl'
     with sample_path.open('x') as stream:
         for sample in samples: stream.write(json.dumps(sample,ensure_ascii=False,sort_keys=True)+'\n')
+    core_native_tools = {'eval','return_result','read_code','read_page','compact_history','escalate'}
+    agent_source = Path(__file__).resolve().parents[2]/'ts-host/src/native/agent.ts'
     summary = {'schema':'natlang.acquired-supervised-sample-review/1','training_admission':False,
         'census':census_ref,'rows_sampled':len(samples),'counts':dict(counts),
         'complete_call_functions':dict(functions),'sample_source_stores':dict(source_stores),
+        'core_native_tools':sorted(core_native_tools),
+        'sample_calls_outside_core_native_names':sum(n for name,n in functions.items() if name not in core_native_tools),
+        'native_agent_source':bind(agent_source),
         'sampled_full_row_category_mass':dict(sample_row_mass),'sample_idiom_rows':dict(idioms),
         'normalized_sample_duplicate_excess':sum(n-1 for n in content_hashes.values() if n>1),
         'decoded_samples':bind(sample_path),
