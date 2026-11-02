@@ -1,5 +1,34 @@
 # Main goal: keep moving forward (owner, 2026-10-11)
 
+## Actual replay qualification and quota-aware continuations (engineering, 2026-11-02)
+
+Source-v1 native actor and packed training replay demonstrably disagree: the
+complete earned67 diagnostic episode reached a 0.175524 action-logprob error.
+Do not reuse those captures for production policy updates. The zero-SGD
+`ffn-stable-v1` candidate preserves weights, optimizer/RNG and exposure while
+making projection arithmetic and pointwise rounding consistent. Its real CUDA
+forward/backward certificate and complete communicating-graph replay passed;
+13,190 action probabilities differed by at most 9.54e-7. Qualification does not
+establish capability lift: the paired four-case development result was parent
+4/4 versus candidate 3/4. Preserve that disadvantage and its false-blocked trace
+in selection evidence; do not call it nonregression or train on protected traces.
+
+Loss-mixture reports must account for remaining per-row visit quotas and actual
+earned credits. One-pass token shares substantially understated Native loss mass
+under seven-visit communication quotas. Use the prepared quota-aware 401,685-row
+continuation and its exact ledger basis, preserving earned exposure and all
+remaining visits. The 472 original-source render obligations were resolved as
+quality exclusions with retained sessions; the seven losslessly graphified long
+contexts still need capacity qualification and rebasing onto the actual adopted
+quota-aware predecessor. Neither prepared package is earned exposure.
+
+Portable development evidence must retain exact original evaluator files and
+source/container path mapping. Seal on the source host and validate the copied
+manifest; never rewrite raw score paths to manufacture verifiability. Structural
+ZIP deltas are the default actor-transfer optimization when smaller than the
+other verified choices. Preserve exact base/target hashes and independent
+reconstruction readback; a compact delta is recovery only with its actual base.
+
 ## Native policy arithmetic and source preparation (engineering, 2026-11-02)
 
 Actual native actors execute `shared_state.native_step`; CUDA BF16 projections

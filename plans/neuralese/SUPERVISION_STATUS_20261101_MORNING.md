@@ -1,3 +1,62 @@
+## Live supervision update, 2026-11-02 06:25 CET
+
+- Previous goal turn freshly verified 23 escalation/CLI/learning tests and 62
+  reward/rollout tests. This turn obtained the actual candidate development
+  outcome, preserved and diagnosed its failed trace, completed independent
+  execution qualification, froze the corrected operational runtime and reclaimed
+  11,945,770,680 bytes of unused generated SGLang weights. No new SGD is claimed.
+- Production is stopped. Original owner
+  lfm3-native67-sourcecorrected-jolt-1102.service ended cooperatively at04:49;
+  source-v1 complete replay FAILED (max action-logprob error0.175524). Original
+  captures and checkpoint21b4ac5a remain diagnostic evidence. Do not restart that
+  controller with its blocked learner or old runtime/seed commands.
+- New exact full candidate bf95bec416a1bb062999baa85df3f0d692220ef88575c22099dce008877c8960
+  is a zero-SGD arithmetic continuation of earned67: all weights, optimizer/RNG,
+  source obligations and exposure preserved. CUDA certificate covers actual
+  forward/backward and288 trainables. Fresh complete communicating graph replay
+  passed all13,190 actions, max9.5367431640625e-7, tolerance1e-4; both eager/plain
+  receipts live in ops/native67-neuralese-replay-1102. No decision-bearing CUDA
+  coverage or SGLang whole-model parity is claimed.
+- Pop paired protected development finished with exact same four cases/runtime:
+  parent4/4 versus candidate3/4. Both source-sealed portable manifests have been
+  copied and independently validated by execution qualification. Candidate failure
+  is route-replan: it lost location, discounted correct tool errors, invented a
+  bridge hazard and returned an unjustified blocked result. Oracle correctly
+  rejects it; this is not a scoring repair. Diagnosis and complete held trace:
+  ops/native67-candidate-dev-failure-1102. These held files are never training data.
+- Execution qualification completed06:23, ops/native67-ffn-qualified-selection-1102/
+  qualification.json. Selection owner select-native67-ffn-qualified-1102 is live
+  at this observation, rechecking exact custody before publication. Its explicit
+  judgment accepts the observed narrow development disadvantage to fix a proven
+  policy-gradient arithmetic defect; it does not claim nonregression or lift.
+  Before relying on selection, inspect selected-publication.json and actual state.
+- Full quota-aware401685 continuation is prepared at
+  /mnt/external/natlang-lfm3-data-20261028/acquired-401685-quota-aware-v2-1102.
+  Receipt551bee7b22a8f87d5a6e65361c3d86e6d080e72cc4eea69567b7c71ac2587b99.
+  One-pass CE shares were misleading under repeated communication quotas; use
+  its exact remaining-credit basis, not the superseded direct one-pass policy.
+  Actual continuation still needs launch/adoption/exposure. New operator
+  ops/next401685-quota-ffn-sft-1102/prepare.py requires selected bf95 and binds
+  runtime-native-quota-replay-1102, source/CE, seed/actor/learner commands and
+  resident authority. It has not run yet. Do not run old next401685-sft config.
+- Frozen runtime-native-quota-replay-1102 is actual commit5320becda and includes
+  quota-aware CE admission, mandatory-SFT execution custody, portable task evidence
+  and complete decision-option replay checks. Closure protection digest8ed08f06.
+  Training source graphification still has seven capacity-pending long contexts;
+  rebase them after quota-aware predecessor adoption. The472 rendering obligations
+  are resolved as quality exclusions with retained exact original sessions in
+  acquired-render-original-resolution-1102; the old pending count is historical.
+- Private qualified64 closure/original67 export finished202/202 with full GET.
+  Exact source67 and bf95 ZIP reconstruction capsules are separately PUT/GET
+  verified using the retained full67 base, zero running sandboxes. Capsule
+  private-recovery-20261101/native67-execution-reconstruction-capsule-1102.json;
+  this is exact checkpoint-byte recovery, not complete new-source restore proof.
+- Internal free~61.7GiB after cache cleanup; external~55GiB. External bf95 full
+  mirror exists; fresh hash unit verify-ffn67-external-mirror-1102 is live. Keep
+  internal candidate until its readers end and alias qualification succeeds;
+  reclaiming its15.4GB will permit checkpoint/reserve headroom above40GiB floor.
+  No cloud allocation, entitlement poller or paid teacher generation was started.
+
 ## Live supervision update, 2026-11-02 04:23 CET
 
 - Previous goal turn was progress: freshly verified 23 inference escalation and
