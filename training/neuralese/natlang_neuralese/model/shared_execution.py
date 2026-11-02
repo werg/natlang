@@ -15,7 +15,8 @@ def _fixed_ffn(module,value):
         return F.linear(value,module.weight,module.bias)
     from ..maple.fused_moe import invariant_linear
     shape=value.shape
-    output=invariant_linear(value.reshape(-1,shape[-1]),module.weight,precision='ieee')
+    output=invariant_linear(value.reshape(-1,shape[-1]),module.weight,precision='ieee',
+        allow_plain_fastpath=not getattr(module,'_native_ffn_force_invariant',False))
     output=output.reshape(*shape[:-1],module.weight.shape[0])
     return output if module.bias is None else output+module.bias
 
@@ -45,6 +46,8 @@ def configure_shared_execution(model,profile='source-v1'):
         if implementation is None:
             continue
         selected = profile == 'stable-v1' or (profile == 'ffn-stable-v1' and implementation is _fixed_ffn)
+        if implementation is _fixed_ffn:
+            module._native_ffn_force_invariant = profile == 'ffn-stable-v1'
         if selected:
             if not hasattr(module,'_native_shared_source_forward'):
                 module._native_shared_source_forward=module.forward
@@ -78,6 +81,8 @@ def validate_shared_execution(model,config):
             continue
         active=getattr(module.forward,'__func__',None)
         selected = profile == 'stable-v1' or (profile == 'ffn-stable-v1' and implementation is _fixed_ffn)
+        if implementation is _fixed_ffn and bool(getattr(module,'_native_ffn_force_invariant',False)) != (profile == 'ffn-stable-v1'):
+            raise ValueError('native shared execution FFN invariant policy differs from declared profile')
         if selected and (active is not implementation
                 or not hasattr(module,'_native_shared_source_forward')):
             raise ValueError('native shared execution module differs from declared profile: '+name)

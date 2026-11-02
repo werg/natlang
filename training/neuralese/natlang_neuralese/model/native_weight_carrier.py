@@ -1579,7 +1579,7 @@ class _TorchStoredLinear(torch.autograd.Function):
         return dx, dw, db, None, None, *weight_anchor_grads, *bias_anchor_grads
 
 
-def stored_linear(x, weight, bias=None, *, storage_dtype, fixed=False, precision='ieee'):
+def stored_linear(x, weight, bias=None, *, storage_dtype, fixed=False, precision='ieee', force_invariant=False):
     from ..common.native_higher_order import active_reference_arithmetic,reference_linear
     if active_reference_arithmetic() is not None:
         return reference_linear(x,weight,bias)
@@ -1591,7 +1591,8 @@ def stored_linear(x, weight, bias=None, *, storage_dtype, fixed=False, precision
             from ..maple.fused_moe import invariant_linear
             shape = x.shape
             out = invariant_linear(x.reshape(-1, shape[-1]), weight, precision=precision,
-                                   forward_storage_dtype=storage_dtype, cotangent_anchors=anchors).reshape(*shape[:-1], weight.shape[0])
+                                   forward_storage_dtype=storage_dtype, cotangent_anchors=anchors,
+                                   allow_plain_fastpath=not force_invariant).reshape(*shape[:-1], weight.shape[0])
         else:
             out = _TorchStoredLinear.apply(x, weight, None, storage_dtype, len(anchors), *anchors)
         return out if bias is None else out + bias
@@ -1676,10 +1677,17 @@ class NativeCarrierLinear(nn.Linear):
     def __init__(self, original):
         # Only a plain bound alias can safely yield to the carrier forward.
         override = original.__dict__.get('forward')
+        from .shared_execution import _fixed_ffn
+        source = original.__dict__.get('_native_shared_source_forward')
+        fixed_ffn = (getattr(override, '__self__', None) is original
+                     and getattr(override, '__func__', None) is _fixed_ffn
+                     and getattr(source, '__self__', None) is original
+                     and (getattr(source, '__func__', None) is nn.Linear.forward
+                          or getattr(getattr(source, '__func__', None), 'natlang_precision_forward', False)))
         if 'forward' in original.__dict__ and not (
                 getattr(override, '__self__', None) is original and
                 (getattr(override, '__func__', None) is nn.Linear.forward or
-                 getattr(getattr(override, '__func__', None), 'natlang_precision_forward', False))):
+                 getattr(getattr(override, '__func__', None), 'natlang_precision_forward', False) or fixed_ffn)):
             raise RuntimeError('Linear cotangent carrier cannot replace a custom instance forward')
         # Preserve hooks/config/ties without resetting or cloning parameters.
         self.__dict__ = original.__dict__.copy()
@@ -1689,15 +1697,20 @@ class NativeCarrierLinear(nn.Linear):
         self._buffers = original._buffers.copy()
         self._modules = original._modules.copy()
         self.forward_storage_dtype = original.weight.dtype
+        self._native_shared_fixed_ffn = fixed_ffn
 
     def forward(self, x):
         x, weight = _precision_operands(self, x)
-        return stored_linear(x, weight, self.bias, storage_dtype=self.forward_storage_dtype)
+        return stored_linear(x, weight, self.bias, storage_dtype=self.forward_storage_dtype,
+                             fixed=self._native_shared_fixed_ffn,
+                             force_invariant=getattr(self, '_native_ffn_force_invariant', False),
+                             precision=getattr(self, 'native_linear_precision', 'ieee'))
 
     def native_fixed_forward(self, x):
         x, weight = _precision_operands(self, x)
         return stored_linear(x, weight, self.bias, storage_dtype=self.forward_storage_dtype,
-                             fixed=True, precision=getattr(self, 'native_linear_precision', 'ieee'))
+                             fixed=True, precision=getattr(self, 'native_linear_precision', 'ieee'),
+                             force_invariant=getattr(self, '_native_ffn_force_invariant', False))
 
 
 def _precision_operands(module, x):

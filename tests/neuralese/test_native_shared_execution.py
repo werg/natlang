@@ -191,3 +191,14 @@ def test_stable_saved_tensor_identity_preserves_runtime_validation_and_rejects_p
     module.forward=module._native_shared_source_forward
     with pytest.raises(ValueError,match='module differs'):
         native.native_identity(model,config,checkpoint_sha256=sha256_file_hex(parent))
+
+
+def test_ffn_invariant_policy_disables_plain_training_vendor_fastpath(monkeypatch):
+    from natlang_neuralese.maple import fused_moe
+    from natlang_neuralese.model import native_weight_carrier
+    x=torch.randn(2,4);weight=torch.randn(3,4)
+    marker=object()
+    monkeypatch.setattr(native_weight_carrier,'plain_training_active',lambda:True)
+    monkeypatch.setattr(fused_moe._InvariantLinear,'apply',lambda *args:marker)
+    assert fused_moe.invariant_linear(x,weight,allow_plain_fastpath=False) is marker
+    assert torch.equal(fused_moe.invariant_linear(x,weight),torch.nn.functional.linear(x,weight))

@@ -599,3 +599,29 @@ def test_stored_rmsnorm_cuda_gain_cotangent_preserves_invocation_geometry(first,
         torch.autograd.backward((left, right), (grad[:, :first], grad[:, first:]))
         scope.finish()
     torch.testing.assert_close(layer.weight.grad.float(), expected.float(), atol=1e-5, rtol=1e-4)
+
+
+def test_ffn_stable_linear_carrier_preserves_fixed_forward_and_gradients(tmp_path):
+    from types import SimpleNamespace
+    from natlang_neuralese.model.shared_execution import configure_shared_execution, validate_shared_execution
+    from natlang_neuralese.model.native_weight_carrier import NativeCarrierLinear
+    torch.manual_seed(211)
+    port=nn.Module();port.block=nn.Module();port.block.feed_forward=nn.Sequential(nn.Linear(8,4,bias=False).to(torch.bfloat16))
+    model=SimpleNamespace(port=port)
+    configure_shared_execution(model,'ffn-stable-v1')
+    original=port.block.feed_forward[0];original_forward=original.forward;parameter=original.weight
+    value=torch.randn(3,8,dtype=torch.bfloat16)
+    xref=value.clone().requires_grad_(True);reference=port.block.feed_forward(xref)
+    expected_dx=torch.autograd.grad(reference.float().sum(),xref)[0]
+    x=value.clone().requires_grad_(True)
+    with ParameterCotangentScope.for_model(port,mode='vjp',directory=tmp_path) as scope:
+        carrier=port.block.feed_forward[0]
+        assert isinstance(carrier,NativeCarrierLinear) and carrier._native_shared_fixed_ffn
+        output=port.block.feed_forward(x)
+        assert torch.equal(output,reference.detach())
+        dweight,dx=torch.autograd.grad(output.float().sum(),(parameter,x))
+        assert torch.isfinite(dweight).all() and scope.entries[id(parameter)]['count']>0
+        torch.testing.assert_close(dx,expected_dx,atol=.016,rtol=.016)
+        scope.finish()
+    assert port.block.feed_forward[0] is original and original.forward == original_forward
+    validate_shared_execution(model,{'native_shared_execution':'ffn-stable-v1'})
