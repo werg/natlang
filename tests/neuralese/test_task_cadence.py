@@ -673,3 +673,59 @@ def test_native_task_eval_requires_and_constructs_real_transport(tmp_path, monke
         TaskEval(spec, tmp_path / 'out', engine, prompt_rendering='full')
     evaluated = TaskEval({**spec, 'neuralese_server': True}, tmp_path / 'out', engine, prompt_rendering='full')
     assert [row['id'] for row in evaluated.rows] == ['held']
+
+
+def test_inprocess_evaluation_binds_actor_and_actual_execution_geometry(tmp_path):
+    import json
+    from types import SimpleNamespace
+    from natlang_neuralese.eval.task_cadence import TaskEval
+    spec=parse_task_eval({'packet':{'path':'p','sha256':'s'},'cases':[0], 'workers':4, 'noise_repeats':1})
+    evaluator=_light_evaluator(spec,tmp_path)
+    evaluator.engine=SimpleNamespace(native_identity={'checkpoint_sha256':'a'*64},device='cpu',
+        model_config={'native_shared_execution':'ffn-stable-v1','native_linear_precision':'ieee'},
+        prefill_tokens=8192,prefix_cache=None)
+    (tmp_path/'task-eval.jsonl').write_text(json.dumps({'step':0,'eligible':True,'task_successes':1,
+        'packet_sha256':'s','case_indices':[0]})+'\n')
+    def execute(run,repeat=0):
+        run.mkdir(parents=True,exist_ok=True)
+        return {'task_successes':1,'task_success_rate':1.,'complete':True,'cases':[],
+                'cases_expected':1,'outcome_counts':{'task_success':1,'infrastructure_error':0,
+                    'unresolved':0,'semantic_mismatch':0}},[0]
+    evaluator._execute=execute
+    first=evaluator.run(1)
+    assert first['previous_step'] is None  # historical execution geometry is unknown
+    assert first['native_identity']=={'checkpoint_sha256':'a'*64}
+    assert first['serving_execution']['prefill_tokens']==8192
+    assert first['serving_execution']['workers']==4
+    assert first['serving_execution']['prefix_cache']['enabled'] is False
+    assert json.loads((tmp_path/'task-eval/step-0000001/task-score.json').read_text())['native_identity']==first['native_identity']
+    # Changing weights can compare only if execution geometry is unchanged.
+    evaluator.engine.native_identity={'checkpoint_sha256':'b'*64}
+    second=evaluator.run(2)
+    assert second['previous_step']==1
+    evaluator.engine.prefill_tokens=2048
+    third=evaluator.run(3)
+    assert third['previous_step'] is None
+    # A same-step result from another actor or serving geometry is not reusable.
+    evaluator.engine.native_identity={'checkpoint_sha256':'c'*64}
+    evaluator.cadence=lambda step,final=False: {'rerun':step,'final':final,'eligible':True}
+    assert evaluator.final_at(3)=={'rerun':3,'final':True,'eligible':True}
+
+
+@pytest.mark.parametrize('change',['identity','geometry'])
+def test_inprocess_evaluation_rejects_actor_or_geometry_change(tmp_path,change):
+    from types import SimpleNamespace
+    spec=parse_task_eval({'packet':{'path':'p','sha256':'s'},'cases':[0]})
+    evaluator=_light_evaluator(spec,tmp_path)
+    evaluator.engine=SimpleNamespace(native_identity={'checkpoint_sha256':'a'*64},device='cpu',
+        model_config={},prefill_tokens=8192,prefix_cache=None)
+    def execute(run,repeat=0):
+        run.mkdir(parents=True,exist_ok=True)
+        if change=='identity':evaluator.engine.native_identity['checkpoint_sha256']='b'*64
+        else:evaluator.engine.prefill_tokens=2048
+        return {'task_successes':1,'task_success_rate':1.,'complete':True,'cases':[],
+                'cases_expected':1,'outcome_counts':{'task_success':1,'infrastructure_error':0,
+                    'unresolved':0,'semantic_mismatch':0}},[0]
+    evaluator._execute=execute
+    with pytest.raises(ValueError,match='changed during'):
+        evaluator.run(1)

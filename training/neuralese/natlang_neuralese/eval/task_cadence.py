@@ -52,6 +52,7 @@ previous eligible evaluation of the stage minus ``noise_successes``. Every evalu
 from __future__ import annotations
 
 import collections
+import copy
 import json
 import os
 import shutil
@@ -347,7 +348,7 @@ class TaskEval:
         callback = getattr(self, 'stop_requested', None)
         return callback is not None and bool(callback())
 
-    def previous(self, step: int) -> dict | None:
+    def previous(self, step: int, *, serving_execution=None) -> dict | None:
         """The stage's last eligible evaluation before ``step`` on the same packet and cases (None if none)."""
         log = self.out / 'task-eval.jsonl'
         if not log.is_file():
@@ -360,7 +361,8 @@ class TaskEval:
                 continue
             if (row.get('eligible') and row.get('step', step) < step and
                     row.get('packet_sha256') == self.spec['packet']['sha256'] and
-                    row.get('case_indices') == self.spec['cases']):
+                    row.get('case_indices') == self.spec['cases'] and
+                    (serving_execution is None or row.get('serving_execution') == serving_execution)):
                 found = row
         return found
 
@@ -469,7 +471,7 @@ class TaskEval:
                     results.extend(read_jsonl(entry['output']))
         return score_rows(self.rows, results, finishes, keys), codes
 
-    def measured_noise(self) -> int | None:
+    def measured_noise(self, *, serving_execution=None) -> int | None:
         """The largest success-count difference between repeat runs of one model recorded in this stage's log."""
         log = self.out / 'task-eval.jsonl'
         values = []
@@ -482,6 +484,7 @@ class TaskEval:
                 if (row.get('packet_sha256') != self.spec['packet']['sha256']
                         or row.get('case_indices') != self.spec['cases']
                         or row.get('prompt_rendering') != self.prompt_rendering
+                        or (serving_execution is not None and row.get('serving_execution') != serving_execution)
                         or row.get('noise_measurement_policy') != NOISE_POLICY
                         or row.get('eligible') is not True):
                     continue
@@ -499,6 +502,9 @@ class TaskEval:
 
     def run(self, step: int) -> dict:
         started = time.time()
+        engine = getattr(self, 'engine', None)
+        native_identity = copy.deepcopy(getattr(engine, 'native_identity', None))
+        serving_execution = self._serving_execution() if native_identity is not None else None
         run = self.root / f'step-{step:07d}'
         score, codes = self._execute(run)
         operational_stop = self.operational_stop_requested()
@@ -506,7 +512,7 @@ class TaskEval:
         # Noise from repeat runs (coordinator 2026-10-12): the first evaluation of a stage runs the same model again
         # (noise_repeats total runs); the spread of the success counts is this stage's measured noise.
         repeats, repeat_noise, repeat_observations = [], None, []
-        if eligible and self.measured_noise() is None and self.spec.get('noise_repeats', 1) > 1:
+        if eligible and self.measured_noise(serving_execution=serving_execution) is None and self.spec.get('noise_repeats', 1) > 1:
             for index in range(1, self.spec.get('noise_repeats', 1)):
                 if self.operational_stop_requested(): break
                 again, again_codes = self._execute(run.with_name(run.name + f'-repeat{index}'), index)
@@ -520,9 +526,9 @@ class TaskEval:
                 repeat_noise = max(counts) - min(counts)
         operational_stop = operational_stop or self.operational_stop_requested()
         eligible = eligible and not operational_stop
-        measured = repeat_noise if repeat_noise is not None else self.measured_noise()
+        measured = repeat_noise if repeat_noise is not None else self.measured_noise(serving_execution=serving_execution)
         noise = max(self.spec['noise_successes'], measured or 0)
-        previous = self.previous(step)
+        previous = self.previous(step, serving_execution=serving_execution)
         coefficient_runtime=getattr(getattr(self,'engine',None),'native_coefficient_policy_runtime',None)
         summary = {'schema': SCHEMA, 'step': step, 'task_successes': score['task_successes'],
                    **({'coefficient_policy_sha256':coefficient_runtime['policy_sha256']} if coefficient_runtime is not None else {}),
@@ -541,6 +547,13 @@ class TaskEval:
                    'regressed': eligible and bool(previous) and score['task_successes'] < previous['task_successes'] - noise,
                    'code_commit': _git_head(),
                    'seconds': time.time() - started, 'run': str(run)}
+        if native_identity is not None:
+            if getattr(engine, 'native_identity', None) != native_identity:
+                raise ValueError('task evaluation actor identity changed during execution')
+            if self._serving_execution() != serving_execution:
+                raise ValueError('task evaluation serving execution changed during evaluation')
+            summary['native_identity'] = native_identity
+            summary['serving_execution'] = serving_execution
         if operational_stop:
             summary.update(operational_stop=True, qualification_deferred=True)
         if not eligible:
@@ -559,6 +572,38 @@ class TaskEval:
                           ('step', 'task_successes', 'cases', 'outcome_counts', 'eligible', 'previous_successes',
                            'repeat_noise', 'noise_successes', 'regressed', 'seconds')}}), flush=True)
         return summary
+
+    def _serving_execution(self):
+        """Bind actual in-process geometry separately from the changing checkpoint."""
+        import torch
+        engine = self.engine
+        cache = getattr(engine, 'prefix_cache', None)
+        config = getattr(engine, 'model_config', {}) or {}
+        device = str(getattr(engine, 'device', 'unknown'))
+        hardware = (torch.cuda.get_device_name(torch.device(device))
+                    if device.startswith('cuda') and torch.cuda.is_initialized() else None)
+        return {'schema':'natlang.task-eval-serving-execution/1',
+                'device':device, 'cuda_device_name':hardware,
+                'torch_version':str(torch.__version__), 'cuda_version':torch.version.cuda,
+                'prefill_tokens':getattr(engine, 'prefill_tokens', None),
+                'prefix_cache':{'enabled':cache is not None,
+                    'block_tokens':getattr(cache, 'block', None),
+                    'budget_bytes':getattr(cache, 'budget', None)},
+                'decode':'native-step-batch-for-concurrent-requests',
+                'workers':self.spec['workers'], 'collector_model_concurrency':2,
+                'task_policy':{key:self.spec.get(key) for key in (
+                    'case_seconds','max_model_requests','max_turns','temperature',
+                    'neuralese_server','identical_turn_limit','runtime')},
+                'prompt_rendering':self.prompt_rendering,
+                'bf16_reduction':('reduced' if torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction
+                                  else 'fp32-accumulate'),
+                'matmul_tf32':bool(torch.backends.cuda.matmul.allow_tf32),
+                'cudnn_tf32':bool(torch.backends.cudnn.allow_tf32),
+                'native_compile':os.environ.get('NATLANG_NATIVE_COMPILE', '1'),
+                'native_shared_execution':config.get('native_shared_execution', 'source-v1'),
+                'native_norm_execution':config.get('native_norm_execution', 'source-v1'),
+                'native_linear_precision':config.get('native_linear_precision', 'ieee'),
+                'model_dtype':config.get('dtype')}
 
     def consecutive_failures(self) -> int:
         """Ineligible evaluations at the end of this stage's log (a resumed run continues the count)."""
@@ -589,6 +634,9 @@ class TaskEval:
         an eligible result for the same packet and step, or rerun the collector
         until it yields an eligible final result (subject to its failure cap).
         """
+        engine = getattr(self, 'engine', None)
+        native_identity = getattr(engine, 'native_identity', None)
+        serving_execution = self._serving_execution() if native_identity is not None else None
         log = self.out / 'task-eval.jsonl'
         if log.is_file():
             for line in reversed(log.read_text().splitlines()):
@@ -600,7 +648,9 @@ class TaskEval:
                     break  # Do not reuse an earlier publication of this interrupted attempt.
                 if (row.get('step') == step and row.get('eligible') is True and
                         row.get('packet_sha256') == self.spec['packet']['sha256'] and
-                        row.get('case_indices') == self.spec['cases']):
+                        row.get('case_indices') == self.spec['cases'] and
+                        (native_identity is None or (row.get('native_identity') == native_identity and
+                         row.get('serving_execution') == serving_execution))):
                     return row
         summary = self.cadence(step, final=True)
         while not summary['eligible'] and not self.operational_stop_requested():
