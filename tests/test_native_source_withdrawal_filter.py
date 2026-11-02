@@ -46,7 +46,7 @@ def test_filter_fails_closed_and_never_publishes_partial(tmp_path,fault):
     elif fault=='duplicate':targets.append(dict(targets[0]))
     elif fault=='wrong_source':targets[0]['source_sha256']='f'*64
     else:
-        row=json.loads(raw[1]);row['conversion']['role_interpretation']='communication';raw[1]=json.dumps(row).encode()+b'\n';source.write_bytes(b''.join(raw));targets[0]['source_sha256']=sha256_file_hex(source)
+        targets[0]['communication']=True
     output=tmp_path/'filtered.jsonl'
     with pytest.raises(ValueError):filter_source(source,output,targets,source_sha256=sha256_file_hex(source))
     assert not output.exists()
@@ -117,7 +117,11 @@ def test_complete_communication_graph_withdrawal_uses_real_source_index(tmp_path
                {'name':'writer','token_ids':[1,2,3], 'target_weights':[0,1,1], 'producing':[[1,3]]},
                {'name':'reader','token_ids':[4,5,6], 'target_weights':[0,0,1],
                 'imports':[{'at':1,'source':'writer','start':1,'stop':3}]}]}
-    rows=[ordinary('first'),graph,ordinary('ordinary-remove'),ordinary('last')]
+    chain=ordinary('ordinary-remove')
+    chain.pop('conversion');chain['source_chain']={'id':'teacher-program'};chain['chain_conversion']={'version':1}
+    chain['nodes']=[{'name':f'n{i}','token_ids':[1,2+i], 'target_weights':[0,1],
+                     'imports':[], 'producing':[]} for i in range(4)]
+    rows=[ordinary('first'),graph,chain,ordinary('last')]
     # JSONL rows deliberately vary spacing while remaining one physical line each.
     raw=[json.dumps(row, separators=(',', ': ') if i==1 else (', ', ':')).encode()+b'\n'
          for i,row in enumerate(rows)]
@@ -164,3 +168,27 @@ def test_invalid_communication_graph_is_never_partially_withdrawn(tmp_path):
     with pytest.raises(ValueError):
         filter_source(source,tmp_path/'invalid.jsonl',[target],source_sha256=sha256_file_hex(source))
     assert not (tmp_path/'invalid.jsonl').exists()
+
+
+def test_compressed_early_validation_failure_preserves_original_error(tmp_path):
+    import base64
+    import os
+    import subprocess
+    source, raw, targets, _, _=fixture(tmp_path)
+    extra=json.loads(raw[2]);extra['large_metadata']=base64.b64encode(os.urandom(524288)).decode()
+    source.write_bytes(raw[0]+raw[1]+json.dumps(extra).encode()+b'\n')
+    compressed=tmp_path/'source.zst'
+    with compressed.open('wb') as output:
+        subprocess.run(['zstd','-qc',str(source)],stdout=output,check=True)
+    target={**targets[0],'source_sha256':sha256_file_hex(compressed),'communication':True}
+    with pytest.raises(ValueError,match='target graph class or binding differs'):
+        filter_source(compressed,tmp_path/'bad.zst',[target],source_sha256=sha256_file_hex(compressed))
+    assert not (tmp_path/'bad.zst').exists()
+
+
+def test_corrupt_compressed_source_reports_decompression_failure(tmp_path):
+    source, _, targets, _, _=fixture(tmp_path)
+    compressed=tmp_path/'broken.zst';compressed.write_bytes(b'not a zstd stream')
+    targets[0]['source_sha256']=sha256_file_hex(compressed)
+    with pytest.raises(ValueError,match='decompression failed'):
+        filter_source(compressed,tmp_path/'bad.jsonl',targets,source_sha256=sha256_file_hex(compressed))

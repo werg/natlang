@@ -8,6 +8,7 @@ from pathlib import Path
 import pickle
 import re
 import subprocess
+import sys
 import tempfile
 
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex as digest, sha256_file_hex
@@ -27,8 +28,9 @@ def _raw(path):
         try:
             yield child.stdout
         finally:
+            failed = sys.exc_info()[0] is not None
             child.stdout.close()
-            if child.wait():
+            if child.wait() and not failed:
                 raise ValueError('native source decompression failed')
     else:
         with Path(path).open('rb') as stream:
@@ -81,20 +83,21 @@ def filter_source(source, output, rows, *, source_sha256):
                             if (example.split != 'train' or classification is not selected[ident]['communication']
                                     or _row_bindings([example])[ident] != selected[ident]['binding']):
                                 raise ValueError('withdrawal target graph class or binding differs')
-                            conversion = row.get('conversion') or {}
-                            if (not classification and (len(row.get('nodes', [])) != 1
-                                    or set(row)-{'schema','id','split','source_groups','tokenizer_fingerprint','nodes','conversion'}
-                                    or set(row['nodes'][0])-{'name','token_ids','target_weights'}
-                                    or conversion.get('role_interpretation') not in ('ordinary-text', 'whole-trajectory-chat-roles'))):
-                                raise ValueError('withdrawal target is not an ordinary train row')
                             removed.append({**selected[ident], 'tokenizer_fingerprint':fingerprint,
                                             'raw_row_sha256':hashlib.sha256(raw).hexdigest()})
                         else:
                             writer.write(raw); retained.update(raw); kept_ids.append(ident)
             finally:
                 if compressor:
-                    writer.close()
-                    if compressor.wait():
+                    failed = sys.exc_info()[0] is not None
+                    try:
+                        writer.close()
+                    except OSError:
+                        if not failed:
+                            raise
+                    finally:
+                        status = compressor.wait()
+                    if status and not failed:
                         raise ValueError('filtered native source compression failed')
             target.flush(); os.fsync(target.fileno())
         if {row['id'] for row in removed} != set(selected) or not kept_ids:
