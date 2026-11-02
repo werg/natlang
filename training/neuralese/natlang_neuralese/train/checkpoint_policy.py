@@ -185,6 +185,8 @@ class CheckpointPolicy:
 
     def _write(self, state: dict, target: Path) -> dict:
         """Preserve the previous slot until the replacement is completely written."""
+        from ..model.native_snapshot_publication import selected_versions,require_versions_unchanged
+        versions=selected_versions(state)
         if self._persistent_reservation is None or target != self.slot:
             self._require_disk_headroom(target)
         # GPU tensors are copied to host one storage at a time while writing; no second full copy in memory.
@@ -193,6 +195,7 @@ class CheckpointPolicy:
             self._reservation_roles(None, None)
         else:
             atomic_checkpoint(target, state)
+        require_versions_unchanged(versions)
         event = {"time": time.time(), "path": str(target), "bytes": target.stat().st_size,
                  "previous_preserved_until_replace": True}
         self._record_committed(state)
@@ -288,6 +291,9 @@ class CheckpointPolicy:
             event['full_recovery'] = 'queued-not-yet-independently-verified'
         if self.on_saved is not None:
             self.on_saved(self.slot, state, event)
+        if state.get('schema') == 'natlang.neuralese-native-checkpoint/1':
+            from ..model.native_snapshot_publication import publish_saved_snapshot
+            event['actor_snapshot_view']=publish_saved_snapshot(self.recovery_queue,self.slot,state)
         self.last_saved_monotonic = time.monotonic()
         better = metric is not None and (self.best_metric is None or (
             metric > self.best_metric if higher_is_better else metric < self.best_metric))
@@ -378,7 +384,13 @@ class CheckpointPolicy:
                     'previous_preserved_until_replace':True,'async_pending':True,
                     'async_headroom':admission,'async_mode':'background'}
                 self.events.append(event)
+                versions=[]
+                def before_write(snapshot):
+                    from ..model.native_snapshot_publication import selected_versions
+                    versions.extend(selected_versions(snapshot))
                 def after_write(snapshot):
+                    from ..model.native_snapshot_publication import require_versions_unchanged
+                    require_versions_unchanged(versions)
                     stat = self.slot.stat()
                     event['bytes'] = stat.st_size
                     self._record_committed(snapshot)
@@ -389,7 +401,7 @@ class CheckpointPolicy:
                 try:
                     if spare is not None:
                         self._reservation_roles(reserved_writer, spare)
-                    self._async_writer.submit(self.slot,state,after_write=after_write, reservation=reserved_writer)
+                    self._async_writer.submit(self.slot,state,after_write=after_write,before_write=before_write, reservation=reserved_writer)
                     if spare is not None:
                         self._persistent_reservation = spare
                     self.last_saved_monotonic = time.monotonic()

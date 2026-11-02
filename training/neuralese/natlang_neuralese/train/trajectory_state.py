@@ -458,12 +458,13 @@ class AsyncAtomicCheckpointWriter:
         if thread is not None:
             self._finish(thread)
 
-    def submit(self, path, state, *, after_write=None, wait=False, reservation=None):
+    def submit(self, path, state, *, after_write=None, before_write=None, wait=False, reservation=None):
         self.drain()
         snapshot = immutable_cpu_snapshot(state)
 
         def write():
             try:
+                if before_write is not None:before_write(snapshot)
                 if reservation is None:
                     atomic_checkpoint(path, snapshot)
                 else:

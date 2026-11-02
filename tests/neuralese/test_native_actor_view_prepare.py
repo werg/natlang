@@ -186,3 +186,105 @@ def test_snapshot_view_preserves_storage_aliases_and_rejects_mutation(tmp_path,m
     with pytest.raises(ValueError,match='snapshot tensor changed'):
         write_snapshot_actor_view(path,tmp_path/'mutated',snapshot=state,decoded_source_stat=signature)
     assert not list((tmp_path/'mutated'/first_source_sha(path)).glob('*.json'))
+
+
+def test_snapshot_owner_pins_full_source_and_bounds_pending_queue(tmp_path,monkeypatch):
+    import json,os
+    from types import SimpleNamespace
+    from natlang_neuralese.model.native_snapshot_publication import publish_saved_snapshot
+    from natlang_neuralese.train import trajectory_state
+    source=tiny_complete(tmp_path);state=CheckpointPolicy.load(source)
+    journal=tmp_path/'recovery';journal.mkdir();queue=SimpleNamespace(directory=journal)
+    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda:1024**3)
+    result=publish_saved_snapshot(queue,source,state)
+    assert result['status']=='ready'
+    pending=json.loads((journal/'actor-view-pending.json').read_text());pin=__import__('pathlib').Path(pending['pin'])
+    assert pending['full_source_pinned'] and os.stat(pin).st_ino==os.stat(source).st_ino
+    source.rename(tmp_path/'old-slot');source.write_bytes(b'new checkpoint')
+    assert pin.read_bytes()==(tmp_path/'old-slot').read_bytes()
+    assert publish_saved_snapshot(queue,source,state)['status']=='deferred'
+    leases=json.loads((journal/'standalone-retention-consumer-leases.json').read_text())['leases']
+    assert len(leases)==1 and leases[0]['role']==pending['lease']['role']
+
+
+def test_snapshot_owner_failure_keeps_full_source_pin_and_retry_record(tmp_path,monkeypatch):
+    import json
+    from types import SimpleNamespace
+    from natlang_neuralese.model import native_snapshot_publication as publisher
+    source=tiny_complete(tmp_path);state=CheckpointPolicy.load(source)
+    journal=tmp_path/'recovery';journal.mkdir()
+    actual=publisher.write_snapshot_actor_view
+    monkeypatch.setattr(publisher,'write_snapshot_actor_view',lambda *a,**k:(_ for _ in ()).throw(OSError('disk full')))
+    result=publisher.publish_saved_snapshot(SimpleNamespace(directory=journal),source,state)
+    pending=json.loads((journal/'actor-view-pending.json').read_text())
+    assert result['status']=='pending' and pending['full_source_pinned'] and pending['last_error']['message']=='disk full'
+    assert __import__('pathlib').Path(pending['pin']).read_bytes()==source.read_bytes()
+    from natlang_neuralese.train import trajectory_state
+    monkeypatch.setattr(publisher,'write_snapshot_actor_view',actual)
+    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda:1024**3)
+    assert publisher.retry_pending(journal)['status']=='ready'
+
+
+def test_owner_transport_and_explicit_release_require_verified_full_source(tmp_path,monkeypatch):
+    import json,shutil,tempfile
+    from pathlib import Path
+    from types import SimpleNamespace
+    from natlang_neuralese.model import native_snapshot_publication as owner
+    from natlang_neuralese.model.native_bundle import _fresh_file_binding
+    from natlang_neuralese.common import runtime_inventory
+    from natlang_neuralese.train import trajectory_state
+    source=tiny_complete(tmp_path);state=CheckpointPolicy.load(source);journal=tmp_path/'recovery';journal.mkdir()
+    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda:1024**3)
+    assert owner.publish_saved_snapshot(SimpleNamespace(directory=journal),source,state)['status']=='ready'
+    record=json.loads((journal/'actor-view-pending.json').read_text());pin=Path(record['pin'])
+    monkeypatch.setattr(runtime_inventory,'python_runtime_binding',lambda:{'sha256':'a'*64})
+    def no_load(*args,**kwargs):raise AssertionError('transport must not decode full source')
+    monkeypatch.setattr(CheckpointPolicy,'load',no_load)
+    transport=owner.prepare_pending_transport(journal);manifest=json.loads(Path(transport['path']).read_text())
+    delivery=tmp_path/'delivery.json';delivery.write_text(json.dumps({'schema':'natlang.actor-transfer-readback/1',
+        'transport_sha256':transport['sha256'],'verified':{'sha256':manifest['view']['sha256'],
+            'source_checkpoint_sha256':record['source']['sha256']}}))
+    with tempfile.TemporaryDirectory(dir='/dev/shm') as external:
+        recovered=Path(external)/'checkpoint.pt';shutil.copyfile(source,recovered)
+        st=pin.stat();receipt=tmp_path/'recovery-proof.json'
+        receipt.write_text(json.dumps({'schema':'natlang.local-full-recovery-export/1','full_state':True,
+            'independent_readback':True,'source_identity':{'device':st.st_dev,'inode':st.st_ino,'size':st.st_size,'mtime_ns':st.st_mtime_ns},
+            'checkpoint':_fresh_file_binding(recovered)}))
+        result=owner.release_pending(journal,recovery_ref=_fresh_file_binding(receipt),transport_ref=transport,delivery_ref=_fresh_file_binding(delivery))
+    assert result['source_sha256']==record['source']['sha256'] and not pin.exists()
+    assert not (journal/'actor-view-pending.json').exists()
+
+
+@pytest.mark.parametrize('asynchronous',[False,True])
+def test_checkpoint_policy_default_publishes_from_its_committed_owner_state(tmp_path,monkeypatch,asynchronous):
+    from natlang_neuralese.train import trajectory_state,checkpoint_safety
+    source=tiny_complete(tmp_path);state=CheckpointPolicy.load(source)
+    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda:1024**3)
+    monkeypatch.setattr(checkpoint_safety,'native_async_snapshot_headroom',lambda *args,**kwargs:{'eligible':True})
+    policy=CheckpointPolicy(tmp_path/'learner',prune_best=False,async_checkpoint=asynchronous)
+    try:
+        event=policy.save(state,async_allowed=asynchronous,async_optimizer=object() if asynchronous else None)
+        policy.drain_async()
+        pending=json.loads((tmp_path/'learner/actor-view-owner/actor-view-pending.json').read_text())
+        assert pending['status']=='ready' and pending['full_source_pinned']
+        assert event['actor_snapshot_view']['status']=='ready'
+        assert pending['source']['sha256']==first_source_sha(policy.slot)
+    finally:policy.close()
+
+
+def test_primary_checkpoint_mutation_rejects_actor_publication_but_keeps_full_commit(tmp_path,monkeypatch):
+    from natlang_neuralese.train import checkpoint_policy
+    source=tiny_complete(tmp_path);state=CheckpointPolicy.load(source)
+    state['backbone_state']['weight']=state['backbone_state']['weight'].clone()
+    policy=CheckpointPolicy(tmp_path/'learner',prune_best=False,async_checkpoint=False)
+    actual=checkpoint_policy.atomic_checkpoint
+    def write_then_mutate(path,values,**kwargs):
+        actual(path,values,**kwargs)
+        values['backbone_state']['weight'].view(-1)[0]+=1
+    monkeypatch.setattr(checkpoint_policy,'atomic_checkpoint',write_then_mutate)
+    try:
+        with pytest.raises(ValueError,match='primary checkpoint write'):
+            policy.save(state)
+        assert policy.slot.exists() and CheckpointPolicy.load(policy.slot)['training']['optimizer']
+        assert not (tmp_path/'learner/actor-view-owner/actor-view-pending.json').exists()
+    finally:policy.close()
