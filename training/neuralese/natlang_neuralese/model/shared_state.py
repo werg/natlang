@@ -38,14 +38,67 @@ class LowRankTokenEmbedding(nn.Module):
         return embeddings + (update * producing[..., None].to(update.dtype)).to(embeddings.dtype)
 
 
+_ROTARY_QUERY_CHUNK = 16384
+
+
+def _known_rotary_port(port):
+    # Do not assume an arbitrary custom port ignores the dummy input's shape
+    # or implements the same pair arithmetic.
+    from .lfm2_port import PortBackbone
+    from .hf_port import QwenPortBackbone
+    from .lfm3_port import Lfm3PortBackbone
+    cls = type(port)
+    if cls not in (PortBackbone, QwenPortBackbone, Lfm3PortBackbone):
+        return False
+    if getattr(getattr(port, '_rope', None), '__func__', None) is not cls._rope:
+        return False
+    apply = getattr(cls, '_apply_rope', None)
+    return apply is None or getattr(getattr(port, '_apply_rope', None), '__func__', None) is apply
+
+
 def _rotate(port, tensor, positions, layer):
-    # Apply existing model-specific RoPE tables at logical consumer positions.
-    return _rotate_pair(port, tensor, tensor, positions, layer)[0]
+    """Apply one model's exact rotary arithmetic without a discarded second output."""
+    if not _known_rotary_port(port):
+        return _rotate_pair(port, tensor, tensor, positions, layer)[0]
+    cos, sin = _rotary_tables(port, tensor, positions)
+    architecture = getattr(port.config, 'model_type', None)
+    if architecture == 'lfm3':
+        kind = port.layer_types[layer]
+        cos, sin = cos[kind], sin[kind]
+    # Tables are computed once for the complete position set: dynamic RoPE
+    # scaling must not depend on individual execution chunks.
+    chunks = []
+    for start in range(0, tensor.shape[2], _ROTARY_QUERY_CHUNK):
+        stop = min(start + _ROTARY_QUERY_CHUNK, tensor.shape[2])
+        value = tensor[:, :, start:stop]
+        c, s = cos[:, start:stop].unsqueeze(1), sin[:, start:stop].unsqueeze(1)
+        if architecture == 'lfm3':
+            c, s = c.float(), s.float()
+            half = value.shape[-1] // 2
+            # Keep the reference's two separate casts: sharing one cast
+            # changes BF16 backward accumulation even when forward is equal.
+            rotated_input = value.float()
+            result = ((value.float() * c) +
+                      (torch.cat((-rotated_input[..., half:], rotated_input[..., :half]), dim=-1) * s)).to(value.dtype)
+        elif architecture == 'qwen3_5':
+            rotary_dim = c.shape[-1]
+            rotary, remainder = value[..., :rotary_dim], value[..., rotary_dim:]
+            half = rotary.shape[-1] // 2
+            result = torch.cat((rotary * c + torch.cat((-rotary[..., half:], rotary[..., :half]), dim=-1) * s,
+                                remainder), dim=-1)
+        else:
+            half = value.shape[-1] // 2
+            result = (value * c) + (torch.cat((-value[..., half:], value[..., :half]), dim=-1) * s)
+        chunks.append(result)
+    # Preserve empty input behavior without constructing an invalid cat.
+    return torch.cat(chunks, dim=2) if chunks else tensor.clone()
 
 
 def _rotary_tables(port, query, positions):
     """The port's model-wide tables depend on positions, device and dtype."""
-    dummy = query.new_empty(1, len(positions), port.embedding_weight.shape[1])
+    # LFM2/LFM3/Qwen3/Qwen3.5 rotary tables inspect only dtype/device of x;
+    # their frequencies and positions do not depend on its shape or contents.
+    dummy = query.new_empty(1) if _known_rotary_port(port) else query.new_empty(1, len(positions), port.embedding_weight.shape[1])
     return port._rope(dummy, positions[None])
 
 
