@@ -2,7 +2,7 @@
   "description": "SGLang fork serving natlang's LFM3 RL actors (owner decision 2026-10-29: upstream-maintained Liquid LFM3 implementation, sgl-project/sglang PR #46858, for dependability). The PR branch (with the upstream main it contains) plus natlang commits: exact post-temperature sampled-token logprob and top-k returned compactly per token (custom_params.natlang_top_k); LFM3 producer spans (the export's producing embedding table, span state mapped in extend and decode) and the native-state export of a closed span (custom_params.natlang_capture) and native-state import through content-hashed placeholders (custom_params.natlang_import), and per-request native adapters in resident low-rank slots (custom_params.natlang_adapter; batches without an adapted request replay the base-only decode graph). The natlang serving front is serve/sglang_actor.py (scripts/neuralese_data/serve_native_checkpoint.py --engine sglang); the checkpoint is served through export/native_hf.py. NATLANG_FORK.md in the fork documents the base, our commits and the rebase procedure. A separate git checkout, not vendored.",
   "path": "../sglang-natlang",
   "branch": "natlang",
-  "commit": "fa291aa1a8b0d3049a8c5a7fc3ec85a200e8abda",
+  "commit": "c8b499410b5df8ad321be23191c8bfc7994c4ea5",
   "repository": "https://github.com/werg/sglang-natlang",
   "upstream": "https://github.com/sgl-project/sglang",
   "upstream_base": "17e94c4677d7beb58a89b104fd61b3768994e45e",
