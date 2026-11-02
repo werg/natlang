@@ -33,6 +33,7 @@ def test_exact_transition_and_tamper_rejection():
 def test_file_verification_reloads_and_rejects_changed_bytes(tmp_path, monkeypatch):
     import hashlib
     from natlang_neuralese.rl import native_raw_policy
+    from natlang_neuralese.train import native_execution_transition as tx
     from natlang_neuralese.train.native_execution_transition import verify_files
     source=parent();child=derive(source,parent_sha256='a'*64)
     def ref(path):
@@ -42,9 +43,26 @@ def test_file_verification_reloads_and_rejects_changed_bytes(tmp_path, monkeypat
     child=derive(source,parent_sha256=parent_ref['sha256']);torch.save(child,b)
     monkeypatch.setattr(native_raw_policy,'saved_native_identity',lambda state,checkpoint_sha256:
         {'checkpoint_sha256':checkpoint_sha256,'profile':state['model_config'].get('native_shared_execution','source-v1')})
-    proof=verify_files(parent_ref,ref(b))
+    comparisons=[]
+    compare=tx.verify_states
+    def observed_compare(*args, **kwargs):
+        comparisons.append(True)
+        return compare(*args, **kwargs)
+    monkeypatch.setattr(tx, 'verify_states', observed_compare)
+    child_ref=ref(b)
+    proof=verify_files(parent_ref,child_ref)
     assert proof['actor_identity']['old']['profile']=='source-v1'
     assert proof['actor_identity']['new']['profile']=='ffn-stable-v1'
+    proof['actor_identity']['new']['profile']='caller mutation'
+    assert verify_files(parent_ref,child_ref)['actor_identity']['new']['profile']=='ffn-stable-v1'
+    assert len(comparisons)==1
+    # Even identical bytes require a new tensor comparison after an inode's
+    # checked metadata changes. A wrong digest never gets a cache hit.
+    import os
+    stat=b.stat();os.utime(b, ns=(stat.st_atime_ns,stat.st_mtime_ns+1))
+    verify_files(parent_ref,child_ref)
+    assert len(comparisons)==2
+    with pytest.raises(ValueError):verify_files(parent_ref,{**child_ref,'sha256':'0'*64})
     bad=copy.deepcopy(child);bad['training']['exposure_counts']['row']+=1;torch.save(bad,b)
     with pytest.raises(ValueError):verify_files(parent_ref,ref(b))
 

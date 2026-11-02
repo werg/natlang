@@ -6,6 +6,14 @@ collection before using a new policy for learning.
 """
 from __future__ import annotations
 
+from collections import OrderedDict
+
+# Repeated admission layers in one process authenticate the same full tensors.
+# Cache only a completed independent comparison, keyed by both exact references
+# and their current five-field filesystem identities. Nothing survives a process
+# restart or a change to either endpoint; retained results contain no tensors.
+_VERIFIED_FILE_TRANSITIONS = OrderedDict()
+
 SCHEMA = 'natlang.native-zero-sgd-execution-transition/1'
 SOURCE = 'source-v1'
 TARGET = 'ffn-stable-v1'
@@ -62,6 +70,8 @@ def verify_states(parent, child, *, parent_sha256):
 def verify_files(parent_ref, child_ref):
     """Independently reread and compare full checkpoint bytes and derive both identities."""
     from pathlib import Path
+    import copy
+    import json
     import torch
     from ..rl.native_direct_sft_recovery import _verify_historical_file_ref
     from ..rl.native_raw_policy import saved_native_identity
@@ -73,6 +83,14 @@ def verify_files(parent_ref, child_ref):
     if old == new or parent_ref['sha256'] == child_ref['sha256']:
         raise ValueError('execution transition requires distinct retained parent and child bytes')
     old_stamp, new_stamp = stamp(old), stamp(new)
+    key = (str(old), str(new), old_stamp, new_stamp,
+           json.dumps(parent_ref, sort_keys=True), json.dumps(child_ref, sort_keys=True))
+    if key in _VERIFIED_FILE_TRANSITIONS:
+        result = copy.deepcopy(_VERIFIED_FILE_TRANSITIONS[key])
+        if stamp(old) != old_stamp or stamp(new) != new_stamp:
+            raise ValueError('checkpoint changed during cached execution-transition verification')
+        _VERIFIED_FILE_TRANSITIONS.move_to_end(key)
+        return result
     parent = torch.load(old, map_location='cpu', weights_only=False, mmap=True)
     child = torch.load(new, map_location='cpu', weights_only=False, mmap=True)
     report = verify_states(parent, child, parent_sha256=parent_ref['sha256'])
@@ -84,8 +102,12 @@ def verify_files(parent_ref, child_ref):
             or _verify_historical_file_ref(parent_ref) != old
             or _verify_historical_file_ref(child_ref) != new):
         raise ValueError('checkpoint changed during independent execution-transition verification')
-    return {**report, 'parent': dict(parent_ref), 'checkpoint': dict(child_ref),
-            'actor_identity': {'old': old_identity, 'new': new_identity}}
+    result = {**report, 'parent': dict(parent_ref), 'checkpoint': dict(child_ref),
+              'actor_identity': {'old': old_identity, 'new': new_identity}}
+    _VERIFIED_FILE_TRANSITIONS[key] = copy.deepcopy(result)
+    while len(_VERIFIED_FILE_TRANSITIONS) > 8:
+        _VERIFIED_FILE_TRANSITIONS.popitem(last=False)
+    return result
 
 
 def publish_diagnostic(state_path, *, proof_ref, out):
