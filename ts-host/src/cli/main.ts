@@ -238,8 +238,8 @@ name: the source name, else "native") starts the native server on its first
 model call and stops it with the command; natlang serve keeps it running so
 later commands start at once. --gguf also exports the weights for the managed
 llama.cpp backend as profile NAME-gguf: faster, ordinary tokens only (the
-Neuralese producer runs on the native server). --escalate PROFILE sets the teacher both profiles
-rerun failed calls on (none removes it). Rerun setup to move to a newer checkpoint; runs
+Neuralese producer runs on the native server). --escalate PROFILE sets the fallback both profiles
+hand off live invocations to (none removes it). Rerun setup to move to a newer checkpoint; runs
 say when the source has one, and an existing NAME-gguf profile is exported again for it. The
 server loads the pin's compact actor view (prepared once at setup: the actor weights without
 optimizer state), a fraction of the full checkpoint's startup time and memory. A tuned program always runs on the checkpoint
@@ -410,7 +410,7 @@ async function setupNative(parsed: Parsed, source: string): Promise<number> {
   const native: NativeModelSettings = { ...defaultNativePython(), ...previous, checkpoint: pin.checkpoint, sha256: pin.sha256, sourceSha256: pin.sourceSha256,
     source: named ? source : resolve(source), ...(pointer.step !== undefined ? { step: pointer.step } : { step: undefined }), actorView: pin.actorView,
     ...(device ? { device } : {}), ...(port ? { port: Number(port) } : {}) };
-  // --escalate PROFILE (or none): the teacher both profiles rerun failed calls on; kept from earlier setups otherwise.
+  // --escalate PROFILE (or none): both profiles hand off live invocations to this fallback.
   const escalate = escalateOption(parsed);
   if (typeof escalate === 'string' && !config.profiles?.[escalate]) throw new Error(`--escalate names no profile ${escalate}`);
   const withEscalation = <T extends { escalate?: string }>(profile: T): T => {
