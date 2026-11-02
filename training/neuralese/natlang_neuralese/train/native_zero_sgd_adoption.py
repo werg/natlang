@@ -22,15 +22,28 @@ def _roles(recipe_path, stage_id):
     return resolve_stage_inputs(recipe,stages[0],{})
 
 
+def _stage_parameters(recipe_path, stage_id):
+    from .recipe import load_recipe, effective_stage_parameters
+    recipe=load_recipe(recipe_path)
+    stages=[stage for stage in recipe['stages'] if stage['id']==stage_id]
+    if len(stages)!=1 or stages[0].get('kind')!='native_state_sft':
+        raise ValueError('source adoption requires the exact single native SFT stage')
+    parameters=effective_stage_parameters(stages[0],[],recipe)
+    return {'epochs':parameters.get('epochs',1.),
+            'communication_min_visits':parameters.get('communication_min_visits')}
+
+
 def admitted_checkpoint(parent, *, prior_recipe, successor_recipe, stage_id):
     """Derive the sole allowed state using the same admission as the trainer."""
     from ..data.native_sources import NativeGraphSource
-    from .native_continuation import collect_sft_progress, restore_sft_progress, stage_key
+    from .native_continuation import (collect_sft_progress, restore_sft_progress, stage_key,
+        apply_communication_quota_options, _retain_pending_sources, active_exposure_quotas)
     from .native_operation_report import source_receipt
     from .native_source_correction import apply_source_correction
     from .native_supervision import load_policy
     from .own_output_supervision import prepare_policy, apply_ce_admission_options
     from .recipe import _source_correction_continuation
+    from .native_quota_aware_ce import validate_admission as validate_quota_aware_ce
     from ..model.native_model import CHECKPOINT_SCHEMA
     if parent.get('schema')!=CHECKPOINT_SCHEMA or not isinstance(parent.get('training'),dict):
         raise ValueError('adoption requires an actual full native checkpoint')
@@ -38,6 +51,7 @@ def admitted_checkpoint(parent, *, prior_recipe, successor_recipe, stage_id):
     if not training.get('optimizer') or not training.get('rng'):
         raise ValueError('adoption requires retained optimizer and RNG state')
     old,new=_roles(prior_recipe,stage_id),_roles(successor_recipe,stage_id)
+    parameters=_stage_parameters(successor_recipe,stage_id)
     if not _source_correction_continuation(old,new):
         raise ValueError('adoption recipes do not prove this exact source and CE correction')
     if old.get('held_native_graphs') != new.get('held_native_graphs'):
@@ -58,15 +72,19 @@ def admitted_checkpoint(parent, *, prior_recipe, successor_recipe, stage_id):
             or (previous.get('options', {}).get('ce_supervision_policy_binding') or {}).get('sha256')
                 != old['ce_supervision_policy']['sha256']):
         raise ValueError('earned SFT frame differs from the held source or prior CE recipe')
+    policy_ref={k:v for k,v in new['ce_supervision_policy'].items() if k in ('path','sha256')}
+    policy=prepare_policy(load_policy(policy_ref),current)
+    prior_options=previous.get('options') or {}
+    quota_record=validate_quota_aware_ce(policy,previous,stage_id=stage_id,
+        candidate_sha256=current.file_sha256,epochs=parameters['epochs'],
+        communication_min_visits=parameters['communication_min_visits'],
+        previous_options=prior_options,policy_binding=policy_ref)
     updated, summary=apply_source_correction(previous,correction['path'],
         model_id=config['architecture']+':'+config['base_inventory_sha256'],stage_id=stage_id,
         current_source_receipt=source,current_bindings=current.bindings,current_order=current.ordered_ids(),
         current_communication_ids=[entry['id'] for entry in current.entries if entry.get('communication')])
-    if (summary.get('changed') is not True or summary.get('added_rows') or summary.get('deferred_rows')
-            or not summary.get('corrected_rows')):
-        raise ValueError('zero-SGD adoption requires only actual corrected rows')
-    policy_ref={k:v for k,v in new['ce_supervision_policy'].items() if k in ('path','sha256')}
-    policy=prepare_policy(load_policy(policy_ref),current)
+    if summary.get('changed') is not True or not summary.get('corrected_rows'):
+        raise ValueError('zero-SGD adoption requires actual corrected rows')
     step=int(training.get('global_step',training.get('step',0)))
     old_frames=collect_sft_progress(training)
     new_frames=updated['sft_progress']
@@ -77,11 +95,36 @@ def admitted_checkpoint(parent, *, prior_recipe, successor_recipe, stage_id):
         if (frame.get('source_receipts') or [{}])[0].get('sha256') == new['native_graphs']['sha256']:
             frame['options']=apply_ce_admission_options(frame.get('options') or {},prior.get('options') or {},
                                                         policy_ref,policy,step)
-        if frame.get('exposure_counts') != prior.get('exposure_counts'):
+        old_counts=prior.get('exposure_counts') or {}
+        next_counts=frame.get('exposure_counts') or {}
+        corrected={row['id'] for row in ((frame.get('options') or {}).get('source_correction_history') or [])[-1].get('corrected_rows',[])} if (frame.get('options') or {}).get('source_correction_history') else set()
+        if any(next_counts.get(key,0)!=value for key,value in old_counts.items() if key not in corrected):
             raise ValueError('zero-SGD adoption changed earned source exposure')
+        if any(value!=0 for key,value in next_counts.items() if key not in old_counts):
+            raise ValueError('zero-SGD adoption credited a new row')
+    def finish_active(frame):
+        options=apply_ce_admission_options(dict(frame.get('options') or {}),prior_options,policy_ref,policy,step)
+        if quota_record is not None:
+            history=list(prior_options.get('quota_aware_ce_history') or [])
+            if quota_record not in history:history.append(quota_record)
+            options['quota_aware_ce_history']=history
+        options['epochs']=parameters['epochs']
+        corrected_minima=dict(options.get('_objective_required_visits') or {})
+        apply_communication_quota_options(options,prior_options,train=current,ce_policy=policy,
+            stage_id=stage_id,requested_visits=parameters['communication_min_visits'])
+        if corrected_minima:
+            minima=options.setdefault('_objective_required_visits',{})
+            for ident,visits in corrected_minima.items():minima[ident]=max(minima.get(ident,0),visits)
+        result=_retain_pending_sources({**frame,'options':options,
+            'exposure_counts':dict(frame.get('exposure_counts') or {})},frame)
+        result['required_visits'].update(active_exposure_quotas(current.entries,epochs=parameters['epochs'],
+                                                                 minimum_visits=result['required_visits']))
+        return result
+    if stage_id in new_frames:
+        new_frames[stage_id]=finish_active(new_frames[stage_id])
     if is_flat:
-        updated['options']=apply_ce_admission_options(updated.get('options') or {},previous.get('options') or {},
-                                                      policy_ref,policy,step)
+        updated=finish_active(updated)
+        updated['sft_progress']=new_frames
         result={**parent,'training':updated}
     else:
         # The policy frame and all its optimizer/RNG/state fields stay as earned.

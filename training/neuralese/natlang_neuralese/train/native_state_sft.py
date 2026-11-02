@@ -106,17 +106,8 @@ def pending_exposure_batches(entries, exposure_counts, *, epochs, batch_graphs=1
         raise ValueError('fixed foundation priority requires genuine communication rows')
     if foundation_ids - {entry['id'] for entry in entries}:
         raise ValueError('fixed foundation priority cannot name absent source rows')
-    whole = int(epochs)
-    fractional = math.ceil((epochs - whole) * len(entries))
-    quotas = {entry['id']: max(int(bool(entry.get('communication'))), whole + (index < fractional))
-              for index, entry in enumerate(entries)}
-    for key, value in (minimum_visits or {}).items():
-        if type(value) is not int or value < 0:
-            raise ValueError('preserved row quotas must be nonnegative integers')
-        if key in quotas:quotas[key] = max(quotas[key], value)
-    if shard is not None:
-        from .diloco.protocol import data_shard
-        quotas = {key: value for key, value in quotas.items() if data_shard(key, shard[1]) == shard[0]}
+    from .native_continuation import active_exposure_quotas
+    quotas=active_exposure_quotas(entries,epochs=epochs,minimum_visits=minimum_visits,shard=shard)
     batches = []
     pending = {visit: [index for index, entry in enumerate(entries)
                        if entry['id'] in quotas and exposure_counts.get(entry['id'], 0) <= visit < quotas[entry['id']]]
@@ -2644,30 +2635,12 @@ def _main(argv=None, *, requested_refresh):
                   'preserved':'weights, optimizer, RNG and earned exposure'}
             if not norm_history or any(norm_history[-1].get(k)!=norm[k] for k in ('graph_reference','policy','stage_id')):norm_history.append(norm)
             checkpoint_options['token_mass_update_normalization_history']=norm_history
-    previous_quota = (saved_options.get('communication_quota_policy') or {})
-    requested_visits = args.communication_min_visits
-    if requested_visits is None and objective is None and previous_quota.get('stage_id') == args.stage_id:
-        requested_visits = previous_quota.get('visits')
-    if requested_visits is not None:
-        if objective is not None or ce_policy is None:
-            raise ValueError('communication minimum visits require the native CE objective')
-        from .own_output_supervision import policy_objective
-        from .native_logical_families import load_map
-        from .native_continuation import communication_minimum_quotas
-        balance = policy_objective(ce_policy).get('family_balance') or {}
-        if balance.get('key') != 'logical-family':
-            raise ValueError('communication minimum visits require an exact logical-family CE map')
-        if (previous_quota.get('stage_id') == args.stage_id and
-                requested_visits < previous_quota.get('visits', 1)):
-            raise ValueError('communication minimum visits cannot silently reduce an earned quota')
-        quota_rows = communication_minimum_quotas(train.entries, load_map(balance['map'], train), requested_visits)
-        quota_values = dict(saved_options.get('_objective_required_visits') or {}) if previous_quota.get('stage_id') == args.stage_id else {}
-        for ident, minimum in quota_rows.items():quota_values[ident] = max(int(quota_values.get(ident, 0)), minimum)
-        checkpoint_options['_objective_required_visits'] = quota_values
-        checkpoint_options['communication_quota_policy'] = {'schema':'natlang.communication-minimum-visits/1',
-            'stage_id':args.stage_id,'source_sha256':train.file_sha256,'family_map':balance['map'],
-            'visits':requested_visits,'rows':len(quota_rows),'ordinary_epoch_quota':'unchanged',
-            'repetition':'repeated visits to the same exact graph; not independent examples'}
+    if objective is not None and args.communication_min_visits is not None:
+        raise ValueError('communication minimum visits require the native CE objective')
+    if objective is None:
+        from .native_continuation import apply_communication_quota_options
+        apply_communication_quota_options(checkpoint_options,saved_options,train=train,ce_policy=ce_policy,
+            stage_id=args.stage_id,requested_visits=args.communication_min_visits)
     from .native_source_classification import (reclassify_progress,
                                                require_explicit_reclassification)
     from .native_classification_reader import migration_classes
@@ -3327,6 +3300,7 @@ def _main(argv=None, *, requested_refresh):
             proof_sha256=proof_sha,global_step=global_step)
         checkpoint_options['pending_focus_history']=saved_focus_history
     saved_options = ce_prior_options = class_migration = None
+    reference_options = parent_receipts = earned_counts = earned_bindings = prior_memory_qualification = qualified_training = None
     saved_training = resume = shared_resume = continuation_training = restored_frame = None
     source_resume = foundation_frame = old_frame = old_options = None
     old_counts = old_quotas = prior_bindings = prior_order = prior_held = None

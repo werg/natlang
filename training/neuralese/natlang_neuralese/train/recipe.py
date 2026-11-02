@@ -1070,9 +1070,15 @@ def _source_correction_continuation(old, new):
             {key:value for key,value in after_objective.items() if key!='family_balance'}):
             raise ValueError('static context source correction changed own-output arithmetic')
         before_balance=before_objective.get('family_balance') or {};after_balance=after_objective.get('family_balance') or {}
-        if ({key:value for key,value in before_balance.items() if key!='map'} !=
-            {key:value for key,value in after_balance.items() if key!='map'} or before_balance.get('key')!='logical-family'):
+        if ({key:value for key,value in before_balance.items() if key not in ('map','scales')} !=
+            {key:value for key,value in after_balance.items() if key not in ('map','scales')}
+                or before_balance.get('key')!='logical-family'):
             raise ValueError('static context source correction changed family weighting')
+        if before_balance.get('scales')!=after_balance.get('scales'):
+            basis=after_policy.get('quota_aware_basis') or {}
+            if (basis.get('schema')!='natlang.quota-aware-ce-basis/1'
+                    or basis.get('candidate_source_sha256')!=new['native_graphs']['sha256']):
+                raise ValueError('changed family scales require a source-bound quota-aware basis')
         from .native_logical_families import checked as checked_family_map
         from .native_source_correction import _proof_file
         from ..common.jsonio import open_jsonl_text
@@ -1083,23 +1089,34 @@ def _source_correction_continuation(old, new):
             raise ValueError('static context family maps do not bind the exact sources')
         before_rows={item['id']:item for item in before_map.get('rows',[])}
         after_rows={item['id']:item for item in after_map.get('rows',[])}
-        if (len(before_rows)!=len(before_map.get('rows',[])) or len(after_rows)!=len(after_map.get('rows',[]))
-            or set(before_rows)!=set(after_rows)):raise ValueError('static context family map row inventory changed')
+        if (len(before_rows)!=len(before_map.get('rows',[])) or len(after_rows)!=len(after_map.get('rows',[]))):
+            raise ValueError('static context family map row inventory repeats an id')
         with open_jsonl_text(_proof_file(path,proof['row_bindings_path'])) as stream:
             correction_rows=[json.loads(line) for line in stream if line.strip()]
         corrections={item['id']:item for item in correction_rows}
         if len(corrections)!=len(correction_rows):raise ValueError('static context correction ledger repeats a row')
         from .native_static_context_correction import verify_static_context_correction
         static_pairs,_=verify_static_context_correction(path,proof['static_native_context_correction'])
-        if (set(corrections)!=set(static_pairs) or any(item.get('disposition')!='corrected'
-            or item.get('old_binding')!=static_pairs[ident]['old_binding']
-            or item.get('new_binding')!=static_pairs[ident]['new_binding'] for ident,item in corrections.items())):
+        if any(ident not in corrections or corrections[ident].get('disposition')!='corrected'
+            or corrections[ident].get('old_binding')!=pair['old_binding']
+            or corrections[ident].get('new_binding')!=pair['new_binding'] for ident,pair in static_pairs.items()):
             raise ValueError('static context correction ledger differs from authenticated graph pairs')
-        for ident,prior in before_rows.items():
-            current=after_rows[ident];entry=corrections.get(ident)
-            if prior['family']!=current['family'] or (prior['binding']!=current['binding'] and
-                (not entry or entry.get('disposition')!='corrected' or entry.get('old_binding')!=prior['binding']
-                 or entry.get('new_binding')!=current['binding'])):
+        for ident,entry in corrections.items():
+            disposition=entry.get('disposition');prior=before_rows.get(ident);current=after_rows.get(ident)
+            if disposition=='corrected':
+                valid=(prior is not None and current is not None and prior['family']==current['family']
+                       and entry.get('old_binding')==prior['binding'] and entry.get('new_binding')==current['binding'])
+            elif disposition=='deferred':
+                valid=(prior is not None and current is None and entry.get('old_binding')==prior['binding']
+                       and entry.get('new_binding') is None)
+            elif disposition=='added':
+                valid=(prior is None and current is not None and entry.get('old_binding') is None
+                       and entry.get('new_binding')==current['binding'])
+            else:valid=False
+            if not valid:raise ValueError('static context family correction ledger differs from row inventory')
+        for ident in set(before_rows)|set(after_rows):
+            if ident in corrections:continue
+            if before_rows.get(ident)!=after_rows.get(ident):
                 raise ValueError('static context family membership or row binding changed outside its correction')
         continuation_identity({'supervision_objective':identity(before_objective)},after_policy)
         declared_inventory=after_policy.get('inventory') or []

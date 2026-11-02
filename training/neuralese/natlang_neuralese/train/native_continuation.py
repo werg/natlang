@@ -178,6 +178,23 @@ def required_visits(order,epochs):
     return {key:whole+int(index<fraction) for index,key in enumerate(order)}
 
 
+def active_exposure_quotas(entries, *, epochs, minimum_visits=None, shard=None):
+    """Compute the trainer's exact active-row epoch, communication and inherited quotas."""
+    if not math.isfinite(epochs) or epochs<=0:
+        raise ValueError('native exposure epochs must be finite and positive')
+    whole=int(epochs);fractional=math.ceil((epochs-whole)*len(entries))
+    quotas={entry['id']:max(int(bool(entry.get('communication'))),whole+(index<fractional))
+            for index,entry in enumerate(entries)}
+    for key,value in (minimum_visits or {}).items():
+        if type(value) is not int or value<0:
+            raise ValueError('preserved row quotas must be nonnegative integers')
+        if key in quotas:quotas[key]=max(quotas[key],value)
+    if shard is not None:
+        from .diloco.protocol import data_shard
+        quotas={key:value for key,value in quotas.items() if data_shard(key,shard[1])==shard[0]}
+    return quotas
+
+
 def stage_key(training):
     return str((training.get('options') or {}).get('stage_id') or 'native-graph-ce')
 
@@ -335,6 +352,33 @@ def communication_minimum_quotas(entries, families, visits):
     if not selected:
         raise ValueError('communication quota requires actual native-communication graphs')
     return selected
+
+
+def apply_communication_quota_options(options, previous_options, *, train, ce_policy, stage_id, requested_visits):
+    """Apply the ordinary trainer's source-bound communication quota policy."""
+    previous_options=previous_options or {}
+    previous_quota=previous_options.get('communication_quota_policy') or {}
+    if requested_visits is None and previous_quota.get('stage_id')==stage_id:
+        requested_visits=previous_quota.get('visits')
+    if requested_visits is None:return options
+    if ce_policy is None:
+        raise ValueError('communication minimum visits require the native CE objective')
+    from .own_output_supervision import policy_objective
+    from .native_logical_families import load_map
+    balance=policy_objective(ce_policy).get('family_balance') or {}
+    if balance.get('key')!='logical-family':
+        raise ValueError('communication minimum visits require an exact logical-family CE map')
+    if previous_quota.get('stage_id')==stage_id and requested_visits<previous_quota.get('visits',1):
+        raise ValueError('communication minimum visits cannot silently reduce an earned quota')
+    quota_rows=communication_minimum_quotas(train.entries,load_map(balance['map'],train),requested_visits)
+    quota_values=dict(previous_options.get('_objective_required_visits') or {}) if previous_quota.get('stage_id')==stage_id else {}
+    for ident,minimum in quota_rows.items():quota_values[ident]=max(int(quota_values.get(ident,0)),minimum)
+    options['_objective_required_visits']=quota_values
+    options['communication_quota_policy']={'schema':'natlang.communication-minimum-visits/1',
+        'stage_id':stage_id,'source_sha256':train.file_sha256,'family_map':balance['map'],
+        'visits':requested_visits,'rows':len(quota_rows),'ordinary_epoch_quota':'unchanged',
+        'repetition':'repeated visits to the same exact graph; not independent examples'}
+    return options
 
 
 def supersede_unearned_stage(progress, training, proof, *, parent_sha256, train_sha256, held_sha256, new_stage):
