@@ -365,7 +365,7 @@ def test_real_resident_sgd_matches_all_data_run_and_recovers_old_checkpoint(tmp_
     import os
     identity={'execution_arithmetic':{'native_compile':os.environ.get('NATLANG_NATIVE_COMPILE','1'),
         'bf16_reduced_precision_reduction':torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction},
-        'model_config':config,'batch_graphs':1,'batch_tokens':0,'checkpoint_layers':True,'chunk_tokens':1024,'checkpoint_input_offload':False,'cotangent_accumulator_backend':'plain',
+        'model_config':config,'batch_graphs':1,'batch_tokens':0,'checkpoint_layers':True,'chunk_tokens':1024,'checkpoint_layer_group_size':4,'checkpoint_input_offload':False,'cotangent_accumulator_backend':'plain',
         'share_causal_prefixes':True,  # on by default for a new stage (owner 2026-10-28)
         'fp8':{'kind':'off','recipe':'delayed','amax_history_len':16,'input_gradient_precision':None},'runtime':{'torch':torch.__version__,'cuda':torch.version.cuda,'device':'cpu'}}
     paths,directory,manager,recipe=setup(tmp_path,config['tokenizer_fingerprint'],roles.ids,identity)
@@ -1788,7 +1788,7 @@ def test_native_trainer_resident_append_with_strong_recovery_queue(tmp_path,monk
     import os
     identity={'execution_arithmetic':{'native_compile':os.environ.get('NATLANG_NATIVE_COMPILE','1'),
         'bf16_reduced_precision_reduction':torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction},
-        'model_config':config,'batch_graphs':1,'batch_tokens':0,'checkpoint_layers':True,'chunk_tokens':1024,
+        'model_config':config,'batch_graphs':1,'batch_tokens':0,'checkpoint_layers':True,'chunk_tokens':1024,'checkpoint_layer_group_size':4,
         'checkpoint_input_offload':False,'cotangent_accumulator_backend':'plain','share_causal_prefixes':True,
         'fp8':{'kind':'off','recipe':'delayed','amax_history_len':16,'input_gradient_precision':None},
         'runtime':{'torch':torch.__version__,'cuda':torch.version.cuda,'device':'cpu'}}

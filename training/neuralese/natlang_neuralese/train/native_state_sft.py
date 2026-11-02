@@ -2554,11 +2554,9 @@ def _main(argv=None, *, requested_refresh):
             or type(sft_reference.get('scored_graphs')) is not int or sft_reference['scored_graphs']<1):
         raise ValueError('saved SFT update budget reference is invalid')
     if sft_reference is not None and sft_reference.get('origin')=='actual-ordinary-sft-update-in-this-checkpoint':
-        from .native_resident import bound
-        source_reference=sft_reference.get('reference_train_source') or {}
-        if source_reference.get('sha256')!=sft_reference.get('reference_train_sha256'):
-            raise ValueError('captured SFT update reference source differs')
-        bound(source_reference)
+        from .native_update_budget_provenance import verify_captured_source
+        verify_captured_source(sft_reference,resume or {},train=train,args=args,
+            model_id=config['architecture']+':'+config['base_inventory_sha256'])
     if (objective is None and resume and int(reference_options.get('accumulate_batches') or 1)>args.accumulate_batches
             and sft_reference is None):
         raise ValueError('decreasing SFT accumulation requires an earned scored-graph reference')
@@ -4789,7 +4787,7 @@ def _main(argv=None, *, requested_refresh):
                                                checkpoint_sha256=checkpoint_sha)
         write_json(task_receipt_path, task_receipt)
     runtime_path = args.out / 'native-runtime-certificate.json'
-    if policy.signaled or requested_refresh.requested or (refresh_boundary and not completed and not active_stage_complete) or (not completed and not foundation_boundary and not refresh_boundary and not active_stage_complete):
+    if policy.signaled or requested_refresh.requested or (refresh_boundary and not completed and not active_stage_complete and not foundation_boundary) or (not completed and not foundation_boundary and not refresh_boundary and not active_stage_complete):
         # Operational stops preserve the exact resumable checkpoint. Defer a
         # full capture/splice qualification until the declared data exposure is
         # finished; do not make interruptions pay for a second model pass.

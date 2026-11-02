@@ -124,6 +124,13 @@ def test_real_trainer_continues_after_payload_loss_and_reactivates_exact_remaini
     declaration=tmp_path/'unavailable.json';declaration.write_text(json.dumps(proof))
     missing=leaves[2].read_bytes();leaves[2].unlink();full.unlink()
     continued=argv.copy();continued[continued.index('--native-graphs')+1]=str(available)
+    with pytest.raises(FileNotFoundError,match='without authenticated availability'):
+        trainer.main(continued)
+    forged=tmp_path/'bad-unavailable.json';bad=dict(proof)
+    bad['prior_train_source']={**proof['prior_train_source'],'sha256':'0'*64}
+    forged.write_text(json.dumps(bad))
+    with pytest.raises(ValueError,match='predecessor differs'):
+        trainer.main(continued+['--unavailable-native-sources',str(forged)])
     assert trainer.main(continued+['--unavailable-native-sources',str(declaration)])==0
     saved=torch.load(tmp_path/'run/checkpoint.pt',weights_only=False)
     assert saved['training']['global_step']==t['global_step']+1

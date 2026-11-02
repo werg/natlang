@@ -141,8 +141,8 @@ def test_actual_old_checkpoint_upgrade_shared_trainer_resume_and_serve_roundtrip
         updated_parameter_names=list(dict(upgraded.named_parameters())))
     migrated,_,_,_,_=load_native_checkpoint(first_composite['path'])
     with torch.no_grad():assert_exact(migrated.logits(migrated(plan)['h_final']),upgraded.logits(upgraded(plan)['h_final']),'old-parent composite upgrade')
-    rows.append(row('train2','train'));train.write_text(''.join(json.dumps(item)+'\n' for item in rows))
-    argv=['--native-graphs',str(train),'--out',str(tmp_path/'new'),'--continue-from',str(parent),
+    rows.append(row('train2','train'));expanded=tmp_path/'train-expanded.jsonl';expanded.write_text(''.join(json.dumps(item)+'\n' for item in rows))
+    argv=['--native-graphs',str(expanded),'--out',str(tmp_path/'new'),'--continue-from',str(parent),
           '--learn-reasoning-boundaries',*common]
     assert trainer.main(argv)==0
     updated=torch.load(tmp_path/'new/checkpoint.pt',map_location='cpu',weights_only=False)

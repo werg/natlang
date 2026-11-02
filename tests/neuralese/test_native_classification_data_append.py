@@ -130,7 +130,7 @@ def test_actual_sgd_and_old_checkpoint_resume_select_committed_proof(tmp_path,mo
     identity={'execution_arithmetic':{'native_compile':os.environ.get('NATLANG_NATIVE_COMPILE','1'),
         'bf16_reduced_precision_reduction':torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction},
         'model_config':config,'batch_graphs':1,'batch_tokens':0,'checkpoint_layers':True,
-        'chunk_tokens':1024,'checkpoint_input_offload':False,'cotangent_accumulator_backend':'plain',
+        'chunk_tokens':1024,'checkpoint_layer_group_size':4,'checkpoint_input_offload':False,'cotangent_accumulator_backend':'plain',
         'share_causal_prefixes':True,
         'fp8':{'kind':'off','recipe':'delayed','amax_history_len':16,'input_gradient_precision':None},
         'runtime':{'torch':torch.__version__,'cuda':torch.version.cuda,'device':'cpu'}}

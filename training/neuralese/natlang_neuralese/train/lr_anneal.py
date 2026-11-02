@@ -137,7 +137,8 @@ class LrWarmup:
 DROPPED_OPTIONS = {'resident_data_directory', 'resident_geometry_qualification', 'diloco', 'checkpoint_publication',
                    'checkpoint_publication_namespace', 'checkpoint_publication_readonly_input_roots',
                    'continue_from', 'out', 'lr_anneal', 'refresh_after_updates', 'refresh_at_checkpoint',
-                   'foundation_qualification_request', 'source_correction', 'native_optimizer_migration'}
+                   'foundation_qualification_request', 'source_correction', 'native_optimizer_migration',
+                   'sft_update_budget_reference'}
 
 
 def trainer_argv(options, parser):

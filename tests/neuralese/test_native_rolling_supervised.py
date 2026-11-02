@@ -1,4 +1,5 @@
 import hashlib
+from pathlib import Path
 
 import pytest
 
@@ -15,7 +16,16 @@ def test_rolling_control_binds_slot_and_preserves_old_parent(tmp_path):
     output = tmp_path / 'learner'
     output.mkdir()
     slot = output / 'checkpoint.pt'
-    slot.write_bytes(b'earned update')
+    import torch
+    from natlang_neuralese.model.native_model import CHECKPOINT_SCHEMA
+    from natlang_neuralese.train.native_continuation import TRAINING_SCHEMA
+    torch.save({'schema':CHECKPOINT_SCHEMA,'model_config':{'architecture':'fixture'},
+        'training':{'schema':TRAINING_SCHEMA,'optimizer':{'moments':torch.tensor([1.])},
+                    'rng':{'seed':torch.tensor([3])},'global_step':1,'step':1,
+                    'identity':{'objective':None},'options':{'stage_id':'sft','epochs':1.},
+                    'source_row_order':['row'],'source_row_bindings':{'row':'binding'},
+                    'required_visits':{'row':1},'exposure_counts':{'row':1},
+                    'source_receipts':[{'sha256':'train'},{'sha256':'held'}]}},slot)
     state = {'checkpoint':str(old)}
     control = {'schema':'natlang.rolling-sft-resume/1', 'checkpoint_path':str(slot),
         'checkpoint_sha256':sha(slot), 'previous_checkpoint_path':str(old),
@@ -24,6 +34,9 @@ def test_rolling_control_binds_slot_and_preserves_old_parent(tmp_path):
     parent, record = rolling_resume_parent(config, state, output)
     assert parent == str(slot.resolve())
     assert record['previous_checkpoint_sha256'] == sha(old)
+    import json
+    custody=json.loads(Path(record['custody_snapshot']['path']).read_text())
+    assert custody['checkpoint']['sha256']==sha(slot) and custody['sft_frames']['sft']['exposure_counts']=={'row':1}
     assert state['checkpoint'] == str(old)
     slot.write_bytes(b'newer update')
     with pytest.raises(ValueError, match='checkpoint changed'):

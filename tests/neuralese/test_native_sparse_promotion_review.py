@@ -49,7 +49,8 @@ def test_promoted_shared_parent_can_resume_legacy_ce_frame_without_repromoting(t
         'model_config':config,'model_state':model_state(model),'optimizer':optimizer.state_dict(),
         'fp8':None,'sft_progress':frames,'global_step':state['training']['global_step']}},
         'training':{'step':3,'rng':state['training']['rng']}},shared)
-    rows.append(row('c'));source.write_text(''.join(json.dumps(value)+'\n' for value in rows))
+    rows.append(row('c'));expanded=tmp_path/'train-expanded.jsonl';expanded.write_text(''.join(json.dumps(value)+'\n' for value in rows))
+    common[common.index('--native-graphs')+1]=str(expanded)
     assert trainer.main([*common,'--out',str(tmp_path/'resumed'),'--continue-from',str(shared),
         '--native-participant','student','--objective-continuation','--learn-reasoning-boundaries'])==0
     resumed=torch.load(tmp_path/'resumed/checkpoint.pt',map_location='cpu',weights_only=False)

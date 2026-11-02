@@ -58,6 +58,10 @@ def test_drain_request_yields_registrable_source_append(tmp_path,monkeypatch):
         assert receipt['checkpoint']['sha256']==resident.sha(out/'checkpoint.pt') and receipt['global_step']==state['global_step']
         assert not (out/trainer.DILOCO_DRAIN_REQUEST).exists() and (out/f"diloco-drain-request-{request['id']}.consumed.json").exists()
         relaunch=common+['--native-graphs',str(new),'--continued-native-graphs',str(old),'--out',str(out),'--continue-from',str(out/'checkpoint.pt'),'--diloco',json.dumps(settings.__dict__)]
+        before=resident.sha(out/'checkpoint.pt')
+        with pytest.raises(ValueError,match='exact allowed role contract'):
+            trainer.main(relaunch+['--learning-rate','0.001'])
+        assert resident.sha(out/'checkpoint.pt')==before
         assert trainer.main(relaunch)==0
         final=torch.load(out/'checkpoint.pt',weights_only=False)['training']
         assert final['exposure_counts']==dict.fromkeys('abcdefg',1) and final['global_step']>state['global_step']

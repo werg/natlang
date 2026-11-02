@@ -368,7 +368,7 @@ def test_checkpoint_copy_uses_low_best_effort_io(monkeypatch):
         def syscall(self,*args):calls.append(('ioprio',args));return 0
     monkeypatch.setattr(offload.ctypes,'CDLL',lambda *args,**kwargs:Lib())
     offload._lower_priority(123)
-    assert calls==[('nice',(offload.os.PRIO_PROCESS,123,19)),('ioprio',(30,1,123,(2<<13)|7))]
+    assert calls==[('nice',(offload.os.PRIO_PROCESS,123,19)),('ioprio',(30,1,123,(2<<13)|2))]
 
 
 def test_static_recovery_contract_allows_earned_progress_but_rejects_quota_change():

@@ -269,10 +269,19 @@ def attach_learner(args, named, *, parent_continuation, saved_state, argv=None, 
             for role in authority['roles'][str(worker)]:
                 candidate=rolling_resume_identity(current_identity,role['identity'],args=args,
                     saved_state=saved_state,manifest=manifest)
-                if candidate==role['identity']:candidates.append(candidate)
+                if source_transition is not None:
+                    # A changed source must still originate from the exact
+                    # contract saved at the drained worker boundary. Validate
+                    # all fixed arguments before registering the new role.
+                    if canonical_json_sha256_hex(role)!=saved_state.get('contract_sha256'):
+                        continue
+                    try:source_identity_transition(role['identity'],candidate,source_transition)
+                    except ValueError:continue
+                    candidates.append(role['identity'])
+                elif candidate==role['identity']:candidates.append(candidate)
             if len(candidates)!=1:
                 raise ValueError('rolling resume does not identify one exact allowed role contract')
-            current_identity=candidates[0]
+            if source_transition is None:current_identity=candidates[0]
         else:
             current_identity=rolling_resume_identity(current_identity,manifest['identity'],args=args,
                 saved_state=saved_state,manifest=manifest)
@@ -293,7 +302,7 @@ def attach_learner(args, named, *, parent_continuation, saved_state, argv=None, 
                 'checkpoint_sha256':source_transition['checkpoint_sha256'],
                 'prior_source_sha256':sha256_file_hex_cached(args.continued_native_graphs),
                 'source_sha256':sha256_file_hex_cached(args.native_graphs)}
-            register_source_append(args,sys.argv[1:] if argv is None else argv,saved_state,record)
+            _,effective=register_source_append(args,sys.argv[1:] if argv is None else argv,saved_state,record)
         elif current_identity!=original:
             prior=source_transition.get('original_identity')
             if prior is not None:
