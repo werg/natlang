@@ -167,6 +167,13 @@ def inherit_versioned_assets(base_dir, additions, out, explicit=None):
     roots = list(dict.fromkeys(p.resolve() for p in roots if p.is_dir()))
     if not roots:
         return None
+    # An immutable predecessor namespace needs a reference, not another full
+    # physical copy on every task-source append. Keep its root explicit in the
+    # manifest so packaging/recovery can dereference the actual dependencies.
+    shared_root = len(roots) == 1
+    if shared_root:
+        Path(out).mkdir(parents=True, exist_ok=True)
+        (Path(out) / 'assets-v3').symlink_to(roots[0], target_is_directory=True)
     files = {}
     for source_root in roots:
         for source in sorted(source_root.rglob('*')):
@@ -179,14 +186,16 @@ def inherit_versioned_assets(base_dir, additions, out, explicit=None):
                     raise ValueError('v3 asset collision requires an explicit task/source rewrite: ' + relative)
                 continue
             target = Path(out) / 'assets-v3' / relative
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(source, target)
-            if sha_file(target) != digest:
+            if not shared_root:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source, target)
+            if not shared_root and sha_file(target) != digest:
                 raise ValueError('v3 asset copy did not retain its exact bytes: ' + relative)
             files[relative] = {'path': relative, 'sha256': digest, 'bytes': source.stat().st_size}
     manifest = Path(out) / 'assets-v3.manifest.json'
     manifest.write_text(json.dumps({'schema': 'natlang.rl-versioned-assets-union/1',
-        'source_roots': [str(p) for p in roots], 'files': list(files.values())}, indent=2) + '\n')
+        'source_roots': [str(p) for p in roots], 'files': list(files.values()),
+        'storage': 'shared-immutable-root' if shared_root else 'copied-union'}, indent=2) + '\n')
     return {'path': manifest.name, 'sha256': sha_file(manifest)}
 
 
@@ -505,11 +514,14 @@ def main():
     base_assets = args.base_assets or base_dir / 'assets'
     if not base_assets.is_dir():
         base_assets = base_dir.parent / 'natlang-rl-broad-external-20261031' / 'assets'
-    if base_assets.is_dir():
-        shutil.copytree(base_assets, out / 'assets')
     # Preserve any append-package assets with their original relative paths. A differing same-path blob is kept
     # under a namespaced subdirectory and explicitly recorded so runtime asset selection is never ambiguous.
     extra_asset_roots = [(p, p / 'assets') for p in inputs if (p / 'assets').is_dir()]
+    shared_base_assets = base_assets.is_dir() and not extra_asset_roots
+    if shared_base_assets:
+        (out / 'assets').symlink_to(base_assets.resolve(), target_is_directory=True)
+    elif base_assets.is_dir():
+        shutil.copytree(base_assets, out / 'assets')
     asset_additions = []
     for package, asset_root in extra_asset_roots:
         package_label = package.name
@@ -546,6 +558,8 @@ def main():
     source_id = out.name
     source_sha = sha_file(cases_path)
     qualification = {'schema': 'natlang.rl-additional-task-source-qualification/1', 'source_id': source_id,
+        'asset_storage': {'v2': 'shared-immutable-predecessor' if shared_base_assets else 'copied-union',
+                          'predecessor_root': str(base_assets.resolve()) if base_assets.is_dir() else None},
         'source_cases_sha256': source_sha, 'qualified_task_rows': sum(source_counts.values()), 'all_train': True,
         'all_source_bound': True, 'qualification_kind': 'hash-bound successor of previously verified sources; new case rows retain upstream source IDs/groups and their source verification; SQL ordering oracles corrected in-place; guided BABI/CLUTRR cases supersede stable task IDs; no teacher generations or capability claims.',
         'training_admission': 'Parent-controlled source transition; preserve exact previous exposure and apply only to future collection/update after transition review.',

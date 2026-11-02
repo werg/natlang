@@ -61,3 +61,23 @@ def test_successor_keeps_predecessor_and_new_versioned_assets(tmp_path):
     (addition/'assets-v3/old.txt').write_text('conflicting payload')
     with pytest.raises(ValueError,match='explicit task/source rewrite'):
         inherit_versioned_assets(base,[addition],tmp_path/'other')
+
+
+def test_successor_references_single_immutable_asset_root_without_copying(tmp_path):
+    import hashlib
+    import json
+    from scripts.rl_tasks.merge_verified_successor import inherit_versioned_assets
+    base, out = tmp_path / 'base', tmp_path / 'out'
+    asset = base / 'assets-v3' / 'nested' / 'evidence.txt'
+    asset.parent.mkdir(parents=True)
+    asset.write_bytes(b'original evidence')
+    before = asset.stat()
+    ref = inherit_versioned_assets(base, [], out)
+    assert (out / 'assets-v3').is_symlink()
+    assert (out / 'assets-v3/nested/evidence.txt').stat().st_ino == before.st_ino
+    manifest = json.loads((out / ref['path']).read_text())
+    assert manifest['storage'] == 'shared-immutable-root'
+    assert manifest['source_roots'] == [str(asset.parent.parent.resolve())]
+    assert manifest['files'] == [{'path': 'nested/evidence.txt', 'bytes': len(b'original evidence'),
+                                  'sha256': hashlib.sha256(b'original evidence').hexdigest()}]
+    assert asset.read_bytes() == b'original evidence'
