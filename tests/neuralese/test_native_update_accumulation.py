@@ -259,3 +259,106 @@ def test_accumulated_centering_uses_position_weighted_means():
     b={'positions':6,'rho_mean':3.,'rho_max':5.,'w_y_zero_fraction':.5}
     result=merge_update_details([{'score_centering':a},{'score_centering':b}],[1,1])['score_centering']
     assert result=={'positions':8,'rho_mean':2.5,'rho_max':5.,'w_y_zero_fraction':.375}
+
+
+def test_sft_budget_scales_every_actual_group_and_restores_on_success_and_failure(monkeypatch):
+    import pytest
+    from natlang_neuralese.train import native_state_sft as trainer
+    model, optimizer=build(); graphs=examples()[:2]
+    nominal=[(group['lr'],group.get('qat_latent_lr')) for group in optimizer.param_groups]
+    observed=[]
+    original=trainer.packed_graph_loss
+    def inspect(*args,**kwargs):
+        observed.append([(group['lr'],group.get('qat_latent_lr')) for group in optimizer.param_groups])
+        return original(*args,**kwargs)
+    monkeypatch.setattr(trainer,'packed_graph_loss',inspect)
+    _,details=trainer.native_training_update(model,optimizer,graphs,checkpoint_layers=True,chunk_tokens=3,sft_update_reference=8)
+    assert observed and all(abs(rate[0]-base[0]/4)<1e-12 for row in observed for rate,base in zip(row,nominal))
+    assert all(qat is None or abs(qat-baseqat/4)<1e-12 for row in observed for (_,qat),(_,baseqat) in zip(row,nominal))
+    assert [(group['lr'],group.get('qat_latent_lr')) for group in optimizer.param_groups]==nominal
+    assert details[0]['sft_update_budget']['scored_graphs']==2
+    assert details[0]['sft_update_budget']['multiplier']==.25
+    monkeypatch.setattr(trainer,'packed_graph_loss',lambda *a,**k: (_ for _ in ()).throw(RuntimeError('failure')))
+    with pytest.raises(RuntimeError,match='failure'):
+        trainer.native_training_update(model,optimizer,graphs,checkpoint_layers=True,chunk_tokens=3,sft_update_reference=8)
+    assert [(group['lr'],group.get('qat_latent_lr')) for group in optimizer.param_groups]==nominal
+
+
+def test_sft_budget_caps_large_windows_and_rejects_zero_scored():
+    import pytest
+    from natlang_neuralese.train.native_state_sft import native_training_update
+    model,optimizer=build(); graphs=examples()[:2]
+    _,details=native_training_update(model,optimizer,graphs,checkpoint_layers=True,chunk_tokens=3,sft_update_reference=1)
+    assert details[0]['sft_update_budget']['multiplier']==1
+    for graph in graphs:
+        graph.target_weights=[0 for _ in graph.target_weights]; graph.decisions=[]
+    with pytest.raises(ValueError,match='at least one scored'):
+        native_training_update(model,optimizer,graphs,checkpoint_layers=True,chunk_tokens=3,sft_update_reference=1)
+
+
+def test_earned_accumulation_decrease_requires_reference_and_carries_captured_reference(tmp_path, monkeypatch):
+    import pytest
+    from natlang_neuralese.train import native_state_sft as trainer
+    from test_native_source_fetch_recovery import source
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE', str(tmp_path/'cache'))
+    paths=source(tmp_path/'base','lfm'); row=json.loads(paths['train'].read_text())
+    paths['train'].write_text(''.join(json.dumps(dict(row,id=f'g{i}'))+'\n' for i in range(4)))
+    out=tmp_path/'out'
+    args=['--base',str(tmp_path/'base'),'--dtype','bfloat16','--rank','4','--device','cpu',
+          '--native-graphs',str(paths['train']),'--held-native-graphs',str(paths['test']),
+          '--epochs','0.5','--batch-graphs','1','--accumulate-batches','2',
+          '--eval-every','100','--out',str(out)]
+    assert trainer.main(args)==0
+    slot=out/'checkpoint.pt'; state=torch.load(slot,weights_only=False,map_location='cpu')
+    assert state['training']['options']['sft_update_budget_reference']['scored_graphs']==2
+    changed=copy.deepcopy(state);changed['training']['options'].pop('sft_update_budget_reference')
+    for frame in (changed['training'].get('sft_progress') or {}).values():
+        (frame.get('options') or {}).pop('sft_update_budget_reference',None)
+    torch.save(changed,slot)
+    continuation=args.copy(); continuation[continuation.index('--accumulate-batches')+1]='1'
+    continuation[continuation.index('--epochs')+1]='1'; continuation+=['--continue-from',str(slot)]
+    with pytest.raises(ValueError,match='decreasing SFT accumulation requires'):
+        trainer.main(continuation)
+    from natlang_neuralese.train.native_resident import binding
+    pin=binding(slot); frame=changed['training'];counts=frame['exposure_counts']; rowbindings=frame['source_row_bindings']
+    rows=[{'id':key,'delta':value,'scored':True,'current_count':value,'binding':rowbindings[key]}
+          for key,value in counts.items() if value]
+    delta={'schema':'natlang.sft-update-budget-row-delta/1','global_step':frame['global_step'],
+           'checkpoint_sha256':pin['sha256'],'train_sha256':frame['source_receipts'][0]['sha256'],'rows':rows}
+    delta_path=tmp_path/'delta.json';delta_path.write_text(json.dumps(delta))
+    predecessor=tmp_path/'predecessor';predecessor.write_text('fixture')
+    receipt={'schema':'natlang.sft-update-budget-reference/1','checkpoint_sha256':pin['sha256'],
+             'train_sha256':delta['train_sha256'],'global_step':delta['global_step'],
+             'scored_graphs':sum(row['delta'] for row in rows),'row_delta':binding(delta_path),
+             'predecessor_checkpoint':binding(predecessor)}
+    proof=tmp_path/'reference.json';proof.write_text(json.dumps(receipt))
+    with_reference=continuation+['--sft-update-budget-reference',json.dumps(binding(proof))]
+    assert trainer.main(with_reference)==0
+    explicit=torch.load(slot,weights_only=False,map_location='cpu')['training']
+    assert explicit['options']['sft_update_budget_reference']['evidence']==binding(proof)
+    torch.save(state,slot)
+    assert trainer.main(continuation)==0
+    final=torch.load(slot,weights_only=False,map_location='cpu')['training']
+    assert final['options']['sft_update_budget_reference']['scored_graphs']==2
+    assert final['options']['sft_update_budget_last_update']['multiplier']==.5
+
+
+def test_sft_budget_scales_real_muon_and_adam_displacements(monkeypatch):
+    from natlang_neuralese.train import native_state_sft as trainer
+    torch.manual_seed(821)
+    model,optimizer=build(); other,other_optimizer=build()
+    other.load_state_dict(model.state_dict());other.port.hf.load_state_dict(model.port.hf.state_dict())
+    graphs=examples()[:2]
+    def loss(model,micro,**kwargs):
+        return sum(p.float().square().sum() for p in model.parameters() if p.requires_grad), {'objective':'fixture'}
+    monkeypatch.setattr(trainer,'packed_graph_loss',loss)
+    before={name:p.detach().clone() for name,p in model.named_parameters()}
+    trainer.native_training_update(model,optimizer,graphs,checkpoint_layers=False,sft_update_reference=8)
+    trainer.native_training_update(other,other_optimizer,graphs,checkpoint_layers=False)
+    for child in (optimizer.latent,optimizer.auxiliary):
+        ids={id(p) for group in child.param_groups for p in group['params']}
+        selected=[(name,p) for name,p in model.named_parameters() if id(p) in ids]
+        actual=torch.cat([(p.detach()-before[name]).flatten() for name,p in selected])
+        reference=torch.cat([(dict(other.named_parameters())[name].detach()-before[name]).flatten() for name,_ in selected])
+        assert reference.norm()>0
+        torch.testing.assert_close(actual.norm()/reference.norm(),torch.tensor(.25),rtol=.03,atol=.001)

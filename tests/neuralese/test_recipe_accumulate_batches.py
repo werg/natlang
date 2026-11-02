@@ -22,3 +22,15 @@ def test_rl_inherits_and_validates_accumulation(tmp_path):
     assert changes['rl']['accumulate_batches']==[7,9]
     validate_stage_parameters('native_state_rl',{'accumulate_batches':7})
     with pytest.raises(ValueError):validate_stage_parameters('native_state_rl',{'accumulate_batches':0})
+
+
+def test_sft_update_budget_reference_binding_is_typed_and_serialized():
+    from natlang_neuralese.train.recipe import validate_stage_parameters, stage_parameter_args
+    value={'path':'/evidence/reference.json','sha256':'a'*64}
+    validate_stage_parameters('native_state_sft',{'sft_update_budget_reference':value})
+    args=stage_parameter_args({'sft_update_budget_reference':value})
+    assert args[0]=='--sft-update-budget-reference'
+    import json
+    assert json.loads(args[1])==value
+    with pytest.raises(ValueError,match='path and SHA256'):
+        validate_stage_parameters('native_state_sft',{'sft_update_budget_reference':{'path':'x','sha256':'bad'}})

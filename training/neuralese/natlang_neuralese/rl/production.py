@@ -486,7 +486,7 @@ LEARNER_SIDE_KEYS = ('trainer_parameters', 'learner_command', 'seed_trainer_para
 
 def native_policy_parameter_contract():
     allowed = {
-        'accumulate_batches','async_checkpoint','base','batch_graphs','batch_tokens',
+        'accumulate_batches','sft_update_budget_reference','async_checkpoint','base','batch_graphs','batch_tokens',
         'checkpoint_every','checkpoint_input_offload','checkpoint_input_offload_directory',
         'checkpoint_seconds','checkpoint_layers','checkpoint_layer_group_size','checkpoint_direct_token_limit',
         'checkpoint_publication','checkpoint_publication_namespace',

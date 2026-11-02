@@ -409,7 +409,7 @@ class _BoundedUpdateProfile:
 
 
 def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_layers=True,
-                           chunk_tokens=128, objective=None, precision=None, accumulate=()):
+                           chunk_tokens=128, objective=None, precision=None, accumulate=(), sft_update_reference=None):
     """One shared complete production update, also used by throughput diagnostics.
 
     ``precision``: (Quantization, point, λ, loss weight) of this update's QAT pass (``--quantization``); the forward
@@ -452,9 +452,18 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
     profiler = (_BoundedUpdateProfile(next(model.parameters()).is_cuda)
                 if profile_path and not Path(profile_path).exists() else None)
     profiler_started=False
-    rates=[(group,group['lr']) for group in optimizer.param_groups] if efficiency_scale!=1. else []
+    if sft_update_reference is not None:
+        if objective is not None or type(sft_update_reference) is not int or sft_update_reference < 1:
+            raise ValueError('SFT update reference requires ordinary SFT and a positive scored-graph count')
+        if sum(scored) == 0:
+            raise ValueError('SFT update budget requires at least one scored graph')
+    budget_scale = min(1., sum(scored)/sft_update_reference) if sft_update_reference else 1.
+    total_scale = budget_scale * efficiency_scale
+    rates=[(group,group['lr'],group.get('qat_latent_lr')) for group in optimizer.param_groups] if total_scale!=1. or sft_update_reference else []
     try:
-        for group,rate in rates:group['lr']=rate*efficiency_scale
+        for group,rate,qat_rate in rates:
+            group['lr']=rate*total_scale
+            if qat_rate is not None: group['qat_latent_lr']=qat_rate*total_scale
         from ..model.native_weight_carrier import ParameterCotangentScope, plain_training_arithmetic
         for index, (micro, share) in enumerate(zip(micro_batches, shares)):
             from .memory_policy import enforce_ledger_cuda_limit
@@ -494,9 +503,19 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
             optimizer.latent._armed = None
         loss = torch.stack(losses).sum() if len(losses) > 1 else losses[0]
         details = merged_details
-        if rates:
+        if efficiency_scale!=1.:
             details['efficiency_update_control']={'schema':'natlang.efficiency-only-update-scaling/1',
                 'scale':efficiency_scale,'scope':'complete-optimizer-update'}
+        if sft_update_reference is not None:
+            control={'schema':'natlang.sft-update-budget-applied/1','scored_graphs':sum(scored),
+                     'reference_scored_graphs':sft_update_reference,'multiplier':budget_scale,
+                     'efficiency_multiplier':efficiency_scale,
+                     'groups':[{'name':group.get('name'), 'lr_before':rate, 'lr_applied':group['lr'],
+                                'qat_latent_lr_before':qat_rate,'qat_latent_lr_applied':group.get('qat_latent_lr')}
+                               for group,rate,qat_rate in rates]}
+            if isinstance(details,list):
+                for item in details:item['sft_update_budget']=control
+            else:details['sft_update_budget']=control
         params = [p for p in model.parameters() if p.requires_grad and p.grad is not None]
         if params:
             norm = torch.nn.utils.clip_grad_norm_(params, float('inf'))
@@ -511,7 +530,9 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
         optimizer.zero_grad(set_to_none=True)
         raise
     finally:
-        for group,rate in rates:group['lr']=rate
+        for group,rate,qat_rate in rates:
+            group['lr']=rate
+            if qat_rate is not None:group['qat_latent_lr']=qat_rate
         if profiler_started:
             try:
                 destination=Path(profile_path);destination.parent.mkdir(parents=True,exist_ok=True)
@@ -1460,6 +1481,7 @@ def build_parser():
         help='packed micro-batches per optimizer update; their gradients accumulate before one MuonSR/AdamW step '
              '(default 16, about 64 graphs at 32k tokens per micro-batch; 1 restores one step per batch). A '
              'continuation records the change in accumulate_batches_history')
+    parser.add_argument('--sft-update-budget-reference', help='JSON binding to an authenticated earned SFT scored-graph reference receipt')
     parser.add_argument('--share-causal-prefixes', action=argparse.BooleanOptionalAction, default=None,
         help='reuse exact causal token prefixes (ordinary SFT; whole-graph policy objectives across turns and '
              'episodes) with unchanged targets, losses and exposure. On by default for new '
@@ -2485,6 +2507,56 @@ def _main(argv=None, *, requested_refresh):
         raise ValueError('native source correction requires the exact saved SFT predecessor frame')
     if args.source_correction is not None and args.continued_native_graphs is None:
         raise ValueError('native source correction requires its declared predecessor graph source')
+    # The active SFT frame, not a surrounding RL frame, owns its reference.
+    reference_options = (resume or {}).get('options') or saved_options
+    sft_reference = reference_options.get('sft_update_budget_reference') if objective is None else None
+    if args.sft_update_budget_reference:
+        if objective is not None: raise ValueError('SFT update budget reference is ordinary SFT only')
+        from .native_resident import bound
+        reference_binding=json.loads(args.sft_update_budget_reference)
+        reference_receipt=json.loads(bound(reference_binding).read_text())
+        parent_path=args.continue_from if parent_continuation else policy.slot
+        if (reference_receipt.get('schema')!='natlang.sft-update-budget-reference/1'
+                or (reference_receipt.get('checkpoint_sha256')!=sha256_file_hex_cached(parent_path)
+                    and (not isinstance(sft_reference,dict) or sft_reference.get('evidence')!=reference_binding))
+                or reference_receipt.get('train_sha256')!=source_receipts[0]['sha256']
+                or type(reference_receipt.get('scored_graphs')) is not int or reference_receipt['scored_graphs']<1):
+            raise ValueError('SFT update budget reference differs from the actual earned checkpoint or source')
+        delta=json.loads(bound(reference_receipt['row_delta']).read_text())
+        records=delta.get('rows')
+        if (delta.get('schema')!='natlang.sft-update-budget-row-delta/1' or not isinstance(records,list)
+                or not records or len({row['id'] for row in records})!=len(records)
+                or any(type(row.get('delta')) is not int or row['delta']<1 or type(row.get('scored')) is not bool
+                       for row in records)
+                or sum(row['delta'] for row in records if row['scored'])!=reference_receipt['scored_graphs']):
+            raise ValueError('SFT update budget row delta does not match the scored count')
+        bound(reference_receipt['predecessor_checkpoint'])
+        if (reference_receipt.get('global_step')!=delta.get('global_step')
+                or reference_receipt.get('checkpoint_sha256')!=delta.get('checkpoint_sha256')
+                or reference_receipt.get('train_sha256')!=delta.get('train_sha256')):
+            raise ValueError('SFT update budget row delta custody differs')
+        if reference_receipt.get('checkpoint_sha256')==sha256_file_hex_cached(parent_path):
+            earned_counts=(resume or {}).get('exposure_counts') or {}
+            earned_bindings=(resume or {}).get('source_row_bindings') or {}
+            if any(earned_counts.get(row['id'],0)!=row.get('current_count')
+                   or earned_bindings.get(row['id'])!=row.get('binding') for row in records):
+                raise ValueError('SFT update budget delta differs from the restored earned frame')
+        sft_reference={'schema':'natlang.sft-update-budget-reference-state/1',
+                       'scored_graphs':reference_receipt['scored_graphs'],'evidence':reference_binding,
+                       'reference_global_step':reference_receipt['global_step']}
+    if sft_reference is not None and (not isinstance(sft_reference,dict)
+            or sft_reference.get('schema')!='natlang.sft-update-budget-reference-state/1'
+            or type(sft_reference.get('scored_graphs')) is not int or sft_reference['scored_graphs']<1):
+        raise ValueError('saved SFT update budget reference is invalid')
+    if (objective is None and resume and int(reference_options.get('accumulate_batches') or 1)>args.accumulate_batches
+            and sft_reference is None):
+        raise ValueError('decreasing SFT accumulation requires an earned scored-graph reference')
+    if sft_reference is not None: checkpoint_options['sft_update_budget_reference']=sft_reference
+    history=list(reference_options.get('sft_update_budget_history') or [])
+    if sft_reference is not None and sft_reference != reference_options.get('sft_update_budget_reference'):
+        history.append({'schema':'natlang.sft-update-budget-transition/1','reference':sft_reference,
+                        'at_global_step':int(saved_training.get('global_step',saved_training.get('step',0)) or 0)})
+    checkpoint_options['sft_update_budget_history']=history
     ce_prior_options = (resume or {}).get('options') or saved_options
     previous_ce = ce_prior_options.get('ce_supervision_policy_binding')
     inherited_ce = saved_options.get('ce_supervision_policy_binding') or previous_ce
@@ -4162,11 +4234,13 @@ def _main(argv=None, *, requested_refresh):
                     with probing(logit_probe):
                         loss, details = native_training_update(model, optimizer, micro_batches[-1], backend=backend,
                             checkpoint_layers=args.checkpoint_layers, chunk_tokens=args.chunk_tokens, objective=objective,
-                            precision=precision_pass, accumulate=micro_batches[:-1])
+                            precision=precision_pass, accumulate=micro_batches[:-1],
+                            sft_update_reference=(sft_reference['scored_graphs'] if objective is None and sft_reference else None))
                 else:
                     loss, details = native_training_update(model, optimizer, micro_batches[-1], backend=backend,
                         checkpoint_layers=args.checkpoint_layers, chunk_tokens=args.chunk_tokens, objective=objective,
-                        precision=precision_pass, accumulate=micro_batches[:-1])
+                        precision=precision_pass, accumulate=micro_batches[:-1],
+                            sft_update_reference=(sft_reference['scored_graphs'] if objective is None and sft_reference else None))
             finally:
                 if warmup is not None:
                     warmup.restore()
@@ -4175,6 +4249,18 @@ def _main(argv=None, *, requested_refresh):
             step += 1
             global_step += 1
             if policy_operation:policy_qat_update(checkpoint_options,quantization,global_step)
+            if objective is None:
+                scored_count=sum(any(weight > 0 for weight in example.target_weights) or bool(example.decisions) for example in batch)
+                if sft_reference is None and scored_count:
+                    sft_reference={'schema':'natlang.sft-update-budget-reference-state/1',
+                                   'scored_graphs':scored_count,'reference_global_step':global_step,
+                                   'origin':'actual-ordinary-sft-update-in-this-checkpoint'}
+                    checkpoint_options['sft_update_budget_reference']=sft_reference
+                    checkpoint_options['sft_update_budget_history'].append({
+                        'schema':'natlang.sft-update-budget-transition/1','reference':sft_reference,
+                        'at_global_step':global_step,'effective':'next ordinary SFT update'})
+                applied=(details[0].get('sft_update_budget') if isinstance(details,list) and details else None)
+                if applied is not None:checkpoint_options['sft_update_budget_last_update']={**applied,'global_step':global_step}
             for example in batch:
                 exposure_counts[example.id] += 1
                 if example.id in foundation_missing:
@@ -4215,6 +4301,8 @@ def _main(argv=None, *, requested_refresh):
                     'fixed_foundation_graphs': sum(train.entries[index]['id'] in foundation_priority_ids for index in indices),
                     'required_graphs': len((foundation_template or {}).get('rows', {})),
                     'completed_graphs': len((foundation_template or {}).get('rows', {})) - len(foundation_missing)}
+            if objective is None and checkpoint_options.get('sft_update_budget_last_update',{}).get('global_step')==global_step:
+                progress['sft_update_budget']=checkpoint_options['sft_update_budget_last_update']
             if mandatory_objective:progress['offline_preference']=details
             progress['learning_rates']=optimizer.native_learning_rates
             if anneal is not None:
