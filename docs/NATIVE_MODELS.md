@@ -161,8 +161,8 @@ own explicit setting.
 ```
 
 With `escalate` (or `--escalate PROFILE`; `--escalate none` turns it off), the running model can call `escalate`
-with its reason, evidence, attempted work and remaining subproblem. A failed model request also hands off when a
-fallback is available. The next explicitly configured profile continues the same invocation, scope and transcript;
+with its reason, evidence, attempted work and remaining subproblem. A failed model request or four identical actions
+with identical failures also hands off when a fallback is available. The next explicitly configured profile continues the same invocation, scope and transcript;
 committed effects are not replayed. A profile may name its own fallback, forming a bounded, cycle-free chain. Each
 handoff prints one line and records the actors and report in the call graph:
 
