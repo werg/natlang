@@ -237,7 +237,7 @@ def test_static_recipe_transition_requires_preserved_family_membership(tmp_path,
        'source_correction':{'path':str(proof_path),'sha256':digest(proof_path),'binding':'source_correction'}}
     assert _source_correction_continuation(old,new)
     new_map.write_text(json.dumps({'source_sha256':'new','rows':[{'id':'x','binding':'new-binding','family':'different'}]}))
-    with pytest.raises(ValueError,match='family membership'):_source_correction_continuation(old,new)
+    with pytest.raises(ValueError,match='family correction ledger differs from row inventory'):_source_correction_continuation(old,new)
 
 
 def test_pending_static_graphs_are_staged_without_discharge(tmp_path,monkeypatch):

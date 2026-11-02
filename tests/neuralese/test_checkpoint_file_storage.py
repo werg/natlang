@@ -223,7 +223,8 @@ def test_recipe_handoff_explicitly_tunes_storage_without_changing_the_stage(tmp_
 
 @pytest.mark.parametrize('layout',['transpose','offset_slice','expanded','overlap','channels_last'])
 @pytest.mark.parametrize('device',['cpu','cuda'])
-def test_kernel_relevant_strides_survive_file_storage_without_unused_prefix(tmp_path,layout,device):
+@pytest.mark.parametrize('arena',[False,True])
+def test_kernel_relevant_strides_survive_file_storage_without_unused_prefix(tmp_path,layout,device,arena):
     if device=='cuda' and not torch.cuda.is_available():pytest.skip('CUDA unavailable')
     base=torch.arange(120,dtype=torch.float32,device=device)
     if layout=='transpose':tensor=base.reshape(12,10).T
@@ -231,13 +232,16 @@ def test_kernel_relevant_strides_survive_file_storage_without_unused_prefix(tmp_
     elif layout=='expanded':tensor=base[17:18].expand(7,9)
     elif layout=='overlap':tensor=base.as_strided((6,7),(2,1),storage_offset=17)
     else:tensor=base.reshape(2,3,4,5).to(memory_format=torch.channels_last)
-    store=CheckpointFileStore(tmp_path);saved=store.pack(tensor);restored=saved.unpack()
+    store=CheckpointFileStore(tmp_path)
+    if arena:store.reserve_arena(1<<20)
+    saved=store.pack(tensor);restored=saved.unpack()
     assert restored.stride()==tensor.stride()
     assert restored.storage_offset()==0
     torch.testing.assert_close(restored,tensor,atol=0,rtol=0)
     span=1+sum((n-1)*s for n,s in zip(tensor.shape,tensor.stride()))
-    assert saved.path.stat().st_size==span*tensor.element_size()
-    if layout=='expanded':assert saved.path.stat().st_size==tensor.element_size()
+    saved_bytes=saved.size if arena else saved.path.stat().st_size
+    assert saved_bytes==span*tensor.element_size()
+    if layout=='expanded':assert saved_bytes==tensor.element_size()
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA unavailable')
@@ -368,13 +372,16 @@ def test_scratch_peak_uses_exact_oversize_measured_cases(tmp_path):
         _measured_checkpoint_scratch_peak({'passed':True,'capacity':{'passed':True,'cases':[{}]}},None)
 
 
-def test_reserved_arena_retains_checkpoint_inputs_for_higher_derivatives(tmp_path,monkeypatch):
+@pytest.mark.parametrize('device',['cpu','cuda'])
+@pytest.mark.parametrize('pin_memory',[False,True])
+def test_reserved_arena_retains_checkpoint_inputs_for_higher_derivatives(tmp_path,monkeypatch,device,pin_memory):
     from types import SimpleNamespace
+    if device=='cuda' and not torch.cuda.is_available():pytest.skip('CUDA unavailable')
     monkeypatch.setenv('NATLANG_CHECKPOINT_MIN_FREE_BYTES','0')
     port=SimpleNamespace(activation_checkpoint=checkpoint)
-    wrapper=configure_checkpoint_input_offload(port,enabled=True,pin_memory=False,directory=tmp_path)
+    wrapper=configure_checkpoint_input_offload(port,enabled=True,pin_memory=pin_memory,directory=tmp_path)
     wrapper.file_store.reserve_arena(1<<20)
-    x=torch.randn(12,dtype=torch.float64,requires_grad=True)
+    x=torch.randn(12,dtype=torch.float64,device=device,requires_grad=True)
     y=x.detach().clone().requires_grad_()
     result=wrapper(lambda v:v.sin().square(),x,use_reentrant=False).sum()
     baseline=checkpoint(lambda v:v.sin().square(),y,use_reentrant=False).sum()
