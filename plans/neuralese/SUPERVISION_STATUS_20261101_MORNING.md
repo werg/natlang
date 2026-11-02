@@ -1,3 +1,54 @@
+## Live supervision update, 2026-11-02 17:50 CET
+
+- Owner-requested fresh GPU-entitlement check completed for cw1,cw2,cw3,cw4.
+  All four again returned `Permission denied: this organization is not entitled
+  to create GPU sandboxes`. No allocation was created. Exact journal:
+  `ops/four-cw-accounts-once-1102-1748.json`; check unit completed successfully.
+- Inline global71 protected evaluation completed17:37:28 at1/4 versus Pop
+  parent2/4, losing previously passing case88. Root stopped the controller and
+  requested learner refresh17:39:02. The already-earned fifth update was saved
+  before exit17:39:54. Stopped full checkpoint SHA
+  `e382ce6dedbbb042d37c831c5d49021ee6eed3965eab2ee3377bfad8f151e7da`;
+  exact source hash verified during actor-view preparation. Retained additional
+  same-inode diagnostic pin: `ops/diagnostic-jolt-pre-final-stop-1102/checkpoint.pt`.
+  Its early pin receipt's expected71 is unverified: capture happened after the
+  final save; report confirms relative step5 and the exact hash above. Do not
+  label that pin as the evaluated global71 state. Original controller has an
+  interrupted pending round; do not blindly replay or count those updates twice.
+- Investigation found a real comparison gap, not proof that weights caused the
+  difference: inline DGX used8192 prefill/no prefix cache/four workers and
+  batched decode, versus standalone Pop2048 prefill/cache/one worker. R19/R20
+  serving/model arithmetic sources are byte-identical. Model evaluation mode
+  and inference mode are active; there is no inline prefix cache to be stale.
+  Historical inline score also failed to retain immutable actor/geometry
+  evidence, and later metrics overwrote its temporary checkpoint identity.
+- Main d419deb40 fixes future TaskEval evidence and comparison/reuse admission:
+  exact identity plus actual serving geometry/backend/device are retained in
+  each score; changing identity/geometry during an eval fails. Historical rows
+  remain unchanged and cannot silently qualify a matched comparison. Helper
+ 36 targeted/46 combined checks passed. Freeze
+  `freeze-native-eval-attestation-v22-1102.service` is preparing this and the
+  reservation-stop fix for the next continuation. Root independent review and
+  the already-running full main checks remain required.
+- Prepare-final-actor-view completed17:42:50 under R19 (19.8GiB peak). Matched
+  Pop transfer is live as `send-jolt72-pop-actor-1102.service`; next operator is
+  `ops/run-pop-jolt72-runtime19-development-1102.py`, same standalone settings
+  and protected packet as the parent. Complete transfer/readback before launch.
+  Restored the exact local71c3 derived view from its retained tiny ZIP delta to
+  permit automatic transfer reuse. Retired only Pop's idle derived BF95 view
+  after released-consumer/hash/recovery checks, retaining Pop's71c3 baseline
+  view; this provides room for the candidate without breaching eval headroom.
+- Diagnostic SFT69 private upload completed; independent private GET and full
+  decoded-target verification are still running in the6GiB RAM-backed scratch.
+  Keep its raw checkpoint until the final capsule is complete. No fresh learner
+  has been started from the unqualified RL candidate. The selected production
+  numeric parent remains source-corrected71c3; all401623 joint SFT obligations
+  survive. Full main checks are actively running after learner shutdown.
+- FFN audit found the current plain BF16 path already uses Tensor Cores despite
+  the `ieee` configuration label. Actual-width Pop witnesses confirmed BF16
+  inputs/weights/adjoints. Arbitrary FP32 tf32x3/bf16x6 alternatives were slower
+  at measured1024-token shapes; no speculative arithmetic change was deployed.
+
 ## Live supervision update, 2026-11-02 17:34 CET
 
 - Useful RL resumed17:21:34. Verified current SFT-budget code consumes the
