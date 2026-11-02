@@ -52,9 +52,17 @@
   qualify-native67-shared-projection-1102 uses8210/9210 and40GiB; comparison unit
   compare-native67-shared-projection-1102 waits for readiness, records actual
   states/probabilities, and stops the qualifier on completion/failure. Receipt
-  ops/native67-shared-projection-qualification-1102/live-comparison.json is pending.
-  This is diagnostic capacity; it must yield to real SGD. Native fast text writer
-  and whole-model backend parity still require qualification.
+  ops/native67-shared-projection-qualification-1102/live-comparison.json completed:
+  three producers still first differ at layer2raw_k/v (max.03125/.03125/.046875);
+  greedy3/3 matched, sampled/top-k differences persist (max observed.375). Both
+  qualifier and comparison units are now inactive, exit0; numerical qualification
+  FAILED despite successful diagnostic execution. Latest CPU-only follow-up
+  forkfa291aa1a8/main2cbd7b06a separates source-v1 FFN vendor GEMMs. It is unqualified.
+  Native source-v1 actor/learner can also differ by FFN batch geometry; the actual
+  complete-episode pre-SGD gate remains mandatory, not yet CUDA-qualified. Stable-v1
+  would be a broader arithmetic/policy transition requiring explicit custody,
+  evaluation and recollection, not a reinterpretation of current source-v1 samples.
+  Native fast text writer and whole-model backend parity remain unfinished.
 - Private export-qualified64-closure-and67-private-v3-1102 is confirmed running.
   201/202 unique objects verified; selected67 full upload is underway (seven1GiB
   parts uploaded by04:22). Final full GET remains required. Neither acknowledgment
