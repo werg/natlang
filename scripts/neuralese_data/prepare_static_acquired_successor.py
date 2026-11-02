@@ -48,6 +48,13 @@ def append_family_plan(parent, prior_census, balance, added_mass):
             'max_scale': balance['max_scale'], 'scope': 'preserve predecessor single-pass effective proportions'}
 
 
+def rebind_quota_candidate(policy, parent_sha256, candidate_sha256):
+    basis=policy.get('quota_aware_basis')
+    if not isinstance(basis,dict) or basis.get('candidate_source_sha256')!=parent_sha256:
+        raise ValueError('static append lost its measured predecessor quota basis')
+    policy['quota_aware_basis']={**basis,'candidate_source_sha256':candidate_sha256}
+
+
 def build(parent_path, graph_receipt_path, output):
     parent_path,graph_receipt_path=map(lambda x:Path(x).resolve(strict=True),(parent_path,graph_receipt_path))
     parent,derivation=map(b.read,(parent_path,graph_receipt_path)); parent_ref=b.bind(parent_path);derivation_ref=b.bind(graph_receipt_path)
@@ -78,6 +85,8 @@ def build(parent_path, graph_receipt_path, output):
         additions.append({'id':entry['id'],'binding':entry['binding'],'family':family})
     family_path=out/'families.json';write_json_durable(family_path,{'schema':'natlang.logical-family-map/1','source_sha256':b.bind(manifest)['sha256'],'rows':old_map['rows']+additions})
     policy=copy.deepcopy(old_policy);policy['inventory']=[{k:v for k,v in b.bind(manifest).items() if k!='bytes'}];policy['objective']['family_balance']['map']={k:v for k,v in b.bind(family_path).items() if k!='bytes'};policy['objective']['family_balance']['scales']=plan['scales'];policy['objective_transition']={'from':identity(objective)['sha256']}
+    if parent.get('quota_basis'):
+        rebind_quota_candidate(policy,parent['source']['sha256'],b.bind(manifest)['sha256'])
     b.append_source_policy(policy,graph_path,derivation['graph'],None,manifest)
     ce_path=out/'ce-policy.json';write_json_durable(ce_path,policy);prepared=prepare_policy(load_policy(b.bind(ce_path)),source)
     unscaled=copy.deepcopy(policy);unscaled['objective']['family_balance']=None;unscaled_path=out/'unscaled-ce-policy.json';write_json_durable(unscaled_path,unscaled)
