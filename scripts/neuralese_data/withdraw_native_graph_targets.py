@@ -1,4 +1,4 @@
-"""Exact raw-row deletion and own-index continuation for ordinary withdrawals."""
+"""Exact whole-graph deletion and authenticated own-index continuation."""
 from __future__ import annotations
 from contextlib import contextmanager
 import hashlib
@@ -36,16 +36,17 @@ def _raw(path):
 
 
 def filter_source(source, output, rows, *, source_sha256):
-    """Remove only enumerated ordinary rows; preserve remaining raw bytes/order."""
+    """Remove enumerated complete graphs; preserve remaining raw bytes/order."""
     source, output = Path(source), Path(output)
     before = _state(source)
     if sha256_file_hex(source) != source_sha256 or source.resolve() == output.resolve():
         raise ValueError('withdrawal source identity differs')
     selected = {}
     for row in rows:
-        if (not isinstance(row.get('id'), str) or row['id'] in selected
+        if (not isinstance(row, dict) or not isinstance(row.get('id'), str) or row['id'] in selected
                 or not isinstance(row.get('binding'), str) or re.fullmatch('[0-9a-f]{64}',row['binding']) is None
-                or row.get('source_sha256') != source_sha256):
+                or row.get('source_sha256') != source_sha256
+                or type(row.get('communication')) is not bool):
             raise ValueError('withdrawal rows need exact unique source bindings')
         selected[row['id']] = row
     if not selected:
@@ -70,13 +71,24 @@ def filter_source(source, output, rows, *, source_sha256):
                             raise ValueError('withdrawal source repeats a graph identity')
                         seen.add(ident); old_ids.append(ident)
                         if ident in selected:
+                            from natlang_neuralese.data.native_graph_schema import parse_graph, communication_classification
+                            from natlang_neuralese.data.native_sources import _row_bindings
+                            fingerprint = row.get('tokenizer_fingerprint')
+                            if not isinstance(fingerprint, str) or not fingerprint:
+                                raise ValueError('withdrawal target tokenizer identity is missing')
+                            example = parse_graph(row, tokenizer_fingerprint=fingerprint)
+                            classification = communication_classification(example)['communication']
+                            if (example.split != 'train' or classification is not selected[ident]['communication']
+                                    or _row_bindings([example])[ident] != selected[ident]['binding']):
+                                raise ValueError('withdrawal target graph class or binding differs')
                             conversion = row.get('conversion') or {}
-                            if (row.get('split') != 'train' or len(row.get('nodes', [])) != 1
+                            if (not classification and (len(row.get('nodes', [])) != 1
                                     or set(row)-{'schema','id','split','source_groups','tokenizer_fingerprint','nodes','conversion'}
                                     or set(row['nodes'][0])-{'name','token_ids','target_weights'}
-                                    or conversion.get('role_interpretation') not in ('ordinary-text', 'whole-trajectory-chat-roles')):
+                                    or conversion.get('role_interpretation') not in ('ordinary-text', 'whole-trajectory-chat-roles'))):
                                 raise ValueError('withdrawal target is not an ordinary train row')
-                            removed.append({**selected[ident], 'raw_row_sha256':hashlib.sha256(raw).hexdigest()})
+                            removed.append({**selected[ident], 'tokenizer_fingerprint':fingerprint,
+                                            'raw_row_sha256':hashlib.sha256(raw).hexdigest()})
                         else:
                             writer.write(raw); retained.update(raw); kept_ids.append(ident)
             finally:
@@ -134,7 +146,10 @@ def continue_filtered_index(index, proof, *, index_sha256, metadata_sha256, outp
     if len(removed) != len(proof['removed']):raise ValueError('withdrawal repeats an index target')
     actual = {row['id']:row for row in entries if row['id'] in removed}
     if (set(actual) != set(removed) or any(actual[k]['binding'] != removed[k]['binding']
-            or actual[k]['communication'] is not False for k in removed)):
+            or removed[k].get('tokenizer_fingerprint') != key.get('tokenizer')
+            or type(removed[k].get('communication')) is not bool
+            or type(actual[k].get('communication')) is not bool
+            or actual[k]['communication'] is not removed[k]['communication'] for k in removed)):
         raise ValueError('withdrawal index target binding differs')
     kept = [row for row in entries if row['id'] not in removed]
     # Transport keeps the original filter proof intact; bind the actual local copy.
