@@ -1,3 +1,51 @@
+## Live supervision update, 2026-11-02 19:10 CET
+
+- Latest owner-requested one-time GPU creation probes: cw1/cw2/cw3/cw4 all
+  denied GPU entitlement again. No sandbox created. Receipt:
+  `ops/gpu-access-retest-20261102T180529Z.json`.
+- Actual stopped JOLT full state is global72, SHA
+  `e382ce6dedbbb042d37c831c5d49021ee6eed3965eab2ee3377bfad8f151e7da`.
+  Matched standalone Pop R19 evaluation finished18:10 at2/4, equal to the
+  selected parent at2/4. Earlier inline1/4 used different serving geometry;
+  it does not establish weight harm. No task capability lift is established.
+  Preserve all five actual SGD updates and unfinished comprehensive SFT
+  obligations. Original interrupted controller queue is historical; do not
+  replay it into a new session.
+- Prepared explicit full-state continuation
+  `ops/earned-jolt72-joint-runtime24-g4-1102/config.json`, complete401623-row
+  joint native/ordinary recipe, unchanged held protection and exposure custody.
+  Runtime `runtime-native-scratch-g4-v24-1102` binds main1d3a09067, including
+  evaluation attestation, inference convolution bounding, physical scratch
+  reservation and disk-aware async writer drain. No frozen code was edited.
+  Checkpoint layer grouping changes2->4 to reduce scratch; numerical tolerances,
+  complete source obligations and40GiB disk floor remain unchanged. Refresh
+  windows change1->16 updates, retaining explicit interrupt/source adoption.
+- Full-model numerical certificate at earned72/G4 is LIVE in
+  `qualify-earned72-g4-r24-1102.service`, no SGD. Learner
+  `lfm3-earned-jolt72-joint-r24-g4-1102` is queued behind that104GiB claim;
+  launcher checks the actual passed certificate before starting. Complete
+  source hardware capacity must pass in the actual trainer before SGD.
+  This is preparation/qualification, not resumed optimizer advancement yet.
+- Main full check ended18:20 with two failures: ordinary3345passed/1failed,
+  Neuralese5778passed/1failed; GPU group26passed/9skipped; TS2563passed,
+  conformance22passed. Replica-state failure caught a runtime-inventory
+  mismatch while code changed; subsequent entire affected file19/19 passed.
+  Static context failure expected an obsolete error substring: family drift
+  was correctly rejected by the stronger correction-ledger guard. Corrected
+  assertion and affected file11/11 pass. Do not call this a fresh full-green
+  suite. Root CUDA arena custody tests63/63 passed; helper async fallback4/4.
+- Safe retirements: SFT68/69 raw diagnostics after exact local/private decoded
+  target readback; deliberately discarded forbidden wrong-reward606a weights
+  with provenance/evidence retained; idle derived actor views after consumer
+  checks; six redundant runtime TARs after exact private custody/presence.
+  Unpacked frozen runtimes remain. Actual live admission still requires original
+ 21b4 and71c3 raw parents: do not retire them merely because72 exists.
+  Internal free97.18GB, external57.02GB at19:09. G2 scratch plus next committed
+  output would exceed steady space; G4 is being measured, not assumed to fit.
+- Global72 full raw state is locally pinned, but its new private exact full-state
+  export remains REQUIRED. Existing71c3/BF95 private recovery remains retained.
+  Do not claim that a derived inference view protects optimizer/RNG/exposure.
+
 ## Live supervision update, 2026-11-02 17:50 CET
 
 - Owner-requested fresh GPU-entitlement check completed for cw1,cw2,cw3,cw4.
