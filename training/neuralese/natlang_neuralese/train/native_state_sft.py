@@ -2527,7 +2527,9 @@ def _main(argv=None, *, requested_refresh):
         if (delta.get('schema')!='natlang.sft-update-budget-row-delta/1' or not isinstance(records,list)
                 or not records or len({row['id'] for row in records})!=len(records)
                 or any(type(row.get('delta')) is not int or row['delta']<1 or type(row.get('scored')) is not bool
-                       for row in records)
+                       or type(row.get('previous_count')) is not int or row['previous_count']<0
+                       or type(row.get('current_count')) is not int
+                       or row['current_count']-row['previous_count']!=row['delta'] for row in records)
                 or sum(row['delta'] for row in records if row['scored'])!=reference_receipt['scored_graphs']):
             raise ValueError('SFT update budget row delta does not match the scored count')
         bound(reference_receipt['predecessor_checkpoint'])

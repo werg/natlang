@@ -321,7 +321,7 @@ def test_earned_accumulation_decrease_requires_reference_and_carries_captured_re
         trainer.main(continuation)
     from natlang_neuralese.train.native_resident import binding
     pin=binding(slot); frame=changed['training'];counts=frame['exposure_counts']; rowbindings=frame['source_row_bindings']
-    rows=[{'id':key,'delta':value,'scored':True,'current_count':value,'binding':rowbindings[key]}
+    rows=[{'id':key,'delta':value,'scored':True,'previous_count':0,'current_count':value,'binding':rowbindings[key]}
           for key,value in counts.items() if value]
     delta={'schema':'natlang.sft-update-budget-row-delta/1','global_step':frame['global_step'],
            'checkpoint_sha256':pin['sha256'],'train_sha256':frame['source_receipts'][0]['sha256'],'rows':rows}
