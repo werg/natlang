@@ -1,3 +1,92 @@
+## Live supervision update, 2026-11-02 02:30 CET
+
+- The previous goal turn made concrete progress: reward/escalation verification
+  and immutable task-asset reuse landed on main. This turn resumed actual useful
+  GPU work, fixed source publication and storage defects, and prepared more data.
+- Production selection is67, not68:67 has11 verified successes across16 development
+  tasks. On matched protected contract-repair case120, repeated67 passed1/1 while
+  repeated68 failed0/1. Initial focused comparisons were67 4/4 versus68 3/4.
+  The68 failure returned the right total but never repaired line_total; hidden
+  function probes failed. Preserve68 and its children for diagnosis, not automatic
+  continuation. Protected development traces remain excluded from training.
+- Active DGX owner lfm3-onpolicy67-core-effects-1102.service collects actual67
+  full-prompt whole-graph JOLT+ with four workers. Exact full parent SHA
+  0c8e75f6bb775cd108191fbd35884e5835050a726ffe112b266be851fe2ee8fc,
+  qualified alias ops/earned67-immutable-parent-1101/checkpoint.pt resolves to
+  external earned67-publication-parent/checkpoint.pt. Actor/runtime is frozen
+  9a86a0bcf. Observed decode throughput roughly200–235tokens/s, not SGD throughput.
+  Eight completed first-two-family student attempts yielded2/4 contract repairs
+  and2/4 stream edits. These are on-policy training outcomes, not held capability
+  improvement. The first packet also covers codebase repair and rotating breadth.
+- Full RL task source now61399, SHA
+  3c366a8449f3f298f84d19d984d096a3fffe2ec11704b510bf2ff85a328cf1b9.
+  The64 new contract/effect and stream-edit tasks passed64 reference executions
+  and64 wrong controls, zero wrongly accepted/errors. Current protection union
+  unchanged; merger reports zero withdrawals, held conflicts or new exclusions.
+  ready: /home/werg/data/broad-rl-tasks-20261031/full-core-effects-20261102.ready.json.
+  The real full merge exposed undefined v3_dir in its final receipt;96de4c5f8
+  binds that field to the actual verified manifest. Singular immutable asset
+  namespaces are referenced and hashed rather than copied on every append.
+- Genuine old-round defects acted on: three bAbI article variants were falsely
+  rejected; corrected student outcome16/16 and total20/20 are rescoring, not gain.
+  The first attempted restart still admitted original raw rollouts because an
+  active-update pointer overrode corrected authority. Root initially missed that
+  actual admission, then interrupted it immediately upon checking. Wrong updates
+  are diagnostic only.778d32b22 fixes authority, authenticates reviewed retries
+  and rejects stale actual admissions. Corrected attempt1 independently checked
+  its actual corrected rollout SHA before SGD and saved one finite update69,
+  SHA333e68d531aaf9fb551968b58659119acae51814e75cb8b09422acd735cefa32.
+  An old controller then failed to resume its partial learner;1a0af0d7f separates
+  actor and rolling learner parents and returns semantic stops to the owner.
+  Neither wrong69 nor the corrected68-child69 is the new production parent.
+- Pop diagnostic69 evaluation is genuinely active in
+  pop69-goodreward-newrecipe-regressions-runtime0f8a-v2-1102.service with actual
+  Docker actor, exact0f8a runtime and protected focused packet. First launch
+  stopped before actor startup for insufficient disk. Removed only completed68's
+  unused remote view after fresh matching DGX and peer hashes; full68 and local
+  view remain. Verified69 transfer sent142040999bytes for a3457806843byte view.
+- fc597668c retires all-zero pending checkpoint spares on orderly trainer close,
+  after draining its writer and while holding the exact reservation lock. It
+  checks every byte and file identity; partial checkpoint payloads survive.
+  Targeted checkpoint suites passed62. The new learner-only frozen runtime
+  includes this and8dd0557c6; its exact command is recorded in
+  ops/onpolicy67-core-effects-1102/learner-runtime-continuation-1102.json and is
+  read at next optimizer launch. The sealed actor capture retains its own runtime.
+  Hard-crash orphan cleanup remains a separate obligation; never delete a pending
+  inode from its reservation receipt alone.
+-8dd0557c6 supplies real zero-SGD source correction, independent full-state byte
+  comparison and typed central publication. Root caught a missing final read-
+  identity check during review; the helper fixed it and added race tests before
+  commit. Actual full-size adoption remains unrun: use the current earned head
+  after the RL owner drains, never publish a stale67 over a new RL checkpoint.
+  The four zero-exposure overlength corrections/minimum7 visits must durably
+  commit before367533/13802 append. All132 long existing graphs were audited;
+  only the four old ordinary rows exceed per-invocation limits, with zero exposure.
+  Corrected353731 and appended367533 source/CE/recipe packages are ready externally;
+  seven additional long static graphs remain separately pending capacity/quality.
+- Raw acquired conversion now complete across every export:93545 train graphs,
+  289 test graphs;1354 tool-arguments and100 unrepresentable calls retain explicit
+  source-faithful review holds. Summary ops/acquired-static016a-conversion-summary-1102.json.
+  Reused Terra engineering helper is auditing row-level novelty/protection and
+  those rendering holds. Its first inventory found20 newly completed output files
+  absent from prior screening,33191 raw train rows; that is not admission or
+  evidence all33191 are novel/useful. No paid teacher generation is running.
+- Private68 full checkpoint and grouped runtime both passed fresh full workstation
+  GET, with no sandbox. Private complete_closure remains false. New background
+  export-qualified64-closure-and67-private-v2-1102 publishes207 qualified64 closure
+  entries (about10.96GB before hash deduplication), its plan/qualification and the
+  full selected67, retaining exact paths/hashes and fresh GET evidence. Initial
+  launch lackedwandb and failed before upload;v2 uses the established cw-venv.
+  This does not yet establish a complete private67 recovery qualification.
+- Storage: roughly74GiB internal and59GiB external free after cleanup. Full64/67/68
+  retained. Redundant external68 rolling mirror was independently rehashed against
+  the retained independent68 copy before retirement, allowing the queued corrected
+  diagnostic69 offload to proceed. Obsolete diagnostic74 retained model/interface
+  in verified compact transport; deliberately discarded only its obsolete optimizer/
+  RNG payload and both full-file hardlinks, releasing about11GiB net. Proofs in
+  ops/{duplicate68-mirror-retirement,superseded74-diagnostic-compaction}-1102.json.
+  Recovery controls must treat retired receipts as history, not current presence.
+
 ## Live supervision update, 2026-11-02 00:31 CET
 
 - Bounded execution-efficiency rewards and live inference escalation are integrated
