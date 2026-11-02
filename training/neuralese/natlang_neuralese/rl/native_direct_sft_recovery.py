@@ -462,6 +462,24 @@ def _authenticated_refresh_publication(reference, seen=None):
     seen.add(str(path))
     publication_binding=_strong_binding(path)
     publication=json.loads(path.read_text())
+    if publication.get('schema')=='natlang.direct-sft-zero-adoption-publication/1':
+        proof_ref=publication.get('proof') or {}
+        proof=json.loads(_verify_historical_file_ref(proof_ref).read_text())
+        prior=_verify_historical_file_ref(proof['prior_recipe'])
+        successor=_verify_historical_file_ref(proof['successor_recipe'])
+        from ..train.native_zero_sgd_adoption import verify
+        checked=verify(proof['parent'],proof['checkpoint'],prior_recipe=prior,
+                       successor_recipe=successor,stage_id=proof['stage_id'])
+        if ({k:v for k,v in proof.items() if k not in ('prior_recipe','successor_recipe')}!=checked
+                or publication.get('parent')!=proof['parent']
+                or publication.get('checkpoint')!=proof['checkpoint']
+                or publication.get('optimizer_updates')!=0 or publication.get('graph_visits')!=0
+                or publication.get('stage_completed') is not False):
+            raise ValueError('zero-SGD source adoption publication differs from actual full-state derivation')
+        return {'binding':publication_binding,'publication':publication,'report':None,'receipt':None,
+                'custody':{'parent':proof['parent'],'successor':{**proof['checkpoint'],'global_step':proof['global_step']}},
+                'continuation_sha256':proof['parent']['sha256'],
+                'authenticated_ancestors':{proof['parent']['sha256'],proof['checkpoint']['sha256']}}
     if publication.get('schema')!='natlang.direct-sft-refresh-publication/1':
         raise ValueError('historical SFT chain contains a non-publication artifact')
     parent=publication.get('parent') or {};checkpoint=publication.get('checkpoint') or {}
@@ -1363,5 +1381,50 @@ def publish_completed(state_path, *, report_ref, receipt_ref, custody_ref, out):
         next_state=_published_checkpoint_state(state,{'path':str(child_path),'sha256':child['sha256']})
         for key in ('pending_native_checkpoint','pending_native_round_dir','pending_update_kind'):next_state.pop(key,None)
         next_state.setdefault('direct_sft_refresh_history',[]).append(binding(out))
+        write_json_durable(state_path,next_state)
+        return result
+
+
+def publish_zero_sgd_adoption(state_path, *, proof_ref, out):
+    """Publish an independently rederived zero-update source correction under the controller lock."""
+    from .production import invalidate_checkpoint_readiness
+    from ..train.native_zero_sgd_adoption import verify
+    state_path=Path(state_path).resolve(strict=True);out=Path(out).resolve()
+    if out.exists():raise ValueError('zero-SGD publication requires a fresh receipt')
+    with (state_path.parent/'controller.lock').open('a') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        if out.exists():raise ValueError('zero-SGD publication receipt already exists')
+        state=json.loads(state_path.read_text())
+        if state.get('active_update_round') or state.get('phase') in {'updating','publishing','learner_pending'}:
+            raise ValueError('cannot adopt a source while an RL update owns the controller')
+        proof=json.loads(_verify_historical_file_ref(proof_ref).read_text())
+        prior=_verify_historical_file_ref(proof['prior_recipe'])
+        successor=_verify_historical_file_ref(proof['successor_recipe'])
+        parent_path=_verify_historical_file_ref(proof['parent'])
+        if Path(state['checkpoint']).resolve(strict=True)!=parent_path:
+            raise ValueError('zero-SGD adoption parent differs from the actual controller parent')
+        partial=state.get('partial_checkpoint')
+        if partial and Path(partial).exists() and Path(partial).resolve()!=parent_path:
+            raise ValueError('a different recoverable partial checkpoint still belongs to the controller')
+        checked=verify(proof['parent'],proof['checkpoint'],prior_recipe=prior,
+                       successor_recipe=successor,stage_id=proof['stage_id'])
+        if {k:v for k,v in proof.items() if k not in ('prior_recipe','successor_recipe')}!=checked:
+            raise ValueError('zero-SGD adoption proof differs from independently derived full state')
+        if Path(state['checkpoint']).resolve(strict=True)!=parent_path:
+            raise ValueError('controller parent path changed during zero-SGD verification')
+        _verify_historical_file_ref(proof_ref)
+        _verify_historical_file_ref(proof['prior_recipe'])
+        _verify_historical_file_ref(proof['successor_recipe'])
+        result={'schema':'natlang.direct-sft-zero-adoption-publication/1','parent':proof['parent'],
+                'checkpoint':proof['checkpoint'],'proof':proof_ref,'optimizer_updates':0,
+                'graph_visits':0,'stage_completed':False}
+        write_json_durable(out,result)
+        next_state=dict(state)
+        next_state['checkpoint']=str(_verify_historical_file_ref(proof['checkpoint']))
+        next_state['actor_policy_pending_load']=proof['checkpoint']['sha256']
+        invalidate_checkpoint_readiness(next_state,proof['checkpoint'],reason='zero-sgd-source-adoption')
+        publication_ref=_strong_binding(out)
+        next_state.setdefault('zero_sgd_source_adoption_history',[]).append(publication_ref)
+        next_state.setdefault('direct_sft_refresh_history',[]).append(publication_ref)
         write_json_durable(state_path,next_state)
         return result

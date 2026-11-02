@@ -741,6 +741,29 @@ def continuation_identity(previous_options, policy):
                      'to': {k: current[k] for k in ('name', 'sha256')}}
 
 
+def apply_ce_admission_options(options, previous_options, ce_binding, policy, global_step):
+    """Record the trainer's exact CE binding and objective transition metadata."""
+    result = dict(options)
+    previous_ce = previous_options.get('ce_supervision_policy_binding')
+    history = list(previous_options.get('ce_supervision_policy_history') or [])
+    if previous_ce != ce_binding:
+        history.append({'from':previous_ce, 'to':ce_binding, 'at_global_step':int(global_step),
+                        'weights_optimizer_rng_exposure':'preserved', 'held_ce':'original-corpus-weights'})
+    result['ce_supervision_policy_history'] = history
+    if ce_binding is not None:
+        result['ce_supervision_policy'] = str(ce_binding['path'])
+        result['ce_supervision_policy_binding'] = dict(ce_binding)
+    objective, transition = continuation_identity(previous_options, policy)
+    if objective['name'] != LEGACY or 'supervision_objective' in previous_options:
+        result['supervision_objective'] = objective
+        objective_history = list(previous_options.get('supervision_objective_history') or [])
+        if transition is not None:
+            objective_history.append({**transition, 'at_global_step':int(global_step),
+                                      'weights_optimizer_rng_exposure':'preserved'})
+        result['supervision_objective_history'] = objective_history
+    return result
+
+
 DEFAULT_REASONING_SHARE = 0.1
 DEFAULT_DECISION_TOKENS = 16.
 DEFAULT_TOKEN_REFERENCE = 100.

@@ -2464,12 +2464,13 @@ def _main(argv=None, *, requested_refresh):
         args.ce_supervision_policy = Path(ce_binding['path'])
         checkpoint_options['ce_supervision_policy'] = str(args.ce_supervision_policy)
         checkpoint_options['ce_supervision_policy_binding'] = ce_binding
-    ce_history = list(ce_prior_options.get('ce_supervision_policy_history') or [])
-    if previous_ce != ce_binding:
-        ce_history.append({'from':previous_ce,'to':ce_binding,
-            'at_global_step':int(saved_training.get('global_step',saved_training.get('step',0))),
-            'weights_optimizer_rng_exposure':'preserved', 'held_ce':'original-corpus-weights'})
-    checkpoint_options['ce_supervision_policy_history'] = ce_history
+    if objective is not None:
+        ce_history = list(ce_prior_options.get('ce_supervision_policy_history') or [])
+        if previous_ce != ce_binding:
+            ce_history.append({'from':previous_ce,'to':ce_binding,
+                'at_global_step':int(saved_training.get('global_step',saved_training.get('step',0))),
+                'weights_optimizer_rng_exposure':'preserved', 'held_ce':'original-corpus-weights'})
+        checkpoint_options['ce_supervision_policy_history'] = ce_history
     default_supervision = None
     if objective is None and args.supervision_objective_mode == 'own-outputs':
         # Own outputs are the default objective (owner 2026-10-28); a continuation adopts it through a recorded
@@ -2488,17 +2489,9 @@ def _main(argv=None, *, requested_refresh):
         # identity: a changed objective needs an explicit transition in the policy.
         from .own_output_supervision import continuation_identity, prepare_policy
         ce_policy = prepare_policy(ce_policy, train)
-        supervision_objective, objective_transition = continuation_identity(ce_prior_options, ce_policy)
-        from .own_output_supervision import LEGACY
-        if supervision_objective['name'] != LEGACY or 'supervision_objective' in ce_prior_options:
-            # Historical row-weight runs keep their exact option set.
-            checkpoint_options['supervision_objective'] = supervision_objective
-            objective_history = list(ce_prior_options.get('supervision_objective_history') or [])
-            if objective_transition is not None:
-                objective_history.append({**objective_transition, 'at_global_step':
-                    int(saved_training.get('global_step', saved_training.get('step', 0))),
-                    'weights_optimizer_rng_exposure': 'preserved'})
-            checkpoint_options['supervision_objective_history'] = objective_history
+        from .own_output_supervision import apply_ce_admission_options
+        checkpoint_options = apply_ce_admission_options(checkpoint_options, ce_prior_options, ce_binding, ce_policy,
+            int(saved_training.get('global_step', saved_training.get('step', 0))))
         if ce_policy is not None and ce_policy.get('_family_census') is not None:
             write_json(args.out / 'supervision-objective-census.json', ce_policy['_family_census'])
     elif ce_prior_options.get('supervision_objective') is not None:
