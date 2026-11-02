@@ -923,6 +923,15 @@ def policy_capacity_request(source,objective):
         'objective':objective.binding(),'entries':entries,'max_example_indices':chosen}
 
 
+def policy_parity_first_group(expected, objective):
+    """Select a real same-actor episode before any policy capacity backward."""
+    parity=getattr(objective,'can_compare_behavior_actor',None)
+    if parity is None or getattr(objective,'_behavior_logprob_probe_done',False):return None
+    selected=next((entry['index'] for entry in expected['entries']
+                   if objective.rows[entry['id']].get('actions') and parity(objective.rows[entry['id']])),None)
+    return None if selected is None else (selected,)
+
+
 def qualify_policy_objective(model,optimizer,train,objective,args,config,*,backend,checkpoint_sha256,
                              pending_batches,prior_proof=None):
     """The actual loaded learner runs its policy loss read-only before SGD."""
@@ -942,6 +951,10 @@ def qualify_policy_objective(model,optimizer,train,objective,args,config,*,backe
     # Qualify maximum whole examples AND actual packed pending batches. Packing
     # can use more memory than any individual episode; never split an episode.
     groups=[(i,)for i in expected['max_example_indices']]
+    # The first same-actor full episode must be checked before any capacity
+    # case can run backward or any learner update can consume another batch.
+    parity_group=policy_parity_first_group(expected,objective)
+    if parity_group is not None:groups.insert(0,parity_group)
     supports=getattr(objective,'shares_causal_prefixes',None)
     if getattr(model,'share_causal_prefixes',False) and supports is not None:
         # The learner forwards each episode's exact causal-prefix packing: also qualify its own maxima.

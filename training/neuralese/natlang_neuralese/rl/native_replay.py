@@ -588,24 +588,52 @@ def token_action_logps(model, hidden, actions, *, chunk_tokens=128, readout=None
 _CENTERING_FIELDS = ('rho', 'alpha', 'tail_q', 'tail_p', 'w_y', 'y_in_top_k')
 
 
-def behavior_logprob_probe(model, hidden, actions, *, graph_id, policy, destination):
-    """Compare a bounded same-model forward with exact captured behavior logps."""
+def behavior_logprob_probe(model, hidden, actions, *, graph_id, policy, destination=None, limit=16, atol=None):
+    """Compare captured behavior scores with the same-model graph's actual masked readout.
+
+    ``limit=None`` checks every action of a complete episode. A finite ``atol``
+    makes a mismatch fail before the caller can backpropagate or update.
+    """
     import os
+    import json
+    from pathlib import Path
     from ..common.jsonio import write_json_durable
-    chosen=actions[:16]
+    if limit is not None and (type(limit) is not int or limit < 1):
+        raise ValueError('behavior logprob probe limit must be positive or None')
+    if atol is not None and (type(atol) not in (int,float) or not math.isfinite(atol) or atol < 0):
+        raise ValueError('behavior logprob parity tolerance must be finite and nonnegative')
+    chosen=actions if limit is None else actions[:limit]
     if not chosen:return None
+    rows=[]
+    # The readout is bounded independently of the length of the real episode.
     with torch.no_grad():
-        current=token_action_logps(model,hidden,chosen,chunk_tokens=16).float().cpu().tolist()
-    rows=[{'query':a['query'],'token_id':a['token_id'],'behavior_logp':float(a['behavior_logp']),
-           'learner_logp':float(value),'delta':float(value)-float(a['behavior_logp'])}
-          for a,value in zip(chosen,current)]
-    if any(not math.isfinite(r['delta']) for r in rows):raise ValueError('nonfinite captured policy logprob comparison')
+        for start in range(0,len(chosen),16):
+            part=chosen[start:start+16]
+            current=token_action_logps(model,hidden,part,chunk_tokens=16).float().cpu().tolist()
+            rows.extend({'action_index':start+i,'query':a['query'],'token_id':a['token_id'],
+                         'behavior_logp':float(a['behavior_logp']),'learner_logp':float(value),
+                         'delta':float(value)-float(a['behavior_logp'])}
+                        for i,(a,value) in enumerate(zip(part,current,strict=True)))
+    if any(not all(math.isfinite(r[key]) for key in ('behavior_logp','learner_logp','delta')) for r in rows):
+        raise ValueError('nonfinite captured policy logprob comparison')
+    maximum=max(abs(r['delta']) for r in rows)
     result={'schema':'natlang.native-policy-behavior-logprob-probe/1','graph_id':graph_id,
-            'policy':policy,'positions':rows,'max_abs_delta':max(abs(r['delta']) for r in rows),
+            'policy':policy,'positions':rows,'action_count':len(rows),'all_episode_actions':limit is None,
+            'max_abs_delta':maximum,'atol':atol,'passed':None if atol is None else maximum<=atol,
             'native_compile':os.environ.get('NATLANG_NATIVE_COMPILE','1'),
             'bf16_reduction':os.environ.get('NATLANG_BF16_REDUCTION','default'),
-            'scope':'first at most 16 scored tokens of one capacity-case graph; not a full-logit or task-quality proof'}
-    write_json_durable(destination,result)
+            'scope':('all captured action tokens of one complete graph; no task-quality proof' if limit is None
+                     else f'first at most {limit} captured action tokens of one graph; no task-quality proof')}
+    if destination is not None:
+        path=Path(destination)
+        if path.exists():
+            if json.loads(path.read_text())!=result:
+                raise ValueError('policy logprob probe destination already contains different evidence')
+        else:write_json_durable(path,result)
+    if atol is not None and maximum>atol:
+        worst=max(rows,key=lambda row:abs(row['delta']))
+        raise ValueError(f'captured policy logprob parity failed before SGD: graph={graph_id}, '
+                         f'action={worst["action_index"]}, max_abs_delta={maximum:.9g}, atol={atol:.9g}')
     return result
 
 
@@ -857,6 +885,7 @@ class NativePolicyObjective:
             validate_state_binding(self.adapter_binding, SimpleNamespace(**self.identity))
         self.evaluation_identity = self.identity
         self.evaluation_adapter_binding = self.adapter_binding
+        self.initial_checkpoint_sha256 = None
         self.bundle = None
         self.native_bundle_store = None
         self.external_state_overrides = {}
@@ -891,10 +920,25 @@ class NativePolicyObjective:
             result['block_bundle']={'path':str(path),'sha256':sha256_file_hex_cached(path)}
         return result
 
+    def bind_initial_checkpoint(self, checkpoint_sha256):
+        """Bind the actual learner's loaded full-state bytes, including partial resumes."""
+        import re
+        if not isinstance(checkpoint_sha256,str) or not re.fullmatch('[0-9a-f]{64}',checkpoint_sha256):
+            raise ValueError('native policy replay requires the exact loaded checkpoint SHA-256')
+        self.initial_checkpoint_sha256=checkpoint_sha256
+
+    def can_compare_behavior_actor(self, row):
+        """Same-policy comparison is invalid after a committed learner update."""
+        return (self.initial_checkpoint_sha256==self.identity['checkpoint_sha256']
+                and row.get('actor_checkpoint_sha256',self.identity['checkpoint_sha256'])==self.initial_checkpoint_sha256
+                and self.behavior_policy is None and self.evaluation_identity==self.identity
+                and self.evaluation_adapter_binding==self.adapter_binding)
+
     def bind_actor(self, engine, *, example=None):
         """Separate immutable sampled behavior from current same-basis coefficients."""
         from ..model.native_adapters import execution_identity, execution_binding, SCHEMA
         self.engine = engine
+        self.bind_initial_checkpoint(engine.native_identity['checkpoint_sha256'])
         if self.behavior_policy is not None:
             if example is None:raise ValueError('native invocation policy needs its exact source graph during actor binding')
             from ..model.native_actor_graph import invocation_actor_bank
@@ -1063,6 +1107,11 @@ class NativePolicyObjective:
             if names!=self.invocation_source_names:
                 raise ValueError('native invocation objective actor names differ from exact packed ownership')
         hidden = result['h_final'][0]
+        if (not getattr(self,'_behavior_logprob_probe_done',False)
+                and any(row.get('actions') and self.can_compare_behavior_actor(row) for row in self.rows.values())
+                and not any(self.rows[example.id].get('actions') and self.can_compare_behavior_actor(self.rows[example.id])
+                            for example in context['examples'])):
+            raise ValueError('first native learner forward must include a same-actor episode for pre-SGD logprob parity')
         losses, count, diagnostics, jolt_parts = [], 0, [], []
         decision_count = 0
         for example in context['examples']:
@@ -1082,15 +1131,13 @@ class NativePolicyObjective:
                        for action in row['actions']]
             import os
             probe=os.environ.get('NATLANG_POLICY_LOGPROB_RECEIPT')
-            if probe and actions and not getattr(self,'_behavior_logprob_probe_done',False):
-                from pathlib import Path
-                if Path(probe).exists():
-                    import json
-                    saved=json.loads(Path(probe).read_text())
-                    if saved.get('schema')!='natlang.native-policy-behavior-logprob-probe/1' or saved.get('policy')!=self.identity:
-                        raise ValueError('policy logprob probe destination belongs to a different policy')
-                else:
-                    behavior_logprob_probe(model,hidden,actions,graph_id=example.id,policy=self.identity,destination=probe)
+            # The first unchanged-actor forward is a real pre-SGD parity gate,
+            # including every sampled action in this complete episode. Off-policy
+            # continuations have genuinely different weights and cannot use it.
+            same_actor=self.can_compare_behavior_actor(row)
+            if same_actor and actions and not getattr(self,'_behavior_logprob_probe_done',False):
+                behavior_logprob_probe(model,hidden,actions,graph_id=example.id,policy=self.identity,
+                    destination=probe,limit=None,atol=1e-4)
                 self._behavior_logprob_probe_done=True
             parts_before = len(jolt_parts)
             if not actions:

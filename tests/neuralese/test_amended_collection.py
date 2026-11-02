@@ -298,3 +298,37 @@ def test_completed_withdrawal_preserves_privileged_rows_and_unknown_native_failu
     with pytest.raises(ValueError,match='learner outputs'):
         adopt_completed_collection_withdrawal(blocked,round_directory=out,report=result,
             amendment_ref=reference,no_update_evidence=bind(guard))
+
+
+def test_full_behavior_logprob_gate_checks_late_action_before_return(tmp_path):
+    import torch
+    from natlang_neuralese.rl.native_replay import behavior_logprob_probe
+    class Model:
+        def logits(self,states):return states
+    hidden=torch.tensor([[1.,2.,3.]]).repeat(20,1)
+    expected=float(torch.log_softmax(hidden[0],dim=0)[2])
+    actions=[{'query':i,'token_id':2,'temperature':1.,'allowed_token_ids':None,'behavior_logp':expected}
+             for i in range(20)]
+    passed=behavior_logprob_probe(Model(),hidden,actions,graph_id='full',policy={'checkpoint_sha256':'a'*64},
+        destination=tmp_path/'passed.json',limit=None,atol=1e-4)
+    assert passed['passed'] and passed['all_episode_actions'] and passed['action_count']==20
+    actions[-1]['behavior_logp']-=0.1
+    with pytest.raises(ValueError,match='parity failed before SGD'):
+        behavior_logprob_probe(Model(),hidden,actions,graph_id='full',policy={'checkpoint_sha256':'a'*64},
+            destination=tmp_path/'failed.json',limit=None,atol=1e-4)
+    failed=json.loads((tmp_path/'failed.json').read_text())
+    assert not failed['passed'] and failed['action_count']==20 and failed['positions'][-1]['action_index']==19
+
+
+def test_behavior_parity_only_applies_to_exact_loaded_behavior_parent():
+    from natlang_neuralese.rl.native_replay import NativePolicyObjective
+    obj=NativePolicyObjective.__new__(NativePolicyObjective)
+    obj.identity={'checkpoint_sha256':'a'*64};obj.evaluation_identity=obj.identity.copy()
+    obj.adapter_binding=None;obj.evaluation_adapter_binding=None;obj.behavior_policy=None
+    obj.bind_initial_checkpoint('a'*64)
+    assert obj.can_compare_behavior_actor({})
+    assert not obj.can_compare_behavior_actor({'actor_checkpoint_sha256':'c'*64})
+    obj.bind_initial_checkpoint('b'*64)
+    assert not obj.can_compare_behavior_actor({})
+    with pytest.raises(ValueError,match='loaded checkpoint'):
+        obj.bind_initial_checkpoint('not-a-sha')

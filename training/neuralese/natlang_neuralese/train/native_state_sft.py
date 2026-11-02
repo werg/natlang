@@ -2412,8 +2412,13 @@ def _main(argv=None, *, requested_refresh):
                     'at_global_step':int(saved_training.get('global_step',saved_training.get('step',0))),
                     'previous_objective':prior.get('objective'),
                     'custody':'complete-graph-optimizer-rng-exposure-preserved'})
+            loaded_policy_checkpoint = policy.slot if state is not None else args.continue_from
+            if loaded_policy_checkpoint is None:
+                raise ValueError('native policy objective requires an exact loaded actor checkpoint')
+            loaded_policy_sha256 = sha256_file_hex_cached(loaded_policy_checkpoint)
+            objective.bind_initial_checkpoint(loaded_policy_sha256)
             if parent_continuation:
-                actual = native_identity(model, config, checkpoint_sha256=sha256_file_hex_cached(args.continue_from))
+                actual = native_identity(model, config, checkpoint_sha256=loaded_policy_sha256)
                 if objective.identity != actual:
                     raise ValueError('native policy objective differs from the actual loaded actor embedding/checkpoint identity')
     if getattr(objective,'mode',None)=='failure_repair_dpo':

@@ -153,3 +153,46 @@ def test_cotangent_storage_transition_uses_actual_policy_capacity_before_update(
         with pytest.raises(ValueError,match='actual objective'):
             _cotangent_transition_capacity_request(args)
     finally:engine.stop();engine.store.close()
+
+
+def test_same_actor_complete_episode_logprob_gate_fails_before_optimizer_update(tmp_path,monkeypatch):
+    from natlang_neuralese.train.native_state_sft import packed_graph_loss
+    engine,model,opt,objective,train,args,config,backend,batches=actual(tmp_path,'lfm')
+    try:
+        objective.bind_initial_checkpoint(objective.identity['checkpoint_sha256'])
+        example=next(train.iter_indices([0]));receipt=tmp_path/'policy-parity.json'
+        monkeypatch.setenv('NATLANG_POLICY_LOGPROB_RECEIPT',str(receipt))
+        before={name:p.detach().clone() for name,p in opt._native_named_parameters}
+        packed_graph_loss(model,[example],checkpoint_layers=True,chunk_tokens=3,objective=objective)
+        report=json.loads(receipt.read_text())
+        assert report['passed'] and report['all_episode_actions']
+        assert report['action_count']==len(objective.rows[example.id]['actions'])
+        assert all(torch.equal(before[name],p) for name,p in opt._native_named_parameters)
+        receipt.unlink();objective._behavior_logprob_probe_done=False
+        objective.rows[example.id]['actions'][-1]['behavior_logp']+=0.1
+        with pytest.raises(ValueError,match='parity failed before SGD'):
+            packed_graph_loss(model,[example],checkpoint_layers=True,chunk_tokens=3,objective=objective)
+        assert not json.loads(receipt.read_text())['passed']
+        assert all(torch.equal(before[name],p) for name,p in opt._native_named_parameters)
+        # A genuinely updated rolling checkpoint retains the original behavior
+        # probabilities for importance correction; it must not be relabeled as
+        # the original actor or rejected for legitimate policy change.
+        receipt.unlink();objective._behavior_logprob_probe_done=False
+        objective.bind_initial_checkpoint('f'*64)
+        packed_graph_loss(model,[example],checkpoint_layers=True,chunk_tokens=3,objective=objective)
+        assert not receipt.exists()
+    finally:engine.stop();engine.store.close()
+
+
+def test_policy_capacity_prioritizes_real_same_actor_episode():
+    from natlang_neuralese.eval.native_memory import policy_parity_first_group
+    obj=NativePolicyObjective.__new__(NativePolicyObjective)
+    obj.identity={'checkpoint_sha256':'a'*64};obj.evaluation_identity=obj.identity.copy()
+    obj.adapter_binding=obj.evaluation_adapter_binding=None;obj.behavior_policy=None
+    obj.bind_initial_checkpoint('a'*64)
+    obj.rows={'stale':{'actor_checkpoint_sha256':'b'*64,'actions':[{}]},
+              'same':{'actions':[{}]},'empty':{'actions':[]}}
+    expected={'entries':[{'id':'stale','index':0},{'id':'empty','index':1},{'id':'same','index':2}]}
+    assert policy_parity_first_group(expected,obj)==(2,)
+    obj._behavior_logprob_probe_done=True
+    assert policy_parity_first_group(expected,obj) is None
