@@ -1,3 +1,27 @@
+## Full schedule qualifies after first-visit reader fix, 2026-11-03 00:37 CET
+
+- Root cause: promotion applies only to each focused row's first missing visit,
+  whereas stream_windows marked every future repetition as focused. Rows177095
+  and177096, and177111/177112, had different earned counts. Their visit1 requests
+  were split between promoted work and repeats148k batches later, but shared a
+  focused reader. There were exactly2 reader crossings in the actual schedule.
+- Minimal-window buffering alone correctly rejected the real plan: retaining
+  those incorrect reader identities required2658624933 token positions across
+  148694 batches. It was never launched. R37 was frozen as preparation only;
+  it is superseded, not a working production runtime.
+- Reader focus now means first pending visit. Actual full-plan qualification
+  passes on401623 rows and1045719 pending batches:1045719 read windows,
+  maximum524650tokens/one complete batch, all reader requests monotone/distinct,
+  exact original complete batches and order retained,2048 focus rows,190416
+  forward tokens in the first16 microbatches. Receipt:
+  `ops/actual-first-visit-focus-window-qualification-1103.json`.
+  This is CPU schedule evidence, not SGD or task quality.48 targeted tests pass,
+  including a regression with differing prior row credits and later repeats.
+- Prepare the final corrected frozen runtime from main and restart intact
+  source71/full67 with the focus already bound into its initial recipe. Preserve
+  original optimizer/RNG/all historical exposure and full recipe obligations.
+  No new earned68 exists; the earlier earned68 preparer correctly failed closed.
+
 ## R36 fetch failure and forward-only buffer correction, 2026-11-03 00:31 CET
 
 - Corrected resident generation6d4580b8... committed00:22:58 at global67.

@@ -29,6 +29,26 @@ def test_monotone_windows_join_transitive_crossings_and_preserve_other_windows()
     assert actual == [[batches[0]], batches[1:5], [batches[5]], [batches[6]]]
 
 
+def test_focus_reader_separates_first_pending_visit_from_later_repetitions():
+    from types import SimpleNamespace
+    from natlang_neuralese.train.native_diversity import stream_windows
+    entries = [row(i, 'a') for i in range(3)]
+    class Source:
+        def __init__(self): self.entries = entries; self.requests = []
+        def iter_indices(self, indices):
+            self.requests.append(list(indices))
+            assert indices == sorted(set(indices))
+            yield from (SimpleNamespace(id=entries[i]['id']) for i in indices)
+    # Row0's first missing visit is0; row1 has already earned0. Its promoted
+    # visit1 precedes row0's ordinary repeat1. Those are different read lanes.
+    batches = [(0, [0], True), (1, [1], False), (0, [2], True), (1, [0], True)]
+    source = Source()
+    result = list(stream_windows(source, [[b] for b in batches], cohort_ids=['same'] * 3,
+                                 focus_ids={entries[0]['id'], entries[1]['id']}))
+    assert [item[:3] for item in result] == batches
+    assert source.requests == [[0], [1], [2], [0]]
+
+
 def test_monotone_windows_reject_unbounded_prefetch_but_allow_one_complete_large_graph():
     import pytest
     from natlang_neuralese.train.native_diversity import monotone_windows

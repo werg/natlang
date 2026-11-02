@@ -1,7 +1,10 @@
 ## Promoted packed groups retain forward-only source reads (engineering, 2026-11-03)
 
-A focus request can promote whole mixed-source packed batches whose constituent
-rows cross a reader's next index. Keep the exact batches, graph content, quotas
+Focus reader identity must bind the first missing visit, matching one-time
+promotion. Marking every future repetition as focused makes rows with different
+earned counts share an invalid cursor (actual full-schedule failure2026-11-03).
+A focus request can also promote whole mixed-source packed batches whose
+constituent rows cross a reader's next index. Keep the exact batches, graph content, quotas
 and order, but merge their minimally overlapping read windows and sort reads
 within that buffer. Source cursors remain strictly monotone and distinct; do not
 rescan compressed sources or suppress the guard. The default merged-window bound

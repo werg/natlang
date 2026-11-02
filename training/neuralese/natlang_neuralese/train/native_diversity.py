@@ -85,17 +85,25 @@ def stream_windows(source, grouped, *, priority_ids=(), cohort_ids=None, rotatio
         # cursors can rewind a source after cross-cohort packing.
         cohort=cohort_ids[index] if cohort_ids is not None else None
         return visit,scheduling_rank(e),foundation,cohort,bool(rotation_index is not None and index<rotation_index),focused
-    focused_batches = {id(indices): any(entries[item]['id'] in focus_ids for item in indices)
-                       for window in grouped for _, indices, _ in window}
+    focus_visits = {}
+    for window in grouped:
+        for visit, indices, _ in window:
+            for index in indices:
+                if entries[index]['id'] in focus_ids:
+                    focus_visits[index] = min(visit, focus_visits.get(index, visit))
+    # Promotion is a one-time visit, not every future repetition of that row.
+    # Rows with different earned counts can have different first pending visits.
+    focused_batches = {(visit, id(indices)): any(focus_visits.get(index) == visit for index in indices)
+                       for window in grouped for visit, indices, _ in window}
     def batch_key(visit, index, indices):
-        return key(visit, index, focused_batches[id(indices)])
+        return key(visit, index, focused_batches[(visit, id(indices))])
     grouped = monotone_windows(grouped, entries, batch_key)
     requests={};last={}
     for window in grouped:
         parts={}
         for visit,indices,_ in window:
             if not indices:raise ValueError('empty diversity batch')
-            focused=any(entries[index]['id'] in focus_ids for index in indices)
+            focused=focused_batches[(visit, id(indices))]
             for index in indices:parts.setdefault(key(visit,index,focused),[]).append(index)
         for k,indices in parts.items():
             indices.sort()
@@ -107,7 +115,7 @@ def stream_windows(source, grouped, *, priority_ids=(), cohort_ids=None, rotatio
         for window in grouped:
             parts={};values={}
             for visit,indices,_ in window:
-                focused=any(entries[index]['id'] in focus_ids for index in indices)
+                focused=focused_batches[(visit, id(indices))]
                 for index in indices:parts.setdefault(key(visit,index,focused),[]).append(index)
             for k,indices in parts.items():
                 if k not in streams:
@@ -128,7 +136,7 @@ def stream_windows(source, grouped, *, priority_ids=(), cohort_ids=None, rotatio
                     else:raise ValueError('diverse source yielded extra rows')
                     stream.close();del streams[k]
             for visit,indices,end in window:
-                focused=any(entries[index]['id'] in focus_ids for index in indices)
+                focused=focused_batches[(visit, id(indices))]
                 yield visit,indices,end,[values.pop((key(visit,index,focused),index)) for index in indices]
             if values:raise ValueError('unused diverse source rows')
         if any(remaining.values()):raise ValueError('diverse source rows remain unread')
