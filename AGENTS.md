@@ -24,6 +24,20 @@ Do not fabricate replacements or relabel historical actor provenance. Bind
 Python reviewer, JS checker and actual TypeScript parser dependencies, and
 apply authenticated ordinary/native whole-graph deferrals to the actual parent.
 
+## Frozen runtime storage stays deduplicated (engineering, 2026-11-02)
+
+Use the common immutable runtime file pool when no checked readers require
+isolation. An isolated pool is temporary operational storage, not a reason to
+retain another complete Node/dependency copy forever. During a verified idle
+window, consolidate frozen trees with `seal_runtime_tree` into the common pool,
+then prune only unreferenced old pool blobs with `prune_unreferenced`. Preserve
+all snapshot paths, exact contents, protected inputs and historical receipts;
+record the new storage observation separately. Do not repool shared inodes while
+checked runtime readers are active. Reader scans are point-in-time observations,
+not globally atomic coordination with arbitrary future launchers. The qualified
+2026-11-02 consolidation retained47 frozen trees and retired15.48GB of redundant
+old-pool file bytes. No source/training data or checkpoint was discarded.
+
 ## SFT update-budget references follow the selected SFT frame (engineering, 2026-11-02)
 
 Do not inherit an explicit scored-graph budget receipt from a discarded diagnostic

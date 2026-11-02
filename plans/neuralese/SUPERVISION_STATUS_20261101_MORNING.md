@@ -1,3 +1,48 @@
+## Three-layer continuation and recovered storage, 2026-11-02 20:00 CET
+
+- R26 G4 capacity also FAILED before SGD at19:41:53. It passed the old RoPE
+  failure point but reached a later normalization-output allocation failure:
+  CUDA peak92,499,355,136B, another2GiB requested. The RoPE arithmetic fix is
+  retained and numerically qualified; it did not make four-layer grouping fit.
+  No earned update or exposure is attributed to either failed capacity run.
+- Current actual learner is `lfm3-earned72-joint-g3-a16-r27-1102`, started19:51:25.
+  Config `ops/earned-jolt72-joint-r27-g3-a16-1102/config.json`, actual frozen
+  runtime remains `runtime-native-single-rotary-v26-1102`/main06cf79a15. Geometry
+  is checkpoint grouping3, initial accumulation16, refresh1 to earn the actual
+  current-lineage scored-graph anchor; next continuation promptly uses4/16.
+  All401623 graphs, full quotas, held custody and optimizer/RNG are retained.
+- G3 actual-parent full-model numerical certificate PASSED at19:51:08,
+  unchanged forward1e-4/gradient1e-5. Largest524650-token source capacity is
+  LIVE since19:57:19 after the two small cases passed. Source72 is still the
+  latest earned full checkpoint. Do not claim optimizer advancement yet.
+- All47 locally idle isolated frozen trees were content-authenticated and
+  consolidated into the existing common immutable pool; snapshot paths and
+  bytes retained. Old unreferenced pool links retired15,483,312,532 logical
+  file bytes; only80,484,511B of new unique blobs were needed. Observed free
+  space97,636,339,712B before and114,976,448,512B after is point-in-time with
+  other jobs present. Receipt `ops/idle-runtime-repooling-1102.json`. The next
+  GPU qualification waited for the actual completed consolidation before
+  importing a repooled runtime. Combined with the unused public weight-cache
+  eviction, this removes about20.8GB of redundant logical storage.
+- Private72 delta is locally encoded+full-target stream verified: payload
+ 3,740,763,581B SHA108cbdec55f87f6468e717e2876b049cbbb06c590af8185cd4cbef034e7d3f8b,
+  receipt08da1e455207be573d0bee6e558f5793d2b2a09c70989ba3ba1d7de512c39a6b.
+  All4 payload parts PUT completed19:48:21; fresh publication readbacks and
+  dependency publications are proceeding. Runtime26 archive private full GET
+  verified19:58:50, SHA73099293079b554cf98dadea235c5cf957fc423791cb6458a26262af801656b6.
+  Final independent decoded-target GET readback/capsule remains REQUIRED.
+  Actual private owner is live and thawed. Root froze it19:37:04–19:38:25 to
+  let ancestor reads finish, then verified running state after thaw.
+- Fresh independent ancestor hashing cannot be skipped under AGENTS custody
+  rules. Existing HMAC memo already reuses tensor comparisons after the fresh
+  hashes; helper correctly made no guard relaxation or unsupported cache change.
+  Longer16-update resident windows will amortize the required initialization
+  after the actual first SFT anchor exists. No legacy ancestor file was retired.
+- Pop expanded16-family protected baseline remains LIVE with an actual actor
+  and GPU work. No completed16-case capability result is claimed. Four-case
+  parent/candidate matched result remains2/4 each. No Luna generation or cloud
+  GPU allocation was started.
+
 ## Rotary memory correction and broader baseline, 2026-11-02 19:33 CET
 
 - R25 whole-source G4 capacity FAILED before SGD at19:24. Actual524650-token
