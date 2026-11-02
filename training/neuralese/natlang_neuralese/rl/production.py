@@ -1792,6 +1792,11 @@ def run(config_path, *, rounds=None, stop=None):
                 if not progress.get('completed') and not qualified_seed_boundary(config,mode,progress,checkpoint):
                     state.update(phase='learner_pending', partial_checkpoint=str(checkpoint), last_learner_progress=control_progress(progress,learner_report))
                     write_json_durable(state_path, state)
+                    boundary = progress.get('continuation_boundary') or {}
+                    if boundary.get('requested_signals') or boundary.get('operational_stop_signals'):
+                        state['phase'] = 'requested_stop'
+                        write_json_durable(state_path, state)
+                        return state
                     pending = True
                     break  # shared trainer resumes this exact substage/output on retry
                 trained_ids = set(state.get('trained_task_ids', []))

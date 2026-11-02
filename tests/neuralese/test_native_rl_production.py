@@ -45,7 +45,7 @@ def test_actual_shared_optimizer_updates_native_policy_graph_for_both_ports(tmp_
 
 @pytest.mark.parametrize('shared_parent',[True,False])
 def test_native_stage_real_shared_parent_update_and_rejects_stale_actor_replay(tmp_path,shared_parent, *, parent_setup=None, extra_args=(),
-        preserve_first_operation_report=False, reject_stale_actor_replay=True):
+        preserve_first_operation_report=False, reject_stale_actor_replay=True, partial_test=False, monkeypatch=None):
     """Actual tiny LFM full trainer; fixture reward is NOT an environment result."""
     from test_native_model import tiny_source
     from natlang_neuralese.model.native_model import load_native_model, model_state, native_identity, SHARED_CHECKPOINT_SCHEMA
@@ -108,9 +108,36 @@ def test_native_stage_real_shared_parent_update_and_rejects_stale_actor_replay(t
     saved_tokenizer = tmp_path/'tokenizer'; tokenizer.save_pretrained(saved_tokenizer)
     argv = ['--rollouts', str(source), '--rl-tokenizer', str(saved_tokenizer), '--rl-mode', 'rft',
         '--continue-from', str(parent), *(['--native-participant', 'lfm'] if shared_parent else []), '--held-native-graphs', str(held),
-        '--out', str(tmp_path/'learner'), '--device', 'cpu', '--epochs', '1', '--rank', '4',
+        '--out', str(tmp_path/'learner'), '--device', 'cpu', '--epochs', '2' if partial_test else '1', '--rank', '4',
         '--learning-rate', '1e-3', '--weight-decay', '0', '--eval-every', '1',
-        *extra_args]
+        *(['--accumulate-batches', '1'] if partial_test else []), *extra_args]
+    if partial_test:
+        from natlang_neuralese.train import loop
+        real_signal=loop.StopSignal
+        class StopAfterFirst:
+            received=[{'signal':'SIGUSR2','unix':1.}]
+            def install(self, signals): return self
+            def restore(self): pass
+            @property
+            def requested(self):
+                path=tmp_path/'learner/train.jsonl'
+                return path.exists() and bool(path.read_text().strip())
+        monkeypatch.setattr(loop, 'StopSignal', StopAfterFirst)
+        assert main(argv) == 0
+        partial=json.loads((tmp_path/'learner/report.json').read_text())
+        assert partial['completed'] is False and partial['step']==1
+        partial_sha=sha256_file_hex(tmp_path/'learner/checkpoint.pt')
+        monkeypatch.setattr(loop, 'StopSignal', real_signal)
+        assert main(argv) == 0
+        final=json.loads((tmp_path/'learner/report.json').read_text())
+        assert final['completed'] is True and final['step']==2
+        assert final['continuation']['checkpoint_sha256']==identity['checkpoint_sha256']
+        receipt=json.loads((tmp_path/'learner/native-training-receipt.json').read_text())
+        assert receipt['operation_parent']['sha256']==partial_sha
+        admission=json.loads((tmp_path/'learner/rl-data-receipt.json').read_text())
+        assert admission['policy']['checkpoint_sha256']==identity['checkpoint_sha256']
+        assert main(argv) == 0
+        return
     assert main(argv) == 0
     slot = tmp_path/'learner/checkpoint.pt'
     first_report=(tmp_path/'learner/report.json').read_bytes()
@@ -309,3 +336,40 @@ def test_long_graph_deferral_keeps_deferred_episodes_whole(tmp_path, monkeypatch
     assert kept == [{'graph': {'id': 'long', 'nodes': [{'token_ids': [1]}]},
                      'objective_row': {'task_id': 't2', 'sample': 1, 'actions': [1, 2]}}]
     assert record['path']['path'].endswith('deferred-long-graphs.jsonl')
+
+
+@pytest.mark.parametrize('tamper', ['none','checkpoint','report','receipt','behavior','rollouts','graph','objective'])
+def test_partial_learner_resume_keeps_behavior_policy_and_checks_custody(tmp_path,tamper):
+    from types import SimpleNamespace
+    from natlang_neuralese.rl.native_stage import _partial_learner_resume
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    def put(name, content):
+        path=tmp_path/name;path.write_text(content);return path
+    behavior=put('behavior.pt','actor68'); checkpoint=put('checkpoint.pt','learner69')
+    rollouts=put('rollouts.jsonl','corrected'); graph=put('rl-native-graphs.jsonl','graph')
+    objective=put('rl-native-objective.json','objective')
+    boundary={'checkpoint_sha256':sha256_file_hex(checkpoint),'new_optimizer_updates':1}
+    continuation={'checkpoint_sha256':sha256_file_hex(behavior)}
+    report={'schema':'natlang.neuralese-native-sft-report/1','completed':False,'checkpoint':str(checkpoint),
+            'checkpoint_sha256':boundary['checkpoint_sha256'],'continuation':continuation,'continuation_boundary':boundary}
+    receipt={'schema':'natlang.native-training-readiness/1','completed':False,
+             'checkpoint':{'path':str(checkpoint),'sha256':boundary['checkpoint_sha256']},
+             'continuation':continuation,'continuation_boundary':boundary}
+    admission={'schema':'natlang.native-rl-admission/1','policy':{'checkpoint_sha256':sha256_file_hex(behavior)},
+        'rollouts':{str(rollouts):sha256_file_hex(rollouts)},'native_graphs_sha256':sha256_file_hex(graph),
+        'objective_sha256':sha256_file_hex(objective)}
+    rp=put('report.json',json.dumps(report));rc=put('native-training-receipt.json',json.dumps(receipt))
+    put('rl-data-receipt.json',json.dumps(admission))
+    if tamper!='none':
+        {'checkpoint':checkpoint,'report':rp,'receipt':rc,'behavior':behavior,'rollouts':rollouts,
+         'graph':graph,'objective':objective}[tamper].write_text('{}')
+    args=SimpleNamespace(out=tmp_path,continue_from=behavior,rollouts=[rollouts])
+    if tamper=='none':
+        assert _partial_learner_resume(args)=={'path':str(checkpoint),'sha256':boundary['checkpoint_sha256']}
+    else:
+        with pytest.raises((ValueError,KeyError)): _partial_learner_resume(args)
+
+
+def test_native_stage_real_partial_resume_preserves_behavior(tmp_path, monkeypatch):
+    test_native_stage_real_shared_parent_update_and_rejects_stale_actor_replay(
+        tmp_path, False, partial_test=True, monkeypatch=monkeypatch)

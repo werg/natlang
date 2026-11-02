@@ -216,6 +216,7 @@ def main(argv=None):
             args.foundation_communication_batches, args.refresh_foundation_readiness,
             args.resident_data_directory, args.resident_geometry_qualification)):
         raise ValueError('SFT source controls cannot be applied to a native RL stage')
+    args.learner_resume = None if (args.out / 'native-rl-completed-operation.json').exists() else _partial_learner_resume(args)
     operation_request = _completed_operation_request(args, trainer, raw_argv)
     from contextlib import nullcontext
     from .native_output_lease import coefficient_output_lease
@@ -223,6 +224,42 @@ def main(argv=None):
         if _completed_operation_replay(args, operation_request):
             return 0
         return _admit_and_train(args,trainer, operation_request=operation_request)
+
+
+def _partial_learner_resume(args):
+    """Authenticate an earned rolling learner separately from behavior policy."""
+    out = Path(args.out)
+    checkpoint, report_path, receipt_path = (out / 'checkpoint.pt', out / 'report.json',
+                                             out / 'native-training-receipt.json')
+    if not checkpoint.exists() and not report_path.exists() and not receipt_path.exists():
+        return None
+    if not all(path.is_file() for path in (checkpoint, report_path, receipt_path, out / 'rl-data-receipt.json')):
+        raise ValueError('partial learner lacks its complete checkpoint, report and admission custody')
+    report, receipt, admission = (json.loads(path.read_text()) for path in
+                                   (report_path, receipt_path, out / 'rl-data-receipt.json'))
+    actual = sha256_file_hex_cached(checkpoint)
+    behavior = sha256_file_hex_cached(args.continue_from)
+    expected_rollouts = {str(Path(p).resolve(strict=True)): sha256_file_hex_cached(p) for p in args.rollouts}
+    boundary = report.get('continuation_boundary') or {}
+    if (report.get('schema') != 'natlang.neuralese-native-sft-report/1'
+            or report.get('completed') is not False
+            or report.get('checkpoint_sha256') != actual
+            or Path(report.get('checkpoint', '')).resolve() != checkpoint.resolve()
+            or receipt.get('schema') != 'natlang.native-training-readiness/1'
+            or receipt.get('completed') is not False
+            or (receipt.get('checkpoint') or {}).get('sha256') != actual
+            or Path((receipt.get('checkpoint') or {}).get('path', '')).resolve() != checkpoint.resolve()
+            or receipt.get('continuation') != report.get('continuation')
+            or receipt.get('continuation_boundary') != report.get('continuation_boundary')
+            or boundary.get('checkpoint_sha256') != actual
+            or admission.get('schema') != 'natlang.native-rl-admission/1'
+            or (admission.get('policy') or {}).get('checkpoint_sha256') != behavior
+            or admission.get('policy_loss') != getattr(args, 'rl_policy_loss', None)
+            or admission.get('rollouts') != expected_rollouts
+            or admission.get('native_graphs_sha256') != sha256_file_hex_cached(out / 'rl-native-graphs.jsonl')
+            or admission.get('objective_sha256') != sha256_file_hex_cached(out / 'rl-native-objective.json')):
+        raise ValueError('partial learner differs from its checkpoint, behavior admission or saved report')
+    return {'path':str(checkpoint.resolve()), 'sha256':actual}
 
 
 def _completed_operation_request(args, trainer, raw_argv):
@@ -246,6 +283,8 @@ def _completed_operation_request(args, trainer, raw_argv):
         'continue_from':path_binding(args.continue_from),
         'held_native_graphs':path_binding(args.held_native_graphs),
     }
+    if getattr(args, 'learner_resume', None) is not None:
+        inputs['learner_resume'] = args.learner_resume
     for key in ('jolt_cases','rl_actors','rl_block_bundle','coefficient_policy','history_reasoning_binding_path',
                 'foundation_qualification_request','publication_owner_pointer'):
         value=getattr(args,key,None)
@@ -303,9 +342,10 @@ def _completed_operation_replay(args, request):
     saved_request=saved.get('request')
     hash_payload={key:value for key,value in saved_request.items() if key!='request_sha256'} if isinstance(saved_request,dict) else None
     if (saved.get('schema')!='natlang.native-rl-completed-operation/1'
-            or saved.get('request')!=request
-            or saved.get('request_sha256')!=request['request_sha256']
-            or canonical_json_sha256_hex(hash_payload)!=request['request_sha256']):
+            or not isinstance(saved_request,dict)
+            or {**saved_request, 'input_bindings': {k:v for k,v in saved_request.get('input_bindings', {}).items() if k != 'learner_resume'}, 'request_sha256':request['request_sha256']} != request
+            or saved.get('request_sha256')!=saved_request.get('request_sha256')
+            or canonical_json_sha256_hex(hash_payload)!=saved_request['request_sha256']):
         raise ValueError('RL output directory is sealed to a different completed operation')
     report_ref,receipt_ref,checkpoint_ref=saved.get('report'),saved.get('training_receipt'),saved.get('checkpoint')
     for ref in (report_ref,receipt_ref,checkpoint_ref):
@@ -318,6 +358,8 @@ def _completed_operation_replay(args, request):
             or receipt.get('checkpoint',{}).get('sha256')!=checkpoint_ref['sha256']
             or receipt.get('continuation',{}).get('checkpoint_sha256')
                 !=request['input_bindings']['continue_from']['files'][0]['sha256']
+            or (saved_request['input_bindings'].get('learner_resume') is not None
+                and (receipt.get('operation_parent') or {}).get('sha256') != saved_request['input_bindings']['learner_resume']['sha256'])
             or Path(checkpoint_ref['path']).resolve()!= (args.out/'checkpoint.pt').resolve()
             or sha256_file_hex_cached(Path(checkpoint_ref['path']))!=checkpoint_ref['sha256']):
         raise ValueError('completed RL operation receipt does not prove its exact committed update')
@@ -437,7 +479,7 @@ def _admit_and_train(args,trainer,*,operation_request=None):
     trainer += ['--policy-capacity-request',json.dumps(binding(request_path),sort_keys=True)]
     from ..train.native_state_sft import main as train
     trainer_args=['--native-graphs', str(graph_path), '--held-native-graphs', str(args.held_native_graphs),
-        '--objective-spec', str(objective_path), '--continue-from', str(args.continue_from),
+        '--objective-spec', str(objective_path), '--continue-from', str(args.learner_resume['path'] if getattr(args, 'learner_resume', None) else args.continue_from),
         '--objective-continuation', '--out', str(args.out), *trainer]
     if transition_path is not None:
         trainer_args += ['--policy-source-continuation', str(transition_path)]
@@ -459,11 +501,13 @@ def _admit_and_train(args,trainer,*,operation_request=None):
             report=json.loads(report_path.read_text());training_receipt=json.loads(receipt_path.read_text())
             checkpoint=binding(checkpoint_path)
             parent_sha=operation_request['input_bindings']['continue_from']['files'][0]['sha256']
+            learner_parent=operation_request['input_bindings'].get('learner_resume')
             boundary=report.get('continuation_boundary') or {}
             if (report.get('completed') is True and report.get('checkpoint_sha256')==checkpoint['sha256']
                     and boundary.get('new_optimizer_updates',0)>0
                     and training_receipt.get('checkpoint',{}).get('sha256')==checkpoint['sha256']
-                    and training_receipt.get('continuation',{}).get('checkpoint_sha256')==parent_sha):
+                    and training_receipt.get('continuation',{}).get('checkpoint_sha256')==parent_sha
+                    and (learner_parent is None or (training_receipt.get('operation_parent') or {}).get('sha256')==learner_parent['sha256'])):
                 payload={key:value for key,value in operation_request.items() if key!='request_sha256'}
                 write_json_durable(args.out/'native-rl-completed-operation.json',{
                     'schema':'natlang.native-rl-completed-operation/1','request':operation_request,
@@ -565,7 +609,7 @@ def _invoke_raw_trainer(args, forwarded_trainer_args, actual_trainer_args, train
             'native_checkpoint_publication':selection,
             'runtime':str(Path(__file__).resolve().parents[4]),
             'production_stage':'native_rl', 'request_id':None}
-        emit_current(config,command,out=job_output,selected_checkpoint=args.continue_from,
+        emit_current(config,command,out=job_output,selected_checkpoint=(args.learner_resume['path'] if getattr(args, 'learner_resume', None) else args.continue_from),
             runtime_root=config['runtime'])
     return train(actual_trainer_args)
 
