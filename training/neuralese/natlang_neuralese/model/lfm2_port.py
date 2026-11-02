@@ -426,21 +426,29 @@ def load_conv_kernel():
         return None
 
 
+FFN_CHECKPOINT_MIN_TOKENS = 16384
+
+
 def feed_forward_residual(layer, h, chunk_tokens=0, sandwich=False):
-    """Token-local FFN chunks preserve gradients without recomputing activations.
+    """Token-local FFN chunks preserve gradients and full graph dependencies.
 
     Attention and convolution retain their full context. Chunking the norm and
-    FFN bounds temporary expanded-width projections; saved activation storage
-    still scales with total tokens unless the caller enables exact CPU offload.
+    FFN bounds temporary expanded-width projections; long gradient-enabled
+    chunked calls also recompute each chunk's expanded activations in backward.
     `sandwich` (LFM3's declared `use_sandwich_norm`) normalizes the FFN output
     with `post_ffn_norm` before it enters the residual stream.
     """
     from .native_gradient_partitions import token_local_chunks
+    checkpoint_chunks = (torch.is_grad_enabled() and chunk_tokens > 0
+                         and h.shape[1] >= FFN_CHECKPOINT_MIN_TOKENS
+                         and h.shape[1] > chunk_tokens)
     if sandwich:
         return token_local_chunks(h, chunk_tokens,
-            lambda part: part + layer.post_ffn_norm(layer.feed_forward(layer.ffn_norm(part))), cpu_rowwise=True)
+            lambda part: part + layer.post_ffn_norm(layer.feed_forward(layer.ffn_norm(part))),
+            cpu_rowwise=True, checkpoint_chunks=checkpoint_chunks)
     return token_local_chunks(h, chunk_tokens,
-        lambda part: part + layer.feed_forward(layer.ffn_norm(part)), cpu_rowwise=True)
+        lambda part: part + layer.feed_forward(layer.ffn_norm(part)),
+        cpu_rowwise=True, checkpoint_chunks=checkpoint_chunks)
 
 
 def short_convolution(port, conv, x, previous, padding=None, chunk_real=None):

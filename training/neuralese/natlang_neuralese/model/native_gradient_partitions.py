@@ -230,7 +230,7 @@ def reduce_parameter_rows(partitions, count, contribution, *, add=None):
 
 @torch._dynamo.disable
 @_scoped_weight_preparations
-def token_local_chunks(h, chunk_tokens, callback, *, cpu_rowwise=False):
+def token_local_chunks(h, chunk_tokens, callback, *, cpu_rowwise=False, checkpoint_chunks=False):
     """Evaluate each physical FFN row once, with invocation-local routing plans.
 
     The layer-major graph still visits each layer once. FFN is token-local;
@@ -238,12 +238,24 @@ def token_local_chunks(h, chunk_tokens, callback, *, cpu_rowwise=False):
     chunk boundaries without replaying any attention or state-producing layer.
     """
     import torch
+    def execute(part):
+        if not checkpoint_chunks or not torch.is_grad_enabled():
+            return callback(part)
+        # Each replay owns an identical preparation cache. A cache borrowed
+        # from the surrounding forward may already have been retired when a
+        # later checkpoint recomputes this chunk.
+        from .native_adapters import capture_native_checkpoint_execution
+        from .native_actor_graph import capture_invocation_actor_execution
+        from torch.utils.checkpoint import checkpoint
+        run = capture_native_checkpoint_execution(
+            capture_invocation_actor_execution(_scoped_weight_preparations(callback)))
+        return checkpoint(run, part, use_reentrant=False, preserve_rng_state=True)
     partitions = active_gradient_partitions()
     if partitions is None:
         width = 1 if cpu_rowwise and h.device.type == 'cpu' else chunk_tokens
         if width <= 0 or h.shape[1] <= width:
-            return callback(h)
-        return torch.cat([callback(part) for part in h.split(width, dim=1)], dim=1)
+            return execute(h)
+        return torch.cat([execute(part) for part in h.split(width, dim=1)], dim=1)
     if h.ndim != 3 or h.shape[0] != 1:
         raise RuntimeError('graph FFN chunks lost their token axis')
     sections = token_slices(partitions, h.shape[1], reverse=False)
@@ -268,5 +280,5 @@ def token_local_chunks(h, chunk_tokens, callback, *, cpu_rowwise=False):
                                       else invocation_index),
                     chunk_offset=start - section.start, invocation_length=count,
                     invocation_namespace=namespace)):
-                outputs.append(callback(part))
+                outputs.append(execute(part))
     return torch.cat(outputs, dim=1) if outputs else h

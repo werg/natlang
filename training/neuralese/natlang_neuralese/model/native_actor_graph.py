@@ -17,6 +17,29 @@ def invocation_actor_bank(port):
     return next((bank for bank in reversed(_BANKS.get()) if bank.engine.shared_model.port is port), None)
 
 
+def capture_invocation_actor_execution(callback):
+    """Re-enter the actual actor's functional substitution for a deferred chunk."""
+    frames = _ACTIVE.get()
+    if not frames:
+        return callback
+    actor_frame = frames[-1]
+    selected = next(((bank, name) for bank in reversed(_BANKS.get())
+                     for name, actor in bank.actors.items() if actor[0] is actor_frame), None)
+    if selected is None:
+        return callback
+    bank, name = selected
+    def execute(*args, **kwargs):
+        current = _ACTIVE.get()
+        if not current or current[-1] is not actor_frame:
+            raise NativeAdapterError('checkpoint chunk lost its exact invocation actor frame')
+        token = _ACTIVE.set(current[:-1])
+        try:
+            return bank.execute(name, lambda: callback(*args, **kwargs))
+        finally:
+            _ACTIVE.reset(token)
+    return execute
+
+
 class NativeInvocationActors:
     def __init__(self, engine, names, bindings, *, default=None, leaves=None, gradient_precision='storage', source_names=None):
         if gradient_precision not in ('storage','fp32'):
