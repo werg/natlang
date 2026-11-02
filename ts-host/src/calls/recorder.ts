@@ -4,6 +4,7 @@
  * never fails a call: a store error is reported once per store and dropped.
  */
 import { hexDigest } from '../native/hash.js';
+import { graphCustodyDigest } from './graph-custody.js';
 import { inputFeatures, snapshot } from './snapshot.js';
 import { approachHash } from './normalize.js';
 import { CALLS_VERSION, type CallRecord, type CallStoreSettings, type CaseStats, type CompilationRow, type DefinitionIdentity,
@@ -74,7 +75,7 @@ export function excluded(patterns: readonly string[] | undefined, definition: { 
   });
 }
 
-type Pending = { service: string; method: string; args: ValueRef; by: 'agent' | 'crisp'; order: number; seq?: number };
+type Pending = { service: string; method: string; args: ValueRef; by: 'agent' | 'crisp'; order: number; seq?: number; graph_order?: number };
 
 /** The record of one running call. */
 export class CallCapture {
@@ -183,9 +184,9 @@ export class CallCapture {
 
   /** One recording-services event (`native/effects.ts`), with its exact arguments and result. */
   effect(event: { phase: 'requested' | 'completed' | 'failed'; service: string; method: string; exact?: { args?: unknown[]; result?: unknown; async?: boolean };
-    error?: string; seq?: number }, by: 'agent' | 'crisp' = 'agent'): void {
+    error?: string; seq?: number; graph_order?: number }, by: 'agent' | 'crisp' = 'agent'): void {
     if (event.phase === 'requested') {
-      this.pending.push({ service: event.service, method: event.method, args: this.ref(event.exact?.args ?? []), by, order: this.order++, seq: event.seq });
+      this.pending.push({ service: event.service, method: event.method, args: this.ref(event.exact?.args ?? []), by, order: this.order++, seq: event.seq, graph_order: event.graph_order });
       return;
     }
     const index = event.seq !== undefined ? this.pending.findIndex(item => item.seq === event.seq) :
@@ -203,7 +204,7 @@ export class CallCapture {
   }
 
   /** Write the record. Never throws. */
-  finish(result: { outcome: string; detail: string; output?: unknown; hasOutput: boolean; events: readonly Record<string, unknown>[] }): CallRecord | undefined {
+  finish(result: { outcome: string; detail: string; output?: unknown; hasOutput: boolean; events: readonly Record<string, unknown>[]; graphChildren?: string[] }): CallRecord | undefined {
     if (this.watcher) clearInterval(this.watcher);
     try {
       const events = result.events;
@@ -216,6 +217,7 @@ export class CallCapture {
       const definition = this.base.definition;
       const output = result.hasOutput ? this.ref(result.output,
         excluded(this.base.exclude, { name: definition.name, source: definition.source }, 'return')) : null;
+      const effects = [...this.effects, ...this.pending.map(({ seq: _seq, ...item }) => ({ ...item, error: 'did not finish' }))].sort((a, b) => a.order - b.order);
       const record: CallRecord = {
         version: CALLS_VERSION, call_id: this.base.callId, parent_call_id: this.base.parentCallId,
         parent_action_index: this.base.parentActionIndex, task_id: this.base.taskId, program_id: this.base.programId,
@@ -223,7 +225,10 @@ export class CallCapture {
         build_hash: this.base.buildHash, program_root: this.base.programRoot, definition, executor: this.executor,
         inputs: this.inputs, captures: this.captures, capture_writes: this.captureWrites, output,
         outcome: result.outcome, detail: result.detail.slice(0, 4000), started_at: this.startedAt, ended_at: new Date().toISOString(),
-        effects: [...this.effects, ...this.pending.map(({ seq: _seq, ...item }) => ({ ...item, error: 'did not finish' }))].sort((a, b) => a.order - b.order),
+        ...(result.graphChildren ? { graph_custody: { schema: 'natlang.call-graph-chronology/1' as const,
+          task_id: this.base.taskId, child_call_ids: result.graphChildren,
+          sha256: graphCustodyDigest(this.base.taskId, this.base.callId, this.base.parentCallId, result.graphChildren, effects) } } : {}),
+        effects,
         folder: this.folder,
         approach: { evals, hash: this.executor.kind === 'agent' && result.outcome === 'done' ? approachHash(actions.filter(action => action.ok).map(action => action.code), this.hostInputs) : null },
         cost: { model_requests: requests.length, turns: requests.length, evals: evals.length, wall_ms: Date.now() - this.started,

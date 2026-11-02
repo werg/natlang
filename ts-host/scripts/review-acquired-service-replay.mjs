@@ -15,14 +15,17 @@ const source = bind(fixturePath);
 if (source.sha256 !== expectedSha) throw new Error('source observation fixture changed');
 const fixture = JSON.parse(readFileSync(fixturePath, 'utf8'));
 if (fixture.schema !== 'natlang.acquired-static-service-feasibility/1' || fixture.training_admission !== false ||
-    fixture.structural_pairing_errors.length !== 0 || !fixture.source_observations_not_native_execution)
+    fixture.structural_pairing_errors.length !== 0 || !fixture.source_observations_not_native_execution ||
+    fixture.replay_contract?.schema !== 'natlang.source-observation-replay-contract/1' ||
+    fixture.replay_contract.matching !== 'ordered-exact' || fixture.replay_contract.allow_new_effects !== false ||
+    fixture.replay_contract.source_session_sha256 !== fixture.normalized_session_sha256)
   throw new Error('source observation fixture lacks required custody');
 const effects = fixture.observations.map(observation => {
   const [service, method, extra] = observation.name.split('.');
   if (!service || !method || extra) throw new Error('source method is not a two-part service name');
   return { service, method, args: [observation.arguments], result: observation.result, async: false, complete: true };
 });
-const replay = new ReplayServices(effects, [], { strictSequence: true });
+const replay = new ReplayServices(effects, [], { mode: 'ordered-exact' });
 for (const effect of effects) assert.equal(replay.services[effect.service][effect.method](...effect.args), effect.result);
 assert.equal(replay.unused().length, 0);
 assert.equal(replay.divergences.length, 0);

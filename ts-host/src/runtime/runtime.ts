@@ -277,6 +277,21 @@ export class NatlangTask {
   async drain(): Promise<void> { while (this.pending.size) await Promise.allSettled([...this.pending]); }
   private readonly abort = new AbortController();
   private callSequence = 0;
+  private effectSequence = 0;
+  private readonly graphChildrenByParent = new Map<string, string[]>();
+  /** Allocate a task-wide order at the actual service request boundary. */
+  nextGraphEffectOrder(): number { return this.effectSequence++; }
+  registerGraphCall(callId: string, parentId: string | null | undefined): void {
+    if (!parentId) return;
+    const children = this.graphChildrenByParent.get(parentId) ?? [];
+    children.push(callId); this.graphChildrenByParent.set(parentId, children);
+  }
+  discardGraphCall(callId: string, parentId: string | null | undefined): void {
+    if (!parentId) return;
+    const children = this.graphChildrenByParent.get(parentId);
+    if (children) this.graphChildrenByParent.set(parentId, children.filter(id => id !== callId));
+  }
+  graphChildren(callId: string): string[] { return [...this.graphChildrenByParent.get(callId) ?? []]; }
   private readonly definitionCalls = new Map<string, number>();
   private readonly taskOrdinal: number;
   definitionSeedId(key: string): string { const ordinal = (this.definitionCalls.get(key) ?? 0) + 1; this.definitionCalls.set(key, ordinal); return key + '/' + ordinal; }

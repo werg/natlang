@@ -71,6 +71,9 @@ def inspect_session(row):
             'Bind or explicitly report all referenced external files, original source and tool observations.',
             'Construct and replay actual Natlang eval/service graphs and validate every resulting observation.',
             'Separately qualify the task outcome and native learning objective before admission.'],
+        'replay_contract':{'schema':'natlang.source-observation-replay-contract/1',
+            'matching':'ordered-exact','allow_new_effects':False,
+            'source_session_sha256':canonical_json_sha256_hex(row)},
         'source_observations_not_native_execution':True,'native_graph_constructed':False,
         'training_admission':False,'observations':observations,'tool_declarations':tools}
 

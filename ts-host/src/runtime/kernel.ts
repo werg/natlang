@@ -599,6 +599,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     }
   }
   const callId = task.nextCallId();
+  task.registerGraphCall(callId, frame.parentCallId);
   const siblingOrdinal=task.reserveExecutionSiblingOrdinal(frame.parentCallId,definition.id);
   const parentOccurrenceEvent=frame.parentCallId?traceFor(frame.parentCallId)?.events.find(event=>event.kind==='invocation'&&
     event.phase==='start'&&event.call_id===frame.parentCallId):undefined;
@@ -644,10 +645,10 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     }
   }
   // A strict tier attempt serves from crisp cases only: with none, the engine goes on to the next tier and no model runs.
-  if (attempt?.strict && !handoff) { capture?.discard(); throw new Deopt(attempt.declined ?? 'no crisp case of this tier served the call'); }
+  if (attempt?.strict && !handoff) { capture?.discard(); task.discardGraphCall(callId, frame.parentCallId); throw new Deopt(attempt.declined ?? 'no crisp case of this tier served the call'); }
   const environment = task.environment();
   let runtime: NativeRuntime | undefined;
-  const services = recordingServices(checkedServices(task, frame, task.services, model, callId, (kind, data) => { runtime?.trace.emit(kind, data); }, frame.signal ?? task.signal) as Record<string, object>, ({ exact, ...event }) => (capture?.effect({ ...event, exact }, 'agent'), event.phase === 'requested' ?
+  const services = recordingServices(checkedServices(task, frame, task.services, model, callId, (kind, data) => { runtime?.trace.emit(kind, data); }, frame.signal ?? task.signal) as Record<string, object>, ({ exact, ...event }) => (capture?.effect({ ...event, exact, ...(event.phase === 'requested' ? { graph_order: task.nextGraphEffectOrder() } : {}) }, 'agent'), event.phase === 'requested' ?
     runtime?.trace.emit('effect', { call_id: callId, capability: `${event.service}.${event.method}`, ...event }) :
     graphNode(runtime?.trace, 'effect', { call_id: callId, capability: `${event.service}.${event.method}`, ...event },
       [{ node: invocationNodeId(callId), port: 'caller' }])));
@@ -804,7 +805,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
       name: definition.name, outcome, detail, adaptation: adaptationProvenance, events: runtime.trace.events as Record<string, unknown>[] });
     environment.close();
     if (capture) {
-      capture.finish({ outcome, detail, output: hostValue, hasOutput: hasValue, events: runtime.trace.events as Record<string, unknown>[] });
+      capture.finish({ outcome, detail, output: hostValue, hasOutput: hasValue, events: runtime.trace.events as Record<string, unknown>[], graphChildren: task.graphChildren(callId) });
       if (outcome !== 'done') task.failedCalls.set(`${frame.parentCallId ?? ''}|${capture.base.definition.key}`, callId);
       if (outcome === 'done' && capture.executor.kind === 'agent')
         for (const item of shadows) { try { store!.enqueue('shadow', item.hash, callId); } catch { /* recording never fails a call */ } }
@@ -895,7 +896,7 @@ async function runCrispCase(input: { task: Frame['task']; frame: Frame; childFra
   const { task, childFrame, callId, definition, options, inputs, folder, capture, store, item } = input;
   const args = caseArguments(capture, folder);
   const original = { ...args };
-  const services = recordingServices(task.services, event => capture.effect(event, 'crisp'));
+  const services = recordingServices(task.services, event => capture.effect({ ...event, ...(event.phase === 'requested' ? { graph_order: task.nextGraphEffectOrder() } : {}) }, 'crisp'));
   let error: unknown;
   try {
     const raw = await runInFrame({ ...childFrame, services }, () => item.run(args));
@@ -937,7 +938,7 @@ async function runCrispCase(input: { task: Frame['task']; frame: Frame; childFra
     capture.executor = { ...capture.executor, kind: 'crisp', case_hash: item.hash };
     task.record({ callId, parentCallId: input.frame.parentCallId ?? null, taskId: task.id, definitionId: definition.id, name: definition.name,
       outcome: 'done', detail: `served by compiled case ${item.hash}`, events: [] });
-    capture.finish({ outcome: 'done', detail: `served by compiled case ${item.hash}`, output: value, hasOutput: true, events: [] });
+    capture.finish({ outcome: 'done', detail: `served by compiled case ${item.hash}`, output: value, hasOutput: true, events: [], graphChildren: task.graphChildren(callId) });
     try {
       store.caseServed(item.hash, callId, false);
       if (!item.hash.startsWith('tier:') && Math.random() < capture.settings.auditRate) store.enqueue('audit', item.hash, callId);

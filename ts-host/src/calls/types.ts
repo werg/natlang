@@ -11,7 +11,7 @@ export type ValueRef =
   | { complete: false; reason: 'oversize' | 'nonportable' | 'excluded'; hash?: string; bytes?: number; type?: string; preview?: string };
 
 /** One service call made during a call (by the agent's eval code, or by a crisp case). */
-export type EffectRecord = { order: number; service: string; method: string; args: ValueRef; result?: ValueRef;
+export type EffectRecord = { order: number; graph_order?: number; service: string; method: string; args: ValueRef; result?: ValueRef;
   /** Whether the method returned a promise, so a replay answers the same way. */
   async?: boolean; error?: string; by: 'agent' | 'crisp' };
 
@@ -68,6 +68,8 @@ export type CallRecord = {
   outcome: string; detail: string;
   started_at: string; ended_at: string;
   effects: EffectRecord[];
+  /** Complete observed child inventory and task-wide effect-order identity, when captured by the current recorder. */
+  graph_custody?: { schema: 'natlang.call-graph-chronology/1'; task_id: string; child_call_ids: string[]; sha256: string };
   folder: FolderRecord | null;
   /** The eval programs the agent ran, in order (successful and failed), and the hash of their normalized form. */
   approach: { evals: string[]; hash: string | null };
