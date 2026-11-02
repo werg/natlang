@@ -15,6 +15,21 @@ def reservation(path):
     return PersistentCheckpointReservation(path, transfer_bytes=0, minimum_free_bytes=0)
 
 
+def test_empty_spare_retirement_preserves_committed_checkpoint_and_partial_payload(tmp_path):
+    path = tmp_path / 'checkpoint.pt'
+    torch.save({'step': 7}, path)
+    owner = reservation(path).acquire(128 * 1024)
+    pending = owner.pending
+    assert owner.discard_empty() is True
+    assert not pending.exists() and not owner.receipt.exists()
+    assert torch.load(path, weights_only=True)['step'] == 7
+    owner = reservation(path).acquire(128 * 1024)
+    os.pwrite(owner._fd, b'partial checkpoint', 64 * 1024)
+    assert owner.discard_empty() is False
+    owner.close()
+    assert pending.read_bytes()[64 * 1024:][:18] == b'partial checkpoint'
+
+
 def test_reserved_inode_is_committed_and_replenished(tmp_path):
     path = tmp_path / 'checkpoint.pt'
     torch.save({'step': 1}, path)

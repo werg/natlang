@@ -1,5 +1,6 @@
 import copy
 import errno
+import json
 import random
 import threading
 import time
@@ -349,7 +350,7 @@ def test_reserved_background_write_retains_separate_next_slot(tmp_path, monkeypa
         pass
 
 
-def test_policy_close_drains_live_writer_and_releases_reusable_reservation(tmp_path, monkeypatch):
+def test_policy_close_drains_live_writer_and_retires_empty_spare(tmp_path, monkeypatch):
     from natlang_neuralese.train import trajectory_state
     monkeypatch.setenv('NATLANG_CHECKPOINT_TRANSFER_HEADROOM_FACTOR', '0')
     monkeypatch.setenv('NATLANG_CHECKPOINT_MIN_FREE_BYTES', '0')
@@ -369,7 +370,6 @@ def test_policy_close_drains_live_writer_and_releases_reusable_reservation(tmp_p
     event = policy.save(state, async_allowed=True, async_optimizer=optimizer)
     assert event['async_pending'] and entered.wait(5)
     pending = policy._persistent_reservation.pending
-    pending_inode = pending.stat().st_ino
     closed = threading.Event()
     def close_policy():
         policy.close()
@@ -381,9 +381,12 @@ def test_policy_close_drains_live_writer_and_releases_reusable_reservation(tmp_p
     closer.join(5)
     assert closed.is_set() and not closer.is_alive()
     assert torch.load(policy.slot, weights_only=False)['training']['exposure_counts'] == {'graph': 1}
+    assert not pending.exists()
+    roles = json.loads(policy.slot.with_name(policy.slot.name + '.reservation-roles.json').read_text())
+    assert roles['writer'] is None and roles['next'] is None
     successor = CheckpointPolicy(tmp_path)
     successor.reserve_next(state, optimizer)
-    assert successor._persistent_reservation.pending.stat().st_ino == pending_inode
+    assert successor._persistent_reservation.pending.is_file()
     successor.close()
 
 

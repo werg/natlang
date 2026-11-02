@@ -227,7 +227,11 @@ class CheckpointPolicy:
             reservation = self._persistent_reservation
             self._persistent_reservation = None
             try:
-                reservation.close()
+                try:
+                    if reservation.discard_empty():
+                        self._reservation_roles(None, None)
+                finally:
+                    reservation.close()
             except BaseException as caught:
                 if error is None:
                     error = caught

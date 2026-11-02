@@ -440,6 +440,32 @@ class PersistentCheckpointReservation:
             self.pending.unlink(); self.receipt.unlink(); self._sync_directory()
         self.close()
 
+    def discard_empty(self):
+        """Retire only a verified all-zero spare while its owner lock is held.
+
+        A failed serializer may leave useful bytes in the pending inode. Preserve
+        those bytes even on shutdown; allocation receipts alone prove no absence
+        of checkpoint data.
+        """
+        if self._fd is None:
+            return False
+        before = self._check_pending_identity()
+        signature = lambda st: (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns)
+        offset = 0
+        zeros = bytes(4 * 1024 * 1024)
+        while offset < before.st_size:
+            size = min(len(zeros), before.st_size - offset)
+            block = os.pread(self._fd, size, offset)
+            if len(block) != size:
+                raise CheckpointReserveError('spare changed during empty reservation verification')
+            if block != zeros[:size]:
+                return False
+            offset += size
+        if signature(before) != signature(self._check_pending_identity()):
+            raise CheckpointReserveError('spare changed during empty reservation verification')
+        self.discard_uncommitted()
+        return True
+
     def close(self):
         if self._fd is not None:
             os.close(self._fd)
