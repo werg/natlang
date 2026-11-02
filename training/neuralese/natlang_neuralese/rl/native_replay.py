@@ -1320,7 +1320,7 @@ def _require_scored_training_episode(rollout, identity,*,actors=None):
         raise ValueError('native RL Neuralese-use bonus belongs only to correct episodes and lies in (0, 1]')
     efficiency = rollout['reward'].get('execution_efficiency')
     if efficiency is not None:
-        from .rollout_math import execution_efficiency_cost, execution_efficiency_counters
+        from .rollout_math import execution_efficiency_cost, execution_efficiency_counters, grounded_failure_report_credit
         if (not isinstance(efficiency, dict) or type(efficiency.get('model_calls')) is not int
                 or efficiency['model_calls'] != len(rollout.get('turns') or [])
                 or (efficiency.get('generated_tokens') is not None and
@@ -1336,6 +1336,9 @@ def _require_scored_training_episode(rollout, identity,*,actors=None):
             weight=efficiency['weight'])
         if not math.isclose(efficiency['cost'], expected_cost, rel_tol=0, abs_tol=1e-12):
             raise ValueError('native RL execution-efficiency cost differs from its captured counters')
+        credit = efficiency.get('failure_report_credit')
+        if credit is not None and (type(credit) not in (int, float) or credit != grounded_failure_report_credit(rollout.get('turns') or [])):
+            raise ValueError('native RL failure-report credit differs from linked execution evidence')
         observed = execution_efficiency_counters(rollout.get('turns') or [])
         if any(efficiency[field] != observed[field]
                for field in ('model_calls', 'generated_tokens', 'repeated_actions')):
@@ -1402,32 +1405,39 @@ def group_episode_advantages(members, *, jolt, mode):
     group std. Success-gated Neuralese reward and bounded execution cost are then applied to the episode that earned
     them. Mixed-outcome groups receive bounded raw costs after outcome standardization. All-success groups can learn
     from centered raw cost differences; those differences are never standardized. All-failed groups receive no
-    cost-only gradient. Historical rollouts without efficiency telemetry keep their old reward.
+    cost-only gradient unless linked execution evidence supports a terminal failure report; its centered
+    reporting credit is at most 0.02 and is never standardized. Historical rollouts without efficiency telemetry keep their old reward.
 
     Correct-versus-failed ordering is preserved: binary GRPO advantages differ by at least 2 because a binary
     group's standard deviation is at most 0.5; JOLT+'s raw centered advantages differ by 1. Neuralese bonus is
     nonnegative and only applies to correct episodes; the efficiency cost can reduce that gap by at most 0.05, so
-    even the JOLT+ minimum gap remains at least 0.95."""
-    from .rollout_math import group_advantages
+    even the JOLT+ minimum gap remains at least 0.93 including the maximum failure-report credit."""
+    from .rollout_math import group_advantages, reporting_spread
     qualities = [row['reward']['quality'] for row in members]
     bonuses = [float(row['reward'].get('neuralese_bonus') or 0.) for row in members]
     advantages, stats = group_advantages(qualities)
     efficiency_costs = [float((row['reward'].get('execution_efficiency') or {}).get('cost') or 0.)
                         for row in members]
+    reports = [float((row['reward'].get('execution_efficiency') or {}).get('failure_report_credit') or 0.)
+               if row['reward']['quality'] == 0 else 0. for row in members]
+    reporting_varies = reporting_spread([row['reward'] for row in members])
     success_only = bool(qualities) and all(quality == 1 for quality in qualities)
     efficiency_varies = len(set(efficiency_costs)) > 1
     if jolt:
         mean = sum(qualities) / len(qualities)
         advantages = [quality - mean if len(qualities) > 1 else 0. for quality in qualities]
     elif mode == 'grpo' and not stats['spread'] and not any(bonuses) and not (
-            success_only and efficiency_varies):
+            (success_only and efficiency_varies) or reporting_varies):
         return None
     mean_cost = sum(efficiency_costs) / len(efficiency_costs) if efficiency_costs else 0.
     cost_terms = ([-cost for cost in efficiency_costs] if stats['spread'] and mode == 'grpo' else
                   [mean_cost - cost for cost in efficiency_costs]
                   if success_only and efficiency_varies and mode == 'grpo' else [0.] * len(members))
-    return [None if advantage is None else advantage + bonus + cost_term
-            for advantage, bonus, cost_term in zip(advantages, bonuses, cost_terms)]
+    report_mean = sum(reports) / len(reports) if reports else 0.
+    report_terms = ([credit - report_mean for credit in reports] if reporting_varies and mode == 'grpo' else
+                    reports if stats['spread'] and mode == 'grpo' else [0.] * len(members))
+    return [None if advantage is None else advantage + bonus + cost_term + report_term
+            for advantage, bonus, cost_term, report_term in zip(advantages, bonuses, cost_terms, report_terms)]
 
 
 def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=None, mode='grpo', behavior_policy=None,
@@ -1485,8 +1495,10 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
         if advantages is None:
             continue
         costs=[float((row['reward'].get('execution_efficiency') or {}).get('cost') or 0.) for row in members]
-        efficiency_only=(mode=='grpo' and len(set(costs))>1
+        from .rollout_math import reporting_spread
+        efficiency_only=(mode=='grpo' and ((len(set(costs))>1
             and all(row['reward']['quality']==1 and not row['reward'].get('neuralese_bonus') for row in members))
+            or reporting_spread([row['reward'] for row in members])))
         efficiency_scale=max((abs(value or 0.) for value in advantages),default=0.) if efficiency_only else None
         for rollout, advantage in zip(members, advantages):
             if mode == 'rft' and rollout['reward']['quality'] < min_quality:

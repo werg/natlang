@@ -125,7 +125,11 @@ def projected_report(original, rows, path):
         valid_costs = all(type(cost) in (int, float) and math.isfinite(cost) and cost >= 0 for cost in costs)
         efficiency_spread = bool(members) and all(reward_of(row['outcome']) == 1 for row in members) \
             and valid_costs and len(set(costs)) > 1
+        from .rollout_math import reporting_spread
+        reporting_varies = reporting_spread([r['reward'] for r in members if r.get('reward') is not None])
+        efficiency_spread = efficiency_spread or reporting_varies
         groups.append({'task_id': old_group['task_id'], **stats,
+                       'reporting_spread': reporting_varies,
                        'efficiency_spread': efficiency_spread,
                        'outcomes': [r['outcome'] for r in members],
                        'route': 'grpo' if stats['spread'] or efficiency_spread else 'retire' if mean >= 1. else 'rejection-sampling'})
@@ -133,6 +137,7 @@ def projected_report(original, rows, path):
     report['groups_with_spread'] = sum(g['spread'] for g in groups)
     report['groups_with_quality_spread'] = sum(g['spread'] for g in groups)
     report['groups_with_efficiency_spread'] = sum(g['efficiency_spread'] for g in groups)
+    report['groups_with_reporting_spread'] = sum(g['reporting_spread'] for g in groups)
     report['neuralese'] = neuralese_metrics(metrics, original.get('neuralese', {}).get('bonus', .1))
     return report
 

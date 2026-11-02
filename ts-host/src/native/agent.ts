@@ -85,8 +85,9 @@ function immediateEmptyEos(response: ModelTurn): boolean {
  */
 export const RETURN_RESULT_DESCRIPTION = 'Finish the call. With status "success", value is the result and must have the declared ' +
   'return type; if a complete typed result is already staged, you may omit value to return that exact stored result. With status ' +
-  '"blocked" (required information is missing; do not guess) or "failed" (the instructions require an ' +
-  'invalid or contradictory operation), give the reason instead of a value. A negative answer (false, no, none, zero, an empty ' +
+  '"blocked" (required information is missing; do not guess) or "failed" (you cannot reliably complete the operation), ' +
+  'give the specific reason instead of a value. Quote observed tool errors where relevant; distinguish your inability from task impossibility. ' +
+  'Use escalate when a configured stronger model could finish. A negative answer (false, no, none, zero, an empty ' +
   'list) is a result like any other: return it with status "success".';
 /** The finishing tool's description before its sentence on negative answers; kept for migrating collected data. */
 export const RETURN_RESULT_DESCRIPTION_BEFORE = 'Finish the call. With status "success", value is the result and must have the ' +
@@ -1018,7 +1019,7 @@ export class NativeToolAgent {
         { status: { type: 'string', enum: ['success', 'blocked', 'failed'] },
           value: { ...(session.lam.type.kind === 'lambda' ? schemaOf(session.lam.type.returns, session.env) : {}),
             description: 'For success, provide a value of the declared return type, or omit it only to return the exact complete result already staged.' },
-          reason: { type: 'string', description: 'For "blocked": what is missing. For "failed": why it cannot be done.' } }, ['status']),
+          reason: { type: 'string', description: 'For "blocked": what information is missing. For "failed": what you could not complete and why. Quote relevant observed tool errors; do not invent missing information or claim a recoverable error proves impossibility.' } }, ['status']),
     ];
     if (this.options.fallbacks?.length) tools.splice(1, 0, tool('escalate',
       'Hand this executing call to the next configured model when you cannot reliably finish. State the evidence and work already done; the next model continues in this same scope and must not repeat completed effects.',
@@ -1936,6 +1937,28 @@ export class NativeToolAgent {
           if (repeated) { const stuckFailure = handoffStuck(repeated); if (stuckFailure) return stuckFailure; continue; }
           if (++failureRepairs > (this.options.maxFailureRepairs ?? Infinity)) return failure;
         }
+        continue;
+      }
+      // An explicit inability report is a handoff opportunity, not a reason
+      // to abandon a live scope when a configured stronger actor can continue.
+      const terminalReport = calls.length === 1 && calls[0]?.[0] === 'return_result' ? calls[0][1] : undefined;
+      if (!lastTurn && terminalReport && ['blocked', 'failed'].includes(String(terminalReport.status)) &&
+          typeof terminalReport.reason === 'string' && terminalReport.reason.trim() &&
+          fallbackIndex < (this.options.fallbacks?.length ?? 0)) {
+        const report = { reason: `Actor reported ${terminalReport.status}`,
+          evidence: terminalReport.reason,
+          attempted_work: 'Inspect the retained transcript and live scope; completed effects must not be repeated.',
+          remaining_subproblem: 'Complete the current invocation, or report the specific remaining blocker.' };
+        session.turn = turns; session.turnReasoning = response.reasoning;
+        const action = session.hostAction('return_result', terminalReport, () => {
+          const failure = switchModel(report);
+          return failure ? { kind: 'blocked', text: failure } : { kind: 'ok', text:
+            'Inability report handed to the next configured actor. Continue from the existing scope and transcript.' };
+        }, String(raw[0]!.id));
+        messages.push({ role: 'assistant', content: '', tool_calls: raw.slice(0, 1), ...thought(response.reasoning) },
+          { role: 'tool', tool_call_id: String(raw[0]!.id), content: action.text });
+        if (action.kind !== 'ok') return action.text;
+        repeatedFailure = ''; repeatedFailures = 0;
         continue;
       }
       const results: NativeResult[] = [];

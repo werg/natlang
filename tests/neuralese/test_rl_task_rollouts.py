@@ -509,7 +509,7 @@ def test_execution_efficiency_uses_observed_whole_graph_counters_and_is_bounded(
          'target': {'tool_calls': [{**action, 'id': 'c'}]}},
     ]})
     assert measured == {'model_calls': 3, 'generated_tokens': 3000, 'repeated_actions': 1,
-                        'cost': pytest.approx(.025625), 'weight': 1.0}
+                        'cost': pytest.approx(.025625), 'weight': 1.0, 'failure_report_credit': 0.0}
     assert measured['cost'] <= .05
     # The same sampled retry after a changed exact tool response is not evidence of no progress.
     progressed = execution_efficiency({'turns': [

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import math
 import json
+import re
 
 
 DEFAULT_EXECUTION_EFFICIENCY_WEIGHT = 1.0
@@ -111,3 +112,52 @@ def execution_efficiency_cost(*, model_calls: int, generated_tokens: int | None,
     token_cost = 0.0 if generated_tokens is None else 0.015 * min(generated_tokens, 2048) / 2048
     repeat_cost = 0.020 * min(repeated_actions, 4) / 4
     return min(MAX_EXECUTION_EFFICIENCY_COST, call_cost + token_cost + repeat_cost) * float(weight)
+
+
+def grounded_failure_report_credit(turns: list[dict]) -> float:
+    """Small credit for a terminal report quoting an observed, linked tool error.
+
+    This proves accurate reporting of execution evidence, not that the task was
+    impossible. Unverified claims of missing information receive nothing. Only
+    failed task outcomes may use this credit; task quality remains unchanged.
+    """
+    if not turns:
+        return 0.
+    final = turns[-1]
+    calls = (final.get('target') or {}).get('tool_calls') or []
+    if len(calls) != 1:
+        return 0.
+    function = calls[0].get('function') or {}
+    arguments = function.get('arguments')
+    if isinstance(arguments, str):
+        try:
+            arguments = json.loads(arguments)
+        except (ValueError, TypeError):
+            return 0.
+    if (function.get('name') != 'return_result' or not isinstance(arguments, dict)
+            or arguments.get('status') not in ('blocked', 'failed')):
+        return 0.
+    reason = arguments.get('reason')
+    invocation = final.get('invocation_id')
+    if not isinstance(reason, str) or not invocation:
+        return 0.
+    prior_ids = {call.get('id') for turn in turns[:-1] if turn.get('invocation_id') == invocation
+                 for call in (turn.get('target') or {}).get('tool_calls') or [] if call.get('id')}
+    for message in final.get('messages') or []:
+        content = message.get('content')
+        if (message.get('role') != 'tool' or message.get('tool_call_id') not in prior_ids
+                or not isinstance(content, str)):
+            continue
+        for line in content.splitlines():
+            line = line.strip()
+            if (24 <= len(line) <= 1200 and line in reason and re.match(
+                    r'(?i)^(?:error\b|[A-Za-z]*Error:|invalid-binding\b|type-error\b|eval-error\b)', line)):
+                return .02
+    return 0.
+
+
+def reporting_spread(rewards: list[dict]) -> bool:
+    """Only outcome-equal failures may learn solely from grounded reporting."""
+    return bool(rewards) and all(row.get('quality') == 0 for row in rewards) and len({
+        float((row.get('execution_efficiency') or {}).get('failure_report_credit') or 0.)
+        for row in rewards}) > 1

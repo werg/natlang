@@ -89,6 +89,20 @@ actors use it. A full3.46GB view64→75 reconstruction verified a138.6MB delta
 
 ## Honest stops, bounded efficiency and live escalation (owner, 2026-11-01)
 
+Engineering update, 2026-11-02: terminal `blocked`/`failed` reports with a reason
+hand off the live invocation when an explicitly configured fallback and budget
+remain. Preserve scope, prior effects, actor provenance and graph-wide limits.
+No fallback is allocated or paid provider enabled implicitly. Mixed-actor
+handoff traces remain ineligible as same-policy whole-graph RL samples.
+
+New scoring records at most 0.02 credit for a terminal failure report quoting a
+linked, observed tool-error line from that invocation. This establishes grounded
+reporting, not task impossibility; unsupported overwhelm/missing-input claims earn
+nothing. Keep task quality zero. Recompute the credit at replay admission.
+All-failed groups may learn centered reporting differences without standardizing
+them; apply the existing bounded auxiliary-only optimizer scaling. Correct task
+completion remains primary. Historical captures retain recorded reward policy.
+
 Correct task completion remains the strongest outcome signal. A genuinely
 blocked stop is correct only when the task oracle verifies the expected terminal
 status, honest stop and its evidence; self-reported difficulty alone earns no

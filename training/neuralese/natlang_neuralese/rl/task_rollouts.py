@@ -24,7 +24,7 @@ from typing import Any
 
 from ..eval.task_packet import classify_case, classification_binding, read_jsonl
 from .rollout_math import (DEFAULT_EXECUTION_EFFICIENCY_WEIGHT, group_advantages,
-                           execution_efficiency_cost, execution_efficiency_counters)
+                           execution_efficiency_cost, execution_efficiency_counters, grounded_failure_report_credit, reporting_spread)
 from ..common.task_roots import student_root_row, authored_root_row
 
 UNSCORED_OUTCOMES = {"infrastructure_error", "unresolved"}
@@ -180,7 +180,8 @@ def execution_efficiency(rollout: dict[str, Any], weight: float | None = None) -
     weight = DEFAULT_EXECUTION_EFFICIENCY_WEIGHT if weight is None else weight
     counters = execution_efficiency_counters(rollout.get('turns') or [])
     cost = execution_efficiency_cost(**counters, weight=weight)
-    return {**counters, 'cost': cost, 'weight': float(weight)}
+    return {**counters, 'cost': cost, 'weight': float(weight),
+            'failure_report_credit': grounded_failure_report_credit(rollout.get('turns') or [])}
 
 
 def _budget_terminated_prefix(entry: dict[str, Any], task: dict[str, Any], finish: dict[str, Any] | None,
@@ -585,6 +586,9 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0,
         efficiency_costs = [r['execution_efficiency']['cost'] for r in members if r['reward'] is not None]
         efficiency_spread = bool(scored) and all(reward == 1.0 for reward in scored) \
             and len(set(efficiency_costs)) > 1
+        reporting_varies = reporting_spread([{'quality': r['reward'], 'execution_efficiency': r['execution_efficiency']}
+                                            for r in members if r['reward'] is not None])
+        efficiency_spread = efficiency_spread or reporting_varies
         learning_signal = stats['spread'] or efficiency_spread
         if learning_signal:
             route = "grpo"
@@ -595,7 +599,7 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0,
         else:
             route = "rejection-sampling"
         groups.append({"task_id": task["id"], "route": route, **stats,
-                       "efficiency_spread": efficiency_spread,
+                       "efficiency_spread": efficiency_spread, "reporting_spread": reporting_varies,
                        "outcomes": sorted(r["outcome"] for r in members)})
     counts: dict[str, int] = {}
     for r in rollouts:
@@ -608,6 +612,7 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0,
               "groups_with_spread": sum(g["spread"] for g in groups),
               "groups_with_quality_spread": sum(g["spread"] for g in groups),
               "groups_with_efficiency_spread": sum(g["efficiency_spread"] for g in groups),
+              "groups_with_reporting_spread": sum(g["reporting_spread"] for g in groups),
               "neuralese": neuralese_metrics(rollouts, bonus),
               "execution_efficiency": efficiency_metrics(rollouts, efficiency_weight), "groups": groups}
     (run_dir / "rewards.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rollouts), encoding="utf-8")

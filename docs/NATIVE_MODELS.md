@@ -161,7 +161,7 @@ own explicit setting.
 ```
 
 With `escalate` (or `--escalate PROFILE`; `--escalate none` turns it off), the running model can call `escalate`
-with its reason, evidence, attempted work and remaining subproblem. A failed model request or four identical actions
+with its reason, evidence, attempted work and remaining subproblem. An explicit `blocked` or `failed` result with a reason, a failed model request, or four identical actions
 with identical failures also hands off when a fallback is available. The next explicitly configured profile continues the same invocation, scope and transcript;
 committed effects are not replayed. A profile may name its own fallback, forming a bounded, cycle-free chain. Each
 handoff prints one line and records the actors and report in the call graph:
@@ -178,6 +178,15 @@ when the allowance ends partway through a view. Servers must advertise `view.bud
 an older server keeps the ordinary argument preview. Cross-model soft inputs are rendered from their exact stored
 source text with provenance; missing source text and model-specific adapters stop the handoff with a diagnostic.
 Use only an owner-authorized fallback profile; each turn retains its actual actor identity.
+
+Training keeps completion quality separate from reporting. A terminal `blocked` or
+`failed` report can receive at most 0.02 auxiliary credit when its reason quotes an
+actual linked tool-error line. Unsupported claims receive none. This does not
+prove the task impossible or count as success. Reporting-only differences remain
+small and receive bounded auxiliary-only optimizer scaling; they are never
+normalized into a full outcome reward. Mixed-actor escalations retain their graph
+for diagnosis and verified teacher use, but cannot masquerade as same-policy RL.
+
 
 When the run ends, the input of each escalated root call of a program function joins that program's
 `tune.examples.jsonl`, without an expected result (the teacher's answer is not a verified oracle), in a group

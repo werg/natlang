@@ -1,3 +1,41 @@
+## Live supervision update, 2026-11-02 08:33 CET
+
+- Owner-requested escalation/reporting changes now run through the real inference
+  and whole-graph RL paths. Existing explicit escalation, provider-error and
+  repeated-failure handoffs are retained. A single terminal blocked/failed report
+  now also hands off to a configured fallback before closing the live scope.
+  Completed effects, graph-wide budgets and actor provenance are preserved.
+  No fallback allocation or paid provider is enabled implicitly.
+- New score captures record at most0.02 reporting credit for a terminal reason
+  quoting a linked observed tool-error line in that invocation. Replay recomputes
+  it. This proves reporting, not impossibility; quality stays0. All-failed groups
+  may use centered raw reporting differences, retaining the auxiliary-only
+  optimizer-rate scaling. Historical rounds retain bound reward policy; no
+  historical captures were rescored or earned steps invented. Mixed-actor graphs
+  remain rejected as same-policy RL. New prompt guidance distinguishes inability
+  from task impossibility. Actual production frozen runtimes must adopt these
+  main changes through their next recorded runtime continuation.
+- Actual user unit lfm3-quota401685-native-ffn-sft-v7r2-1102.service is FAILED,
+  ExecMainStatus1. No new production SGD is verified. Terra's bounded CPU review
+  found the actual OOM allocation in stored finite convolution, not a dense
+  token-level attention mask: a2.22GiB FP32 histories-times-weight temporary failed
+  at a77.8GB peak on the290623-token graph. Its invocation lengths are262144,
+  27327,1152. Block-mask attention uses128-token blocks. Helper made no code
+  changes; a bounded convolution/checkpointing fix still needs real whole-graph
+  numerical/backward/replay qualification. Do not restart unchanged controls or
+  call this failed capacity attempt useful optimizer progress.
+- Direct declared-source export is complete: private-recovery-20261101/
+  quota-native-source-export-1102.json has complete=true and expected_files195.
+  Existing objects retain prior full GET evidence with fresh presence checks;
+  missing objects received full PUT and workstation GET. Latest runtime/control
+  closure, current-plan binding and complete restore qualification remain separate.
+- Disk checked08:25: internal68GiBfree, external55GiBfree. Zero-reservation reuse
+  changes in checkpoint_safety.py and their tests remain separately uncommitted
+  from the earlier supervisor work; preserve/review them, do not stage them into
+  the escalation commit. The active attempt already applied operational empty-
+  reserve retirement and direct-streaming transfer budgeting. Recovery parents
+  remain protected. No new sandbox or generation was started.
+
 ## Live supervision update, 2026-11-02 07:01 CET
 
 - This goal turn made concrete progress: independently qualified and selected the

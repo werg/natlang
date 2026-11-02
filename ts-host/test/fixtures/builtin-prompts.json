@@ -129,7 +129,7 @@
      "type": "function",
      "function": {
       "name": "return_result",
-      "description": "Finish the call. With status \"success\", value is the result and must have the declared return type; if a complete typed result is already staged, you may omit value to return that exact stored result. With status \"blocked\" (required information is missing; do not guess) or \"failed\" (the instructions require an invalid or contradictory operation), give the reason instead of a value. A negative answer (false, no, none, zero, an empty list) is a result like any other: return it with status \"success\".",
+      "description": "Finish the call. With status \"success\", value is the result and must have the declared return type; if a complete typed result is already staged, you may omit value to return that exact stored result. With status \"blocked\" (required information is missing; do not guess) or \"failed\" (you cannot reliably complete the operation), give the specific reason instead of a value. Quote observed tool errors where relevant; distinguish your inability from task impossibility. Use escalate when a configured stronger model could finish. A negative answer (false, no, none, zero, an empty list) is a result like any other: return it with status \"success\".",
       "parameters": {
        "type": "object",
        "properties": {
@@ -163,7 +163,7 @@
         },
         "reason": {
          "type": "string",
-         "description": "For \"blocked\": what is missing. For \"failed\": why it cannot be done."
+         "description": "For \"blocked\": what information is missing. For \"failed\": what you could not complete and why. Quote relevant observed tool errors; do not invent missing information or claim a recoverable error proves impossibility."
         }
        },
        "required": [
@@ -309,7 +309,7 @@
       "type": "function",
       "function": {
        "name": "return_result",
-       "description": "Finish the call. With status \"success\", value is the result and must have the declared return type; if a complete typed result is already staged, you may omit value to return that exact stored result. With status \"blocked\" (required information is missing; do not guess) or \"failed\" (the instructions require an invalid or contradictory operation), give the reason instead of a value. A negative answer (false, no, none, zero, an empty list) is a result like any other: return it with status \"success\".",
+       "description": "Finish the call. With status \"success\", value is the result and must have the declared return type; if a complete typed result is already staged, you may omit value to return that exact stored result. With status \"blocked\" (required information is missing; do not guess) or \"failed\" (you cannot reliably complete the operation), give the specific reason instead of a value. Quote observed tool errors where relevant; distinguish your inability from task impossibility. Use escalate when a configured stronger model could finish. A negative answer (false, no, none, zero, an empty list) is a result like any other: return it with status \"success\".",
        "parameters": {
         "type": "object",
         "properties": {
@@ -327,7 +327,7 @@
          },
          "reason": {
           "type": "string",
-          "description": "For \"blocked\": what is missing. For \"failed\": why it cannot be done."
+          "description": "For \"blocked\": what information is missing. For \"failed\": what you could not complete and why. Quote relevant observed tool errors; do not invent missing information or claim a recoverable error proves impossibility."
          }
         },
         "required": [
@@ -470,7 +470,7 @@
       "type": "function",
       "function": {
        "name": "return_result",
-       "description": "Finish the call. With status \"success\", value is the result and must have the declared return type; if a complete typed result is already staged, you may omit value to return that exact stored result. With status \"blocked\" (required information is missing; do not guess) or \"failed\" (the instructions require an invalid or contradictory operation), give the reason instead of a value. A negative answer (false, no, none, zero, an empty list) is a result like any other: return it with status \"success\".",
+       "description": "Finish the call. With status \"success\", value is the result and must have the declared return type; if a complete typed result is already staged, you may omit value to return that exact stored result. With status \"blocked\" (required information is missing; do not guess) or \"failed\" (you cannot reliably complete the operation), give the specific reason instead of a value. Quote observed tool errors where relevant; distinguish your inability from task impossibility. Use escalate when a configured stronger model could finish. A negative answer (false, no, none, zero, an empty list) is a result like any other: return it with status \"success\".",
        "parameters": {
         "type": "object",
         "properties": {
@@ -488,7 +488,7 @@
          },
          "reason": {
           "type": "string",
-          "description": "For \"blocked\": what is missing. For \"failed\": why it cannot be done."
+          "description": "For \"blocked\": what information is missing. For \"failed\": what you could not complete and why. Quote relevant observed tool errors; do not invent missing information or claim a recoverable error proves impossibility."
          }
         },
         "required": [
@@ -631,7 +631,7 @@
       "type": "function",
       "function": {
        "name": "return_result",
-       "description": "Finish the call. With status \"success\", value is the result and must have the declared return type; if a complete typed result is already staged, you may omit value to return that exact stored result. With status \"blocked\" (required information is missing; do not guess) or \"failed\" (the instructions require an invalid or contradictory operation), give the reason instead of a value. A negative answer (false, no, none, zero, an empty list) is a result like any other: return it with status \"success\".",
+       "description": "Finish the call. With status \"success\", value is the result and must have the declared return type; if a complete typed result is already staged, you may omit value to return that exact stored result. With status \"blocked\" (required information is missing; do not guess) or \"failed\" (you cannot reliably complete the operation), give the specific reason instead of a value. Quote observed tool errors where relevant; distinguish your inability from task impossibility. Use escalate when a configured stronger model could finish. A negative answer (false, no, none, zero, an empty list) is a result like any other: return it with status \"success\".",
        "parameters": {
         "type": "object",
         "properties": {
@@ -649,7 +649,7 @@
          },
          "reason": {
           "type": "string",
-          "description": "For \"blocked\": what is missing. For \"failed\": why it cannot be done."
+          "description": "For \"blocked\": what information is missing. For \"failed\": what you could not complete and why. Quote relevant observed tool errors; do not invent missing information or claim a recoverable error proves impossibility."
          }
         },
         "required": [
@@ -792,7 +792,7 @@
       "type": "function",
       "function": {
        "name": "return_result",
-       "description": "Finish the call. With status \"success\", value is the result and must have the declared return type; if a complete typed result is already staged, you may omit value to return that exact stored result. With status \"blocked\" (required information is missing; do not guess) or \"failed\" (the instructions require an invalid or contradictory operation), give the reason instead of a value. A negative answer (false, no, none, zero, an empty list) is a result like any other: return it with status \"success\".",
+       "description": "Finish the call. With status \"success\", value is the result and must have the declared return type; if a complete typed result is already staged, you may omit value to return that exact stored result. With status \"blocked\" (required information is missing; do not guess) or \"failed\" (you cannot reliably complete the operation), give the specific reason instead of a value. Quote observed tool errors where relevant; distinguish your inability from task impossibility. Use escalate when a configured stronger model could finish. A negative answer (false, no, none, zero, an empty list) is a result like any other: return it with status \"success\".",
        "parameters": {
         "type": "object",
         "properties": {
@@ -810,7 +810,7 @@
          },
          "reason": {
           "type": "string",
-          "description": "For \"blocked\": what is missing. For \"failed\": why it cannot be done."
+          "description": "For \"blocked\": what information is missing. For \"failed\": what you could not complete and why. Quote relevant observed tool errors; do not invent missing information or claim a recoverable error proves impossibility."
          }
         },
         "required": [
@@ -953,7 +953,7 @@
       "type": "function",
       "function": {
        "name": "return_result",
-       "description": "Finish the call. With status \"success\", value is the result and must have the declared return type; if a complete typed result is already staged, you may omit value to return that exact stored result. With status \"blocked\" (required information is missing; do not guess) or \"failed\" (the instructions require an invalid or contradictory operation), give the reason instead of a value. A negative answer (false, no, none, zero, an empty list) is a result like any other: return it with status \"success\".",
+       "description": "Finish the call. With status \"success\", value is the result and must have the declared return type; if a complete typed result is already staged, you may omit value to return that exact stored result. With status \"blocked\" (required information is missing; do not guess) or \"failed\" (you cannot reliably complete the operation), give the specific reason instead of a value. Quote observed tool errors where relevant; distinguish your inability from task impossibility. Use escalate when a configured stronger model could finish. A negative answer (false, no, none, zero, an empty list) is a result like any other: return it with status \"success\".",
        "parameters": {
         "type": "object",
         "properties": {
@@ -971,7 +971,7 @@
          },
          "reason": {
           "type": "string",
-          "description": "For \"blocked\": what is missing. For \"failed\": why it cannot be done."
+          "description": "For \"blocked\": what information is missing. For \"failed\": what you could not complete and why. Quote relevant observed tool errors; do not invent missing information or claim a recoverable error proves impossibility."
          }
         },
         "required": [
@@ -1114,7 +1114,7 @@
       "type": "function",
       "function": {
        "name": "return_result",
-       "description": "Finish the call. With status \"success\", value is the result and must have the declared return type; if a complete typed result is already staged, you may omit value to return that exact stored result. With status \"blocked\" (required information is missing; do not guess) or \"failed\" (the instructions require an invalid or contradictory operation), give the reason instead of a value. A negative answer (false, no, none, zero, an empty list) is a result like any other: return it with status \"success\".",
+       "description": "Finish the call. With status \"success\", value is the result and must have the declared return type; if a complete typed result is already staged, you may omit value to return that exact stored result. With status \"blocked\" (required information is missing; do not guess) or \"failed\" (you cannot reliably complete the operation), give the specific reason instead of a value. Quote observed tool errors where relevant; distinguish your inability from task impossibility. Use escalate when a configured stronger model could finish. A negative answer (false, no, none, zero, an empty list) is a result like any other: return it with status \"success\".",
        "parameters": {
         "type": "object",
         "properties": {
@@ -1132,7 +1132,7 @@
          },
          "reason": {
           "type": "string",
-          "description": "For \"blocked\": what is missing. For \"failed\": why it cannot be done."
+          "description": "For \"blocked\": what information is missing. For \"failed\": what you could not complete and why. Quote relevant observed tool errors; do not invent missing information or claim a recoverable error proves impossibility."
          }
         },
         "required": [
@@ -1279,7 +1279,7 @@
      "type": "function",
      "function": {
       "name": "return_result",
-      "description": "Finish the call. With status \"success\", value is the result and must have the declared return type; if a complete typed result is already staged, you may omit value to return that exact stored result. With status \"blocked\" (required information is missing; do not guess) or \"failed\" (the instructions require an invalid or contradictory operation), give the reason instead of a value. A negative answer (false, no, none, zero, an empty list) is a result like any other: return it with status \"success\".",
+      "description": "Finish the call. With status \"success\", value is the result and must have the declared return type; if a complete typed result is already staged, you may omit value to return that exact stored result. With status \"blocked\" (required information is missing; do not guess) or \"failed\" (you cannot reliably complete the operation), give the specific reason instead of a value. Quote observed tool errors where relevant; distinguish your inability from task impossibility. Use escalate when a configured stronger model could finish. A negative answer (false, no, none, zero, an empty list) is a result like any other: return it with status \"success\".",
       "parameters": {
        "type": "object",
        "properties": {
@@ -1301,7 +1301,7 @@
         },
         "reason": {
          "type": "string",
-         "description": "For \"blocked\": what is missing. For \"failed\": why it cannot be done."
+         "description": "For \"blocked\": what information is missing. For \"failed\": what you could not complete and why. Quote relevant observed tool errors; do not invent missing information or claim a recoverable error proves impossibility."
         }
        },
        "required": [
@@ -1444,7 +1444,7 @@
      "type": "function",
      "function": {
       "name": "return_result",
-      "description": "Finish the call. With status \"success\", value is the result and must have the declared return type; if a complete typed result is already staged, you may omit value to return that exact stored result. With status \"blocked\" (required information is missing; do not guess) or \"failed\" (the instructions require an invalid or contradictory operation), give the reason instead of a value. A negative answer (false, no, none, zero, an empty list) is a result like any other: return it with status \"success\".",
+      "description": "Finish the call. With status \"success\", value is the result and must have the declared return type; if a complete typed result is already staged, you may omit value to return that exact stored result. With status \"blocked\" (required information is missing; do not guess) or \"failed\" (you cannot reliably complete the operation), give the specific reason instead of a value. Quote observed tool errors where relevant; distinguish your inability from task impossibility. Use escalate when a configured stronger model could finish. A negative answer (false, no, none, zero, an empty list) is a result like any other: return it with status \"success\".",
       "parameters": {
        "type": "object",
        "properties": {
@@ -1466,7 +1466,7 @@
         },
         "reason": {
          "type": "string",
-         "description": "For \"blocked\": what is missing. For \"failed\": why it cannot be done."
+         "description": "For \"blocked\": what information is missing. For \"failed\": what you could not complete and why. Quote relevant observed tool errors; do not invent missing information or claim a recoverable error proves impossibility."
         }
        },
        "required": [
@@ -1609,7 +1609,7 @@
      "type": "function",
      "function": {
       "name": "return_result",
-      "description": "Finish the call. With status \"success\", value is the result and must have the declared return type; if a complete typed result is already staged, you may omit value to return that exact stored result. With status \"blocked\" (required information is missing; do not guess) or \"failed\" (the instructions require an invalid or contradictory operation), give the reason instead of a value. A negative answer (false, no, none, zero, an empty list) is a result like any other: return it with status \"success\".",
+      "description": "Finish the call. With status \"success\", value is the result and must have the declared return type; if a complete typed result is already staged, you may omit value to return that exact stored result. With status \"blocked\" (required information is missing; do not guess) or \"failed\" (you cannot reliably complete the operation), give the specific reason instead of a value. Quote observed tool errors where relevant; distinguish your inability from task impossibility. Use escalate when a configured stronger model could finish. A negative answer (false, no, none, zero, an empty list) is a result like any other: return it with status \"success\".",
       "parameters": {
        "type": "object",
        "properties": {
@@ -1631,7 +1631,7 @@
         },
         "reason": {
          "type": "string",
-         "description": "For \"blocked\": what is missing. For \"failed\": why it cannot be done."
+         "description": "For \"blocked\": what information is missing. For \"failed\": what you could not complete and why. Quote relevant observed tool errors; do not invent missing information or claim a recoverable error proves impossibility."
         }
        },
        "required": [
@@ -1774,7 +1774,7 @@
      "type": "function",
      "function": {
       "name": "return_result",
-      "description": "Finish the call. With status \"success\", value is the result and must have the declared return type; if a complete typed result is already staged, you may omit value to return that exact stored result. With status \"blocked\" (required information is missing; do not guess) or \"failed\" (the instructions require an invalid or contradictory operation), give the reason instead of a value. A negative answer (false, no, none, zero, an empty list) is a result like any other: return it with status \"success\".",
+      "description": "Finish the call. With status \"success\", value is the result and must have the declared return type; if a complete typed result is already staged, you may omit value to return that exact stored result. With status \"blocked\" (required information is missing; do not guess) or \"failed\" (you cannot reliably complete the operation), give the specific reason instead of a value. Quote observed tool errors where relevant; distinguish your inability from task impossibility. Use escalate when a configured stronger model could finish. A negative answer (false, no, none, zero, an empty list) is a result like any other: return it with status \"success\".",
       "parameters": {
        "type": "object",
        "properties": {
@@ -1796,7 +1796,7 @@
         },
         "reason": {
          "type": "string",
-         "description": "For \"blocked\": what is missing. For \"failed\": why it cannot be done."
+         "description": "For \"blocked\": what information is missing. For \"failed\": what you could not complete and why. Quote relevant observed tool errors; do not invent missing information or claim a recoverable error proves impossibility."
         }
        },
        "required": [
@@ -1943,7 +1943,7 @@
      "type": "function",
      "function": {
       "name": "return_result",
-      "description": "Finish the call. With status \"success\", value is the result and must have the declared return type; if a complete typed result is already staged, you may omit value to return that exact stored result. With status \"blocked\" (required information is missing; do not guess) or \"failed\" (the instructions require an invalid or contradictory operation), give the reason instead of a value. A negative answer (false, no, none, zero, an empty list) is a result like any other: return it with status \"success\".",
+      "description": "Finish the call. With status \"success\", value is the result and must have the declared return type; if a complete typed result is already staged, you may omit value to return that exact stored result. With status \"blocked\" (required information is missing; do not guess) or \"failed\" (you cannot reliably complete the operation), give the specific reason instead of a value. Quote observed tool errors where relevant; distinguish your inability from task impossibility. Use escalate when a configured stronger model could finish. A negative answer (false, no, none, zero, an empty list) is a result like any other: return it with status \"success\".",
       "parameters": {
        "type": "object",
        "properties": {
@@ -1961,7 +1961,7 @@
         },
         "reason": {
          "type": "string",
-         "description": "For \"blocked\": what is missing. For \"failed\": why it cannot be done."
+         "description": "For \"blocked\": what information is missing. For \"failed\": what you could not complete and why. Quote relevant observed tool errors; do not invent missing information or claim a recoverable error proves impossibility."
         }
        },
        "required": [

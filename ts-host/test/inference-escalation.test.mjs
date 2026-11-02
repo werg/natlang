@@ -334,3 +334,33 @@ test('no-progress handoff does not restart an exhausted graph budget', async () 
   assert.equal(studentCalls, 4); assert.equal(expertCalls, 0);
   assert.ok(!traces[0].events.some(event => event.kind === 'model_escalation'));
 });
+
+test('an explicit inability report hands off before closing the live invocation', async () => {
+  for (const status of ['blocked', 'failed']) {
+    let writes = 0, requests = 0;
+    const traces = [];
+    const runtime = createNatlangRuntime({ calls: false,
+      model: { id: 'student', driver: async () => ++requests === 1 ?
+        call('eval', { code: 'const observed = ledger.record(value)' }) :
+        call('return_result', { status, reason: 'I cannot reliably finish the remaining calculation.' }) },
+      models: { expert: { id: 'expert', driver: async request => {
+        assert.ok(JSON.stringify(request.messages).includes('cannot reliably finish'));
+        return call('eval', { code: 'return observed + 1', finish: true });
+      } } }, escalation: { models: ['expert'] },
+      services: { ledger: { record(value) { writes++; return value; } } },
+      serviceDeclarations: { ledger: 'export function record(value: number): number;' }, trace: t => traces.push(t) });
+    assert.equal(await runtime.run(() => definition('Record once and return input plus one.')(41)), 42);
+    assert.equal(writes, 1);
+    assert.equal(traces[0].events.filter(e => e.kind === 'model_escalation').length, 1);
+  }
+});
+
+test('an inability handoff cannot reset the graph request budget', async () => {
+  let expertCalls = 0;
+  const runtime = createNatlangRuntime({ calls: false, limits: { maxModelRequests: 1 },
+    model: async () => call('return_result', { status: 'failed', reason: 'Cannot finish.' }),
+    models: { expert: async () => { expertCalls++; return call('return_result', { status: 'success', value: 42 }); } },
+    escalation: { models: ['expert'] } });
+  await assert.rejects(runtime.run(() => definition('Return the input.')(42)), /graph model request or token budget exhausted/);
+  assert.equal(expertCalls, 0);
+});
