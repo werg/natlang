@@ -2514,9 +2514,18 @@ def _main(argv=None, *, requested_refresh):
         # identity: a changed objective needs an explicit transition in the policy.
         from .own_output_supervision import continuation_identity, prepare_policy
         ce_policy = prepare_policy(ce_policy, train)
+        from .native_quota_aware_ce import validate_admission as validate_quota_aware_ce
+        quota_aware_record = validate_quota_aware_ce(ce_policy, resume, stage_id=args.stage_id,
+            candidate_sha256=train.file_sha256, epochs=args.epochs,
+            communication_min_visits=args.communication_min_visits, previous_options=ce_prior_options,
+            policy_binding=ce_binding) if ce_binding else None
         from .own_output_supervision import apply_ce_admission_options
         checkpoint_options = apply_ce_admission_options(checkpoint_options, ce_prior_options, ce_binding, ce_policy,
             int(saved_training.get('global_step', saved_training.get('step', 0))))
+        if quota_aware_record is not None:
+            history=list((ce_prior_options or {}).get('quota_aware_ce_history') or [])
+            if quota_aware_record not in history:history.append(quota_aware_record)
+            checkpoint_options['quota_aware_ce_history']=history
         if ce_policy is not None and ce_policy.get('_family_census') is not None:
             write_json(args.out / 'supervision-objective-census.json', ce_policy['_family_census'])
     elif ce_prior_options.get('supervision_objective') is not None:

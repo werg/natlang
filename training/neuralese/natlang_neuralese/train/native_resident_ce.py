@@ -121,7 +121,7 @@ def extension_policy(old, new, *, prior_train=None, candidate_train=None):
     prior, policy = load_policy(before), load_policy(after)
     a, b = _public(prior), _public(policy)
     excluded = {'sources', 'source_contract', 'inventory', 'first_row_observations', 'prior_inventory_correction',
-                'decision_factor_evidence', 'source_correction'}
+                'decision_factor_evidence', 'source_correction', 'quota_aware_basis'}
     source_correction = b.get('source_correction')
     prior_source_correction = a.get('source_correction')
     if prior_source_correction is not None and source_correction != prior_source_correction:
