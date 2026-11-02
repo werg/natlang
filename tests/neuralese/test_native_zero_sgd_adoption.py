@@ -44,6 +44,9 @@ def fixture(tmp_path, monkeypatch, *, carried):
         training={'schema':frame['schema'],'identity':{'objective':'policy'},'options':{'stage_id':'policy'},
             'optimizer':frame['optimizer'],'rng':frame['rng'],'step':2,'global_step':9,
             'exposure_counts':{'policy-episode':3},'sft_progress':frame['sft_progress']}
+    if not carried:
+        # The earned quota inventory lives in the saved stage snapshot.
+        training.pop('required_visits')
     parent={'schema':CHECKPOINT_SCHEMA,'model_config':{'architecture':'lfm2','base_inventory_sha256':'inventory',
         'tokenizer_fingerprint':FP,'marker_ids':[1,2,3,4]},'model_state':{'weight':torch.tensor([3.,4.])},'training':training}
     roles={'native_graphs':{'path':'/new','sha256':'new'},'held_native_graphs':{'path':'/held','sha256':'held'},
@@ -297,14 +300,21 @@ def test_mixed_static_correction_quality_deferral_and_append_preserves_earned_st
     monkeypatch.setattr(adoption,'_roles',lambda path,stage:old_roles if str(path).endswith('old-recipe') else new_roles)
     monkeypatch.setattr(adoption,'_stage_parameters',lambda *args:{'epochs':1.5,'communication_min_visits':7})
     frame['sft_progress']={'native_full_sft':{k:copy.deepcopy(v) for k,v in frame.items() if k not in ('optimizer','rng','sft_progress')}}
+    frame['sft_progress']['prior_shared_source']=copy.deepcopy(frame['sft_progress']['native_full_sft'])
     training=frame if not carried else {'identity':{'objective':'policy'},'options':{'stage_id':'policy'},
         'optimizer':frame['optimizer'],'rng':frame['rng'],'step':2,'global_step':9,
         'exposure_counts':{'policy-episode':3},'sft_progress':frame['sft_progress']}
+    if not carried:
+        # The earned quota inventory lives in the saved stage snapshot.
+        training.pop('required_visits')
     parent={'schema':CHECKPOINT_SCHEMA,'model_config':{'architecture':'lfm2','base_inventory_sha256':'inventory',
         'tokenizer_fingerprint':FP,'marker_ids':[58,59,60,61]},'model_state':{'weight':torch.tensor([3.,4.])},'training':training}
     before=copy.deepcopy(parent)
     child,summary=adoption.admitted_checkpoint(parent,prior_recipe='old-recipe',successor_recipe='new-recipe',stage_id='native_full_sft')
     assert (summary['corrected_rows'],summary['deferred_rows'],summary['added_rows'])==(int(static_change),1,2)
+    retired_frame=child['training']['sft_progress']['prior_shared_source']
+    assert 'deferred' not in retired_frame['exposure_counts']
+    assert retired_frame['pending_source_rows']['deferred']['retired_exposure']['visits']==1
     active=child['training']['sft_progress']['native_full_sft'] if carried else child['training']
     assert active['exposure_counts']=={'keep':1,'deferred':1,'static':0,'old-comm':2,'added':0,'added-comm':0}
     assert active['required_visits']['added-comm']==7 and active['required_visits']['added']==1
@@ -328,6 +338,17 @@ def test_mixed_static_correction_quality_deferral_and_append_preserves_earned_st
     torch.save(forged,child_path)
     with pytest.raises(ValueError):
         adoption.verify(ref(parent_path),ref(child_path),prior_recipe=old_recipe,successor_recipe=new_recipe,stage_id='native_full_sft')
+    # A carried frame may retire a row only with its exact earned credit.
+    from natlang_neuralese.train import native_source_correction
+    original_apply=native_source_correction.apply_source_correction
+    def corrupt_retirement(*args,**kwargs):
+        result,summary=original_apply(*args,**kwargs)
+        result['sft_progress']['prior_shared_source']['pending_source_rows']['deferred']['retired_exposure']['visits']=0
+        return result,summary
+    with monkeypatch.context() as patch:
+        patch.setattr(native_source_correction,'apply_source_correction',corrupt_retirement)
+        with pytest.raises(ValueError,match='changed earned source exposure'):
+            adoption.admitted_checkpoint(parent,prior_recipe='old-recipe',successor_recipe='new-recipe',stage_id='native_full_sft')
     # A measured CE basis is bound to actual old credits and exact requested quotas.
     changed=copy.deepcopy(parent)
     target=changed['training']['sft_progress']['native_full_sft'] if carried else changed['training']

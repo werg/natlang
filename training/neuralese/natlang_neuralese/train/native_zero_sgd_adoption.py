@@ -38,7 +38,7 @@ def admitted_checkpoint(parent, *, prior_recipe, successor_recipe, stage_id):
     from .native_continuation import (collect_sft_progress, restore_sft_progress, stage_key,
         apply_communication_quota_options, _retain_pending_sources, active_exposure_quotas)
     from .native_operation_report import source_receipt
-    from .native_source_correction import apply_source_correction
+    from .native_source_correction import apply_source_correction, _binding
     from .native_supervision import load_policy
     from .own_output_supervision import prepare_policy, apply_ce_admission_options
     from .recipe import _source_correction_continuation
@@ -63,7 +63,12 @@ def admitted_checkpoint(parent, *, prior_recipe, successor_recipe, stage_id):
     source=source_receipt(current)
     is_flat=((training.get('identity') or {}).get('objective') is None and stage_key(training)==stage_id)
     progress=collect_sft_progress(training)
-    previous=training if is_flat else restore_sft_progress(training,stage_id,collected_progress=progress)
+    if is_flat and stage_id in progress:
+        # Collection owns an independent resolved frame. The correction code
+        # copies before mutation, so do not duplicate its full row inventory.
+        previous={**training,**progress[stage_id],'sft_progress':progress}
+    else:
+        previous=restore_sft_progress(training,stage_id,collected_progress=progress)
     if previous is None:
         raise ValueError('parent checkpoint does not carry the requested earned SFT frame')
     prior_receipts=previous.get('source_receipts') or []
@@ -85,7 +90,7 @@ def admitted_checkpoint(parent, *, prior_recipe, successor_recipe, stage_id):
     if summary.get('changed') is not True or not any(summary.get(key) for key in ('corrected_rows','deferred_rows','added_rows')):
         raise ValueError('zero-SGD adoption requires an actual source change')
     step=int(training.get('global_step',training.get('step',0)))
-    old_frames=collect_sft_progress(training)
+    old_frames=progress
     new_frames=updated['sft_progress']
     for name,frame in new_frames.items():
         prior=old_frames.get(name)
@@ -97,8 +102,21 @@ def admitted_checkpoint(parent, *, prior_recipe, successor_recipe, stage_id):
         old_counts=prior.get('exposure_counts') or {}
         next_counts=frame.get('exposure_counts') or {}
         corrected={row['id'] for row in ((frame.get('options') or {}).get('source_correction_history') or [])[-1].get('corrected_rows',[])} if (frame.get('options') or {}).get('source_correction_history') else set()
-        if any(next_counts.get(key,0)!=value for key,value in old_counts.items() if key not in corrected):
-            raise ValueError('zero-SGD adoption changed earned source exposure')
+        pending=frame.get('pending_source_rows') or {}
+        prior_bindings=prior.get('source_row_bindings') or {}
+        prior_quotas=prior.get('required_visits') or {}
+        prior_receipts=prior.get('source_receipts') or []
+        for key,value in old_counts.items():
+            if key in corrected or next_counts.get(key)==value:
+                continue
+            retired=(pending.get(key) or {}).get('retired_exposure') or {}
+            prior_source=prior_receipts[0] if prior_receipts else {}
+            if (key in next_counts or key in (frame.get('source_row_bindings') or {})
+                    or (pending.get(key) or {}).get('binding')!=prior_bindings.get(key)
+                    or retired.get('visits')!=value
+                    or retired.get('required_visits')!=prior_quotas.get(key)
+                    or retired.get('source_receipt')!=_binding(prior_source)):
+                raise ValueError('zero-SGD adoption changed earned source exposure')
         if any(value!=0 for key,value in next_counts.items() if key not in old_counts):
             raise ValueError('zero-SGD adoption credited a new row')
     def finish_active(frame):
