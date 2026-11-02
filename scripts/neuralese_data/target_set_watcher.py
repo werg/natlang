@@ -5,7 +5,7 @@ One pass (``--loop`` repeats it every ``--interval`` seconds; the state lives in
 
 1. Render jobs (``runs/natlang-target-set-20261011/jobs.json``: id, render_dir, source_corpora, supersedes, notes):
    a finished render (``receipt.json``) whose id is not on origin/main is registered and its manifest published through
-   register_corpora.py (private worktree off origin/main, retried with back-off when the registry is busy). Renders
+   register_corpora.py from canonical main; conflicting selected paths must be resolved. Renders
    that other agents register themselves (static curriculum batches, Clef pools, SWE twins, S1 calls) are never
    registered here: they join the set through the registry.
 2. Membership (target_set_manifest.resolve over origin/main's registry and the living spec). When it differs from the

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Register the bulk harness-bench SWE-rebench corpus (D13) and its four text twins: entries and manifests are committed
-and pushed by register_corpora.py from a private worktree off origin/main (never the shared checkout's registry).
+and pushed by register_corpora.py from canonical main with isolated selected-path publication.
 Run by swe_bulk_followup.sh when the twins are assembled.
 
   register_swe_bulk.py --bulk BULK_OUT --twin-root TWIN_ROOT

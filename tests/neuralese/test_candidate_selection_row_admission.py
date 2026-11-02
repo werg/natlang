@@ -115,3 +115,22 @@ def test_owner_item_digest_is_checked_when_declared_and_optional_under_pinned_re
         render.candidate_selection_owner_item_sha({'item_sha256': 'b' * 64}, verified)
     with pytest.raises(ValueError, match='owner item hash differs'):
         render.candidate_selection_owner_item_sha({'item_sha256': None}, verified)
+
+
+def test_proposed_registry_and_manifest_still_enforce_full_candidate_gate(tmp_path, monkeypatch):
+    import json
+    render=load_renderer();monkeypatch.setattr(render,'ROOT',tmp_path)
+    data=tmp_path/'data/corpus';data.mkdir(parents=True);source=data/'turns.jsonl';source.write_text('{}\n')
+    registry=tmp_path/'proposed-registry.json';manifest=tmp_path/'proposed-manifest.json'
+    entry={'id':'proposed','path':'data/corpus','training_admission':True,'trace_admission':False,
+           'candidate_selection_admission':{'schema':'natlang.registry-candidate-selection-admission/1',
+               'decision':'admit-reviewed-candidate-selection','training_admission':True,'trace_admission':False}}
+    registry.write_text(json.dumps({'corpora':[entry]}))
+    manifest.write_text(json.dumps({'id':'other','path':'data/corpus','files':[]}))
+    with pytest.raises(ValueError,match='must be provided together'):
+        render.registered_candidate_selection_admission('proposed',[source],registry_file=registry)
+    with pytest.raises(ValueError,match='registry manifest identity mismatch'):
+        render.registered_candidate_selection_admission('proposed',[source],registry_file=registry,manifest_file=manifest)
+    manifest.write_text(json.dumps({'id':'proposed','path':'data/corpus','files':[]}))
+    with pytest.raises(ValueError,match='immutable corpus manifest'):
+        render.registered_candidate_selection_admission('proposed',[source],registry_file=registry,manifest_file=manifest)

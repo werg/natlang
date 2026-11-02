@@ -369,13 +369,15 @@ def candidate_selection_owner_item_sha(owner_row, verified_item_sha):
     return owner_row.get('item_sha256', verified_item_sha)
 
 
-def registered_candidate_selection_admission(corpus_id, sources):
+def registered_candidate_selection_admission(corpus_id, sources, *, registry_file=None, manifest_file=None):
     """Verify a registry owner's exact admission of a conversion-only candidate packet.
 
     The packet bytes remain candidate-selection metadata. This returns the exact ID/target/source map which the
     renderer may promote in memory only because the registry owner admitted this corpus.
     """
-    registry_path = ROOT / 'training/neuralese_corpora.json'
+    if (registry_file is None) != (manifest_file is None):
+        raise ValueError('candidate admission registry and manifest overrides must be provided together')
+    registry_path = Path(registry_file) if registry_file is not None else ROOT / 'training/neuralese_corpora.json'
     registry = json.loads(registry_path.read_text())
     entries = [entry for entry in registry.get('corpora', []) if entry.get('id') == corpus_id]
     if not entries:
@@ -396,7 +398,8 @@ def registered_candidate_selection_admission(corpus_id, sources):
     corpus_root = (ROOT / entry['path']).resolve(strict=True)
     if any(path.resolve(strict=True).parent != corpus_root for path in sources):
         raise ValueError('candidate-selection admission must render directly from the registered packet files')
-    registry_manifest_path = ROOT / 'training/corpus-manifests' / f'{corpus_id}.json'
+    registry_manifest_path = (Path(manifest_file) if manifest_file is not None else
+                              ROOT / 'training/corpus-manifests' / f'{corpus_id}.json')
     registry_manifest = json.loads(registry_manifest_path.read_text())
     if registry_manifest.get('id') != corpus_id or registry_manifest.get('path') != entry['path']:
         raise ValueError('candidate-selection registry manifest identity mismatch')
@@ -2241,6 +2244,8 @@ def main(argv=None):
     p.add_argument('--out-dir', type=Path)
     p.add_argument('--verify-admission-only', action='store_true',
                    help='verify the complete registered candidate admission without rendering or model loading')
+    p.add_argument('--admission-registry-file', type=Path, help=argparse.SUPPRESS)
+    p.add_argument('--admission-manifest-file', type=Path, help=argparse.SUPPRESS)
     p.add_argument('--exclude-programs', type=Path, nargs='*', default=[],
                    help='jsonl rows {id, reason_code?}: programs whose rows are dropped')
     p.add_argument('--program-header-as-full', action='store_true',
@@ -2305,8 +2310,12 @@ def main(argv=None):
     if (a.resource_only_renderer_parent_sha256 is not None
             and a.resource_only_renderer_parent_sha256 not in SEARCH_REVIEWED_RESOURCE_PARENT_CHAIN):
         p.error('--resource-only-renderer-parent-sha256 must match the exact reviewed Search renderer parent')
+    if bool(a.admission_registry_file) != bool(a.admission_manifest_file) or (
+            a.admission_registry_file and not a.verify_admission_only):
+        p.error('admission registry and manifest overrides require verify-admission-only together')
     if a.verify_admission_only:
-        verified = registered_candidate_selection_admission(a.corpus_id, a.source)
+        verified = registered_candidate_selection_admission(a.corpus_id, a.source,
+            registry_file=a.admission_registry_file, manifest_file=a.admission_manifest_file)
         if verified is None:
             p.error('--verify-admission-only requires registered candidate-selection admission')
         print(json.dumps(verified, sort_keys=True))

@@ -1,31 +1,15 @@
 #!/usr/bin/env python3
-"""Register corpora unattended: registry entries + immutable manifests, committed and pushed from a private worktree.
+"""Register corpus entries and immutable manifests from canonical main.
 
-Generators (static curriculum campaign, Clef daily pools, S1/view-ask call stages, SWE bulk follow-up) finish while
-the shared checkout holds other sessions' uncommitted edits, often to training/neuralese_corpora.json itself. Editing
-the registry there and committing would sweep those edits into the commit, or leave the registration uncommitted for
-an agent to finish by hand (coordinator decision 2026-10-11: no agent commits registrations by hand). This helper never
-touches the shared checkout's files:
+Build only the requested registry and manifest blobs from the clean selected
+paths. The shared publisher uses a temporary index and validates each rebased
+plan before pushing; unrelated dirty and staged work is never consumed. A
+selected dirty path is an actionable conflict. Manifest reuse retains the
+selected-file and full-stat checks, and candidate admissions retain their full
+renderer gate. Temporary generated files are not Git worktrees.
 
-  1. under a host-wide lock, reset a private linked worktree (default ~/.cache/natlang-register-wt) to origin/main;
-  2. add the entries to its registry (an id already registered with the same content is a no-op unless its manifest
-     is missing on main, which is then published; a different entry
-     under an existing id is an error unless --replace: published manifests are immutable);
-  3. publish each entry's manifest there (scripts/sync_training_corpora.py publish --repo WORKTREE). Data paths are
-     resolved through the shared checkout: the first component of an entry path the worktree lacks (gitignored data
-     links such as data/neuralese/corpora/ID, runs/...) is symlinked to the shared checkout's;
-  4. validate (registry parses, ids unique, every new entry has its manifest) and run scripts/check-main.sh --quick in
-     the worktree (it links the main checkout's venv and node packages);
-  5. commit only the registry and those manifests, push to origin main;
-  6. on a lost push race, a fetch conflict or a red check, back off and redo 1-5 from the new origin/main (the registry
-     change is regenerated, never merged textually). A private publish receipt reuses a corpus manifest only when its
-     entry, selected file set and full file stat identities still match; a changed file is hashed again. Afterwards
-     advance the shared checkout without touching dirty files (scripts/git_publish.py --sync-only), best effort.
-
-Python: ``register(entries, message, replace=False, links=None)``; ``registered_ids()`` reads origin/main's registry.
-CLI:    register_corpora.py --entries FILE.json [--entries ...] -m SUBJECT [--replace] [--link REL=TARGET ...]
-        (FILE holds one entry or a list of entries);
-        register_corpora.py --id ID -m SUBJECT   publish the manifest of an entry registered earlier (data now final). Exit 0 registered (or nothing to do), 1 gave up.
+Python: register(entries, message, replace=False, links=None)
+CLI: register_corpora.py --entries FILE.json -m SUBJECT [--replace] [--link REL=TARGET]
 """
 from __future__ import annotations
 
@@ -41,26 +25,21 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 REGISTRY = 'training/neuralese_corpora.json'
 MANIFESTS = 'training/corpus-manifests'
-WORKTREE = Path(os.environ.get('NATLANG_REGISTER_WORKTREE', Path.home() / '.cache/natlang-register-wt'))
 LOCK = Path.home() / '.local/state/natlang/register-corpora.lock'
 TRAILERS = 'Registration-Tool: scripts/neuralese_data/register_corpora.py'
-
-
-class Retry(Exception):
-    """A transient failure: push race, fetch error, red check. The whole attempt is redone after a backoff."""
 
 
 def git(*args: str, cwd: Path | None = None, check: bool = True) -> subprocess.CompletedProcess:
     result = subprocess.run(['git', *args], cwd=cwd or REPO, capture_output=True, text=True)  # REPO at call time
     if check and result.returncode:
-        raise Retry(f'git {" ".join(args)}: {result.stderr.strip()[-500:]}')
+        raise RuntimeError(f'git {" ".join(args)}: {result.stderr.strip()[-500:]}')
     return result
 
 
 def registered_ids(fetch: bool = True) -> set[str]:
     """Ids registered on origin/main (the shared checkout may lag behind or hold uncommitted edits)."""
     if fetch:
-        git('fetch', '-q', 'origin', check=False)
+        git('fetch', '-q', 'origin')
     shown = git('show', f'origin/main:{REGISTRY}')
     return {c['id'] for c in json.loads(shown.stdout)['corpora']}
 
@@ -76,141 +55,223 @@ def link(rel: str, target: str | Path) -> None:
     os.symlink(target, path)
 
 
-def prepare_worktree() -> Path:
-    git('fetch', '-q', 'origin')
-    if not (WORKTREE / '.git').exists():
-        git('worktree', 'prune', check=False)
-        WORKTREE.parent.mkdir(parents=True, exist_ok=True)
-        git('worktree', 'add', '-q', '--detach', str(WORKTREE), 'origin/main')
-    git('reset', '-q', '--hard', 'origin/main', cwd=WORKTREE)
-    git('clean', '-q', '-fd', cwd=WORKTREE)  # untracked only (ignored node_modules links stay); this worktree is ours
-    return WORKTREE
+def _module(path: Path, name: str):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
-def resolve_data(wt: Path, rel: str) -> None:
-    """Make WT/REL resolve to the shared checkout's data by linking its first missing component."""
-    parts = Path(rel).parts
-    for i in range(1, len(parts) + 1):
-        here = wt.joinpath(*parts[:i])
-        if not here.exists() and not here.is_symlink():
-            there = REPO.joinpath(*parts[:i])
-            if not there.exists():
-                raise ValueError(f'data path missing in the shared checkout: {rel}')
-            here.parent.mkdir(parents=True, exist_ok=True)
-            os.symlink(there, here)
-            return
-
-
-def attempt(entries: list[dict], message: str, replace: bool, check: bool) -> list[str]:
-    wt = prepare_worktree()
-    path = wt / REGISTRY
-    registry = json.loads(path.read_text())
-    index = {c['id']: i for i, c in enumerate(registry['corpora'])}
-    changed = []
+def _registry_with_entries(registry, entries, replace):
+    import copy
+    result = copy.deepcopy(registry)
+    corpora = result.get('corpora')
+    if not isinstance(corpora, list):
+        raise ValueError('corpus registry is malformed')
+    index = {entry['id']: i for i, entry in enumerate(corpora)}
+    if len(index) != len(corpora):
+        raise ValueError('corpus registry contains duplicate ids')
     for entry in entries:
-        if entry['id'] in index:
-            if registry['corpora'][index[entry['id']]] == entry:
-                # Registered earlier but its manifest never reached main (an older flow left it uncommitted).
-                if not (wt / MANIFESTS / f"{entry['id']}.json").exists():
-                    changed.append(entry)
-                continue
-            if not replace:
-                raise ValueError(f"{entry['id']} is registered with different content; manifests are immutable: "
-                                 'publish a new id (or --replace for an entry whose manifest is unchanged)')
-            registry['corpora'][index[entry['id']]] = entry
+        ident = entry.get('id') if isinstance(entry, dict) else None
+        if not isinstance(ident, str) or not ident or '/' in ident or ident in {'.', '..'}:
+            raise ValueError('corpus id must be one nonempty path component')
+        if ident in index:
+            if corpora[index[ident]] != entry:
+                if not replace:
+                    raise ValueError(f'{ident} is registered with different content; manifests are immutable: '
+                                     'publish a new id (or --replace for an entry whose manifest is unchanged)')
+                corpora[index[ident]] = entry
         else:
-            registry['corpora'].append(entry)
-        changed.append(entry)
+            index[ident] = len(corpora)
+            corpora.append(entry)
+    return result
+
+
+def _guard_clean(publisher_git, paths, original_head):
+    """Never consume someone else's staged, unstaged, untracked or newly committed selected paths."""
+    status = publisher_git.out('status', '--porcelain=v1', '--untracked-files=all', '--', *paths)
+    conflicts = [line for line in status.splitlines() if line]
+    for path in paths:
+        if publisher_git.entry('HEAD', path) != original_head[path]:
+            conflicts.append(path + ' (HEAD changed during registration)')
+        if original_head[path] is None and ((REPO / path).exists() or (REPO / path).is_symlink()):
+            conflicts.append(path + ' (untracked or ignored file)')
+    if conflicts:
+        raise ValueError('registration selected paths have foreign or concurrent changes; preserve them and '
+                         'commit/publish them separately before retrying:\n  ' + '\n  '.join(conflicts))
+
+
+def attempt(entries: list[dict], message: str, replace: bool, check: bool, *, tries=10) -> list[str]:
+    import io
+    import contextlib
+    import tempfile
+    publisher = _module(REPO / 'scripts/git_publish.py', 'natlang_registration_git_publish')
+    sync = _module(REPO / 'scripts/sync_training_corpora.py', 'natlang_registration_corpus_sync')
+    git('fetch', '-q', 'origin')
+    selected = [REGISTRY] + [f"{MANIFESTS}/{entry.get('id')}.json" for entry in entries if isinstance(entry, dict)]
+    # Validate ids before allowing them to become Git or filesystem paths.
+    for entry in entries:
+        ident = entry.get('id') if isinstance(entry, dict) else None
+        if not isinstance(ident, str) or not ident or '/' in ident or ident in {'.', '..'}:
+            raise ValueError('corpus id must be one nonempty path component')
+    if len({entry['id'] for entry in entries}) != len(entries):
+        raise ValueError('registration request contains duplicate corpus ids')
+    repository = publisher.Git(REPO)
+    head_entries = {path: repository.entry('HEAD', path) for path in selected}
+    _guard_clean(repository, selected, head_entries)
+    upstream_entries = {path: repository.entry('origin/main', path) for path in selected}
+    changed_upstream = [path for path in selected if head_entries[path] != upstream_entries[path]]
+    if changed_upstream:
+        sync_output = io.StringIO()
+        with contextlib.redirect_stdout(sync_output), contextlib.redirect_stderr(sync_output):
+            status = publisher.main(['-C', str(REPO), '--sync-only'])
+        if status != publisher.EXIT_OK:
+            raise ValueError('registration paths differ from origin/main; safe checkout sync was blocked. '
+                'Preserve the other work and resolve the reported conflict:\n' + sync_output.getvalue()[-4000:])
+        head_entries = {path: repository.entry('HEAD', path) for path in selected}
+        _guard_clean(repository, selected, head_entries)
+        changed_upstream = [path for path in selected if head_entries[path] != repository.entry('origin/main', path)]
+        if changed_upstream:
+            raise ValueError('registration paths contain unpublished local commits: ' + ', '.join(changed_upstream)
+                + '; publish or reconcile those exact paths before retrying')
+    registry = json.loads(repository.blob(head_entries[REGISTRY][1]))
+    initial = {entry['id']: entry for entry in registry['corpora']}
+    proposed = _registry_with_entries(registry, entries, replace)
+    changed = [entry for entry in entries if initial.get(entry['id']) != entry or
+               head_entries[f"{MANIFESTS}/{entry['id']}.json"] is None]
     if not changed:
         return []
-    text = json.dumps(registry, indent=2, ensure_ascii=False) + '\n'
-    if text != path.read_text():
-        path.write_text(text)
-    for entry in changed:
-        resolve_data(wt, entry['path'])
-        publish_cache = LOCK.parent / 'register-corpora-manifest-cache' / (entry['id'] + '.json')
-        published = subprocess.run([sys.executable, str(wt / 'scripts/sync_training_corpora.py'), 'publish',
-                                    '--repo', str(wt), '--machine', entry['owner'], '--id', entry['id'],
-                                    '--reuse-cache', str(publish_cache)],
-                                   cwd=wt, capture_output=True, text=True)
-        if published.returncode:
-            raise ValueError(f"publish {entry['id']}: {published.stderr.strip()[-1500:]}")
-    reloaded = json.loads(path.read_text())
-    ids = [c['id'] for c in reloaded['corpora']]
-    if len(ids) != len(set(ids)):
-        raise ValueError('duplicate registry ids after the change')
-    paths = [REGISTRY] + [f"{MANIFESTS}/{e['id']}.json" for e in changed]
-    missing = [p for p in paths if not (wt / p).is_file()]
-    if missing:
-        raise ValueError(f'missing after publish: {missing}')
-    if check:
-        quick = subprocess.run(['scripts/check-main.sh', '--quick'], cwd=wt, capture_output=True, text=True)
-        if quick.returncode:
-            # Keep one complete failure outside the disposable worktree. Retry
-            # summaries are deliberately short, but must not erase stderr or
-            # the evidence needed to diagnose an interpreter/setup failure.
-            failure_path = LOCK.parent / 'register-corpora-last-check-failure.json'
-            failure_path.parent.mkdir(parents=True, exist_ok=True)
-            temporary = failure_path.with_suffix('.tmp')
-            temporary.write_text(json.dumps({
-                'time_unix': time.time(), 'worktree': str(wt),
-                'commit': git('rev-parse', 'HEAD', cwd=wt).stdout.strip(),
-                'corpus_ids': [entry['id'] for entry in changed],
-                'python_override': os.environ.get('NATLANG_PYTHON'),
-                'returncode': quick.returncode,
-                'stdout': quick.stdout, 'stderr': quick.stderr,
-            }, indent=2) + '\n')
-            temporary.replace(failure_path)
-            raise Retry(f'check-main --quick is red; complete latest failure: {failure_path}\n'
-                        + (quick.stdout + quick.stderr)[-1500:])
-    candidates = [entry for entry in changed if entry.get('candidate_selection_admission') is not None]
-    if candidates:
-        # Use the renderer's complete existing gate, including exact owner rows,
-        # evidence and immutable manifest pins, before committing publication.
-        build = subprocess.run(['npm', 'run', '--silent', 'build'], cwd=wt / 'ts-host',
-                               capture_output=True, text=True)
-        if build.returncode:
-            raise Retry('candidate admission verifier build failed: ' + build.stderr[-1500:])
-        for entry in candidates:
-            verified = subprocess.run([
-                sys.executable, str(wt / 'scripts/neuralese_data/render_native_turn_corpus.py'),
-                '--corpus-id', entry['id'], '--source', str(wt / entry['path'] / 'turns.jsonl'),
-                '--verify-admission-only',
-            ], cwd=wt, capture_output=True, text=True)
-            if verified.returncode:
-                raise ValueError(f"candidate admission {entry['id']}: {verified.stderr[-1500:]}")
-    git('add', '--', *paths, cwd=wt)
-    body = '\n'.join(f"- {e['id']}" for e in changed)
-    git('commit', '-q', '-m', message, '-m', 'Registered unattended by scripts/neuralese_data/register_corpora.py:\n'
-        + body, '-m', TRAILERS, '--', *paths, cwd=wt)
-    pushed = git('push', '-q', 'origin', 'HEAD:main', cwd=wt, check=False)
-    if pushed.returncode:
-        raise Retry(f'push rejected: {pushed.stderr.strip()[-300:]}')
-    return [e['id'] for e in changed]
+    with tempfile.TemporaryDirectory(prefix='natlang-corpus-registration-') as temporary:
+        scratch = Path(temporary)
+        registry_file = scratch / 'registry.json'
+        manifests_dir = scratch / 'manifests'
+        manifests_dir.mkdir()
+        registry_file.write_text(json.dumps(proposed, indent=2, ensure_ascii=False) + '\n')
+        contents = {REGISTRY: registry_file.read_bytes()}
+        for entry in changed:
+            manifest_name = f"{MANIFESTS}/{entry['id']}.json"
+            generated = manifests_dir / (entry['id'] + '.json')
+            publish_cache = LOCK.parent / 'register-corpora-manifest-cache' / (entry['id'] + '.json')
+            try:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    value = sync.publish(REPO, entry, publish_cache, manifest_output=generated)
+            except (OSError, ValueError) as error:
+                raise ValueError(f"publish {entry['id']}: {error}") from error
+            existing = head_entries[manifest_name]
+            if existing is not None:
+                old_bytes = repository.blob(existing[1])
+                if json.loads(old_bytes) != value:
+                    raise ValueError(f"immutable snapshot changed: {entry['id']}; publish a new id")
+                contents[manifest_name] = old_bytes
+                generated.write_bytes(old_bytes)
+            else:
+                contents[manifest_name] = generated.read_bytes()
+        _guard_clean(repository, selected, head_entries)
+        if check:
+            quick = subprocess.run(['scripts/check-main.sh', '--quick'], cwd=REPO, capture_output=True, text=True)
+            if quick.returncode:
+                failure_path = LOCK.parent / 'register-corpora-last-check-failure.json'
+                failure_path.parent.mkdir(parents=True, exist_ok=True)
+                temporary_failure = failure_path.with_suffix('.tmp')
+                temporary_failure.write_text(json.dumps({'time_unix':time.time(), 'checkout':str(REPO),
+                    'commit':git('rev-parse','HEAD').stdout.strip(), 'corpus_ids':[e['id'] for e in changed],
+                    'python_override':os.environ.get('NATLANG_PYTHON'), 'returncode':quick.returncode,
+                    'stdout':quick.stdout, 'stderr':quick.stderr}, indent=2)+'\n')
+                temporary_failure.replace(failure_path)
+                raise ValueError(f'check-main --quick is red; complete latest failure: {failure_path}')
+        candidates = [entry for entry in changed if entry.get('candidate_selection_admission') is not None]
+        if candidates:
+            build = subprocess.run(['npm', 'run', '--silent', 'build'], cwd=REPO / 'ts-host', capture_output=True, text=True)
+            if build.returncode:
+                raise ValueError('candidate admission verifier build failed: ' + build.stderr[-1500:])
+            for entry in candidates:
+                verified = subprocess.run([sys.executable, str(REPO / 'scripts/neuralese_data/render_native_turn_corpus.py'),
+                    '--corpus-id', entry['id'], '--source', str(REPO / entry['path'] / 'turns.jsonl'),
+                    '--verify-admission-only', '--admission-registry-file', str(registry_file),
+                    '--admission-manifest-file', str(manifests_dir / (entry['id'] + '.json'))],
+                    cwd=REPO, capture_output=True, text=True)
+                if verified.returncode:
+                    raise ValueError(f"candidate admission {entry['id']}: {verified.stderr[-1500:]}")
+        _guard_clean(repository, selected, head_entries)
+        overrides = {path: ('100644', repository.out('hash-object','-w','--no-filters','--stdin',input=data))
+                     for path,data in contents.items()}
+        def registry_successor(g, _base, upstream):
+            try:
+                remote_entry = g.entry(upstream, REGISTRY)
+                remote_registry = json.loads(g.blob(remote_entry[1]))
+                remote_ids = {entry['id']: entry for entry in remote_registry['corpora']}
+                for entry in entries:
+                    ident = entry['id']
+                    if remote_ids.get(ident) != initial.get(ident) and remote_ids.get(ident) != entry:
+                        raise ValueError(f'{ident} changed concurrently upstream; reconcile the registry and retry')
+                expected = _registry_with_entries(remote_registry, entries, replace)
+                if expected == remote_registry:
+                    return {REGISTRY: remote_entry}
+                text = (json.dumps(expected, indent=2, ensure_ascii=False) + '\n').encode()
+                return {REGISTRY: ('100644', g.out('hash-object','-w','--no-filters','--stdin',input=text))}
+            except (OSError, ValueError, KeyError, TypeError) as error:
+                raise publisher.PublishError(str(error)) from error
+        def validate_plan(g, upstream, plan):
+            try:
+                _guard_clean(g, selected, head_entries)
+                # A retry reuses immutable blobs only after the selected file
+                # inventory and five-field source identities are checked again.
+                for entry in changed:
+                    name = f"{MANIFESTS}/{entry['id']}.json"
+                    cache = LOCK.parent / 'register-corpora-manifest-cache' / (entry['id'] + '.json')
+                    current = sync.publish(REPO, entry, cache,
+                        manifest_output=manifests_dir / (entry['id'] + '.json'))
+                    if current != json.loads(contents[name]):
+                        raise ValueError(f"source snapshot changed during registration: {entry['id']}")
+                remote_entry = g.entry(upstream, REGISTRY)
+                remote_registry = json.loads(g.blob(remote_entry[1]))
+                remote_ids = {entry['id']:entry for entry in remote_registry['corpora']}
+                for entry in entries:
+                    ident = entry['id']
+                    if remote_ids.get(ident) != initial.get(ident) and remote_ids.get(ident) != entry:
+                        raise ValueError(f'{ident} changed concurrently upstream; reconcile the registry and retry')
+                expected = _registry_with_entries(remote_registry, entries, replace)
+                proposed_plan = {path: value for path,value,_ in plan}
+                actual = proposed_plan.get(REGISTRY)
+                if actual is None or json.loads(g.blob(actual[1])) != expected:
+                    raise ValueError('upstream registry merge does not exactly preserve registration semantics')
+                for entry in changed:
+                    name=f"{MANIFESTS}/{entry['id']}.json"
+                    if g.entry(upstream,name) not in (None,overrides[name]) or proposed_plan.get(name) != overrides[name]:
+                        raise ValueError(f"immutable manifest {name} changed upstream; inspect it and publish a new id")
+            except (OSError, ValueError, KeyError, TypeError) as error:
+                raise publisher.PublishError(str(error)) from error
+        output = io.StringIO()
+        body = '\n'.join(f"- {entry['id']}" for entry in changed)
+        args = ['-C',str(REPO),'--no-check','--no-advance','--retries',str(max(0,tries-1)),
+                '-m',message,'-m','Registered unattended by scripts/neuralese_data/register_corpora.py:\n'+body,
+                '--trailer',TRAILERS,*contents]
+        with contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
+            status = publisher.main(args, content_overrides=overrides, final_overrides=registry_successor,
+                                    plan_validator=validate_plan)
+        if status != publisher.EXIT_OK:
+            raise ValueError('registration was not published; preserve selected paths and resolve the conflict:\n'+output.getvalue()[-4000:])
+        # The publisher uses a temporary index and --no-advance. Sync separately:
+        # it refuses to overwrite any selected or foreign dirty/staged file.
+        sync_output = io.StringIO()
+        with contextlib.redirect_stdout(sync_output), contextlib.redirect_stderr(sync_output):
+            status = publisher.main(['-C',str(REPO),'--sync-only'])
+        if status != publisher.EXIT_OK:
+            print('registration was published; checkout was not advanced: '+sync_output.getvalue().strip(), file=sys.stderr)
+        return [entry['id'] for entry in changed]
 
 
 def register(entries: list[dict], message: str, replace: bool = False, links: dict[str, str] | None = None,
              tries: int = 10, check: bool = True) -> list[str]:
-    """Register ENTRIES on origin/main; returns the ids added or replaced (empty: already registered)."""
+    """Register ENTRIES from canonical main, preserving all other work."""
     for rel, target in (links or {}).items():
         link(rel, target)
     LOCK.parent.mkdir(parents=True, exist_ok=True)
     with open(LOCK, 'w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        for n in range(tries):
-            try:
-                done = attempt(entries, message, replace, check)
-                break
-            except Retry as error:
-                wait = min(60 * 2 ** n, 1800)
-                print(json.dumps({'register_retry': n + 1, 'wait_s': wait, 'reason': str(error)[-600:]}),
-                      file=sys.stderr, flush=True)
-                time.sleep(wait)
-        else:
-            raise RuntimeError(f'registration gave up after {tries} attempts')
+        done = attempt(entries, message, replace, check, tries=tries)
     if done:
-        subprocess.run([sys.executable, str(REPO / 'scripts/git_publish.py'), '--sync-only'], cwd=REPO,
-                       capture_output=True)
         print(json.dumps({'registered': done}), flush=True)
     return done
 
@@ -230,7 +291,12 @@ def main() -> int:
         value = json.loads(path.read_text())
         entries.extend(value if isinstance(value, list) else [value])
     if args.ids:
-        registry = json.loads(git('show', f'origin/main:{REGISTRY}').stdout) if git('fetch', '-q', 'origin', check=False) else None
+        try:
+            git('fetch', '-q', 'origin')
+            registry = json.loads(git('show', f'origin/main:{REGISTRY}').stdout)
+        except (RuntimeError, ValueError) as error:
+            print(f'register_corpora: {error}', file=sys.stderr)
+            return 1
         found = {c['id']: c for c in registry['corpora'] if c['id'] in args.ids}
         if set(args.ids) - set(found):
             print(f'register_corpora: not registered on origin/main: {sorted(set(args.ids) - set(found))}', file=sys.stderr)

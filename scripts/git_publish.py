@@ -206,14 +206,22 @@ def merge3(git: Git, path: str, base: tuple[str, str], upstream: tuple[str, str]
         return git.out("hash-object", "-w", "--no-filters", "--stdin", input=proc.stdout)
 
 
-def plan_paths(git: Git, base: str, upstream: str, paths: list[str]):
+def plan_paths(git: Git, base: str, upstream: str, paths: list[str], *, content_overrides=None, final_overrides=None):
     """For each path: (action, new entry or None, note). Raises on conflict. `base` is the merge base of the local
-    HEAD and `upstream`: content the caller committed locally but never pushed differs from it and is published."""
+    HEAD and `upstream`: content the caller committed locally but never pushed differs from it and is published.
+
+    Internal callers can supply immutable worktree blobs, or a validated final
+    successor of the current upstream. CLI callers retain worktree semantics.
+    """
     plan = []
     for path in paths:
+        if final_overrides is not None and path in final_overrides:
+            plan.append((path, final_overrides[path], 'caller-validated upstream successor'))
+            continue
         b = git.entry(base, path)
         u = git.entry(upstream, path)
-        w = worktree_entry(git, path)
+        w = (content_overrides[path] if content_overrides is not None and path in content_overrides
+             else worktree_entry(git, path))
         if w is None and b is None and u is None:
             raise PublishError(f"{path}: not in the worktree, HEAD or origin/main")
         if w == u:
@@ -368,7 +376,7 @@ def before_push(attempt: int) -> None:
     """Test hook (monkeypatched by tests to simulate a concurrent push)."""
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, *, content_overrides=None, final_overrides=None, plan_validator=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
     ap.add_argument("paths", nargs="*", help="files or directories to publish (worktree content)")
@@ -401,6 +409,8 @@ def main(argv: list[str] | None = None) -> int:
             return EXIT_OK if ok else EXIT_NOT_ADVANCED
         if not a.paths:
             ap.error("name the paths to publish")
+        if final_overrides is not None and plan_validator is None:
+            raise PublishError('caller-produced final paths require a plan validator')
         messages = list(a.message)
         if a.file:
             messages.append(Path(a.file).read_text())
@@ -431,8 +441,12 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"git_publish: note: the checkout's HEAD has {ahead} commit(s) not on {a.remote}/{a.branch}; "
                       "only the named paths' content is published (their local commits included), not the commits",
                       flush=True)
-            plan = plan_paths(git, base, upstream, paths)
+            selected_final = final_overrides(git, base, upstream) if final_overrides is not None else None
+            plan = plan_paths(git, base, upstream, paths, content_overrides=content_overrides,
+                              final_overrides=selected_final)
             validate_json_plan(git, upstream, plan)
+            if plan_validator is not None:
+                plan_validator(git, upstream, plan)
             commit, _ = build_commit(root, upstream, plan, message)
             for path, new, note in plan:
                 print(f"  {'delete' if new is None else 'publish'} {path} ({note})")
@@ -450,6 +464,8 @@ def main(argv: list[str] | None = None) -> int:
                 print(msg)
                 return EXIT_OK
             before_push(attempt)
+            if plan_validator is not None:
+                plan_validator(git, upstream, plan)
             proc = git.run("push", "--porcelain", a.remote, f"{commit}:refs/heads/{a.branch}", check=False)
             if proc.returncode == 0:
                 git.run("update-ref", f"refs/remotes/{a.remote}/{a.branch}", commit)

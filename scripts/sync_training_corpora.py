@@ -157,7 +157,7 @@ def compile_declared_glob(pattern):
     return re.compile('(?s:' + ''.join(chunks) + r')\Z')
 
 
-def publish(repo, entry, reuse_cache=None):
+def publish(repo, entry, reuse_cache=None, *, manifest_output=None):
     root = repo / relative(entry['path'])
     files = []
     patterns = entry.get('include', ['**/*'])
@@ -236,7 +236,7 @@ def publish(repo, entry, reuse_cache=None):
                         break
                 if unchanged:
                     value = cached_manifest
-                    target = manifest_path(repo, entry['id'])
+                    target = Path(manifest_output) if manifest_output is not None else manifest_path(repo, entry['id'])
                     if target.exists() and json.loads(target.read_text()) != value:
                         raise ValueError(f"immutable snapshot changed: {entry['id']}; publish a new id")
                     save(target, value)
@@ -258,7 +258,7 @@ def publish(repo, entry, reuse_cache=None):
         file_stats[item['path']] = after
     value = {'schema': 'natlang.corpus-snapshot/1', 'id': entry['id'], 'owner': entry['owner'],
              'path': entry['path'], 'files': rows, 'bytes': sum(x['bytes'] for x in rows)}
-    target = manifest_path(repo, entry['id'])
+    target = Path(manifest_output) if manifest_output is not None else manifest_path(repo, entry['id'])
     if target.exists() and json.loads(target.read_text()) != value:
         raise ValueError(f"immutable snapshot changed: {entry['id']}; publish a new id")
     save(target, value)
@@ -272,6 +272,7 @@ def publish(repo, entry, reuse_cache=None):
         save(cache_path, cached)
     print(json.dumps({'published': entry['id'], 'files': len(rows), 'bytes': value['bytes'],
                       'manifest_file_sha256': digest(target)[0]}), flush=True)
+    return value
 
 
 def current_receipt(repo, manifest):

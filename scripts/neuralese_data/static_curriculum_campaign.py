@@ -592,8 +592,8 @@ def registry_entries(root: Path, name: str) -> list[dict]:
 
 def register(args) -> None:
     """Register every rendered batch not yet on origin/main: entries and manifests are committed and pushed by
-    register_corpora.py from a private worktree off origin/main, so other sessions' uncommitted registry edits in the
-    shared checkout never ride along and nothing waits for a hand commit."""
+    register_corpora.py from canonical main. Other sessions' dirty registry edits block registration instead of
+    being included in its publication."""
     sys.path.insert(0, str(REPO / 'scripts/neuralese_data'))
     from register_corpora import register as register_entries, registered_ids
     root = Path(args.root)

@@ -134,9 +134,8 @@ def parse(argv=None):
     p.add_argument('--notes', default='')
     p.add_argument('--supersedes', action='append', default=[], help='registered ids this render replaces')
     p.add_argument('--no-publish', action='store_true')
-    p.add_argument('--via-worktree', action='store_true',
-                   help='register, publish, commit and push through register_corpora.py (private worktree off '
-                        'origin/main) instead of editing this checkout\'s registry')
+    p.add_argument('--via-publisher', '--via-worktree', dest='via_worktree', action='store_true',
+                   help='register and publish through register_corpora.py from canonical main')
     a = p.parse_args(argv)
     # The registry path is the link inside the repo, not where it resolves (corpora may live on NVMe behind a link).
     a.path = os.path.relpath(os.path.abspath(a.render_dir), ROOT)
