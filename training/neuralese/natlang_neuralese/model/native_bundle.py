@@ -8,12 +8,13 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import stat
 import tempfile
 
-from ..common.hashing import sha256_file_hex_cached
+from ..common.hashing import sha256_file_hex, sha256_file_hex_cached
 from ..common.jsonio import write_json_durable
 from .native_composite import SCHEMA, resolve_composite_artifact
 
@@ -25,6 +26,59 @@ TRANSPORT_SCHEMA = 'natlang.native-actor-transport/1'
 def _file_binding(path):
     path = Path(path).resolve(strict=True)
     return {'path':str(path),'sha256':sha256_file_hex_cached(path),'bytes':path.stat().st_size}
+
+
+def _fresh_file_binding(path):
+    path=Path(path).resolve(strict=True);before=path.stat()
+    digest=sha256_file_hex(path);after=path.stat()
+    signature=lambda s:(s.st_dev,s.st_ino,s.st_size,s.st_mtime_ns,s.st_ctime_ns)
+    if signature(before)!=signature(after):raise ValueError('actor view input changed during hash verification')
+    return {'path':str(path),'sha256':digest,'bytes':after.st_size}
+
+
+def _same_values_bounded(a,b,where='state',*,max_bytes=4*1024*1024):
+    """Bitwise compare tensors with bounded contiguous temporaries, including strided views."""
+    import torch
+    if isinstance(a,torch.Tensor):
+        if not isinstance(b,torch.Tensor) or a.dtype!=b.dtype or a.shape!=b.shape:
+            raise RuntimeError(f'actor view differs at {where}')
+        def compare(x,y):
+            if x.numel()*x.element_size()>max_bytes and x.ndim and x.numel():
+                axis=max(range(x.ndim),key=lambda i:x.shape[i])
+                if x.shape[axis]>1:
+                    middle=x.shape[axis]//2
+                    compare(x.narrow(axis,0,middle),y.narrow(axis,0,middle))
+                    compare(x.narrow(axis,middle,x.shape[axis]-middle),y.narrow(axis,middle,x.shape[axis]-middle))
+                    return
+            left=x.detach().contiguous().reshape(-1);right=y.detach().contiguous().reshape(-1)
+            try:left,right=left.view(torch.uint8),right.view(torch.uint8)
+            except RuntimeError:pass
+            if not torch.equal(left,right):raise RuntimeError(f'actor view differs at {where}')
+        compare(a,b)
+    elif isinstance(a,dict):
+        if not isinstance(b,dict) or list(a)!=list(b):raise RuntimeError(f'actor view differs at {where}')
+        for key in a:_same_values_bounded(a[key],b[key],f'{where}.{key}',max_bytes=max_bytes)
+    elif isinstance(a,(list,tuple)):
+        if not isinstance(b,(list,tuple)) or len(a)!=len(b):raise RuntimeError(f'actor view differs at {where}')
+        for i,(left,right) in enumerate(zip(a,b,strict=True)):_same_values_bounded(left,right,f'{where}[{i}]',max_bytes=max_bytes)
+    elif a!=b and not (a!=a and b!=b):raise RuntimeError(f'actor view differs at {where}')
+
+
+def _cached_actor_view(source, directory):
+    """Find only a content-addressed receipt, rechecking its source and view bytes."""
+    for proof in sorted(directory.iterdir()):
+        if not re.fullmatch('[0-9a-f]{64}\\.json',proof.name):continue
+        if proof.is_symlink() or not proof.is_file():raise ValueError('actor view receipt must be a regular file')
+        reference=_fresh_file_binding(proof)
+        if proof.stem!=reference['sha256']:raise ValueError('cached actor view receipt digest differs')
+        metadata=json.loads(proof.read_text());name=(metadata.get('view') or {}).get('path')
+        if not isinstance(name,str) or Path(name).name!=name or (directory/name).is_symlink():
+            raise ValueError('cached actor view must be a regular sibling')
+        _,_,view=_actor_view_files(source,reference)
+        if view.is_symlink() or view.name!=_fresh_file_binding(view)['sha256']+'.pt':
+            raise ValueError('cached actor view is not content addressed')
+        return view
+    return None
 
 
 def write_actor_view(checkpoint, out, *, validated_state, decoded_source_stat=None,
@@ -39,7 +93,6 @@ def write_actor_view(checkpoint, out, *, validated_state, decoded_source_stat=No
     """
     from .native_model import CHECKPOINT_SCHEMA
     from ..train.checkpoint_policy import CheckpointPolicy
-    from ..train.checkpoint_offload import _same_values
     from ..train.trajectory_state import atomic_checkpoint
     from .native_composite import _durable_immutable
     source = Path(checkpoint).resolve(strict=True)
@@ -57,7 +110,7 @@ def write_actor_view(checkpoint, out, *, validated_state, decoded_source_stat=No
     signature = (before.st_dev,before.st_ino,before.st_size,before.st_mtime_ns)
     if signature != decoded_source_stat:
         raise ValueError('actor view source is not the unchanged file used for the validated decode')
-    source_binding = _file_binding(source)
+    source_binding = _fresh_file_binding(source)
     selected = {key:validated_state[key] for key in
                 ('schema','model_config','backbone_state','interface_state','step')}
     if type(selected['step']) is not int or selected['step'] < 0:
@@ -71,24 +124,27 @@ def write_actor_view(checkpoint, out, *, validated_state, decoded_source_stat=No
     out = Path(out).resolve()/source_binding['sha256']
     out.mkdir(parents=True,exist_ok=True)
     recovered = prepared_view is not None
+    cached = None if recovered else _cached_actor_view(source,out)
     if recovered:
         pending = Path(prepared_view).absolute()
         if (pending.is_symlink() or pending.parent.resolve(strict=True) != out
                 or not pending.name.startswith('.actor-view-') or pending.suffix != '.pt'
                 or not stat.S_ISREG(pending.lstat().st_mode)):
             raise ValueError('recovered actor view must be a regular temporary file in its exact source directory')
+    elif cached is not None:
+        pending=cached
     else:
         fd,name = tempfile.mkstemp(prefix='.actor-view-',suffix='.pt',dir=out)
         os.close(fd)
         pending = Path(name)
     try:
-        if not recovered:
+        if not recovered and cached is None:
             atomic_checkpoint(pending,selected)
         candidate_before = pending.stat()
         candidate_signature = (candidate_before.st_dev,candidate_before.st_ino,
             candidate_before.st_size,candidate_before.st_mtime_ns,candidate_before.st_ctime_ns)
         written = CheckpointPolicy.load(pending)
-        _same_values(selected,written)
+        _same_values_bounded(selected,written)
         del written
         digest = sha256_file_hex_cached(pending)
         candidate_after = pending.stat()
@@ -96,18 +152,20 @@ def write_actor_view(checkpoint, out, *, validated_state, decoded_source_stat=No
                 candidate_after.st_mtime_ns,candidate_after.st_ctime_ns) != candidate_signature:
             raise ValueError('actor view temporary output changed during verification')
         target = out/(digest+'.pt')
-        try:os.link(pending,target)
-        except FileExistsError:
-            if sha256_file_hex_cached(target) != digest:
-                raise ValueError('immutable actor view collision')
+        if cached is None:
+            try:os.link(pending,target)
+            except FileExistsError:
+                if sha256_file_hex_cached(target) != digest:
+                    raise ValueError('immutable actor view collision')
         directory = os.open(out,os.O_RDONLY|os.O_DIRECTORY)
         try:os.fsync(directory)
         finally:os.close(directory)
     finally:
-        if not recovered:
+        if not recovered and cached is None:
             pending.unlink(missing_ok=True)
     after = source.stat()
-    if (after.st_dev,after.st_ino,after.st_size,after.st_mtime_ns) != signature:
+    if ((after.st_dev,after.st_ino,after.st_size,after.st_mtime_ns) != signature
+            or after.st_ctime_ns != before.st_ctime_ns):
         raise ValueError('actor view source changed during extraction')
     receipt = {'schema':ACTOR_VIEW_SCHEMA,'source':source_binding,'view':{
         **_file_binding(target),'path':target.name},'step':selected['step'],
