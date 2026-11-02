@@ -783,8 +783,10 @@ def restore_engine(request: dict, *, dtype=None):
     expected=provenance['checkpoint']
     if any(actual[key]!=expected[key] for key in ('sha256','bytes')):
         raise ValueError('native async eval checkpoint bytes changed')
+    actor=request.get('transported_actor')
     engine=load_native_engine(str(weights),base=request['base'],device=request['device'],
-        prompt_rendering=request['prompt_rendering'])
+        prompt_rendering=request['prompt_rendering'],
+        **({'transported_actor':actor} if actor is not None else {}))
     saved=provenance['model_config']
     for key in ('architecture','rank','marker_ids','tokenizer_fingerprint','base_inventory_sha256',
                 'dtype','sparse_row_dtype','token_override_ids','token_override_dtype','native_linear_precision','native_attention_precision','precision'):
@@ -792,7 +794,8 @@ def restore_engine(request: dict, *, dtype=None):
         expected_value=saved.get(key,default)
         if engine.model_config.get(key,default)!=expected_value:
             raise ValueError('native async eval model contract changed: '+key)
-    if engine.native_identity['checkpoint_sha256']!=expected['sha256']:
+    expected_identity=actor['source_sha256'] if actor is not None else expected['sha256']
+    if engine.native_identity['checkpoint_sha256']!=expected_identity:
         raise ValueError('native async eval restored another checkpoint identity')
     return engine
 
@@ -818,6 +821,11 @@ def run_request(request_dir: Path, *, engine_factory=restore_engine) -> dict:
             if request.get('native_state'):
                 evaluator.evaluation_provenance={**evaluator.evaluation_provenance,
                     'native_identity':evaluator.engine.native_identity,
+                    **({'actor_policy_binding':evaluator.engine.rl_policy_binding,
+                        'serving_config':evaluator.engine.serving_config,
+                        'bf16_reduction':{'declared':__import__('os').environ.get('NATLANG_BF16_REDUCTION','fp32-accumulate'),
+                            'reduced_enabled':__import__('torch').backends.cuda.matmul.allow_bf16_reduced_precision_reduction}}
+                       if request.get('transported_actor') is not None else {}),
                     'torch_version':__import__('torch').__version__,
                     'cuda_device':(__import__('torch').cuda.get_device_name()
                                    if str(request['device']).startswith('cuda') else None),
@@ -828,6 +836,18 @@ def run_request(request_dir: Path, *, engine_factory=restore_engine) -> dict:
             summary['seconds'] = time.time() - started
         finally:
             evaluator.engine = None
+    if request.get('transported_actor') is not None:
+        # Keep the exact small request independently of the disposable weight
+        # snapshot; landed results must remain auditable after queue cleanup.
+        from ..model.native_composite import _durable_immutable
+        raw=(request_dir/'request.json').read_bytes()
+        request_sha=__import__('hashlib').sha256(raw).hexdigest()
+        recorded=(summary.get('evaluation_provenance') or {}).get('request_sha256')
+        if recorded is not None and recorded!=request_sha:
+            raise ValueError('landed transported evaluation request changed')
+        history=Path(request['stage_out'])/'task-eval'/'sealed-requests'
+        history.mkdir(parents=True,exist_ok=True)
+        _durable_immutable(history/(request_sha+'.json'),raw)
     drop_request(request_dir)  # storage rules: the snapshot goes once its row landed
     return summary
 

@@ -108,6 +108,16 @@ def verify_request(request):
     if any(request.get(key,'default' if key=='sdpa_backend' else None)!=execution[key]
            for key in ('device','sdpa_backend')):
         raise ValueError('native async eval execution specification changed after sealing')
+    actor=request.get('transported_actor')
+    if actor is not None:
+        if actor!=provenance.get('transported_actor') or actor.get('source_sha256')!=provenance.get('source_training_checkpoint_sha256'):
+            raise ValueError('native async transported actor source changed after sealing')
+        for name in ('transport','view_receipt','recovery_receipt'):
+            ref=actor.get(name)
+            if ref is not None and file_binding(ref['path'])!=ref:
+                raise ValueError('native async transported actor receipt changed after sealing')
+    elif provenance.get('transported_actor') is not None:
+        raise ValueError('native async transported actor binding is missing')
     return verify_environment(provenance)
 
 
@@ -119,7 +129,9 @@ def _active_request(directory,request):
 
 def _publish_request(active,queue):
     queue=Path(queue);queue.mkdir(parents=True,exist_ok=True)
-    write_json_durable(queue/('native-'+active['checkpoint_sha256']+'.json'),{'request':active['request']})
+    pointer=queue/('native-'+active['checkpoint_sha256']+'.json');value={'request':active['request']}
+    from ..model.native_composite import _durable_immutable
+    _durable_immutable(pointer,json.dumps(value,indent=2,sort_keys=True).encode('utf-8'))
 
 
 def _recover_request(*,out,identity,step,spec,base,source_export,device,prepared=None):
@@ -175,7 +187,7 @@ def _recover_request(*,out,identity,step,spec,base,source_export,device,prepared
     return _active_request(directory,request)
 
 
-def seal_request(checkpoint,*,identity,step,spec,out,base,queue,source_export=None,device='cuda',consume_export=False,on_sealed=None,on_prepared=None):
+def seal_request(checkpoint,*,identity,step,spec,out,base,queue,source_export=None,device='cuda',consume_export=False,on_sealed=None,on_prepared=None,transported_actor=None):
     """Seal verified export bytes; keep a derived view's original parent separate."""
     from ..train.checkpoint_policy import CheckpointPolicy
     from ..model.native_model import CHECKPOINT_SCHEMA,base_inventory
@@ -184,7 +196,13 @@ def seal_request(checkpoint,*,identity,step,spec,out,base,queue,source_export=No
     checkpoint=checkpoint_argument.resolve(strict=True);spec=require_native_transport(parse_task_eval(spec))
     if file_binding(checkpoint)['sha256']!=identity['sha256'] or checkpoint.stat().st_size!=identity['bytes']:
         raise ValueError('native eval checkpoint differs from independently verified export')
-    state=CheckpointPolicy.load(checkpoint)
+    if transported_actor is None:
+        state=CheckpointPolicy.load(checkpoint)
+    else:
+        from ..model.native_bundle import load_transported_actor_view
+        if source_export is not None or consume_export:
+            raise ValueError('transported actor evaluation does not claim a full-source export')
+        state=load_transported_actor_view(checkpoint,**transported_actor)
     config=state.get('model_config') or {}
     if state.get('schema')!=CHECKPOINT_SCHEMA or config.get('architecture') not in set(all_architectures()):
         raise ValueError('native async export path requires a supported native student checkpoint')
@@ -249,12 +267,14 @@ def seal_request(checkpoint,*,identity,step,spec,out,base,queue,source_export=No
         'evaluation_spec_sha256':canonical_json_sha256_hex(spec),
         'sampler':{'temperature':spec['temperature'],'seed_base':400000,'repeat_seed_stride':100000,
                    'noise_repeats':spec['noise_repeats'],'neuralese_server':spec.get('neuralese_server',False)}}
+    if transported_actor is not None:provenance['transported_actor']=transported_actor
     verify_environment(provenance)
     request={'schema':ASYNC_SCHEMA,'step':step,'stage_out':str(stage),'spec':spec,
         'prompt_rendering':spec['prompt_rendering'],'device':device,'native_state':True,
         'base':str(Path(base).resolve()),'weights':str(weights),'checkpoint':str(checkpoint),
         'requested_at':time.time(),'evaluation_provenance':provenance,
-        'trainer_code_commit':(source_export or {}).get('source_code_commit')}
+        'trainer_code_commit':(source_export or {}).get('source_code_commit'),
+        **({'transported_actor':transported_actor} if transported_actor is not None else {})}
     if on_prepared is not None:on_prepared(request_dir,request)
     write_json_durable(request_dir/'request.json',request)
     active=_active_request(request_dir,request)
@@ -340,3 +360,132 @@ def poll_latest(export_state,*,out,spec,base,queue,fetch_command,local_checkpoin
         if not local_checkpoint:destination.unlink(missing_ok=True)  # sealed request now owns immutable bytes
         receipt_path.unlink(missing_ok=True)
         return {'event':'native_eval_enqueued',**active}
+
+
+def seal_transport_request(checkpoint, *, step, spec, out, base, queue, transported_actor, device='cuda'):
+    """One durable queued compact-actor request; later candidates wait for it to drain.
+
+    This is evaluation custody only. The transported view is never a full-state
+    recovery, training continuation, or evidence of current-weight quality.
+    """
+    from .task_cadence import TaskEval, parse_task_eval
+    checkpoint=Path(checkpoint).resolve(strict=True);out=Path(out).resolve();out.mkdir(parents=True,exist_ok=True)
+    identity=file_binding(checkpoint);spec=parse_task_eval(spec)
+    declaration={'checkpoint':identity,'step':step,'spec':spec,'base':str(Path(base).resolve(strict=True)),
+                 'queue':str(Path(queue).resolve()),'transported_actor':transported_actor,'device':device}
+    state_path=out/'native-transport-async-state.json'
+    with (out/'transport-ingest.lock').open('a') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        state=json.loads(state_path.read_text()) if state_path.exists() else {}
+        active=state.get('active')
+        if active:
+            directory=Path(active['request']);request_path=directory/'request.json'
+            if request_path.exists():
+                request=json.loads(request_path.read_text());verify_request(request)
+                if file_binding(request_path)['sha256']!=active['request_sha256']:
+                    raise ValueError('pending transported evaluation request changed')
+                active_queue=Path(active['queue']);pointer=active_queue/('native-'+active['checkpoint_sha256']+'.json')
+                if pointer.exists():
+                    if json.loads(pointer.read_text())!={'request':str(directory)}:
+                        raise ValueError('pending transported evaluation queue pointer changed')
+                else:_publish_request(active,active_queue)
+                return {'event':'native_eval_pending','active_step':active['step'],
+                        'eligible':None,'request':str(directory)}
+            evaluator=TaskEval(active['spec'],Path(active['stage_out']),None,
+                               prompt_rendering=active['spec']['prompt_rendering'])
+            result=evaluator.landed(active['step'])
+            if result is None or (result.get('evaluation_provenance') or {}).get('source_checkpoint_sha256')!=active['checkpoint_sha256']:
+                raise ValueError('transported evaluation disappeared without its bound result')
+            write_json_durable(out/'latest-transport-result.json',{'checkpoint_sha256':active['checkpoint_sha256'],
+                'source_checkpoint_sha256':active['source_checkpoint_sha256'],'step':active['step'],
+                'result':result,'historical':True,'qualifies_current_weights':False})
+            state.pop('active');state['last_completed_declaration_sha256']=active['declaration_sha256']
+            write_json_durable(state_path,state)
+        declaration_sha=canonical_json_sha256_hex(declaration)
+        if state.get('last_completed_declaration_sha256')==declaration_sha:
+            return {'event':'native_eval_up_to_date','step':step}
+        prepared=state.get('prepared')
+        if prepared is not None:
+            if prepared.get('declaration_sha256')!=declaration_sha:
+                raise ValueError('interrupted transported evaluation is bound to another request')
+            request=prepared['request'];directory=Path(prepared['directory']);verify_request(request)
+            expected_spec=dict(spec);expected_spec['runtime']=request['spec']['runtime']
+            if (request.get('step')!=step or request.get('spec')!=expected_spec
+                    or request.get('base')!=declaration['base'] or request.get('device')!=device
+                    or request.get('transported_actor')!=transported_actor
+                    or request['evaluation_provenance']['checkpoint']['sha256']!=identity['sha256']):
+                raise ValueError('interrupted transported evaluation changed its admitted controls')
+            if file_binding(request['weights'])!=request['evaluation_provenance']['checkpoint']:
+                raise ValueError('interrupted transported evaluation weights changed')
+            path=directory/'request.json'
+            if path.exists() and json.loads(path.read_text())!=request:raise ValueError('sealed transported request changed')
+            if not path.exists():write_json_durable(path,request)
+            active=_active_request(directory,request)
+        else:
+            def on_prepared(directory,request):
+                state['prepared']={'declaration_sha256':declaration_sha,'directory':str(directory),'request':request}
+                write_json_durable(state_path,state)
+            active=seal_request(checkpoint,identity=identity,step=step,spec=spec,out=out,base=base,queue=queue,
+                                device=device,transported_actor=transported_actor,on_prepared=on_prepared)
+        path=Path(active['request'])/'request.json'
+        active.update(request_sha256=file_binding(path)['sha256'],declaration_sha256=declaration_sha,queue=declaration['queue'],
+                      source_checkpoint_sha256=transported_actor['source_sha256'])
+        state.pop('prepared',None);state['active']=active;write_json_durable(state_path,state)
+        _publish_request(active,queue)
+        return {'event':'native_eval_enqueued',**active}
+
+
+def compare_transported_development(parent_score, parent_request, candidate_score, candidate_request, *,
+                                    parent_source_sha256, candidate_source_sha256):
+    """Recompute a paired 16-family protected-development comparison from landed bytes."""
+    from collections import Counter
+    import hashlib
+    from .portable_task_evidence import checked_read
+    from .task_packet import TASK_OUTCOMES, accounted
+    from ..train.native_execution_transition import DEV_PACKET_SHA256
+    def load(score_ref,request_ref,source):
+        def read(ref):
+            path=Path(ref['path']).resolve(strict=True);raw=checked_read(path)
+            if (str(path)!=ref['path'] or len(raw)!=ref['bytes'] or hashlib.sha256(raw).hexdigest()!=ref['sha256']):
+                raise ValueError('development comparison evidence changed')
+            return json.loads(raw)
+        score=read(score_ref);request=read(request_ref)
+        verify_request(request);prov=score.get('evaluation_provenance') or {};sealed=request['evaluation_provenance']
+        if (score.get('eligible') is not True or not accounted(score) or score.get('historical') is not True
+                or score.get('qualifies_current_weights') is not False
+                or prov.get('request_sha256')!=request_ref['sha256']
+                or prov.get('source_training_checkpoint_sha256')!=source
+                or sealed.get('source_training_checkpoint_sha256')!=source
+                or prov.get('native_identity',{}).get('checkpoint_sha256')!=source
+                or (prov.get('actor_policy_binding') or {}).get('native_identity')!=prov.get('native_identity')
+                or prov.get('bf16_reduction')!={'declared':'fp32-accumulate','reduced_enabled':False}
+                or any(prov.get(k)!=sealed.get(k) for k in ('checkpoint','packet','case_indices','evaluation_spec_sha256','runtime','transported_actor'))
+                or score.get('packet_sha256')!=DEV_PACKET_SHA256 or score.get('case_indices')!=request['spec']['cases']):
+            raise ValueError('development result lacks its exact evaluated actor and protected request')
+        packet=Path(sealed['packet']['path']);rows=[json.loads(line) for line in packet.read_text().splitlines() if line.strip()]
+        indices=score['case_indices'];detail=score.get('cases_detail')
+        if (len(indices)!=16 or not isinstance(detail,list) or len(detail)!=16
+                or [row.get('id') for row in detail]!=[rows[i].get('id') for i in indices]
+                or len({row.get('family') for row in detail})!=16
+                or any(not isinstance(row.get('family'),str) or not row['family'] or row.get('outcome') not in TASK_OUTCOMES for row in detail)):
+            raise ValueError('development result does not cover its 16 declared packet families')
+        counts=Counter(row['outcome'] for row in detail)
+        if (any((score.get('outcome_counts') or {}).get(k,0)!=counts[k] for k in TASK_OUTCOMES)
+                or score.get('task_successes')!=counts['task_success']):
+            raise ValueError('development result counts differ from detailed outcomes')
+        spec=dict(request['spec']);spec.pop('runtime',None);spec['packet']={'sha256':DEV_PACKET_SHA256}
+        return score,prov,spec
+    old,oldp,olds=load(parent_score,parent_request,parent_source_sha256)
+    new,newp,news=load(candidate_score,candidate_request,candidate_source_sha256)
+    if (olds!=news or oldp['runtime']['sha256']!=newp['runtime']['sha256']
+            or oldp.get('serving_config')!=newp.get('serving_config')
+            or oldp.get('actor_policy_binding',{}).get('python_runtime')!=newp.get('actor_policy_binding',{}).get('python_runtime')
+            or [r['id'] for r in old['cases_detail']]!=[r['id'] for r in new['cases_detail']]):
+        raise ValueError('development observations do not share exact runtime and geometry')
+    return {'schema':'natlang.native-async-development-comparison/1','role':'protected-development',
+        'parent_source_sha256':parent_source_sha256,'candidate_source_sha256':candidate_source_sha256,
+        'packet_sha256':DEV_PACKET_SHA256,'case_indices':old['case_indices'],
+        'parent_successes':old['task_successes'],'candidate_successes':new['task_successes'],
+        'case_outcome_changes':[{'id':a['id'],'parent':a['outcome'],'candidate':b['outcome']}
+            for a,b in zip(old['cases_detail'],new['cases_detail'],strict=True) if a['outcome']!=b['outcome']],
+        'untouched_confirmation':False,'current_policy_admission':False,'training_credit':0}
