@@ -570,6 +570,27 @@ def predecessor_mass_census(previous, predecessor_path, objective, *, seen=()):
         'current_source': previous['source'], 'unscaled_objective': unscaled}
 
 
+def reviewed_partition_count(prepared_source_receipt, reviewed_preparation_builder_sha256, screen_path, predecessor_path, partition_screen, partition_predecessor):
+    if not prepared_source_receipt:
+        raise ValueError('reviewed partition reuse requires an exact prepared receipt')
+    prepared_early_path = Path(prepared_source_receipt).resolve(strict=True)
+    prepared_early = read(prepared_early_path)
+    builder_ref = checked_preparation_builder(prepared_early_path, prepared_early['builder'])
+    if (builder_ref['sha256'] != reviewed_preparation_builder_sha256
+            or prepared_early.get('schema') != PREPARED_SCHEMA
+            or prepared_early.get('training_admission') is not False
+            or prepared_early.get('screen') != bind(screen_path)
+            or prepared_early.get('predecessor') != bind(predecessor_path)):
+        raise ValueError('reviewed source preparation does not authenticate this partition')
+    partition = read(checked(partition_screen['pending_partition'], 'prepared partition proof'))
+    if (partition.get('schema') != 'natlang.acquired-position-pending-partition/1'
+            or partition.get('predecessor') != bind(partition_predecessor)
+            or partition.get('active_graph') != partition_screen.get('output')
+            or type((partition.get('pending_graph') or {}).get('rows')) is not int):
+        raise ValueError('reviewed prepared partition controls differ')
+    return partition['pending_graph']['rows']
+
+
 def build(predecessor_receipt, screen_receipt, census_receipt, output, *, share=0.07, prepared_source_receipt=None,
           diagnosis_verification=None, diagnosis_program=None, family=FAMILY, screen_program=None,
           reviewed_preparation_builder_sha256=None):
@@ -594,24 +615,8 @@ def build(predecessor_receipt, screen_receipt, census_receipt, output, *, share=
         if reviewed_preparation_builder_sha256 is None:
             _, pending_count = verify_partition(partition_screen, partition_predecessor)
         else:
-            if not prepared_source_receipt:
-                raise ValueError('reviewed partition reuse requires an exact prepared receipt')
-            prepared_early_path = Path(prepared_source_receipt).resolve(strict=True)
-            prepared_early = read(prepared_early_path)
-            builder_ref = checked_preparation_builder(prepared_early_path, prepared_early['builder'])
-            if (builder_ref['sha256'] != reviewed_preparation_builder_sha256
-                    or prepared_early.get('schema') != PREPARED_SCHEMA
-                    or prepared_early.get('training_admission') is not False
-                    or prepared_early.get('screen') != bind(screen_path)
-                    or prepared_early.get('predecessor') != bind(predecessor_path)):
-                raise ValueError('reviewed source preparation does not authenticate this partition')
-            partition = read(checked(partition_screen['pending_partition'], 'prepared partition proof'))
-            if (partition.get('schema') != 'natlang.acquired-position-pending-partition/1'
-                    or partition.get('predecessor') != bind(partition_predecessor)
-                    or partition.get('active_graph') != partition_screen.get('output')
-                    or type((partition.get('pending_graph') or {}).get('rows')) is not int):
-                raise ValueError('reviewed prepared partition controls differ')
-            pending_count = partition['pending_graph']['rows']
+            pending_count = reviewed_partition_count(prepared_source_receipt, reviewed_preparation_builder_sha256,
+                screen_path, predecessor_path, partition_screen, partition_predecessor)
         verify_partition_census(screen, census)
     elif census.get('pending_partition'):
         raise ValueError('pending census lacks its partitioned screen')

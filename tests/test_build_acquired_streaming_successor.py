@@ -244,3 +244,28 @@ def test_shared_named_binding_stays_valid_for_recipe_continuation():
     new['native_graphs']['binding']='renamed'
     new['foundation_native_graphs']['binding']='renamed'
     assert not _data_continuation(old,new)
+
+
+@pytest.mark.parametrize('tamper', ['none', 'builder', 'screen', 'predecessor', 'partition', 'admission'])
+def test_reviewed_partition_reuse_binds_exact_preparation(tmp_path, tamper):
+    from scripts.neuralese_data.build_acquired_streaming_successor import bind, reviewed_partition_count, PREPARED_SCHEMA
+    def write(name, value):
+        path=tmp_path/name
+        path.write_text(json.dumps(value))
+        return bind(path)
+    screen=write('screen.json', {'screen':1}); predecessor=write('predecessor.json', {'source':1})
+    old=write('old.json', {'source':0});builder=write('builder.py', {'reviewed':True})
+    active={'path':'active','sha256':'a','rows':3}
+    partition=write('partition.json', {'schema':'natlang.acquired-position-pending-partition/1',
+        'predecessor':old,'active_graph':active,'pending_graph':{'rows':2}})
+    prep={'schema':PREPARED_SCHEMA,'training_admission':False,'screen':screen,'predecessor':predecessor,'builder':builder}
+    if tamper=='screen': prep['screen']['sha256']='bad'
+    if tamper=='predecessor': prep['predecessor']['sha256']='bad'
+    if tamper=='admission': prep['training_admission']=True
+    ref=write('prep.json',prep); partition_screen={'pending_partition':partition,'output':active}
+    if tamper=='partition': partition_screen['output']={'sha256':'bad'}
+    digest='bad' if tamper=='builder' else builder['sha256']
+    args=(ref['path'],digest,screen['path'],predecessor['path'],partition_screen,old['path'])
+    if tamper=='none': assert reviewed_partition_count(*args)==2
+    else:
+        with pytest.raises(ValueError): reviewed_partition_count(*args)
