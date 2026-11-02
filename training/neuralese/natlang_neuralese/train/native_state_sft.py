@@ -399,6 +399,20 @@ class _BoundedUpdateProfile:
                                'cuda_timing_scope': 'current stream', 'phases': phases})
 
 
+def _reserve_checkpoint_scratch(store, size, policy):
+    """Drain an overlapping checkpoint writer if it owns needed disk space."""
+    import errno
+    from .checkpoint_safety import CheckpointSpaceUnavailable
+    writer_overlapped=policy.async_pending
+    try:
+        return store.reserve_arena(size)
+    except (CheckpointSpaceUnavailable,OSError) as error:
+        if isinstance(error,OSError) and error.errno!=errno.ENOSPC:raise
+        if not writer_overlapped and not policy.async_pending:raise
+        policy.drain_async()  # Propagate writer failure; never enter SGD here.
+        return store.reserve_arena(size)
+
+
 def _measured_checkpoint_scratch_peak(memory_check, oversize_proof):
     """Read successful whole-graph scratch measurements for this update."""
     from .native_resident import bound
@@ -4263,7 +4277,7 @@ def _main(argv=None, *, requested_refresh):
                                                                         'capacity':measured},None)
                         if scratch_peak is None:raise ValueError('actual graph scratch capacity qualification failed')
                     scratch_bound=max(1,scratch_peak)+max(1<<20,(scratch_peak+3)//4)
-                    model.port.activation_checkpoint.file_store.reserve_arena(scratch_bound)
+                    _reserve_checkpoint_scratch(model.port.activation_checkpoint.file_store,scratch_bound,policy)
                 except BaseException:
                     cursor = _restore_unstarted_update(optimizer=optimizer, previous_cursor=previous_cursor,
                         rng_state=fetch_rng, device=args.device, warmup=warmup, anneal=anneal)

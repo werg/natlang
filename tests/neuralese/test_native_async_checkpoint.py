@@ -1,6 +1,7 @@
 import copy
 import errno
 import json
+import os
 import random
 import threading
 import time
@@ -505,3 +506,65 @@ def test_low_disk_spare_falls_back_to_current_reserved_checkpoint(tmp_path,monke
     assert policy.slot.stat().st_ino==old_inode and torch.load(policy.slot,weights_only=False)['step']==1
     assert not policy.slot.with_name(policy.slot.name+'.alternate.reserved-pending').exists()
     policy.close()
+
+
+def test_scratch_reservation_drains_real_overlapping_checkpoint_to_free_space(tmp_path,monkeypatch):
+    from types import SimpleNamespace
+    from natlang_neuralese.train import trajectory_state, checkpoint_safety
+    from natlang_neuralese.train.native_state_sft import _reserve_checkpoint_scratch
+    from natlang_neuralese.common.checkpoint_file_storage import CheckpointFileStore
+    monkeypatch.setenv('NATLANG_CHECKPOINT_TRANSFER_HEADROOM_FACTOR','0')
+    monkeypatch.setenv('NATLANG_CHECKPOINT_MIN_FREE_BYTES','0')
+    entered,release=threading.Event(),threading.Event()
+    original=trajectory_state.atomic_checkpoint
+    def delayed(path,state,**kwargs):
+        entered.set();assert release.wait(10)
+        return original(path,state,**kwargs)
+    monkeypatch.setattr(trajectory_state,'atomic_checkpoint',delayed)
+    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda:1<<50)
+    optimizer=torch.optim.AdamW([torch.nn.Parameter(torch.ones(2))])
+    state={'step':1,'training':{'optimizer':optimizer.state_dict(),'rng':{},'exposure_counts':{'row':1},'options':{}}}
+    policy=CheckpointPolicy(tmp_path,async_checkpoint=True)
+    with policy.slot.open('wb') as stream:
+        os.posix_fallocate(stream.fileno(),0,8*1024*1024)
+    old_inode=policy.slot.stat().st_ino
+    policy.reserve_next(state,optimizer)
+    event=policy.save(state,async_allowed=True,async_optimizer=optimizer)
+    assert event['async_pending'] and entered.wait(5)
+    store=CheckpointFileStore(tmp_path/'scratch',pin_memory=False)
+    # The old committed inode physically occupies 8 MiB until the delayed
+    # writer atomically replaces it. Model precisely that available-space edge.
+    def disk_usage(_):
+        return SimpleNamespace(free=(4 if policy.slot.stat().st_ino==old_inode else 12)*1024*1024)
+    monkeypatch.setattr(checkpoint_safety.shutil,'disk_usage',disk_usage)
+    drain=policy.drain_async
+    calls=[]
+    def release_and_drain():
+        calls.append(True);release.set();drain()
+    monkeypatch.setattr(policy,'drain_async',release_and_drain)
+    try:
+        assert _reserve_checkpoint_scratch(store,6*1024*1024,policy)==6*1024*1024
+        assert calls==[True] and policy.slot.stat().st_ino!=old_inode
+        assert store.snapshot()['arena_bytes']==6*1024*1024
+        assert torch.load(policy.slot,weights_only=False)['step']==1
+    finally:
+        release.set();store.release_arena();policy.close()
+
+
+def test_scratch_fallback_propagates_writer_failure_and_does_not_retry_other_errors():
+    from types import SimpleNamespace
+    from natlang_neuralese.train.native_state_sft import _reserve_checkpoint_scratch
+    from natlang_neuralese.train.checkpoint_safety import CheckpointSpaceUnavailable
+    attempts=[]
+    def full(_):attempts.append(1);raise CheckpointSpaceUnavailable('full')
+    def failed_writer():raise RuntimeError('writer failed')
+    with pytest.raises(RuntimeError,match='writer failed'):
+        _reserve_checkpoint_scratch(SimpleNamespace(reserve_arena=full),4,
+            SimpleNamespace(async_pending=True,drain_async=failed_writer))
+    assert attempts==[1]
+    with pytest.raises(CheckpointSpaceUnavailable):
+        _reserve_checkpoint_scratch(SimpleNamespace(reserve_arena=full),4,
+            SimpleNamespace(async_pending=False,drain_async=lambda:pytest.fail('unexpected drain')))
+    with pytest.raises(OSError,match='io'):
+        _reserve_checkpoint_scratch(SimpleNamespace(reserve_arena=lambda _:(_ for _ in ()).throw(OSError(errno.EIO,'io'))),4,
+            SimpleNamespace(async_pending=True,drain_async=lambda:pytest.fail('unexpected drain')))
