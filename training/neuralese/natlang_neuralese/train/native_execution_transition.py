@@ -11,8 +11,9 @@ from ..rl.native_direct_sft_recovery import with_historical_file_verification_se
 
 # Repeated admission layers in one process authenticate the same full tensors.
 # Cache only a completed independent comparison, keyed by both exact references
-# and their current five-field filesystem identities. Nothing survives a process
-# restart or a change to either endpoint; retained results contain no tensors.
+# and their current five-field filesystem identities. Cross-process reuse is
+# separately authenticated by native_transition_comparison_cache; both layers
+# retain no tensors and require fresh file authentication per admission.
 _VERIFIED_FILE_TRANSITIONS = OrderedDict()
 
 SCHEMA = 'natlang.native-zero-sgd-execution-transition/1'

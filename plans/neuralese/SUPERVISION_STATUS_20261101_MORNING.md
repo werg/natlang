@@ -1,3 +1,122 @@
+## Live supervision update, 2026-11-02 11:01 CET
+
+- Matched runtime10 evaluation finished: BF95 parent2/4 versus earned68 successor
+  0/4, same four protected cases, full prompt, actor transport/serving options and
+  budgets. Parent succeeds folder-criteria and idempotent-retry; successor fails
+  all four semantically. This is a small single-pass development comparison,
+  not a broad performance estimate or measured decode variance. The matched
+  result supports the actual BF95 parent decision. Evidence supplement:
+  `ops/parent-selection-after-native68-matched-development-1102.json`; raw parent
+  copy `ops/portable-bf95-runtime10-development-1102/evaluation/` and successor
+  copy `ops/portable-native68-bounded-development-1102/evaluation/`. Pop evaluator
+  and container both stopped after completion. No held result is training data.
+- The runtime13 group4 complete524650-token check still OOMed10:52:30 after174.5s,
+  now inside bounded convolution during grouped backward recomputation, requiring
+  another258MiB at70.33GiB allocated/70.76GiB limit. The FFN fix remains valid;
+  passing small certificates did not prove full capacity. Failed owner is terminal,
+  no new SGD. Preserve its exact failure proof in
+  `sft401692-bounded-ffn-from-bf95-1102/learner/memory-qualifications/`.
+- Actual current owner: `lfm3-bf95-full401692-bounded-ffn-g2-v13-1102.service`,
+  started10:55:20, config `ops/bf95-full401692-bounded-ffn-g2-v13-1102/config.json`,
+  output `sft401692-bounded-ffn-g2-from-bf95-1102/learner`. Same BF95 full parent,
+  all401692 rows,96GiB claim,FFN1024, plain cotangents; change only layer grouping
+  4->2 to reduce recompute working state. Small checks passed, complete524650-token
+  check started11:00:27. Verify its actual result and subsequent optimizer updates;
+  none have been verified yet. No seven-row omission, raised claim or false credit.
+- Actual runtime13/source401692 continuation export completed10:54:48,20files,
+  capsule `bf95-runtime13-source401692-capsule-1102.json` SHA
+  `36ee4bce9825c6259a1514fac76a1fd6a3a2411ce47723a0d346c2167c2b7082`.
+  New group2 control files are a further supplement still to export; archive,
+  source closure and parent full-state dependencies remain retained.
+- Comparison-cache implementationac489e808 is committed on main, with25 targeted
+  tests and fresh checkpoint/proof hashing, exact file identities, authenticated
+  result, verifier-source/runtime binding and cross-process/tamper coverage. Root
+  is independently running cache/execution tests. It is not in frozen runtime13;
+  include it in the next recorded runtime continuation, not a hot patch. It saves
+  repeated tensor comparison reads, not fresh full byte authentication, and does
+  not authorize retirement of old parent dependencies. Alternate32/64 convolution
+  tiles have only a CPU study; CUDA arithmetic/capacity remains unqualified, so no
+  model code/default change was made for them.
+
+## Live supervision update, 2026-11-02 10:51 CET
+
+This section supersedes older live-state descriptions below.
+
+- Actual production owner is `lfm3-bf95-full401692-bounded-ffn-v13-1102.service`,
+  started10:45:45. Config is
+  `ops/bf95-full401692-bounded-ffn-v13-r3-1102/config.json`; runtime13 is frozen
+  commit81c15995b. The learner restored the actual353731-row source and optimizer
+  and admitted47961 additional rows at10:48:41. It is now measuring the complete
+  524650-token graph. No new SFT optimizer step is yet verified. Complete401692
+  rows and all remaining visit quotas are included; no seven-context omission.
+- Selected parent is actual BF95 global67, not earned68. The finished Pop
+  checkpoint68 four-case protected development result is0/4, all semantic
+  mismatches, versus the prior BF95 system1/4. Case112 returned correct ids but
+  additionally sent an unauthorized test email. Runtime/prompt also changed, so
+  this is not isolated weight-only regression or a broad capability conclusion.
+  Matched BF95 under exactly runtime10 and the same four cases/budgets is running
+  on Pop: `pop-bf95-runtime10-development-1102.service`, actor ready10:40:13.
+  Parent decision is `ops/parent-selection-after-native68-development-1102.json`.
+  The temporary401685 group2 attempt was stopped before SGD (only checkpoint
+  policy metadata existed), preserving all earned state. Do not train through
+  unexplained harm solely because an update was earned.
+- Plain-mode qualification11 still OOMed in FFN backward; mode correction alone
+  was insufficient. Composite third-party FFN frames are normal: fixed arithmetic
+  wraps its projections. Actual remaining blocker was retained expanded FFN
+  activations across chunks within group4 recomputation. Terra implemented nested
+  chunk checkpointing with exact actor functional substitution, gradient partition,
+  cotangent/reference and RNG custody. Code81c15995b, test-only NVFP4 addition
+  0fcffc7c4, both on origin/main. Forced distinct-actor test initially exposed a
+  saved-tensor mismatch; it was fixed before integration. Synthetic CUDA peak
+  fell151126016->17694720 bytes with unchanged declared tolerances. This is not
+  the real524650-token capacity result; inspect the live proof before claiming it.
+- Independent root qualification of runtime13 passed on actual earned68 weights,
+  all production optimizer parameters, with both bounded primitives forced:
+  `ops/bounded-ffn-native68-complete-certificate-r2-1102/native-runtime-certificate.json`.
+  FFN fixture uses chunk1 to exercise the real branch on the small full-model
+  reference (96 witnessed calls); production remains chunk1024. The first root
+  certificate operator used chunk64 and correctly failed its branch-witness
+  assertion rather than calling an unexercised path qualified. Complete BF95
+  communicating-episode replay passed eager/plain all13190 actions at9.54e-7:
+  `ops/native67-bounded-ffn-replay-1102/behavior-replay-logprobs.json`.
+- New scoring dd1b138d0 binds `bounded-rational-v2`: call/token/repeat costs keep
+  bounded resolution above8 calls/2048 tokens. All five recent real trajectories
+  had old cost.03 despite8--33 calls and6539--20259 tokens. New costs differ
+  .01892--.02570. Existing five complete historical graphs pass unchanged under
+  their clipped-v1 reader; no rescoring or earned-credit rewrite.57 reward/replay
+  tests passed. Root separately ran26 ZIP/actor transport tests. New policy is in
+  runtime12 and13, not an opt-in flag. Correct completion remains primary and
+  all-failed groups do not learn cheap failure from efficiency alone.
+- Earned68 full-state private export completed10:36:52, capsule
+  `earned68-native-fullstate-capsule-1102.json` SHA
+  `28be9bdf4734ab9f11fc37296815c1d1390df2394c46b0be3dadc95ac5e08755`.
+  Full15.39GB raw target and exact RL dependencies received workstation GET.
+  Runtime11/source401692 capsule17 files completed10:24:27, SHA02695d7c... .
+  Actual runtime13/archive/current controls export now runs as
+  `export-bf95-runtime13-source401692-1102.service`; not yet claimed complete.
+- Exact earned68 ZIP delta schema2 built3,013,451,013 bytes versus15,392,797,254
+  bytes full. Independent complete stream reconstruction passed10:42:43 against
+  actual c2c76... hash; receipt c4472996... . It retains full optimizer/RNG/exposure.
+  Local capsule `ops/native68-fullstate-zip-v2-1102/local-recovery-capsule.json`
+  binds the retained exact BF95 full dictionary, delta, decoder/dependency and
+  private raw target. After fresh private presence and no active raw-file
+  consumers, redundant diagnostic raw68 and its exact external-mirror retry pin
+  were compacted10:47:50, freeing15.39GB. Evidence:
+  `ops/compacted-diagnostic-native68-fullstate-1102.json`. This preserved the real
+  earned update; it did not claim a zero-update save or delete its information.
+  Internal free space is71GiB, external55GiB; original floors remain unchanged.
+- Peer matched BF95 view was reconstructed/read back from the68 view using only
+  51,992,479 transferred bytes versus3,457,806,907 full bytes. Retired the unused
+  Pop68 derived view only after full private recovery and completed held result
+  copy; retained all metadata/results. Pop has10.56GiB free. Never infer capability
+  lift from this transport saving. Exact raw held results copied to
+  `ops/portable-native68-bounded-development-1102/evaluation/`; original source
+  paths remain untouched. Do not admit them to training.
+- One focused Terra helper is improving immutable historical transition tensor
+  comparison reuse across processes; it preserves fresh full content hashes,
+  five-field identities and verifier/result bindings. No GPU. Its work is not
+  yet complete or in the frozen learner. Main supervision stays in this strand.
+
 ## Live supervision update, 2026-11-02 10:17 CET
 
 This section supersedes older live-state descriptions below; older measurements

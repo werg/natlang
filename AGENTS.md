@@ -1,5 +1,17 @@
 # Main goal: keep moving forward (owner, 2026-10-11)
 
+## Bound FFN saved activations with full execution custody (engineering, 2026-11-02)
+
+Token-local FFN chunking alone bounds temporaries, not saved expanded activations
+across chunks during an outer layer-group checkpoint recomputation. Long
+chunked gradient-enabled FFNs now checkpoint each chunk by default at16384 rows.
+Retain exact invocation functional weight substitution, native actor/reference
+and cotangent scopes, gradient partitions and RNG. Merely restoring actor
+metadata caused a real saved-tensor-count mismatch and was repaired before
+integration. Force the branch in small-model certificates and record that
+witness; a passed fixture which never exercised the path is insufficient.
+Validate actual complete long graphs before claiming the capacity blocker fixed.
+
 ## Capacity must measure actual learner arithmetic (engineering, 2026-11-02)
 
 Ordinary SFT's prepared capacity and numerical-reference probes previously used
