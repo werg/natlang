@@ -45,7 +45,9 @@ def _parse_line(line):
     if _WORKER_AUDIT is None:return base
     from scripts.neuralese_data.audit_acquired_learning_signal import row_signal
     from scripts.neuralese_data.acquired_content_review import content_review
-    return (*base,row_signal(row,_WORKER_AUDIT),content_review(row,_WORKER_AUDIT))
+    markers = ((125019,125020) if _WORKER_SOURCE.tokenizer_fingerprint ==
+        '133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3' else None)
+    return (*base,row_signal(row,_WORKER_AUDIT,tool_call_markers=markers),content_review(row,_WORKER_AUDIT))
 
 
 def parallel_rows(path, tokenizer, roles, *, workers=2, max_pending=4, row_limit=None, audit=None):

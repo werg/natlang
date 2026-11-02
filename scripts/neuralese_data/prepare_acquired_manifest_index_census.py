@@ -77,7 +77,7 @@ def prepare(combined_ref,*,output,workers=2,pending_census_ref=None,resume=False
         else:target.write_bytes(data)
     captured_components=[bind(captured/path.name) for path in component_paths]
     signal_path=output/'row-signals.jsonl';quality_path=output/'content-review.jsonl'
-    counts=Counter();masses=Counter();stores=Counter();roles_total=Counter();unknown=Counter();fingerprints=defaultdict(list);templates=Counter()
+    counts=Counter();masses=Counter();stores=Counter();store_mass=defaultdict(Counter);roles_total=Counter();unknown=Counter();fingerprints=defaultdict(list);templates=Counter()
     proofs=[];all_seen=set();geometry_by_id={};ids=[];history_profiles=Counter();source_reviews=[]
     with signal_path.open('w') as signal_out, quality_path.open('w') as quality_out:
         def consume(signal,review):
@@ -87,6 +87,14 @@ def prepare(combined_ref,*,output,workers=2,pending_census_ref=None,resume=False
             counts['zero_effective_rows']+=not signal['eligible'];counts['source_label_diagnosis_rows']+=signal['source_label_diagnosis']
             counts['oracle_verified_rows']+=signal['oracle_verified'];counts['native_execution_verified_rows']+=signal['native_execution_verified']
             masses.update(signal['category_mass']);stores[signal['source_store'] or '<unknown>']+=1
+            markup=signal.get('tool_call_markup')
+            if not isinstance(markup,dict):raise ValueError('LFM3 source lacks tool-call markup measurement')
+            counts['tool_call_markup_pairs']+=markup['balanced_pairs']
+            counts['tool_call_markup_positive_tokens']+=markup['effective_positive_tokens']
+            counts['tool_call_markup_unmatched_markers']+=markup['unmatched_markers']
+            counts['tool_call_markup_effective_mass']+=markup['effective_mass']
+            per_store=store_mass[signal['source_store'] or '<unknown>'];per_store.update(signal['category_mass'])
+            per_store['tool_call_markup_subset_of_reply']+=markup['effective_mass']
             if not signal['source_store']:unknown['source_store']+=1
             roles_total.update(review['role_counts']);counts['unknown_role_starts']+=review['unknown_role_starts']
             fingerprints[review['exact_token_weight_sha256']].append(signal['id']);templates[review['role_structure_sha256']]+=1
@@ -181,10 +189,12 @@ def prepare(combined_ref,*,output,workers=2,pending_census_ref=None,resume=False
     census={'schema':'natlang.acquired-effective-learning-census/1','status':'canonical parser and effective-loss census; no admission',
         'screen':combined_ref,'ce_policy':bind(policy_path),'objective_sha256':canonical_json_sha256_hex(objective),
         'row_signals':bind(signal_path),'rows':len(ids),'counts':dict(counts),'category_mass':dict(masses),
-        'source_stores':dict(stores),'unknown':dict(unknown),'training_admission':False,'content_review':bind(review_path),
+        'source_stores':dict(stores),'source_store_category_mass':{k:dict(v) for k,v in store_mass.items()},'unknown':dict(unknown),'training_admission':False,'content_review':bind(review_path),
         'leaf_index_proofs':proofs,'source_format_history':source_reviews,'history_profile_counts':dict(history_profiles),
         'pending_census':pending_census_ref,'code_bindings':captured_components,'ordered_graph_ids_sha256':canonical_json_sha256_hex(ids),
         'ordered_kv_slots': [geometry_by_id[i] for i in ids],
+        'tool_call_markup_markers':{'tokenizer_fingerprint':tokenizer,'open':125019,'close':125020,
+            'scope':'balanced markup within assistant reply; subset of reply mass, not verified tool execution'},
         'scope':'Full graph parser and effective CE mask; measured source labels do not verify outcomes.'}
     write_json_durable(output/'receipt.json',census);return census
 

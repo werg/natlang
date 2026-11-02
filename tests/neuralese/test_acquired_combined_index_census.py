@@ -39,3 +39,16 @@ def test_sample_contains_only_actual_effective_positive_tokens():
     weights,_=graph_weights(graph,obj)
     expected=[token for token,weight in zip(actual,weights,strict=True) if weight>0][:8192]
     assert [token for run in review['sample']['effective_positive_token_segments'] for token in run]==expected
+
+
+def test_tool_markup_mass_counts_only_complete_assistant_reply_pairs(monkeypatch):
+    from scripts.neuralese_data import audit_acquired_learning_signal as audit
+    graph=row();graph['nodes'][0]['token_ids']=[125019,7,125020,125019,8,125020,125019,9]
+    graph['nodes'][0]['target_weights']=[1]*8
+    monkeypatch.setattr(audit,'graph_weights',lambda *_:([0,0,0,0.5,1,0.5,2,3],[0,0,0,1,1,1,1,1]))
+    signal=audit.row_signal(graph,{},tool_call_markers=(125019,125020))
+    measured=signal['tool_call_markup']
+    assert measured['balanced_pairs']==1
+    assert measured['effective_mass']==2
+    assert measured['effective_positive_tokens']==3
+    assert measured['unmatched_markers']==1

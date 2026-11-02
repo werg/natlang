@@ -25,7 +25,7 @@ def bind(path):
             'sha256': sha256_file_hex(path)}
 
 
-def row_signal(row, objective):
+def row_signal(row, objective, *, tool_call_markers=None):
     weights, categories = graph_weights(row, objective)
     mass, tokens = Counter(), Counter()
     for weight, category in zip(weights, categories):
@@ -41,7 +41,33 @@ def row_signal(row, objective):
     if diagnosis and (diagnosis.get('failed_actions_positive_targets') is not False
                       or diagnosis.get('source_labels_unchanged') is not True):
         raise ValueError('diagnosis lacks explicit non-imitation and original-label custody')
+    tool_markup = None
+    if tool_call_markers is not None:
+        start_marker, end_marker = tool_call_markers
+        # Only count complete pairs wholly within assistant reply positions.
+        # Other roles can quote the same strings and are not action targets.
+        token_ids = (token for node in row['nodes'] for token in node['token_ids'])
+        active = None; paired_mass = 0.0; paired_tokens = 0; pairs = 0; unmatched = 0
+        for token, weight, category in zip(token_ids, weights, categories, strict=True):
+            if CATEGORIES[category] != 'reply':
+                if active is not None: unmatched += 1; active = None
+                continue
+            if token == start_marker:
+                if active is not None: unmatched += 1
+                active = [0.0, 0]
+            if active is not None:
+                active[0] += weight
+                active[1] += weight > 0
+            if token == end_marker:
+                if active is None: unmatched += 1
+                else:
+                    paired_mass += active[0]; paired_tokens += active[1]; pairs += 1; active = None
+        if active is not None: unmatched += 1
+        tool_markup = {'balanced_pairs': pairs, 'effective_mass': paired_mass,
+            'effective_positive_tokens': paired_tokens, 'unmatched_markers': unmatched,
+            'scope': 'balanced tool-call markup within assistant reply; not tool correctness or execution'}
     return {'id': row['id'], 'graph_sha256': canonical_json_sha256_hex(row),
+            **({'tool_call_markup': tool_markup} if tool_markup is not None else {}),
             'source_store': lineage.get('store'), 'source_groups': row.get('source_groups', []),
             'source_row_id': row.get('conversion', {}).get('source_row_id'),
             'source_curated': acquired.get('admission_class'),
