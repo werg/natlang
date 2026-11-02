@@ -22,6 +22,36 @@ from ..common.paths import root
 from .task_rollouts import prepare, score, neuralese_use_bonus as bonus_setting
 
 
+def _active_reclassified_rollouts(state, report, values, round_dir):
+    """Keep the authenticated projection authoritative across active resumes."""
+    current = state['update_rollouts']
+    corrected = values['rollouts']
+    raw = str(round_dir / 'rollouts.jsonl')
+    if current not in (raw, corrected):
+        raise ValueError('active update names a different rollout than the authenticated correction')
+    if current == raw and Path(values['learner_out']).exists() and not report.get('reclassified_attempt_retry'):
+        raise ValueError('reclassified learner already exists; reviewed attempt retry required')
+    if report.get('reclassified_attempt_retry'):
+        retries = state.setdefault('reward_reclassification_retry_history', [])
+        if report['reclassified_attempt_retry'] not in retries:
+            retries.append(report['reclassified_attempt_retry'])
+    return corrected
+
+
+def _verify_existing_rl_admission(stage_out, rollouts, policy, policy_loss):
+    """Check a resumed admission before allowing any learner command."""
+    from ..common.hashing import sha256_file_hex
+    admission = json.loads((stage_out / 'rl-data-receipt.json').read_text())
+    rollout = Path(rollouts).resolve(strict=True)
+    admitted_policy = (admission.get('policy') or {}).get('checkpoint_sha256', admission.get('behavior_policy_sha256'))
+    if (admission.get('schema') != 'natlang.native-rl-admission/1'
+            or admission.get('policy_loss') != policy_loss or admitted_policy != policy
+            or admission.get('rollouts') != {str(rollout): sha256_file_hex(rollout)}
+            or admission.get('native_graphs_sha256') != sha256_file_hex(stage_out / 'rl-native-graphs.jsonl')
+            or admission.get('objective_sha256') != sha256_file_hex(stage_out / 'rl-native-objective.json')):
+        raise ValueError('RL learner admission differs from the selected policy, loss, rollout or source bytes')
+
+
 def commit_no_signal_round(state, *, report_path, rollouts_path, policy_id, policy_loss, next_offset):
     """Advance collection custody without claiming a training update."""
     from ..common.hashing import sha256_file_hex_cached
@@ -1028,7 +1058,13 @@ def collect_with_actor(config, values, **kwargs):
     rescored = (config.get('reward_reclassification_continuations') or {}).get(str(Path(kwargs['out']).resolve()))
     if rescored is not None:
         from .reward_reclassification import resume_reclassified_collection
-        return resume_reclassified_collection(rescored, kwargs, validate_actors=validate_actor_receipts)
+        report = resume_reclassified_collection(rescored, kwargs, validate_actors=validate_actor_receipts)
+        retry = (config.get('reward_reclassification_attempt_retries') or {}).get(str(Path(kwargs['out']).resolve()))
+        if retry is not None:
+            from .reward_reclassification import verify_reclassified_attempt_retry
+            report['reclassified_learner_out'] = verify_reclassified_attempt_retry(retry, kwargs, rescored)
+            report['reclassified_attempt_retry'] = retry
+        return report
     amended = (config.get('amended_collection_continuations') or {}).get(str(Path(kwargs['out']).resolve()))
     if amended is not None:
         from .amended_collection import resume_amended_collection
@@ -1664,9 +1700,15 @@ def run(config_path, *, rounds=None, stop=None):
                 if state.get('update_policy_loss') != policy_loss:
                     raise ValueError('RL policy loss changed inside an active update round; keep its declared loss '
                                      'or start a fresh round with a new collection')
-                mode = state['update_mode']
-                values['rollouts'] = state['update_rollouts']
-                rft_stages = state.get('update_stages', ['all'])
+                correcting_raw = (bool(report.get('reward_reclassification'))
+                                  and state['update_rollouts'] == str(round_dir / 'rollouts.jsonl'))
+                if not correcting_raw:
+                    mode = state['update_mode']
+                    rft_stages = state.get('update_stages', ['all'])
+                if report.get('reward_reclassification'):
+                    values['rollouts'] = _active_reclassified_rollouts(state, report, values, round_dir)
+                else:
+                    values['rollouts'] = state['update_rollouts']
             values['mode'] = mode
             if config.get('coefficient_policy') and state.get('active_update_round')!=str(round_dir):
                 state['update_coefficient_policy']={'path':values['coefficient_policy'],'sha256':values['coefficient_policy_sha256']}
@@ -1702,9 +1744,8 @@ def run(config_path, *, rounds=None, stop=None):
                 learner_report = stage_out / 'report.json'
                 saved_progress=json.loads(learner_report.read_text()) if learner_report.is_file() else {}
                 saved_receipt = stage_out / 'rl-data-receipt.json'
-                if mode == 'grpo' and saved_receipt.is_file() and (
-                        json.loads(saved_receipt.read_text()).get('policy_loss') != policy_loss):
-                    raise ValueError('completed RL learner stage was admitted under a different policy loss')
+                if mode == 'grpo' and saved_receipt.is_file():
+                    _verify_existing_rl_admission(stage_out, values['rollouts'], policy, policy_loss)
                 already_complete=bool((saved_progress.get('completed') and
                     (not (config.get('coefficient_policy') and mode!='seed') or saved_progress.get('qualification_complete') is True))
                     or qualified_seed_boundary(config,mode,saved_progress,stage_out/'checkpoint.pt'))

@@ -181,3 +181,30 @@ def resume_reclassified_collection(reference, request, *, validate_actors):
     return {**json.loads(score.read_text()), 'reclassified_rollouts': str(corrected),
             'reward_reclassification': reference,
             'reclassified_learner_out': str(out / ('learner-reclassified-' + proof['id']))}
+
+
+def verify_reclassified_attempt_retry(reference, request, correction):
+    """Retain an incorrectly admitted attempt while restarting from its real parent."""
+    evidence = json.loads(_read(reference).read_text())
+    out = Path(request['out']).resolve(strict=True)
+    proof = json.loads(_read(correction).read_text())
+    attempt = out / ('learner-reclassified-' + proof['id'])
+    if (evidence.get('schema') != 'natlang.reward-reclassification-attempt-retry/1'
+            or evidence.get('reason') != 'original-rollouts-admitted-after-reclassification'
+            or evidence.get('out') != str(out) or evidence.get('reclassification') != correction
+            or evidence.get('parent', {}).get('sha256') != request['policy_id']
+            or proof.get('parent_sha256') != request['policy_id']):
+        raise ValueError('retry does not bind the reviewed correction and current parent')
+    _read(evidence['parent'])
+    checkpoint = _read(evidence['discarded_checkpoint'])
+    admission_path = _read(evidence['discarded_admission'])
+    if checkpoint != (attempt / 'checkpoint.pt').resolve(strict=True) or admission_path != (attempt / 'rl-data-receipt.json').resolve(strict=True):
+        raise ValueError('retry evidence does not name the actual discarded attempt')
+    admission = json.loads(admission_path.read_text())
+    original = out / 'rollouts.jsonl'
+    if (admission.get('schema') != 'natlang.native-rl-admission/1'
+            or admission.get('policy', {}).get('checkpoint_sha256') != request['policy_id']
+            or admission.get('rollouts') != {str(original): sha256_file_hex(original)}
+            or evidence['discarded_checkpoint']['sha256'] == request['policy_id']):
+        raise ValueError('retry attempt lacks the actual incorrect admission and distinct checkpoint')
+    return str(out / ('learner-reclassified-' + proof['id'] + '-attempt-1'))

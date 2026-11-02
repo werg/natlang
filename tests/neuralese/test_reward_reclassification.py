@@ -1,3 +1,5 @@
+import hashlib
+from pathlib import Path
 import copy
 import json
 
@@ -136,3 +138,68 @@ def test_unearned_preparation_rejects_other_state_and_bindings(tmp_path, mutatio
         evidence['admission'] = write(tmp_path / 'foreign-admission.json', {})
         reference = write(request['out'] / 'unearned-preparation.json', evidence)
     with pytest.raises(ValueError): verify_unearned_preparation(reference, request)
+
+
+def test_active_reclassification_keeps_corrected_rollout(tmp_path):
+    from natlang_neuralese.rl.production import _active_reclassified_rollouts
+    out = tmp_path / 'round'; out.mkdir()
+    values = {'rollouts': str(out / 'corrected.jsonl'), 'learner_out': str(out / 'learner-corrected')}
+    state = {'update_rollouts': str(out / 'rollouts.jsonl')}
+    assert _active_reclassified_rollouts(state, {}, values, out) == values['rollouts']
+    (out / 'learner-corrected').mkdir()
+    with pytest.raises(ValueError, match='reviewed attempt retry'):
+        _active_reclassified_rollouts(state, {}, values, out)
+    state['update_rollouts'] = str(out / 'other.jsonl')
+    with pytest.raises(ValueError, match='different rollout'):
+        _active_reclassified_rollouts(state, {}, values, out)
+    state['update_rollouts'] = str(out / 'rollouts.jsonl')
+    report = {'reclassified_attempt_retry': {'sha256': 'reviewed'}}
+    assert _active_reclassified_rollouts(state, report, values, out) == values['rollouts']
+    assert state['reward_reclassification_retry_history'] == [report['reclassified_attempt_retry']]
+
+
+@pytest.mark.parametrize('tamper', ['none', 'parent', 'admission', 'checkpoint', 'reason', 'correction'])
+def test_reviewed_reclassification_attempt_retry(tmp_path, tamper):
+    from natlang_neuralese.rl.reward_reclassification import verify_reclassified_attempt_retry
+    reference, request, _, write, _ = preparation_fixture(tmp_path)
+    out = request['out']; parent = json.loads(Path(reference['path']).read_text())['parent']
+    correction = write(out / 'proof.json', {'id':'abc', 'parent_sha256':parent['sha256']})
+    attempt = out / 'learner-reclassified-abc'; attempt.mkdir()
+    checkpoint = write(attempt / 'checkpoint.pt', {'diagnostic':'bad update'})
+    raw = out / 'rollouts.jsonl'
+    admission = write(attempt / 'rl-data-receipt.json', {'schema':'natlang.native-rl-admission/1',
+        'policy':{'checkpoint_sha256':parent['sha256']}, 'rollouts':{str(raw):hashlib.sha256(raw.read_bytes()).hexdigest()}})
+    evidence = {'schema':'natlang.reward-reclassification-attempt-retry/1', 'out':str(out),
+        'reason':'original-rollouts-admitted-after-reclassification', 'parent':parent,
+        'reclassification':correction, 'discarded_checkpoint':checkpoint, 'discarded_admission':admission}
+    if tamper == 'parent': request['policy_id'] = checkpoint['sha256']
+    if tamper == 'admission': write(attempt / 'rl-data-receipt.json', {'forged':True})
+    if tamper == 'checkpoint': write(attempt / 'checkpoint.pt', {'forged':True})
+    if tamper == 'reason': evidence['reason'] = 'other'
+    if tamper == 'correction': evidence['reclassification'] = {'sha256':'forged'}
+    ref = write(out / 'retry.json', evidence)
+    if tamper == 'none':
+        assert verify_reclassified_attempt_retry(ref, request, correction) == str(out / 'learner-reclassified-abc-attempt-1')
+    else:
+        with pytest.raises(ValueError): verify_reclassified_attempt_retry(ref, request, correction)
+
+
+@pytest.mark.parametrize('tamper', ['none', 'rollouts', 'graphs', 'objective', 'policy', 'loss'])
+def test_existing_admission_matches_selected_source_before_resume(tmp_path, tamper):
+    from natlang_neuralese.rl.production import _verify_existing_rl_admission
+    def put(name, data):
+        path = tmp_path / name; path.write_text(data)
+        return path, hashlib.sha256(path.read_bytes()).hexdigest()
+    rollout, rollhash = put('rollouts.jsonl', 'corrected')
+    graph, graphhash = put('rl-native-graphs.jsonl', 'graphs')
+    objective, objhash = put('rl-native-objective.json', 'objective')
+    admission = {'schema':'natlang.native-rl-admission/1', 'policy':{'checkpoint_sha256':'parent'},
+        'policy_loss':{'schema':'jolt-plus/1'}, 'rollouts':{str(rollout):rollhash},
+        'native_graphs_sha256':graphhash, 'objective_sha256':objhash}
+    (tmp_path / 'rl-data-receipt.json').write_text(json.dumps(admission))
+    if tamper in ('rollouts', 'graphs', 'objective'): {'rollouts':rollout, 'graphs':graph, 'objective':objective}[tamper].write_text('forged')
+    policy = 'other' if tamper == 'policy' else 'parent'
+    loss = {} if tamper == 'loss' else {'schema':'jolt-plus/1'}
+    if tamper == 'none': _verify_existing_rl_admission(tmp_path, rollout, policy, loss)
+    else:
+        with pytest.raises(ValueError): _verify_existing_rl_admission(tmp_path, rollout, policy, loss)
