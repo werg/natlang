@@ -1467,7 +1467,8 @@ def build_parser():
         help='explicit per-model attention arithmetic; restores optimizer, RNG and row exposure before qualification')
     from .native_optimizer_migration import POLICY as NATIVE_OPTIMIZER_MIGRATION
     parser.add_argument('--native-norm-execution', choices=('source-v1','stable-v1'))
-    parser.add_argument('--native-shared-execution',choices=('source-v1','stable-v1'))
+    from ..model.shared_execution import NATIVE_SHARED_EXECUTIONS
+    parser.add_argument('--native-shared-execution',choices=NATIVE_SHARED_EXECUTIONS)
     parser.add_argument('--history-reasoning-policy', choices=('keep',), default=None,
         help='explicitly render earlier assistant reasoning in complete training and serving histories')
     from ..model.native_parameter_precision import ORDINARY_PRECISION_PROFILES

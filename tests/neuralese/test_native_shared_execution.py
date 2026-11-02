@@ -77,10 +77,27 @@ def test_maple_norm_preserves_private_gain_and_reference_derivatives(device,high
 def test_recipe_profile_is_shared_across_objectives(kind):
     from natlang_neuralese.train.recipe import HANDLERS,validate_stage_parameters,stage_parameter_args
     assert 'native_shared_execution'in HANDLERS[kind]['parameters']
-    for value in('source-v1','stable-v1'):
+    for value in('source-v1','stable-v1','ffn-stable-v1'):
         validate_stage_parameters(kind,{'native_shared_execution':value})
         assert stage_parameter_args({'native_shared_execution':value})==['--native-shared-execution',value]
     with pytest.raises(ValueError):validate_stage_parameters(kind,{'native_shared_execution':'unknown'})
+
+
+def test_ffn_only_profile_preserves_norm_and_convolution_state_policy():
+    from natlang_neuralese.model.shared_execution import convolution_state_dtype, _fixed_ffn
+    model, *_ = fixture('lfm')
+    norm = next(module for module in model.port.modules() if type(module).__name__ in {'RMSNorm','Lfm2RMSNorm','Lfm3RMSNorm'})
+    old_norm = norm.forward
+    configure_shared_execution(model, 'ffn-stable-v1')
+    validate_shared_execution(model, {'native_shared_execution':'ffn-stable-v1'})
+    assert norm.forward == old_norm
+    assert any(getattr(module.forward, '__func__', None) is _fixed_ffn for module in model.port.modules())
+    with torch.enable_grad():
+        assert convolution_state_dtype(model.port) == torch.float32
+    configure_shared_execution(model, 'stable-v1')
+    configure_shared_execution(model, 'ffn-stable-v1')
+    validate_shared_execution(model, {'native_shared_execution':'ffn-stable-v1'})
+    assert norm.forward == old_norm
 
 
 @pytest.mark.parametrize('source_transition',[False,True])
@@ -141,16 +158,17 @@ def test_real_checkpoint_resume_inherits_profile_and_exact_optimizer_rng_exposur
 
 
 @pytest.mark.parametrize('family',['lfm'])
-def test_stable_saved_tensor_identity_preserves_runtime_validation_and_rejects_profile_conflict(tmp_path,monkeypatch,family):
+@pytest.mark.parametrize('profile',['stable-v1','ffn-stable-v1'])
+def test_stable_saved_tensor_identity_preserves_runtime_validation_and_rejects_profile_conflict(tmp_path,monkeypatch,family,profile):
     from test_native_serving_adapters import engine_fixture
     from test_native_raw_policy import parent_training
     from natlang_neuralese.model import native_model as native
     from natlang_neuralese.rl.native_raw_policy import prepare_raw_policy
     from natlang_neuralese.common.hashing import sha256_file_hex
     engine=engine_fixture(tmp_path,family);model=engine.shared_model;config=engine.model_config
-    configure_shared_execution(model,'stable-v1');config['native_shared_execution']='stable-v1'
+    configure_shared_execution(model,profile);config['native_shared_execution']=profile
     saved={'schema':native.CHECKPOINT_SCHEMA,'step':9,'model_config':config,**native.model_state(model),'training':parent_training()}
-    assert saved['interface_state']['native_shared_execution']=='stable-v1'
+    assert saved['interface_state']['native_shared_execution']==profile
     parent=tmp_path/'stable.pt';torch.save(saved,parent)
     expected=native.native_identity(model,config,checkpoint_sha256=sha256_file_hex(parent))
     actual=prepare_raw_policy(parent,base=config['base'],tokenizer_out=tmp_path/'tokens')

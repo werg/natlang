@@ -4,7 +4,7 @@ from types import MethodType
 import torch
 import torch.nn.functional as F
 
-NATIVE_SHARED_EXECUTIONS=('source-v1','stable-v1')
+NATIVE_SHARED_EXECUTIONS=('source-v1','stable-v1','ffn-stable-v1')
 _NORM_TYPES={'RMSNorm','Lfm2RMSNorm','Lfm3RMSNorm','Qwen2RMSNorm','Qwen3RMSNorm'}
 
 
@@ -35,12 +35,17 @@ def _fixed_norm(module,value):
 def configure_shared_execution(model,profile='source-v1'):
     if profile not in NATIVE_SHARED_EXECUTIONS:
         raise ValueError('unsupported native shared execution profile: '+str(profile))
+    if profile == 'ffn-stable-v1' and not any(
+            type(module) is torch.nn.Linear and '.feed_forward.' in name
+            for name, module in model.port.named_modules()):
+        raise ValueError('FFN-only shared execution requires supported feed-forward projections')
     for name,module in model.port.named_modules():
         implementation=(_fixed_ffn if type(module)is torch.nn.Linear and '.feed_forward.'in name
             else _fixed_norm if type(module).__name__ in _NORM_TYPES else None)
         if implementation is None:
             continue
-        if profile=='stable-v1':
+        selected = profile == 'stable-v1' or (profile == 'ffn-stable-v1' and implementation is _fixed_ffn)
+        if selected:
             if not hasattr(module,'_native_shared_source_forward'):
                 module._native_shared_source_forward=module.forward
             module.forward=MethodType(implementation,module)
@@ -68,10 +73,11 @@ def validate_shared_execution(model,config):
         if implementation is None:
             continue
         active=getattr(module.forward,'__func__',None)
-        if profile=='stable-v1' and (active is not implementation
+        selected = profile == 'stable-v1' or (profile == 'ffn-stable-v1' and implementation is _fixed_ffn)
+        if selected and (active is not implementation
                 or not hasattr(module,'_native_shared_source_forward')):
             raise ValueError('native shared execution module differs from declared profile: '+name)
-        if profile=='source-v1' and active in (_fixed_ffn,_fixed_norm):
+        if not selected and active in (_fixed_ffn,_fixed_norm):
             raise ValueError('native source execution retains stable module: '+name)
 
 

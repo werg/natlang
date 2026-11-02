@@ -2,7 +2,7 @@
   "description": "SGLang fork serving natlang's LFM3 RL actors (owner decision 2026-10-29: upstream-maintained Liquid LFM3 implementation, sgl-project/sglang PR #46858, for dependability). The PR branch (with the upstream main it contains) plus natlang commits: exact post-temperature sampled-token logprob and top-k returned compactly per token (custom_params.natlang_top_k); LFM3 producer spans (the export's producing embedding table, span state mapped in extend and decode) and the native-state export of a closed span (custom_params.natlang_capture) and native-state import through content-hashed placeholders (custom_params.natlang_import), and per-request native adapters in resident low-rank slots (custom_params.natlang_adapter; batches without an adapted request replay the base-only decode graph). The natlang serving front is serve/sglang_actor.py (scripts/neuralese_data/serve_native_checkpoint.py --engine sglang); the checkpoint is served through export/native_hf.py. NATLANG_FORK.md in the fork documents the base, our commits and the rebase procedure. A separate git checkout, not vendored.",
   "path": "../sglang-natlang",
   "branch": "natlang",
-  "commit": "c8b499410b5df8ad321be23191c8bfc7994c4ea5",
+  "commit": "f0aae211c9fae62b555fcf1c43a557ff6700b214",
   "repository": "https://github.com/werg/sglang-natlang",
   "upstream": "https://github.com/sgl-project/sglang",
   "upstream_base": "17e94c4677d7beb58a89b104fd61b3768994e45e",
@@ -30,6 +30,6 @@
     "transformers": "5.19.0",
     "changed_2026_10_31": "humming-kernels 0.1.12 -> 0.1.18"
   },
-  "qualification": "LFM3 native and source FFN projection dispatch has CPU coverage only; whole-model state, logits, likelihood, replay and performance remain unqualified.",
+  "qualification": "The explicit FFN-only execution profile and SGLang dispatch have CPU coverage only. Native and SGLang whole-model state, actor/learner replay, held behavior and performance remain unqualified.",
   "bf16_reduction": "NATLANG_BF16_REDUCTION defaults to fp32-accumulate; reduced is historical replay only"
 }

@@ -63,6 +63,40 @@ def require_raw_training(state):
     return training
 
 
+def saved_native_identity(state, *, checkpoint_sha256):
+    """Derive serving identity directly from a verified full or actor-view state."""
+    import torch
+    from ..model.native_model import native_tensor_identity
+    config = state['model_config']
+    interface = state['interface_state']
+    embedding_keys = [key for key in state['backbone_state'] if key == 'embed_tokens.weight' or key.endswith('.embed_tokens.weight')]
+    if len(embedding_keys) != 1:
+        raise ValueError('native checkpoint must identify its one actual input embedding tensor')
+    dtype = {'torch.bfloat16': torch.bfloat16, 'torch.float32': torch.float32,
+             'torch.float16': torch.float16}[config['dtype']]
+    # These are views of saved tensors, not modules or randomly initialized
+    # weights. Reuse serving's exact identity law, including activation casts.
+    attention_mode=interface.get('native_attention_precision','ieee')
+    shared_mode=interface.get('native_shared_execution',config.get('native_shared_execution','source-v1'))
+    from ..model.native_parameter_precision import ordinary_precision_state_dtypes
+    ordinary_dtypes = ordinary_precision_state_dtypes(state['backbone_state'],
+        config.get('native_ordinary_precision'))
+    proxy = SimpleNamespace(port=SimpleNamespace(embedding_weight=state['backbone_state'][embedding_keys[0]].to(dtype),
+        native_attention_precision=attention_mode, native_norm_execution=interface.get('native_norm_execution','source-v1'),
+        native_shared_execution=shared_mode),
+        native_attention_precision=attention_mode,
+        native_shared_execution=shared_mode,
+        native_norm_execution=interface.get('native_norm_execution','source-v1'),
+        native_ordinary_precision=config.get('native_ordinary_precision'),
+        _native_ordinary_parameter_dtypes=ordinary_dtypes,
+        input_rows=interface['input_rows'], adapter=SimpleNamespace(state_dict=lambda: interface['adapter']),
+        native_linear_precision=interface.get('native_linear_precision', 'ieee'),
+        token_override_ids=tuple(interface.get('token_override_ids', ())),
+        tied=interface.get('output_rows') is None,
+        extra_input_rows=interface.get('extra_input_rows'), extra_output_rows=interface.get('extra_output_rows'))
+    return native_tensor_identity(proxy, config, checkpoint_sha256=checkpoint_sha256)
+
+
 def prepare_raw_policy(checkpoint, *, base, tokenizer_out, require_optimizer=True, verified_checkpoint=None,
                        checkpoint_control=None):
     import torch
@@ -91,33 +125,7 @@ def prepare_raw_policy(checkpoint, *, base, tokenizer_out, require_optimizer=Tru
         raise ValueError('raw native RL requires an actual single-model native checkpoint')
     if require_optimizer and control is None:require_raw_training(state)
     config = state['model_config']
-    interface = state['interface_state']
-    embedding_keys = [key for key in state['backbone_state'] if key == 'embed_tokens.weight' or key.endswith('.embed_tokens.weight')]
-    if len(embedding_keys) != 1:
-        raise ValueError('native checkpoint must identify its one actual input embedding tensor')
-    dtype = {'torch.bfloat16': torch.bfloat16, 'torch.float32': torch.float32,
-             'torch.float16': torch.float16}[config['dtype']]
-    # These are views of saved tensors, not modules or randomly initialized
-    # weights. Reuse serving's exact identity law, including activation casts.
-    attention_mode=interface.get('native_attention_precision','ieee')
-    shared_mode=interface.get('native_shared_execution',config.get('native_shared_execution','source-v1'))
-    from ..model.native_parameter_precision import ordinary_precision_state_dtypes
-    ordinary_dtypes = ordinary_precision_state_dtypes(state['backbone_state'],
-        config.get('native_ordinary_precision'))
-    proxy = SimpleNamespace(port=SimpleNamespace(embedding_weight=state['backbone_state'][embedding_keys[0]].to(dtype),
-        native_attention_precision=attention_mode, native_norm_execution=interface.get('native_norm_execution','source-v1'),
-        native_shared_execution=shared_mode),
-        native_attention_precision=attention_mode,
-        native_shared_execution=shared_mode,
-        native_norm_execution=interface.get('native_norm_execution','source-v1'),
-        native_ordinary_precision=config.get('native_ordinary_precision'),
-        _native_ordinary_parameter_dtypes=ordinary_dtypes,
-        input_rows=interface['input_rows'], adapter=SimpleNamespace(state_dict=lambda: interface['adapter']),
-        native_linear_precision=interface.get('native_linear_precision', 'ieee'),
-        token_override_ids=tuple(interface.get('token_override_ids', ())),
-        tied=interface.get('output_rows') is None,
-        extra_input_rows=interface.get('extra_input_rows'), extra_output_rows=interface.get('extra_output_rows'))
-    identity = native_tensor_identity(proxy, config, checkpoint_sha256=sha256_file_hex_cached(checkpoint))
+    identity = saved_native_identity(state, checkpoint_sha256=sha256_file_hex_cached(checkpoint))
     tokenizer = AutoTokenizer.from_pretrained(base, local_files_only=True, trust_remote_code=False)
     from ..serve.chat import bind_history_reasoning
     bind_history_reasoning(tokenizer, policy=config.get('history_reasoning_policy'), require_declared=True,

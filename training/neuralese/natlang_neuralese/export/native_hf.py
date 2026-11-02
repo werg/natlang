@@ -114,6 +114,13 @@ def export_loaded(model, tokenizer, roles, config, *, checkpoint, checkpoint_sha
     if (earlier and earlier.get('schema') == SCHEMA and earlier.get('checkpoint_sha256') == checkpoint_sha256 and earlier.get('dtype') == dtype_name
             and (out_dir / 'model.safetensors').is_file()
             and sha256_file_hex(out_dir / 'model.safetensors') == earlier['weights_sha256']):
+        profile = config.get('native_shared_execution', 'source-v1')
+        if earlier.get('native_shared_execution', 'source-v1') != profile:
+            raise ValueError('existing SGLang export has a different native shared execution profile')
+        if profile != 'source-v1':
+            saved_config = json.loads((out_dir / 'config.json').read_text())
+            if saved_config.get('natlang_shared_execution') != profile:
+                raise ValueError('existing SGLang config does not bind its native shared execution profile')
         return earlier
     if config['architecture'] != 'lfm3':
         raise ValueError(f"SGLang export is qualified for lfm3 only, not {config['architecture']!r}")
@@ -129,6 +136,7 @@ def export_loaded(model, tokenizer, roles, config, *, checkpoint, checkpoint_sha
     hf_config.torch_dtype = dtype_name
     markers = {name: int(getattr(roles, name)) for name in ('produce_open', 'produce_close', 'consume_open', 'consume_close')}
     hf_config.natlang_producer = {**markers, 'offset': hf_config.vocab_size}
+    hf_config.natlang_shared_execution = config.get('native_shared_execution', 'source-v1')
     hf_config.save_pretrained(out_dir)
     # The config's auto_map names LFM3's Hub remote code; SGLang reads the config through it (--trust-remote-code)
     # and runs its own model. The vendored files are byte-identical to the pinned revision (third_party/lfm3).
@@ -150,6 +158,7 @@ def export_loaded(model, tokenizer, roles, config, *, checkpoint, checkpoint_sha
     manifest = {
         'schema': SCHEMA, 'checkpoint': str(checkpoint), 'checkpoint_sha256': checkpoint_sha256, 'dtype': dtype_name,
         'architecture': config['architecture'], 'tokenizer_fingerprint': config.get('tokenizer_fingerprint'),
+        'native_shared_execution': config.get('native_shared_execution', 'source-v1'),
         'merged_rows': {'marker_ids': list(config['marker_ids']),
                         'token_override_ids': list(config.get('token_override_ids', [])), 'tied': tied},
         'weights_sha256': sha256_file_hex(out_dir / 'model.safetensors'),

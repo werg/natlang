@@ -198,7 +198,7 @@ def launch_sglang(engine, args, checkpoint):
     python = args.sglang_python or fork['python']
     if engine.model_config.get('native_linear_precision', 'ieee') != 'ieee':
         raise ValueError('SGLang native projection requires the ieee native linear policy')
-    if engine.model_config.get('native_shared_execution', 'source-v1') != 'source-v1':
+    if engine.model_config.get('native_shared_execution', 'source-v1') not in ('source-v1', 'ffn-stable-v1'):
         raise ValueError('SGLang LFM3 FFN has not qualified this native shared execution policy')
     # The backend's native projection uses the same frozen serving runtime as
     # the front. Put it first so an editable or user-installed package cannot
