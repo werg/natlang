@@ -24,7 +24,14 @@ def audit(screen_ref,predecessor_ref,reserved_refs,out):
     if (screen.get('schema')!='natlang.new-acquired-source-screen/1' or screen.get('training_admission') is not False
             or screen.get('prepared_source_sha256')!=predecessor['source']['sha256']):
         raise ValueError('screen and exact prepared predecessor differ')
-    ids=json.loads(checked(screen['active_ids']).read_text());families=json.loads(checked(predecessor['family_map']).read_text())
+    if screen.get('active_ids'):
+        ids=json.loads(checked(screen['active_ids']).read_text())
+    else:
+        ids=[]
+        with open_jsonl_text(checked(screen['active'])) as stream:
+            for line in stream:
+                if line.strip():ids.append(json.loads(line)['id'])
+    families=json.loads(checked(predecessor['family_map']).read_text())
     if (len(ids)!=screen['active']['rows'] or len(set(ids))!=len(ids)
             or families.get('source_sha256')!=predecessor['source']['sha256']
             or len(families.get('rows',[]))!=predecessor['rows']):
