@@ -1,5 +1,20 @@
 # Main goal: keep moving forward (owner, 2026-10-11)
 
+## Digest-cache maintenance stays bounded and off the source filesystem (engineering, 2026-11-02)
+
+The shared append-only digest cache reached606.5MB and2.30million entries;
+loading its full in-memory index exhausted a1GiB metadata job. Small operations
+and tests use isolated hash caches. Periodic storage supervision compacts the
+shared derived cache by default using a bounded SQLite index, dropping disposable
+/tmp and /var/tmp entries and retaining the last observed signature per path and
+key kind. Exact source signatures still control lookup; misses rehash bytes.
+Do not stat-walk every historic source path on the external filesystem: that
+attempt stalled on metadata I/O and was replaced. The successful live pass took
+14seconds, retained337.7MB and used1.5GiB measured cgroup peak, so its storage
+observer is admitted at2GiB. A recent-pass/growth check prevents repeated scans.
+Concurrent cache additions may become misses; source data, checkpoints and
+verification evidence are never modified by cache maintenance.
+
 ## Removed rows retain earned exposure on resume (engineering, 2026-11-02)
 
 When resuming an existing SFT frame, restore its complete saved exposure ledger,

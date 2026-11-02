@@ -130,8 +130,14 @@ def main():
     parser.add_argument('--internal', type=Path, default=machine_root('data_nvme'))
     parser.add_argument('--external', type=Path, default=machine_root('data_hdd'))
     parser.add_argument('--status', type=Path, default=Path.home() / '.local/state/natlang/native-storage/status.json')
+    parser.add_argument('--no-compact-hash-cache',action='store_true',
+                        help='skip derived stale digest-cache maintenance')
     args = parser.parse_args()
     result = native_storage_observation(args.internal, args.external)
+    if not args.no_compact_hash_cache:
+        from compact_hash_cache import compact
+        cache=Path(os.environ.get('NATLANG_HASH_CACHE') or Path.home()/'.cache/natlang/sha256-cache.jsonl')
+        result['hash_cache_maintenance']=compact(cache)
     atomic_json(args.status, result)
     print(json.dumps(result), flush=True)
 

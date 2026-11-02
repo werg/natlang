@@ -1,3 +1,49 @@
+## Actual R36 restart and bounded cache maintenance, 2026-11-02 23:34 CET
+
+- Corrected runtime `runtime-native-complete-resume-v36-1102`, commit844024109,
+  frozen23:26:14. Actual owner `lfm3-intact67-full-r36-1102.service` started
+  23:29:25, controller3354577, learner3359627. Config
+  `ops/intact67-full-r36-1102/config.json`; actual output `intact67-full-r36-1102`.
+  Selected source71/full67 is intact; original FFN external admission restored.
+  All401623 corrected active graphs, historical568 visits (including the one
+  quality-deferred visit), source quotas, optimizer/RNG and joint-native recipe
+  obligations remain. Grouping2, BF16, accumulation16/refresh1 first earns the
+  actual selected SFT frame's anchor. Then promptly adopt4/16-update windows.
+  Startup source/index checks are advancing; no optimizer68 is claimed yet.
+- R36 includes the exact historical-exposure restore, async checkpoint owner-lock
+  correction, proportional-role/task-diverse RL materialization and authenticated
+  selector-history handoff. Four actual old actor71 training-world observations
+  are bound in the actual config. The handoff metadata builder's first lightweight
+  attempt failed on an absent bytes field in a path/SHA binding; corrected before
+  creation of controls. Actual second preparation passed in38seconds,5.2GiB peak;
+  it delegates full-parent validation to actual startup rather than repeating it.
+- Existing R35 metadata-only-save continuation operator is terminal failed and
+  superseded. R34's zero-SGD handoff is diagnostic, never a production parent.
+  Its numeric state was unchanged; the exact guard caught loss of one historical
+  exposure count. Preserve its raw state and measured capacity as evidence until
+  replacement/recovery dependencies are durable.
+- Final resume/correction/FFN tests64 passed. Selector handoff48 tests and29 final
+  supervised/history tests passed; strict packet mutation5 tests passed, including
+  same-size rewrites with restored mtime. Required quick checks passed.
+- Fast live digest-cache compaction completed23:30:18:606543216 to337718178B,
+  scanned2297509 entries, dropped1123867 disposable entries, retained1140572 keys.
+ 14seconds,1.5GiB measured cgroup peak. It uses bounded SQLite indexing and does
+  not stat-walk or change source files. Exact-key first digests retained; old
+  signatures collapse by path/kind, with normal lookup signatures preventing
+  unverified reuse. Concurrent append misses are safely rehashed. Receipt:
+  `ops/shared-hash-cache-bounded-compaction-1102.json`.
+- Cache/storage tests11 passed and quick checks passed. Storage observer is now
+  admitted at2GiB in both repository and installed systemd service, matching the
+  measured compaction peak; default maintenance enabled. Recent-pass/growth
+  guard skips repeated compaction. Supervisor restarted after its old overlapping
+  claim drained; verify current timer/service health. The earlier stat-walking
+  attempt and old observer were interrupted; their temporaries cleaned and the
+  original cache stayed intact until the successful bounded replacement.
+- Pop protected R34 baseline remains active and GPU-busy; no complete new score
+  yet. R36 runtime/control independent export and the first actual earned-anchor
+  continuation remain required. Full67 and diagnostic72 recovery capsules remain
+  independently downloadable with zero sandboxes; no new trained state exists.
+
 ## Exact exposure guard found resume bug; corrected fresh continuation, 2026-11-02 23:24 CET
 
 - R34 completed all six oversized cases and honored its stop before SGD23:08:54.
