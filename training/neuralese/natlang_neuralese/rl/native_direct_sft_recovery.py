@@ -515,7 +515,8 @@ def _authenticated_refresh_publication(reference, seen=None):
     seen.add(str(path))
     publication_binding=_strong_binding(path)
     publication=json.loads(path.read_text())
-    if publication.get('schema')=='natlang.native-execution-selection-publication/1':
+    if publication.get('schema') in ('natlang.native-execution-selection-publication/1',
+                                     'natlang.native-execution-source-adopted-selection/1'):
         from ..train.native_execution_transition import verify_selected_publication
         checked=verify_selected_publication(reference)
         proof=checked['proof']

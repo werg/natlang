@@ -387,3 +387,62 @@ def test_adoption_reserves_checkpoint_and_preserves_failed_serialization(tmp_pat
     assert pending.stat().st_blocks*512 >= pending.stat().st_size
     assert (failed/'checkpoint.pt.reservation.json').is_file()
     assert not (failed/'checkpoint.pt').exists()
+
+
+def test_execution_selection_composes_only_verified_source_adoption(tmp_path,monkeypatch):
+    from natlang_neuralese.train import checkpoint_safety, native_execution_transition as tx
+    parent,_,ref=fixture(tmp_path,monkeypatch,carried=True)
+    candidate=tmp_path/'candidate.pt';torch.save(parent,candidate)
+    prior=tmp_path/'prior-recipe.json';prior.write_text('{}')
+    successor=tmp_path/'next-recipe.json';successor.write_text('{}')
+    monkeypatch.setattr(checkpoint_safety.shutil,'disk_usage',lambda _:SimpleNamespace(free=100*1024**3))
+    out=tmp_path/'adoption';adoption.prepare(ref(candidate),prior_recipe=prior,successor_recipe=successor,
+        stage_id='native_full_sft',output=out)
+    proof_ref=ref(out/'proof.json')
+    transition_parent=tmp_path/'transition-parent.pt';transition_parent.write_bytes(b'old')
+    original_proof={'parent':ref(transition_parent),'checkpoint':ref(candidate),'global_step':9,
+                    'actor_identity':{'old':{'checkpoint_sha256':ref(transition_parent)['sha256']},
+                                      'new':{'checkpoint_sha256':ref(candidate)['sha256']}}}
+    qualified={'candidate':{'path':'candidate-publication','sha256':'q'},'protected_development':{'observed':True}}
+    monkeypatch.setattr(tx,'verify_qualification',lambda _:qualified)
+    monkeypatch.setattr(tx,'verify_candidate_publication',lambda _: {'proof':original_proof})
+    controller=tmp_path/'controller.json'
+    selected=tmp_path/'selected.json'
+    selected.write_text(json.dumps({'schema':'natlang.native-execution-selection-publication/1',
+        'selection_hold':False,'optimizer_updates':0,'graph_visits':0,'decision_reason':'reviewed',
+        'qualification':{'path':'qualified','sha256':'q'},'candidate':qualified['candidate'],
+        'parent':original_proof['parent'],'checkpoint':original_proof['checkpoint'],
+        'actor_identity':original_proof['actor_identity'],'protected_development':qualified['protected_development'],
+        'untouched_confirmation':False,'controller_state_path':str(controller)}))
+    selection_ref=ref(selected)
+    controller.write_text(json.dumps({'execution_transition_history':[selection_ref],
+                                     'direct_sft_refresh_history':[selection_ref]}))
+    composed=tx.publish_source_adopted_selection(selection_ref,proof_ref,out=tmp_path/'composed.json')
+    verified=tx.verify_selected_publication(composed)
+    assert verified['proof']['parent']==original_proof['parent']
+    assert verified['proof']['checkpoint']==ref(out/'checkpoint.pt')
+    assert verified['source_adoption']['optimizer_updates']==0
+    altered=copy.deepcopy(parent);altered['model_state']['weight'][0]=99
+    other=tmp_path/'other.pt';torch.save(altered,other)
+    original_proof['checkpoint']=ref(other)
+    with pytest.raises(ValueError):tx.verify_selected_publication(composed)
+    original_proof['checkpoint']=ref(candidate)
+    adoption_proof=json.loads((out/'proof.json').read_text())
+    training=torch.load(out/'checkpoint.pt',weights_only=False)['training']
+    training.setdefault('options',{})['native_shared_execution_history']=[{'from':tx.SOURCE,'to':tx.TARGET,
+        'qualification':'pending','parent_checkpoint_sha256':original_proof['parent']['sha256'],'at_global_step':9}]
+    admitted=tx.require_qualified_for_training(training,admission_ref=composed,checkpoint_path=out/'checkpoint.pt')
+    assert admitted['options']['native_shared_execution_history'][0]['qualification']['candidate_checkpoint_sha256']==ref(out/'checkpoint.pt')['sha256']
+    original_child=torch.load(out/'checkpoint.pt',weights_only=False)
+    for kind in ('weight','exposure','parent'):
+        child=copy.deepcopy(original_child); forged=copy.deepcopy(adoption_proof)
+        if kind=='weight': child['model_state']['weight'][0]=99
+        if kind=='exposure':
+            counts=child['training']['sft_progress']['native_full_sft']['exposure_counts']
+            counts[next(iter(counts))]=99
+        child_path=tmp_path/(kind+'.pt');torch.save(child,child_path)
+        forged['checkpoint']=ref(child_path)
+        if kind=='parent':forged['parent']=ref(other)
+        forged_path=tmp_path/(kind+'-proof.json');forged_path.write_text(json.dumps(forged))
+        with pytest.raises((ValueError,KeyError)):
+            tx.publish_source_adopted_selection(selection_ref,ref(forged_path),out=tmp_path/(kind+'-forged.json'))

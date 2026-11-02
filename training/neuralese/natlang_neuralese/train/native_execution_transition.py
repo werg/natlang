@@ -634,6 +634,35 @@ def verify_selected_publication(reference):
     from ..rl.native_direct_sft_recovery import _verify_historical_file_ref
     from pathlib import Path
     publication = json.loads(_verify_historical_file_ref(reference).read_text())
+    if publication.get('schema') == 'natlang.native-execution-source-adopted-selection/1':
+        if set(publication)!={'schema','selected_execution','source_adoption'}:
+            raise ValueError('unsupported source-adopted execution selection')
+        selected=verify_selected_publication(publication['selected_execution'])
+        if selected['publication'].get('schema')!='natlang.native-execution-selection-publication/1':
+            raise ValueError('source adoption requires an original execution selection')
+        adoption_ref=publication['source_adoption']
+        adoption=json.loads(_verify_historical_file_ref(adoption_ref).read_text())
+        from .native_zero_sgd_adoption import verify as verify_adoption
+        prior=_verify_historical_file_ref(adoption['prior_recipe'])
+        successor=_verify_historical_file_ref(adoption['successor_recipe'])
+        checked=verify_adoption(adoption['parent'],adoption['checkpoint'],prior_recipe=prior,
+                                successor_recipe=successor,stage_id=adoption['stage_id'])
+        if adoption!={**checked,'prior_recipe':adoption['prior_recipe'],'successor_recipe':adoption['successor_recipe']}:
+            raise ValueError('source adoption differs from independently rechecked full state')
+        candidate=selected['proof']
+        if (adoption['parent']['sha256']!=candidate['checkpoint']['sha256']
+                or _verify_historical_file_ref(adoption['parent'])!=_verify_historical_file_ref(candidate['checkpoint'])
+                or adoption['global_step']!=candidate['global_step']):
+            raise ValueError('source adoption does not descend from the exact selected execution checkpoint')
+        _verify_historical_file_ref(adoption_ref)
+        _verify_historical_file_ref(reference)
+        # The original qualification remains attached to the original candidate;
+        # the adopted child is authorized solely by the independently replayed
+        # metadata-only source transition.
+        proof={**candidate,'checkpoint':adoption['checkpoint']}
+        return {'publication':publication,'qualification':selected['qualification'],'proof':proof,
+                'original_execution_selection':selected,'source_adoption':adoption,
+                'authenticated_ancestors':[*selected['authenticated_ancestors'],adoption['checkpoint']['sha256']]}
     if (publication.get('schema') != 'natlang.native-execution-selection-publication/1'
             or publication.get('selection_hold') is not False
             or publication.get('optimizer_updates') != 0 or publication.get('graph_visits') != 0
@@ -837,3 +866,33 @@ def seal_fresh_collection(*, out, request_ref, proof_out):
     try:os.fsync(fd)
     finally:os.close(fd)
     return proof
+
+
+def publish_source_adopted_selection(selected_ref, adoption_ref, *, out):
+    """Publish a typed composition after independently verifying both chains."""
+    from pathlib import Path
+    from ..common.jsonio import write_json_durable
+    from ..rl.native_direct_sft_recovery import _strong_binding
+    output=Path(out).resolve()
+    if output.exists():
+        raise ValueError('source-adopted execution selection already exists')
+    publication={'schema':'natlang.native-execution-source-adopted-selection/1',
+                 'selected_execution':dict(selected_ref),'source_adoption':dict(adoption_ref)}
+    # Verify through the same reader using a temporary exclusive envelope, then
+    # publish only the exact verified bytes to a new immutable path.
+    import tempfile, json, os
+    output.parent.mkdir(parents=True,exist_ok=True)
+    fd,name=tempfile.mkstemp(prefix='.execution-composition-',dir=output.parent)
+    temporary=Path(name)
+    try:
+        with os.fdopen(fd,'w') as stream:
+            json.dump(publication,stream,sort_keys=True);stream.write('\n');stream.flush();os.fsync(stream.fileno())
+        verify_selected_publication(_strong_binding(temporary))
+        # Hard link is exclusive and cannot replace a concurrent publication.
+        os.link(temporary,output)
+        directory=os.open(output.parent,os.O_DIRECTORY)
+        try:os.fsync(directory)
+        finally:os.close(directory)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return _strong_binding(output)
