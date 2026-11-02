@@ -1,3 +1,30 @@
+## Recovery supplement and verification follow-through, 2026-11-02 21:09 CET
+
+- R30 controls capsule completed21:06:15 with fresh private workstation GETs:
+  `private-recovery-20261101/earned72-r30-continuation-closure-capsule-1102.json`,
+  SHA6163499ced0a54ad8df362326aad07947fb3578276895d85917c295eeb91f016.
+  Its earlier R28 capsule reference binds prior controls; completed capacity
+  request/proof bytes are separately exported in the following explicit supplement.
+- Exact completed BF16 capacity supplement completed21:07:46:
+  `private-recovery-20261101/earned72-r30-capacity-closure-capsule-1102.json`,
+  SHA722c3b0862359ffe81953360861a0d994e804114e2e7109b08a13c2a03e458ea.
+  Includes actual R28 complete-source measurement, exact request/proof, actual
+  R30 packed cases and bound continuation capsule. Ongoing six oversize cases
+  remain uncompleted evidence; no SGD or restored-training claim is added.
+- Main89932a6e4 pushed; quick checks passed (source manifest,7 Python ratchets,
+  TypeScript check). Full suite waiter `check-main-full-1102-2109-waiter.service`
+  is active with the actual13GiB admission request and correct Node24 path;
+  full suite has not started or passed. Do not call this a green full check.
+- Next conditional operation remains: after an actual earned SFT update captures
+  its current-parent scored-graph reference, continue accumulation4 and16-update
+  resident windows. Use the saved frame's reference; retain all whole-graph
+  quota/exposure, fresh proof/headroom checks and source-transition custody.
+  Existing dense-LFM3 capacity implementation already supports authenticated
+  prior-proof reuse across earned checkpoints and exact recorded envelopes;
+  preserve measured proofs/frontier rather than assuming every resume needs
+  another full largest-graph pass. It rechecks actual headroom and exact
+  execution/objective/precision identity and may correctly require remeasurement.
+
 ## Earned72 BF16 continuation and protected baseline, 2026-11-02 21:06 CET
 
 - Actual active DGX learner is `lfm3-earned72-bf16-g2-a16-r30-1102.service`,
