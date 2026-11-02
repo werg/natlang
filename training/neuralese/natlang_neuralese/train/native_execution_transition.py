@@ -69,14 +69,20 @@ def verify_states(parent, child, *, parent_sha256):
 
 
 @with_historical_file_verification_session
-def verify_files(parent_ref, child_ref):
-    """Independently reread and compare full checkpoint bytes and derive both identities."""
+def verify_files(parent_ref, child_ref, *, proof_ref=None):
+    """Freshly hash both checkpoints and verify their exact full-state transition.
+
+    A cross-process comparison memo is usable only with an independently
+    authenticated proof; checkpoint byte hashes remain fresh per operation.
+    """
     from pathlib import Path
     import copy
     import json
     import torch
+    from ..common.jsonio import canonical_json_bytes
     from ..rl.native_direct_sft_recovery import _verify_historical_file_ref
     from ..rl.native_raw_policy import saved_native_identity
+    from . import native_transition_comparison_cache as comparison_cache
     def stamp(path):
         st = path.stat()
         return st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns
@@ -85,14 +91,52 @@ def verify_files(parent_ref, child_ref):
     if old == new or parent_ref['sha256'] == child_ref['sha256']:
         raise ValueError('execution transition requires distinct retained parent and child bytes')
     old_stamp, new_stamp = stamp(old), stamp(new)
+    expected = None
+    proof_path = proof_stamp = None
+    if proof_ref is not None:
+        proof_path = _verify_historical_file_ref(proof_ref)
+        proof_stamp = stamp(proof_path)
+        expected = json.loads(proof_path.read_text())
+        _verify_historical_file_ref(proof_ref)
+        if not isinstance(expected, dict) or expected.get('schema') != SCHEMA:
+            raise ValueError('execution transition comparison needs a typed independent proof')
+    try:
+        verifier = comparison_cache.verifier_identity()
+    except (OSError, ValueError, AttributeError, TypeError):
+        verifier = None
     key = (str(old), str(new), old_stamp, new_stamp,
-           json.dumps(parent_ref, sort_keys=True), json.dumps(child_ref, sort_keys=True))
-    if key in _VERIFIED_FILE_TRANSITIONS:
+           json.dumps(parent_ref, sort_keys=True), json.dumps(child_ref, sort_keys=True), verifier,
+           None if proof_path is None else str(proof_path), proof_stamp,
+           None if proof_ref is None else json.dumps(proof_ref, sort_keys=True))
+    persistent_key = ({'parent': dict(parent_ref), 'checkpoint': dict(child_ref),
+                       'parent_path': str(old), 'checkpoint_path': str(new),
+                       'parent_identity': list(old_stamp), 'checkpoint_identity': list(new_stamp),
+                       'verifier': verifier, 'proof': dict(proof_ref),
+                       'proof_path': str(proof_path), 'proof_identity': list(proof_stamp)}
+                      if verifier is not None and proof_ref is not None else None)
+    result = None
+    persistent_hit = False
+    if verifier is not None and key in _VERIFIED_FILE_TRANSITIONS:
         result = copy.deepcopy(_VERIFIED_FILE_TRANSITIONS[key])
-        if stamp(old) != old_stamp or stamp(new) != new_stamp:
-            raise ValueError('checkpoint changed during cached execution-transition verification')
         _VERIFIED_FILE_TRANSITIONS.move_to_end(key)
-        return result
+    elif persistent_key is not None:
+        result = comparison_cache.lookup(persistent_key, expected)
+        persistent_hit = result is not None
+    if result is not None:
+        if (stamp(old) != old_stamp or stamp(new) != new_stamp
+                or _verify_historical_file_ref(parent_ref) != old
+                or _verify_historical_file_ref(child_ref) != new):
+            raise ValueError('checkpoint changed during cached execution-transition verification')
+        if expected is not None and canonical_json_bytes(result) != canonical_json_bytes(expected):
+            raise ValueError('execution transition proof differs from independent full-state rederivation')
+        if proof_ref is not None:
+            if _verify_historical_file_ref(proof_ref) != proof_path or stamp(proof_path) != proof_stamp:
+                raise ValueError('execution transition proof changed during cached comparison')
+        if comparison_cache.verifier_identity() != verifier:
+            raise ValueError('transition verifier changed during cached comparison')
+        if persistent_key is not None and not persistent_hit:
+            comparison_cache.store(persistent_key, result)
+        return copy.deepcopy(result)
     parent = torch.load(old, map_location='cpu', weights_only=False, mmap=True)
     child = torch.load(new, map_location='cpu', weights_only=False, mmap=True)
     report = verify_states(parent, child, parent_sha256=parent_ref['sha256'])
@@ -106,9 +150,19 @@ def verify_files(parent_ref, child_ref):
         raise ValueError('checkpoint changed during independent execution-transition verification')
     result = {**report, 'parent': dict(parent_ref), 'checkpoint': dict(child_ref),
               'actor_identity': {'old': old_identity, 'new': new_identity}}
-    _VERIFIED_FILE_TRANSITIONS[key] = copy.deepcopy(result)
-    while len(_VERIFIED_FILE_TRANSITIONS) > 8:
-        _VERIFIED_FILE_TRANSITIONS.popitem(last=False)
+    if expected is not None and canonical_json_bytes(result) != canonical_json_bytes(expected):
+        raise ValueError('execution transition proof differs from independent full-state rederivation')
+    if proof_ref is not None:
+        if _verify_historical_file_ref(proof_ref) != proof_path or stamp(proof_path) != proof_stamp:
+            raise ValueError('execution transition proof changed during full comparison')
+    if verifier is not None:
+        if comparison_cache.verifier_identity() != verifier:
+            raise ValueError('transition verifier changed during full comparison')
+        _VERIFIED_FILE_TRANSITIONS[key] = copy.deepcopy(result)
+        while len(_VERIFIED_FILE_TRANSITIONS) > 8:
+            _VERIFIED_FILE_TRANSITIONS.popitem(last=False)
+        if persistent_key is not None:
+            comparison_cache.store(persistent_key, result)
     return result
 
 
@@ -132,7 +186,7 @@ def publish_diagnostic(state_path, *, proof_ref, out):
     proof = json.loads(proof_path.read_text())
     if proof.get('schema') != SCHEMA:
         raise ValueError('execution transition publication requires its typed proof')
-    checked = verify_files(proof['parent'], proof['checkpoint'])
+    checked = verify_files(proof['parent'], proof['checkpoint'], proof_ref=proof_ref)
     if proof != checked:
         raise ValueError('execution transition proof differs from independent full-state rederivation')
     def stamp(path):
@@ -177,7 +231,7 @@ def verify_candidate_publication(publication_ref):
         raise ValueError('unsupported execution candidate publication')
     proof_ref = publication.get('proof') or {}
     proof = json.loads(_verify_historical_file_ref(proof_ref).read_text())
-    checked = verify_files(proof['parent'], proof['checkpoint'])
+    checked = verify_files(proof['parent'], proof['checkpoint'], proof_ref=proof_ref)
     if (proof != checked or publication.get('parent') != checked['parent']
             or publication.get('checkpoint') != checked['checkpoint']
             or publication.get('actor_identity') != checked['actor_identity']
