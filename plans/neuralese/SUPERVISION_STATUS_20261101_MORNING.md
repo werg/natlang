@@ -1,3 +1,41 @@
+## Live supervision update, 2026-11-02 17:34 CET
+
+- Useful RL resumed17:21:34. Verified current SFT-budget code consumes the
+  small authenticated receipt and BF95 predecessor, not the diagnostic SFT68
+  raw checkpoint. No active recipe/runtime/source-adoption binding required
+  that raw path. Fresh private object presence and exact local recovery were
+  checked; retired only SFT68's15,386,502,534-byte raw inode and exact queued
+  pin. Custody: `ops/diagnostic-sft68-raw-retirement-1102/retirement.json`.
+  The offload owner restarted with its same queue; other jobs remain intact.
+- Current learner has earned four updates, global67→71. Per-update forward
+  throughput was about1995,2811,2059,2012 tokens/s; these are throughput figures,
+  not comparable loss/capability measurements. It is now executing the protected
+  four-case development evaluation inline on its actual current model. Two
+  completed cases match the selected parent's outcomes; two remain pending.
+  CPU activity after the last save came from the in-process inference service,
+  not a stuck checkpoint writer. Preserve the complete result before selecting
+  this candidate as behaviorally better. No capability lift is established yet.
+- Diagnostic SFT69 exact local reconstruction completed17:23:31: full target
+  15,393,106,054 bytes, exact delta3,378,870,601 bytes. Private upload and fresh
+  GET verification are live as `publish-diagnostic69-after-encode-r2-1102`.
+  Temporary final readback uses `/dev/shm` under an explicit6GiB ledger claim
+  and verified6GiB kernel limit, preserving training disk headroom. Keep the
+  diagnostic raw state until that independent decoded readback completes.
+- Runtime21 freeze completed17:19 at e73293253, including the future-reservation
+  stop fix and complete protected/control closure. It is prepared for the next
+  recorded continuation; the active numerical/replay runtime remains20.
+- Fixed a real supervision gap: storage observation missed the RL `native_stage`
+  entrypoint. Eight targeted tests passed; an actual observation now reports
+  PID1927307, its output/progress and exact reservation roles. Evidence:
+  `ops/rl-storage-observer-live-1102.json`. Full main checks are queued under
+  `main-full-storage-observer-1102-waiter.service`, waiting for actual memory
+  admission; do not call the queued suite passed.
+- Additional cold derived test artifacts were compressed with exact decoded
+  readback; the large archive was copied/hash checked to external storage with
+  its original compressed path retained as a symlink. No training source or
+  result report was deleted. Ledger accounting changes alone do not resize a
+  live unit's kernel MemoryMax; operational guidance now states this explicitly.
+
 ## Live supervision update, 2026-11-02 17:12 CET
 
 - Production parent is now the independently verified zero-SGD source adoption

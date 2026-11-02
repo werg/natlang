@@ -1494,6 +1494,11 @@ afterwards. The rules below are consequences of this one.
   (`scripts/memory_ledger.py run --unit <family>-<id> --budget-gb N -- ...`;
   units run asynchronously, so wait for the unit to finish and read its log).
   Never report a merge as verified when the ledgered tests did not run.
+- `memory_ledger.py adopt` changes accounting; it does not resize an existing
+  unit's kernel `MemoryMax`. When a lightweight waiter becomes a larger job,
+  admit its real budget and explicitly set and verify the actual cgroup limit
+  before allocating its working set, or launch a fresh correctly budgeted unit.
+  Disposable RAM-backed readback files count toward that host budget too.
 - Bound dirty file-cache memory during large artifact copies (engineering finding,
   2026-10-22): a small Python heap does not bound a ledger unit's memory. Flush
   and synchronize bounded write windows, release clean cache when appropriate,

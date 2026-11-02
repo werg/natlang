@@ -87,7 +87,10 @@ def current_native_writers(proc_root=Path('/proc')):
         try:
             args = (directory / 'cmdline').read_bytes().split(b'\0')
             args = [value.decode('utf-8', 'replace') for value in args if value]
-            if 'natlang_neuralese.train.native_state_sft' not in args or '--validate-continuation-only' in args:
+            modules = {'natlang_neuralese.train.native_state_sft', 'natlang_neuralese.rl.native_stage'}
+            native_writer = any(value == '-m' and index + 1 < len(args) and args[index + 1] in modules
+                                for index, value in enumerate(args))
+            if not native_writer or '--validate-continuation-only' in args:
                 continue
             out = args[args.index('--out') + 1]
             environment = (directory / 'environ').read_bytes().split(b'\0')
