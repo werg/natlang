@@ -710,3 +710,36 @@ def test_sft_descriptor_rejects_wrong_source_and_geometry(tmp_path, monkeypatch)
 
 # Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
 pytestmark = pytest.mark.usefixtures('per_batch_native_updates')
+
+
+@pytest.mark.parametrize('mode',['vjp','plain'])
+def test_prepared_capacity_and_parity_use_actual_learner_cotangents(tmp_path,monkeypatch,mode):
+    from natlang_neuralese.eval import native_memory as memory
+    from natlang_neuralese.train import native_resident as resident
+    import json
+    model,optimizer,train,roles,config,args=prepared_fixture(tmp_path,monkeypatch)
+    args.cotangent_accumulator_backend='plain' if mode=='plain' else 'cpu_file'
+    request_path=__import__('pathlib').Path(json.loads(args.memory_qualification)['path'])
+    request=json.loads(request_path.read_text())
+    request['identity']=memory.capacity_identity(config,args,None)
+    request_path.write_text(json.dumps(request));args.memory_qualification=json.dumps(resident.binding(request_path))
+    original=memory.qualify_capacity;observed=[]
+    def qualify(*a,**k):
+        observed.append(k.get('cotangent_mode'))
+        return original(*a,**k)
+    monkeypatch.setattr(memory,'qualify_capacity',qualify)
+    report=memory.run_prepared(model,optimizer,train,roles,config,args,backend=None,checkpoint_sha256='a'*64)
+    assert report['passed']
+    assert observed==[mode,mode,mode]  # both exact-gradient parity paths and whole-graph capacity
+    assert report['capacity']['cotangent_mode']==mode
+    assert report['numerical_reference']['baseline']['cotangent_mode']==mode
+    assert report['numerical_reference']['offloaded']['cotangent_mode']==mode
+    if mode=='plain':assert report['identity']['cotangent_accumulator_backend']=='plain'
+
+
+def test_capacity_mode_uses_native_backend_alias():
+    from types import SimpleNamespace
+    from natlang_neuralese.eval.native_memory import _cotangent_mode
+    assert _cotangent_mode(SimpleNamespace(native_cotangent_accumulator_backend='plain'))=='plain'
+    assert _cotangent_mode(SimpleNamespace(cotangent_accumulator_backend='plain'))=='plain'
+    assert _cotangent_mode(SimpleNamespace(cotangent_accumulator_backend='device_fp32'))=='vjp'

@@ -405,7 +405,7 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
 
 
 def offload_numerical_parity(model, optimizer, example, *, backend=None, chunk_tokens=1024,
-                             checkpoint_sha256, source_binding, checkpoint_layers=True, checkpoint_input_offload=None, checkpoint_input_offload_directory=None, objective=None):
+                             checkpoint_sha256, source_binding, checkpoint_layers=True, checkpoint_input_offload=None, checkpoint_input_offload_directory=None, objective=None, cotangent_mode='vjp'):
     """Bitwise full named-gradient parity, retaining only per-parameter digests."""
     from ..common.checkpoint_offload import configure_checkpoint_input_offload
     checkpoint_input_offload = checkpoint_layers if checkpoint_input_offload is None else checkpoint_input_offload
@@ -425,11 +425,11 @@ def offload_numerical_parity(model, optimizer, example, *, backend=None, chunk_t
     try:
         configure_checkpoint_input_offload(model.port,enabled=False)
         baseline=qualify_capacity(model,optimizer,[example],backend=backend,chunk_tokens=chunk_tokens,
-            checkpoint_sha256=checkpoint_sha256,source_binding=source_binding,gradient_observer=reference,objective=objective)
+            checkpoint_sha256=checkpoint_sha256,source_binding=source_binding,gradient_observer=reference,objective=objective,cotangent_mode=cotangent_mode)
         configure_checkpoint_input_offload(model.port,enabled=checkpoint_input_offload,
             directory=checkpoint_input_offload_directory)
         candidate=qualify_capacity(model,optimizer,[example],backend=backend,chunk_tokens=chunk_tokens,
-            checkpoint_layers=checkpoint_layers,checkpoint_sha256=checkpoint_sha256,source_binding=source_binding,gradient_observer=compare,objective=objective)
+            checkpoint_layers=checkpoint_layers,checkpoint_sha256=checkpoint_sha256,source_binding=source_binding,gradient_observer=compare,objective=objective,cotangent_mode=cotangent_mode)
         return {'passed':baseline['passed'] and candidate['passed'] and not mismatches
                     and seen==gradients.keys() and baseline['cases'][0].get('loss')==candidate['cases'][0].get('loss'),
                 'baseline':baseline,'offloaded':candidate,'candidate_checkpoint_layers':checkpoint_layers,
@@ -456,6 +456,13 @@ def _require_checkpoint_group_execution(model, args):
     actual = getattr(model.port, 'checkpoint_layer_group_size', 1)
     if type(declared) is not int or declared < 1 or actual != declared:
         raise ValueError('capacity checkpoint layer grouping differs from actual model execution')
+
+
+def _cotangent_mode(args):
+    backend = getattr(args, 'cotangent_accumulator_backend', None)
+    if backend is None:
+        backend = getattr(args, 'native_cotangent_accumulator_backend', 'cpu_file')
+    return 'plain' if backend == 'plain' else 'vjp'
 
 
 def capacity_identity(config,args,backend):
@@ -588,7 +595,8 @@ def _run_one_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoi
             return offload_numerical_parity(model,optimizer,example,backend=backend,
                 chunk_tokens=args.chunk_tokens,checkpoint_sha256=checkpoint_sha256,source_binding=binding(train.path),
                 checkpoint_layers=args.checkpoint_layers,checkpoint_input_offload=args.checkpoint_input_offload,
-                checkpoint_input_offload_directory=getattr(args,'checkpoint_input_offload_directory',None),objective=objective)
+                checkpoint_input_offload_directory=getattr(args,'checkpoint_input_offload_directory',None),objective=objective,
+                cotangent_mode=_cotangent_mode(args))
         if reference_reuse is None:
             result['numerical_reference']=measure_reference()
         else:
@@ -603,7 +611,7 @@ def _run_one_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoi
             examples=list(source.iter_indices([row['index'] for row in selected]))
             result['capacity']=qualify_capacity(model,optimizer,examples,backend=backend,chunk_tokens=args.chunk_tokens,
                 checkpoint_layers=args.checkpoint_layers,checkpoint_sha256=checkpoint_sha256,source_binding=request['source'],objective=objective,
-                retained_gradients=getattr(args,'accumulate_batches',1)>1)
+                retained_gradients=getattr(args,'accumulate_batches',1)>1,cotangent_mode=_cotangent_mode(args))
             result['passed']=result['capacity']['passed']
     except (RuntimeError,FloatingPointError,MemoryError) as error:
         if isinstance(error,CapacityStateChangedError):raise
@@ -1022,7 +1030,7 @@ def qualify_policy_objective(model,optimizer,train,objective,args,config,*,backe
             checkpoint_layers=args.checkpoint_layers,chunk_tokens=args.chunk_tokens,
             checkpoint_sha256=checkpoint_sha256,source_binding=expected['source'],objective=objective,
             retained_gradients=getattr(args,'accumulate_batches',1)>1,production_packing=True,
-            cotangent_mode='plain' if getattr(args,'cotangent_accumulator_backend',None)=='plain' else 'vjp')
+            cotangent_mode=_cotangent_mode(args))
         if not result['capacity']['passed']:
             raise RuntimeError('actual policy objective exceeded its learner capacity')
         if args.fp8_training!='off':
