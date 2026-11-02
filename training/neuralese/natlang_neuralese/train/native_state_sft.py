@@ -504,6 +504,11 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
         for index, (micro, share) in enumerate(zip(micro_batches, shares)):
             from .memory_policy import enforce_ledger_cuda_limit
             enforce_ledger_cuda_limit(next(model.parameters()).device)
+            micro_started = time.monotonic()
+            progress = {'kind': 'native_microbatch_progress', 'index': index,
+                        'total': len(micro_batches), 'graphs': len(micro),
+                        'timing_scope': 'host-dispatch; no additional CUDA synchronization'}
+            print(json.dumps({**progress, 'phase': 'forward_start'}), flush=True)
             final = index == len(micro_batches) - 1
             if final and profiler is not None:
                 profiler_started=True
@@ -531,10 +536,14 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
                 if final:
                     merged_details=parts[0] if len(parts)==1 else merge_update_details(parts,scored)
                 scaled = loss if share == 1. else loss * share
+                print(json.dumps({**progress, 'phase': 'backward_start',
+                                  'host_elapsed_seconds': time.monotonic() - micro_started}), flush=True)
                 with (profiler.phase('native_backward_and_in_backward_optimizer') if profiler_started else _nullcontext()):
                     (scaled if loss_weight is None else scaled * loss_weight).backward()
                 cotangents.finish()
             losses.append(loss.detach() * share)
+            print(json.dumps({**progress, 'phase': 'microbatch_returned',
+                              'host_elapsed_seconds': time.monotonic() - micro_started}), flush=True)
         if optimizer.latent is not None:
             optimizer.latent._armed = None
         loss = torch.stack(losses).sum() if len(losses) > 1 else losses[0]

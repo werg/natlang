@@ -1555,6 +1555,11 @@ afterwards. The rules below are consequences of this one.
   `check-main.sh` supplies one by default. Test fixture identities accumulated
   millions of entries in the shared production cache and caused real metadata
   job memory failures; cache isolation preserves the same exact hash verifiers.
+- Set `OMP_NUM_THREADS=1` and `MKL_NUM_THREADS=1` for standalone small numerical
+  tests, as `check-main.sh` already does, unless a test needs explicit parallelism.
+  On2026-11-02 the same35 update/norm checks took75.41s and691 CPU-seconds
+  with default pools versus9.61s and10.93 CPU-seconds with one thread. This
+  changes test resource use, not production trainer threading or arithmetic.
 - When resolving a merge conflict, keep both sides unless you know a side was
   removed on purpose; a dropped section of AGENTS.md or a plan is lost silently.
 - Stop processes by systemd unit name or an explicit PID, never by pattern.

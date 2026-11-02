@@ -169,3 +169,29 @@ def test_preallocated_norm_input_adjoint_retains_concatenated_layout(monkeypatch
     assert dx.is_contiguous()
     for a, b in ((output, expected), (dx, ref_dx), (dw, ref_dw)):
         assert torch.equal(a, b)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA norm window boundaries')
+@pytest.mark.parametrize('rows', [8191, 8192, 8193, 16401])
+def test_windowed_cuda_norm_preserves_gain_fanin_across_windows(rows, monkeypatch):
+    from natlang_neuralese.model import native_parameter_precision as precision
+    torch.manual_seed(rows)
+    layer = Lfm3RMSNorm().to('cuda')
+    layer.weight = nn.Parameter(torch.randn(2048, device='cuda', dtype=torch.bfloat16))
+    x = torch.randn(rows, 2048, device='cuda', dtype=torch.bfloat16, requires_grad=True)
+    gradient = torch.randn_like(x)
+    calls = []
+    original = precision._lfm3_norm_adjoint_parts
+    def bounded(part, *args):
+        calls.append(part.shape[0])
+        assert part.shape[0] <= 8192
+        return original(part, *args)
+    monkeypatch.setattr(precision, '_lfm3_norm_adjoint_parts', bounded)
+    output = precision._RowwiseNormAdjoint.apply(x, layer.weight, layer.forward)
+    dx, dw = torch.autograd.grad(output, (x, layer.weight), gradient)
+    reference = concatenated_norm_reference(layer.forward, x)
+    ref_dx, ref_dw = torch.autograd.grad(reference, (x, layer.weight), gradient)
+    assert len(calls) == (rows + 8191) // 8192
+    assert dx.is_contiguous()
+    for actual, expected in ((output, reference), (dx, ref_dx), (dw, ref_dw)):
+        assert torch.equal(actual, expected)

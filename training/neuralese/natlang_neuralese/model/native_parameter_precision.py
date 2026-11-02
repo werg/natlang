@@ -32,26 +32,37 @@ def rowwise_norm_forward(original_forward, x):
     # otherwise doubles the whole-trajectory output at the allocation peak.
     # The differentiable replay retains its original graph/fan-in ordering.
     differentiable = torch.is_grad_enabled()
-    pieces = [] if differentiable else None
+    concatenate = differentiable or rows.shape[0] < 4096
+    owner = getattr(original_forward, '__self__', None)
+    batched = not concatenate and type(owner).__name__ == 'Lfm3RMSNorm'
+    # Bound the source norm's FP32 workspace relative to the retained output.
+    # Small prefills keep their original single-cat path; large trajectories
+    # batch independent 128-row blocks instead of dispatching them one by one.
+    window = min(8192, max(128, (rows.shape[0] // 16 // 128) * 128)) if batched else 128
+    pieces = [] if concatenate else None
     output = None
-    for start in range(0, rows.shape[0], 128):
-        part = rows[start:start + 128]
+    for start in range(0, rows.shape[0], window):
+        part = rows[start:start + window]
         count = part.shape[0]
-        if count < 128:
-            part = F.pad(part, (0, 0, 0, 128 - count))
-        normalized = original_forward(part)[:count]
-        if differentiable:
+        padding = (-count) % 128
+        if padding:
+            part = F.pad(part, (0, 0, 0, padding))
+        if batched:
+            normalized = original_forward(part.reshape(-1, 128, rows.shape[-1])).reshape(-1, rows.shape[-1])[:count]
+        else:
+            normalized = original_forward(part)[:count]
+        if concatenate:
             pieces.append(normalized)
         else:
             if output is None:
                 output = normalized.new_empty(rows.shape)
             output[start:start + count].copy_(normalized)
-    return (torch.cat(pieces, dim=0) if differentiable else output).reshape(x.shape)
+    return (torch.cat(pieces, dim=0) if concatenate else output).reshape(x.shape)
 
 
 
-def _batched_lfm3_norm_adjoint(x, weight, gradient, eps):
-    """Batch independent 128-row adjoints while retaining BF16 gain fan-in order."""
+def _lfm3_norm_adjoint_parts(x, weight, gradient, eps):
+    """Batch independent 128-row adjoints without reducing their gain parts."""
     import torch.nn.functional as F
     rows = x.reshape(-1, x.shape[-1])
     grads = gradient.reshape_as(rows)
@@ -67,11 +78,36 @@ def _batched_lfm3_norm_adjoint(x, weight, gradient, eps):
         normalized = (value * torch.rsqrt(value.square().mean(-1, keepdim=True) + eps)).to(rows.dtype)
         output = gains[:, None, :] * normalized
         dx, gain_parts = torch.autograd.grad(output, (rows, gains), grads.reshape_as(rows))
-    # Match the original custom adjoint's reverse-creation BF16 accumulation.
-    dweight = gain_parts[-1]
-    for i in range(gain_parts.shape[0] - 2, -1, -1):
-        dweight = dweight + gain_parts[i]
-    return dx.reshape(-1, x.shape[-1])[:count].reshape_as(x), dweight
+    return dx.reshape(-1, x.shape[-1])[:count].reshape_as(x), gain_parts
+
+
+def _sum_norm_gain_parts(gain_parts, dweight=None):
+    # Keep every original BF16 addition in reverse creation order, including
+    # across windows. Summing each window first would change the rounding.
+    for i in range(gain_parts.shape[0] - 1, -1, -1):
+        dweight = gain_parts[i] if dweight is None else dweight + gain_parts[i]
+    return dweight
+
+
+def _batched_lfm3_norm_adjoint(x, weight, gradient, eps):
+    """Batch independent 128-row adjoints while retaining BF16 gain fan-in order."""
+    dx, gain_parts = _lfm3_norm_adjoint_parts(x, weight, gradient, eps)
+    return dx, _sum_norm_gain_parts(gain_parts)
+
+
+def _windowed_lfm3_norm_adjoint(x, weight, gradient, eps):
+    """Bound large-trajectory adjoint workspace while batching its local VJPs."""
+    rows = x.reshape(-1, x.shape[-1])
+    grads = gradient.reshape_as(rows)
+    dx = rows.new_empty(rows.shape)
+    dweight = None
+    # Align windows with the original 128-row blocks, including the final pad.
+    for start in reversed(range(0, rows.shape[0], 8192)):
+        end = min(start + 8192, rows.shape[0])
+        part, gain_parts = _lfm3_norm_adjoint_parts(rows[start:end], weight, grads[start:end], eps)
+        dx[start:end].copy_(part)
+        dweight = _sum_norm_gain_parts(gain_parts, dweight)
+    return dx.reshape_as(x), dweight
 
 
 class _RowwiseNormAdjoint(torch.autograd.Function):
@@ -100,9 +136,10 @@ class _RowwiseNormAdjoint(torch.autograd.Function):
         row_count = x.numel() // x.shape[-1] if x.ndim and x.shape[-1] else 0
         if (type(owner).__name__ == 'Lfm3RMSNorm' and x.is_cuda
                 and x.dtype == gradient.dtype == weight.dtype == torch.bfloat16
-                and x.requires_grad and weight.requires_grad and 129 <= row_count <= 1024
+                and x.requires_grad and weight.requires_grad and row_count >= 129
                 and hasattr(owner, 'variance_epsilon')):
-            dx, dweight = _batched_lfm3_norm_adjoint(x, weight, gradient, owner.variance_epsilon)
+            adjoint = _batched_lfm3_norm_adjoint if row_count <= 1024 else _windowed_lfm3_norm_adjoint
+            dx, dweight = adjoint(x, weight, gradient, owner.variance_epsilon)
             return dx, dweight, None
         rows = x.reshape(-1, x.shape[-1])
         grads = gradient.reshape(-1, gradient.shape[-1])
