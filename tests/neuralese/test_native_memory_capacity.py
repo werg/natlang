@@ -743,3 +743,68 @@ def test_capacity_mode_uses_native_backend_alias():
     assert _cotangent_mode(SimpleNamespace(native_cotangent_accumulator_backend='plain'))=='plain'
     assert _cotangent_mode(SimpleNamespace(cotangent_accumulator_backend='plain'))=='plain'
     assert _cotangent_mode(SimpleNamespace(cotangent_accumulator_backend='device_fp32'))=='vjp'
+
+
+@pytest.mark.parametrize('actual_qualification', [False, True])
+def test_trainer_carries_measured_proof_from_restored_checkpoint_to_new_output(tmp_path, monkeypatch, actual_qualification):
+    from test_native_model import tiny_source
+    from test_native_state_sft import graph
+    from natlang_neuralese.model.native_model import load_native_model
+    from natlang_neuralese.train import native_state_sft as trainer, native_packed_capacity as packed
+    from natlang_neuralese.train import native_resident as resident
+    from natlang_neuralese.eval import native_memory as memory
+    base = tmp_path/'base'; tiny_source(base)
+    _, _, _, config = load_native_model(base, dtype=torch.float32, rank=4)
+    train, held = tmp_path/'train.jsonl', tmp_path/'held.jsonl'
+    train.write_text(json.dumps(dict(graph('train'), tokenizer_fingerprint=config['tokenizer_fingerprint']))+'\n')
+    held.write_text(json.dumps(dict(graph('held'), split='test', tokenizer_fingerprint=config['tokenizer_fingerprint']))+'\n')
+    seen = []
+    request = tmp_path/'request.json'; request.write_text('{}')
+    request_binding = resident.binding(request)
+    original_run = memory.run_prepared
+    reports = []
+    if actual_qualification:
+        monkeypatch.setattr(memory, '_dense_capacity_reuse_supported', lambda *a: True)
+        monkeypatch.setattr(packed, 'oversize_execution_identity', lambda *a, **kw: {'execution':'fixture'})
+        monkeypatch.setattr(packed, '_capacity_memory_context', lambda device: {'device_type':'cpu', 'host_available_bytes':1 << 40})
+        monkeypatch.setattr(packed, '_incremental_headroom_covers', lambda row, context: True)
+    def qualify(model, optimizer, source, roles, config, args, *, checkpoint_sha256, prior_proofs, **kwargs):
+        seen.append(list(prior_proofs))
+        if actual_qualification:
+            _, geometry, _ = packed.geometry_for_source(source, args.out, allow_build=True)
+            descriptor = {'schema':'natlang.native-sft-capacity-cases/1', 'source':resident.binding(source.path), 'geometry':geometry}
+            descriptor_path = args.out/'descriptor.json'; descriptor_path.write_text(json.dumps(descriptor))
+            old_request = args.memory_qualification
+            args.memory_qualification = json.dumps(resident.binding(descriptor_path))
+            try:
+                result = original_run(model,optimizer,source,roles,config,args,checkpoint_sha256=checkpoint_sha256,
+                                      prior_proofs=prior_proofs,**kwargs)
+            finally:
+                args.memory_qualification = old_request
+            reports.append(result)
+            return result
+        proof = args.out/'memory-qualifications'/request_binding['sha256']/checkpoint_sha256/'proof.json'
+        proof.parent.mkdir(parents=True, exist_ok=True); proof.write_text('{}')
+        certificate = args.out/'mock-capacity.json'; certificate.write_text('{}')
+        args.resident_geometry_qualification = certificate
+        return {'passed':True, 'request':request_binding, 'parent_checkpoint_sha256':checkpoint_sha256}
+    monkeypatch.setattr(memory, 'run_prepared', qualify)
+    monkeypatch.setattr(packed, 'qualify_pending', lambda *a, **kw: None)
+    def run(out, epochs, parent=None):
+        argv=['--base',str(base),'--dtype','float32','--rank','4','--device','cpu',
+              '--native-graphs',str(train),'--held-native-graphs',str(held),'--epochs',str(epochs),
+              '--eval-every','100','--out',str(out),'--memory-qualification',json.dumps(request_binding)]
+        if parent is not None: argv += ['--continue-from',str(parent)]
+        assert trainer.main(argv)==0
+    first, second = tmp_path/'first', tmp_path/'second'
+    run(first, 1)
+    state=torch.load(first/'checkpoint.pt',map_location='cpu',weights_only=False)
+    proof, = state['training']['options']['memory_qualification']['measured_proofs']
+    assert seen == [[]]
+    run(second, 2, first/'checkpoint.pt')
+    assert seen == [[], [proof]]
+    if actual_qualification:
+        assert reports[1]['capacity_reuse']['measured_proof'] == proof
+        assert reports[1]['numerical_reference']['passed']
+        assert reports[0]['request']['path'] != reports[1]['request']['path']
+        assert reports[1]['capacity']['parent_checkpoint_sha256'] == reports[0]['parent_checkpoint_sha256']

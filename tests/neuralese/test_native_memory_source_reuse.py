@@ -176,3 +176,45 @@ def test_file_scratch_reuse_requires_measured_peak_and_storage_headroom(tmp_path
     assert memory._scratch_headroom_covers(cases, str(tmp_path))
     monkeypatch.setattr(shutil, 'disk_usage', lambda path: type('Space', (), {'free': 1000})())
     assert not memory._scratch_headroom_covers(cases, str(tmp_path))
+
+
+def test_sft_descriptor_reuses_proof_across_output_directories(tmp_path, monkeypatch):
+    from natlang_neuralese.train import native_packed_capacity as packed
+    model, optimizer, train, roles, config, args, _ = active_request(tmp_path, monkeypatch)
+    config = {**config, 'architecture': 'lfm3'}
+    _, geometry, _ = packed.geometry_for_source(train, args.out, allow_build=True)
+    descriptor = {'schema':'natlang.native-sft-capacity-cases/1',
+                  'source':resident.binding(train.path), 'geometry':geometry}
+    descriptor_path=tmp_path/'descriptor.json'; descriptor_path.write_text(json.dumps(descriptor))
+    args.memory_qualification=json.dumps(resident.binding(descriptor_path))
+    monkeypatch.setattr(memory, '_dense_capacity_reuse_supported', lambda *a: True)
+    monkeypatch.setattr(packed, 'oversize_execution_identity', lambda *a, **kw: {'execution':'fixture'})
+    monkeypatch.setattr(packed, '_capacity_memory_context', lambda device: {'device_type':'cpu', 'host_available_bytes':1 << 40})
+    monkeypatch.setattr(packed, '_incremental_headroom_covers', lambda row, context: True)
+    first=memory.run_prepared(model,optimizer,train,roles,config,args,backend=None,checkpoint_sha256='a'*64)
+    first_proof=resident.binding(args.out/'memory-qualifications'/first['request']['sha256']/('a'*64)/'proof.json')
+    args.out=tmp_path/'new-output'; args.out.mkdir()
+    calls=[]
+    monkeypatch.setattr(memory, 'offload_numerical_parity', lambda *a, **kw: (calls.append('parity'), {'passed':True})[1])
+    monkeypatch.setattr(memory, 'qualify_capacity', lambda *a, **kw: pytest.fail('remeasured unchanged graph'))
+    second=memory.run_prepared(model,optimizer,train,roles,config,args,backend=None,
+                               checkpoint_sha256='b'*64,prior_proofs=[first_proof])
+    assert calls == ['parity'] and second['passed']
+    assert first['request']['path'] != second['request']['path']
+    assert first['request']['sha256'] == second['request']['sha256']
+    assert second['capacity_reuse']['measured_request'] == first['request']
+    assert second['capacity_reuse']['current_request'] == second['request']
+    assert second['capacity']['parent_checkpoint_sha256']=='a'*64
+    assert args.resident_geometry_qualification.is_file()
+
+
+def test_relocated_index_witness_requires_exact_semantic_identity(tmp_path):
+    old = {'source':{'path':'same','sha256':'a'*64}, 'cases':[{'id':'a'}],
+           'indexes':[{'cache':{'path':'old','sha256':'b'*64},
+                       'key':{'parser':'p','roles':[1,2]}, 'metadata_sha256':'c'*64}]}
+    new = copy.deepcopy(old); new['indexes'][0]['cache']['path']='new'
+    one, two = tmp_path/'one', tmp_path/'two'
+    one.write_text(json.dumps(old)); two.write_text(json.dumps(new))
+    assert memory._same_capacity_request(resident.binding(one),resident.binding(two))
+    new['indexes'][0]['key']['roles']=[2,1]; two.write_text(json.dumps(new))
+    assert not memory._same_capacity_request(resident.binding(one),resident.binding(two))

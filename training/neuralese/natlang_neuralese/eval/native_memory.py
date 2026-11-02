@@ -509,6 +509,27 @@ def capacity_identity(config,args,backend):
                'input_gradient_precision':getattr(backend,'input_gradient_precision',None)}}
 
 
+def _same_capacity_request(previous_binding, current_binding):
+    """Authenticate both requests; tolerate only relocated validated index caches."""
+    from ..train.native_resident import bound
+    old = bound(previous_binding).read_bytes()
+    new = bound(current_binding).read_bytes()
+    if old == new:
+        return True
+    previous, current = json.loads(old), json.loads(new)
+    def semantic(request):
+        request = dict(request)
+        witnesses = request.get('indexes')
+        if not isinstance(witnesses, list):
+            raise ValueError('capacity request lacks index witnesses')
+        request['indexes'] = [{key:value for key,value in witness.items() if key != 'cache'}
+                              for witness in witnesses]
+        if any('key' not in witness or 'metadata_sha256' not in witness for witness in request['indexes']):
+            raise ValueError('capacity request lacks index witness identity')
+        return request
+    return semantic(previous) == semantic(current)
+
+
 def _dense_capacity_reuse_supported(model, config, objective):
     from ..model.lfm3_port import Lfm3PortBackbone
     return (objective is None and config.get('architecture') == 'lfm3'
@@ -633,7 +654,7 @@ def _run_one_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoi
                 prior_path = bound(reference)
                 previous = json.loads(prior_path.read_text())
                 capacity = previous.get('capacity') or {}
-                if (previous.get('passed') is not True or previous.get('request') != result['request']
+                if (previous.get('passed') is not True or not _same_capacity_request(previous.get('request'), result['request'])
                         or previous.get('identity') != identity or previous.get('runtime_code_sha256') != code_sha
                         or previous.get('capacity_execution_identity') != execution
                         or previous.get('capacity_reuse') is not None
@@ -689,6 +710,7 @@ def _run_one_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoi
                 result['capacity_reuse'] = {'measured_proof':reference,
                     'measured_parent_checkpoint_sha256':previous['parent_checkpoint_sha256'],
                     'current_parent_checkpoint_sha256':checkpoint_sha256,
+                    'measured_request':previous['request'], 'current_request':result['request'],
                     'memory_context':current_memory}
             else:
                 examples=list(source.iter_indices([row['index'] for row in selected]))

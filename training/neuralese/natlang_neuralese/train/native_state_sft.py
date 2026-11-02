@@ -2991,6 +2991,9 @@ def _main(argv=None, *, requested_refresh):
     # Keep only the small continuation values still needed below. Decoded
     # predecessor/source maps are no longer needed after optimizer/RNG restore;
     # retaining them through gradient and capacity checks wastes gigabytes.
+    prior_memory_qualification = (((resume or {}).get('options') or {}).get('memory_qualification')
+        or (saved_options or {}).get('memory_qualification') or {})
+    prior_memory_proofs = list(prior_memory_qualification.get('measured_proofs') or ())
     prior_policy_capacity = ((resume or {}).get('options') or {}).get('policy_capacity')
     prior_packed_capacity = ((resume or {}).get('options') or {}).get('sft_packed_capacity') or {}
     prior_oversize_baseline = ((resume or {}).get('options') or {}).get('oversize_capacity_baseline')
@@ -3265,7 +3268,7 @@ def _main(argv=None, *, requested_refresh):
         memory_check = run_prepared(model,optimizer,train,roles,config,args,backend=backend,objective=objective,
             checkpoint_sha256=sha256_file_hex_cached(args.continue_from if parent_continuation else policy.slot)
                 if parent_continuation or policy.slot.exists() else config['base_inventory_sha256'],
-            prior_proofs=(((resume or {}).get('options') or {}).get('memory_qualification') or {}).get('measured_proofs', ()))
+            prior_proofs=prior_memory_proofs)
         if not args.resident_geometry_qualification:
             raise ValueError('explicit memory qualification produced no usable physical capacity certificate')
         from .native_resident import binding as capacity_proof_binding
