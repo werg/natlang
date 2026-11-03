@@ -9,7 +9,8 @@ job): ``diloco-token`` (bearer token, every role), and for learners ``diloco-url
     cloud_role coordinator --root R --parent P --settings JSON --trainer-argv JSON [--port 8080] [-- INIT ARGS]
         initialize the coordinator root from the parent once (native_diloco init), then serve it
     cloud_role learner --worker I --settings JSON --out-link L --out-target D -- TRAINER ARGS
-        run native_state_sft on worker I's shard with --diloco filled in (coordinator URL from the secret file).
+        run native_state_sft on worker I's shard with --diloco filled in (coordinator URL from the secret file); a
+        killed trainer restarts from its own rolling slot (--restarts, default 2).
 
 Every learner names the same trainer argv (the coordinator identity binds it), including ``--out L``. ``L`` is a
 symlink to this sandbox's own stage directory ``D``, so the learner state is exported with its stage while the
@@ -67,16 +68,41 @@ def link_out(link, target):
     link.symlink_to(target, target_is_directory=True)
 
 
+def resume_argv(argv, slot):
+    """The same learner argv continuing from its own rolling slot (native_diloco.rolling_resume_identity maps the
+    changed --continue-from back to the coordinator's original seed after checking the slot bytes)."""
+    argv = list(argv)
+    index = argv.index('--continue-from')
+    argv[index + 1] = str(slot)
+    return argv
+
+
 def learner(args, trainer):
-    from ..native_state_sft import main as trainer_main
+    """Run the learner as a child process; a killed or failed trainer restarts from its own earned rolling slot (the
+    worker-loss recovery path), at most ``--restarts`` times, and never from a slot it has not written."""
+    import subprocess
     secret('diloco-token')
     secret('diloco-gateway')
     url = secret(URL_SECRET)
     link_out(args.out_link, args.out_target)
-    os.environ[WORKER_ID_ENV] = str(args.worker)
+    environment = {**os.environ, WORKER_ID_ENV: str(args.worker)}
     argv = learner_argv(args.settings, args.worker, url, trainer)
-    sys.argv = [sys.argv[0], *argv]  # the trainer binds its identity from sys.argv
-    trainer_main(argv)
+    out = Path(argv[argv.index('--out') + 1])
+    slot = out / 'checkpoint.pt'
+    log = Path(args.out_target) / 'cloud-role-events.jsonl'
+    for attempt in range(args.restarts + 1):
+        current = resume_argv(argv, slot) if attempt and slot.is_file() else argv
+        with log.open('a') as stream:
+            stream.write(json.dumps({'event': 'learner_start', 'attempt': attempt, 'resume': current is not argv,
+                                     'at': __import__('time').time()}) + '\n')
+        rc = subprocess.call([sys.executable, '-u', '-m', 'natlang_neuralese.train.native_state_sft', *current],
+                             env=environment)
+        with log.open('a') as stream:
+            stream.write(json.dumps({'event': 'learner_exit', 'attempt': attempt, 'rc': rc,
+                                     'at': __import__('time').time()}) + '\n')
+        if rc == 0:
+            return
+    raise SystemExit(rc)
 
 
 def main(argv=None):
@@ -98,6 +124,7 @@ def main(argv=None):
     w.add_argument('--settings', required=True)
     w.add_argument('--out-link', required=True)
     w.add_argument('--out-target', required=True)
+    w.add_argument('--restarts', type=int, default=2)
     args = parser.parse_args(argv)
     if args.role == 'coordinator':
         coordinator(args, extra)
