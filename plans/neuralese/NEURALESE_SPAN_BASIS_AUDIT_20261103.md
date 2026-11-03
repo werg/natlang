@@ -115,3 +115,12 @@ withdrawals are unchanged):
   earlier rows. `build_acquired_full_session_graphs` passes its tokenizer.
 
 Items marked S are suitable for a Sonnet helper given this table.
+
+## Status of finding 1 (2026-11-03, later)
+
+Done for the composed families (12,231 of 12,378 producer call sites, 98.8%) and for 11,734 of the 15,204 reader cases
+(77.2%): `curriculum.reference.children` with gold, checked or mechanical notes, keyed to the real rendered child prompts.
+Not covered: reader call sites the model chooses at run time (QuALITY parts, TabFact row slices, TriviaQA sections,
+knights-and-knaves assumptions; 2,704 cases) and 545 natlang-codebase cases whose type alias no function declares.
+Details, sources and counts: `BROAD_RL_TASKS_20261031.md`, "Reference notes for Neuralese producer children".
+

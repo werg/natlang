@@ -392,3 +392,70 @@ Open: drive covers two train codebases (dependency_plan, shopkeeper) plus order_
 spell_arena need a state adapter. Feature has 19 train cases (below 20 distinct texts). Neither the decision readout
 with a `Neuralese` argument nor the drive/desk services in tune programs were run on a live actor; live-model
 false-negative rates are unmeasured.
+
+## Reference notes for Neuralese producer children (2026-11-03, span audit S1)
+
+`NEURALESE_SPAN_BASIS_AUDIT_20261103.md` finding 1: none of the 23,093 RL cases with a `Neuralese<...>` helper had
+`curriculum.reference.children`, so by `rl/privileged_context.applicable` a producer child saw no JOLT+ context and no
+target note existed for it. The builders now keep the upstream intermediates they used to discard.
+
+Shape (`scripts/rl_tasks/child_notes.py`): `reference.children = [{match, value, provenance}]` per producer call site. `match`
+is the child's signature opening (`You are inside this call: gather(`) plus the runtime rendering of the arguments that
+name the call site (question prefix, `{ title: "T", text: "` of its document, `path: string = "P"`, the part's first
+line); `value` is the note in the helper's declared type (string, or the typed record/list); `provenance` is `gold` (the
+dataset annotation as is), `checked` (derived from annotations by code that verified it against the inputs: a supporting
+sentence located by its gold answer, cells located by derivation numbers) or `mechanical:<method>` (the shared
+`operator_seeds` methods over the child's own inputs and the gold answer, where the dataset has no intermediates).
+Notes are only emitted for training rows and never for a call site the case does not fix (a QuALITY part, a TriviaQA
+section, a TabFact row slice, a knights-and-knaves assumption are chosen by the model at run time and stay uncovered).
+`privileged_context` needed no change: `Neuralese<T>` is read as `T`, a typed record is accepted only when it fits the
+declared type, and several matching children with different notes give none. The keys were checked against the real
+rendered child prompts of the frozen runtime (drivers recorded each child request, `applicable` evaluated on them):
+every recorded call of a covered helper matched exactly one entry, no conflicts except 2 of 24 MultiHiertt `read_table`
+calls (two tables sharing a cell fragment: they get no note, never a wrong one).
+
+**Composed families** (`sources/composed_notes.py`; source `natlang-rl-composed-neuralese-notes-20261103` beside the
+build, rebuilt, re-verified under the frozen 9564bc915 runtime with the same counts as before: relay 1582/1610 kept,
+typed 1753/1796, iterate 1800/1800, fanin 1487/1510, deep 1865/1900; re-assembled with the same custody exclusions;
+**held dev/confirmation packets are byte-identical** (same SHA-256), train 7,889 rows, same ids). Producer call sites
+covered: 12,231 of 12,378 (98.8%): gold 5,172, checked 5,079, mechanical 1,980 (QuALITY evidence/option notes, the
+only composed source with no intermediates). 31,187 entries. MuSiQue hop answers with the sentence holding each,
+2Wiki evidence triples and supporting sentences (typed per-document profiles carry the gold relevance flag), SQuAD
+answer span and its sentence at the gold offset, CLUTRR proof base relations, bAbI supporting facts, TriviaQA answer
+sentence per section, TAT-QA table rows by derivation numbers and gold `rel_paragraphs`, MultiHiertt gold evidence cell
+descriptions, HybridQA rows and pages holding the answer.
+
+**Reader-framed cases of the 61,399-row source** (`scripts/rl_tasks/add_child_notes.py`; source
+`full-core-effects-child-notes-20261103` beside the build: rows identical to `full-core-effects-20261102-...` except
+`reference.children`; held, assets and every other file are symlinks to the predecessor; the receipt binds its
+`cases.jsonl` SHA). Notes come from rebuilt rows only where the rebuilt row equals the predecessor row apart from
+children (2Wiki, MuSiQue, HybridQA, SQuAD, MultiHiertt), else from the case's own bound snapshot and gold
+(`derived_*`: codebase repository assets by SHA, recorded `gold_sql`, natlang function files, local CLUTRR/bAbI rows,
+HotpotQA answer lines because its archive is not on this machine). Call-site coverage of the 15,204 reader cases:
+11,734 (77.2%).
+
+| source | cases | covered | provenance |
+|---|---:|---:|---|
+| codebase-py (`read_file`) | 3,887 | 3,887 | checked |
+| natlang-codebase (`read_function`) | 2,544 | 1,999 | checked |
+| bird + spider (`plan_query`: reference SQL) | 1,344 | 1,344 | gold |
+| 2WikiMultihopQA / MuSiQue (`read_document`) | 751 / 624 | 751 / 624 | gold (MuSiQue checked) |
+| HotpotQA | 739 | 678 | mechanical (answer lines) |
+| codebase-natlang TS (`read_file`) | 740 | 740 | checked |
+| HybridQA (`read_page`) | 703 | 591 | checked |
+| CLUTRR guided / bAbI guided | 338 / 70 | 338 / 66 | checked / gold |
+| MultiHiertt (`read_table`) | 468 | 424 | gold |
+| SQuAD (`find_answer`) | 292 | 292 | checked |
+| QuALITY, TabFact, TriviaQA, knights-knaves | 675, 776, 639, 614 | 0 | model-chosen call sites |
+
+Qualification of the enriched reader rows (`verify.mjs`, frozen 9564bc915 runtime, `NATLANG_CALL_STORE=off`, the
+predecessor's assets): 11,734/11,734 reference replays accepted, 36,157/36,157 wrong-answer controls rejected,
+15,266 alias probes of which 354 rejected (the listed ones are all codebase `definition` cases whose `./path` alias
+form the oracle does not normalize; the rows and oracles are the predecessor's, so this is not a change from the notes).
+The children are not executed by the root-only reference replay, so this shows the rows still qualify, not that a note
+helps.
+
+A transplanted or derived note is not a measured lift: the oracle still grades only the root's answer. The notes enter
+guidance through the existing JOLT+ visibility rule; their use as self-distillation targets is separate.
+`rl/jolt_handoff` ranks reference cases by (level, actions, children), so a case that gained children ranks after an
+otherwise equal one that has none.
