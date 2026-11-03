@@ -220,7 +220,7 @@ def test_fetch_reconstructs_delta_chain_and_restores_exact_inputs(tmp_path, monk
 
 def test_sandbox_controls_drop_host_only_wrappers_and_relocate_resident_plan(tmp_path):
     wrapper = tmp_path / 'admit-learner-100g.py'
-    wrapper.write_text("subprocess.run(['python','/home/werg/natlang/scripts/memory_ledger.py','adopt'])\n")
+    wrapper.write_text("subprocess.run(['python','scripts/memory_ledger.py','adopt'])\n")
     other = tmp_path / 'tool.py'
     other.write_text('print(1)\n')
     lock = '/w/scripts/update_lock.sh'
@@ -228,7 +228,7 @@ def test_sandbox_controls_drop_host_only_wrappers_and_relocate_resident_plan(tmp
     assert sandbox_command(learner) == ['py', '-m', 'natlang_neuralese.rl.native_stage', '--out', '{learner_out}']
     assert sandbox_command(['py', str(other), '--', 'x']) == ['py', str(other), '--', 'x']
     config = {'learner_command': learner, 'seed_command': ['py', str(wrapper), '--', 'py', '-m', 'sft'],
-              'llama_cpp_converter': '/home/werg/data/llama', 'resident_data_directory': '/dgx/ops/resident-data',
+              'llama_cpp_converter': '/dgx/llama', 'resident_data_directory': '/dgx/ops/resident-data',
               'trainer_parameters': {'resident_data_directory': '/dgx/ops/resident-data', 'seed': 1},
               'seed_trainer_parameters': {'resident_data_directory': '/dgx/ops/resident-data'}}
     result = sandbox_controls(config, tmp_path / 'w000000')
