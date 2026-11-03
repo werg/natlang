@@ -26,6 +26,14 @@ diverse sources) and cut over at the next window. Add interleaved RL with a
 spread-seeking selector and declared tuning/metalearner stages. Promote by paired
 protected-development outcomes. Preserve earned exposure and historical custody.
 
+Owner follow-up (2026-11-03): start training on the corrected mixture as soon as
+its caps and quality checks pass, and fill measured per-construct gaps while it
+trains. Never pad scarce behaviours by repetition. Fill gaps primarily with RL:
+small-model (Haiku) subagents author task programs and exact oracles, prompted
+for real depth and diversity, qualified by reference/negative/alias replay.
+On-policy RL is preferred over more teacher demonstrations; verified successful
+rollouts may self-distill into SFT. Teacher codebase generation is secondary.
+
 ## Interleaved RL is a declared stage; selector /2 seeks outcome spread (engineering, 2026-11-03)
 
 Recipe kind `native_interleaved_rl` (`rl/interleave.py`) requires the joint SFT
