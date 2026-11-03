@@ -1,6 +1,8 @@
 # Weight-space editing of LFM3 full67 (2026-11-03)
 
-Status: **time-boxed investigation; no edit candidate. The single causal edit test was negative.** The supervisor capped this work at 15:45 CET.
+Status: **time-boxed investigation; no edit candidate.** Both causal edit families failed on held-out code starts:
+the direct-logit head ablation (section 6) and the residual mean-difference mode ablation (section 8, 2026-11-03
+afternoon). The supervisor capped the first pass at 15:45 CET.
 The findings, tools and negative results below are the deliverable. No checkpoint was modified. Nothing here claims
 capability lift. The protected dev packet was never opened; its outcomes are known only from the brief.
 
@@ -189,8 +191,8 @@ obstacle, and do not add or reshape a skill.
 
 **Untested next steps, in order of promise:**
 
-1. Ablate a residual *mean-difference* "Python-mode" direction across its top writers (mode-level, as in Exp 8).
-   It should be tested in the same regeneration harness first, then in paired practice outcomes.
+1. ~~Ablate a residual *mean-difference* "Python-mode" direction across its top writers.~~ Tested; it fails on held-out
+   code starts (section 8).
 2. Fix the cause in data. Withdraw or repair supervised targets whose eval code starts with `import` or prose.
    Add error-recovery targets.
 3. Use JOLT+ RL on folder-reducer and logic worlds. Exact oracles there already penalise the failed evals.
@@ -208,3 +210,109 @@ session scratch and disposable:
 - `k1b/`: DLA features (`codefeats.pkl`), per-head DLA (`heads.pkl`) and regenerations (`regen_*.pkl`).
 
 No checkpoint, actor view or ops directory was written, so no rejected candidate needs deletion.
+Section 8 adds `k3/` (writer captures `writers.pkl`, train proxy `proxy.pkl`, held-out regenerations `held.pkl`) and
+the helpers `state2.py`, `ws2.py`, `prelude2.py`, `heldout.py`. A spec file for the L19 edit was staged under
+`ops/wsedit-python-mode-specs-1103/` before the held-out result and was deleted afterwards; no candidate was written.
+
+## 8. Mode-level mean-difference ablation (section 6 next step 1): negative on held-out
+
+Run 2026-11-03 16:05–17:45 CET on the DGX: ledger units `wsedit2-1`/`wsedit2-2`, low priority. The units were
+preempted twice by production memory demand and resumed from saved state. Pop was not used, because 14 GB RAM and
+9 GB free disk cannot hold the 12.5 GB full checkpoint, and the eval watcher needs its 8 GB GPU. The harness is
+section 6's greedy regeneration from the exact code-start prefix: 60 tokens, native engine, full67 weights edited in
+place and restored. A base repeat reproduced every held-out base text exactly.
+
+**Split.** The split is by world (chain root prompt), so no world has prefixes on both sides.
+
+| Side | Bad (py + js-import) | Good probe | Other good |
+|---|---|---|---|
+| fold 1 train | 19 (8 + 11) | 15 | 85 |
+| fold 1 test | 18 (13 + 5) | 15 | 142, of which 30 sampled as extra |
+
+Variants were selected on train data only:
+- writer attribution;
+- a first-token proxy (does argmax at the code start leave `import`?), measured on train bad and train good probes;
+- strength.
+
+Fold 2 swaps the roles of train and test: the direction and writers come from the test side and are scored on the
+train side.
+
+**Direction.** u_L = normalize(mean bad − mean good) of the raw residual entering layer L at the code-start position.
+- Separation appears at layer 15. Held-out AUROC: 0.95 at L15, 0.96 at L19–22, 0.98 at L23.
+- The direction rotates through depth: cos(u15, u22) = 0.29, cos(u19, u22) = 0.53.
+- Train and test directions agree only partly: cos = 0.82 at L19 and 0.81 at L22.
+
+**Writers.** Writers are ranked by bad−good mean of u_L · (post-norm write) on train captures (19 bad, 40 good):
+- For u19, the top 8 carry 91%: ffn18 .59, op14 .40, ffn17 .31, ffn16 .25, ffn14 .16, ffn15 .15, op17 .07, op12 .05.
+- For u22, the writers are ffn21, ffn19, ffn20, ffn18, op14, op21 and ffn17, which carry 80%.
+- The mode is written by many mid-to-late FFNs, not by two blocks.
+
+**Edit.** `project_out_columns`, gain-aware, applied to all columns of each writer's `o_proj`/`conv.out_proj`/`w2`,
+alpha 1.
+
+**Train proxy** (first token, 19 bad / 15 good):
+
+| Variant | Bad fixed | Good unchanged | Good turned to import |
+|---|---|---|---|
+| L22 top-4 | 8 | 14 | 0 |
+| L22 top-8 | 17 | 14 | 0 |
+| L22 top-8, alpha 0.5 | 7 | 14 | 0 |
+| L22 top-8, alpha 0.75 | 12 | 14 | 0 |
+| L22 top-8, alpha 1.25 | 17 | 14 | 0 |
+| L22 top-6 | 15 | 14 | 0 |
+| L22 top-12 | 17 | 14 | 0 |
+| L22 80% share (7 writers) | 17 | 14 | 0 |
+| L23 top-8 | 16 | 14 | 0 |
+| **L19 top-8** (selected) | **17** | **15** | 0 |
+| L19 top-4 | 15 | 15 | 0 |
+| L22 top-8, norm-aware | 17 | 14 | 0 |
+
+**Norm-aware variant.** Each writer's post-norm gain is rescaled by the mean RMS shrink that the projection causes on
+train captures, which undoes the sandwich-norm re-amplification on average. The measured shrink factors are
+0.997–0.999, so the u-component holds well under 1% of each write's energy. The variant is indistinguishable from
+the plain edit. Section 6's hypothesis that renormalisation re-amplifies the edit is therefore not the operative
+failure mode.
+
+**Held-out regeneration.** Bad = starts that still begin with `import` or show Python markers.
+"Good same" = byte-identical to base over 60 tokens.
+
+| Variant (direction/writers fit on) | Held-out bad still bad | Good probe: same / new import | Extra good: same / new import |
+|---|---|---|---|
+| base | 18/18 | 15/15 / 0 | 30/30 / 0 |
+| fold 1: L19 top-8 (train) | **10/18** (fixed 4/5 js-import, 4/13 Python) | 11/15 / 0 | 29/30 / 0 |
+| fold 1: L19 top-8 norm-aware | 10/18 | 10/15 / 0 | 29/30 / 0 |
+| fold 1: L22 80% share | 12/18 | 12/15 / 0 | 30/30 / 0 |
+| fold 1: L19 top-8 + Python-only direction (8 writers) | 13/18 | 8/15 / 0 | 26/30 / 0 |
+| fold 2 base | 19/19 | 15/15 / 0 | 30/30 / 1* |
+| fold 2: L19 top-8 (test-side fit) | 14/19 | 11/15 / **4** | 13/30 / **15** |
+
+\* That greedy base regeneration of a sampled-good prefix already starts with `import`.
+
+Additional observations:
+- Fold 1's good-start changes were benign JS rewrites, such as a different `console.log` formatting.
+- The Python-only direction combined with the shared one also lowered the train proxy, to 9/19 fixed and 13/15
+  good unchanged.
+
+**Verdict: stage 1 fails.**
+- The best train-selected edit fixes only 8 of 18 held-out bad starts. It mainly fixes the JS-import-plus-prose
+  kind; Python starts mostly persist (`import pathlib, asyncio` in folder reducers).
+- The cross-fold edit is actively harmful. It fixes 5/19, and it turns 19 of 45 good starts into JS-import-plus-prose
+  starts such as `import { facts } // maybe not needed`.
+
+Mechanism:
+- Projection removes a writer's u-component regardless of sign. On good contexts some writers carry a *negative*
+  component, and removing it pushes those contexts toward the bad side.
+- The js-import and Python modes are related but distinct directions (cos 0.79). Ablating a Python-weighted direction
+  releases the js-import mode.
+- The train proxy saturated (17/19) and did not predict held-out generalisation.
+
+A weight-only, bias-free edit cannot implement a sign-preserving mean shift. Exp 8's single-direction recipe does not
+transfer to this habit.
+
+Stage 2 therefore did not run:
+- no candidate checkpoint was written;
+- no paired practice was run;
+- no dev16 request was made.
+
+Remaining routes, unchanged in order: fix the data (withdraw or repair targets whose eval code starts with `import` or
+prose; add recovery targets), and JOLT+ RL on folder-reducer and logic worlds with their exact oracles.
