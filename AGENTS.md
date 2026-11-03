@@ -86,6 +86,16 @@ real rendered call, then let it morph through direct learning on sufficient
 dedicated data. Each operator needs its own adequate training data and measured
 use, never a nominal parameter with a handful of rows.
 
+Neuralese span basis (owner, 2026-11-03): every Neuralese span, soft state or
+learned operator output starts from a good token sequence: input-specific,
+target-relevant content the consumer needs, never a constant cue, instruction or
+placeholder shared across inputs. Use gold/checked summaries or supporting spans.
+Where none exist, use a deterministic mechanical summary (structure outline,
+question-selected extractive spans, exact identifiers and values, length scaled to
+input), recording seed provenance. Then morph through end-to-end consumer-outcome
+learning with annealed text supervision. A span whose content is the same for
+every input, or that ablation cannot distinguish from shuffled state, is a defect.
+
 ## Built capabilities must not lie fallow (owner, 2026-11-03)
 
 The SGLang actor was built and integrated, then left unused for days behind a
