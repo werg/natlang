@@ -1,0 +1,138 @@
+"""Authored RL tasks (`natlang.rl-authored-task/1`) -> ordinary `natlang.program/2` curriculum cases.
+
+Authoring workers (plans/neuralese/RL_TASK_AUTHORING_KIT.md) write one JSON object per task: a complete natlang
+program (root function plus helper functions in its callable folder), the invocation inputs, the exact expected
+result, an oracle kind, meaningful wrong answers and type-valid alternative gold forms. This converter checks the
+authored shape, assigns the split from the world identity (related tasks share a world and therefore a split),
+records the author model as provenance and the scripted structure smoke, and emits the same case format the
+collector, verify.mjs and the RL controller already use. It never invents gold, wrong answers or references.
+
+  python scripts/rl_tasks/sources/authored.py IN.jsonl OUT.jsonl
+"""
+from __future__ import annotations
+
+import json
+import re
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from common import CURRICULUM_VERSION, slug, text_digest, unit_split  # noqa: E402
+
+SCHEMA = 'natlang.rl-authored-task/1'
+GENERATOR = 'natlang.rl-authored-tasks/1'
+CONSTRUCTS = frozenset({'call_depth_3', 'neuralese_relay', 'typed_neuralese', 'neuralese_fan_in', 'iterate',
+                        'iterate_neuralese', 'folder_reducer', 'decision_readout', 'skills', 'multi_operation_codebase',
+                        'effect_state'})
+ORACLES = frozenset({'exact', 'normalized'})
+NAME = re.compile(r'^[a-z][a-z0-9_]*$')
+FILE = re.compile(r'^[a-z][a-z0-9_]*(/[a-z][a-z0-9_-]*)*(\.nl|\.ts|/SKILL\.md)$')
+
+
+def fail(task, message):
+    raise ValueError(f'{task.get("id", "?")}: {message}')
+
+
+def convert(task):
+    if task.get('schema') != SCHEMA:
+        fail(task, f'schema must be {SCHEMA}')
+    for key in ('id', 'author', 'family', 'world', 'level', 'constructs', 'root', 'files', 'inputs', 'expected',
+                'oracle', 'oracle_depth', 'wrong_answers', 'alias_answers', 'smoke'):
+        if key not in task:
+            fail(task, 'missing ' + key)
+    if not NAME.match(task['family']):
+        fail(task, 'family must be snake_case')
+    if not isinstance(task['id'], str) or not re.fullmatch(r'[a-z0-9][a-z0-9-]{2,80}', task['id']):
+        fail(task, 'id must be lowercase letters, digits and dashes')
+    if type(task['level']) is not int or not 0 <= task['level'] <= 3:
+        fail(task, 'level must be 0, 1, 2 or 3')
+    constructs = task['constructs']
+    if not constructs or not set(constructs) <= CONSTRUCTS:
+        fail(task, 'constructs must be a non-empty subset of ' + ', '.join(sorted(CONSTRUCTS)))
+    if task['oracle'] not in ORACLES:
+        fail(task, 'oracle must be exact or normalized')
+    if task['oracle_depth'] not in ('answer', 'effect-state'):
+        fail(task, 'oracle_depth must be answer or effect-state')
+    if (task['oracle_depth'] == 'effect-state') != ('effect_state' in constructs):
+        fail(task, 'oracle_depth effect-state and construct effect_state go together')
+    files, root = task['files'], task['root']
+    if root not in files or '/' in root or not root.endswith('.nl'):
+        fail(task, 'root must be a top-level .nl file present in files')
+    stem = root[:-3]
+    for path in files:
+        if not FILE.match(path) or (path != root and not path.startswith(stem + '/')):
+            fail(task, f'file {path} must live in the root callable folder {stem}/')
+        if path.endswith('.nl') and not files[path].startswith('---\n'):
+            fail(task, f'{path} needs YAML frontmatter (args, returns)')
+    wrong, aliases = task['wrong_answers'], task['alias_answers']
+    if len(wrong) < 2 or any(json.dumps(w, sort_keys=True) == json.dumps(task['expected'], sort_keys=True) for w in wrong):
+        fail(task, 'at least two wrong answers, none equal to expected')
+    author = task['author']
+    if not isinstance(author, dict) or not author.get('model') or not author.get('worker'):
+        fail(task, 'author needs model and worker')
+    smoke = task['smoke']
+    if not isinstance(smoke, dict) or not isinstance(smoke.get('code'), str) or not isinstance(smoke.get('children'), dict):
+        fail(task, 'smoke needs code (root eval script) and children (scripted helper answers by name)')
+    world = 'authored:' + task['world']
+    split = unit_split(world, 'train-carve', salt='rl-authored-20261103')
+    family = 'auth_' + task['family']
+    case_id = f'auth:{slug(task["family"], 40)}:{slug(task["id"], 80)}:{text_digest(json.dumps(task, sort_keys=True))[:8]}'
+    root_body = files[root].split('---', 2)[-1]
+    return {
+        'version': 'natlang.program/2', 'id': case_id, 'kind': 'lambda_source', 'family': family,
+        'source': 'authored-rl:' + author['model'], 'split': split, 'source_ids': ['authored:' + task['id']],
+        'source_groups': sorted({world, *('authored-group:' + g for g in task.get('groups', []))}),
+        'source_revisions': [GENERATOR], 'license': 'authored', 'gold_sources': ['authored-exact-oracle'],
+        'generation': {'generator': GENERATOR, 'teacher_generation': True, 'author': author,
+                       'method': 'program, inputs, exact expected result and controls authored by a model worker; '
+                                 'qualified by reference, negative and alias replay; no sampled trajectory'},
+        'curriculum': {
+            'version': CURRICULUM_VERSION, 'family': family, 'family_version': 1, 'shape': task.get('shape', family),
+            'variant': 'base', 'pair_group': None, 'split_group': world, 'slice': 'nested_scoped',
+            'domain': 'other', 'mode': 'single_call', 'inline': 'optional',
+            'evidence': {'world': [], 'retrieved': [], 'background': []}, 'assumptions': [], 'decisive': [],
+            'plausible_actions': [], 'minimum_sequence': [],
+            'reference': {'root': task.get('reference') or [['return_result', {'status': 'success',
+                                                                               'value': task['expected']}]]},
+            'rl': {'level': task['level'], 'family': family, 'basis': 'authored-exact-oracle-reference-verified'},
+            **({'iterate': 'required'} if {'iterate', 'iterate_neuralese'} & set(constructs) else {}),
+            **({'named': 'required'} if len([p for p in files if p.endswith('.nl')]) > 1 else {}),
+            'external': {'source': 'authored', 'upstream': 'authored:' + author['model'], 'upstream_id': task['id'],
+                         'upstream_split': 'train-carve', 'unit': world, 'shape': task.get('shape', family),
+                         'instruction_sha256': text_digest(root_body)[:16], 'instruction_id': text_digest(root_body)[:12],
+                         'neuralese_room': '', 'framing': 'authored', 'constructs': sorted(constructs),
+                         'subject_domain': task.get('domain', 'other'),
+                         'oracle_depth': task['oracle_depth'],
+                         'checks': {'wrong_answers': wrong, 'alias_answers': aliases},
+                         'structure': {'name': family, 'constructs': sorted(constructs),
+                                       'smoke': {'root': [['eval', {'code': smoke['code']}],
+                                                          ['return_result', {'status': 'success',
+                                                                             'value': task['expected']}]],
+                                                 'children': smoke['children']}}}},
+        'semantics': {'root': root, 'files': files, 'inputs': task['inputs'], 'expected': task['expected'],
+                      'oracle': task['oracle']},
+    }
+
+
+def main(argv=None):
+    argv = argv or sys.argv[1:]
+    if len(argv) != 2:
+        raise SystemExit(__doc__)
+    errors, out = [], []
+    for number, line in enumerate(Path(argv[0]).read_text().splitlines(), 1):
+        if not line.strip():
+            continue
+        try:
+            out.append(convert(json.loads(line)))
+        except (ValueError, KeyError, TypeError, json.JSONDecodeError) as error:
+            errors.append(f'line {number}: {error}')
+    ids = [row['id'] for row in out]
+    if len(ids) != len(set(ids)):
+        errors.append('duplicate task ids')
+    Path(argv[1]).write_text(''.join(json.dumps(row, ensure_ascii=False) + '\n' for row in out))
+    print(json.dumps({'converted': len(out), 'errors': errors}))
+    return 1 if errors else 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
