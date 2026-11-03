@@ -43,6 +43,7 @@ log "\"event\":\"start\",\"gpu\":\"$(nvidia-smi --query-gpu=name --format=csv,no
 progress() { python3 "$HELPER" progress "$L"; }
 field() { python3 -c "import json,sys;v=json.loads(sys.argv[1]).get(sys.argv[2]);print('' if v is None else str(v).lower() if isinstance(v,bool) else v)" "$1" "$2"; }
 
+INPUTS=$ROOT/inputs
 # 1. parent and run inputs
 SECRETS=${NATLANG_CW_SECRETS:-$NATLANG_CW_CONTROL_DIR/secrets}
 if [ ! -f "$L/config.json" ] && [ ! -f "$L/lineage.json" ]; then
@@ -54,6 +55,45 @@ if [ ! -f "$L/config.json" ] && [ ! -f "$L/lineage.json" ]; then
   log "\"event\":\"parent_ready\",\"seconds\":$(since $s)"
 fi
 rm -f "$SECRETS/rl-parent"
+
+# The SGLang fork venv (x86_64 lock + editable fork source + Rust radix-tree core), cached on the volume: RL actors
+# with `--engine sglang` and the sglang_bench stage shard. Sets SGL_VENV/SGL_COMMIT.
+install_sglang() {
+  local NEEDS_SGLANG=1 s
+  if [ "$NEEDS_SGLANG" = 1 ]; then
+    SGL_DIR=/home/werg/sglang-natlang
+    SGL_VENV=$(python3 -c "import json;print(json.load(open('$CODE/training/neuralese/sglang-fork.json'))['python'])" | xargs dirname | xargs dirname)
+    SGL_COMMIT=$(python3 -c "import json;print(json.load(open('$CODE/training/neuralese/sglang-fork.json'))['commit'])")
+  fi
+  if [ "$NEEDS_SGLANG" = 1 ] && [ ! -f "$SGL_VENV/.natlang-$SGL_COMMIT" ]; then
+    s=$(date +%s)
+    rm -rf "$SGL_DIR" "$SGL_VENV"; mkdir -p "$SGL_DIR"
+    tar -xzf "$INPUTS/sglang-natlang-$SGL_COMMIT.tar.gz" -C "$SGL_DIR" || { log '"event":"failed","step":"fork-source"'; exit 2; }
+    python3 -m pip install -q --no-cache-dir uv >/dev/null 2>&1 || { log '"event":"failed","step":"uv"'; exit 2; }
+    export -n PIP_CONSTRAINT 2>/dev/null; unset PIP_CONSTRAINT
+    python3 -m uv venv -q -p "$(command -v python3)" "$SGL_VENV" || { log '"event":"failed","step":"sglang-venv"'; exit 2; }
+    python3 -m uv pip install -q -p "$SGL_VENV/bin/python" -r "$INPUTS/sglang-lock-$SGL_COMMIT-x86_64.txt" \
+      --extra-index-url https://download.pytorch.org/whl/cu130 --index-strategy unsafe-best-match > "$OUT/sglang-install.log" 2>&1 \
+      || { tail -20 "$OUT/sglang-install.log"; log '"event":"failed","step":"sglang-deps"'; exit 2; }
+    # The fork's Rust radix-tree core (SGLang's default unified tree backend) is built here; the other Rust extensions
+    # (gRPC, Rust server, multimodal) are unused by the actor. The loader may rebuild it for the installed torch, so
+    # cargo stays on PATH for the actor too.
+    if ! command -v cargo >/dev/null 2>&1 && [ ! -x "$HOME/.cargo/bin/cargo" ]; then
+      (curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal -q) > "$OUT/rustup.log" 2>&1 \
+        || { tail -20 "$OUT/rustup.log"; log '"event":"failed","step":"rustup"'; exit 2; }
+    fi
+    export PATH="$HOME/.cargo/bin:$PATH"
+    SGLANG_BUILD_RUST_EXTS=mem_cache python3 -m uv pip install -q -p "$SGL_VENV/bin/python" --no-deps -e "$SGL_DIR/python" >> "$OUT/sglang-install.log" 2>&1 \
+      || { tail -20 "$OUT/sglang-install.log"; log '"event":"failed","step":"sglang-fork"'; exit 2; }
+    "$SGL_VENV/bin/python" -c "import sglang.srt.mem_cache.rust_tree_core.extension as e; e.load_tree_core_extension()" >> "$OUT/sglang-install.log" 2>&1 \
+      || { tail -20 "$OUT/sglang-install.log"; log '"event":"failed","step":"sglang-rust-tree-core"'; exit 2; }
+    KERNEL=sgl_kernel; nvidia-smi >/dev/null 2>&1 || KERNEL=sglang  # no driver in a CPU check sandbox
+    "$SGL_VENV/bin/python" -c "import sglang, $KERNEL, torch; print(sglang.__file__, torch.__version__, torch.cuda.is_available())" >> "$OUT/sglang-install.log" 2>&1 \
+      || { tail -20 "$OUT/sglang-install.log"; log '"event":"failed","step":"sglang-import"'; exit 2; }
+    touch "$SGL_VENV/.natlang-$SGL_COMMIT"
+    log "\"event\":\"sglang_ready\",\"commit\":\"$SGL_COMMIT\",\"seconds\":$(since $s)"
+  fi
+}
 
 # A tune shard (tune.json): natlang_neuralese.tune.stage --shard I/N on the restored parent with the code snapshot
 # (its ts-host natlang CLI and native student), the stage directory staged while it runs and once at the end; the
@@ -71,6 +111,7 @@ if [ -f "$L/tune.json" ]; then
   export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}
   STAGE=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['stage_dir'])" "$L/tune.json")
   MODULE=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['module'])" "$L/tune.json")
+  if [ "$MODULE" = natlang_neuralese.serve.sglang_bench ]; then install_sglang || exit 2; fi
   mapfile -d '' ARGS < <(python3 -c "import json,sys;sys.stdout.write(''.join(a+chr(0) for a in json.load(open(sys.argv[1]))['argv']))" "$L/tune.json")
   log "\"event\":\"tune_setup_done\",\"stage\":\"$STAGE\",\"node\":\"$(node --version 2>/dev/null)\",\"seconds\":$(since $t0)"
   await_upload() { local seq; seq=$(ls "$E" | grep -E '^[0-9]{6}\.json$' | tail -1 | cut -c1-6)
@@ -104,7 +145,6 @@ PROGRESS=$(progress) || { log '"event":"failed","step":"progress"'; exit 2; }
 CFG=$(field "$PROGRESS" config); KIND=$(field "$PROGRESS" kind)
 
 # 2. environments
-INPUTS=$ROOT/inputs
 VENV=/home/werg/natlang/.venv-neuralese
 if [ ! -x "$VENV/bin/python" ]; then
   python3 -m venv --system-site-packages "$VENV" || { log '"event":"failed","step":"learner-venv"'; exit 2; }
@@ -113,39 +153,7 @@ NEEDS_SGLANG=$(python3 -c "
 import json,sys;c=json.load(open(sys.argv[1]));a=c.get('actor_command') or []
 print(int(not c.get('mandatory_sft_only') and any(x=='--engine' and y=='sglang' for x,y in zip(a,a[1:]))))" "$CFG")
 SGL_VENV=; SGL_COMMIT=
-if [ "$NEEDS_SGLANG" = 1 ]; then
-  SGL_DIR=/home/werg/sglang-natlang
-  SGL_VENV=$(python3 -c "import json;print(json.load(open('$CODE/training/neuralese/sglang-fork.json'))['python'])" | xargs dirname | xargs dirname)
-  SGL_COMMIT=$(python3 -c "import json;print(json.load(open('$CODE/training/neuralese/sglang-fork.json'))['commit'])")
-fi
-if [ "$NEEDS_SGLANG" = 1 ] && [ ! -f "$SGL_VENV/.natlang-$SGL_COMMIT" ]; then
-  s=$(date +%s)
-  rm -rf "$SGL_DIR" "$SGL_VENV"; mkdir -p "$SGL_DIR"
-  tar -xzf "$INPUTS/sglang-natlang-$SGL_COMMIT.tar.gz" -C "$SGL_DIR" || { log '"event":"failed","step":"fork-source"'; exit 2; }
-  python3 -m pip install -q --no-cache-dir uv >/dev/null 2>&1 || { log '"event":"failed","step":"uv"'; exit 2; }
-  export -n PIP_CONSTRAINT 2>/dev/null; unset PIP_CONSTRAINT
-  python3 -m uv venv -q -p "$(command -v python3)" "$SGL_VENV" || { log '"event":"failed","step":"sglang-venv"'; exit 2; }
-  python3 -m uv pip install -q -p "$SGL_VENV/bin/python" -r "$INPUTS/sglang-lock-$SGL_COMMIT-x86_64.txt" \
-    --extra-index-url https://download.pytorch.org/whl/cu130 --index-strategy unsafe-best-match > "$OUT/sglang-install.log" 2>&1 \
-    || { tail -20 "$OUT/sglang-install.log"; log '"event":"failed","step":"sglang-deps"'; exit 2; }
-  # The fork's Rust radix-tree core (SGLang's default unified tree backend) is built here; the other Rust extensions
-  # (gRPC, Rust server, multimodal) are unused by the actor. The loader may rebuild it for the installed torch, so
-  # cargo stays on PATH for the actor too.
-  if ! command -v cargo >/dev/null 2>&1 && [ ! -x "$HOME/.cargo/bin/cargo" ]; then
-    (curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal -q) > "$OUT/rustup.log" 2>&1 \
-      || { tail -20 "$OUT/rustup.log"; log '"event":"failed","step":"rustup"'; exit 2; }
-  fi
-  export PATH="$HOME/.cargo/bin:$PATH"
-  SGLANG_BUILD_RUST_EXTS=mem_cache python3 -m uv pip install -q -p "$SGL_VENV/bin/python" --no-deps -e "$SGL_DIR/python" >> "$OUT/sglang-install.log" 2>&1 \
-    || { tail -20 "$OUT/sglang-install.log"; log '"event":"failed","step":"sglang-fork"'; exit 2; }
-  "$SGL_VENV/bin/python" -c "import sglang.srt.mem_cache.rust_tree_core.extension as e; e.load_tree_core_extension()" >> "$OUT/sglang-install.log" 2>&1 \
-    || { tail -20 "$OUT/sglang-install.log"; log '"event":"failed","step":"sglang-rust-tree-core"'; exit 2; }
-  KERNEL=sgl_kernel; nvidia-smi >/dev/null 2>&1 || KERNEL=sglang  # no driver in a CPU check sandbox
-  "$SGL_VENV/bin/python" -c "import sglang, $KERNEL, torch; print(sglang.__file__, torch.__version__, torch.cuda.is_available())" >> "$OUT/sglang-install.log" 2>&1 \
-    || { tail -20 "$OUT/sglang-install.log"; log '"event":"failed","step":"sglang-import"'; exit 2; }
-  touch "$SGL_VENV/.natlang-$SGL_COMMIT"
-  log "\"event\":\"sglang_ready\",\"commit\":\"$SGL_COMMIT\",\"seconds\":$(since $s)"
-fi
+[ "$NEEDS_SGLANG" = 1 ] && install_sglang
 log "\"event\":\"actor_environment\",\"sglang\":$NEEDS_SGLANG,\"kind\":\"$KIND\""
 
 # 3. runtime: the config's frozen runtime as restored, or ROOT/runtime from the bundle's code snapshot

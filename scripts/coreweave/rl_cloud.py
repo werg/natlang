@@ -342,6 +342,9 @@ def is_sft(spec):
     return 'controller' in spec
 
 
+SGLANG_BENCH = 'natlang_neuralese.serve.sglang_bench'
+
+
 def is_tune(spec):
     """A stage shard (``"tune"``) runs an adaptation stage module on a parent checkpoint: ``natlang_neuralese.tune.stage
     --shard I/N`` (the default ``module``) or ``natlang_neuralese.tune.learned.bank_stage`` over an ``episodes`` pool."""
@@ -704,6 +707,15 @@ def seed_tune(run, name):
         inputs = file_inputs(run, name, _file_records([pool, pool.parent / 'rows.jsonl', *custody_inputs()]))
         argv = ['--episodes', str(pool), '--protection', str(REPO / 'training' / 'protected-worlds.json'),
                 '--continue-from', str(parent), '--out', str(stage_dir), '--device', 'cuda', *tune.get('args', [])]
+    elif module == SGLANG_BENCH:
+        # SGLang actor throughput and actor/learner mismatch on real RL turns (serve/sglang_bench.py): the fork's venv,
+        # the HF export of the parent and its server in the sandbox; reports and samples in the stage directory.
+        names = []
+        workload = Path(tune['workload'])
+        inputs = file_inputs(run, name, _file_records([workload]))
+        argv = ['all', '--out', str(stage_dir), '--workload', str(workload), '--checkpoint', str(parent),
+                '--base', run['hf'].split('=', 1)[1], '--export-dir', str(stage_dir.parent / 'sglang-hf'),
+                *tune.get('args', [])]
     else:
         raise SystemExit(f'{name}: no cloud stage shard for module {module}')
     L.mkdir(parents=True)
@@ -1076,6 +1088,8 @@ def needs_sglang(run):
     """Whether any lineage's actor runs the SGLang fork (RL lineages with ``--engine sglang``); SFT windows and native
     actors need none of its source, lock or venv."""
     for name, spec in run['lineages'].items():
+        if is_tune(spec) and spec['tune'].get('module') == SGLANG_BENCH:
+            return True
         if not is_rl(spec):
             continue
         command = cloud_config(run, name).get('actor_command') or []
