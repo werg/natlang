@@ -131,7 +131,7 @@ def _shape(text):
     return re.sub(r'\d+', '#', text.strip().split('\n', 1)[0])[:60]
 
 
-def census_node(ids, weights, tokenizer, totals, examples, row_id):
+def census_node(ids, weights, tokenizer, totals, examples, row_id, pairs=None):
     """Message-level census of one node: tool-call names with import-first code, and what follows a failed eval."""
     starts = [i for i, token in enumerate(ids) if token == IM_START]
     messages = []
@@ -141,10 +141,10 @@ def census_node(ids, weights, tokenizer, totals, examples, row_id):
         supervised = any(w > 0 for w in weights[begin:end])
         stop = min(end, begin + 2 + 400) if role == 'tool' else end
         text = tokenizer.decode([i for i in ids[begin + 2:stop] if i < len(tokenizer)]) if role in ('assistant', 'tool') else ''
-        messages.append((role, supervised, text))
+        messages.append((role, supervised, text, begin, end))
     pending = None  # (code_hash, supervised) of the last eval whose result has not been classified
     failure = None  # (kind, code_hash, supervised) of the eval whose failing result is awaiting the next action
-    for role, supervised, text in messages:
+    for role, supervised, text, begin, end in messages:
         if role == 'assistant':
             calls = [m for m in _CALL.finditer(text)]
             for m in calls:
@@ -156,7 +156,7 @@ def census_node(ids, weights, tokenizer, totals, examples, row_id):
                     if PY_IMPORT.match(head) or re.match(r'^\s*(?:import|from)\s', head):
                         totals[f'tool_import_start:{name}:{kind}'] += 1
             if failure is not None:
-                bad_kind, bad_hash, bad_supervised = failure
+                bad_kind, bad_hash, bad_supervised, bad_span = failure
                 failure = None
                 eval_calls = [m for m in calls if m.group(1) == 'eval']
                 if not calls:
@@ -168,11 +168,13 @@ def census_node(ids, weights, tokenizer, totals, examples, row_id):
                     outcome = 'other-tool:' + calls[0].group(1)
                 key = f'recovery:{bad_kind}:{outcome}:{"supervised" if supervised else "context"}'
                 totals[key] += 1
+                if pairs is not None:
+                    pairs.append((key, bad_span, (begin, end)))
                 if len(examples.setdefault(key, [])) < 5:
                     examples[key].append(row_id)
             eval_calls = [m for m in calls if m.group(1) == 'eval']
             pending = (hashlib.sha1(eval_calls[-1].group(3).encode()).digest(), supervised,
-                       bool(FOREIGN & set(classify(eval_calls[-1].group(3))))) if eval_calls else None
+                       bool(FOREIGN & set(classify(eval_calls[-1].group(3)))), (begin, end)) if eval_calls else None
         elif role == 'tool' and pending is not None:
             body = text.split('<tool_response>', 1)[-1].lstrip('\n')
             totals['resp_shape:' + _shape(body)] += 1
@@ -180,7 +182,7 @@ def census_node(ids, weights, tokenizer, totals, examples, row_id):
                     'repeat-warning' if 'failed the same way' in body[:600] else None)
             if kind:
                 totals[f'eval_failure:{kind}{"+foreign" if pending[2] else ""}:{"supervised" if pending[1] else "context"}'] += 1
-                failure = (kind + ('+foreign' if pending[2] else ''), pending[0], pending[1])
+                failure = (kind + ('+foreign' if pending[2] else ''), pending[0], pending[1], pending[3])
             pending = None
 
 

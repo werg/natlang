@@ -60,3 +60,31 @@ def test_audit_leaf_counts_supervised_and_context(tmp_path):
     assert [e['kind'] for e in events] == ['supervised'] and events[0]['syntax_fail'] is True
     assert 'start-python-import' in events[0]['flags']
     assert Counter(totals)['flagged_syntax_fail_supervised'] == 1
+
+
+def test_census_counts_the_action_after_a_failed_eval():
+    class Tokens:
+        roles = {1001: 'assistant', 1002: 'tool'}
+
+        def __len__(self):
+            return 10 ** 6
+
+        def decode(self, ids):
+            return ''.join(self.roles.get(i) or chr(i) for i in ids)
+
+    def message(role, text):
+        return [audit.IM_START, 1001 if role == 'assistant' else 1002, *map(ord, text)]
+
+    call = lambda code: f'<function=eval>\n<parameter=code>\n{code}\n</parameter>\n</function>'
+    ids = [*message('assistant', call('import os\nprint(1)')),
+           *message('tool', '\n<tool_response>\n1:1 typescript-syntax: Unexpected keyword or identifier.'),
+           *message('assistant', call('const x = 1;\nx')),
+           *message('tool', '\n<tool_response>\nok')]
+    first_end = len(message('assistant', call('import os\nprint(1)')))
+    weights = [0.0] * first_end + [1.0] * (len(ids) - first_end)
+    totals, examples, pairs = Counter(), {}, []
+    audit.census_node(ids, weights, Tokens(), totals, examples, 'r1', pairs)
+    assert totals['eval_failure:compile+foreign:context'] == 1
+    assert totals['recovery:compile+foreign:different-eval:supervised'] == 1
+    assert examples == {'recovery:compile+foreign:different-eval:supervised': ['r1']}
+    assert [(key, bad[0], nxt[0]) for key, bad, nxt in pairs] == [('recovery:compile+foreign:different-eval:supervised', 0, first_end + len(message('tool', '\n<tool_response>\n1:1 typescript-syntax: Unexpected keyword or identifier.')))]
