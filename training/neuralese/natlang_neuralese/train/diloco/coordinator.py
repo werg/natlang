@@ -161,6 +161,12 @@ def initialize_coordinator(
         validate_role_contract(identity, workers, verify_files=True)
         if identity['baseline_sha256'] != (seed_source or {}).get('sha256'):
             raise ValueError('heterogeneous baseline differs from exact coordinator seed')
+        template = identity.get('namespace_template')
+        if template is not None:
+            roles = identity['roles'].get(str(template.get('worker')), [])
+            if (not any(canonical_json_sha256_hex(x) == template.get('role_sha256') for x in roles)
+                    or map_namespace(roles[0], template.get('namespace'), template.get('namespace')) != roles[0]):
+                raise ValueError('namespace template does not name an exact declared role')
     if root.exists() and any(root.iterdir()):
         raise FileExistsError(f"Refusing to overwrite a DiLoCo coordinator run at {root}")
     root.mkdir(parents=True, exist_ok=True)
@@ -210,6 +216,25 @@ def initialize_coordinator(
         (root / "manifest.json").unlink(missing_ok=True)
         raise
     return manifest
+
+
+_NAMESPACE_PATH = re.compile(r'/[A-Za-z0-9_.@+-]+(?:/[A-Za-z0-9_.@+-]+)*')
+
+
+def map_namespace(value, source: dict, target: dict):
+    """``value`` with its ``source`` window/parent paths replaced by ``target``'s (exact path components only)."""
+    if (not isinstance(source, dict) or not isinstance(target, dict) or set(source) != {'out', 'parent'}
+            or set(target) != {'out', 'parent'}
+            or not all(isinstance(x, str) and _NAMESPACE_PATH.fullmatch(x) for x in (*source.values(), *target.values()))):
+        raise ValueError('a role namespace names exactly two normalized absolute paths: out and parent')
+    for a, b in ((source['out'], source['parent']), (target['out'], target['parent'])):
+        if a == b or a.startswith(b + '/') or b.startswith(a + '/'):
+            raise ValueError('role namespace paths must not nest')
+    text = json.dumps(value, sort_keys=True, separators=(',', ':'))
+    replacement = {source['parent']: target['parent'], source['out']: target['out']}
+    pattern = '|'.join(re.escape(x) for x in sorted(replacement, key=len, reverse=True))
+    text = re.sub(f'(?:{pattern})(?=[/"\\\\])', lambda match: replacement[match.group(0)], text)
+    return json.loads(text)
 
 
 def validate_outer_schedule(schedule) -> list[dict]:
@@ -459,6 +484,40 @@ class Coordinator:
                     self.progress.setdefault('role_evidence',{})[digest]={'path':'contracts/'+digest+'.tar','sha256':evidence_sha}
                     self._write_progress()
                 return {'status':'registered','sha256':digest}
+
+    def admit_role(self, worker: int, contract: dict, namespace: dict) -> dict:
+        """Admit a joining worker's own initial role: the template role with only its window and parent paths changed.
+
+        An elastic session declares at init one exact template role (``namespace_template``: the cohost worker's
+        actual effective trainer identity and dependencies, verified against its files then) and the two paths that
+        name that worker's own window directory and parent copy. A worker whose control is the same session control
+        relocated to its own lineage presents its exact role and its two paths; mapped back onto the template paths
+        it must equal the template byte for byte (same parent checkpoint sha256, arguments, dependency hashes and
+        optimizer settings). Its own files were verified by its trainer's exact role selection."""
+        from .role_contract import SCHEMA as HETERO_SCHEMA
+        identity = self.manifest['identity']
+        template = identity.get('namespace_template') if identity.get('schema') == HETERO_SCHEMA else None
+        if not isinstance(template, dict):
+            raise ValueError('coordinator admits no namespaced roles')
+        if not 0 <= worker < self.manifest['workers']:
+            raise ValueError('Invalid learner ID')
+        if not isinstance(contract, dict) or contract.get('kind') != 'sft':
+            raise ValueError('an admitted role is the session supervised role')
+        mapped = map_namespace(contract, namespace, template['namespace'])
+        base = [x for x in identity['roles'][str(template['worker'])]
+                if canonical_json_sha256_hex(x) == template['role_sha256']]
+        if len(base) != 1 or canonical_json_sha256_hex(mapped) != template['role_sha256']:
+            raise ValueError('worker role differs from the session template beyond its own window and parent paths')
+        digest = canonical_json_sha256_hex(contract)
+        with self.lock, self.progress_lock:
+            current = self.role_contracts(worker)['roles'][str(worker)]
+            if any(canonical_json_sha256_hex(x) == digest for x in current):
+                return {'status': 'already_admitted', 'sha256': digest}
+            self.progress.setdefault('role_contracts', {}).setdefault(str(worker), []).append(contract)
+            self.progress.setdefault('admitted_roles', {}).setdefault(str(worker), []).append(
+                {'sha256': digest, 'namespace': dict(namespace), 'at': time.time()})
+            self._write_progress()
+        return {'status': 'admitted', 'sha256': digest}
 
     def _sequences(self, worker: int) -> list[int]:
         """The newest sequence held from ``worker`` per fragment (merged or queued).
@@ -1212,6 +1271,9 @@ def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, sto
                     name=value['evidence_name'];digest=value['evidence_sha256'];files.check(name,digest)
                     if files.committed(name)!=digest:raise ValueError('role evidence is not durably committed')
                     result=operation('register_role_contract',{'worker':int(value['worker']),'session':str(value['session']),'contract':value['contract']},files.root/name)
+                elif parsed.path == "/v1/admit-role":
+                    value=self._read_json(1 << 20)
+                    result=operation('admit_role', {'worker':int(value['worker']),'contract':value['contract'],'namespace':value['namespace']})
                 elif parsed.path == "/v1/identity-transition":
                     value=self._read_json()
                     result=operation('identity_transition', {'worker':int(value['worker']),'session':str(value['session']),'transition':value['transition']})

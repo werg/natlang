@@ -80,6 +80,8 @@ def next_window(previous_config, out, config_out, *, checkpoint_path=None, windo
     if not (boundary.get('kind') == 'semantic-refresh' and boundary.get('reached') is True
             and boundary.get('new_optimizer_updates', 0) >= 1):
         raise SystemExit('previous window did not reach an earned semantic-refresh boundary')
+    if Path(config_out).is_file():
+        return adopt_prepared_window(Path(config_out), Path(out), previous_config, parent, ref)
     training = CheckpointPolicy.load(parent)['training']
     if not training.get('optimizer') or not training.get('rng'):
         raise SystemExit('earned boundary lacks optimizer or RNG state')
@@ -134,6 +136,22 @@ def next_window(previous_config, out, config_out, *, checkpoint_path=None, windo
     write_json_durable(config_out, c)
     result = {'prepared': str(config_out), 'out': str(out), 'parent': ref, 'global_step': training['global_step'],
               'source_roles': sorted(sources)}
+    print(json.dumps(result), flush=True)
+    return result
+
+
+def adopt_prepared_window(config_out, out, previous_config, parent, ref):
+    """The next window was prepared ahead of this boundary (an elastic DiLoCo session control relocated to this
+    lineage, train/diloco/session.py): adopt it unchanged when it names exactly this boundary (the previous window's
+    directory and the earned parent's sha256) and this window directory; anything else is refused, never rebuilt."""
+    c = json.loads(config_out.read_text())
+    marker = (c.get('branch_origin') or {}).get('prepared_next_window') or {}
+    expected = {'prior_out': os.path.abspath(json.loads(Path(previous_config).read_text())['out']),
+                'parent_sha256': ref['sha256']}
+    if ({k: marker.get(k) for k in expected} != expected or os.path.abspath(c.get('out', '')) != os.path.abspath(out)
+            or Path(c.get('checkpoint', '')).resolve() != parent or not c.get('mandatory_sft_only')):
+        raise SystemExit(f'{config_out} exists and is not a control prepared for this exact boundary')
+    result = {'prepared': str(config_out), 'out': str(out), 'parent': ref, 'adopted_prepared_window': marker}
     print(json.dumps(result), flush=True)
     return result
 
