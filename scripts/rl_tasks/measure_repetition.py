@@ -303,13 +303,50 @@ def report(paths, label=None):
     }
 
 
+def overlap_with_pool(paths, pool_paths):
+    """How much of `paths`' train supply repeats a reference pool's: distinct instruction texts, whole programs and
+    declared structures already present in the pool, and the share of its rows whose functional program (structure and
+    prose, as FunctionalPrograms judges) already has a pool leader. Declared text only, like the rest of the report."""
+    def keys(files):
+        for path in files:
+            with open(path) as handle:
+                for line in handle:
+                    if line.strip():
+                        row = json.loads(line)
+                        if row.get('split', 'train') == 'train':
+                            yield row, program_features(row)
+    pool = [features for _, features in keys(pool_paths)]
+    seen = {name: {features[name] for features in pool} for name in ('instruction', 'program', 'structure')}
+    leaders = FunctionalPrograms()
+    for features in pool:
+        leaders.add(features['family'], features['functional'], features['functional_words'])
+    mine = list(keys(paths))
+    rows = len(mine)
+    out = {'pool_rows': len(pool), 'rows': rows}
+    for name in ('instruction', 'program', 'structure'):
+        distinct = {features[name] for _, features in mine}
+        out[f'distinct_{name}_texts_in_pool' if name != 'structure' else 'distinct_structures_in_pool'] = {
+            'of': len(distinct), 'in_pool': len(distinct & seen[name])}
+        out[f'rows_with_{name}_in_pool'] = sum(features[name] in seen[name] for _, features in mine)
+    functional_repeats = sum(leaders.matches(features['family'], features['functional'], features['functional_words'])
+                             for _, features in mine)
+    out['rows_with_functional_program_in_pool'] = functional_repeats
+    pool_families = {features['family'] for features in pool}
+    out['rows_in_families_absent_from_pool'] = sum(features['family'] not in pool_families for _, features in mine)
+    return out
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--cases', action='append', required=True)
     parser.add_argument('--label')
+    parser.add_argument('--against', action='append', default=[],
+                        help='a reference pool case file (repeatable); adds the overlap of --cases with it')
     parser.add_argument('-o', '--out')
     args = parser.parse_args(argv)
     result = report(args.cases, args.label)
+    if args.against:
+        result['against_pool'] = overlap_with_pool(args.cases, args.against)
     text = json.dumps(result, indent=1, sort_keys=False)
     if args.out:
         write_text_atomic(args.out, text + '\n')

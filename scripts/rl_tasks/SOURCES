@@ -52,3 +52,10 @@ composed-iterate composed:iterate
 composed-fanin composed:fanin
 composed-deep composed:deep
 codebase-ops codebase_ops:cases
+
+# bgkit knowledge-reasoning stores not used by the SFT mix, RL pool or operator cases (plans/neuralese/BGKIT_KR_CENSUS_20261103.md)
+bgkit-searchqa bgkit_reading:searchqa
+bgkit-haystack bgkit_reading:haystack
+bgkit-pubmed bgkit_reading:pubmed
+bgkit-narrative bgkit_reading:narrative
+bgkit-memory bgkit_reading:memory

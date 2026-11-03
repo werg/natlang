@@ -73,13 +73,13 @@ def _files(program: Program) -> dict:
 def _case(program: Program, family: str, *, item: dict, inputs: dict, expected, oracle, level: int, returns=None,
           instruction_suffix: str = '', wrong=None, aliases=None, upstream: str, license_: str, license_note: str = '',
           revision: str = '', difficulty=None, smoke_children=None, slice_='nested_scoped', reference_value=None,
-          children=()):
+          children=(), source=None):
     instruction = pick(program.instructions, item['unit'] + '|' + program.name)
     if instruction_suffix:
         instruction = instruction.rstrip() + '\n' + instruction_suffix
     origin = item['source']
     case = make_case(
-        source=SOURCE, family=family, shape=f'{program.name}-{item["shape"]}', upstream=upstream,
+        source=source or SOURCE, family=family, shape=f'{program.name}-{item["shape"]}', upstream=upstream,
         upstream_id=item['id'], upstream_split=item['split'], unit=item['unit'],
         groups=sorted(set(item['groups'] + [f'ext-unit:{origin}:{item["unit"]}'])), root_name=program.root,
         args=program.args, returns=returns or program.returns, instruction=instruction, inputs=inputs,
