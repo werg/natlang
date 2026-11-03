@@ -442,3 +442,19 @@ def test_admission_appends_atomically_and_refuses_clashes_failures_and_unapprove
         raise AssertionError('failed novelty admitted')
     except SystemExit as error:
         assert 'novelty' in str(error)
+
+
+def test_folder_worlds_are_part_of_a_tasks_identity(tmp_path):
+    base = case('a', 'reducers', 'Sort the files in the folder with `file.moveTo("done/")`.', {})
+    other = json.loads(json.dumps(base))
+    other['id'] = 'b'
+    base['semantics']['folder_files'] = {'inbox/x.md': 'Kettle with an unopened box'}
+    other['semantics']['folder_files'] = {'inbox/x.md': 'Toaster with a burnt element'}
+    pool = write(tmp_path / 'pool.jsonl', [case(f'p{i}', 'reducers', 'pool ' + 'abcdefghijklmnopqrstu'[i] * (i + 2), {}) for i in range(20)])
+    out = tmp_path / 'n.json'
+    authored_novelty.main([write(tmp_path / 'b.jsonl', [base, other]), '--pool', pool, '-o', str(out)])
+    assert json.loads(out.read_text())['exact_duplicates'] == []
+    same = json.loads(json.dumps(base))
+    same['id'] = 'c'
+    authored_novelty.main([write(tmp_path / 'c.jsonl', [base, same]), '--pool', pool, '-o', str(out)])
+    assert json.loads(out.read_text())['exact_duplicates'] == ['c']

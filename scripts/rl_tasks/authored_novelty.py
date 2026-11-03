@@ -59,7 +59,11 @@ def normalize_value(value):
 
 def task_key(row, features):
     """Normalized program plus normalized inputs: digits and quoted literals do not make a different task."""
-    inputs = normalize_value((row.get('semantics') or {}).get('inputs'))
+    semantics = row.get('semantics') or {}
+    inputs = semantics.get('inputs')
+    if semantics.get('folder_files'):  # a directory reducer's world is part of its invocation
+        inputs = {'inputs': inputs, 'folder_files': semantics['folder_files']}
+    inputs = normalize_value(inputs)
     return features['program'], json.dumps(inputs, sort_keys=True, ensure_ascii=False)
 
 
