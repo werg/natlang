@@ -78,11 +78,12 @@ BANK_METALEARNING_DEFAULTS = {
     'outer_steps': 200,
     'eval_every': 50,
     'meta_batch': 2,
-    'rank': 8,
-    'components': 16,
-    'component_rank': 4,
-    'inner_steps': 6,
-    'refine_steps': 2,
+    'rank': 32,
+    'components': 64,
+    'component_rank': 16,
+    'inner_steps': 12,
+    'layer_groups': 8,
+    'residual_rank': 2,
     'train_bank': True,
     'train_basis': True,
     'min_held_families': 4,
@@ -158,9 +159,9 @@ def validate_parameters(kind, parameters):
         if type(fraction) not in (int, float) or not 0 < fraction < 1:
             raise ValueError('held_fraction must be in (0, 1): promotion needs held families')
         for key in ('outer_steps', 'eval_every', 'meta_batch', 'rank', 'components', 'component_rank', 'inner_steps',
-                    'min_held_families', 'max_parent_lag_steps'):
+                    'layer_groups', 'min_held_families', 'max_parent_lag_steps'):
             _positive_int(parameters, key)
-        _positive_int(parameters, 'refine_steps', 0)
+        _positive_int(parameters, 'residual_rank', 0)
         for key in ('train_bank', 'train_basis'):
             if parameters.get(key, True) is not True:
                 raise ValueError(f'{key} stays explicitly enabled in the operational recipe (AGENTS.md "Learned LoRA '

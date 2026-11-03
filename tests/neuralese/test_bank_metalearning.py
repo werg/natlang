@@ -22,8 +22,9 @@ def pool_rows(engine, families=6, worlds=6):
 
 
 def small_recipe(**overrides):
-    return MB.MetaRecipe(**{'rank': 4, 'components': 3, 'component_rank': 2, 'inner_steps': 2, 'refine_steps': 1,
-                            'meta_batch': 2, 'lora_rank': 2, 'outer_lr_bank': 5e-2, 'outer_lr_basis': 1e-2, **overrides})
+    return MB.MetaRecipe(**{'rank': 4, 'components': 3, 'component_rank': 2, 'inner_steps': 2, 'init': 'random',
+                            'layer_groups': 2, 'residual_rank': 1, 'meta_batch': 2, 'lora_rank': 2,
+                            'outer_lr_bank': 5e-2, 'outer_lr_basis': 1e-2, **overrides})
 
 
 def test_pool_holds_out_whole_families_and_splits_their_worlds(tmp_path):
@@ -87,6 +88,7 @@ def test_outer_steps_train_bank_and_basis_resume_exactly_and_evaluate_four_arms(
              {k: v.clone() for k, v in basis0.items()})
     first = learner.step()
     assert first['grad_norm']['bank'] > 0 and first['grad_norm']['basis'] > 0 and first['update_norm'] > 0
+    assert first['grad_norm']['meta'] > 0 and first['regression_unexplained'] is None  # random init: no LoRA fits
     assert len(first['families']) == 2 and all(len(set(r['worlds'])) == 5 for r in first['families'])
     moved = MB._detached(learner.leaves)
     assert any(not torch.equal(start[1][k], moved[1][k]) for k in start[1])
@@ -102,7 +104,8 @@ def test_outer_steps_train_bank_and_basis_resume_exactly_and_evaluate_four_arms(
     assert [r['family'] for r in replay['families']] == [r['family'] for r in expected['families']]
     assert abs(replay['families'][0]['query_fitted'] - expected['families'][0]['query_fitted']) < 1e-5
     evaluation = learner.evaluate('dev')
-    assert evaluation['families'] and set(evaluation['mean']) == set(MB.ARMS)
+    assert evaluation['families'] and set(evaluation['mean']) == set(MB.ARMS) == set(learner.arms)
+    assert all(0 <= f['similarity'] <= 1 for f in evaluation['families'].values()) and 'mean_distinct' in evaluation
     parent = evaluation['mean']['parent']
     assert parent is not None and set(evaluation['meta_wins']) == {'initial', 'lora'}
     # Each finished family is saved: a preempted evaluation resumes from the saved families.
@@ -116,6 +119,42 @@ def test_outer_steps_train_bank_and_basis_resume_exactly_and_evaluate_four_arms(
     # A new promoted parent: the live bank continues from its saved tensors with a recorded transition.
     follow = MB.BankMetaLearner(engine, pool, recipe, tmp_path / 'op', parent_sha256='q')
     assert follow.state['parents'][-1]['sha256'] == 'q' and follow.state['step'] == learner.state['step']
+    engine.store.close()
+
+
+def test_pca_initialization_spans_the_meta_train_lora_fits_and_trains_with_the_regression(tmp_path):
+    engine = engine_fixture(tmp_path, 'lfm')
+    pool = MB.build_pool(pool_rows(engine, families=10), held_fraction=.5, seed=1)
+    recipe = small_recipe(init='pca', components=8, variance=.95, aux_families=3)
+    names = MB.select_targets(engine, recipe)
+    fits = MB.family_lora_fits(engine, pool, recipe, names, tmp_path / 'fits')
+    meta_train = {n for n, f in pool['families'].items() if f['role'] == 'meta-train'}
+    assert set(fits) == meta_train and sorted(p.stem for p in (tmp_path / 'fits').glob('*.pt')) == sorted(meta_train)
+    assert MB.family_lora_fits(engine, pool, recipe, names, tmp_path / 'fits').keys() == fits.keys()  # resumes
+    learner = MB.BankMetaLearner(engine, pool, recipe, tmp_path / 'op', parent_sha256='p', fits=fits)
+    spectrum = learner.state['spectrum']
+    assert 1 <= learner.state['components'] <= min(8, len(fits))
+    assert spectrum['explained'] >= .95 or learner.state['components'] == min(8, len(fits))
+    initial = float(learner.regression(sorted(fits)))
+    assert 0 <= initial <= 1
+    # The un-meta-trained PCA bank's initial coefficients already reproduce part of the average update.
+    assert float(learner.meta['init'].abs().sum()) > 0
+    entry = learner.step()
+    assert entry['regression_unexplained'] is not None and entry['grad_norm']['meta'] > 0
+    # Renormalization rescales coefficients and steps with the components: composed updates are unchanged.
+    with torch.no_grad():  # an off-invariant component, as after an optimizer step
+        for f in learner.leaves['factors_by_component'].values():
+            for P, Q in f.values():
+                P.mul_(1.7)
+    factors, _ = MB._detached(learner.leaves)
+    slots = list(range(len(learner.bank0.components)))
+    before = learner.bank0.composed_cores(slots, learner.meta['init'].detach().clone(), factors=factors)
+    before = {name: value.clone() for name, value in before.items()}
+    learner._rescale_meta(MB.restore_invariants(learner.bank0, learner.leaves, basis=False))
+    factors, _ = MB._detached(learner.leaves)
+    after = learner.bank0.composed_cores(slots, learner.meta['init'].detach(), factors=factors)
+    for name in before:
+        torch.testing.assert_close(after[name], before[name], atol=1e-5, rtol=1e-4)
     engine.store.close()
 
 

@@ -141,8 +141,8 @@ def parse_parameters(args):
 
 
 def recipe_of(parameters):
-    fields = {key: parameters[key] for key in ('rank', 'components', 'component_rank', 'inner_steps', 'refine_steps',
-                                               'meta_batch', 'train_bank', 'train_basis')}
+    fields = {key: parameters[key] for key in ('rank', 'components', 'component_rank', 'inner_steps', 'layer_groups',
+                                               'residual_rank', 'meta_batch', 'train_bank', 'train_basis')}
     return MB.MetaRecipe(**{**fields, **(parameters.get('recipe_overrides') or {})})
 
 
@@ -180,9 +180,16 @@ def run(args, parameters):
         _log('dry_run', held=len(held), meta_train=len(pool['families']) - len(held), recipe=recipe.as_json())
         return 0
     engine = _engine(checkpoint, args.device, args.dtype, out / 'store')
-    learner = MB.BankMetaLearner(engine, pool, recipe, out / 'learner', parent_sha256=parent)
-    _log('start', step=learner.state['step'], parent=parent, held=len(held),
-         meta_train=len(pool['families']) - len(held), targets=learner.state['targets'])
+    fits = None
+    if recipe.init == 'pca':
+        # Data-driven initialization: plain LoRA fits of the meta-training families (saved per family; the same
+        # parameterization and pass count as the baseline arm). Fits belong to the parent they were made on.
+        fits = MB.family_lora_fits(engine, pool, recipe, MB.select_targets(engine, recipe), out / 'lora-fits' / parent[:16],
+                                   log=lambda family, value: _log('family_lora_fit', family=family, **value))
+    learner = MB.BankMetaLearner(engine, pool, recipe, out / 'learner', parent_sha256=parent, fits=fits)
+    _log('start', step=learner.state['step'], parent=parent, held=len(held), spectrum=learner.state.get('spectrum'),
+         meta_train=len(pool['families']) - len(held), targets=learner.state['targets'], groups=learner.state['groups'],
+         components=learner.state['components'])
     evaluated = {e['step'] for e in learner.state['evaluations'] if e['split'] == 'dev'}
     def evaluate():
         if learner.state['step'] in evaluated:
@@ -191,13 +198,15 @@ def run(args, parameters):
                                                                          family=family, **value))
         evaluated.add(learner.state['step'])
         learner.save()
-        _log('evaluation', step=result['step'], mean=result['mean'], meta_wins=result['meta_wins'], seconds=result['seconds'])
+        _log('evaluation', step=result['step'], mean=result['mean'], meta_wins=result['meta_wins'],
+             mean_distinct=result['mean_distinct'], distinct=result['families_distinct_count'], seconds=result['seconds'])
         return result
     evaluate()
     while learner.state['step'] < parameters['outer_steps']:
         entry = learner.step()
         learner.save()
         _log('outer', step=entry['step'], seconds=entry['seconds'], grad=entry['grad_norm'], update=entry['update_norm'],
+             regression=entry['regression_unexplained'], step_size=entry['step_size_mean'],
              query=[round(r['query_fitted'], 4) for r in entry['families']],
              support=[(round(r['support_start'], 4), round(r['support_fitted'], 4)) for r in entry['families']])
         if learner.state['step'] % parameters['eval_every'] == 0:
@@ -223,7 +232,9 @@ def run(args, parameters):
                                  'seconds_per_step': sum(seconds) / len(seconds) if seconds else None,
                                  'passes_per_step': steps[-1]['passes'] if steps else None},
               'held': held_decision, 'confirmation': confirmation,
-              'evaluations': [{k: e[k] for k in ('split', 'step', 'mean', 'meta_wins', 'seconds')}
+              'initialization': {'kind': recipe.init, 'spectrum': learner.state.get('spectrum')},
+              'evaluations': [{k: e.get(k) for k in ('split', 'step', 'mean', 'meta_wins', 'mean_distinct',
+                                                     'meta_wins_distinct', 'families_distinct_count', 'seconds')}
                               for e in learner.state['evaluations']],
               'adaptation_baselines': str(args.adaptation) if args.adaptation else None,
               'production_exposure_advanced': False,
@@ -253,7 +264,7 @@ def main(argv=None):
     parser.add_argument('--held-fraction', type=float)
     parser.add_argument('--promotion-margin', type=float)
     for key in ('outer_steps', 'eval_every', 'meta_batch', 'rank', 'components', 'component_rank', 'inner_steps',
-                'refine_steps', 'min_held_families', 'max_parent_lag_steps'):
+                'layer_groups', 'residual_rank', 'min_held_families', 'max_parent_lag_steps'):
         parser.add_argument('--' + key.replace('_', '-'), type=int)
     for key in ('train_bank', 'train_basis'):
         parser.add_argument('--' + key.replace('_', '-'), dest=key, action='store_const', const=True)
