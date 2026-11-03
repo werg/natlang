@@ -653,32 +653,46 @@ def _run_one_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoi
                                                  objective_binding=None)
     current_memory = _capacity_memory_context(next(model.parameters()).device)
     prior_capacity = None
+    reuse_rejections = []
     if execution is not None:
         for reference in prior_proofs:
             try:
                 prior_path = bound(reference)
                 previous = json.loads(prior_path.read_text())
                 capacity = previous.get('capacity') or {}
-                if (previous.get('passed') is not True or not _same_capacity_request(previous.get('request'), result['request'])
-                        or previous.get('identity') != identity or previous.get('runtime_code_sha256') != code_sha
-                        or previous.get('capacity_execution_identity') != execution
-                        or previous.get('capacity_reuse') is not None
-                        or capacity.get('passed') is not True or capacity.get('whole_graphs') is not True
-                        or capacity.get('optimizer_updates') != 0
-                        or capacity.get('parent_checkpoint_sha256') != previous.get('parent_checkpoint_sha256')
-                        or capacity.get('source') != request['source']
-                        or capacity.get('retained_accumulation_gradients') != (getattr(args,'accumulate_batches',1)>1)
-                        or capacity.get('cotangent_mode') != _cotangent_mode(args)
-                        or [row.get('id') for row in capacity.get('cases', [])] != [row['id'] for row in selected]
-                        or len(capacity.get('cases') or []) != len(selected)
-                        or not _scratch_headroom_covers(capacity.get('cases') or [], getattr(args,'checkpoint_input_offload_directory',None))
-                        or any(row.get('status') != 'passed' or not _incremental_headroom_covers(row,current_memory)
-                               for row in capacity['cases'])):
+                checks = (
+                    ('passed', previous.get('passed') is True),
+                    ('request', _same_capacity_request(previous.get('request'), result['request'])),
+                    ('identity', previous.get('identity') == identity),
+                    ('runtime_code', previous.get('runtime_code_sha256') == code_sha),
+                    ('execution_identity', previous.get('capacity_execution_identity') == execution),
+                    ('measured_not_reused', previous.get('capacity_reuse') is None),
+                    ('capacity_passed', capacity.get('passed') is True and capacity.get('whole_graphs') is True
+                        and capacity.get('optimizer_updates') == 0
+                        and capacity.get('parent_checkpoint_sha256') == previous.get('parent_checkpoint_sha256')),
+                    ('source', capacity.get('source') == request['source']),
+                    ('retained_gradients', capacity.get('retained_accumulation_gradients') == (getattr(args,'accumulate_batches',1)>1)),
+                    ('cotangent_mode', capacity.get('cotangent_mode') == _cotangent_mode(args)),
+                    ('cases', [row.get('id') for row in capacity.get('cases', [])] == [row['id'] for row in selected]
+                        and len(capacity.get('cases') or []) == len(selected)
+                        and all(row.get('status') == 'passed' for row in capacity['cases'])),
+                    ('scratch_headroom', _scratch_headroom_covers(capacity.get('cases') or [], getattr(args,'checkpoint_input_offload_directory',None))),
+                    ('memory_headroom', all(_incremental_headroom_covers(row,current_memory) for row in capacity.get('cases') or [])))
+                failed = [name for name, ok in checks if not ok]
+                if failed:
+                    reuse_rejections.append({'proof':reference,'failed':failed})
                     continue
                 prior_capacity = (reference, previous)
                 break
-            except (OSError, ValueError, KeyError, TypeError):
+            except (OSError, ValueError, KeyError, TypeError) as error:
+                reuse_rejections.append({'proof':reference,'error':f'{type(error).__name__}: {error}'})
                 continue
+    # Make the reuse decision visible: a silent miss cost 20 GPU-minutes per
+    # restart before the unified-memory headroom predicate was corrected.
+    print(json.dumps({'kind':'capacity_reuse_decision','prior_proofs':len(prior_proofs),
+        'dense_reuse_supported':execution is not None,'selected':None if prior_capacity is None else prior_capacity[0],
+        'rejections':reuse_rejections}),flush=True)
+    result['capacity_reuse_rejections'] = reuse_rejections
     result['capacity_execution_identity'] = execution
     result['capacity_memory_context'] = current_memory
     try:

@@ -354,6 +354,10 @@ def _capacity_memory_context(device):
                 'allocated_bytes':None,'reserved_bytes':None,'reusable_cache_bytes':None,
                 'host_available_bytes':host_available}
     free,total=torch.cuda.mem_get_info(device)
+    # GB10-class integrated devices allocate CUDA memory from host RAM. Their
+    # device-free figure excludes reclaimable page cache, so it can read 22 GiB
+    # while the same pool has 78 GiB available and a 57 GiB measured graph fits.
+    unified=bool(getattr(torch.cuda.get_device_properties(device),'is_integrated',False))
     allocated=int(torch.cuda.memory_allocated(device));reserved=int(torch.cuda.memory_reserved(device))
     from .memory_policy import ledger_claim,ledger_reusable_bytes
     claim=ledger_claim()
@@ -362,6 +366,7 @@ def _capacity_memory_context(device):
     return {'device_type':'cuda','free_bytes_at_probe':int(free),'total_bytes':int(total),
             'allocated_bytes':allocated,'reserved_bytes':reserved,
             'reusable_cache_bytes':max(0,reserved-allocated),'host_available_bytes':host_available,
+            'unified_memory':unified,
             **({'ledger_available_bytes':available} if available is not None else {})}
 
 
@@ -478,7 +483,11 @@ def _incremental_headroom_covers(case, current_memory):
         reusable=current_memory.get('reusable_cache_bytes')
         if any(type(value) is not int or value<0 for value in (needed,free,reusable)):
             return False
-        if free+reusable < needed+max(1<<30,(needed+3)//4):
+        # On unified memory the device and host draw on one physical pool. The
+        # combined host check below (available memory, including reclaimable
+        # cache, covering CUDA plus host peaks with the same margin) and the
+        # ledger allowance bound it; instantaneous free pages do not.
+        if current_memory.get('unified_memory') is not True and free+reusable < needed+max(1<<30,(needed+3)//4):
             return False
         if (current_memory.get('ledger_available_bytes') is not None
                 and current_memory['ledger_available_bytes']<needed+max(1<<30,(needed+3)//4)):

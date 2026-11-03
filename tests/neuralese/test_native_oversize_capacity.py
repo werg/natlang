@@ -260,6 +260,20 @@ def test_capacity_envelope_uses_incremental_peak_and_current_reusable_headroom()
     assert not _incremental_headroom_covers(case,{'device_type':'cuda','free_bytes_at_probe':20<<30,
         'reusable_cache_bytes':3<<30,'total_bytes':128<<30,'host_available_bytes':60<<30,
         'ledger_available_bytes':4<<30})
+    # Actual earned179 restart (GB10): 57.4 GiB measured CUDA peak, 22.1 GiB
+    # device-free pages but 78.2 GiB available in the same unified pool and a
+    # 77 GiB ledger allowance. The fresh 1,147 s measurement then passed.
+    gib=1<<30
+    restart={'device_type':'cuda','free_bytes_at_probe':int(22.1*gib),'reusable_cache_bytes':int(0.1*gib),
+        'total_bytes':int(121.6*gib),'host_available_bytes':int(78.2*gib),'ledger_available_bytes':77*gib}
+    large={'cuda_incremental_peak_allocated_bytes':int(54.61*gib),
+        'cuda_incremental_peak_reserved_bytes':int(57.36*gib),'host_incremental_peak_bytes':int(2.35*gib)}
+    assert not _incremental_headroom_covers(large,restart)
+    assert _incremental_headroom_covers(large,{**restart,'unified_memory':True})
+    # The shared pool still binds: host availability and the ledger claim.
+    assert not _incremental_headroom_covers(large,{**restart,'unified_memory':True,'host_available_bytes':70*gib})
+    assert not _incremental_headroom_covers(large,{**restart,'unified_memory':True,'ledger_available_bytes':70*gib})
+    assert not _incremental_headroom_covers(large,{**restart,'unified_memory':False})
     assert _incremental_headroom_covers({'host_incremental_peak_bytes':2<<30},
         {'device_type':'cpu','host_available_bytes':5<<30})
     assert not _incremental_headroom_covers({'host_incremental_peak_bytes':2<<30},
