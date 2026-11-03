@@ -22,6 +22,18 @@ def test_frame_digest_rejects_incomplete_quota_or_credit_inventory():
  with pytest.raises(ValueError,match='inventories'):make_basis(frame,stage_id='s',source_sha256='p',candidate_sha256='c',epochs=1.,communication_min_visits=7)
 
 
+
+def test_frame_digest_binds_retired_rows_historical_exposure():
+ frame={'source_row_bindings':{'a':'x'},'source_row_order':['a'],'required_visits':{'a':1},'exposure_counts':{},'source_receipts':[{'sha256':'p'}]}
+ kw=dict(stage_id='s',source_sha256='p',candidate_sha256='c',epochs=1.,communication_min_visits=7)
+ plain=make_basis(frame,**kw)['parent_frame_sha256']
+ retired=copy.deepcopy(frame);retired['required_visits']['gone']=1;retired['exposure_counts']['gone']=1
+ digest=make_basis(retired,**kw)['parent_frame_sha256'];assert digest!=plain
+ changed=copy.deepcopy(retired);changed['exposure_counts']['gone']=0
+ assert make_basis(changed,**kw)['parent_frame_sha256']!=digest
+ orphan=copy.deepcopy(frame);orphan['exposure_counts']['gone']=1
+ with pytest.raises(ValueError,match='inventories'):make_basis(orphan,**kw)
+
 def test_new_repeated_communication_continuation_requires_quota_basis():
  args={'stage_id':'s','candidate_sha256':'child','epochs':1.,'communication_min_visits':7,'policy_binding':{'sha256':'new'}}
  with pytest.raises(ValueError,match='requires a measured quota-aware basis'):

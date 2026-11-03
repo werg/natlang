@@ -7,14 +7,18 @@ def frame_digest(frame):
     rows=frame.get('source_row_bindings') or {};order=frame.get('source_row_order') or []
     quotas=frame.get('required_visits') or {};credits=frame.get('exposure_counts') or {}
     if (not isinstance(rows,dict) or not isinstance(order,list) or len(order)!=len(rows) or len(set(order))!=len(order)
-            or set(order)!=set(rows) or set(quotas)!=set(rows) or not set(credits)<=set(rows)):
+            or set(order)!=set(rows) or not set(rows)<=set(quotas) or not set(credits)<=set(quotas)):
         raise ValueError('quota-aware CE requires exact saved row, quota and credit inventories')
+    # Rows removed from the active source keep their saved quota and earned credit (historical exposure); they are
+    # bound after the active rows so frames without retired rows keep their original digest.
+    retired=sorted(set(quotas)-set(rows))
     digest=hashlib.sha256()
-    for ident in order:
+    for ident in (*order,*retired):
         quota=quotas[ident];credit=credits.get(ident,0)
         if type(quota) is not int or type(credit) is not int or quota<0 or credit<0 or credit>quota:
             raise ValueError('quota-aware CE encountered invalid saved obligations')
-        digest.update(json.dumps([ident,rows[ident],quota,credit],ensure_ascii=False,separators=(',',':')).encode('utf8'));digest.update(b'\n')
+        record=[ident,rows[ident],quota,credit] if ident in rows else ['retired',ident,quota,credit]
+        digest.update(json.dumps(record,ensure_ascii=False,separators=(',',':')).encode('utf8'));digest.update(b'\n')
     return digest.hexdigest()
 
 def make_basis(frame,*,stage_id,source_sha256,candidate_sha256,epochs,communication_min_visits):
