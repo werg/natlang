@@ -22,6 +22,7 @@ from natlang_neuralese.common.custody import ProtectedWorlds
 from natlang_neuralese.common.hashing import sha256_file_hex, sha256_hex
 from natlang_neuralese.common.jsonio import write_json_durable
 from natlang_neuralese.data.native_graph_schema import communication_classification, parse_graph
+from natlang_neuralese.data.provider_static_graph import STATIC_PROVENANCES
 from natlang_neuralese.data.native_sources import NativeGraphSource
 from natlang_neuralese.train import native_packed_capacity as capacity
 from natlang_neuralese.train.native_resident_ce import extension_policy
@@ -33,6 +34,18 @@ from natlang_neuralese.train.recipe import (
     _data_continuation, load_recipe, resolve_stage_inputs,
 )
 
+
+
+def _encoder_weights(graph, node):
+    """The exact encoder-node CE weights a graph's conversion policy declares: all zero (historical rows), or only the
+    closing marker under producer-close supervision (data/provider_native_graph.PRODUCER_CLOSE_SUPERVISION)."""
+    from natlang_neuralese.data.provider_native_graph import PRODUCER_CLOSE_SUPERVISION, encoder_target_weights
+    policy = graph.get("producer_close_supervision")
+    if policy is None:
+        return [0.0] * len(node["token_ids"])
+    if policy != PRODUCER_CLOSE_SUPERVISION:
+        raise ValueError("unknown producer-close supervision policy")
+    return encoder_target_weights(len(node["token_ids"]))
 
 def _read(path):
     return json.loads(Path(path).read_bytes())
@@ -180,9 +193,9 @@ def _verify_captured_episode(receipt_path, protection, tokenizer):
         raise ValueError("episode lacks its authenticated native producer and actual consumers")
     encoder_nodes = [node for node in graph["nodes"]
                      if node.get("name") == encoders[0].get("source_occurrence")]
-    if (len(encoder_nodes) != 1 or sum(weight > 0 for weight in encoder_nodes[0]["target_weights"]) != 0
+    if (len(encoder_nodes) != 1 or encoder_nodes[0]["target_weights"] != _encoder_weights(graph, encoder_nodes[0])
             or not encoder_nodes[0].get("producing")):
-        raise ValueError("teacher-text encoder must be an actual in-graph zero-CE producer")
+        raise ValueError("teacher-text encoder must be an actual in-graph producer with zero body CE")
     action_nodes = [node for node in graph["nodes"] if node not in encoder_nodes]
     imported = [(node, edge) for node in action_nodes for edge in node.get("imports", [])
                 if edge.get("source") == encoders[0]["source_occurrence"]]
@@ -218,7 +231,7 @@ def _verify_static_episode(receipt_path, protection, tokenizer):
     graph_rows=_jsonl(graph_path)
     if len(graph_rows)!=1:raise ValueError('static receipt must bind one whole graph')
     graph=graph_rows[0]; provenance=graph.get('static_training_provenance') or {}
-    if (provenance.get('schema')!='natlang.provider-static-native-graph/1' or provenance.get('audit_sha256')!=receipt['audit']['sha256']
+    if (provenance.get('schema') not in STATIC_PROVENANCES or provenance.get('audit_sha256')!=receipt['audit']['sha256']
         or provenance.get('execution_runtime')!=runtime or graph.get('student_native_identity') is not None
         or graph.get('tokenizer_fingerprint')!=tokenizer or graph.get('split')!='train'):
         raise ValueError('static graph compiler provenance, tokenizer or split differs')
@@ -251,8 +264,8 @@ def _verify_static_episode(receipt_path, protection, tokenizer):
     for item in encoders:
         node=nodes.get(item.get('producer'))
         if node is None or item.get('producer_span') not in node.get('producing',[]):raise ValueError('static teacher source producer span differs')
-        if item.get('source_kind')=='authenticated-host-text-encoder' and any(w>0 for w in node['target_weights']):
-            raise ValueError('host text encoder must remain zero CE')
+        if item.get('source_kind')=='authenticated-host-text-encoder' and node['target_weights']!=_encoder_weights(graph,node):
+            raise ValueError('host text encoder must keep zero body CE (only a declared producer close is supervised)')
     return {'kind':'static','receipt_path':str(receipt_path),'receipt_binding':_bind(receipt_path),'receipt':receipt,
         'graph_path':str(graph_path),'graph_bytes':graph_path.read_bytes(),'graph':graph,'graph_binding':_bind(graph_path),
         'raw_binding':_bind(raw_path),'audit_binding':_bind(audit_path),'raw':raw,'program':program,
@@ -464,7 +477,9 @@ def build(base_dir, episode_receipt, output_dir):
             "encoder_count": len(episode["graph"].get("teacher_text_encoder_sources",[]) if is_static else episode["graph"]["teacher_text_encoders"]),
             "consumer_actions": sum(bool(n.get('imports')) for n in episode['graph']['nodes']) if is_static else episode["receipt"]["consumer_action_count"],
             "supervised_turns": sum(bool(r.get('target_supervision')) for r in episode['graph']['teacher_source_receipts']) if is_static else episode["receipt"]["target_supervised_turns"],
-            "supervised_tokens": supervised_tokens, "encoder_target_weights": 0},
+            "supervised_tokens": supervised_tokens,
+            # 0: historical all-zero encoders; else the declared close-only policy (body stays zero).
+            "encoder_target_weights": episode["graph"].get("producer_close_supervision") or 0},
         "teacher_actor": _teacher_actor_binding(episode["raw"], episode["raw_binding"]),
         **({'static_compiler_runtime':episode['receipt']['runtime'], 'tokenizer_fingerprint':tokenizer,
             'scope':'Training-only token graph; no captured student state or checkpoint is claimed.'} if is_static else

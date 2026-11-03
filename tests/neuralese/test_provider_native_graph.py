@@ -344,7 +344,12 @@ def test_luna_text_source_replays_as_student_encoder_and_full_gradient_graph(tmp
         bindings[0]["source_occurrence"], bindings[1]["source_occurrence"], bindings[0]["source_occurrence"]]
     assert (example.plan.invocations[2].imports[0].start,
             example.plan.invocations[2].imports[0].stop) == (1, 1 + len(blocks[0].block.token_ids))
-    assert sum(example.target_weights) == len(capture["generated_inputs"])
+    # Producer-close supervision: each encoder node's closing marker is the only CE target in that node.
+    assert row["producer_close_supervision"] == "natlang.producer-close-supervision/1"
+    for node in row["nodes"][:2]:
+        assert node["target_weights"] == [0.0] * (len(node["token_ids"]) - 1) + [1.0]
+        assert node["producing"] == [[1, len(node["token_ids"]) - 1]]
+    assert sum(example.target_weights) == len(capture["generated_inputs"]) + 2
 
     prior_prompt = [{"role": "user", "content": "Earlier episode context."}]
     prior_receipt = {**receipt, "source_turn_index": 4, "source_turn_sha256": "9" * 64,
@@ -363,8 +368,9 @@ def test_luna_text_source_replays_as_student_encoder_and_full_gradient_graph(tmp
     episode_row, episode = native_graph_from_luna_episode([bundle, prior_bundle])
     assert [action["source_turn_index"] for action in episode_row["teacher_episode_actions"]] == [4, 5]
     assert len(episode.plan.invocations) == 4
+    encoders = len(episode_row["teacher_text_encoders"])
     assert sum(weight > 0 for weight in episode.target_weights) == (
-        len(prior_capture["generated_inputs"]) + len(capture["generated_inputs"]))
+        len(prior_capture["generated_inputs"]) + len(capture["generated_inputs"]) + encoders)
 
     model = engine.shared_model
     for parameter in model.parameters():
@@ -389,7 +395,7 @@ def test_luna_text_source_replays_as_student_encoder_and_full_gradient_graph(tmp
         loss.backward()
         grads = [parameter.grad for parameter in model.parameters() if parameter.grad is not None]
         assert detail["supervised_tokens"] == (len(capture["generated_inputs"])
-                                                 + len(prior_capture["generated_inputs"]))
+                                                 + len(prior_capture["generated_inputs"]) + encoders)
         assert any(torch.isfinite(grad).all() and grad.norm() > 0 for grad in grads)
         assert model.adapter.up.weight.grad is not None and model.adapter.up.weight.grad.norm() > 0
         return loss.detach()

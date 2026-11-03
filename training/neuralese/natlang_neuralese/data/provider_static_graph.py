@@ -5,10 +5,15 @@ claims a student capture, or supplies sampled-policy probabilities.
 """
 from __future__ import annotations
 import base64, hashlib, json
-from .provider_native_graph import _replace_refs
+from .provider_native_graph import PRODUCER_CLOSE_SUPERVISION, _replace_refs, encoder_target_weights
 from .provider_teacher_source import load_verified_luna_teacher_turn, _jsonl_by_id, _read_bound
 from .native_graph_schema import parse_graph
 
+
+# /2: host text-encoder nodes supervise their closing marker (provider_native_graph.PRODUCER_CLOSE_SUPERVISION); /1 rows
+# keep their exact all-zero encoder weights.
+STATIC_PROVENANCE='natlang.provider-static-native-graph/2'
+STATIC_PROVENANCES=('natlang.provider-static-native-graph/1',STATIC_PROVENANCE)
 
 def _sha(data): return hashlib.sha256(data).hexdigest()
 def _canonical(value): return json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()
@@ -94,7 +99,7 @@ def _compile_loaded_episode(loaded,renderer,*,tokenizer_fingerprint):
         ids=renderer._template_tokens(escape_specials(body,renderer.specials,'static'),'static')
         if not ids:raise ValueError('empty encoder payload')
         name='teacher-text-encoder:'+_sha((first['source_row_id']+key).encode())[:24];writer[key]=(name,1,1+len(ids))
-        nodes.append({'name':name,'token_ids':[renderer.role_tokens.produce_open,*ids,renderer.role_tokens.produce_close],'target_weights':[0.0]*(len(ids)+2),'producing':[[1,1+len(ids)]]})
+        nodes.append({'name':name,'token_ids':[renderer.role_tokens.produce_open,*ids,renderer.role_tokens.produce_close],'target_weights':encoder_target_weights(len(ids)+2),'producing':[[1,1+len(ids)]]})
     for key,(_,name,lo,hi) in inline.items():writer[key]=(name,lo,hi)
     for i,(action,receipt) in enumerate(zip(actions,receipts)):
         details=by_action.get(i,[]); names={x[0] for x in details}
@@ -103,5 +108,5 @@ def _compile_loaded_episode(loaded,renderer,*,tokenizer_fingerprint):
         own,target=action['own'],action['target']; supervise=receipt.get('target_supervision')
         if type(supervise) is not bool or not target:raise ValueError('target supervision is malformed')
         nodes.append({'name':name,'token_ids':own+target,'target_weights':[0.0]*len(own)+[float(supervise)]*len(target),'imports':[{'at':at,'source':writer[key][0],'start':writer[key][1],'stop':writer[key][2]} for at,key in action['imports']],**({'producing':[[lo,hi] for _,lo,hi in details]} if details else {})})
-    row={'schema':'natlang.neuralese-native-graph/1','id':'luna-native-episode:'+first['source_row_id'],'split':'train','source_groups':first['source_groups'],'tokenizer_fingerprint':tokenizer_fingerprint,'nodes':nodes,'teacher_source_receipts':receipts,'context_only_target_rendering':{'type_roundtrip_required':False,'structural_validation':True,'supervised_targets_require_type_roundtrip':True},'teacher_text_encoder_sources':[{'teacher_block_id':key,'body_sha256':digest,'type':value_type,'source_kind':'inline-supervised-target' if key in inline else 'authenticated-host-text-encoder','producer':writer[key][0],'producer_span':[writer[key][1],writer[key][2]]} for key,(body,digest,value_type) in bodies.items()],'static_training_provenance':{'schema':'natlang.provider-static-native-graph/1','audit_sha256':loaded[0][0]['audit_sha256'],'scope':'Authenticated teacher tokens and graph topology; no model capture, KV, sampled policy, or probabilities.'}}
+    row={'schema':'natlang.neuralese-native-graph/1','id':'luna-native-episode:'+first['source_row_id'],'split':'train','source_groups':first['source_groups'],'tokenizer_fingerprint':tokenizer_fingerprint,'nodes':nodes,'teacher_source_receipts':receipts,'context_only_target_rendering':{'type_roundtrip_required':False,'structural_validation':True,'supervised_targets_require_type_roundtrip':True},'teacher_text_encoder_sources':[{'teacher_block_id':key,'body_sha256':digest,'type':value_type,'source_kind':'inline-supervised-target' if key in inline else 'authenticated-host-text-encoder','producer':writer[key][0],'producer_span':[writer[key][1],writer[key][2]]} for key,(body,digest,value_type) in bodies.items()],'producer_close_supervision':PRODUCER_CLOSE_SUPERVISION,'static_training_provenance':{'schema':STATIC_PROVENANCE,'audit_sha256':loaded[0][0]['audit_sha256'],'scope':'Authenticated teacher tokens and graph topology; no model capture, KV, sampled policy, or probabilities.'}}
     return row,parse_graph(row,tokenizer_fingerprint=tokenizer_fingerprint)

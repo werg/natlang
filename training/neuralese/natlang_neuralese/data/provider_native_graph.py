@@ -13,6 +13,23 @@ import json
 from ..model.native_graph_plan import ImportSpan, Invocation, compile_graph, invocation_dict
 
 
+# Producer-close supervision (fallow register C6): the close marker of every exported producer span is a CE target
+# (weight 1). Encoder nodes here are exactly [produce_open, body, produce_close]: the body is authenticated teacher
+# text (Luna's own typed text result), encoded natively; it stays zero weight (the student did not author it at this
+# position, and it is supervised where Luna's action wrote it). The close after a complete body is a deterministic
+# target and the only large-scale supply of CE on produce_close: without it the student never learns to end a span
+# (close log-prob -18 to -35 at the writer site). Rows built under this policy carry the declaration; rows without it
+# keep their exact historical all-zero producer weights and bindings.
+PRODUCER_CLOSE_SUPERVISION = "natlang.producer-close-supervision/1"
+
+
+def encoder_target_weights(token_count):
+    """CE weights of one [produce_open, body..., produce_close] encoder node: only the closing marker is a target."""
+    if token_count < 3:
+        raise ValueError("a native encoder node is produce_open, a nonempty body and produce_close")
+    return [0.0] * (token_count - 1) + [1.0]
+
+
 def _canonical(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
@@ -160,7 +177,7 @@ def native_graph_from_luna_capture(captured):
                 or lo != 1 or hi != len(writer_tokens)-1):
             raise ValueError("Luna student encoder source capture differs from its archived native text state")
         writer_nodes.append({"name": writer_name, "token_ids": writer_tokens,
-            "target_weights": [0.0] * len(writer_tokens), "producing": [[lo, hi]]})
+            "target_weights": encoder_target_weights(len(writer_tokens)), "producing": [[lo, hi]]})
         writer_invocations.append(Invocation(writer_name, tuple(writer_tokens), producing=((lo, hi),)))
         body_hashes[binding["native_block_id"]] = _sha(_canonical(writer_source))
     import_counts = {binding["native_block_id"]: 0 for binding in bindings}
@@ -212,6 +229,7 @@ def native_graph_from_luna_capture(captured):
         "split": "train", "source_groups": list(receipt["source_groups"]),
         "tokenizer_fingerprint": tokenizer_fingerprint, "nodes": nodes,
         "student_native_identity": student_identity,
+        "producer_close_supervision": PRODUCER_CLOSE_SUPERVISION,
         "teacher_source_receipt": receipt,
         "teacher_text_encoders": [{"schema": "natlang.authenticated-teacher-text-encoder/1",
             "teacher_block_id": binding["teacher_block_id"], "native_block_id": binding["native_block_id"],
@@ -349,7 +367,7 @@ def native_graph_from_luna_episode(captures):
             raise ValueError("Luna episode encoder does not preserve its exact student text-source capture")
         name = binding["source_occurrence"]
         writer_nodes.append({"name": name, "token_ids": writer_tokens,
-            "target_weights": [0.0] * len(writer_tokens), "producing": [[lo, hi]]})
+            "target_weights": encoder_target_weights(len(writer_tokens)), "producing": [[lo, hi]]})
         writer_invocations.append(Invocation(name, tuple(writer_tokens), producing=((lo, hi),)))
 
     action_nodes, action_invocations, action_receipts = [], [], []
@@ -460,12 +478,13 @@ def native_graph_from_luna_episode(captures):
         "id": "luna-native-episode:" + first["source_row_id"], "split": "train",
         "source_groups": list(first["source_groups"]), "tokenizer_fingerprint": student_identity["tokenizer_fingerprint"],
         "nodes": nodes, "student_native_identity": student_identity,
+        "producer_close_supervision": PRODUCER_CLOSE_SUPERVISION,
         "teacher_source_receipt": receipts[-1], "teacher_source_receipts": receipts,
         "teacher_text_encoders": encoders, "teacher_text_inline_producers": inline_receipts,
         "teacher_episode_actions": action_receipts}
     example = parse_graph(row, tokenizer_fingerprint=student_identity["tokenizer_fingerprint"])
     if (len(example.plan.invocations) != len(bindings) + len(captures)
-            or sum(weight > 0 for weight in example.target_weights) != sum(
+            or sum(weight > 0 for weight in example.target_weights) != len(writer_nodes) + sum(
                 item["supervised_tokens"] for item in action_receipts)):
         raise ValueError("Luna episode graph lost a writer, action target, or supervised token")
     return row, example
