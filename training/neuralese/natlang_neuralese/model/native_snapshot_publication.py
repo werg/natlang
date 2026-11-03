@@ -259,7 +259,8 @@ def _verify_private_reconstruction(capsule, capsule_ref, export_ref, source):
     files=capsule.get('files')
     if not isinstance(files,list):raise ValueError('private reconstruction lacks dependency inventory')
     def role(name,*,multiple=False):
-        found=[item for item in files if isinstance(item,dict) and item.get('role')==name]
+        names={name} if isinstance(name,str) else set(name)
+        found=[item for item in files if isinstance(item,dict) and item.get('role') in names]
         if not found or (not multiple and len(found)!=1):raise ValueError('private reconstruction dependency role differs')
         for item in found:
             verified(item)
@@ -269,7 +270,8 @@ def _verify_private_reconstruction(capsule, capsule_ref, export_ref, source):
         return found if multiple else found[0]
     local=role('local-full-state-reconstruction-capsule');delta=role('exact-full-state-delta-receipt')
     payload=role('exact-full-state-delta-payload');readback=role('independent-private-full-target-stream-readback')
-    parent=role('retained-private-BF95-base-capsule');decoders=role('exact-reconstruction-decoder',multiple=True)
+    # The base capsule is bound by content below; its role names the actual base.
+    parent=role(('retained-private-BF95-base-capsule','retained-private-internal21b4-base-capsule'));decoders=role('exact-reconstruction-decoder',multiple=True)
     if len(decoders)<2:raise ValueError('private reconstruction lacks its complete decoder closure')
     def local_json(item):
         path=Path(item['original_path']).resolve(strict=True);actual=_fresh_file_binding(path)

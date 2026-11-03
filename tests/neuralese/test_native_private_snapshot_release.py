@@ -6,7 +6,7 @@ from natlang_neuralese.model.native_bundle import _fresh_file_binding
 from natlang_neuralese.model.native_snapshot_publication import _verify_private_reconstruction
 
 
-def fixture(tmp_path,target=None):
+def fixture(tmp_path,target=None,parent_role='retained-private-BF95-base-capsule'):
     def write(name,value):
         p=tmp_path/name;p.write_text(json.dumps(value,sort_keys=True));return p
     def ref(path,role):
@@ -16,7 +16,7 @@ def fixture(tmp_path,target=None):
     target=target or {'sha256':'e'*64,'bytes':99};payload={'sha256':'f'*64,'bytes':10}
     parent=ref(write('parent.json',{'schema':'natlang.exact-native-execution-recovery-capsule/1','run':'private/run',
         'base':base0,'targets':{'parent':{'target':base,'payload':bpayload,'receipt':bdelta}}}),
-        'retained-private-BF95-base-capsule')
+        parent_role)
     decoders=[ref(write(f'decoder-{i}.json',{'version':i}),'exact-reconstruction-decoder') for i in range(2)]
     delta=ref(write('delta.json',{'schema':'natlang.artifact-zip-delta/2','base':base,'target':target,
                                'payload':payload}),'exact-full-state-delta-receipt')
@@ -55,6 +55,15 @@ def test_private_reconstruction_binds_stream_base_decoder_and_publisher(tmp_path
     Path(stream['original_path']).write_text('{}')
     with pytest.raises(ValueError,match='local evidence changed'):
         _verify_private_reconstruction(capsule,cref,_fresh_file_binding(export),target)
+
+
+@pytest.mark.parametrize('role',['retained-private-internal21b4-base-capsule','unrelated-base-capsule'])
+def test_private_reconstruction_names_actual_base_capsule_role(tmp_path,role):
+    capsule,cref,export,target,*_=fixture(tmp_path,parent_role=role)
+    if role.startswith('unrelated'):
+        with pytest.raises(ValueError,match='role differs'):
+            _verify_private_reconstruction(capsule,cref,_fresh_file_binding(export),target)
+    else:_verify_private_reconstruction(capsule,cref,_fresh_file_binding(export),target)
 
 
 def test_private_reconstruction_rejects_foreign_full_source(tmp_path):
