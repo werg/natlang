@@ -209,6 +209,27 @@ def _bound_json_refs(value, out, suffix='.json'):
             _bound_json_refs(item, out, suffix)
 
 
+def admission_payload_references(roots, records):
+    """Whole output directories of the sealed collections the admission records replay (the execution-transition
+    qualification re-reads their rollouts, blocks and row results; 2026-11-03 cloud start failure on
+    ffn-native67-neuralese-diagnostic-1102/blocks). Other non-JSON paths in those records are historical source
+    payloads (evidence, not inputs) and are not shipped."""
+    found = set()
+    for current in [*roots, *records]:
+        path = Path(current)
+        if not path.is_file() or path.stat().st_size > NESTED_JSON_BYTES:
+            continue
+        try:
+            value = json.loads(path.read_text())
+        except (ValueError, OSError):
+            continue
+        if isinstance(value, dict) and value.get('schema') == 'natlang.sealed-collection-continuation/1':
+            out = value.get('out')
+            if isinstance(out, str) and out.startswith('/') and Path(out).is_dir():
+                found.add(out)
+    return sorted(found)
+
+
 def nested_checkpoint_references(roots, records):
     """Historical full checkpoints bound inside the admission records (execution-transition verification re-hashes the
     exact parent/child bytes at controller start): {path: sha256}. Shipped as exact checkpoint blobs, not files."""
@@ -303,6 +324,8 @@ def closure(config_path, *, max_file_bytes=4 * GIB):
     for item in nested:
         want(item, 'nested-admission-reference')
     historical_checkpoints = nested_checkpoint_references(admission, nested)
+    for item in admission_payload_references(admission, nested):
+        want(item, 'nested-admission-payload')
     custody = runtime / 'runtime-input-closure.json'
     if custody.is_file():
         for item in json.loads(custody.read_text()).get('bound_files', []):

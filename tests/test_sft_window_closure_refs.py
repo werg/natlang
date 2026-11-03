@@ -42,3 +42,16 @@ def test_historical_checkpoints_bound_in_admission_records_are_reported(tmp_path
                                                     'child': {'path': '/absent/checkpoint.pt', 'sha256': 'e' * 64}}}))
     found = window.nested_checkpoint_references([str(admission)], [])
     assert found == {'/absent/checkpoint.pt': 'e' * 64, str(parent): 'f' * 64}
+
+
+def test_sealed_collection_directories_are_admission_payloads(tmp_path):
+    out = tmp_path / 'collection'
+    (out / 'blocks').mkdir(parents=True)
+    proof = tmp_path / 'sealed-collection.json'
+    proof.write_text(json.dumps({'schema': 'natlang.sealed-collection-continuation/1', 'out': str(out),
+                                 'files': {'rollouts.jsonl': {'path': str(out / 'rollouts.jsonl'), 'sha256': 'a' * 64}}}))
+    other = tmp_path / 'source.jsonl'
+    other.write_text('{}')
+    record = tmp_path / 'record.json'
+    record.write_text(json.dumps({'source': {'path': str(other), 'sha256': 'b' * 64}}))
+    assert window.admission_payload_references([str(record)], [str(proof)]) == [str(out)]
