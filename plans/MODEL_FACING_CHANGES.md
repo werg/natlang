@@ -1,5 +1,17 @@
 # Model-facing changes and their measurement
 
+### 2026-11-03 — Learned Neuralese operator prompts (debt: live measurement)
+
+Four new operator prompts in `training/neuralese/natlang_neuralese/model/learned_operators.py` (`compact-value`,
+`compact-params`, `compact-history`, `extract`; plans/neuralese/LEARNED_COMPACTION_OPERATORS.md). Each is the text
+initialization of learned prompt rows at an operator write site, followed by K slot positions whose state a consumer
+imports; the slot rows start from each operator's slot text. The executing model sees them only inside operator
+sites (and, once the runtime hooks land, the consume-marked state plus a one-line note where a value was compacted).
+**Measurement debt:** the ablation (`eval/neuralese_ablation.py`: actual vs shuffled vs zeroed vs text-cut) on held
+operator graphs at text initialization and after training, then about 48 live samples per runtime site (compacted
+listing, compacted tool output, compacted history) comparing task success with the text cut before the learned path
+becomes the runtime default.
+
 ### 2026-11-03 — Decision-readout and multi-operation codebase RL task prompts (debt: live measurement)
 
 New RL task programs from `scripts/rl_tasks/sources/decisions.py` (source `decisions`: families `route`, `desk`,
