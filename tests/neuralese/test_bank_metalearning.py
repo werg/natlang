@@ -1,6 +1,7 @@
 """Continuous bank meta-learning (tune/learned/meta_bank.py) on the tiny native fixture: pool splits, exact
 publication invariants, first-order outer steps into the bank and basis, resume, held-family arms and the gate."""
 import json
+from pathlib import Path
 
 import pytest
 import torch
@@ -23,7 +24,7 @@ def pool_rows(engine, families=6, worlds=6):
 
 def small_recipe(**overrides):
     return MB.MetaRecipe(**{'rank': 4, 'components': 3, 'component_rank': 2, 'inner_steps': 2, 'init': 'random',
-                            'layer_groups': 2, 'residual_rank': 1, 'meta_batch': 2, 'lora_rank': 2,
+                            'layer_groups': 2, 'residual_rank': 1, 'meta_batch': 2, 'lora_rank': 2, 'reference_passes': [1],
                             'outer_lr_bank': 5e-2, 'outer_lr_basis': 1e-2, **overrides})
 
 
@@ -104,7 +105,7 @@ def test_outer_steps_train_bank_and_basis_resume_exactly_and_evaluate_four_arms(
     assert [r['family'] for r in replay['families']] == [r['family'] for r in expected['families']]
     assert abs(replay['families'][0]['query_fitted'] - expected['families'][0]['query_fitted']) < 1e-5
     evaluation = learner.evaluate('dev')
-    assert evaluation['families'] and set(evaluation['mean']) == set(MB.ARMS) == set(learner.arms)
+    assert evaluation['families'] and set(evaluation['mean']) == set(MB.ARMS) | {'lora@1'} == set(learner.arms)
     assert all(0 <= f['similarity'] <= 1 for f in evaluation['families'].values()) and 'mean_distinct' in evaluation
     parent = evaluation['mean']['parent']
     assert parent is not None and set(evaluation['meta_wins']) == {'initial', 'lora'}
@@ -172,8 +173,10 @@ def test_stage_kind_validates_and_gates():
     report = {'schema': adaptation_stages.BANK_METALEARNING_REPORT, 'completed': True,
               'production_exposure_advanced': False,
               'outer_training': {'steps': 3, 'train_bank': True, 'train_basis': True},
-              'held': {'met': True}, 'confirmation': {'met': True}}
+              'held': {'met': True, 'basis': 'task-outcome'}, 'confirmation': {'met': True}}
     adaptation_stages.require_gate(report, 'bank_metalearning')
+    with pytest.raises(ValueError):  # teacher-forced loss steers; it never promotes
+        adaptation_stages.require_gate({**report, 'held': {'met': True, 'basis': 'teacher-forced-loss'}}, 'bank_metalearning')
     with pytest.raises(ValueError):
         adaptation_stages.require_gate({**report, 'confirmation': {'met': False}}, 'bank_metalearning')
 
@@ -202,4 +205,52 @@ def test_pool_drops_worlds_that_repeat_an_earlier_worlds_targets(tmp_path):
              for row in rows + [duplicate]]
     chosen = MB.build_pool(index, held_fraction=.01, seed=0)
     assert [w['world'] for f in chosen['families'].values() for w in f['worlds']] == worlds
+    engine.store.close()
+
+
+def test_task_outcome_gate_collects_every_arm_with_its_adapter_and_compares_to_the_published_bank(tmp_path):
+    from natlang_neuralese.tune.learned import bank_outcomes as BO
+    engine = engine_fixture(tmp_path, 'lfm')
+    pool = MB.build_pool(pool_rows(engine, families=10), held_fraction=.5, seed=1)
+    learner = MB.BankMetaLearner(engine, pool, small_recipe(), tmp_path / 'op', parent_sha256='p' * 64)
+    cases = tmp_path / 'cases.jsonl'
+    rows = [{'id': f'{family}-{i}', 'family': family, 'split': 'train', 'source_groups': []}
+            for family in ('fa', 'fb', 'fc') for i in range(4 if family == 'fc' else 6)]
+    rows.append({'id': 'held-row', 'family': 'fa', 'split': 'dev'})
+    cases.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    plan = BO.task_families(cases, protected=None, exclude={'fb'}, support=2, dev=2, confirmation=2, seed=0)
+    assert set(plan['families']) == {'fa'}  # fb meta-trains, fc is too small
+    assert sorted(sum(plan['families']['fa'].values(), [])) == [f'fa-{i}' for i in range(6)]
+    seen = []
+    def collect(*, cases, out, rows, group, **kwargs):
+        adapters = engine.native_default_adapters
+        seen.append((Path(out).name, adapters, dict(engine.rl_policy_binding).get('bank_adaptation')))
+        if adapters:  # every adapter the gate serves resolves in the engine's store
+            assert engine.store.get_native_tensor_artifact(adapters[0]['id']) is not None
+        ids = [json.loads(line)['id'] for line in Path(cases).read_text().splitlines()]
+        wins = 2 if adapters and 'candidate' in Path(out).name else 1
+        Path(out, 'rollouts.jsonl').write_text(''.join(json.dumps({'task_id': i, 'reward': {'quality': 1.0}}) + '\n'
+                                                       for i in ids for _ in range(wins)))
+        return {'successes': wins * len(ids), 'scored': group * len(ids)}
+    engine.rl_policy_binding = {'checkpoint_sha256': 'p' * 64}
+    outcomes = BO.TaskOutcomes(learner, plan, tmp_path / 'outcomes', parent_sha256='p' * 64, protected=None,
+                               samples=2, reference_passes=(1,), collect=collect, endpoint='http://unused')
+    support = [row for f in pool['families'].values() if f['role'] == 'meta-train' for w in f['worlds'][:1] for row in w['rows']][:2]
+    outcomes.support_rows = lambda family: (support, {'rows': len(support)})
+    result = outcomes.evaluate('dev')
+    arms = result['families']['fa']['arms']
+    assert set(arms) == {'parent', 'candidate', 'published', 'lora@1'}
+    assert result['totals'] == {'candidate': 4, 'lora@1': 2, 'parent': 2, 'published': 2}
+    assert engine.native_default_adapters is None and 'bank_adaptation' not in engine.rl_policy_binding
+    served = {name.split('-')[0]: (adapters, binding) for name, adapters, binding in seen}
+    assert served['parent'] == (None, None) and served['candidate'][1]['arm'] == 'candidate'
+    assert served['candidate'][0][0]['id'] != served['published'][0][0]['id']
+    decision = BO.outcome_promotion(result, min_families=1)
+    assert decision['met'] and decision['basis'] == 'task-outcome'
+    assert not BO.outcome_promotion({**result, 'totals': {**result['totals'], 'candidate': 2}})['met']
+    # Promotion makes the candidate the published bank the next candidate must beat.
+    manifest = learner.publish()
+    learner.promote(manifest)
+    assert learner.bank_of('published').snapshot == manifest['snapshot']
+    torch.testing.assert_close(learner._values('published')[2], learner.meta['init'].detach())
     engine.store.close()

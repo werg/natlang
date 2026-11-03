@@ -84,6 +84,13 @@ BANK_METALEARNING_DEFAULTS = {
     'inner_steps': 12,
     'layer_groups': 8,
     'residual_rank': 2,
+    # The gate (owner, 2026-11-03): held RL task families' exact-oracle success, candidate vs published bank.
+    'task_families': 16,
+    'support_tasks': 4,
+    'dev_tasks': 4,
+    'confirmation_tasks': 4,
+    'task_samples': 4,
+    'min_task_families': 4,
     'train_bank': True,
     'train_basis': True,
     'min_held_families': 4,
@@ -108,9 +115,9 @@ HANDLERS = {
         'result': 'optimizer-manifest.json'},
     BANK_METALEARNING: {
         'module': 'natlang_neuralese.tune.learned.bank_stage',
-        'required_inputs': {'episodes', 'protection'},
+        'required_inputs': {'episodes', 'task_source', 'protection'},
         'optional_inputs': {'continue_from', 'parent_selection', 'base_snapshot', 'adaptation'},
-        'argument_roles': ('episodes', 'protection', 'parent_selection', 'base_snapshot', 'adaptation'),
+        'argument_roles': ('episodes', 'task_source', 'protection', 'parent_selection', 'base_snapshot', 'adaptation'),
         'parameters': set(BANK_METALEARNING_DEFAULTS) | {'recipe_overrides'},
         'result': 'bank-manifest.json'},
 }
@@ -159,7 +166,8 @@ def validate_parameters(kind, parameters):
         if type(fraction) not in (int, float) or not 0 < fraction < 1:
             raise ValueError('held_fraction must be in (0, 1): promotion needs held families')
         for key in ('outer_steps', 'eval_every', 'meta_batch', 'rank', 'components', 'component_rank', 'inner_steps',
-                    'layer_groups', 'min_held_families', 'max_parent_lag_steps'):
+                    'layer_groups', 'min_held_families', 'max_parent_lag_steps', 'task_families', 'support_tasks',
+                    'dev_tasks', 'confirmation_tasks', 'task_samples', 'min_task_families'):
             _positive_int(parameters, key)
         _positive_int(parameters, 'residual_rank', 0)
         for key in ('train_bank', 'train_basis'):
@@ -216,6 +224,8 @@ def require_gate(report, kind):
         executed = report.get('outer_training') or {}
         if not all(executed.get(key) is True for key in ('train_basis', 'train_bank')) or (executed.get('steps') or 0) < 1:
             raise ValueError('bank meta-learning earned no outer update of the bank and basis')
+        if (report.get('held') or {}).get('basis') != 'task-outcome':
+            raise ValueError('bank meta-learning promotes on held-family task outcomes, not teacher-forced loss')
         if (report.get('held') or {}).get('met') is not True:
             raise ValueError('bank meta-learning held-family promotion not met: ' + str((report.get('held') or {}).get('reason')))
         if (report.get('confirmation') or {}).get('met') is not True:

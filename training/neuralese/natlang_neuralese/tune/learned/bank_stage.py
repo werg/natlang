@@ -168,7 +168,9 @@ def run(args, parameters):
     # Schedule parameters (how long to run, how often to evaluate) may change on a continuation; everything else
     # binds the operation.
     schedule = ('outer_steps', 'eval_every')
+    task_source = Path(args.task_source).resolve()
     operation = {'episodes': {'path': str(pool_path), 'sha256': sha256_file_hex(pool_path)},
+                 'task_source': {'path': str(task_source), 'sha256': sha256_file_hex(task_source)},
                  'protection_sha256': protected.digest,
                  'parameters': {k: v for k, v in parameters.items() if k not in schedule}}
     bound = out / 'operation.json'
@@ -212,16 +214,40 @@ def run(args, parameters):
         if learner.state['step'] % parameters['eval_every'] == 0:
             evaluate()
     final = evaluate()
-    held_decision = MB.promotion(final, min_families=parameters['min_held_families'], margin=parameters['promotion_margin'])
-    confirmation = {'met': False, 'reason': 'development promotion not met; confirmation not spent'}
-    if held_decision['met']:
-        done = [e for e in learner.state['evaluations'] if e['split'] == 'confirmation' and e['step'] == learner.state['step']]
-        result = done[0] if done else learner.evaluate('confirmation', log=lambda family, value: _log(
-            'held_family', split='confirmation', family=family, **value))
-        learner.save()
-        confirmation = {**MB.promotion(result, min_families=parameters['min_held_families'],
-                                       margin=parameters['promotion_margin']), 'step': result['step']}
+    steering = MB.promotion(final, min_families=parameters['min_held_families'], margin=parameters['promotion_margin'])
+    # The gate: held RL task families' exact-oracle success, the candidate vs the published bank (initially the
+    # un-meta-trained bank); the parent and plain LoRA at several pass budgets are references.
+    from .bank_outcomes import TaskOutcomes, outcome_promotion, task_families
+    plan_path = out / 'task-families.json'
+    if plan_path.exists():
+        plan = json.loads(plan_path.read_text())
+    else:
+        plan = task_families(task_source, protected=protected, exclude=set(pool['families']),
+                             support=parameters['support_tasks'], dev=parameters['dev_tasks'],
+                             confirmation=parameters['confirmation_tasks'], max_families=parameters['task_families'],
+                             seed=recipe.seed)
+        _write(plan_path, plan)
+    if plan['cases']['sha256'] != operation['task_source']['sha256']:
+        raise SystemExit('the held task families were chosen from another task source')
+    outcomes = TaskOutcomes(learner, plan, out / 'outcomes', parent_sha256=parent, protected=protected,
+                            samples=parameters['task_samples'])
+    try:
+        development = outcomes.evaluate('dev')
+        _log('task_outcomes', split='dev', totals=development['totals'], scored=development['scored'],
+             adapted=development['adapted_families'])
+        held_decision = {**outcome_promotion(development, min_families=parameters['min_task_families']),
+                         'step': learner.state['step']}
+        confirmation = {'met': False, 'reason': 'development task-outcome gate not met; confirmation not spent'}
+        if held_decision['met']:
+            confirmed = outcomes.evaluate('confirmation', references=False)
+            confirmation = {**outcome_promotion(confirmed, min_families=parameters['min_task_families']),
+                            'step': learner.state['step']}
+            _log('task_outcomes', split='confirmation', totals=confirmed['totals'], scored=confirmed['scored'])
+    finally:
+        outcomes.close()
     manifest = learner.publish()
+    if held_decision['met'] and confirmation['met']:
+        learner.promote(manifest)
     learner.save()
     steps = learner.state['history']
     seconds = [h['seconds'] for h in steps]
@@ -231,7 +257,8 @@ def run(args, parameters):
                                  'train_basis': recipe.train_basis,
                                  'seconds_per_step': sum(seconds) / len(seconds) if seconds else None,
                                  'passes_per_step': steps[-1]['passes'] if steps else None},
-              'held': held_decision, 'confirmation': confirmation,
+              'held': held_decision, 'confirmation': confirmation, 'steering': steering,
+              'task_families': {'plan': str(plan_path), 'families': len(plan['families'])},
               'initialization': {'kind': recipe.init, 'spectrum': learner.state.get('spectrum')},
               'evaluations': [{k: e.get(k) for k in ('split', 'step', 'mean', 'meta_wins', 'mean_distinct',
                                                      'meta_wins_distinct', 'families_distinct_count', 'seconds')}
@@ -253,6 +280,8 @@ def main(argv=None):
         return pool_command(argv[1:])
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument('--episodes', required=True)
+    parser.add_argument('--task-source', required=True, help='RL task cases (JSONL) whose families supply the held '
+                        'task-outcome gate')
     parser.add_argument('--protection', required=True)
     parser.add_argument('--continue-from', required=True)
     parser.add_argument('--parent-selection')
@@ -264,7 +293,8 @@ def main(argv=None):
     parser.add_argument('--held-fraction', type=float)
     parser.add_argument('--promotion-margin', type=float)
     for key in ('outer_steps', 'eval_every', 'meta_batch', 'rank', 'components', 'component_rank', 'inner_steps',
-                'layer_groups', 'residual_rank', 'min_held_families', 'max_parent_lag_steps'):
+                'layer_groups', 'residual_rank', 'min_held_families', 'max_parent_lag_steps', 'task_families',
+                'support_tasks', 'dev_tasks', 'confirmation_tasks', 'task_samples', 'min_task_families'):
         parser.add_argument('--' + key.replace('_', '-'), type=int)
     for key in ('train_bank', 'train_basis'):
         parser.add_argument('--' + key.replace('_', '-'), dest=key, action='store_const', const=True)

@@ -307,6 +307,7 @@ class MetaRecipe:
     train_basis: bool = True
     lora_rank: int = 8            # the plain per-program LoRA baseline (and the PCA initialization's fits)
     lora_lr: float = 1e-3
+    reference_passes: list = field(default_factory=lambda: [1, 4, 24])  # LoRA references at these pass budgets
     target_pattern: str | None = None
     seed: int = 0
 
@@ -657,12 +658,14 @@ class BankMetaLearner:
         record.write_text(json.dumps(self.state, indent=1, sort_keys=True))
         record.replace(self.out / 'state.json')
 
-    def publish(self):
-        """The live bank as an ordinary bank snapshot (`bank.save_bank`) plus its inner-fit law (initial
-        coefficients and step sizes, a parameter-set artifact): the deployment and tuning input."""
+    def snapshot_bank(self):
+        """The live bank as a stored bank (invariants restored, basis artifact written): the form adapters of the
+        candidate are composed on. Cached per outer step."""
         from dataclasses import replace
-        from ...model.native_artifact import NativeTensorArtifact
-        from .bank import SharedBasis, component_id, save_bank
+        from .bank import SharedBasis, component_id
+        cached = getattr(self, '_snapshot', None)
+        if cached is not None and cached[0] == self.state['step']:
+            return cached[1]
         self._rescale_meta(restore_invariants(self.bank0, self.leaves))
         factors, basis = _detached(self.leaves)
         shared = SharedBasis(self.bank0.basis.native_identity, self.recipe.rank,
@@ -674,12 +677,21 @@ class BankMetaLearner:
         components = [replace(c, factors={n: (P.clone(), Q.clone()) for n, (P, Q) in factors[k].items()},
                               id=component_id(c.source, factors[k]))
                       for k, c in enumerate(self.bank0.components)]
-        published = replace(self.bank0.with_components(components, reason=f'meta-learning step {self.state["step"]}'),
-                            basis=shared, basis_artifact=record.id)
-        manifest = save_bank(self.engine, published)
+        bank = replace(self.bank0.with_components(components, reason=f'meta-learning step {self.state["step"]}'),
+                       basis=shared, basis_artifact=record.id)
+        self._snapshot = (self.state['step'], bank)
+        return bank
+
+    def publish(self):
+        """The live bank as an ordinary bank snapshot (`bank.save_bank`) plus its inner-fit law (initial
+        coefficients and step sizes, a parameter-set artifact): the deployment and tuning input."""
+        from ...model.native_artifact import NativeTensorArtifact
+        from .bank import save_bank
+        bank = self.snapshot_bank()
+        manifest = save_bank(self.engine, bank)
         law = self.engine.store.put_native_tensor_artifact(NativeTensorArtifact(
             'parameter-set', self.engine.native_identity,
-            {key: value.detach().cpu().contiguous() for key, value in self.meta.items()}, record.id,
+            {key: value.detach().cpu().contiguous() for key, value in self.meta.items()}, bank.basis_artifact,
             {'scope': INNER_FIT_LAW, 'snapshot': manifest['snapshot']}))
         manifest['inner_fit'] = {'law': INNER_FIT_LAW, 'tensors': law.id, 'steps': self.recipe.inner_steps,
                                  'residual_rank': self.recipe.residual_rank, 'residual_lr': self.recipe.residual_lr}
@@ -687,9 +699,38 @@ class BankMetaLearner:
         path.write_text(json.dumps(manifest, indent=1, sort_keys=True))
         return manifest
 
+    def promote(self, manifest):
+        """The candidate passed the task-outcome gate: it becomes the published bank later candidates must beat."""
+        self.state['published'] = {'manifest': manifest, 'step': self.state['step']}
+        self._published = None
+
+    def _published_values(self):
+        """``(bank, init, log_step)`` of the published bank; before any promotion, the un-meta-trained bank."""
+        record = self.state.get('published')
+        if record is None:
+            return self.bank0, self.a0, self.log_step0
+        if getattr(self, '_published', None) is None:
+            from .bank import load_bank
+            manifest = record['manifest']
+            law = self.engine.store.get_native_tensor_artifact(manifest['inner_fit']['tensors']).artifact.tensors
+            self._published = (load_bank(self.engine, manifest), law['init'], law['log_step'])
+        return self._published
+
+    def bank_of(self, which):
+        if which == 'initial':
+            return self.bank0
+        if which == 'published':
+            return self._published_values()[0]
+        return self.snapshot_bank()
+
     # -- execution ----------------------------------------------------------------------------------------------
     def _values(self, which):
-        """Fixed bank values and meta-parameters for an inner fit: the live (``meta``) or initial bank."""
+        """Fixed bank values and meta-parameters for an inner fit: the live (``meta``), initial or published bank."""
+        if which == 'published':
+            bank, init, log_step = self._published_values()
+            return ({k: c.factors for k, c in enumerate(bank.components)},
+                    {f'{side}.{name}': getattr(bank.basis, side)[name] for name in bank.basis.names
+                     for side in ('left', 'right')}, init, log_step)
         if which == 'initial':
             return ({k: c.factors for k, c in enumerate(self.bank0.components)},
                     {f'{side}.{name}': getattr(self.bank0.basis, side)[name] for name in self.bank0.basis.names
@@ -903,8 +944,9 @@ class BankMetaLearner:
                     fitted = self.fit(support, which, residual=arm == 'meta_residual')
                     result[arm] = {'loss': self.score(scored, which, fitted['coefficients'], fitted['residual']),
                                    'support_first': fitted['history'][0], 'support_last': fitted['history'][-1]}
-                elif arm == 'lora':
-                    leaves, history = self.fit_lora(support, self.recipe.fit_passes)
+                elif arm == 'lora' or arm.startswith('lora@'):
+                    passes = self.recipe.fit_passes if arm == 'lora' else int(arm.split('@')[1])
+                    leaves, history = self.fit_lora(support, passes)
                     result[arm] = {'loss': self.score_lora(scored, leaves), 'support_last': history[-1]}
                 if arm not in BANK_ARMS:
                     fixed.setdefault(name, {})[arm] = result[arm]
@@ -922,7 +964,9 @@ class BankMetaLearner:
 
     @property
     def arms(self):
-        return ARMS if self.recipe.residual_rank else tuple(arm for arm in ARMS if arm != 'meta_residual')
+        """The steering arms: ``lora`` is the matched-pass reference, ``lora@n`` the other reference budgets."""
+        base = ARMS if self.recipe.residual_rank else tuple(arm for arm in ARMS if arm != 'meta_residual')
+        return (*base, *[f'lora@{n}' for n in self.recipe.reference_passes if n != self.recipe.fit_passes])
 
 
 def similarity(support, scored):
