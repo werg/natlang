@@ -266,7 +266,41 @@ Later evaluations reuse the parent/initial/LoRA arms (measured once per parent) 
 - cuSOLVER SVD can return a numerically non-orthonormal basis; the basis is re-orthonormalized by QR.
 - The cloud runs were capacity-limited (ResourceExhausted) and then OOM. The DGX run is preemptible and resumes per family.
 
-The random-bank run was cut over after one outer step (supervisor decision): data-driven PCA initialization, more
-components, per-layer-group Meta-SGD coefficients, a residual arm and the weight-space regression (see "Algorithm"),
-on pool v3 (exact-duplicate worlds removed: 64 meta-train / 16 held families, 729 rows). The run is DGX ledger unit
-`bankmeta-pca-1`, out `run-pca-v3`; the PCA step-0 numbers are recorded below when measured.
+The random-bank run was cut over after one outer step (supervisor decision). The replacement run uses the
+data-driven PCA initialization, more components, per-layer-group Meta-SGD coefficients, a residual arm and the
+weight-space regression (see "Algorithm"). It runs on pool v3: exact-duplicate worlds removed, 64 meta-train and
+16 held families, 729 rows. The run is DGX ledger unit `bankmeta-pca-5`, out `run-pca-v4`.
+
+**PCA initialization (measured):**
+- 64 meta-train LoRA fits took 30-140 s each on the GB10.
+- The rank-32 LoRA-delta basis captures 53% of the fits' relative delta energy.
+- 28 components explain 90% of the captured energy; the first two carry 34% and 22%.
+- 70 targets remain: the 16-row attention gates are below rank 32 and stay with the parent.
+- There are 16 coefficient groups.
+
+**Step-0 held development, PCA bank** (teacher-forced loss per target token, 12-pass fits; the 12 families without
+a near-duplicate dev world in parentheses):
+
+| arm | mean dev loss |
+|---|---|
+| parent | 2.325 (2.461) |
+| PCA bank, learned initial coefficients, no fit (`initial_unfitted`, 10 families) | 1.166 |
+| PCA bank coefficient fit (`initial` = `meta` at step 0) | **0.675 (0.818)** |
+| PCA bank fit + rank-2 residual | 0.752 (0.930) |
+| plain LoRA rank 8, 1 pass | 1.659 (1.803) |
+| plain LoRA, 4 passes | 0.908 (1.091) |
+| plain LoRA, 12 passes (matched) | 1.345 (1.694) |
+| plain LoRA, 24 passes | 2.138 (2.707) |
+
+At step 0 the PCA bank's coefficient fit beats the matched-pass LoRA on 14 of 16 held families and every LoRA
+budget on average. The random bank was at 2.171 against LoRA 0.785 on pool v1.
+
+- About 70% of the gain over the parent is a shift shared by all teacher programs: the learned mean coefficients
+  alone reach 1.166. The per-program fit adds about 0.49 nats more.
+- Plain LoRA at lr 1e-3 overfits three support rows beyond 4 passes. The LoRA references are untuned baselines.
+- The residual arm (lr 1e-2) hurts.
+- These are teacher-forced losses on held teacher-program families. They steer meta-training; they are not the
+  promotion gate, which is task outcome.
+
+**Outer steps:** 70 s each on the GB10 (meta-batch 2, 12 inner steps). At step 1 the weight-space regression left
+51% unexplained, consistent with the basis capturing 53%.
