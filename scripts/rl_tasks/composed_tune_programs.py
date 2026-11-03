@@ -93,11 +93,11 @@ def oracle_of(case):
 # program name -> (operations: [(structure program, origin source, rename root to, returns override)], types.ts, notes)
 PROGRAMS = {
     'composed-multihop-kit': {
-        'operations': [('decompose-solve-read', 'musique', 'main', None),
-                       ('lookup-read-compare', '2wikimultihopqa', 'answer_by_lookups', None)],
+        'operations': [('decompose-solve-read', 'musique', 'main', 'string'),
+                       ('lookup-read-compare', '2wikimultihopqa', 'answer_by_lookups', 'string')],
         'note': 'depth-3 call graphs, two operations (decompose/solve/read and lookup/read/compare)'},
     'composed-multihop-steps': {
-        'operations': [('decompose-solve-read-confirm', 'musique', 'main', None)],
+        'operations': [('decompose-solve-read-confirm', 'musique', 'main', 'string')],
         'note': 'depth-3 decompose -> solve_step -> read_passage, plus confirm'},
     'composed-kinship-paths': {
         'operations': [('trace-and-compose-kinship', 'clutrr', 'main', 'Kinship')],
