@@ -33,6 +33,11 @@ small-model (Haiku) subagents author task programs and exact oracles, prompted
 for real depth and diversity, qualified by reference/negative/alias replay.
 On-policy RL is preferred over more teacher demonstrations; verified successful
 rollouts may self-distill into SFT. Teacher codebase generation is secondary.
+Authoring is continuous, not a one-off batch: keep finding new impulses for
+tasks and Natlang programs. Existing agentic and knowledge-reasoning datasets
+seed program designs, call arguments and targets (inspiration with real oracles;
+never protected/held inputs). Rotate domains and problem types; measure
+repetition against the existing pool before admitting each batch.
 
 ## Interleaved RL is a declared stage; selector /2 seeks outcome spread (engineering, 2026-11-03)
 
