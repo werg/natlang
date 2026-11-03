@@ -1214,12 +1214,14 @@ def provision_role_tokens(port, tokenizer):
     return RoleTokens(*ids)
 
 
-def native_step(model, ids, cache=None, *, producing=False):
+def native_step(model, ids, cache=None, *, producing=False, embeddings=None):
     """Incremental inference with the exact same native layer math as the DAG.
 
     Returned layer tensors cover only this chunk, retaining autograd when used
     for an exact reference. Cached keys are already rotated at consumer-local
     positions; block capture stores the raw keys separately in the result.
+    ``embeddings`` ([1, tokens, width]) replaces ``model.embed(ids)``, as in the
+    graph forward: learned operator rows substitute their token positions.
     """
     from .lfm2_port import PortCache, ConvState, DeltaState, append_kv
     port = model.port
@@ -1230,7 +1232,9 @@ def native_step(model, ids, cache=None, *, producing=False):
         raise ValueError('native state requires an unpadded cache with aligned layer positions')
     start = cache.lengths[0]
     positions = torch.arange(start, start+ids.shape[1], device=ids.device)
-    raw = model.embed(ids)
+    raw = model.embed(ids) if embeddings is None else embeddings
+    if embeddings is not None and tuple(embeddings.shape[:2]) != tuple(ids.shape):
+        raise ValueError('native_step embeddings must cover exactly its token IDs')
     if ids.shape[1] == 0:
         # An empty span carries the exact model/layer layout but consumes no
         # positions and does not mutate the consumer's hybrid or attention state.

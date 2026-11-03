@@ -54,6 +54,11 @@ class Operator:
     # Starting target of dedicated training examples (owner: about 20-30k each).
     data_target: int
     purpose: str
+    # How a consumer is shown the imported state(s): open + state (+ separator + state ...) + close. For 'user-suffix'
+    # operators the frame is its own user message after the first user message; otherwise it opens the first one.
+    consumer_open: str = ''
+    consumer_close: str = '\n\n'
+    consumer_separator: str = '\n'
 
 
 VALUE_PROMPT = (
@@ -79,20 +84,46 @@ OPERATORS = {operator.name: operator for operator in (
     Operator('compact-value', 1, VALUE_PROMPT, 'system',
              ' Exact names, numbers, paths and structure of the value, and where the rest is:', 64,
              ('tool_output', 'file', 'document', 'passage', 'record', 'schema', 'tool_doc'), 'one', 25_000,
-             'Large tool/service outputs, documents and collections rendered into a call (renderValue).'),
+             'Large tool/service outputs, documents and collections rendered into a call (renderValue).',
+             'Compacted value: '),
     Operator('compact-params', 1, PARAMS_PROMPT, 'system',
              ' What the argument is, how it is organised, and what in it matters to the call:', 32,
              ('document', 'passage', 'file', 'record', 'schema', 'tool_output'), 'one', 25_000,
-             "A call's large arguments in its opening listing (inputsListing)."),
+             "A call's large arguments in its opening listing (inputsListing).",
+             'Compacted argument: '),
     Operator('compact-history', 1, HISTORY_PROMPT, 'user-suffix',
              ' Done, found, exact files, identifiers, commands and values, failures and what is left:', 128,
              ('trajectory',), 'one', 25_000,
-             'Context carried between model runs (compact_history and the automatic near-limit compaction).'),
+             'Context carried between model runs (compact_history and the automatic near-limit compaction).',
+             'Earlier steps of this session, compacted: ', '\n\nContinue from the most recent steps.'),
     Operator('extract', 1, EXTRACT_PROMPT, 'system',
              ' Facts this task needs from the document:', 32,
              ('document', 'passage', 'record', 'file', 'tool_output'), 'per-source', 30_000,
-             'Neuralese-prompted extractor/summarizer whose state a parent lambda must use (bottleneck).'),
+             'Neuralese-prompted extractor/summarizer whose state a parent lambda must use (bottleneck).',
+             'Extracts from the documents, one per document:\n'),
 )}
+
+
+def operator_site_messages(name: str, *, instructions: str, source=None, context=(), prompt_part=None):
+    """The operator's write site as serving messages, before the assistant reply (the slots).
+
+    ``prompt_part`` stands in for the prompt text (a native-state placeholder part when rendering to tokens; the
+    prompt text itself when None). ``source`` is the site's input text, or for 'user-suffix' operators the list of
+    conversation messages compacted. The shared definition for the graph renderer and the serving endpoint.
+    """
+    spec = operator(name)
+    prompt = spec.prompt if prompt_part is None else prompt_part
+    def content(part):
+        return part if isinstance(part, str) else [part]
+    if spec.placement == 'system':
+        if not isinstance(source, str):
+            raise ValueError(f'operator {name} reads one text input')
+        return [{'role': 'system', 'content': content(prompt)}, *[dict(message) for message in context],
+                {'role': 'user', 'content': f'{instructions}\n\n{source}' if instructions else source}]
+    if not isinstance(source, list):
+        raise ValueError(f'operator {name} compacts a list of conversation messages')
+    return [*[dict(message) for message in context], *[dict(message) for message in source],
+            {'role': 'user', 'content': content(prompt)}]
 
 
 def operator(name: str) -> Operator:

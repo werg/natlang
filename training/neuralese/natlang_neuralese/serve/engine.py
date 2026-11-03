@@ -867,6 +867,69 @@ class Engine:
         block.validate()
         return block, self.store.put_native_state(block, owner=owner)
 
+    def native_operator(self, name, *, instructions='', value=None, messages=None, context=(), tools=None, note='',
+                        adapters=None):
+        """Run one learned Neuralese operator site (model/learned_operators.py) and archive its K slot states."""
+        return self._native_run(lambda: self._native_operator_impl(name, instructions=instructions, value=value,
+            messages=messages, context=context, tools=tools, note=note), adapters)
+
+    def _operator_site(self):
+        cached = getattr(self, '_operator_site_cache', None)
+        if cached is None:
+            from ..data.operator_graph import OperatorGraphRenderer
+            from ..model.learned_operators import OperatorRows
+            fingerprint = self.model_config["tokenizer_fingerprint"]
+            rows = getattr(self.shared_model, 'operator_rows', None)
+            trained = rows is not None
+            if rows is None:
+                # No trained rows in this checkpoint: the text-initialized operator (identical to its text prompt).
+                rows = OperatorRows.text_initialized(self.shared_model.port.embedding_weight, self.tokenizer,
+                                                     tokenizer_fingerprint=fingerprint)
+            renderer = OperatorGraphRenderer(self.tokenizer, role_ids=self.role_tokens.ids,
+                                             tokenizer_fingerprint=fingerprint, bindings=rows.bindings,
+                                             max_tokens=self.context)
+            cached = self._operator_site_cache = (renderer, rows, 'trained' if trained else 'text-initialized')
+        return cached
+
+    def _native_operator_impl(self, name, *, instructions, value, messages, context, tools, note):
+        if not getattr(self, "native_state_enabled", False):
+            raise RequestError("neuralese-native-state-unavailable", "learned operators require shared-state serving")
+        from ..model.learned_operators import ResolvedSpan, operator, registry_sha256
+        from ..model.shared_state import native_step
+        try:
+            spec = operator(name)
+        except ValueError as error:
+            raise RequestError("neuralese-operator-unknown", str(error)) from error
+        if not isinstance(instructions, str) or not isinstance(note, str):
+            raise RequestError("neuralese-operator-input", "operator instructions and note must be text")
+        source = value if spec.placement == 'system' else messages
+        if spec.placement == 'system' and not isinstance(value, str):
+            raise RequestError("neuralese-operator-input", f"operator {name} reads one text value")
+        if spec.placement != 'system' and not isinstance(messages, list):
+            raise RequestError("neuralese-operator-input", f"operator {name} compacts a list of messages")
+        renderer, rows, state = self._operator_site()
+        try:
+            ids, prompt, slots = renderer.site(name, instructions=instructions, source=source,
+                                               context=list(context or ()), tools=tools)
+        except ValueError as error:
+            raise RequestError("neuralese-operator-input", str(error)) from error
+        if len(ids) >= self.context:
+            raise RequestError("context-length", f"operator site of {len(ids)} tokens exceeds this model context")
+        tensor = torch.tensor([ids], dtype=torch.long, device=self.device)
+        with torch.inference_mode():
+            embeddings = rows.apply(self.shared_model.embed(tensor), [ResolvedSpan(name, 'prompt', 'site', *prompt),
+                                                                       ResolvedSpan(name, 'slots', 'site', *slots)])
+            start, stop = slots
+            prefix = native_step(self.shared_model, tensor[:, :start], embeddings=embeddings[:, :start])
+            capture = native_step(self.shared_model, tensor[:, start:stop], prefix["cache"], producing=True,
+                                  embeddings=embeddings[:, start:stop])
+        block, record = self._native_store_capture(ids[start:stop], [capture], text=note)
+        meta = record.meta()
+        meta["type"] = "Neuralese<string>"
+        return {"id": record.id, "native_state": meta,
+                "operator": {"name": name, "version": spec.version, "slots": spec.slots, "site_tokens": len(ids),
+                             "registry_sha256": registry_sha256([name]), "rows": state}}
+
     def native_write_text(self, text: str, *, value_type: str | None = None, adapters=None):
         return self._native_run(lambda: self._native_write_text_impl(text, value_type=value_type), adapters)
 

@@ -215,6 +215,8 @@ def main(argv=None):
     parser.add_argument('--graphs', required=True)
     parser.add_argument('--text-cut')
     parser.add_argument('--operator-rows', help='a saved OperatorRows state (learned_operators.save_rows)')
+    parser.add_argument('--text-init-operators', action='store_true',
+                        help='operator rows text-initialized from this checkpoint (the untrained operator)')
     parser.add_argument('--limit', type=int, default=64)
     parser.add_argument('--max-tokens', type=int, default=24_000, help='skip graphs with more physical tokens')
     parser.add_argument('--score', choices=('consumers', 'all'), default='consumers')
@@ -230,6 +232,9 @@ def main(argv=None):
     model.eval()
     fingerprint = config['tokenizer_fingerprint']
     rows = load_rows(args.operator_rows, device=args.device) if args.operator_rows else None
+    if args.text_init_operators:
+        from ..model.learned_operators import OperatorRows
+        rows = OperatorRows.text_initialized(model.port.embedding_weight, tokenizer, tokenizer_fingerprint=fingerprint)
     examples, spans, raw_rows, skipped = [], {}, {}, {'no-internal-import': 0, 'over-max-tokens': 0}
     for row in _read_jsonl(args.graphs):
         if len(examples) >= args.limit:
@@ -243,7 +248,7 @@ def main(argv=None):
             continue
         if row.get(ROW_FIELD):
             if rows is None:
-                raise SystemExit('graphs declare learned operator spans; pass --operator-rows')
+                raise SystemExit('graphs declare learned operator spans; pass --operator-rows or --text-init-operators')
             spans[example.id] = resolve_spans(row, example.plan, rows.bindings)
         examples.append(example)
     text_cut = None

@@ -159,3 +159,37 @@ def test_ablation_externalized_own_state_matches_actual_and_conditions_differ():
     # Consumers that do not import anything are not scored.
     assert ablation.consumer_weights(example)[:len(example.plan.invocations[0].token_ids)] == (
         (0.,) * len(example.plan.invocations[0].token_ids))
+
+
+def test_serving_native_step_site_matches_the_training_graph_capture():
+    """The operator endpoint's incremental site (native_step with substituted rows) equals the graph producer."""
+    from natlang_neuralese.model.shared_state import capture_block, concatenate_captures, native_step
+    from natlang_neuralese.model.learned_operators import ResolvedSpan
+    model = tiny_model()
+    bindings = small_bindings()
+    rows = OperatorRows(bindings, model.port.embedding_weight.shape[1])
+    rows.reset_to_text(model.port.embedding_weight)
+    with torch.no_grad():
+        rows.rows('compact-value', 'slots').add_(0.2 * torch.randn_like(rows.rows('compact-value', 'slots')))
+        rows.rows('compact-value', 'prompt').add_(0.2 * torch.randn_like(rows.rows('compact-value', 'prompt')))
+    row = graph_row(0, bindings['compact-value']['slot_token_ids'])
+    example = parse_graph(row, tokenizer_fingerprint=FINGERPRINT)
+    spans = resolve_spans(row, example.plan, rows.bindings)
+    identity = {'checkpoint_sha256': 'a' * 64, 'tokenizer_fingerprint': 'b' * 64, 'embedding_weight_sha256': 'c' * 64,
+                'architecture': model.port.config.model_type}
+    producer = row['nodes'][0]
+    start, stop = producer['producing'][0]
+    with torch.no_grad():
+        result = model(example.plan, embeddings=operator_embeddings(model, rows, example.plan, spans))
+        graph_block = capture_block(result, 'producer', start, stop, text='', **identity)
+        ids = torch.tensor([producer['token_ids']])
+        site = [ResolvedSpan('compact-value', span.kind, 'site', span.start, span.stop) for span in spans]
+        embeddings = rows.apply(model.embed(ids), site)
+        prefix = native_step(model, ids[:, :start], embeddings=embeddings[:, :start])
+        capture = native_step(model, ids[:, start:stop], prefix['cache'], producing=True,
+                              embeddings=embeddings[:, start:stop])
+    fields = concatenate_captures([capture])
+    for graph_layer, step_layer in zip(graph_block.layers, fields['layers']):
+        for key, value in graph_layer.items():
+            if key != 'kind':
+                torch.testing.assert_close(step_layer[key].float(), value.float(), rtol=1e-4, atol=1e-5)

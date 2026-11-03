@@ -40,7 +40,7 @@ def block_ids(value) -> set[str]:
 # (`neuralese-<capability>-unavailable`); this server serves every capability it lists.
 NATIVE_CAPABILITIES = sorted([
     "chat", "chat.stream", "decide", "score", "grad", "grad.order2", "optim", "native.adapters", "adapters.create", "guidance", "guidance.check", "native.text-write", "native.init-body", "parts.value-type", "render", "store", "store.native-state", "store.native-tensor-artifact",
-    "native.protocol-recovery", "store.owners", "template", "template.argument-path", "template.value-type", "view", "view.budget/1"])
+    "native.protocol-recovery", "operator/1", "store.owners", "template", "template.argument-path", "template.value-type", "view", "view.budget/1"])
 
 
 def completion_limit(body: dict) -> int:
@@ -242,6 +242,12 @@ def make_handler(engine: Engine):
                 if self.path == "/v1/neuralese/native-states/write-text":
                     body = self._object()
                     return self._json(201, engine.native_write_text(body.get("text"), value_type=body.get("type"), adapters=body.get('adapters')))
+                if self.path == "/v1/neuralese/operator":
+                    body = self._object()
+                    return self._json(201, engine.native_operator(body.get("operator"),
+                        instructions=body.get("instructions") or '', value=body.get("value"),
+                        messages=body.get("messages"), context=body.get("context") or (), tools=body.get("tools"),
+                        note=body.get("note") or '', adapters=body.get('adapters')))
                 if self.path == "/v1/neuralese/native-states/init-body":
                     body = self._object()
                     return self._json(201, engine.native_init_body(body.get("messages") or [], body.get("tools"),
