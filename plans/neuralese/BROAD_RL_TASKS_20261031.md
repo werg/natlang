@@ -309,3 +309,86 @@ train worlds per operation plus the source's dev/confirmation worlds, persisted 
 perturbed value 0. `tune.structure` gives nine distinct shape keys, none equal to the existing supply's
 `950aa7445931e5f6`. Reader gap: `tune.structure` reads frontmatter values verbatim, so a quoted `returns: "string"`
 counts as `named`; these programs write plain `returns:` in `main.nl`.
+
+## Decision-readout and multi-operation codebase families (2026-11-03)
+
+Builders: `scripts/rl_tasks/sources/decisions.py` (source `decisions`) and `scripts/rl_tasks/sources/codebase_ops.py`
+(source `codebase-ops`); expected values of codebase operations come from `scripts/rl_tasks/run_exports.mjs`, which runs
+the codebase's own TypeScript through the collector's authoring harness. Build area:
+`/mnt/external/natlang-rl-composed-20261103/decisions-and-codebase-ops/` (`build/<source>/raw-cases.jsonl`,
+`verified/`, `final/{train,dev,confirmation}.jsonl`). Verified against a frozen ts-host snapshot (`runtime/`, main at
+9564bc915 plus the authoring change below). No teacher generation.
+
+Runtime change: `teacher/authoring.ts` calls `export: "default"` as the module itself (`step.transition(...)`). Every
+natlang codebase TypeScript child is a default export, which the executable authoring oracle could not call before.
+**Repair and feature cases need a controller runtime with this change** (577fc3271 or later); an older runtime rejects
+every rollout of them.
+
+**Decision readout** (labelled CLINC150 plus, BANKING77, MASSIVE en, TREC, SMS spam, VitaminC, BoardgameQA). Each
+program has a `readout: decision` function with a literal-union result and a root that acts on it with `decide(...)`:
+`route` (decision gates a team lookup; out of scope goes to `"human_review"`), `desk` (assign/escalate effects through
+a `desk` service; answer = the service's confirmation code of its final state, materialized by verify.mjs from the
+gold actions as for the tau-bench store), `inbox` (spam junked through an `inbox` service, state code), `tally`
+(counts / ids / majority over several decisions), `tree` (two chained decisions: MASSIVE scenario then intent, TREC
+coarse then fine, the second function chosen by the first answer), `verdict` (a helper writes a `Neuralese<string>`
+note on the evidence and a decision function with a Neuralese argument reads it; the reference returns the gold
+directly because a scripted child cannot write Neuralese without the actor's write port), `folder_route` (directory
+reducer: request files in `inbox/` moved into team directories; oracle = exact resulting files) and `skill_route`
+(desk routing tables published as bound skills; the root decides the intent, reads the covering skill and returns its
+queue code). Abstention on a probability floor has no exact gold, so no case grades a floor; abstention is
+data-labelled (CLINC out-of-scope utterances, or a request of an intent outside the candidates). Root instructions:
+one deployment-setting sentence per dataset (six per intent dataset) before one of 2-5 procedure wordings per family.
+
+Custody: CLINC/BANKING77/SMS items carry the inline curriculum's content ids (`<dataset>:sha256(dataset\0text\0)`, the
+groups of the protected joint-v4 worlds) and its content split (`source-split.mjs`, including reservations), so
+protected items are related exactly; 114 train rows related to protected groups were dropped. Other datasets keep their
+upstream evaluation splits as dev/confirmation. Every item is used in at most one case.
+
+**Multi-operation codebases** (repository `codebases/<name>`, split per codebase exactly as the natlang-codebase
+families: train dependency_plan, legal_move, shopkeeper, reconciliation, experiment_lab, spell_arena, highlighter,
+type_studio; dev order_saga; confirmation webserver, nlprolog, mail_rules). Per codebase: `trace` (run a function, or
+fold a transition over steps; exact), `select` (which candidate arguments give a result field a value; answer-list),
+`repair` (directory reducer: one operator flipped in a TypeScript child; visible table of required results; oracle =
+`semantics.authoring` runs on the visible and further inputs + `codebase_check` load/preserve/header), `feature`
+(directory reducer: add a fully specified module folding / mapping / tolerantly applying an existing function; oracle =
+authoring runs of the new export + load + every existing file preserved) and `drive` (a service applies the codebase's
+own transition; reach a stated target with the fewest moves; confirmation code of projected state plus applied move
+set; unique minimal move set checked by breadth-first search at build time). Negative controls: other results,
+perturbations; for repair the unchanged mutant, a lookup special-casing only the visible table, deleting the file; for
+feature a no-op, an off-by-one implementation, an edit of an existing file; for drive the gold minus its last move, an
+extra move and doing nothing.
+
+Qualification (verify.mjs, every case):
+
+| family | train | dev/conf | train levels | distinct normalized root texts (train) | oracle | negatives rejected/tried |
+|---|---|---|---|---|---|---|
+| ext_codebase-ops_drive | 60 | 44 | L2:38 L3:22 | 10 | effect/state | 176/176 |
+| ext_codebase-ops_feature | 19 | 12 | L3:19 | 19 | effect/state | 57/57 |
+| ext_codebase-ops_repair | 47 | 17 | L3:47 | 35 | effect/state | 141/141 |
+| ext_codebase-ops_select | 38 | 22 | L2:38 | 30 | answer | 76/76 |
+| ext_codebase-ops_trace | 137 | 86 | L1:135 L2:2 | 36 | answer | 274/274 |
+| ext_decisions_desk | 201 | 26 | L2:90 L3:111 | 67 | effect/state | 1158/1158 |
+| ext_decisions_folder_route | 239 | 31 | L2:142 L3:97 | 70 | effect/state | 717/717 |
+| ext_decisions_inbox | 82 | 14 | L2:40 L3:42 | 22 | effect/state | 326/326 |
+| ext_decisions_route | 549 | 67 | L0:162 L1:387 | 72 | answer | 1521/1521 |
+| ext_decisions_skill_route | 235 | 29 | L1:83 L2:152 | 71 | answer | 940/940 |
+| ext_decisions_tally | 398 | 54 | L2:233 L3:165 | 257 | answer | 710/710 |
+| ext_decisions_tree | 300 | 36 | L2:300 | 24 | answer | 863/863 |
+| ext_decisions_verdict | 520 | 66 | L1:31 L2:451 L3:38 | 24 | answer | 1560/1560 |
+
+Totals: decisions 2,961/2,966 kept (5 dropped: `source_review_pending` items), 9,190/9,190 negative controls rejected,
+1,256/1,256 alias probes accepted; codebase-ops 482/485 kept (3 references failed: generator produced a value the
+declared type rejects or a missing session), 1,165/1,165 negatives rejected, 61/61 aliases accepted. After custody:
+**2,825 train rows** in `final/train.jsonl` (effect/state oracles: 648, 23%), held `final/dev.jsonl`
+(220) and `final/confirmation.jsonl` (284). LFM3 held-set group closure: passed, 0 conflicts over 2,825 rows (`final/held-set-union.json`).
+
+Tune programs (`scripts/rl_tasks/tune_programs.py`, `tune-programs/` beside the build): eight train codebases and three
+intent sets as programs with several operations, each with exact examples and world groups; codebase drive and
+decision desk operations have `tune.services.mjs`. `tune.structure` gives 9 distinct shape keys (see the program table in the build area's `tune-programs/programs-prepared.json`), none equal to the
+existing supply's `950aa7445931e5f6`. Reader gap found: `tune.structure` reads a quoted `returns: "State"` as `named`;
+the writer emits unquoted simple result types.
+
+Open: drive covers two train codebases (dependency_plan, shopkeeper) plus order_saga/webserver held; legal_move and
+spell_arena need a state adapter. Feature has 19 train cases (below 20 distinct texts). Neither the decision readout
+with a `Neuralese` argument nor the drive/desk services in tune programs were run on a live actor; live-model
+false-negative rates are unmeasured.

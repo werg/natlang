@@ -26,6 +26,7 @@ import collections
 import hashlib
 import json
 import random
+import re
 import sys
 from pathlib import Path
 
@@ -107,6 +108,9 @@ def write_program(out, name, files, examples, services=None):
     if directory.exists():
         raise SystemExit(f'{directory} exists; tune programs are never overwritten')
     for relative, text in files.items():
+        if relative.endswith('.nl') and '/' not in relative:
+            # Plain `returns: State` (types are read verbatim): tune.structure reads the root result unquoted.
+            text = re.sub(r'^returns: "([A-Za-z_][\w<>, \[\]]*)"$', r'returns: \1', text, count=1, flags=re.M)
         path = directory / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text)
