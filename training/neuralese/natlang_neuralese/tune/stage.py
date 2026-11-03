@@ -48,8 +48,10 @@ from .structure import distinct_shapes, program_structure
 from ..common.paths import root as _logical_root
 
 # The checkout holding ts-host, applications/ and the lane helpers. The recipe runner executes this module from its
-# frozen Python runtime, so it is the logical repo root (NATLANG_REPO), never this file's location.
-REPO = _logical_root('repo').resolve()
+# frozen Python runtime, so it is the logical repo root (NATLANG_REPO), never this file's location. Paths stay logical
+# (absolute, not symlink-resolved) throughout: a cloud shard runs where the DGX roots are symlinks onto its volume, and
+# its operation binding, staged programs and records must name the same paths as the DGX stage directory it merges into.
+REPO = _logical_root('repo').absolute()
 LANE = REPO / 'training' / 'neuralese' / 'learned-optimizer'
 MANIFEST_SCHEMA = 'natlang.program-adaptation-manifest/1'
 DISTILL_SCHEMA = 'natlang.program-adaptation-distill/1'
@@ -186,7 +188,7 @@ def stage_programs(manifest_path, out, names=None):
     items = manifest.get('programs')
     if not isinstance(items, list) or not items:
         raise SystemExit(f'{manifest_path}: a program manifest lists {{"programs": [{{"program", "family", "path"}}]}}')
-    source_dir = Path(manifest_path).resolve().parent
+    source_dir = Path(manifest_path).absolute().parent
     if names:
         known = {item['program'] for item in items}
         if set(names) - known:
@@ -217,7 +219,7 @@ def stage_programs(manifest_path, out, names=None):
             pending.replace(destination)
         staged.append({**item, 'path': str(destination), 'source_path': str(source)})
     prepared = {**{key: value for key, value in manifest.items() if key != 'programs'}, 'programs': staged,
-                'staged_from': {'path': str(Path(manifest_path).resolve()), 'sha256': sha256_file_hex(manifest_path)}}
+                'staged_from': {'path': str(Path(manifest_path).absolute()), 'sha256': sha256_file_hex(manifest_path)}}
     path = target / 'programs-prepared.json'
     if path.exists() and json.loads(path.read_text()) != prepared:
         raise SystemExit(f'{path} stages another program set; use a new stage directory')
@@ -238,9 +240,9 @@ def _program_hours_timeout(parameters):
 
 
 def run(args, parameters):
-    out = Path(args.out).resolve()
+    out = Path(args.out).absolute()
     out.mkdir(parents=True, exist_ok=True)
-    checkpoint = Path(args.continue_from).resolve()
+    checkpoint = Path(args.continue_from).absolute()
     if args.dry_run:
         sha = sha256_file_hex(checkpoint)
     else:
@@ -251,9 +253,9 @@ def run(args, parameters):
         from ..train.promotion import require_parent_selection
         selection = require_parent_selection(json.loads(Path(args.parent_selection).read_text()), sha)
     operation = {'schema': 'natlang.program-adaptation-operation/1', 'checkpoint': str(checkpoint), 'checkpoint_sha256': sha,
-                 'programs': {'path': str(Path(args.programs).resolve()), 'sha256': sha256_file_hex(args.programs)},
-                 'protection': {'path': str(Path(args.protection).resolve()), 'sha256': sha256_file_hex(args.protection)},
-                 'parent_selection': ({'path': str(Path(args.parent_selection).resolve()),
+                 'programs': {'path': str(Path(args.programs).absolute()), 'sha256': sha256_file_hex(args.programs)},
+                 'protection': {'path': str(Path(args.protection).absolute()), 'sha256': sha256_file_hex(args.protection)},
+                 'parent_selection': ({'path': str(Path(args.parent_selection).absolute()),
                                        'sha256': sha256_file_hex(args.parent_selection)} if selection else None),
                  'parameters': parameters, 'dry_run': bool(args.dry_run), 'pilot': bool(args.pilot)}
     bound = _read(out / 'operation.json')
@@ -265,7 +267,7 @@ def run(args, parameters):
     if catalog and not (out / 'programs' / 'privileged-prepared.json').exists():
         from .supply import main as supply
         supply(['privileged', '--programs', str(out / 'programs'), '--names', *catalog,
-                '--registry', str(Path(args.protection).resolve()), '--root', str(REPO)])
+                '--registry', str(Path(args.protection).absolute()), '--root', str(REPO)])
     structures = {item['program']: program_structure(item['path']) for item in programs}
     _write(out / 'structure.json', {'schema': 'natlang.program-adaptation-structure/1', 'programs': structures,
                                     'shapes': distinct_shapes(structures.values())})
@@ -489,7 +491,7 @@ def finish(out, programs, parameters, entry, args, sha):
 def register_distill(out, corpus_id, *, repo=REPO):
     """Stage a stage's distill package as a registry snapshot (``training_admission: false``) for ordinary review and
     a recorded source continuation; publishes its immutable manifest through ``scripts/sync_training_corpora.py``."""
-    out = Path(out).resolve()
+    out = Path(out).absolute()
     receipt = _read(out / 'distill' / 'package' / 'receipt.json')
     if receipt is None or receipt.get('schema') != DISTILL_SCHEMA:
         raise SystemExit(f'{out}: no distill package; run the stage first')
