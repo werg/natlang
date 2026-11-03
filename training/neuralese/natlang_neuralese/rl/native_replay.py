@@ -229,6 +229,7 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
         adapter_binding, binding_seen = binding, True
         law = capture.get('sampling_law') or {}
         temperature = law.get('temperature')
+        engine = actor_export_format(capture)
         decision_sample = None
         if decision:
             if any(capture.get(key) for key in ('samples','generated_inputs','writes','sampling_law')):
@@ -345,7 +346,8 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
                 events.append({'local_query': prompt_length + index - 1, 'token_id': token,
                     'behavior_logp': sample['logp'], 'temperature': float(temperature),
                     'allowed_token_ids': allowed, 'banned_token_ids': banned, 'turn': name, 'sample': sample['source_sample'],
-                    **({'behavior_top_k': _behavior_top_k(sample, token, top_k_law)} if top_k_law is not None else {})})
+                    **({'behavior_top_k': _behavior_top_k(sample, token, top_k_law)} if top_k_law is not None else {}),
+                    **({'actor_export': engine} if engine is not None else {})})
             input_actions.append({'local_query':prompt_length+index-1,'token_id':token,
                 'turn':name,'kind':'forced' if sample['forced'] else 'sampled',
                 'source_sample':sample.get('source_sample'),'input_index':index,
@@ -627,6 +629,46 @@ def validate_policy_decision_branches(plan, row):
                            or token.get('banned_token_ids') is not None
                            for i,token in enumerate(option))):
                 raise ValueError('decision option coordinates differ from their graph')
+
+
+ENGINE_GUARD_SCHEMA = 'natlang.actor-engine-mismatch-guard/1'
+# Per-episode bounds on the learner/actor log-probability gap of tokens sampled from an export of the weights in
+# another engine (SGLang, llama.cpp). An episode beyond either bound is rejected (logged, no loss terms); the others
+# train under the loss's importance correction.
+DEFAULT_ENGINE_GUARD = {'schema': ENGINE_GUARD_SCHEMA, 'max_abs_logp': 1.5, 'mean_k3': 0.01}
+
+
+def actor_export_format(capture):
+    """The export a capture was sampled from in another engine (rl.actors ``actor_export``), or None (native)."""
+    export = capture.get('actor_export')
+    return None if export is None else f"{export['kind']}:{export['format']}"
+
+
+def engine_guard_declaration(value):
+    """Canonical engine-mismatch guard (None -> the default bounds)."""
+    value = dict(DEFAULT_ENGINE_GUARD if value is None else value)
+    if set(value) != set(DEFAULT_ENGINE_GUARD) or value['schema'] != ENGINE_GUARD_SCHEMA:
+        raise ValueError('actor engine guard needs schema, max_abs_logp and mean_k3')
+    for key in ('max_abs_logp', 'mean_k3'):
+        if type(value[key]) not in (int, float) or not math.isfinite(value[key]) or value[key] <= 0:
+            raise ValueError(f'actor engine guard {key} must be a positive finite bound')
+        value[key] = float(value[key])
+    return value
+
+
+def engine_mismatch(learner_logp, behavior_logp, guard):
+    """Per-episode learner/actor gap of engine-sampled tokens; ``accepted`` applies the guard's bounds.
+
+    k3 = E_q[r - 1 - log r] with r = p_learner/q_actor estimates KL(q_actor || p_learner) from the actor's samples."""
+    delta = [float(a) - float(b) for a, b in zip(learner_logp, behavior_logp, strict=True)]
+    if not delta or any(not math.isfinite(d) for d in delta):
+        raise ValueError('engine mismatch needs finite learner and actor log-probabilities')
+    k3 = sum(math.exp(max(min(d, 20.), -20.)) - 1 - d for d in delta) / len(delta)
+    result = {'tokens': len(delta), 'max_abs': max(abs(d) for d in delta),
+              'mean_abs': sum(abs(d) for d in delta) / len(delta), 'mean_delta': sum(delta) / len(delta),
+              'mean_k3': k3}
+    result['accepted'] = result['max_abs'] <= guard['max_abs_logp'] and k3 <= guard['mean_k3']
+    return result
 
 
 def behavior_logprob_probe(model, hidden, actions, *, graph_id, policy, destination=None, limit=16, atol=None,
@@ -935,6 +977,12 @@ class NativePolicyObjective:
             self.identity=self.spec['policy']
             self.archive_owner=self.identity['checkpoint_sha256']
         self.actors=self.spec.get('actors')
+        self.engine_guard=(engine_guard_declaration(self.spec['actor_engine_guard'])
+                           if 'actor_engine_guard' in self.spec else None)
+        if self.engine_guard is None and any('actor_export' in action for row in self.rows.values()
+                                             for action in row.get('actions') or ()):
+            raise ValueError('engine-sampled native policy rows need their declared engine-mismatch guard')
+        self.engine_guard_records=[]
         if 'actors' in self.spec:
             from .actors import actor_declaration
             if (self.behavior_policy is not None
@@ -1178,14 +1226,15 @@ class NativePolicyObjective:
         decision_probe_required=any(row.get('decision_actions') and self.can_compare_behavior_actor(row)
                                     for row in self.rows.values())
         if (not getattr(self,'_behavior_logprob_probe_done',False)
-                and any((row.get('actions') or row.get('decision_actions')) and self.can_compare_behavior_actor(row) for row in self.rows.values())
+                and any((native_sampled_actions(row.get('actions')) or row.get('decision_actions')) and self.can_compare_behavior_actor(row) for row in self.rows.values())
                 and not any((self.rows[example.id].get('decision_actions') if decision_probe_required else
-                             (self.rows[example.id].get('actions') or self.rows[example.id].get('decision_actions')))
+                             (native_sampled_actions(self.rows[example.id].get('actions')) or self.rows[example.id].get('decision_actions')))
                             and self.can_compare_behavior_actor(self.rows[example.id])
                             for example in context['examples'])):
             raise ValueError('first native learner forward must include a same-actor episode with required decisions for pre-SGD logprob parity')
         losses, count, diagnostics, jolt_parts = [], 0, [], []
         decision_count = 0
+        engine_records = []
         for example in context['examples']:
             row = self.rows[example.id]
             if set(row.get('graph_nodes', row['episode_turns'])) | set((row.get('jolt') or {}).get('twin_turns', ())) != {
@@ -1208,13 +1257,22 @@ class NativePolicyObjective:
             # including every sampled action in this complete episode. Off-policy
             # continuations have genuinely different weights and cannot use it.
             same_actor=self.can_compare_behavior_actor(row)
-            if (same_actor and (actions or row.get('decision_actions'))
+            # Tokens sampled by the native engine keep the exact replay gate; tokens sampled from an export in
+            # another engine (SGLang, llama.cpp) are recomputed here and guarded per episode instead.
+            native_actions=native_sampled_actions(actions)
+            engine_actions=[action for action in actions if 'actor_export' in action]
+            if (same_actor and (native_actions or row.get('decision_actions'))
                     and (not decision_probe_required or row.get('decision_actions'))
                     and not getattr(self,'_behavior_logprob_probe_done',False)):
-                behavior_logprob_probe(model,hidden,actions,graph_id=example.id,policy=self.identity,
+                behavior_logprob_probe(model,hidden,native_actions,graph_id=example.id,policy=self.identity,
                     destination=probe,limit=None,atol=1e-4,decision_actions=row.get('decision_actions') or (),
                     decision_physical_rows=rows)
                 self._behavior_logprob_probe_done=True
+            if engine_actions:
+                record=self._engine_guard(model,hidden,example.id,engine_actions,same_actor)
+                engine_records.append(record)
+                if not record['accepted']:
+                    continue
             parts_before = len(jolt_parts)
             if not actions:
                 terms = hidden.new_zeros((0,), dtype=torch.float32)
@@ -1263,7 +1321,12 @@ class NativePolicyObjective:
             if self.spec['mode'] == 'rft' and 'rft_weight' in row:
                 terms = terms * float(row['rft_weight'])
             losses.append(terms.sum()); count += len(actions) + len(decisions)
+        engine_summary=summarize_engine_guard(engine_records) if engine_records else None
         if count == 0:
+            if engine_records and not any(record['accepted'] for record in engine_records):
+                # Every episode of this batch was rejected by the engine-mismatch guard: no update direction.
+                return hidden.float().sum() * 0., {'sampled_tokens': 0, 'sampled_decisions': 0, 'episodes': 0,
+                    'objective': self.spec['mode'], 'engine_guard': engine_summary}
             raise ValueError('native objective batch has no actual sampled actions')
         from .jolt import summarize_jolt
         return torch.stack(losses).sum() / count, {'sampled_tokens': count - decision_count,
@@ -1272,7 +1335,42 @@ class NativePolicyObjective:
             **({'policy_loss': self.policy_loss['schema']} if self.policy_loss is not None else {}),
             **({'score_centering': summarize_score_centering(diagnostics)} if diagnostics else {}),
             **({'jolt': summarize_jolt(jolt_parts, count)} if jolt_parts else {}),
+            **({'engine_guard': engine_summary} if engine_summary is not None else {}),
             **({'codec_execution':result['codec_execution']} if 'codec_execution' in result else {})}
+
+    def _engine_guard(self, model, hidden, graph_id, actions, same_actor):
+        """Recompute every engine-sampled token of one episode and apply the declared mismatch guard."""
+        import os
+        learner=[]
+        with torch.no_grad():
+            for start in range(0,len(actions),16):
+                learner.extend(token_action_logps(model,hidden,actions[start:start+16],chunk_tokens=16).float().cpu().tolist())
+        record={'schema':'natlang.actor-engine-mismatch/1','graph_id':graph_id,
+                'exports':sorted({action['actor_export'] for action in actions}),'same_actor':bool(same_actor),
+                **engine_mismatch(learner,[action['behavior_logp'] for action in actions],self.engine_guard),
+                'guard':self.engine_guard}
+        self.engine_guard_records.append(record)
+        log=os.environ.get('NATLANG_ENGINE_GUARD_LOG')
+        if log:
+            import json
+            with open(log,'a') as handle:
+                handle.write(json.dumps(record,sort_keys=True)+'\n')
+                handle.flush(); os.fsync(handle.fileno())
+        return record
+
+
+def native_sampled_actions(actions):
+    """Actions sampled by the native engine itself (the exact replay gate's scope)."""
+    return [action for action in actions or () if 'actor_export' not in action]
+
+
+def summarize_engine_guard(records):
+    return {'episodes': len(records), 'rejected': sum(not record['accepted'] for record in records),
+            'tokens': sum(record['tokens'] for record in records),
+            'max_abs': max(record['max_abs'] for record in records),
+            'mean_abs': sum(record['mean_abs'] * record['tokens'] for record in records)
+                        / max(1, sum(record['tokens'] for record in records)),
+            'max_mean_k3': max(record['mean_k3'] for record in records)}
 
 
 def _physical_rows(context, example):
@@ -1441,7 +1539,7 @@ def group_episode_advantages(members, *, jolt, mode):
 
 
 def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=None, mode='grpo', behavior_policy=None,
-                      min_quality=1., policy_loss=None, privileged=None, actors=None):
+                      min_quality=1., policy_loss=None, privileged=None, actors=None, engine_guard=None):
     """Admit whole training episodes and retain real graph/action provenance. Rewards are graded qualities in
     [0, 1] (an exact oracle gives 0 or 1). ``grpo`` keeps groups whose qualities differ; ``rft`` (teacher-forced
     whole-graph supervision through every producer/consumer dependency) keeps episodes with quality >= ``min_quality``.
@@ -1451,7 +1549,10 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
     each episode's whole-graph privileged/unprivileged twin; ``privileged(rollout, replay, turns)`` returns the
     shared ``privileged_blocks`` (custody refusal: that episode keeps only its outcome term).
     ``actors`` (rl.actors declaration) admits episodes sampled by declared stale/quantized actors of earlier
-    lineage checkpoints; their score-centered/JOLT+ terms need an importance correction (tis or mis)."""
+    lineage checkpoints; their score-centered/JOLT+ terms need an importance correction (tis or mis).
+    Episodes sampled from an export in another engine (``actor_export`` in the capture, e.g. SGLang) bind
+    ``engine_guard`` (``DEFAULT_ENGINE_GUARD`` when None): the learner recomputes their tokens under its own forward,
+    rejects an episode beyond the guard's bounds and corrects the rest with the loss's importance weights."""
     from .policy_math import policy_loss_declaration, objective_policy_loss
     from .actors import actor_declaration
     actors = actor_declaration(actors, learner_identity=identity)
@@ -1582,6 +1683,10 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
                 **({'invocation_actors':replay.invocation_actors} if replay.invocation_actors is not None else {})}
             graphs.append(graph)
     stale = any('actor_checkpoint_sha256' in row for row in objective_rows.values())
+    engine_sampled = any('actor_export' in action for row in objective_rows.values() for action in row['actions'])
+    if engine_sampled and mode == 'grpo' and policy_loss is not None and policy_loss['schema'] != 'clipped-ratio/1' and (
+            policy_loss.get('outcome', policy_loss)['importance'] == 'none'):
+        raise ValueError('engine-sampled episodes need an importance-corrected loss (tis or mis)')
     if stale and policy_loss is not None and policy_loss['schema'] != 'clipped-ratio/1' and (
             policy_loss.get('outcome', policy_loss)['importance'] == 'none'):
         raise ValueError('declared stale/quantized actor episodes need an importance-corrected loss (tis or mis)')
@@ -1592,4 +1697,5 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
            if behavior_policy is not None else {'policy':dict(identity)}),
         **({'adapter_binding': adapter_binding} if adapter_binding else {}),
         **({'actors': actors} if stale else {}),
+        **({'actor_engine_guard': engine_guard_declaration(engine_guard)} if engine_sampled else {}),
         'block_bundle': str(block_bundle) if block_bundle else None}

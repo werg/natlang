@@ -1076,8 +1076,9 @@ def policy_parity_first_group(expected, objective):
     selected=next((entry['index'] for entry in entries
                    if objective.rows[entry['id']].get('decision_actions')),None)
     if selected is None:
+        from ..rl.native_replay import native_sampled_actions
         selected=next((entry['index'] for entry in entries
-                       if objective.rows[entry['id']].get('actions')),None)
+                       if native_sampled_actions(objective.rows[entry['id']].get('actions'))),None)
     return None if selected is None else (selected,)
 
 

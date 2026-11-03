@@ -169,12 +169,18 @@ class SglangEngine(Engine):
         self.native_fallback_reasons = {}
         self.native_endpoint_metrics = {}
         self._sglang_lock = threading.Lock()
+        # Bound in every SGLang-sampled capture (rl.actors ``actor_export``, kind exact: the checkpoint's own weights
+        # in another engine). The learner recomputes those tokens under its own forward, guards the engine mismatch
+        # per episode and corrects it with the loss's importance weights (rl.native_replay DEFAULT_ENGINE_GUARD).
+        self.sglang_actor_export = {'kind': 'exact', 'format': f"sglang-hf-{export_manifest['dtype']}",
+                                    'sha256': export_manifest['weights_sha256']}
         binding = getattr(self, 'rl_policy_binding', None)
         if binding is not None:
             binding['serving_engine'] = {'engine': 'sglang', 'fork': dict(fork),
                 'hf_export_weights_sha256': export_manifest['weights_sha256'], 'dtype': export_manifest['dtype'],
                 'bf16_reduction': os.environ.get('NATLANG_BF16_REDUCTION', 'fp32-accumulate'),
                 'banned_token_ids': list(self.sglang_banned)}
+            binding['actor_export'] = dict(self.sglang_actor_export)
         return self
 
     def progress_metrics(self):
@@ -447,6 +453,7 @@ class SglangEngine(Engine):
 
     def _sglang_run_bound(self, seq, adapter):
         request = seq.request
+        seq.native_actor_export = getattr(self, 'sglang_actor_export', None)
         ids = self._sglang_prompt(seq)
         template_prefix, template_suffix = self._native_template_plan(seq)
         open_position = (self._sglang_template_prefix(seq, ids, template_prefix, template_suffix)

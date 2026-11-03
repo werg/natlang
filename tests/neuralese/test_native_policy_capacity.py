@@ -196,3 +196,62 @@ def test_policy_capacity_prioritizes_real_same_actor_episode():
     assert policy_parity_first_group(expected,obj)==(2,)
     obj._behavior_logprob_probe_done=True
     assert policy_parity_first_group(expected,obj) is None
+
+
+def test_engine_sampled_episode_is_guarded_not_exact_gated(tmp_path,monkeypatch):
+    """SGLang/llama.cpp exports of the same weights: per-episode mismatch guard instead of the exact native gate."""
+    from natlang_neuralese.train.native_state_sft import packed_graph_loss
+    from natlang_neuralese.rl.native_replay import DEFAULT_ENGINE_GUARD, engine_mismatch
+    engine,model,opt,objective,train,args,config,backend,batches=actual(tmp_path,'lfm')
+    try:
+        objective.bind_initial_checkpoint(objective.identity['checkpoint_sha256'])
+        example=next(train.iter_indices([0]))
+        log=tmp_path/'engine-guard.jsonl';monkeypatch.setenv('NATLANG_ENGINE_GUARD_LOG',str(log))
+        for row in objective.rows.values():  # every episode was sampled on SGLang
+            for action in row['actions']:
+                action['actor_export']='exact:sglang-hf-bfloat16';action['behavior_logp']+=0.01
+        actions=objective.rows[example.id]['actions']
+        objective.engine_guard=dict(DEFAULT_ENGINE_GUARD)
+        # A small engine gap trains (the exact 1e-4 gate would have failed on these tokens).
+        packed_graph_loss(model,[example],checkpoint_layers=True,chunk_tokens=3,objective=objective)
+        record=json.loads(log.read_text().splitlines()[-1])
+        assert record['accepted'] and record['tokens']==len(actions) and abs(record['mean_abs']-0.01)<1e-3
+        assert not getattr(objective,'_behavior_logprob_probe_done',False)
+        # A large gap rejects the episode: no loss terms, logged.
+        actions[-1]['behavior_logp']-=3.
+        packed_graph_loss(model,[example],checkpoint_layers=True,chunk_tokens=3,objective=objective)
+        record=json.loads(log.read_text().splitlines()[-1])
+        assert not record['accepted'] and record['max_abs']>2.9
+    finally:engine.stop();engine.store.close()
+    assert engine_mismatch([0.,-1.],[0.,-1.],DEFAULT_ENGINE_GUARD)['mean_k3']==0.
+
+
+def test_prepare_objective_binds_engine_guard_for_exported_actor_captures(tmp_path):
+    from natlang_neuralese.rl.native_replay import DEFAULT_ENGINE_GUARD
+    from test_native_serving_adapters import engine_fixture
+    from test_native_rl_replay import actor_rollout
+    from test_rl_episode_graph import attach_execution_graph
+    engine=engine_fixture(tmp_path,'lfm')
+    try:
+        model,roles,identity,_,block,turns=actor_rollout('lfm',loaded=(engine.shared_model,engine.role_tokens,engine.native_identity))
+        export={'kind':'exact','format':'sglang-hf-bfloat16','sha256':'e'*64}
+        episodes=[{'task_id':'t','sample':sample,'split':'train','group':'g','reward':{'quality':quality},
+                   'policy':{'checkpoint_sha256':identity['checkpoint_sha256']},
+                   'turns':[{'messages':[],'target':{},'invocation_id':turn['graph_turn'],
+                             'sampling':{**turn['sampling'],'actor_export':export},'replay':{'raw_calls_retained':True}}
+                            for turn in turns]} for sample,quality in [(0,1),(1,0)]]
+        attach_execution_graph(episodes)
+        _,spec=prepare_objective(episodes,identity=identity,roles=roles,fetch_block=lambda key:block,mode='grpo')
+        assert spec['actor_engine_guard']==DEFAULT_ENGINE_GUARD
+        assert all(a['actor_export']=='exact:sglang-hf-bfloat16' for row in spec['rows'].values() for a in row['actions'])
+    finally:engine.stop();engine.store.close()
+
+
+def test_tis_cap_mode_is_configurable_without_changing_default_bytes():
+    from natlang_neuralese.rl.policy_math import importance_weight, policy_loss_declaration
+    r=torch.tensor([.5,2.5,9.])
+    assert importance_weight(r,'tis').tolist()==[.5,2.,2.]
+    assert importance_weight(r,'tis-c3').tolist()==[.5,2.5,3.]
+    assert policy_loss_declaration({'schema':'score-centered/1'})['importance']=='tis'
+    assert policy_loss_declaration({'schema':'score-centered/1','importance':'tis-c3'})['importance']=='tis-c3'
+    with pytest.raises(ValueError):policy_loss_declaration({'schema':'score-centered/1','importance':'tis-c0.5'})

@@ -65,8 +65,8 @@ def policy_loss_declaration(value):
     result = {**DEFAULT_SCORE_CENTERED, **value}
     if type(result['k']) is not int or not 1 <= result['k'] <= 4096:
         raise ValueError('score-centered k must be an integer in [1, 4096]')
-    if result['importance'] not in IMPORTANCE_MODES:
-        raise ValueError('score-centered importance must be none, tis or mis')
+    if result['importance'] not in IMPORTANCE_MODES and tis_cap(result['importance']) is None:
+        raise ValueError('score-centered importance must be none, tis, tis-c<C> (truncation cap C in [1, 100]) or mis')
     if (type(result['eps']) not in (int, float) or not math.isfinite(result['eps'])
             or not 0 < result['eps'] < 1):
         raise ValueError('score-centered eps must be in (0, 1)')
@@ -74,12 +74,24 @@ def policy_loss_declaration(value):
     return result
 
 
+def tis_cap(mode):
+    """Truncation cap C of a ``tis`` (C = 2) or ``tis-c<C>`` importance mode, else None."""
+    if mode == 'tis':
+        return 2.
+    import re
+    match = re.fullmatch(r'tis-c(\d+(?:\.\d+)?)', mode) if isinstance(mode, str) else None
+    if match is None or not 1. <= float(match.group(1)) <= 100.:
+        return None
+    return float(match.group(1))
+
+
 def importance_weight(ratio, mode):
-    """f(r): none -> 1; TIS -> min(r, 2); MIS -> r on [0.5, 5], else 0."""
+    """f(r): none -> 1; TIS -> min(r, C) (C = 2, or C from ``tis-c<C>``); MIS -> r on [0.5, 5], else 0."""
     if mode == 'none':
         return torch.ones_like(ratio)
-    if mode == 'tis':
-        return ratio.clamp(max=2.)
+    cap = tis_cap(mode)
+    if cap is not None:
+        return ratio.clamp(max=cap)
     if mode == 'mis':
         return torch.where((ratio >= .5) & (ratio <= 5.), ratio, torch.zeros_like(ratio))
     raise ValueError('unsupported importance mode')
