@@ -22,7 +22,12 @@ import sys
 from pathlib import Path
 
 DIGITS = re.compile(r'\d+(?:\.\d+)?')
-QUOTED = re.compile(r'"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\'|`[^`]*`')
+# Quoted literals: double-quoted and backtick spans, and single-quoted spans only when the quote is not inside a word.
+# A prose apostrophe ("the lane's limit") is not a string opener; quotes never span lines.
+QUOTED = re.compile(r'"(?:[^"\\\n]|\\.)*"|(?<!\w)\'(?:[^\'\\\n]|\\.)*\'(?!\w)|`[^`]*`')
+CODE_SPAN = re.compile(r'`([^`]+)`')
+CALL = re.compile(r'\b([A-Za-z_]\w*)\s*\(')
+CODE_LITERAL = re.compile(r'"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\'|\d+(?:\.\d+)?')
 SPACE = re.compile(r'\s+')
 # Broad-builder source modules that are separate program generators (scripts/rl_tasks/sources/*.py).
 OWN_GENERATOR_SOURCES = frozenset({'composed', 'decisions', 'codebase-ops'})
@@ -59,6 +64,39 @@ def frontmatter_field(header, name):
 
 def curriculum_of(row):
     return row.get('curriculum') or {}
+
+
+def code_skeleton(code):
+    """Code with literals abstracted and whitespace removed: the steps, not the values."""
+    return re.sub(r'\s+', '', CODE_LITERAL.sub('L', code))
+
+
+def functional_signature(row):
+    """What the program does, independent of its prose: call graph, operation set and code steps.
+
+    The signature binds every function's place in the callable folder, its declared argument and return types,
+    its kind/readout, which helpers (and iterateOn/decide) its body calls, the code spans its instructions spell out
+    and the reference's eval scripts, all with literals abstracted. Paragraphs that change no call, type or code
+    step (restated invariants, padding) do not change it; neither do changed rule wordings inside one helper.
+    """
+    semantics = row['semantics']
+    files = {path: text for path, text in semantics['files'].items() if path.endswith('.nl')}
+    helpers = {path.rsplit('/', 1)[-1][:-3] for path in files}
+    functions = []
+    for path, text in sorted(files.items()):
+        header, body = split_file(text)
+        calls = sorted({name for name in CALL.findall(body) if name in helpers or name in ('iterateOn', 'decide')})
+        functions.append({'path': path, 'args': normalize(frontmatter_field(header, 'args')),
+                          'returns': normalize(frontmatter_field(header, 'returns')),
+                          'kind': bool(re.search(r'^kind:\s*directory-reducer', header, re.M)),
+                          'readout': bool(re.search(r'^readout:\s*decision', header, re.M)),
+                          'calls': calls, 'code': sorted({code_skeleton(span) for span in CODE_SPAN.findall(body)})})
+    reference = (curriculum_of(row).get('reference') or {}).get('root') or []
+    scripts = [code_skeleton(str((action[1] or {}).get('code', ''))) for action in reference
+               if isinstance(action, list) and len(action) == 2 and action[0] == 'eval' and isinstance(action[1], dict)]
+    skills = sorted(path for path in semantics['files'] if path.endswith('SKILL.md'))
+    return json.dumps({'functions': functions, 'reference_scripts': scripts, 'skills': skills,
+                       'services': sorted(semantics.get('services') or {})}, sort_keys=True)
 
 
 def program_features(row):
@@ -99,6 +137,7 @@ def program_features(row):
     curriculum = row.get('curriculum') or {}
     return {
         'instruction': normalize(root_body),
+        'functional': functional_signature(row),
         'program': normalize('\n'.join(f'{p}\n{split_file(t)[1]}' for p, t in sorted(files.items()))),
         'structure': json.dumps({'nl_files': min(len(files), 6), 'depth': min(depth, 4),
                                  'neuralese_results': min(neuralese_results, 3), 'typed_results': min(typed_results, 3),

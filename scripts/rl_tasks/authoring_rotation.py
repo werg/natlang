@@ -55,6 +55,9 @@ def main(argv=None):
     rec.add_argument('--admitted', type=int, required=True)
     args = parser.parse_args(argv)
     import fcntl
+    # The ledger and its directory are created on first use; a missing ledger is an empty rotation.
+    Path(args.ledger).parent.mkdir(parents=True, exist_ok=True)
+    Path(args.ledger).touch(exist_ok=True)
     lock = open(str(args.ledger) + '.lock', 'w')
     fcntl.flock(lock, fcntl.LOCK_EX)  # claims and records are serialized across workers
     all_entries = ledger(args.ledger)

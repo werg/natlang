@@ -20,7 +20,7 @@ def write(path, rows):
 
 
 def test_same_program_on_different_worlds_is_not_a_duplicate_but_literal_swaps_are(tmp_path):
-    program = 'Reconcile the ledger from messages, then return the stock record.'
+    program = 'Reconcile the ledger from messages, then return the stock record with `return applyMoves(stock, moves)`.'
     pool = write(tmp_path / 'pool.jsonl', [case(f'p{i}', 'ledger', 'pool program ' + 'abcdefghijklmnopqrstu'[i] * (i + 1), {'m': i})
                                            for i in range(20)])
     batch = write(tmp_path / 'batch.jsonl', [
@@ -38,6 +38,50 @@ def test_same_program_on_different_worlds_is_not_a_duplicate_but_literal_swaps_a
         case('a', 'ledger', program, {'messages': ['Delivery of oat milk arrived crushed and was refused at the door']}),
         case('b', 'ledger', program, {'messages': ['The bakery returned two bags of flour that were the wrong grind']})])
     assert authored_novelty.main([batch, '--pool', pool, '-o', str(out)]) == 0
+
+
+def test_prose_apostrophes_are_not_string_literals():
+    from measure_repetition import normalize
+    one = normalize("Check the lane's limit. Keep Bob's notes and the driver's log apart.")
+    two = normalize("Check the lane's limit. Merge Bob's notes into the driver's log.")
+    assert one != two and "Keep Bob's notes" in one
+    assert normalize("Route 'east' traffic") == normalize("Route 'west' traffic")
+
+
+def test_padding_paragraphs_are_not_functional_novelty(tmp_path):
+    def program(name, padding='', helper='tally'):
+        files = {'count.nl': '---\nargs:\n  items: "string[]"\nreturns: "number"\n---\nFor each item call `await '
+                             + helper + '(item)` and sum the results.\n' + padding,
+                 f'count/{helper}.nl': '---\nargs:\n  item: "string"\nreturns: "number"\n---\nScore the item.\n'}
+        row = case(name, 'tally', '', {'items': [name]})
+        row['semantics'].update(root='count.nl', files=files)
+        return row
+    paddings = ['Structural invariants: the sum never decreases while items remain to be scored.',
+                'Note that every item is visited exactly once and the order of visiting does not matter at all.',
+                'Remember that the result is a plain number which counts the scored total of all the items here.',
+                'An empty list has a total of zero; this follows directly from the summing rule stated above too.']
+    pool = write(tmp_path / 'pool.jsonl', [program('p0')])
+    padded = write(tmp_path / 'padded.jsonl', [program(f'q{i}', text) for i, text in enumerate(paddings)])
+    out = tmp_path / 'novelty.json'
+    assert authored_novelty.main([padded, '--pool', pool, '-o', str(out)]) == 1
+    report = json.loads(out.read_text())
+    assert report['functional_repeats'] == ['q0', 'q1', 'q2', 'q3']
+    assert report['families']['tally']['batch_new_functional'] == 0
+    real = write(tmp_path / 'real.jsonl', [program(f'r{i}', '', helper) for i, helper in
+                                           enumerate(['weigh', 'rank', 'price', 'grade', 'audit'])])
+    assert authored_novelty.main([real, '--pool', pool, '-o', str(out)]) == 0
+    assert json.loads(out.read_text())['families']['tally']['batch_new_functional'] == 5
+
+
+def test_rotation_creates_a_missing_ledger(tmp_path, capsys):
+    lists = {}
+    for name in ('datasets', 'constructs', 'problems'):
+        lists[name] = tmp_path / f'{name}.txt'
+        lists[name].write_text('x\n')
+    ledger = tmp_path / 'new' / 'rotation.jsonl'
+    assert authoring_rotation.main(['next', '--ledger', str(ledger), *[f'--{k}={v}' for k, v in lists.items()],
+                                    '--worker', 'w', '--claim', '--batch', 'b']) in (0, None)
+    assert ledger.exists() and json.loads(ledger.read_text().splitlines()[0])['status'] == 'claimed'
 
 
 def test_claims_reserve_distinct_cells_record_finalizes_and_claims_expire(tmp_path, capsys):

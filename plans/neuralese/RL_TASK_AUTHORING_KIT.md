@@ -130,13 +130,23 @@ report):
 
 ```sh
 cd /home/werg/natlang
-B=/mnt/external/natlang-rl-authoring/batches/<worker>/<batch>
-python3 scripts/memory_ledger.py run --unit rlauth-<worker>-<batch> --budget-gb 4 --priority low --wait 3600 -- \
-  env PYTHONPATH=/home/werg/natlang/training/neuralese:/home/werg/natlang \
-  /home/werg/natlang/.venv-neuralese/bin/python scripts/rl_tasks/qualify_authored.py $B/tasks.jsonl $B/qualified
-until ! systemctl --user is-active -q rlauth-<worker>-<batch> && ! systemctl --user is-active -q rlauth-<worker>-<batch>-waiter; do sleep 5; done
+B=/mnt/external/natlang-rl-authoring/batches/<worker>/<batch>; U=rlauth-<worker>-<batch>
+rm -f $B/qualify.exit
+python3 scripts/memory_ledger.py run --unit $U --budget-gb 4 --priority low --no-resumable --wait 3600 -- \
+  sh -c "env PYTHONPATH=/home/werg/natlang/training/neuralese:/home/werg/natlang \
+  /home/werg/natlang/.venv-neuralese/bin/python scripts/rl_tasks/qualify_authored.py $B/tasks.jsonl $B/qualified \
+  > $B/qualify.log 2>&1; echo \$? > $B/qualify.exit"
+# `run --wait` only waits for ADMISSION: it returns when the unit starts (or is queued), and its exit code says
+# nothing about the job. Wait for the job itself and check how it ended:
+until [ -f $B/qualify.exit ] || { ! systemctl --user is-active -q $U && ! systemctl --user is-active -q $U-waiter; }; do sleep 5; done
+sleep 2; echo "job exit: $(cat $B/qualify.exit 2>/dev/null || echo MISSING)  unit result: $(systemctl --user show $U -p Result --value)"
 cat $B/qualified/report.json | head -60
 ```
+
+The batch is qualified only when `job exit: 0` AND `report.json` says `"result": "PASS"`. `job exit: MISSING` means
+the job was killed or never ran (unit result `oom-kill`, `signal`, `exit-code` ...): read `$B/qualify.log` and rerun;
+never read an old `report.json` as the result of this run. (A unit that finished successfully is removed by systemd,
+so its result then shows `success`; a failed unit stays listed with its failure.)
 
 What it checks per task:
 1. **convert**: the JSON matches section 2 (errors name the line and field);
@@ -155,18 +165,27 @@ accepted means the oracle cannot tell right from wrong, so the task is broken.
 Then the repetition gate against the existing pool:
 
 ```sh
-python3 scripts/memory_ledger.py run --unit rlnov-<worker>-<batch> --budget-gb 6 --priority low --wait 3600 -- \
-  /home/werg/natlang/.venv-neuralese/bin/python scripts/rl_tasks/authored_novelty.py $B/qualified/verified/cases.jsonl \
+U=rlnov-<worker>-<batch>; rm -f $B/novelty.exit
+python3 scripts/memory_ledger.py run --unit $U --budget-gb 6 --priority low --no-resumable --wait 3600 -- \
+  sh -c "/home/werg/natlang/.venv-neuralese/bin/python scripts/rl_tasks/authored_novelty.py $B/qualified/verified/cases.jsonl \
   --pool /home/werg/data/broad-rl-tasks-20261031/full-core-effects-20261102-20261102T011031Z-3015925/cases.jsonl \
-  --pool /mnt/external/natlang-rl-authoring/admitted/cases.jsonl -o $B/novelty.json
+  --pool /mnt/external/natlang-rl-authoring/admitted/cases.jsonl -o $B/novelty.json > $B/novelty.log 2>&1; echo \$? > $B/novelty.exit"
+until [ -f $B/novelty.exit ] || { ! systemctl --user is-active -q $U && ! systemctl --user is-active -q $U-waiter; }; do sleep 5; done
+sleep 2; echo "job exit: $(cat $B/novelty.exit 2>/dev/null || echo MISSING)  unit result: $(systemctl --user show $U -p Result --value)"
 ```
 
 A task is its program together with its inputs. Several invocations of one program on materially different worlds
 and inputs are wanted (a multi-operation codebase is called many times). Pass: no exact duplicates (same program AND
 same inputs after normalizing digits and quoted literals: swapping a number or quoted value is not a new task), at most
 10% near duplicates (within a family, 5-word shingle Jaccard >= 0.8 for the programs AND for the inputs), and every
-family either has 20+ distinct programs in total or gains 5+ new programs in this batch. `novelty.json` reports
-distinct programs per family separately from tasks.
+family either has 20+ distinct programs in total or gains 5+ new programs in this batch. Text is not enough: each
+program also has a functional signature (call graph, helper argument/return types, kind/readout, which helpers each
+function calls, the code steps it spells out in backticks and the reference scripts, with literals abstracted).
+Adding paragraphs that change no call, type or code step does not make a new program: such tasks are listed under
+`functional_repeats`, and in each family at least half of the batch's new programs must be functionally new (unless
+the family already has 20+ functional signatures). New programs come from new operations, helpers, data flow or code
+steps. `novelty.json` reports distinct programs and functional signatures per family separately from tasks
+(job exit 1 means FAIL, not a crash; read `novelty.json`).
 Report both results to the supervisor; the supervisor moves passing batches into `admitted/` and records the rotation.
 
 ## 5. Exclusions
