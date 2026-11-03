@@ -117,6 +117,20 @@ checkpoints that are DGX symlinks stay symlinks (ccfe8593f). The namespace repla
 makes after allocation are not traced. The production holder (cw1 b4caeaa0, H100, 8 CPU/64Gi) was granted at 20:31
 CET and the v43b seed delivered.
 
+Further root causes before the first update:
+- A traced-read closure shipped DGX arm64 `/lib` loader files (3bf919288; seeds refuse system paths).
+- Two held-packet registrations grew the protected union, which made historical qualifications fail. The digest is
+  now treated as provenance (4bac2dd1e, 9f9aa5c39), shipped as runtime v44.
+- The package's packed geometry carried the 1102 parser identity. It was recomputed under v44 with 0 changed slots,
+  as control `corrected-mix-full67-w1-v44b-1103`.
+- A stale size+mtime digest cache hit closure files restored with mtime 0 (158e076cd).
+- A lineage minimum above its own request lost the bankmeta GPU (f749b0777).
+
+Production's first update committed at 22:03Z: global step 68 on cw1 b4caeaa0 (H100, 8 CPU/64Gi). The step took 57
+graphs in 262 s (about 780 graphs/h, ~3.4x DGX), with 50.6 GB peak allocated. Backbone LR is 2e-5 and rows 1e-3,
+under a 1/64 warmup multiplier. Rule from this incident: prepared package artifacts get versioned successors and
+are never rewritten in place.
+
 ## Open for step 2
 
 Controller windows plus DiLoCo: each worker's window control needs `trainer_parameters.diloco` (URL from the secret
