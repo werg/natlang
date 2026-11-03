@@ -214,6 +214,9 @@ log "\"event\":\"setup_done\",\"seconds\":$(since $t0)"
 # 4. controller calls
 export NATLANG_REPO=$R PYTHONPATH=$R/training/neuralese:$R PATH=$NODE_BIN:$VENV/bin:$PATH
 export HF_HUB_OFFLINE=1 PYTHONUNBUFFERED=1 NATLANG_HASH_CACHE=$ROOT/hash-cache.jsonl
+# Content-addressed row-index cache entries the closure ships at their DGX path (observed reads of the controller start):
+# a hit skips rescanning that source; a miss recomputes exactly.
+[ -d /home/werg/.cache/natlang/row-index ] && export NATLANG_ROW_INDEX_CACHE=${NATLANG_ROW_INDEX_CACHE:-/home/werg/.cache/natlang/row-index}
 export OMP_NUM_THREADS=${OMP_NUM_THREADS:-1} MKL_NUM_THREADS=${MKL_NUM_THREADS:-1}
 export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}
 # Sandbox-owned checkpoint controls (the DGX's host admission wrapper and update lock are not part of a cloud config):

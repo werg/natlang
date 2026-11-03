@@ -21,10 +21,12 @@ import argparse
 import copy
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
 GIB = 1024 ** 3
+REPO = Path(__file__).resolve().parents[2]
 NESTED_JSON_BYTES = 64 * 1024 ** 2
 NESTED_JSON_DEPTH = 4
 # Bound records above this are census/objective payloads (families, objectives, rolling custody), not admission
@@ -318,7 +320,29 @@ def nested_json_references(roots, *, depth=NESTED_JSON_DEPTH):
     return sorted(found)
 
 
-def closure(config_path, *, max_file_bytes=4 * GIB):
+TRACE_CALL = re.compile(r'^(?:\d+\s+)?(open|openat|stat|lstat|newfstatat|statx|access|faccessat2?)\('
+                        r'(?:AT_FDCWD, |-?\d+, )?"([^"]+)".*\)\s+=\s+(-?\d+)')
+TRACE_SYSTEM = ('/usr/', '/etc/', '/proc/', '/sys/', '/dev/', '/tmp/', '/var/tmp/', '/run/')
+
+
+def traced_reads(trace):
+    """Regular files a traced controller start successfully opened or stat-ed (``strace -f -e trace=%file`` text):
+    the inputs it actually reads, including those named only inside predecessor source manifests and verification
+    records the static policy does not follow (2026-11-03 namespace replay). System paths and temporary files are
+    not inputs."""
+    found = set()
+    with open(trace, errors='replace') as stream:
+        for line in stream:
+            match = TRACE_CALL.match(line)
+            if not match or int(match.group(3)) < 0:
+                continue
+            path = match.group(2)
+            if path.startswith('/') and not path.startswith(TRACE_SYSTEM) and '/__pycache__/' not in path:
+                found.add(path)
+    return sorted(path for path in found if Path(path).is_file())
+
+
+def closure(config_path, *, max_file_bytes=4 * GIB, observed=None):
     """The files a window's controller and learner read, by the runtime's own resolvers: every absolute path the
     control names, the recipe resolver's files and stage inputs (manifests, shards, CE/focus/correction dependencies),
     and the runtime's protected-custody closure, plus the small JSON records the control's execution-transition/admission files bind
@@ -374,6 +398,15 @@ def closure(config_path, *, max_file_bytes=4 * GIB):
         want(item, 'nested-admission-payload')
     for item in protection_root_inputs(admission, nested):
         want(item, 'protection-root')
+    if observed:
+        tracked = set()
+        if (REPO / '.git').exists():  # the code bundle carries the checkout's tracked files
+            import subprocess
+            listing = subprocess.run(['git', '-C', str(REPO), 'ls-files', '-z'], capture_output=True, check=True).stdout
+            tracked = {str(REPO / item) for item in listing.decode().split('\0') if item}
+        for item in traced_reads(observed):
+            if item not in tracked:
+                want(item, 'observed-read')
     custody = runtime / 'runtime-input-closure.json'
     if custody.is_file():
         for item in json.loads(custody.read_text()).get('bound_files', []):
@@ -427,6 +460,8 @@ def main(argv=None):
     p = sub.add_parser('closure')
     p.add_argument('--config', required=True)
     p.add_argument('-o', '--output', required=True)
+    p.add_argument('--observed-reads', help='strace -f file-call trace of this control\'s CPU controller start: '
+                   'every regular file it read is a closure member')
     args = parser.parse_args(argv)
     if args.command == 'next':
         next_window(args.previous_config, args.out, args.config_out, checkpoint_path=args.checkpoint_path,
@@ -435,7 +470,7 @@ def main(argv=None):
         rolling(args.config, args.config_out)
     else:
         from natlang_neuralese.common.jsonio import write_json_durable
-        value = closure(args.config)
+        value = closure(args.config, observed=args.observed_reads)
         write_json_durable(Path(args.output), value)
         print(json.dumps({'files': len(value['files']), 'bytes': value['bytes'], 'excluded': len(value['excluded']),
                           'missing': len(value['missing'])}), flush=True)

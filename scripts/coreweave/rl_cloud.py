@@ -710,11 +710,17 @@ def seed_tune(run, name):
                 '--continue-from', str(parent), '--out', str(stage_dir), '--device', 'cuda', '--shard', tune['shard'],
                 '--program-names', json.dumps(names), *tune.get('args', [])]
     elif module == 'natlang_neuralese.tune.learned.bank_stage':
-        # The bank meta-learning stage: its episode pool files and the protection custody as exact inputs.
+        # The bank meta-learning stage: its episode pool files, the RL task source of its held task-outcome gate and
+        # the protection custody as exact inputs. ``seed_stage`` also ships the stage directory as it stands (a DGX
+        # run handed over to the cloud continues from its saved LoRA fits, learner state and store).
         names = []
         pool = Path(tune['episodes'])
-        inputs = file_inputs(run, name, _file_records([pool, pool.parent / 'rows.jsonl', *custody_inputs()]))
-        argv = ['--episodes', str(pool), '--protection', str(REPO / 'training' / 'protected-worlds.json'),
+        tasks = [Path(tune['task_source'])] if tune.get('task_source') else []
+        carried = [p for p in stage_dir.rglob('*') if p.is_file()] if tune.get('seed_stage') else []
+        inputs = file_inputs(run, name, _file_records([pool, pool.parent / 'rows.jsonl', *tasks, *carried,
+                                                       *custody_inputs()]))
+        argv = ['--episodes', str(pool), *(['--task-source', str(tasks[0])] if tasks else []),
+                '--protection', str(REPO / 'training' / 'protected-worlds.json'),
                 '--continue-from', str(parent), '--out', str(stage_dir), '--device', 'cuda', *tune.get('args', [])]
     elif module == SGLANG_BENCH:
         # SGLang actor throughput and actor/learner mismatch on real RL turns (serve/sglang_bench.py): the fork's venv,
@@ -793,7 +799,8 @@ def seed_sft(run, name):
                                     'windows': [{'index': 0, 'out': str(window), 'config': str(window / 'config.json')}]})
     closure_path = hub(run) / 'closures' / f'{name}.json'
     closure_path.parent.mkdir(parents=True, exist_ok=True)
-    runtime_tool(boundary['runtime'], 'closure', '--config', str(window / 'config.json'), '-o', str(closure_path))
+    runtime_tool(boundary['runtime'], 'closure', '--config', str(window / 'config.json'), '-o', str(closure_path),
+                 *observed_reads(spec))
     closure = read_json(closure_path)
     allowed = set(spec.get('allow_missing', []))
     missing = [m['path'] for m in closure['missing'] if m['path'] not in allowed]
@@ -863,6 +870,17 @@ def relocate_control(config, window, parent_path, ident):
     return config
 
 
+def observed_reads(spec):
+    """``--observed-reads TRACE`` when the lineage declares the strace of a CPU controller start of this exact window
+    control (``observed_reads``): every regular file that start read becomes a closure member (sft_window.traced_reads)."""
+    trace = spec.get('observed_reads')
+    if not trace:
+        return ()
+    if not Path(trace).is_file():
+        raise SystemExit(f'observed_reads trace {trace} is missing')
+    return ('--observed-reads', str(trace))
+
+
 def historical_checkpoint_blobs(run, closure, parent_path):
     """Historical full checkpoints the window's admission records bind (execution-transition verification re-hashes
     the exact parent/child bytes at controller start), shipped at their DGX paths as declared exact bases (ZIP-delta
@@ -902,7 +920,8 @@ def seed_prepared_sft(run, name, spec, exports, L):
                                     'windows': [{'index': 0, 'out': str(window), 'config': str(window / 'config.json')}]})
     closure_path = hub(run) / 'closures' / f'{name}.json'
     closure_path.parent.mkdir(parents=True, exist_ok=True)
-    runtime_tool(boundary['runtime'], 'closure', '--config', str(window / 'config.json'), '-o', str(closure_path))
+    runtime_tool(boundary['runtime'], 'closure', '--config', str(window / 'config.json'), '-o', str(closure_path),
+                 *observed_reads(spec))
     closure = read_json(closure_path)
     allowed = set(spec.get('allow_missing', []))
     missing = [m['path'] for m in closure['missing'] if m['path'] not in allowed]

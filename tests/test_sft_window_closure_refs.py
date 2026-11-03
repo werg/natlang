@@ -76,3 +76,19 @@ def test_protection_roots_named_by_admission_records_ship_their_untracked_source
     record.write_text(json.dumps({'report': {'protection_root': str(root)}}))
     # The registry files tracked by the checkout arrive with the code bundle; the untracked held cases are shipped.
     assert window.protection_root_inputs([str(record)], []) == [str(root / 'runs' / 'held' / 'cases.jsonl')]
+
+
+def test_traced_reads_keep_successful_regular_file_accesses_outside_system_paths(tmp_path, monkeypatch):
+    monkeypatch.setattr(window, 'TRACE_SYSTEM', ('/usr/',))  # pytest's tmp_path lives under /tmp
+    source = tmp_path / 'source.jsonl.zst'
+    source.write_bytes(b'x')
+    (tmp_path / 'dir').mkdir()
+    trace = tmp_path / 'strace.txt'
+    trace.write_text('\n'.join([
+        f'24    openat(AT_FDCWD, "{source}", O_RDONLY) = 3',
+        f'24    newfstatat(AT_FDCWD, "{tmp_path / "dir"}", {{st_mode=S_IFDIR|0755, ...}}, 0) = 0',
+        f'24    openat(AT_FDCWD, "{tmp_path / "absent.json"}", O_RDONLY) = -1 ENOENT (No such file or directory)',
+        '24    openat(AT_FDCWD, "/usr/lib/python3.12/json/__init__.py", O_RDONLY) = 3',
+        f'24    statx(AT_FDCWD, "{source}", AT_STATX_SYNC_AS_STAT, STATX_ALL, {{...}}) = 0',
+    ]) + '\n')
+    assert window.traced_reads(trace) == [str(source)]
