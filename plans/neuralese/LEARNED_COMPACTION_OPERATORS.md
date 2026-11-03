@@ -90,6 +90,7 @@ Baselines on full67 (`ops/bf95-quality-source-zero-sgd-v2-1102`), weighted consu
 
 | Graphs | Rows | actual | shuffled | zeroed | text-cut | Reading |
 |---|---|---|---|---|---|---|
+| rest27 bgkit-knowledge graphs (not yet in production; text-prompted verbatim producers; 41 longer graphs skipped) | 32 | 0.415 | 1.323 | 1.317 | — | consumers strongly use imported **written** text state (+0.91 nats/token without it; actual better on 78%/75% of rows) |
 | compact-params smoke (S1 repo_qa, text-init rows) | 21 | 4.375 | 4.370 | 4.614 | 4.132 | untrained state carries no row-specific information; the text cut is better |
 | compact-history smoke (S1 SWE checked, text-init) | 10 | 0.556 | 0.563 | 0.568 | 0.568 | small row-specific use |
 | extract smoke (hotpot, text-init) | 12 | 7.742 | 7.802 | 8.458 | 6.186 | documents are short, so the "text cut" is the whole text (upper bound) |
