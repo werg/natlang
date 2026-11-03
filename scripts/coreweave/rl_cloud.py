@@ -808,7 +808,7 @@ def seed_sft(run, name):
         raise SystemExit(f'{name}: inputs the control names are absent on the DGX: {missing[:20]}')
     inputs = lineage_inputs(run, name, closure)
     checkpoint = put_checkpoint(run, boundary['parent'], parent_path)
-    historical, skipped = historical_checkpoint_blobs(run, closure, parent_path)
+    historical, skipped, historical_links = historical_checkpoint_blobs(run, closure, parent_path)
     if skipped:
         print(json.dumps({'event': 'historical_checkpoints_not_shipped', 'items': skipped}), flush=True)
     members = ['lineage.json'] + [str(p.relative_to(L)) for p in sorted(L.rglob('*')) if p != L / 'lineage.json'
@@ -818,7 +818,8 @@ def seed_sft(run, name):
               'trained_rounds': 0, 'created': time.time(), 'state_sha256': None, 'kind': 'sft',
               'blobs': [{'kind': 'top', 'sha256': top_sha, 'bytes': top_bytes, 'encoding': 'tar.zst'}, checkpoint,
                         *historical],
-              'checkpoint': str(parent_path), 'checkpoints': [str(parent_path)], 'links': [], 'inputs': inputs,
+              'checkpoint': str(parent_path), 'checkpoints': [str(parent_path)], 'links': historical_links,
+              'inputs': inputs,
               'closure': {'path': str(closure_path), 'sha256': file_digest(closure_path), 'files': len(closure['files']),
                           'bytes': closure['bytes'], 'excluded': len(closure['excluded'])},
               'parent_source': boundary, 'dgx_verified': True, 'cloud_committed': True}
@@ -887,7 +888,7 @@ def historical_checkpoint_blobs(run, closure, parent_path):
     chains already in a readable store: no upload; the sandbox reconstructs each). Bound checkpoints that are not
     declared bases are reported, not uploaded."""
     declared = checkpoint_bases(run)
-    blobs, skipped = [], []
+    blobs, skipped, links, shipped = [], [], [], set()
     for item in closure.get('historical_checkpoints', []):
         digest, path = item['sha256'], item['path']
         if path == str(parent_path):
@@ -897,9 +898,16 @@ def historical_checkpoint_blobs(run, closure, parent_path):
                                 for d in ([d] if spec['encoding'] == 'raw' else [spec['receipt']['sha256'], spec['payload']['sha256']])):
             skipped.append(item)
             continue
-        blobs.append({**{k: v for k, v in declared[digest].items() if k not in ('path', 'source')},
-                      'kind': 'checkpoint', 'path': path})
-    return blobs, skipped
+        # A bound path that is a symlink on the DGX stays a symlink: verifiers compare resolved paths (two records of
+        # one checkpoint through a link and its target must resolve to the same file, 2026-11-03 namespace replay).
+        real = os.path.realpath(path)
+        if real != path:
+            links.append({'path': path, 'symlink_to': real})
+        if real not in shipped:
+            shipped.add(real)
+            blobs.append({**{k: v for k, v in declared[digest].items() if k not in ('path', 'source')},
+                          'kind': 'checkpoint', 'path': real})
+    return blobs, skipped, links
 
 
 def seed_prepared_sft(run, name, spec, exports, L):
@@ -929,7 +937,7 @@ def seed_prepared_sft(run, name, spec, exports, L):
         raise SystemExit(f'{name}: inputs the control names are absent on the DGX: {missing[:20]}')
     inputs = lineage_inputs(run, name, closure)
     checkpoint = put_checkpoint(run, boundary['parent'], parent_path)
-    historical, skipped = historical_checkpoint_blobs(run, closure, parent_path)
+    historical, skipped, historical_links = historical_checkpoint_blobs(run, closure, parent_path)
     if skipped:
         print(json.dumps({'event': 'historical_checkpoints_not_shipped', 'items': skipped}), flush=True)
     members = ['lineage.json'] + [str(p.relative_to(L)) for p in sorted(L.rglob('*')) if p != L / 'lineage.json'
@@ -939,7 +947,8 @@ def seed_prepared_sft(run, name, spec, exports, L):
               'trained_rounds': 0, 'created': time.time(), 'state_sha256': None, 'kind': 'sft',
               'blobs': [{'kind': 'top', 'sha256': top_sha, 'bytes': top_bytes, 'encoding': 'tar.zst'}, checkpoint,
                         *historical],
-              'checkpoint': str(parent_path), 'checkpoints': [str(parent_path)], 'links': [], 'inputs': inputs,
+              'checkpoint': str(parent_path), 'checkpoints': [str(parent_path)], 'links': historical_links,
+              'inputs': inputs,
               'closure': {'path': str(closure_path), 'sha256': file_digest(closure_path), 'files': len(closure['files']),
                           'bytes': closure['bytes'], 'excluded': len(closure['excluded'])},
               'parent_source': boundary, 'dgx_verified': True, 'cloud_committed': True}

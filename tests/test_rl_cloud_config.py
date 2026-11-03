@@ -90,7 +90,23 @@ def test_historical_checkpoints_ship_as_declared_bases_only(tmp_path, monkeypatc
     closure = {'historical_checkpoints': [
         {'path': '/dgx/parent.pt', 'sha256': 'c' * 64}, {'path': '/dgx/old.pt', 'sha256': 'b' * 64},
         {'path': '/dgx/unknown.pt', 'sha256': 'd' * 64}, {'path': '/cloud/parent/checkpoint.pt', 'sha256': 'c' * 64}]}
-    blobs, skipped = rc.historical_checkpoint_blobs(run, closure, '/cloud/parent/checkpoint.pt')
+    blobs, skipped, links = rc.historical_checkpoint_blobs(run, closure, '/cloud/parent/checkpoint.pt')
     assert [(b['path'], b['encoding']) for b in blobs] == [('/dgx/parent.pt', 'zip-delta'), ('/dgx/old.pt', 'raw')]
     assert all(b['kind'] == 'checkpoint' and 'source' not in b for b in blobs)
-    assert [s['path'] for s in skipped] == ['/dgx/unknown.pt']
+    assert [s['path'] for s in skipped] == ['/dgx/unknown.pt'] and links == []
+
+
+def test_historical_checkpoint_symlinks_ship_once_and_stay_links(tmp_path, monkeypatch):
+    import scripts.coreweave.rl_cloud as rc
+    real = tmp_path / 'external' / 'c.pt'
+    real.parent.mkdir()
+    real.write_bytes(b'x')
+    alias = tmp_path / 'data' / 'c.pt'
+    alias.parent.mkdir()
+    alias.symlink_to(real)
+    run = {'root': str(tmp_path), 'checkpoint_bases': [{'sha256': 'c' * 64, 'bytes': 1, 'encoding': 'raw', 'source': 'x'}]}
+    monkeypatch.setattr(rc, 'locate', lambda run, digest: ('store', {'bytes': 1}))
+    closure = {'historical_checkpoints': [{'path': str(alias), 'sha256': 'c' * 64}, {'path': str(real), 'sha256': 'c' * 64}]}
+    blobs, skipped, links = rc.historical_checkpoint_blobs(run, closure, '/cloud/parent/checkpoint.pt')
+    assert [b['path'] for b in blobs] == [str(real)] and not skipped
+    assert links == [{'path': str(alias), 'symlink_to': str(real)}]

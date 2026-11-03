@@ -639,9 +639,13 @@ def fetch(parent, lineage):
             temp.unlink()
     for link in parent.get('links', []):
         target = Path(link['path'])
-        if target.exists():
+        if target.exists() or target.is_symlink():
             target.unlink()
-        os.link(link['same_as'], target)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if 'symlink_to' in link:  # a DGX symlink (bound records resolve through it), recreated as one
+            os.symlink(link['symlink_to'], target)
+        else:
+            os.link(link['same_as'], target)
     state = controller(lineage)[0] / 'state.json'
     if parent.get('state_sha256') and file_digest(state) != parent['state_sha256']:
         raise ValueError('restored state.json differs from the export')
