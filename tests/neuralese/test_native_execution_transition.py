@@ -386,3 +386,13 @@ def test_zero_update_saved_qualification_requires_exact_actual_state(tmp_path, m
     else:
         with pytest.raises(ValueError):
             tx.require_qualified_for_training(saved['training'], checkpoint_path=path)
+
+
+def test_qualification_recheck_keeps_its_recorded_protection_union_digest():
+    from natlang_neuralese.train.native_execution_transition import _with_recorded_protection_union
+    report = {'protected_development': {'protected_worlds_sha256': 'old', 'parent_successes': 3}, 'x': 1}
+    checked = {'protected_development': {'protected_worlds_sha256': 'grown', 'parent_successes': 3}, 'x': 1}
+    assert _with_recorded_protection_union(checked, report) == report
+    # Every other field still compares exactly.
+    changed = {'protected_development': {'protected_worlds_sha256': 'grown', 'parent_successes': 2}, 'x': 1}
+    assert _with_recorded_protection_union(changed, report) != report

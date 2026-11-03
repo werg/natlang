@@ -613,6 +613,18 @@ def qualify_candidate(publication_ref, evidence_ref, *, protection_root):
             'untouched_confirmation':False}
 
 
+def _with_recorded_protection_union(checked, report):
+    """The protected-worlds union digest in a qualification is provenance of when it was made: the registry only
+    grows as held packets are registered (2026-11-03: two registrations made every earlier qualification unverifiable).
+    The recheck itself requires the development packet to be in the current union (validate_dev_behavior); every
+    other field still compares exactly."""
+    recorded = (report.get('protected_development') or {}).get('protected_worlds_sha256')
+    current = checked.get('protected_development')
+    if not isinstance(current, dict) or recorded is None:
+        return checked
+    return {**checked, 'protected_development': {**current, 'protected_worlds_sha256': recorded}}
+
+
 @with_historical_file_verification_session
 def verify_qualification(qualification_ref):
     import json
@@ -621,7 +633,7 @@ def verify_qualification(qualification_ref):
     if report.get('schema') != 'natlang.native-execution-qualification/1':
         raise ValueError('unsupported execution qualification receipt')
     checked = qualify_candidate(report['candidate'], report['evidence'], protection_root=report['protection_root'])
-    if report != checked:
+    if report != _with_recorded_protection_union(checked, report):
         raise ValueError('execution qualification differs from independently rechecked evidence')
     _verify_historical_file_ref(qualification_ref)
     return checked
