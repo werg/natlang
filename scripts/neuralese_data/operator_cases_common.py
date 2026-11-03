@@ -21,8 +21,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from neuralese_data.records import normalize_text, validate  # noqa: E402
+from natlang_neuralese.common.paths import resolve as data_path  # noqa: E402  (records.py puts it on sys.path)
 
-OUT_ROOT = Path(os.environ.get('NATLANG_OPERATOR_CASES', '/mnt/external/natlang-compaction-operators-20261103/cases'))
+OUT_ROOT = Path(os.environ.get('NATLANG_OPERATOR_CASES') or data_path('data_hdd', 'natlang-compaction-operators-20261103', 'cases'))
 SCHEMA = 'natlang.operator-cases/1'
 
 # Size floors follow the runtime's own cut thresholds (ts-host native/cutoff.ts): only values the runtime would cut
