@@ -203,3 +203,28 @@ def test_a_meta_learned_bank_without_optimizer_state_deploys_by_its_inner_fit(tm
     assert receipt['operatorPolicy'] == 'bank-inner-fit-v1' and receipt['writer'] is None
     assert receipt['history'][0]['operator'] == 'refine' and receipt['bank'] == bank.snapshot
     assert (receipt['selected'] is not None) == receipt['history'][0]['accepted']
+
+
+def test_a_bank_with_a_meta_learned_inner_fit_law_deploys_by_that_law(tmp_path):
+    import torch
+    from natlang_neuralese.model.native_artifact import NativeTensorArtifact
+    from natlang_neuralese.serve.store import TensorStore
+    from natlang_neuralese.tune.learned.meta_bank import INNER_FIT_LAW
+    plan, bank, _ = operation(tmp_path)
+    value = json.loads(open(plan).read())
+    del value['learned']['state']
+    manifest = json.loads((tmp_path / 'bank.json').read_text())['bank']
+    K, G = len(bank.components), len(bank.group_labels)
+    store = TensorStore(value['learned']['store'])
+    law = store.put_native_tensor_artifact(NativeTensorArtifact(
+        'parameter-set', bank.basis.native_identity,
+        {'init': torch.full((K, G), .01), 'log_step': torch.full((K, G), -3.)}, bank.basis_artifact,
+        {'scope': INNER_FIT_LAW, 'snapshot': manifest['snapshot']}))
+    store.close()
+    manifest['inner_fit'] = {'law': INNER_FIT_LAW, 'tensors': law.id, 'steps': 3, 'residual_rank': 0, 'residual_lr': .01}
+    (tmp_path / 'bank.json').write_text(json.dumps(manifest))
+    open(plan, 'w').write(json.dumps(value))
+    assert main(['--plan', plan, '--out', str(tmp_path / 'out')]) == 0
+    receipt = json.loads((tmp_path / 'out' / 'result.json').read_text())['receipt']
+    assert receipt['history'][0]['operator'] == 'meta-fit' and receipt['bank'] == bank.snapshot
+    assert (receipt['selected'] is not None) == receipt['history'][0]['accepted']

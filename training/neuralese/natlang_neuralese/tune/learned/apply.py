@@ -53,6 +53,9 @@ class Context:
         learned, engine = self.learned, self.engine
         raw = json.loads(Path(learned['bank']).read_text())
         self.bank = load_bank(engine, raw['bank'] if isinstance(raw.get('bank'), dict) else raw)
+        # A meta-learned bank (`meta_bank.BankMetaLearner.publish`) carries its inner-fit law: learned initial
+        # coefficients and per-coefficient step sizes.
+        self.law = (raw['bank'] if isinstance(raw.get('bank'), dict) else raw).get('inner_fit')
         # Without an optimizer state the bank is used as meta-learned (`meta_bank`): adaptation is its inner fit.
         self.trainer = None
         if learned.get('state'):
@@ -202,6 +205,52 @@ class Context:
         states = {key: self.engine.store.put_native_state(block).id for key, block in result['states'].items()}
         return self._carry(parent, adapters, mixtures, states, actor='in-bank-refinement', extra={'loss': result['loss']['final']})
 
+    def meta_fit(self, *, steps):
+        """The meta-learned bank's own inner step (`meta_bank.BankMetaLearner.fit`, law ``inner_fit``) on the
+        program's root scope: free per-group coefficients from the learned initial values, ``steps`` Adam-preconditioned
+        steps scaled by the learned per-coefficient step sizes, unavailable slots held at zero. Other scopes and
+        every soft state run at their incoming values."""
+        from .meta_bank import INNER_FIT_LAW
+        from .views import MIXTURE_SCHEMA
+        if (self.law or {}).get('law') != INNER_FIT_LAW:
+            raise LearnedOptimizerError('this bank carries no meta-learned inner-fit law')
+        law = self.engine.store.get_native_tensor_artifact(self.law['tensors'])
+        if law is None:
+            raise LearnedOptimizerError(f'the inner-fit law {self.law["tensors"]} is not in the operation store')
+        tree = [node['id'] for node in self.manifest['tree']]
+        arrays = {array.scope: array for array in self.pc.scope_arrays(self.incoming_adapters)}
+        root = next(scope for scope in tree if scope in arrays)
+        array = arrays[root]
+        slots = torch.tensor(array.slots)
+        mask = torch.tensor(array.available, dtype=torch.float32)[:, None]
+        init, step = law.artifact.tensors['init'][slots] * mask, law.artifact.tensors['log_step'][slots].exp()
+        a = init.clone().requires_grad_(True)
+        first, second = torch.zeros_like(init), torch.zeros_like(init)
+        adapters = {s: array.adapter if s == root else self.incoming_adapters.get(s, self.placeholders[s]) for s in self.scopes}
+        def leaves():
+            return {array.adapter: self.bank.adapter_tensors(self.bank.composed_cores(array.slots, a * mask, offset=array.offset))}
+        states, history = self._states_of(None), []
+        for t in range(1, steps + 1):
+            a.grad = None
+            history.append(self.support.accumulate(adapters, leaves, states))
+            grad = a.grad if a.grad is not None else torch.zeros_like(a)
+            with torch.no_grad():
+                first.mul_(.9).add_(grad, alpha=.1)
+                second.mul_(.999).addcmul_(grad, grad, value=.001)
+                a.sub_(step * (first / (1 - .9 ** t)) / ((second / (1 - .999 ** t)).sqrt() + 1e-8))
+        executed = (a * mask).detach()
+        adapter = self.bank.compose_adapter(self.engine, self.bank.composed_cores(array.slots, executed, offset=array.offset)).id
+        view = self.views[root]
+        mixture = {'schema': MIXTURE_SCHEMA,
+                   'bank': view.snapshot, 'view': view.id, 'componentIds': list(view.component_ids),
+                   'eligible': list(view.eligible), 'dropoutMask': list(view.retained), 'distribution': [], 'gains': [],
+                   'mixture': {'law': INNER_FIT_LAW, 'steps': steps, 'tensors': self.law['tensors']},
+                   'effective': [[float(x).hex() for x in row] for row in executed.double().tolist()]}
+        if self.incoming_adapters.get(root):
+            mixture['incoming'] = self.incoming_adapters[root]
+        return self._carry(None, {root: adapter}, {root: mixture}, {}, actor='meta-learned-inner-fit',
+                           extra={'law': INNER_FIT_LAW, 'support_history': history})
+
     def retrieve(self, parent, *, rounds=1, operations=None):
         """The retrieval baseline without gradients: per selected scope, the single best component token (or the
         null token) at its parent's gains (or the format's initial gain) on the exact support loss; ``rounds``
@@ -241,13 +290,17 @@ class Context:
 
 
 def inner_fit(context, *, steps):
-    """Deployment on a meta-learned bank: the meta-learner's inner step (`refine`, an in-bank fit of the mixtures
-    and soft states from the incoming bundle), kept only when it lowers the exact support loss."""
+    """Deployment on a meta-learned bank: the meta-learner's inner step, kept only when it lowers the exact support
+    loss. A bank with a meta-learned inner-fit law runs that law (`Context.meta_fit`, its own step count); an
+    older bank without one refines its mixture law (`refine`)."""
     incoming = context.evaluate(None)
-    bundle = context.refine(None, steps=steps)
+    if context.law:
+        bundle = context.meta_fit(steps=context.law['steps'])
+    else:
+        bundle = context.refine(None, steps=steps)
     loss = context.evaluate(bundle)
     accepted = loss < incoming
-    history = [{'step': 0, 'operator': 'refine', 'bundle': bundle['id'], 'supportLoss': loss, 'incumbentLoss': incoming,
+    history = [{'step': 0, 'operator': 'meta-fit' if context.law else 'refine', 'bundle': bundle['id'], 'supportLoss': loss, 'incumbentLoss': incoming,
                 'accepted': accepted}]
     return (bundle, loss, history) if accepted else (None, incoming, history)
 
