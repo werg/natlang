@@ -126,11 +126,11 @@ def test_outer_steps_train_bank_and_basis_resume_exactly_and_evaluate_four_arms(
 def test_pca_initialization_spans_the_meta_train_lora_fits_and_trains_with_the_regression(tmp_path):
     engine = engine_fixture(tmp_path, 'lfm')
     pool = MB.build_pool(pool_rows(engine, families=10), held_fraction=.5, seed=1)
-    recipe = small_recipe(init='pca', components=8, variance=.95, aux_families=3)
+    recipe = small_recipe(init='pca', components=8, variance=.95, aux_families=3, init_families=4)
     names = MB.select_targets(engine, recipe)
     fits = MB.family_lora_fits(engine, pool, recipe, names, tmp_path / 'fits')
     meta_train = {n for n, f in pool['families'].items() if f['role'] == 'meta-train'}
-    assert set(fits) == meta_train and sorted(p.stem for p in (tmp_path / 'fits').glob('*.pt')) == sorted(meta_train)
+    assert set(fits) == set(sorted(meta_train)[:4]) == {p.stem for p in (tmp_path / 'fits').glob('*.pt')}
     assert MB.family_lora_fits(engine, pool, recipe, names, tmp_path / 'fits').keys() == fits.keys()  # resumes
     learner = MB.BankMetaLearner(engine, pool, recipe, tmp_path / 'op', parent_sha256='p', fits=fits)
     spectrum = learner.state['spectrum']

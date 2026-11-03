@@ -289,6 +289,7 @@ class MetaRecipe:
     components: int = 64          # bank size cap K; the PCA initialization keeps those explaining ``variance``
     component_rank: int = 16      # rank of each component core inside the basis
     variance: float = .9          # share of the meta-train families' LoRA-delta energy the initial components explain
+    init_families: int = 64       # meta-training families whose LoRA fits initialize the bank (and feed the regression)
     init: str = 'pca'             # 'pca': principal directions of meta-train families' LoRA fits; 'random': seeded
     layer_groups: int = 8         # coefficient groups: depth slices x matrix family (`bank.target_groups`)
     inner_steps: int = 12         # support passes per fit, identical for every fitting arm (matched compute)
@@ -376,7 +377,7 @@ def family_lora_fits(engine, pool, recipe, names, directory, *, log=None):
     directory.mkdir(parents=True, exist_ok=True)
     adapter = None
     fits = {}
-    for family in sorted(name for name, f in pool['families'].items() if f['role'] == 'meta-train'):
+    for family in sorted(name for name, f in pool['families'].items() if f['role'] == 'meta-train')[:recipe.init_families]:
         path = directory / f'{family}.pt'
         if path.exists():
             fits[family] = torch.load(path, map_location='cpu', weights_only=True)['factors']
@@ -603,7 +604,8 @@ class BankMetaLearner:
         if not path.exists():
             return
         state = json.loads(path.read_text())
-        if state.get('schema') != STATE_SCHEMA or state['recipe'] != self.recipe.as_json():
+        # Fields added later read their default from an older saved recipe.
+        if state.get('schema') != STATE_SCHEMA or MetaRecipe.from_json(state['recipe']).as_json() != self.recipe.as_json():
             raise LearnedOptimizerError('the saved meta-learning state has another recipe')
         same_parent = state['parent_sha256'] == self.state['parent_sha256']
         if same_parent and state['initial_bank'] != self.bank0.snapshot:
