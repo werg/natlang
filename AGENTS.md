@@ -1203,6 +1203,9 @@ Smoke tests (owner, 2026-11-03) are minimal: about one GPU-hour, the fewest step
 that exercise the path, sandboxes stopped immediately. They run at low priority,
 never take capacity a production learner needs, and never delay a production
 launch; production proceeds whether or not a smoke has finished.
+No unnecessary smokes (owner, 2026-11-03): when a path is ready for production, production is its
+own smoke test. Do not run a separate smoke of a ready production path (e.g. DiLoCo, SGLang RL actors);
+qualify on the first real production updates/rounds and their actual checks.
 
 ## Sandbox recovery coverage (engineering finding, 2026-10-23)
 
