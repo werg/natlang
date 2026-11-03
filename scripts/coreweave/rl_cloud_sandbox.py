@@ -578,6 +578,10 @@ def _restore_input(item, scratch):
             if destination.exists() or destination.is_symlink():
                 destination.unlink()
             shutil.move(str(source), str(destination))
+            # The closure tar is deterministic (mtime 0); a restored file gets a fresh mtime so the size+mtime keyed
+            # digest cache never reuses a previous restore's digest for same-size new bytes (2026-11-03: a rebound
+            # sft-capacity-descriptor.json failed 'resident artifact changed' on its stale cached digest).
+            os.utime(destination)
         shutil.rmtree(unpacked, ignore_errors=True)
         for member in item.get('files', []):
             if file_digest(member['path']) != member['sha256']:
