@@ -1574,6 +1574,8 @@ def run(config_path, *, rounds=None, stop=None):
             config = adopt_policy_loss_defaults(config, state, state_path)
             config = adopt_task_curriculum_defaults(config, state, state_path,
                 sealed_selection=(out / f"round-{state['round']:06d}-selection.json").exists())
+            config = adopt_actor_engine_defaults(config, state, state_path,
+                sealed_selection=(out / f"round-{state['round']:06d}-selection.json").exists())
             config = initial_capacity_collection(config,state)
             state_participant=state.get('native_participant')
             if state_participant is not None:
@@ -2080,6 +2082,51 @@ def adopt_task_curriculum_defaults(config, state, state_path, *, sealed_selectio
     return {**config, **after}
 
 
+SGLANG_ACTOR_TRANSITION = 'sglang-actor-engine-is-guard-20261103'
+DEFAULT_SGLANG_PROJECTION = 'native'
+
+
+def sglang_actor_command(command, projection=DEFAULT_SGLANG_PROJECTION):
+    """``command`` with ``--engine sglang`` and the projection policy (replacing an ``--engine`` value)."""
+    command = list(command)
+    if '--engine' in command:
+        index = command.index('--engine')
+        command[index + 1] = 'sglang'
+    else:
+        command += ['--engine', 'sglang']
+    if '--sglang-projection' not in command:
+        command += ['--sglang-projection', projection]
+    return command
+
+
+def adopt_actor_engine_defaults(config, state, state_path, *, sealed_selection=False):
+    """Raw LFM3 continuations adopt the SGLang actor through a recorded transition (decision 17, owner 2026-11-03).
+
+    SGLang-sampled episodes are recomputed by the learner, guarded per episode (rl.native_replay engine guard) and
+    corrected with the loss's truncated importance weights; native-engine tokens keep the exact replay gate. The
+    next unbound collection switches ``actor_command`` from ``--engine native`` (or no engine) to ``--engine
+    sglang``; a sealed selection or an active update keeps its recorded actor. ``actor_engine_keep_native: true``
+    opts out; coefficient-policy actors stay native (SGLang serves ordinary checkpoints only).
+    """
+    command = config.get('actor_command') or []
+    if (not command or config.get('actor_engine_keep_native') is True or config.get('coefficient_policy')
+            or config.get('actor_engine', 'native-python') != 'native-python' or config.get('model') != 'lfm'
+            or sealed_selection or state.get('active_update_round')):
+        return config
+    engine = command[command.index('--engine') + 1] if '--engine' in command else 'native'
+    if engine == 'sglang':
+        return config
+    adopted = sglang_actor_command(command)
+    record = {'schema': 'natlang.rl-actor-engine-transition/1', 'transition': SGLANG_ACTOR_TRANSITION,
+              'from': command, 'to': adopted, 'round': state.get('round')}
+    transitions = state.setdefault('actor_engine_transitions', [])
+    if not any(item.get('transition') == SGLANG_ACTOR_TRANSITION and item.get('from') == command
+               and item.get('to') == adopted for item in transitions):
+        transitions.append(record)
+        write_json_durable(state_path, state)
+    return {**config, 'actor_command': adopted}
+
+
 def bind_policy_loss(config, values):
     """The configured grpo policy loss, bound into the learner command; None keeps the clipped loss."""
     from .policy_math import policy_loss_declaration
@@ -2246,7 +2293,7 @@ def configure_native(args):
     if coefficient_policy is None and raw['native_identity']['architecture'] == 'lfm3':
         # Decision 17: ordinary-token turns generate on the SGLang fork (serve/sglang_actor.py); every other turn runs
         # on the native engine of the same loaded checkpoint. Opt out by removing the flag from the config.
-        config['actor_command'] += ['--engine', 'sglang']
+        config['actor_command'] = sglang_actor_command(config['actor_command'])
     write_json_durable(args.config, config)
     return config
 

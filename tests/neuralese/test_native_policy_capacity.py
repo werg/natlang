@@ -255,3 +255,21 @@ def test_tis_cap_mode_is_configurable_without_changing_default_bytes():
     assert policy_loss_declaration({'schema':'score-centered/1'})['importance']=='tis'
     assert policy_loss_declaration({'schema':'score-centered/1','importance':'tis-c3'})['importance']=='tis-c3'
     with pytest.raises(ValueError):policy_loss_declaration({'schema':'score-centered/1','importance':'tis-c0.5'})
+
+
+def test_lfm_continuations_adopt_sglang_actor_through_recorded_transition(tmp_path):
+    from natlang_neuralese.rl import production
+    path=tmp_path/'state.json';state={'round':3}
+    config={'model':'lfm','actor_command':['python','serve.py','--port','8200','--engine','native']}
+    adopted=production.adopt_actor_engine_defaults(config,state,path)
+    assert adopted['actor_command'][-4:]==['--engine','sglang','--sglang-projection',production.DEFAULT_SGLANG_PROJECTION]
+    record=json.loads(path.read_text())['actor_engine_transitions']
+    assert len(record)==1 and record[0]['from']==config['actor_command'] and record[0]['round']==3
+    # Idempotent; sealed selections, active updates, opt-outs and coefficient actors keep their actor.
+    assert production.adopt_actor_engine_defaults(config,state,path)==adopted
+    assert len(json.loads(path.read_text())['actor_engine_transitions'])==1
+    for kept,kwargs in (({},{'sealed_selection':True}),({'actor_engine_keep_native':True},{}),
+                        ({'coefficient_policy':'p.json'},{})):
+        assert production.adopt_actor_engine_defaults({**config,**kept},state,path,**kwargs)['actor_command']==config['actor_command']
+    assert production.adopt_actor_engine_defaults(config,{'active_update_round':'r'},path)==config
+    assert production.adopt_actor_engine_defaults(adopted,state,path)==adopted

@@ -63,6 +63,7 @@ def main(argv=None):
     config, declared = interleave.bind_stage(config, state, state_path)
     config = production.adopt_policy_loss_defaults(config, state, state_path)
     config = production.adopt_task_curriculum_defaults(config, state, state_path)
+    config = production.adopt_actor_engine_defaults(config, state, state_path)
     if args.no_teacher:
         config['jolt_teacher_attempts'] = 0
     cases = list(read_jsonl(config['cases']))
