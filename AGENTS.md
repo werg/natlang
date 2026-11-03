@@ -1188,6 +1188,10 @@ ideal shape first, then back off stepwise (lower CPU and RAM toward the measured
 workload minimum, then drop optional constraints) until capacity is granted, keeping
 exactly one GPU. Record the granted shape, adapt execution to it, and do not
 describe the account as exhausted or retry the identical request in a tight loop.
+Smoke tests (owner, 2026-11-03) are minimal: about one GPU-hour, the fewest steps
+that exercise the path, sandboxes stopped immediately. They run at low priority,
+never take capacity a production learner needs, and never delay a production
+launch; production proceeds whether or not a smoke has finished.
 
 ## Sandbox recovery coverage (engineering finding, 2026-10-23)
 
