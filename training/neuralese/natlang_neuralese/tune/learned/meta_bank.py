@@ -941,6 +941,18 @@ class BankMetaLearner:
                     result[arm] = fixed[name][arm]
                 elif arm == 'parent':
                     result[arm] = {'loss': self.score(scored, 'initial')}
+                elif arm == 'meta' and self.state['step'] == 0 and self.state.get('published') is None:
+                    # Before any outer step the live bank, initial coefficients and step sizes are the initial
+                    # bank's exactly: one fit serves both arms.
+                    if 'initial' not in fixed.get(name, {}):
+                        fitted = self.fit(support, 'initial')
+                        fixed.setdefault(name, {})['initial'] = {
+                            'loss': self.score(scored, 'initial', fitted['coefficients']),
+                            'support_first': fitted['history'][0], 'support_last': fitted['history'][-1]}
+                    result[arm] = dict(fixed[name]['initial'])
+                    result['initial'] = fixed[name]['initial']
+                elif arm == 'initial' and arm in result:
+                    pass
                 elif arm in ('meta', 'meta_residual', 'initial'):
                     which = 'initial' if arm == 'initial' else 'meta'
                     fitted = self.fit(support, which, residual=arm == 'meta_residual')
