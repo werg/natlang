@@ -13,6 +13,7 @@ import type { CallableDefinition } from '../runtime/kernel.js';
 import { runInFrame } from '../runtime/context.js';
 import type { PluggableMode } from '../runtime/pluggable.js';
 import { isNeuraleseRef } from './neuralese.js';
+import { parseType } from './types.js';
 import type { LambdaNode } from './values.js';
 import type { NativeSession } from './runtime.js';
 
@@ -90,6 +91,16 @@ export function requestText(messages: readonly unknown[]): string {
   return messages.flatMap(message => isRecord(message) && typeof message.content === 'string' ? [message.content] : []).join('\n');
 }
 
+/**
+ * What the writer reads about its consumer: the call's own request text without the shared system prompt. Visibility
+ * still matches the whole request text; the writer only needs the call's opening, and repeating the ~5k-token system
+ * prompt inside the writer's argument doubled its prompt and buried the facts (MEMETIC_META_LEARNING_REVIEW_20261103.md).
+ */
+export function consumerText(messages: readonly unknown[]): string {
+  const own = messages.filter(message => !(isRecord(message) && message.role === 'system'));
+  return requestText(own.length ? own : messages);
+}
+
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error)).split('\n')[0]!.slice(0, 300);
 
 /**
@@ -99,6 +110,8 @@ const errorText = (error: unknown) => (error instanceof Error ? error.message : 
 export class TrainingGuidance {
   /** Calls running the guidance policy: they and every call below them get no guidance. */
   private readonly policyCalls = new Set<string>();
+  /** The last model turn node of each writeGuidance call: the source of the state its text is written as. */
+  private readonly writerTurns = new Map<string, { node: string; ancestors: readonly string[] }>();
   private readonly requests = new Map<string, Promise<Record<string, unknown> | undefined>>();
   constructor(readonly run: GuidanceRun, readonly writerPackage: GuidanceWriterPackage) { guidanceRun(run); }
 
@@ -114,6 +127,9 @@ export class TrainingGuidance {
     return undefined;
   }
 
+  /** The agent records each writeGuidance model turn as it is taken (its graph node). */
+  noteWriterTurn(callId: string, node: string, ancestors: readonly string[]): void { this.writerTurns.set(callId, { node, ancestors }); }
+
   /** Whether a call runs inside the guidance policy (its own calls and theirs). */
   insidePolicy(session: NativeSession): boolean {
     return (session.runtime.frame?.chain ?? []).some(id => this.policyCalls.has(id)) ||
@@ -127,13 +143,13 @@ export class TrainingGuidance {
   requestFor(session: NativeSession, callId: string, messages: readonly unknown[]): Promise<Record<string, unknown> | undefined> {
     let request = this.requests.get(callId);
     if (!request) {
-      request = this.compute(session, callId, requestText(messages));
+      request = this.compute(session, callId, requestText(messages), consumerText(messages));
       this.requests.set(callId, request);
     }
     return request;
   }
 
-  private async compute(session: NativeSession, callId: string, text: string): Promise<Record<string, unknown> | undefined> {
+  private async compute(session: NativeSession, callId: string, text: string, ownText: string): Promise<Record<string, unknown> | undefined> {
     const trace = session.runtime.trace, pkg = this.writerPackage;
     const role = session.runtime.options.parentCallId ? 'child' as const : 'root' as const;
     const consumer: GuidanceConsumer = { name: callId, role, text };
@@ -173,10 +189,25 @@ export class TrainingGuidance {
     if (this.run.writer === 'off') failure = WRITER_OFF;
     else try {
       // model-call-kind: runtime-authored-call (writeGuidance, guidance policy) -- training/model-call-kinds.json
-      const written = await runInFrame(frame, () => invokeDefinition(frame!, pkg.writer.definition, [consumer, facts]));
-      if (isNeuraleseRef(written)) state = { id: written.$neuralese.id,
+      const known = new Set(this.writerTurns.keys());
+      const written = await runInFrame(frame, () => invokeDefinition(frame!, pkg.writer.definition, [{ ...consumer, text: ownText }, facts]));
+      if (typeof written === 'string' && written.trim()) {
+        // Span basis: the writer answers in its own plain text (an ordinary string result, measured to work on full67
+        // where a native producer span and a forced template value did not); the configured writer materializes that
+        // exact text as the native state, a typed-text-result producer span bound to the writer's final model turn.
+        // The writer runs as a child call of this consumer; concurrent consumers' writers are told apart by call id.
+        const own = [...this.writerTurns].filter(([id, entry]) => !known.has(id) && entry.ancestors.includes(callId));
+        if (own.length !== 1) throw new Error('writeGuidance returned text without exactly one recorded writer call');
+        const turn = own[0]![1].node;
+        const ref = await session.runtime.writeNeuraleseText(written, parseType('Neuralese<string>'), {
+          sourceKind: 'typed-text-result', source: 'return_result', markerContext: 'return-result',
+          inputs: [{ node: turn, port: 'result-source' }] });
+        if (isNeuraleseRef(ref)) state = { id: ref.$neuralese.id,
+          ...(ref.$neuralese.source_occurrence ? { source_occurrence: ref.$neuralese.source_occurrence } : {}) };
+        else failure = 'the configured writer returned no native state';
+      } else if (isNeuraleseRef(written)) state = { id: written.$neuralese.id,
         ...(written.$neuralese.source_occurrence ? { source_occurrence: written.$neuralese.source_occurrence } : {}) };
-      else failure = 'writeGuidance returned no native state';
+      else failure = 'writeGuidance returned no guidance text';
     } catch (error) { failure = `writeGuidance failed: ${errorText(error)}`; }
     if (state) {
       const mode = this.run.role === 'teacher' ? 'import' : 'write-only';

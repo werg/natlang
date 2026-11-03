@@ -4,13 +4,14 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { NativeToolAgent, modelTurnsSoFar } from '../dist/native/agent.js';
-import { TrainingGuidance, requestText } from '../dist/native/training-guidance.js';
+import { TrainingGuidance, requestText, consumerText } from '../dist/native/training-guidance.js';
 import { loadGuidanceWriter } from '../dist/runtime/node-guidance-writer.js';
 import { chatCompletionModelTurn } from '../dist/model/chat-completion.js';
 import { MemoryNeuraleseStore } from '../dist/native/neuralese-store.js';
 import { ModelTurnRecorder, setRecorderSource } from '../dist/native/model-recording.js';
 import { interpreter, lambda, nl } from './support/natlang.mjs';
 import { nativeStateFixture } from './fixtures/native-state.mjs';
+import { createNativeStateFixturePort } from './fixtures/native-state-port.mjs';
 
 const DIR = fileURLToPath(new URL('../../applications/guidance-writer', import.meta.url));
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -19,6 +20,7 @@ const WRITE_SHA = sha(readFileSync(`${DIR}/writeGuidance.nl`));
 const CRISP_SHA = sha('natlang.select-guidance-facts.crisp/1');
 const pkg = loadGuidanceWriter(DIR);
 
+const GUIDANCE_TEXT = 'Return "7": ask helper("child-question") and return its answer.';
 const custody = { schema: 'natlang.jolt-privileged-custody/1', split: 'train', case_id: 'world-1' };
 const FACTS = [
   { id: 'reference_solution:0', kind: 'reference_solution', text: 'A verified reference solution:\n1. eval:\nreturn await helper("child-question")', invocation: null, match: [] },
@@ -32,8 +34,8 @@ test('the package loads with its exact .nl hashes and crisp identity', () => {
   assert.equal(pkg.selection.sha256, SELECT_SHA);
   assert.equal(pkg.writer.sha256, WRITE_SHA);
   assert.equal(pkg.crispSha256, CRISP_SHA);
-  assert.equal(pkg.writer.definition.readout, 'template');
-  assert.match(pkg.writer.definition.returns, /^Neuralese<string>$/);
+  assert.equal(pkg.writer.definition.readout, undefined);
+  assert.equal(pkg.writer.definition.returns, 'string');
   assert.equal(pkg.selection.definition.returns, 'string[]');
 });
 
@@ -106,7 +108,10 @@ test('training guidance travels on the wire only to a native server', async () =
  */
 async function episode({ role = 'teacher', selection, select = ids => ids, writer = 'write', writerSetting } = {}) {
   const store = new MemoryNeuraleseStore(), artifact = await store.putNativeState(nativeStateFixture());
-  const neuralese = { store, dialect: 'native-state/fixture' };
+  const writes = [];
+  const fixturePort = createNativeStateFixturePort(store);
+  const port = { dialect: fixturePort.dialect, async write(text, options) { writes.push({ text, options }); return fixturePort.write(text, options); } };
+  const neuralese = { store, dialect: 'native-state/fixture', port };
   const requests = [];
   const driver = Object.assign(async request => {
     requests.push(structuredClone(request));
@@ -118,8 +123,7 @@ async function episode({ role = 'teacher', selection, select = ids => ids, write
     }
     if (policy === 'writeGuidance') {
       if (writer === 'fail') return { calls: [['return_result', { status: 'failed', reason: 'The writer could not write.' }]] };
-      return { calls: [['return_result', { status: 'success', value: [{ type: 'native_state', id: artifact.id }] }]],
-        raw_response: { native_state: { blocks: [{ ...artifact.metadata, id: artifact.id }] } } };
+      return { calls: [['return_result', { status: 'success', value: GUIDANCE_TEXT }]] };
     }
     const opening = String(request.messages[1]?.content ?? '');
     if (opening.includes('Answer q.')) return { calls: [['return_result', { status: 'success', value: '7' }]] };
@@ -143,7 +147,7 @@ async function episode({ role = 'teacher', selection, select = ids => ids, write
     result = await runtime.run(lambda({ type: '() => string', instructions: 'Ask the helper.',
       codebase: { helper: nl('helper', { args: { q: 'string' }, returns: 'string', instructions: 'Answer q.' }) } }));
   } finally { setRecorderSource(() => undefined); }
-  return { result, requests, recorder, artifact, traces };
+  return { result, requests, recorder, artifact, traces, writes, store };
 }
 
 const consumerTurns = requests => requests.filter(request => !request.guidance_policy);
@@ -170,16 +174,16 @@ test('each consumer\'s first turn runs selection then the writer; every consumer
     assert.notEqual(request.invocation_id, 'run-1');
   }
   const writeTurn = policyTurns(requests, 'writeGuidance')[0];
-  assert.equal(writeTurn.template.value, 'write', 'the writer is a template producer write');
+  assert.equal(writeTurn.template, undefined, 'the writer is an ordinary text call');
   // The writer's own prompt carries every selected fact verbatim (rl/privileged_context.writer_saw).
   const writerText = requestText(writeTurn.messages);
   for (const fact of FACTS.slice(0, 2)) assert.ok(writerText.includes(fact.text), fact.id);
-  const blockWrite = [...recorder.graphNodes.values()].find(node => node.kind === 'block_write' && node.block === artifact.id &&
-    node.call_id === writeTurn.invocation_id);
+  const blockWrite = [...recorder.graphNodes.values()].find(node => node.kind === 'block_write' &&
+    node.source_kind === 'typed-text-result' && node.turn.startsWith(writeTurn.invocation_id));
   assert.ok(blockWrite, 'the recorder holds the writer\'s producer write');
   const rootRequest = { schema: 'natlang.guidance-request/1', invocation: { name: 'run-1', role: 'root' }, mode: 'import',
     custody, facts: [FACTS[0], FACTS[1], FACTS[3]], selection: { implementation: 'nl', sha256: SELECT_SHA },
-    writer: { function: 'writeGuidance', sha256: WRITE_SHA }, state: { id: artifact.id, source_occurrence: blockWrite.node } };
+    writer: { function: 'writeGuidance', sha256: WRITE_SHA }, state: { id: blockWrite.block, source_occurrence: blockWrite.node } };
   for (const request of root) assert.deepEqual(request.privileged_context, rootRequest);
   assert.deepEqual(child[0].privileged_context.invocation, { name: child[0].invocation_id, role: 'child' });
   assert.deepEqual(child[0].privileged_context.facts, [FACTS[2]]);
@@ -187,6 +191,32 @@ test('each consumer\'s first turn runs selection then the writer; every consumer
   // The policy calls are graph nodes of the same episode: their model turns are recorded with the consumer's.
   const turnCalls = new Set([...recorder.graphNodes.values()].filter(node => node.kind === 'model_turn').map(node => node.call_id));
   for (const request of requests) assert.ok(turnCalls.has(request.invocation_id), `recorded turn of ${request.invocation_id}`);
+});
+
+test('the writer answers in plain text and the configured writer materializes that exact text as native state', async () => {
+  const { result, requests, recorder, writes } = await episode();
+  assert.equal(result.outcome.kind, 'done', result.outcome.detail);
+  const writeTurns = policyTurns(requests, 'writeGuidance');
+  assert.equal(writeTurns.length, 2);
+  for (const turn of writeTurns) assert.equal(turn.template, undefined, 'an ordinary call: no forced producer span or value');
+  const writerPrompt = JSON.stringify(writeTurns[0].messages);
+  assert.equal(writerPrompt.split('You are running one call of a natural-language function').length - 1, 1,
+    'the consumer system prompt is not repeated inside the writer argument');
+  assert.equal(writes.filter(write => write.text === GUIDANCE_TEXT).length, 2);
+  for (const write of writes) assert.equal(write.options.producer.source_kind, 'typed-text-result');
+  const root = consumerTurns(requests).filter(request => request.invocation_id === 'run-1');
+  const state = root[0].privileged_context.state;
+  assert.equal(root[0].privileged_context.mode, 'import');
+  const node = recorder.graphNodes.get(state.source_occurrence);
+  assert.equal(node.kind, 'block_write');
+  assert.equal(node.source_kind, 'typed-text-result');
+  assert.match(node.turn, /#turn\d+$/);
+  assert.ok(node.turn.startsWith(writeTurns[0].invocation_id), 'bound to the writer\'s own final turn');
+});
+
+test('consumerText drops the shared system prompt', () => {
+  assert.equal(consumerText([{ role: 'system', content: 'sys' }, { role: 'user', content: 'open' }, { role: 'tool', content: 'b' }]), 'open\nb');
+  assert.equal(consumerText([{ role: 'system', content: 'sys' }]), 'sys');
 });
 
 test('a student writes guidance without importing it', async () => {

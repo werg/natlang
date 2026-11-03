@@ -1,5 +1,18 @@
 # Model-facing changes and their measurement
 
+### 2026-11-03 — Guidance writer answers in plain text (writeGuidance; small live check, debt: 48-sample measurement)
+
+`applications/guidance-writer/writeGuidance.nl` now declares `returns: string` with no `readout: template`, adds "Everything
+you need is in consumer and facts; return the guidance text." to step 5, and its `consumer.text` argument is the
+consumer call's own request text without the shared system prompt (`native/training-guidance.ts consumerText`). The
+host writes the returned text as the native state (`typed-text-result`). **Live check on full67 (actor :8270, greedy,
+2026-11-03):** the old forced native producer write failed 4/4 turns (`neuralese-native-state-open`, as on 56/61/75);
+`Neuralese<string>` with a forced text value echoed the type name; `string` with a forced value echoed the consumer
+text; `Neuralese<string>` without a template deliberated about the type for 4x768 tokens and never returned;
+`string` without a template returned correct numbered guidance in 3 turns (1/1; a second probe was an actor-queue
+timeout). **Debt:** about 48 samples on real JOLT+/memetic consumers: completion rate, writer tokens per write, and
+consumer success with the written state versus the text fallback.
+
 ### 2026-11-03 — Learned Neuralese operator prompts (debt: live measurement)
 
 Four new operator prompts in `training/neuralese/natlang_neuralese/model/learned_operators.py` (`compact-value`,

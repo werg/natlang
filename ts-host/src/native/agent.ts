@@ -1836,6 +1836,8 @@ export class NativeToolAgent {
           schedule_priority: response.scheduling.priority } : {}) });
       const turnNode = await this.modelTurnNode(session, graphMessages, response, turns + 1, undefined, currentActor,
         [...reencodedInputs, ...(handoffNode ? [{ node: handoffNode, port: 'handoff' }] : [])], currentTemperature);
+      if (turnNode && guidancePolicy?.function === 'writeGuidance' && callId) trainingGuidance!.noteWriterTurn(callId, turnNode,
+        [...(session.runtime.frame?.chain ?? []), ...(session.runtime.options.parentCallId ? [session.runtime.options.parentCallId] : [])]);
       const recorder = activeRecorder();
       const recordedTurn = response.raw_response?.x_natlang_recorded_turn;
       const recordedNative = response.raw_response?.x_natlang_native_recorded_turn;

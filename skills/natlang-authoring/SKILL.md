@@ -327,8 +327,9 @@ action when retaining native RL receipts; forced template inputs are not actions
 Training guidance (JOLT+, memetic learning) is written in-run, not authored: for
 each call of a training episode the runtime selects the verified facts that call
 may see (`applications/guidance-writer` `selectGuidanceFacts`) and the policy
-model writes them with `writeGuidance` as Neuralese, which the call imports after
-its leading system turn. Do not add training facts to your instructions. A
+model writes guidance from them with `writeGuidance` as plain text; the runtime
+writes that text as a native state, which the call imports after its leading
+system turn. Do not add training facts to your instructions. A
 `guidance-run-invalid` error names the malformed field of the run's
 `x_natlang_guidance` control; regenerate it with rl/jolt.py `guidance_controls`.
 A `training-guidance-unavailable` error means the run is not on a native-state

@@ -9,7 +9,7 @@ types.ts                GuidanceFact, GuidanceConsumer
 visibility.ts           crisp: which facts a call may see at all (exact rule; rl/privileged_context.applicable verifies it)
 crispSelection.ts       crisp side of the selection pluggable: a fixed kind order
 selectGuidanceFacts.nl  natural-language side: which visible facts, most useful first
-writeGuidance.nl        the guidance: Neuralese<string>, readout: template (one forced producer write)
+writeGuidance.nl        the guidance as plain text (string); the host writes that exact text as the native state
 writeHint.nl            hindsight hint for one hinted call (the root, or a long child as its own pass) from its verified execution, explored with eval (DECOMPOSITION.md)
 trajectoryOverview.ts   crisp: one call's structural overview the hint writer opens with
 planTeacherAttempts.nl  how many privileged teacher attempts each scored student group gets (JOLT+ controller)
@@ -20,8 +20,12 @@ Per consumer call, on its first model turn (ts-host/src/native/training-guidance
 1. consumer = `{name: call id, role: root | child, text: the call's prompt text}`; keep the visible facts. None: no guidance.
 2. Select with `pluggable({crisp, nl}, setting ?? 'nl')`. An NL selection that fails or is not distinct visible ids falls
    back to crisp; the request records the implementation that served.
-3. `writeGuidance(consumer, selected)` runs in-process as a child call of the consumer, on the same model and recorder.
-   Its result is the written native state. A teacher imports it (`mode: import`); a student only writes it
+3. `writeGuidance(consumer, selected)` runs in-process as a child call of the consumer, on the same model and recorder,
+   with `consumer.text` the call's own request text (without the shared system prompt). It answers in plain text; the
+   configured writer materializes that exact text as the native state (a `typed-text-result` producer span bound to
+   the writer's final model turn), so the span starts from the model's own guidance text (span basis) and whole-graph
+   RL trains both the text and, through the consumer's import, its state. A native producer-span write is not used:
+   LFM3 checkpoints through full67 never learned the producer close token (MEMETIC_META_LEARNING_REVIEW_20261103.md). A teacher imports it (`mode: import`); a student only writes it
    (`mode: write-only`, for the OPSD twin). When the writer fails, a teacher gets the selected facts as text
    (`mode: text`, with the reason); a student's engine renders the same text turn and only records it (`mode: text-twin`:
    token ids and insertion point in the capture receipt) for the OPSD twin, never in the student's prompt.

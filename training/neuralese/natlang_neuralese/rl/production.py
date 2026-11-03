@@ -784,10 +784,11 @@ def _legacy_collection_binding(recorded):
 def guidance_collection_options(stage):
     """Early backbone learning uses verified text twins before native authoring.
 
-    Checkpoint56's native writers all stalled on malformed producer spans.
+    Checkpoint56-full67 native producer-span writers all stalled (the close token
+    was never learned); since 2026-11-03 the writer answers in text and the host
+    writes that text as the state (MEMETIC_META_LEARNING_REVIEW_20261103.md).
     Writer-off still records student text twins and imports teacher text; it
-    does not disable privileged learning. Joint native SFT remains required.
-    The later general guidance stage retains its native-writer default.
+    does not disable privileged learning. The later guidance stage runs the writer.
     """
     return {'selection':'crisp', 'writer':'off'} if stage == 'backbone' else {}
 

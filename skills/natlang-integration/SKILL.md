@@ -107,12 +107,15 @@ it on the wire. On each call's first model turn the runtime keeps the facts that
 call may see (`applications/guidance-writer/visibility.ts`), selects them
 (`selectGuidanceFacts`, crisp or NL by `selection`; a failed or invalid NL
 selection falls back to crisp and is recorded) and runs `writeGuidance` in-process
-as a child call on the same model and recorder. A teacher imports the written
-state after the leading system turn, a student only writes it, and a failed or
+as a child call on the same model and recorder; it returns plain text and the
+runtime writes that exact text as the native state (`typed-text-result`, bound to
+the writer's final turn). A teacher imports the written state after the leading system turn, a student only writes it, and a failed or
 switched-off writer gives a teacher its facts as text and records the same text
 turn for a student's training twin (`text-twin`; the student never sees it). Recovery: `guidance-run-invalid` names the bad
 field (regenerate the control); `training-guidance-unavailable` means use a
-native-state server (`--neuralese-server`); `guidance-writer-missing` means set
+native-state server (`--neuralese-server`); a `writeGuidance returned text without exactly
+one recorded writer call` fallback means the writer ran outside its consumer (report it as a runtime bug);
+`guidance-writer-missing` means set
 `NATLANG_GUIDANCE_WRITER` to the package directory.
 
 Decision readouts (`readout: decision`, `decide(fn, ...)`) are trainable model outputs: SFT supervises the choice over
