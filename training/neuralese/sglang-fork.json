@@ -2,7 +2,7 @@
   "description": "SGLang fork serving natlang's LFM3 RL actors (owner decision 2026-10-29: upstream-maintained Liquid LFM3 implementation, sgl-project/sglang PR #46858, for dependability). The PR branch (with the upstream main it contains) plus natlang commits: exact post-temperature sampled-token logprob and top-k returned compactly per token (custom_params.natlang_top_k); LFM3 producer spans (the export's producing embedding table, span state mapped in extend and decode) and the native-state export of a closed span (custom_params.natlang_capture) and native-state import through content-hashed placeholders (custom_params.natlang_import), and per-request native adapters in resident low-rank slots (custom_params.natlang_adapter; batches without an adapted request replay the base-only decode graph). The natlang serving front is serve/sglang_actor.py (scripts/neuralese_data/serve_native_checkpoint.py --engine sglang); the checkpoint is served through export/native_hf.py. NATLANG_FORK.md in the fork documents the base, our commits and the rebase procedure. A separate git checkout, not vendored.",
   "path": "../sglang-natlang",
   "branch": "natlang",
-  "commit": "78d9f20bf4d683c6f49b84868aa2c93b23b39910",
+  "commit": "a06adeda40a68d7ce7621ae44141afa0ec4a643c",
   "repository": "https://github.com/werg/sglang-natlang",
   "upstream": "https://github.com/sgl-project/sglang",
   "upstream_base": "17e94c4677d7beb58a89b104fd61b3768994e45e",
@@ -19,8 +19,8 @@
     "scripts/neuralese_data/check_sglang_decide_parity.py (decide/score against the native engine)"
   ],
   "previous_commit": {
-    "commit": "f0aae211c9fae62b555fcf1c43a557ff6700b214",
-    "note": "Prior fork head: LFM3 projections always ran the invariant native_step kernel."
+    "commit": "78d9f20bf4d683c6f49b84868aa2c93b23b39910",
+    "note": "Prior fork head: padded CUDA-graph decode rows (state sentinel -1) read and overwrote the last LFM3 conv state slot in the natlang conv decode."
   },
   "dependency_pins": {
     "torch": "2.14.1",
