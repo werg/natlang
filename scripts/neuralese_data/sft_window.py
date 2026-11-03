@@ -25,6 +25,11 @@ import sys
 from pathlib import Path
 
 GIB = 1024 ** 3
+NESTED_JSON_BYTES = 64 * 1024 ** 2
+NESTED_JSON_DEPTH = 4
+# Bound records above this are census/objective payloads (families, objectives, rolling custody), not admission
+# records; shipping them all would add ~2.6 GB per seed.
+NESTED_JSON_SHIP_BYTES = 16 * 1024 ** 2
 
 
 def _require_new(path):
@@ -173,11 +178,67 @@ def _paths(value, out):
             _paths(item, out)
 
 
+def admission_roots(config):
+    """JSON files the control names under execution-transition/admission keys (top level and trainer parameters)."""
+    roots = set()
+    for scope in (config, config.get('trainer_parameters') or {}, config.get('seed_trainer_parameters') or {}):
+        for key, value in scope.items():
+            # task_selection_history: its record binds the source-controller snapshot rl.selection_history.initial
+            # reads at controller start (2026-11-03 cloud interleaved-control start failure).
+            if 'execution' in key or 'admission' in key or key == 'task_selection_history':
+                found = set()
+                _paths(value, found)
+                roots |= {p for p in found if p.endswith('.json')}
+    return sorted(roots)
+
+
+def _bound_json_refs(value, out):
+    """Paths of bound references ({"path": ..., "sha256": ...}) to JSON files inside a JSON value."""
+    if isinstance(value, dict):
+        path = value.get('path')
+        if isinstance(path, str) and path.startswith('/') and path.endswith('.json') and isinstance(value.get('sha256'), str):
+            out.add(path)
+        for item in value.values():
+            _bound_json_refs(item, out)
+    elif isinstance(value, list):
+        for item in value:
+            _bound_json_refs(item, out)
+
+
+def nested_json_references(roots, *, depth=NESTED_JSON_DEPTH):
+    """Small JSON records bound (path + sha256) inside control-named JSON files, transitively to ``depth``. Source
+    manifests (native-graph-sources) are not expanded: their typed resolvers already name what training reads, and their
+    per-shard receipts are provenance."""
+    found, frontier = set(), list(dict.fromkeys(roots))
+    for _ in range(depth):
+        following = []
+        for current in frontier:
+            path = Path(current)
+            if not path.is_file() or path.stat().st_size > NESTED_JSON_BYTES:
+                continue
+            try:
+                value = json.loads(path.read_text())
+            except (ValueError, OSError):
+                continue
+            if isinstance(value, dict) and str(value.get('schema', '')).startswith('natlang.native-graph-sources'):
+                continue
+            refs = set()
+            _bound_json_refs(value, refs)
+            for item in sorted(refs - found - set(roots)):
+                if Path(item).is_file() and Path(item).stat().st_size <= NESTED_JSON_SHIP_BYTES:
+                    found.add(item)
+                    following.append(item)
+        frontier = following
+    return sorted(found)
+
+
 def closure(config_path, *, max_file_bytes=4 * GIB):
     """The files a window's controller and learner read, by the runtime's own resolvers: every absolute path the
     control names, the recipe resolver's files and stage inputs (manifests, shards, CE/focus/correction dependencies),
-    and the runtime's protected-custody closure. Paths recorded inside those files (receipts, reports, provenance) are
-    not followed: the typed resolvers define what is read, and historical source paths are evidence, not inputs.
+    and the runtime's protected-custody closure, plus the small JSON records the control's execution-transition/admission files bind
+    (path + sha256) transitively to depth 4: controller start verifies admissions through them (e.g. the selected
+    publication a source-controller admission names). Non-JSON paths recorded
+    inside those files (historical source payloads, raw archives) are not followed: they are evidence, not inputs.
     Excluded and reported: the runtime itself (shipped as one archive), the base model (Hugging Face),
     the Python environment, checkpoints (shipped as exact blobs), the window's own output, scratch directories, and
     files above ``max_file_bytes`` (external provenance such as raw archives; never training payloads)."""
@@ -213,6 +274,13 @@ def closure(config_path, *, max_file_bytes=4 * GIB):
             if isinstance(value, dict) and 'path' in value:
                 for item in _binding_files(value):
                     want(item['path'], f'stage-input:{stage}')
+    # Execution-admission and custody records are verified through their nested historical file references at
+    # controller start (native_execution_transition.verify_selected_publication reads the selected publication a
+    # source-controller admission names, 2026-11-03 cloud start failure). Follow JSON references transitively from
+    # the JSON files the control names: bounded to existing small .json files, so historical source payloads stay
+    # evidence, not inputs.
+    for item in nested_json_references(admission_roots(config)):
+        want(item, 'nested-admission-reference')
     custody = runtime / 'runtime-input-closure.json'
     if custody.is_file():
         for item in json.loads(custody.read_text()).get('bound_files', []):
