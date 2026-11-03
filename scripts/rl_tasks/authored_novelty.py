@@ -9,7 +9,8 @@ codebases call one program many times). Programs and inputs are compared after n
 literals (scripts/rl_tasks/measure_repetition.py), so a task whose program and inputs differ from another only in
 names, numbers or quoted values is the same task.
 
-- exact duplicate: same normalized program AND same normalized inputs as a pool task or an earlier batch task;
+- exact duplicate: same normalized program AND same normalized inputs as a pool task or an earlier batch task; a directory
+  reducer's folder world counts exactly (raw file names and contents, hashed), so folder-only variants are not duplicates;
 - near duplicate: within the same family, word 5-shingle Jaccard >= 0.8 between the normalized programs AND >= 0.8
   between the normalized inputs.
 
@@ -31,6 +32,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -57,13 +59,32 @@ def normalize_value(value):
     return value
 
 
+def folder_digest(folder_files):
+    """Exact identity of a directory reducer's world: raw file names (digits and all) and raw file contents."""
+    canonical = json.dumps(sorted((str(path), str(text)) for path, text in folder_files.items()), ensure_ascii=False)
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
 def task_key(row, features):
-    """Normalized program plus normalized inputs: digits and quoted literals do not make a different task."""
+    """Exact key: normalized program, normalized inputs, and for a directory reducer the exact folder world (file names
+    and contents, not digit-normalized: ``01.md``/``02.md`` entries or a long and a short world of one program are
+    different invocations, where the old key collapsed them into exact duplicates). Digits and quoted literals in the
+    plain inputs still do not make a different task."""
     semantics = row.get('semantics') or {}
-    inputs = semantics.get('inputs')
-    if semantics.get('folder_files'):  # a directory reducer's world is part of its invocation
-        inputs = {'inputs': inputs, 'folder_files': semantics['folder_files']}
-    inputs = normalize_value(inputs)
+    inputs = normalize_value(semantics.get('inputs'))
+    folder = semantics.get('folder_files')
+    if folder:
+        inputs = {'inputs': inputs, 'folder_sha256': folder_digest(folder)}
+    return features['program'], json.dumps(inputs, sort_keys=True, ensure_ascii=False)
+
+
+def near_key(row, features):
+    """Near-duplicate text: the exact key's program and inputs, with the folder world as normalized file names and text,
+    so two worlds that differ only in a few notes still compare by their shared wording."""
+    semantics = row.get('semantics') or {}
+    inputs = {'inputs': normalize_value(semantics.get('inputs'))}
+    if semantics.get('folder_files'):
+        inputs['folder_files'] = {str(path): normalize(str(text)) for path, text in sorted(semantics['folder_files'].items())}
     return features['program'], json.dumps(inputs, sort_keys=True, ensure_ascii=False)
 
 
@@ -90,7 +111,8 @@ def main(argv=None):
             pool_tasks.add(key)
             pool_family_programs[features['family']].add(features['program'])
             functional.add(features['family'], features['functional'], features['functional_words'])
-            pool_shingles[features['family']].append((shingles(key[0]), shingles(key[1])))
+            pool_text = near_key(row, features)
+            pool_shingles[features['family']].append((shingles(pool_text[0]), shingles(pool_text[1])))
     pool_functional = collections.Counter(functional.counts)
     batch = [(row, program_features(row)) for row in rows(args.batch)]
     exact, near, seen = [], [], set()
@@ -110,7 +132,8 @@ def main(argv=None):
         if key in pool_tasks or key in seen:
             exact.append(row['id'])
         seen.add(key)
-        mine = (shingles(key[0]), shingles(key[1]))
+        keyed = near_key(row, features)
+        mine = (shingles(keyed[0]), shingles(keyed[1]))
         for other in pool_shingles[features['family']]:
             if all(len(a & b) / max(1, len(a | b)) >= 0.8 for a, b in zip(mine, other)):
                 near.append(row['id'])

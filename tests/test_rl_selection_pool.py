@@ -44,7 +44,7 @@ def test_pool_caps_generators_and_families_and_prefers_new_programs(tmp_path):
     assert receipt['cases']['rows'] == len(kept)
 
 
-def test_effect_state_quota_shrinks_pool_without_duplicating_rows(tmp_path):
+def test_effect_state_share_keeps_every_candidate_and_tags_world_rows(tmp_path):
     rows = []
     for name in 'abcd':
         rows += [case(f'{name}-plain-{i}', f'{name}-plain{i % 12}', 'g/' + name, body=f'{name} plain {chr(97 + i % 26)}{i}')
@@ -59,10 +59,36 @@ def test_effect_state_quota_shrinks_pool_without_duplicating_rows(tmp_path):
     kept = [json.loads(line) for line in (tmp_path / 'quota' / 'cases.jsonl').read_text().splitlines()]
     ids = [row['id'] for row in kept]
     assert len(ids) == len(set(ids))
-    effects = sum('effects' in row['semantics'] for row in kept)
-    assert effects == 40 and effects >= .3 * len(kept) - 1
-    assert receipt['quota']['applied'] and receipt['cases']['rows'] < free['cases']['rows']
-    assert not free['quota']['applied']
+    # The share is not met by dropping candidates: the pool is exactly the unconstrained pool, effect rows tagged.
+    assert receipt['cases']['rows'] == free['cases']['rows']
+    tagged = {row['id'] for row in kept if row['curriculum']['rl'].get('mix_class') == 'effect_state'}
+    assert tagged == {row['id'] for row in kept if 'effects' in row['semantics']} and len(tagged) == 40
+    assert receipt['quota']['mode'] == 'selection-time' and receipt['quota']['class_quota'] == {'effect_state': .34}
+    assert not any('mix_class' in row['curriculum']['rl'] for row in
+                   map(json.loads, (tmp_path / 'free' / 'cases.jsonl').read_text().splitlines()))
+
+
+def test_selector_honours_the_class_quota_every_round_on_a_low_effect_pool(tmp_path):
+    from natlang_neuralese.rl import production
+    from natlang_neuralese.rl.curriculum import DEFAULT
+    rows = []
+    for name in 'abcd':
+        rows += [case(f'{name}-plain-{i}', f'{name}-plain{i % 12}', 'g/' + name, body=f'{name} plain {chr(97 + i % 26)}{i}')
+                 for i in range(200)]
+        rows += [case(f'{name}-eff-{i}', f'{name}-eff{i % 12}', 'g/' + name, body=f'{name} effect {i} step', effect=True)
+                 for i in range(10)]
+    source = tmp_path / 'cases.jsonl'
+    source.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    pool.assemble([str(source)], tmp_path / 'quota', share=.3, domains={}, family_share=.2, min_effect_share=.3,
+                  protected=Stub())
+    cases = [json.loads(line) for line in (tmp_path / 'quota' / 'cases.jsonl').read_text().splitlines()]
+    assert sum(c['curriculum']['rl'].get('mix_class') == 'effect_state' for c in cases) < .1 * len(cases)
+    offset = 0
+    for _ in range(12):
+        chosen = production.select_tasks(cases, [], {'rows': 16, 'group': 8, 'offset': offset}, curriculum=DEFAULT)
+        effect = sum(cases[item['row']]['curriculum']['rl'].get('mix_class') == 'effect_state' for item in chosen)
+        assert effect >= .34 * 16 and len({item['row'] for item in chosen}) == 16
+        offset = (chosen[-1]['row'] + 1) % len(cases)
 
 
 def test_program_caps_and_excluded_ids_trim_program_poor_sources_without_touching_rows(tmp_path):
@@ -82,11 +108,9 @@ def test_program_caps_and_excluded_ids_trim_program_poor_sources_without_touchin
     assert receipt['dropped_before_selection'] == {'excluded_ids': 2, 'bgkit': 21}
 
 
-def test_returned_state_without_a_world_is_not_effect_state_and_min_rows_bounds_the_shrinking(tmp_path):
+def test_returned_state_without_a_world_is_not_tagged_effect_state(tmp_path):
     rows = []
-    for name in 'abcd':
-        rows += [case(f'{name}-plain-{i}', f'{name}-plain{i % 12}', 'g/' + name, body=f'{name} plain {chr(97 + i % 26)}{i}')
-                 for i in range(200)]
+    for name in 'ab':
         rows += [case(f'{name}-eff-{i}', f'{name}-eff{i % 12}', 'g/' + name, body=f'{name} effect {i} step', effect=True)
                  for i in range(10)]
         for i in range(10):  # an author-declared "complete state" with no folder, service or effect check
@@ -95,14 +119,11 @@ def test_returned_state_without_a_world_is_not_effect_state_and_min_rows_bounds_
             rows.append(row)
     source = tmp_path / 'cases.jsonl'
     source.write_text(''.join(json.dumps(row) + '\n' for row in rows))
-    strict = pool.assemble([str(source)], tmp_path / 'strict', share=.3, domains={}, family_share=.2, min_effect_share=.3,
-                           protected=Stub())
-    assert strict['quota']['effect_rows'] == 40 and strict['quota']['met']
-    floor = pool.assemble([str(source)], tmp_path / 'floor', share=.3, domains={}, family_share=.2, min_effect_share=.3,
-                          min_pool_rows=300, protected=Stub())
-    assert floor['cases']['rows'] >= 300 > strict['cases']['rows']
-    assert floor['quota']['effect_rows'] == 40 and not floor['quota']['met']
-    assert floor['quota']['effect_share'] < .3
+    receipt = pool.assemble([str(source)], tmp_path / 'strict', share=.9, domains={}, family_share=1.0, min_effect_share=.3,
+                            protected=Stub())
+    assert receipt['quota']['effect_rows'] == 20 and receipt['quota']['returned_state_rows'] == 20
+    kept = [json.loads(line) for line in (tmp_path / 'strict' / 'cases.jsonl').read_text().splitlines()]
+    assert sum(row['curriculum']['rl'].get('mix_class') == 'effect_state' for row in kept) == 20
 
 
 class Stub:

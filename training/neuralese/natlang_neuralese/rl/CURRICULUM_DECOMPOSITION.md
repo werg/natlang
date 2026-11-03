@@ -47,3 +47,12 @@ program records with exact host verifiers, not invented student/teacher traces.
    `task-curriculum-v2-spread-20261103`; a sealed selection snapshot keeps the
    policy and budget it was chosen under, and `task_curriculum_keep_v1: true`
    opts out. The controller records `task_curriculum_spread_yield` per round.
+
+7. Construct shares are enforced here, not by dropping pool candidates (2026-11-03). Policy `/2` carries
+   `class_quota` (default `{"effect_state": 0.34}`): rows tagged `curriculum.rl.mix_class` by the pool assembler (an oracle
+   that verifies a world after the run: folders, services, repaired code) make up at least that share of every round.
+   Rotating breadth keeps its exact cursor; the shortfall is taken from practice by the usual frontier, outcome-signal and
+   family-exploration order restricted to the class, then the remaining slots fill from all other rows. A pool without
+   the tag selects exactly as before; a config without `class_quota` adopts the default through the recorded transition
+   `task-curriculum-class-quota-20261103`. `scripts/rl_tasks/simulate_selection.py` measures the sampled mixture, distinct
+   rows, programs and families the selector actually reaches on a pool.

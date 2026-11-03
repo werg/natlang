@@ -66,6 +66,16 @@ and floors rounds at 16 tasks x 8 samples. Configs binding /1 adopt it through a
 recorded controller transition; sealed selections keep their recorded policy.
 Measure task-supply repetition with `scripts/rl_tasks/measure_repetition.py`.
 
+Construct shares are enforced at selection time, never by dropping pool candidates
+(supervisor, 2026-11-03: reaching the 30% effect/state bar by shrinking the pool cost
+1,653 distinct programs). The pool assembler keeps every row that survives the generator
+and family caps and tags rows whose oracle verifies a world `curriculum.rl.mix_class =
+effect_state`; selector /2 carries `class_quota` (default effect_state 0.34) and fills at
+least that share of every round from the tagged rows after the rotating breadth cursor
+(rows never duplicated; untagged pools select as before; continuations adopt the field
+through the recorded transition `task-curriculum-class-quota-20261103`). Measure the
+sampled mixture with `scripts/rl_tasks/simulate_selection.py`, not the pool's own share.
+
 ## Neuralese compaction is the intended runtime design (owner, 2026-11-03)
 
 Owner intent: Neuralese compacts and summarizes large values throughout the

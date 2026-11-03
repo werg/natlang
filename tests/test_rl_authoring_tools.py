@@ -501,3 +501,25 @@ def test_authored_child_notes_only_from_replay_verified_input_specific_notes():
     assert notes.derive(row({'read': once}, 'for (const x of xs) await read(x);'))[0] == []  # one value, many calls
     new, why = notes.with_notes(row({'read': once}, 'await read(x);', replay=False))
     assert new['curriculum']['reference'].get('children') is None and why == {'smoke_not_replay_verified': 1}
+
+
+def test_folder_only_variants_with_numbered_files_are_not_exact_duplicates(tmp_path):
+    base = case('a', 'reducers', 'Sort the files in the folder with `file.moveTo("done/")`.', {})
+    variants = []
+    for ident, files in (('b', {'inbox/01.md': 'Entry 12 kettle sealed', 'inbox/02.md': 'Entry 13 toaster burnt'}),
+                         ('c', {'inbox/01.md': 'Entry 14 kettle sealed', 'inbox/02.md': 'Entry 15 toaster burnt'}),
+                         ('d', {'inbox/01.md': 'Entry 12 kettle sealed', 'inbox/02.md': 'Entry 13 toaster burnt',
+                                'inbox/03.md': 'Entry 16 fan'})):
+        row = json.loads(json.dumps(base))
+        row['id'] = ident
+        row['semantics']['folder_files'] = files
+        variants.append(row)
+    pool = write(tmp_path / 'pool.jsonl', [case(f'p{i}', 'reducers', 'pool ' + 'abcdefghijklmnopqrstu'[i] * (i + 2), {}) for i in range(20)])
+    out = tmp_path / 'n.json'
+    authored_novelty.main([write(tmp_path / 'b.jsonl', variants), '--pool', pool, '-o', str(out)])
+    # Digit-normalized names and contents used to collapse b, c and d into one key.
+    assert json.loads(out.read_text())['exact_duplicates'] == []
+    twin = json.loads(json.dumps(variants[0]))
+    twin['id'] = 'e'
+    authored_novelty.main([write(tmp_path / 'c.jsonl', [variants[0], twin]), '--pool', pool, '-o', str(out)])
+    assert json.loads(out.read_text())['exact_duplicates'] == ['e']

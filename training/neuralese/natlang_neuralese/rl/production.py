@@ -2072,6 +2072,7 @@ def adopt_policy_loss_defaults(config, state, state_path):
 
 
 TASK_CURRICULUM_V2_TRANSITION = 'task-curriculum-v2-spread-20261103'
+TASK_CURRICULUM_CLASS_QUOTA_TRANSITION = 'task-curriculum-class-quota-20261103'
 
 
 def adopt_task_curriculum_defaults(config, state, state_path, *, sealed_selection=False):
@@ -2103,14 +2104,16 @@ def adopt_task_curriculum_defaults(config, state, state_path, *, sealed_selectio
              'group': max(before['group'], adopted['min_group'])}
     if after == before:
         return config
-    if schema == V1_SCHEMA or after['rows_per_round'] != before['rows_per_round'] or after['group'] != before['group']:
-        record = {'schema': 'natlang.rl-task-curriculum-transition/1', 'transition': TASK_CURRICULUM_V2_TRANSITION,
-                  'from': before, 'to': after, 'round': state.get('round')}
-        transitions = state.setdefault('task_curriculum_transitions', [])
-        if not any(item.get('transition') == TASK_CURRICULUM_V2_TRANSITION and item.get('from') == before
-                   and item.get('to') == after for item in transitions):
-            transitions.append(record)
-            write_json_durable(state_path, state)
+    # A /2 config that predates ``class_quota`` adopts the construct-share default through its own recorded transition.
+    name = (TASK_CURRICULUM_V2_TRANSITION if schema == V1_SCHEMA or after['rows_per_round'] != before['rows_per_round']
+            or after['group'] != before['group'] else TASK_CURRICULUM_CLASS_QUOTA_TRANSITION)
+    record = {'schema': 'natlang.rl-task-curriculum-transition/1', 'transition': name,
+              'from': before, 'to': after, 'round': state.get('round')}
+    transitions = state.setdefault('task_curriculum_transitions', [])
+    if not any(item.get('transition') == name and item.get('from') == before
+               and item.get('to') == after for item in transitions):
+        transitions.append(record)
+        write_json_durable(state_path, state)
     return {**config, **after}
 
 

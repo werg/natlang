@@ -2,6 +2,9 @@
 """Reference notes for the Neuralese producer helpers of authored RL tasks (fallow register S1).
 
   authored_child_notes.py backfill [--pool DIR] [--dry-run]     add notes to the admitted train rows that can carry them
+  authored_child_notes.py mechanical TASKS.jsonl [--pool DIR] [--dry-run]
+                                                                 attach per-call notes of a corrected tasks file to admitted rows
+                                                                 whose program cannot replay (provenance ``mechanical``)
 
 An authored Neuralese task scripts, in its smoke, what each producer helper literally writes for the call it is given
 (``smoke.children``; ``smoke.replay`` runs the whole root script with those answers and the oracle judges the result,
@@ -128,13 +131,65 @@ def backfill(pool, dry_run=False):
     return summary
 
 
+def mechanical(pool, tasks_path, dry_run=False):
+    """Attach input-specific per-call notes from ``tasks_path`` (a corrected copy of an admitted batch whose only change is
+    ``smoke.children``) to the admitted rows of the same task ids that have none. For programs that cannot be a full
+    replay (their root reads typed Neuralese fields in code) the notes are deterministic extracts of each call's own
+    arguments, not verified producer outputs: provenance is ``mechanical:argument-extract``, never ``checked``. The
+    same exclusions as ``derive`` apply (constants, short strings, identical notes, repeated calls with one script)."""
+    pool = Path(pool)
+    tasks = {}
+    for line in Path(tasks_path).read_text().splitlines():
+        if line.strip():
+            task = json.loads(line)
+            tasks[task['id']] = task
+    with open(pool / 'cases.jsonl.lock', 'a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        rows = [json.loads(line) for line in (pool / 'cases.jsonl').read_text().splitlines() if line.strip()]
+        out, stats, skipped = [], collections.Counter(), collections.Counter()
+        for row in rows:
+            task = tasks.get(row['id'].split(':')[2]) if row['id'].count(':') >= 3 else None
+            if (task is None or row['split'] != 'train' or (row['curriculum'].get('reference') or {}).get('children')
+                    or not (row['curriculum'].get('external') or {}).get('structure')):
+                out.append(row)
+                continue
+            stats['candidate_rows'] += 1
+            probe = json.loads(json.dumps(row))
+            probe['curriculum']['external']['structure']['smoke']['children'] = task['smoke']['children']
+            children, why = derive(probe)
+            skipped.update(why)
+            if not children:
+                out.append(row)
+                continue
+            children = [{**child, 'provenance': 'mechanical:argument-extract'} for child in children]
+            reference = dict(row['curriculum']['reference'])
+            reference['children'] = children
+            out.append({**row, 'curriculum': {**row['curriculum'], 'reference': reference}})
+            stats['rows_with_notes'] += 1
+            stats['notes'] += len(children)
+        summary = {'rows': len(rows), **stats, 'skipped_sites': dict(skipped), 'tasks_file': str(tasks_path)}
+        if not dry_run and stats['rows_with_notes']:
+            write_text_atomic(pool / 'cases.jsonl', ''.join(json.dumps(row) + '\n' for row in out))
+            with open(pool / 'admissions.jsonl', 'a') as log:
+                log.write(json.dumps({'unix': __import__('time').time(), 'status': 'child-notes-mechanical',
+                                      **summary}) + '\n')
+    return summary
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest='cmd', required=True)
     fill = sub.add_parser('backfill')
     fill.add_argument('--pool', default=DEFAULT_POOL)
     fill.add_argument('--dry-run', action='store_true')
+    mech = sub.add_parser('mechanical')
+    mech.add_argument('tasks')
+    mech.add_argument('--pool', default=DEFAULT_POOL)
+    mech.add_argument('--dry-run', action='store_true')
     args = parser.parse_args(argv)
+    if args.cmd == 'mechanical':
+        print(json.dumps(mechanical(args.pool, args.tasks, args.dry_run)))
+        return 0
     print(json.dumps(backfill(args.pool, args.dry_run)))
     return 0
 
