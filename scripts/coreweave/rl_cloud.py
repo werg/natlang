@@ -33,8 +33,9 @@ RUN.json (schema natlang.rl-cloud-run/1):
    "checkpoint_bases" ([{"sha256", "bytes", "path" (DGX copy, to build deltas against), "encoding": "raw" |
                          "zip-delta" with "base", "receipt" {sha256, bytes}, "payload" {sha256, bytes}}]),
    "runtime_archive" ({"runtime", "archive", "sha256", "bytes", "closure_sha256"}: the frozen runtime SFT windows run),
-   "lineages": {NAME: joint SFT: {"controller" (a DGX mandatory supervised controller config), "window" (optional
-                         refresh_after_updates), "config" (overrides), "resources", "account", "allow_missing"}
+   "lineages": {NAME: joint SFT: {"controller" (the DGX lineage's current window control), "window" (optional
+                         refresh_after_updates), "rebuild_window" (seed from an incomplete window's parent, forking
+                         from the DGX window), "config" (overrides), "resources", "account", "allow_missing"}
                       RL: {"template" (a DGX lineage config.json), "parent": {"checkpoint", "tokenizers"},
                            "config", "resources", "account"}},
    RL lineages also: "template_runtime" (a DGX RL runtime whose runs/ packets ship), "extras", "cloud_inputs"}
@@ -478,8 +479,8 @@ def select_boundary(spec):
     if state.get('phase') == 'awaiting_semantic_refresh' and state.get('pending_native_checkpoint'):
         mode, previous, parent = 'next-window', control, Path(state['pending_native_checkpoint'])
     else:
-        if config.get('rolling_sft_resume'):
-            raise SystemExit(f'{control} is a rolling retry control: its earned slot is not a completed boundary')
+        # A window still training, failed or retried in its rolling slot (a rolling control keeps the window's
+        # branch origin): only its parent is a completed boundary the cloud can rebuild the window from.
         prior = ((config.get('branch_origin') or {}).get('prior_control') or {}).get('path')
         if not prior:
             raise SystemExit(f'{control} has no prior control to rebuild its window from')
@@ -497,8 +498,19 @@ def select_boundary(spec):
     expected = (config.get('branch_origin') or {}).get('parent', {}).get('sha256')
     if mode == 'same-window' and expected and expected != sha:
         raise SystemExit(f'{control}: parent sha256 {sha} differs from its branch origin {expected}')
+    in_flight = None
+    if mode == 'same-window':
+        slot = Path(config['out']) / 'learner' / 'checkpoint.pt'
+        rolling = config.get('rolling_sft_resume') or {}
+        in_flight = {'phase': state.get('phase'),
+                     'rolling_slot': str(slot) if slot.is_file() and slot.resolve() != parent.resolve() else None,
+                     'rolling_slot_global_step': (read_json(control.parent / 'preparation.json', {}) or {}).get('slot_global_step')
+                     if rolling else None,
+                     'note': 'a cloud rebuild of this window forks from the DGX window and does not carry its in-flight '
+                             'or rolling progress; seed requires lineages.NAME.rebuild_window: true'}
     return {'mode': mode, 'controller': str(control), 'controller_sha256': file_digest(control),
-            'phase': state.get('phase'), 'previous_controller': str(previous), 'window': window,
+            'phase': state.get('phase'), 'dgx_window_in_flight': in_flight,
+            'previous_controller': str(previous), 'window': window,
             'parent': str(parent), 'parent_sha256': sha, 'parent_bytes': parent.stat().st_size,
             'runtime': (config.get('actor_environment') or {}).get('NATLANG_REPO') or str(Path(config['runtime']).parent)}
 
@@ -603,8 +615,14 @@ def seed_sft(run, name):
         return read_json(exports / 'seed.json')
     L = lineage_dir(run, name)
     if L.exists() and any(L.iterdir()):
-        raise SystemExit(f'{L} is not empty; a seed is only for a new lineage')
+        if any(L.rglob('state.json')):
+            raise SystemExit(f'{L} has a controller state; a seed is only for a new lineage')
+        shutil.rmtree(L)  # an interrupted seed's prepared controls: nothing earned, rebuilt from the live boundary
     boundary = select_boundary(spec)
+    if boundary['mode'] == 'same-window' and spec.get('rebuild_window') is not True:
+        raise SystemExit(f'{name}: {spec["controller"]} is not a completed window ({boundary["phase"]}); seeding '
+                         f'rebuilds it from {boundary["parent_sha256"][:12]} and forks from the DGX window: set '
+                         f'rebuild_window: true to do that deliberately, or name the DGX window once it completes')
     window, parent_path = L / 'w000000', L / 'parent' / 'checkpoint.pt'
     ident = f'lfm3-cloud-{name}-w000000'
     prepared = window / 'dgx-prepared-config.json'

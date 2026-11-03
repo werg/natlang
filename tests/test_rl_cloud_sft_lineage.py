@@ -240,3 +240,54 @@ def test_sandbox_controls_drop_host_only_wrappers_and_relocate_resident_plan(tmp
     assert config['trainer_parameters']['resident_data_directory'] == '/dgx/ops/resident-data'  # input untouched
     with pytest.raises(ValueError, match='update lock'):
         sandbox_controls({'actor_command': ['py', lock]}, tmp_path)
+
+
+def test_select_boundary_follows_the_live_dgx_window(tmp_path):
+    from scripts.coreweave.rl_cloud import select_boundary
+    ops, runs = tmp_path / 'ops', tmp_path / 'runs'
+    recipe = tmp_path / 'recipe.json'
+    recipe.write_text(json.dumps({'stages': [{'id': 'sft', 'parameters': {'refresh_after_updates': 64}}]}))
+
+    def window(name, checkpoint, prior=None, extra=None):
+        out = runs / name
+        (out / 'learner').mkdir(parents=True)
+        config = {'out': str(out), 'checkpoint': str(checkpoint), 'mandatory_sft_only': True, 'runtime': '/rt/ts-host',
+                  'production_recipe': str(recipe), 'production_stage': 'sft', **(extra or {})}
+        if prior is not None:
+            config['branch_origin'] = {'prior_control': {'path': str(prior)}}
+        (ops / name).mkdir(parents=True)
+        (ops / name / 'config.json').write_text(json.dumps(config))
+        return out, ops / name / 'config.json'
+
+    base = write_zip(tmp_path / 'base.pt', {'w': b'\x01' * 64})
+    first, first_control = window('w84', base)
+    earned = write_zip(first / 'learner' / 'checkpoint.pt', {'w': b'\x02' * 64})
+    (first / 'state.json').write_text(json.dumps({'phase': 'awaiting_semantic_refresh',
+                                                  'pending_native_checkpoint': str(earned)}))
+    done = select_boundary({'controller': str(first_control)})
+    assert (done['mode'], done['previous_controller'], done['parent_sha256']) == ('next-window', str(first_control), sha(earned))
+    assert done['dgx_window_in_flight'] is None
+
+    second, second_control = window('w179', earned, prior=first_control)
+    (second / 'state.json').write_text(json.dumps({'phase': 'updating_mandatory_sft', 'checkpoint': str(earned)}))
+    with pytest.raises(SystemExit, match='successor'):
+        select_boundary({'controller': str(first_control)})
+    rebuilt = select_boundary({'controller': str(second_control)})
+    assert (rebuilt['mode'], rebuilt['previous_controller'], rebuilt['window']) == ('same-window', str(first_control), 64)
+    assert rebuilt['parent_sha256'] == sha(earned) and rebuilt['dgx_window_in_flight']['phase'] == 'updating_mandatory_sft'
+
+    # the DGX retries the window in its rolling slot: the retry control names the window's prior control too
+    write_zip(second / 'learner' / 'checkpoint.pt', {'w': b'\x03' * 64})
+    retry_dir = ops / 'w179-rolling186'
+    retry_dir.mkdir()
+    retry = json.loads(second_control.read_text())
+    retry['rolling_sft_resume'] = {'schema': 'natlang.rolling-sft-resume/1'}
+    (retry_dir / 'config.json').write_text(json.dumps(retry))
+    (retry_dir / 'preparation.json').write_text(json.dumps({'prior_control': {'path': str(second_control)},
+                                                            'slot_global_step': 186}))
+    with pytest.raises(SystemExit, match='successor'):
+        select_boundary({'controller': str(second_control)})
+    rolling = select_boundary({'controller': str(retry_dir / 'config.json')})
+    assert rolling['mode'] == 'same-window' and rolling['parent_sha256'] == sha(earned)
+    assert rolling['dgx_window_in_flight']['rolling_slot_global_step'] == 186
+    assert rolling['dgx_window_in_flight']['rolling_slot'] == str(second / 'learner' / 'checkpoint.pt')

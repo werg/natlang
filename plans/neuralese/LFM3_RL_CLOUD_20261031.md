@@ -169,11 +169,14 @@ runtime R38) run as *windows*: one mandatory supervised controller trains to its
 is a new controller continuing from that earned checkpoint (`native_supervised.continuation_config`). A cloud
 joint-SFT lineage runs exactly that, window after window, in one GPU sandbox:
 
-- Run file lineage `{"controller": DGX window config}`. `rl_cloud.py seed` reads that controller's **live** state:
-  a completed window continues as the next window (`scripts/neuralese_data/sft_window.py next`, the generalized DGX
-  window operator, run under the lineage's frozen runtime package); a window still training or failed offers only its
-  own parent (the same window rerun from it). A control the DGX has already moved past (a sibling `OPS/*/config.json`
-  naming it as `prior_control`) is refused. Window 0 lives at `ROOT/<lineage>/w000000`, the parent at
+- Run file lineage `{"controller": the DGX lineage's current window control}`. `rl_cloud.py seed` reads that
+  controller's **live** state: a completed window continues as the next window (`scripts/neuralese_data/sft_window.py
+  next`, the generalized DGX window operator, run under the lineage's frozen runtime package). A window still
+  training, failed or retried in its rolling slot offers only its parent: the window is rebuilt from its prior
+  control's completed boundary, exactly as the DGX prepared it, without the DGX window's in-flight or rolling progress.
+  That forks from the DGX window, so seed requires `"rebuild_window": true` (plan shows `dgx_window_in_flight`). A
+  control the DGX has already moved past (a sibling `OPS/*/config.json` or rolling `preparation.json` naming it as
+  `prior_control`) is refused. A seed preempted before its record is written restarts cleanly. Window 0 lives at `ROOT/<lineage>/w000000`, the parent at
   `ROOT/<lineage>/parent/checkpoint.pt`, the window index at `ROOT/<lineage>/lineage.json`.
 - Host-only controls are dropped, not copied: the DGX `admit-learner-100g.py` ledger wrapper and `update_lock.sh`
   (`rl_cloud.sandbox_command`), the aarch64 llama.cpp converter; the resident source plan moves beside the window. The
@@ -185,11 +188,13 @@ joint-SFT lineage runs exactly that, window after window, in one GPU sandbox:
   and stage inputs, the runtime's protected-custody files; checkpoints, the runtime, the HF base, environment, scratch
   and the window's own output excluded; >4 GiB external provenance excluded and reported). Files already committed in a
   readable store (`blob_stores`: the private recovery store) become exact `file` inputs; only the rest is packed and
-  uploaded once. On 2026-11-03: 349 files, 7.07 GB, of which 248 (5.86 GB) were already private; 101 (1.21 GB) packed.
+  uploaded once. On 2026-11-03: 349 files, 7.07 GB, of which 248 (5.86 GB) were already private; 101 (1.21 GB) packed
+  into one 1.07 GB blob (committed, 6 MB/s).
 - Parent: an exact ZIP delta (`artifact_zip_delta.py`) over the nearest declared full base whose bytes are on the DGX
   (`checkpoint_bases`: `bf95…`, itself a delta over the raw private base `0c8e75f6…`), decoded once on the DGX before
   upload; the sandbox fetches the raw base at cloud bandwidth and reconstructs the chain, each step verified against
-  its bound target hash. Trained deltas from `bf95` measured 3.2-3.7 GB vs 15.4 GB raw.
+  its bound target hash. Trained deltas from `bf95` measured 3.2-3.7 GB (steps 68-72) and 5.35 GB for the step-179
+  parent `239c8ca0` (built in 646 s on DGX) vs 15.4 GB raw.
 - Progress: a window counts when it reaches its boundary with optimizer updates (no RL `trained_rounds` involved).
   Exports select the actual resume checkpoints: a completed window's pending checkpoint; an interrupted window's
   rolling slot plus the exact parent its `rolling_sft_resume` binds; else the controller parent. The window metadata
