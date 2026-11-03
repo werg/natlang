@@ -53,9 +53,11 @@ class SupportSet:
         return [{'id': adapters[node], 'scale': float(scales.get(node, 1))}
                 for node in self.bindings[binding_id]['ancestry'] if node in adapters and scales.get(node, 1) != 0]
 
-    def accumulate(self, adapters, make_leaves, soft_blocks=None, *, backward=True):
+    def accumulate(self, adapters, make_leaves, soft_blocks=None, *, backward=True, extra_leaves=None):
         """Run every row under its binding's stack; ``make_leaves()`` returns fresh live ``{adapter id: tensors}``
-        (rebuilt per row so each backward has its own composition graph). Returns the weighted loss value."""
+        (rebuilt per row so each backward has its own composition graph). ``extra_leaves`` are live tensors of
+        artifacts the stacks reference without running them as entries (a bank's live basis, keyed by its basis
+        artifact). Returns the weighted loss value."""
         from ...data.native_graph import graph_loss
         from ...model.native_adapters import adapter_state_input_receipt, run_native
         from .checkpointing import configure_adaptation_checkpointing
@@ -77,8 +79,10 @@ class SupportSet:
                 if backward and loss.requires_grad:
                     (loss * row['coefficient']).backward()
                 return float(loss.detach()) * row['coefficient']
-            total += run_native(self.engine, execute, entries, leaves={k: v for k, v in leaves.items() if any(e['id'] == k for e in entries)},
-                                gradient_precision='fp32')
+            live = {k: v for k, v in leaves.items() if any(e['id'] == k for e in entries)}
+            if extra_leaves and live:
+                live.update(extra_leaves)
+            total += run_native(self.engine, execute, entries, leaves=live, gradient_precision='fp32')
         return total
 
 
@@ -102,11 +106,13 @@ def placeholder_adapters(engine, bank, scopes, owner=None):
 
 def fit_in_bank(engine, bank, support, arrays, *, soft_states=None, steps=50, learning_rate=5e-2,
                 state_learning_rate=1e-3, refine_steps=30, init=None, train_states=True, fixed_states=(),
-                fixed_adapters=None):
+                fixed_adapters=None, factors=None, basis_leaves=None):
     """Fit in the learner's parametrization. ``arrays``: list of `ScopeArray`; ``soft_states``: ``{soft key: state
     id}`` trained jointly when ``train_states`` (except ``fixed_states``, held at their incoming value);
     ``fixed_adapters``: scope -> adapter that runs unchanged in every stack (scopes outside the fit); ``init``: scope ->
-    a parent mixture ``{'distribution', 'gain'}`` or (M,) projected coefficients (`targets.project_adapter`).
+    a parent mixture ``{'distribution', 'gain'}`` or (M,) projected coefficients (`targets.project_adapter`);
+    ``factors``/``basis_leaves``: live bank values (component index -> {m: (P, Q)}; ``{basis artifact: tensors}``)
+    used instead of the stored snapshot, held fixed here (the meta-learner's inner step, `meta_bank`).
     Returns labels and history."""
     from ...serve.native_grad import _leaf_block
     fmt = bank.mixture_format
@@ -138,7 +144,8 @@ def fit_in_bank(engine, bank, support, arrays, *, soft_states=None, steps=50, le
     def executed():
         return {array.scope: coefficients(*law(array.scope)) for array in arrays}
     def leaves(values):
-        return {array.adapter: bank.adapter_tensors(bank.composed_cores(array.slots, values[array.scope], offset=array.offset))
+        return {array.adapter: bank.adapter_tensors(bank.composed_cores(array.slots, values[array.scope], factors=factors,
+                                                                        offset=array.offset))
                 for array in arrays}
     state_params = [value for _, _, values in states.values() for value in values.values() if value.requires_grad]
     def run(count):
@@ -148,7 +155,7 @@ def fit_in_bank(engine, bank, support, arrays, *, soft_states=None, steps=50, le
         optimizer, history = torch.optim.Adam(groups), []
         for _ in range(count):
             optimizer.zero_grad(set_to_none=True)
-            history.append(support.accumulate(adapters, lambda: leaves(executed()), soft_blocks))
+            history.append(support.accumulate(adapters, lambda: leaves(executed()), soft_blocks, extra_leaves=basis_leaves))
             optimizer.step()
         return history
     history = run(steps)
@@ -158,7 +165,8 @@ def fit_in_bank(engine, bank, support, arrays, *, soft_states=None, steps=50, le
     refined = run(refine_steps)
     with torch.no_grad():
         final = executed()
-        fitted_loss = support.accumulate(adapters, lambda: leaves(final), soft_blocks, backward=False)
+        fitted_loss = support.accumulate(adapters, lambda: leaves(final), soft_blocks, backward=False,
+                                         extra_leaves=basis_leaves)
     out = {}
     for array in arrays:
         with torch.no_grad():

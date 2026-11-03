@@ -59,7 +59,7 @@ def refuse_retired_parameters(parameters):
 
 def validate_stage_parameters(kind, parameters):
     """Validate parameter shapes whose CLI actions are not scalar values."""
-    if kind in ('program_adaptation', 'learned_optimizer'):
+    if kind in ADAPTATION_KINDS:
         from .adaptation_stages import validate_parameters as validate_adaptation
         validate_adaptation(kind, parameters)
         return
@@ -1992,7 +1992,7 @@ def main(argv=None):
         parser.error('unknown stopping stage')
     if args.stage and next((stage['kind'] for stage in recipe['stages'] if stage['id'] == args.stage), None) \
             not in ADAPTATION_KINDS:
-        parser.error('--stage runs a declared program_adaptation or learned_optimizer stage')
+        parser.error('--stage runs a declared adaptation stage (program_adaptation, bank_metalearning, learned_optimizer)')
     if args.inspect:
         print(json.dumps(recipe, indent=2))
         return
