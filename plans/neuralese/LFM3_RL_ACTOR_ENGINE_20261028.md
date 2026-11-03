@@ -178,8 +178,11 @@ reported p = 0.53 for ` >` where the learner gives -24.4 nats (` !==` is certain
 the learner's law, i.e. a transient one-step mixup, not lasting state damage. Same workload: without CUDA graphs
 0/64 (max 0.43), with graphs but `--disable-overlap-schedule` 0/64 (max 0.55, per-turn k3 <= 0.0013, c=32 115 vs
 122 tok/s); with overlap but the triton attention backend instead of flashinfer 0/64 (max 0.42, c=32 130 tok/s).
-The cloud RTX PRO 6000 runs (flashinfer, overlap) showed 0/424. So the mixup needs flashinfer + overlap on GB10
-(sm_121); the race inside it is not localized further. Actors now run `--disable-overlap-schedule` by default (`--sglang-overlap-schedule` opts in; the
+With overlap and flashinfer but `--disable-cuda-graph-padding` 0/64 (max 0.28, per-turn k3 <= 0.0013, c=32 203 tok/s).
+The cloud RTX PRO 6000 runs (flashinfer, overlap, padding) showed 0/424. So on GB10 (sm_121) the mixup needs padded
+CUDA-graph decode batches + the overlapped scheduler + flashinfer; most likely the padded rows' state/metadata of the
+batch prepared ahead by the overlap thread, not localized further. Overlap + no padding is a faster candidate default
+(one 64-turn DGX sample; not measured on cloud). Actors now run `--disable-overlap-schedule` by default (`--sglang-overlap-schedule` opts in; the
 serving_engine binding records it), and the engine guard rejects such episodes in any case.
 
 **Measurements** (`serve/sglang_bench.py`, full67 `71c3eb45…`, real pilot turns: 78 turns, 1.07M prompt tokens;
@@ -208,6 +211,18 @@ tokens (~36 tok/s aggregate, ~25 s per ~250-token turn), 0 native fallbacks; cap
 round on this GPU is still hours; the DGX is a weak rollout GPU, the cloud card is 8-40x faster. Learner rescore of its
 106 turns (52,444 tokens): mean 0.026, p99 0.18, max 26.5, per-turn k3 max 0.28: the overlap mixup in real episodes
 (scattered, uncorrelated with prompt length), which the guard rejects and the no-overlap default removes.
+
+**Cloud smoke of the interleaved control (2026-11-03, cw2 sandbox 55aad6a7, ~0.5 GPU-h, stopped).** The prepared
+control `ops/interleaved-rl-full67-v41-1103` was run as one 2x2 RL round (smoke recipe child; code at main 35501c48).
+Granted shape after the stepwise backoff: 1 GPU, 4 CPU, 48Gi (cw1/cw3/cw4 refused every shape). Setup worked:
+the seed's exact input closure (248 inputs, 5.2 of 6.6 GB already in the private stores) and the full67 ZIP-delta
+parent reconstructed in 672 s, the SGLang fork installed in 301 s (installed because the engine default will switch
+the native actor), the runtime built from main and the actor rebound. The controller then failed in 5 s, before any
+rollout: `task_selection_history` names a selector-history file whose `source_controller` snapshot
+(`control-inputs/source-controller-bbc730...json`) was not in the closure (the closure did not follow typed indirect
+inputs). Fix: `sft_window.closure` follows bound JSON references from `task_selection_history` (with the concurrent nested-admission-reference change). So the smoke did not reach sampling, replay, the guard or the IS update; the
+IS/guard evidence remains the cloud and DGX rescore measurements above and the unit tests. Per owner decision no
+further SGLang smoke: production interleaved RL is the next use.
 
 **Switching the collector.** Runtimes frozen from main >= 90a5d41e1 carry the guard; v39/v41 do not and must not
 collect with SGLang. Existing LFM collector configs switch automatically at their next unbound collection via
