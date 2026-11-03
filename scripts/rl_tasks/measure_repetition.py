@@ -24,6 +24,9 @@ from pathlib import Path
 DIGITS = re.compile(r'\d+(?:\.\d+)?')
 QUOTED = re.compile(r'"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\'|`[^`]*`')
 SPACE = re.compile(r'\s+')
+# Semantics that verify effects or state (files, services, function checks, repaired codebases), not only an answer.
+EFFECT_KEYS = frozenset({'effects', 'expected_files', 'function_checks', 'operation', 'service_scopes', 'files_oracle',
+                         'codebase_check', 'state_oracle'})
 
 
 def normalize(text):
@@ -52,6 +55,10 @@ def frontmatter_field(header, name):
     return '\n'.join(out)
 
 
+def curriculum_of(row):
+    return row.get('curriculum') or {}
+
+
 def program_features(row):
     semantics = row['semantics']
     files = {path: text for path, text in semantics['files'].items() if path.endswith('.nl')}
@@ -71,6 +78,19 @@ def program_features(row):
         if re.search(r'^readout:\s*decision', header, re.M):
             readouts += 1
     code = '\n'.join(text for text in semantics['files'].values())
+    oracle = semantics.get('oracle')
+    explicit = (curriculum_of(row).get('external') or {}).get('oracle_depth')
+    effect_state = (explicit == 'effect-state' if explicit in ('effect-state', 'answer') else
+                    bool(EFFECT_KEYS & set(semantics)) or (isinstance(oracle, dict) and oracle.get('level') in
+                                                           ('constraints', 'authoring', 'state', 'effects')))
+    generator = (row.get('generation') or {}).get('generator') or 'unknown'
+    external = curriculum_of(row).get('external') or {}
+    source = str(external.get('source') or '')
+    if generator == 'natlang.broad_external_rl_tasks/1':
+        kind = ('codebase' if 'codebase' in source else
+                'composed' if external.get('framing') not in (None, 'plain', 'neuralese-helper') else 'dataset')
+        generator = generator + ':' + kind
+    wrapper = generator.endswith(':dataset') and len(files) == 1 and curriculum_of(row).get('mode') == 'single_call'
     depth = max((path.count('/') for path in files), default=0)
     root_header, root_body = split_file(semantics['files'][root])
     curriculum = row.get('curriculum') or {}
@@ -88,7 +108,12 @@ def program_features(row):
         'neuralese_fan_in': neuralese_results >= 2, 'iterate': 'iterateOn' in code, 'readout_decision': readouts > 0,
         'decide_call': bool(re.search(r'\bdecide\(', code)), 'services': bool(semantics.get('services')),
         'single_call': curriculum.get('mode') == 'single_call',
-        'generator': (row.get('generation') or {}).get('generator') or 'unknown',
+        'generator': generator, 'dataset_wrapper': wrapper, 'effect_state_oracle': effect_state,
+        'call_depth_ge_3': depth >= 2,
+        'folder_reducer': bool(re.search(r'^kind:\s*directory-reducer', '\n'.join(
+            split_file(t)[0] for t in files.values()), re.M)),
+        'skills': any('/skills/' in path and path.endswith('SKILL.md') for path in semantics['files']),
+        'neuralese_iterate': 'iterateOn' in code and neuralese_results + neuralese_args > 0,
         'family': row.get('family') or 'unspecified',
         'level': (curriculum.get('rl') or {}).get('level'),
     }
@@ -101,11 +126,18 @@ def effective(counter):
     return math.exp(-sum((n / total) * math.log(n / total) for n in counter.values()))
 
 
+CONSTRUCTS = ('multi_function', 'call_depth_ge_3', 'neuralese_result', 'typed_neuralese_result',
+              'neuralese_argument', 'neuralese_fan_in', 'iterate', 'neuralese_iterate', 'folder_reducer',
+              'readout_decision', 'decide_call', 'skills', 'services', 'effect_state_oracle', 'dataset_wrapper',
+              'single_call')
+
+
 def report(paths, label=None):
     rows = 0
     instructions, programs, structures = collections.Counter(), collections.Counter(), collections.Counter()
     family_instructions = collections.defaultdict(set)
     family_rows = collections.Counter()
+    family_programs = collections.defaultdict(set)
     constructs = collections.Counter()
     generators, levels = collections.Counter(), collections.Counter()
     for path in paths:
@@ -125,18 +157,19 @@ def report(paths, label=None):
                 family_rows[features['family']] += 1
                 generators[features['generator']] += 1
                 levels[str(features['level'])] += 1
-                for key in ('multi_function', 'neuralese_result', 'typed_neuralese_result', 'neuralese_argument',
-                            'neuralese_fan_in', 'iterate', 'readout_decision', 'decide_call', 'services',
-                            'single_call'):
+                for key in CONSTRUCTS:
                     constructs[key] += bool(features[key])
-                constructs['depth_ge_2'] += features['depth'] >= 2
+                family_programs[features['family']].add(features['program'])
     narrow = [family for family, texts in family_instructions.items() if len(texts) <= 3]
+    broad = [family for family, texts in family_programs.items() if len(texts) >= 20]
     top = sum(n for _, n in instructions.most_common(10))
     return {
         'schema': 'natlang.rl-task-repetition/1', 'label': label, 'cases': [str(Path(p).resolve()) for p in paths],
         'rows': rows, 'families': len(family_rows),
         'families_with_le3_instruction_texts': len(narrow),
         'rows_in_families_with_le3_instruction_texts': sum(family_rows[f] for f in narrow),
+        'families_with_ge20_program_texts': len(broad),
+        'share_of_families_with_ge20_program_texts': round(len(broad) / len(family_rows), 4) if family_rows else None,
         'distinct_instruction_texts': len(instructions), 'effective_instruction_texts': round(effective(instructions), 1),
         'top10_instruction_share': round(top / rows, 4) if rows else None,
         'distinct_programs': len(programs), 'effective_programs': round(effective(programs), 1),
