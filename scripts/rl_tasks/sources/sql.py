@@ -17,6 +17,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from ..common import ARCHIVE_RAW, BUILD_ASSETS, TASK_ASSETS, make_case, pick
+from . import reader_notes
 
 RAW = ARCHIVE_RAW / 'agentic-20260927'
 ASSET_ROOT = TASK_ASSETS
@@ -217,7 +218,8 @@ def _build(source, items, db_dir_of, per_db, out_assets, upstream, revision, see
                 oracle={'level': 'normalized', 'normalization': 'result-set', **({'ordered': True} if ordered else {})}, level=level,
                 license_='CC-BY-SA-4.0', services={'db': service}, domain='relational', wrong=wrong, aliases=aliases,
                 neuralese_room='query planning and per-table inspection can be delegated; parent checks rows',
-                revision=revision, difficulty=difficulty, neuralese=NEURALESE))
+                revision=revision, difficulty=difficulty, neuralese=NEURALESE,
+                helper_notes=reader_notes.sql_plan_notes(question, sql)))
             out[-1]['curriculum']['external']['sql_profile'] = sql_profile(sql)
             out[-1]['curriculum']['external']['gold_sql'] = sql
     return out

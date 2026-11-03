@@ -9,6 +9,7 @@ import json
 import random
 
 from ..common import ARCHIVE_RAW, SOURCES_DIR, distinct_wrong, make_case, pick, resolve_str
+from . import reader_notes
 
 ARGS = {'question': 'string', 'documents': '{ title: string; text: string }[]'}
 INSTRUCTIONS = [
@@ -33,7 +34,7 @@ ORACLE = {'level': 'span', 'normalization': 'qa', 'threshold': 0.8}
 
 
 def _case(source, upstream, revision, license_, item_id, split, question, documents, answer, aliases, level, shape,
-          groups, pool, difficulty=None):
+          groups, pool, difficulty=None, notes=None):
     instruction = pick(INSTRUCTIONS, item_id)
     oracle = dict(ORACLE)
     alts = [a for a in aliases if a and a != answer]
@@ -49,7 +50,7 @@ def _case(source, upstream, revision, license_, item_id, split, question, docume
                      expected=answer, oracle=oracle, level=level, license_=license_, domain='relational',
                      wrong=wrong, aliases=[answer.upper(), 'The ' + answer + '.'] + alts[:2],
                      neuralese_room='per-document reading delegated to children that return evidence to the parent',
-                     revision=revision, difficulty=difficulty, neuralese=NEURALESE)
+                     revision=revision, difficulty=difficulty, neuralese=NEURALESE, helper_notes=notes)
 
 
 def hotpot(cap_train=1500, cap_eval=150, seed=20261031):
@@ -69,7 +70,8 @@ def hotpot(cap_train=1500, cap_eval=150, seed=20261031):
             level = {'easy': 1, 'medium': 1, 'hard': 2}.get(r['level'], 2)
             out.append(_case('hotpotqa', 'hotpotqa/hotpot_qa', revision, 'CC-BY-SA-4.0', r['id'], split, r['question'],
                              docs, r['answer'], [], level, f'hotpot-{r["type"]}-{len(docs)}docs',
-                             [f'hotpotqa-q:{r["id"]}'], pool, difficulty=r['level']))
+                             [f'hotpotqa-q:{r["id"]}'], pool, difficulty=r['level'],
+                             notes=reader_notes.hotpot_notes(r, docs)))
     return out
 
 
@@ -102,7 +104,7 @@ def musique(base=f'{SOURCES_DIR}/musique', cap_train=1500, cap_eval=150, seed=20
             level = {'2': 1, '3': 2, '4': 3}.get(hops, 2)
             out.append(_case('musique', 'MuSiQue', '', 'CC-BY-4.0', r['id'], split, r['question'], docs, r['answer'],
                              r.get('answer_aliases') or [], level, f'musique-{hops}hop-{len(docs)}docs', groups, pool,
-                             difficulty=f'{hops}hop'))
+                             difficulty=f'{hops}hop', notes=reader_notes.musique_notes(r, docs)))
             taken += 1
     return out
 
@@ -127,7 +129,7 @@ def twowiki(base=f'{SOURCES_DIR}/2wikimultihopqa', cap_train=1500, cap_eval=150,
             level = {'comparison': 1, 'inference': 2, 'compositional': 2, 'bridge_comparison': 3}.get(kind, 2)
             out.append(_case('2wikimultihopqa', '2WikiMultihopQA', '', 'Apache-2.0', qid, split, r['question'], docs,
                              str(r['answer']), [], level, f'2wiki-{kind}-{len(docs)}docs', [f'2wiki-q:{qid}'], pool,
-                             difficulty=kind))
+                             difficulty=kind, notes=reader_notes.twowiki_notes(r, docs, context)))
     return out
 
 
@@ -184,7 +186,8 @@ def hybridqa(cap_train=1500, cap_eval=150, seed=20261031):
                 oracle=dict(ORACLE), level=2, license_='CC-BY-4.0', domain='relational',
                 wrong=distinct_wrong(answer, pool[n:] + pool[:n], 2), aliases=[answer.upper()],
                 neuralese_room='linked pages read by children returning notes; parent joins with the table lookup',
-                neuralese=HYBRID_NEURALESE, revision='f4ed68e'))
+                neuralese=HYBRID_NEURALESE, revision='f4ed68e',
+                helper_notes=reader_notes.hybrid_page_notes(r['question'], answer, inputs['table'], pages)))
             n += 1
             if n >= (cap_train if split == 'train' else cap_eval * 2):
                 break

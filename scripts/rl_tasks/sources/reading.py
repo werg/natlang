@@ -9,6 +9,7 @@ import re
 from collections import defaultdict
 
 from ..common import SOURCES_DIR, distinct_wrong, make_case, pick, text_digest
+from . import reader_notes
 
 BASE = SOURCES_DIR
 
@@ -76,7 +77,7 @@ def squad(cap_train=700, cap_eval=80, per_case=4, seed=20261031):
                 license_='CC-BY-SA-4.0', domain='relational', wrong=wrong, aliases=aliases,
                 reference_root=[['return_result', {'status': 'success', 'value': first}]],
                 neuralese_room='one child per question returns located evidence; parent assembles the record',
-                revision='', neuralese=SQUAD_NEURALESE))
+                revision='', neuralese=SQUAD_NEURALESE, helper_notes=reader_notes.squad_notes(context, qs)))
             out[-1]['semantics']['expected'] = gold
     return out
 
@@ -232,7 +233,8 @@ def babi(per_task=70, eval_per_task=8, seed=20261031, *, source='babi', task_fil
                     aliases=[r['answer'].upper()],
                     revision=('tasks_1-20_v1-2+ordered-history-helper-v1' if guided else ''),
                     neuralese=BABI_HISTORY_NEURALESE if guided else None,
-                    framing='neuralese-helper' if guided else None))
+                    framing='neuralese-helper' if guided else None,
+                    helper_notes=reader_notes.babi_history_notes(facts, r.get('supporting_fact_ids') or [], r['question']) if guided else None))
                 if len(seen_stories) >= cap:
                     break
     return out
@@ -287,7 +289,8 @@ def clutrr(cap_train=1000, cap_eval=150, seed=20261031, *, source='clutrr', min_
                 wrong=[l for l in labels if l != gold][:2], aliases=[gold.capitalize()],
                 revision=('gen_train234_test2to10+path-edge-helper-v1' if guided else ''),
                 difficulty=f'{hops}hops', neuralese=CLUTRR_PATH_NEURALESE if guided else None,
-                framing='neuralese-helper' if guided else None))
+                framing='neuralese-helper' if guided else None,
+                helper_notes=reader_notes.clutrr_edge_notes(r['story'], r.get('proof_state') or '') if guided else None))
     return out
 
 

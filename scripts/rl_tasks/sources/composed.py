@@ -381,7 +381,7 @@ def multihiertt_items(seed=20261103, scan_factor=3, cap=1000):
                 'source': 'multihiertt', 'id': r['uid'], 'split': split, 'unit': unit, 'groups': [unit],
                 'question': qa['question'], 'tables': tables, 'paragraphs': paragraphs, 'answer': qa['answer'],
                 'kind': qa['question_type'], 'ops': ops, 'shape': f'multihiertt-{qa["question_type"]}',
-                'table_evidence': parse_list(qa.get('table_evidence')), 'text_evidence': parse_list(qa.get('text_evidence')),
+                'table_evidence': parse_list(qa.get('table_evidence')), 'text_evidence': notes.evidence_positions(parse(r['paragraphs']), parse_list(qa.get('text_evidence'))),
                 'descriptions': dict(parse(r.get('table_description') or {})), 'program': str(qa.get('program') or '')})
     return out
 

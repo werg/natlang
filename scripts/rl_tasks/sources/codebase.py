@@ -34,6 +34,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from ..common import make_case, pick, resolve_str
+from . import reader_notes
 
 V3_ASSETS = resolve_str('repo', 'runs', 'natlang-rl-broad-external-20261031-v3', 'assets')
 BUILD_V3_ASSETS = resolve_str('data_nvme', 'broad-rl-tasks-20261031', 'assets-v3')
@@ -447,6 +448,7 @@ def python_packages(per_package=160, mutations=12, seed=20261031, out_assets=BUI
                 level=min(3, level), license_=license_, services={'repo': service},
                 domain='relational', slice_='inline_placement', wrong=wrong, aliases=aliases,
                 revision=version, neuralese=NEURALESE, split=split,
+                helper_notes=reader_notes.file_notes(kind, x, answer, files),
                 neuralese_room='per-file notes from read_file fanned in to the answer')
             case['curriculum']['external']['codebase'] = {'package': name, 'version': version, 'files': len(files),
                                                           'bytes': sum(len(t) for t in files.values()),
@@ -462,6 +464,7 @@ def python_packages(per_package=160, mutations=12, seed=20261031, out_assets=BUI
                 license_=license_, services={'repo': _service(rel, sha, {path_: patched})},
                 domain='relational', slice_='inline_placement', wrong=siblings, aliases=[key.upper()],
                 revision=version, neuralese=NEURALESE, split=split,
+                helper_notes=reader_notes.file_notes('mutation', '', key, files),
                 neuralese_room='per-file notes from read_file fanned in to the answer')
             case['curriculum']['external']['codebase'] = {'package': name, 'version': version, 'files': len(files),
                                                           'bytes': sum(len(t) for t in files.values()),
@@ -626,6 +629,7 @@ def natlang_modules(per_unit=200, seed=20261031, out_assets=BUILD_V3_ASSETS):
                 framing=pick(['plain', 'neuralese-helper'], item + '|framing'), level=min(3, level),
                 license_='natlang repository (owner)', services={'repo': service}, domain='relational',
                 slice_='inline_placement', wrong=wrong, aliases=aliases, revision=commit, neuralese=NEURALESE, split=split,
+                helper_notes=reader_notes.file_notes(kind, x, answer, files),
                 neuralese_room='per-file notes from read_file fanned in to the answer')
             case['curriculum']['external']['codebase'] = {'package': unit_dir, 'version': commit, 'files': len(files),
                                                           'bytes': sum(len(t) for t in files.values()),

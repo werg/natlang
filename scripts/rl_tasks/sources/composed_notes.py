@@ -67,17 +67,20 @@ def musique_relay(program, item):
     return out
 
 
+def musique_support(item):
+    """{title: note} of every gold supporting paragraph: the hop questions it answers and the sentence that holds each
+    answer (found by code in the gold paragraph)."""
+    documents = {d['title']: d for d in item['documents']}
+    out = {}
+    for line, title, sentence, _ in _musique_steps(item):
+        if title in documents and sentence:
+            out[title] = clip((out[title] + '\n' if title in out else '') + f'{line}\n{sentence}')
+    return out
+
+
 def musique_passage_notes(item):
     """read_passage(step, document) of the depth-3 program: one note per gold supporting paragraph."""
-    documents = {d['title']: d for d in item['documents']}
-    out = []
-    for line, title, sentence, provenance in _musique_steps(item):
-        document = documents.get(title)
-        if not document or not sentence:
-            continue
-        text = f'{line}\n{sentence}'
-        out.append(child('read_passage', [document_key(title)], clip(text), 'checked'))
-    return out
+    return [child('read_passage', [document_key(title)], note, 'checked') for title, note in musique_support(item).items()]
 
 
 # ---------------------------------------------------------------- 2WikiMultihopQA
@@ -134,21 +137,25 @@ def wiki_profiles(item):
     return out
 
 
-def wiki_entry_notes(item):
-    """read_entry(entity, attribute, document) of the lookup program: the gold supporting sentences of each supporting
-    document with the evidence triples about it. A non-supporting document gets no note (its content is not annotated)."""
-    out = []
-    documents = {d['title']: d for d in item['documents']}
+def wiki_support(item):
+    """{title: note} of every gold supporting document: its gold supporting sentences with the evidence triples about it."""
+    documents = {d['title'] for d in item['documents']}
+    out = {}
     for title in dict.fromkeys(t for t, _ in item['support']):
-        document = documents.get(title)
-        if document is None:
+        if title not in documents:
             continue
         subject = PARENTHETICAL.sub('', title)
         lines = [s for t, s in _wiki_sentences(item) if t == title]
         lines += [f'{s} | {r} | {o}' for s, r, o in item['evidences'] if s in (title, subject)]
         if lines:
-            out.append(child('read_entry', [document_key(title)], clip('\n'.join(lines)), 'gold'))
+            out[title] = clip('\n'.join(lines))
     return out
+
+
+def wiki_entry_notes(item):
+    """read_entry(entity, attribute, document) of the lookup program. A non-supporting document gets no note (its
+    content is not annotated)."""
+    return [child('read_entry', [document_key(title)], note, 'gold') for title, note in wiki_support(item).items()]
 
 
 # ---------------------------------------------------------------- QuALITY (no annotation of evidence: mechanical)
@@ -315,6 +322,12 @@ def tatqa_notes(item, answer):
     elif item['rel']:
         out.append(child('read_text', [question], clip('\n'.join(paragraphs[i] for i in item['rel'] if i < len(paragraphs))), 'gold'))
     return out
+
+
+def evidence_positions(original, indices):
+    """Positions in the non-empty paragraphs of the upstream paragraph indices an annotation names."""
+    kept = {index: position for position, index in enumerate(i for i, p in enumerate(original) if str(p).strip())}
+    return [kept[i] for i in indices if isinstance(i, int) and i in kept]
 
 
 def multihiertt_notes(item, program):

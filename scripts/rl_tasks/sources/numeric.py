@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 
 from ..common import SOURCES_DIR, make_case, pick, text_digest
+from . import reader_notes
 
 BASE = SOURCES_DIR
 
@@ -418,7 +419,8 @@ def multihiertt(cap_train=1500, cap_eval=150, seed=20261031):
                 inputs={'question': qa['question'], 'paragraphs': paragraphs, 'tables': tables}, expected=expected,
                 oracle=oracle, level=2 + (len(tables) > 2), license_='MIT', domain='relational', wrong=wrong,
                 aliases=aliases, revision='', neuralese_room='per-table notes fanned in to the computation',
-                neuralese=MULTIHIERTT_NEURALESE))
+                neuralese=MULTIHIERTT_NEURALESE,
+                helper_notes=reader_notes.multihiertt_table_notes(qa['question'], qa, tables, paragraphs, r.get('table_description'))))
             n += 1
             if n >= cap:
                 break

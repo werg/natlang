@@ -131,3 +131,48 @@ def test_only_training_cases_get_children_and_coverage_counts_declared_producers
         pass
     else:
         raise AssertionError('an unknown provenance must be rejected')
+
+
+# ---------------------------------------------------------------- reader-framed helpers
+
+def test_reader_helpers_get_per_document_notes_and_gold_irrelevance():
+    from scripts.rl_tasks.sources import reader_notes
+    row = {'question': 'Who wrote the novel?', 'context': {'title': ['Novel', 'Other'], 'sentences': [['It was written by Ann.', 'It is long.'], ['Nothing.']]},
+           'supporting_facts': {'title': ['Novel'], 'sent_id': [0]}}
+    documents = [{'title': 'Novel', 'text': 'It was written by Ann. It is long.'}, {'title': 'Other', 'text': 'Nothing.'}]
+    novel, other = reader_notes.hotpot_notes(row, documents)
+    assert novel['value'] == 'It was written by Ann.' and other['value'] == reader_notes.IRRELEVANT
+    assert {novel['provenance'], other['provenance']} == {'gold'}
+    text = opening('read_document(question: string, document: { title: string, text: string }): Neuralese<string>',
+                   question=('string', '"Who wrote the novel?"'),
+                   document=('{...}', '{ title: "Novel", text: "It was written by Ann. It is long." }'))
+    assert reaches(novel, text) and not reaches(other, text)
+
+
+def test_file_notes_name_only_files_the_exact_answer_lists_and_find_symbol_lines():
+    from scripts.rl_tasks.sources import reader_notes
+    files = {'a.py': 'def f():\n    return _fmt(1)\n', 'b.py': 'x = 1\n'}
+    entries = reader_notes.file_notes('callers', '_fmt', ['a.py:f'], files)
+    assert len(entries) == 1 and entries[0]['provenance'] == 'checked'
+    assert entries[0]['value'] == 'In a.py, matching the question: f.\nLines mentioning _fmt:\nL2: return _fmt(1)'
+    call = opening('read_file(question: string, path: string, text: string): Neuralese<string>',
+                   question=('string', '"Which functions call _fmt?"'), path=('string', '"a.py"'), text=('string', '"def f()..."'))
+    assert reaches(entries[0], call) and not reaches(entries[0], call.replace('"a.py"', '"b.py"'))
+
+
+def test_helper_notes_are_kept_only_for_a_training_case_that_uses_the_helper():
+    from scripts.rl_tasks.common import make_case
+    neuralese = {'helper': 'read_x', 'args': {'q': 'string'}, 'returns': 'Neuralese<string>', 'instruction': 'Read.',
+                 'root_note': 'Use read_x.'}
+    entry = cn.child('read_x', ['question text'], 'note', 'gold')
+
+    def build(framing, split):
+        return make_case(source='s', family='f', shape='sh', upstream='u', upstream_id='1', upstream_split=split, unit='u1',
+                         groups=['g'], root_name='root', args={'q': 'string'}, returns='string', instruction='Do it.',
+                         inputs={'q': 'x'}, expected='y', oracle='exact', level=1, license_='MIT', neuralese=neuralese,
+                         framing=framing, helper_notes=[entry])
+    helper = build('neuralese-helper', 'train')
+    assert helper['curriculum']['reference']['children'] == [entry]
+    assert 'children' not in build('plain', 'train')['curriculum']['reference']
+    held = build('neuralese-helper', 'validation')
+    assert held['split'] != 'train' and 'children' not in held['curriculum']['reference']

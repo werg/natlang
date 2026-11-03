@@ -18,6 +18,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training' / 'neura
 from natlang_neuralese.common.hashing import sha256_hex  # noqa: E402
 from natlang_neuralese.common.paths import resolve, resolve_str  # noqa: E402
 
+from .child_notes import attach  # noqa: E402
+
 CURRICULUM_VERSION = 'natlang.inline_curriculum/1'
 BUILDER = 'natlang.broad_external_rl_tasks/1'
 SPLITS = ('train', 'dev', 'confirmation')
@@ -76,11 +78,13 @@ def make_case(*, source: str, family: str, shape: str, upstream: str, upstream_i
               domain: str = 'other', reference_root: list | None = None, wrong: list | None = None,
               aliases: list | None = None, neuralese_room: str = '', revision: str = '', difficulty=None,
               extra_semantics: dict | None = None, split: str | None = None, instruction_id: str | None = None,
-              neuralese: dict | None = None, framing: str | None = None):
+              neuralese: dict | None = None, framing: str | None = None, helper_notes: list | None = None):
     """`neuralese`: an optional Neuralese framing of the same task: {helper, args, returns, instruction, root_note}.
     The case then uses either the plain framing or a callable folder helper whose declared result is Neuralese<...>
     (per-document/per-item views fanned in to the parent's decision), chosen per split unit unless `framing` is
-    given; `curriculum.external.framing` records which. The reward is the same outcome oracle either way."""
+    given; `curriculum.external.framing` records which. The reward is the same outcome oracle either way.
+    `helper_notes`: reference children (scripts/rl_tasks/child_notes.py) for the neuralese helper's call sites; kept only
+    on a training case that uses the helper, so a plain framing or a held case is exactly as it was without them."""
     split = split or unit_split(unit, upstream_split)
     if neuralese and framing is None:
         framing = pick(['plain', 'neuralese-helper'], unit + '|framing')
@@ -100,7 +104,7 @@ def make_case(*, source: str, family: str, shape: str, upstream: str, upstream_i
     ref = reference_root or [['return_result', {'status': 'success', 'value': expected}]]
     groups = sorted(set([f'ext-unit:{source}:{unit}', *groups]))
     family_id = f'ext_{source}_{family}'
-    return {
+    case = {
         'version': 'natlang.program/2', 'id': case_id, 'kind': 'lambda_source', 'family': family_id,
         'source': f'external-rl:{source}', 'split': split,
         'source_ids': [f'{upstream}:{upstream_id}'], 'source_groups': groups,
@@ -127,6 +131,9 @@ def make_case(*, source: str, family: str, shape: str, upstream: str, upstream_i
         },
         'semantics': semantics,
     }
+    if helper_notes and framing == 'neuralese-helper':
+        attach(case, helper_notes)
+    return case
 
 
 def jsonl_write(path, rows):
