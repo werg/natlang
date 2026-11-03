@@ -1719,3 +1719,8 @@ def test_shape_ladder_default_rung_only_when_allowed():
     assert cwctl.shape_ladder(ideal, {'cpu': '4', 'memory': '32Gi'})[-1] == {'gpu': 1, 'cpu': '4', 'memory': '32Gi'}
     ladder = cwctl.shape_ladder(ideal, {'cpu': '4', 'memory': '32Gi'}, allow_default=True)
     assert ladder[-1] == {'gpu': 1} and ladder[-2] == {'gpu': 1, 'cpu': '4', 'memory': '32Gi'}
+
+
+def test_shape_ladder_never_raises_a_resource_above_the_request():
+    ladder = cwctl.shape_ladder({'gpu': 1, 'cpu': '8', 'memory': '40Gi'}, {'cpu': '4', 'memory': '48Gi'})
+    assert all(cwctl._gib(s['memory']) <= 40 for s in ladder) and ladder[-1]['cpu'] == '4'

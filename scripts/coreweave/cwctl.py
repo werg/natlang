@@ -353,8 +353,9 @@ def shape_ladder(resources: dict, minimum: dict | None = None, allow_default: bo
     can run at that size; the sandbox checks its assigned cgroup against the minimum before starting work."""
     ideal = dict(resources)
     minimum = dict(minimum or {})
-    floor_cpu = float(minimum.get('cpu', max(1.0, float(ideal['cpu']) / 2))) if 'cpu' in ideal else None
-    floor_mem = _gib(minimum.get('memory', f"{_gib(ideal['memory']) / 2}Gi")) if 'memory' in ideal else None
+    # A floor above the ideal (a template minimum larger than a lineage's own request) never raises the request.
+    floor_cpu = min(float(ideal['cpu']), float(minimum.get('cpu', max(1.0, float(ideal['cpu']) / 2)))) if 'cpu' in ideal else None
+    floor_mem = min(_gib(ideal['memory']), _gib(minimum.get('memory', f"{_gib(ideal['memory']) / 2}Gi"))) if 'memory' in ideal else None
     shapes = [ideal]
     cpu = float(ideal['cpu']) if 'cpu' in ideal else None
     mem = _gib(ideal['memory']) if 'memory' in ideal else None
