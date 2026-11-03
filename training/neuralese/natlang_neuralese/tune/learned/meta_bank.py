@@ -194,7 +194,17 @@ def build_pool(rows, *, held_fraction=.25, support_worlds=3, query_worlds=2, dev
             'families': {}}
     names = sorted(families, key=lambda name: _order(name, seed))
     for name in names:
-        worlds = sorted(families[name], key=natural)
+        # Worlds whose supervised targets repeat an earlier world's exactly carry no new evidence: a support fit could
+        # score a dev world by memorizing it. Keep the first of each distinct target sequence.
+        seen, distinct = set(), []
+        for world in sorted(families[name], key=natural):
+            key = tuple(tuple(tok for tok, w in zip(node.get('token_ids') or (), node.get('target_weights') or ()) if w > 0)
+                        for row in families[name][world] for node in row['graph'].get('nodes') or ())
+            if key in seen:
+                continue
+            seen.add(key)
+            distinct.append(world)
+        worlds = distinct
         held = int(_order(name, f'held-{seed}')[:8], 16) / 16 ** 8 < held_fraction
         need = support_worlds + dev_worlds + confirm_worlds if held else support_worlds + query_worlds
         if len(worlds) < need:

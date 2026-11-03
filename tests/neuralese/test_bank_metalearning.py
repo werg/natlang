@@ -16,6 +16,7 @@ def pool_rows(engine, families=6, worlds=6):
     rows = []
     for f in range(families):
         for w, row in enumerate(rows_for(engine, f'fam{f}', worlds, offset=f)):
+            row['graph']['nodes'][0]['token_ids'][3] = 10 + w  # every world supervises a distinct target
             rows.append({'family': f'fam{f}', 'world': f'w{w}', 'graph': row['graph'], 'actor': {'kind': 'fixture'}})
     return rows
 
@@ -142,3 +143,14 @@ def test_whole_trajectory_sources_are_reduced_to_their_declared_assistant_target
     assert MB.assistant_targets(graph) is None  # a count that disagrees with the declaration is refused
     plain = {'id': 'h', 'nodes': [{'token_ids': [1], 'target_weights': [.5]}]}
     assert MB.assistant_targets(plain) is plain
+
+
+def test_pool_drops_worlds_that_repeat_an_earlier_worlds_targets(tmp_path):
+    engine = engine_fixture(tmp_path, 'lfm')
+    rows = pool_rows(engine, families=1, worlds=8)
+    duplicate = json.loads(json.dumps(rows[0]))
+    duplicate['world'], duplicate['graph']['id'] = 'w9', 'dup'
+    pool = MB.build_pool(rows + [duplicate], held_fraction=.01, seed=0)
+    worlds = [w['world'] for f in pool['families'].values() for w in f['worlds']]
+    assert 'w9' not in worlds and len(worlds) == len(set(worlds))
+    engine.store.close()
