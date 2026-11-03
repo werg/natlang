@@ -22,36 +22,46 @@ recipe kind `bank_metalearning` ([`train/adaptation_stages.py`](../../training/n
 
 ## Algorithm
 
-Fast weights are one program's component-token mixture over the bank: free logits over the null token and K
-components, plus one bounded gain per target group (depth quarter x matrix family). This is the executed law
-`c_kg = g_g * p_k` of `mixture.py`, owner decision 13, the same parameterization the writer head, `natlang tune
---learned` and the release format use. No new mixture form is introduced. Slow weights are the bank:
-component factors `P_k, Q_k` (rank `r_c` inside the basis) and the shared orthonormal basis `U_m, V_m`
-(rank R per target matrix). Every attention, convolution and FFN matrix of the native target table is included.
-`train_bank` and `train_basis` are explicit and required (AGENTS.md "Learned LoRA mixtures and bases").
+Revised 2026-11-03 (supervisor decision from an owner request; supersedes the first-run law below it).
 
-One outer step:
+**Initialization from data.** Plain rank-8 LoRAs are fitted on every meta-training family's support worlds, with
+the baseline's parameterization and pass count (`family_lora_fits`, saved per family and per parent). The basis
+`U_m, V_m` (rank R = 32) is the top singular directions of each matrix's stacked deltas `[D_1 ... D_F]`
+(`delta_basis`, computed from the factors). The components are the uncentered principal directions of the fits'
+basis coordinates, jointly over all matrices with weights `sqrt(q_m)`. Directions are kept up to `variance`
+(0.9) of the energy, capped at `components` (64) and factored to rank `component_rank` (16) (`pca_components`).
+The learned initial coefficients start at the families' mean projection. The per-coefficient step sizes start at
+two spreads over the inner steps. A random bank on a weight-SVD basis (`init: random`) is the first-run
+construction; it recovered about 9% of LoRA's gain at step 0.
 
-1. Sample `meta_batch` meta-training families. For each one, draw disjoint support (3) and query (2) worlds from its
-   train worlds, one verified trajectory per world.
-2. **Inner step** (`fit.fit_in_bank`, unchanged except that it now accepts live bank values): Adam on the free
-   logits and gain logits for `inner_steps`, then on the fixed top-p law for `refine_steps`. The loss is the support
-   rows' teacher-forced loss, a mean over rows of per-graph CE on assistant targets only. The bank is held fixed. The
-   result is the executed coefficients `c*`.
-3. **Outer step**, first order: the query rows' teacher-forced loss at `c*`, held constant, backpropagates into the
-   live component factors and basis through the exact composition `U (sum_k c*_k P_k Q_k^T) V^T`. The gradient of
-   the sampled families is averaged and one Adam step is taken (bank lr 1e-2, basis lr 1e-4). This is FO-MAML on
-   the slow weights. The adapted parameters (coefficients) and the meta-trained ones (bank) are disjoint, so Reptile's
-   weight-difference update does not apply.
-4. **Invariants** (`restore_invariants`): the basis is re-orthonormalized by QR, with the factors re-expressed
-   exactly (`P <- R_u P`, `Q <- R_v Q`, so the composed update is unchanged). Every component is then rescaled to
-   unit relative energy `sum_m q_m ||C_km||^2 = 1`. Coefficients therefore stay comparable, and the bounded gains
-   bound every adapted update. The renormalization rescales a component, so Adam moments are approximate for one
-   step. This is recorded, not hidden.
+**Fast weights.** Each program fits free, signed coefficients `a[k, g]` per component and coefficient group, where
+the groups are depth slices x matrix family (`layer_groups` = 8). The executed cores are
+`C_m = sum_k a[k, g(m)] P_k Q_k^T`. The inner step is Meta-SGD: `inner_steps` (12) Adam-preconditioned steps from
+the learned initial coefficients `a0`, each scaled by learned per-coefficient step sizes `exp(log_step)`.
+The coefficients are signed and unbounded: the mixture-token law (`c_kg = g_g p_k`, owner decision 13) remains
+the learned optimizer's writer law. A meta-learned bank publishes its own law (`bank-manifest.json`
+`inner_fit`), and `natlang tune --learned` deploys by it (`apply.Context.meta_fit`, root scope).
 
-Second-order MAML is not used. With coefficient-only inner loops the dominant first-order term is the query
-gradient at the adapted point. The second-order term would need a Hessian-vector product through 8 inner steps of a
-1.7B model per episode.
+**Residual.** Optionally, a per-program residual core `X_m Y_m^T` of rank `residual_rank` (2) in basis
+coordinates is fitted alongside, by Adam. It is evaluated as its own arm (`meta_residual`). Meta-training's inner
+step is coefficient-only.
+
+**Outer step**, first order:
+
+1. Sample `meta_batch` meta-training families, each with disjoint support (3) and query (2) worlds.
+2. Run the inner step on the support rows with the bank held fixed.
+3. Backpropagate the query loss at the fitted coefficients into the live factors and basis. The coefficients'
+   gradient `g` also gives the meta-parameters their first-order gradients: `dL/da0 = g` and
+   `dL/dlog_step = g * (-travel) * step`, where `travel` is the sum of the inner step directions.
+4. Add a **weight-space regression** over `aux_families` (8) meta-training families. For each one, take the share of
+   its LoRA delta's relative energy that the live bank leaves unexplained at its least-squares per-group
+   coefficients. This needs no model forward and gives a dense gradient into the components and basis.
+5. Take one Adam step (bank 1e-2, basis 1e-4, meta-parameters 1e-2).
+6. **Invariants** (`restore_invariants`): QR re-orthonormalize the basis, re-expressing the factors exactly, and
+   renormalize each component to unit relative energy. Coefficients and step sizes are rescaled by the inverse
+   factor, so every composed update is unchanged (`_rescale_meta`).
+
+Second-order MAML is not used.
 
 ### Losses
 
@@ -80,24 +90,31 @@ an RL inner step plugs in there.
 - **Cadence.** Outer steps run continuously. A held development evaluation runs every `eval_every` steps, and
   confirmation runs once, only when development promotion holds.
 
-### Promotion evidence (`bank_metalearning` gate)
+### Promotion gate: held-family task outcomes (owner, 2026-11-03, AGENTS 12f799442)
 
-Held families are the held-out unit: whole families never enter meta-training. Within a held family, worlds split
-into train (support for the evaluation fit), dev (scored) and confirmation (scored once). Four arms run at matched
-adaptation compute, meaning the same number of support forward/backward passes (`inner_steps + refine_steps`):
+A bank snapshot **promotes when it beats the current published bank on held-family task outcomes**: exact-oracle
+task success of the adapted model on development tasks. The published bank is initially the un-meta-trained bank of
+this lineage (the PCA bank) and afterwards the last promoted snapshot (`state.published`). Confirmation tasks are
+scored once, only after development holds (`bank_outcomes.py`, `outcome_promotion`; `require_gate` demands
+`held.basis == "task-outcome"`).
 
-| arm | what is fitted |
-| --- | --- |
-| parent | nothing (zero coefficients, exactly the parent) |
-| meta | coefficients over the meta-trained bank |
-| initial | coefficients over the identical bank before meta-training (seeded random components, weight-SVD basis) |
-| lora | a plain per-program free LoRA (`free-lora`, rank 8, B zero), the tuner's own parameterization |
-
-Promotion requires the meta arm's mean dev loss to be strictly below the initial, LoRA and parent arms on at
-least `min_held_families` families, then the same on confirmation worlds once. The gate (`require_gate`) also
-requires actual outer updates of both bank and basis. Losses are teacher-forced losses on verified trajectories.
-Task-outcome lift needs rollouts of adapted programs (the program-adaptation development arms) and is not claimed
-by this gate.
+- **Held task families** are RL task families from the stage's `task_source` (train rows only, protected-related
+  rows dropped, never a meta-training family; `task_families`). Each family's tasks are cut by a seeded hash into
+  support (4), development (4) and confirmation (4).
+- **Adaptation evidence** is the parent's own oracle-verified successful rollouts on the support tasks. They are
+  collected once per parent and shared by every arm. A family where the parent solves no support task cannot be
+  adapted, and every arm there is the parent. Families with evidence are counted (`min_task_families`, 4).
+- **Execution.** Each arm's fitted adapter becomes the default adapter of an in-process native server on the
+  stage's own engine. The family's tasks run through the production collector (`rl.production.collect`, student
+  root mode, full prompt contract, `task_samples` (4) attempts per task). They are scored by the shared task scorer.
+  The actor receipt binds the arm's adapter (`rl_policy_binding.bank_adaptation`). Collections are
+  resumable and keyed by the exact adapter.
+- **References, not gates:** the parent, and plain per-program LoRA at 1, 4 and 24 passes. Deployment tuning picks
+  whichever adapts better at its own budget.
+- **Steering:** teacher-forced held dev loss (`evaluate`) runs every `eval_every` outer steps. It reports means over
+  all held families and over the families without a near-duplicate scored world (`similarity` < 0.8, the highest
+  target-token `difflib` ratio to a support world), for the parent, meta, meta+residual, initial and LoRA arms (LoRA
+  at the matched and reference budgets). It is recorded as `steering` in the report, never as promotion.
 
 ## Episode supply
 
@@ -123,17 +140,21 @@ selector pilots are the source. No paid or new teacher generation is involved.
 
 ## Compute per outer step
 
-Per family in the meta batch: `inner_steps + refine_steps` support passes, each a forward and backward over 3 rows,
-plus one fitted support forward and one query forward/backward over 2 rows. The default of 6+2 steps and
-meta_batch 2 gives 2 x (8 x 3 + 3 + 2) = 58 row forward/backward-equivalents per outer step. Rows are capped at
-4096 tokens. Measured per-step seconds are in "First run" below. A held evaluation costs, per held family,
-3 fitting arms x (8 x 3 support passes + 2 dev rows) plus 2 parent rows.
+Per family in the meta batch there are `inner_steps` (12) support passes over 3 rows, plus one query
+forward/backward over 2 rows: 2 x (12 x 3 + 2) = 76 row forward/backward-equivalents per outer step. The
+weight-space regression adds no model forward. The PCA initialization costs one LoRA fit per meta-training
+family: 12 passes over 3 rows, measured at 138 s on the contended GB10 (64 families, about 2.5 h once per parent).
+A task-outcome evaluation costs, per held family:
+- one parent support collection (4 tasks x 4 attempts);
+- for each of the parent, published, candidate and 3 LoRA-reference arms, a fit plus 4 tasks x 4 attempts. Fixed
+  arms are reused while the parent is unchanged.
 
 ## Deployment and program adaptation
 
 - **Deployment tuning is the inner step.** `natlang tune <program> --learned spec.json` accepts a meta-learned bank
-  without optimizer `state` (policy `crisp-baseline`). The release is the in-bank fit (`apply.inner_fit`: `refine`
-  from the incoming bundle, `fit_steps`), kept only when it lowers the exact support loss. The release, validation,
+  without optimizer `state` (policy `crisp-baseline`). The release is the bank's published inner-fit law
+  (`apply.Context.meta_fit`: Meta-SGD coefficients on the root scope from the learned initial values; older banks
+  without a law refine their mixtures), kept only when it lowers the exact support loss. The release, validation,
   activation and rollback are the ordinary pipeline. `bank-manifest.json` is the bank file the spec names; its
   store is the stage's `store/`.
 - **`program_adaptation`** reruns per promoted parent, warm-started from the previous releases where the tuner can
@@ -240,4 +261,7 @@ Later evaluations reuse the parent/initial/LoRA arms (measured once per parent) 
 - cuSOLVER SVD can return a numerically non-orthonormal basis; the basis is re-orthonormalized by QR.
 - The cloud runs were capacity-limited (ResourceExhausted) and then OOM. The DGX run is preemptible and resumes per family.
 
-Pending: the step-25 meta-arm evaluation and the promotion decision; a rerun on pool v3 (deduplicated worlds).
+The random-bank run was cut over after one outer step (supervisor decision): data-driven PCA initialization, more
+components, per-layer-group Meta-SGD coefficients, a residual arm and the weight-space regression (see "Algorithm"),
+on pool v3 (exact-duplicate worlds removed: 64 meta-train / 16 held families, 729 rows). The run is DGX ledger unit
+`bankmeta-pca-1`, out `run-pca-v3`; the PCA step-0 numbers are recorded below when measured.
