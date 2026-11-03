@@ -189,7 +189,7 @@ Then the repetition gate against the existing pool:
 
 ```sh
 U=rlnov-<worker>-<batch>; rm -f $B/novelty.exit
-python3 scripts/memory_ledger.py run --unit $U --budget-gb 6 --priority low --wait 3600 -- \
+python3 scripts/memory_ledger.py run --unit $U --budget-gb 12 --priority low --wait 3600 -- \
   sh -c "/home/werg/natlang/.venv-neuralese/bin/python scripts/rl_tasks/authored_novelty.py $B/qualified/verified/cases.jsonl \
   --pool /home/werg/data/broad-rl-tasks-20261031/full-core-effects-20261102-20261102T011031Z-3015925/cases.jsonl \
   --pool /mnt/external/natlang-rl-authoring/admitted/cases.jsonl -o $B/novelty.json > $B/novelty.log 2>&1; echo \$? > $B/novelty.exit"
@@ -399,6 +399,22 @@ your batch notes). Padding added to pass the gate is removed in the audit and co
 After round 1 (77 tasks admitted): `call_depth_3` 53, `iterate` 42, `effect_state` 32, `multi_operation_codebase` 14,
 `decision_readout` 11, `iterate_neuralese` 8, `neuralese_relay` 8, `skills` 4, `typed_neuralese` 0, `neuralese_fan_in` 0,
 `folder_reducer` 0. Author the zero and near-zero constructs first, with real depth, folders and skills.
+
+After round 2 (520 tasks admitted in all, 27 families; pool `/mnt/external/natlang-rl-authoring/admitted/cases.jsonl`):
+`effect_state` 264 (51%), `call_depth_3` 228, `iterate` 184, `decision_readout` 130, `typed_neuralese` 119,
+`multi_operation_codebase` 98, `skills` 94, `neuralese_relay` 87, `neuralese_fan_in` 73, `folder_reducer` 61,
+`iterate_neuralese` 49. Next round: grow the existing families to 20+ distinct programs each (every family has 6-15
+today; the selection pool's share of families with 20+ programs fell from 67% to 50% because the authored families are new
+and small), so write EXTENSION batches that reuse an admitted family name and add 7+ new programs; and take the constructs
+still under 100 (`iterate_neuralese`, `folder_reducer`, `neuralese_fan_in`, `neuralese_relay`, `skills`,
+`multi_operation_codebase`). Authored rows are 4.4% of the balanced selection pool (the generator-balance cap leaves them
+their full supply), so the pool's effect/state share stays at 11%: reaching the 30% bar needs an authored (or generated)
+effect-state supply of thousands of rows or an assembler quota, not more of the same batches.
+Authoring pitfalls found in round 2 (all enforced by the checks or the blind solve): exact-oracle record keys and strings
+must come from one stated convention (letter case, key names, parcel/part names: otherwise a solver and the author
+disagree); folder worlds count in task identity; smoke/reference child fragments must be single-line and inside the first
+two lines of the call text; mutants (`wrong_code`) that leave a world unchanged are accepted by the oracle, so every mutant
+must change an effect on its world; assignments through the `store` input are forbidden (copy it to a `const`).
 
 Bar: each construct >= 100 distinct qualified tasks; >= 70% of families with >= 20 distinct programs; >= 30% of the
 selection pool with effect/state oracles. Existing RL source (61,399 tasks, measured with
