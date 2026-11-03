@@ -594,6 +594,7 @@ class BankMetaLearner:
         self.state = {'schema': STATE_SCHEMA, 'recipe': recipe.as_json(), 'parent_sha256': parent_sha256,
                       'parents': [{'sha256': parent_sha256, 'from_step': 0}], 'spectrum': self.spectrum,
                       'initial_bank': self.bank0.snapshot, 'targets': len(names), 'groups': G,
+                      'targets_below_rank': excluded_targets(engine, recipe),
                       'components': len(components), 'step': 0, 'history': [], 'evaluations': [], 'rng': recipe.seed}
         self.rng = random.Random(recipe.seed)
         self._restore()
@@ -1031,11 +1032,23 @@ def promotion(evaluation, *, min_families=1, margin=0.):
             'meta-trained bank does not beat: ' + ', '.join(k for k, v in beats.items() if not v)}
 
 
+def excluded_targets(engine, recipe):
+    """Pattern-selected matrices left out because a side is shorter than the basis rank."""
+    from ...model.native_adapters import target_parameters
+    available = target_parameters(engine.shared_model)
+    return sorted(name for name in available if (not recipe.target_pattern or re.search(recipe.target_pattern, name))
+                  and min(available[name].shape[-2:]) < recipe.rank)
+
+
 def select_targets(engine, recipe):
     from ...model.native_adapters import target_parameters
-    names = sorted(target_parameters(engine.shared_model))
+    available = target_parameters(engine.shared_model)
+    names = sorted(available)
     if recipe.target_pattern:
         names = [name for name in names if re.search(recipe.target_pattern, name)]
+    # One basis rank serves every matrix: a matrix with a side shorter than the rank (LFM3's 16-row per-head
+    # attention gates at rank 32) cannot hold an orthonormal rank-R basis and is left to the parent.
+    names = [name for name in names if min(available[name].shape[-2:]) >= recipe.rank]
     if not names:
         raise LearnedOptimizerError('no target matrices selected')
     return names
