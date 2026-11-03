@@ -168,12 +168,19 @@ its own forward and trains with truncated importance weights `min(p_learner/q_ac
 of both engines. Fork 78d9f20bf4 adds `NATLANG_SGLANG_PROJECTION=vendor`: one fused vendor BF16 GEMM (fp32
 accumulate) per projection; norms, conv, gate rounding and the producer/import/capture paths are unchanged.
 
-**Defect found and fixed (fork a06adeda40).** CUDA-graph decode pads batches with the `-1` mamba state sentinel. The
-natlang conv decode (and the upstream torch fallback) indexed the conv-state pool with it, i.e. read and overwrote
-the pool's last slot, a live request's or radix-cached conv state (the CuTe kernel skips `slot < 0`). On DGX it
-showed as 5 of 84 real turns sampled at concurrency 8/32 diverging from the learner by up to 23.8 nats (SGLang put
-p = 0.53 on ` >` where `text.slice(...) !== edit.expected` was certain); the same workload without CUDA graphs had
-max 0.43. Padded rows now use the reserved padding slot 0.
+**Defects found on DGX.** (1) Fork a06adeda40: CUDA-graph decode pads batches with the `-1` mamba state sentinel;
+the natlang conv decode (and the upstream torch fallback) indexed the conv-state pool with it, i.e. read and
+overwrote the pool's last slot, a live request's or radix-cached conv state (the CuTe kernel skips `slot < 0`).
+Padded rows now use the reserved padding slot 0. (2) Not explained by (1): on DGX GB10 with CUDA graphs *and* the
+overlapped scheduler, 5 of 84 real turns sampled at concurrency 8/32 (before the fix) and 2+ of 80 (after it)
+contained single tokens drawn from a wrong distribution: e.g. after `if (text.slice(edit.start, edit.end)` SGLang
+reported p = 0.53 for ` >` where the learner gives -24.4 nats (` !==` is certain), and the continuation returns to
+the learner's law, i.e. a transient one-step mixup, not lasting state damage. Same workload: without CUDA graphs
+0/64 (max 0.43), with graphs but `--disable-overlap-schedule` 0/64 (max 0.55, per-turn k3 <= 0.0013, c=32 115 vs
+122 tok/s); with overlap but the triton attention backend instead of flashinfer 0/64 (max 0.42, c=32 130 tok/s).
+The cloud RTX PRO 6000 runs (flashinfer, overlap) showed 0/424. So the mixup needs flashinfer + overlap on GB10
+(sm_121); the race inside it is not localized further. Actors now run `--disable-overlap-schedule` by default (`--sglang-overlap-schedule` opts in; the
+serving_engine binding records it), and the engine guard rejects such episodes in any case.
 
 **Measurements** (`serve/sglang_bench.py`, full67 `71c3eb45…`, real pilot turns: 78 turns, 1.07M prompt tokens;
 T=1, top-128 capture, stop at `<|im_end|>`, max 1024 tokens; artifacts under
@@ -193,6 +200,21 @@ Learner-recomputed mismatch of SGLang samples (cloud): native projection 54,458 
 0.742, per-turn k3 <= 0.0037. Every turn is inside the guard. SGLang prefill scores of the native actor's own samples:
 mean 0.015, max 0.60 (native projection) / 0.48 (vendor). Cloud: two 1-GPU cw2 sandboxes, ~0.4 GPU-h each, stopped by
 the exporter after their verified final exports (`rl_cloud.py` stage shard `natlang_neuralese.serve.sglang_bench`).
+
+**Pilot-equivalent on DGX** (`pilot-sglang-1/`: the selector pilot's config with `--engine sglang`, vendor projection,
+overlap on, 4 workers, 4 rows x group 8, shared contended GB10): 36 min window, 157 SGLang requests, 78,637 sampled
+tokens (~36 tok/s aggregate, ~25 s per ~250-token turn), 0 native fallbacks; captures carry
+`actor_export = exact:sglang-hf-bfloat16-vendor-projection`. Episodes are 22-38 turns / 10-20k tokens, so a 32-episode
+round on this GPU is still hours; the DGX is a weak rollout GPU, the cloud card is 8-40x faster. Learner rescore of its
+106 turns (52,444 tokens): mean 0.026, p99 0.18, max 26.5, per-turn k3 max 0.28: the overlap mixup in real episodes
+(scattered, uncorrelated with prompt length), which the guard rejects and the no-overlap default removes.
+
+**Switching the collector.** Runtimes frozen from main >= 90a5d41e1 carry the guard; v39/v41 do not and must not
+collect with SGLang. Existing LFM collector configs switch automatically at their next unbound collection via
+`production.adopt_actor_engine_defaults` (records `actor_engine_transitions`; skipped for coefficient policies, sealed
+selections, an active update, or `actor_engine_keep_native`). New configs: `actor_command` with `--engine sglang`
+(defaults `--sglang-projection vendor`, overlap off). The learner's objective binds `actor_engine_guard` and requires
+`importance: tis`/`tis-c<C>` for engine-sampled actions; native-sampled actions keep the exact pre-SGD gate.
 
 ## Neuralese feature plan on SGLang
 
