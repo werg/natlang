@@ -11,7 +11,7 @@ in its own slot through ``rolling_sft_resume``. The same steps serve the DGX and
 Run with the package of the runtime that trains the lineage on PYTHONPATH (a frozen runtime; this file only uses
 functions that runtime already has):
 
-  sft_window.py next --previous-config CFG --out DIR --config-out PATH [--checkpoint-path P] [--window N] [--id ID]
+  sft_window.py next --previous-config CFG --out DIR --config-out PATH [--checkpoint-path P] [--window N] [--id ID] [--runtime R]
   sft_window.py rolling --config CFG --config-out PATH
   sft_window.py closure --config CFG -o OUT.json     exact input files a window's controller and learner read
 """
@@ -48,7 +48,7 @@ def _folded_admissions(training, options):
     return [e for e in history if isinstance(e, dict) and isinstance(e.get('qualification'), dict)]
 
 
-def next_window(previous_config, out, config_out, *, checkpoint_path=None, window=None, ident=None):
+def next_window(previous_config, out, config_out, *, checkpoint_path=None, window=None, ident=None, runtime=None):
     """The next window from the previous window's actual earned boundary (generalizes the DGX
     prepare-earned-window-continuation operator; no host-only checks or wrappers)."""
     from natlang_neuralese.common.jsonio import write_json_durable
@@ -113,13 +113,23 @@ def next_window(previous_config, out, config_out, *, checkpoint_path=None, windo
         raise SystemExit(f'{out} is not empty')
     out.mkdir(parents=True, exist_ok=True)
     config_out = _require_new(config_out)
+    prior_runtime = Path(c['runtime']).parent
+    runtime = Path(runtime).resolve() if runtime is not None else None
+    if runtime == prior_runtime:
+        runtime = None
     if window is not None and window != prior_window:
         stage['parameters']['refresh_after_updates'] = window
+    if runtime is not None and isinstance(stage['parameters'].get('task_eval'), dict):
+        stage['parameters']['task_eval']['runtime'] = str(runtime / 'ts-host')
+    if (window is not None and window != prior_window) or runtime is not None:
         recipe_path = out / 'recipe-runtime.json'
         write_json_durable(recipe_path, recipe)
         load_recipe(recipe_path)
         c['production_recipe'] = str(recipe_path)
     c['resident_data_directory'] = str(out / 'resident-data')
+    runtime_transition = None
+    if runtime is not None:
+        runtime_transition = rebind_runtime(c, prior_runtime, runtime)
     c, sources = ns.continuation_config(c, stage, checkpoint=str(parent), out=str(out))
     c.pop('execution_transition_source_controller', None)
     c.pop('rolling_sft_resume', None)  # a same-slot retry control never carries into a new window
@@ -131,8 +141,10 @@ def next_window(previous_config, out, config_out, *, checkpoint_path=None, windo
     c['branch_origin'] = {
         'parent': ref, 'parent_global_step': training['global_step'], 'actual_report': binding(report_path),
         'actual_completed_controller': binding(previous / 'state.json'), 'prior_control': binding(previous_config),
-        'scored_graph_anchor': anchor, 'changed_controls': ({'refresh_after_updates': [prior_window, window]}
-                                                            if window is not None and window != prior_window else {}),
+        'scored_graph_anchor': anchor, 'changed_controls': {
+            **({'refresh_after_updates': [prior_window, window]} if window is not None and window != prior_window else {}),
+            **({'runtime': [str(prior_runtime), str(runtime)]} if runtime is not None else {})},
+        **({'runtime_transition': runtime_transition} if runtime_transition else {}),
         'reason': 'Next window of the same joint SFT continuation from the actual earned boundary.',
         'execution_admission': ({'folded_in_parent_history': folded[0]['qualification']['admission'],
                                  'controller_inheritance': 'omitted'} if folded else None),
@@ -166,6 +178,33 @@ def prepare_session_window(request, previous_config, previous, out, config_out, 
                     '--prior-out', os.path.abspath(previous), '--id', f"{spec.get('id_prefix', 'lfm3')}-{out.name}",
                     '--output', str(config_out)], check=True, env=main_env)
     os.replace(request, request.with_name(request.name + f'.consumed-{out.name}'))
+
+
+def rebind_runtime(c, prior, runtime):
+    """Point a never-started window control at another frozen runtime: the controller's ts-host, the actor entry
+    and its package environment. Recipe, sources, objective and learner arguments are unchanged (learner commands run
+    as modules from the controller's runtime). Returns the recorded transition (both runtimes' closure bindings)."""
+    from natlang_neuralese.train.native_resident import binding
+    closure = runtime / 'runtime-input-closure.json'
+    if not closure.is_file():
+        raise SystemExit(f'{runtime} is not a frozen runtime (no runtime-input-closure.json)')
+    c['runtime'] = str(runtime / 'ts-host')
+    actor = c.get('actor_command') or []
+    if len(actor) > 1 and str(actor[1]).startswith(str(prior) + '/'):
+        actor[1] = str(runtime) + str(actor[1])[len(str(prior)):]
+    env = c.get('actor_environment') or {}
+    if env:
+        c['actor_environment'] = {**env, 'NATLANG_REPO': str(runtime),
+                                  'PYTHONPATH': f'{runtime}/training/neuralese:{runtime}'}
+    stale = [k for k in ('seed_command', 'learner_command') if str(prior) in json.dumps(c.get(k))]
+    if stale:
+        raise SystemExit(f'{stale} still name {prior}: rebind them explicitly')
+    prior_closure = prior / 'runtime-input-closure.json'
+    return {'schema': 'natlang.sft-window-runtime-transition/1',
+            'from': {**binding(prior_closure), 'commit': json.loads(prior_closure.read_text()).get('commit')}
+                    if prior_closure.is_file() else {'path': str(prior)},
+            'to': {**binding(closure), 'commit': json.loads(closure.read_text()).get('commit')},
+            'at': 'window boundary (never-started control; no in-flight resident generation crosses runtimes)'}
 
 
 def adopt_prepared_window(config_out, out, previous_config, parent, ref):
@@ -504,6 +543,7 @@ def main(argv=None):
     p.add_argument('--checkpoint-path')
     p.add_argument('--window', type=int)
     p.add_argument('--id')
+    p.add_argument('--runtime', help='frozen runtime for the new window (recorded runtime transition)')
     p = sub.add_parser('rolling')
     p.add_argument('--config', required=True)
     p.add_argument('--config-out', required=True)
@@ -515,7 +555,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.command == 'next':
         next_window(args.previous_config, args.out, args.config_out, checkpoint_path=args.checkpoint_path,
-                    window=args.window, ident=args.id)
+                    window=args.window, ident=args.id, runtime=args.runtime)
     elif args.command == 'rolling':
         rolling(args.config, args.config_out)
     else:
