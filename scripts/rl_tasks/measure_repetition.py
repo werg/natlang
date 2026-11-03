@@ -24,6 +24,8 @@ from pathlib import Path
 DIGITS = re.compile(r'\d+(?:\.\d+)?')
 QUOTED = re.compile(r'"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\'|`[^`]*`')
 SPACE = re.compile(r'\s+')
+# Broad-builder source modules that are separate program generators (scripts/rl_tasks/sources/*.py).
+OWN_GENERATOR_SOURCES = frozenset({'composed', 'decisions', 'codebase-ops'})
 # Semantics that verify effects or state (files, services, function checks, repaired codebases), not only an answer.
 EFFECT_KEYS = frozenset({'effects', 'expected_files', 'function_checks', 'operation', 'service_scopes', 'files_oracle',
                          'codebase_check', 'state_oracle'})
@@ -87,7 +89,8 @@ def program_features(row):
     external = curriculum_of(row).get('external') or {}
     source = str(external.get('source') or '')
     if generator == 'natlang.broad_external_rl_tasks/1':
-        kind = ('codebase' if 'codebase' in source else
+        # The broad builder hosts several source modules; the newer ones are their own generators.
+        kind = (source if source in OWN_GENERATOR_SOURCES else 'codebase' if 'codebase' in source else
                 'composed' if external.get('framing') not in (None, 'plain', 'neuralese-helper') else 'dataset')
         generator = generator + ':' + kind
     wrapper = generator.endswith(':dataset') and len(files) == 1 and curriculum_of(row).get('mode') == 'single_call'

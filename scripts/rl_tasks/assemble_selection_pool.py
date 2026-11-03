@@ -88,47 +88,63 @@ def caps(sizes, share):
         capped |= over
 
 
-def take(members, count):
-    """Round-robin across (family, level), preferring effect/state oracles; repeated normalized programs come last."""
+def take(members, count, family_cap, family_counts):
+    """Round-robin across (family, level), effect/state oracles first inside each queue; repeated normalized programs
+    come after every new program; no source family exceeds ``family_cap`` rows of the pool."""
     queues = collections.OrderedDict()
     for row, features in sorted(members, key=lambda item: (not item[1]['effect_state_oracle'], item[0]['id'])):
         queues.setdefault((features['family'], features['level']), collections.deque()).append((row, features))
     chosen, programs, repeats = [], set(), collections.OrderedDict()
+    def admit(row, features):
+        chosen.append((row, features))
+        programs.add(features['program'])
+        family_counts[features['family']] += 1
     while len(chosen) < count and queues:
         for key in list(queues):
             queue = queues[key]
+            if family_counts[key[0]] >= family_cap:
+                del queues[key]
+                continue
             while queue and queue[0][1]['program'] in programs:
                 repeats.setdefault(key, collections.deque()).append(queue.popleft())
             if queue:
-                row, features = queue.popleft()
-                chosen.append((row, features))
-                programs.add(features['program'])
+                admit(*queue.popleft())
             if not queue:
                 del queues[key]
             if len(chosen) >= count:
                 break
     while len(chosen) < count and repeats:
         for key in list(repeats):
-            chosen.append(repeats[key].popleft())
-            if not repeats[key]:
+            if family_counts[key[0]] < family_cap and repeats[key]:
+                admit(*repeats[key].popleft())
+            if not repeats[key] or family_counts[key[0]] >= family_cap:
                 del repeats[key]
             if len(chosen) >= count:
                 break
     return chosen
 
 
-def assemble(inputs, out, *, share, domains):
+def assemble(inputs, out, *, share, domains, family_share=0.05):
     out = Path(out)
     if out.exists():
         raise SystemExit(f'{out} exists')
-    rows = load(inputs)
+    rows = load([path for path in inputs if Path(path).stat().st_size])
     classes = collections.defaultdict(list)
     for row, features in rows:
         classes[features['generator']].append((row, features))
-    limits = caps({c: len(m) for c, m in classes.items()}, share)
-    pool = []
+    # A family (one program design or template) may hold at most family_share of the pool, effect oracles included:
+    # the cap is solved jointly with the generator caps (two fixed-point passes suffice for these sizes).
+    family_cap = len(rows)
+    for _ in range(3):
+        usable = {}
+        for generator, members in classes.items():
+            per_family = collections.Counter(features['family'] for _, features in members)
+            usable[generator] = sum(min(n, family_cap) for n in per_family.values())
+        limits = caps(usable, share)
+        family_cap = max(1, int(family_share * sum(limits.values())))
+    pool, family_counts = [], collections.Counter()
     for generator, members in sorted(classes.items()):
-        pool += members if limits[generator] >= len(members) else take(members, limits[generator])
+        pool += take(members, limits[generator], family_cap, family_counts)
     merges = collections.Counter()
     written = []
     family_programs = collections.defaultdict(set)
@@ -176,8 +192,8 @@ def assemble(inputs, out, *, share, domains):
     receipt = {'schema': 'natlang.rl-selection-pool/1',
                'inputs': [{'path': str(Path(p).resolve()), 'sha256': sha256(p)} for p in inputs],
                'cases': {'path': 'cases.jsonl', 'sha256': sha256(cases), 'rows': len(ordered)},
-               'max_generator_share': share,
-               'generator_classes': {c: {'available': len(m), 'kept': min(len(m), limits[c])}
+               'max_generator_share': share, 'max_family_share': family_share, 'family_cap_rows': family_cap,
+               'generator_classes': {c: {'available': len(m), 'kept': sum(1 for _, f in pool if f['generator'] == c)}
                                      for c, m in sorted(classes.items())},
                'family_merges': [{'from': a, 'to': b, 'rows': n} for (a, b), n in sorted(merges.items())],
                'domains': domains,
@@ -190,13 +206,40 @@ def assemble(inputs, out, *, share, domains):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--cases', action='append', required=True, help='verified train cases JSONL (repeatable)')
-    parser.add_argument('--out', required=True)
+    parser.add_argument('--cases', action='append', default=[], help='verified train cases JSONL (repeatable)')
+    parser.add_argument('--spec', help='JSON {"cases": [paths], "max_generator_share", "max_family_share"}; '
+                        'empty or missing files (e.g. a not-yet-filled admitted/cases.jsonl) are skipped')
+    parser.add_argument('--out', help='new output directory')
+    parser.add_argument('--out-root', help='write a fresh selection-pool-<UTC time> here and update latest.json')
+    parser.add_argument('--max-family-share', type=float, default=0.05)
     parser.add_argument('--max-generator-share', type=float, default=0.2)
     parser.add_argument('--domain-map', help='JSON object source-prefix -> domain (default: built-in map)')
     args = parser.parse_args(argv)
     domains = json.loads(Path(args.domain_map).read_text()) if args.domain_map else DEFAULT_DOMAINS
-    assemble(args.cases, args.out, share=args.max_generator_share, domains=domains)
+    inputs, share, family_share = list(args.cases), args.max_generator_share, args.max_family_share
+    if args.spec:
+        spec = json.loads(Path(args.spec).read_text())
+        inputs += spec['cases']
+        share = spec.get('max_generator_share', share)
+        family_share = spec.get('max_family_share', family_share)
+    inputs = [path for path in inputs if Path(path).is_file()]
+    if not inputs:
+        raise SystemExit('no task source files')
+    if args.out_root:
+        import time
+        root = Path(args.out_root)
+        out = root / time.strftime('selection-pool-%Y%m%dT%H%M%SZ', time.gmtime())
+    elif args.out:
+        out = Path(args.out)
+    else:
+        raise SystemExit('give --out or --out-root')
+    receipt = assemble(inputs, out, share=share, domains=domains, family_share=family_share)
+    if args.out_root:
+        latest = {'pool': str(out.resolve()), 'cases': str((out / 'cases.jsonl').resolve()),
+                  'sha256': receipt['cases']['sha256'], 'rows': receipt['cases']['rows']}
+        pending = root / 'latest.json.pending'
+        pending.write_text(json.dumps(latest, indent=1) + '\n')
+        pending.replace(root / 'latest.json')
 
 
 if __name__ == '__main__':
