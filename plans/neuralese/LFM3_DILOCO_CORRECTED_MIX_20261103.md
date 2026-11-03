@@ -107,6 +107,16 @@ those, so the closure now includes the observed reads of a strace'd CPU controll
 row-index cache entries. Runtime v42 misses the index for all 51 D32 acquired-session sources (~2-2.5 h of CPU
 indexing at start); the trace builds those entries on the DGX so that the GPU does not repeat the work.
 
+The traced start then found a real runtime defect: v42 (with 4cc424565's per-payload reader cap) could not start this
+control anywhere. Historical zero-SGD adoption verification rederived the quota policy with the new
+`payload_reader_cap` field and failed exactly. 90571dcbb rederives pre-cap records under their own law. The fix ships
+as runtime v43 (`runtime-native-corrected-mix-v43-1103`), with the control re-prepared as
+`ops/corrected-mix-full67-w1-v43-1103`; it is identical to the v42 control apart from runtime bindings. Historical
+checkpoints that are DGX symlinks stay symlinks (ccfe8593f). The namespace replay of the v43 closure (1,762 files,
+11.4 GB) reached the learner's model load (GPU allocation) cleanly. Coverage stops at that point: reads the learner
+makes after allocation are not traced. The production holder (cw1 b4caeaa0, H100, 8 CPU/64Gi) was granted at 20:31
+CET and the v43b seed delivered.
+
 ## Open for step 2
 
 Controller windows plus DiLoCo: each worker's window control needs `trainer_parameters.diloco` (URL from the secret
