@@ -1647,6 +1647,8 @@ def build_parser():
     parser.add_argument('--lr-warmup', type=int, default=0,
         help='linear learning-rate warmup over the lineage\'s first N optimizer updates (by global step), then the '
              'declared constant rate (train/lr_anneal.LrWarmup); 0 = none')
+    parser.add_argument('--lr-warmup-start', type=int, default=0,
+        help='lineage update at which the --lr-warmup ramp begins (a declared rate transition); 0 = the lineage start')
     parser.add_argument('--quantization', default=None,
         help='QAT component (JSON text or a path): the recipe quantization spec (train/quantization.py) plus '
              '"bind": {"stage": ID, "start": U0, "end": U1}, the update range over which that stage\'s progress '
@@ -3350,8 +3352,8 @@ def _main(argv=None, *, requested_refresh):
     warmup = None
     if args.lr_warmup:
         from .lr_anneal import LrWarmup
-        warmup = LrWarmup(optimizer, args.lr_warmup)
-        checkpoint_options['lr_warmup'] = {'updates': args.lr_warmup}
+        warmup = LrWarmup(optimizer, args.lr_warmup, start=args.lr_warmup_start)
+        checkpoint_options['lr_warmup'] = {'updates': args.lr_warmup, 'start_global_step': args.lr_warmup_start}
     matrix_reference = saved_norm_reference
     if telemetry_spec is not None and matrix_reference is None:
         from .matrix_telemetry import frobenius_norms, matrix_inventory, reference_record
@@ -4443,7 +4445,7 @@ def _main(argv=None, *, requested_refresh):
                 progress['lr_anneal'] = {'multiplier': anneal_factor, 'update': global_step - anneal.start,
                                          'steps': anneal.spec['steps'], 'branch': True}
             if warmup is not None:
-                progress['lr_warmup'] = {'multiplier': warmup_factor, 'updates': warmup.updates}
+                progress['lr_warmup'] = {'multiplier': warmup_factor, 'updates': warmup.updates, 'start_global_step': warmup.start}
             if weight_ema is not None:
                 progress['weight_ema'] = weight_ema.summary()
             if precision_pass is not None:
@@ -4569,13 +4571,15 @@ def _main(argv=None, *, requested_refresh):
                 refresh_boundary = refresh_boundary or requested_refresh.requested or automatic_refresh_due
                 break
             # A carried absolute SFT step can hit cadence before this relative
-            # optimizer window ends. Defer inline evaluation throughout such
+            # optimizer window ends. Defer inline task evaluation throughout such
             # windows; independently scheduled task monitoring remains active.
+            # The bounded held-loss subset still runs at its cadence inside a
+            # window, so every window shorter than the stage yields a held signal.
             bounded_window = args.refresh_after_updates is not None or args.refresh_at_checkpoint
             allow_cadence = not bounded_window or step == total_end
             due_task = allow_cadence and task_eval is not None and ((step == total_end and not policy_operation) or
                         bool(args.task_eval_every and step % args.task_eval_every == 0))
-            due_eval = allow_cadence and (step % eval_at == 0 or step == total_end or due_task)
+            due_eval = step % eval_at == 0 or (allow_cadence and (step == total_end or due_task))
             if due_eval:
                 evaluation_rng = capture_training_rng_state(args.device)
                 try:

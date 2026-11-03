@@ -100,18 +100,25 @@ class LrWarmup:
     N)``; from update N on the rate is the declared constant. The factor multiplies whatever rate the group holds for
     that update (so it composes with an anneal) and the groups get their rates back afterwards, so the saved optimizer
     state is shaped exactly like the lineage's. It is a function of the lineage ``global_step`` only: a resume or a
-    continuation past N trains at the constant rate, and a DiLoCo learner warms up over its own local updates."""
+    continuation past N trains at the constant rate, and a DiLoCo learner warms up over its own local updates.
 
-    def __init__(self, optimizer, updates):
+    ``start`` (``--lr-warmup-start S``) declares a rate transition at lineage update S: the update that follows
+    ``global_step >= S`` earlier updates trains at ``rate * min(1, (global_step - S + 1) / N)``, so a raised rate ramps
+    in over the N updates after the transition instead of over the lineage's first N."""
+
+    def __init__(self, optimizer, updates, start=0):
         from .optim_restore import _children
         if type(updates) is not int or updates < 0:
             raise ValueError('lr warmup is a non-negative number of updates')
+        if type(start) is not int or start < 0:
+            raise ValueError('lr warmup start is a non-negative lineage update')
         self.updates = updates
+        self.start = start
         self.groups = [group for _, child in _children(optimizer) for group in child.param_groups]
         self.saved = None
 
     def factor(self, global_step):
-        return 1.0 if self.updates == 0 else min(1.0, (int(global_step) + 1) / self.updates)
+        return 1.0 if self.updates == 0 else min(1.0, max(0, int(global_step) - self.start + 1) / self.updates)
 
     def scale(self, global_step):
         factor = self.factor(global_step)

@@ -1710,7 +1710,15 @@ def test_refresh_only_boundary_does_not_force_task_window(tmp_path,monkeypatch,r
             argv[argv.index('--epochs')+1]='3'
             argv[-1]='2'
         argv+=['--task-eval-every','1']
-        monkeypatch.setattr(trainer,'_evaluate_cadence',lambda *a,**k: pytest.fail('held evaluation started at automatic refresh'))
+        if refresh=='relative-interior':
+            # The bounded held subset still runs at its cadence inside the window (never at the refresh itself).
+            held_calls=[]
+            def held(*a,**k):
+                held_calls.append(k.get('final'))
+                return {'loss':0.,'scope':'cadence-subset'},None
+            monkeypatch.setattr(trainer,'_evaluate_cadence',held)
+        else:
+            monkeypatch.setattr(trainer,'_evaluate_cadence',lambda *a,**k: pytest.fail('held evaluation started at automatic refresh'))
     elif refresh=='file-arena':
         from natlang_neuralese.common.checkpoint_file_storage import CheckpointFileStore
         original_reserve=CheckpointFileStore.reserve_arena
@@ -1729,6 +1737,8 @@ def test_refresh_only_boundary_does_not_force_task_window(tmp_path,monkeypatch,r
         acquire=PersistentCheckpointReservation.acquire
         attempts=[]
         def unavailable_on_next(self,bound):
+            if 'actor-views' in str(self.pending):
+                return acquire(self,bound)  # actor-view publication reserves its own inode, not the future checkpoint
             attempts.append(bound)
             if len(attempts)==2:
                 os.kill(os.getpid(),signal.SIGUSR2)
@@ -1770,6 +1780,8 @@ def test_refresh_only_boundary_does_not_force_task_window(tmp_path,monkeypatch,r
             certificate=json.loads((out/'native-runtime-certificate.json').read_text())
             assert certificate['deferred'] and not certificate['passed']
             assert certificate['reason']=='semantic refresh; qualification deferred until resume'
+        if refresh=='relative-interior':
+            assert held_calls==[False,False]  # one interior cadence evaluation: raw and default EMA weights
         if refresh=='file-arena':
             assert len(arenas)==2 and all(allocated>=bound for bound,allocated in arenas)
         if refresh=='reservation-signal':

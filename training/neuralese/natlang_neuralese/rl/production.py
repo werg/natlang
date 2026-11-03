@@ -502,7 +502,7 @@ def native_policy_parameter_contract():
         'gradient_atol','held_eval_graphs','held_eval_tokens','held_final_policy',
         'history_reasoning_policy','history_reasoning_binding_path','history_reasoning_binding_sha256',
         'execution_transition_admission','execution_transition_admission_sha256',
-        'interface_row_learning_rate','learned_row_learning_rate','learning_rate','lr_warmup',
+        'interface_row_learning_rate','learned_row_learning_rate','learning_rate','lr_warmup','lr_warmup_start',
         'lr_anneal','matrix_telemetry','memory_qualification','native_ordinary_precision',
         'native_linear_precision','native_attention_precision','native_norm_execution',
         'native_shared_execution','native_optimizer_migration','optimizer_state_storage',

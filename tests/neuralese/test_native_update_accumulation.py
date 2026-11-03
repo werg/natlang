@@ -416,6 +416,20 @@ def test_sft_budget_composes_with_warmup_and_restores_nominal_groups(monkeypatch
     assert [(group['lr'],group.get('qat_latent_lr')) for group in optimizer.param_groups]==nominal
 
 
+def test_warmup_from_a_declared_rate_transition():
+    from natlang_neuralese.train.lr_anneal import LrWarmup
+    _,optimizer=build()
+    nominal=[group['lr'] for group in optimizer.param_groups]
+    warmup=LrWarmup(optimizer,64,start=67)
+    assert warmup.factor(67)==1/64 and warmup.factor(98)==.5 and warmup.factor(130)==1. and warmup.factor(500)==1.
+    assert warmup.factor(10)==0.
+    assert warmup.scale(98)==.5
+    assert [group['lr'] for group in optimizer.param_groups]==[rate*.5 for rate in nominal]
+    warmup.restore()
+    assert [group['lr'] for group in optimizer.param_groups]==nominal
+    assert LrWarmup(optimizer,10).factor(4)==.5
+
+
 def test_sft_budget_control_is_recorded_for_mapping_details(monkeypatch):
     from natlang_neuralese.train import native_state_sft as trainer
     model,optimizer=build();graphs=examples()[:1]
