@@ -226,6 +226,11 @@ tunes from the new parent. This is an open item for the tuning lane.
   rebind the parent and resume (recorded parent transition). Confirmation is spent only when development promotion
   holds. Grow the episode pool as RL collection produces verified successful parent rollouts (`bank_stage pool
   --rollouts`). A grown pool is a new stage directory (its `operation.json` binds the pool). Seeding it with the previous `learner/` state continues the same bank: the learner binds its recipe and initial bank, not the pool.
+- **Operational note (owner rule, AGENTS 43c88f234).** Never stop a qualifying GPU sandbox while GPU capacity is
+  still needed. A changed configuration restarts inside the held sandbox (push the new seed/stage dir, move the old
+  run's state aside, start the new driver in place), as the cloud agent did for production on 8120d5a5. On
+  2026-11-03, stopping the obsolete random-bank sandbox 6618cead and requesting a new one lost the cw1 GPU to a
+  StartupTimeout.
 - **Operational note.** A stage-shard relaunch from a final (failed) export is shut down by the exporter immediately.
   Move those records under `.cloud/superseded/` first, as the tuning pilot does.
 
