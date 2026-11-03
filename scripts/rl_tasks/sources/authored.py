@@ -16,8 +16,8 @@ import re
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from common import CURRICULUM_VERSION, slug, text_digest, unit_split  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+from scripts.rl_tasks.common import CURRICULUM_VERSION, slug, text_digest, unit_split  # noqa: E402
 
 SCHEMA = 'natlang.rl-authored-task/1'
 GENERATOR = 'natlang.rl-authored-tasks/1'
