@@ -60,13 +60,17 @@ def earned_parent(previous_config, checkpoint=None):
     return binding(path), training.get('global_step'), state
 
 
-def successor_recipe(previous_recipe_path, out, *, stage_id, sft_stage, task_source, parameters):
+def successor_recipe(previous_recipe_path, out, *, stage_id, sft_stage, task_source, parameters, sft_window=None):
     from natlang_neuralese.common.jsonio import write_json_durable
     from natlang_neuralese.common.hashing import sha256_file_hex_cached
     from natlang_neuralese.train.recipe import load_recipe, resolve_recipe_data
     recipe = copy.deepcopy(resolve_recipe_data(previous_recipe_path))
     if any(stage['id'] == stage_id for stage in recipe['stages']):
         raise SystemExit(f'recipe already declares {stage_id}')
+    if sft_window is not None:
+        # The SFT window length is the joint stage's semantic-refresh cadence (as sft_window.py next --window).
+        next(stage for stage in recipe['stages'] if stage['id'] == sft_stage)['parameters']['refresh_after_updates'] = \
+            sft_window
     name = 'rl_task_source_' + re.sub(r'[^a-z0-9]+', '_', Path(task_source).parent.name.lower()).strip('_')[:48]
     recipe.setdefault('input_bindings', {})[name] = {'path': str(Path(task_source).resolve(strict=True)),
                                                      'sha256': sha256_file_hex_cached(task_source)}
@@ -126,7 +130,8 @@ def prepare(args):
                   'max_model_requests': previous.get('max_model_requests', 64),
                   'max_turns': previous.get('max_turns', 128), 'case_seconds': previous.get('case_seconds', 3600)}
     recipe = successor_recipe(previous['production_recipe'], control, stage_id=args.stage_id,
-                              sft_stage=previous['production_stage'], task_source=task_source, parameters=parameters)
+                              sft_stage=previous['production_stage'], task_source=task_source, parameters=parameters,
+                              sft_window=args.sft_window_updates)
     config = copy.deepcopy(previous)
     for key in ('mandatory_sft_only', 'rolling_sft_resume', 'execution_transition_source_controller',
                 'task_selection_history', 'branch_origin'):
@@ -189,6 +194,8 @@ def main(argv=None):
     parser.add_argument('--stage-id', default='interleaved_jolt_rl_v1')
     parser.add_argument('--rl-rounds-per-window', type=int, default=2)
     parser.add_argument('--start-with', choices=('rl', 'sft'), default='rl')
+    parser.add_argument('--sft-window-updates', type=int,
+                        help="SFT updates per window (the joint stage's refresh_after_updates; default: unchanged)")
     parser.add_argument('--rows-per-round', type=int, default=16)
     parser.add_argument('--group', type=int, default=8)
     parser.add_argument('--policy-loss', help='canonical policy loss JSON (default JOLT+ tis)')
