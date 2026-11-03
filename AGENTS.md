@@ -1172,6 +1172,12 @@ came from a 1-CPU box and single-copy state, not from cohosting itself: per-sand
 so cohosting changes coordinator risk from p_cpu to p_gpu, not N-fold. Replication and durable export are the
 protection. Measure coordinator peak RAM/CPU beside a live learner, and exercise primary failover in the
 first production DiLoCo rounds. Run no coordinator without at least two training learners.
+Reuse granted sandboxes (owner, 2026-11-03): under capacity constraints, a launch first reuses a running
+qualifying sandbox (one GPU, assigned shape at or above the job's measured minimum, any of our accounts)
+that is idle or running lower-priority work (smoke, probe, finished job), instead of stopping it and
+creating a new one. Hand it over in place: drain the lower-priority job with its evidence, push the new
+inputs and start the higher-priority role. Never stop a qualifying GPU sandbox while a higher-priority
+launch is waiting for capacity.
 Owner decision (2026-10-28): GPU sandboxes running inference engines (RL actors,
 evaluators, serving) request a CPU minimum of 8 cores. vLLM/SGLang were CPU-bound on
 the 2 CPUs an unconstrained request receives (GPU 13-68% busy). The earlier
