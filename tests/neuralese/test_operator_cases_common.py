@@ -61,3 +61,23 @@ def test_filled_seeds_keep_records_valid(tmp_path):
         assert sink.offer(record(0, 'src/a.py:3 failed\n' * 200))
     line = (tmp_path / 'compact-value' / 'unit.port-records.jsonl').read_text().splitlines()[0]
     assert validate(json.loads(line)) == []
+
+
+def test_question_selected_spans_prefer_answer_sentences_and_window_long_lines():
+    from neuralese_data.operator_cases_common import question_selected_spans
+    text = ('The river is long. Ada Lovelace wrote the first program for the engine. '
+            'The engine was designed by Babbage. Unrelated trivia about weather. ' + 'x' * 5000 + ' Ada Lovelace tail.')
+    seed = question_selected_spans(text, 'Who wrote the first program?', ['Ada Lovelace'], 300)
+    assert 'Ada Lovelace wrote the first program' in seed and 'weather' not in seed and len(seed) <= 400
+    assert question_selected_spans(text, 'Who?', ['Nobody Here'], 300) is None
+    long_line = 'y' * 3000 + ' needle-answer ' + 'z' * 3000
+    assert 'needle-answer' in question_selected_spans(long_line, 'needle?', ['needle-answer'], 400)
+
+
+def test_pool_text_hashes_skip_excluded_sources(tmp_path):
+    from neuralese_data.operator_cases_common import pool_text_hashes, text_key
+    folder = tmp_path / 'compact-value'
+    folder.mkdir()
+    for name, text in (('a', 'alpha text ' * 200), ('b', 'beta text ' * 200)):
+        (folder / f'{name}.port-records.jsonl').write_text(json.dumps({'sources': [{'role': 'tool_output', 'text': text}]}) + '\n')
+    assert pool_text_hashes('compact-value', exclude={'a'}, out_root=tmp_path) == {text_key('beta text ' * 200)}

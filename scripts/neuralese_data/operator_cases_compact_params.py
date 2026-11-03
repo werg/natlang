@@ -44,20 +44,28 @@ def consumer_question(record: dict) -> str | None:
 
 
 def eligibility(record: dict) -> str | None:
-    """None when the record is a compact-params candidate, else the drop reason."""
+    """None when the record is a compact-params candidate, else the drop reason.
+
+    A multi-source record is a call with several large arguments (spec section 4): every source stays, one site per
+    argument of at least `compact_min_chars`, at most `RULES['sources'][1]` sources and `max_total_chars` in total.
+    """
     sources = record.get('sources') or []
-    if len(sources) != 1:
-        return 'multi-source'
+    rules = RULES[OPERATOR]
+    if not rules['sources'][0] <= len(sources) <= rules['sources'][1]:
+        return 'sources-above-8'
     if (record.get('outcome') or {}).get('label') not in IMITATION_LABELS:
         return 'label'
-    rules = RULES[OPERATOR]
-    if sources[0].get('role') not in rules['roles']:
+    if any(source.get('role') not in rules['roles'] for source in sources):
         return 'source-role'
-    length = len(source_text(sources[0]))
-    if length < rules['min_chars']:
+    lengths = [len(source_text(source)) for source in sources]
+    if max(lengths) < rules['compact_min_chars']:
         return 'below-4096-chars'
-    if length > rules['max_chars']:
+    if min(lengths) < rules['min_chars']:
+        return 'source-below-200-chars'
+    if max(lengths) > rules['max_chars']:
         return 'above-120000-chars'
+    if sum(lengths) > rules['max_total_chars']:
+        return 'total-above-110000-chars'
     if consumer_question(record) is None:
         return 'no-consumer-question'
     return None
@@ -65,8 +73,11 @@ def eligibility(record: dict) -> str | None:
 
 def to_case(record: dict) -> dict:
     """Rewrite writer.instructions into the listing purpose; everything else stays as in S1 (re-sealed)."""
-    role = record['sources'][0]['role']
-    record['writer']['instructions'] = f'The call that receives this {role} answers: {consumer_question(record)}'
+    sources = record['sources']
+    roles = sorted({source['role'] for source in sources})
+    what = (f'this {roles[0]}' if len(sources) == 1 else
+            f'these {len(sources)} arguments ({", ".join(roles)})')
+    record['writer']['instructions'] = f'The call that receives {what} answers: {consumer_question(record)}'
     return seal(record)
 
 

@@ -51,8 +51,8 @@ seeds by provenance. The seed lives only in `meta`: the site never reads it as i
 
 | Operator | Sources | Roles | Chars per source |
 |---|---|---|---|
-| `compact-value` | exactly 1 | tool_output, file, document, passage, record, schema, tool_doc | 2,000 – 120,000 |
-| `compact-params` | exactly 1 | document, passage, file, record, schema, tool_output | 4,096 – 120,000 |
+| `compact-value` | exactly 1 | tool_output, file, document, passage, record, schema, tool_doc | 800 – 120,000 |
+| `compact-params` | 1 – 8 (one site per source of at least 4,096; at most 110,000 in total) | document, passage, file, record, schema, tool_output | 200 – 120,000 each |
 | `compact-history` | exactly 1 | trajectory | 8,000 – 200,000 (serialized) |
 | `extract` | 2 – 8 | document, passage, record, file, tool_output | 200 – 20,000 each |
 
@@ -159,6 +159,33 @@ does not occur (case-insensitive) in the pages (`answer-not-in-results`): the st
 **Caps.** Train ≤ 15,000, test ≤ 1,000 (upstream test rows only; this store is all train, so carve test by
 `stable_rank(question_group) % 100 < 3`). Source name `web-search-r1`.
 
+## §3b compact-value ← question-driven tool-output cases (2026-11-03 rerun; floor and new sources)
+
+**Floor.** `compact-value` has its own source floor, 800 characters (`RULES['compact-value']['min_chars']`; the other
+operators keep theirs). The runtime cuts an output only past 2,000 shown characters, but real tool outputs worth
+carrying exactly (a directory listing, a short file, a search page) are often 800-2,000 characters, and the operator's
+state is also what a consumer reads instead of a value. Below 2,000 the text-cut sibling is the whole value, so such a
+case teaches exact-detail carriage; the ablation baseline there is the full text. The reruns of `tool-digest` and
+`web-search-r1` adopt the floor through `RULES`.
+
+**Question-driven converters** (consumer asks a question whose exact answer is in the tool output; the seed is *checked*:
+`operator_cases_common.question_selected_spans` = the sentences/lines that contain a gold answer, best question overlap
+first, then more question-overlap lines; provenance `checked`, origin `code:question-selected-spans`):
+
+* `web-<store>` (`operator_cases_web_qa.py`): bgkit `web_openresearcher_v3`, `web_openseeker_v3`, `web_webshaper_v3`,
+  `web_sds_v3`, `web_miroverse_nc_v2` final rows. Source = the trajectory's tool results (search pages and opened pages in
+  order, learned-compaction slots dropped, one `tool_output`); target = the `ANSWER:` text confirmed by exact match against
+  the dataset gold and present verbatim in the results (MiroVerse finals are reports: the dataset gold answer of an
+  `em`-flagged report). One case per question world over all stores; a question with any upstream-eval row is test
+  throughout. v2 stores are superseded by v3 (same trajectories).
+* `agent-tool-slots-repo-qa` (`operator_cases_repo_tool_qa.py`): bgkit `agent_tool_slots_v8` repo-QA final turns. Source = the
+  one tool result (read/map/grep/list; `compaction` notes and the repo-overview marker are not tool results) containing the
+  exact static-analysis answer; one case per task; repository/held-out/eval split closure as `tool-digest`; no question
+  template above 30% of a split's cap.
+
+Both reject a source text that the compact-value pool already contains (`duplicate-in-pool`; cross-converter repetition).
+The repo-QA files overlap the compact-params S1 repo-QA sources only in repositories; the overlap count is in the manifest notes.
+
 ## §4 compact-params ← S1 long-document QA (argument listing of a large document)
 
 **Goal.** About 25k cases where a call receives a large document argument and answers its instructions from the
@@ -211,6 +238,18 @@ prompt as swe_compaction.py does (`_message`, `strip_markup`). Label: join `meta
 `instance_id`, `repo`): resolved → `checked` (`swe-rebench-tests`), else reject `unresolved`; trajectories not found →
 reject `no-upstream`. Groups `repo:<repo>`, `swe-instance:<instance_id>`; bench instances
 (`swe_compaction.load_bench_instances()`) → split `test`. Dedupe (b) against (a) by (trajectory_id, span).
+
+**Finding (2026-11-03): bgkit `compaction_v2` cannot be labelled.** Its 9,775 trajectory ids (UUIDs) are all SWE-Zero
+trajectories (`/home/werg/bgkit-data-nvme/capability_packaging/trajectories_ext/swe_zero/data`, 318,115 rows; all 9,775
+found locally: 6,091 SWE-Fixer-Train-110K, 3,402 SWE-Gym-Raw, 282 nebius/SWE-rebench). None of the Open-SWE-Traces
+subsets (`trajectories_ext/open_swe_traces`, scale-swe and swe-rebench-v2, 260k trajectories with a `resolved` column)
+contains any of these ids. SWE-Zero is execution-free by construction: its fields are instance_id, repo, license,
+trajectory_id, trajectory, model_patch, dataset; there is no resolved/test status and none is published upstream. The only
+local gold patches are the nebius/SWE-rebench parquet files (`/mnt/external/bgkit-data/swe_rebench`): 282 of the
+trajectories join, and only 7 have a model patch whose changed lines equal the gold patch (code check, not test
+resolution). Producing real resolved labels would need running the tests of 9,775 instances in their environments
+(`docker_image`/`install_config` exist only for the 282 SWE-rebench ones); SWE-Fixer/SWE-Gym environments are not local.
+No converter wiring is added; `no-upstream` is the honest reject.
 
 **Seed.** The bgkit `compaction`/`compaction_v2` `target` is the next assistant message, not a compaction note, so
 neither input has gold notes: the shared helper's `mechanical:history-outline` (actions, paths, errors, last step,

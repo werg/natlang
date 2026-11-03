@@ -35,8 +35,13 @@ SCHEMA = 'natlang.operator-cases/1'
 # Size floors follow the runtime's own cut thresholds (ts-host native/cutoff.ts): only values the runtime would cut
 # are compaction cases. Ceilings keep one rendered graph below the renderer's token cap.
 RULES = {
+    # compact-value has its own lower floor (owner 2026-11-03, converter rerun): the runtime cuts a tool output only past
+    # 2,000 shown characters, but the operator's state is also what a consumer reads instead of a value (also between
+    # runs and in listings), and real tool outputs worth carrying exactly are often 800-2,000 characters (a directory
+    # listing, a short file, a search page). Below 2,000 the text-cut sibling is the whole value, so such a case teaches
+    # exact-detail carriage; the ablation baseline there is the full text. Other operators keep their own floors.
     'compact-value': {'sources': (1, 1), 'roles': {'tool_output', 'file', 'document', 'passage', 'record', 'schema',
-                                                   'tool_doc'}, 'min_chars': 2000, 'max_chars': 120_000},
+                                                   'tool_doc'}, 'min_chars': 800, 'max_chars': 120_000},
     # One site per argument the listing cuts (>= SCOPE_VALUE_CHARS 4096); shorter arguments of a multi-argument
     # call are shown in full. The total keeps one rendered graph below the renderer's 32k-token cap.
     'compact-params': {'sources': (1, 8), 'roles': {'document', 'passage', 'file', 'record', 'schema', 'tool_output'},
@@ -124,6 +129,59 @@ def iter_jsonl(path, limit=None):
                 return
             if line.strip():
                 yield json.loads(line)
+
+
+def question_selected_spans(text: str, question: str, answers, budget: int, *, limit: int = 8) -> str | None:
+    """Checked extractive seed for a question-driven tool-output case: the sentences/lines that contain a gold answer
+    (best question overlap first, at most ``limit``), then the best question-overlap sentences while budget remains,
+    all in source order. None when no sentence contains an answer (the state could not carry it)."""
+    from natlang_neuralese.data.operator_seeds import _words, sentences
+    wanted = [answer.lower() for answer in answers if isinstance(answer, str) and answer.strip()]
+    asked = _words(question)
+    pieces = list(dict.fromkeys(sentences(text)))
+
+    def window(piece):  # a single over-long line keeps the stretch around its first answer occurrence
+        if len(piece) <= budget:
+            return piece
+        at = min((i for i in (piece.lower().find(answer) for answer in wanted) if i >= 0), default=0)
+        start = max(0, min(at - budget // 2, len(piece) - budget))
+        return piece[start:start + budget]
+
+    pieces = [window(piece) for piece in pieces]
+    with_answer = sorted((-len(_words(piece) & asked), index) for index, piece in enumerate(pieces)
+                         if any(answer in piece.lower() for answer in wanted))
+    if not with_answer:
+        return None
+    chosen, used = set(), 0
+    for _, index in with_answer[:limit]:
+        if chosen and used + len(pieces[index]) + 1 > budget:
+            continue
+        chosen.add(index)
+        used += len(pieces[index]) + 1
+    extra = sorted((-len(_words(piece) & asked), index) for index, piece in enumerate(pieces)
+                   if index not in chosen and _words(piece) & asked)
+    for _, index in extra:
+        if len(chosen) < 2 * limit and used + len(pieces[index]) + 1 <= budget:
+            chosen.add(index)
+            used += len(pieces[index]) + 1
+    return '\n'.join(pieces[index] for index in sorted(chosen))
+
+
+def pool_text_hashes(operator: str, *, exclude=(), out_root: Path | None = None) -> set:
+    """Normalized-text hashes of every source already written for ``operator`` (source files of the pool except the ``exclude`` names), so a
+    new converter can reject a value the operator already trains on (repetition across converters, not only within one)."""
+    hashes = set()
+    for path in sorted((Path(out_root or OUT_ROOT) / operator).glob('*.port-records.jsonl')):
+        if path.name.removesuffix('.port-records.jsonl') in exclude:
+            continue
+        for record in iter_jsonl(path):
+            for source in record['sources']:
+                hashes.add(hashlib.sha256(normalize_text(source_text(source)).encode()).hexdigest())
+    return hashes
+
+
+def text_key(text: str) -> str:
+    return hashlib.sha256(normalize_text(text).encode()).hexdigest()
 
 
 def stable_rank(key: str, salt: str = 'operator-cases') -> int:
