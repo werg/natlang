@@ -8,7 +8,7 @@ from natlang_neuralese.common.hashing import sha256_file_hex_cached
 
 def fixture(tmp_path):
     cases=tmp_path/'cases.jsonl';cases.write_text(json.dumps({'id':'world'})+'\n')
-    state=tmp_path/'state.json';row={'task_id':'world','observed_policy_id':'a'*64,'scored':4,'mean':1.}
+    state=tmp_path/'state.json';row={'task_id':'world','observed_policy_id':'a'*64,'scored':4,'mean':1.,'observed_round':37,'spread':False}
     state.write_text(json.dumps({'checkpoint':'old-actor.pt','trained_rounds':17,'offset':4,
         'task_curriculum_history':{'world':row,'withdrawn':{**row,'task_id':'withdrawn'}}}))
     ref={'path':str(state),'sha256':sha256_file_hex_cached(state)}
@@ -26,6 +26,10 @@ def test_history_survives_source_owner_advancement_without_policy_credit(tmp_pat
     assert state['task_curriculum_history']['world']['observed_policy_id']=='a'*64
     assert state['task_selection_history_excluded_ids']==['withdrawn']
     assert 'group_stats' not in state
+    carried=state['task_curriculum_history']['world']
+    assert 'observed_round' not in carried and carried['source_controller_round']==37
+    from natlang_neuralese.rl.curriculum import DEFAULT,difficulty_shift
+    assert difficulty_shift(list(state['task_curriculum_history'].values()),DEFAULT)==0
 
 
 @pytest.mark.parametrize('damage',['packet','packet-same-stat','snapshot','actor'])

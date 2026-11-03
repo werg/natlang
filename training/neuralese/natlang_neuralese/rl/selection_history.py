@@ -43,7 +43,13 @@ def initial(config):
                 or type(row.get('mean')) not in (int,float) or not math.isfinite(row['mean'])
                 or not 0<=row['mean']<=1):
             raise ValueError('task selector observation lacks exact actor and score provenance')
-        if task in ids:retained[task]=row
+        if task in ids:
+            # Round numbers belong to the source controller. Kept as observed_round
+            # they would collide with this controller's rounds (or, being larger,
+            # stay "newest" forever) in the spread-driven difficulty shift.
+            row=dict(row);source_round=row.pop('observed_round',None)
+            if source_round is not None:row['source_controller_round']=source_round
+            retained[task]={**row,'source_controller_sha256':record['source_controller']['sha256']}
     offset=state.get('offset',0)
     if type(offset) is not int or offset<0:raise ValueError('invalid historical selector offset')
     return {'task_curriculum_history':retained,'offset':offset%len(ids) if ids else 0,
