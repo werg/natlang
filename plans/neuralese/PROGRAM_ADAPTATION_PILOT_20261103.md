@@ -90,3 +90,19 @@ Measures: untuned development headroom per program (the S3 entry signal), self-t
 development numbers, paired tuned-vs-untuned gain, one confirmation per release with gain, wall time per root and per
 round (`logs/`, `tunes/<name>.timing.json`), distilled training-world rows. Does not: complete S3 (one shape; pilot
 scope), select a production parent, or establish capability lift beyond these paired development roots.
+
+## Launch status (2026-11-03)
+
+- CPU pipeline check (cw3, `launch --check`): bootstrap, exact inputs, parent reconstruction `0c8e75f6` -> `bf95`
+  (43.6 s) -> full67 `71c3eb45` (37.5 s), protected-custody privileged supply and the export round trip to the DGX
+  hub all passed. The dry-run fixture's two non-catalog failures are its own limitation (it requires privileged
+  references). The check found and fixed: closure restore through the sandbox's symlinked roots, the exporter's
+  helper path, launches restoring the seed parent, and `tune.stage` resolving symlinked paths (the first GPU attempt
+  of both shards stopped on it before any tuning; records under `.cloud/superseded/resolve-paths-1103`).
+- GPU shards running since 10:18 UTC: `tune-full67-s0` sandbox `fb56ca39-31c6-4b32-97c2-f946eaf12019` (cw3) and
+  `tune-full67-s1` sandbox `e351d38e-fe86-465c-9206-d48d975ba930` (cw4), each H100 80GB, 9 CPU, 64 GiB, lifetime 79 h
+  and 53 h. Exporter: ledger service `rl-cloud-export-1103f` (log `.cloud/exporter.log`); it stops a shard's sandbox
+  once its final export is verified (exercised on the failed first attempt of shard 1).
+- Monitor: `rl_cloud.py status RUN`; export manifests `.cloud/exports/<lineage>/<seq>.json` (`tune_progress`); hub
+  copies `<lineage>/stage`; live: `cwctl.py exec SANDBOX -- tail .../pilot-full67/logs/<program>.entry.log`.
+  Stop: `rl_cloud.py stop RUN <lineage>`.
