@@ -547,3 +547,24 @@ honestly for every task. Any "no" means fix or delete the task, not argue it.
     constructs (`typed_neuralese`, `neuralese_fan_in`, real `folder_reducer`, `skills`)?
 
 Then run section 4.
+
+## 12. Round 3 changes (2026-11-03)
+
+- **Smoke replay is required for Neuralese tasks.** A task claiming `typed_neuralese`, `neuralese_relay`, `neuralese_fan_in`
+  or `iterate_neuralese` sets `"smoke": {"code": ..., "children": ..., "replay": true}`. With `replay` the smoke code is the
+  WHOLE root script (every item, every helper call, the exact code steps) and its returned value is judged by the oracle
+  against `expected`, so the arithmetic/filtering/ordering behind `expected` is checked by a real run with the helpers'
+  scripted answers (the structure smoke runs the teacher-text Neuralese transport). Script each helper per call with
+  `{"$match": [{"match": "<text in its call, single line, in the first two lines>", "value": ...}, ...]}`. A Neuralese
+  value is opaque to code: code cannot read `.field` of a `Neuralese<{...}>` result (the run stops), it can only pass the value
+  into another helper. So put the exact steps after the Neuralese stage in a code step over the PLAIN return of a consumer
+  helper (e.g. a `net_movements(notes, items)` returning a record array), and give each scripted helper the answer its text
+  would literally produce. Where the final decision is taken in language by the root from typed Neuralese records, the replay
+  cannot check it (the blind solve still does): add a final plain helper or exact code step wherever the answer has one.
+  Qualification fails Neuralese tasks without `replay`, and warns when the replay returns a bare literal.
+- **Protection closure is seconds, not 25 minutes**: it now uses a persistent exact-signature hash cache
+  (`/mnt/external/natlang-rl-authoring/protection-cache/hash-cache.jsonl`); the union digest is recomputed from the actual
+  protection inputs every run and recorded in `report.json` (`steps.protection_closure`).
+- **Selection pool quota**: the assembler keeps every effect/state row under the family cap and shrinks the other rows until
+  effect/state oracles are 30% of the pool (no duplicated rows). Each admitted effect/state task therefore grows the pool.
+- `scripts/rl_tasks/authored_family_report.py FAMILY` lists the programs a family already has (extension batches).
