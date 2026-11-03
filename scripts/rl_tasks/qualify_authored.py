@@ -25,8 +25,10 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 sys.path.insert(0, str(HERE / 'sources'))
 sys.path.insert(0, str(REPO / 'training' / 'neuralese'))
-DEFAULT_RUNTIME = '/mnt/external/natlang-rl-authoring/runtime/ts-host'
-UNION = Path('/home/werg/data/broad-rl-tasks-20261031/union_groups_fast.py')
+from natlang_neuralese.common.paths import resolve  # noqa: E402
+
+DEFAULT_RUNTIME = str(resolve('data_hdd', 'natlang-rl-authoring', 'runtime', 'ts-host'))
+UNION = resolve('data_nvme', 'broad-rl-tasks-20261031', 'union_groups_fast.py')
 
 
 def node():
