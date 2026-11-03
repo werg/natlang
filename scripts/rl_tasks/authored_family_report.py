@@ -18,7 +18,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from measure_repetition import program_features, split_file  # noqa: E402
 
-POOL = '/mnt/external/natlang-rl-authoring/admitted/cases.jsonl'
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training' / 'neuralese'))
+from natlang_neuralese.common.paths import resolve  # noqa: E402
+
+POOL = str(resolve('data_hdd', 'natlang-rl-authoring', 'admitted', 'cases.jsonl'))
 
 
 def main(argv=None):
