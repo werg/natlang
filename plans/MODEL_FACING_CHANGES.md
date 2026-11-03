@@ -1,5 +1,14 @@
 # Model-facing changes and their measurement
 
+### 2026-11-03 — Memetic improver supervisor and workspace declaration (debt: live measurement)
+
+New model-facing texts: `applications/memetic-improver/improve_program.nl` and `improve_program/refine.nl` (numbered
+steps: study failures, one typed change per step, measure, keep only above the best, two misses stop, commit), the
+`workspace` service declaration with its typed `Change`/`FitSpec`/`Evaluation` types (`rl/memetic_workspace.py
+DECLARATION`), and the problem texts `Workspace.problems` returns for invalid changes. **Debt:** about 48 supervisor
+episodes on the current parent: commit rate, typed-change validity on first proposal, changes per kind, evaluations
+used, support-claimed vs query-realized gain; and whether `iterateOn` is used as instructed or replaced by turns.
+
 ### 2026-11-03 — Guidance writer answers in plain text (writeGuidance; small live check, debt: 48-sample measurement)
 
 `applications/guidance-writer/writeGuidance.nl` now declares `returns: string` with no `readout: template`, adds "Everything

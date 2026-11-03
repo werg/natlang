@@ -1,0 +1,8 @@
+{
+  "schema": "natlang.package/v2",
+  "name": "@natlang/memetic-improver",
+  "version": "0.1.0",
+  "description": "The memetic improvement supervisor: the policy model studies one program's support invocations and improves the program by typed, measured changes (guidance, skills, instruction and signature patches, adapter fits) through the workspace service, then commits a change set. Episodes of it are trained by whole-graph RL on held query-world gains (training/neuralese rl/memetic_stage.py).",
+  "include": ["README.md", "DECOMPOSITION.md", "improve_program.nl", "improve_program/refine.nl"],
+  "engines": { "natlang": ">=0.1.0", "node": ">=22.13.0" }
+}

@@ -67,6 +67,10 @@ def validate_stage_parameters(kind, parameters):
         from ..rl.interleave import validate_stage_parameters as validate_interleaved
         validate_interleaved(parameters)
         return
+    if kind == 'native_memetic_rl':
+        from ..rl.memetic_stage import validate_stage_parameters as validate_memetic
+        validate_memetic(parameters)
+        return
     if kind in {'native_state_rl','native_coefficient_rl'} and parameters.get('rl_policy_loss') is not None:
         from ..rl.policy_math import policy_loss_declaration
         policy_loss_declaration(parameters['rl_policy_loss'])
@@ -261,7 +265,16 @@ HANDLERS['native_interleaved_rl'] = {
                   'neuralese_use_bonus'},
     'result':'checkpoint.pt'}
 INTERLEAVED_RL_KINDS=frozenset({'native_interleaved_rl'})
-HEADLESS_NATIVE_KINDS = NATIVE_TRAINING_KINDS | COEFFICIENT_NATIVE_KINDS | INTERLEAVED_RL_KINDS
+# Memetic meta-learning ("improve program P" episodes, rl/memetic_stage.py) rides on a declared interleaved RL stage:
+# its controller runs a memetic round every ``memetic_every`` rounds, from the stage's program source, with whole-graph
+# JOLT+ updates of the supervisor episodes. The stage never advances SFT exposure.
+HANDLERS['native_memetic_rl'] = {
+    'module':'natlang_neuralese.rl.memetic_stage','controller':True,
+    'required_inputs':{'program_source'},'optional_inputs':set(),
+    'parameters':{'rl_stage','memetic_every','programs_per_round','group','settings','promotion_min_gain'},
+    'result':'checkpoint.pt'}
+MEMETIC_RL_KINDS=frozenset({'native_memetic_rl'})
+HEADLESS_NATIVE_KINDS = NATIVE_TRAINING_KINDS | COEFFICIENT_NATIVE_KINDS | INTERLEAVED_RL_KINDS | MEMETIC_RL_KINDS
 NATIVE_IDENTITY_QUALIFICATION = 'native_state_runtime_qualified'
 # Program adaptation and the learned optimizer (train/adaptation_stages.py): stages on an earned backbone that train
 # program adapters/soft states and the optimizer's own parameters, never backbone weights or lineage exposure.
@@ -763,6 +776,10 @@ def load_recipe(path):
                     or type(effective_stage_parameters(sft, [], recipe).get('refresh_after_updates')) is not int):
                 raise ValueError('interleaved RL must require an earlier native_state_sft stage with declared '
                                  'refresh_after_updates windows: ' + name)
+        if kind in MEMETIC_RL_KINDS:
+            rl_stage = next((item for item in recipe['stages'] if item.get('id') == parameters.get('rl_stage')), None)
+            if rl_stage is None or rl_stage.get('kind') not in INTERLEAVED_RL_KINDS or parameters['rl_stage'] not in required:
+                raise ValueError('memetic RL must require the earlier interleaved RL stage it rides on: ' + name)
         declared.add(name)
         complete.add(name)
     if not native_lineage(recipe):

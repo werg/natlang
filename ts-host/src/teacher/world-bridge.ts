@@ -8,10 +8,14 @@ import { createInterface } from 'node:readline';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-/** A ScienceWorld task variation, or an ALFWorld game (task: its path under ALFWORLD_DATA). */
-export type WorldSpec = { kind: 'scienceworld' | 'alfworld'; task: string; variation?: number; simplifications?: string };
+/**
+ * A ScienceWorld task variation, an ALFWorld game (task: its path under ALFWORLD_DATA), or a memetic improvement
+ * episode (task: its `natlang.memetic-episode/1` spec; the process is training/neuralese rl/memetic_workspace.py and the
+ * program sees it as the service `workspace`).
+ */
+export type WorldSpec = { kind: 'scienceworld' | 'alfworld' | 'memetic'; task: string; variation?: number; simplifications?: string };
 
-const script = (kind: WorldSpec['kind']) => fileURLToPath(new URL(`../../scripts/inline-curriculum/${kind}_bridge.py`, import.meta.url));
+const script = (kind: 'scienceworld' | 'alfworld') => fileURLToPath(new URL(`../../scripts/inline-curriculum/${kind}_bridge.py`, import.meta.url));
 const vendor = (path: string) => fileURLToPath(new URL(`../../../vendor/${path}`, import.meta.url));
 const dataset = (path: string) => process.env.NATLANG_DATASETS
   ? resolve(process.env.NATLANG_DATASETS, path)
@@ -19,6 +23,10 @@ const dataset = (path: string) => process.env.NATLANG_DATASETS
 
 export class WorldBridge {
   private next = 1;
+  /** Name, declaration and offered methods of a world that declares itself (memetic); the others are `world`. */
+  serviceName = 'world';
+  declarationText?: string;
+  private methods?: string[];
   private readonly pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
   private constructor(private readonly process: ChildProcessWithoutNullStreams) {
     createInterface({ input: process.stdout }).on('line', line => {
@@ -41,6 +49,21 @@ export class WorldBridge {
    * installed; ALFWORLD_DATA points at ALFWorld's downloaded data.
    */
   static async open(spec: WorldSpec): Promise<WorldBridge> {
+    if (spec.kind === 'memetic') {
+      const repo = fileURLToPath(new URL('../../../', import.meta.url));
+      const python = process.env.NATLANG_MEMETIC_PYTHON ?? resolve(repo, '.venv-neuralese/bin/python');
+      const pythonPath = [resolve(repo, 'training/neuralese'), repo, process.env.PYTHONPATH].filter(Boolean).join(':');
+      const child = spawn(python, ['-m', 'natlang_neuralese.rl.memetic_workspace', 'serve'],
+        { stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, PYTHONPATH: pythonPath } });
+      // Its nested collections log progress on stderr; drain it into the collector log so the pipe never fills.
+      child.stderr.on('data', chunk => process.stderr.write(chunk));
+      const bridge = new WorldBridge(child);
+      const loaded = await bridge.request('load', { task: spec.task }) as { service: string; declaration: string; methods: string[] };
+      bridge.serviceName = loaded.service;
+      bridge.declarationText = loaded.declaration;
+      bridge.methods = loaded.methods;
+      return bridge;
+    }
     const python = spec.kind === 'alfworld' ? process.env.ALFWORLD_PYTHON ?? vendor('alfworld-venv/bin/python') :
       process.env.SCIENCEWORLD_PYTHON ?? vendor('scienceworld-venv/bin/python');
     const env = spec.kind === 'alfworld' ? { ...process.env, ALFWORLD_DATA: process.env.ALFWORLD_DATA ?? dataset('alfworld/data') } : process.env;
@@ -58,7 +81,7 @@ export class WorldBridge {
   }
 
   /** The TypeScript declaration of `world` the program is shown: every method is asynchronous. */
-  static declaration(kind: WorldSpec['kind']): string {
+  static declaration(kind: 'scienceworld' | 'alfworld'): string {
     const actions = kind === 'alfworld' ? '{ commands: string[] }' :
       '{ templates: string[]; objects: string[] }  // fill a template\'s OBJ slots with objects';
     return [
@@ -79,8 +102,16 @@ export class WorldBridge {
     ].join('\n');
   }
 
-  /** The service the program sees as `world`. */
+  /** The declaration the program is shown for this world's service. */
+  declarationFor(kind: WorldSpec['kind']): string {
+    return this.declarationText ?? WorldBridge.declaration(kind as 'scienceworld' | 'alfworld');
+  }
+
+  /** The service the program sees (`world`, or the name a self-declaring world gives). The host-only `score` is never
+   * offered to a self-declaring world's program. */
   service(): Record<string, (...args: unknown[]) => unknown> {
+    if (this.methods) return Object.fromEntries(this.methods.filter(method => method !== 'score')
+      .map(method => [method, (...args: unknown[]) => this.request(method, { args })]));
     return {
       task: () => this.request('task'),
       look: () => this.request('look'),

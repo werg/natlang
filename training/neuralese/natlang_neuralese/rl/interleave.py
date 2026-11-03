@@ -72,10 +72,16 @@ def declared_stage(config):
         raise ValueError('interleaved RL alternates with a different SFT stage than the controller obligation')
     inputs = resolve_stage_inputs(recipe, stage, {})
     sft = stages[parameters['sft_stage']]
+    memetic = next((item for item in recipe['stages'] if item['kind'] == 'native_memetic_rl'
+                    and (item.get('parameters') or {}).get('rl_stage') == stage_id), None)
     return {'id': stage_id, 'parameters': parameters, 'task_source': inputs['rl_task_source'],
             'sft_stage': sft, 'sft_window_updates': effective_stage_parameters(sft, [], recipe)['refresh_after_updates'],
             'recipe_sha256': recipe_identity_sha256(config['production_recipe']),
-            'stage_sha256': canonical_json_sha256_hex(stage)}
+            'stage_sha256': canonical_json_sha256_hex(stage),
+            'memetic': None if memetic is None else {
+                'id': memetic['id'], 'parameters': effective_stage_parameters(memetic, [], recipe),
+                'program_source': resolve_stage_inputs(recipe, memetic, {})['program_source'],
+                'stage_sha256': canonical_json_sha256_hex(memetic)}}
 
 
 def bind_stage(config, state, state_path):
@@ -103,6 +109,15 @@ def bind_stage(config, state, state_path):
             k: v for k, v in binding.items() if k != 'round'}:
         bindings.append(binding)
         write_json_durable(state_path, state)
+    if declared.get('memetic') is not None and state.get('checkpoint'):
+        # A due memetic round ("improve program P" episodes, rl/memetic_stage.py) replaces this round's task source.
+        from .memetic_stage import bind_round
+        before = json.dumps(interleave.get('memetic'), sort_keys=True)
+        memetic = bind_round(result, declared['memetic'], state, sha256_file_hex_cached(state['checkpoint']))
+        if json.dumps(interleave.get('memetic'), sort_keys=True) != before:
+            write_json_durable(state_path, state)
+        if memetic is not None:
+            result = memetic
     return result, declared
 
 

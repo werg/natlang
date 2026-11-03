@@ -1512,6 +1512,17 @@ def group_episode_advantages(members, *, jolt, mode):
     even the JOLT+ minimum gap remains at least 0.93 including the maximum failure-report credit."""
     from .rollout_math import group_advantages, reporting_spread
     qualities = [row['reward']['quality'] for row in members]
+    anchors = {(row['reward'].get('memetic') or {}).get('anchor') for row in members}
+    if anchors != {None}:
+        # Memetic improvement episodes (rl.memetic_stage): graded query success, centered on the larger of the group
+        # mean and the best trivial improvement (no change, default crisp improvement), so a candidate that does not
+        # beat doing the trivial thing never earns a positive advantage. Raw, never std-normalized.
+        if None in anchors or len(anchors) != 1:
+            raise ValueError('a memetic group shares one trivial-improvement anchor')
+        if len(qualities) < 2:
+            return [0.] * len(qualities)
+        center = max(sum(qualities) / len(qualities), float(next(iter(anchors))))
+        return [quality - center for quality in qualities]
     bonuses = [float(row['reward'].get('neuralese_bonus') or 0.) for row in members]
     advantages, stats = group_advantages(qualities)
     efficiency_costs = [float((row['reward'].get('execution_efficiency') or {}).get('cost') or 0.)
