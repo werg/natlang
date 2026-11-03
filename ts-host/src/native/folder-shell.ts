@@ -1,5 +1,5 @@
 /** Bash over the same Folder overlay used by file tools and reducers. */
-import { Bash, defineCommand, getCommandNames,
+import { Bash, InMemoryFs, MountableFs, defineCommand, getCommandNames,
   type IFileSystem, type FsStat, type FileContent, type BufferEncoding,
   type RmOptions, type CpOptions, type MkdirOptions } from 'just-bash';
 import { Folder } from './scoped-fs.js';
@@ -124,6 +124,28 @@ export class FolderFs implements IFileSystem {
   async utimes(path: string): Promise<void> { if (!await this.exists(path)) throw new Error(`ENOENT: ${path}`); }
 }
 
+/**
+ * The device files a shell script expects. `/dev/null` and `/dev/zero` read as empty and discard what is written to them
+ * (a script's `2>/dev/null` and `> /dev/null` must work, and must not leave a file behind); `/dev/stdin`, `/dev/stdout`
+ * and `/dev/stderr` are handled by the shell itself.
+ */
+class DeviceFs extends InMemoryFs {
+  private static readonly SINKS = new Set(['/null', '/zero']);
+  constructor() { super({ '/null': '', '/zero': '', '/stdin': '', '/stdout': '', '/stderr': '' }); }
+  override async writeFile(path: string, content: FileContent, options?: { encoding?: BufferEncoding } | BufferEncoding): Promise<void> {
+    if (!DeviceFs.SINKS.has(this.resolvePath('/', path))) await super.writeFile(path, content, options);
+  }
+  override async appendFile(path: string, content: FileContent, options?: { encoding?: BufferEncoding } | BufferEncoding): Promise<void> {
+    if (!DeviceFs.SINKS.has(this.resolvePath('/', path))) await super.appendFile(path, content, options);
+  }
+}
+
+/** The folder, with `/dev` and a scratch `/tmp` (kept in memory for this shell, never part of the folder's changes). */
+function shellFs(folder: Folder): IFileSystem {
+  return new MountableFs({ base: new FolderFs(folder), mounts: [
+    { mountPoint: '/dev', filesystem: new DeviceFs() }, { mountPoint: '/tmp', filesystem: new InMemoryFs() }] });
+}
+
 /** Refuse open-ended shell loops and function recursion before any command runs. */
 export function checkBashPolicy(command: string): void {
   checkBashAst(new Bash().transform(command).ast);
@@ -177,7 +199,7 @@ export async function runFolderBash(folder: Folder, command: string, options: Fo
       if (args[0] === '-c') source = args[1] ?? '';
       else if (args[0] === '-' || !args.length) source = decodeStdin(ctx.stdin);
       else source = await folder.readText(args[0]!);
-      const result = await runFolderPython(folder, source, options.python);
+      const result = await runFolderPython(folder, source, options.python, undefined, ctx.cwd);
       return { stdout: result.stdout ? `${result.stdout}\n` : '', stderr: result.stderr, exitCode: 0 };
     } catch (error) { return { stdout: '', stderr: String(error), exitCode: 1 }; }
   });
@@ -215,7 +237,7 @@ export async function runFolderBash(folder: Folder, command: string, options: Fo
         `${flags.includes('-header') ? 'writer.writerow(columns)\n' : ''}writer.writerows(rows)\n` +
         `print(buffer.getvalue(), end='')\n`);
     try {
-      const result = await runFolderPython(folder, script, options.python);
+      const result = await runFolderPython(folder, script, options.python, undefined, ctx.cwd);
       return { stdout: result.stdout ? `${result.stdout}\n` : '', stderr: result.stderr, exitCode: 0 };
     } catch (error) { return { stdout: '', stderr: String(error), exitCode: 1 }; }
   });
@@ -246,7 +268,7 @@ export async function runFolderBash(folder: Folder, command: string, options: Fo
       return { stdout: '', stderr: 'usage: natlang ask|call|apply ...', exitCode: 2 };
     } catch (error) { return { stdout: '', stderr: String(error), exitCode: 1 }; }
   });
-  const bash = new Bash({ fs: new FolderFs(folder), cwd: ROOT, python: false, javascript: false,
+  const bash = new Bash({ fs: shellFs(folder), cwd: ROOT, python: false, javascript: false,
     ...(options.network === false ? {} : { network: { dangerouslyAllowFullInternetAccess: true } }),
     customCommands: [changes, pythonCommand('python'), pythonCommand('python3'), sqlite, natlang],
     executionLimits: { maxCommandCount: 1000, maxLoopIterations: 10000 } });

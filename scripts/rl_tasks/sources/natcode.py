@@ -80,8 +80,48 @@ HINTS = {
     'uses-typo': 'one function lists a `uses` entry whose path is misspelled.',
     'ts-syntax': 'one TypeScript child has a syntax error.',
     'missing-child': 'a function that another function lists in its `uses` was removed. Recreate it with the '
-                     'parameters and result its callers need: {contract}.',
+                     'parameters and result its callers need: {contract}. Its callers pass arguments by position, so '
+                     'the order, optionality and types of the parameters and the result are what must match; the '
+                     'parameter names are yours to choose.',
 }
+
+
+def _rename_parameters(args, suffix='Value'):
+    """The top-level parameter names of a braced parameter list, each given `suffix` (types and order unchanged)."""
+    out, depth, at_name = [], 0, True
+    i = 0
+    while i < len(args):
+        char = args[i]
+        if char in '{[(<':
+            depth += 1
+        elif char in '}])' or (char == '>' and args[i - 1] != '='):
+            depth -= 1
+        elif char == ',' and depth == 1:
+            at_name = True
+        elif at_name and depth == 1 and (char.isalpha() or char in '_$'):
+            m = re.match(r'[\w$]+', args[i:])
+            out.append(m.group(0) + suffix)
+            i += len(m.group(0))
+            at_name = False
+            continue
+        out.append(char)
+        i += 1
+    return ''.join(out)
+
+
+def _split_parameters(args):
+    """The top-level `name: type` entries of a braced parameter list."""
+    body, depth, start, parts = args.strip()[1:-1], 0, 0, []
+    for i, char in enumerate(body):
+        if char in '{[(<':
+            depth += 1
+        elif char in '}])' or (char == '>' and body[i - 1] != '='):
+            depth -= 1
+        elif char == ',' and depth == 0:
+            parts.append(body[start:i].strip())
+            start = i + 1
+    parts.append(body[start:].strip())
+    return [part for part in parts if part]
 
 
 def _git(*args):
@@ -373,9 +413,20 @@ def natlang_codebases(per_package=60, repairs=24, seed=20261031):
             root = case['semantics']['root']
             case['semantics']['files'][root] = case['semantics']['files'][root].replace('---\nargs:', '---\nkind: directory-reducer\nargs:', 1)
             delete = f'await folder.file({json.dumps(path)}).remove(); return "removed";' if broken is not None else 'return "nothing";'
+            # A recreated function is correct under any parameter names (its callers pass arguments by position).
+            renamed = [write(re.sub(r'^args:.*$', lambda m: 'args: ' + _rename_parameters(frontmatter(files[path])['args']),
+                                    files[path], count=1, flags=re.M))] if kind == 'missing-child' else []
+            wrong_signatures = []
+            if kind == 'missing-child':
+                # Negative controls for the recreated function: a dropped last parameter, and the last parameter retyped.
+                parts = _split_parameters(frontmatter(files[path])['args'])
+                retyped = re.sub(r':.*$', ': string', parts[-1], flags=re.S)
+                for variant in ('{ ' + ', '.join(parts[:-1]) + ' }' if len(parts) > 1 else '{}',
+                                '{ ' + ', '.join(parts[:-1] + [retyped]) + ' }'):
+                    wrong_signatures.append(write(re.sub(r'^args:.*$', lambda m: 'args: ' + variant, files[path], count=1, flags=re.M)))
             case['curriculum']['external']['checks'] = {
-                'wrong_code': ['return "looked, nothing to fix";', write(wrong_fix)] + ([delete] if broken is not None else []),
-                'wrong_answers': [], 'alias_answers': []}
+                'wrong_code': ['return "looked, nothing to fix";', write(wrong_fix), *wrong_signatures] + ([delete] if broken is not None else []),
+                'wrong_answers': [], 'alias_answers': [], **({'alias_code': renamed} if renamed else {})}
             case['curriculum']['external']['codebase'] = {'package': unit_dir, 'version': commit, 'kind': f'repair-{kind}', **size}
             out.append(case)
     return out

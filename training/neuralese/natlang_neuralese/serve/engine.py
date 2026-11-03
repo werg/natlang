@@ -14,7 +14,7 @@ import queue
 import threading
 import time
 from concurrent.futures import Future
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace as dataclass_replace
 
 import torch
 
@@ -745,6 +745,10 @@ class Engine:
         seq.prompt_positions = seq.cache.lengths[0]
         if seq.prompt_positions >= self.context:
             raise RequestError("context-length", f"prompt uses {seq.prompt_positions} positions, context is {self.context}")
+        if seq.request.forced_message is None and seq.request.max_tokens > self.context - seq.prompt_positions:
+            # The completion allowance never exceeds what the context leaves after the prompt (the SGLang actor does the
+            # same); the reply then ends with finish_reason "length" instead of decoding past the context window.
+            seq.request = dataclass_replace(seq.request, max_tokens=self.context - seq.prompt_positions)
         if template_prefix is not None:
             needed = len(template_prefix) + (1 if seq.request.template.get('value') == 'write' else 0)
             if seq.prompt_positions + seq.generated_positions + needed >= self.context:

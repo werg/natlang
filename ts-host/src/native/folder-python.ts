@@ -31,7 +31,6 @@ let singleton: Promise<any> | undefined;
 let currentHost: PythonHost | undefined;
 let currentRefresh: (() => void) | undefined;
 let awaitingChild = false;
-let nextCall = 0;
 let tail: Promise<void> = Promise.resolve();
 function fromPython(value: any): unknown {
   if (value && typeof value.toJs === 'function') return fromPython(value.toJs({ dict_converter: Object.fromEntries }));
@@ -57,7 +56,6 @@ async function interpreter(): Promise<any> {
     const py = await loadPyodide(node ? { packageBaseUrl: localAssets,
       packageCacheDir: decodeURIComponent(new URL(localAssets).pathname) } :
       { indexURL: localAssets, packageBaseUrl: localAssets });
-    py.FS.mkdir('/calls');
     py.FS.writeFile('/lib/python3.14/site-packages/natlang_policy.py', PYTHON_POLICY);
     py.FS.writeFile('/lib/python3.14/site-packages/natlang.py', PYTHON_NATLANG);
     py.registerJsModule('_natlang_host', {
@@ -81,7 +79,9 @@ async function interpreter(): Promise<any> {
 }
 
 /** Run a policy-checked cell. Calls share an interpreter but keep separate folders and Python globals. */
-export async function runFolderPython(folder: Folder, source: string, host: PythonHost = {}, timeoutMs = 30_000): Promise<PythonResult> {
+export async function runFolderPython(folder: Folder, source: string, host: PythonHost = {}, timeoutMs = 30_000,
+    /** The directory the cell starts in: absolute under /workspace, or relative to it (default /workspace). */
+    cwd = ''): Promise<PythonResult> {
   if (awaitingChild) throw new Error('a Python child cannot reenter the shared interpreter while its parent awaits nl');
   const previous = tail;
   let unlock!: () => void;
@@ -89,20 +89,27 @@ export async function runFolderPython(folder: Folder, source: string, host: Pyth
   await previous;
   let py: any;
   const before = new Map(folder.diffSync().changes.map(change => [change.path, change.after]));
-  const mount = `/calls/${++nextCall}`;
+  // The folder is /workspace, as in the shell: `os.getcwd()` and tracebacks show a path the model can use with bash too.
+  const mount = '/workspace';
+  // Raw writes, not line batches: a last line without a newline is still output. One trailing newline is dropped, as the
+  // line-batched handlers dropped each line's, so ordinary output keeps its shape.
   const stdout: string[] = [], stderr: string[] = [];
+  const sink = (parts: string[]) => { const decoder = new TextDecoder(); return { write: (bytes: Uint8Array) => { parts.push(decoder.decode(bytes, { stream: true })); return bytes.length; } }; };
+  const collected = (parts: string[]) => parts.join('').replace(/\n$/, '');
   let watchdog: { terminate(): Promise<unknown> | unknown } | undefined;
   try {
     py = await interpreter();
-    py.setStdout({ batched: (text: string) => stdout.push(text) });
-    py.setStderr({ batched: (text: string) => stderr.push(text) });
+    py.setStdout(sink(stdout));
+    py.setStderr(sink(stderr));
     currentHost = host;
     await py.loadPackagesFromImports(source, { messageCallback: () => {} });
-    py.FS.mkdir(mount);
     const adapter = folderFS(py, folderView(folder));
     currentRefresh = adapter.refresh;
+    try { py.FS.rmdir(mount); } catch { /* absent */ }
+    py.FS.mkdir(mount);
     py.FS.mount(adapter, {}, mount);
-    py.FS.chdir(mount);
+    const start = `${mount}/${cwd.replace(/^\/workspace(?:\/|$)/, '').replace(/^\/+|\/+$/g, '')}`.replace(/\/$/, '');
+    try { py.FS.chdir(start); } catch { py.FS.chdir(mount); }
     const namespace = py.runPython('import natlang_policy; natlang_policy.fresh_namespace()');
     namespace.set('__natlang_source', source);
     namespace.set('__natlang_run', py.globals.get('__natlang_run'));
@@ -113,7 +120,10 @@ export async function runFolderPython(folder: Folder, source: string, host: Pyth
     }
     let value: any;
     try {
-      value = await py.runPythonAsync('await __natlang_run(__natlang_source, globals())', { globals: namespace });
+      try { value = await py.runPythonAsync('await __natlang_run(__natlang_source, globals())', { globals: namespace }); }
+      // A last line written without a newline (sys.stdout.write, print(..., end='')) belongs to this cell's output,
+      // not the next cell's: the line-batched handlers only see it once the streams are flushed.
+      finally { py.runPython('import sys\nsys.stdout.flush()\nsys.stderr.flush()'); }
       const openWriter = py.FS.streams.find((stream: any) => stream?.path?.startsWith(`${mount}/`) && (stream.flags & 3) !== 0);
       if (openWriter) throw new Error(`close the Python file or sqlite connection before leaving the cell: ${openWriter.path}`);
     }
@@ -129,7 +139,7 @@ export async function runFolderPython(folder: Folder, source: string, host: Pyth
       const prior = before.get(change.path), after = change.after;
       return !before.has(change.path) || prior?.length !== after?.length || prior?.some((byte, i) => byte !== after?.[i]);
     }).map(change => change.path);
-    return { value: converted, stdout: stdout.join('\n'), stderr: stderr.join('\n'), changedPaths };
+    return { value: converted, stdout: collected(stdout), stderr: collected(stderr), changedPaths };
   } finally {
     currentHost = undefined;
     currentRefresh = undefined;

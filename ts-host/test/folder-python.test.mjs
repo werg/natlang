@@ -83,3 +83,22 @@ test('the watchdog reasserts a consumed interrupt until termination', async () =
     }
   } finally { await worker.terminate(); }
 });
+
+test('Python keeps a last line written without a newline and works in /workspace, /dev/null and /tmp (H4)', async () => {
+  const folder = Folder.fromFiles({ 'a.txt': 'a\n' });
+  const first = await runFolderPython(folder, "import sys\nsys.stdout.write('abc')\nprint('x', end='')");
+  assert.equal(first.stdout, 'abcx');
+  const second = await runFolderPython(folder, "print('later')");
+  assert.equal(second.stdout, 'later', 'unterminated output does not spill into the next cell');
+  const lines = await runFolderPython(folder, "print('a')\nprint('b')");
+  assert.equal(lines.stdout, 'a\nb');
+  const env = await runFolderPython(folder, `
+import os, tempfile
+open(os.devnull, 'w').write('discarded')
+scratch = tempfile.mkdtemp()
+open(scratch + '/n', 'w').write('t')
+[os.getcwd(), open('/dev/null').read(), open(scratch + '/n').read(), sorted(os.listdir('.'))]
+`);
+  assert.deepEqual(env.value, ['/workspace', '', 't', ['a.txt']]);
+  assert.deepEqual(env.changedPaths, []);
+});

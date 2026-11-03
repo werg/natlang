@@ -40,3 +40,27 @@ test('shell python3 and sqlite3 share its folder and interpreter', async () => {
   assert.equal(separated.exitCode, 0, separated.stderr);
   assert.equal(separated.stdout, "x:'ok'\na;b:ok\n");
 });
+
+test('bash has /dev/null, /dev/zero and a scratch /tmp like a standard shell (H4)', async () => {
+  const folder = Folder.fromFiles({ 'a.txt': 'a\n' });
+  const silenced = await runFolderBash(folder, 'ls nosuch 2>/dev/null; echo rc=$?; echo hi > /dev/null; cat /dev/null; echo end');
+  assert.equal(silenced.exitCode, 0, silenced.stderr);
+  assert.equal(silenced.stdout, 'rc=2\nend\n');
+  assert.equal(silenced.stderr, '');
+  assert.deepEqual(silenced.changedPaths, []);
+  assert.equal((await runFolderBash(folder, 'cat < /dev/null | wc -c; test -e /dev/null && echo exists')).stdout.trim().replace(/\s+/g, ' '), '0 exists');
+  const scratch = await runFolderBash(folder, 'mkdir -p /tmp/w && echo scratch > /tmp/w/n && cat /tmp/w/n && cp a.txt /tmp/w/a && ls /tmp/w');
+  assert.equal(scratch.exitCode, 0, scratch.stderr);
+  assert.equal(scratch.stdout, 'scratch\na\nn\n');
+  assert.deepEqual(scratch.changedPaths, [], 'scratch files are not part of the folder');
+  assert.equal((await runFolderBash(folder, 'cat /etc/passwd')).exitCode !== 0, true);
+});
+
+test('python3 in bash starts in the shell directory and sees the same folder (H4)', async () => {
+  const folder = Folder.fromFiles({ 'types.ts': 'export type A = string;\n', 'sourcingDesk/a.nl': 'x', 'sourcingDesk/b.nl': 'y' });
+  const result = await runFolderBash(folder, 'cd sourcingDesk && python3 -c "import os; print(sorted(os.listdir(\'.\')), os.getcwd(), open(\'/workspace/types.ts\').read().strip())"; ls');
+  assert.equal(result.exitCode, 0, result.stderr);
+  assert.equal(result.stdout, "['a.nl', 'b.nl'] /workspace/sourcingDesk export type A = string;\na.nl\nb.nl\n");
+  const root = await runFolderBash(folder, 'python3 -c "import os; print(sorted(os.listdir(\'.\')))"');
+  assert.equal(root.stdout, "['sourcingDesk', 'types.ts']\n");
+});

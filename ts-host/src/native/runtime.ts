@@ -1531,6 +1531,9 @@ export class NativeSession {
     if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
     if (!NATIVE_TOOLS.includes(name))
       return this.record(name, args, rejected(new Reject([{ path: name, code: 'bad-action', expected: 'a scope-eval tool' }])));
+    if (this.lam.withheldTools?.includes(name))
+      return this.record(name, args, rejected(new Reject([{ path: name, code: 'withheld-tool', text:
+        `${name} is withheld from calls of ${this.lam.functionName || 'this function'} by its definition; do this step with the tools this call offers` }])));
     if (this.actionLimitReached()) return this.record(name, args, { kind: 'budget', text: 'action or tool-call budget exhausted' });
     this.toolCalls++;
     this.actions++; this.lam.steps++;
@@ -2298,7 +2301,7 @@ export class NativeSession {
           `${dropped === 1 ? 'was' : 'were'} still running; ${dropped === 1 ? 'it was' : 'they were'} stopped. Await every call ` +
           '(for example with Promise.all(...)) before the eval ends.');
       }
-      const raw = finished as { result?: unknown; returned?: boolean;
+      const raw = finished as { result?: unknown; returned?: boolean; valueless?: boolean;
         bindings?: Record<string, unknown>; captures?: Record<string, unknown> } | undefined;
       if (!raw || typeof raw !== 'object' || !raw.bindings || typeof raw.bindings !== 'object')
         throw new Reject([{ path: 'code', code: 'bad-action', expected: 'an atomic scope transaction result' }]);
@@ -2405,8 +2408,10 @@ export class NativeSession {
         this.failureDebug = undefined;
       }
       this.evalDetail = { value: output.result ?? null, console: (evaluated.logs ?? []).join('\n') };
+      // An eval that completes without a value shows `undefined`, as a JavaScript REPL does; `null` is shown only for a
+      // value that is null. A trailing `null` after console output read as part of that output (an edit-stream run appended it).
       const rendered = isLive(output.result) || isHandle(output.result) ? livePreview(output.result as object, this.runtime.displayLiveId) :
-        this.showValue(output.result ?? null);
+        raw.valueless === true && !isHandle(output.result) ? 'undefined' : this.showValue(output.result ?? null);
       const status = functionResult !== undefined ?
         stagedMessage(functionResult, this.runtime.displayLiveId, this.runtime.untrusted) : notResult;
       const stored = changed.map(([name, , value]) => `local ${name} = ${oneLine(value, name, this.runtime.displayLiveId, this.runtime.untrusted)}`);

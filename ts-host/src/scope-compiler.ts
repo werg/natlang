@@ -1411,12 +1411,12 @@ function compileScopeSnippetUnhinted(source: string, options: ScopeCompileOption
       `{ result: __natlang_result, bindings: __natlang_bindings }); ` +
       `return __natlang_output({ result: __natlang_settled.result === undefined ? null : __natlang_settled.result, ` +
       `returned: __natlang_returned, bindings: __natlang_present(__natlang_settled.bindings)` +
-      `${mutableCaptures.length ? `, captures: { ${mutableCaptures.join(', ')} }` : ''} }); };`,
+      `${mutableCaptures.length ? `, captures: { ${mutableCaptures.join(', ')} }` : ''}, ...(__natlang_settled.result === undefined ? { valueless: true } : {}) }); };`,
   ].filter(Boolean).join('\n');
   const typescript = `async function ${ENTRYPOINT}(__inputs: Readonly<Record<string, unknown>>, ` +
     `__locals: Readonly<Record<string, unknown>>, ` +
     `__captures: Readonly<Record<string, unknown>>) {\n${prologue}\n${body}\n` +
-    `return __natlang_finish(null);\n}\n`;
+    `return __natlang_finish(undefined);\n}\n`;
   const emitted = ts.transpileModule(typescript, { fileName: 'natlang-scope.ts', reportDiagnostics: true,
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None, isolatedModules: true,
       removeComments: false } });

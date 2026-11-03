@@ -135,6 +135,15 @@ async function qualify(record) {
     try { result.wrong.push({ value: code.slice(0, 120), accepted: await accepted(variant) }); }
     catch (e) { result.wrong.push({ value: code.slice(0, 120), accepted: null, error: String(e).slice(0, 300) }); }
   }
+  // Effect-graded cases: alternative correct implementations (a recreated function under other parameter names)
+  // replace the final eval's code and must be accepted; acceptance is measured like an alias answer.
+  for (const code of checks.alias_code ?? []) {
+    const variant = structuredClone(record);
+    const last = variant.curriculum.reference.root.at(-1);
+    last[1] = { ...last[1], code };
+    try { result.aliases.push({ value: code.slice(0, 120), accepted: await accepted(variant) }); }
+    catch (e) { result.aliases.push({ value: code.slice(0, 120), accepted: null, error: String(e).slice(0, 300) }); }
+  }
   for (const value of wrongs) {
     const variant = withAnswer(record, value);
     if (!variant) { result.wrong.push({ value, accepted: null, error: 'no terminal answer to replace' }); continue; }

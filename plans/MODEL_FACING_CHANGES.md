@@ -1,5 +1,19 @@
 # Model-facing changes and their measurement
 
+### 2026-11-03 — Harness defects H1-H5 from the memetic review (debt: live measurement)
+
+Model-facing: (H1) an eval that completes without a value now reports `undefined`, not a bare `null`, after its
+`console:` output (`native/runtime.ts`, `scope-compiler.ts` `valueless`); a `null` value still shows `null`. (H4) in the
+folder `bash`: `/dev/null` and `/dev/zero` exist and discard writes, `/tmp` is in-memory scratch outside the folder's
+changes (`native/folder-shell.ts`); `python3` runs with the folder mounted at `/workspace` (was `/calls/N`), starts in
+the shell's current directory, and reports a last line written without a newline (`native/folder-python.ts`; raw
+stdout/stderr writes). (H2) the missing-child repair task text adds "the parameter names are yours to choose" (order and
+types are fixed); its oracle compares a recreated function's parameters by position and type. (H3) no text change; a
+`:hinted` twin's reward now requires its stated technique. (H5) engine-side clamp of `max_tokens`; the reply ends with
+`finish_reason: length` where it would have run past the context. **Debt:** 48 samples each on the memetic-review tasks:
+rate of `null` copied into answers after console output (edit_stream), `2>/dev/null` use and python-in-bash path errors
+(repair_missing_child), and hinted-twin success under the enforced technique.
+
 ### 2026-11-03 — Memetic improver supervisor and workspace declaration (debt: live measurement)
 
 New model-facing texts: `applications/memetic-improver/improve_program.nl` and `improve_program/refine.nl` (numbered

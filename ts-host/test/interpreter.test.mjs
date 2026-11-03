@@ -164,6 +164,18 @@ test('eval returns console.log observations without changing the function result
   assert.equal(finished.kind, 'ok'); assert.equal(lam.return, 12); assert.doesNotMatch(finished.text, /average 4/);
 });
 
+test('an eval without a value shows undefined, not a bare null that reads as console output', async () => {
+  const { session } = open({ type: '() => string', instructions: 'Return text.' });
+  const logged = await session.applyAsync('eval', { code: 'console.log("alpha"); console.log(null);' });
+  assert.equal(logged.kind, 'ok'); assert.equal(logged.text.split('\n').slice(0, 4).join('\n'), 'console:\nalpha\nnull\nundefined');
+  const declared = await session.applyAsync('eval', { code: 'const answer = 1;' });
+  assert.match(declared.text, /^undefined\nStored local answer = 1\./);
+  const nothing = await session.applyAsync('eval', { code: 'undefined;' });
+  assert.equal(nothing.text, 'undefined');
+  const nulled = await session.applyAsync('eval', { code: 'null;' });
+  assert.equal(nulled.text, 'null');
+});
+
 test('eval can use local functions within one call without persisting them', async () => {
   const { lam, session } = open({ type: '(items: number[]) => number', instructions: 'Return the average.', args: { items: [2, 4, 6] } });
   const arrow = await session.applyAsync('eval', { code:

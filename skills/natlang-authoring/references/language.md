@@ -96,6 +96,8 @@ Use ordinary TypeScript types in signatures; the supported set (records, arrays,
 
 The model carries out the instructions for one call: it answers directly when the work takes only reading and judgment, and otherwise uses a persistent TypeScript eval scope where parameters, captures, callable items and services are bindings, then finishes with `return_result` (`success`, `blocked`, or `failed`). The tools, cut-offs, transcript search and conversation compaction are specified in [Model surface](../../../spec/SPEC.md#model-surface), [Eval](../../../spec/SPEC.md#eval), [Cut-offs](../../../spec/SPEC.md#cut-offs) and [Conversation length](../../../spec/SPEC.md#conversation-length). Directory reducers additionally get file tools ([directory reducers](../../../spec/ext/directory-reducers.md)). Write instructions so the next meaningful action is apparent from them and the typed scope.
 
+An eval that finishes without a value reports `undefined` (as a JavaScript REPL does), after any `console:` output; `null` appears only for a value that is null. In the folder tools, `bash` and `python3` share the folder as `/workspace` (the working directory; `python3` starts in the shell's current directory), `/dev/null` and `/dev/zero` exist (`2>/dev/null` works and writes nothing), and `/tmp` is scratch that is not part of the folder's changes; python output without a final newline is still reported.
+
 ## Iteration
 
 ```ts
