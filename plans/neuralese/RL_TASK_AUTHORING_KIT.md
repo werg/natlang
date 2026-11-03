@@ -568,3 +568,22 @@ Then run section 4.
 - **Selection pool quota**: the assembler keeps every effect/state row under the family cap and shrinks the other rows until
   effect/state oracles are 30% of the pool (no duplicated rows). Each admitted effect/state task therefore grows the pool.
 - `scripts/rl_tasks/authored_family_report.py FAMILY` lists the programs a family already has (extension batches).
+
+## 13. Round 3 results and operating notes (2026-11-03)
+
+Round 3 ran 25 Haiku-authored extension batches (w39-w68), each through the full chain: qualify, novelty, independent blind
+solve by a Sonnet subagent from the packet alone, admission. Lessons that the blind solve found (all were semantic, not
+arithmetic), now rules for every batch:
+- A readout (`readout: decision`) sees only its arguments: pass it every fact its label depends on (pharmacy: the drug schedule;
+  a limit's direction; a drug name). A label that two careful readers could split is dropped, not argued.
+- State every output convention in the program text: ordering keys, id forms ("Room 101" even if the note says "room 101"),
+  number formats in written files, band edges ("0.5 or more but less than 0.8"), what a trailing "?" means.
+- Folder tasks: the blind solver must also reproduce `expected_folders`; give the solver a folder-state answer format.
+- Tasks whose blind answer differs or is flagged ambiguous are held back at admission (`--drop`), together with their program
+  when the defect is in the program text; admitted counts below exclude them.
+- Run ledger commands detached (`setsid nohup`, or the ledger `--detach` flag): a foreground ledger client that exits stops
+  its unit ("on client request"), which killed several novelty runs.
+- `multi_operation_codebase` needs shared helper files; the lint warns when roots share none (round-3 library/clinic worlds
+  keep per-root helpers: the tag there rests on shared world state, treat as weaker).
+- Pool assembly: `assemble_selection_pool.py --spec pool-spec.json` now takes `min_effect_share` (0.3), `program_caps`
+  (per external source, e.g. bgkit 40 rows per program) and `exclude_ids`.
