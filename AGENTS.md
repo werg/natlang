@@ -26,6 +26,20 @@ diverse sources) and cut over at the next window. Add interleaved RL with a
 spread-seeking selector and declared tuning/metalearner stages. Promote by paired
 protected-development outcomes. Preserve earned exposure and historical custody.
 
+## Interleaved RL is a declared stage; selector /2 seeks outcome spread (engineering, 2026-11-03)
+
+Recipe kind `native_interleaved_rl` (`rl/interleave.py`) requires the joint SFT
+stage and binds the RL task source, selector, round budget and JOLT+ loss. An RL
+controller with `interleaved_rl_stage` alternates `rl_rounds_per_window` RL rounds
+with one existing mandatory SFT window to that stage's `refresh_after_updates`
+boundary; SFT quotas/exposure stay in the carried frames. Prepare the control with
+`scripts/neuralese_data/prepare_interleaved_rl.py` under a runtime frozen from main.
+Task selector `natlang.rl-task-curriculum/2` starts new families at their median
+level, shifts practice by outcome-spread fraction (<0.3 moves one level per round)
+and floors rounds at 16 tasks x 8 samples. Configs binding /1 adopt it through a
+recorded controller transition; sealed selections keep their recorded policy.
+Measure task-supply repetition with `scripts/rl_tasks/measure_repetition.py`.
+
 # Main goal: keep moving forward (owner, 2026-10-11)
 
 ## Digest-cache maintenance stays bounded and off the source filesystem (engineering, 2026-11-02)
