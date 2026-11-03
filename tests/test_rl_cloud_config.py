@@ -118,3 +118,15 @@ def test_file_inputs_refuse_host_system_files(tmp_path):
     with pytest.raises(SystemExit, match='host system'):
         rc.file_inputs({'root': str(tmp_path)}, 'w', [{'path': '/lib/aarch64-linux-gnu/liblz4.so.1', 'sha256': 'a' * 64,
                                                       'bytes': 1}])
+
+
+def test_minimum_resources_never_exceed_the_lineage_request(tmp_path):
+    import json, pytest
+    import scripts.coreweave.rl_cloud as rc
+    run = {'id': 'r', 'root': str(tmp_path), 'job': 'scripts/coreweave/jobs/lfm3/rl-lineage.job.json',
+           'lineages': {'small': {'resources': {'cpu': '8', 'memory': '40Gi'}},
+                        'bad': {'resources': {'cpu': '8', 'memory': '40Gi'}, 'minimum_resources': {'cpu': '4', 'memory': '48Gi'}}}}
+    job = rc.render_job(run, 'small', 0)
+    assert job['minimum_resources']['memory'] == '40Gi' and job['env']['NATLANG_CW_MIN_MEMORY'] == '40Gi'
+    with pytest.raises(SystemExit, match='exceed'):
+        rc.render_job(run, 'bad', 0)

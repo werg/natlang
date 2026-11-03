@@ -1326,6 +1326,14 @@ def bundle(run):
 
 # -- launch ---------------------------------------------------------------------------------------------------------------
 
+def resource_amount(kind, value):
+    """CPU cores or GiB of a Kubernetes-style quantity (cwctl._gib for memory)."""
+    if kind == 'memory':
+        return cwctl._gib(value)
+    text = str(value)
+    return float(text[:-1]) / 1000 if text.endswith('m') else float(text)
+
+
 def render_job(run, name, rounds, check=False):
     spec = run['lineages'][name]
     text = Path(REPO / run['job']).read_text()
@@ -1344,6 +1352,16 @@ def render_job(run, name, rounds, check=False):
         job['needs'] = {**job.get('needs', {}), 'gpu_memory_gb': 0}
     if spec.get('minimum_resources'):  # the shape backoff floor (cwctl.create_with_shape_backoff)
         job['minimum_resources'] = spec['minimum_resources']
+        above = [k for k in ('cpu', 'memory') if k in job['minimum_resources'] and k in job['resources']
+                 and resource_amount(k, job['minimum_resources'][k]) > resource_amount(k, job['resources'][k])]
+        if above:  # refused at plan time, never after a grant (the sandbox shape guard would end it at once)
+            raise SystemExit(f'{name}: minimum_resources {above} exceed the lineage request {job["resources"]}')
+    elif job.get('minimum_resources'):
+        # The template floor belongs to the template request: a lineage that requests less keeps its own request as
+        # the floor (2026-11-03: bankmeta-pca asked 40Gi under the 48Gi template floor and its granted GPU refused).
+        job['minimum_resources'] = {k: (job['resources'][k] if k in job['resources'] and
+                                        resource_amount(k, v) > resource_amount(k, job['resources'][k]) else v)
+                                    for k, v in job['minimum_resources'].items()}
     if spec.get('allow_default_shape'):
         job['allow_default_shape'] = True
     floor = job.get('minimum_resources') or {}
