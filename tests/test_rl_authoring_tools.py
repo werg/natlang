@@ -5,6 +5,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts' / 'rl_tasks'))
 import authored_novelty  # noqa: E402
 import authoring_rotation  # noqa: E402
+import blind_solve  # noqa: E402
 
 
 def case(ident, family, program, inputs):
@@ -395,3 +396,49 @@ def test_authored_tasks_may_claim_no_construct_and_aliases_are_accepted_by_the_o
                                      oracle_depth='answer', reference=None, alias_answers=[3]))
     with pytest.raises(ValueError):
         authored.convert(folder_task(constructs='folder_reducer'))
+
+
+def test_blind_solve_packets_hide_answers_and_compare_uses_the_oracle(tmp_path):
+
+    task = {'id': 't', 'root': 'f.nl', 'files': {'f.nl': '---\nargs:\n  x: "number"\nreturns: "{ n: number; s: string }"\n---\nbody'},
+            'inputs': {'x': 1}, 'expected': {'n': 2, 's': 'Ok'}, 'oracle': 'normalized', 'alias_answers': [{'n': 2, 's': 'fine'}],
+            'wrong_answers': [{'n': 3, 's': 'Ok'}], 'groups': ['g'], 'smoke': {'code': 'x'}}
+    row = blind_solve.packet_row(task)
+    assert row['returns'] == '{ n: number; s: string }' and set(row) == {'id', 'root', 'files', 'inputs', 'returns'}
+    ok = blind_solve.compare([task], {'t': {'answer': {'s': ' ok', 'n': 2.0}}})
+    assert not ok['disagreements'] and ok['agree'] == 1
+    assert blind_solve.compare([task], {'t': {'answer': {'n': 2, 's': 'fine'}}})['agree'] == 1
+    assert blind_solve.compare([task], {'t': {'answer': {'n': 3, 's': 'Ok'}}})['disagreements'][0]['differs'] == ['answer']
+    assert blind_solve.compare([task], {})['missing'] == ['t']
+    exact = dict(task, oracle='exact', alias_answers=[])
+    assert blind_solve.compare([exact], {'t': {'answer': {'n': 2, 's': 'ok'}}})['disagreements']
+    folder = dict(exact, folders={'a/x.md': 'T'}, expected_folders={'b/x.md': 'T'})
+    assert blind_solve.compare([folder], {'t': {'answer': {'n': 2, 's': 'Ok'}, 'folders': {'a/x.md': 'T'}}})['disagreements'][0]['differs'] == ['folders']
+
+
+def test_admission_appends_atomically_and_refuses_clashes_failures_and_unapproved_batches(tmp_path):
+    import admit_authored
+    batch, pool = tmp_path / 'b', tmp_path / 'pool'
+    (batch / 'q' / 'verified').mkdir(parents=True)
+    rows = [{'id': 'c1', 'split': 'train'}, {'id': 'c2', 'split': 'dev'}]
+    write(batch / 'q' / 'verified' / 'cases.jsonl', rows)
+    status = {'c1': {'task': 't1', 'problems': []}, 'c2': {'task': 't2', 'problems': []}}
+    (batch / 'q' / 'report.json').write_text(json.dumps({'result': 'PASS', 'tasks_status': status}))
+    (batch / 'nov.json').write_text(json.dumps({'result': 'PASS'}))
+    out = admit_authored.admit(batch, 'q', 'nov.json', ['t2'], [], 'tester', '', pool)
+    assert out['admitted'] == 1 and out['held'] == 1
+    assert [json.loads(line)['id'] for line in (pool / 'cases.jsonl').read_text().splitlines()] == ['c1']
+    log = json.loads((pool / 'admissions.jsonl').read_text().splitlines()[0])
+    assert log['admitted_case_ids'] == ['c1'] and log['dropped_tasks'] == ['t2'] and log['reviewer'] == 'tester'
+    try:
+        admit_authored.admit(batch, 'q', 'nov.json', ['t2'], [], 'tester', '', pool)
+        raise AssertionError('duplicate admission accepted')
+    except SystemExit as error:
+        assert 'already admitted' in str(error)
+    assert admit_authored.admit(batch, 'q', 'nov.json', ['t2'], ['c1'], 'tester', '', pool)['superseded'] == 1
+    (batch / 'nov.json').write_text(json.dumps({'result': 'FAIL'}))
+    try:
+        admit_authored.admit(batch, 'q', 'nov.json', [], [], 'tester', '', pool)
+        raise AssertionError('failed novelty admitted')
+    except SystemExit as error:
+        assert 'novelty' in str(error)

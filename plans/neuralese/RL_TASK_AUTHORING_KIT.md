@@ -57,7 +57,7 @@ One JSON object per line:
 | `schema` | `"natlang.rl-authored-task/1"` |
 | `id` | lowercase letters, digits, dashes; unique for you, e.g. `"pantry-close-day-0007"` |
 | `author` | `{"model": "<your model id>", "worker": "<your worker name>"}` |
-| `family` | snake_case name of the *program design* (the reusable application/program), e.g. `stock_day_reconciliation`. All tasks that run the same program design share one family. Aim for 20+ genuinely different tasks per family over time. |
+| `family` | snake_case name of the *design theme* (the reusable application/program family), e.g. `stock_day_reconciliation`. All tasks that run the same program design share one family, and the novelty gate needs every family in a batch to gain 5+ genuinely different programs (or already have 20+): put your 6+ different programs of one theme under ONE family name (e.g. `contract_obligation_trackers`), never one family per program. Aim for 20+ genuinely different programs per family over time. |
 | `shape` | short name of the call-graph pattern, e.g. `carried-notes-then-exact-apply` |
 | `domain` | free word: `operations`, `planning`, `finance`, `science`, `customer_service`, `code`, ... |
 | `world` | identity of the scenario world. Tasks that share facts (same store, same document set, same codebase, same customer) MUST share `world`; the split (train/dev/confirmation) is derived from it, so related tasks never cross splits. |
@@ -146,7 +146,7 @@ report):
 cd /home/werg/natlang
 B=/mnt/external/natlang-rl-authoring/batches/<worker>/<batch>; U=rlauth-<worker>-<batch>
 rm -f $B/qualify.exit
-python3 scripts/memory_ledger.py run --unit $U --budget-gb 4 --priority low --no-resumable --wait 3600 -- \
+python3 scripts/memory_ledger.py run --unit $U --budget-gb 4 --priority low --wait 3600 -- \
   sh -c "env PYTHONPATH=/home/werg/natlang/training/neuralese:/home/werg/natlang \
   /home/werg/natlang/.venv-neuralese/bin/python scripts/rl_tasks/qualify_authored.py $B/tasks.jsonl $B/qualified \
   > $B/qualify.log 2>&1; echo \$? > $B/qualify.exit"
@@ -189,7 +189,7 @@ Then the repetition gate against the existing pool:
 
 ```sh
 U=rlnov-<worker>-<batch>; rm -f $B/novelty.exit
-python3 scripts/memory_ledger.py run --unit $U --budget-gb 6 --priority low --no-resumable --wait 3600 -- \
+python3 scripts/memory_ledger.py run --unit $U --budget-gb 6 --priority low --wait 3600 -- \
   sh -c "/home/werg/natlang/.venv-neuralese/bin/python scripts/rl_tasks/authored_novelty.py $B/qualified/verified/cases.jsonl \
   --pool /home/werg/data/broad-rl-tasks-20261031/full-core-effects-20261102-20261102T011031Z-3015925/cases.jsonl \
   --pool /mnt/external/natlang-rl-authoring/admitted/cases.jsonl -o $B/novelty.json > $B/novelty.log 2>&1; echo \$? > $B/novelty.exit"
@@ -214,6 +214,24 @@ means the job did not finish: read `novelty.log`, never an older file). The func
 (10 of 12 audited round-1 batches within 30% of the auditors' distinct-program counts) and the audit still counts
 behaviour: a rule sentence toggled inside one helper can look like one program to the gate and eight to the auditor.
 Report both results to the supervisor; the supervisor moves passing batches into `admitted/` and records the rotation.
+
+The `--no-resumable` flag is deliberately absent: the ledger backfills only resumable jobs behind a large waiting head,
+and a qualification is simply rerun if preempted. Expect 30-50 minutes (queue, then the ~25 minute protection-closure
+step, which is a fixed cost per run): pre-check with `authored_checks.py` and the converter
+(`scripts/rl_tasks/sources/authored.py TASKS.jsonl`; it needs `alias_answers`, possibly `[]`) before queueing, and qualify once
+with every fix. Round-2 pitfalls the verifier enforces: no `while` loops; one terminal `return` per reference script
+(wrong answers replace only the last return); scripted reference children cannot replay `Neuralese<...>` helper
+results (no write port), so tasks with Neuralese/typed-Neuralese helpers use the default direct-return reference (smoke
+still scripts every helper) and their `expected` is verified only by the blind solve below.
+
+**Blind solve and admission (supervisor).** After qualification and novelty PASS, the supervisor runs
+`scripts/rl_tasks/blind_solve.py packet TASKS.jsonl -o PACKET` (strips expected, wrong answers, aliases, reference,
+smoke, groups), has a different model solve every task from the packet alone (literal run, helpers see only their
+arguments), and compares with `blind_solve.py compare TASKS.jsonl ANSWERS.json`. Every disagreement is settled by running
+the program literally; every flagged ambiguity is sent back to the author. Admission is
+`scripts/rl_tasks/admit_authored.py BATCH --qualified qualified-N --novelty novelty.json --reviewer ... [--drop ID]
+[--supersede CASE_ID]` (appends under the pool lock, atomic, logged in `admitted/admissions.jsonl`), then
+`authoring_rotation.py record ... --credit-from <batch>/qualified-N/verified/cases.jsonl`.
 
 ## 5. Exclusions
 
