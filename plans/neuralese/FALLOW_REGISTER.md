@@ -1,0 +1,128 @@
+# Fallow register: built capabilities not live in production
+
+Living register required by AGENTS.md "Built capabilities must not lie fallow"
+(owner, 2026-11-03). Review it every supervision cycle. A row leaves this table
+only when the live job actually runs the capability (deployment counts, not
+commits), or when a deliberate exclusion is recorded with its reason. A blocker
+with no active work for 48 hours must be resolved, replaced by a standard-practice
+mechanism, or excluded explicitly.
+
+**First audit:** 2026-11-03 ~12:30 CET, read-only (fallow audit). Evidence comes from:
+
+- the live SFT controller `W/ops/earned179-joint-r38-a4-window64-1103/config.json` and its recipe;
+- the prepared RL control `W/ops/interleaved-rl-full67-v39-1103/config.json`;
+- `W/ops/adaptation-stages-successor-1103/recipe-runtime.json`;
+- the cloud `run.json` and run state under `/mnt/external/natlang-lfm3-cloud-20261103/`;
+- `systemctl --user`, `nvidia-smi` on DGX and Pop, and the learner `train.jsonl`/journal;
+- the code, plans and git history since 2026-10-13.
+
+`W` = `/home/werg/data/lfm3-rl-dgx-20261029`, `T` = `training/neuralese/natlang_neuralese`,
+`NSS` = `T/train/native_state_sft.py`.
+
+## Production state at audit time
+
+- **DGX learner.** None is running. The earned179 window reached global step 226 and
+  was stopped at 11:04, which suggests a deliberate stop for the corrected-mix cutover.
+  The GPU (90%) is running an RL collection pilot (`rlpilot-full67-1`) and three
+  practice evaluations.
+- **Earned progress.** Stage `native_joint_sft_v4` has 1,231 of 1,142,509 required
+  graph visits (0.11%). Training runs at 4 graphs per update, about 63 s per update,
+  roughly 230 graphs/hour, so the full stage would take about 200 days.
+- **Effective learning rates** (train.jsonl step 226, `sft_update_budget`): backbone
+  2.5e-7 and learned/interface rows 2.5e-5. These are the configured 1e-6 and 1e-4
+  times the update-budget multiplier 0.25 (4 scored graphs against a 16-graph
+  reference). The committed decision (LFM3_COMMITTED_DECISIONS #2) is 2e-5 and 1e-3,
+  so the backbone runs 80x lower and the rows 40x lower.
+- **Cloud.** cw3 and cw4 run the program-tuning pilot. cw1 and cw2 are idle. The
+  `joint-sft` cloud lineage is declared in run.json but has no account and was never
+  launched.
+- **Pop.** GPU at 0%. No evaluator is running.
+
+## Register
+
+Row numbers are stable IDs; keep them when editing so references stay valid. The
+table is roughly ordered by impact. The current ranking by impact × ease is
+1, 7, 6, 5, 2, 4, 19, 8, 22, 9, then the rest. Blocker types:
+
+| Type | Meaning |
+|---|---|
+| `bar` | A bespoke strictness or qualification bar. |
+| `wiring` | Not wired into the live config, stage or launcher. |
+| `deploy` | Fixed on main, but the live job runs an older frozen runtime. |
+| `data` | Code exists, but there is no admitted data or training input. |
+| `forgotten` | No recorded reason. |
+| `excluded` | Deliberately excluded, with a reason. |
+| `covered` | An active agent owns it today. |
+
+| # | Capability | Built where | Status in production (evidence) | Blocker | Impact | Next action | Effort | Owner |
+|---|---|---|---|---|---|---|---|---|
+| 1 | Committed learning rates (backbone 2e-5 Muon-scaled, rows/adapter 1e-3, EMA eval) | `LFM3_COMMITTED_DECISIONS_20261028.md` #2; `T/train/native_learning_rates.py` | **Not used.** Configured 1e-6/1e-4 (the "initial approved RL rates", `LFM3_FRESH_RESTART_INTEGRATION_20261029.md`). The update-budget multiplier then scales them by 0.25, so the applied rates are 2.5e-7/2.5e-5. A 2026-10-30 decisions.log entry measured 1e-6 as "negligible movement" and raised RL to 5e-6; the SFT lineage never took that transition. | forgotten + `bar` (budget scaling compounds a rate already measured as too small) | **H** | Declare an LR transition at the next SFT window: backbone 2e-5 and rows 1e-3, or at least 5e-6/1e-4 *applied*. Compare per-row update telemetry and paired dev outcomes after about 200 updates. Re-anchor or remove the 16-graph scored reference, because accumulation 4 permanently quarters every LR. | S (config) | supervisor |
+| 2 | Interleaved whole-graph JOLT+ RL (`native_interleaved_rl` stage) | `T/rl/interleave.py`, `T/rl/production.py`; control `W/ops/interleaved-rl-full67-v39-1103/` | **0 RL rounds.** The live controller is `mandatory_sft_only: true` with `trained_rounds 0`. The prepared v39 control exists. Only a collection-only pilot runs (`rlpilot-full67-1`, `--no-teacher`, 2 rounds, no update). | `wiring`, and an actor that is about 100x too slow | **H** | Launch v39 as a real controller once the pilot confirms outcome spread. Do not wait for the SGLang qualification: the native actor can run small groups now, and the actor swap lands later. | S–M | supervisor |
+| 3 | SGLang actor (`--engine sglang`) with TIS correction | `T/serve/sglang_actor.py`, `serve_native_checkpoint.py --engine sglang`, `T/rl/actors.py` (`--rl-actors` stale/quantized actor admission with importance correction) | Not used: both configs pass `--engine native`. | `covered` (agent active today) | **H** | Covered. Note one aspect: `--rl-actors` (async/stale actors with IS) is a separate built mechanism and should be wired with it. | — | SGLang agent |
+| 4 | Capacity-proof reuse across restarts/windows | AGENTS.md "Reuse dense physical capacity"; `T/train/native_capacity_continuation.py`, `native_packed_capacity.py` | **Not effective.** The earned179 restart re-measured the 524,650-token graph for 1160 s (09:47→10:07) and wrote fresh packed-capacity proofs. That measured graph is a D16 ChatDev row, which the 2026-11-03 recipe review decided to withdraw. | `bar` (the reuse predicate is too strict) plus `data` | **H** (20+ min of GPU per window) | Diagnose why the reuse predicate rejected the existing proof; the journal shows no reuse attempt. Withdrawing D16/D18 in the corrected mix also removes the largest graph. Use windows of at least 256 updates until reuse works. | M | supervisor + helper |
+| 5 | Update-specific checkpoint scratch sizing, plus other post-freeze fixes | `6757515c6` (scratch sizing), `9cf58ad6f` (recovery verifier role), `af21365f5` (carried selector-history round collision) | `6757515c6` is not in the v38 runtime the earned179 learner ran (cf782eb2a), and the cloud `runtime_archive` is also v38. v38 gets by only with the admit-wrapper override `NATLANG_CHECKPOINT_MIN_FREE_BYTES=40GiB`. v39 (09f214d0b, prepared RL only) has the first two but **lacks `af21365f5`**, which can skew v2 difficulty shifts for carried selector history. | `deploy` | **H** (two failed starts; cloud would hit the 75 GB reservation) | Freeze one runtime ≥ main HEAD for the corrected-mix SFT, the cloud archive and the v39 RL control. Verify the scratch reservation in the first update log. | S | supervisor |
+| 6 | In-learner task evals (`--task-eval`, cadence) | `NSS` `--task-eval/--task-eval-every`, `T/eval/task_cadence.py`; promotion gates `T/train/promotion.py` (new 11-03) | **Off:** `task_eval_every 0` and `min_successes 0`, so only the end-of-stage evaluation would run. Bounded windows defer it, and the earned179 `report.task_eval` is `null`. Selection relies on separate ad-hoc practice evals. | `forgotten` / cost concern | **H** (training selects on loss blind) | Set `task_eval_every` to the window length (64) with the 4 cases already configured, plus `min_successes` ≥ the parent's baseline. Or run it on Pop (idle) asynchronously against each published actor view. | S | supervisor |
+| 7 | Held-loss evaluation cadence | `NSS` `--eval-every`, `--held-eval-graphs` | **Never runs.** `eval_every 500` fires only at global steps that are multiples of 500. Every window ends earlier (84→179, 179→226). Neither window's `train.jsonl` has a held row, and `held_qualification` is still at its "cadence-subset" placeholder. | `wiring` (cadence larger than the window) | **H** (no regression signal) | Set `eval_every` ≤ the window length (e.g. 32 or 64; the trainer requires `checkpoint_every` to be a multiple of it). | S | supervisor |
+| 8 | Idle cloud capacity: cw1, cw2, and the `joint-sft` cloud lineage | `scripts/coreweave/rl_cloud.py`, `rl_cloud_sandbox.py`, `diloco.py`, `T/train/native_diloco.py`; run.json `lineages.joint-sft` | cw1 and cw2 are idle. The joint-sft lineage is declared without an account and was never launched. The handoff lists unfixed issues with the lineage script: it expects `trained_rounds` to advance on SFT, export skipping uses RL counters, and setup installs SGLang unconditionally. | `wiring` | **H** (2+ H100s idle) | Fix the three handoff issues in `lfm3_rl_lineage.sh`/`rl_cloud_sandbox.stage`, then launch the corrected-mix SFT continuation (or a second RL lineage) on cw1/cw2. DiLoCo across DGX and cloud is the multi-GPU path. | M | supervisor |
+| 9 | DiLoCo multi-learner SFT (committed decisions #7, #8) | `T/train/native_diloco.py`, `T/train/diloco/`, `scripts/coreweave/diloco*.py`; `NSS --diloco` | Not used since the 10-29 coordinator incident; training is single-GPU on DGX. | `wiring` + recovery qualification | **H** (4x throughput on a 200-day stage) | After #8, run 2–4 learners with the cohosted coordinator on the corrected mix, using the existing role supervisor. | M–L | supervisor |
+| 10 | QAT (NVFP4 + FP8 points, multi-precision loss), and BF16/FP8/NVFP4 dev monitoring (committed decision #15) | `T/train/quantization.py`, `qformats.py`, `T/model/nvfp4_gemm.py`, `export/lfm3_quantized.py`; `bae117676` "QAT on by default" (`ce9b07734` made it possible to turn off) | **Off** in every live recipe (`quantization: "off"`). It was turned off around the 10-29 regression investigation; the only stated reason is "current serving is BF16". The handoff carries it as a fixed control. Three-precision dev monitoring is not running. The owner's direction (LFM3_RECIPE §Optimizer and precision) is QAT to NVFP4/FP8. | `forgotten` (excluded during a diagnosis, never revisited) | M–H (deploy format, NVFP4 actors) | Record a deliberate exclusion while the LR/mixture fixes land, or re-enable the FP8-first ramp at the next SFT window. NVFP4 GEMM exists for λ=1. | S–M | supervisor |
+| 11 | Weight-EMA evaluation and selection | `T/train/weight_ema.py` (default `eval: both`) | The EMA is maintained (decay 0.999), but `eval: raw` means it is never evaluated or selected. Committed decision #2 says "eval reads the EMA". | `forgotten` | M | Set `eval: both` once held eval runs (#7), and select parents on EMA versus raw dev outcomes. | S | supervisor |
+| 12 | Pop evaluator and the decision-grade checkpoint gate | `scripts/coreweave/send_actor_transport.py` (not in any DGX `actor_command`); driver `W/ops/run-pop-expanded-dev16-quality-parent-runtime34-1102.py`; v38 runtime installed on Pop; `scripts/neuralese_data/lfm3_checkpoint_gate.py` and `decision-eval.job.json` (refused for quota on 10-30, arms now obsolete) | Pop GPU at 0%, no evaluator. Evaluations run on the DGX GPU and compete with training. Cloud quota has been back since 11-03. | `wiring` | M | Move protected-dev evaluation of each new actor view to Pop: adapt the R34 driver to v38/v39 and the transport receipts. Re-target the decision gate at full67 vs s226 vs the base on an idle cloud account. | S–M | supervisor |
+| 13 | LR anneal branch for release candidates | `T/train/lr_anneal.py`, `NSS --lr-anneal` | Never used. | `wiring` | M (cheap better release candidates) | Use it for candidate selection after LRs are corrected (#1): branch, anneal, then evaluate on dev. | S | supervisor |
+| 14 | Stored guidance / memetic native program | `T/rl/memetic_program.py`, `memetic_batch.py`, `serve/native_guidance.py`; `MEMETIC_NATIVE_PROGRAM.md` | No data and no training (recipe review finding 3: 0 stored-guidance graphs). The 10-31 writer captures stalled on malformed producer spans. | `data` + a writer defect | M–H (core owner capability) | Repair writer authoring per AGENTS "Actual early privileged learning", then run `memetic_program` on 1–2 programs from the RL pool once RL is live. | M–L | unowned |
+| 15 | Decision readout (`decide`) supervision and RL sampling | `T/train/decision_supervision.py`, `T/rl/decision_policy.py`, `T/common/decision_objective.py` | Code exists, but `decide` is 0.22% of data (some malformed) and there are 0 decision-readout graphs in the mixture. | `data` | M | Add oracle-built `decide` tasks to the RL pool and the corrected mix. | M | RL-authoring agent (confirm) |
+| 16 | Native soft states and LoRA mixtures/bases in the backbone recipe | `T/tune/soft.py`, `soft_export.py`, `T/model/native_coefficient_policy.py`, `T/rl/native_coefficient_stage.py`, `T/tune/learned/` | Not in any production stage. The successor recipe declares `program_adaptation_s3`/`learned_optimizer_s4`, but they gate on SFT completion (about 200 days away). | `covered` in part (tuning pilot, bank meta-learning) | M | Covered by the tuning/bank agents. Gap: the successor recipe's `requires: native_joint_sft_v4` completion makes these stages unreachable. Change it to a promotion gate. | S | tuning/bank agents |
+| 17 | Hindsight hints and the Gaussian import channel | `T/rl/hindsight.py`, `hindsight_pilot.py`, `T/model/import_channel.py`; pilot data `/home/werg/data/hindsight-pilot-20261030` | Pilot on 10-30. `NEURALESE_HINDSIGHT_HINTS.md` records "no-go for the live JOLT+ loop now": hints of about 250 tokens, slow writer episodes, small gain. Its re-entry criterion is Δ ≥ 0.2 nats/token at ≤ 64 tokens. | `excluded` (with reason), but the reason is throughput-bound | M | Re-run `writeHint` on the SGLang actor once it is live, then phase 1 at lr ≤ 5e-5. | S once SGLang is live | unowned |
+| 17a | Self-distillation update objective (prefer successful Neuralese-using rollouts, per AGENTS 10-31) | `8702c8d71`; OPSD/text-twin path in `T/rl/` | Not used: `update_objective: policy` in both configs and the v39 RL stage. Checkpoint57 earned one OPSD update on 10-31; nothing since. | `wiring` | M | Enable it as a second update kind in the interleaved RL stage: successful rollouts, especially Neuralese-using ones, feed SD. | S–M | supervisor |
+| 17b | Model-facing harness fixes and unmeasured prompt policies | `LFM3_HARNESS_ERGONOMICS_20261028.md` (success effect receipt, `read_file` binding footer, system-prompt `nl` examples, zero-argument inline children; `COMBINED_RESULTS_PLACEHOLDER`); `plans/MODEL_FACING_CHANGES.md` debts (JOLT+ privileged wording, typed reader rev 12, guidance-writer authoring) | Not measured or adopted. The required ~48-sample live measurements were never run. | `bar` (the measurement window never scheduled) | M | Run the combined-variant measurement (committed decision #14) on the native actor now, or on SGLang when it is live. | M | unowned |
+| 18 | Offline preference / DPO stage | `T/train/native_preference.py`, recipe kind `native_offline_preference`, `NSS --preference-beta`; 12,004 prepared pairs `/home/werg/data/lfm3-dpo-20261029/out` (`training_admission:false`, `capacity_qualified:false`) | Never admitted; 0 earned pair visits. The data is web-research (MiroThinker), not natlang. | `excluded`? (not recorded) | L–M | Either admit failure-repair DPO from RL failures (the schema exists) or record an exclusion for the MiroThinker pairs. | S (decision) | unowned |
+| 19 | SFT throughput levers not adopted | `T/train/fp8_backend.py` (`--fp8-training te-fp8`, off; EMA eval not qualified on FP8); `LFM3_THROUGHPUT_20261028.md` "Remaining ideas" (32k–64k batch tokens, batched Newton-Schulz, selective activation checkpointing ~7%, fused linear+CE readout); `--checkpoint-direct-token-limit` (skip recompute on small graphs, 0); `NATLANG_NEURALESE_KERNELS` conv kernel (0, "not qualified") | Live learner runs **1 graph per microbatch**, 4 per update, about 15 s per graph, about 230 graphs/hour. None of these levers is enabled. | `bar` / `forgotten` | **H** (the 200-day stage is the binding constraint) | Run one bounded profiling pass on the corrected mix: multi-graph packed microbatches up to `batch_tokens`, direct-token limit, FP8. Adopt what helps. | M | unowned |
+| 20 | llama.cpp NVFP4 actors / GGUF serving of current LFM3 (committed decision #10, local serving) | `llama_cpp_converter` in config (`/home/werg/data/llama-neuralese-a6401bb`), `actor_engine: llama-cpp` (`T/rl/production.py`) | Configured path, never used. The user-facing `lfm-latest` / `lfm-latest-gguf` profiles still point to the retired pre-LFM3 step-40658 checkpoint from 10-27. | `wiring` | L–M | Refresh `setup --native` to the current behaviorally selected LFM3 parent so the owner can try it. Let SGLang supersede the llama.cpp RL actor (decision #17). | S | supervisor |
+| 21 | Program-header (compact) prompt rendering | `--prompt-rendering program-header` (serve and trainer) | Off by design: AGENTS makes compact prompts a later robustness target. | `excluded` (owner) | L | None until RL is established. | — | — |
+
+| 22 | Prepared data not in the mix | rest27 pairs (39,134, never verified or graphed: `runs/lfm3-communication/verify.py`); recovered D02/D21, native-sft-v13-r2, static-s7k, evidence-terminal, first-wave renders (`LFM3_DATA_COVERAGE_AUDIT_20261031.md` §4/§6); full D12–D16 acquired action trajectories; 22 of 45 S3 port families unconverted; broad Neuralese graphs (`NEURALESE_BROAD_GRAPHS_20261031.md`); Luna design-brief tranche and held-shapes seeds 52116–18; 13,802-row ready append | Not admitted. | `covered` in part (corrected-mix agent) | **H** | Confirm with the corrected-mix agent which items it takes on. These may fall outside its scope: rest27 verification, the 22 S3 families, broad graphs, and the 13,802-row append. Assign them explicitly. | M–L | corrected-mix agent + supervisor |
+
+### Covered by active agents today (one line each)
+
+SGLang actor and RL throughput; the corrected SFT mix (wrapper/big2/D16/D18/D12
+fixes, rest27/recovered/Luna admission); RL task authoring and selection pool;
+the program-tuning pilot (cw3/cw4); continuous LoRA-bank meta-learning
+(`bank_metalearning`, `bankmeta-pool-3` running); weight-space editing. These
+aspects are **not** covered by them:
+
+- #16: the successor recipe's completion gate makes the adaptation stages unreachable.
+- #3: `--rl-actors` stale/quantized actor admission.
+- SGLang open items: GPU parity of fork `8f2fd5894`, determinism, guidance rewind
+  (not in SGLang) and the CuTe conv kernel.
+- Tuning lane: the dense JOLT+ term in the tune trainer is "not wired". Planted
+  controls have no scheduled job. Stage kind `native_coefficient_rl` is used by no
+  recipe. The 51-program supply and the self-teach supply (`ts-host/src/tune/selfteach.ts`)
+  were never run (`JOINT_LEARNED_OPTIMIZER_STATUS.md`).
+
+## Why these went fallow (patterns)
+
+1. **Qualification bars without a deadline.** Numerical-equality qualification
+   (SGLang), capacity re-measurement (#4) and an FP8 EMA qualification (#19)
+   were each treated as a precondition with no owner or date. The standard
+   alternatives, such as IS-corrected off-policy sampling or reusing the
+   measured envelope with a conservative margin, were never weighed.
+2. **Settings frozen by incident, never restored.** QAT off, LR 1e-6, EMA eval
+   raw and task eval 0 each entered during the 10-29 regression investigation
+   or an emergency restart. They were then copied forward from config to config
+   as "the actual controls" by custody-preserving tooling. No config field
+   records *why* a value is set, so nothing prompts a revisit.
+3. **Compounding scalars.** The update-budget multiplier (#1) silently quarters
+   an LR that had already been measured as too small. The held-eval cadence
+   (#7) is larger than every window, so the mechanism is on but never fires.
+   Neither shows in a config review; both show in `train.jsonl`.
+4. **Frozen runtimes lag main.** Fixes land on main, but the learner runs a
+   runtime frozen hours earlier (#5). "Committed" was reported as done.
+5. **Stage gates on completion of a 200-day stage.** Later recipe stages
+   (adaptation, metalearner, RL) require `native_joint_sft_v4` completion or
+   `mandatory_sft_only`. Throughput makes that unreachable, so everything
+   downstream waits indefinitely.
+6. **Prepared artifacts mistaken for progress.** DPO pairs, hindsight pilots,
+   the v39 RL control and the cloud joint-sft lineage were each prepared to a
+   receipt and then left without a launch owner.
+7. **Idle resources not on the supervision checklist.** Pop and cw1/cw2 were
+   idle while the DGX GPU ran evaluations alongside (or instead of) training.
