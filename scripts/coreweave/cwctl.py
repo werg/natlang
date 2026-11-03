@@ -322,8 +322,50 @@ def backoff_seconds(attempt: int, hint: float | None, rand=None) -> float:
     return max(hint or 0.0, CREATE_INTERVAL_SECONDS, ceiling * (0.5 + 0.5 * rand()))
 
 
+def shape_exhausted(error: BaseException) -> bool:
+    """The cluster cannot serve the requested CPU/RAM shape right now (owner 2026-11-03): SandboxResourceExhausted
+    without an explicit quota error. Not an account limit; a smaller shape may be granted at once."""
+    facts = error_facts(error)
+    text = facts['error']
+    return (not facts['quota_error'] and facts['reason'] not in RETRYABLE_REASONS
+            and (type(error).__name__ == 'SandboxResourceExhaustedError' or 'RESOURCE_EXHAUSTED' in text
+                 or 'resource exhausted' in text.lower()))
+
+
+def _gib(value) -> float:
+    text = str(value)
+    for suffix, scale in (('Gi', 1.0), ('Mi', 1 / 1024), ('Ti', 1024.0), ('G', 1e9 / 2 ** 30), ('M', 1e6 / 2 ** 30)):
+        if text.endswith(suffix):
+            return float(text[:-len(suffix)]) * scale
+    return float(text) / 2 ** 30
+
+
+def shape_ladder(resources: dict, minimum: dict | None = None) -> list[dict]:
+    """Requested shapes, ideal first, then CPU and RAM lowered stepwise (x0.75) to the workload's measured minimum
+    (``minimum_resources``; default half the ideal), the GPU count always unchanged."""
+    ideal = dict(resources)
+    minimum = dict(minimum or {})
+    floor_cpu = float(minimum.get('cpu', max(1.0, float(ideal['cpu']) / 2))) if 'cpu' in ideal else None
+    floor_mem = _gib(minimum.get('memory', f"{_gib(ideal['memory']) / 2}Gi")) if 'memory' in ideal else None
+    shapes = [ideal]
+    cpu = float(ideal['cpu']) if 'cpu' in ideal else None
+    mem = _gib(ideal['memory']) if 'memory' in ideal else None
+    while (cpu is not None and cpu > floor_cpu) or (mem is not None and mem > floor_mem):
+        shape = dict(ideal)
+        if cpu is not None:
+            cpu = max(floor_cpu, float(int(cpu * 0.75)))
+            shape['cpu'] = str(int(cpu)) if cpu == int(cpu) else str(cpu)
+        if mem is not None:
+            mem = max(floor_mem, float(int(mem * 0.75 / 4) * 4))
+            shape['memory'] = f'{int(mem)}Gi' if mem == int(mem) else f'{mem}Gi'
+        if shape == shapes[-1]:
+            break
+        shapes.append(shape)
+    return shapes
+
+
 def throttled_create(create, *, sleep=time.sleep, clock=time.time, attempts: int | None = None,
-                     account: str | None = None):
+                     account: str | None = None, fail_fast=None):
     """Run ``create()`` serialized across processes (a file lock), at least CREATE_INTERVAL_SECONDS after the
     previous create from this machine, retrying only retryable errors with backoff. Every refusal is recorded
     (an occupancy-quota error tells us the real concurrent limit: learned passively, never probed)."""
@@ -349,7 +391,7 @@ def throttled_create(create, *, sleep=time.sleep, clock=time.time, attempts: int
                 if facts['reason'] == 'CWSANDBOX_OCCUPANCY_QUOTA_EXCEEDED':
                     record({'event': 'quota_observed', **tagged, 'limit': facts['metadata'].get('limit'),
                             'current': facts['metadata'].get('current')})
-                if not facts['retryable'] or attempt == attempts - 1:
+                if not facts['retryable'] or attempt == attempts - 1 or (fail_fast is not None and fail_fast(error)):
                     raise
         sleep(backoff_seconds(attempt, facts['retry_delay_seconds']))
     raise AssertionError('unreachable')
@@ -408,16 +450,45 @@ def start_startup_log_capture(sandbox_id, timeout=30):
         time.sleep(0.1)
     raise ControllerError('startup log stream did not become ready before input transfer')
 
-def create_recorded(run_args: list[str], keywords: dict, account: str, entry: dict, *, attempts: int | None = None):
+def create_recorded(run_args: list[str], keywords: dict, account: str, entry: dict, *, attempts: int | None = None,
+                    fail_fast=None):
     """Create one sandbox in ``account`` (throttled), then record and bind it before anything else touches it."""
     from cwsandbox import Sandbox
     auth = account_auth(account)
     sandbox = throttled_create(lambda: Sandbox.run(*run_args, auth=auth, **keywords), attempts=attempts,
-                               account=account)
+                               account=account, fail_fast=fail_fast)
     cwaccounts.bind(STATE, 'sandboxes', sandbox.sandbox_id, account)
     entry = {'event': 'launched', 'sandbox_id': sandbox.sandbox_id, 'account': account, **entry}
     record(entry)
     return sandbox, entry
+
+
+def create_with_shape_backoff(job: dict, account: str, summary: dict, create):
+    """Create the job's sandbox at its ideal shape, then at stepwise smaller CPU/RAM shapes down to its measured
+    minimum while the cluster answers SandboxResourceExhausted (owner 2026-11-03); exactly the requested GPU count
+    throughout. The granted shape is recorded on the launch entry and as a ``shape_granted`` event."""
+    ladder = shape_ladder(job['resources'], job.get('minimum_resources'))
+    for index, shape in enumerate(ladder):
+        shaped = {**job, 'resources': shape}
+        request = jobs.sandbox_request(shaped, bootstrap_text())
+        last = index == len(ladder) - 1
+        try:
+            sandbox, entry = create(run_arguments(request), run_keywords(request), account, {
+                'job': job['id'], 'kind': job['kind'], 'lifetime_hours': job['lifetime_hours'], 'resources': shape,
+                'requested_resources': job['resources'], 'bucket': job.get('bucket'), 'bundle': job.get('bundle'),
+                'reason': job['placement']['reason'], 'cost': summary['cost'], 'exports': export_targets(job)},
+                fail_fast=None if last else shape_exhausted)
+        except Exception as error:
+            if last or not shape_exhausted(error):
+                raise
+            record({'event': 'shape_refused', 'job': job['id'], 'account': account, 'resources': shape,
+                    'next': ladder[index + 1]})
+            continue
+        if shape != job['resources']:
+            record({'event': 'shape_granted', 'job': job['id'], 'sandbox_id': entry['sandbox_id'], 'account': account,
+                    'requested': job['resources'], 'granted': shape})
+        return sandbox, entry
+    raise AssertionError('unreachable')
 
 
 def launch(job: dict, dry_run: bool, wait: bool, gpu_hour_price: float | None, bundle_file: Path | None = None,
@@ -442,10 +513,7 @@ def launch(job: dict, dry_run: bool, wait: bool, gpu_hour_price: float | None, b
     if secrets:
         cwaccounts.refuse_credentials(secrets)
     created = time.time()
-    sandbox, entry = create_recorded(run_arguments(request), run_keywords(request), account, {
-        'job': job['id'], 'kind': job['kind'], 'lifetime_hours': job['lifetime_hours'], 'resources': job['resources'],
-        'bucket': job.get('bucket'), 'bundle': job.get('bundle'), 'reason': job['placement']['reason'],
-        'cost': summary['cost'], 'exports': export_targets(job)})
+    sandbox, entry = create_with_shape_backoff(job, account, summary, create_recorded)
     created = max(created, time.time() - 5)  # the throttle may have waited before the create itself
     if on_created is not None:
         on_created(entry["sandbox_id"])

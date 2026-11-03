@@ -12,6 +12,10 @@
   "cpu": "8",
   "memory": "64Gi"
  },
+ "minimum_resources": {
+  "cpu": "4",
+  "memory": "48Gi"
+ },
  "lifetime_hours": 720,
  "scratch": {
   "path": "/work",
@@ -47,6 +51,6 @@
   "lineage_owner": "dgx",
   "moves_active_lineage": true
  },
- "resource_notes": "Exactly one GPU, explicit CPU/RAM minima (owner 2026-10-29: learners 8 CPU / 64Gi; inference engines >= 8 CPU). The template default is the joint-SFT learner: DGX R38 window learner host RSS ~11-27 GB plus the 15 GB full-state checkpoint load. RL lineages (actor + 12-24 natlang node workers + learner; DGX-measured ~18 GB host while collecting) declare more in the run file's per-lineage \"resources\" (16 CPU / 96Gi). Replace with the measured cgroup peak (+25%) each call logs (call_done memory_peak). GPU: unconstrained; the learner's capacity qualification re-measures on the assigned GPU (DGX GB10 peaks ~64 GB CUDA).",
+ "resource_notes": "Exactly one GPU, explicit CPU/RAM minima (owner 2026-10-29: learners 8 CPU / 64Gi; inference engines >= 8 CPU). The template default is the joint-SFT learner: DGX R38 window learner host RSS ~11-27 GB plus the 15 GB full-state checkpoint load. RL lineages (actor + 12-24 natlang node workers + learner; DGX-measured ~18 GB host while collecting) declare more in the run file's per-lineage \"resources\" (16 CPU / 96Gi). Replace with the measured cgroup peak (+25%) each call logs (call_done memory_peak). GPU: unconstrained; the learner's capacity qualification re-measures on the assigned GPU (DGX GB10 peaks ~64 GB CUDA). minimum_resources is the floor of the launch-time shape backoff (cwctl.create_with_shape_backoff, owner 2026-11-03): SandboxResourceExhausted lowers CPU/RAM stepwise toward it, always exactly one GPU; 48Gi covers the 15 GB checkpoint load plus the measured ~11-27 GB learner RSS.",
  "bundle_plan": "rl_cloud.py seed RUN.json LINEAGE (window 0, input closure, parent ZIP delta), rl_cloud.py bundle RUN.json (code snapshot, wheelhouse, HF base; RL: custody packets, task source, SGLang fork only when used); rl_cloud.py launch RUN.json LINEAGE pushes the bundle and the rl-parent capability."
 }

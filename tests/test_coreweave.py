@@ -1656,3 +1656,56 @@ def test_resume_inputs_checks_real_sha_before_reuse(tmp_path, monkeypatch):
     assert (inbox/sha).read_bytes()==body
     assert cwctl.push_inputs(box,job,manifest,log=lambda _:None)['pushed']==0
     assert box.pushes==1
+
+
+def test_shape_ladder_lowers_cpu_and_ram_to_minimum_keeping_one_gpu():
+    ladder = cwctl.shape_ladder({'gpu': 1, 'cpu': '16', 'memory': '96Gi'}, {'cpu': '4', 'memory': '48Gi'})
+    assert ladder[0] == {'gpu': 1, 'cpu': '16', 'memory': '96Gi'}
+    assert ladder[-1] == {'gpu': 1, 'cpu': '4', 'memory': '48Gi'}
+    assert all(shape['gpu'] == 1 for shape in ladder)
+    cpus = [float(s['cpu']) for s in ladder]
+    assert cpus == sorted(cpus, reverse=True) and len(set(map(str, ladder))) == len(ladder)
+    # A floor at or above the ideal leaves only the ideal; the default floor is half the ideal.
+    assert cwctl.shape_ladder({'cpu': '4', 'memory': '16Gi'}, {'cpu': '4', 'memory': '48Gi'}) == [
+        {'cpu': '4', 'memory': '16Gi'}]
+    assert cwctl.shape_ladder({'gpu': 1, 'cpu': '8', 'memory': '64Gi'})[-1] == {'gpu': 1, 'cpu': '4', 'memory': '32Gi'}
+
+
+def test_launch_backs_off_shape_on_resource_exhausted_and_records_grant(tmp_path, monkeypatch):
+    monkeypatch.setattr(cwctl, 'STATE', tmp_path)
+    monkeypatch.setattr(cwctl, 'bootstrap_text', lambda: '#!/bin/sh\n')
+
+    class SandboxResourceExhaustedError(Exception):
+        reason, metadata, retry_delay = None, {}, None
+
+    class Box:
+        sandbox_id = 'box-1'
+
+    asked = []
+
+    def create(run_args, keywords, account, entry, *, fail_fast=None):
+        asked.append(entry['resources'])
+        error = SandboxResourceExhaustedError('Create sandbox resource exhausted')
+        if len(asked) < 3:
+            assert fail_fast is not None and fail_fast(error)
+            raise error
+        return Box(), {'event': 'launched', 'sandbox_id': 'box-1', **entry}
+
+    job = {'id': 'j', 'kind': 'train', 'lifetime_hours': 1, 'placement': {'reason': 'test'}, 'image': 'img',
+           'resources': {'gpu': 1, 'cpu': '16', 'memory': '96Gi'}, 'minimum_resources': {'cpu': '4', 'memory': '48Gi'},
+           'transport': 'api', 'command': ['true'], 'env': {}, 'scratch': {'path': '/work', 'size': '10Gi'}}
+    monkeypatch.setattr(cwctl.jobs, 'sandbox_request', lambda job, text: {'command': 'true', 'resources': job['resources']})
+    _, entry = cwctl.create_with_shape_backoff(job, 'cw3', {'cost': None}, create)
+    assert asked[0] == job['resources'] and entry['resources'] == asked[2] != job['resources']
+    assert all(shape['gpu'] == 1 for shape in asked)
+    events = [json.loads(line) for line in (tmp_path / 'sandboxes.jsonl').read_text().splitlines()]
+    assert [e['event'] for e in events] == ['shape_refused', 'shape_refused', 'shape_granted']
+    assert events[-1]['granted'] == asked[2]
+    # Any other refusal (e.g. an explicit quota error) is not a shape problem: it propagates at once.
+    class Invalid(Exception):
+        reason, metadata, retry_delay = 'CWSANDBOX_INVALID_REQUEST', {}, None
+
+    def refuse(*args, **kwargs):
+        raise Invalid('bad request')
+    with pytest.raises(Invalid):
+        cwctl.create_with_shape_backoff(job, 'cw3', {'cost': None}, refuse)
