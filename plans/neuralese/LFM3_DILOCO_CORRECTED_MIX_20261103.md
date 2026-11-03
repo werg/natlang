@@ -131,6 +131,25 @@ graphs in 262 s (about 780 graphs/h, ~3.4x DGX), with 50.6 GB peak allocated. Ba
 under a 1/64 warmup multiplier. Rule from this incident: prepared package artifacts get versioned successors and
 are never rewritten in place.
 
+## Runtime v45 cutover (2026-11-03 22:46Z)
+
+The v44 learner spent about 40% of wall time re-proving oversize capacity before each update. Fix 811008e9e and the
+discrete-GPU page-cache correction 247bfb208 ship as runtime v45:
+- Commit c3347b8f0, closure 0981b20a, archive sha 47ebbccb, 114,337,263 bytes.
+- The freeze needed `ops/runtime45-packet-predecessor`, which adds the round-4 held packets (authored b, c, d, e).
+
+The control replay ran `scripts/coreweave/closure_replay.py` on the seed control rebound to v45. It passed through
+the controller and learner preflight and stopped at the expected CUDA model load.
+
+The cutover interrupted the learner once, at an early window boundary:
+- The old driver was retired and the learner received SIGUSR2. w000000 stopped at global step 73, and its boundary
+  was staged for export.
+- `sft_window.py next --runtime` (f6f781c6d) prepared w000001 on v45. The change is recorded in
+  `branch_origin.changed_controls.runtime` and `runtime_transition`.
+- A new driver started from code 3f9932967 with driver ownership; `run.json` `runtime_archive` now points at v45.
+- The DiLoCo session request adopts at a later SIGUSR2 boundary of this v45 window, so no second interruption is
+  needed.
+
 ## Open for step 2
 
 Controller windows plus DiLoCo: each worker's window control needs `trainer_parameters.diloco` (URL from the secret
