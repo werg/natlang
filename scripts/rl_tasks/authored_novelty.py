@@ -34,7 +34,9 @@ import argparse
 import collections
 import hashlib
 import json
+import os
 import sys
+import zlib
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -95,26 +97,99 @@ def rows(path):
                 yield json.loads(line)
 
 
+STATIC_POOL_BYTES = 50_000_000  # pools at least this large are indexed once and reused (the admitted pool changes each batch)
+INDEX_ROOT = Path(os.environ.get('NATLANG_NOVELTY_INDEX') or '/mnt/external/natlang-rl-authoring/novelty-index')
+
+
+def crc_shingles(text):
+    return frozenset(zlib.crc32(item.encode()) for item in shingles(text))
+
+
+def digest(value):
+    return hashlib.sha1(value.encode()).digest()
+
+
+def build_index(path):
+    """Everything the gate needs from one pool file, in a form that is small to load: exact-key digests, per-family
+    program digests, the functional adds to replay, and per-family near-duplicate shingle hashes (CRC32 of the 5-word
+    shingles: the Jaccard test is the same, a 32-bit collision between shingles of one family is negligible)."""
+    tasks, programs, functional, near = set(), collections.defaultdict(set), [], collections.defaultdict(list)
+    for row in rows(path):
+        features = program_features(row)
+        key = task_key(row, features)
+        tasks.add(digest(key[0] + '\0' + key[1]))
+        programs[features['family']].add(digest(features['program']))
+        functional.append((features['family'], features['functional'], features['functional_words']))
+        text = near_key(row, features)
+        near[features['family']].append((crc_shingles(text[0]), crc_shingles(text[1])))
+    return {'tasks': tasks, 'programs': dict(programs), 'functional': functional, 'near': dict(near)}
+
+
+def pool_index(path, families):
+    """The index of ``path`` restricted to ``families`` (the batch's): everything in the gate is keyed by family, so a
+    large static pool is cached once under INDEX_ROOT (keyed by path, size and mtime) as a small shared part plus one shard
+    per family, and a run loads only the shards of the families it checks."""
+    stat = Path(path).stat()
+    if stat.st_size < STATIC_POOL_BYTES:
+        index = build_index(path)
+        return {'tasks': index['tasks'], 'programs': index['programs'],
+                'functional': _group(index['functional']), 'near': index['near']}
+    import pickle
+    name = hashlib.sha1(f'{Path(path).resolve()}|{stat.st_size}|{stat.st_mtime_ns}'.encode()).hexdigest()
+    root = INDEX_ROOT / name
+    if not (root / 'meta.pkl').exists():
+        index = build_index(path)
+        grouped = _group(index['functional'])
+        root.mkdir(parents=True, exist_ok=True)
+        for family in set(grouped) | set(index['near']):
+            with open(root / f'{digest(family).hex()}.pkl', 'wb') as handle:
+                pickle.dump({'functional': grouped.get(family, []), 'near': index['near'].get(family, [])}, handle,
+                            protocol=pickle.HIGHEST_PROTOCOL)
+        pending = root / 'meta.pending'
+        with open(pending, 'wb') as handle:  # last: a reader never sees a half-built index
+            pickle.dump({'tasks': index['tasks'], 'programs': index['programs']}, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        pending.replace(root / 'meta.pkl')
+    with open(root / 'meta.pkl', 'rb') as handle:
+        meta = pickle.load(handle)
+    out = {'tasks': meta['tasks'], 'programs': meta['programs'], 'functional': {}, 'near': {}}
+    for family in families:
+        shard = root / f'{digest(family).hex()}.pkl'
+        if shard.exists():
+            with open(shard, 'rb') as handle:
+                data = pickle.load(handle)
+            out['functional'][family], out['near'][family] = data['functional'], data['near']
+    return out
+
+
+def _group(functional):
+    grouped = collections.defaultdict(list)
+    for family, structure, words in functional:
+        grouped[family].append((structure, words))
+    return dict(grouped)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('batch')
     parser.add_argument('--pool', action='append', default=[])
     parser.add_argument('-o', '--out')
     args = parser.parse_args(argv)
+    batch = [(row, program_features(row)) for row in rows(args.batch)]
+    families_checked = {features['family'] for _, features in batch}
     pool_tasks, pool_family_programs = set(), collections.defaultdict(set)
     functional = FunctionalPrograms()
     pool_shingles = collections.defaultdict(list)
     for path in args.pool:
-        for row in rows(path):
-            features = program_features(row)
-            key = task_key(row, features)
-            pool_tasks.add(key)
-            pool_family_programs[features['family']].add(features['program'])
-            functional.add(features['family'], features['functional'], features['functional_words'])
-            pool_text = near_key(row, features)
-            pool_shingles[features['family']].append((shingles(pool_text[0]), shingles(pool_text[1])))
+        index = pool_index(path, families_checked)
+        pool_tasks |= index['tasks']
+        for family, items in index['programs'].items():
+            pool_family_programs[family] |= items
+        for family, items in index['functional'].items():
+            for structure, words in items:
+                functional.add(family, structure, words)
+        for family, items in index['near'].items():
+            pool_shingles[family].extend(items)
     pool_functional = collections.Counter(functional.counts)
-    batch = [(row, program_features(row)) for row in rows(args.batch)]
     exact, near, seen = [], [], set()
     added = collections.defaultdict(set)
     new_functional = collections.Counter()
@@ -123,17 +198,19 @@ def main(argv=None):
         family = features['family']
         is_new = functional.add(family, features['functional'], features['functional_words'])
         new_functional[family] += is_new
-        if not is_new and features['program'] not in pool_family_programs[family] | seen_programs[family]:
+        program_id = digest(features['program'])
+        if not is_new and program_id not in pool_family_programs[family] | seen_programs[family]:
             functional_repeats.append(row['id'])
-        seen_programs[family].add(features['program'])
+        seen_programs[family].add(program_id)
     for row, features in batch:
-        program = features['program']
+        program = digest(features['program'])
         key = task_key(row, features)
+        key = digest(key[0] + '\0' + key[1])
         if key in pool_tasks or key in seen:
             exact.append(row['id'])
         seen.add(key)
         keyed = near_key(row, features)
-        mine = (shingles(keyed[0]), shingles(keyed[1]))
+        mine = (crc_shingles(keyed[0]), crc_shingles(keyed[1]))
         for other in pool_shingles[features['family']]:
             if all(len(a & b) / max(1, len(a | b)) >= 0.8 for a, b in zip(mine, other)):
                 near.append(row['id'])

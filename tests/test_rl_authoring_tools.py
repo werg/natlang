@@ -523,3 +523,21 @@ def test_folder_only_variants_with_numbered_files_are_not_exact_duplicates(tmp_p
     twin['id'] = 'e'
     authored_novelty.main([write(tmp_path / 'c.jsonl', [variants[0], twin]), '--pool', pool, '-o', str(out)])
     assert json.loads(out.read_text())['exact_duplicates'] == ['e']
+
+
+def test_large_pools_are_indexed_once_per_family_and_give_the_same_verdict(tmp_path, monkeypatch):
+    program = 'Reconcile the ledger from messages, then return the stock record with `return applyMoves(stock, moves)`.'
+    pool_rows = [case(f'p{i}', 'ledger', 'pool program ' + 'abcdefghijklmnopqrstu'[i] * (i + 1), {'m': i}) for i in range(20)]
+    pool_rows += [case(f'q{i}', 'other', 'unrelated program ' + 'vwxyz'[i % 5] * (i + 3), {'m': i}) for i in range(5)]
+    pool = write(tmp_path / 'pool.jsonl', pool_rows)
+    batch = write(tmp_path / 'batch.jsonl', [
+        case('a', 'ledger', program, {'messages': ['Delivery of 12 oat milk cases arrived crushed and was refused at the door']}),
+        case('c', 'ledger', program, {'messages': ['Delivery of 15 oat milk cases arrived crushed and was refused at the door']})])
+    small, large = tmp_path / 'small.json', tmp_path / 'large.json'
+    assert authored_novelty.main([batch, '--pool', pool, '-o', str(small)]) == 1
+    monkeypatch.setattr(authored_novelty, 'STATIC_POOL_BYTES', 0)
+    monkeypatch.setattr(authored_novelty, 'INDEX_ROOT', tmp_path / 'index')
+    for _ in range(2):  # the second run loads the cached shards instead of rebuilding
+        assert authored_novelty.main([batch, '--pool', pool, '-o', str(large)]) == 1
+        assert json.loads(large.read_text()) == json.loads(small.read_text())
+    assert (tmp_path / 'index').is_dir() and any((tmp_path / 'index').glob('*/meta.pkl'))
