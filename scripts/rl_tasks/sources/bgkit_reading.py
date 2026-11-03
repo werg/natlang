@@ -34,6 +34,7 @@ from natlang_neuralese.common.paths import resolve
 
 from ..child_notes import answer_sentences, child, document_key, fragment, overlap
 from ..common import distinct_wrong
+from . import bgkit_programs as bp
 from .composed import DOC, Program, _case, _iterate_steps, _span_oracle
 
 REPO = Path(__file__).resolve().parents[3]
@@ -51,6 +52,32 @@ SOURCE = 'bgkit'
 
 def _key(text):
     return fragment(text)
+
+
+def _deal(items, programs, count, eligible=None, restricted=()):
+    """Disjoint items for each program (its first `count` eligible items in order), restricted programs first so that the
+    items only they can use are not spent on the others. Returns {program name: [items]} (fewer when the supply runs out)."""
+    rest = list(items)
+    out = {}
+    order = sorted(programs, key=lambda program: 0 if program.name in restricted else 1)
+    for program in order:
+        chosen, keep = [], []
+        for item in rest:
+            if len(chosen) < count and (eligible is None or eligible(program, item)):
+                chosen.append(item)
+            else:
+                keep.append(item)
+        rest = keep
+        out[program.name] = chosen
+    return out
+
+
+def _readouts(case, program):
+    """Write `readout: decision` on the program's decision-readout helpers (leaves that the root reads with `decide`)."""
+    for helper in bp.READOUTS.get(program.name, ()):
+        path = f'{program.root}/{helper}.nl'
+        case['semantics']['files'][path] = case['semantics']['files'][path].replace('---\n', '---\nreadout: decision\n', 1)
+    return case
 
 
 def _protected_question_hashes():
@@ -314,31 +341,40 @@ def _sq_notes(program, item, groups):
     return out
 
 
-def searchqa(train=(250, 250, 250, 250, 250, 250), held=40, seed=20261103):
+SQ_PROGRAMS = (SQ_VOTE, SQ_JUDGE, SQ_TALLY, SQ_CLUE_FIRST, SQ_PROPOSE, SQ_SELECT) + bp.SQ_NEW
+
+
+def searchqa(train=80, held=8, seed=20261103):
+    """`train` rows and `held` upstream-validation rows per program (the pool caps rows per program, so a few dozen per
+    program and many programs beat many rows of a few)."""
     family = 'searchqa_reading'
-    items = searchqa_items(seed, limit=(sum(train), held))
+    programs = SQ_PROGRAMS
+    items = searchqa_items(seed, limit=(train * len(programs), (held * len(programs) + 1) // 2))
     out = []
-    for split in ('train', 'validation'):
+    for split, count in (('train', train), ('validation', held)):
         pool = items[split + '-pool']
-        counts = train if split == 'train' else (held // 2 + 1,) * 6
+        dealt = _deal(items[split], programs, count)
         cursor = 0
-        for program, n in zip((SQ_VOTE, SQ_JUDGE, SQ_TALLY, SQ_CLUE_FIRST, SQ_PROPOSE, SQ_SELECT), counts):
-            for k, item in enumerate(items[split][cursor:cursor + n]):
+        for program in programs:
+            for k, item in enumerate(dealt[program.name]):
                 answer = item['answer']
                 groups = [item['snippets'][i:i + 3] for i in range(0, len(item['snippets']), 3)]
                 inputs = ({'groups': groups, 'question': item['question']} if program is SQ_TALLY
                           else {'question': item['question'], 'snippets': item['snippets']})
                 oracle, alts = _span_oracle(answer, _alias_forms(answer))
-                out.append(_case(program, family, item=item, inputs=inputs, expected=answer, oracle=oracle,
-                                 level=_sq_level(item) if program is not SQ_TALLY else min(3, _sq_level(item) + 1),
-                                 wrong=distinct_wrong(answer, pool[(cursor + k) % 400:] + pool, 3),
-                                 aliases=[answer.upper()] + alts[:2], upstream='lucadiliello/searchqa',
-                                 license_='LicenseRef-searchqa-web-snippets',
-                                 license_note='clues and answers are J! Archive items; snippets are public web text',
-                                 difficulty=item['shape'], slice_='iterate' if program is SQ_TALLY else 'nested_scoped',
-                                 smoke_children={**({'judge': answer} if program is SQ_JUDGE else {'verify': answer} if program is SQ_PROPOSE else {})},
-                                 children=_sq_notes(program, item, groups), source=SOURCE))
-            cursor += n
+                level = _sq_level(item) + (program is SQ_TALLY or program.name in bp.SQ_HARDER)
+                children = (_sq_notes(program, item, groups) if program in SQ_PROGRAMS[:6] else bp.sq_notes(program, item))
+                case = _case(program, family, item=item, inputs=inputs, expected=answer, oracle=oracle, level=min(3, level),
+                             wrong=distinct_wrong(answer, pool[(cursor + k) % 400:] + pool, 3),
+                             aliases=[answer.upper()] + alts[:2], upstream='lucadiliello/searchqa',
+                             license_='LicenseRef-searchqa-web-snippets',
+                             license_note='clues and answers are J! Archive items; snippets are public web text',
+                             difficulty=item['shape'], slice_='iterate' if program.iterate else 'nested_scoped',
+                             smoke_children={**({'judge': answer} if program is SQ_JUDGE else {'verify': answer} if program is SQ_PROPOSE
+                                                else {'arbiter': answer} if program is bp.SQ_TWO_READERS else {})},
+                             children=children, source=SOURCE)
+                out.append(_readouts(case, program))
+            cursor += len(dealt[program.name])
     return out
 
 
@@ -379,11 +415,15 @@ def haystack_items(seed=20261103, limit=(1400, 120), max_chars=20000):
         chunks = _chunks(r['context'])
         if len(facts) != meta['n_facts'] or not 3 <= len(chunks) <= 16:
             continue  # the pattern must count exactly the facts the generator placed
+        if bp.replay(facts, r['instruction']) != r['target']:
+            continue  # an exact replay of the facts must reproduce the gold: the programs that compute it in code stay sound
         story = group_key('babi-story', meta['doc'].rsplit(':', 1)[0])
         unit = f'bgkit-babi-filler:{story}'  # every filler variant of one story stays on one side of the split
         item = {'id': f'{meta["doc"]}:{index}', 'unit': unit, 'groups': [story], 'source': 'babi_filler', 'split': split,
                 'question': r['instruction'], 'answer': r['target'], 'chunks': chunks, 'facts': facts, 'task': meta['task'],
                 'filler': meta['filler_source'], 'shape': f'{meta["task"]}-{len(chunks)}chunks-{meta["filler_source"]}'}
+        item['grep_ok'] = bp.grep_eligible(item)
+        item['count_ok'] = bp.count_eligible(item)
         pools[split][meta['task']].append(r['target'])
         out[split].append(item)
     for split in out:
@@ -516,6 +556,8 @@ HAY_SELECT = Program(
 
 def _hay_notes(program, item):
     out, seen = [], []
+    if program not in HAY_PROGRAMS[:4]:
+        return bp.hay_notes(program, item, FACT)
     for index, chunk in enumerate(item['chunks']):
         found = FACT.findall(chunk)
         seen.extend(found)
@@ -527,29 +569,42 @@ def _hay_notes(program, item):
     return out
 
 
-def haystack(train=(250, 250, 250, 250), held=36, seed=20261103):
+HAY_PROGRAMS = (HAY_TRACK, HAY_SPOT, HAY_FOCUS, HAY_SELECT) + bp.HAY_NEW
+
+
+def _hay_eligible(program, item):
+    if item is None:
+        return True
+    if program.name in bp.HAY_PERSON_ONLY and bp.person_of(item['question']) is None:
+        return False
+    return (item['grep_ok'] if program is bp.HAY_GREP else item['count_ok'] if program is bp.HAY_COUNT else True)
+
+
+def haystack(train=80, held=6, seed=20261103):
     family = 'haystack_reading'
-    items = haystack_items(seed, limit=(sum(train), held))
+    programs = HAY_PROGRAMS
+    items = haystack_items(seed, limit=(train * len(programs) * 2, held * len(programs)))
     out = []
-    for split in ('train', 'validation'):
-        counts = train if split == 'train' else (held // 2,) * 4
-        cursor = 0
-        for program, n in zip((HAY_TRACK, HAY_SPOT, HAY_FOCUS, HAY_SELECT), counts):
-            for k, item in enumerate(items[split][cursor:cursor + n]):
+    for split, count in (('train', train), ('validation', held)):
+        dealt = _deal(items[split], programs, count, _hay_eligible, restricted={p.name for p in programs if p.name in bp.HAY_PERSON_ONLY}
+                      | {bp.HAY_GREP.name, bp.HAY_COUNT.name})
+        for program in programs:
+            for k, item in enumerate(dealt[program.name]):
                 chunks = len(item['chunks'])
                 level = 0 if chunks <= 4 else 1 if chunks <= 7 else 2 if chunks <= 11 else 3
-                if item['task'] == 'qa3':
+                if item['task'] == 'qa3' or program.name in bp.HAY_HARDER:
                     level = min(3, level + 1)
                 answer = item['answer']
-                out.append(_case(program, family, item=item, inputs={'chunks': item['chunks'], 'question': item['question']},
-                                 expected=answer, oracle={'level': 'normalized', 'normalization': 'qa'}, level=level,
-                                 wrong=distinct_wrong(answer, item['pool'][k % 50:] + item['pool'], 2),
-                                 aliases=[answer.upper()], upstream='bgkit/babi_filler_v3',
-                                 license_='BSD-3-Clause', license_note='bAbI tasks inside wikitext, PG-19 and fineweb-edu filler',
-                                 difficulty=item['shape'], slice_='iterate' if program is HAY_TRACK else 'nested_scoped',
-                                 smoke_children={**({'settle': answer} if program is not HAY_TRACK else {'answer_from_world': answer})},
-                                 children=_hay_notes(program, item), source=SOURCE))
-            cursor += n
+                settle = {name: answer for name in ('settle', 'settle_facts', 'settle_ledgers', 'settle_windows', 'answer_from_world', 'answer_again')
+                          if name in program.helpers}
+                case = _case(program, family, item=item, inputs={'chunks': item['chunks'], 'question': item['question']},
+                             expected=answer, oracle={'level': 'normalized', 'normalization': 'qa'}, level=level,
+                             wrong=distinct_wrong(answer, item['pool'][k % 50:] + item['pool'], 2),
+                             aliases=[answer.upper()], upstream='bgkit/babi_filler_v3',
+                             license_='BSD-3-Clause', license_note='bAbI tasks inside wikitext, PG-19 and fineweb-edu filler',
+                             difficulty=item['shape'], slice_='iterate' if program.iterate else 'nested_scoped',
+                             smoke_children=settle, children=_hay_notes(program, item), source=SOURCE)
+                out.append(_readouts(case, program))
     return out
 
 
@@ -657,19 +712,25 @@ def _pubmed_notes(item):
     return out
 
 
-def pubmed(train=900, seed=20261103):
+PUB_PROGRAMS = (PUB_STANCE, PUB_ITER) + bp.PUB_NEW
+
+
+def pubmed(train=80, held=0, seed=20261103):
+    """About `train` train rows per program: the first `1.07 * train * programs` shuffled items, ~6% of which the unit carve-out holds out."""
     family = 'pubmed_reading'
     out = []
-    for k, item in enumerate(pubmed_items(seed)[:train + 120]):
+    for k, item in enumerate(pubmed_items(seed)[:int(train * 1.07 * len(PUB_PROGRAMS))]):
         answer = item['answer']
         wrong = [a for a in ('yes', 'no', 'maybe') if a != answer]
-        program = PUB_ITER if k % 2 else PUB_STANCE
-        out.append(_case(program, family, item={**item}, inputs={'question': item['question'], 'sections': item['sections']},
-                         expected=answer, oracle='exact', level=2 if answer == 'maybe' else 1 if len(item['sections']) > 3 else 0,
-                         wrong=wrong, aliases=[], upstream='qiaojin/PubMedQA', license_='MIT',
-                         difficulty=item['shape'], smoke_children={'verdict': answer},
-                         slice_='iterate' if program is PUB_ITER else 'nested_scoped',
-                         children=_pubmed_notes(item) if program is PUB_STANCE else [], source=SOURCE))
+        program = PUB_PROGRAMS[k % len(PUB_PROGRAMS)]
+        level = 2 if answer == 'maybe' else 1 if len(item['sections']) > 3 else 0
+        children = (_pubmed_notes(item) if program is PUB_STANCE else [] if program is PUB_ITER else bp.pub_notes(program, item))
+        case = _case(program, family, item={**item}, inputs={'question': item['question'], 'sections': item['sections']},
+                     expected=answer, oracle='exact', level=min(3, level + (program.name in bp.PUB_HARDER)),
+                     wrong=wrong, aliases=[], upstream='qiaojin/PubMedQA', license_='MIT',
+                     difficulty=item['shape'], smoke_children={'verdict': answer, 'verdict_from_gist': answer, 'judge_cases': answer},
+                     slice_='iterate' if program.iterate else 'nested_scoped', children=children, source=SOURCE)
+        out.append(_readouts(case, program))
     return out
 
 
@@ -824,6 +885,8 @@ NQ_SELECT = Program(
 
 def _nq_notes(program, item):
     answer, out, seen = item['answer'], [], ''
+    if program not in NQ_PROGRAMS[:4]:
+        return bp.nq_notes(program, item)
     for index, passage in enumerate(item['passages']):
         sentence = answer_sentences(passage, [answer], 320)
         if program in (NQ_JUDGE, NQ_FOCUS, NQ_SELECT):
@@ -837,27 +900,32 @@ def _nq_notes(program, item):
     return out
 
 
-def narrative(train=(225, 225, 225, 225), held=40, seed=20261103):
+NQ_PROGRAMS = (NQ_JUDGE, NQ_ITER, NQ_FOCUS, NQ_SELECT) + bp.NQ_NEW
+
+
+def narrative(train=80, held=6, seed=20261103):
     family = 'narrative_reading'
-    items = narrative_items(seed, limit=(sum(train), held))
+    programs = NQ_PROGRAMS
+    items = narrative_items(seed, limit=(train * len(programs), (held * len(programs) + 1) // 2))
     out = []
-    for split in ('train', 'validation'):
-        counts = train if split == 'train' else (held // 2,) * 4
-        cursor = 0
-        for program, n in zip((NQ_JUDGE, NQ_ITER, NQ_FOCUS, NQ_SELECT), counts):
-            for k, item in enumerate(items[split][cursor:cursor + n]):
+    for split, count in (('train', train), ('validation', held)):
+        dealt = _deal(items[split], programs, count)
+        for program in programs:
+            for k, item in enumerate(dealt[program.name]):
                 answer = item['answer']
                 oracle, alts = _span_oracle(answer, item['aliases'])
                 parts = len(item['passages'])
-                out.append(_case(program, family, item=item, inputs={'passages': item['passages'], 'question': item['question']},
-                                 expected=answer, oracle=oracle, level=0 if parts <= 4 else 1 if parts <= 7 else 2 if parts <= 10 else 3,
-                                 wrong=distinct_wrong(answer, item['pool'][k % 200:] + item['pool'], 3),
-                                 aliases=[answer.upper()] + alts[:2], upstream='deepmind/narrativeqa', license_='Apache-2.0',
-                                 license_note='summaries are Wikipedia-derived plot text', difficulty=item['shape'],
-                                 slice_='iterate' if program is NQ_ITER else 'nested_scoped',
-                                 smoke_children={'conclude': answer} if program is not NQ_ITER else {},
-                                 children=_nq_notes(program, item), source=SOURCE))
-            cursor += n
+                level = 0 if parts <= 4 else 1 if parts <= 7 else 2 if parts <= 10 else 3
+                case = _case(program, family, item=item, inputs={'passages': item['passages'], 'question': item['question']},
+                             expected=answer, oracle=oracle, level=min(3, level + (program.name in bp.NQ_HARDER)),
+                             wrong=distinct_wrong(answer, item['pool'][k % 200:] + item['pool'], 3),
+                             aliases=[answer.upper()] + alts[:2], upstream='deepmind/narrativeqa', license_='Apache-2.0',
+                             license_note='summaries are Wikipedia-derived plot text', difficulty=item['shape'],
+                             slice_='iterate' if program.iterate else 'nested_scoped',
+                             smoke_children={name: answer for name in ('conclude', 'answer_from_events', 'answer_from_timeline', 'answer_from',
+                                                                       'propose_again', 'combine_steps') if name in program.helpers},
+                             children=_nq_notes(program, item), source=SOURCE)
+                out.append(_readouts(case, program))
     return out
 
 
@@ -884,7 +952,7 @@ def memory_items(seed=20261103, limit=(500, 40), max_chars=45000):
         answer = r['target'].strip()
         if not 3 <= len(sessions) <= 40 or not any(answer.lower() in s.lower() for s in sessions):
             continue
-        question = re.sub(r'^\(asked on [^)]*\)\s*', '', json.loads(r['prompt'])[0]).strip()
+        question = re.sub(r'^\(asked on [^()]*(?:\([^()]*\)[^()]*)*\)\s*', '', json.loads(r['prompt'])[0]).strip()
         episode = group_key('memory-episode', f'{meta["source"]}:{meta["episode"]}')
         pool[split].append(answer)
         out[split].append({'id': f'{meta["episode"]}:{index}', 'unit': f'bgkit-memory:{episode}', 'groups': [episode],
@@ -998,22 +1066,33 @@ def _memory_notes(item):
     return out
 
 
-def memory(train=420, held=30, seed=20261103):
+MEM_PROGRAMS = (MEM_FANIN, MEM_ITER, MEM_SELECT) + bp.MEM_NEW
+
+
+def memory(train=60, held=6, seed=20261103):
     family = 'memory_reading'
-    items = memory_items(seed, limit=(train, held))
+    programs = MEM_PROGRAMS
+    items = memory_items(seed, limit=(train * len(programs), (held * len(programs) + 1) // 2))
     out = []
-    for split in ('train', 'validation'):
-        for k, item in enumerate(items[split]):
-            answer = item['answer']
-            n = len(item['sessions'])
-            program = (MEM_FANIN, MEM_ITER, MEM_SELECT)[k % 3]
-            out.append(_case(program, family, item=item, inputs={'question': item['question'], 'sessions': item['sessions']},
+    for split, count in (('train', train), ('validation', held)):
+        # the verbatim-answer supply is a few hundred items: spread it evenly rather than filling the first programs
+        count = min(count, -(-len(items[split]) // len(programs)))
+        dealt = _deal(items[split], programs, count)
+        for program in programs:
+            for k, item in enumerate(dealt[program.name]):
+                answer = item['answer']
+                n = len(item['sessions'])
+                children = (_memory_iter_notes(item) if program is MEM_ITER else _memory_notes(item) if program in (MEM_FANIN, MEM_SELECT)
+                            else bp.mem_notes(program, item))
+                case = _case(program, family, item=item, inputs={'question': item['question'], 'sessions': item['sessions']},
                              expected=answer, oracle=dict({'level': 'span', 'normalization': 'qa', 'threshold': 0.8}),
-                             level=0 if n <= 8 else 1 if n <= 16 else 2 if n <= 28 else 3,
+                             level=min(3, (0 if n <= 8 else 1 if n <= 16 else 2 if n <= 28 else 3) + (program.name in bp.MEM_HARDER)),
                              wrong=distinct_wrong(answer, item['pool'][k % 100:] + item['pool'], 3), aliases=[answer.upper()],
                              upstream='bgkit/memory_qa_v2_pairs', license_='LicenseRef-unverified',
                              license_note='sessions from Conversation Chronicles; questions and answers by a bgkit teacher, kept only when the answer occurs verbatim in a session',
-                             difficulty=item['shape'], slice_='iterate' if program is MEM_ITER else 'nested_scoped',
-                             smoke_children={'answer_from_memory': answer} if program is MEM_ITER else {'settle': answer},
-                             children=_memory_iter_notes(item) if program is MEM_ITER else _memory_notes(item), source=SOURCE))
+                             difficulty=item['shape'], slice_='iterate' if program.iterate else 'nested_scoped',
+                             smoke_children={name: answer for name in ('answer_from_memory', 'settle', 'answer_from_summaries', 'resolve_conflict')
+                                             if name in program.helpers},
+                             children=children, source=SOURCE)
+                out.append(_readouts(case, program))
     return out
