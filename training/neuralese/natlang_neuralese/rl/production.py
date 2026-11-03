@@ -1465,6 +1465,8 @@ def resume_preflight(config_path, scratch):
     if not receipt.exists():
         return {**report, 'ok': True, 'status': 'unbound', 'reason': 'current round has no collection binding'}
     report['round_dir'] = str(round_dir)
+    from .interleave import bind_stage as bind_interleaved_stage
+    config, _ = bind_interleaved_stage(config, state, scratch_state)
     config = adopt_policy_loss_defaults(config, state, scratch_state)
     config = initial_capacity_collection(config, state)
     if state.get('native_participant') is not None:
@@ -1567,6 +1569,8 @@ def run(config_path, *, rounds=None, stop=None):
             config = resolve_recipe_data(config_path)
             if config.get('native_state') is not True:
                 raise ValueError('RL production hot reload cannot switch away from the native shared-state actor')
+            from .interleave import bind_stage as bind_interleaved_stage, window_due, run_sft_window
+            config, interleaved = bind_interleaved_stage(config, state, state_path)
             config = adopt_policy_loss_defaults(config, state, state_path)
             config = adopt_task_curriculum_defaults(config, state, state_path,
                 sealed_selection=(out / f"round-{state['round']:06d}-selection.json").exists())
@@ -1578,6 +1582,14 @@ def run(config_path, *, rounds=None, stop=None):
                 config={**config,'native_participant':state_participant}
             if not config.get('after_update') and not config.get('actor_command'):
                 raise ValueError('configure after_update before learning: every endpoint needs new weights')
+            # Declared interleaving: an SFT window runs between RL rounds, never
+            # inside a sealed selection or an active update.
+            if (interleaved is not None and not state.get('active_update_round')
+                    and not (out / f"round-{state['round']:06d}-selection.json").exists()
+                    and window_due(interleaved, state)):
+                if run_sft_window(config, interleaved, state, state_path, control) == 'stopped':
+                    return state
+                continue
             cases = list(read_jsonl(config['cases']))
             from .task_source import validate_current_materialized_task_contracts
             validate_current_materialized_task_contracts(cases)

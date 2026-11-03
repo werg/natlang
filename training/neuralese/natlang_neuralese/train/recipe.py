@@ -59,6 +59,10 @@ def refuse_retired_parameters(parameters):
 
 def validate_stage_parameters(kind, parameters):
     """Validate parameter shapes whose CLI actions are not scalar values."""
+    if kind == 'native_interleaved_rl':
+        from ..rl.interleave import validate_stage_parameters as validate_interleaved
+        validate_interleaved(parameters)
+        return
     if kind in {'native_state_rl','native_coefficient_rl'} and parameters.get('rl_policy_loss') is not None:
         from ..rl.policy_math import policy_loss_declaration
         policy_loss_declaration(parameters['rl_policy_loss'])
@@ -235,7 +239,19 @@ HANDLERS['native_coefficient_rl'] = {
                   'checkpoint_layers','checkpoint_layer_group_size','fp8_training','fp8_recipe'},
     'result':'checkpoint.pt'}
 COEFFICIENT_NATIVE_KINDS=frozenset({'native_coefficient_rl'})
-HEADLESS_NATIVE_KINDS = NATIVE_TRAINING_KINDS | COEFFICIENT_NATIVE_KINDS
+# Whole-graph JOLT+ RL interleaved with an earlier declared joint SFT stage. The
+# controller (rl.production run with ``interleaved_rl_stage``; rl/interleave.py)
+# alternates bounded RL rounds with that SFT stage's semantic-refresh windows;
+# the recipe binds the task source, selector, round budget and policy loss.
+HANDLERS['native_interleaved_rl'] = {
+    'module':'natlang_neuralese.rl.production','controller':True,
+    'required_inputs':{'rl_task_source'},'optional_inputs':set(),
+    'parameters':{'sft_stage','rl_rounds_per_window','start_with','rows_per_round','group','task_curriculum',
+                  'rl_policy_loss','update_objective','max_model_requests','max_turns','case_seconds',
+                  'neuralese_use_bonus'},
+    'result':'checkpoint.pt'}
+INTERLEAVED_RL_KINDS=frozenset({'native_interleaved_rl'})
+HEADLESS_NATIVE_KINDS = NATIVE_TRAINING_KINDS | COEFFICIENT_NATIVE_KINDS | INTERLEAVED_RL_KINDS
 NATIVE_IDENTITY_QUALIFICATION = 'native_state_runtime_qualified'
 
 
@@ -722,6 +738,12 @@ def load_recipe(path):
         if not isinstance(parameters, dict) or not set(parameters) <= HANDLERS[kind]['parameters']:
             raise ValueError('unknown stage parameters')
         validate_stage_parameters(kind, parameters)
+        if kind in INTERLEAVED_RL_KINDS:
+            sft = next((item for item in recipe['stages'] if item.get('id') == parameters.get('sft_stage')), None)
+            if (sft is None or sft.get('kind') != 'native_state_sft' or parameters['sft_stage'] not in required
+                    or type(effective_stage_parameters(sft, [], recipe).get('refresh_after_updates')) is not int):
+                raise ValueError('interleaved RL must require an earlier native_state_sft stage with declared '
+                                 'refresh_after_updates windows: ' + name)
         declared.add(name)
         complete.add(name)
     if not native_lineage(recipe):
@@ -2068,6 +2090,9 @@ def main(argv=None):
                 for dependency in stage['requires']:
                     predecessor = next(item for item in reports if item['id'] == dependency)
                     require_gate(predecessor['gate'], predecessor['kind'])
+                if HANDLERS[kind].get('controller'):
+                    raise ValueError('stage ' + stage['id'] + ' runs through its controller '
+                                     '(rl.production run with interleaved_rl_stage), not the stage runner')
                 output = directory / HANDLERS[kind]['result']
                 command = [sys.executable, '-m', HANDLERS[kind]['module']]
                 resolved = stage_inputs[stage['id']]

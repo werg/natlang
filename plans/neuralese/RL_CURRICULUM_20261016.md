@@ -244,3 +244,22 @@ window,17 sampled turns are scalar replies. The false first audit remains
 preserved; no sample was regenerated or replaced. This closes authored teacher
 text-execution measurement only. Training admission, exposure and actual student
 native-KV/hybrid-state qualification remain separate.
+
+## Interleaved RL as a declared recipe stage (2026-11-03)
+
+Recipe kind `native_interleaved_rl` (`rl/interleave.py`) declares whole-graph
+JOLT+ RL alternating with an earlier joint SFT stage. It requires that stage,
+names it in `sft_stage`, and binds input `rl_task_source` plus the controller's
+`rows_per_round`, `group`, `task_curriculum`, `rl_policy_loss`,
+`update_objective` and invocation limits. An ordinary RL production controller
+with `interleaved_rl_stage: <id>` (and `production_stage` = the SFT stage) runs
+`rl_rounds_per_window` completed RL rounds, then one SFT window: the existing
+mandatory continuation from its current head, in `sft-window-NNNNNN/`, to the SFT
+stage's declared `refresh_after_updates` semantic-refresh boundary. The window's
+earned checkpoint becomes the next actor's policy. `start_with: sft` runs a window
+first. An interrupted window resumes from its earned slot through
+`natlang.rolling-sft-resume/1`; a window that earns no update retires later
+windows (`interleave.sft_complete`). Windows never run inside a sealed selection
+or an active update. SFT quotas, exposure and optimizer/RNG stay in the carried
+checkpoint frames; an SFT window is never counted as an RL round. Controller
+state records `interleave.windows` and `interleave.stage_bindings`.
