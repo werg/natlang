@@ -79,9 +79,22 @@ production DiLoCo rounds are the qualification: watch actual merges, exports and
 
 ## Production status
 
-Window 0 (`ops/corrected-mix-full67-w1-1103`, runtime v42) launched 16:25 CET in sandbox 7512cb2f (cw3) at the ideal
-shape (1 GPU RTX PRO 6000 Blackwell 96 GB, 8 CPU / 64Gi; floor 4 CPU / 32Gi). Exporter unit
-`rl-cloud-export-corrected-1`.
+First start (7512cb2f, cw3, 16:25) restored parent and inputs but the controller failed in 3 s:
+`inherited_execution_admission` verifies the selected publication named inside the source-controller admission, a
+file the closure never shipped (it did not follow nested references). Fix 7422c599e: the closure ships bound
+(path + sha256) JSON records reachable from the control's execution-transition/admission and task_selection_history
+files (depth 4, <= 16 MiB each; source manifests not expanded): 1,401 files, 8.29 GB. The GPU was re-acquired
+first as a holder (`rl_cloud launch --parent-later`: bundle installed, waits for `rl-parent`), sandbox 8120d5a5
+(cw3, 1 GPU / 8 CPU / 64Gi), then re-seeded and handed the parent with `deliver-parent` (17:18). Exporter unit
+`rl-cloud-export-corrected-2`.
+
+Holder path: `launch --parent-later` + `deliver-parent` is the minimal in-place handover (acquire capacity first, ship
+inputs later). General takeover of a running lower-priority sandbox (`launch --reuse`) is not built yet.
+
+DiLoCo placement (owner 2026-11-03, AGENTS 16a944ad1): coordinator primary cohosted on a learner sandbox, replica on
+a learner in another account, started only once two GPU learners train; measure its RAM/CPU beside the learner and
+exercise one primary failover in the first rounds. `cloud_role` currently starts the coordinator on its own CPU
+sandbox; cohosting is the change for step 2.
 
 ## Open for step 2
 
