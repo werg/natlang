@@ -96,6 +96,17 @@ a learner in another account, started only once two GPU learners train; measure 
 exercise one primary failover in the first rounds. `cloud_role` currently starts the coordinator on its own CPU
 sandbox; cohosting is the change for step 2.
 
+Starts 3 and 4 failed on further unshipped verifier inputs: the `/home/werg` symlink changed `resolve()` (fixed by
+real mirror directories in bootstrap, b7ca76ea5), then the sealed-collection blocks directory (b50133206). After the
+fourth failure the sandbox was released, and the closure is now qualified locally before any relaunch. The CPU
+namespace replay is a docker container (bwrap is blocked by apparmor userns restrictions on DGX) that shows only the
+shipped closure at its DGX paths plus the code bundle. It found the protection-root packet cases (db2a060d6), the
+portable dev evidence and predecessor source shards named only inside nested manifests. The static policy cannot reach
+those, so the closure now includes the observed reads of a strace'd CPU controller start of the exact window
+(`sft_window closure --observed-reads`, lineage `observed_reads`, 05bfa26b6), including the content-addressed
+row-index cache entries. Runtime v42 misses the index for all 51 D32 acquired-session sources (~2-2.5 h of CPU
+indexing at start); the trace builds those entries on the DGX so that the GPU does not repeat the work.
+
 ## Open for step 2
 
 Controller windows plus DiLoCo: each worker's window control needs `trainer_parameters.diloco` (URL from the secret
