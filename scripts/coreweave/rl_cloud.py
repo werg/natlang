@@ -1330,7 +1330,7 @@ def export_lineage(run, name, live, log=print, get=True):
             _exec(box, ['chmod', '600', cap], 60)
             started = time.time()
             try:
-                result = _exec(box, ['python3', f"{run['root']}/runtime/{SANDBOX_HELPER}", 'upload', cap], 6 * 3600)
+                result = _exec(box, ['python3', str(REPO / SANDBOX_HELPER), 'upload', cap], 6 * 3600)
             finally:
                 _exec(box, ['rm', '-f', cap], 60)
             events = [json.loads(l) for l in result.stdout.splitlines() if l.startswith('{')]
