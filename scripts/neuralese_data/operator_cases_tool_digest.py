@@ -26,13 +26,14 @@ from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from natlang_neuralese.common import paths  # noqa: E402
 from neuralese_data import bgkit  # noqa: E402
 from neuralese_data.common import Reject, parquet_rows  # noqa: E402
 from neuralese_data.operator_cases_common import OUT_ROOT, RULES, CaseSink, iter_jsonl, stable_rank  # noqa: E402
 from neuralese_data.records import exact_refs_from, group_key, leakage, seal, text_hash  # noqa: E402
 
-S1_TOOL_DIGEST = Path('/mnt/external/natlang-development-data/data/neuralese/port-records/full-20261003/'
-                      'resume-20261003T1948-review1/final/tool_digest.port-records.jsonl')
+S1_TOOL_DIGEST = paths.resolve('data_hdd', 'natlang-development-data/data/neuralese/port-records/full-20261003/'
+                               'resume-20261003T1948-review1/final/tool_digest.port-records.jsonl')
 OPERATOR, SOURCE = 'compact-value', 'tool-digest'
 CONVERTER = 'scripts/neuralese_data/operator_cases_tool_digest.py@2'
 MAX_LISTED_REFS = 24
