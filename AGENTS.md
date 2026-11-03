@@ -65,6 +65,26 @@ and floors rounds at 16 tasks x 8 samples. Configs binding /1 adopt it through a
 recorded controller transition; sealed selections keep their recorded policy.
 Measure task-supply repetition with `scripts/rl_tasks/measure_repetition.py`.
 
+## Built capabilities must not lie fallow (owner, 2026-11-03)
+
+The SGLang actor was built and integrated, then left unused for days behind a
+bespoke exactness bar while RL rollouts ran about 100x too slowly on the native engine.
+When the slowness surfaced, the intended solution was not raised. Standard
+practice (fast-engine sampling, trainer-recomputed logprobs, truncated
+importance correction, divergence rejection) was never considered. Rules:
+- Keep `plans/neuralese/FALLOW_REGISTER.md` current: every built capability that
+  is not live, with its blocker, impact, next action and an active owner. Review it
+  every supervision cycle; adding a capability without wiring it in creates a
+  register entry, not a silent default-off flag.
+- When any symptom appears (slow, failing, poor learning), first check what we
+  already built for it (register, plans, AGENTS.md) before diagnosing from scratch,
+  and state that option explicitly.
+- A qualification bar may not block an otherwise-ready improvement indefinitely.
+  If a blocker has had no active work for 48 hours, either resolve it, replace the
+  bar with the standard-practice mechanism that keeps correctness safe, or record a
+  deliberate exclusion with its reason. Strictness that prevents use is not safety.
+- Deployment counts, not commits: a fix is done when the live job runs it.
+
 # Main goal: keep moving forward (owner, 2026-10-11)
 
 ## Digest-cache maintenance stays bounded and off the source filesystem (engineering, 2026-11-02)
