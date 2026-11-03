@@ -66,3 +66,32 @@ rendering is specified in `COMPACTION_OPERATOR_CONVERTERS.md` §1.
 state shuffled across rows (a derangement) and with zeroed state, plus optionally the runtime's text cut of the
 same value. Promotion of an operator to runtime default requires, on held worlds: NLL(actual) below shuffled, zeroed
 and text-cut, and a matching paired task-outcome check in the live runtime.
+
+## Pipeline (2026-11-03)
+
+1. Converters (Sonnet, `COMPACTION_OPERATOR_CONVERTERS.md` §2-§6) write cases to
+   `/mnt/external/natlang-compaction-operators-20261103/cases/<operator>/`.
+2. `scripts/neuralese_data/build_operator_graphs.py --cases <file or cases root>` renders graphs plus text-cut
+   siblings into `.../graphs/<operator>/<source>/` under the current protection projection (a ledgered watcher
+   renders each case file once its manifest lands).
+3. `scripts/neuralese_data/operator_stage_sources.py --out DIR` writes the operator train/held source manifests and
+   per-operator counts against the data targets.
+4. Training: a `native_state_sft` stage with `learned_operators: all` appends the operator train sources to the joint
+   SFT continuation through its recorded source transition. Rows attach text-initialized (recorded
+   `learned_operator_history`, new zero Adam moments), train at the learned-row rate and persist in `interface_state`.
+5. Measurement: `python -m natlang_neuralese.eval.neuralese_ablation --checkpoint C --graphs held --text-cut
+   held-textcut [--text-init-operators]` before and after training; promotion as above, then the runtime default
+   (`compaction: nl`) after the live check.
+
+## Measurements
+
+Baselines on full67 (`ops/bf95-quality-source-zero-sgd-v2-1102`), weighted consumer-target NLL; reports under
+`/mnt/external/natlang-compaction-operators-20261103/ablation/`.
+
+| Graphs | Rows | actual | shuffled | zeroed | text-cut | Reading |
+|---|---|---|---|---|---|---|
+| compact-params smoke (S1 repo_qa, text-init rows) | 21 | 4.375 | 4.370 | 4.614 | 4.132 | untrained state carries no row-specific information; the text cut is better |
+| compact-history smoke (S1 SWE checked, text-init) | 10 | 0.556 | 0.563 | 0.568 | 0.568 | small row-specific use |
+| extract smoke (hotpot, text-init) | 12 | 7.742 | 7.802 | 8.458 | 6.186 | documents are short, so the "text cut" is the whole text (upper bound) |
+
+These are the starting point the trained operators must beat; they are smoke-sized, not held-world results.
