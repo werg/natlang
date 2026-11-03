@@ -533,6 +533,30 @@ def _snapshot_leaves(bank):
     return _bank_leaves(bank, _TrainAll)
 
 
+def meta_sgd(a0, log_step, steps, support_pass, *, after_step=None):
+    """The published inner-fit law (`INNER_FIT_LAW`): ``steps`` Adam-preconditioned steps on free per-group
+    coefficients from ``a0``, each scaled by ``exp(log_step)``. ``support_pass(a)`` runs the support loss with its
+    backward into ``a`` and returns the loss value. Returns the fitted coefficients (detached), the summed step
+    directions and the per-step support losses. Coefficients a pass masks out get a zero gradient and stay put."""
+    step = log_step.exp()
+    a = a0.detach().clone().requires_grad_(True)
+    first, second, travel = torch.zeros_like(a), torch.zeros_like(a), torch.zeros_like(a)
+    history = []
+    for t in range(1, steps + 1):
+        a.grad = None
+        history.append(support_pass(a))
+        grad = a.grad if a.grad is not None else torch.zeros_like(a)
+        with torch.no_grad():
+            first.mul_(.9).add_(grad, alpha=.1)
+            second.mul_(.999).addcmul_(grad, grad, value=.001)
+            direction = (first / (1 - .9 ** t)) / ((second / (1 - .999 ** t)).sqrt() + 1e-8)
+            a.sub_(step * direction)
+            travel.add_(direction)
+        if after_step is not None:
+            after_step()
+    return a.detach(), travel, history
+
+
 class _TrainAll:
     train_bank = True
     train_basis = True
@@ -767,29 +791,19 @@ class BankMetaLearner:
         coefficients, residual, summed step directions and the support-loss history."""
         factors, basis, a0, log_step = self._values(which)
         support = support_set(self.engine, rows)
-        step = log_step.exp()
-        a = a0.clone().requires_grad_(True)
-        first, second, travel = torch.zeros_like(a0), torch.zeros_like(a0), torch.zeros_like(a0)
         res = self._residual() if residual and self.recipe.residual_rank else None
         optimizer = torch.optim.Adam([t for pair in res.values() for t in pair], lr=self.recipe.residual_lr) if res else None
-        history = []
         extra = {self.bank0.basis_artifact: basis}
-        for t in range(1, self.recipe.inner_steps + 1):
-            a.grad = None
+
+        def support_pass(a):
             if optimizer:
                 optimizer.zero_grad(set_to_none=True)
-            history.append(support.accumulate({SCOPE: self.placeholder}, lambda: self._tensors(a, factors, res),
-                                              extra_leaves=extra))
-            grad = a.grad if a.grad is not None else torch.zeros_like(a)
-            with torch.no_grad():
-                first.mul_(.9).add_(grad, alpha=.1)
-                second.mul_(.999).addcmul_(grad, grad, value=.001)
-                direction = (first / (1 - .9 ** t)) / ((second / (1 - .999 ** t)).sqrt() + 1e-8)
-                a.sub_(step * direction)
-                travel.add_(direction)
-            if optimizer:
-                optimizer.step()
-        return {'coefficients': a.detach(), 'travel': travel, 'history': history,
+            loss = support.accumulate({SCOPE: self.placeholder}, lambda: self._tensors(a, factors, res), extra_leaves=extra)
+            return loss
+
+        a, travel, history = meta_sgd(a0, log_step, self.recipe.inner_steps, support_pass,
+                                      after_step=optimizer.step if optimizer else None)
+        return {'coefficients': a, 'travel': travel, 'history': history,
                 'residual': {n: (X.detach(), Y.detach()) for n, (X, Y) in res.items()} if res else None}
 
     def score(self, rows, which, coefficients=None, residual=None):

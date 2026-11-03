@@ -719,7 +719,7 @@ def collection_binding(*, cases, endpoints, policy_id, rows, offset, group, root
                        neuralese_server, case_seconds, max_model_requests, max_turns, expected_native=None,
                        behavior_top_k=None, system_prompt=None, prompt_rendering=None, guidance_stage=None,
                        coefficient_policy=None, context_tokens=None, neuralese_use_bonus=None,
-                       program_guidance=None):
+                       program_guidance=None, adapters=None):
     """The exact provenance a collection binds (no side effects): cases, policy, sampling, runtime and actor."""
     from ..common.hashing import sha256_file_hex, sha256_hex, canonical_json_sha256_hex
     runtime = Path(runtime or root('repo') / 'ts-host')
@@ -741,7 +741,8 @@ def collection_binding(*, cases, endpoints, policy_id, rows, offset, group, root
         **({'guided': True, 'system_prompt_sha256': sha256_hex(system_prompt.encode())}
            if system_prompt is not None else {}),
         **({'guided': True, 'program_guidance_sha256': canonical_json_sha256_hex(program_guidance)}
-           if program_guidance is not None else {})}
+           if program_guidance is not None else {}),
+        **({'adapters': adapters} if adapters is not None else {})}
     coefficient_runtime=None
     if coefficient_policy is not None:
         from ..model.native_coefficient_policy import runtime_binding
@@ -798,7 +799,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
             case_seconds=600, max_model_requests=128, max_turns=160, control=None, expected_native=None, coefficient_policy=None,
             behavior_top_k=None, teacher_attempts=0, teacher_plan='nl',
             system_prompt=None, prompt_rendering=None, guidance_stage=None, context_tokens=None,
-            neuralese_use_bonus=None, program_guidance=None):
+            neuralese_use_bonus=None, program_guidance=None, adapters=None):
     """Bounded subprocess fanout; existing collector and exact task verifier. ``behavior_top_k`` also records the
     actors' top-k sampler log-probs at every sampled position (score-centered RL); None leaves collection unchanged.
     ``teacher_attempts`` JOLT+ teacher attempts per group (the crisp plan; ``teacher_plan='nl'`` lets
@@ -814,7 +815,11 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     collection binding and added to correct student episodes that pass Neuralese state between calls.
     ``program_guidance`` (a ``natlang.memetic-program-guidance/1`` binding) is stored native program guidance every call
     of every rollout carries through the runtime's program-guidance channel (tool loop and decision readouts alike);
-    it is bound by digest into the collection binding."""
+    it is bound by digest into the collection binding.
+    ``adapters`` (``natlang.memetic-adapter-actor/1``-style ``{'entries': [{id, scale}], ...}`` binding) runs every
+    request of every rollout with exactly that native adapter stack (``x_natlang_adapters``): an adapter-composed
+    actor, bound in full into the collection binding. The server attests the base checkpoint; each captured turn
+    records the effective adapted identity and its adapter binding."""
     if prompt_rendering not in (None,'full'):
         raise ValueError('native on-policy collection requires the full prompt contract')
     if guidance_stage not in (None,'backbone'):
@@ -827,6 +832,12 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         raise InterruptedError('collection stop requested')
     if not endpoints or workers < 1:
         raise ValueError('RL needs served endpoints and positive worker concurrency')
+    if adapters is not None and (not isinstance(adapters, dict) or not isinstance(adapters.get('entries'), list)
+            or not adapters['entries'] or any(not isinstance(e, dict) or set(e) != {'id', 'scale'}
+                                              or not isinstance(e['id'], str) for e in adapters['entries'])):
+        raise ValueError('adapters is a binding with a non-empty entries list of {id, scale}')
+    if adapters is not None and not neuralese_server:
+        raise ValueError('native adapters need the native-state server')
     out = Path(out).resolve()
     out.mkdir(parents=True, exist_ok=True)
     binding = collection_binding(cases=cases, endpoints=endpoints, policy_id=policy_id, rows=rows, offset=offset,
@@ -835,7 +846,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         expected_native=expected_native, behavior_top_k=behavior_top_k, system_prompt=system_prompt,
         prompt_rendering=prompt_rendering, guidance_stage=guidance_stage, coefficient_policy=coefficient_policy,
         context_tokens=context_tokens, neuralese_use_bonus=bonus_setting(neuralese_use_bonus),
-        program_guidance=program_guidance)
+        program_guidance=program_guidance, adapters=adapters)
     coefficient_runtime = (binding.get('coefficient_policy') or {}).get('runtime')
     if coefficient_policy is not None:
         coefficient_policy = Path(coefficient_policy).resolve(strict=True)
@@ -907,6 +918,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     config = out / 'sampling-config.json'
     write_json_durable(config, {'guidance': False, 'x_natlang_rl_capture': True,
         **({'x_natlang_rl_top_k': behavior_top_k} if behavior_top_k is not None else {}),
+        **({'x_natlang_adapters': adapters['entries']} if adapters is not None else {}),
         **({'x_natlang_native_coefficient_policy':coefficient_runtime} if coefficient_runtime is not None else {})})
     guidance_refusal = None
     if teacher_attempts:
