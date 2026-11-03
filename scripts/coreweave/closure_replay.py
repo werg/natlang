@@ -45,7 +45,10 @@ def mounts(run, lineage, closure, parent, work, writable):
     copy.mkdir(parents=True)
     for p in root.iterdir():
         if p.name != 'parent':
-            (shutil.copytree if p.is_dir() else shutil.copy2)(p, copy / p.name, symlinks=True)
+            if p.is_dir():
+                shutil.copytree(p, copy / p.name, symlinks=True)
+            else:
+                shutil.copy2(p, copy / p.name, follow_symlinks=False)
     (copy / 'parent').mkdir()
     code = work / 'code'  # the git snapshot the sandbox bundle carries
     if code.exists():
