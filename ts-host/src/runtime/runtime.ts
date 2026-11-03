@@ -1,11 +1,11 @@
 import type { WeightBinding } from '../adaptation/weights/binding.js';
 import { setLexicalNativeAdapterSource, setLexicalSoftStateSource, type NativeAdapterBinding } from '../native/model-recording.js';
 import { ProgramView } from '../adaptation/program-view.js';
-import { nativeProgramGuidance as validateNativeProgramGuidance } from '../guidance/program.js';
+import { programGuidance as validateProgramGuidance, programGuidanceProgram } from '../guidance/program.js';
 import { isAdaptationBinding, bindAdaptation } from '../adaptation/compatibility.js';
 import { fingerprint } from '../adaptation/identity.js';
 import type { ProgramDescriptor, AdaptationBinding, ExecutorIdentity } from '../adaptation/types.js';
-import type { MemeticGuidanceBinding, NativeProgramGuidance } from '../guidance/program.js';
+import type { ProgramGuidance, ProgramGuidanceInput } from '../guidance/program.js';
 import { declarationNamespace } from '../native/external.js';
 import type { EvalEnvironment } from '../native/evaluator.js';
 import type { DecisionScorer, ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
@@ -92,8 +92,9 @@ export type NatlangRuntimeOptions = {
   /** Tuned weight releases (`natlang tune`), one per program. A function is read at each task creation, so a newly
    * activated release serves new tasks while running tasks finish on the one they pinned. */
   weights?: readonly WeightBinding[] | (() => readonly WeightBinding[]);
-  /** Exact stored native guidance binding emitted by the memetic guidance exporter. */
-  nativeProgramGuidance?: MemeticGuidanceBinding;
+  /** Exact stored native guidance emitted by the memetic guidance exporter: one binding, or a list of scoped bindings
+   * of one program (each call imports its function's binding, else the program-wide one). */
+  nativeProgramGuidance?: ProgramGuidanceInput;
   executorIdentity?: ExecutorIdentity;
   isolateModules?: boolean;
   signal?: AbortSignal;
@@ -177,7 +178,7 @@ export type TaskOptions = { program?: ProgramDescriptor; adaptation?: Adaptation
   /** Pin these weight releases instead of the runtime's current ones. */
   weights?: readonly WeightBinding[];
   services?: Services; serviceDeclarations?: Record<string, string>;
-  nativeProgramGuidance?: MemeticGuidanceBinding;
+  nativeProgramGuidance?: ProgramGuidanceInput;
   serviceScopes?: Record<string, string[]>; signal?: AbortSignal; trace?: TraceSink; name?: string;
   /** Live events of this task (`LiveEvent`), besides the runtime's `onLive`. */
   onLive?: LiveSink;
@@ -230,7 +231,7 @@ export class NatlangTask {
   readonly programView: ProgramView;
   /** The weight releases pinned at creation; every call of this task, inner calls included, resolves from these. */
   readonly weights: readonly WeightBinding[];
-  readonly nativeProgramGuidance?: NativeProgramGuidance;
+  readonly nativeProgramGuidance?: ProgramGuidance;
   readonly specialization?: SpecializationMode;
   readonly auditOf?: string;
   /** The last failed call per caller and definition revision, so a retry can be recorded against it. */
@@ -303,12 +304,12 @@ export class NatlangTask {
     let binding = options.adaptation === undefined ? runtime.options.adaptation : options.adaptation;
     const program = options.program ?? runtime.options.program ?? binding?.program;
     const guidanceBinding = options.nativeProgramGuidance ?? runtime.options.nativeProgramGuidance;
-    if (guidanceBinding) {
+    this.nativeProgramGuidance = guidanceBinding ? validateProgramGuidance(guidanceBinding) : undefined;
+    if (this.nativeProgramGuidance) {
       if (!program) throw new Error('native program guidance requires its exact program descriptor');
-      if (guidanceBinding.program_id !== program.id)
+      if (programGuidanceProgram(this.nativeProgramGuidance) !== program.id)
         throw new Error('native program guidance binding belongs to a different program');
     }
-    this.nativeProgramGuidance = guidanceBinding ? validateNativeProgramGuidance(guidanceBinding) : undefined;
     if (binding) {
       const artifact = binding.artifact;
       // A package can be loaded through multiple module URLs. Revalidate foreign

@@ -1,5 +1,17 @@
 # Model-facing changes and their measurement
 
+### 2026-11-03 — Scoped program guidance (M6) and `withhold:` tool restriction (M4) (debt: live measurement)
+
+(M6) Stored program guidance can be a list of scoped bindings; each call now imports only its own function's binding
+(program-wide text followed by the function's part), else the program-wide one. Before, in the collector path every
+call of a run (root and nested, through the shared agent) imported the same composed text with every function's
+section; nested calls of a function now see a different, shorter `<natlang_program_guidance>` state. (M4) A `.nl`
+function's `withhold: [tool, ...]` frontmatter removes those tools from its calls' tool schema and the directory-reducer
+tool list in the system prompt (an unbanked prompt variant), and a call to one is refused with "`<tool>` is withheld
+from calls of `<fn>` by its definition; do this step with the tools this call offers". **Debt:** about 48 episodes
+each: scoped versus composed guidance on the memetic packet (task outcome per scoped function), and attempted calls of
+withheld tools plus recovery rate after the refusal.
+
 ### 2026-11-03 — Harness defects H1-H5 from the memetic review (debt: live measurement)
 
 Model-facing: (H1) an eval that completes without a value now reports `undefined`, not a bare `null`, after its

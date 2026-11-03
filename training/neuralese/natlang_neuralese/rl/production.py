@@ -813,8 +813,10 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     served window forces compaction long before the model needs it.
     ``neuralese_use_bonus`` (None: task_rollouts.DEFAULT_NEURALESE_USE_BONUS; 0 opts out) is bound into the
     collection binding and added to correct student episodes that pass Neuralese state between calls.
-    ``program_guidance`` (a ``natlang.memetic-program-guidance/1`` binding) is stored native program guidance every call
-    of every rollout carries through the runtime's program-guidance channel (tool loop and decision readouts alike);
+    ``program_guidance`` (a ``natlang.memetic-program-guidance/1`` binding, or a list of scoped ones of one program:
+    at most one without ``function``, at most one per ``function``) is stored native program guidance; each call of
+    every rollout, root and nested, imports its own function's binding, else the program-wide one, through the
+    runtime's program-guidance channel (tool loop and decision readouts alike);
     it is bound by digest into the collection binding.
     ``adapters`` (``natlang.memetic-adapter-actor/1``-style ``{'entries': [{id, scale}], ...}`` binding) runs every
     request of every rollout with exactly that native adapter stack (``x_natlang_adapters``): an adapter-composed
@@ -909,6 +911,11 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     if program_guidance is not None:
         if not neuralese_server:
             raise ValueError('stored native program guidance needs the native-state server')
+        # One binding, or a list of scoped bindings of one program (optional ``function``: the .nl file stem); the
+        # runtime (ts-host guidance/program.ts programGuidance) validates the scoping invariants strictly.
+        if not (isinstance(program_guidance, dict) or (isinstance(program_guidance, list) and program_guidance and
+                                                         all(isinstance(item, dict) for item in program_guidance))):
+            raise ValueError('program_guidance is one binding or a nonempty list of bindings')
         guidance_file = out / 'program-guidance.json'
         write_json_durable(guidance_file, program_guidance)
         for entry in entries:

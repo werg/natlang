@@ -4,7 +4,7 @@
  * with the interpreter in the caller's task, and returns the checked value or throws `NatlangCallError`.
  */
 import { DECISION_SYSTEM_PROMPT } from '../native/decision.js';
-import { authoredTextGuidance } from '../guidance/program.js';
+import { authoredTextGuidance, guidanceForCall, programGuidanceProgram } from '../guidance/program.js';
 import { hexDigest } from '../native/hash.js';
 import { NativeToolAgent } from '../native/agent.js';
 import { NativeRuntime, inferValueType } from '../native/runtime.js';
@@ -54,6 +54,8 @@ export type CallableDefinition = {
   readout?: 'decision' | 'template';
   /** The runtime's model this definition runs on (`models`); the default model when absent or not configured. */
   model?: string;
+  /** Tools this definition's own calls are not offered (`withhold:` frontmatter; loader WITHHOLDABLE_TOOLS). */
+  withhold?: readonly string[];
   revision?: string;
   description?: string;
   /** Source path for named definitions. */
@@ -295,6 +297,7 @@ export function definitionNode(definition: CallableDefinition, inputs: unknown[]
   node.codebase = definition.codebase;
   node.hostClasses = options.classes;
   if (definition.readout) node.readout = definition.readout;
+  if (definition.withhold?.length) node.withheldTools = [...definition.withhold];
   const env = new TypeEnv(node.types);
   env.classes = options.classes;
   env.dialects = options.dialects;
@@ -447,7 +450,8 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     // An instantiated generic result keeps the instance its call site chose.
     definition = { ...definition, body: record.instructions, revision: record.revision,
       params: Object.entries(record.args).map(([name, type]) => ({ name: name.replace(/\?$/, ''), type, optional: name.endsWith('?') })),
-      returns: definition.representation ? definition.returns : record.returns, types: record.types, codebase: record.codebase };
+      returns: definition.representation ? definition.returns : record.returns, types: record.types, codebase: record.codebase,
+      withhold: record.withhold };
   } else if (replacement?.kind === 'lambda.instructions' && options.instructions === undefined)
     definition = { ...definition, body: replacement.template.segments[0]! };
   // Capture this call's source revision; later edits affect future calls only.
@@ -656,10 +660,12 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   const addendum = [frame.systemAddendum, attempt?.guidance].filter(Boolean).join('\n\n') || undefined;
   const nativeReader = !!(task.runtime.options.neuralese?.nativeStateConsumer ||
     task.runtime.options.neuralese?.nativeStateConsumerForCall);
-  const boundGuidance = task.nativeProgramGuidance?.binding?.program_id === owner ? task.nativeProgramGuidance : undefined;
-  const selectedNativeGuidance = eligibleGuidance ? boundGuidance ??
-    (nativeReader ? view.nativeGuidance() : undefined) : undefined;
-  const selectedAuthoredGuidance = eligibleGuidance && !selectedNativeGuidance && !nativeReader && view.guidance() && view.program?.id ?
+  // Bound stored guidance of this program replaces the view's: the call imports its function's binding, else the
+  // program-wide one, else none (guidance/program.ts guidanceForCall).
+  const guidanceBound = !!owner && programGuidanceProgram(task.nativeProgramGuidance) === owner;
+  const selectedNativeGuidance = !eligibleGuidance ? undefined : guidanceBound ?
+    guidanceForCall(task.nativeProgramGuidance, definition.name) : nativeReader ? view.nativeGuidance() : undefined;
+  const selectedAuthoredGuidance = eligibleGuidance && !guidanceBound && !selectedNativeGuidance && !nativeReader && view.guidance() && view.program?.id ?
     authoredTextGuidance(view.guidance(), view.program.id) : undefined;
   const handoffNames = task.runtime.options.escalation?.enabled === false ? [] : task.runtime.options.escalation?.models ?? [];
   if (new Set(handoffNames).size !== handoffNames.length) throw new Error('escalation model chain contains a cycle');

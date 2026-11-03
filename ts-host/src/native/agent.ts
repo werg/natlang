@@ -1,7 +1,7 @@
 import { nativeProtocolFailure, nativeProtocolFeedback } from './native-protocol.js';
 import { renderAuthoredTextGuidance } from '../guidance/program.js';
 import { fingerprint } from '../adaptation/identity.js';
-import type { AuthoredTextGuidance, NativeProgramGuidance } from '../guidance/program.js';
+import { guidanceForCall, type AuthoredTextGuidance, type NativeProgramGuidance, type ProgramGuidance } from '../guidance/program.js';
 import { formatType } from './types.js';
 import type { Type, TypeEnv } from './types.js';
 import { MISSING, Reject, coerce, isLive, liveId, liveLabel, problems } from './values.js';
@@ -456,7 +456,9 @@ export class NativeToolAgent {
         guidance?: boolean | { repeat?: number; syntax?: boolean; retries?: number; tools?: string[] } }[];
       modelBudget?: ModelBudget;
       temperature?: number; maxSeconds?: number; promptRendering?: PromptRendering; systemPrompt?: string | (() => string);
-      programGuidance?: NativeProgramGuidance; authoredTextGuidance?: AuthoredTextGuidance;
+      /** Stored program guidance: one binding, or a scoped set from which each call imports its function's binding,
+       * else the program-wide one (guidance/program.ts guidanceForCall). */
+      programGuidance?: ProgramGuidance; authoredTextGuidance?: AuthoredTextGuidance;
       maxFailureRepairs?: number;
       /** The readout's system prompt (default DECISION_SYSTEM_PROMPT; the kernel adds iteration addenda). */
       decisionSystemPrompt?: () => string;
@@ -1131,7 +1133,9 @@ export class NativeToolAgent {
       tools.splice(2, 0, ...fileTools.filter(item => offered.includes(item.function.name))
         .sort((a, b) => offered.indexOf(a.function.name) - offered.indexOf(b.function.name)));
     }
-    return tools;
+    // The definition's `withhold:` frontmatter takes those tools out of its calls' schema (the session refuses them too).
+    const withheld = session.lam.withheldTools;
+    return withheld?.length ? tools.filter(item => !withheld.includes(item.function.name)) : tools;
   }
 
   tools(session: NativeSession): unknown[] {
@@ -1416,8 +1420,7 @@ export class NativeToolAgent {
   }
 
   /** Encode stored policy against this runtime's exact native reader before any model call. */
-  private async runtimeProgramGuidance(): Promise<string> {
-    const guidance = this.options.programGuidance;
+  private async runtimeProgramGuidance(guidance: NativeProgramGuidance | undefined): Promise<string> {
     if (!guidance) return '';
     if (guidance.kind !== 'native-program-guidance') throw new TypeError('unknown program guidance binding');
     const neuralese = this.options.neuralese;
@@ -1501,7 +1504,8 @@ export class NativeToolAgent {
     // Fixed for the whole call, so the server can reuse its prompt cache across turns.
     let adaptedSystem: string | undefined;
     // The program's guidance, which every prompt of the call carries: the tool loop's system prompt and the decision readout's.
-    const guidance = renderAuthoredTextGuidance(this.options.authoredTextGuidance) + await this.runtimeProgramGuidance();
+    const guidance = renderAuthoredTextGuidance(this.options.authoredTextGuidance) +
+      await this.runtimeProgramGuidance(guidanceForCall(this.options.programGuidance, session.lam.functionName));
     const systemPrompt = () => {
       if (adaptedSystem !== undefined) return adaptedSystem;
       const base = typeof this.options.systemPrompt === 'function' ? this.options.systemPrompt() : this.options.systemPrompt ?? TOOLS_PROMPT;
@@ -1509,7 +1513,7 @@ export class NativeToolAgent {
       const composed = (allowAdHoc ? base : promptAtNlDepthLimit(base)) +
       (Object.keys(session.lam.codebase).length ? FUNCTION_TOOLS_PROMPT : '') +
       (session.lam.projectTransaction ? directoryReducerPrompt(this.options.fileTools, allowAdHoc,
-        session.lam.projectTransaction.folder.access !== 'read') : '') +
+        session.lam.projectTransaction.folder.access !== 'read', session.lam.withheldTools) : '') +
       guidance;
       if (this.options.programGuidance !== undefined || this.options.authoredTextGuidance !== undefined) adaptedSystem = composed;
       return composed;

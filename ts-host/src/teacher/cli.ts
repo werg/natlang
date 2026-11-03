@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { chatRequestControls, wireControls } from './chat-request-controls.js';
 import type { GuidanceRun } from '../native/training-guidance.js';
-import { nativeProgramGuidance } from '../guidance/program.js';
+import { programGuidance as parseProgramGuidance } from '../guidance/program.js';
 import { providerRequestControls } from './provider-request-controls.js';
 import { APPROACH_PROMPT, FILE_TOOL_SURFACES, type FileToolSurface } from '../native/prompt.js';
 import { NATIVE_TOOL_SCHEMA } from '../native/tool-surface.js';
@@ -57,7 +57,7 @@ async function main(): Promise<void> {
       '         --action-max-tokens N  independent per-action output cap (planner cap remains separate)\n' +
       '         --request-retries N (default 1) repeats the same request; --transport-retries N (default 0) retries the whole case\n' +
       '         --retry-delay-ms N --worker-stagger SECONDS --system-file PATH\n' +
-      '         --program-guidance-file PATH  (natlang.memetic-program-guidance/1 binding every call carries; needs --neuralese-server)\n' +
+      '         --program-guidance-file PATH  (natlang.memetic-program-guidance/1 binding, or a list of scoped ones; needs --neuralese-server)\n' +
       '         --chat-request-config FILE  JSON sampling/template controls retained in provenance\n' +
       '         --provider-request-config FILE  JSON transport controls retained in provenance\n' +
       '         --provider-request-timeout-ms N --provider-action-cycle-timeout-ms N\n' +
@@ -110,7 +110,7 @@ async function main(): Promise<void> {
     throw new Error('training-guidance-unavailable: x_natlang_guidance runs on a native-state server; add --neuralese-server');
   if (flags.has('--program-guidance-file') && !flags.has('--neuralese-server'))
     throw new Error('--program-guidance-file needs the native reader of --neuralese-server');
-  const programGuidance = flags.has('--program-guidance-file') ? nativeProgramGuidance(JSON.parse(
+  const programGuidance = flags.has('--program-guidance-file') ? parseProgramGuidance(JSON.parse(
     await readFile(resolve(flags.get('--program-guidance-file')!), 'utf8'))) : undefined;
   const judgeModelId = flags.get('--judge-model-id');
   if ([judgeModelId, flags.get('--judge-server'), flags.get('--judge-provider')].some(Boolean) &&

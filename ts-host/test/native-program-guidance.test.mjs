@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { NativeToolAgent } from '../dist/native/agent.js';
-import { authoredTextGuidance, nativeProgramGuidance } from '../dist/adaptation/index.js';
+import { authoredTextGuidance, guidanceForCall, nativeProgramGuidance, programGuidance, programGuidanceIdentity } from '../dist/adaptation/index.js';
+import { parseNatlang, PATH_ONLY } from '../dist/runtime/loader.js';
+import { natlangDefinition } from '../dist/runtime/callable.js';
+import { prepareDefinitionNode } from '../dist/runtime/kernel.js';
 import { NatlangRuntime, NatlangTask } from '../dist/runtime/runtime.js';
 import { nodePlatform } from '../dist/runtime/node.js';
-import { interpreter, lambda } from './support/natlang.mjs';
+import { interpreter, lambda, nl } from './support/natlang.mjs';
 
 const identity = checkpoint => ({ architecture: 'fixture-native', checkpoint_sha256: checkpoint.repeat(64),
   tokenizer_fingerprint: 'b'.repeat(64), embedding_weight_sha256: 'c'.repeat(64), consumption_modes: [] });
@@ -159,4 +162,81 @@ test('explicit text-only authored guidance is inserted into the composed system 
   const prompt = requests[0].messages[0].content;
   assert.equal(prompt.split('<natlang_program_guidance>').length - 1, 1);
   assert.equal(prompt.split('Use the approved procedure.').length - 1, 1);
+});
+
+test('scoped guidance lists are validated strictly', () => {
+  const student = identity('a');
+  const at = (letter, extra = {}) => ({ ...binding(student, `Guidance ${letter}.`, 'nzs1_' + letter.repeat(52)), ...extra });
+  assert.throws(() => programGuidance([]), /at least one binding/);
+  assert.throws(() => programGuidance([at('a'), at('b')]), /more than one program-wide/);
+  assert.throws(() => programGuidance([at('a', { function: 'refine' }), at('b', { function: 'refine' })]), /more than one binding for function refine/);
+  assert.throws(() => programGuidance([at('a'), at('b', { program_id: 'other-program' })]), /different programs/);
+  assert.throws(() => programGuidance([at('a', { function: 'not a name' })]), /invalid natlang.memetic-program-guidance/);
+  const plain = programGuidance(at('a'));
+  assert.equal(plain.kind, 'native-program-guidance');
+  assert.deepEqual(programGuidanceIdentity(plain), at('a'));
+  const scoped = programGuidance([at('a'), at('b', { function: 'refine' })]);
+  assert.equal(guidanceForCall(scoped, 'refine').binding.native_state_id, 'nzs1_' + 'b'.repeat(52));
+  assert.equal(guidanceForCall(scoped, 'other').binding.native_state_id, 'nzs1_' + 'a'.repeat(52));
+  assert.equal(guidanceForCall(scoped, 'nl@inline').binding.native_state_id, 'nzs1_' + 'a'.repeat(52));
+  const onlyRefine = programGuidance(at('b', { function: 'refine' }));
+  assert.equal(guidanceForCall(onlyRefine, 'other'), undefined);
+  assert.equal(guidanceForCall(onlyRefine, 'refine').binding.function, 'refine');
+});
+
+test('each call of a run imports its own function\'s guidance, else the program-wide one (root and nested)', async () => {
+  const student = identity('a');
+  const ids = { program: 'nzs1_' + 'p'.repeat(52), polish: 'nzs1_' + 'r'.repeat(52) };
+  const texts = { [ids.program]: 'Program-wide guidance.', [ids.polish]: 'Program-wide guidance.\n\nFor polish: be terse.' };
+  const store = { async pin() {}, async getNativeState(stateId) {
+    return texts[stateId] ? { id: stateId, metadata: { schema: 'neuralese.native-state/1', text: texts[stateId], ...student } } : undefined;
+  } };
+  const seen = {};
+  const driver = async request => {
+    const opening = String(request.messages[1].content);
+    const call = /^You are inside this call: (\w+)\(/.exec(opening)?.[1];
+    const states = request.messages[0].content.filter(part => part.type === 'native_state').map(part => part.id);
+    (seen[call] ??= []).push(...states);
+    if (call !== 'main') return { calls: [['return_result', { status: 'success', value: call }]] };
+    if (request.messages.some(message => message.role === 'tool' && !String(message.tool_call_id).startsWith('scope_')))
+      return { calls: [['return_result', { status: 'success' }]] };
+    return { calls: [['eval', { code: 'const a = await polish("x"); const b = await other("y"); return a + b' }]] };
+  };
+  driver.neuralese = true;
+  const scoped = programGuidance([
+    { ...binding(student, texts[ids.program], ids.program) },
+    { ...binding(student, texts[ids.polish], ids.polish), function: 'polish' }]);
+  const agent = new NativeToolAgent(driver, { maxTurns: 4, programGuidance: scoped, neuralese: { store, nativeStateConsumer: student } });
+  const child = name => nl(name, { args: { input: 'string' }, returns: 'string', instructions: `Answer for input.` });
+  const runtime = interpreter({ agent: currentSession => agent.run(currentSession) });
+  const result = await runtime.run(lambda({ type: '() => string', instructions: 'Combine polish and other.', function: 'main',
+    codebase: { polish: child('polish'), other: child('other') } }));
+  assert.equal(result.value, 'polishother');
+  assert.deepEqual([...new Set(seen.main)], [ids.program]);
+  assert.deepEqual([...new Set(seen.polish)], [ids.polish]);
+  assert.deepEqual([...new Set(seen.other)], [ids.program]);
+});
+
+test('withhold: frontmatter takes tools out of a function\'s schema and refuses them with a teaching error', async () => {
+  assert.throws(() => parseNatlang('bad.nl', '---\nreturns: string\nwithhold: [eval]\n---\nDo it.\n', {}, PATH_ONLY),
+    /withhold lists tools this function's calls are not offered/);
+  const record = parseNatlang('careful.nl', '---\nreturns: string\nwithhold: [edit_code, diff_code]\n---\nDo it.\n', {}, PATH_ONLY);
+  assert.deepEqual(record.withhold, ['edit_code', 'diff_code']);
+  record.codebase = { helper: nl('helper', { returns: 'string', instructions: 'Help.' }) };
+  const node = await prepareDefinitionNode(natlangDefinition(record), []);
+  assert.deepEqual(node.withheldTools, ['edit_code', 'diff_code']);
+  const requests = [];
+  const driver = async request => {
+    requests.push(request);
+    if (requests.length === 1) return { calls: [['edit_code', { name: 'helper', find: 'Help.', replace_with: 'Assist.' }]] };
+    return { calls: [['return_result', { status: 'success', value: 'done' }]] };
+  };
+  const agent = new NativeToolAgent(driver, { maxTurns: 3 });
+  const result = await interpreter({ agent: currentSession => agent.run(currentSession) }).run(node);
+  assert.equal(result.value, 'done');
+  const offered = requests[0].tools.map(item => item.function.name);
+  assert.ok(offered.includes('read_code'));
+  assert.ok(!offered.includes('edit_code') && !offered.includes('diff_code'));
+  const feedback = requests[1].messages.find(message => message.role === 'tool' && !String(message.tool_call_id).startsWith('scope_'));
+  assert.match(String(feedback.content), /edit_code is withheld from calls of careful by its definition; do this step with the tools this call offers/);
 });

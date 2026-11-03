@@ -135,7 +135,8 @@ export function natlangDefinition(record: NatlangRecord): CallableDefinition {
   return { programId: record.programId, id: record.id, name: record.name, body: record.instructions,
     params: Object.entries(record.args).map(([raw, type]) => ({ name: raw.replace(/\?$/, ''), type, optional: raw.endsWith('?') })),
     returns: record.returns, ...(record.declaredParameters ? { declaredParameters: true as const } : {}), ...(record.generic ? { generic: record.generic } : {}), types: record.types, codebase: record.codebase as Record<string, unknown>,
-    subtype: record.subtype, ...(record.readout ? { readout: record.readout } : {}), ...(record.model ? { model: record.model } : {}), description: record.description, source: record.source, revision: record.revision };
+    subtype: record.subtype, ...(record.readout ? { readout: record.readout } : {}), ...(record.model ? { model: record.model } : {}),
+    ...(record.withhold ? { withhold: record.withhold } : {}), description: record.description, source: record.source, revision: record.revision };
 }
 
 /**

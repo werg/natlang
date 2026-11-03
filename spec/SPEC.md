@@ -74,13 +74,16 @@ Assess every observation with assess, then summarize the assessments.
 ```
 
 Frontmatter keys are `description`, `args`, `returns`, `generic`, `types`, `kind`
-(`function` or `directory-reducer`), `readout` (see Decision readout), `model`, and `uses`. `generic` declares a
+(`function` or `directory-reducer`), `readout` (see Decision readout), `model`, `uses` and `withhold`. `generic` declares a
 representation-generic result ([Neuralese](ext/neuralese.md#generic-results)): `generic: { R: string | Neuralese<string> }`
 with `returns: R`. `model: NAME` runs every
 call of the function on the runtime's model of that name (the `models` runtime option), and on the default model
 when the runtime has none. `uses` lists package
 items the function may call besides its companion folder, by path from the package root (`uses: [harness/cut]`); each
-joins its context under its base name, with its own companion folder. `args`, `returns`, `generic` and `types` hold
+joins its context under its base name, with its own companion folder. `withhold` lists optional tools the
+function's own calls are not offered (`withhold: [delegate]`): `edit_code`, `diff_code` and the folder tools; eval,
+return_result, read_page, compact_history and read_code are always offered. A withheld tool is absent from the call's
+tool schema and prompt, and calling it anyway is refused with a one-sentence error. `args`, `returns`, `generic` and `types` hold
 TypeScript type text, read verbatim rather than as YAML, so types need no
 quoting: `rows: { title: string }[]`, `pick?: (x: string) => number`,
 `returns: "yes" | "no"`. `args` and `types` are one `name: type` per indented

@@ -55,6 +55,8 @@ export type NatlangRecord = { programId?: string; kind: 'natlang'; id: string; n
    * from the package root. Each is in `codebase` under its base name.
    */
   uses?: string[];
+  /** `withhold: [delegate]` in the frontmatter: tools this function's own calls are not offered (WITHHOLDABLE_TOOLS). */
+  withhold?: string[];
   /**
    * Data entries of the companion folder bound by default (S0 §7): each `.nz` file's exports under the file's name,
    * as loaded (Neuralese references, data, soft-function specs). Its blocks are registered as imported blocks.
@@ -96,7 +98,11 @@ export function isFileRecord(record: ItemRecord): boolean {
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
-const NL_KEYS = new Set(['description', 'args', 'returns', 'generic', 'types', 'kind', 'readout', 'model', 'uses']);
+const NL_KEYS = new Set(['description', 'args', 'returns', 'generic', 'types', 'kind', 'readout', 'model', 'uses', 'withhold']);
+/** Optional tools a `.nl` function may withhold from its own calls (`withhold:` frontmatter). eval, return_result,
+ * read_page, compact_history and read_code are the call protocol itself and always offered. */
+export const WITHHOLDABLE_TOOLS: readonly string[] = ['edit_code', 'diff_code', 'list_files', 'search_files', 'read_file',
+  'write_file', 'edit_file', 'diff_files', 'bash', 'python', 'delegate', 'editor'];
 const revisionOf = (text: string) => hexDigest(text).slice(0, 16);
 const TYPE_KEYS = /^(args|types|generic|returns):(.*)$/;
 
@@ -217,6 +223,9 @@ export function parseNatlang(path: string, text: string, inherited: Record<strin
   if (meta.uses !== undefined && (!Array.isArray(meta.uses) || meta.uses.some(item => typeof item !== 'string' ||
       !/^[A-Za-z_$][\w$]*(\/[A-Za-z_$][\w$]*)*$/.test(item))))
     throw new NatlangSourceError(path, 'uses must list package items by path from the package root, such as [harness/cut]');
+  if (meta.withhold !== undefined && (!Array.isArray(meta.withhold) ||
+      meta.withhold.some(item => typeof item !== 'string' || !WITHHOLDABLE_TOOLS.includes(item))))
+    throw new NatlangSourceError(path, `withhold lists tools this function's calls are not offered, from: ${WITHHOLDABLE_TOOLS.join(', ')}`);
   if (meta.readout === 'decision') {
     const env = new TypeEnv(Object.fromEntries(Object.entries(types).map(([name, text]) => [name, parseType(text)])));
     if ((finiteValues(parseType(returns), env)?.length ?? 0) < 2)
@@ -228,7 +237,8 @@ export function parseNatlang(path: string, text: string, inherited: Record<strin
     instructions: match[2]!.replace(/^\n+|\n+$/g, '') + '\n', types, subtype, codebase: {}, ...(generic ? { generic } : {}),
     ...(meta.readout === 'decision' || meta.readout === 'template' ? { readout: meta.readout as 'decision' | 'template' } : {}),
     ...(typeof meta.model === 'string' ? { model: meta.model } : {}),
-    ...(Array.isArray(meta.uses) && meta.uses.length ? { uses: meta.uses as string[] } : {}) };
+    ...(Array.isArray(meta.uses) && meta.uses.length ? { uses: meta.uses as string[] } : {}),
+    ...(Array.isArray(meta.withhold) && meta.withhold.length ? { withhold: [...new Set(meta.withhold as string[])] } : {}) };
 }
 
 /** The package root above `dir`: the nearest directory with `natlang.json` or `package.json`. */

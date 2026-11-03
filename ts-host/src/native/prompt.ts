@@ -49,10 +49,12 @@ export function scopedFileToolNames(surface: FileToolSurface = 'all', writable =
 
 export const DIRECTORY_REDUCER_DECLARATION = 'This call is a directory reducer: folder is a private copy of its input folder, and the changes you have made to it when you reply done are kept.';
 
-export function directoryReducerPrompt(surface: FileToolSurface = 'all', allowAdHoc = true, writable = true): string {
+export function directoryReducerPrompt(surface: FileToolSurface = 'all', allowAdHoc = true, writable = true,
+  withheld: readonly string[] = []): string {
   const order = ['bash', 'python', 'delegate', 'editor', 'list_files', 'search_files', 'read_file', 'write_file', 'edit_file', 'diff_files'];
   const names = new Set(scopedFileToolNames(surface, writable));
   if (!allowAdHoc) names.delete('delegate');
+  for (const name of withheld) names.delete(name);
   return `
 ${DIRECTORY_REDUCER_DECLARATION}
 Paths are relative POSIX paths such as "notes/todo.md".

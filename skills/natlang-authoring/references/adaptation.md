@@ -27,7 +27,12 @@ const decide = /* @natlangSite urgency */ nl<string>`Classify message ${message}
 Labels must be valid and unique within the file. Runtime-generated children,
 `delegate`, and unregistered ad hoc callables are not independently persistent
 components. Generated children inherit owning-program guidance; imported programs
-need explicit guidance inclusion. Component selection accepts exact keys,
+need explicit guidance inclusion. Stored native guidance can be scoped: a list of
+`natlang.memetic-program-guidance/1` bindings of one program, at most one without
+`function` (program-wide) and at most one per `function` (the `.nl` file stem).
+Each call imports exactly one: its own function's binding, else the program-wide
+one, else none. Inline children import the program-wide binding. A function
+binding's text must already contain the program-wide part, since it replaces it. Component selection accepts exact keys,
 `lambda-only`, `guidance-only`, or `joint`.
 
 ## Define independent evidence
