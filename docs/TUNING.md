@@ -221,6 +221,15 @@ Each correction row records the student checkpoint and release, the boundary cal
 boundary, the round, the teacher and the verification evidence; the whole repaired trajectory is kept in
 `.natlang/tune/rounds/<data>/round-<n>.repairs.jsonl`. Repair rounds work on every backend.
 
+Memetic improvement (the LFM3 meta-learning technique; plans/neuralese/MEMETIC_META_LEARNING_REVIEW_20261103.md) is
+the trained model improving a program the way an engineer would: it studies the program's support invocations and
+commits typed changes (scoped guidance, skills, instruction and signature patches, adapter fits) measured on those
+invocations. Its outputs deploy through the existing channels, not a separate release kind: committed guidance is a
+`natlang.memetic-program-guidance/1` binding (exact text plus the native state written from it under the serving
+checkpoint, rewritten from the text when the checkpoint changes) that the runtime imports as native program guidance;
+instruction, signature and skill changes are ordinary source edits of the program; an adapter fit is an ordinary
+release, the same coefficient fit `--learned` deploys. `natlang tune` stays the adapter path.
+
 `natlang tune ./my-program --learned spec.json` lets the trained joint learned optimizer propose the program's native
 soft instruction states, soft skill states and LoRA mixtures together (plans/neuralese/JOINT_LEARNED_OPTIMIZER.md).
 The spec names the optimizer's component bank (`bank`), its trained state (`state`), the operation's artifact store

@@ -1,5 +1,11 @@
 # Native memetic learning for repeated program invocations
 
+> **Status 2026-11-03:** superseded as the meta-learning loop by the trainable memetic stage
+> ([MEMETIC_META_LEARNING_REVIEW_20261103.md](MEMETIC_META_LEARNING_REVIEW_20261103.md)): the author here is a Python
+> prompt whose calls are not captured, so it cannot learn. Its write-text state, program-guidance binding, paired
+> evaluation, acceptance ledger and producer+consumer SFT export are reused as mechanism by `rl/memetic_workspace.py`
+> and `rl/memetic_stage.py`.
+
 `natlang_neuralese.rl.memetic_program` is the current task-success search and
 training-data bridge for one program. It replaces the old decision-readout
 memetic experiment and its flat soft-skill/weight-adapter individuals in this
