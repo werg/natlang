@@ -99,4 +99,19 @@ Severity combines the training mass affected with how bad the basis is.
    seeds) before the first operator training window. Then ablate by seed provenance.
 4. **#4:** replace the 16-token tail with a seeded summary span before any further long-context conversion.
 
-Nothing here has been changed. Items marked S are suitable for a Sonnet helper given this table.
+Status 2026-11-03 (S2 and #4 implemented for future conversions and quota computation; the corrected-mix package's own
+withdrawals are unchanged):
+
+- **S2.** Inline-instruction writer/read pairs carry `edge_kind: 'instruction'` (converter occurrences and mined edges).
+  Chain assembly writes `instruction: true` on those graph imports; `communication_classification` then does not count
+  them (a graph with only instruction imports is ordinary: no communication family, quota or exposure), and the
+  per-edge pair builder skips them. `communication_minimum_quotas` caps the repeated quota at
+  `DEFAULT_MAX_READERS_PER_PAYLOAD = 3` readers per identical payload (token-slice digest `payload_sha256` in new index
+  entries; rows from older indexes have no digest and keep the quota, reported as `unknown_payload_rows`), recorded in
+  `communication_quota_policy.payload_reader_cap`.
+- **#4.** `graphify(..., tokenizer=...)` exports a seeded chunk summary (`operator_seeds.chunk_summary_seed`:
+  question-selected sentences, exact identifiers, outline) as each chunk's producer span, under bounded producer CE
+  (schema `/2`, seed provenance recorded); without a tokenizer the legacy tail export (`/1`) still replays and verifies the
+  earlier rows. `build_acquired_full_session_graphs` passes its tokenizer.
+
+Items marked S are suitable for a Sonnet helper given this table.

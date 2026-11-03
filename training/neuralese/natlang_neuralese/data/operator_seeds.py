@@ -157,6 +157,24 @@ def mechanical_seed(operator: str, source: dict, *, question: str = '', answers=
     return {'text': outline(text, budget), 'provenance': 'mechanical:outline'}
 
 
+def chunk_summary_seed(text: str, question: str = '') -> dict:
+    """A deterministic summary of one chunk of a long text: {text, provenance, parts}.
+
+    The question-selected sentences when a question is known (the spans the consumer needs most), then the exact
+    identifiers, paths, numbers and names present, then the structure outline (headings, definitions, head/tail).
+    The budget scales with the chunk size like every mechanical seed; a source is never left without one.
+    """
+    budget = budget_chars(len(text))
+    chosen = []
+    for part, seed in (('question-overlap', overlap_sentences(text, question, budget // 2) if question else None),
+                       ('identifiers', identifiers(text, budget // 4)),
+                       ('outline', outline(text, max(200, budget // 2)))):
+        if seed:
+            chosen.append((part, seed))
+    return {'text': _clip('\n'.join(seed for _, seed in chosen), budget),
+            'provenance': 'mechanical:chunk-summary', 'parts': [part for part, _ in chosen]}
+
+
 def supplied_seed(source: dict) -> dict | None:
     """A converter-supplied gold/checked seed, validated; None when absent."""
     seed = (source.get('meta') or {}).get('operator_seed')

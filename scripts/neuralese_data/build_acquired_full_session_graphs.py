@@ -494,8 +494,10 @@ def _bound_acquired_graph(graph, tokenizer, fingerprint, max_context_tokens, con
     if objective is None:
         raise ValueError('long ordinary conversion needs its exact own-output objective: '+str(reason))
     try:
+        # Each chunk exports a seeded summary of itself (not its arbitrary last 16 tokens): S2/#4 audit 2026-11-03.
         bounded,_ = graphify(graph,objective,max_tokens=max_context_tokens,consumer_context=max(2,context_overlap),
-                             state_tokens=min(16,max_context_tokens-1))
+                             state_tokens=min(16,max_context_tokens-1),tokenizer=tokenizer,
+                             seed_tokens=min(256,max_context_tokens//2))
     except ValueError as error:
         if not str(error).startswith(('invalid static native context geometry', 'effective target distribution cannot use',
                                       'target-bearing consumer and imported states exceed')):
@@ -766,8 +768,9 @@ def _convert(args, prepared):
         'prepared_tokenizer': prepared.binding,
         'runtime': {'files': runtime['files'], 'fingerprint': runtime['fingerprint']},
         'chunk_sessions': args.chunk_sessions,
-        'ordinary_context_window_policy': {'schema':'natlang.static-native-context-or-windows/1',
-            'max_tokens':args.max_context_tokens,'overlap':args.context_overlap,'state_tokens':16},
+        'ordinary_context_window_policy': {'schema':'natlang.static-native-context-or-windows/2',
+            'max_tokens':args.max_context_tokens,'overlap':args.context_overlap,'state_tokens':16,
+            'chunk_export':'mechanical-summary-seed','seed_tokens':min(256,args.max_context_tokens//2)},
         'held_group_closure_sha256': canonical_json_sha256_hex(sorted(held))}
     if repair_binding is not None:
         binding['source_syntax_repair'] = repair_binding
