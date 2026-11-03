@@ -230,6 +230,50 @@ def oversize_baseline(source, prior_geometry, *, fallback_tokens, current_geomet
             'geometry':dict(prior_geometry),'prefix_rows':len(values)}
 
 
+def measured_source_maxima_baseline(source, geometry, memory_check, *, retained_gradients, cotangent_mode):
+    """Adopt this run's measured whole-source maxima as the oversize boundary.
+
+    The SFT memory qualification measures the source's maximum-token and
+    maximum-KV complete graphs on the live learner before any update. A
+    resume already adopts the same authenticated geometry boundary; a fresh
+    window previously fell back to ``batch_tokens`` and re-measured every
+    graph above 16384 tokens before every update (production learner,
+    2026-11-03: 7-13 live backwards, 2-4 minutes, per 262 s update).
+    Returns None unless passed cases on this exact source, retained-gradient
+    and cotangent path reach both geometry maxima of the complete source.
+    """
+    from .native_resident import binding
+    if geometry is None or not memory_check:
+        return None
+    try:
+        limits=oversize_baseline(source,geometry,fallback_tokens=0)
+    except (OSError,ValueError,KeyError,TypeError):
+        return None  # Unverifiable geometry keeps the per-update live gate.
+    if limits.get('prefix_rows')!=len(source.entries):
+        return None
+    actual=binding(source.path)
+    measured=[];proofs=[]
+    for check in memory_check.get('checks',[memory_check]):
+        capacity=(check or {}).get('capacity') or {}
+        if ((check or {}).get('passed') is not True or capacity.get('passed') is not True
+                or capacity.get('whole_graphs') is not True or capacity.get('optimizer_updates')!=0
+                or capacity.get('source')!=actual
+                or capacity.get('retained_accumulation_gradients') is not bool(retained_gradients)
+                or capacity.get('cotangent_mode')!=cotangent_mode or capacity.get('qat_point') is not None):
+            continue
+        cases=[case for case in capacity.get('cases') or () if case.get('status')=='passed']
+        if not cases:continue
+        measured.extend(cases)
+        proofs.append({'request':check.get('request'),'parent_checkpoint_sha256':check.get('parent_checkpoint_sha256'),
+                       'capacity_reuse':check.get('capacity_reuse')})
+    if (not measured or max(case['forward_tokens'] for case in measured)<limits['forward_tokens']
+            or max(case['kv_slots'] for case in measured)<limits['kv_slots']):
+        return None
+    return {**limits,'basis':'current-run-measured-source-maxima','memory_qualification':proofs,
+            'measured_cases':[{'example_ids':case.get('example_ids'),'forward_tokens':case['forward_tokens'],
+                               'kv_slots':case['kv_slots']} for case in measured]}
+
+
 def policy_capacity_baseline(reference, *, checkpoint_sha256, objective_binding, source_binding,
                              cotangent_mode, retained_gradients):
     """Reuse measured geometry; the proof retains its original numerical parent."""
@@ -312,14 +356,50 @@ def _one_group_dominates(measured, candidate):
             return False
         if any(actual[key]>bound[key] for key in ('attention_workspace_rows','target_positions','decision_count')):
             return False
-        if len(actual['node_shapes'])!=len(bound['node_shapes']):
-            return False
         # Preserve each invocation's coupled dimensions; a large total cannot
         # stand in for a larger individually padded attention workspace.
-        for node,limit in zip(actual['node_shapes'],bound['node_shapes']):
-            if len(node)!=len(limit) or any(a>b for a,b in zip(node,limit)):
-                return False
+        if not _nodes_injectively_dominated(actual['node_shapes'],bound['node_shapes']):
+            return False
     return True
+
+
+def _nodes_injectively_dominated(actual, bound, *, exact_pairs=1<<16):
+    """Every actual invocation maps to a distinct measured one at least as large.
+
+    Each per-node dimension is bounded by one real measured invocation and no
+    measured invocation covers two, so a graph never exceeds the measured
+    graph's invocation count or any coupled per-invocation shape. Node order
+    within the plan does not change allocation sizes; requiring identical
+    order and count made distinct graphs never cover each other, so every new
+    graph paid a full live backward (production learner, 2026-11-03).
+    """
+    actual=[tuple(node) for node in actual];bound=[tuple(node) for node in bound]
+    if len(actual)>len(bound):return False
+    if not actual:return True
+    if any(len(node)!=len(actual[0]) for node in actual+bound):return False
+    covers=lambda node,limit:all(a<=b for a,b in zip(node,limit))
+    # Greedy over descending sizes is sound (it only returns an actual
+    # injective assignment); exact bipartite matching resolves its misses.
+    remaining=sorted(bound)
+    for node in sorted(actual,reverse=True):
+        choice=next((i for i,limit in enumerate(remaining) if covers(node,limit)),None)
+        if choice is None:break
+        remaining.pop(choice)
+    else:
+        return True
+    if len(actual)*len(bound)>exact_pairs:
+        return False
+    edges=[[j for j,limit in enumerate(bound) if covers(node,limit)] for node in actual]
+    owner=[None]*len(bound)
+    def augment(i,seen):
+        for j in edges[i]:
+            if j in seen:continue
+            seen.add(j)
+            if owner[j] is None or augment(owner[j],seen):
+                owner[j]=i
+                return True
+        return False
+    return all(augment(i,set()) for i in sorted(range(len(actual)),key=lambda i:len(edges[i])))
 
 
 def _nondominated_group_indices(groups):
@@ -348,16 +428,20 @@ def _nondominated_group_indices(groups):
 def _capacity_memory_context(device):
     import torch
     from .trajectory_state import available_system_memory_bytes
-    host_available=available_system_memory_bytes()
     if device.type != 'cuda' or not torch.cuda.is_initialized():
         return {'device_type':device.type,'free_bytes_at_probe':None,'total_bytes':None,
                 'allocated_bytes':None,'reserved_bytes':None,'reusable_cache_bytes':None,
-                'host_available_bytes':host_available}
+                'host_available_bytes':available_system_memory_bytes(reclaimable_page_cache=True)}
     free,total=torch.cuda.mem_get_info(device)
     # GB10-class integrated devices allocate CUDA memory from host RAM. Their
     # device-free figure excludes reclaimable page cache, so it can read 22 GiB
     # while the same pool has 78 GiB available and a 57 GiB measured graph fits.
     unified=bool(getattr(torch.cuda.get_device_properties(device),'is_integrated',False))
+    # A discrete card's host peak is ordinary process memory, which the kernel
+    # serves by reclaiming clean page cache. Checkpoint writes fill a sandbox
+    # cgroup with such cache (2026-11-03: 94 KB "available" of 64 GiB with
+    # 13 GiB anonymous), which rejected every measured envelope.
+    host_available=available_system_memory_bytes(reclaimable_page_cache=not unified)
     allocated=int(torch.cuda.memory_allocated(device));reserved=int(torch.cuda.memory_reserved(device))
     from .memory_policy import ledger_claim,ledger_reusable_bytes
     claim=ledger_claim()
@@ -597,24 +681,30 @@ def serialize_oversize_capacity_frontier(frontier):
 
 def _find_oversize_envelope(frontier, candidate_groups, *, execution_identity, precision,
                             effective_layout, current_memory):
+    matches=_match_oversize_candidates(frontier,candidate_groups,execution_identity=execution_identity,
+        precision=precision,effective_layout=effective_layout,current_memory=current_memory)
+    return None if not matches or any(match is None for match in matches) else matches
+
+
+def _match_oversize_candidates(frontier, candidate_groups, *, execution_identity, precision,
+                               effective_layout, current_memory):
+    """Per requested group: the smallest covering measured case, or None."""
     # Microbatches execute sequentially. Each must be covered by one complete
     # measured case; different microbatches may use different measured cases.
     # Never construct an artificial envelope from independent maxima.
+    eligible=[entry for entry in frontier or ()
+              if _profile_shape_compatible(entry['record'],execution_identity=execution_identity,
+                  precision=precision,effective_layout=effective_layout,current_memory=current_memory)
+              and _incremental_headroom_covers(entry['case'],current_memory)]
     matches=[]
     for candidate in candidate_groups:
-        choices=[]
-        for entry in frontier or ():
-            record=entry['record'];case=entry['case'];measured=entry['group']
-            if not _profile_shape_compatible(record,execution_identity=execution_identity,
-                    precision=precision,effective_layout=effective_layout,current_memory=current_memory):
-                continue
-            if not _incremental_headroom_covers(case,current_memory):continue
-            if _one_group_dominates(measured,candidate):
-                choices.append((measured['forward_tokens']+measured['kv_slots'],entry))
-        if not choices:return None
+        choices=[(entry['group']['forward_tokens']+entry['group']['kv_slots'],entry)
+                 for entry in eligible if _one_group_dominates(entry['group'],candidate)]
+        if not choices:
+            matches.append(None);continue
         entry=min(choices,key=lambda item:item[0])[1]
         matches.append((entry['proof'],entry['record'],entry['case'],entry['group']))
-    return matches or None
+    return matches
 
 
 
@@ -706,18 +796,29 @@ def qualify_oversize_batches(model, optimizer, micro_batches, *, args, backend, 
     from .native_state_sft import _communication_prefix_allowed
     effective_layout={'share_causal_prefixes':bool(getattr(model,'share_causal_prefixes',False)),
         'allow_communication_prefixes':bool(_communication_prefix_allowed(backend,precision))}
+    covered=[None]*len(candidate_groups)
     if execution_identity is not None:
-        reused=_find_oversize_envelope(prior_frontier,candidate_groups,
+        covered=_match_oversize_candidates(prior_frontier,candidate_groups,
             execution_identity=execution_identity,precision=precision,effective_layout=effective_layout,
             current_memory=memory_context)
-        if reused is not None:
-            return record_oversize_envelope_reuse(args,match=reused,candidate_groups=candidate_groups,
+        if all(match is not None for match in covered):
+            print(json.dumps({'kind':'native_oversize_capacity_decision','global_step':global_step,
+                'requested_groups':len(candidate_groups),'envelope_covered':len(candidate_groups),'measured':0}),flush=True)
+            return record_oversize_envelope_reuse(args,match=covered,candidate_groups=candidate_groups,
                 source_path=source_path,execution_identity=execution_identity,precision=precision,
                 effective_layout=effective_layout,current_memory=memory_context,
                 checkpoint_sha256=checkpoint_sha256,global_step=global_step)
-    selected_indices, coverage_indices = _nondominated_group_indices(candidate_groups)
+    # Only groups beyond the measured frontier pay a live backward; each
+    # covered group records the exact measured case that bounds it.
+    uncovered=[index for index,match in enumerate(covered) if match is None]
+    selected_local, coverage_local = _nondominated_group_indices([candidate_groups[i] for i in uncovered])
+    selected_indices=[uncovered[i] for i in selected_local]
+    coverage_indices={uncovered[i]:uncovered[j] for i,j in enumerate(coverage_local)}
     measured_batches = [batches[index] for index in selected_indices]
     measured_groups = [candidate_groups[index] for index in selected_indices]
+    print(json.dumps({'kind':'native_oversize_capacity_decision','global_step':global_step,
+        'requested_groups':len(candidate_groups),'envelope_covered':len(candidate_groups)-len(uncovered),
+        'measured':len(selected_indices)}),flush=True)
     named=getattr(optimizer,'_native_named_parameters',list(model.named_parameters()))
     prior={id(parameter):(parameter,parameter.grad) for _,parameter in named if parameter.grad is not None}
     for parameter,_ in prior.values():parameter.grad=None
@@ -734,8 +835,14 @@ def qualify_oversize_batches(model, optimizer, micro_batches, *, args, backend, 
             'parent_checkpoint_sha256':checkpoint_sha256,'source':binding(source_path),
             'baseline':baseline,'model_boundary':'current-live-model-before-update',
             'candidate_groups':measured_groups,'requested_candidate_groups':candidate_groups,
-            'requested_group_coverage':[{'requested_index':i,'measured_index':selected_indices.index(j)}
-                                        for i,j in enumerate(coverage_indices)],
+            'requested_group_coverage':[
+                {'requested_index':i,'measured_index':selected_indices.index(coverage_indices[i])}
+                if covered[i] is None else
+                {'requested_index':i,'envelope_source':covered[i][0],
+                 'envelope_source_global_step':covered[i][1]['global_step'],
+                 'measured_group':covered[i][3],'measured_case_id':covered[i][2].get('id'),
+                 'measured_case_example_ids':covered[i][2].get('example_ids')}
+                for i in range(len(candidate_groups))],
             'memory_context':memory_context,
             'execution_identity':execution_identity,'effective_layout':effective_layout,
             'objective':objective_binding,

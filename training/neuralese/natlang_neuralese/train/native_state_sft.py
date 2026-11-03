@@ -434,16 +434,20 @@ def _measured_checkpoint_scratch_peak(memory_check, oversize_proof, micro_batche
     if oversize_proof:
         proof=json.loads(bound(oversize_proof).read_text())
         if proof.get('passed') is not True:raise ValueError('oversize scratch evidence did not pass')
+        refs=[]
         if proof.get('schema')=='natlang.native-oversize-live-capacity/1':
             reports.append(proof.get('capacity') or {})
+            # Groups covered by an earlier measured case carry their scratch rate there.
+            refs=[item['envelope_source'] for item in proof.get('requested_group_coverage') or []
+                  if 'envelope_source' in item]
         elif proof.get('schema')=='natlang.native-oversize-capacity-envelope-reuse/1':
             refs=[item['envelope_source'] for item in proof.get('case_matches') or []]
             if not refs:raise ValueError('oversize scratch reuse lacks measured cases')
-            for ref in refs:
-                source=json.loads(bound(ref).read_text())
-                if source.get('passed') is not True:raise ValueError('oversize scratch source did not pass')
-                reports.append(source.get('capacity') or {})
         else:raise ValueError('unsupported oversize scratch evidence')
+        for ref in {(ref['path'],ref['sha256']):ref for ref in refs}.values():
+            source=json.loads(bound(ref).read_text())
+            if source.get('passed') is not True:raise ValueError('oversize scratch source did not pass')
+            reports.append(source.get('capacity') or {})
     peaks=[];rates=[]
     for report in reports:
         if report.get('passed') is not True:raise ValueError('scratch capacity report did not pass')
@@ -3722,11 +3726,21 @@ def _main(argv=None, *, requested_refresh):
         raise ValueError('native checkpoint update is beyond the declared epoch exposure')
     # Retain the last authenticated source-prefix geometry as the boundary
     # for newly larger whole graphs. Only those groups pay a fresh live gate.
-    from .native_packed_capacity import oversize_baseline
+    from .native_packed_capacity import oversize_baseline, measured_source_maxima_baseline
+    # A saved batch-token fallback carries no geometry; it must not mask an
+    # authenticated packed geometry or this run's measured source maxima.
     prior_geometry = ((prior_oversize_baseline or {}).get('geometry')
-        if prior_oversize_baseline else prior_packed_capacity.get('geometry'))
+        or prior_packed_capacity.get('geometry'))
     oversize_limits = oversize_baseline(train, prior_geometry, fallback_tokens=args.batch_tokens,
         current_geometry=json.loads(args.sft_packed_geometry) if args.sft_packed_geometry else None)
+    if prior_geometry is None and objective is None and args.sft_packed_geometry:
+        from ..eval.native_memory import _cotangent_mode
+        measured_limits = measured_source_maxima_baseline(train, json.loads(args.sft_packed_geometry),
+            memory_check, retained_gradients=args.accumulate_batches>1, cotangent_mode=_cotangent_mode(args))
+        if measured_limits is not None:
+            oversize_limits = measured_limits
+    print(json.dumps({'kind':'native_oversize_baseline','global_step':global_step,
+        **{key:oversize_limits.get(key) for key in ('basis','forward_tokens','kv_slots','prefix_rows')}}),flush=True)
     from .native_packed_capacity import oversize_execution_identity
     oversize_execution_identity_record = oversize_execution_identity(model, optimizer,
         args=args, backend=backend, objective_binding=objective_binding)

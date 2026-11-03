@@ -586,3 +586,141 @@ def test_capacity_parent_read_bounds_retries_and_preserves_other_errors(tmp_path
     def broken(path):raise RuntimeError('unrelated failure')
     monkeypatch.setattr(hashing,'sha256_file_hex_cached',broken)
     with pytest.raises(RuntimeError,match='unrelated'):capacity_parent_sha(policy,'base')
+
+
+def test_capacity_dominance_matches_nodes_injectively_regardless_of_order():
+    from natlang_neuralese.train.native_packed_capacity import _one_group_dominates, _nodes_injectively_dominated
+    def group(nodes,targets=1):
+        tokens=sum(n[0] for n in nodes);slots=sum(n[1] for n in nodes)
+        graph={'id':'g','forward_tokens':tokens,'kv_slots':slots,'attention_workspace_rows':sum((n[0]+127)//128*128 for n in nodes),
+               'node_shapes':[list(n) for n in nodes],'target_positions':targets,'decision_count':0}
+        return {'graphs':[graph],'forward_tokens':tokens,'kv_slots':slots,'graph_count':1}
+    measured=group([(900,910,1,1,0),(400,400,0,0,0),(700,705,2,1,0)],50)
+    # Fewer, reordered invocations, each bounded by a distinct measured one.
+    assert _one_group_dominates(measured,group([(650,700,2,1,0),(880,900,1,1,0)],40))
+    # One measured invocation cannot bound two candidate invocations.
+    assert not _one_group_dominates(measured,group([(800,810,1,1,0),(800,810,1,1,0)],40))
+    # A larger per-invocation dimension (imports) is never covered by totals.
+    assert not _one_group_dominates(measured,group([(300,300,3,0,0)],10))
+    # More invocations than measured remain unproven.
+    assert not _one_group_dominates(measured,group([(100,100,0,0,0)]*4,10))
+    # Greedy misses are resolved by an exact matching, never by crossing maxima.
+    assert _nodes_injectively_dominated([(5,1),(1,5)],[(5,5),(1,5)])
+    assert _nodes_injectively_dominated([(1,5),(5,1)],[(6,1),(1,6)])
+    assert not _nodes_injectively_dominated([(5,5)],[(5,4),(4,5)])
+
+
+def test_live_gate_measures_only_groups_beyond_frontier_and_records_cover(tmp_path,monkeypatch):
+    from natlang_neuralese.train import native_packed_capacity as capacity
+    from natlang_neuralese.eval import native_memory
+    from natlang_neuralese.train.native_resident import binding
+    from natlang_neuralese.train.native_state_sft import _measured_checkpoint_scratch_peak
+    model=torch.nn.Linear(2,2);optimizer=SimpleNamespace(_native_named_parameters=list(model.named_parameters()))
+    source=tmp_path/'source.json';source.write_text('{}')
+    memory={'device_type':'cpu','free_bytes_at_probe':None,'total_bytes':None,'host_available_bytes':8<<30}
+    monkeypatch.setattr(capacity,'_capacity_memory_context',lambda device:dict(memory))
+    execution={'sha256':'e'*64}
+    layout={'share_causal_prefixes':False,'allow_communication_prefixes':True}
+    def case(ident,tokens,slots):
+        return {'status':'passed','id':ident,'forward_tokens':tokens,'kv_slots':slots,'example_ids':[ident],
+                'cuda_incremental_peak_allocated_bytes':0,'cuda_incremental_peak_reserved_bytes':0,
+                'host_incremental_peak_bytes':0,'checkpoint_input_peak_scope':'case',
+                'checkpoint_input_offload':{'peak_live_bytes':tokens*10}}
+    prior={'schema':'natlang.native-oversize-live-capacity/1','global_step':67,'source':binding(source),
+        'execution_identity':execution,'effective_layout':layout,'memory_context':memory,
+        'candidate_groups':[{'graphs':[{'id':'old','forward_tokens':60,'kv_slots':61}],
+            'forward_tokens':60,'kv_slots':61,'graph_count':1}],
+        'passed':True,'optimizer_updates':0,'earned_exposure':0,'model_boundary':'current-live-model-before-update',
+        'capacity':{'passed':True,'optimizer_updates':0,'production_packing':True,'whole_graphs':True,
+            'cpu_and_all_cuda_rng_restored':True,'task_quality_qualified':False,'qat_point':None,
+            'cases':[case('old',60,61)]}}
+    prior_path=tmp_path/'prior.json';prior_path.write_text(json.dumps(prior))
+    frontier=capacity.load_oversize_capacity_frontier([{'proof':binding(prior_path)}])
+    assert len(frontier)==1
+    lengths=[(41,42),(63,64),(56,58)]
+    batches=[[SimpleNamespace(id=str(i),plan=SimpleNamespace(token_count=t,slot_sources=range(k)))]
+             for i,(t,k) in enumerate(lengths)]
+    seen=[]
+    def qualify(model,optimizer,selected,**kwargs):
+        seen.extend(selected)
+        return {'passed':True,'optimizer_updates':0,'production_packing':True,'whole_graphs':True,
+                'cpu_and_all_cuda_rng_restored':True,'task_quality_qualified':False,'qat_point':None,
+                'cases':[case('1',63,64)]}
+    monkeypatch.setattr(native_memory,'qualify_capacity',qualify)
+    args=SimpleNamespace(checkpoint_layers=True,chunk_tokens=16,cotangent_accumulator_backend='plain',
+                         accumulate_batches=1,out=tmp_path)
+    ref=capacity.qualify_oversize_batches(model,optimizer,batches,args=args,backend=None,precision=None,
+        source_path=source,checkpoint_sha256='a'*64,global_step=68,
+        baseline={'forward_tokens':10,'kv_slots':10},prior_frontier=frontier,execution_identity=execution)
+    record=json.loads(open(ref['path']).read())
+    assert seen==[batches[1]]
+    coverage=record['requested_group_coverage']
+    assert [c.get('measured_index') for c in coverage]==[None,0,None]
+    assert [c['envelope_source']['path'] for c in (coverage[0],coverage[2])]==[str(prior_path)]*2
+    assert coverage[0]['measured_case_example_ids']==['old'] and coverage[0]['envelope_source_global_step']==67
+    # Scratch bounds include the earlier measured case that covered a group.
+    assert _measured_checkpoint_scratch_peak(None,ref,batches)==63*10
+    # The extended frontier now covers the whole next update without a backward.
+    capacity.remember_oversize_capacity_proof(frontier,ref)
+    monkeypatch.setattr(native_memory,'qualify_capacity',lambda *a,**k:(_ for _ in ()).throw(AssertionError('reprove')))
+    again=capacity.qualify_oversize_batches(model,optimizer,batches,args=args,backend=None,precision=None,
+        source_path=source,checkpoint_sha256='b'*64,global_step=69,
+        baseline={'forward_tokens':10,'kv_slots':10},prior_frontier=frontier,execution_identity=execution)
+    assert json.loads(open(again['path']).read())['schema']=='natlang.native-oversize-capacity-envelope-reuse/1'
+
+
+def test_current_run_measured_source_maxima_become_oversize_boundary(tmp_path):
+    from natlang_neuralese.train.native_packed_capacity import measured_source_maxima_baseline
+    from natlang_neuralese.train.native_resident import binding
+    sourcefile=tmp_path/'train.json';sourcefile.write_text('{}')
+    entries=[{'id':'a','binding':'a'*64,'forward_tokens':500},{'id':'b','binding':'b'*64,'forward_tokens':300}]
+    geometry={'identity':{'parser':'pinned'},'source':binding(sourcefile),'kv_slots':[510,620],
+              'rows_sha256':_rows_digest(entries)}
+    p=tmp_path/'geometry.json';p.write_text(json.dumps(geometry))
+    source=SimpleNamespace(entries=entries,path=sourcefile)
+    def check(cases,**changes):
+        capacity={'passed':True,'whole_graphs':True,'optimizer_updates':0,'source':binding(sourcefile),
+                  'retained_accumulation_gradients':True,'cotangent_mode':'plain','qat_point':None,
+                  'cases':[{'status':'passed','example_ids':[i],'forward_tokens':t,'kv_slots':k} for i,t,k in cases]}
+        capacity.update(changes)
+        return {'passed':True,'request':{'path':'r','sha256':'1'},'parent_checkpoint_sha256':'c','capacity':capacity}
+    maxima=[('a',500,510),('b',300,620)]
+    kwargs=dict(retained_gradients=True,cotangent_mode='plain')
+    limits=measured_source_maxima_baseline(source,binding(p),check(maxima),**kwargs)
+    assert limits['forward_tokens']==500 and limits['kv_slots']==620
+    assert limits['basis']=='current-run-measured-source-maxima' and limits['prefix_rows']==2
+    assert [c['example_ids'] for c in limits['measured_cases']]==[['a'],['b']]
+    # Cohort form and list of checks.
+    assert measured_source_maxima_baseline(source,binding(p),{'checks':[check(maxima)]},**kwargs) is not None
+    # Missing the maximum-KV graph, or a different execution path, keeps the live gate.
+    assert measured_source_maxima_baseline(source,binding(p),check(maxima[:1]),**kwargs) is None
+    assert measured_source_maxima_baseline(source,binding(p),check(maxima),retained_gradients=False,cotangent_mode='plain') is None
+    assert measured_source_maxima_baseline(source,binding(p),check(maxima),retained_gradients=True,cotangent_mode='vjp') is None
+    assert measured_source_maxima_baseline(source,binding(p),check(maxima,passed=False),**kwargs) is None
+    assert measured_source_maxima_baseline(source,binding(p),check(maxima,source={'path':'x','sha256':'y'}),**kwargs) is None
+    assert measured_source_maxima_baseline(source,binding(p),None,**kwargs) is None
+    # A geometry covering only a prefix does not bound later rows.
+    prefix=dict(geometry,kv_slots=[510],rows_sha256=_rows_digest(entries[:1]))
+    q=tmp_path/'prefix.json';q.write_text(json.dumps(prefix))
+    assert measured_source_maxima_baseline(source,binding(q),check(maxima),**kwargs) is None
+
+
+def test_host_headroom_discounts_only_inactive_clean_page_cache(tmp_path):
+    from natlang_neuralese.train.trajectory_state import available_system_memory_bytes
+    root=tmp_path/'cgroup';leaf=root/'sandbox'
+    leaf.mkdir(parents=True)
+    gib=1<<30
+    (leaf/'memory.max').write_text(str(64*gib))
+    (leaf/'memory.current').write_text(str(64*gib-4096))
+    meminfo=tmp_path/'meminfo';meminfo.write_text('MemAvailable: 900000000 kB\n')
+    cgroup=tmp_path/'cgroup.txt';cgroup.write_text('0::/sandbox\n')
+    call=lambda reclaim=True:available_system_memory_bytes(meminfo_path=meminfo,cgroup_path=cgroup,cgroup_root=root,
+        cgroup_v1_root=tmp_path/'v1',reclaimable_page_cache=reclaim)
+    assert call()==4096
+    (leaf/'memory.stat').write_text(f'anon {13*gib}\nactive_file {10*gib}\ninactive_file {40*gib}\n'
+                                    f'file_dirty {3*gib}\nfile_writeback {gib}\n')
+    assert call()==4096+36*gib
+    # Unified-memory CUDA cannot allocate from page cache: no discount there.
+    assert call(False)==4096
+    (leaf/'memory.stat').write_text('anon 1\n')
+    assert call()==4096

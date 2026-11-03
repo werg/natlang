@@ -341,8 +341,32 @@ def immutable_cpu_snapshot(value, *, _tensor_storage_memo=None):
     raise TypeError(f'unsupported checkpoint snapshot leaf: {type(value).__module__}.{type(value).__qualname__}')
 
 
+def _reclaimable_clean_file_cache(cgroup, *, v1):
+    """Inactive clean page cache the kernel reclaims before charging an OOM.
+
+    A cgroup's usage counter includes page cache. Large checkpoint writes fill
+    it to the limit, so ``limit - usage`` reads near zero while almost all of
+    that cache is reclaimable (production learner, 2026-11-03: 68.5 GB charged,
+    13.2 GB anonymous). Count active and dirty/writeback file pages as used;
+    an unreadable stat discounts nothing. Only for host/discrete-device
+    allocations: GB10 unified CUDA allocations cannot use page cache.
+    """
+    keys=(('total_inactive_file','total_dirty','total_writeback') if v1
+          else ('inactive_file','file_dirty','file_writeback'))
+    try:
+        stat={}
+        for line in (cgroup/'memory.stat').read_text().splitlines():
+            parts=line.split()
+            if len(parts)==2 and parts[0] in keys:stat[parts[0]]=int(parts[1])
+    except (OSError,ValueError):
+        return 0
+    if keys[0] not in stat:return 0
+    return max(0,stat[keys[0]]-stat.get(keys[1],0)-stat.get(keys[2],0))
+
+
 def available_system_memory_bytes(*, meminfo_path='/proc/meminfo', cgroup_path='/proc/self/cgroup',
-                                  cgroup_root='/sys/fs/cgroup', cgroup_v1_root='/sys/fs/cgroup/memory'):
+                                  cgroup_root='/sys/fs/cgroup', cgroup_v1_root='/sys/fs/cgroup/memory',
+                                  reclaimable_page_cache=False):
     """Return host availability capped by finite limits on this process's cgroup ancestry.
 
     Cgroup-v2 memory files live at the process's nested cgroup, not at the
@@ -398,6 +422,8 @@ def available_system_memory_bytes(*, meminfo_path='/proc/meminfo', cgroup_path='
                         limit=int(limit_text)
                         if limit>0 and limit < (1<<60):
                             current_usage=int((current/current_name).read_text().strip())
+                            if reclaimable_page_cache:
+                                current_usage-=_reclaimable_clean_file_cache(current,v1=limit_name!='memory.max')
                             limits.append(max(0,limit-current_usage))
                     except (FileNotFoundError,PermissionError,ValueError,OSError):
                         # A finite limit without a readable usage counter is
