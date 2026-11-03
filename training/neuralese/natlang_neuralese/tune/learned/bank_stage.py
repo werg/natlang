@@ -165,8 +165,12 @@ def run(args, parameters):
         raise SystemExit(f'{len(held)} held families < min_held_families {parameters["min_held_families"]}')
     checkpoint = Path(args.continue_from)
     parent = sha256_file_hex(checkpoint)
+    # Schedule parameters (how long to run, how often to evaluate) may change on a continuation; everything else
+    # binds the operation.
+    schedule = ('outer_steps', 'eval_every')
     operation = {'episodes': {'path': str(pool_path), 'sha256': sha256_file_hex(pool_path)},
-                 'protection_sha256': protected.digest, 'parameters': parameters}
+                 'protection_sha256': protected.digest,
+                 'parameters': {k: v for k, v in parameters.items() if k not in schedule}}
     bound = out / 'operation.json'
     if bound.exists() and json.loads(bound.read_text()) != operation:
         raise SystemExit('this stage directory is bound to other episodes, protection or parameters')
@@ -183,7 +187,8 @@ def run(args, parameters):
     def evaluate():
         if learner.state['step'] in evaluated:
             return next(e for e in learner.state['evaluations'] if e['split'] == 'dev' and e['step'] == learner.state['step'])
-        result = learner.evaluate('dev')
+        result = learner.evaluate('dev', log=lambda family, value: _log('held_family', step=learner.state['step'],
+                                                                         family=family, **value))
         evaluated.add(learner.state['step'])
         learner.save()
         _log('evaluation', step=result['step'], mean=result['mean'], meta_wins=result['meta_wins'], seconds=result['seconds'])
@@ -202,7 +207,8 @@ def run(args, parameters):
     confirmation = {'met': False, 'reason': 'development promotion not met; confirmation not spent'}
     if held_decision['met']:
         done = [e for e in learner.state['evaluations'] if e['split'] == 'confirmation' and e['step'] == learner.state['step']]
-        result = done[0] if done else learner.evaluate('confirmation')
+        result = done[0] if done else learner.evaluate('confirmation', log=lambda family, value: _log(
+            'held_family', split='confirmation', family=family, **value))
         learner.save()
         confirmation = {**MB.promotion(result, min_families=parameters['min_held_families'],
                                        margin=parameters['promotion_margin']), 'step': result['step']}

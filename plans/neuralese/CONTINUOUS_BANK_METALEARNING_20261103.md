@@ -165,6 +165,49 @@ held loss at lower compute.
   components (`growth.py`). This makes the un-meta-trained comparison clean. Growth from tuner fits remains
   available once the bank is in production.
 
+## Recipe: gated on parent promotion, concurrent with SFT
+
+Successor recipe (new file; the existing `adaptation-stages-successor-1103` is unchanged):
+`/home/werg/data/lfm3-rl-dgx-20261029/ops/bank-metalearning-successor-1103/recipe-runtime.json`, SHA-256
+`d3befd55ad67973e35b0a8f85ccea90ea73a7db3a6c850395d705c78b9c1f881`. Stages:
+
+- `native_joint_sft_v4` is unchanged.
+- `program_adaptation_s3` binds `continue_from: promoted_parent` (full67).
+- `bank_metalearning_s4` binds `episodes: bank_episode_pool`, `protection` and `continue_from: promoted_parent`.
+  Its parameters: 2000 outer steps, held evaluation every 100 steps, 8 held families minimum.
+- `learned_optimizer_s4` is removed from the recipe and remains a declared stage kind for the later refinement.
+
+Both adaptation stages declare `requires: [native_joint_sft_v4]`. The recipe runner lets an adaptation stage start
+before its headless SFT predecessor completes once `continue_from` and `parent_selection` are both bound. So they run
+concurrently with joint SFT, gated on promotion, not on SFT completion; SFT completion is about 200 days out at
+current throughput.
+
+They stay `admitted: false` for one concrete missing input. The selected full67 parent has no
+`natlang.behavior-promotion-selection` record (`train.promotion select-parent`). It has only the supervisor's
+behavioural reselection notes, and this stage does not fabricate one. Admission is a recorded handoff that binds that
+record as `promoted_parent_selection` and sets `admitted: true`. Each later promotion rebinds `promoted_parent` and
+`promoted_parent_selection`. `bank_metalearning` continues its live bank on the new parent; `program_adaptation`
+reruns in a fresh stage directory.
+
+Warm-started program adaptation is the intended semantics, but `tune.stage` has no warm-start input yet. Each rerun
+tunes from the new parent. This is an open item for the tuning lane.
+
+## Production placement and cadence
+
+- **Where.** The DGX GB10 has had no admissible headroom for a 1.7B-parameter fit with backward all day
+  (2026-11-03: the RL pilot, weight-space jobs and SFT preparation hold it; ledger headroom near or below zero). The
+  meta-learner needs one GPU with about 20-30 GB, plus an episode pool of tens of MB. Production runs on one dedicated
+  cloud GPU sandbox through the stage-shard lineage (`rl_cloud.py`, lineage `tune.module =
+  natlang_neuralese.tune.learned.bank_stage`), exported every 30 minutes and at the end to the DGX hub. When the DGX
+  frees, the same stage command runs there through the ledger at medium priority.
+- **Cadence.** Run continuously in blocks of `outer_steps` with a held development evaluation every `eval_every`
+  steps. At each backbone promotion, stop at the next completed outer step (the state is saved after every step),
+  rebind the parent and resume (recorded parent transition). Confirmation is spent only when development promotion
+  holds. Grow the episode pool as RL collection produces verified successful parent rollouts (`bank_stage pool
+  --rollouts`). A grown pool is a new stage directory (its `operation.json` binds the pool). Seeding it with the previous `learner/` state continues the same bank: the learner binds its recipe and initial bank, not the pool.
+- **Operational note.** A stage-shard relaunch from a final (failed) export is shut down by the exporter immediately.
+  Move those records under `.cloud/superseded/` first, as the tuning pilot does.
+
 ## First run (2026-11-03)
 
 Results are filled in below as measured.

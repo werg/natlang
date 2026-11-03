@@ -583,7 +583,7 @@ class BankMetaLearner:
         self.state['history'].append(entry)
         return entry
 
-    def evaluate(self, split='dev', arms=ARMS, families=None):
+    def evaluate(self, split='dev', arms=ARMS, families=None, log=None):
         """Held-family adaptation: fit on each held family's train worlds, score its ``split`` worlds per arm."""
         started = time.time()
         held = [name for name, f in sorted(self.pool['families'].items()) if f['role'] == 'held']
@@ -609,6 +609,8 @@ class BankMetaLearner:
                     leaves, history = self.fit_lora(support, self.recipe.fit_passes)
                     result[arm] = {'loss': self.score_lora(scored, leaves), 'support_last': history[-1]}
             out['families'][name] = result
+            if log is not None:
+                log(name, {arm: round(value['loss'], 5) for arm, value in result.items()})
         means = {}
         for arm in arms:
             values = [f[arm]['loss'] for f in out['families'].values()]
