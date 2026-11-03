@@ -7,6 +7,11 @@ Mechanism: [`tune/learned/meta_bank.py`](../../training/neuralese/natlang_neural
 stage [`tune/learned/bank_stage.py`](../../training/neuralese/natlang_neuralese/tune/learned/bank_stage.py),
 recipe kind `bank_metalearning` ([`train/adaptation_stages.py`](../../training/neuralese/natlang_neuralese/train/adaptation_stages.py)).
 
+> **Status (owner correction, AGENTS f484c96f6, 2026-11-03 evening):** meta-learning is the memetic natlang path.
+> Crisp bank meta-learning is no longer the main line. It is a service and a baseline the memetic supervisor can
+> call. Meta-training stopped at outer step 5, and all GPUs go to DiLoCo training. See "Handoff to the memetic path"
+> at the end of this note.
+
 ## Why this replaces the learned-optimizer main line
 
 - The learned-optimizer lane never ran on a real model. Its outer loop needs complete inner fits that take hours
@@ -304,3 +309,88 @@ budget on average. The random bank was at 2.171 against LoRA 0.785 on pool v1.
 
 **Outer steps:** 70 s each on the GB10 (meta-batch 2, 12 inner steps). At step 1 the weight-space regression left
 51% unexplained, consistent with the basis capturing 53%.
+
+## Handoff to the memetic path (2026-11-03)
+
+Meta-training stopped at outer step 5 on the DGX (unit `bankmeta-pca-5`). That unit had already exited after a
+ledger preemption: its requeue refused the stage directory because the protection registry digest had changed
+since the operation was bound. All bankmeta DGX units and the bankmeta cloud exporter are stopped. The cw1 sandbox 17382ab4 never ran bank
+training: it was launched for lineage `bankmeta-pca` at 20:32, and its shape guard refused the assigned shape
+(`assigned-shape-below-minimum`). It exited at 20:36, so it held no bank state to hand over. The final state and
+its verified copy are on the DGX:
+
+- **Export:** `/mnt/external/natlang-bank-metalearning-20261103/final-export-20261103/` (927 MB). This is a copy of stage
+  directory `run-pca-v4` with `SHA256SUMS`, independently re-hashed. It contains:
+  - `learner/state.json` and `state.torch`: bank factors, basis, meta-parameters, Adam state, RNG, evaluation and
+    history;
+  - `lora-fits/71c3eb45594dd866/*.pt`: 64 meta-train LoRA fits;
+  - `store/`: the native artifact store with the basis, published bank and inner-fit law;
+  - `bank-manifest.json`: the published bank at step 5, made by `final-publish.py`;
+  - `operation.json`.
+- **Published bank:** snapshot `nbank1:20c4524fb06c1cf5bd67065204eafef07ef5361722775414a39a585709c37315`, 28
+  components, inner-fit law artifact `nnt1_7azruti6tb32mvcv4lkn5dyayrrifck7g5ldpvo6qsrvfcveucmq`. All 84 files
+  are listed in `SHA256SUMS`, re-verified against the stage directory and the copy.
+- **Reproducibility caveat:** the restored learner rebuilds the initial PCA bank from the saved fits. That
+  reconstruction is sensitive to the CPU thread count: a restore with default threads refused, correctly, as
+  "another initial bank". Restore with `OMP_NUM_THREADS=4`, as the run used (`final-publish.py`). Persisting the
+  initial bank tensors would remove this dependence.
+- **Parent:** `bf95-quality-source-zero-sgd-v2-1102/checkpoint.pt` (sha 71c3eb45...). The bank coordinates are
+  weight-update coordinates for that parent. A new parent takes the recorded transition (`BankMetaLearner` with
+  another `parent_sha256`).
+
+What the memetic path can reuse:
+
+1. **The PCA bank as a coefficient-fit service.**
+   - Inputs:
+     - a program's verified support rows as native graphs (`{'graph': ...}` with assistant-only targets; see
+       `meta_bank.graph_rows`, `rollout_rows` and `assistant_targets`);
+     - the parent engine;
+     - the bank (`bank-manifest.json` plus its store).
+   - Call: `BankMetaLearner(engine, pool, recipe, out, parent_sha256, fits)` restores the bank.
+     `learner.fit(rows, 'meta' | 'initial' | 'published')` returns the fitted coefficients `(K, G)`, the step
+     directions and the support-loss history (about 12 passes). `learner.bank_of(which).compose_adapter(engine,
+     cores)` stores the executable `xs` adapter, run as an ordinary native adapter (`run_native` or the server's
+     default adapters).
+   - Deployment form: `natlang tune <program> --learned spec.json`, with the spec naming `bank-manifest.json` (no
+     optimizer `state`). `apply.Context.meta_fit` runs the published Meta-SGD law on the root scope and releases
+     through the ordinary pipeline.
+   - Output: an adapter id, the support loss and the coefficients.
+   - Cost: 12 support passes per fit; seconds on an H100, about 1-3 min on the GB10.
+2. **Held-family task-outcome harness** (`tune/learned/bank_outcomes.py`), usable for any adaptation, including
+   memetic guidance:
+   - `task_families` picks held RL task families from a task source and cuts their tasks into
+     support/dev/confirmation.
+   - `TaskOutcomes.support_rows` collects the parent's oracle-verified successful support rollouts and lowers them
+     to rows.
+   - `TaskOutcomes.run(name, ids, adapter)` serves `adapter` as the default adapter of an in-process native server
+     on the same engine. It runs the tasks through `rl.production.collect` (student roots, full prompt contract) and
+     returns successes per task from the shared scorer.
+   - `outcome_promotion` compares two arms' totals.
+   - The smoke passed: ext_babi_task01, 4/4 support successes in 203 s.
+   - A memetic arm plugs in by replacing the adapter with its stored guidance (`program_guidance` on `collect`).
+3. **Pools and near-duplicate handling.**
+   - `pool-teacher-v3`: 64 meta-train and 16 held teacher-program families, 729 rows.
+   - `pool-teacher-v4`: 512 meta-train and the same 16 held families, 4649 candidate rows.
+   - Both are under `/mnt/external/natlang-bank-metalearning-20261103/`, with assistant-only targets,
+     protected-worlds custody and exact-duplicate worlds removed (`build_pool` with target digests in the index
+     pass).
+   - `meta_bank.similarity` flags near-duplicate scored worlds (target-token `difflib` ratio >= 0.8), and
+     `summarize` reports means over all families and over the families without them.
+4. **Step-0 numbers.** See "First run" above. In short, for the PCA bank coefficient fit, 12 passes:
+
+   | arm | mean dev loss |
+   |---|---|
+   | PCA bank coefficient fit | 0.675 |
+   | parent | 2.325 |
+   | plain LoRA, 4 passes (best budget) | 0.908 |
+   | plain LoRA, 12 passes (matched) | 1.345 |
+   | learned mean coefficients, no fit | 1.166 |
+
+   About 70% of the gain is a shift shared by teacher programs. The numbers are teacher-forced held losses; there
+   is no task-outcome measurement of the bank yet.
+5. **Outer steps 1-5:** 70-140 s each on the GB10. The weight-space regression left 51-55% unexplained (bounded by
+   the basis capturing 53%). The query losses are noisy at meta-batch 2. A bank outer lr of 1e-2 moves factors
+   about 10% per step: lower it before resuming.
+
+Not done: factored delta application for FFN targets, the amortized coefficient predictor, a `program_adaptation`
+warm-start, and any task-outcome promotion of a meta-trained bank.
