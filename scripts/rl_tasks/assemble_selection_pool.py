@@ -24,13 +24,14 @@ from __future__ import annotations
 
 import argparse
 import collections
-import hashlib
 import json
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training' / 'neuralese'))
 from measure_repetition import program_features, report  # noqa: E402
+from natlang_neuralese.common.hashing import sha256_file_hex as sha256  # noqa: E402
 
 # Upstream dataset sources of the broad builder, grouped by the kind of reasoning their tasks need.
 DEFAULT_DOMAINS = {
@@ -44,14 +45,6 @@ DEFAULT_DOMAINS = {
     'rg-': 'puzzles', 'msr-sqa': 'table_qa', 'knights-knaves': 'logic', 'mbpp': 'code', 'design-brief': 'design_briefs', 'design_brief_gates': 'design_briefs', 'tau': 'agent_store',
     'apigen': 'agent_store',
 }
-
-
-def sha256(path):
-    digest = hashlib.sha256()
-    with open(path, 'rb') as handle:
-        for block in iter(lambda: handle.read(1 << 20), b''):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def domain_of(row, domains):
