@@ -587,3 +587,31 @@ arithmetic), now rules for every batch:
   keep per-root helpers: the tag there rests on shared world state, treat as weaker).
 - Pool assembly: `assemble_selection_pool.py --spec pool-spec.json` now takes `min_effect_share` (0.3), `program_caps`
   (per external source, e.g. bgkit 40 rows per program) and `exclude_ids`.
+
+## 14. Round 4 changes (2026-11-03)
+
+- **Effect/state means a world.** `measure_repetition.program_features` counts `effect_state_oracle` only when the oracle verifies a
+  world after the run: effect keys (`effects`, `expected_files`, `files_oracle`, `function_checks`, `operation`, `service_scopes`,
+  `codebase_check`), `folder_files`, or a service whose state the oracle reads. An author-declared `oracle_depth: effect-state`
+  with none of that evidence is `returned_state_oracle` (a record computed from the arguments): kept, reported separately, never
+  counted toward the owner's 30% bar. Round 3's assembler share (30.0%) had counted 511 such authored rows; the strict share of the
+  same 6,666-row pool was 22.4% (1,490 rows). An independent count that excludes the 100 authored folder-effect rows reproduces
+  20.9% (1,390 rows). Author `effect_state` tasks as `folder_reducer` worlds with `expected_folders`.
+- **Pool assembly**: train rows related to any registered protected packet or held source are dropped (receipt:
+  `protected_world_related`, `protected_worlds_digest`); `min_pool_rows` (pool-spec) bounds the quota's shrinking and the receipt
+  reports `quota.met` and the honest share instead of dropping breadth; returned-state rows are kept whole but not counted.
+- **Held authored rows** are registered with `scripts/rl_tasks/register_authored_held.py` (immutable stamped packets
+  `natlang-rl-authored-{dev,confirmation}-<stamp>`, evaluation-only, pinned manifests). Run it after every admission wave, commit
+  the manifests and `training/neuralese_corpora.json`, then rebuild the pool (the protection digest changes). Authors reused
+  `invented:<domain>` group strings across worlds that the world split put on different sides, so 13 train rows were related to
+  held rows and are never selectable.
+- **Rotation credit**: `record --credit-from` credits only the batch's admitted rows (admission log); `reconcile` rewrites a
+  ledger to the admission log (25 entries had over-credited tasks the audit dropped).
+- **Blind solve**: every packet row carries an `answer_format`; folder tasks must list EVERY file of the final world folder with exact
+  text. `blind_solve.py prompt` prints the uniform solver prompt; the solver returns `{"answers": ..., "ambiguous": ...}` and
+  `compare` fails on any ambiguity. Round 4 found one wrong `expected` per roughly 40 tasks that qualification could not see
+  (a root that never calls its helper because the crew list omits the names; a total of 1300 for a literal 1360).
+- **multi_operation_codebase lint is an error** without an identical helper file (same name, same text) in two or more roots' folders.
+- **Producer notes**: `admit_authored` attaches `reference.children` for Neuralese producer helpers from replay-verified smoke
+  scripts (`authored_child_notes.py`; per-call `$match` values, never constants).
+- **The family field is the bare family name**; the converter adds `auth_`.
