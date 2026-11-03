@@ -34,7 +34,8 @@ RUN.json (schema natlang.rl-cloud-run/1):
                          "zip-delta" with "base", "receipt" {sha256, bytes}, "payload" {sha256, bytes}}]),
    "runtime_archive" ({"runtime", "archive", "sha256", "bytes", "closure_sha256"}: the frozen runtime SFT windows run),
    "lineages": {NAME: joint SFT: {"controller" (the DGX lineage's current window control), "window" (optional
-                         refresh_after_updates), "rebuild_window" (seed from an incomplete window's parent, forking
+                         refresh_after_updates), "prepared_control" (window 0 is that exact DGX-prepared, never-started
+                         control, e.g. a corrected-mix boundary), "rebuild_window" (seed from an incomplete window's parent, forking
                          from the DGX window), "config" (overrides), "resources", "account", "allow_missing"}
                       RL: {"template" (a DGX lineage config.json), "parent": {"checkpoint", "tokenizers"},
                            "config", "resources", "account"}},
@@ -766,6 +767,8 @@ def seed_sft(run, name):
         if any(L.rglob('state.json')):
             raise SystemExit(f'{L} has a controller state; a seed is only for a new lineage')
         shutil.rmtree(L)  # an interrupted seed's prepared controls: nothing earned, rebuilt from the live boundary
+    if spec.get('prepared_control'):
+        return seed_prepared_sft(run, name, spec, exports, L)
     boundary = select_boundary(spec)
     if boundary['mode'] == 'same-window' and spec.get('rebuild_window') is not True:
         raise SystemExit(f'{name}: {spec["controller"]} is not a completed window ({boundary["phase"]}); seeding '
@@ -810,6 +813,90 @@ def seed_sft(run, name):
               'parent_source': boundary, 'dgx_verified': True, 'cloud_committed': True}
     store_json(exports / 'seed.json', record)
     note(run, f'{name} seed export ({boundary["mode"]}): parent {boundary["parent"]} ({boundary["parent_sha256"][:12]}, '
+              f'{checkpoint["encoding"]}) from {spec["controller"]}; {len(inputs)} inputs, closure '
+              f'{closure["bytes"] / 1e9:.2f} GB')
+    return record
+
+
+def prepared_boundary(spec):
+    """An exact window control prepared on the DGX but never started there (``"prepared_control": true``), e.g. a
+    corrected-mix boundary whose source correction, objective continuation and focus only its own preparer applies:
+    ``sft_window.py next`` from the prior control would rebuild a different (uncorrected) window. The cloud lineage
+    becomes this control's only executor, so a control the DGX has started (or moved past) is refused."""
+    from natlang_neuralese.common.hashing import sha256_file_hex_cached
+    control = Path(spec['controller'])
+    config = json.loads(control.read_text())
+    if not config.get('mandatory_sft_only'):
+        raise SystemExit(f'{control} is not a mandatory supervised controller')
+    if (Path(config['out']) / 'state.json').exists():
+        raise SystemExit(f'{control} has started on the DGX ({config["out"]}/state.json): name its completed boundary '
+                         f'instead; a prepared control has one executor')
+    successors = controller_successors(control)
+    if successors:
+        raise SystemExit(f'{control} has successor controls {successors}')
+    parent = Path(config['checkpoint']).resolve(strict=True)
+    sha = sha256_file_hex_cached(parent)
+    expected = ((config.get('branch_origin') or {}).get('parent') or {}).get('sha256')
+    if expected and expected != sha:
+        raise SystemExit(f'{control}: parent sha256 {sha} differs from its branch origin {expected}')
+    return {'mode': 'prepared-control', 'controller': str(control), 'controller_sha256': file_digest(control),
+            'phase': None, 'dgx_window_in_flight': None, 'previous_controller': None, 'window': None,
+            'parent': str(parent), 'parent_sha256': sha, 'parent_bytes': parent.stat().st_size,
+            'runtime': (config.get('actor_environment') or {}).get('NATLANG_REPO') or str(Path(config['runtime']).parent)}
+
+
+def relocate_control(config, window, parent_path, ident):
+    """A prepared DGX control as window 0 of a cloud lineage: its output tree moved to ``window`` (every path under the
+    old ``out``), the parent at the lineage's parent path, host-only controls dropped (sandbox_controls)."""
+    old_out = str(config['out']).rstrip('/')
+    text = json.dumps(config)
+    text = text.replace(json.dumps(old_out), json.dumps(str(window))).replace(old_out + '/', str(window) + '/')
+    config = sandbox_controls(json.loads(text), window)
+    config['out'] = str(window)
+    config['checkpoint'] = str(parent_path)
+    config['id'] = ident
+    config.pop('rolling_sft_resume', None)
+    return config
+
+
+def seed_prepared_sft(run, name, spec, exports, L):
+    """Seed export of a joint-SFT lineage whose window 0 is an exact DGX-prepared, never-started control."""
+    boundary = prepared_boundary(spec)
+    window, parent_path = L / 'w000000', L / 'parent' / 'checkpoint.pt'
+    window.mkdir(parents=True)
+    source = json.loads(Path(spec['controller']).read_text())
+    store_json(window / 'dgx-prepared-config.json', source)
+    config = relocate_control(source, window, parent_path, f'lfm3-cloud-{name}-w000000')
+    for key, value in spec.get('config', {}).items():
+        if value is None:
+            config.pop(key, None)
+        else:
+            config[key] = value
+    store_json(window / 'config.json', config)
+    store_json(L / 'lineage.json', {'schema': sandbox.LINEAGE_SCHEMA, 'origin': boundary,
+                                    'windows': [{'index': 0, 'out': str(window), 'config': str(window / 'config.json')}]})
+    closure_path = hub(run) / 'closures' / f'{name}.json'
+    closure_path.parent.mkdir(parents=True, exist_ok=True)
+    runtime_tool(boundary['runtime'], 'closure', '--config', str(window / 'config.json'), '-o', str(closure_path))
+    closure = read_json(closure_path)
+    allowed = set(spec.get('allow_missing', []))
+    missing = [m['path'] for m in closure['missing'] if m['path'] not in allowed]
+    if missing:
+        raise SystemExit(f'{name}: inputs the control names are absent on the DGX: {missing[:20]}')
+    inputs = lineage_inputs(run, name, closure)
+    checkpoint = put_checkpoint(run, boundary['parent'], parent_path)
+    members = ['lineage.json'] + [str(p.relative_to(L)) for p in sorted(L.rglob('*')) if p != L / 'lineage.json'
+                                  and not str(p.relative_to(L)).startswith('parent')]
+    top_sha, top_bytes = _tar_zst_put(run, L, members, f'{name}-seed-top')
+    record = {'schema': EXPORT_SCHEMA, 'seq': 'seed', 'lineage': name, 'lineage_dir': str(L), 'round': 0,
+              'trained_rounds': 0, 'created': time.time(), 'state_sha256': None, 'kind': 'sft',
+              'blobs': [{'kind': 'top', 'sha256': top_sha, 'bytes': top_bytes, 'encoding': 'tar.zst'}, checkpoint],
+              'checkpoint': str(parent_path), 'checkpoints': [str(parent_path)], 'links': [], 'inputs': inputs,
+              'closure': {'path': str(closure_path), 'sha256': file_digest(closure_path), 'files': len(closure['files']),
+                          'bytes': closure['bytes'], 'excluded': len(closure['excluded'])},
+              'parent_source': boundary, 'dgx_verified': True, 'cloud_committed': True}
+    store_json(exports / 'seed.json', record)
+    note(run, f'{name} seed export (prepared control): parent {boundary["parent"]} ({boundary["parent_sha256"][:12]}, '
               f'{checkpoint["encoding"]}) from {spec["controller"]}; {len(inputs)} inputs, closure '
               f'{closure["bytes"] / 1e9:.2f} GB')
     return record
@@ -1331,7 +1418,7 @@ def plan(run):
         elif is_tune(spec):
             entry['start'] = {'seed': 'not yet prepared', **spec['tune']}
         elif is_sft(spec):
-            boundary = select_boundary(spec)
+            boundary = prepared_boundary(spec) if spec.get('prepared_control') else select_boundary(spec)
             entry['start'] = {'seed': 'not yet prepared', **boundary}
             entry['bases'] = {b['sha256']: {'local': bool(b.get('path') and Path(b['path']).is_file()),
                                             'chain_blobs_readable': all(

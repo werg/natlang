@@ -41,3 +41,27 @@ def test_actor_uses_sglang_follows_the_engine_adoption_default():
     assert not actor_uses_sglang({**native, 'model': 'mellum'})
     assert not actor_uses_sglang({**native, 'actor_engine': 'llama-cpp'})
     assert not actor_uses_sglang({**native, 'mandatory_sft_only': True})
+
+
+def test_prepared_control_relocates_window_and_refuses_a_started_control(tmp_path):
+    from scripts.coreweave.rl_cloud import prepared_boundary, relocate_control
+    parent = tmp_path / 'parent.pt'
+    parent.write_bytes(b'parent')
+    out = tmp_path / 'dgx-window'
+    control = tmp_path / 'ops' / 'w1' / 'config.json'
+    control.parent.mkdir(parents=True)
+    config = {'mandatory_sft_only': True, 'out': str(out), 'checkpoint': str(parent), 'runtime': '/rt/x/y',
+              'trainer_parameters': {'checkpoint_input_offload_directory': str(out) + '/offload'},
+              'rolling_sft_resume': {'schema': 'natlang.rolling-sft-resume/1'},
+              'learner_command': ['python', '-m', 'natlang_neuralese.rl.native_stage', '{out}']}
+    control.write_text(json.dumps(config))
+    boundary = prepared_boundary({'controller': str(control)})
+    assert boundary['mode'] == 'prepared-control' and boundary['parent'] == str(parent.resolve())
+    moved = relocate_control(config, tmp_path / 'cloud' / 'w000000', tmp_path / 'cloud' / 'parent' / 'checkpoint.pt', 'id0')
+    assert moved['out'] == str(tmp_path / 'cloud' / 'w000000')
+    assert moved['trainer_parameters']['checkpoint_input_offload_directory'] == str(tmp_path / 'cloud' / 'w000000') + '/offload'
+    assert moved['checkpoint'].endswith('cloud/parent/checkpoint.pt') and 'rolling_sft_resume' not in moved
+    out.mkdir()
+    (out / 'state.json').write_text('{}')
+    with pytest.raises(SystemExit):
+        prepared_boundary({'controller': str(control)})
