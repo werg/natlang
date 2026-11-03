@@ -6,16 +6,30 @@ oracles. You write programs, inputs, exact answers and controls. You never write
 
 Read this whole file before writing anything. Rules that override everything else:
 
-- **Every fact the answer needs is visible in the inputs or the program.** No hidden gold. If a careful human with
-  the inputs could not get exactly the expected value, the task is wrong.
+- **Run the program literally, then write `expected`.** Simulate every helper as a reader that sees only the
+  arguments it receives (and its own text), in the order the program calls them. Never copy a dataset's gold: if the
+  program's routing, budget, filter or rule drops a fact, the literal answer changes and `expected` follows the
+  program. Round 1 found no arithmetic slips in hand-computed answers; every wrong `expected` came from answering by
+  intent or from dataset gold instead of running the program as written.
+- **Every fact the answer needs is visible in the inputs or in the text of the helper that decides it.** No hidden
+  gold, and no rule in a root preface the deciding helper never receives. If a careful human with the inputs could not
+  get exactly the expected value, the task is wrong.
+- **Every natural-language judgment has one clearly right reading.** If a note does not name the item, a careful
+  reader must not be able to argue the other way. Prefer notes that name the box, barcode or entity. When ambiguity is
+  the lesson, the program's own stated rule must settle it. Ambiguous tasks are rejected, not repaired later.
+- **Drop a tag rather than simulate it.** A construct you cannot build honestly is not claimed: `constructs: []` is a
+  valid task. Do not write your own inbox to claim `folder_reducer` (use `folders`), do not tag
+  `multi_operation_codebase` on a one-operation world, do not give a skill a fact the answer does not need.
 - **The answer contract is visible.** The root's `returns` type and its instruction say exactly what form the answer
-  takes (record fields, units, whole numbers, exact names).
-- **Real diversity, not renaming.** A new task must differ in what is computed, its call graph, its state, or its
-  failure modes. Swapping names, numbers, products or cities into the same program is the *same* task; the novelty
-  gate rejects it.
+  takes (record fields, units, whole numbers, exact names), and the question asks for exactly what the root returns
+  (a sum is not "the average", a count is not "which").
+- **Real diversity, not renaming and not toggling.** A new task must differ in what is computed, its call graph, its
+  state, or its failure modes. Swapping names, numbers or cities, switching a rule sentence on or off, or adding an inert
+  paragraph is the *same* task (see section 7). The novelty gate and the audit both remove padding and count it
+  against the batch.
 - **Never use protected or held data** (see Exclusions). Never copy text from evaluation packets.
 - **Policy is natural language; exact work is code.** NL helpers interpret, judge and summarize; arithmetic, sums,
-  sorting, counting and state updates happen in the root's code (`eval`) or are spelled out as exact steps.
+  sorting, counting, comparisons and state updates happen in the root's code (`eval`) or are spelled out as exact steps.
 - **Do not spell out a wrong form in an instruction** ("do not write X"). Say what to do.
 
 ## 1. Where to write
@@ -47,20 +61,20 @@ One JSON object per line:
 | `shape` | short name of the call-graph pattern, e.g. `carried-notes-then-exact-apply` |
 | `domain` | free word: `operations`, `planning`, `finance`, `science`, `customer_service`, `code`, ... |
 | `world` | identity of the scenario world. Tasks that share facts (same store, same document set, same codebase, same customer) MUST share `world`; the split (train/dev/confirmation) is derived from it, so related tasks never cross splits. |
-| `level` | 0-3 real difficulty: 0 = one helper call and a direct answer; 1 = two or three steps; 2 = several dependent steps or carried state; 3 = long inputs, many items, corrections or competing constraints. Use all four levels in a family. For constructs that need at least two helpers (relay, fan-in, depth 3), level 0 is the simplest two-call version: short clean inputs, no corrections, each helper used once. |
-| `constructs` | non-empty subset of: `call_depth_3`, `neuralese_relay`, `typed_neuralese`, `neuralese_fan_in`, `iterate`, `iterate_neuralese`, `folder_reducer`, `decision_readout`, `skills`, `multi_operation_codebase`, `effect_state` (definitions in section 3) |
+| `level` | honest difficulty 0-3: 0 = one helper call and a direct answer (a two-call relay or a one-call filter is level 0, not 2); 1 = two or three steps; 2 = several dependent steps or carried state; 3 = long inputs, many items, corrections or competing constraints. Level 3 must be genuinely long and constrained: a dozen or more items, corrections that interact, or rules that compete and need a stated precedence. Round 1 labelled one-call filters 2-3 and had no real level-3 task; auditors relabel inflated levels. Every family needs real level-3 tasks. For constructs that need at least two helpers (relay, fan-in, depth 3), level 0 is the simplest two-call version: short clean inputs, no corrections, each helper used once. |
+| `constructs` | list, possibly empty, drawn from: `call_depth_3`, `neuralese_relay`, `typed_neuralese`, `neuralese_fan_in`, `iterate`, `iterate_neuralese`, `folder_reducer`, `decision_readout`, `skills`, `multi_operation_codebase`, `effect_state` (definitions in section 3). Claim only what the program really does; `[]` is correct for a good task whose construct would be fake. |
 | `root` | the root file name, e.g. `"close_stock_day.nl"` (top level, ends in `.nl`) |
-| `files` | object path -> file text. The root plus its helpers. Helpers callable by the root live in the folder named like the root without `.nl` (`close_stock_day/absorb.nl`). A helper called by a helper lives in that helper's folder (`handle_claim/assess_parts/coverage_window.nl`). Skills: `root_folder/skills/<skill-name>/SKILL.md`. |
+| `files` | object path -> file text. The root plus its helpers. Helpers callable by the root live in the folder named like the root without `.nl` (`close_stock_day/absorb.nl`). A helper called by a helper lives in that helper's folder (`handle_claim/assess_parts/coverage_window.nl`). Skills: `<folder of the function that reads them>/skills/<skill-name>/SKILL.md`: the runtime binds a folder's skills only to the call that owns that folder (the root owns `close_stock_day/`, so `close_stock_day/skills/x/SKILL.md` is visible to the root and to nobody below it; a helper `handle/assess.nl` needs `handle/assess/skills/x/SKILL.md`). Qualification rejects a skill read by any other function. |
 | `inputs` | object: the root's arguments by name, with concrete values |
 | `expected` | the exact correct result, matching the root's `returns` type |
 | `oracle` | `"exact"` (deep equality; records compare by field, key order irrelevant) or `"normalized"` (also ignores case, surrounding spaces and number formatting for strings/numbers) |
 | `oracle_depth` | `"effect-state"` when `expected` is the full resulting state of the world after the task's operations (a stock ledger, a schedule, a set of bookings, a repaired config); otherwise `"answer"`. Must agree with the `effect_state` construct. |
-| `wrong_answers` | 2-6 *meaningful* wrong results of the right type: what a model gets by a real mistake (missed correction, wrong branch, off-by-one, dropped item, applied rule in the wrong order). Each must differ from `expected` and must be rejected by the oracle. |
-| `alias_answers` | 0-3 alternative forms of the SAME correct result that should be accepted (reordered record keys, case/spacing variants for normalized). Must be type-valid. |
+| `wrong_answers` | 2-6 *meaningful, task-specific* wrong results of the right type: what a model gets by a real mistake (missed correction, wrong branch, off-by-one, dropped item, applied rule in the wrong order). Each must differ from `expected` and must be rejected by the oracle. |
+| `alias_answers` | 0-3 alternative forms of the SAME correct result. They become the oracle's `alternates`, so the runtime accepts them; key order is already ignored and `normalized` already ignores case, spacing and number formatting. An alias may not equal a wrong answer. Use them only for forms a careful author would also call right. |
 | `smoke` | `{"code": "<root eval script>", "children": {"<helper name>": <scripted answer>}}`. The code calls the helpers the way the program intends (one pass is enough); each helper answers with its scripted value. It proves the call graph wires and type-checks. Typed Neuralese helpers answer with a record; `Neuralese<string>` helpers with text; `readout: decision` helpers with one of their options. |
 | `groups` | optional list of extra world/source identities (e.g. the dataset item id your task was inspired by) |
 | `reference` | optional; default is a direct return of `expected`. Either a list of root actions, or `{"root": [...], "children": [{"match": ["<text the helper call receives>"], "value": <its answer>}, ...]}` when the root's script calls helpers (required for folder tasks: the reference must really do the moves/writes). |
-| `folders` | optional, only with `folder_reducer`: object relative path -> file text, e.g. `{"inbox/r-0412.md": "..."}`. These files are the task's world folder; the root (which must have `kind: directory-reducer`) reads, moves and writes them. Never have the root create its own items instead. |
+| `folders` | required with `folder_reducer` (qualification rejects the tag without it): object relative path -> file text, e.g. `{"inbox/r-0412.md": "..."}`. These files are the task's world folder; the root (which must have `kind: directory-reducer`) reads, moves and writes them. Never have the root create its own items or take them as arguments instead. The folder is carried through conversion, reference replay and smoke. |
 | `expected_folders` | optional, with `folders` and `oracle_depth: "effect-state"`: the complete folder after a correct run (every file that must exist, with its exact text). Files left behind or misplaced fail the task. |
 | `wrong_code` | optional (needs `reference`): 1-4 wrong root scripts that replace the reference's last eval, e.g. a sort that skips one category or moves everything to one place. Each must be rejected. Use these for effect tasks: a wrong returned value alone does not show the oracle checks the effects. |
 
@@ -89,16 +103,16 @@ fields or `null`, never `undefined`.
 
 | tag | the program must contain |
 |---|---|
-| `call_depth_3` | root -> helper -> sub-helper, each solving a *different* subproblem (not the same task delegated again) |
+| `call_depth_3` | root -> helper -> sub-helper, each solving a *different* subproblem. The middle helper owns its own work (it combines its sub-helper's result with something else it computes or decides) and actually calls the sub-helper. A pass-through middle, a sub-helper that is a one-line comparison (exact comparisons belong in code), or the same task delegated again is not depth. Qualification rejects a missing chain and warns on pass-through and thin middles (heuristic). |
 | `neuralese_relay` | a helper returns `Neuralese<...>` and that value is passed as an argument into another helper |
 | `typed_neuralese` | a helper returns `Neuralese<{ ...record... }>` |
 | `neuralese_fan_in` | two or more Neuralese-producing helpers (distinct roles, or one per item) whose outputs the parent combines |
-| `iterate` | the root uses `iterateOn` over items/steps with an explicit stopping condition |
+| `iterate` | the root uses `iterateOn` over several items/steps (not one) and states its stopping condition in words ("Stop when ..."); qualification rejects any `iterateOn` without one |
 | `iterate_neuralese` | `iterateOn` whose carried state is (or contains) a Neuralese value |
 | `folder_reducer` | the root has frontmatter `kind: directory-reducer` and works over the task's `folders` items (read each file with `folder.files("dir/*.md")` and `file.readText()`, act with `file.moveTo("dir/")` or writes); usually paired with `effect_state` + `expected_folders`. See the example below. |
-| `decision_readout` | a `readout: decision` helper whose distribution the parent acts on via `decide(...)` |
-| `skills` | `skills/<name>/SKILL.md` files the program loads and applies to choose or perform work |
-| `multi_operation_codebase` | the task's root is one of several operations of the same reusable program (same `family`, same helper files, different root functions across tasks of one world) |
+| `decision_readout` | a `readout: decision` helper whose distribution the parent acts on via `decide(...)`. A readout is a leaf: it runs in one pass with no tools, so it calls no helper and owns no callable folder (qualification rejects both); do its lookups in the parent first and pass the facts in. |
+| `skills` | `<folder>/skills/<name>/SKILL.md` files, in the folder of the function that reads them, that the program loads (`read_code("skills.<name>")`) and applies to choose or perform work. A skill must hold the only statement of a fact or procedure the answer needs: a skill that restates the note is decoration, and the audit removes the tag. |
+| `multi_operation_codebase` | the task's root is one of several operations of the same reusable program: tasks of one `world` run different root functions over the same helper files. A world whose tagged tasks run one root fails qualification. |
 | `effect_state` | `expected` is the complete resulting state, checked field by field |
 
 Small `folder_reducer` example (`returns_desk_sorting`, level 1; qualified: reference, 4 negatives rejected, alias
@@ -152,13 +166,22 @@ What it checks per task:
 1. **convert**: the JSON matches section 2 (errors name the line and field);
 2. **reference replay**: the expected value, returned by the root, is admitted by the runtime and accepted by the oracle;
 3. **negative replay**: every `wrong_answers` entry is REJECTED by the oracle;
-4. **alias replay**: every `alias_answers` entry is replayed; acceptance is recorded (a rejected alias is a warning:
-   fix the alias or change `oracle` to `normalized` when the variant is genuinely the same answer);
+4. **alias replay**: every `alias_answers` entry is replayed and must be ACCEPTED (aliases are the oracle's alternates);
 5. **smoke**: the `smoke.code` call graph runs with the scripted helper answers (catches wrong file placement, type
-   errors, missing helpers);
-6. **custody**: no relation to any protected world (ProtectedWorlds registry) or the LFM3 held-set group closure.
+   errors, missing helpers); the smoke and reference scripts must also call each root helper with the declared number
+   of arguments;
+6. **custody**: no relation to any protected world (ProtectedWorlds registry) or the LFM3 held-set group closure;
+7. **lint** (`scripts/rl_tasks/authored_checks.py`, static): `folder_reducer` or a `directory-reducer` root without
+   `folders`; a readout that calls helpers or owns a folder; a skill bound to the wrong function; a
+   `multi_operation_codebase` world with one root; `iterateOn` without a stated stop, or an `iterate` tag without
+   `iterateOn`; `call_depth_3` without a chain or with a middle that never calls its sub-helper; helper calls spelled out
+   in your instructions with the wrong argument count. Warnings prefixed `heuristic:` (pass-through or thin middle
+   helpers, shared helpers across operations) are guesses for the auditor and fail nothing; take them seriously.
 
-Pass criterion: `"result": "PASS"` (every task passes 1-3, 5, 6). If some fail, fix or delete those tasks and rerun into
+Qualification never runs the program as a model would, so none of this proves your `expected`: that is what the
+literal run in section 10 is for.
+
+Pass criterion: `"result": "PASS"` (every task passes 1-7). If some fail, fix or delete those tasks and rerun into
 a fresh `qualified-2/` directory. Never weaken an oracle or delete a wrong answer just to pass: a wrong answer that is
 accepted means the oracle cannot tell right from wrong, so the task is broken.
 
@@ -178,14 +201,18 @@ A task is its program together with its inputs. Several invocations of one progr
 and inputs are wanted (a multi-operation codebase is called many times). Pass: no exact duplicates (same program AND
 same inputs after normalizing digits and quoted literals: swapping a number or quoted value is not a new task), at most
 10% near duplicates (within a family, 5-word shingle Jaccard >= 0.8 for the programs AND for the inputs), and every
-family either has 20+ distinct programs in total or gains 5+ new programs in this batch. Text is not enough: each
-program also has a functional signature (call graph, helper argument/return types, kind/readout, which helpers each
-function calls, the code steps it spells out in backticks and the reference scripts, with literals abstracted).
-Adding paragraphs that change no call, type or code step does not make a new program: such tasks are listed under
-`functional_repeats`, and in each family at least half of the batch's new programs must be functionally new (unless
-the family already has 20+ functional signatures). New programs come from new operations, helpers, data flow or code
-steps. `novelty.json` reports distinct programs and functional signatures per family separately from tasks
-(job exit 1 means FAIL, not a crash; read `novelty.json`).
+family either has 20+ distinct programs in total or gains 5+ new programs in this batch. Text is not enough: a program is also counted as a
+*functional program* (structure: call graph, helper argument/return types, kind/readout, which helpers each function
+calls, the code steps spelled out in backticks and the reference scripts, literals abstracted; plus the prose of the
+helpers, at word-trigram Jaccard 0.7, so renaming the root or reformatting a sentence is not a new program but a changed
+rule or a new operation is). Tasks whose program is functionally an existing one are listed under `functional_repeats`,
+and in each family at least half of the batch's new programs must be functionally new (unless the family already has
+20+ functional programs). New programs come from new operations, helpers, data flow or code steps, with inputs on which
+the new rule changes the answer. `novelty.json` reports distinct programs and functional programs per family separately
+from tasks (job exit 1 means FAIL, not a crash; read `novelty.json`; the file is written atomically, so a missing file
+means the job did not finish: read `novelty.log`, never an older file). The functional count is a calibrated proxy
+(10 of 12 audited round-1 batches within 30% of the auditors' distinct-program counts) and the audit still counts
+behaviour: a rule sentence toggled inside one helper can look like one program to the gate and eight to the auditor.
 Report both results to the supervisor; the supervisor moves passing batches into `admitted/` and records the rotation.
 
 ## 5. Exclusions
@@ -278,12 +305,15 @@ priority). Aliases: case and trailing-space variants.
 Authoring never stops after a quota. Every batch is in one of two **equal** modes; alternate between them.
 
 **Mode A, dataset-inspired.** A local dataset (section 9) supplies realistic call arguments and targets. Take an
-item's structure and gold, wrap it in a program that genuinely needs the batch's construct, and keep the item id in
-`groups`. The dataset is a seed, not a constraint: change the framing, add state, corrections or operations.
+item's structure, question and numbers, wrap them in a program that genuinely needs the batch's construct, and compute
+`expected` by running that program literally (section 10). The item's gold is a hint, never the answer: where the
+program's routing, budget or rule removes the evidence the gold relied on, the literal answer differs and wins.
+Cite the item id in `groups` only for items you actually used (question, numbers or gold); otherwise record the seed as
+`invented:<domain>`. The dataset is a seed, not a constraint: change the framing, add state, corrections or operations.
 
 **Mode B, original invention.** No dataset. Invent the program, its domain, its world data and its exact answer
-yourself (compute the expected value by hand, step by step, and double-check it; then write wrong answers from the
-mistakes you nearly made). Techniques, use a different one each batch:
+yourself (compute the expected value by running your program literally, step by step, as section 10 describes; then write
+wrong answers from the mistakes you nearly made). Techniques, use a different one each batch:
 1. *Unusual real process*: pick a real-world workflow few datasets cover (beekeeping hive inspections, ferry
    car-deck loading, choir seating by voice part, archive accession numbering, darkroom chemical rotation, sports
    league tie-breakers, hospital linen par levels) and model its records and rules.
@@ -303,7 +333,8 @@ mistakes you nearly made). Techniques, use a different one each batch:
    (report, undo, forecast, audit) to become a multi-operation codebase family.
 
 Each batch takes one **cell** = (seed, construct, problem type), where seed is a dataset name (mode A) or
-`invented:<domain>` (mode B):
+`invented:<domain>` (mode B). The rotation credits a batch to every construct it genuinely covers (`record --credit-from`),
+not only to its cell's construct:
 
 ```sh
 python3 scripts/rl_tasks/authoring_rotation.py next --ledger /mnt/external/natlang-rl-authoring/rotation.jsonl \
@@ -320,19 +351,36 @@ writing a batch.
 `next` returns the least-covered construct, the mode that has admitted fewer tasks (A or B), and for mode A the
 least-used dataset x problem cell; for mode B it lists every invented domain already used so you choose a domain
 NOT in that list (and not a renaming of one). Concurrent workers are offset so they start on different cells. After
-the supervisor admits a batch, record it (for mode B pass `--dataset invented:<your-domain>`):
+the supervisor admits a batch, record it (for mode B pass `--dataset invented:<your-domain>`; add
+`--credit-from <admitted cases.jsonl of the batch>` or repeated `--credit construct=N` so every genuine construct is credited):
 
 ```sh
 python3 scripts/rl_tasks/authoring_rotation.py record --ledger /mnt/external/natlang-rl-authoring/rotation.jsonl \
-  --dataset <dataset or invented:domain> --construct C --problem P --worker W --batch DIR --admitted N
+  --dataset <dataset or invented:domain> --construct C --problem P --worker W --batch DIR --admitted N \
+  [--credit construct=N ...] [--credit-from CASES.jsonl]
 ```
+
+**Steer away from the running ledger with corrections** (a list of notes folded into a running tally, later notes
+correcting earlier ones): 5 of the 6 round-1 batches admitted that one problem type, and it is now over-represented.
+Pick a computation of another kind: allocation or packing under constraints, routing over a table, scheduling with
+precedence, matching with stated preferences, diffing two states, planning from a rule table, reconciling two sources,
+bisection, graph or dependency order. Rotation priorities for the next round are `typed_neuralese`,
+`neuralese_fan_in`, `folder_reducer` over real `folders`, and `skills` (0 to 4 admitted each).
 
 Inside a cell, design a *program* first (a small application: its users, records/state, operations and failure
 modes), then write 10-40 tasks against it across all four levels: different invocations, different worlds, different
 corrections and edge cases. A new batch in an existing family must add new program variants (a new operation, helper
-role or kind of input mess), not new numbers. The novelty gate (section 4) enforces this against everything admitted.
+role or kind of input mess), not new numbers. Grow a family with new operations (undo, audit, carry-over, merge, repair,
+forecast, counterfactual) or new helper roles; not with more note mixes, readouts of the same ledger, per-task rule
+sentences switched on and off, or paragraphs that change no call, type or code step. For every rule variant include
+inputs on which omitting the rule changes the answer, and say which input that is (a comment in the task's `shape` or
+your batch notes). Padding added to pass the gate is removed in the audit and counted against the batch. The novelty gate (section 4) enforces this against everything admitted.
 
 ## 8. Gaps to fill (counts against the 2026-11-03 bar)
+
+After round 1 (77 tasks admitted): `call_depth_3` 53, `iterate` 42, `effect_state` 32, `multi_operation_codebase` 14,
+`decision_readout` 11, `iterate_neuralese` 8, `neuralese_relay` 8, `skills` 4, `typed_neuralese` 0, `neuralese_fan_in` 0,
+`folder_reducer` 0. Author the zero and near-zero constructs first, with real depth, folders and skills.
 
 Bar: each construct >= 100 distinct qualified tasks; >= 70% of families with >= 20 distinct programs; >= 30% of the
 selection pool with effect/state oracles. Existing RL source (61,399 tasks, measured with
@@ -386,3 +434,82 @@ See `plans/neuralese/RL_TASK_AUTHORING_DATASETS.md` (registry-derived catalog of
 knowledge-reasoning datasets, with schemas, protection status and 2-3 program ideas each). Use registries
 (`training/neuralese_corpora.json`, `training/corpus-manifests/`, `/home/werg/data/external-rl-sources/SURVEY.md` and
 each source's `PROVENANCE.json`); never crawl disks to find data. Prefer datasets marked underused.
+
+## 10. Authoring discipline (from the round-1 audit)
+
+Round 1 (163 tasks from six workers, `RL_AUTHORING_AUDIT_ROUND1_20261103.md`): 146 passed the audit, 99 of those only
+after fixes, 17 were rejected, and 77 tasks from 6 batches were admitted. The failures were semantic, not arithmetic.
+Do these things every time.
+
+**Run the program literally.** Write out, for each helper call, exactly what the helper receives (its arguments only,
+never the root's inputs or a preface it was not passed) and what its text makes it return. Apply the root's steps to
+those returns. That result is `expected`. Typical misses: a router that sends the decisive snippet to the wrong bucket,
+a budget that cuts off the fact, a gate applied to a file that never contained the fact. If the literal result differs
+from what you intended, either change the program so it does what you intended or accept the literal result.
+
+**One clearly right reading.** Name the entity in the note (box, barcode, hive id, ticket number). A reader who sees
+"reel 2 confirmed" with no named item, or "artists sign their work" offered as proof that a named artist engraved it
+(affirming the consequent), can argue either way; the task is rejected. If a recurring or worsening event must be
+counted, state the counting rule in the helper that counts. Put every rule the answer needs in the text of the helper
+that decides it.
+
+**Drop a tag rather than simulate it.** `folder_reducer` means the task's `folders` and `expected_folders`, nothing else.
+`multi_operation_codebase` means several root operations over shared helper files in one world. `skills` means a skill
+that is the only place a needed fact lives, in the folder of the function that reads it. `decision_readout` means a
+leaf. `neuralese_relay` and `iterate_neuralese` mean the relayed or carried note actually feeds the decision on the
+branch the task takes (a relay that never runs when the answer is "ask" is not covered by that task). `iterate` means
+several items and a stated stop. When unsure, remove the tag; `constructs: []` is fine.
+
+**Real depth.** For `call_depth_3` the middle helper owns a different subproblem and combines its sub-helper's result
+with its own work (for example, plan -> resolve one step -> look up one fact). A middle that forwards its arguments
+and returns the sub-helper's value, or a sub-helper that is one comparison, is not depth. Exact comparisons and
+arithmetic stay in code.
+
+**Diversity through new computation.** A family grows by new operations, helper roles or data flow: undo, audit,
+carry-over, merge, repair, forecast, counterfactual. It does not grow by toggled rule sentences, inert "Guard:" or
+"Tie check:" paragraphs, or per-task prefaces the deciding helper never sees. For each rule variant, include inputs on
+which omitting the rule changes the answer and know which task that is: in round 1 a refrigerated-first rule changed 2
+of 8 answers, a crane reserve 1 of 7 and best-fit none of the level-3 tasks, so 16 tasks were 8 programs by behaviour.
+Padding is removed in the audit and counted against the batch.
+
+**Contract hygiene.** The question asks for exactly what the root returns (a sum when it returns a sum, not "the
+average"; a count when it returns a count, not "which"). Use exactly representable decimals (halves, quarters, tenths
+only where the program rounds explicitly): JavaScript gives `5 - 4.2 = 0.7999999999999998`, and the exact oracle expects
+`0.8`. Otherwise state the rounding in the root's instruction. Wrong answers are task-specific mistakes (a missed
+correction, a wrong branch, an off-by-one), never a copy-pasted "colour: blue". State the counting rule for recurring
+events. Give every `iterateOn` an explicit stop.
+
+**Honest levels.** Label by what the task asks of a solver. Write genuine level-3 tasks in every family: long inputs,
+a dozen or more items, corrections that interact, or competing constraints with a stated precedence. A two-call relay is
+level 0 and a one-call filter is level 0 or 1.
+
+**Honest provenance.** Cite `groups` only for dataset items you used. If you borrowed only a format (a plan layout, a
+record shape), say `invented:<domain>`.
+
+## 11. Self-audit before qualifying
+
+The audit solves each task independently from the program text and inputs alone, with `expected`, wrong answers,
+aliases, reference and smoke stripped out, and then compares. Do that to your own batch first, and answer every line
+honestly for every task. Any "no" means fix or delete the task, not argue it.
+
+1. Did I simulate each helper with only the arguments it receives, then write `expected` from that run (not from the
+   dataset gold and not from what I meant)?
+2. Is every fact the answer needs in the inputs or in the text of the helper that decides it, with no root-only rule?
+3. Does every judgment have one clearly right reading, with the entity named in the note?
+4. Does the question ask for exactly what the root returns, in the unit and rounding it states? Are the decimals
+   exact?
+5. For each construct tag: can I point at the file and line that makes it true (section 3)? If not, remove the tag.
+   `folder_reducer` has `folders`; the readout is a leaf; the skill sits in its reader's folder and holds a needed fact;
+   the middle helper has its own subproblem; `iterateOn` runs over several items and states its stop; every spelled-out
+   helper call has the declared argument count.
+6. For every rule variant in the batch, which input changes its answer when the rule is removed? Is there such an
+   input for each?
+7. Is each task a new computation, or the same program with a sentence switched, a name or number changed, or an inert
+   paragraph added? Count the distinct programs by behaviour; that is what the audit counts.
+8. Are the levels honest, with real level-3 tasks, and is each wrong answer a real, task-specific mistake that the
+   oracle rejects?
+9. Is `groups` limited to items I actually used, with `invented:<domain>` otherwise?
+10. Does the batch avoid the running-ledger-with-corrections problem type, and does it cover one of the priority
+    constructs (`typed_neuralese`, `neuralese_fan_in`, real `folder_reducer`, `skills`)?
+
+Then run section 4.
