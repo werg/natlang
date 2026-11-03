@@ -245,6 +245,52 @@ def nested_checkpoint_references(roots, records):
     return dict(sorted(found.items()))
 
 
+def _find_key(value, key, out):
+    if isinstance(value, dict):
+        for name, item in value.items():
+            if name == key and isinstance(item, str):
+                out.add(item)
+            else:
+                _find_key(item, key, out)
+    elif isinstance(value, list):
+        for item in value:
+            _find_key(item, key, out)
+
+
+def protection_root_inputs(roots, records):
+    """Files ``ProtectedWorlds.load`` reads for every ``protection_root`` the admission records name (the
+    execution-transition qualification reloads the development packet's protection set at controller start;
+    2026-11-03 namespace replay: the held packet cases under the code checkout's untracked runs/). Files tracked in
+    a git checkout root arrive with the code bundle and are not shipped over it."""
+    import subprocess
+    from natlang_neuralese.common.custody import REGISTRY, _protected_source_paths, _read_protected_registry
+    named = set()
+    for current in [*roots, *records]:
+        path = Path(current)
+        if not path.is_file() or path.stat().st_size > NESTED_JSON_BYTES:
+            continue
+        try:
+            _find_key(json.loads(path.read_text()), 'protection_root', named)
+        except (ValueError, OSError):
+            continue
+    found = set()
+    for root in sorted(named):
+        root = Path(root)
+        if not root.is_dir():
+            continue
+        tracked = set()
+        if (root / '.git').exists():
+            listing = subprocess.run(['git', '-C', str(root), 'ls-files', '-z'], capture_output=True, check=True).stdout
+            tracked = {str(root / item) for item in listing.decode().split('\0') if item}
+        registry = root / REGISTRY
+        # The lexical path of every identity ProtectedWorlds.load(root) checks (the frozen runtime's own enumeration).
+        for item in [str(registry), *(identity[0] for identity in
+                                      _protected_source_paths(_read_protected_registry(registry), root))]:
+            if item not in tracked:
+                found.add(item)
+    return sorted(found)
+
+
 def nested_json_references(roots, *, depth=NESTED_JSON_DEPTH):
     """Small JSON records bound (path + sha256) inside control-named JSON files, transitively to ``depth``. Source
     manifests (native-graph-sources) are not expanded: their typed resolvers already name what training reads, and their
@@ -326,6 +372,8 @@ def closure(config_path, *, max_file_bytes=4 * GIB):
     historical_checkpoints = nested_checkpoint_references(admission, nested)
     for item in admission_payload_references(admission, nested):
         want(item, 'nested-admission-payload')
+    for item in protection_root_inputs(admission, nested):
+        want(item, 'protection-root')
     custody = runtime / 'runtime-input-closure.json'
     if custody.is_file():
         for item in json.loads(custody.read_text()).get('bound_files', []):

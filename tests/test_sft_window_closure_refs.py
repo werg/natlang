@@ -55,3 +55,24 @@ def test_sealed_collection_directories_are_admission_payloads(tmp_path):
     record = tmp_path / 'record.json'
     record.write_text(json.dumps({'source': {'path': str(other), 'sha256': 'b' * 64}}))
     assert window.admission_payload_references([str(record)], [str(proof)]) == [str(out)]
+
+
+def test_protection_roots_named_by_admission_records_ship_their_untracked_sources(tmp_path):
+    import subprocess
+    root = tmp_path / 'checkout'
+    (root / 'training').mkdir(parents=True)
+    (root / 'runs' / 'held').mkdir(parents=True)
+    (root / 'runs' / 'held' / 'cases.jsonl').write_text('{}\n')
+    (root / 'groups.json').write_text('{}')
+    (root / 'training' / 'neuralese_corpora.json').write_text(json.dumps({'corpora': [
+        {'id': 'held', 'path': 'runs/held', 'admission': 'evaluation-only-never-training', 'include': ['cases.jsonl']}]}))
+    (root / 'training' / 'protected-worlds.json').write_text(json.dumps({
+        'schema': 'natlang.protected-worlds-registry/1',
+        'sources': [{'id': 'packets', 'kind': 'evaluation-packets', 'registry': 'training/neuralese_corpora.json'},
+                    {'id': 'groups', 'kind': 'source-groups', 'path': 'groups.json'}]}))
+    subprocess.run(['git', 'init', '-q', str(root)], check=True)
+    subprocess.run(['git', '-C', str(root), 'add', 'training', 'groups.json'], check=True)
+    record = tmp_path / 'qualification.json'
+    record.write_text(json.dumps({'report': {'protection_root': str(root)}}))
+    # The registry files tracked by the checkout arrive with the code bundle; the untracked held cases are shipped.
+    assert window.protection_root_inputs([str(record)], []) == [str(root / 'runs' / 'held' / 'cases.jsonl')]
