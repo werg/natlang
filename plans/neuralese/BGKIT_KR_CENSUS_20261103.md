@@ -44,9 +44,12 @@ SFT mixture counts are rows of the corrected 100,840-row scan (families: rest27 
 | `chatqa2_long_sft` / `chatqa2_narrativeqa` | 30,000 / 14,760 | 2 (`chatqa2-doc`; predecessor withdrew 192 of 194) | 0 | s1-qa-long-context 4,300 | mixed upstream, unverified licence terms and protected-benchmark overlap unchecked; candidate for a verbatim-span family later. |
 | `babilong` (+ browse trees) | 11,854 | 0 | 0 | 0 | protected evaluation (showcase benchmarks). Not usable. |
 
+Predecessor figures below (the 7b99d86d source before correction, matched to the correction ledger by id) come from a scan of the
+first 86 of its 118 source files that the memory ledger preempted; they are lower bounds on withdrawals, not totals.
+
 Totals: 3,995 of 100,840 corrected-mix rows (4.0%) are bgkit-store derived, and 6,782 (6.7%) are bgkit or KR-reader
 derived; all of them are scheduled, none earned. Predecessor-to-corrected withdrawals in the KR namespaces were
-heavy (hotpotqa 1,006 of 1,798, memory-episode 238 of 261, chatqa2 192 of 194, quality 110 of 566), from the template-reader,
+heavy (in the scanned part: hotpotqa 1,006 of 1,798, memory-episode 238 of 261, chatqa2 192 of 194, quality 110 of 566), from the template-reader,
 near-duplicate and wrapper-collapse caps of the 2026-11-03 recipe review.
 
 ## 3. RL reader supply (new)
