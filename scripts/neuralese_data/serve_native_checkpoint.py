@@ -63,6 +63,10 @@ def main() -> None:
     parser.add_argument('--sglang-projection', choices=('native', 'vendor'), default='vendor',
                         help="LFM3 projections on SGLang: the learner's invariant native kernel, or one fused vendor "
                              'BF16 GEMM (fp32 accumulate; the learner corrects the gap with importance weights)')
+    parser.add_argument('--sglang-overlap-schedule', action='store_true',
+                        help="SGLang's overlapped scheduler. Off by default: on DGX GB10 with CUDA graphs it put "
+                             'tokens of a wrong distribution into 2-6%% of real RL turns (up to 24 nats from the '
+                             'learner); without it 0 of 64 (2026-11-03, plans/neuralese/LFM3_RL_ACTOR_ENGINE_20261028.md)')
     parser.add_argument('--sglang-arg', action='append', default=[], help='extra sglang.launch_server argument')
     parser.add_argument('--hf-export-dir', type=Path, help='HF export cache (default: <store-dir or checkpoint dir>/sglang-hf/<sha>)')
     args = parser.parse_args()
@@ -224,7 +228,8 @@ def launch_sglang(engine, args, checkpoint):
                '--max-mamba-cache-size', str(8 * args.sglang_max_running),
                '--cuda-graph-max-bs-decode', str(args.sglang_max_running),
                '--incremental-streaming-output', '--stream-interval', '8',
-               '--skip-tokenizer-init', '--trust-remote-code', *args.sglang_arg]
+               '--skip-tokenizer-init', '--trust-remote-code',
+               *([] if args.sglang_overlap_schedule else ['--disable-overlap-schedule']), *args.sglang_arg]
     print(json.dumps({'event': 'sglang_launch', 'command': command, 'export': manifest, 'source': source}), flush=True)
     # FlashInfer JIT-compiles kernels: the fork venv's ninja and the CUDA toolkit's nvcc on PATH.
     cuda = os.environ.get('CUDA_HOME', '/usr/local/cuda')
@@ -266,7 +271,7 @@ def launch_sglang(engine, args, checkpoint):
         time.sleep(5)
     engine.bind_sglang(url, export_manifest=manifest, fork={key: fork[key] for key in ('repository', 'branch', 'commit')},
                        adapter_slots=args.sglang_adapter_slots, adapter_rank=args.sglang_adapter_rank,
-                       projection=args.sglang_projection)
+                       projection=args.sglang_projection, overlap_schedule=args.sglang_overlap_schedule)
     return process
 
 

@@ -183,7 +183,7 @@ def sample(url, rows, concurrency, requests, *, max_tokens, min_tokens, stop_ids
         records = result['meta_info'].get('natlang_top_k') or []
         logps = [float(np.frombuffer(base64.b64decode(r)[:4], dtype='<f4')[0]) for r in records]
         meta = {k: v for k, v in result['meta_info'].items() if not isinstance(v, (list, dict))}
-        return {'prompt': row['prompt'], 'tokens': result['output_ids'], 'logps': logps,
+        return {'prompt': row['prompt'], 'tokens': result['output_ids'], 'logps': logps, 'records': records,
                 'seconds': time.monotonic() - started, 'meta': meta}
     started = time.monotonic()
     with ThreadPoolExecutor(concurrency) as pool:
@@ -226,7 +226,7 @@ def rescore(args, sample_files):
                     values += lp.gather(1, index[:, None])[:, 0].tolist()
             delta = [a - b for a, b in zip(values, row['logps'])]
             deltas += delta
-            turns.append({'tokens': len(delta), 'max_abs': float(np.max(np.abs(delta))),
+            turns.append({'source': row.get('source'), 'tokens': len(delta), 'max_abs': float(np.max(np.abs(delta))),
                           'mean_abs': float(np.mean(np.abs(delta))), 'mean_delta': float(np.mean(delta)),
                           'mean_k3': float(np.mean([np.exp(min(x, 20.)) - 1 - x for x in delta]))})
     return {'step': 'rescore', 'what': 'native learner-arithmetic logp minus SGLang sampled logp, SGLang samples',
