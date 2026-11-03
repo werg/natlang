@@ -587,6 +587,7 @@ class BankMetaLearner:
         restore_invariants(self.bank0, self.leaves)
         update = float(torch.sqrt(sum(((p.detach() - b) ** 2).sum() for p, b in zip(params, before))))
         self.state['step'] += 1
+        _release_cache()
         entry = {'step': self.state['step'], 'parent_sha256': self.state['parent_sha256'], 'families': records,
                  'grad_norm': norms, 'update_norm': update, 'seconds': round(time.time() - started, 2),
                  'passes': len(batch) * (self.recipe.fit_passes + 1 + 1)}
@@ -601,15 +602,25 @@ class BankMetaLearner:
             held = [name for name in held if name in families]
         out = {'schema': EVAL_SCHEMA, 'split': split, 'step': self.state['step'], 'parent_sha256': self.state['parent_sha256'],
                'fit_passes': self.recipe.fit_passes, 'families': {}}
+        # Resumable: each finished family is saved, so a preempted evaluation continues where it stopped. Arms that do
+        # not depend on the meta-trained bank (parent, initial bank, plain LoRA) are measured once per parent and
+        # reused at later steps: same rows, same deterministic fits.
+        partial = self.state.setdefault('partial_evaluations', {}).setdefault(f'{split}:{self.state["step"]}', {})
+        fixed = self.state.setdefault('fixed_arms', {}).setdefault(f'{self.state["parent_sha256"]}:{split}', {})
         for name in held:
             worlds = self.pool['families'][name]['worlds']
             support = [row for w in worlds if w['split'] == 'train' for row in w['rows']]
             scored = [row for w in worlds if w['split'] == split for row in w['rows']]
             if not support or not scored:
                 continue
+            if name in partial:
+                out['families'][name] = partial[name]
+                continue
             result = {}
             for arm in arms:
-                if arm == 'parent':
+                if arm != 'meta' and arm in fixed.get(name, {}):
+                    result[arm] = fixed[name][arm]
+                elif arm == 'parent':
                     result[arm] = {'loss': self.score(scored, 'initial')}
                 elif arm in ('meta', 'initial'):
                     fitted = self.fit(support, arm)
@@ -618,7 +629,11 @@ class BankMetaLearner:
                 elif arm == 'lora':
                     leaves, history = self.fit_lora(support, self.recipe.fit_passes)
                     result[arm] = {'loss': self.score_lora(scored, leaves), 'support_last': history[-1]}
-            out['families'][name] = result
+                if arm != 'meta':
+                    fixed.setdefault(name, {})[arm] = result[arm]
+            out['families'][name] = partial[name] = result
+            _release_cache()
+            self.save()
             if log is not None:
                 log(name, {arm: round(value['loss'], 5) for arm, value in result.items()})
         means = {}
@@ -634,6 +649,7 @@ class BankMetaLearner:
                 wins[other] = sum(1 for f in out['families'].values() if f['meta']['loss'] < f[other]['loss'])
         out['meta_wins'] = wins
         out['seconds'] = round(time.time() - started, 2)
+        self.state['partial_evaluations'].pop(f'{split}:{self.state["step"]}', None)
         self.state['evaluations'].append(out)
         return out
 
@@ -650,6 +666,13 @@ def promotion(evaluation, *, min_families=1, margin=0.):
     return {'met': met, 'beats': beats, 'means': means, 'families': count,
             'reason': 'meta-trained bank beats the un-meta-trained bank, plain LoRA and the parent' if met else
             'meta-trained bank does not beat: ' + ', '.join(k for k, v in beats.items() if not v)}
+
+
+def _release_cache():
+    """Return cached device blocks between families and steps: rows of different lengths fragment the caching
+    allocator, and on unified-memory hosts the cache counts against the job's memory claim."""
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
 
 def _rng_tensor(state):

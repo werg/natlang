@@ -105,12 +105,17 @@ def test_outer_steps_train_bank_and_basis_resume_exactly_and_evaluate_four_arms(
     assert evaluation['families'] and set(evaluation['mean']) == set(MB.ARMS)
     parent = evaluation['mean']['parent']
     assert parent is not None and set(evaluation['meta_wins']) == {'initial', 'lora'}
+    # Each finished family is saved: a preempted evaluation resumes from the saved families.
+    interrupted = MB.BankMetaLearner(engine, pool, recipe, tmp_path / 'op', parent_sha256='p')
+    saved = interrupted.state['partial_evaluations'][f"dev:{learner.state['step']}"]
+    assert set(saved) == set(evaluation['families'])
+    assert interrupted.evaluate('dev')['mean'] == evaluation['mean']
     manifest = learner.publish()
     bank = load_bank(engine, manifest)
     assert bank.parent == learner.bank0.snapshot and len(bank.components) == 3
     # A new promoted parent: the live bank continues from its saved tensors with a recorded transition.
     follow = MB.BankMetaLearner(engine, pool, recipe, tmp_path / 'op', parent_sha256='q')
-    assert follow.state['parents'][-1]['sha256'] == 'q' and follow.state['step'] == learner.state['step'] - 1
+    assert follow.state['parents'][-1]['sha256'] == 'q' and follow.state['step'] == learner.state['step']
     engine.store.close()
 
 
