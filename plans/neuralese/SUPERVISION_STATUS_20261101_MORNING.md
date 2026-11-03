@@ -1,3 +1,17 @@
+## Handoff to Claude Code, 2026-11-03 01:23 CET
+
+Read [the detailed current handoff](SUPERVISION_HANDOFF_20261103_CODEX_TO_CLAUDE.md)
+before acting on the older entries below. R38 passed numerical/full-source/packed
+capacity and fetched16 microbatches, then failed **before SGD** on activation-scratch
+space admission. There is no earned68. The production parent remains source71/full67.
+
+R36/R38 exact local diagnostic delta encoders completed successfully at01:20–01:21;
+private publication and safe raw retirement are pending. Global checkpoint offload
+and storage supervision were left running. Pop R38 installation is complete, but
+no evaluator is running. All four CoreWeave entitlement probes succeeded and were
+stopped; no new cloud learner was launched. Sub-agent strands are finished and
+their commits are on main. The owner requested leaving processes to the next agent.
+
 ## Initial focus role wired; graph payload recovery complete, 2026-11-03 00:39 CET
 
 - Final launch preparation found one more real wiring gap: the supported recipe
