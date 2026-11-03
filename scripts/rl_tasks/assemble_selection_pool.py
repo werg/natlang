@@ -59,7 +59,35 @@ def domain_of(row, domains):
     return None
 
 
-def load(paths):
+def apply_program_caps(rows, caps, dropped):
+    """Keep at most ``max_rows_per_program`` rows of each normalized program of the named external sources
+    (``curriculum.external.source``): program-poor supplies (one template over thousands of worlds) would otherwise
+    shrink the pool's effective program count. The survivors are the rows with the smallest id hashes, which spreads
+    them over worlds; nothing is duplicated or altered."""
+    import hashlib
+    limits = {item['source']: int(item['max_rows_per_program']) for item in caps}
+    if not limits:
+        return rows
+    groups = collections.defaultdict(list)
+    kept = []
+    for row, features in rows:
+        source = str(((row.get('curriculum') or {}).get('external') or {}).get('source') or '')
+        if source in limits:
+            groups[(source, features['program'])].append((row, features))
+        else:
+            kept.append((row, features))
+    for (source, _), members in groups.items():
+        members.sort(key=lambda item: hashlib.sha256(item[0]['id'].encode()).hexdigest())
+        kept += members[:limits[source]]
+        dropped[source] += max(0, len(members) - limits[source])
+    order = {id(item[0]): index for index, item in enumerate(rows)}
+    kept.sort(key=lambda item: order[id(item[0])])
+    return kept
+
+
+def load(paths, exclude_ids=(), program_caps=(), dropped=None):
+    dropped = collections.Counter() if dropped is None else dropped
+    excluded = set(exclude_ids)
     rows, seen = [], set()
     for path in paths:
         with open(path) as handle:
@@ -72,8 +100,11 @@ def load(paths):
                 if row['id'] in seen:
                     raise SystemExit(f'duplicate task id across inputs: {row["id"]}')
                 seen.add(row['id'])
+                if row['id'] in excluded:
+                    dropped['excluded_ids'] += 1
+                    continue
                 rows.append((row, program_features(row)))
-    return rows
+    return apply_program_caps(rows, program_caps, dropped)
 
 
 def caps(sizes, share):
@@ -202,11 +233,12 @@ def select(classes, total, share, family_share, min_effect_share):
     return pool, family_cap, limits, quota
 
 
-def assemble(inputs, out, *, share, domains, family_share=0.05, min_effect_share=0.0):
+def assemble(inputs, out, *, share, domains, family_share=0.05, min_effect_share=0.0, exclude_ids=(), program_caps=()):
     out = Path(out)
     if out.exists():
         raise SystemExit(f'{out} exists')
-    rows = load([path for path in inputs if Path(path).stat().st_size])
+    dropped = collections.Counter()
+    rows = load([path for path in inputs if Path(path).stat().st_size], exclude_ids, program_caps, dropped)
     classes = collections.defaultdict(list)
     for row, features in rows:
         classes[features['generator']].append((row, features))
@@ -258,6 +290,7 @@ def assemble(inputs, out, *, share, domains, family_share=0.05, min_effect_share
     receipt = {'schema': 'natlang.rl-selection-pool/1',
                'inputs': [{'path': str(Path(p).resolve()), 'sha256': sha256(p)} for p in inputs],
                'cases': {'path': 'cases.jsonl', 'sha256': sha256(cases), 'rows': len(ordered)},
+               'exclude_ids': sorted(exclude_ids), 'program_caps': list(program_caps), 'dropped_before_selection': dict(dropped),
                'max_generator_share': share, 'max_family_share': family_share, 'family_cap_rows': family_cap,
                'quota': quota,
                'generator_classes': {c: {'available': len(m), 'kept': sum(1 for _, f in pool if f['generator'] == c)}
@@ -274,7 +307,7 @@ def assemble(inputs, out, *, share, domains, family_share=0.05, min_effect_share
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--cases', action='append', default=[], help='verified train cases JSONL (repeatable)')
-    parser.add_argument('--spec', help='JSON {"cases": [paths], "max_generator_share", "max_family_share"}; '
+    parser.add_argument('--spec', help='JSON {"cases": [paths], "max_generator_share", "max_family_share", "min_effect_share", "exclude_ids": [ids], "program_caps": [{"source", "max_rows_per_program"}]}; '
                         'empty or missing files (e.g. a not-yet-filled admitted/cases.jsonl) are skipped')
     parser.add_argument('--out', help='new output directory')
     parser.add_argument('--out-root', help='write a fresh selection-pool-<UTC time> here and update latest.json')
@@ -288,6 +321,7 @@ def main(argv=None):
     domains = json.loads(Path(args.domain_map).read_text()) if args.domain_map else DEFAULT_DOMAINS
     inputs, share, family_share = list(args.cases), args.max_generator_share, args.max_family_share
     min_effect = args.min_effect_share
+    exclude_ids, program_caps = [], []
     if args.spec:
         spec = json.loads(Path(args.spec).read_text())
         inputs += spec['cases']
@@ -295,6 +329,8 @@ def main(argv=None):
         family_share = spec.get('max_family_share', family_share)
         if min_effect is None:
             min_effect = spec.get('min_effect_share')
+        exclude_ids += list(spec.get('exclude_ids', []))
+        program_caps = list(spec.get('program_caps', []))
     inputs = [path for path in inputs if Path(path).is_file()]
     if not inputs:
         raise SystemExit('no task source files')
@@ -307,7 +343,8 @@ def main(argv=None):
     else:
         raise SystemExit('give --out or --out-root')
     receipt = assemble(inputs, out, share=share, domains=domains, family_share=family_share,
-                       min_effect_share=0.3 if min_effect is None else min_effect)
+                       min_effect_share=0.3 if min_effect is None else min_effect,
+                       exclude_ids=exclude_ids, program_caps=program_caps)
     if args.out_root:
         latest = {'pool': str(out.resolve()), 'cases': str((out / 'cases.jsonl').resolve()),
                   'sha256': receipt['cases']['sha256'], 'rows': receipt['cases']['rows']}

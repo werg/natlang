@@ -62,3 +62,20 @@ def test_effect_state_quota_shrinks_pool_without_duplicating_rows(tmp_path):
     assert effects == 40 and effects >= .3 * len(kept) - 1
     assert receipt['quota']['applied'] and receipt['cases']['rows'] < free['cases']['rows']
     assert not free['quota']['applied']
+
+
+def test_program_caps_and_excluded_ids_trim_program_poor_sources_without_touching_rows(tmp_path):
+    rows = []
+    for i in range(30):
+        row = case(f'poor-{i}', 'poor_fam', 'g/poor', body='one template over many worlds')
+        row['curriculum']['external'] = {'source': 'bgkit'}
+        rows.append(row)
+    rows += [case(f'rich-{i}', f'rich{i % 3}', 'g/rich', body=f'rich program {chr(97 + i)}x{i}') for i in range(20)]
+    source = tmp_path / 'cases.jsonl'
+    source.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    receipt = pool.assemble([str(source)], tmp_path / 'capped', share=.9, domains={}, family_share=1.0,
+                            exclude_ids=['poor-3', 'rich-0'], program_caps=[{'source': 'bgkit', 'max_rows_per_program': 8}])
+    kept = {json.loads(line)['id'] for line in (tmp_path / 'capped' / 'cases.jsonl').read_text().splitlines()}
+    assert sum(i.startswith('poor-') for i in kept) == 8 and 'poor-3' not in kept and 'rich-0' not in kept
+    assert sum(i.startswith('rich-') for i in kept) == 19
+    assert receipt['dropped_before_selection'] == {'excluded_ids': 2, 'bgkit': 21}

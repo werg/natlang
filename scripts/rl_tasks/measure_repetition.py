@@ -31,7 +31,7 @@ CALL = re.compile(r'\b([A-Za-z_]\w*)\s*\(')
 CODE_LITERAL = re.compile(r'"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\'|\d+(?:\.\d+)?')
 SPACE = re.compile(r'\s+')
 # Broad-builder source modules that are separate program generators (scripts/rl_tasks/sources/*.py).
-OWN_GENERATOR_SOURCES = frozenset({'composed', 'decisions', 'codebase-ops'})
+OWN_GENERATOR_SOURCES = frozenset({'composed', 'decisions', 'codebase-ops', 'bgkit'})
 # Semantics that verify effects or state (files, services, function checks, repaired codebases), not only an answer.
 EFFECT_KEYS = frozenset({'effects', 'expected_files', 'function_checks', 'operation', 'service_scopes', 'files_oracle',
                          'codebase_check', 'state_oracle'})
