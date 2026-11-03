@@ -4818,6 +4818,25 @@ def _main(argv=None, *, requested_refresh):
             if requested_refresh.requested or relative_refresh_due or (args.refresh_after_updates is None
                                         and args.refresh_at_checkpoint and due_checkpoint):
                 refresh_boundary = True
+                if diloco is not None:
+                    # A window boundary is a drained DiLoCo boundary: deliver every fragment's partial window, install
+                    # the merges and save that state, so the next stage (an interleaved RL round or the next window)
+                    # registers its role from an exact drained worker checkpoint (rl/diloco_contract).
+                    if not diloco.drain_for_contract(stop_requested=lambda: policy.signaled):
+                        raise RuntimeError('DiLoCo windows were not delivered and merged at the window boundary; '
+                                           'resume from the rolling slot')
+                    _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
+                        global_step=global_step, epoch=epoch, cursor=cursor, source_receipts=source_receipts,
+                        source_hash=source_hash, source_row_bindings=source_row_bindings,
+                        held_row_bindings=held_row_bindings, exposure_counts=exposure_counts,
+                        rng=capture_training_rng_state(args.device), metrics=metrics,
+                        architecture=config['architecture'], options={**checkpoint_options, '_source_row_order': source_order},
+                        fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
+                    policy.drain_async()
+                    last_saved_step = step
+                    metadata_dirty = False
+                    print(json.dumps({'event': 'diloco_window_boundary_drained', 'global_step': global_step,
+                                      'merges': diloco.merges}), flush=True)
                 break
         if step == total_end and not policy.signaled and anneal is None:
             try:

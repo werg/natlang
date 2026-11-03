@@ -112,3 +112,45 @@ def test_namespaced_admission_relay_and_learner_start(tmp_path, monkeypatch):
         assert error.value.status == 502
     finally:
         stop.set()
+
+
+def test_plain_window_continuation_follows_its_drained_predecessor(tmp_path):
+    import tarfile
+    import uuid
+    model = torch.nn.Linear(2, 1, bias=False)
+    seed = tmp_path / 'seed.pt'
+    torch.save({'model': model.state_dict()}, seed)
+    shared = {'train': tmp_path / 'train.json', 'held': tmp_path / 'held.json'}
+    for path in shared.values():
+        path.write_text(path.name)
+    root1, argv1 = lineage(tmp_path, 'L1', shared, seed.read_bytes())
+    item1, contract, ns1, settings = join.compute_role(argv1, 4)
+    declared = {**contract, 'namespace_template': {'worker': 1, 'namespace': ns1,
+                                                  'role_sha256': canonical_json_sha256_hex(item1)}}
+    coordinator_root = tmp_path / 'coordinator'
+    initialize_coordinator(coordinator_root, run_id='elastic', masters=TensorSurface.from_module(model).masters,
+                           identity=declared, workers=4, min_quorum=1, grace_seconds=0, fragment_bytes=1024,
+                           seed_source={'sha256': item1['identity']['parent_checkpoint_sha256']})
+    c = Coordinator(coordinator_root)
+    session = str(uuid.uuid4())
+    c.lease(1, session, canonical_json_sha256_hex(item1))
+    drained = tmp_path / 'drained.pt'
+    drained.write_bytes(b'drained worker state')
+    digest = hashlib.sha256(drained.read_bytes()).hexdigest()
+
+    def continuation(stage='sft'):
+        item = json.loads(json.dumps(item1))
+        argv = item['identity']['trainer_argv']
+        argv[argv.index('--continue-from') + 1] = str(drained)
+        argv[argv.index('--out') + 1] = str(root1 / 'w2' / 'learner')
+        argv[argv.index('--stage-id') + 1] = stage
+        item['identity']['parent_checkpoint_sha256'] = digest
+        item.update(continuation_parent_sha256=digest, continuation_parent={'path': str(drained), 'sha256': digest},
+                    predecessor_contract_sha256=canonical_json_sha256_hex(item1))
+        return item
+    archive = tmp_path / 'empty.tar'
+    with tarfile.open(archive, 'w'):
+        pass
+    with pytest.raises(ValueError, match='window continuation changed'):
+        c.register_role_contract(1, session, continuation('other'), archive)
+    assert c.register_role_contract(1, session, continuation(), archive)['status'] == 'registered'

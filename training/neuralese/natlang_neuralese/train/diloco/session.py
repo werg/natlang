@@ -70,20 +70,22 @@ def prepare(args):
     if stage['parameters'].get('refresh_after_updates') != args.window:
         raise SystemExit('the prepared window did not adopt the session window length')
     stage['parameters']['diloco'] = block
+    # Inputs the prepared window wrote under its own directory (control-inputs snapshots, which bind each other's
+    # paths) stay at that session path, which ships to every worker; only the window's own outputs relocate.
+    text = json.dumps(base)
+    moved = sorted(str(p.relative_to(prep / 'out')) for p in (prep / 'out').rglob('*') if p.is_file() and p != old_recipe)
     recipe_path = write(directory / 'recipe-runtime.json', recipe)
     load_recipe(recipe_path)
     binding = native_recipe_binding(recipe_path, base['recipe_lineage_sha256'])
-    text = json.dumps(base).replace(json.dumps(str(old_recipe))[1:-1], str(recipe_path))
+    text = text.replace(json.dumps(str(old_recipe))[1:-1], str(recipe_path))
     control = json.loads(text)
     control['production_recipe'] = str(recipe_path)
     for key in ('trainer_parameters', 'seed_trainer_parameters'):
         control[key]['diloco'] = block
         control[key]['recipe_binding'] = binding
-    leftovers = sorted(str(p.relative_to(prep / 'out')) for p in (prep / 'out').rglob('*')
-                       if p.is_file() and p.name != 'recipe-runtime.json')
-    if leftovers:
-        raise SystemExit(f'the prepared window wrote inputs inside its window directory {leftovers}: '
-                         f'a relocated worker would not have them')
+    old_recipe.unlink()
+    if any(not x.startswith('control-inputs/') for x in moved):
+        raise SystemExit(f'the prepared window wrote unexpected inputs in its directory {moved}')
     bin_dir = directory / 'bin'
     bin_dir.mkdir()
     for name in ('join.py', 'relay.py'):
@@ -96,6 +98,7 @@ def prepare(args):
                                'init': ['--quorum', '1', '--max-staleness', str(args.max_staleness),
                                         '--grace-seconds', str(args.grace_seconds),
                                         '--outer-schedule', json.dumps(DEFAULT_SCHEDULE)]},
+               'window_inputs': moved,
                'boundary': {'config': str(Path(args.boundary_config).resolve()),
                             'parent': base['branch_origin']['parent'], 'window_updates': args.window,
                             'local_steps': args.local_steps}}
@@ -106,8 +109,11 @@ def prepare(args):
         item['seed_command'] = [seed[0], str(bin_dir / 'join.py'), '--session', str(session_path),
                                 '--worker', str(worker), '--', *seed]
         item['out'] = str(directory / 'workers' / f'worker-{worker}' / 'out')
-        text = json.dumps(item).replace(json.dumps(str(prep / 'out'))[1:-1], item['out'])
+        text = json.dumps(item).replace(json.dumps(str(prep / 'out') + '/resident-data')[1:-1],
+                                        item['out'] + '/resident-data')
         item = json.loads(text)
+        if json.dumps(item).count(str(prep / 'out') + '/') != json.dumps(item).count(str(prep / 'out') + '/control-inputs/'):
+            raise SystemExit('a worker control still names the preparation window directory')
         item['id'] = f'{args.run_id}-worker-{worker}'
         item['branch_origin'] = {**item['branch_origin'], 'diloco_session': {
             'session': str(session_path), 'worker': worker, 'run_id': args.run_id,
@@ -150,7 +156,7 @@ def main(argv=None):
     p.add_argument('--relay-port', type=int, default=18080)
     p.add_argument('--coordinator-port', type=int, default=8080)
     p.add_argument('--max-staleness', type=int, default=2)
-    p.add_argument('--grace-seconds', type=float, default=900.0)
+    p.add_argument('--grace-seconds', type=float, default=300.0)
     p.add_argument('--state-root', default='/work/diloco')
     p.add_argument('--coordinator-code', help='the bundle code the cohost serves the coordinator from '
                    '(default: the machine profile repo root, the same path in every sandbox)')

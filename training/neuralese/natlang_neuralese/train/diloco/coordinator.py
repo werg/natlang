@@ -432,6 +432,21 @@ class Coordinator:
                         if (matches[0]['identity']['parent_checkpoint_sha256']!=contract['identity']['parent_checkpoint_sha256']
                                 or fixed(matches[0]['identity']['trainer_argv'])!=fixed(contract['identity']['trainer_argv'])):
                             raise ValueError('objective transition changed fixed trainer identity')
+                    elif not contract.get('source_transition'):
+                        # A plain next window of the same supervised stage from the worker's own drained boundary:
+                        # the same stage, sources, held data and objective; only window paths and the parent advance.
+                        def bound(role,flag):
+                            argv=role['identity']['trainer_argv'];indices=[i for i,v in enumerate(argv[:-1]) if v==flag]
+                            if not indices:return None
+                            if len(indices)!=1:raise ValueError('window continuation repeats '+flag)
+                            refs=[r['sha256'] for r in role['dependencies'] if r['path']==argv[indices[0]+1]]
+                            return refs[0] if len(refs)==1 else ValueError
+                        def stage(role):
+                            argv=role['identity']['trainer_argv'];return [argv[i+1] for i,v in enumerate(argv[:-1]) if v=='--stage-id']
+                        if (stage(matches[0])!=stage(contract) or not re.fullmatch('[0-9a-f]{64}',str(contract.get('continuation_parent_sha256','')))
+                                or any(bound(matches[0],flag)!=bound(contract,flag) or bound(contract,flag) is ValueError for flag in
+                                       ('--native-graphs','--held-native-graphs','--foundation-native-graphs','--ce-supervision-policy'))):
+                            raise ValueError('supervised window continuation changed its stage, sources, held data or objective')
                     else:
                         transition=contract.get('source_transition') or {}
                         if (transition.get('schema')!='natlang.diloco-source-contract-transition/1'

@@ -39,6 +39,8 @@ REQUIRED_FLAGS = ('--native-graphs', '--held-native-graphs')
 OPTIONAL_FLAGS = ('--foundation-native-graphs', '--continued-native-graphs', '--continued-held-native-graphs',
                   '--pending-focus', '--ce-supervision-policy')
 TRAINER_MODULE = 'natlang_neuralese.train.native_state_sft'
+# Interleaved RL stages register their own on-policy role from a drained worker checkpoint (rl/diloco_contract).
+STAGE_MODULES = ('natlang_neuralese.rl.native_stage',)
 
 
 def flag(argv, name, required=True):
@@ -149,6 +151,8 @@ def ensure_coordinator(session, contract, item, namespace, settings, parent, sec
     env = {**os.environ, 'PYTHONPATH': f'{code}/training/neuralese:{code}', 'NATLANG_REPO': code,
            'NATLANG_CW_SECRETS': secrets}
     if not (root / 'manifest.json').is_file():
+        if item is None:
+            raise SystemExit(f'join: a continuation found no coordinator at {root}')
         declared = {**contract, 'namespace_template': {'worker': session['cohost_worker'], 'namespace': namespace,
                                                        'role_sha256': canonical_json_sha256_hex(item)}}
         path = state_dir / 'role-contract.json'
@@ -194,9 +198,10 @@ def main(argv=None):
     parser.add_argument('--worker', type=int, required=True)
     args = parser.parse_args(argv[:split])
     command = argv[split + 1:]
-    if TRAINER_MODULE not in command:
-        raise SystemExit(f'join: the wrapped command must run {TRAINER_MODULE}')
-    trainer = command[command.index(TRAINER_MODULE) + 1:]
+    module = next((m for m in (TRAINER_MODULE, *STAGE_MODULES) if m in command), None)
+    if module is None:
+        raise SystemExit(f'join: the wrapped command must run {TRAINER_MODULE} or {STAGE_MODULES}')
+    trainer = command[command.index(module) + 1:]
     session = json.loads(Path(args.session).read_text())
     if session.get('schema') != SESSION_SCHEMA or not 0 <= args.worker < session['workers']:
         raise SystemExit('join: not an elastic DiLoCo session or worker outside its slots')
@@ -221,6 +226,22 @@ def main(argv=None):
         (Path(secrets) / 'diloco-gateway').write_text('')
     wait_for(Path(secrets) / 'diloco-url', log, 'coordinator URL')
     ensure_relay(session, state_dir, secrets, log)
+    seed = (session.get('boundary') or {}).get('parent') or {}
+    if module != TRAINER_MODULE:
+        if cohost:
+            ensure_coordinator(session, None, None, None, None, None, secrets, state_dir, log)
+        log('stage_exec', module=module)
+        os.execv(command[0], command)
+    if seed.get('sha256'):
+        from natlang_neuralese.common.hashing import sha256_file_hex_cached
+        if sha256_file_hex_cached(Path(flag(trainer, '--continue-from'))) != seed['sha256']:
+            # A later window (or the return from an interleaved RL round) continues this worker's own drained state:
+            # the trainer registers that continuation itself (rl/diloco_contract); only the relay and, on the cohost,
+            # the served coordinator are this wrapper's to keep alive.
+            if cohost:
+                ensure_coordinator(session, None, None, None, None, None, secrets, state_dir, log)
+            log('continuation_exec_trainer')
+            os.execv(command[0], command)
     started = time.monotonic()
     item, contract, namespace, settings = compute_role(trainer, session['workers'])
     log('role_computed', seconds=round(time.monotonic() - started, 1), namespace=namespace,
