@@ -342,6 +342,19 @@ def is_sft(spec):
     return 'controller' in spec
 
 
+def is_tune(spec):
+    """A tune shard runs ``natlang_neuralese.tune.stage --shard I/N`` on a parent checkpoint (``"tune"``)."""
+    return 'tune' in spec
+
+
+def is_rl(spec):
+    return not is_sft(spec) and not is_tune(spec)
+
+
+def kind(spec):
+    return 'sft' if is_sft(spec) else 'tune' if is_tune(spec) else 'rl'
+
+
 def sandbox_command(command):
     """A DGX controller command without its host-only prefixes: the memory-ledger admission wrapper
     (``[python, WRAPPER.py, '--', ...]`` whose source adopts a ledger unit and sets DGX unified-memory/NVMe controls)
@@ -537,6 +550,14 @@ def put_checkpoint(run, source, target_path):
     from natlang_neuralese.common.hashing import sha256_file_hex_cached
     source = Path(source).resolve(strict=True)
     sha, size = sha256_file_hex_cached(source), source.stat().st_size
+    declared = checkpoint_bases(run).get(sha)
+    if declared is not None and declared['bytes'] == size:
+        chain = base_specs(run, sha)
+        if all(locate(run, d) is not None for d, spec in chain.items()
+               for d in ([d] if spec['encoding'] == 'raw' else [spec['receipt']['sha256'], spec['payload']['sha256']])):
+            # the parent itself is a declared exact base (raw or a delta chain) already in a readable store
+            return {**{k: v for k, v in declared.items() if k not in ('path', 'source')}, 'kind': 'checkpoint',
+                    'path': str(target_path)}
     for base in run.get('checkpoint_bases', []):
         local = base.get('path')
         if not local or not Path(local).is_file():
@@ -591,8 +612,13 @@ def lineage_inputs(run, name, closure):
         put_local(run, archive)
     inputs.append({'kind': 'runtime', 'path': str(runtime), 'sha256': spec['sha256'], 'bytes': spec['bytes'],
                    'closure_sha256': spec['closure_sha256']})
-    packed = []
-    for item in closure['files']:
+    return inputs + file_inputs(run, name, closure['files'])
+
+
+def file_inputs(run, name, files):
+    """Exact files at their DGX paths: committed blobs in a readable store as ``file`` inputs, the rest packed once."""
+    inputs, packed = [], []
+    for item in files:
         found = locate(run, item['sha256'])
         if found is not None and found[1]['bytes'] == item['bytes']:
             inputs.append({'kind': 'file', 'path': item['path'], 'sha256': item['sha256'], 'bytes': item['bytes']})
@@ -603,6 +629,85 @@ def lineage_inputs(run, name, closure):
         inputs.append({'kind': 'archive', 'path': f'{run["root"]}/.inputs/{name}-closure', 'sha256': digest,
                        'bytes': size, 'files': [{'path': p['path'], 'sha256': p['sha256']} for p in packed]})
     return inputs
+
+
+def _main_python(code, *args):
+    """``code`` in the DGX learner environment with this checkout's package (tune shards run main's code)."""
+    env = {**os.environ, 'NATLANG_REPO': str(REPO), 'PYTHONPATH': f'{REPO}/training/neuralese:{REPO}',
+           'OMP_NUM_THREADS': '1', 'MKL_NUM_THREADS': '1'}
+    result = subprocess.run([str(REPO / '.venv-neuralese' / 'bin' / 'python'), '-c', code, *args], cwd=REPO, env=env,
+                            capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f'learner-environment step failed: {result.stderr[-2000:]}')
+    return result.stdout
+
+
+def custody_inputs():
+    """The files ProtectedWorlds reads (common.custody) that the code snapshot does not carry (untracked packets and
+    data-root source groups)."""
+    listed = _main_python('import json\n'
+                          'from natlang_neuralese.common.custody import _protected_source_paths\n'
+                          'from natlang_neuralese.common.paths import root\n'
+                          'repo = root("repo")\n'
+                          'declared = json.loads((repo / "training/protected-worlds.json").read_text())\n'
+                          'print(json.dumps([str(i[0]) for i in _protected_source_paths(declared, repo)]))').strip()
+    out = []
+    for path in json.loads(listed.splitlines()[-1]):
+        relative = os.path.relpath(path, REPO)
+        tracked = not relative.startswith('..') and subprocess.run(
+            ['git', '-C', str(REPO), 'ls-files', '--error-unmatch', relative], capture_output=True).returncode == 0
+        if not tracked and Path(path).is_file():
+            out.append(path)
+    return out
+
+
+def _file_records(paths):
+    from natlang_neuralese.common.hashing import sha256_file_hex_cached
+    return [{'path': str(p), 'bytes': Path(p).stat().st_size, 'sha256': sha256_file_hex_cached(Path(p))}
+            for p in sorted(set(map(str, paths)))]
+
+
+def seed_tune(run, name):
+    """Seed export of a tune shard: its stage command, the programs staged once on the DGX into the stage directory
+    (``tune.stage.stage_programs``; the shards and the DGX merge share that directory and path), the program manifest
+    and protection custody files as inputs, and the parent checkpoint as a declared exact base (no upload)."""
+    from natlang_neuralese.common.hashing import sha256_file_hex_cached
+    spec = run['lineages'][name]
+    tune = spec['tune']
+    exports = hub(run) / 'exports' / name
+    if (exports / 'seed.json').exists():
+        return read_json(exports / 'seed.json')
+    L = lineage_dir(run, name)
+    if L.exists():
+        shutil.rmtree(L)  # only an interrupted seed's prepared command: nothing earned
+    parent = Path(tune['parent']['path'])
+    if sha256_file_hex_cached(parent.resolve(strict=True)) != tune['parent']['sha256']:
+        raise SystemExit(f'{parent} is not the declared parent {tune["parent"]["sha256"]}')
+    stage_dir, programs = Path(tune['stage_dir']), Path(tune['programs'])
+    names = tune['program_names']
+    _main_python('import json, sys\nfrom natlang_neuralese.tune.stage import stage_programs\n'
+                 'stage_programs(sys.argv[1], sys.argv[2], json.loads(sys.argv[3]))',
+                 str(programs), str(stage_dir), json.dumps(names))
+    staged = [p for p in (stage_dir / 'programs').rglob('*') if p.is_file()]
+    inputs = file_inputs(run, name, _file_records([programs, *staged, *custody_inputs()]))
+    argv = ['--programs', str(programs), '--protection', str(REPO / 'training' / 'protected-worlds.json'),
+            '--continue-from', str(parent), '--out', str(stage_dir), '--device', 'cuda', '--shard', tune['shard'],
+            '--program-names', json.dumps(names), *tune.get('args', [])]
+    L.mkdir(parents=True)
+    store_json(L / 'tune.json', {'schema': 'natlang.cloud-tune-shard/1', 'module': 'natlang_neuralese.tune.stage',
+                                 'argv': argv, 'stage_dir': str(stage_dir), 'parent': tune['parent'],
+                                 'shard': tune['shard'], 'program_names': names})
+    checkpoint = put_checkpoint(run, parent, parent)
+    top_sha, top_bytes = _tar_zst_put(run, L, ['tune.json'], f'{name}-seed-top')
+    record = {'schema': EXPORT_SCHEMA, 'seq': 'seed', 'lineage': name, 'lineage_dir': str(L), 'round': 0,
+              'trained_rounds': 0, 'created': time.time(), 'state_sha256': None, 'kind': 'tune',
+              'blobs': [{'kind': 'top', 'sha256': top_sha, 'bytes': top_bytes, 'encoding': 'tar.zst'}, checkpoint],
+              'checkpoint': str(parent), 'checkpoints': [str(parent)], 'links': [], 'inputs': inputs,
+              'parent_source': tune['parent'], 'dgx_verified': True, 'cloud_committed': True}
+    store_json(exports / 'seed.json', record)
+    note(run, f'{name} tune shard seed: {tune["shard"]} of {names} on {parent} ({tune["parent"]["sha256"][:12]}, '
+              f'{checkpoint["encoding"]}); {len(inputs)} inputs; stage {stage_dir}')
+    return record
 
 
 def seed_sft(run, name):
@@ -672,6 +777,8 @@ def seed(run, name):
     spec = run['lineages'][name]
     if is_sft(spec):
         return seed_sft(run, name)
+    if is_tune(spec):
+        return seed_tune(run, name)
     exports = hub(run) / 'exports' / name
     if (exports / 'seed.json').exists():
         return read_json(exports / 'seed.json')
@@ -946,7 +1053,7 @@ def needs_sglang(run):
     """Whether any lineage's actor runs the SGLang fork (RL lineages with ``--engine sglang``); SFT windows and native
     actors need none of its source, lock or venv."""
     for name, spec in run['lineages'].items():
-        if is_sft(spec):
+        if not is_rl(spec):
             continue
         command = cloud_config(run, name).get('actor_command') or []
         if any(a == '--engine' and b == 'sglang' for a, b in zip(command, command[1:])):
@@ -960,11 +1067,11 @@ def bundle(run):
     inputs = cloud_inputs(run)
     remote = {i['path'] for i in inputs}
     covered = lambda p: any(p == r or p.startswith(r + '/') for r in remote)
-    rl = any(not is_sft(spec) for spec in run['lineages'].values())
+    rl = any(is_rl(spec) for spec in run['lineages'].values())
     extras = ((fork_inputs(run, code_sha) if needs_sglang(run) else []) + (runtime_runs(run) if rl else [])
               + [e for e in run.get('extras', []) if not covered(e)])
     for spec in run['lineages'].values():
-        if is_sft(spec):
+        if not is_rl(spec):
             continue
         cases = spec.get('config', {}).get('cases') or json.loads(Path(spec['template']).read_text())['cases']
         if cases not in extras and not covered(cases):
@@ -995,7 +1102,9 @@ def render_job(run, name, rounds, check=False):
     # Exactly one GPU and explicit CPU/RAM minima per lineage (an RL lineage's actor and node workers need more than a
     # learner; AGENTS.md learner default 8 CPU / 64Gi).
     job['resources'] = {**job['resources'], **spec.get('resources', {}), 'gpu': 1}
-    if not is_sft(spec):  # RL lineages run ROOT/runtime built from the code snapshot, whose ts-host serves the tasks
+    if spec.get('lifetime_hours'):  # a lineage with a declared GPU-hour ceiling (a bounded pilot shard)
+        job['lifetime_hours'] = spec['lifetime_hours']
+    if not is_sft(spec):  # RL lineages and tune shards run the code snapshot's ts-host
         job['env']['NATLANG_CW_BUILD_TSHOST'] = '1'
     if check:  # the CPU pipeline check: no GPU, small, short
         job['resources'] = {'cpu': '4', 'memory': '16Gi'}
@@ -1091,12 +1200,14 @@ def plan(run):
         else:
             reason = 'pinned'
         load[account] += 1
-        entry = {'kind': 'sft' if is_sft(spec) else 'rl', 'account': account, 'reason': reason,
+        entry = {'kind': kind(spec), 'account': account, 'reason': reason,
                  'resources': job['resources'], 'lifetime_hours': job['lifetime_hours'], 'job': job['id']}
         record = newest_verified(run, name)
         if record is not None:
             entry['start'] = {'export': record['seq'], 'checkpoint': record.get('checkpoint'),
                               'phase': record.get('phase'), 'window': record.get('window')}
+        elif is_tune(spec):
+            entry['start'] = {'seed': 'not yet prepared', **spec['tune']}
         elif is_sft(spec):
             boundary = select_boundary(spec)
             entry['start'] = {'seed': 'not yet prepared', **boundary}
@@ -1171,6 +1282,9 @@ def materialize(run, record):
                     temp.unlink()
                 os.link(source, temp)
                 temp.replace(target)
+        elif blob['kind'] == 'stage':  # a tune shard's stage directory: the hub copy beside its record
+            (L / 'stage').mkdir(parents=True, exist_ok=True)
+            sandbox.untar_zst(source, L / 'stage')
         else:
             sandbox.untar_zst(source, L)
     for link in record.get('links', []):
@@ -1304,6 +1418,16 @@ def export_loop(run, once=False, interval=120):
                 except Exception as error:  # one lineage's failure must not stop the others' exports
                     print(json.dumps({'event': 'export_error', 'lineage': name,
                                       'error': f'{type(error).__name__}: {error}'[:800]}), flush=True)
+        for name, live in read_json(hub(run) / 'run-state.json', {}).get('lineages', {}).items():
+            record = newest_verified(run, name)
+            if live.get('status') == 'running' and record and record.get('final'):
+                try:
+                    note(run, f'{name}: final export {record["seq"]} ({record.get("phase")}) verified on DGX; '
+                              f'shutting down {live["sandbox_id"]}')
+                    stop(run, name)
+                except Exception as error:  # retried next pass
+                    print(json.dumps({'event': 'stop_error', 'lineage': name,
+                                      'error': f'{type(error).__name__}: {error}'[:500]}), flush=True)
         try:
             retired = prune_blobs(run)
             if retired:

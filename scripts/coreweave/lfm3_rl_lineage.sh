@@ -54,6 +54,52 @@ if [ ! -f "$L/config.json" ] && [ ! -f "$L/lineage.json" ]; then
   log "\"event\":\"parent_ready\",\"seconds\":$(since $s)"
 fi
 rm -f "$SECRETS/rl-parent"
+
+# A tune shard (tune.json): natlang_neuralese.tune.stage --shard I/N on the restored parent with the code snapshot
+# (its ts-host natlang CLI and native student), the stage directory staged while it runs and once at the end; the
+# DGX exporter shuts the sandbox down once the final export (status done or failed) is verified.
+if [ -f "$L/tune.json" ]; then
+  VENV=/home/werg/natlang/.venv-neuralese
+  [ -x "$VENV/bin/python" ] || python3 -m venv --system-site-packages "$VENV" || { log '"event":"failed","step":"learner-venv"'; exit 2; }
+  if [ ! -f "$CODE/node_modules/.natlang-npm-ci" ]; then
+    (cd "$CODE" && npm ci --no-audit --no-fund > "$OUT/npm-root.log" 2>&1) || { tail -20 "$OUT/npm-root.log"; log '"event":"failed","step":"npm-root"'; exit 2; }
+    touch "$CODE/node_modules/.natlang-npm-ci"
+  fi
+  [ -f "$CODE/ts-host/bin/natlang.mjs" ] && [ -d "$CODE/ts-host/dist" ] || { log '"event":"failed","step":"ts-host"'; exit 2; }
+  export NATLANG_REPO=$CODE PYTHONPATH=$CODE/training/neuralese:$CODE PATH=$VENV/bin:$PATH
+  export HF_HUB_OFFLINE=1 PYTHONUNBUFFERED=1 NATLANG_HASH_CACHE=$ROOT/hash-cache.jsonl NATLANG_NODE=$(command -v node)
+  export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}
+  STAGE=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['stage_dir'])" "$L/tune.json")
+  MODULE=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['module'])" "$L/tune.json")
+  mapfile -d '' ARGS < <(python3 -c "import json,sys;sys.stdout.write(''.join(a+chr(0) for a in json.load(open(sys.argv[1]))['argv']))" "$L/tune.json")
+  log "\"event\":\"tune_setup_done\",\"stage\":\"$STAGE\",\"node\":\"$(node --version 2>/dev/null)\",\"seconds\":$(since $t0)"
+  await_upload() { local seq; seq=$(ls "$E" | grep -E '^[0-9]{6}\.json$' | tail -1 | cut -c1-6)
+    log "\"event\":\"await_export\",\"seq\":\"$seq\""; while [ -n "$seq" ] && [ ! -f "$E/$seq.uploaded" ]; do sleep 30; done; }
+  if [ "${NATLANG_RL_CHECK:-0}" = 1 ]; then  # CPU check: the stage's dry run in a scratch stage directory
+    CHECK=$STAGE-check; mkdir -p "$CHECK"; cp -a "$STAGE/programs" "$CHECK/"
+    for i in "${!ARGS[@]}"; do [ "${ARGS[$i]}" = --out ] && ARGS[$((i+1))]=$CHECK; done
+    (cd "$CODE" && "$VENV/bin/python" -u -m "$MODULE" "${ARGS[@]}" --dry-run) > "$OUT/tune-check.log" 2>&1
+    rc=$?; tail -20 "$OUT/tune-check.log"; log "\"event\":\"check_tune_dry_run\",\"rc\":$rc"
+    python3 "$HELPER" stage "$L" "$E" >> "$OUT/exports.log" 2>&1; log "\"event\":\"check_staged\",\"rc\":$?"
+    await_upload; log "\"event\":\"check_done\",\"seconds\":$(since $t0)"; exit 0
+  fi
+  python3 -c "import json,sys,time;json.dump({'status':'running','started':time.time()},open(sys.argv[1],'w'))" "$L/tune-status.json"
+  ( while sleep "${NATLANG_CW_STAGE_SECONDS:-1800}"; do python3 "$HELPER" stage "$L" "$E" >> "$OUT/exports.log" 2>&1
+      python3 "$HELPER" prune "$L" "$E" >> "$OUT/exports.log" 2>&1; done ) & stager=$!
+  child=
+  trap 'log "\"event\":\"term\""; kill $stager 2>/dev/null; [ -n "$child" ] && kill -TERM $child 2>/dev/null; wait $child 2>/dev/null; exit 143' TERM INT
+  s=$(date +%s); log "\"event\":\"tune_start\",\"argv\":$(python3 -c "import json,sys;print(json.dumps(json.load(open(sys.argv[1]))['argv']))" "$L/tune.json")"
+  (cd "$CODE" && exec "$VENV/bin/python" -u -m "$MODULE" "${ARGS[@]}") >> "$OUT/tune.log" 2>&1 &
+  child=$!; wait $child; rc=$?; child=
+  kill $stager 2>/dev/null; wait $stager 2>/dev/null
+  status=done; [ $rc -eq 0 ] || status=failed
+  python3 -c "import json,sys,time;v=json.load(open(sys.argv[1]));v.update(status=sys.argv[2],rc=int(sys.argv[3]),finished=time.time());json.dump(v,open(sys.argv[1],'w'))" "$L/tune-status.json" "$status" "$rc"
+  log "\"event\":\"tune_done\",\"rc\":$rc,\"status\":\"$status\",\"seconds\":$(since $s),\"memory_peak\":\"$(cat /sys/fs/cgroup/memory.peak 2>/dev/null)\""
+  [ $rc -eq 0 ] || tail -30 "$OUT/tune.log"
+  python3 "$HELPER" stage "$L" "$E" >> "$OUT/exports.log" 2>&1 || log '"event":"stage_failed"'
+  await_upload; log "\"event\":\"done\",\"status\":\"$status\",\"seconds\":$(since $t0)"
+  [ $rc -eq 0 ] && exit 0 || exit 3
+fi
 PROGRESS=$(progress) || { log '"event":"failed","step":"progress"'; exit 2; }
 CFG=$(field "$PROGRESS" config); KIND=$(field "$PROGRESS" kind)
 

@@ -1,10 +1,11 @@
-# Program-adaptation pilot on the step-179 parent (prepared 2026-11-03, not launched)
+# Program-adaptation pilot on the full67 parent (2026-11-03)
 
 Review item 8 (`RECIPE_REVIEW_20261103/TUNING_METALEARNING_RL.md`). A bounded machinery qualification of the new
 `program_adaptation` recipe stage (`tune.stage --pilot`) on two one-GPU CoreWeave sandboxes. It measures per-root
 time, self-teach row yield, untuned headroom and first paired development lift on LFM3, and shakes out lane bugs
 before S3 runs at scale. It is **not** a production adapter run and never completes the stage (`--pilot` reports are
-`scope: pilot`, `completed: false`); program tunes never advance backbone exposure. No sandbox has been created.
+`scope: pilot`, `completed: false`); program tunes never advance backbone exposure. Launch status: section "Launch"
+below.
 
 ## Structural diversity: none exists yet
 
@@ -25,52 +26,46 @@ its prerequisite. The pilot therefore picks the most different programs that exi
 
 ## Inputs (all exist on DGX)
 
-- Parent: step 179, `/home/werg/data/lfm3-rl-dgx-20261029/earned84-joint-r38-a4-window64-1103/learner/checkpoint.pt`,
-  SHA-256 `239c8ca0d4f49a3c4414580c587890fd036c07bf9076df87fbf354ef487ca6dd`, 15,403,153,798 bytes. Its ZIP delta over
-  `bf95…` (5.35 GB) already exists in the cloud run store
-  (`/mnt/external/natlang-lfm3-cloud-20261103/.cloud/deltas/bf95bec416a1bb06-239c8ca0…`); sandboxes reconstruct it
-  from the private raw base `0c8e75f6…` exactly as the joint-SFT lineage does. No behaviour selection exists for step
-  179 (no matched dev16 run); the pilot runs without `--parent-selection`, which is why it is a pilot.
+- Parent (supervisor decision 2026-11-03): **full67**, the behavioural parent,
+  `/home/werg/data/lfm3-rl-dgx-20261029/ops/bf95-quality-source-zero-sgd-v2-1102/checkpoint.pt`, SHA-256
+  `71c3eb45594dd866d2c3d935a5577188e7e0750bf39cb2484ebbe8e4c7d9a83b`, 12,496,833,447 bytes, global step 67. Step 179
+  scored 11/16 on dev16 against full67's 12/16, so full67 stays the selected parent. Its private exact recovery is
+  `private-recovery-20261101/quality-parent-71c3eb45594dd866-exact-delta-capsule-1102.json` (89.6 MB ZIP delta over
+  `bf95…`, itself an 81 MB delta over the raw private base `0c8e75f6…`); sandboxes reconstruct it from those blobs and
+  nothing is uploaded from the DGX. The pilot still runs without `--parent-selection`.
 - Program set: `/home/werg/data/program-adaptation-20261103/program-set-v1.json`
   (SHA-256 `85d285339c4da3589f5ccc084411b808e0ec264dc0ce379e2b95efa0c5864563`, 54 programs).
 - Protection: `training/protected-worlds.json` (SHA-256 `d024a3ed…ec8e` at prep time) and the protected packets'
   `runs/<packet>/cases.jsonl` it names (the RL lineages' custody-packet bundle already ships these).
 - Runtime: a code bundle at main including this change (tune.stage, tune concurrency), ts-host built, Node 24.
 
-## Launch plan
+## Launch
 
-Accounts: **cw3** (shard 0) and **cw4** (shard 1), as the review assigns (cw1/cw2 go to RL actors). Resources: exactly
-one GPU, 8 CPU, 64Gi RAM (the native server plus four concurrent roots; learner-class host memory for the adapter
-fits), 720 h lifetime, explicit stop after the shard finishes. Both accounts last refused GPU sandboxes
-(`CWSANDBOX_GPU_NOT_ALLOWED`, `LFM3_RL_CLOUD_20261031.md`); the one-time entitlement check is not to be re-polled, so
-the first launch attempt is the entitlement check.
+Lineage kind "tune shard" in `scripts/coreweave/rl_cloud.py` (run file
+`/mnt/external/natlang-lfm3-cloud-20261103/run.json`, lineages `tune-full67-s0`, `tune-full67-s1`). `rl_cloud.py seed`
+stages the five programs once on the DGX into the stage directory with `tune.stage.stage_programs` (both shards and the
+DGX merge share `/home/werg/data/program-adaptation-20261103/pilot-full67`), ships the staged programs, the program set
+and the protection custody files the code snapshot lacks as exact inputs, and binds the parent as a declared exact base.
+The sandbox restores the parent and stage directory at their DGX paths and runs, with the bundle's code snapshot
+(ts-host built, root `npm ci`):
 
-Each sandbox, after the standard bootstrap (bundle, HF base, parent reconstruction, ts-host build):
-
-    PROGRAMS='["ticket-routing","invoice-review","inventory-routing","refund-decision","access-request"]'
-    python -m natlang_neuralese.tune.stage --pilot --shard I/2 \
-      --programs /home/werg/data/program-adaptation-20261103/program-set-v1.json \
+    python -m natlang_neuralese.tune.stage --programs .../program-set-v1.json \
       --protection /home/werg/natlang/training/protected-worlds.json \
-      --continue-from /work/parent/checkpoint.pt --out /home/werg/data/program-adaptation-20261103/pilot-179 \
-      --device cuda --program-names "$PROGRAMS" --program-hours 24 --concurrency 4
+      --continue-from /home/werg/data/lfm3-rl-dgx-20261029/ops/bf95-quality-source-zero-sgd-v2-1102/checkpoint.pt \
+      --out /home/werg/data/program-adaptation-20261103/pilot-full67 --device cuda --shard I/2 \
+      --program-names "$PROGRAMS" --pilot --program-hours 24 --concurrency 4
 
-Shard 0 (cw3): ticket-routing, inventory-routing, access-request. Shard 1 (cw4): invoice-review, refund-decision.
-Export: the stage directory without `hash-cache.jsonl` and `natlang-config` (each shard's `programs/<name>`, `tunes/`,
-`distill/programs/`, `logs/`, `structure.json`, `entry.json`, `operation.json`). Merge on DGX by directory union (the
-shards' program sets are disjoint and `operation.json` is identical), then the unsharded run writes `report.json`
-without GPU work:
+`--shard` takes every second program **in manifest order** (refund-decision, access-request, ticket-routing,
+invoice-review, inventory-routing): shard 0 = refund-decision, ticket-routing, inventory-routing (cw3); shard 1 =
+access-request, invoice-review (cw4). One GPU, 8 CPU, 64Gi each; sandbox lifetime set to the shard's GPU-hour ceiling
+(79 h, 53 h). The stage directory (without `hash-cache.jsonl`, `natlang-config`) is exported every 30 minutes and at
+the end; the exporter's hub copy is `ROOT/<lineage>/stage`, and each export manifest carries `tune_progress`
+(per-program evaluation arms, tune/timing/failure records, entry, log sizes). The exporter shuts a shard's sandbox
+down once its final export (status done or failed) is verified on the DGX.
 
-    python -m natlang_neuralese.tune.stage --pilot --programs ... --protection ... --continue-from <DGX parent> \
-      --out /home/werg/data/program-adaptation-20261103/pilot-179 --device cpu --program-names "$PROGRAMS" \
-      --program-hours 24 --concurrency 4
-
-(The DGX parent path differs from the sandbox's: bind the same absolute path on the sandbox, or the operation binding
-refuses the merge. `rl_cloud` already restores the parent at its DGX path.)
-
-Launch mechanics: `scripts/coreweave/rl_cloud.py` has joint-SFT and RL lineage kinds only. The pilot needs a third,
-small lineage kind ("tune shard": parent from `checkpoint_bases`, the program set and protection as `cloud_inputs`,
-command above, export of the stage directory). It is left to the strand currently fixing the cloud launch path, to
-avoid conflicting edits there; until it exists the pilot is prepared, not launchable.
+Merge on DGX by directory union of the two hub copies into the stage directory (disjoint program work; identical
+`operation.json`), then the unsharded run writes `report.json` without GPU work (same arguments, `--device cpu`, no
+`--shard`).
 
 ## Expected cost
 

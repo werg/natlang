@@ -291,3 +291,45 @@ def test_select_boundary_follows_the_live_dgx_window(tmp_path):
     assert rolling['mode'] == 'same-window' and rolling['parent_sha256'] == sha(earned)
     assert rolling['dgx_window_in_flight']['rolling_slot_global_step'] == 186
     assert rolling['dgx_window_in_flight']['rolling_slot'] == str(second / 'learner' / 'checkpoint.pt')
+
+
+def test_tune_shard_exports_its_stage_directory_and_final_status(tmp_path):
+    L = tmp_path / 'root' / 'tune-s0'
+    L.mkdir(parents=True)
+    stage_dir = tmp_path / 'stage'
+    arms = stage_dir / 'programs' / 'refund-decision' / '.natlang' / 'tune' / 'evaluations' / 'development'
+    arms.mkdir(parents=True)
+    (stage_dir / 'natlang-config').mkdir()
+    (stage_dir / 'natlang-config' / 'config.json').write_text('{}')
+    (stage_dir / 'hash-cache.jsonl').write_text('{}\n')
+    (stage_dir / 'operation.json').write_text('{"schema": "x"}')
+    (L / 'tune.json').write_text(json.dumps({'stage_dir': str(stage_dir), 'argv': [], 'module': 'm'}))
+    exports = tmp_path / 'root' / '.exports' / 'tune-s0'
+    first = sandbox.stage(L, exports)
+    assert first['kind'] == 'tune' and first['phase'] == 'running' and first['final'] is False
+    assert sandbox.stage(L, exports)['seq'] == first['seq']
+    (arms / 'untuned.json').write_text('{"roots": 3}')
+    (stage_dir / 'tunes').mkdir()
+    (stage_dir / 'tunes' / 'refund-decision.timing.json').write_text('{}')
+    (L / 'tune-status.json').write_text(json.dumps({'status': 'done', 'rc': 0}))
+    final = sandbox.stage(L, exports)
+    assert final['final'] is True and final['phase'] == 'done'
+    assert final['tune_progress']['programs'] == {'refund-decision': {'development': ['untuned']}}
+    assert final['tune_progress']['tunes'] == ['refund-decision.timing.json']
+    stage_blob = next(b for b in final['blobs'] if b['kind'] == 'stage')
+    listing = subprocess.run(f'zstd -dc {exports}/cas/{stage_blob["sha256"]} | tar -t', shell=True,
+                             capture_output=True, text=True, check=True).stdout.split()
+    assert 'operation.json' in listing and not any(n.startswith(('natlang-config', 'hash-cache')) for n in listing)
+    sandbox.prune(L, exports)  # no controller config: CAS only
+
+    # a replacement sandbox resumes the stage directory from the export
+    restored = tmp_path / 'elsewhere' / 'stage'
+    capability = {'schema': 'natlang.rl-cloud-parent/1', 'lineage_dir': str(tmp_path / 'r2' / 'tune-s0'), 'seq': final['seq'],
+                  'trained_rounds': 0, 'state_sha256': None, 'inputs': [], 'links': [],
+                  'blobs': [{**blob(exports / 'cas' / b['sha256']), 'kind': b['kind'], 'encoding': b['encoding'],
+                             **({'path': str(restored)} if b['kind'] == 'stage' else {})} for b in final['blobs']]}
+    parent = tmp_path / 'rl-parent'
+    parent.write_text(json.dumps(capability))
+    assert sandbox.fetch(parent, tmp_path / 'r2' / 'tune-s0') == 0
+    assert (restored / 'programs/refund-decision/.natlang/tune/evaluations/development/untuned.json').read_text() == '{"roots": 3}'
+    assert json.loads((tmp_path / 'r2' / 'tune-s0' / 'tune-status.json').read_text())['status'] == 'done'

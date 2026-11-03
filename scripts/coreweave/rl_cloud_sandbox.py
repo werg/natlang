@@ -275,10 +275,72 @@ def _metadata_members(base, directory):
     return out
 
 
+TUNE_EXCLUDE = ('hash-cache.jsonl', 'natlang-config')
+
+
+def tune_progress(stage_dir):
+    """What a tune shard has actually produced: per-program evaluation arms, tune/timing/failure records, entry and log
+    sizes (natlang_neuralese.tune.stage writes each step's result before the next starts)."""
+    stage_dir = Path(stage_dir)
+    programs = {}
+    for program in sorted((stage_dir / 'programs').glob('*/')):
+        evaluations = program / '.natlang' / 'tune' / 'evaluations'
+        arms = {part.name: sorted(p.stem for p in part.glob('*.json')) for part in sorted(evaluations.glob('*/'))} \
+            if evaluations.is_dir() else {}
+        if arms:
+            programs[program.name] = arms
+    entry = stage_dir / 'entry.json'
+    return {'programs': programs, 'tunes': sorted(p.name for p in (stage_dir / 'tunes').glob('*.json')),
+            'shards': sorted(p.name for p in (stage_dir / 'shards').glob('*.json')),
+            'entry': json.loads(entry.read_text()) if entry.is_file() else None,
+            'logs': {p.name: p.stat().st_size for p in sorted((stage_dir / 'logs').glob('*'))}}
+
+
+def stage_tune(lineage, exports):
+    """An export of a tune shard: its command and status, and the stage directory (without its hash cache and tuner
+    configuration home), staged when anything in it changed."""
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+    cas = exports / 'cas'
+    cas.mkdir(parents=True, exist_ok=True)
+    spec = json.loads((lineage / 'tune.json').read_text())
+    status_path = lineage / 'tune-status.json'
+    status = json.loads(status_path.read_text()) if status_path.is_file() else {'status': 'running'}
+    stage_dir = Path(spec['stage_dir'])
+    members = [m for m in _members(stage_dir, exclude=TUNE_EXCLUDE)] if stage_dir.is_dir() else []
+    listing = [(m, (stage_dir / m).stat().st_size, (stage_dir / m).stat().st_mtime_ns) for m in members
+               if (stage_dir / m).is_file()]
+    boundary = {'tree': canonical_json_sha256_hex(listing), 'status': status}
+    previous = sorted(exports.glob('[0-9]*.json'))
+    prior = json.loads(previous[-1].read_text()) if previous else {}
+    if prior.get('boundary') == boundary:
+        event(event='stage_skipped', reason='boundary already staged', seq=prior['seq'])
+        return prior
+    top = [p.name for p in lineage.iterdir() if p.is_file() and not p.name.endswith(SKIP)]
+    digest, size, parts = _cas_put_archive(cas, lineage, top)
+    blobs = [{'kind': 'top', 'sha256': digest, 'bytes': size, 'encoding': 'tar.zst', 'parts': parts}]
+    if members:
+        digest, size, parts = _cas_put_archive(cas, stage_dir, members)
+        blobs.append({'kind': 'stage', 'path': str(stage_dir), 'sha256': digest, 'bytes': size, 'encoding': 'tar.zst',
+                      'parts': parts})
+    base = exports / 'parent-seq'
+    seq = max(prior.get('seq', -1), int(base.read_text()) if base.exists() else -1) + 1
+    manifest = {'schema': SCHEMA, 'seq': seq, 'lineage': lineage.name, 'lineage_dir': str(lineage), 'kind': 'tune',
+                'created': time.time(), 'round': 0, 'trained_rounds': 0, 'phase': status['status'],
+                'final': status['status'] in ('done', 'failed'), 'state_sha256': None, 'boundary': boundary,
+                'checkpoint': None, 'checkpoints': [], 'tune_progress': tune_progress(stage_dir),
+                'blobs': blobs, 'links': [], 'previous_seq': prior.get('seq')}
+    write_json_durable(exports / f'{seq:06d}.json', manifest)
+    event(event='staged', seq=seq, phase=manifest['phase'], blobs=len(blobs), bytes=sum(b['bytes'] for b in blobs),
+          tunes=manifest['tune_progress']['tunes'])
+    return manifest
+
+
 def stage(lineage, exports):
     # The logical (DGX) path, never resolved: in a sandbox the DGX home root is a symlink onto the scratch volume, and the
     # export names the paths the DGX hub copy and a resumed sandbox use.
     lineage, exports = Path(os.path.abspath(lineage)), Path(exports)
+    if (lineage / 'tune.json').is_file():
+        return stage_tune(lineage, exports)
     cas = exports / 'cas'
     cas.mkdir(parents=True, exist_ok=True)
     out, config_path = controller(lineage)
@@ -569,15 +631,16 @@ def fetch(parent, lineage):
             _fetch_verified(blob, target)
         else:
             temp = _fetch_verified(blob, scratch / blob['sha256'])
-            untar_zst(temp, lineage)
+            destination = Path(blob['path']) if blob['kind'] == 'stage' else lineage
+            destination.mkdir(parents=True, exist_ok=True)
+            untar_zst(temp, destination)
             temp.unlink()
     for link in parent.get('links', []):
         target = Path(link['path'])
         if target.exists():
             target.unlink()
         os.link(link['same_as'], target)
-    out, _ = controller(lineage)
-    state = out / 'state.json'
+    state = controller(lineage)[0] / 'state.json'
     if parent.get('state_sha256') and file_digest(state) != parent['state_sha256']:
         raise ValueError('restored state.json differs from the export')
     shutil.rmtree(scratch, ignore_errors=True)  # reconstructed bases are only intermediates
@@ -609,6 +672,9 @@ def prune(lineage, exports):
         if blob.name not in keep and not blob.name.startswith('.'):
             removed += blob.stat().st_size
             blob.unlink()
+    if (lineage / 'tune.json').is_file():  # a tune shard's checkpoint is its read-only parent
+        event(event='pruned', newest_uploaded=newest, bytes=removed)
+        return 0
     out, config_path = controller(lineage)
     config = json.loads(config_path.read_text())
     state, _ = _state(out, config)
