@@ -41,8 +41,10 @@ STATE_SCHEMA = 'natlang.bank-meta-state/1'
 EVAL_SCHEMA = 'natlang.bank-meta-evaluation/1'
 SCOPE = 'program'
 MANIFEST = {'bindings': [{'id': SCOPE, 'ancestry': [SCOPE]}], 'scales': {}}
-ARMS = ('parent', 'meta', 'meta_residual', 'initial', 'lora')
-BANK_ARMS = ('meta', 'meta_residual')          # refit at every evaluation; the others are fixed per parent
+ARMS = ('parent', 'meta', 'meta_residual', 'meta_unfitted', 'initial', 'initial_unfitted', 'lora')
+# Refit at every evaluation; the others are fixed per parent. ``*_unfitted``: the learned initial coefficients with no
+# inner step, separating what the bank shifts for every program from what the per-program fit adds.
+BANK_ARMS = ('meta', 'meta_residual', 'meta_unfitted')
 PROMOTION_ARMS = ('parent', 'meta', 'initial', 'lora')
 NEAR_DUPLICATE = .8                             # target-token similarity at which a held family is a near-duplicate
 INNER_FIT_LAW = 'natlang.bank-inner-fit/meta-sgd-1'
@@ -954,6 +956,9 @@ class BankMetaLearner:
                     result['initial'] = fixed[name]['initial']
                 elif arm == 'initial' and arm in result:
                     pass
+                elif arm in ('meta_unfitted', 'initial_unfitted'):
+                    which = arm.split('_')[0]
+                    result[arm] = {'loss': self.score(scored, which, self._values(which)[2])}
                 elif arm in ('meta', 'meta_residual', 'initial'):
                     which = 'initial' if arm == 'initial' else 'meta'
                     fitted = self.fit(support, which, residual=arm == 'meta_residual')
