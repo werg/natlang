@@ -145,6 +145,55 @@ prompt's import spec, so they do not depend on the radix cache still holding imp
 import on SGLang through the ordinary import path with the native receipt (`adapter_state_input_receipt` with the
 export's layout check).
 
+## 2026-11-03: SGLang is the RL actor under importance correction (owner direction)
+
+**Policy.** Bit-level SGLang/native equality is no longer a precondition (owner, 2026-11-03; standard verl/OpenRLHF
+practice). SGLang samples and records its sampled-token logprob and top-k; the learner recomputes every token under
+its own forward and trains with truncated importance weights `min(p_learner/q_actor, C)` (score-centered/JOLT+
+`importance: tis`, C = 2; `tis-c<C>` configures C). Mismatch stays a bug signal and is guarded:
+
+- SGLang captures bind their export (`actor_export` = `{kind: exact, format: sglang-hf-<dtype>-<projection>-projection,
+  sha256: HF weights}`, the existing rl.actors binding). The learner tags those actions; the exact 1e-4 replay gate
+  keeps covering native-engine tokens only (mixed episodes with native fallback turns keep it for those turns).
+- Every engine-sampled episode is recomputed and checked against the objective's `actor_engine_guard`
+  (`DEFAULT_ENGINE_GUARD`: per-episode max |dlogp| <= 1.5 nats and mean k3 KL(q||p) <= 0.01). An episode beyond it
+  is rejected (no loss terms) and logged to `NATLANG_ENGINE_GUARD_LOG`; the step summary reports `engine_guard`.
+- Raw LFM3 continuations adopt `--engine sglang --sglang-projection vendor` at their next unbound collection through
+  `production.adopt_actor_engine_defaults` (recorded in `state.actor_engine_transitions`; sealed selections, active
+  updates, coefficient actors and `actor_engine_keep_native: true` keep the native actor). The collection pilot applies
+  the same transition. A runtime frozen before main 2108e0a43 has no engine guard: its learner fails the exact gate
+  on SGLang episodes, so the actor switch needs a runtime frozen from main >= 60d67f5f6.
+
+**Projection.** The invariant native_step projection kernel (64-row tiles for single-query decode) was the main cost
+of both engines. Fork 78d9f20bf4 adds `NATLANG_SGLANG_PROJECTION=vendor`: one fused vendor BF16 GEMM (fp32
+accumulate) per projection; norms, conv, gate rounding and the producer/import/capture paths are unchanged.
+
+**Defect found and fixed (fork a06adeda40).** CUDA-graph decode pads batches with the `-1` mamba state sentinel. The
+natlang conv decode (and the upstream torch fallback) indexed the conv-state pool with it, i.e. read and overwrote
+the pool's last slot, a live request's or radix-cached conv state (the CuTe kernel skips `slot < 0`). On DGX it
+showed as 5 of 84 real turns sampled at concurrency 8/32 diverging from the learner by up to 23.8 nats (SGLang put
+p = 0.53 on ` >` where `text.slice(...) !== edit.expected` was certain); the same workload without CUDA graphs had
+max 0.43. Padded rows now use the reserved padding slot 0.
+
+**Measurements** (`serve/sglang_bench.py`, full67 `71c3eb45…`, real pilot turns: 78 turns, 1.07M prompt tokens;
+T=1, top-128 capture, stop at `<|im_end|>`, max 1024 tokens; artifacts under
+`/mnt/external/natlang-actor-engine-20261103/`):
+
+| engine (GPU) | c=1 | c=8 | c=32 | c=64 |
+|---|---|---|---|---|
+| native engine, cloud RTX PRO 6000 (lanes 1/4/8/16) | 24 | 60 (4) / 77 (8) | 99 (16) | — |
+| SGLang native projection, RTX PRO 6000 | 99 | 514 | 1,120 | 2,041 |
+| SGLang vendor projection, RTX PRO 6000 | 193 | 1,116 | 2,402 | 4,149 |
+| native engine, DGX GB10 shared (selector pilot) | ~11 per stream, ~45 over 4 workers | | | |
+| SGLang native projection, DGX GB10 briefly unshared | 18.7 | 70 | 132 | — |
+
+Output tok/s, wall clock over all requests (prefix cache warm: 98-99% of prompt tokens cached, as in RL groups).
+Learner-recomputed mismatch of SGLang samples (cloud): native projection 54,458 tokens / 212 turns: mean |dlogp|
+0.0144, p99 0.123, max 0.431, per-turn k3 <= 0.0015; vendor projection 59,754 tokens: mean 0.0152, p99 0.124, max
+0.742, per-turn k3 <= 0.0037. Every turn is inside the guard. SGLang prefill scores of the native actor's own samples:
+mean 0.015, max 0.60 (native projection) / 0.48 (vendor). Cloud: two 1-GPU cw2 sandboxes, ~0.4 GPU-h each, stopped by
+the exporter after their verified final exports (`rl_cloud.py` stage shard `natlang_neuralese.serve.sglang_bench`).
+
 ## Neuralese feature plan on SGLang
 
 Policy stays in the natlang front; the fork carries mechanism. Shared mechanism for the state features: a
@@ -295,7 +344,7 @@ requests).
 
 ## Not established
 
-- SGLang throughput on LFM3 against the Python native server and llama.cpp at RL shape on the sandbox GPU (H100 /
-  RTX PRO 6000). DGX GB10 numbers are relative only.
+- SGLang vs llama.cpp at RL shape on a sandbox GPU (SGLang vs the native engine is measured above).
+- A complete collector round with the SGLang actor and a learner update under the engine guard on real episodes.
 - The CuTe gated-conv kernel on H100 (sm_90) and RTX PRO 6000 (sm_120) in our runs; the PR states it was validated
   numerically on both, and gates it on sm90/sm100/sm120 (sm_121 GB10 counts as sm120).
