@@ -411,3 +411,12 @@ def test_bank_fit_baseline_and_typed_fit(tmp_path):
     assert w.candidate(['c1'])['adapter'] == {'schema': 'natlang.memetic-adapter/1', 'adapter_id': 'a'}
     assert 'fit(spec: FitSpec)' in ws.offered(True)['declaration'] and 'fit' in ws.offered(True)['methods']
     assert 'fit(' not in ws.offered(False)['declaration'] and 'fit' not in ws.offered(False)['methods']
+
+
+def test_withhold_change_edits_the_function_frontmatter(tmp_path):
+    w = workspace(tmp_path)
+    assert w.propose({'kind': 'withhold', 'file': 'route/intent.nl', 'tools': ['teleport']})['problems']
+    assert w.propose({'kind': 'withhold', 'file': 'route/intent.nl', 'tools': ['delegate']}) == {'id': 'c1'}
+    changed = ws.apply_changes(w.spec['support'][0], w.candidate(['c1'])['files'])
+    meta, _ = ws.frontmatter(changed['semantics']['files']['route/intent.nl'])
+    assert meta['withhold'] == ['delegate'] and meta['args'] == {'request': 'string'}

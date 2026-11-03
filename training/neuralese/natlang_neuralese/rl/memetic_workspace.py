@@ -34,7 +34,10 @@ from ..common.hashing import canonical_json_sha256_hex
 from ..common.jsonio import write_json_durable
 
 SPEC_SCHEMA = 'natlang.memetic-episode/1'
-CHANGE_KINDS = ('guidance', 'skill', 'instructions', 'signature', 'revert', 'adapter')
+CHANGE_KINDS = ('guidance', 'skill', 'instructions', 'signature', 'withhold', 'revert', 'adapter')
+# Tools a function's frontmatter may withhold from its calls (ts-host runtime/loader.ts `withhold`).
+WITHHOLDABLE = ('edit_code', 'diff_code', 'list_files', 'search_files', 'read_file', 'write_file', 'edit_file',
+                'diff_files', 'bash', 'python', 'delegate', 'editor')
 SCOPE_KINDS = ('program', 'function', 'inputs')
 MAX_TEXT = 4000
 REPO = Path(__file__).resolve().parents[4]
@@ -71,6 +74,7 @@ type Change =
   | { kind: "skill"; function: string; name: string; description: string; body: string; action: "create" | "revise" | "retire" }
   | { kind: "instructions"; file: string; find: string; replace: string }
   | { kind: "signature"; file: string; field: "args" | "returns"; name?: string; type: string }
+  | { kind: "withhold"; file: string; tools: string[] }
   | { kind: "revert"; id: string };
 type Evaluation = { ids: string[]; success: number; baseline: number; attempts: Attempt[]; evaluationsLeft: number };'''
 
@@ -201,6 +205,11 @@ def apply_changes(case, changes):
                 args[change['name']] = change['type']
                 meta['args'] = args
             files[change['file']] = render_nl(meta, body)
+        elif kind == 'withhold':
+            meta, body = frontmatter(files[change['file']])
+            tools = sorted(set(meta.get('withhold') or []) | set(change['tools']))
+            meta['withhold'] = tools
+            files[change['file']] = render_nl(meta, body)
         elif kind == 'skill':
             folder = skill_folder(files, change['function'])
             path = f"{folder}skills/{change['name']}/SKILL.md"
@@ -309,7 +318,7 @@ class Workspace:
     # --- changes --------------------------------------------------------------------------------------------------
     def problems(self, change):
         if not isinstance(change, dict) or change.get('kind') not in CHANGE_KINDS or change['kind'] == 'adapter':
-            return ['kind is guidance, skill, instructions, signature or revert']
+            return ['kind is guidance, skill, instructions, signature, withhold or revert']
         kind = change['kind']
         texts = [value for key, value in change.items() if isinstance(value, str)]
         if any(len(text) > MAX_TEXT for text in texts):
@@ -342,7 +351,10 @@ class Workspace:
             if change['action'] != 'retire' and not (str(change.get('description') or '').strip()
                                                      and str(change.get('body') or '').strip()):
                 return ['a skill needs a description (when to use it) and a body (what to do)']
-        if kind in ('instructions', 'signature') and change.get('file') not in self.program['files']:
+        if kind == 'withhold' and (not isinstance(change.get('tools'), list) or not change['tools']
+                                   or any(tool not in WITHHOLDABLE for tool in change['tools'])):
+            return ['tools lists tools to withhold, from: ' + ', '.join(WITHHOLDABLE)]
+        if kind in ('instructions', 'signature', 'withhold') and change.get('file') not in self.program['files']:
             return [f"file is one of: {', '.join(sorted(p for p in self.program['files'] if p.endswith('.nl')))}"]
         if kind == 'signature' and change.get('field') not in ('args', 'returns'):
             return ['field is args or returns']
@@ -377,7 +389,7 @@ class Workspace:
         adapters = [change for _, change in changes if change['kind'] == 'adapter']
         if len(adapters) > 1:
             raise ValueError('one adapter fit per change set')
-        files = [change for _, change in changes if change['kind'] in ('instructions', 'signature', 'skill')]
+        files = [change for _, change in changes if change['kind'] in ('instructions', 'signature', 'withhold', 'skill')]
         files += input_skills(guidance, self.program['root'])
         return {'ids': [i for i, _ in changes], 'files': files,
                 'guidance': compose_guidance([c for c in guidance if c['scope']['kind'] != 'inputs']) or None,

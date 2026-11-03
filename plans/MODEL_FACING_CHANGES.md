@@ -38,7 +38,9 @@ Amended 2026-11-03 (late): the brief no longer carries `supportAttempts`/`suppor
 episode's actor lease); step 2/3 read `workspace.baseline()` (new method, "How the unchanged program did on its support
 invocations"). `fit(spec: FitSpec)` appears in the declaration only when the episode has a bank fit service. Input-class
 guidance is now delivered as a skill whose description is "Use for inputs where ..." (skill listing text), and
-function-scoped guidance only reaches that function's calls. Same measurement debt.
+function-scoped guidance only reaches that function's calls. A `withhold` change kind (`{ kind: "withhold"; file;
+tools }`, writing the function's `withhold:` frontmatter) and the refine step-2 wording "or withholding a tool from a
+function whose calls should not use it" were added. Same measurement debt.
 
 ### 2026-11-03 — Guidance writer answers in plain text (writeGuidance; small live check, debt: 48-sample measurement)
 
