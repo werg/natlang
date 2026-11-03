@@ -60,7 +60,7 @@ def main() -> None:
                              'engine); batches without an adapted request replay the base-only decode graph')
     parser.add_argument('--sglang-adapter-rank', type=int, default=32,
                         help='largest summed adapter rank per SGLang module and slot')
-    parser.add_argument('--sglang-projection', choices=('native', 'vendor'), default='native',
+    parser.add_argument('--sglang-projection', choices=('native', 'vendor'), default='vendor',
                         help="LFM3 projections on SGLang: the learner's invariant native kernel, or one fused vendor "
                              'BF16 GEMM (fp32 accumulate; the learner corrects the gap with importance weights)')
     parser.add_argument('--sglang-arg', action='append', default=[], help='extra sglang.launch_server argument')

@@ -2083,7 +2083,7 @@ def adopt_task_curriculum_defaults(config, state, state_path, *, sealed_selectio
 
 
 SGLANG_ACTOR_TRANSITION = 'sglang-actor-engine-is-guard-20261103'
-DEFAULT_SGLANG_PROJECTION = 'native'
+DEFAULT_SGLANG_PROJECTION = 'vendor'
 
 
 def sglang_actor_command(command, projection=DEFAULT_SGLANG_PROJECTION):
