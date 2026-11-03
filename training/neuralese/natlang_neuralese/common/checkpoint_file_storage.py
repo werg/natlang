@@ -150,6 +150,11 @@ class CheckpointFileStore:
             (self.path / 'store.json').write_text(json.dumps({'schema': SCHEMA}))
             self.cleanup = weakref.finalize(self, _remove_store, self.path, lease, self.arena_holder)
 
+    def reset_peak(self):
+        """Start a new peak observation; lifetime peaks overstate later smaller graphs."""
+        with self.lock:
+            self.counters['peak_live_bytes']=self.counters['live_bytes']
+
     def reserve_arena(self, size):
         """Physically own the measured scratch bound before optimizer work."""
         if type(size) is not int or size<1:
@@ -160,7 +165,9 @@ class CheckpointFileStore:
             if self.arena_fd is not None:
                 if self.counters['live_files']:
                     raise ValueError('cannot resize checkpoint scratch while graphs retain inputs')
-                if self.arena_size>=size:return self.arena_size
+                # Reuse a covering arena unless it would hold more than twice the
+                # current bound: one oversize update must not pin its disk forever.
+                if size<=self.arena_size<=2*size:return self.arena_size
                 os.close(self.arena_fd);self.arena_fd=None;self.arena_holder[0]=None
                 (self.path/'arena.bin').unlink()
                 self.arena_size=0;self.arena_free=[]

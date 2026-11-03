@@ -35,6 +35,9 @@ class CheckpointInputOffload:
         with torch.autograd.graph.save_on_cpu(pin_memory=self.pin_memory):
             return self.checkpoint(function, *args, **kwargs)
 
+    def reset_peak(self):
+        if self.file_store is not None:self.file_store.reset_peak()
+
     def snapshot(self):
         return {'checkpoint_calls': self.calls, **(self.file_store.snapshot()
                 if self.file_store is not None else {'storage': 'cpu'})}

@@ -413,8 +413,14 @@ def _reserve_checkpoint_scratch(store, size, policy):
         return store.reserve_arena(size)
 
 
-def _measured_checkpoint_scratch_peak(memory_check, oversize_proof):
-    """Read successful whole-graph scratch measurements for this update."""
+def _measured_checkpoint_scratch_peak(memory_check, oversize_proof, micro_batches=None):
+    """Bound this update's file scratch from successful whole-graph measurements.
+
+    Saved checkpoint inputs are released after each microbatch backward and scale
+    with forward positions. With per-case peaks, the bound is the largest measured
+    bytes per forward token times this update's largest microbatch. Older
+    lifetime-scoped evidence keeps the conservative maximum measured peak.
+    """
     from .native_resident import bound
     reports=[]
     for check in (memory_check or {}).get('checks',[memory_check] if memory_check else []):
@@ -432,16 +438,23 @@ def _measured_checkpoint_scratch_peak(memory_check, oversize_proof):
                 if source.get('passed') is not True:raise ValueError('oversize scratch source did not pass')
                 reports.append(source.get('capacity') or {})
         else:raise ValueError('unsupported oversize scratch evidence')
-    peaks=[]
+    peaks=[];rates=[]
     for report in reports:
         if report.get('passed') is not True:raise ValueError('scratch capacity report did not pass')
         cases=report.get('cases') or []
         if not cases:raise ValueError('scratch capacity report lacks whole-graph cases')
         for case in cases:
-            peak=(case.get('checkpoint_input_offload') or {}).get('peak_live_bytes')
+            offload=case.get('checkpoint_input_offload') or {}
+            peak=offload.get('peak_live_bytes')
             if type(peak) is not int or peak<0:raise ValueError('scratch capacity lacks measured file peak')
             peaks.append(peak)
-    return max(peaks) if peaks else None
+            tokens=case.get('forward_tokens')
+            rates.append(-(-peak//tokens) if case.get('checkpoint_input_peak_scope')=='case' and type(tokens) is int and tokens>0 else None)
+    if not peaks:return None
+    if micro_batches and None not in rates:
+        largest=max(sum(example.plan.token_count for example in micro) for micro in micro_batches)
+        return max(rates)*largest
+    return max(peaks)
 
 
 def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_layers=True,
@@ -4266,7 +4279,7 @@ def _main(argv=None, *, requested_refresh):
             if args.checkpoint_input_offload_directory:
                 try:
                     from ..eval.native_memory import _dense_capacity_reuse_supported
-                    scratch_peak=(_measured_checkpoint_scratch_peak(memory_check,oversize_proof)
+                    scratch_peak=(_measured_checkpoint_scratch_peak(memory_check,oversize_proof,micro_batches)
                         if memory_check is not None and _dense_capacity_reuse_supported(model,config,objective) else None)
                     if scratch_peak is None:
                         from ..eval.native_memory import qualify_capacity
@@ -4285,7 +4298,7 @@ def _main(argv=None, *, requested_refresh):
                         finally:
                             for parameter,gradient in prior_grads:parameter.grad=gradient
                         scratch_peak=_measured_checkpoint_scratch_peak({'passed':measured.get('passed'),
-                                                                        'capacity':measured},None)
+                                                                        'capacity':measured},None,micro_batches)
                         if scratch_peak is None:raise ValueError('actual graph scratch capacity qualification failed')
                     scratch_bound=max(1,scratch_peak)+max(1<<20,(scratch_peak+3)//4)
                     _reserve_checkpoint_scratch(model.port.activation_checkpoint.file_store,scratch_bound,policy)

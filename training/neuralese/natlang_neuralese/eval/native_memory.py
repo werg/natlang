@@ -274,6 +274,10 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
                  'forward_tokens':sum(item.plan.token_count for item in batch),
                  'kv_slots':sum(len(item.plan.slot_sources) for item in batch),'status':'running'}
             rows.append(row)
+            # File scratch peaks are recorded per case, so a later small packed
+            # case does not inherit an earlier oversize graph's lifetime peak.
+            offload_hook=getattr(model.port,'activation_checkpoint',None)
+            if callable(getattr(offload_hook,'reset_peak',None)):offload_hook.reset_peak()
             started=time.monotonic()
             phase='retained-gradient-allocation' if retained_gradients else 'forward'
             host=None
@@ -340,6 +344,7 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
                 hook=getattr(model.port,'activation_checkpoint',None)
                 if callable(getattr(hook,'snapshot',None)):
                     row['checkpoint_input_offload']=hook.snapshot()
+                    if callable(getattr(hook,'reset_peak',None)):row['checkpoint_input_peak_scope']='case'
                 host_stats=getattr(torch.cuda.memory,'host_memory_stats',None)
                 row['pinned_host_allocator'] = ({key:value for key,value in host_stats().items()
                     if key in {'allocated_bytes.current','allocated_bytes.peak','active_bytes.current','active_bytes.peak'}}

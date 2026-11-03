@@ -1,6 +1,7 @@
 import copy
 import gc
 import json
+import mmap
 
 import pytest
 import torch
@@ -400,4 +401,37 @@ def test_failed_arena_copy_does_not_retain_a_live_slot(tmp_path,monkeypatch):
     monkeypatch.setattr(store,'copy_to_file',lambda *args:(_ for _ in ()).throw(OSError('copy failed')))
     with pytest.raises(OSError,match='copy failed'):store.pack(torch.ones(4))
     assert store.snapshot()['live_bytes']==0 and store.snapshot()['live_files']==0
+    store.release_arena()
+
+
+def test_scratch_bound_scales_case_scoped_peaks_to_actual_update_microbatches():
+    from types import SimpleNamespace
+    from natlang_neuralese.train.native_state_sft import _measured_checkpoint_scratch_peak
+    def case(peak,tokens,scope='case'):
+        return {'checkpoint_input_offload':{'peak_live_bytes':peak},'forward_tokens':tokens,
+                **({'checkpoint_input_peak_scope':scope} if scope else {})}
+    def micro(*tokens):return [SimpleNamespace(plan=SimpleNamespace(token_count=t)) for t in tokens]
+    large={'passed':True,'capacity':{'passed':True,'cases':[case(49152*524650,524650),case(49152*16384+7,16384)]}}
+    # Largest per-token rate times the update's largest microbatch, not the oversize graph.
+    assert _measured_checkpoint_scratch_peak(large,None,[micro(8000,8000),micro(100)])==(-(-(49152*16384+7)//16384))*16000
+    # Without the update geometry, keep the whole-evidence maximum.
+    assert _measured_checkpoint_scratch_peak(large,None)==49152*524650
+    # Historical lifetime-scoped peaks cannot be rescaled.
+    legacy={'passed':True,'capacity':{'passed':True,'cases':[case(25787596800,524650,None),case(25787596800,16384,None)]}}
+    assert _measured_checkpoint_scratch_peak(legacy,None,[micro(16384)])==25787596800
+
+
+def test_case_peak_reset_and_oversized_arena_shrinks(tmp_path,monkeypatch):
+    monkeypatch.setenv('NATLANG_CHECKPOINT_MIN_FREE_BYTES','0')
+    store=CheckpointFileStore(tmp_path,pin_memory=False)
+    saved=store.pack(torch.ones(1024))
+    assert store.snapshot()['peak_live_bytes']>0
+    del saved
+    store.reset_peak()
+    assert store.snapshot()['peak_live_bytes']==store.snapshot()['live_bytes']==0
+    page=mmap.PAGESIZE
+    assert store.reserve_arena(8*page)==8*page
+    assert store.reserve_arena(5*page)==8*page
+    assert store.reserve_arena(2*page)==2*page
+    assert (store.path/'arena.bin').stat().st_size==2*page
     store.release_arena()
