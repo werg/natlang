@@ -198,12 +198,16 @@ def prepare_program(family, split, *, evaluate, settings, fitter=None, spec=None
     attempts = [{'digest': attempt_digest(result, attempt_id=f'a{i + 1}', world=world),
                  'steps': attempt_steps(result)} for i, (world, result) in enumerate(support['results'])]
     # Admission reads the support evidence only: selecting programs on the query outcome that also anchors the
-    # reward would bias the anchor (regression to the mean).
+    # reward would bias the anchor (regression to the mean). Unscored rollouts (wall-clock timeouts, infrastructure)
+    # are unresolved, not failures: a parent whose support runs mostly did not resolve has no measurement.
     headroom = support['success']
-    admitted = settings['min_success'] <= headroom <= settings['max_success']
+    resolved = support.get('scored', rollouts) / rollouts
+    unresolved = resolved < 0.5
+    admitted = not unresolved and settings['min_success'] <= headroom <= settings['max_success']
     prepared = {'schema': 'natlang.memetic-prepared/1', 'family': family, 'support_success': support['success'],
                 'attempts': attempts, 'headroom': headroom, 'admitted': admitted,
-                'seconds_per_rollout': round(seconds, 2), 'baselines': {'none': None, 'default': None}}
+                'seconds_per_rollout': round(seconds, 2), 'resolved_fraction': round(resolved, 3),
+                'unresolved': unresolved, 'baselines': {'none': None, 'default': None}}
     if not admitted:
         return prepared
     target, samples = query_plan(split.get('query') or split['dev'], seconds_per_rollout=seconds, settings=settings)
@@ -260,7 +264,7 @@ def ensure_prepared(spec, evaluate, fitter=None):
         memo = path.parent / 'measurements.json'
         rows = json.loads(memo.read_text()) if memo.exists() else []
         rows.append({'parent_sha256': spec['parent_sha256'], 'support_success': prepared['support_success'],
-                     'admitted': prepared['admitted']})
+                     'admitted': prepared['admitted'], 'unresolved': prepared['unresolved']})
         write_json_durable(memo, rows)
         return prepared
 
@@ -331,8 +335,8 @@ def _excluded(memo_path, parents, settings):
     if not memo_path.exists():
         return False
     rows = json.loads(memo_path.read_text())
-    if not rows or rows[-1]['admitted']:
-        return False
+    if not rows or rows[-1]['admitted'] or rows[-1].get('unresolved'):
+        return False  # an unresolved measurement says nothing about headroom
     since = len(parents) - 1 - max((i for i, p in enumerate(parents) if p == rows[-1]['parent_sha256']), default=-1)
     return since < settings['stale_parents']
 

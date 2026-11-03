@@ -443,3 +443,16 @@ def test_interleaved_stage_declares_the_guidance_writer():
         interleave.validate_stage_parameters({**base, 'guidance_stage': 'native'})
     assert interleave.CONTROLLER_KEYS['guidance_stage'] == 'jolt_guidance_stage'
     assert guidance_collection_options('writer') == {} and guidance_collection_options('backbone')['writer'] == 'off'
+
+
+def test_unresolved_support_is_no_measurement(tmp_path):
+    class TimingOut(Evaluator):
+        def __call__(self, cases, guidance, adapter, *, name, out=None, samples=None):
+            return {**super().__call__(cases, guidance, adapter, name=name, samples=samples), 'success': 0., 'scored': 0}
+    value = spec(tmp_path)
+    prepared = stage.ensure_prepared(value, TimingOut())
+    assert prepared['unresolved'] is True and prepared['admitted'] is False
+    memo = tmp_path / 'stage' / 'programs' / 'fam' / 'measurements.json'
+    assert stage._excluded(memo, ['p' * 64], {'stale_parents': 3}) is False, 'measured again at the next parent'
+    with pytest.raises(ValueError, match='did not resolve'):
+        ws.Workspace(value, Evaluator(), check=lambda c: [], prepare=stage.ensure_prepared).prepared

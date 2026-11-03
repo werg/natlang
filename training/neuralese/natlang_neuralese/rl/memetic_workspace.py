@@ -277,7 +277,9 @@ class Workspace:
                 raise ValueError('this workspace has no preparation')
             self._prepared = self._prepare(self.spec, self.evaluate_cases, self.fitter)
             if not self._prepared['admitted']:
-                raise ValueError('the program has no improvement headroom under this parent '
+                raise ValueError('the parent\'s support runs of this program did not resolve (timeouts); no measurement'
+                                 if self._prepared.get('unresolved') else
+                                 'the program has no improvement headroom under this parent '
                                  f"(support success {self._prepared['support_success']})")
         return self._prepared
 
