@@ -100,7 +100,7 @@ every input, or that ablation cannot distinguish from shuffled state, is a defec
 
 Production LFM3 training runs mainly on CoreWeave GPU sandboxes. Use DiLoCo across
 as many one-GPU learners as the four accounts grant, balanced across accounts, with
-coordinator primary and replica on CPU sandboxes in different accounts. Until
+coordinator primary and replica cohosted on learners in different accounts. Until
 DiLoCo is qualified, a single cloud learner carries the lineage through the
 `rl_cloud` SFT-window path. The DGX is a supporting resource: an optional extra
 worker, RL rollouts, data preparation, qualification and recovery hub. Its
@@ -1166,6 +1166,12 @@ DiLoCo coordinator was starved by its own learner, timed out a replica ack and f
 outer catch-up. Learner sandboxes now request an explicit CPU and RAM minimum (initially 8 CPU, 64Gi), and the
 DiLoCo coordinator primary and replica run on dedicated CPU-only sandboxes, never cohosted with a learner. Check
 `resource_requests`/`cpu.max` on every new sandbox; a provider default is not a measured choice.
+Owner decision (2026-11-03, supersedes the dedicated-CPU-sandbox placement above): cohost the DiLoCo
+coordinator primary on one learner and its replica on a learner in a different account. The 10-29 failure
+came from a 1-CPU box and single-copy state, not from cohosting itself: per-sandbox loss rates are similar,
+so cohosting changes coordinator risk from p_cpu to p_gpu, not N-fold. Replication and durable export are the
+protection. Measure coordinator peak RAM/CPU beside a live learner, and exercise primary failover in the
+first production DiLoCo rounds. Run no coordinator without at least two training learners.
 Owner decision (2026-10-28): GPU sandboxes running inference engines (RL actors,
 evaluators, serving) request a CPU minimum of 8 cores. vLLM/SGLang were CPU-bound on
 the 2 CPUs an unconstrained request receives (GPU 13-68% busy). The earlier
