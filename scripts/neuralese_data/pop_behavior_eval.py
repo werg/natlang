@@ -137,8 +137,18 @@ def write_parent_pointer(parent):
 
 # ---- discovery ---------------------------------------------------------------------------------------------------
 
+# Cloud SFT-window lineages (rl_cloud.py): the DGX hub copy of each window controller, restored from DGX-verified
+# exports only (rl_cloud export), at <run root>/<lineage>/w<NNNNNN>/state.json beside its config.json.
+CLOUD = Path(os.environ.get('NATLANG_CLOUD_RUNS', resolve_str('data_hdd')))
+
+
+def controller_states():
+    yield from sorted(W.glob('*/state.json'))
+    yield from sorted(CLOUD.glob('natlang-lfm3-cloud-*/*/w[0-9][0-9][0-9][0-9][0-9][0-9]/state.json'))
+
+
 def controller_progress():
-    for state_path in sorted(W.glob('*/state.json')):
+    for state_path in controller_states():
         try:
             progress = (read_json(state_path) or {}).get('last_learner_progress') or {}
         except ValueError:
@@ -148,7 +158,9 @@ def controller_progress():
 
 
 def lineage_runtime(state_path):
-    config = read_json(W / 'ops' / state_path.parent.name / 'config.json') or {}
+    beside = state_path.parent / 'config.json'  # a cloud window keeps its control beside its state
+    config = read_json(beside if state_path.parent.parent != W and beside.is_file()
+                       else W / 'ops' / state_path.parent.name / 'config.json') or {}
     runtime = (config.get('actor_environment') or {}).get('NATLANG_REPO')
     return runtime if runtime and Path(runtime, 'runtime-input-closure.json').is_file() else None
 
@@ -177,7 +189,9 @@ def discover(state):
             continue
         runtime = lineage_runtime(state_path)
         state['candidates'][sha] = {
-            'sha256': sha, 'path': progress['checkpoint'], 'runtime': runtime, 'lineage': state_path.parent.name,
+            'sha256': sha, 'path': progress['checkpoint'], 'runtime': runtime,
+            'lineage': state_path.parent.name if state_path.parent.parent == W else
+            f'{state_path.parent.parent.parent.name}/{state_path.parent.parent.name}/{state_path.parent.name}',
             'step': checkpoint_global_step(progress, progress['checkpoint']), 'trigger': 'window-boundary',
             'discovered': time.time(), 'status': 'queued' if runtime else 'blocked',
             **({} if runtime else {'reason': 'lineage config names no frozen runtime'}), 'ema': True}
