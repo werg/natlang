@@ -67,7 +67,8 @@ export function roundsSelector(options: TuneOptions, settings: RoundsSettings = 
           const summary = await runRollouts({ root: options.root, program: options.program, release, driver: served.driver,
             weights: [new WeightBinding(release, { program: options.program, available: served.loaded, nativeState: !!served.nativeState, strict: true })],
             examples: data.examples, samples: settings.samples ?? 4, temperature: settings.temperature ?? 0.8, round: index,
-            out: join(directory, `round-${index}.rollouts.jsonl`), policyCheckpointSha256: options.student.base.checkpoint_sha256, log, services: options.services, execution: options.settings.execution });
+            out: join(directory, `round-${index}.rollouts.jsonl`), policyCheckpointSha256: options.student.base.checkpoint_sha256, log, services: options.services, execution: options.settings.execution,
+            concurrency: options.settings.concurrency });
           return { path: summary.path, written: summary.written, reused: summary.reused, successes: summary.successes, skipped: summary.skipped.length };
         } finally { await served.close(); }
       },

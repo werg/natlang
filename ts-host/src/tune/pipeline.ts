@@ -423,7 +423,7 @@ export async function evaluateRelease(options: TuneOptions, data: Pick<TuneData,
     const weights = manifest ? [new WeightBinding(manifest, { program: options.program, available: served.loaded,
       nativeState: !!served.nativeState, strict: true })] : [];
     const result = await evaluateRoots({ root: options.root, program: options.program, driver: served.driver, weights, examples, arm, services: options.services, execution: options.settings.execution,
-      release: manifest?.digest ?? null, partition, log: options.log });
+      concurrency: options.settings.concurrency, release: manifest?.digest ?? null, partition, log: options.log });
     if (save) saveArm(options.root, result);
     return result;
   } finally { await served.close(); }
@@ -468,9 +468,9 @@ export async function tuneProgram(options: TuneOptions, select?: ReleaseSelector
       const probe = development.length ? development : examples.filter(example => example.partition === 'train').slice(0, 1);
       const tunedBinding = new WeightBinding(manifest, { program, available: served.loaded, nativeState: !!served.nativeState, strict: true });
       const validation = await timed(timings, 'validate', log, async () => {
-        const tuned = await evaluateRoots({ root, program, driver: served.driver, weights: [tunedBinding], examples: probe, services: options.services, execution: options.settings.execution,
+        const tuned = await evaluateRoots({ root, program, driver: served.driver, weights: [tunedBinding], examples: probe, services: options.services, execution: options.settings.execution, concurrency: options.settings.concurrency,
           arm: 'hierarchy', release: manifest.digest, partition: 'development' });
-        const base = await evaluateRoots({ root, program, driver: served.driver, weights: [], examples: probe, services: options.services, execution: options.settings.execution,
+        const base = await evaluateRoots({ root, program, driver: served.driver, weights: [], examples: probe, services: options.services, execution: options.settings.execution, concurrency: options.settings.concurrency,
           arm: 'untuned', release: null, partition: 'development' });
         return { tuned, base };
       });

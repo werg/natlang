@@ -1,4 +1,4 @@
-import { tuneRuntime, rethrowInfrastructureFailure, type TuneExecution } from './execution.js';
+import { tuneRuntime, rethrowInfrastructureFailure, mapBounded, tuneConcurrency, type TuneExecution } from './execution.js';
 /**
  * Evaluation through the ordinary engine (plans/HIERARCHICAL_LORA_TUNING.md §9). An arm is a set of weight releases
  * (none for the untuned base) run over declared root examples of one partition, with strict resolution so a missing
@@ -28,7 +28,9 @@ export type RootOutcome = {
   readonly error?: string;
 };
 export type ArmResult = { readonly schema: 'natlang.tune-arm/v1'; readonly arm: string; readonly release: string | null;
-  readonly partition: string; readonly execution?: TuneExecution; readonly roots: readonly RootOutcome[] };
+  readonly partition: string; readonly execution?: TuneExecution;
+  /** Roots that ran at once (wall-time limits see the shared server's load); arms pair under the same value. */
+  readonly concurrency?: number; readonly roots: readonly RootOutcome[] };
 
 /** The callable's positional arguments for an example input (an object is keyed by parameter name). */
 export function exampleArguments(fn: unknown, input: unknown): unknown[] {
@@ -37,13 +39,15 @@ export function exampleArguments(fn: unknown, input: unknown): unknown[] {
     : Array.isArray(input) ? input : [input];
 }
 
-/** Run one arm over the examples, one fresh task per root. */
+/** Run one arm over the examples, one fresh task per root, `concurrency` roots at once (`tune.concurrency`). */
 export async function evaluateRoots(options: { root: string; program: ProgramDescriptor; driver: ModelDriver;
   weights: readonly WeightBinding[]; examples: readonly SplitExample[]; arm: string; release: string | null; partition: string;
   /** Host services for one root, fresh per root (TuneOptions.services). */
-  log?: (line: string) => void; execution?: TuneExecution; services?: (example: SplitExample) => Services }): Promise<ArmResult> {
-  const roots: RootOutcome[] = [];
-  for (const example of options.examples) {
+  log?: (line: string) => void; execution?: TuneExecution; services?: (example: SplitExample) => Services;
+  concurrency?: number }): Promise<ArmResult> {
+  const concurrency = tuneConcurrency(options.concurrency);
+  let finished = 0;
+  const roots = await mapBounded(options.examples, concurrency, async (example): Promise<RootOutcome> => {
     const stacks: RootOutcome['stacks'][number][] = [];
     let promptTokens = 0, completionTokens = 0, turns = 0;
     const inner = options.driver as (...args: unknown[]) => Promise<ModelTurn>;
@@ -70,12 +74,14 @@ export async function evaluateRoots(options: { root: string; program: ProgramDes
     } finally { runtime.close(); }
     const scored = await scoreRoot(options.root, example as unknown as Record<string, unknown>, value, !ok);
     const score = scored ? scored.quality : null, correct = scored ? scored.quality === 1 : null;
-    roots.push({ id: example.id, component: example.component, partition: example.protected ? 'protected' : example.partition,
+    const outcome: RootOutcome = { id: example.id, component: example.component, partition: example.protected ? 'protected' : example.partition,
       function: example.function, source: example.source ?? 'real', oracle: await scorable(options.root, example), ok, correct, score, ms: Date.now() - started,
-      promptTokens, completionTokens, turns, stacks, ...(error ? { error: error.slice(0, 500) } : {}) });
-    options.log?.(`evaluation ${options.arm}: root ${example.id} ${roots.length}/${options.examples.length}, correct=${correct}, completed=${ok}${error ? ` (${error})` : ''}`);
-  }
-  return { schema: 'natlang.tune-arm/v1', arm: options.arm, release: options.release, partition: options.partition, ...(options.execution ? { execution: options.execution } : {}), roots };
+      promptTokens, completionTokens, turns, stacks, ...(error ? { error: error.slice(0, 500) } : {}) };
+    options.log?.(`evaluation ${options.arm}: root ${example.id} ${++finished}/${options.examples.length}, correct=${correct}, completed=${ok}${error ? ` (${error})` : ''}`);
+    return outcome;
+  });
+  return { schema: 'natlang.tune-arm/v1', arm: options.arm, release: options.release, partition: options.partition,
+    ...(options.execution ? { execution: options.execution } : {}), ...(concurrency > 1 ? { concurrency } : {}), roots };
 }
 
 /** Success of one root: the oracle when it has one, completion otherwise. */

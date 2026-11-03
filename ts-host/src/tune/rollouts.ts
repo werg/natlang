@@ -1,6 +1,6 @@
 import { derivedSeed, sampleOption } from '../runtime/seeded-decision.js';
 export { derivedSeed, sampleOption } from '../runtime/seeded-decision.js';
-import { tuneRuntime, rethrowInfrastructureFailure, executionKey, type TuneExecution } from './execution.js';
+import { tuneRuntime, rethrowInfrastructureFailure, executionKey, mapBounded, tuneConcurrency, type TuneExecution } from './execution.js';
 /**
  * Student rollouts for program RL (plans/HIERARCHICAL_LORA_TUNING.md §5.1a).
  *
@@ -75,8 +75,9 @@ class Skip extends Error {}
 export async function runRollouts(options: { root: string; program: ProgramDescriptor; release: WeightManifest;
   weights: readonly WeightBinding[]; driver: ModelDriver; examples: readonly SplitExample[]; samples: number; temperature: number;
   round: number; out: string; policyCheckpointSha256: string; log?: (line: string) => void;
-  /** Host services for one root, fresh per rollout (TuneOptions.services). */
-  execution?: TuneExecution; services?: (example: SplitExample) => Services }): Promise<RolloutSummary> {
+  /** Host services for one root, fresh per rollout (TuneOptions.services). Rollouts in flight: `concurrency`
+   * (`tune.concurrency`); each keeps its own seed, so order of completion does not change any sample. */
+  execution?: TuneExecution; services?: (example: SplitExample) => Services; concurrency?: number }): Promise<RolloutSummary> {
   if (!Number.isInteger(options.samples) || options.samples < 2)
     throw new Error('group-relative rewards need at least two rollouts per root');
   if (!(options.temperature > 0)) throw new Error('rollouts sample the student at a positive temperature');
@@ -87,6 +88,7 @@ export async function runRollouts(options: { root: string; program: ProgramDescr
   const behavior = releaseBehavior(options.release);
   const skipped: RolloutSkip[] = [];
   let written = 0, reused = 0, successes = 0;
+  const pending: { example: SplitExample; group: string; sample: number }[] = [];
   for (const example of options.examples) {
     if (example.partition !== 'train') { skipped.push({ root: example.id, sample: null, reason: `${example.partition} root` }); continue; }
     if (!await scorable(options.root, example)) { skipped.push({ root: example.id, sample: null, reason: 'no root oracle or verifier' }); continue; }
@@ -94,20 +96,23 @@ export async function runRollouts(options: { root: string; program: ProgramDescr
     const group = `${example.id}/${options.release.digest}/round-${options.round}/execution-${executionKey(options.execution)}` +
       (verifier ? `/verifier-${verifier.slice(0, 16)}` : '') + (services ? `/services-${services.slice(0, 16)}` : '');
     for (let sample = 0; sample < options.samples; sample++) {
-      if (existing.has(`${group}\0${sample}`)) { reused++; continue; }
-      const seed = derivedSeed(options.release.digest, options.round, example.id, sample);
-      try {
-        const rollout = await runOne(options, example, group, sample, seed, behavior);
-        appendFileSync(options.out, JSON.stringify(rollout) + '\n');
-        written++; successes += rollout.reward.quality;
-        options.log?.(`rollout ${example.id}#${sample}: reward ${rollout.reward.quality}`);
-      } catch (error) {
-        if (!(error instanceof Skip)) throw error;
-        skipped.push({ root: example.id, sample, reason: error.message });
-        options.log?.(`rollout ${example.id}#${sample}: skipped (${error.message})`);
-      }
+      if (existing.has(`${group}\0${sample}`)) reused++;
+      else pending.push({ example, group, sample });
     }
   }
+  await mapBounded(pending, tuneConcurrency(options.concurrency), async ({ example, group, sample }) => {
+    const seed = derivedSeed(options.release.digest, options.round, example.id, sample);
+    try {
+      const rollout = await runOne(options, example, group, sample, seed, behavior);
+      appendFileSync(options.out, JSON.stringify(rollout) + '\n');
+      written++; successes += rollout.reward.quality;
+      options.log?.(`rollout ${example.id}#${sample}: reward ${rollout.reward.quality}`);
+    } catch (error) {
+      if (!(error instanceof Skip)) throw error;
+      skipped.push({ root: example.id, sample, reason: error.message });
+      options.log?.(`rollout ${example.id}#${sample}: skipped (${error.message})`);
+    }
+  });
   return { path: options.out, written, reused, successes, skipped };
 }
 

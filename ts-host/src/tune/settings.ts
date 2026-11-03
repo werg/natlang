@@ -1,4 +1,4 @@
-import type { TuneExecution } from './execution.js';
+import { tuneConcurrency, type TuneExecution } from './execution.js';
 /**
  * `natlang tune` setup (plans/HIERARCHICAL_LORA_TUNING.md §1.1): the student, its trainer, the authorized teacher and
  * the serving backend come from the `tune` block of the natlang configuration (`natlang setup` writes it) and are
@@ -66,6 +66,8 @@ export type TuneSettings = {
   readonly softStates?: boolean;
   /** Invocation budgets shared by all tune execution arms; recorded in evaluation and RL receipts. */
   readonly execution?: TuneExecution;
+  /** Roots in flight per evaluation arm and rollout round (default `DEFAULT_TUNE_CONCURRENCY`, execution.ts). */
+  readonly concurrency?: number;
   /** Default trainer recipe fields (natlang_neuralese.tune.trainer.Recipe), shared across programs. */
   readonly recipe?: Readonly<Record<string, unknown>>;
   /** Incremental builds (plan §8): full refit cadence and how shared-ancestor edits build. */
@@ -198,6 +200,7 @@ export function loadTuneSettings(environment: NodeJS.ProcessEnv = process.env, o
   if (backend === 'managed-local' && !student.baseGgufSha256) throw new TuneSetupError(`tune.students.${name}.baseGgufSha256 is required for the managed-local backend`);
   return { settings: { student: name, students: tune.students!, teacher, backend, ...(tune.teachers?.length ? { teachers: tune.teachers } : {}),
     ...(tune.execution ? { execution: tune.execution } : {}),
+    ...(tune.concurrency !== undefined ? { concurrency: tuneConcurrency(tune.concurrency) } : {}),
     teacherRouting: { ...DEFAULT_TEACHER_ROUTING, ...tune.teacherRouting }, ...(tune.families ? { families: tune.families } : {}), ...(tune.recipe ? { recipe: tune.recipe } : {}), ...(tune.rounds ? { rounds: tune.rounds } : {}), ...(tune.softStates !== undefined ? { softStates: tune.softStates } : {}), ...(tune.incremental ? { incremental: tune.incremental } : {}),
     ...(tune.servingProfile ? { servingProfile: tune.servingProfile } : {}),
     placement: { ...DEFAULT_PLACEMENT, ...tune.placement, costWeights: { ...DEFAULT_PLACEMENT.costWeights, ...tune.placement?.costWeights } } },
