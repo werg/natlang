@@ -134,7 +134,8 @@ def test_real_trainer_continues_after_payload_loss_and_reactivates_exact_remaini
     assert trainer.main(continued+['--unavailable-native-sources',str(declaration)])==0
     saved=torch.load(tmp_path/'run/checkpoint.pt',weights_only=False)
     assert saved['training']['global_step']==t['global_step']+1
-    assert saved['training']['exposure_counts']=={'a':1,'b':1}
+    # The complete saved exposure ledger survives, including the temporarily unavailable row's zero.
+    assert saved['training']['exposure_counts']=={'a':1,'b':1,'c':0}
     frame=saved['training']['sft_progress']['native-graph-ce']
     assert frame['pending_source_rows']['c']['required_visits']==1
     assert frame['exposure_counts']['c']==0

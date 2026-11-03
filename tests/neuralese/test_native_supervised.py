@@ -94,7 +94,10 @@ def test_offline_continuation_binds_actual_objective_and_effective_revision(tmp_
     declaration,sources=supervised.continuation_config(config,stage,checkpoint='current',out=tmp_path/'out')
     from natlang_neuralese.rl.production import initial_controller_state
     restored=initial_controller_state(declaration)
-    assert restored['task_curriculum_history']=={'world':observation}
+    # Carried observations keep their source controller's identity (and round, when recorded) apart from this one's.
+    carried=restored['task_curriculum_history']['world']
+    assert {key:value for key,value in carried.items() if key!='source_controller_sha256'}==observation
+    assert len(carried['source_controller_sha256'])==64
     assert restored['trained_rounds']==0 and restored['checkpoint']=='current'
     assert declaration['seed_command'][2]=='natlang_neuralese.train.native_preference'
     assert declaration['trainer_parameters']['recipe_binding']['lineage_sha256']=='a'*64
