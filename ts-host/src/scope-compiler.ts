@@ -468,7 +468,62 @@ function literalValue(node: ts.Expression): string | number | boolean | undefine
   return undefined;
 }
 
+const JS_KEYWORDS = new Set(['const', 'let', 'var', 'function', 'return', 'await', 'if', 'else', 'for', 'while', 'try', 'catch',
+  'throw', 'new', 'import', 'export', 'class', 'type', 'interface', 'async', 'yield', 'do', 'switch', 'case', 'default',
+  'break', 'continue', 'typeof', 'delete', 'void', 'in', 'of']);
+const PYTHON_IMPORT_LINE = /^\s*(?:import\s+[\w.]+(?:\s+as\s+\w+)?(?:\s*,\s*[\w.]+(?:\s+as\s+\w+)?)*|from\s+[\w.]+\s+import\s+[^'"]+)\s*;?\s*$/;
+const PYTHON_SYNTAX_LINES = [
+  /^\s*def\s+\w+\s*\(.*\)\s*(?:->[^:]*)?:\s*$/,
+  /^\s*(?:if|elif|else|for|while|with|try|except|finally|class)\b[^{;]*:\s*(?:#.*)?$/,
+  /(?<![\w.$])print\s*\(/,
+  /^\s*#(?:\s|$)/,
+  /(?<![\w.$'"])(?:True|False|None)\b(?!['"])/,
+];
+const PROSE_RUN = /^[A-Za-z][A-Za-z'’,;:.!?-]*(?:\s+[A-Za-z'’,;:.!?-]+){3,}\s*$/;
+const TYPESCRIPT_ONLY = 'The code argument is run as TypeScript in this call\'s scope. ';
+
+/**
+ * One sentence of recovery for eval code that is not TypeScript at all: a Python program, or prose that leaked into
+ * the code argument. Only consulted after the code failed to parse, so valid code is never second-guessed.
+ */
+function foreignCodeHint(source: string): ScopeCompileDiagnostic | undefined {
+  const lines = source.split('\n');
+  const at = (index: number, message: string): ScopeCompileDiagnostic => {
+    const start = lines.slice(0, index).reduce((sum, line) => sum + line.length + 1, 0);
+    return { code: 'typescript-syntax', message, start, end: start + lines[index]!.length, line: index + 1, column: 1 };
+  };
+  const first = lines.findIndex(line => line.trim() !== '');
+  if (first >= 0 && PYTHON_IMPORT_LINE.test(lines[first]!))
+    return at(first, TYPESCRIPT_ONLY + 'Python is not available: the inputs, services, functions and built-ins such as nl are already ' +
+      'in scope, so use them by name, and write judgment as `await nl(...)`.');
+  const python = lines.findIndex(line => PYTHON_SYNTAX_LINES.some(pattern => pattern.test(line)));
+  if (python >= 0)
+    return at(python, TYPESCRIPT_ONLY + 'Declare with const or let, use braces for blocks and true/false/null, ' +
+      'and inspect a value by ending the code with it.');
+  const prose = lines.findIndex((line, index) => {
+    const text = (index === first ? line.replace(/^\s*import\b[^'"\n]*['"][^'"\n]*['"]\s*[;?]?/, '') : line).trim();
+    return PROSE_RUN.test(text) && !JS_KEYWORDS.has(text.split(/\s+/)[0]!.replace(/[:,]$/, ''));
+  });
+  if (prose >= 0)
+    return at(prose, TYPESCRIPT_ONLY + 'This line is not code: put only statements in the code argument, ' +
+      'and any explanation in // comments or in your reply outside the call.');
+  return undefined;
+}
+
 export function compileScopeSnippet(source: string, options: ScopeCompileOptions = {}): ScopeCompileResult {
+  const result = compileScopeSnippetUnhinted(source, options);
+  if (!result.ok && typeof source === 'string') {
+    const parsed = ts.createSourceFile('eval-source.ts', source, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
+    if (((parsed as unknown as { parseDiagnostics?: readonly unknown[] }).parseDiagnostics ?? []).length) {
+      const hint = foreignCodeHint(source);
+      // The parser's cascade over a whole foreign program buries the sentence; keep it and the first few errors.
+      if (hint) result.diagnostics.splice(0, result.diagnostics.length, hint, ...result.diagnostics.slice(0, 4));
+    }
+  }
+  return result;
+}
+
+function compileScopeSnippetUnhinted(source: string, options: ScopeCompileOptions = {}): ScopeCompileResult {
   if (typeof source !== 'string') throw new TypeError('scope source must be a string');
   if (options.allowModules) {
     const module = ts.createSourceFile('imports.ts', source, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
@@ -495,7 +550,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
         }
         lowered = lowered.slice(0, statement.getStart(module)) + text + lowered.slice(statement.end);
       }
-      return compileScopeSnippet(lowered, options);
+      return compileScopeSnippetUnhinted(lowered, options);
     }
   }
   const snippetSource = source;
@@ -511,7 +566,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   if (uncalled.length) {
     let called = snippetSource;
     for (const end of uncalled.sort((a, b) => b - a)) called = called.slice(0, end - userStart) + '()' + called.slice(end - userStart);
-    return compileScopeSnippet(called, options);
+    return compileScopeSnippetUnhinted(called, options);
   }
   const fn = file.statements.find(ts.isFunctionDeclaration);
   if (!fn?.body) throw new Error('internal scope compiler wrapper failure');

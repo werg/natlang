@@ -321,3 +321,26 @@ test('redeclaring an injected name names its kind and the fix for that kind', ()
   assert.match(message("import { shipments } from 'shipments';", { serviceBindings: ['shipments'], allowModules: true }),
     /^shipments is already in this eval's scope; use it directly instead of importing it\.$/);
 });
+
+test('eval code that is Python or prose gets one sentence of recovery before the parser errors; valid code is untouched', () => {
+  const first = code => { const result = compileScopeSnippet(code, { allowModules: true }); return [result.ok, result.diagnostics[0]]; };
+  for (const code of ['import os, json, shutil\nfrom pathlib import Path\nx = 1', 'from pathlib import Path\nprint(Path("."))']) {
+    const [ok, diagnostic] = first(code);
+    assert.equal(ok, false);
+    assert.match(diagnostic.message, /^The code argument is run as TypeScript in this call's scope\. Python is not available: .*await nl\(\.\.\.\)`\.$/);
+    assert.equal(diagnostic.line, 1);
+  }
+  const [, python] = first('const a = 1;\ndef f(x):\n    return x');
+  assert.match(python.message, /Declare with const or let, use braces for blocks and true\/false\/null/);
+  assert.equal(python.line, 2);
+  for (const code of ["Let's call nl on each ticket and then count them.\nconst x = 1;",
+    "import { facts } from 'facts'? Not sure. Let's just call nl on each item\nconst y = 2"]) {
+    const [ok, diagnostic] = first(code);
+    assert.equal(ok, false);
+    assert.match(diagnostic.message, /This line is not code: put only statements in the code argument/);
+  }
+  // Only code that failed to parse is ever second-guessed: a JavaScript import, a private field and a plain syntax slip are left alone.
+  assert.deepEqual(first("import { facts } from 'facts';\nfacts.length"), [true, undefined]);
+  assert.equal(first('class A { #p = 1; get() { return this.#p } }\nnew A().get()')[0], true);
+  assert.doesNotMatch(first('const x = ;\nx')[1].message, /TypeScript in this call/);
+});

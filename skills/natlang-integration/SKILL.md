@@ -683,3 +683,10 @@ return effects, including parent roots that call preparation helpers. The
 `effect_adapter_required` error means the result has outgoing intentions without
 a configured serializer: register that operation's adapter and retry its durable
 invocation. Do not advance a pending checkpoint separately from its outbox write.
+
+Native `eval` rejects code that is not TypeScript before running it, with the scope compiler's `typescript-syntax`
+diagnostics. For Python-shaped code or prose inside the `code` argument the first diagnostic is a recovery sentence
+(`The code argument is run as TypeScript in this call's scope. ...`) naming the offending line. It is attached only
+after the code failed to parse, so valid imports of project packages, private fields and ordinary syntax slips keep
+their plain parser messages. A collector or evaluator that counts repeated failing evals should treat this diagnostic
+as the single teaching signal and compare the next action: a different, parseable action is a recovery.

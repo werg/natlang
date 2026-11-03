@@ -650,3 +650,11 @@ A root operation that returns outgoing intentions must declare a required effect
 array and construct it on every branch, including `[]` for no action. Calling a
 preparation child does not deliver its intentions: return its actual effects and
 checkpoint together through the root's declared application boundary.
+
+`eval` code is TypeScript and nothing else. When the code argument does not parse because it is Python (an import or
+`from ... import` line, `def f(x):`, `print(...)`, `True`/`None`) or because explanation text leaked into it, the first
+diagnostic names the line and gives the one-sentence fix: the inputs, services, functions and built-ins such as `nl`
+are already in scope, so use them by name with `const`/`let`, braces and `true`/`false`/`null`, write judgment as
+`await nl(...)`, and keep explanation in `//` comments or in the reply outside the call. Recover by resending the
+statements as TypeScript, not by resending the same lines or switching to another tool for a judgment `nl` should make.
+A JavaScript `import` of a project package is valid; importing a name already in scope reports that it is in scope.

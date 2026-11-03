@@ -1839,3 +1839,17 @@ memetic teacher ferry. Teacher generation is retired for LFM3, so the ferry is r
 served native student itself (`--author` defaults to `--server`). The prompt text is unchanged; the model reading it
 changed. Before relying on memetic runs, sample about 48 authoring calls on the live LFM3 policy and check that the
 replies contain usable `<guidance>` blocks within the word budget.
+
+## Eval error: Python or prose in the code argument (2026-11-03, live measurement pending)
+
+`ts-host/src/scope-compiler.ts` now prepends one recovery sentence to the diagnostics of an eval whose code failed to
+parse and starts with a Python import, contains Python-only lines (`def f(x):`, `if x:` blocks, `print(`, `True`/`None`,
+`#` comments), or has a prose line (a line of four or more plain words, including text after a JavaScript `import ...
+from '...'`). The wording is
+"The code argument is run as TypeScript in this call's scope." plus the fix for that shape (use scope names and
+`await nl(...)`; declare with `const`/`let`, braces and `true/false/null`; put explanation in comments or outside the
+call). Nothing in any prompt changed, and parseable code is never touched.
+Motivation: 14% of full67's eval actions (37 of 264 on the practice set) started with `import`, either Python or a
+JavaScript import mixed with prose; the old error was a raw `';' expected.`, after which both checkpoints repeated the
+same failing action. Measure about 48 replays per variant of the failing first requests on the live executor
+(before/after wording) and record the rate of a different parseable next action. Unmeasured until then.
