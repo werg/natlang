@@ -31,6 +31,28 @@ import time
 from pathlib import Path
 
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training' / 'neuralese'))
+from natlang_neuralese.common.paths import resolve  # noqa: E402
+
+DEFAULT_POOL = resolve('data_hdd', 'natlang-rl-authoring', 'admitted')
+
+
+def admitted_ids_by_batch(admissions):
+    """batch directory -> ids admitted for it (a batch admitted in several steps accumulates)."""
+    found = {}
+    path = Path(admissions)
+    if path.exists():
+        for line in path.read_text().splitlines():
+            if line.strip():
+                entry = json.loads(line)
+                found.setdefault(entry['batch_dir'], []).extend(entry['admitted_case_ids'])
+    return found
+
+
+def credits_of(rows):
+    return dict(collections.Counter(c for row in rows for c in row['curriculum']['external'].get('constructs', [])))
+
+
 def lines(path):
     return [line.strip() for line in Path(path).read_text().splitlines() if line.strip() and not line.startswith('#')]
 
@@ -59,6 +81,11 @@ def main(argv=None):
     rec.add_argument('--admitted', type=int)
     rec.add_argument('--credit', action='append', default=[], metavar='CONSTRUCT=N')
     rec.add_argument('--credit-from', metavar='CASES.jsonl')
+    rec.add_argument('--admissions', default=str(DEFAULT_POOL / 'admissions.jsonl'),
+                     help='admission log: a batch with an entry is credited only for its admitted case ids')
+    fix = sub.add_parser('reconcile', help='rewrite recorded entries to the admitted rows of the admission log')
+    fix.add_argument('--ledger', required=True)
+    fix.add_argument('--pool', default=str(DEFAULT_POOL))
     args = parser.parse_args(argv)
     import fcntl
     # The ledger and its directory are created on first use; a missing ledger is an empty rotation.
@@ -67,14 +94,45 @@ def main(argv=None):
     lock = open(str(args.ledger) + '.lock', 'w')
     fcntl.flock(lock, fcntl.LOCK_EX)  # claims and records are serialized across workers
     all_entries = ledger(args.ledger)
+    if args.command == 'reconcile':
+        by_batch = admitted_ids_by_batch(Path(args.pool) / 'admissions.jsonl')
+        pool = {}
+        for line in (Path(args.pool) / 'cases.jsonl').read_text().splitlines():
+            if line.strip():
+                row = json.loads(line)
+                pool[row['id']] = row
+        changed = 0
+        for entry in all_entries:
+            ids = by_batch.get(entry['batch'])
+            if entry.get('status', 'recorded') != 'recorded' or ids is None:
+                continue
+            rows = [pool[i] for i in dict.fromkeys(ids) if i in pool]
+            credits = credits_of(rows)
+            if entry['admitted'] != len(rows) or (entry.get('credits') or {}) != credits:
+                entry.update(admitted=len(rows), reconciled_from_admissions=True)
+                entry.pop('credits', None)
+                if credits:
+                    entry['credits'] = credits
+                changed += 1
+        backup = Path(str(args.ledger) + f'.pre-reconcile-{int(time.time())}')
+        backup.write_text(Path(args.ledger).read_text())
+        Path(args.ledger).write_text(''.join(json.dumps(entry) + '\n' for entry in all_entries))
+        print(json.dumps({'reconciled_entries': changed, 'backup': str(backup)}))
+        return 0
     recorded_batches = {entry['batch'] for entry in all_entries if entry.get('status', 'recorded') == 'recorded'}
     entries = [entry for entry in all_entries if entry.get('status', 'recorded') == 'recorded']
     if args.command == 'record':
         credits = {}
         if args.credit_from:
             rows = [json.loads(line) for line in Path(args.credit_from).read_text().splitlines() if line.strip()]
-            credits = dict(collections.Counter(c for row in rows
-                                               for c in row['curriculum']['external'].get('constructs', [])))
+            # Credit only admitted rows: the qualified cases file also holds the tasks the audit dropped (round 3
+            # over-credited 100+ construct tasks and 7 admitted counts by reading it whole).
+            known = admitted_ids_by_batch(args.admissions)
+            admitted_ids = known.get(args.batch) or known.get(str(Path(args.batch).resolve()))
+            if admitted_ids is not None:
+                rows = [row for row in rows if row['id'] in set(admitted_ids)]
+                args.admitted = len(rows)
+            credits = credits_of(rows)
             if args.admitted is None:
                 args.admitted = len(rows)
         for item in args.credit:
