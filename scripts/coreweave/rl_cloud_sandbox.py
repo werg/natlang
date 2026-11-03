@@ -566,17 +566,19 @@ def _restore_input(item, scratch):
         return
     temp = _fetch_verified(item, scratch / item['sha256'])
     if kind == 'archive':
-        tar = subprocess.Popen(['tar', '-x', '-C', '/', '--keep-directory-symlink'], stdin=subprocess.PIPE)
-        with open(temp, 'rb') as source:
-            if shutil.which('zstd'):
-                ok = subprocess.run(['zstd', '-q', '-dc'], stdin=source, stdout=tar.stdin).returncode == 0
-            else:
-                import zstandard
-                zstandard.ZstdDecompressor().copy_stream(source, tar.stdin)
-                ok = True
-        tar.stdin.close()
-        if tar.wait() != 0 or not ok:
-            raise RuntimeError(f'cannot unpack input archive {item["sha256"]}')
+        # Unpacked beside the scratch blob, then moved file by file: the DGX roots in a sandbox are symlinks onto the
+        # volume, and tar extracting at / through them fails (EXDEV); shutil.move copies across devices when needed.
+        unpacked = scratch / f'archive-{item["sha256"]}'
+        shutil.rmtree(unpacked, ignore_errors=True)
+        unpacked.mkdir(parents=True)
+        untar_zst(temp, unpacked)
+        for member in item.get('files', []):
+            source, destination = unpacked / member['path'].lstrip('/'), Path(member['path'])
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            if destination.exists() or destination.is_symlink():
+                destination.unlink()
+            shutil.move(str(source), str(destination))
+        shutil.rmtree(unpacked, ignore_errors=True)
         for member in item.get('files', []):
             if file_digest(member['path']) != member['sha256']:
                 raise ValueError(f'{member["path"]}: restored bytes differ from the closure')
