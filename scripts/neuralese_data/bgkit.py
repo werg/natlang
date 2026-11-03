@@ -59,6 +59,10 @@ SLOT_QA_STORES = {
 }
 OVERVIEW_STORES = {"file_overview": "file_overview", "repo_overview_v1": "repo_overview"}
 TOOL_DIGEST_STORES = {"tool_digest_v2": "run1", "tool_digest_ext_v3": "ext_synth"}
+# Earlier digest stores, converted only for learned-operator cases (operator_cases_tool_digest.py); not in ALL_STORES.
+TOOL_DIGEST_EXTRA_STORES = {"tool_digest": "run0", "tool_digest_v1": "run1", "tool_digest_ext_v1": "ext_synth_v1",
+                            "tool_digest_ext_v2": "ext_synth_v2"}
+TOOL_DIGEST_GENERATORS = {**TOOL_DIGEST_STORES, **TOOL_DIGEST_EXTRA_STORES}
 REPO_STORES = {"repo_qa_file_v3": "repo_qa", "repo_localisation_v3": "repo_localisation"}
 ALL_STORES = [*QA_STORES, *TOOL_DIGEST_STORES, *REPO_STORES, *SLOT_QA_STORES, *OVERVIEW_STORES]
 
@@ -266,10 +270,10 @@ def convert_tool_digest(store: str, row_index: int, row: dict, task_repos: dict)
                      "withheld": ["sources"]},
         "target": {"kind": "text", "value": target, "alternatives": []},
         "outcome": {"label": "teacher", "checked": None,
-                    "details": {"generator": TOOL_DIGEST_STORES[store], "raw_chars": meta.get("raw_chars")}},
+                    "details": {"generator": TOOL_DIGEST_GENERATORS[store], "raw_chars": meta.get("raw_chars")}},
         "lineage": _lineage(store, row_index, f"github:{repo}" if repo else None, upstream_id=meta.get("task_id") or meta.get("key"),
                             revision=revision, teacher="unknown",
-                            notes={"bgkit_generator": TOOL_DIGEST_STORES[store]}),
+                            notes={"bgkit_generator": TOOL_DIGEST_GENERATORS[store]}),
         "license": license_("LicenseRef-repository-content", False,
                             "Tool output from public repositories under their own licences; digest written by a bgkit teacher."),
         "split": _split(row),
@@ -350,7 +354,7 @@ def load_heldout_repos(tasks_dir: Path = TASKS_DIR) -> set:
 def converter_for(store: str, task_repos: dict, heldout_repos: set):
     if store in QA_STORES:
         return lambda i, row: convert_qa(store, i, row)
-    if store in TOOL_DIGEST_STORES:
+    if store in TOOL_DIGEST_GENERATORS:
         return lambda i, row: convert_tool_digest(store, i, row, task_repos)
     if store in REPO_STORES:
         return lambda i, row: convert_repo(store, i, row, task_repos, heldout_repos)
