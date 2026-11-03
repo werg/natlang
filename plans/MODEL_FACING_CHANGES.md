@@ -19,6 +19,22 @@ samples per family on the current student: task success; whether `decide` is use
 whether drive rollouts plan with the codebase function before acting (extra moves change the confirmation code);
 whether skill-route rollouts read the covering skill; compile/type errors in feature modules (the sibling `.ts` import).
 
+### 2026-11-03 — Composed Neuralese call-graph RL task prompts (debt: live measurement)
+
+New RL task programs from `scripts/rl_tasks/sources/composed.py` (source `composed`, families `neuralese_relay`,
+`neuralese_typed`, `neuralese_iterate`, `neuralese_fanin`, `multihop_deep`; see
+`plans/neuralese/BROAD_RL_TASKS_20261031.md`, "Composed Neuralese structures"). The executing model sees 21 new program
+shapes: root instructions that name their helpers and spell out the call order in numbered steps (some with the exact
+eval idiom, for example `iterateOn(step, start).withMeasure(s => parts.length - s.next).until(...)`), helper functions
+with `Neuralese<string>` parameters (`note`, `prior`, `priorNotes`, `state`, `evidence`), typed Neuralese results
+(`Neuralese<{ subject; relevant; facts }>`, `Neuralese<{ answer; sentence }>`, relation lists, candidate states), a typed
+Neuralese array argument (`profiles`), and depth-3 folders (`solve_step/read_passage`, `lookup/read_entry`,
+`trace_path/links_of`, `combine/combine_pair`). Two to three root instruction variants per shape (numbered/code-spelled
+versus prose). **Measurement debt:** about 48 live samples per variant on the current student: task success, whether the
+intended helpers and Neuralese arguments are actually used, and compile/type errors in the root eval (for example
+reading fields of a typed Neuralese value in code), before these prompts are tuned further; compare the numbered and
+prose variants of one shape.
+
 ### 2026-10-31 — Memetic guidance evaluations deliver stored guidance through the program-guidance channel (debt: live outcome)
 
 `memetic_program.evaluate` used to append the candidate's `<natlang_program_guidance>` native-state block to a replaced

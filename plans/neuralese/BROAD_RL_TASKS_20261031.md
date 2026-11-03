@@ -231,3 +231,81 @@ while lineages read it).
   with `NATLANG_RL_TASK_ASSETS_V3`. v2 rows keep reading the v2 asset entry (`NATLANG_RL_TASK_ASSETS`).
 - tau2-bench: its retail/airline tasks are revised tau-bench v1 test tasks, which stay held here; telecom needs its
   user-side tools and simulator and is not converted.
+
+## Composed Neuralese structures (2026-11-03)
+
+Recipe review 2026-11-03 (`RECIPE_REVIEW_20261103/NEURALESE_CAPABILITY_COVERAGE.md` §5-6): the live 61k source is one
+root wrapping one item, and its only Neuralese shape is `read_X -> Neuralese<string>` fan-in (0 relays, 0 typed
+Neuralese results, 80 `iterateOn`). Builder `scripts/rl_tasks/sources/composed.py` (source `composed`, `SOURCES`
+entries `composed-relay|typed|iterate|fanin|deep`) turns already downloaded sources into multi-function programs whose
+intended call graph moves Neuralese state in five other ways. No teacher generation; each item keeps its upstream gold
+and the existing `checkOracle` kind; rewards stay outcome-only. Split units and source groups are the ones the broad
+source uses for the same upstream items (`ext-unit:<origin>:<unit>` is added), and items are drawn in disjoint slices
+per program where a source serves two families (MuSiQue relay/deep, QuALITY relay/iterate).
+
+| family (`curriculum.external.framing`) | programs (shape) | sources | construct |
+|---|---|---|---|
+| `neuralese_relay` | gather -> refine -> conclude; gather -> refine -> root answers; hop relay first_link -> next_link(prior); evidence -> weigh; evidence -> sharpen -> weigh | MuSiQue, 2Wiki, QuALITY | `Neuralese<string>` note passed as a `note`/`prior`/`evidence` argument into another child |
+| `neuralese_typed` | per-document `Neuralese<{subject; relevant; facts[]}>` profiles (root decides, or a `judge(profiles: Neuralese<...>[])` child); per-question `Neuralese<{answer; sentence}>`; per-sentence `Neuralese<{person; relation; relative}[]>` | 2Wiki, SQuAD, CLUTRR | structured Neuralese results, typed Neuralese array argument |
+| `neuralese_iterate` | open_notes/absorb(priorNotes) over article parts (settle child or root decides); begin_state/advance(state) over story chunks; typed candidate state `Neuralese<{candidates[]}>` over page sections | QuALITY (2/3/5/8 parts), bAbI (4-fact chunks), TriviaQA (sections) | `iterateOn` with a `{state, next}` cursor, measure = unread parts, Neuralese state carried step to step |
+| `neuralese_fanin` | read_table + read_text; per-table read_table + read_text -> plan_calculation(tableNotes[], textNote); find_rows + read_page | TAT-QA, MultiHiertt, HybridQA | distinct producer roles fanning in to one exact (eval) decision |
+| `multihop_deep` | split_question -> solve_step -> solve_step/read_passage (+ confirm(chain)); lookup -> lookup/read_entry -> compare; trace_path -> trace_path/links_of and combine -> combine/combine_pair | MuSiQue, 2Wiki, CLUTRR | depth-3 call graphs with distinct subproblems (decompose, retrieve/read, bridge, verify; path finding and relation composition) |
+
+Each program has 4-7 root instruction variants that change how the task is put (numbered plan with the exact eval idiom,
+prose, goal-first, reader request, check-before-answer, stopping rule), chosen per split unit; after normalizing digits
+and quoted/code literals (`measure_repetition.py`) the families have 22 / 23 / 25 / 22 (53 with the answer-contract
+lines of TAT-QA/MultiHiertt return types) / 24 distinct root instruction texts. `curriculum.named: required` on all,
+`iterate: required` on the iterate family (coverage notes, never rejection), `inline: optional`. Levels are real
+difficulty: hops (MuSiQue 2/3/4 -> 1/2/3), 2Wiki question type, QuALITY parts and hard flag, story chunks, sections,
+questions per article, kinship hops, derivation operators, table rows.
+
+`curriculum.external.structure` records the program, depth, producer roles and construct flags, plus `smoke`: the
+intended orchestration. The case reference replays a direct root answer (the collector replay has no Neuralese port),
+so `scripts/rl_tasks/structure_smoke.mjs` executes, for up to 3 cases per shape, that orchestration through
+`executeProgram` with the teacher-text Neuralese transport and scripted children: Neuralese arguments into children,
+typed Neuralese results and arrays, `iterateOn` over Neuralese state and depth-3 folders all load, type-check and run
+(472/472 runs over 166 shapes). This qualifies program structure only, not that a model uses it.
+
+Qualification (`verify.mjs`, frozen ts-host snapshot of 9564bc915 under the build directory, `NATLANG_CALL_STORE=off`:
+the shared 73 GB call store made replay I/O-bound):
+
+| family | built | kept | train/dev/conf | reference ok | wrong accepted / tried | alias rejected / tried | oracles (train) |
+|---|---|---|---|---|---|---|---|
+| neuralese_relay | 1610 | 1582 | 1464/55/63 | 1607 | 35/5379 | 0/2462 | span qa F1 0.8 (+aliases) 1024, exact letter 440 |
+| neuralese_typed | 1796 | 1753 | 1657/54/42 | 1796 | 43/5224 | 0/2563 | span qa 699, qa-alias-map record 508, normalized 450 |
+| neuralese_iterate | 1800 | 1800 | 1680/68/52 | 1800 | 0/5360 | 0/1443 | exact letter 660, span/normalized qa 1020 |
+| neuralese_fanin | 1510 | 1487 | 1368/59/60 | 1510 | 23/4463 | 1/1510 | numeric-tolerance 626, span qa 607, answer-list 135 |
+| multihop_deep | 1900 | 1865 | 1773/52/40 | 1898 | 37/6294 | 0/3600 | span qa 1323, normalized 450 |
+
+Wrong answers include each item's MuSiQue bridge answers (stopping one hop early) and the other entity of 2Wiki
+comparisons, besides other items' gold and the generic perturbation. Accepted wrongs are the known long-gold case (gold
++ four words passes F1 0.8; SQuAD 42, MuSiQue/2Wiki ~60) and five references held by `source_review_pending`.
+MultiHiertt arithmetic first used the FinQA 5e-3 relative band, which accepted the +7 control on large values (180 of
+440 cases); its gold is the upstream program's exact execution, so the composed rows use 0.006 absolute (1e-6
+relative, percent forms) and keep 432.
+
+Custody and assembly (`assemble.py --legacy-per-family 0 --train-cap 5000`, both exclusion files under
+`custody/`): train rows sharing an upstream id or group with the live 61k source's held dev/confirmation rows (11,
+HybridQA tables), the LFM3 held-set group closure (`union_groups_fast.py`: 40, SQuAD `wiki:` groups 33 and TAT-QA 7)
+and ProtectedWorlds (2 more HybridQA) are dropped: 53 rows. Result: **7,889 train cases** (relay 1,464, typed 1,624,
+iterate 1,680, fanin 1,348, deep 1,773; levels 0/1/2/3 = 1,515/3,235/2,222/917; 145 distinct normalized root
+instruction texts, 12 declared structures), held dev 288 / confirmation 257 (upstream evaluation splits only).
+Location: `/mnt/external/natlang-rl-composed-20261103/neuralese-structures/natlang-rl-composed-neuralese-20261103/`
+(`cases.jsonl`, `held/`, `qualification.json`, `repetition.json`); the frozen verification runtime and logs are beside it.
+Not registered and not admitted to a lineage yet; the held packets would need `evaluation-only-never-training`
+registration before use.
+
+Construct coverage of the 7,889 train rows (declared program shape, not evidence an episode used it): depth-3 graphs
+1,773; a Neuralese value passed into another child 3,710 (relay family, judge(profiles), iterate reducers, filing
+planner); typed `Neuralese<T>` 2,044; `iterateOn` over Neuralese state 1,680; fan-in of distinct producer roles 1,348.
+Oracles are answer checks; only the SQuAD records (field by field, 508) and TAT-QA span lists check more than one value
+(about 8% of rows), well short of an effect/state share; effect oracles come from the codebase and authored state tasks.
+
+Tune programs (`scripts/rl_tasks/composed_tune_programs.py`, checked by `check_tune_programs.mjs`): nine reusable
+program directories under `.../neuralese-structures/tune-programs/` (multihop kit with two operations, multihop steps,
+kinship paths, article reducer, story reducer, section candidates, report readers, table pages, filing planner), 160
+train worlds per operation plus the source's dev/confirmation worlds, persisted `.natlang/tune/splits.json`, and a
+`tune.reward.mjs` verifier carrying the rows' oracle. All functions load; every expected value scores 1 and every
+perturbed value 0. `tune.structure` gives nine distinct shape keys, none equal to the existing supply's
+`950aa7445931e5f6`. Reader gap: `tune.structure` reads frontmatter values verbatim, so a quoted `returns: "string"`
+counts as `named`; these programs write plain `returns:` in `main.nl`.
