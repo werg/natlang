@@ -15,7 +15,6 @@ registration; rebuild the selection pool afterwards.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import sys
 import time
@@ -24,16 +23,13 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(REPO / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_file_hex as sha  # noqa: E402
 from natlang_neuralese.common.paths import resolve_str  # noqa: E402
 
 DEFAULT_POOL = resolve_str('data_hdd', 'natlang-rl-authoring', 'admitted')
 REGISTRY = REPO / 'training' / 'neuralese_corpora.json'
 PREFIX = 'natlang-rl-authored-'
 SPLITS = {'dev': 'dev', 'confirmation': 'confirmation'}
-
-
-def sha(path):
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
 def registered_ids(registry):
