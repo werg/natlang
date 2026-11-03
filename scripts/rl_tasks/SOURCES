@@ -44,3 +44,9 @@ codebase-py codebase:python_packages
 codebase-natlang codebase:natlang_modules
 natlang-codebase natcode:natlang_codebases
 design-brief-gates design_brief_gates:cases
+# Composed Neuralese call-graph families (one source `composed`, five families; plans/neuralese/BROAD_RL_TASKS_20261031.md)
+composed-relay composed:relay
+composed-typed composed:typed
+composed-iterate composed:iterate
+composed-fanin composed:fanin
+composed-deep composed:deep
