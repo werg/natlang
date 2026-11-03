@@ -333,3 +333,18 @@ def test_tune_shard_exports_its_stage_directory_and_final_status(tmp_path):
     assert sandbox.fetch(parent, tmp_path / 'r2' / 'tune-s0') == 0
     assert (restored / 'programs/refund-decision/.natlang/tune/evaluations/development/untuned.json').read_text() == '{"roots": 3}'
     assert json.loads((tmp_path / 'r2' / 'tune-s0' / 'tune-status.json').read_text())['status'] == 'done'
+
+
+def test_tune_shard_launches_always_restore_the_seed_parent(tmp_path, monkeypatch):
+    from scripts.coreweave import rl_cloud
+    monkeypatch.setattr(rl_cloud, 'hub', lambda run: tmp_path)
+    parent = {'kind': 'checkpoint', 'encoding': 'raw', 'sha256': 'a' * 64, 'bytes': 1, 'path': '/p/checkpoint.pt'}
+    (tmp_path / 'exports' / 'tune-s0').mkdir(parents=True)
+    (tmp_path / 'exports' / 'tune-s0' / 'seed.json').write_text(json.dumps(
+        {'seq': 'seed', 'lineage': 'tune-s0', 'kind': 'tune', 'blobs': [{'kind': 'top', 'encoding': 'tar.zst', 'sha256': 'b' * 64}, parent]}))
+    export = {'seq': 3, 'lineage': 'tune-s0', 'kind': 'tune', 'blobs': [{'kind': 'top', 'encoding': 'tar.zst', 'sha256': 'c' * 64},
+                                                                      {'kind': 'stage', 'encoding': 'tar.zst', 'sha256': 'd' * 64}]}
+    assert rl_cloud.launch_blobs({}, export)[-1] == parent
+    assert rl_cloud.record_digests({}, export) == {'a' * 64, 'c' * 64, 'd' * 64}
+    sft = {'seq': 3, 'lineage': 'joint', 'blobs': export['blobs']}
+    assert rl_cloud.launch_blobs({}, sft) == export['blobs']

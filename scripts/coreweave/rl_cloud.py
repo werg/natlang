@@ -834,11 +834,21 @@ def lineage_seed_inputs(run, name):
     return (read_json(hub(run) / 'exports' / name / 'seed.json', {}) or {}).get('inputs', [])
 
 
+def launch_blobs(run, record, name=None):
+    """The blobs a launch from ``record`` materializes. A tune shard's exports carry its stage directory, never its
+    read-only parent, so every launch of a shard also restores the seed's parent checkpoint."""
+    out = list(record['blobs'])
+    if record.get('kind') == 'tune' and not any(b['kind'] == 'checkpoint' for b in out):
+        seed = read_json(hub(run) / 'exports' / (name or record['lineage']) / 'seed.json')
+        out += [b for b in seed['blobs'] if b['kind'] == 'checkpoint']
+    return out
+
+
 def record_digests(run, record, name=None):
     """Every blob a launch from ``record`` reads: its blobs (and a delta's receipt, payload and base chain) and the
     lineage's and run's inputs."""
     out = set()
-    for blob in record['blobs']:
+    for blob in launch_blobs(run, record, name):
         out.add(blob['sha256'])
         if blob['encoding'] == 'zip-delta':
             out |= {blob['receipt']['sha256'], blob['payload']['sha256']}
@@ -855,7 +865,7 @@ def _with_parts(run, value):
 def parent_capability(run, record):
     inputs = read_json(hub(run) / 'run-state.json', {}).get('inputs', []) + lineage_seed_inputs(run, record['lineage'])
     out_blobs, bases = [], {}
-    for blob in record['blobs']:
+    for blob in launch_blobs(run, record):
         if blob['encoding'] == 'zip-delta':
             out_blobs.append({**blob, 'receipt': _with_parts(run, blob['receipt']),
                               'payload': _with_parts(run, blob['payload'])})
