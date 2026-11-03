@@ -35,6 +35,9 @@ async function pinNativeProgramGuidance(store: NeuraleseStore, id: string): Prom
   await pending;
 }
 import { listingViewInstructions, viewNote } from './prompt.js';
+import { pluggable, type PluggableSetting } from '../runtime/pluggable.js';
+import { framedState, type CompactSite } from '../neuralese/operator.js';
+import type { NeuraleseRef } from './neuralese.js';
 import { untrustedBlock, type UntrustedRegistry } from './untrusted.js';
 import { writtenReturnResult } from './pseudo-call.js';
 import { decodeTurnValue, encodeMessages, isContentParts, isNativeAdapterRef, isNeuraleseRef, neuraleseSentinel, neuraleseRefSentinel, nativeStateSentinel, NeuraleseUnsupportedError, supportsGuidance, supportsNeuralese,
@@ -484,6 +487,14 @@ export class NativeToolAgent {
       /** Tensor store and write port for soft values (S0 §3). */
       neuralese?: NeuraleseRuntimeOptions;
       /**
+       * How values the runtime would cut off are shown (a pluggable part, runtime/pluggable.ts): `crisp` keeps the text
+       * cut; `nl` also shows the learned Neuralese operator's state of the whole value (cut-off tool outputs and
+       * argument listings) and carries a compacted history state with `compact_history` notes, when the driver reads
+       * Neuralese and `neuralese.compactor` is configured. Default `crisp` until the live measurement
+       * (plans/MODEL_FACING_CHANGES.md 2026-11-03) adopts the learned path; env NATLANG_NEURALESE_COMPACTION overrides.
+       */
+      compaction?: PluggableSetting;
+      /**
        * Receives the deltas of the call's model turns as they stream (plans/STREAMING.md §1.6), with the turn's number
        * (as its `model_request` trace events give it). A turn taken again after a failed request first gets a `reset`.
        * Without it the driver is called with no turn options.
@@ -508,9 +519,58 @@ export class NativeToolAgent {
    * representation, its instructions the receiving call's (prompt.ts `listingViewInstructions`). Only plain data is
    * viewed; a failed view keeps the preview.
    */
+  /**
+   * The learned operator's state of one site (`compaction: nl`, neuralese/operator.ts), or undefined to keep the crisp
+   * text cut. A failed operator keeps the cut and is traced; it never fails the call.
+   */
+  private async compactRef(session: NativeSession, site: CompactSite): Promise<NeuraleseRef | undefined> {
+    const compactor = this.options.neuralese?.compactor;
+    if (!compactor || !supportsNeuralese(this.driver)) return undefined;
+    const setting = this.options.compaction ?? this.options.neuralese?.compaction ??
+      (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.NATLANG_NEURALESE_COMPACTION as PluggableSetting;
+    const chars = site.operator === 'compact-history' ? JSON.stringify(site.messages).length : site.value.length;
+    const run = pluggable<[CompactSite], NeuraleseRef | undefined>({
+      crisp: () => undefined,
+      nl: async request => {
+        try { return await compactor(request); } catch (error) {
+          session.runtime.trace.emit('operator', { call_id: session.runtime.currentCallId ?? null, operator: request.operator,
+            representation: 'text', chars, error: String((error as Error)?.message ?? error).slice(0, 300) });
+          return undefined;
+        }
+      } }, setting, { default: 'crisp', name: 'compaction', serve: 'nl', same: () => true });
+    const ref = await run(site);
+    if (ref) session.runtime.trace.emit('operator', { call_id: session.runtime.currentCallId ?? null, operator: site.operator,
+      representation: 'neuralese', block: ref.$neuralese.id, chars });
+    return ref;
+  }
+
+  /** The call's instructions as an operator's purpose text (bounded). */
+  private purpose(session: NativeSession): string {
+    const body = typeof session.lam.body === 'string' ? session.lam.body.replace(/\n+$/, '') : '';
+    return body.length > 2000 ? body.slice(0, 2000) : body;
+  }
+
   private async views(session: NativeSession): Promise<Record<string, string>> {
     const view = this.options.neuralese?.view;
     const lam = session.lam;
+    if (this.options.neuralese?.compactor && supportsNeuralese(this.driver) && lam.type.kind === 'lambda') {
+      // The learned compact-params operator, when selected, writes the listing's state of each argument it would cut.
+      const root = lam.projectTransaction?.folder;
+      const out: Record<string, string> = {};
+      for (const field of lam.type.params.fields) {
+        if (!Object.hasOwn(lam.args, field.name)) continue;
+        const value = lam.args[field.name]!;
+        if (value instanceof FileHandle || !renderValue(value, { root, holder: field.name, budget: scopeValueChars(session),
+          liveIdentity: session.runtime.displayLiveId, untrusted: session.runtime.untrusted }).includes('<<cut off:')) continue;
+        let text: string | undefined;
+        try { text = JSON.stringify(value); } catch { text = undefined; }
+        if (text === undefined) continue;
+        const ref = await this.compactRef(session, { operator: 'compact-params', value: text,
+          instructions: `The call that receives this argument as ${field.name} (${formatType(field.type)}) answers: ${this.purpose(session)}` });
+        if (ref) out[field.name] = ref.$neuralese.id;
+      }
+      if (Object.keys(out).length) return out;
+    }
     if (!view || !supportsNeuralese(this.driver) || lam.type.kind !== 'lambda') return {};
     const root = lam.projectTransaction?.folder;
     const out: Record<string, string> = {};
@@ -1995,10 +2055,23 @@ export class NativeToolAgent {
       let note: string | undefined;
       for (const [index, result] of results.entries()) {
         const [name, args] = calls[index]!, id = String(raw[index]!.id);
-        messages.push({ role: 'tool', tool_call_id: id, content: result.text + (index === results.length - 1 ? notice : '') });
+        let content = result.text;
+        // A cut-off output also shows the learned compact-value state of all of it, when that operator is selected.
+        for (const full of result.cutOff ?? []) {
+          const ref = await this.compactRef(session, { operator: 'compact-value', value: full,
+            instructions: `Read this ${name} result for: ${this.purpose(session)}` });
+          if (ref) content += '\n\n' + framedState('compact-value', ref).trimEnd();
+        }
+        messages.push({ role: 'tool', tool_call_id: id, content: content + (index === results.length - 1 ? notice : '') });
         if (name === 'compact_history' && result.kind === 'ok') note = String(args.note).trim();
       }
       if (note !== undefined) {
+        // With the learned compact-history operator selected, the note also carries the compacted state of the whole
+        // conversation it replaces (Neuralese parts of that conversation are read as their text markers).
+        const history = await this.compactRef(session, { operator: 'compact-history', tools: this.tools(session),
+          messages: messages.map(message => typeof message.content === 'string' ? { ...message, content:
+            runtimeTextToParts(message.content).map(part => part.type === 'text' ? part.text : '[Neuralese]').join('') } : message) });
+        if (history) note += '\n\n' + framedState('compact-history', history);
         // The note speaks for everything before it: the conversation becomes the opening, the note, and the compaction
         // call with its result.
         const elided = pinNote(note) + collapseHistory(messages, protectedLength);

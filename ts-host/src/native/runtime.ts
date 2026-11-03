@@ -152,7 +152,9 @@ export type NativeRuntimeHooks = {
 };
 export type NativeOutcome = { kind: 'done' | 'quiesced'; detail: string; value?: Value };
 /** A tool call's result. `entry` is its index in the session's transcript. */
-export type NativeResult = { kind: string; text: string; value?: Value; codes?: string[]; entry?: number };
+export type NativeResult = { kind: string; text: string; value?: Value; codes?: string[]; entry?: number;
+  /** The full texts of outputs this result shows cut off (the learned compaction operator reads them; agent.ts). */
+  cutOff?: string[] };
 export type NativeAgent = (session: NativeSession) => Promise<string | void> | string | void;
 export type NativeRuntimeOptions = { environment: EvalEnvironment; hooks: NativeRuntimeHooks; agent?: NativeAgent;
   /** Sees each service call this runtime wraps, with its exact arguments and result (a standalone run's call record). */
@@ -1408,6 +1410,7 @@ export class NativeSession {
     this.runtime.trace.emit('action', { call_id: this.runtime.currentCallId ?? null, surface: this.surfaceName, name, ...(toolCallId ? { tool_call_id: toolCallId } : {}),
       arguments: capturedArgs, outcome: result.kind, result_text: result.text, diagnostics: result.codes ?? [] });
     const output = this.cuts.reduce((text, cut) => text.replace(cut.shown, cut.full), result.text);
+    const cutOff = this.cuts.filter(cut => result.text.includes(cut.shown)).map(cut => cut.full);
     this.cuts = [];
     const entry = this.transcript.length, detail = name === 'eval' ? this.evalDetail : undefined;
     this.evalDetail = undefined;
@@ -1425,7 +1428,7 @@ export class NativeSession {
       arguments: structuredClone(capturedArgs), status: result.kind, ...(value !== undefined ? { value } : {}),
       ...(detail?.console ? { console: detail.console } : {}), output });
     this.runtime.observeState('after-action');
-    return { ...result, entry };
+    return { ...result, entry, ...(cutOff.length ? { cutOff } : {}) };
   }
   private actionLimitReached(): boolean {
     return (this.runtime.options.maxActions !== undefined && this.actions >= this.runtime.options.maxActions) ||

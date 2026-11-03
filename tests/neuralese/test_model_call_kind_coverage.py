@@ -17,7 +17,7 @@ HTTP = ROOT / 'training/neuralese/natlang_neuralese/serve/http.py'
 AUDIT = ROOT / REGISTRY['audit']
 
 # Lines that issue a request to the executing model, or author a natlang call the runtime runs on it.
-MODEL_ENDPOINT = r'/v1/(?:chat/completions|natlang/score|neuralese/(?:decide|decide_many|view|native-states/))'
+MODEL_ENDPOINT = r'/v1/(?:chat/completions|natlang/score|neuralese/(?:decide|decide_many|view|operator|native-states/))'
 SITE_PATTERNS = (
     re.compile(r'\b(?:this\.driver|currentDriver)\('),     # the executing actor, including live handoffs
     re.compile(r'\.driver \?\? this\.driver\)\('),       # a turn on an optional second driver

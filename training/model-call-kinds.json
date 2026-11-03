@@ -43,6 +43,14 @@
    "rl": {"status": "gap", "owner": "legacy-sweep", "section": "view-write"},
    "parity": {"status": "not-applicable", "reason": "the server renders the view site itself (view.py); nothing in ts-host constructs serverViewer"}
   },
+  "operator-write": {
+   "summary": "A learned Neuralese operator site (compact-value, compact-params, compact-history, extract): one prefill of the operator's learned prompt rows, the value or conversation, and K learned slot positions whose native state is returned (POST /v1/neuralese/operator; model/learned_operators.py).",
+   "model_output": "forced",
+   "endpoints": ["/v1/neuralese/operator"],
+   "sft": {"status": "covered", "evidence": ["training/neuralese/natlang_neuralese/data/operator_graph.py", "scripts/neuralese_data/build_operator_graphs.py", "tests/neuralese/test_operator_graph.py"]},
+   "rl": {"status": "not-applicable", "reason": "no sampled tokens: the slots are forced positions trained only through the consumers that import them"},
+   "parity": {"status": "covered", "evidence": ["tests/neuralese/test_learned_operators.py"]}
+  },
   "native-forced-write": {
    "summary": "Forced producers: write-text materializes a string as native state (Neuralese<string> arguments, soft-body placeholders); init-body encodes a soft body in its real rendered call context.",
    "model_output": "forced",
@@ -78,6 +86,7 @@
   "/v1/neuralese/decide_many": {"kinds": ["decision-readout", "refinement-judge-scored"]},
   "/v1/natlang/score": {"kinds": ["decision-readout", "refinement-judge-scored"]},
   "/v1/neuralese/view": {"kinds": ["view-write"]},
+  "/v1/neuralese/operator": {"kinds": ["operator-write"]},
   "/v1/neuralese/native-states/write-text": {"kinds": ["native-forced-write"]},
   "/v1/neuralese/native-states/init-body": {"kinds": ["native-forced-write"]},
   "/health": {"model_facing": false, "reason": "liveness"},
