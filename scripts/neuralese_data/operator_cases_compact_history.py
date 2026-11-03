@@ -22,13 +22,15 @@ from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from neuralese_data.operator_cases_common import OUT_ROOT, RULES, CaseSink, source_text, stable_rank  # noqa: E402
+from neuralese_data.operator_cases_common import (  # noqa: E402
+    OUT_ROOT, RULES, CaseSink, data_path, source_text, stable_rank)
 from neuralese_data.records import VERSION, exact_refs_from, group_key, license_, seal, strip_markup  # noqa: E402
 
 OPERATOR = 'compact-history'
-S1_FILE = Path('/mnt/external/natlang-development-data/data/neuralese/port-records/full-20261003/'
-               'resume-20261003T1948-review1/final/trajectory_continuation_swe.port-records.jsonl')
-BENCH_KEYS = Path('/mnt/external/bgkit-data/trajectories_ext/bench_dedupe/bench_keys.json')
+S1_FILE = data_path('data_hdd', 'natlang-development-data', 'data', 'neuralese', 'port-records', 'full-20261003',
+                    'resume-20261003T1948-review1', 'final', 'trajectory_continuation_swe.port-records.jsonl')
+TRAJECTORIES_EXT = data_path('data_hdd', 'bgkit-data', 'trajectories_ext')
+BENCH_KEYS = TRAJECTORIES_EXT / 'bench_dedupe' / 'bench_keys.json'
 S1_NAME = 's1-swe'
 TRAIN_CAP, TEST_CAP = 15_000, 1_000
 MAX_WINDOWS = 2        # windows per trajectory overall
@@ -161,8 +163,8 @@ def convert_s1(out_root: Path, limit: int | None, windows: Counter, bench: set, 
 # ---------------------------------------------------------------------------------------------------------
 
 BGKIT_NAME = 'bgkit-compaction-v2'
-BGKIT_TASKS = Path('/home/werg/bgkit-data-nvme/bgkit2/tasks/compaction_v2.parquet')
-UPSTREAM_TRAJECTORIES = Path('/mnt/external/bgkit-data/trajectories_ext/swe_rebench_openhands/trajectories.parquet')
+BGKIT_TASKS = Path.home() / 'bgkit-data-nvme' / 'bgkit2' / 'tasks' / 'compaction_v2.parquet'
+UPSTREAM_TRAJECTORIES = TRAJECTORIES_EXT / 'swe_rebench_openhands' / 'trajectories.parquet'
 UPSTREAM = 'nebius/SWE-rebench-openhands-trajectories'
 CONVERTER = 'scripts/neuralese_data/operator_cases_compact_history.py@1'
 COMPACTED_MARKER = '[Earlier conversation compacted]'
