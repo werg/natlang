@@ -216,6 +216,55 @@ def _origins(receipt, order):
     return result
 
 
+QUOTA_REVISION_SCHEMA = 'natlang.native-quota-revision/1'
+FAMILY_REASSIGNMENT_SCHEMA = 'natlang.native-family-reassignment/1'
+_LEDGER_FIELDS = {QUOTA_REVISION_SCHEMA: {'id', 'binding', 'prior_required_visits', 'required_visits'},
+                  FAMILY_REASSIGNMENT_SCHEMA: {'id', 'binding', 'old_family', 'new_family'}}
+
+
+def declared_row_ledger(proof_path, proof, key):
+    """Load an optional proof-bound per-row ledger (quota revision or family reassignment).
+
+    A quota revision lowers the visit debt of exact unchanged rows to a declared
+    smaller quota; earned credit is never reduced (the applied quota is the larger
+    of the declared quota and the row's earned visits). A family reassignment moves
+    exact unchanged rows between declared CE families. Both are explicit, reviewed
+    transitions with a nonempty reason, never inferred from a changed map or plan.
+    """
+    declaration = proof.get(key)
+    if declaration is None:
+        return None, None
+    schema = {'quota_revision': QUOTA_REVISION_SCHEMA, 'family_reassignment': FAMILY_REASSIGNMENT_SCHEMA}[key]
+    if (not isinstance(declaration, dict) or declaration.get('schema') != schema
+            or not isinstance(declaration.get('reason'), str) or not declaration['reason'].strip()):
+        raise ValueError(f'source correction {key} needs its schema and an explicit reason')
+    path = _proof_file(proof_path, declaration.get('row_bindings_path', ''))
+    digest = sha256_file_hex_cached(path)
+    if digest != declaration.get('row_bindings_sha256'):
+        raise ValueError(f'source correction {key} ledger changed')
+    from ..common.jsonio import open_jsonl_text
+    rows = {}
+    with open_jsonl_text(path) as stream:
+        for line in stream:
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            if (not isinstance(row, dict) or set(row) != _LEDGER_FIELDS[schema]
+                    or not isinstance(row['id'], str) or row['id'] in rows):
+                raise ValueError(f'source correction {key} ledger row is malformed or repeated')
+            if schema == QUOTA_REVISION_SCHEMA:
+                prior, required = row['prior_required_visits'], row['required_visits']
+                if type(prior) is not int or type(required) is not int or not 1 <= required < prior:
+                    raise ValueError('quota revision may only lower a positive quota to a positive quota')
+            elif (not all(isinstance(row[name], str) and row[name] for name in ('old_family', 'new_family'))
+                    or row['old_family'] == row['new_family']):
+                raise ValueError('family reassignment must name two different families')
+            rows[row['id']] = row
+    if not rows:
+        raise ValueError(f'source correction {key} ledger is empty')
+    return rows, {'path': str(path), 'sha256': digest, 'bytes': path.stat().st_size}
+
+
 def source_correction_dependencies(reference):
     """Validate and return the immutable proof file used by provider closure."""
     path = Path(reference['path']).resolve(strict=True)
@@ -264,6 +313,11 @@ def source_correction_dependencies(reference):
             dependencies.append({'path':str(evidence_path),'sha256':evidence_sha,
                                  'bytes':evidence_path.stat().st_size})
             seen.add(str(evidence_path))
+    for key in ('quota_revision', 'family_reassignment'):
+        _, ledger = declared_row_ledger(path, proof, key)
+        if ledger is not None and ledger['path'] not in seen:
+            dependencies.append(ledger)
+            seen.add(ledger['path'])
     protected = proof.get('protected_held_correction')
     if protected is not None:
         if protected.get('schema') != 'natlang.native-protected-held-correction/1':
@@ -1011,9 +1065,26 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
             new_quotas[row_id]=max(new_quotas[row_id],minimum)
     for row_id in deferred:
         new_counts.setdefault(row_id, int(counts.get(row_id, 0)))
+    revision, revision_ledger = declared_row_ledger(path, proof, 'quota_revision')
+    revised = {}
+    for row_id, item in (revision or {}).items():
+        if (row_id in corrected or row_id in eligibility_decreased or row_id in deferred or row_id in added
+                or old_bindings.get(row_id) != item['binding'] or current_bindings.get(row_id) != item['binding']):
+            raise ValueError('quota revision names a row that is not an exact unchanged earned row: ' + row_id)
+        if int(quotas.get(row_id, -1)) != item['prior_required_visits']:
+            raise ValueError('quota revision prior quota differs from the earned saved quota: ' + row_id)
+        # Earned credit is history: a lowered quota never falls below actual visits.
+        revised[row_id] = max(item['required_visits'], int(counts.get(row_id, 0)))
+        new_quotas[row_id] = revised[row_id]
     result['exposure_counts'] = new_counts
     result['required_visits'] = new_quotas
     result['options'] = dict(options)
+    if revised:
+        objective_quotas = dict(result['options'].get('_objective_required_visits') or {})
+        for row_id, value in revised.items():
+            if row_id in objective_quotas:
+                objective_quotas[row_id] = value
+        result['options']['_objective_required_visits'] = objective_quotas
     if static_used:
         objective_quotas=dict(result['options'].get('_objective_required_visits') or {})
         for row_id in static_used:objective_quotas[row_id]=new_quotas[row_id]
@@ -1040,6 +1111,10 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
         **({'static_native_context_rows': sorted(static_used),
             'static_native_context_required_visits': {row_id:new_quotas[row_id] for row_id in sorted(static_used)}}
            if static_used else {}),
+        **({'quota_revision': {'ledger': revision_ledger, 'rows': len(revised),
+            'reason': proof['quota_revision']['reason'],
+            'required_visits_removed': sum(revision[k]['prior_required_visits'] - v for k, v in revised.items()),
+            'earned_credit_retained': True}} if revised else {}),
     }
     new_history.append(record)
     result['options']['source_correction_history'] = new_history
@@ -1077,6 +1152,8 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
             frame_quotas[row_id] = _fresh_quota(epochs, current_positions[row_id], len(current_order),
                                                 communication=row_id in current_communication)
             if row_id in static_used:frame_quotas[row_id]=new_quotas[row_id]
+        for row_id, value in revised.items():
+            frame_quotas[row_id] = value
         frame['exposure_counts'] = frame_counts
         frame['required_visits'] = frame_quotas
         frame['pending_source_rows'] = dict(pending)
@@ -1089,6 +1166,11 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
         if static_used:
             frame_objective_quotas=dict(frame_options.get('_objective_required_visits') or {})
             for row_id in static_used:frame_objective_quotas[row_id]=new_quotas[row_id]
+            frame_options['_objective_required_visits']=frame_objective_quotas
+        if revised and frame_options.get('_objective_required_visits'):
+            frame_objective_quotas=dict(frame_options['_objective_required_visits'])
+            for row_id, value in revised.items():
+                if row_id in frame_objective_quotas:frame_objective_quotas[row_id]=value
             frame_options['_objective_required_visits']=frame_objective_quotas
         for option_key in ('_communication_ids', '_producer_consumer_ids'):
             if option_key in frame_options:
@@ -1212,4 +1294,6 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
                'added_rows': len(added), 'protected_held_rows': protected_held_rows}
     if eligibility_decreased:
         summary['eligibility_decreased_rows'] = len(eligibility_decreased)
+    if revised:
+        summary['quota_revised'] = dict(revised)
     return result, summary

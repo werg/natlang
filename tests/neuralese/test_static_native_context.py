@@ -240,6 +240,48 @@ def test_static_recipe_transition_requires_preserved_family_membership(tmp_path,
     with pytest.raises(ValueError,match='family correction ledger differs from row inventory'):_source_correction_continuation(old,new)
 
 
+def test_static_recipe_transition_admits_only_declared_family_reassignment(tmp_path,monkeypatch):
+    import json,hashlib
+    from test_native_source_correction import _receipt,_write_proof,_row,_write_ledger,_with_section
+    from natlang_neuralese.train.recipe import _source_correction_continuation
+    import natlang_neuralese.train.native_source_correction as correction
+    import natlang_neuralese.train.native_supervision as supervision
+    import natlang_neuralese.train.native_logical_families as families
+    from natlang_neuralese.train.own_output_supervision import identity,policy_objective
+    prior=_receipt('/old','old',['x','y'],['old-leaf','y-leaf']);current=_receipt('/new','new',['y'],['y-leaf'])
+    proof_path=_write_proof(tmp_path,prior,current,[_row('x','x-binding',None,'old-leaf',None,'deferred','duplicate label')])
+    digest=lambda p:hashlib.sha256(p.read_bytes()).hexdigest()
+    row_path=tmp_path/'source-correction-rows.jsonl'
+    monkeypatch.setattr(correction,'source_correction_dependencies',lambda ref:[{'path':str(proof_path)},{'path':str(row_path),'sha256':digest(row_path)}])
+    old_map=tmp_path/'old-map.json';new_map=tmp_path/'new-map.json'
+    old_map.write_text(json.dumps({'source_sha256':'old','rows':[{'id':'x','binding':'x-binding','family':'general-agent'},
+        {'id':'y','binding':'y-binding','family':'natlang'}]}))
+    new_map.write_text(json.dumps({'source_sha256':'new','rows':[{'id':'y','binding':'y-binding','family':'port-record-wrapper'}]}))
+    monkeypatch.setattr(families,'checked',lambda ref: __import__('pathlib').Path(ref['path']))
+    base=objective(mass='token');before=copy.deepcopy(base);after=copy.deepcopy(base)
+    balance={'key':'logical-family','max_scale':8,'normalization':'declared/1'}
+    before['family_balance']={**balance,'scales':{'general-agent':1.0,'natlang':1.0},'map':{'path':str(old_map),'sha256':'a'*64}}
+    after['family_balance']={**balance,'scales':{'port-record-wrapper':1.0},'map':{'path':str(new_map),'sha256':'b'*64}}
+    prior_policy={'objective':before};next_policy={'objective':after,'inventory':[{'sha256':'new'}],
+        'objective_transition':{'from':identity(policy_objective(prior_policy))['sha256']},
+        'quota_aware_basis':{'schema':'natlang.quota-aware-ce-basis/1','candidate_source_sha256':'new'}}
+    monkeypatch.setattr(supervision,'load_policy',lambda ref:prior_policy if ref['path']=='old-ce' else next_policy)
+    old={'native_graphs':{'path':'/old','sha256':'old','binding':'native_graphs'},'ce_supervision_policy':{'path':'old-ce','sha256':'c','binding':'ce'}}
+    new={'native_graphs':{'path':'/new','sha256':'new','binding':'native_graphs'},
+       'continued_native_graphs':{'path':'/old','sha256':'old','binding':'continued_native_graphs'},
+       'ce_supervision_policy':{'path':'new-ce','sha256':'d','binding':'ce'},
+       'source_correction':{'path':str(proof_path),'sha256':digest(proof_path),'binding':'source_correction'}}
+    def refresh():new['source_correction']['sha256']=digest(proof_path)
+    with pytest.raises(ValueError,match='membership or row binding changed outside its correction'):_source_correction_continuation(old,new)
+    schema=correction.FAMILY_REASSIGNMENT_SCHEMA
+    wrong=_write_ledger(tmp_path,'wrong.jsonl',[{'id':'y','binding':'y-binding','old_family':'coding','new_family':'port-record-wrapper'}])
+    _with_section(proof_path,'family_reassignment',schema,wrong);refresh()
+    with pytest.raises(ValueError,match='declared family reassignment differs'):_source_correction_continuation(old,new)
+    ledger=_write_ledger(tmp_path,'move.jsonl',[{'id':'y','binding':'y-binding','old_family':'natlang','new_family':'port-record-wrapper'}])
+    _with_section(proof_path,'family_reassignment',schema,ledger);refresh()
+    assert _source_correction_continuation(old,new)
+
+
 def test_pending_static_graphs_are_staged_without_discharge(tmp_path,monkeypatch):
     import json,hashlib
     from types import SimpleNamespace

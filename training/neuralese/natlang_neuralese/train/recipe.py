@@ -1156,8 +1156,16 @@ def _source_correction_continuation(old, new):
                        and entry.get('new_binding')==current['binding'])
             else:valid=False
             if not valid:raise ValueError('static context family correction ledger differs from row inventory')
+        from .native_source_correction import declared_row_ledger
+        reassigned,_=declared_row_ledger(path,proof,'family_reassignment')
+        for ident,move in (reassigned or {}).items():
+            prior=before_rows.get(ident);current=after_rows.get(ident)
+            if (ident in corrections or prior is None or current is None or prior['binding']!=move['binding']
+                    or current['binding']!=move['binding'] or prior['family']!=move['old_family']
+                    or current['family']!=move['new_family']):
+                raise ValueError('declared family reassignment differs from the exact unchanged row inventory')
         for ident in set(before_rows)|set(after_rows):
-            if ident in corrections:continue
+            if ident in corrections or ident in (reassigned or {}):continue
             if before_rows.get(ident)!=after_rows.get(ident):
                 raise ValueError('static context family membership or row binding changed outside its correction')
         continuation_identity({'supervision_objective':identity(before_objective)},after_policy)

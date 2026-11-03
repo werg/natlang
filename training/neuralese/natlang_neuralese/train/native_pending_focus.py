@@ -4,6 +4,7 @@ import hashlib,json
 from pathlib import Path
 
 SCHEMA='natlang.native-pending-focus/1'
+FINISHED=('complete','superseded-unearned','superseded')
 
 
 def dependencies(reference):
@@ -13,6 +14,7 @@ def dependencies(reference):
     if hashlib.sha256(path.read_bytes()).hexdigest()!=reference['sha256']:raise ValueError('focus request SHA differs')
     doc=json.loads(path.read_text())
     if doc.get('schema')!=SCHEMA or not isinstance(doc.get('rows'),list) or not doc['rows']:raise ValueError('invalid pending focus request')
+    if 'supersedes' in doc:_supersession(doc)
     result=[{'path':str(path),'sha256':reference['sha256']}];seen=set();verified={}
     for item in doc['rows']:
         if not isinstance(item,dict) or set(item)!={'id','binding','source_sha256','split','evidence'} or item['split']!='train':raise ValueError('focus row must be a bound train row')
@@ -69,10 +71,39 @@ def active_for_operation(*, ordinary_sft, explicit_request):
     return ordinary_sft
 
 
+def _supersession(doc):
+    declaration=doc.get('supersedes')
+    if (not isinstance(declaration,dict) or set(declaration)!={'request_sha256','reason'}
+            or not isinstance(declaration['request_sha256'],str) or len(declaration['request_sha256'])!=64
+            or not isinstance(declaration['reason'],str) or not declaration['reason'].strip()):
+        raise ValueError('focus supersession names the exact active request SHA-256 and a reason')
+    return declaration
+
+
+def supersede_declared_focus(history, doc, *, request_sha256, global_step):
+    """Retire the active focus only when a new bound request explicitly names it.
+
+    Visits already earned under the old request remain ordinary row exposure;
+    only the one-time promotion of its unconsumed rows ends, and those rows keep
+    their quotas in the ordinary schedule. Without a declaration nothing changes.
+    """
+    if 'supersedes' not in doc:
+        return history
+    declaration=_supersession(doc)
+    history=[dict(item) for item in history]
+    if not history or history[-1].get('state')!='active' or history[-1]['request']['sha256']!=declaration['request_sha256']:
+        raise ValueError('declared focus supersession does not name the active pending focus')
+    record=history[-1]
+    record.update({'state':'superseded','superseded_at_global_step':int(global_step),'superseded_by':request_sha256,
+                   'supersession_reason':declaration['reason'],
+                   'disposition':'earned focus visits remain row exposure; unconsumed rows return to the ordinary schedule'})
+    return history
+
+
 def supersede_unearned_focus(history, old_frame, *, proof_sha256, global_step):
     """Archive a focus request only when every referenced old-stage credit is zero."""
     history = [dict(item) for item in history]
-    if not history or history[-1].get('state') in ('complete', 'superseded-unearned'):
+    if not history or history[-1].get('state') in FINISHED:
         return history
     record = history[-1]
     if record.get('state') != 'active' or record.get('consumed') or record.get('withdrawn'):

@@ -250,3 +250,59 @@ def test_policy_operation_defers_sft_focus_without_retiring_or_mutating_history(
     assert active_for_operation(ordinary_sft=True,explicit_request='focus')
     with pytest.raises(ValueError,match='cannot target'):
         active_for_operation(ordinary_sft=False,explicit_request='focus')
+
+
+def test_declared_supersession_retires_only_the_named_active_focus():
+    from natlang_neuralese.train.native_pending_focus import supersede_declared_focus
+    active={'request':{'path':'/old','sha256':'a'*64},'state':'active','consumed':['x'],'initial_credits':{'x':0,'y':0}}
+    doc={'schema':'natlang.native-pending-focus/1','rows':[]}
+    assert supersede_declared_focus([active],doc,request_sha256='b'*64,global_step=5)==[active]
+    doc['supersedes']={'request_sha256':'c'*64,'reason':'diverse graph sources'}
+    with pytest.raises(ValueError,match='does not name the active'):supersede_declared_focus([active],doc,request_sha256='b'*64,global_step=5)
+    doc['supersedes']={'request_sha256':'a'*64,'reason':' '}
+    with pytest.raises(ValueError,match='reason'):supersede_declared_focus([active],doc,request_sha256='b'*64,global_step=5)
+    doc['supersedes']['reason']='diverse graph sources'
+    history=supersede_declared_focus([active],doc,request_sha256='b'*64,global_step=5)
+    assert active['state']=='active'
+    assert history[0]['state']=='superseded' and history[0]['consumed']==['x'] and history[0]['superseded_by']=='b'*64
+
+
+def test_actual_trainer_supersedes_partly_earned_focus_only_by_declaration(tmp_path,monkeypatch):
+    import torch
+    from natlang_neuralese.train import native_state_sft as trainer
+    from natlang_neuralese.train.native_cohort_schedule import source_cohort_ids
+    from natlang_neuralese.data.native_sources import NativeGraphSource
+    from test_native_source_fetch_recovery import source
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
+    base=tmp_path/'base';paths=source(base,'lfm')
+    row=json.loads(paths['train'].read_text());rows=[]
+    for name in ('a','b','c','d'):
+        item=json.loads(json.dumps(row));item['id']=name;item['source_groups']=[name];rows.append(item)
+    paths['train'].write_text(''.join(json.dumps(x)+'\n' for x in rows))
+    _,_,_,cfg=trainer.load_native_model(base,dtype=torch.bfloat16,rank=4)
+    indexed=NativeGraphSource(paths['train'],cfg['tokenizer_fingerprint'],required_split='train',role_ids=tuple(cfg['marker_ids']))
+    cohort=source_cohort_ids(indexed)
+    proof=tmp_path/'proof';proof.write_text('oracle accepted')
+    evidence=[{'path':str(proof),'sha256':hashlib.sha256(proof.read_bytes()).hexdigest()}]
+    def request(name,ids,supersedes=None):
+        doc={'schema':'natlang.native-pending-focus/1','rows':[{'id':i,'binding':indexed.bindings[i],'source_sha256':cohort[ord(i)-97],'split':'train','evidence':evidence} for i in ids]}
+        if supersedes:doc['supersedes']={'request_sha256':hashlib.sha256(supersedes.read_bytes()).hexdigest(),'reason':'re-selected from diverse graph sources'}
+        path=tmp_path/name;path.write_text(json.dumps(doc));return path
+    first=request('first.json',['c','d'])
+    out=tmp_path/'run'
+    def run(focus,resume=False):
+        args=['--base',str(base),'--dtype','bfloat16','--rank','4','--device','cpu','--native-graphs',str(paths['train']),'--held-native-graphs',str(paths['test']),'--epochs','1','--batch-graphs','1','--accumulate-batches','1','--eval-every','1','--checkpoint-every','1','--checkpoint-seconds','0','--seed','23','--refresh-after-updates','1','--out',str(out),'--pending-focus',str(focus)]
+        if resume:args+=['--continue-from',str(out/'checkpoint.pt')]
+        assert trainer.main(args)==0
+        return torch.load(out/'checkpoint.pt',weights_only=False,map_location='cpu')['training']
+    state=run(first)
+    record=state['options']['pending_focus_history'][-1]
+    assert record['state']=='active' and len(record['consumed'])==1
+    earned=dict(state['exposure_counts'])
+    with pytest.raises(ValueError,match='prior pending focus has not completed'):run(request('plain.json',['a']),resume=True)
+    state=run(request('second.json',['a'],supersedes=first),resume=True)
+    history=state['options']['pending_focus_history']
+    assert [item['state'] for item in history][0]=='superseded' and history[0]['consumed']==record['consumed']
+    assert history[1]['request']['path'].endswith('second.json')
+    assert state['exposure_counts']['a']==1
+    assert all(state['exposure_counts'][key]>=value for key,value in earned.items())

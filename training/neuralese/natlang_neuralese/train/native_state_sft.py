@@ -2842,6 +2842,11 @@ def _main(argv=None, *, requested_refresh):
                 minima=checkpoint_options.setdefault('_objective_required_visits',{})
                 for ident,minimum in saved_options['_objective_required_visits'].items():
                     minima[ident]=max(int(minima.get(ident,0)),int(minimum))
+            # An explicit proof-bound quota revision lowers exact rows below the
+            # pre-correction minima merged above; earned credit stays a floor.
+            for ident,lowered in (source_correction_result.get('quota_revised') or {}).items():
+                if ident in checkpoint_options.get('_objective_required_visits',{}):
+                    checkpoint_options['_objective_required_visits'][ident]=lowered
             checkpoint_options['held_correction_binding'] = saved_options.get('held_correction_binding')
             checkpoint_options['held_correction_history'] = list(saved_options.get('held_correction_history') or [])
             checkpoint_options['foundation_qualification_history'] = list(
@@ -3532,11 +3537,13 @@ def _main(argv=None, *, requested_refresh):
         if focus_history and focus_history[-1]['request']['sha256']==focus_reference['sha256']:
             focus_record=focus_history[-1]
         else:
-            if focus_history and focus_history[-1].get('state') not in ('complete','superseded-unearned'):raise ValueError('prior pending focus has not completed')
+            from .native_pending_focus import FINISHED as focus_finished, supersede_declared_focus
+            focus_history=supersede_declared_focus(focus_history,focus_request,request_sha256=focus_reference['sha256'],global_step=global_step)
+            if focus_history and focus_history[-1].get('state') not in focus_finished:raise ValueError('prior pending focus has not completed')
             focus_record={'schema':'natlang.native-pending-focus-history/1','request':focus_reference,'at_global_step':global_step,
                 'initial_credits':{row['id']:exposure_counts.get(row['id'],0) for row in focus_request['rows']},'state':'active','consumed':[],'withdrawn':[]}
             focus_history.append(focus_record)
-    elif focus_enabled and focus_history and focus_history[-1].get('state') not in ('complete','superseded-unearned'):
+    elif focus_enabled and focus_history and focus_history[-1].get('state') not in ('complete','superseded-unearned','superseded'):
         focus_record=focus_history[-1];focus_request,_=focus_dependencies(focus_record['request'])
     urgent_cohort_ids = source_cohort_ids(train) if args.urgent_cohort_fairness or args.ordinary_cohort_fairness or args.communication_cohort_fairness or focus_request else None
     if focus_request:
@@ -3595,7 +3602,26 @@ def _main(argv=None, *, requested_refresh):
             history.append({'schema':'natlang.native-frontier-interleave/1','source_sha256':train.file_sha256,
                             'global_step':global_step,'period':5,'earned_visits_granted':0})
     if args.continuation_preflight_only:
+        # Plan the actual pending schedule's monotone source windows (the same
+        # call as training); the first window read validates row identity, and
+        # any merged window beyond its token bound fails here, before SGD.
+        planned = stream_windows(train, [[batch] for batch in pending_batches], priority_ids=foundation_priority_ids,
+            cohort_ids=urgent_cohort_ids, rotation_index=rotation_index, focus_ids=focus_ids|frontier_ids,
+            urgent_cohort_fairness=args.urgent_cohort_fairness, ordinary_cohort_fairness=args.ordinary_cohort_fairness,
+            communication_cohort_fairness=args.communication_cohort_fairness)
+        try:
+            next(planned, None)
+        finally:
+            planned.close()
+        communication_rows={entry['id'] for entry in train.entries if entry.get('communication')}
+        communication_quota=sum(value for key,value in required_visits.items() if key in communication_rows)
         receipt={'schema':'natlang.native-continuation-cpu-preflight/1','passed':True,
+            'schedule_windows_planned':True,'focus_rows_pending':len(focus_ids),
+            'communication_required_visits':communication_quota,
+            'remaining_graph_visits':sum(max(0,value-exposure_counts.get(key,0)) for key,value in required_visits.items()),
+            'source_corrections':[{'proof_sha256':item.get('proof_sha256'),'deferred_rows':len(item.get('deferred_rows') or []),
+                'added_rows':len(item.get('added_rows') or []),'quota_revision':item.get('quota_revision')}
+                for item in checkpoint_options.get('source_correction_history') or []],
             'parent_sha256':sha256_file_hex_cached(args.continue_from),'global_step':global_step,
             'stage_id':args.stage_id,'source_sha256':train.file_sha256,'rows':len(train.entries),
             'pending_batches':len(pending_batches),'required_visits':sum(required_visits.values()),

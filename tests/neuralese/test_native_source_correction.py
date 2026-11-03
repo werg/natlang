@@ -863,3 +863,106 @@ def test_live_recipe_correction_accepts_proved_held_repair_and_portable_ledgers(
     assert not _source_correction_continuation(old,bad)
     bad = copy.deepcopy(new);bad['unrelated_input']={'path':'/smuggled','sha256':'bad','binding':'other'}
     assert not _source_correction_continuation(old,bad)
+
+
+def _write_ledger(tmp_path, name, rows):
+    path = tmp_path / name
+    path.write_text(''.join(json.dumps(row, sort_keys=True) + '\n' for row in rows))
+    return path
+
+
+def _with_section(proof_path, key, schema, ledger, reason='bounded template repetition'):
+    proof = json.loads(proof_path.read_text())
+    proof[key] = {'schema': schema, 'row_bindings_path': str(ledger),
+                  'row_bindings_sha256': _sha(ledger), 'reason': reason}
+    proof_path.write_text(json.dumps(proof, sort_keys=True))
+    return proof_path
+
+
+def _quota_frame(prior, ids, counts, quotas, minima):
+    bindings = {key: {'h': key} for key in ids}
+    frame = {'source_receipts': [prior, {'path': '/held', 'sha256': 'held'}],
+             'source_row_bindings': dict(bindings), 'source_row_order': list(ids),
+             'exposure_counts': dict(counts), 'required_visits': dict(quotas),
+             'options': {'stage_id': 'native_full_sft', 'epochs': 1, '_communication_ids': list(ids[:3]),
+                         '_objective_required_visits': dict(minima)}}
+    return {**copy.deepcopy(frame), 'global_step': 9, 'sft_progress': {'native_full_sft': copy.deepcopy(frame)}}
+
+
+def test_quota_revision_lowers_exact_rows_but_never_below_earned_credit(tmp_path):
+    from natlang_neuralese.train.native_source_correction import QUOTA_REVISION_SCHEMA
+    ids = ['edge:a', 'edge:b', 'edge:keep', 'ordinary', 'bad']
+    prior = _receipt('/old/train.json', 'old', ids, ['s-a', 's-b', 's-k', 's-o', 's-bad'])
+    current = _receipt('/new/train.json', 'new', ids[:4], ['s-a', 's-b', 's-k', 's-o'])
+    training = _quota_frame(prior, ids, {'edge:a': 0, 'edge:b': 3, 'edge:keep': 2, 'ordinary': 1, 'bad': 1},
+                            {'edge:a': 7, 'edge:b': 7, 'edge:keep': 7, 'ordinary': 1, 'bad': 1},
+                            {'edge:a': 7, 'edge:b': 7, 'edge:keep': 7})
+    proof = _write_proof(tmp_path, prior, current,
+        [_row('bad', {'h': 'bad'}, None, 's-bad', None, 'deferred', 'duplicate label target')])
+    ledger = _write_ledger(tmp_path, 'quota.jsonl', [
+        {'id': 'edge:a', 'binding': {'h': 'edge:a'}, 'prior_required_visits': 7, 'required_visits': 1},
+        {'id': 'edge:b', 'binding': {'h': 'edge:b'}, 'prior_required_visits': 7, 'required_visits': 2}])
+    _with_section(proof, 'quota_revision', QUOTA_REVISION_SCHEMA, ledger)
+    deps = source_correction_dependencies({'path': str(proof), 'sha256': _sha(proof)})
+    assert str(ledger.resolve()) in {item['path'] for item in deps}
+    current_bindings = {key: {'h': key} for key in ids[:4]}
+    result, summary = apply_source_correction(training, proof, model_id='lfm2:inventory',
+        stage_id='native_full_sft', current_source_receipt=current, current_bindings=current_bindings,
+        current_order=ids[:4], current_communication_ids=ids[:3])
+    assert summary['quota_revised'] == {'edge:a': 1, 'edge:b': 3}
+    assert result['required_visits']['edge:a'] == 1 and result['required_visits']['edge:b'] == 3
+    assert result['required_visits']['edge:keep'] == 7
+    assert result['exposure_counts']['edge:b'] == 3
+    frame = result['sft_progress']['native_full_sft']
+    assert frame['required_visits']['edge:a'] == 1 and frame['required_visits']['edge:b'] == 3
+    assert frame['options']['_objective_required_visits'] == {'edge:a': 1, 'edge:b': 3, 'edge:keep': 7}
+    assert result['options']['_objective_required_visits'] == {'edge:a': 1, 'edge:b': 3, 'edge:keep': 7}
+    record = result['options']['source_correction_history'][-1]['quota_revision']
+    assert record['rows'] == 2 and record['required_visits_removed'] == 10 and record['earned_credit_retained']
+    # Replay of the committed proof changes nothing.
+    _, replay = apply_source_correction(result, proof, model_id='lfm2:inventory', stage_id='native_full_sft',
+        current_source_receipt=current, current_bindings=current_bindings, current_order=ids[:4],
+        current_communication_ids=ids[:3])
+    assert replay['changed'] is False
+
+
+@pytest.mark.parametrize('bad', ['prior', 'binding', 'raise', 'removed'])
+def test_quota_revision_rejects_unearned_or_changed_rows(tmp_path, bad):
+    from natlang_neuralese.train.native_source_correction import QUOTA_REVISION_SCHEMA
+    ids = ['edge:a', 'edge:b', 'edge:c', 'bad']
+    prior = _receipt('/old/train.json', 'old', ids, ['s-a', 's-b', 's-c', 's-bad'])
+    current = _receipt('/new/train.json', 'new', ids[:3], ['s-a', 's-b', 's-c'])
+    training = _quota_frame(prior, ids, {key: 0 for key in ids}, {'edge:a': 7, 'edge:b': 7, 'edge:c': 7, 'bad': 1}, {})
+    proof = _write_proof(tmp_path, prior, current,
+        [_row('bad', {'h': 'bad'}, None, 's-bad', None, 'deferred', 'duplicate')])
+    item = {'id': 'edge:a', 'binding': {'h': 'edge:a'}, 'prior_required_visits': 7, 'required_visits': 2}
+    if bad == 'prior':
+        item['prior_required_visits'] = 5
+    elif bad == 'binding':
+        item['binding'] = {'h': 'other'}
+    elif bad == 'raise':
+        item['required_visits'] = 9
+    else:
+        item = {**item, 'id': 'bad', 'binding': {'h': 'bad'}, 'prior_required_visits': 1, 'required_visits': 1}
+    ledger = _write_ledger(tmp_path, 'quota.jsonl', [item])
+    _with_section(proof, 'quota_revision', QUOTA_REVISION_SCHEMA, ledger)
+    with pytest.raises(ValueError, match='quota revision'):
+        apply_source_correction(training, proof, model_id='lfm2:inventory', stage_id='native_full_sft',
+            current_source_receipt=current, current_bindings={key: {'h': key} for key in ids[:3]},
+            current_order=ids[:3], current_communication_ids=ids[:3])
+
+
+def test_quota_revision_requires_reason_and_exact_ledger(tmp_path):
+    from natlang_neuralese.train.native_source_correction import QUOTA_REVISION_SCHEMA
+    prior = _receipt('/old/train.json', 'old', ['edge', 'bad'], ['s-e', 's-bad'])
+    current = _receipt('/new/train.json', 'new', ['edge'], ['s-e'])
+    proof = _write_proof(tmp_path, prior, current, [_row('bad', {'h': 'bad'}, None, 's-bad', None, 'deferred', 'dup')])
+    ledger = _write_ledger(tmp_path, 'quota.jsonl', [
+        {'id': 'edge', 'binding': {'h': 'edge'}, 'prior_required_visits': 7, 'required_visits': 1}])
+    _with_section(proof, 'quota_revision', QUOTA_REVISION_SCHEMA, ledger, reason=' ')
+    with pytest.raises(ValueError, match='explicit reason'):
+        source_correction_dependencies({'path': str(proof), 'sha256': _sha(proof)})
+    _with_section(proof, 'quota_revision', QUOTA_REVISION_SCHEMA, ledger)
+    ledger.write_text(ledger.read_text().replace('"required_visits": 1', '"required_visits": 2'))
+    with pytest.raises(ValueError, match='ledger changed'):
+        source_correction_dependencies({'path': str(proof), 'sha256': _sha(proof)})
