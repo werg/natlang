@@ -867,7 +867,7 @@ def seed(run, name):
                                             'excluded': len(closure['excluded'])},
               'links': [], 'parent_source': str(checkpoint), 'dgx_verified': True, 'cloud_committed': True}
     store_json(exports / 'seed.json', record)
-    note(run, f'{name} seed export: parent {checkpoint} ({ck_sha[:12]}), config from {spec["template"]} with '
+    note(run, f'{name} seed export: parent {checkpoint} ({checkpoint_blob["sha256"][:12]}, {checkpoint_blob["encoding"]}), {len(inputs)} inputs, config from {spec["template"]} with '
               f'overrides {json.dumps(spec.get("config", {}))}')
     return record
 
