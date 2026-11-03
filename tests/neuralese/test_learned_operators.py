@@ -198,7 +198,7 @@ def test_serving_native_step_site_matches_the_training_graph_capture():
 def test_runtime_consumer_frames_equal_the_registry():
     import json as _json
     from pathlib import Path
-    source = (Path(__file__).resolve().parents[2] / 'ts-host/src/neuralese/operator.ts').read_text()
+    source = (Path(__file__).resolve().parents[2] / 'ts-host/src/native/operator-frames.ts').read_text()
     for name, spec in OPERATORS.items():
         line = next(line for line in source.splitlines() if line.strip().startswith(f"'{name}':"))
         assert f'open: {_json.dumps(spec.consumer_open)}'.replace('"', "'") in line, name

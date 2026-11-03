@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { MemoryNeuraleseStore } from '../dist/native/neuralese-store.js';
 import { neuraleseRef } from '../dist/native/neuralese.js';
-import { OPERATOR_FRAMES } from '../dist/neuralese/operator.js';
+import { OPERATOR_FRAMES } from '../dist/native/operator-frames.js';
 import { createNatlangRuntime } from '../dist/index.js';
 import { loadVirtualNatlang } from '../dist/runtime/virtual-project.js';
 

@@ -7,7 +7,7 @@ Four new operator prompts in `training/neuralese/natlang_neuralese/model/learned
 initialization of learned prompt rows at an operator write site, followed by K slot positions whose state a consumer
 imports; the slot rows start from each operator's slot text. Consumers see the state framed as `Compacted value: `, `Compacted argument: `,
 `Earlier steps of this session, compacted: ` … `Continue from the most recent steps.` and
-`Extracts from the documents, one per document:` (ts-host `neuralese/operator.ts` `OPERATOR_FRAMES`; behind the agent's
+`Extracts from the documents, one per document:` (ts-host `native/operator-frames.ts` `OPERATOR_FRAMES`; behind the agent's
 `compaction` setting, default `crisp`). The executing model sees them only inside operator
 sites (and, once the runtime hooks land, the consume-marked state plus a one-line note where a value was compacted).
 **Measurement debt:** the ablation (`eval/neuralese_ablation.py`: actual vs shuffled vs zeroed vs text-cut) on held

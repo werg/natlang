@@ -43,7 +43,7 @@ export async function nativeStateRuntimeOptions(options: NativeClientOptions, se
   const nativeStateConsumer = nativeStateConsumerFromInfo(info);
   if (!nativeStateConsumer)
     return failure('neuralese-native-state-unavailable', 'the server must declare native identity and consumption modes');
-  const { serverCompactor, OPERATOR_CAPABILITY } = await import('../neuralese/operator.js');
+  const { serverCompactor, OPERATOR_CAPABILITY } = await import('./native-operator.js');
   const compactor = serves(info, OPERATOR_CAPABILITY) ? serverCompactor({ ...options, info }) : undefined;
   return { store: options.store, dialect, nativeStateConsumer,
     nativeStateConsumerForCall: async () => nativeStateConsumerFromInfo(await neuraleseServerInfo(options.endpoint, { headers: options.headers })),

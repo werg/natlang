@@ -289,10 +289,10 @@ export type NeuraleseRuntimeOptions = {
   view?: ((site: { value: string; instructions?: string }, budget?: { maxRequests: number | null; maxTokens: number | null;
     onUsage: (usage: { requests: number; tokens: number }) => void }) => Promise<NeuraleseRef | undefined>) & { budgeted?: true };
   /**
-   * The learned Neuralese operators of the native server (neuralese/operator.ts `serverCompactor`): compacted cut-off
+   * The learned Neuralese operators of the native server (model/native-operator.ts `serverCompactor`): compacted cut-off
    * values, argument listings and history carry, used when the agent's `compaction` setting selects them.
    */
-  compactor?: import('../neuralese/operator.js').Compactor;
+  compactor?: import('./operator-frames.js').Compactor;
   /** The agent's `compaction` setting for hosts that configure the runtime through these options (agent.ts). */
   compaction?: import('../runtime/pluggable.js').PluggableSetting;
 };

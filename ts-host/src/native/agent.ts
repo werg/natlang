@@ -36,7 +36,7 @@ async function pinNativeProgramGuidance(store: NeuraleseStore, id: string): Prom
 }
 import { listingViewInstructions, viewNote } from './prompt.js';
 import { pluggable, type PluggableSetting } from '../runtime/pluggable.js';
-import { framedState, type CompactSite } from '../neuralese/operator.js';
+import { framedState, type CompactSite } from './operator-frames.js';
 import type { NeuraleseRef } from './neuralese.js';
 import { untrustedBlock, type UntrustedRegistry } from './untrusted.js';
 import { writtenReturnResult } from './pseudo-call.js';
@@ -520,7 +520,7 @@ export class NativeToolAgent {
    * viewed; a failed view keeps the preview.
    */
   /**
-   * The learned operator's state of one site (`compaction: nl`, neuralese/operator.ts), or undefined to keep the crisp
+   * The learned operator's state of one site (`compaction: nl`, native/operator-frames.ts), or undefined to keep the crisp
    * text cut. A failed operator keeps the cut and is traced; it never fails the call.
    */
   private async compactRef(session: NativeSession, site: CompactSite): Promise<NeuraleseRef | undefined> {
