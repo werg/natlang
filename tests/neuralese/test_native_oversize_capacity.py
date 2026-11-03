@@ -724,3 +724,16 @@ def test_host_headroom_discounts_only_inactive_clean_page_cache(tmp_path):
     assert call(False)==4096
     (leaf/'memory.stat').write_text('anon 1\n')
     assert call()==4096
+
+
+def test_host_snapshot_checks_count_page_cache_only_off_unified_cuda(monkeypatch):
+    from types import SimpleNamespace
+    from natlang_neuralese.train import trajectory_state
+    monkeypatch.setattr(torch.cuda, 'is_available', lambda: True)
+    monkeypatch.setattr(torch.cuda, 'is_initialized', lambda: True)
+    monkeypatch.setattr(torch.cuda, 'current_device', lambda: 0)
+    for integrated, expected in ((False, True), (True, False)):
+        monkeypatch.setattr(torch.cuda, 'get_device_properties', lambda device, i=integrated: SimpleNamespace(is_integrated=i))
+        assert trajectory_state.page_cache_reclaimable_for_host_allocations() is expected
+    monkeypatch.setattr(torch.cuda, 'is_initialized', lambda: False)
+    assert trajectory_state.page_cache_reclaimable_for_host_allocations() is True

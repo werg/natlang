@@ -637,7 +637,7 @@ def native_async_snapshot_headroom(state, optimizer, *, margin=1.15, available_m
     margin and 1.25 available-memory margin used by text warmup. Unknown memory
     or unsupported tensor storage fails closed to synchronous persistence.
     """
-    from .trajectory_state import available_system_memory_bytes
+    from .trajectory_state import available_system_memory_bytes, page_cache_reclaimable_for_host_allocations
     import torch
 
     if (not math.isfinite(margin) or margin < 1.0
@@ -661,7 +661,7 @@ def native_async_snapshot_headroom(state, optimizer, *, margin=1.15, available_m
     parameter_count = sum(len(group['params']) for group in optimizer.param_groups)
     overhead = max(16 * 1024 * 1024, parameter_count * 1024)
     size_bound = int(math.ceil((payload + max(0, lazy_slots-current_slots) + overhead) * margin))
-    available = available_system_memory_bytes()
+    available = available_system_memory_bytes(reclaimable_page_cache=page_cache_reclaimable_for_host_allocations())
     # Leave room for the measured device high-water mark to recur after this
     # boundary, plus 25% margin. CUDA allocations can share physical memory
     # with host snapshots; a boundary-only host check misses that growth.

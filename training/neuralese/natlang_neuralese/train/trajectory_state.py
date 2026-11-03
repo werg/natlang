@@ -364,6 +364,24 @@ def _reclaimable_clean_file_cache(cgroup, *, v1):
     return max(0,stat[keys[0]]-stat.get(keys[1],0)-stat.get(keys[2],0))
 
 
+def page_cache_reclaimable_for_host_allocations():
+    """Whether host-side allocations may count inactive clean page cache as available.
+
+    Discrete CUDA devices (and CPU-only processes) allocate host memory as
+    ordinary process memory, which the kernel serves by reclaiming clean page
+    cache. GB10-class integrated CUDA shares that pool with device allocations
+    that cannot use page cache, so unified memory keeps the strict reading.
+    """
+    try:
+        import torch
+        if torch.cuda.is_available() and torch.cuda.is_initialized():
+            return not bool(getattr(torch.cuda.get_device_properties(torch.cuda.current_device()),
+                                    'is_integrated', False))
+    except (ImportError, RuntimeError):
+        return False
+    return True
+
+
 def available_system_memory_bytes(*, meminfo_path='/proc/meminfo', cgroup_path='/proc/self/cgroup',
                                   cgroup_root='/sys/fs/cgroup', cgroup_v1_root='/sys/fs/cgroup/memory',
                                   reclaimable_page_cache=False):

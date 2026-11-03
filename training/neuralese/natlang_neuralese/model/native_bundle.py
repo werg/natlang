@@ -89,7 +89,7 @@ def write_snapshot_actor_view(checkpoint,out,*,snapshot,decoded_source_stat):
     """
     import math,torch
     from ..train.checkpoint_safety import PersistentCheckpointReservation,checkpoint_size_upper_bound
-    from ..train.trajectory_state import atomic_checkpoint,available_system_memory_bytes
+    from ..train.trajectory_state import atomic_checkpoint,available_system_memory_bytes,page_cache_reclaimable_for_host_allocations
     from .native_model import CHECKPOINT_SCHEMA
     source=Path(checkpoint).resolve(strict=True)
     if snapshot.get('schema')!=CHECKPOINT_SCHEMA or snapshot.get('inference_only') or snapshot.get('optimizer_pruned'):
@@ -117,7 +117,7 @@ def write_snapshot_actor_view(checkpoint,out,*,snapshot,decoded_source_stat):
             for item in value:visit(item)
     visit(selected)
     largest=max((size for tensor,_,size in tensors if tensor.device.type!='cpu'),default=0)
-    available=available_system_memory_bytes()
+    available=available_system_memory_bytes(reclaimable_page_cache=page_cache_reclaimable_for_host_allocations())
     required=math.ceil(largest*1.25)+16*1024**2
     if available is None or available<required:
         raise ValueError('snapshot view storage transfer exceeds actual host headroom')
