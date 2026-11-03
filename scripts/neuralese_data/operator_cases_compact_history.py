@@ -184,7 +184,12 @@ BGKIT_NAME = 'bgkit-compaction-v2'
 BGKIT_TASKS = Path.home() / 'bgkit-data-nvme' / 'bgkit2' / 'tasks' / 'compaction_v2.parquet'
 UPSTREAM_TRAJECTORIES = TRAJECTORIES_EXT / 'swe_rebench_openhands' / 'trajectories.parquet'
 UPSTREAM = 'nebius/SWE-rebench-openhands-trajectories'
-CONVERTER = 'scripts/neuralese_data/operator_cases_compact_history.py@1'
+CONVERTER = 'scripts/neuralese_data/operator_cases_compact_history.py@2'
+SWE_ZERO = Path.home() / 'bgkit-data-nvme' / 'capability_packaging' / 'trajectories_ext' / 'swe_zero'
+SWE_ZERO_UPSTREAM = 'nvidia/SWE-Zero-Trajectories'
+SWE_ZERO_VERIFIED = 'swe-zero-local-tests'
+# Labels written by scripts/neuralese_data/swezero_eval.py: one line per trajectory id with resolved true / false / null.
+SWE_ZERO_LABELS = data_path('data_hdd', 'natlang-compaction-operators-20261103', 'swezero-eval', 'labels.jsonl')
 COMPACTED_MARKER = '[Earlier conversation compacted]'
 INSTRUCTIONS = ('Read this earlier part of the coding session so that the task can be continued from the most '
                 'recent steps.')
@@ -216,14 +221,44 @@ def prune(value):
 
 
 def upstream_status(path: Path = UPSTREAM_TRAJECTORIES) -> dict:
-    """{trajectory_id: (instance_id, repo, resolved, row_group)} from the three small columns only."""
+    """{trajectory_id: (instance_id, repo, resolved, row_group, evidence)} from the small columns only (no evidence)."""
     import pyarrow.parquet as pq
     status, parquet = {}, pq.ParquetFile(path)
     for group in range(parquet.num_row_groups):
         table = parquet.read_row_group(group, columns=['trajectory_id', 'instance_id', 'repo', 'resolved'])
         for row in zip(*(table.column(name).to_pylist() for name in ('trajectory_id', 'instance_id', 'repo',
                                                                       'resolved'))):
-            status[row[0]] = (row[1], row[2], bool(row[3]), group)
+            status[row[0]] = (row[1], row[2], bool(row[3]), group, None)
+    return status
+
+
+def swe_zero_status(labels: Path = SWE_ZERO_LABELS, data: Path = SWE_ZERO / 'data') -> dict:
+    """Same shape as `upstream_status` for SWE-Zero trajectories, from the locally executed test labels.
+
+    `resolved` is True/False only where the instance's tests were actually run (gold-validated environment); None
+    carries the unlabelled reason in the evidence. The row group locates the trajectory for re-materialisation.
+    """
+    import pyarrow.parquet as pq
+    if not labels.exists():
+        return {}
+    rows = {}
+    for line in labels.read_text().splitlines():
+        row = json.loads(line)
+        rows[row['trajectory_id']] = row
+    status = {}
+    for path in sorted(data.glob('*.parquet')):
+        parquet = pq.ParquetFile(path)
+        for group in range(parquet.num_row_groups):
+            table = parquet.read_row_group(group, columns=['trajectory_id', 'repo'])
+            for tid, repo in zip(table.column('trajectory_id').to_pylist(), table.column('repo').to_pylist()):
+                row = rows.get(tid)
+                if row is not None:
+                    evidence = {'status': row.get('status'), 'reason': row.get('reason'),
+                                'test_log_sha256': row.get('test_log_sha256'), 'harness': row.get('harness'),
+                                'image': row.get('image'), 'tests': row.get('tests'), 'dataset': row.get('dataset'),
+                                'provenance': row.get('provenance')}
+                    status[tid] = (row['instance_id'], repo, row.get('resolved'), ('swe-zero', str(path), group),
+                                   evidence)
     return status
 
 
@@ -245,8 +280,11 @@ def bgkit_candidates(tasks_path: Path, status: dict, bench: set, limit: int | No
                                        'assistant message')
             elif tid not in status:
                 sink.reject(record_id, 'no-upstream: trajectory not in the upstream resolved-status table')
+            elif status[tid][2] is None:
+                sink.reject(record_id, f'no-label-{(status[tid][4] or {}).get("status")}: the instance has no '
+                                       'validated test environment, so no honest resolved status exists')
             elif not status[tid][2]:
-                sink.reject(record_id, 'unresolved: upstream tests did not resolve the instance')
+                sink.reject(record_id, 'unresolved: the instance tests did not resolve the instance')
             else:
                 # The stored session is collapsed: [system, task, compaction marker, *recent steps]; the recent
                 # steps are upstream messages[stop : stop + n], the target is the next assistant message.
@@ -277,10 +315,11 @@ def bgkit_record(candidate: dict, status: dict, trajectory: list, tools) -> dict
         return 'target-mismatch: stored target is not the upstream next assistant text'
     task = message_of(trajectory[1])
     earlier = [message_of(m) for m in trajectory[start:stop]]
-    instance, repo, _, _ = status[candidate['tid']]
+    instance, repo, _, _, evidence = status[candidate['tid']]
     text = '\n'.join(str(m.get('content') or '') for m in earlier)
     record = {
-        'version': VERSION, 'id': f'upstream:swe-rebench-openhands:{candidate["tid"]}:{target_index}',
+        'version': VERSION, 'id': f'upstream:{"swe-rebench-openhands" if evidence is None else "swe-zero"}:'
+                                  f'{candidate["tid"]}:{target_index}',
         'family': 'trajectory_continuation_swe', 'task': 'continue',
         'sources': [{'role': 'trajectory', 'messages': earlier, 'exact_refs': exact_refs_from(text),
                      'meta': {'span': [start, stop]}}],
@@ -288,12 +327,18 @@ def bgkit_record(candidate: dict, status: dict, trajectory: list, tools) -> dict
         'consumer': {'context': [task, *[message_of(m) for m in trajectory[stop:target_index]]],
                      'tools': prune(list(tools or [])), 'withheld': ['sources']},
         'target': {'kind': 'message', 'value': {'role': 'assistant', 'content': target}, 'alternatives': []},
-        'outcome': {'label': 'checked', 'checked': VERIFIED,
-                    'details': {'resolved': True, 'checker_evidence': {
-                        'origin': 'upstream_resolved_status', 'raw_status_field': 'resolved', 'raw_status': True,
-                        'local_execution': False}}},
+        'outcome': ({'label': 'checked', 'checked': VERIFIED,
+                     'details': {'resolved': True, 'checker_evidence': {
+                         'origin': 'upstream_resolved_status', 'raw_status_field': 'resolved', 'raw_status': True,
+                         'local_execution': False}}} if evidence is None else
+                    {'label': 'checked', 'checked': SWE_ZERO_VERIFIED,
+                     'details': {'resolved': True, 'checker_evidence': {
+                         'origin': 'local_test_execution', 'local_execution': True, 'gold_validated': True,
+                         'test_log_sha256': evidence['test_log_sha256'], 'harness': evidence['harness'],
+                         'image': evidence['image'], 'tests': evidence['tests']}}}),
         'lineage': {'project': 'bgkit', 'store': 'compaction_v2', 'store_version': None, 'row': candidate['id'],
-                    'upstream': UPSTREAM, 'upstream_id': candidate['tid'], 'upstream_revision': None,
+                    'upstream': UPSTREAM if evidence is None else SWE_ZERO_UPSTREAM,
+                    'upstream_id': candidate['tid'], 'upstream_revision': None,
                     'teacher': {'model': 'Qwen/Qwen3-Coder-480B-A35B-Instruct', 'provider': 'nebius (dataset)'},
                     'converter': CONVERTER, 'sha256': '',
                     'notes': {'instance_id': instance, 'upstream_system_prompt': 'dropped (OpenHands scaffolding)',
@@ -307,8 +352,8 @@ def bgkit_record(candidate: dict, status: dict, trajectory: list, tools) -> dict
 
 
 def open_bgkit_sink(out_root: Path, tasks_path: Path, upstream_path: Path) -> CaseSink:
-    return CaseSink(OPERATOR, BGKIT_NAME, converter=__file__, inputs=[tasks_path, upstream_path], out_root=out_root,
-                    caps={'train': TRAIN_CAP, 'test': TEST_CAP, 'max_windows_per_trajectory': MAX_WINDOWS})
+    return CaseSink(OPERATOR, BGKIT_NAME, converter=__file__, inputs=[tasks_path, upstream_path, *([SWE_ZERO_LABELS] if SWE_ZERO_LABELS.exists() else [])],
+                    out_root=out_root, caps={'train': TRAIN_CAP, 'test': TEST_CAP, 'max_windows_per_trajectory': MAX_WINDOWS})
 
 
 def convert_bgkit(sink: CaseSink, status: dict, candidates: list, windows: Counter, taken: set,
@@ -330,11 +375,19 @@ def convert_bgkit(sink: CaseSink, status: dict, candidates: list, windows: Count
                 per_split[split] += 1
                 chosen.append(candidate)
     parquet = pq.ParquetFile(upstream_path)
-    for group in sorted({c['group'] for c in chosen}):
+    swe_zero_tools = json.loads((SWE_ZERO / 'tools.json').read_text()) if any(
+        isinstance(c['group'], tuple) for c in chosen) else None
+    for group in sorted({c['group'] for c in chosen}, key=str):
         wanted = {c['tid'] for c in chosen if c['group'] == group}
-        table = parquet.read_row_group(group, columns=['trajectory_id', 'trajectory', 'tools'])
-        by_id = {tid: (trajectory, tools) for tid, trajectory, tools in zip(
-            *(table.column(name).to_pylist() for name in ('trajectory_id', 'trajectory', 'tools'))) if tid in wanted}
+        if isinstance(group, tuple):       # SWE-Zero: a separate file per group; the tool list is one shared file
+            table = pq.ParquetFile(group[1]).read_row_group(group[2], columns=['trajectory_id', 'trajectory'])
+            by_id = {tid: (trajectory, swe_zero_tools) for tid, trajectory in zip(
+                *(table.column(name).to_pylist() for name in ('trajectory_id', 'trajectory'))) if tid in wanted}
+        else:
+            table = parquet.read_row_group(group, columns=['trajectory_id', 'trajectory', 'tools'])
+            by_id = {tid: (trajectory, tools) for tid, trajectory, tools in zip(
+                *(table.column(name).to_pylist() for name in ('trajectory_id', 'trajectory', 'tools')))
+                if tid in wanted}
         del table
         for candidate in (c for c in chosen if c['group'] == group):
             trajectory, tools = by_id[candidate['tid']]
@@ -353,7 +406,7 @@ def main(argv=None):
     out_root, windows, bench = Path(args.out_root), Counter(), load_bench_instances()
     # The bgkit join runs first only to learn how many windows it can supply: whatever part of its 15,000-window
     # budget it cannot fill is given to the S1 records, so the train total approaches the 25-30k target.
-    status = upstream_status()
+    status = {**swe_zero_status(), **upstream_status()}     # the OpenHands table wins for an id present in both
     with open_bgkit_sink(out_root, BGKIT_TASKS, UPSTREAM_TRAJECTORIES) as sink:
         candidates = bgkit_candidates(BGKIT_TASKS, status, bench, args.limit, sink)
         available = sum(1 for c in candidates if c['split'] == 'train')

@@ -144,3 +144,49 @@ def test_bgkit_window_already_taken_from_s1_is_not_repeated(tmp_path):
         candidates = ch.bgkit_candidates(tasks, status, set(), None, sink)
         ch.convert_bgkit(sink, status, candidates, Counter(), {('a', (2, 26))}, upstream_path=upstream)
     assert dict(sink.counts) == {} and dict(sink.rejects) == {'duplicate': 1}
+
+
+def test_swe_zero_labels_admit_only_locally_resolved_trajectories(tmp_path, monkeypatch):
+    """SWE-Zero trajectories join the locally executed test labels; unlabelled instances are rejected by status."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    data = tmp_path / 'swe_zero' / 'data'
+    data.mkdir(parents=True)
+    ids = ['z1', 'z2', 'z3', 'z4']
+    pq.write_table(pa.Table.from_pylist([
+        {'trajectory_id': tid, 'instance_id': f'o__r-{n}', 'repo': 'o/r', 'trajectory': upstream_trajectory(tid)}
+        for n, tid in enumerate(ids)]), data / 'train-00000-of-00001.parquet')
+    (tmp_path / 'swe_zero' / 'tools.json').write_text(json.dumps([{'type': 'function', 'function': {'name': 'bash'}}]))
+    monkeypatch.setattr(ch, 'SWE_ZERO', tmp_path / 'swe_zero')
+    harness = {'name': 'swe-rebench-fork', 'git_commit': 'abc'}
+    labels = tmp_path / 'labels.jsonl'
+    labels.write_text(''.join(json.dumps(row) + '\n' for row in [
+        {'trajectory_id': 'z1', 'instance_id': 'o__r-0', 'resolved': True, 'status': 'resolved',
+         'test_log_sha256': 'f' * 64, 'harness': harness, 'image': 'img', 'tests': {}},
+        {'trajectory_id': 'z2', 'instance_id': 'o__r-1', 'resolved': False, 'status': 'unresolved'},
+        {'trajectory_id': 'z3', 'instance_id': 'o__r-2', 'resolved': None, 'status': 'no-environment'},
+    ]))
+    status = ch.swe_zero_status(labels, data)
+    assert {tid: value[2] for tid, value in status.items()} == {'z1': True, 'z2': False, 'z3': None}
+    tasks_rows = [{'family': 'compaction', 'target': upstream_trajectory(tid)[26]['content'], 'split': 'train',
+                   'instruction': json.dumps([upstream_trajectory(tid)[0], TASK,
+                                              {'role': 'user', 'content': ch.COMPACTED_MARKER + '\n<|reserved_6|>'},
+                                              *upstream_trajectory(tid)[22:26]]),
+                   'meta': json.dumps({'trajectory_id': tid, 'span': [2, 22], 'mode': 'segments'})} for tid in ids]
+    pq.write_table(pa.Table.from_pylist(tasks_rows), tmp_path / 'tasks.parquet')
+    out = tmp_path / 'out'
+    # The OpenHands upstream file is not consulted for SWE-Zero ids; an empty one stands in for it.
+    pq.write_table(pa.Table.from_pylist([{'trajectory_id': 'x', 'instance_id': 'i', 'repo': 'r', 'resolved': True,
+                                          'trajectory': [], 'tools': []}]), tmp_path / 'upstream.parquet')
+    with ch.open_bgkit_sink(out, tmp_path / 'tasks.parquet', tmp_path / 'upstream.parquet') as sink:
+        candidates = ch.bgkit_candidates(tmp_path / 'tasks.parquet', status, set(), None, sink)
+        ch.convert_bgkit(sink, status, candidates, Counter(), set(), upstream_path=tmp_path / 'upstream.parquet')
+    cases = [json.loads(line) for line in (out / 'compact-history' / 'bgkit-compaction-v2.port-records.jsonl')
+             .read_text().splitlines()]
+    assert len(cases) == 1 and valid(cases[0])
+    assert cases[0]['outcome']['checked'] == ch.SWE_ZERO_VERIFIED
+    evidence = cases[0]['outcome']['details']['checker_evidence']
+    assert evidence['local_execution'] and evidence['gold_validated'] and evidence['test_log_sha256'] == 'f' * 64
+    assert cases[0]['lineage']['upstream'] == ch.SWE_ZERO_UPSTREAM and cases[0]['consumer']['tools']
+    rejects = json.loads((out / 'compact-history' / 'bgkit-compaction-v2.manifest.json').read_text())['rejects']
+    assert rejects == {'unresolved': 1, 'no-label-no-environment': 1, 'no-upstream': 1}
