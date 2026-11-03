@@ -420,3 +420,15 @@ def test_withhold_change_edits_the_function_frontmatter(tmp_path):
     changed = ws.apply_changes(w.spec['support'][0], w.candidate(['c1'])['files'])
     meta, _ = ws.frontmatter(changed['semantics']['files']['route/intent.nl'])
     assert meta['withhold'] == ['delegate'] and meta['args'] == {'request': 'string'}
+
+
+def test_prepare_round_measures_selected_programs_before_collection(tmp_path, monkeypatch):
+    rows = [case(i) for i in range(10)]
+    receipt = stage.build(cases=rows, out=tmp_path / 'm', parent_sha256='p' * 64,
+                          settings={'held_fraction': 0., 'support': 3, 'query': 3}, log=lambda line: None)
+    monkeypatch.setattr(ws, 'production_evaluator', lambda spec, endpoint: Evaluator())
+    monkeypatch.delenv('NATLANG_BANK_SERVICE', raising=False)
+    done = stage.prepare_round(receipt['task_source']['path'], endpoint='http://a', log=lambda line: None)
+    assert len(done) == 1 and done[0]['admitted'] is True and done[0]['support_success'] == 0.25
+    spec_path = json.loads(open(receipt['task_source']['path']).readline())['semantics']['world']['task']
+    assert stage.ensure_prepared(json.loads(open(spec_path).read()), None)['support_success'] == 0.25, 'read, not rerun'

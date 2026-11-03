@@ -1098,6 +1098,9 @@ def _bind_collected_coefficient_policy(values,kwargs,binding,identity):
 
 def _collect_round(config, kwargs):
     """Collect, then (memetic rounds only) the stage's distillation and promotion work on the same live actor."""
+    if config.get('memetic_round') is not None:
+        from .memetic_stage import prepare_round
+        prepare_round(kwargs['cases'], endpoint=kwargs['endpoints'][0])
     report = collect(**kwargs)
     if config.get('memetic_round') is not None:
         from .memetic_stage import after_collection

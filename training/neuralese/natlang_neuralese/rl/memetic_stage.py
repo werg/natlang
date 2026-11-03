@@ -29,6 +29,7 @@ import difflib
 import hashlib
 import json
 import math
+import os
 import time
 from pathlib import Path
 
@@ -449,6 +450,28 @@ def bind_round(config, declared, state, parent_sha256, *, protected=None):
         # program dozens of times, so a memetic round keeps its declared size.
         bound['task_curriculum'] = {**config['task_curriculum'], 'min_rows_per_round': rows, 'min_group': group}
     return bound
+
+
+def prepare_round(cases_path, *, endpoint, log=print):
+    """Inside the memetic round's actor lease, before collection: prepare each selected program's evidence and
+    baselines for this parent, so the episodes' own time budget is spent on improving, not on measuring the parent."""
+    from .memetic_workspace import production_evaluator
+    fitter = None
+    if os.environ.get('NATLANG_BANK_SERVICE'):
+        from .memetic_fit import bank_fitter
+        fitter = lambda episode, fit_spec: bank_fitter(episode, fit_spec, endpoint=os.environ['NATLANG_BANK_SERVICE'])
+    prepared = []
+    for row in read_jsonl(Path(cases_path)):
+        world = (row.get('semantics') or {}).get('world') or {}
+        if world.get('kind') != 'memetic':
+            continue
+        spec = json.loads(Path(world['task']).read_text())
+        started = time.monotonic()
+        value = ensure_prepared(spec, production_evaluator(spec, endpoint), fitter)
+        prepared.append({'program': spec['program']['key'], 'admitted': value['admitted'],
+                         'support_success': value['support_success'], 'seconds': round(time.monotonic() - started, 1)})
+        log(json.dumps({'event': 'memetic_prepared', **prepared[-1]}))
+    return prepared
 
 
 def after_collection(round_info, *, endpoint, round_out, collect=None, log=print):
