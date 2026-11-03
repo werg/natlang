@@ -32,8 +32,9 @@ def _stage_parameters(recipe_path, stage_id):
             'communication_min_visits':parameters.get('communication_min_visits')}
 
 
-def admitted_checkpoint(parent, *, prior_recipe, successor_recipe, stage_id):
-    """Derive the sole allowed state using the same admission as the trainer."""
+def admitted_checkpoint(parent, *, prior_recipe, successor_recipe, stage_id, reader_cap=None):
+    """Derive the sole allowed state using the same admission as the trainer (``reader_cap``: the communication
+    quota's per-payload reader cap; None = the current default, HISTORICAL_UNCAPPED for records made before it)."""
     from ..data.native_sources import NativeGraphSource
     from .native_continuation import (collect_sft_progress, restore_sft_progress, stage_key,
         apply_communication_quota_options, _retain_pending_sources, active_exposure_quotas)
@@ -128,7 +129,8 @@ def admitted_checkpoint(parent, *, prior_recipe, successor_recipe, stage_id):
         options['epochs']=parameters['epochs']
         corrected_minima=dict(options.get('_objective_required_visits') or {})
         apply_communication_quota_options(options,prior_options,train=current,ce_policy=policy,
-            stage_id=stage_id,requested_visits=parameters['communication_min_visits'])
+            stage_id=stage_id,requested_visits=parameters['communication_min_visits'],
+            **({} if reader_cap is None else {'max_readers_per_payload':reader_cap}))
         if corrected_minima:
             minima=options.setdefault('_objective_required_visits',{})
             for ident,visits in corrected_minima.items():minima[ident]=max(minima.get(ident,0),visits)
@@ -180,6 +182,20 @@ def _same(a,b, path='checkpoint'):
     elif a!=b:raise ValueError('adoption changed value at '+path)
 
 
+def _recorded_reader_cap(child):
+    """The reader-cap law the verified child was made under: a communication quota policy recorded without
+    ``payload_reader_cap`` predates the cap (2026-11-03) and is rederived uncapped; the comparison stays exact."""
+    from .native_continuation import HISTORICAL_UNCAPPED
+    training=child.get('training') or {}
+    policies=[(training.get('options') or {}).get('communication_quota_policy')]
+    policies+=[(frame.get('options') or {}).get('communication_quota_policy')
+               for frame in (training.get('sft_progress') or {}).values() if isinstance(frame,dict)]
+    policies=[policy for policy in policies if isinstance(policy,dict)]
+    if policies and all('payload_reader_cap' not in policy for policy in policies):
+        return HISTORICAL_UNCAPPED
+    return None
+
+
 def verify(parent_ref, child_ref, *, prior_recipe, successor_recipe, stage_id):
     import torch
     from ..rl.native_direct_sft_recovery import _verify_historical_file_ref, _strong_binding
@@ -196,7 +212,8 @@ def verify(parent_ref, child_ref, *, prior_recipe, successor_recipe, stage_id):
         raise ValueError('adoption needs distinct retained parent and child')
     before=torch.load(parent_path,map_location='cpu',weights_only=False,mmap=True)
     child=torch.load(child_path,map_location='cpu',weights_only=False,mmap=True)
-    expected,summary=admitted_checkpoint(before,prior_recipe=prior_recipe,successor_recipe=successor_recipe,stage_id=stage_id)
+    expected,summary=admitted_checkpoint(before,prior_recipe=prior_recipe,successor_recipe=successor_recipe,stage_id=stage_id,
+                                         reader_cap=_recorded_reader_cap(child))
     _same(expected,child)
     # Reload separately: correction metadata must never mutate the actual
     # retained parent or change any tensor/optimizer/RNG through aliasing.

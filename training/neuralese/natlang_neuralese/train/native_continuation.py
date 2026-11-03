@@ -397,9 +397,18 @@ def communication_minimum_quotas(entries, families, visits, *, max_readers_per_p
     return {ident: visits for ident in selected if ident in kept}
 
 
+HISTORICAL_UNCAPPED = 'historical-uncapped'
+
+
 def apply_communication_quota_options(options, previous_options, *, train, ce_policy, stage_id, requested_visits,
                                       max_readers_per_payload=DEFAULT_MAX_READERS_PER_PAYLOAD):
-    """Apply the ordinary trainer's source-bound communication quota policy."""
+    """Apply the ordinary trainer's source-bound communication quota policy.
+
+    ``max_readers_per_payload=HISTORICAL_UNCAPPED`` rederives a record made before the per-payload reader cap
+    existed (its policy has no ``payload_reader_cap``): no cap and no cap field, exactly as that record was made."""
+    historical = max_readers_per_payload == HISTORICAL_UNCAPPED
+    if historical:
+        max_readers_per_payload = None
     previous_options=previous_options or {}
     previous_quota=previous_options.get('communication_quota_policy') or {}
     if requested_visits is None and previous_quota.get('stage_id')==stage_id:
@@ -424,6 +433,8 @@ def apply_communication_quota_options(options, previous_options, *, train, ce_po
         'stage_id':stage_id,'source_sha256':train.file_sha256,'family_map':balance['map'],
         'visits':requested_visits,'rows':len(quota_rows),'payload_reader_cap':cap_report,'ordinary_epoch_quota':'unchanged',
         'repetition':'repeated visits to the same exact graph; not independent examples'}
+    if historical:
+        del options['communication_quota_policy']['payload_reader_cap']
     return options
 
 

@@ -149,3 +149,28 @@ def test_instruction_only_rows_are_never_in_the_quota_family():
     with pytest.raises(ValueError, match='non-communication'):
         communication_minimum_quotas(rows, ['native-communication', 'native-communication'], 7)
     assert communication_minimum_quotas(rows, ['natlang', 'native-communication'], 7) == {'value': 7}
+
+
+def test_historical_uncapped_rederivation_reproduces_a_pre_cap_record(monkeypatch):
+    """A record made before the reader cap is rederived uncapped and without the cap field (zero-SGD adoption
+    verification of full67's source adoption, 2026-11-03); new records keep the default cap."""
+    from types import SimpleNamespace
+    from natlang_neuralese.train import native_continuation, native_logical_families, own_output_supervision
+    from natlang_neuralese.train import native_zero_sgd_adoption as adoption
+    rows = entries([(f'r{i}', ['same']) for i in range(10)])
+    monkeypatch.setattr(own_output_supervision, 'policy_objective',
+                        lambda policy: {'family_balance': {'key': 'logical-family', 'map': {'path': 'm'}}})
+    monkeypatch.setattr(native_logical_families, 'load_map', lambda ref, train: ['native-communication'] * len(rows))
+    train = SimpleNamespace(entries=rows, file_sha256='s')
+    def apply(cap):
+        extra = {} if cap is None else {'max_readers_per_payload': cap}
+        return native_continuation.apply_communication_quota_options(
+            {}, {}, train=train, ce_policy={}, stage_id='st', requested_visits=7, **extra)
+    current, historical = apply(None), apply(native_continuation.HISTORICAL_UNCAPPED)
+    assert current['communication_quota_policy']['rows'] == 3 and 'payload_reader_cap' in current['communication_quota_policy']
+    assert historical['communication_quota_policy']['rows'] == 10
+    assert 'payload_reader_cap' not in historical['communication_quota_policy']
+    child = {'training': {'options': historical, 'sft_progress': {'st': {'options': historical}}}}
+    assert adoption._recorded_reader_cap(child) == native_continuation.HISTORICAL_UNCAPPED
+    assert adoption._recorded_reader_cap({'training': {'options': current}}) is None
+    assert adoption._recorded_reader_cap({'training': {}}) is None
