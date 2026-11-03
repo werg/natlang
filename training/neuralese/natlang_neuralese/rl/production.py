@@ -1568,6 +1568,8 @@ def run(config_path, *, rounds=None, stop=None):
             if config.get('native_state') is not True:
                 raise ValueError('RL production hot reload cannot switch away from the native shared-state actor')
             config = adopt_policy_loss_defaults(config, state, state_path)
+            config = adopt_task_curriculum_defaults(config, state, state_path,
+                sealed_selection=(out / f"round-{state['round']:06d}-selection.json").exists())
             config = initial_capacity_collection(config,state)
             state_participant=state.get('native_participant')
             if state_participant is not None:
@@ -1592,6 +1594,7 @@ def run(config_path, *, rounds=None, stop=None):
             selection_file = out / f"round-{state['round']:06d}-selection.json"
             if selection_file.exists() and not json.loads(selection_file.read_text()).get('selection'):
                 selection_file.unlink()  # repair pre-fix empty snapshots; no active collection owns them
+            snapshot = None
             if selection_file.exists():
                 snapshot = json.loads(selection_file.read_text())
                 selection, selected = snapshot['selection'], snapshot['cases']
@@ -1605,13 +1608,17 @@ def run(config_path, *, rounds=None, stop=None):
                     indices=[i for i,row in enumerate(cases) if row.get('id')==initial_world.get('case_id')]
                     if len(indices)!=1:raise ValueError('initial JOLT world is absent or ambiguous')
                     selection_offset=indices[0]
+                selection_budget={'rows': config.get('rows_per_round', 32), 'group': config.get('group', 4),
+                                  'offset': selection_offset}
                 selection = select_tasks(cases, [*state.get('task_curriculum_history', {}).values(), *state.get('group_stats', [])],
-                    {'rows': config.get('rows_per_round', 32), 'group': config.get('group', 4), 'offset': selection_offset},
-                    command=config.get('select_tasks_command'),curriculum=config.get('task_curriculum'))
+                    selection_budget,command=config.get('select_tasks_command'),curriculum=config.get('task_curriculum'))
                 selected = [cases[item['row']] for item in selection]
                 if selection:
+                    # The snapshot binds the policy and budget that chose it: an
+                    # in-flight round keeps them across later default transitions.
                     write_json_durable(selection_file, {'source_sha256': sha256_file_hex(Path(config['cases'])),
-                        'selection': selection, 'cases': selected})
+                        'selection': selection, 'cases': selected, 'budget': selection_budget,
+                        **({'curriculum': config['task_curriculum']} if config.get('task_curriculum') is not None else {})})
             if not selection:
                 state.update(phase='await_new_train_tasks', reason='current train tasks solved; continue production SFT/new task admission')
                 write_json_durable(state_path, state)
@@ -1658,8 +1665,14 @@ def run(config_path, *, rounds=None, stop=None):
             amended_offset=None
             if amended_groups is not None:
                 from .curriculum import breadth_rows, policy_options
-                budget={'rows':config.get('rows_per_round',32),'group':config.get('group',4),'offset':state['offset']}
-                breadth=breadth_rows(cases,budget,policy_options(config.get('task_curriculum') or {}))
+                # A sealed selection keeps the policy and row budget it was chosen
+                # under (older snapshots predate that binding: use the config).
+                bound_budget=(snapshot or {}).get('budget') or {}
+                budget={'rows':bound_budget.get('rows',config.get('rows_per_round',32)),
+                        'group':bound_budget.get('group',config.get('group',4)),'offset':state['offset']}
+                bound_curriculum=((snapshot or {}).get('curriculum') if 'budget' in (snapshot or {})
+                                  else config.get('task_curriculum'))
+                breadth=breadth_rows(cases,budget,policy_options(bound_curriculum or {}))
                 selected_rows=[item['row'] for item in selection]
                 if selected_rows[-len(breadth):]!=breadth:
                     raise ValueError('amended collection selection has no authenticated breadth suffix')
@@ -1693,6 +1706,11 @@ def run(config_path, *, rounds=None, stop=None):
             grouped = {g['task_id']: g for g in state.get('group_stats', [])}
             grouped.update({g['task_id']: g for g in report.get('groups', [])})
             state['group_stats'] = list(grouped.values())
+            from .curriculum import spread_yield
+            yields=state.setdefault('task_curriculum_spread_yield',[])
+            yields[:]=[item for item in yields if item.get('round')!=state['round']]
+            yields.append({'round':state['round'],'collection_attempt':attempt,'policy_id':policy,
+                           **spread_yield(report.get('groups',[]))})
             history=state.setdefault('task_curriculum_history',{})
             for group in report.get('groups',[]):
                 if group.get('scored',0)>0:
@@ -2007,6 +2025,49 @@ def adopt_policy_loss_defaults(config, state, state_path):
     return {**config, 'policy_loss': adopted}
 
 
+TASK_CURRICULUM_V2_TRANSITION = 'task-curriculum-v2-spread-20261103'
+
+
+def adopt_task_curriculum_defaults(config, state, state_path, *, sealed_selection=False):
+    """Continuations adopt the /2 task selector through a recorded transition.
+
+    A config binding the historical ``natlang.rl-task-curriculum/1`` policy keeps its
+    own fractions and adopts /2's median start, spread-driven difficulty and
+    selection budget floor (``min_rows_per_round``/``min_group``) from the next
+    unbound collection. A round whose selection is already sealed keeps the
+    recorded policy and budget in its snapshot. ``task_curriculum_keep_v1: true``
+    opts out; a config without any ``task_curriculum`` keeps plain rotation.
+    """
+    from .curriculum import DEFAULT, V1_SCHEMA, V2_SCHEMA, policy_options
+    current = config.get('task_curriculum')
+    if current is None or config.get('task_curriculum_keep_v1') is True or sealed_selection:
+        return config
+    before = {'task_curriculum': current, 'rows_per_round': config.get('rows_per_round', 32),
+              'group': config.get('group', 4)}
+    schema = current.get('schema', V1_SCHEMA)
+    if schema == V1_SCHEMA:
+        adopted = policy_options({**DEFAULT, **{key: value for key, value in policy_options(current).items()
+                                                if key != 'schema'}})
+    elif schema == V2_SCHEMA:
+        adopted = policy_options(current)
+    else:
+        raise ValueError('unsupported task curriculum policy schema')
+    after = {'task_curriculum': adopted,
+             'rows_per_round': max(before['rows_per_round'], adopted['min_rows_per_round']),
+             'group': max(before['group'], adopted['min_group'])}
+    if after == before:
+        return config
+    if schema == V1_SCHEMA or after['rows_per_round'] != before['rows_per_round'] or after['group'] != before['group']:
+        record = {'schema': 'natlang.rl-task-curriculum-transition/1', 'transition': TASK_CURRICULUM_V2_TRANSITION,
+                  'from': before, 'to': after, 'round': state.get('round')}
+        transitions = state.setdefault('task_curriculum_transitions', [])
+        if not any(item.get('transition') == TASK_CURRICULUM_V2_TRANSITION and item.get('from') == before
+                   and item.get('to') == after for item in transitions):
+            transitions.append(record)
+            write_json_durable(state_path, state)
+    return {**config, **after}
+
+
 def bind_policy_loss(config, values):
     """The configured grpo policy loss, bound into the learner command; None keeps the clipped loss."""
     from .policy_math import policy_loss_declaration
@@ -2104,7 +2165,7 @@ def configure_native(args):
         'seed_native_graphs': str(args.seed_native_graphs.resolve()),
         'held_native_graphs': str(args.held_native_graphs.resolve()), 'base': str(args.base.resolve()),
         'cases': str(args.cases.resolve()), 'runtime': str(args.runtime.resolve()),
-        'endpoints': [endpoint], 'rows_per_round': 32, 'group': 4, 'workers': 4,
+        'endpoints': [endpoint], 'rows_per_round': 32, 'group': 8, 'workers': 4,
         'task_curriculum': DEFAULT_TASK_CURRICULUM.copy(),
         'neuralese_server': True, 'prompt_rendering': 'full', 'trainer_parameters': parameters,
         'neuralese_use_bonus': bonus_setting(None),

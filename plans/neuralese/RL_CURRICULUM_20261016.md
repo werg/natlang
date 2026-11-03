@@ -20,6 +20,11 @@ include:
 }
 ```
 
+Policy `/2` (2026-11-03, default) adds median family starts, spread-driven
+difficulty (`spread_target` 0.3) and a 16-task x 8-sample selection floor; see
+`training/neuralese/natlang_neuralese/rl/CURRICULUM_DECOMPOSITION.md` step 6.
+Configs binding `/1` adopt it through a recorded controller transition.
+
 Task metadata is `curriculum.rl = {level, family, qualification}`. Lower levels
 start practice; actual scored success moves practice upward. Existing tasks
 without metadata remain eligible at level 3. Reserve at least one rotating row
