@@ -210,4 +210,34 @@ tunes from the new parent. This is an open item for the tuning lane.
 
 ## First run (2026-11-03)
 
-Results are filled in below as measured.
+Setup: parent `bf95-quality-source-zero-sgd-v2-1102` (sha 71c3eb45…), pool `pool-teacher-v1` (64 meta-train / 16 held
+teacher-program families, assistant-only targets, at most 4096 tokens), defaults from `MetaRecipe` (rank 8, 16
+components of rank 4, 6+2 inner steps = 24 support passes per fit), targets restricted to the token-mixing projections
+(`self_attn|conv.in_proj|conv.out_proj`, 81 matrices). DGX ledger unit `bankmeta-run-dgx-5` (medium, resumable),
+out `/mnt/external/natlang-bank-metalearning-20261103/run-full67-dgx-v2`.
+
+**Step-0 held development (teacher-forced loss per target token, mean over 16 held families):**
+
+| arm | mean dev loss | gain over parent |
+|---|---|---|
+| parent (no adaptation) | 2.310 | 0 |
+| un-meta-trained (random) bank, coefficient fit | 2.171 | 0.139 |
+| plain per-program LoRA (rank 8, 24 passes) | 0.785 | 1.525 |
+
+The meta arm equals the random bank at step 0. The coefficient fit on a random bank recovers only about 9% of
+what a free LoRA recovers at matched passes. That gap is what meta-training must close. The LoRA advantage is
+inflated by about 4–5 families whose dev worlds nearly repeat their support worlds (LoRA dev loss 0.002–0.09 on
+2757f652, e26c62b2, f48bf161, a4a1a48a, a7af7b61). Exact repeats are removed by the world dedupe in `build_pool`
+(pool v3); near-repeats are not.
+
+**Compute:** one outer step (meta-batch 2: 2 x (24 support passes + 2 query rows with backward)) took 187 s on the
+contended GB10 (first step: grad norm bank 0.157, basis 1.55). A full four-arm 16-family held evaluation took 54 min.
+Later evaluations reuse the parent/initial/LoRA arms (measured once per parent) and refit only the meta arm.
+
+**Findings during the run:**
+- All 153 projection targets with dense FP32 deltas exceed one H100 (77.9 GB). Token-mixing projections only (81)
+  fit in about 18–40 GB. FFN targets need sparse/factored delta application before they can join.
+- cuSOLVER SVD can return a numerically non-orthonormal basis; the basis is re-orthonormalized by QR.
+- The cloud runs were capacity-limited (ResourceExhausted) and then OOM. The DGX run is preemptible and resumes per family.
+
+Pending: the step-25 meta-arm evaluation and the promotion decision; a rerun on pool v3 (deduplicated worlds).
