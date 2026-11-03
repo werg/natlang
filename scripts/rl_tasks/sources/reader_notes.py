@@ -10,8 +10,11 @@ for the call it reaches.
 from __future__ import annotations
 
 import ast
+import hashlib
+import json
 import re
 
+from ..common import SOURCES_DIR, text_digest
 from ..child_notes import answer_sentences, child, clip, document_key, fragment, sentence_at, string_key
 from . import composed_notes as composed
 
@@ -32,7 +35,7 @@ def read_document_notes(question, documents, support, provenance):
     return out
 
 
-def derived_document_notes(row):
+def derived_document_notes(row, context=None):
     """read_document notes of an existing case whose upstream annotation is not available: the sentences of each document
     that contain the gold answer (mechanical; a document without it gets no note, since distractors are not annotated)."""
     inputs, semantics = row['semantics']['inputs'], row['semantics']
@@ -100,6 +103,40 @@ def squad_notes(context, questions):
     return out
 
 
+def _jsonl(path):
+    with open(path) as handle:
+        for line in handle:
+            if line.strip():
+                yield json.loads(line)
+
+
+def derived_clutrr_notes(row, context):
+    """extract_relation_edge notes of an existing guided CLUTRR case: the gold proof of its upstream row (looked up by id in
+    the local CLUTRR files; a story that differs from the case's is not used)."""
+    index = context.get('clutrr')
+    if index is None:
+        index = context['clutrr'] = {}
+        for split in ('train', 'test'):
+            for r in _jsonl(f'{SOURCES_DIR}/clutrr/gen_train234_test2to10__{split}.jsonl'):
+                index[r['id']] = (r['story'], r.get('proof_state') or '')
+    found = index.get(row['curriculum']['external']['upstream_id'])
+    if found is None or found[0] != row['semantics']['inputs']['story']:
+        return []
+    return clutrr_edge_notes(*found)
+
+
+def derived_babi_notes(row, context):
+    """track_query_history notes of an existing guided bAbI case: the gold supporting facts of its upstream row."""
+    index = context.get('babi')
+    if index is None:
+        index = context['babi'] = {}
+        for split in ('train', 'test'):
+            for r in _jsonl(f'{SOURCES_DIR}/babi/{split}.jsonl'):
+                index[f'{r["story_id"]}:{text_digest(r["question"])[:8]}'] = r.get('supporting_fact_ids') or []
+    inputs = row['semantics']['inputs']
+    return babi_history_notes(inputs['facts'], index.get(row['curriculum']['external']['upstream_id'], []), inputs['question'])
+
+
 def clutrr_edge_notes(story, proof):
     """extract_relation_edge(sentence): "B is A's relation" for the gold proof's base relations whose two people the
     sentence names (a sentence without one gets no note: it may state relations outside the proof)."""
@@ -135,7 +172,7 @@ def multihiertt_table_notes(question, qa, tables, paragraphs, descriptions):
     return [e for e in composed.multihiertt_notes(item, Plain) if e['match'][0].endswith('read_table(')]
 
 
-def derived_sql_notes(row):
+def derived_sql_notes(row, context=None):
     """plan_query notes of an existing SQL case: the reference query the case recorded as ``external.gold_sql``."""
     sql = (row['curriculum']['external'] or {}).get('gold_sql')
     return sql_plan_notes(row['semantics']['inputs']['question'], sql) if sql else []
@@ -144,6 +181,87 @@ def derived_sql_notes(row):
 def sql_plan_notes(question, sql):
     """plan_query(question, schema): the dataset's reference query is the plan."""
     return [child('plan_query', [fragment(question)], clip('The reference query for this question:\n' + sql.strip()), 'gold')]
+
+
+def _frontmatter(text):
+    match = re.match(r'---\n([\s\S]*?)\n---', text)
+    out, key = {}, ''
+    for line in (match.group(1).split('\n') if match else []):
+        head = re.match(r'^([A-Za-z_]+):\s?(.*)$', line)
+        if head:
+            key = head.group(1)
+            out[key] = head.group(2)
+        elif key:
+            out[key] += '\n' + line
+    return out
+
+
+def derived_function_notes(row, context):
+    """read_function notes of an existing natlang-codebase case: each function the exact gold answer (or the declared type
+    the question is about) points at, described from its own file in the case: its declared parameters/result, the lines
+    that mention the asked-about identifier, or the children it calls. The call is keyed by the function's own body, which
+    the child's ``source`` argument shows, whatever name the model gives it."""
+    ext = row['curriculum']['external']
+    kind = ext['codebase']['kind'].removeprefix('explore-')
+    x = ext['upstream_id'].split(':', 2)[2]
+    answer = row['semantics']['expected']
+    files = {path.removeprefix('explore_program/'): text for path, text in row['semantics']['files'].items()
+             if path.startswith('explore_program/')}
+    nl = {path: text for path, text in files.items() if path.endswith('.nl')}
+    path_of = lambda dotted: dotted.replace('.', '/') + '.nl'
+    body = lambda text: text.split('---', 2)[-1].strip()
+    out = []
+
+    def add(path, value):
+        if path in nl and value.strip():
+            out.append(child('read_function', [fragment(body(nl[path]))], clip(value), 'checked'))
+
+    declared = lambda path: _frontmatter(nl[path])
+    if kind == 'children' and isinstance(answer, list):
+        add(path_of(x), f'{x} calls these named items directly: {", ".join(answer)}.')
+    elif kind in ('param-type', 'return-type') and isinstance(answer, list):
+        field = 'args' if kind == 'param-type' else 'returns'
+        for dotted in answer:
+            path = path_of(dotted)
+            if path in nl:
+                what = 'a parameter' if field == 'args' else 'a result'
+                add(path, f'{dotted} declares {what} whose type mentions {x}:\n{declared(path).get(field, "").strip()}')
+    elif kind == 'mentions' and isinstance(answer, list):
+        for dotted in answer:
+            path = path_of(dotted)
+            if path in nl:
+                lines = [line.strip()[:160] for line in body(nl[path]).splitlines() if x in line][:4]
+                add(path, f'{dotted} mentions {x} in its instructions:\n' + '\n'.join(lines))
+    elif kind == 'leaves' and isinstance(answer, list):
+        for dotted in answer:
+            add(path_of(dotted), f'{dotted} is a leaf of {x}: it calls no other named function.')
+    elif kind in ('fields', 'optional-fields', 'field-type'):
+        alias = x.split(' of ')[-1] if kind == 'field-type' else x
+        fact = (f'{alias} has these fields: {", ".join(answer)}.' if kind == 'fields' and isinstance(answer, list) else
+                f'{alias} has these optional fields: {", ".join(answer)}.' if kind == 'optional-fields' and isinstance(answer, list) else
+                f'The type of {x} is declared as {answer}.' if kind == 'field-type' and isinstance(answer, str) else None)
+        if fact:
+            users = [path for path in sorted(nl) if re.search(rf'\b{re.escape(alias)}\b', declared(path).get('args', '') + declared(path).get('returns', ''))]
+            for path in users[:6]:
+                add(path, fact)
+    return out
+
+
+def derived_file_notes(row, context):
+    """read_file notes of an existing codebase case, from the exact repository snapshot its service serves (the asset the
+    case binds by SHA-256) and its recorded gold answer. ``context``: {'assets_v3': Path, 'cache': dict}."""
+    external = row['curriculum']['external']
+    codebase = external['codebase']
+    files = context['cache'].get(codebase['asset_sha256'])
+    if files is None:
+        path = context['assets_v3'] / codebase['asset']
+        data = path.read_bytes()
+        if hashlib.sha256(data).hexdigest() != codebase['asset_sha256']:
+            return []
+        files = context['cache'][codebase['asset_sha256']] = json.loads(data)
+    kind = codebase['kind']
+    x = '' if kind == 'mutation' else external['upstream_id'].split(':', 2)[2]
+    return file_notes(kind, x, row['semantics']['expected'], files)
 
 
 def file_notes(kind, x, answer, files):

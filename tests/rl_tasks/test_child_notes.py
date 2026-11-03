@@ -176,3 +176,46 @@ def test_helper_notes_are_kept_only_for_a_training_case_that_uses_the_helper():
     assert 'children' not in build('plain', 'train')['curriculum']['reference']
     held = build('neuralese-helper', 'validation')
     assert held['split'] != 'train' and 'children' not in held['curriculum']['reference']
+
+
+# ---------------------------------------------------------------- add_child_notes.py
+
+def _row(case_id, split, children=None, **change):
+    row = {'id': case_id, 'split': split, 'family': 'f', 'curriculum': {'reference': {'root': [['return_result', {}]]},
+           'external': {'source': 'musique', 'framing': 'neuralese-helper'}}, 'semantics': {'root': 'r.nl', 'files': {}}, **change}
+    if children:
+        row['curriculum']['reference']['children'] = children
+    return row
+
+
+def test_transplant_copies_notes_only_into_identical_rows_and_leaves_everything_else_linked(tmp_path, monkeypatch):
+    import sys
+    from scripts.rl_tasks import add_child_notes
+    entry = cn.child('read_document', ['q'], 'note', 'gold')
+    predecessor = tmp_path / 'pred'
+    (predecessor / 'held').mkdir(parents=True)
+    (predecessor / 'held' / 'dev.jsonl').write_text('{"id": "h"}\n')
+    rows = [_row('a', 'train'), _row('b', 'train'), _row('h', 'dev'), _row('c', 'train')]
+    (predecessor / 'cases.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in rows))
+    (predecessor / 'receipt.json').write_text(json.dumps({'source_id': 'pred', 'cases': {'path': 'cases.jsonl'}}))
+    build = tmp_path / 'build' / 'musique'
+    build.mkdir(parents=True)
+    rebuilt = [_row('a', 'train', [entry]), _row('b', 'train', [entry], family='changed'), _row('h', 'dev', [entry])]
+    (build / 'raw-cases.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in rebuilt))
+    out = tmp_path / 'out'
+    monkeypatch.setattr(sys, 'argv', ['x', '--predecessor', str(predecessor), '--build', str(tmp_path / 'build'), '--out', str(out)])
+    add_child_notes.main()
+    written = [json.loads(line) for line in (out / 'cases.jsonl').read_text().splitlines()]
+    assert [r['curriculum']['reference'].get('children') for r in written] == [[entry], None, None, None]
+    assert [r['id'] for r in written] == ['a', 'b', 'h', 'c']
+    assert (out / 'held').is_symlink() and (out / 'held' / 'dev.jsonl').read_text() == '{"id": "h"}\n'
+    receipt = json.loads((out / 'receipt.json').read_text())
+    assert receipt['child_notes']['per_source'] == {'musique': {'transplanted': 1, 'rebuilt_row_differs': 1}}
+    assert receipt['predecessor']['rows'] == 4 and receipt['source_id'] == 'out'
+    try:
+        monkeypatch.setattr(sys, 'argv', ['x', '--predecessor', str(predecessor), '--build', str(tmp_path / 'build'), '--out', str(out)])
+        add_child_notes.main()
+    except SystemExit as stop:
+        assert 'immutable' in str(stop)
+    else:
+        raise AssertionError('an existing task source must not be rewritten')

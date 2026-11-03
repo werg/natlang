@@ -31,7 +31,11 @@ from natlang_neuralese.common.hashing import sha256_file_hex as sha_file  # noqa
 # Sources whose upstream rows are not on this machine: notes derived from the case's own inputs and gold answer.
 DERIVED = {'hotpotqa': reader_notes.derived_document_notes, 'spider': reader_notes.derived_sql_notes,
            'bird': reader_notes.derived_sql_notes, 'spider-hard': reader_notes.derived_sql_notes,
-           'bird-hard': reader_notes.derived_sql_notes}
+           'bird-hard': reader_notes.derived_sql_notes, 'codebase-py': reader_notes.derived_file_notes,
+           'codebase-natlang': reader_notes.derived_file_notes, 'clutrr-guided': reader_notes.derived_clutrr_notes,
+           'babi-guided': reader_notes.derived_babi_notes, 'natlang-codebase': reader_notes.derived_function_notes}
+# Derived from the case's own bound snapshot and gold even when a rebuilt row exists: the live repository has moved on.
+DERIVE_FIRST = {'codebase-py', 'codebase-natlang'}
 
 
 def digest_without_children(row):
@@ -49,7 +53,9 @@ def main():
     ap.add_argument('--predecessor', required=True, type=Path)
     ap.add_argument('--build', required=True, type=Path, action='append')
     ap.add_argument('--out', required=True, type=Path)
+    ap.add_argument('--assets-v3', type=Path, default=None, help='repository snapshots (default: PREDECESSOR/assets-v3)')
     a = ap.parse_args()
+    context = {'assets_v3': a.assets_v3 or a.predecessor / 'assets-v3', 'cache': {}}
     if a.out.exists():
         raise SystemExit(f'{a.out} exists; task sources are immutable')
     rebuilt = {}
@@ -70,7 +76,7 @@ def main():
         for line in handle:
             row = json.loads(line)
             external = row['curriculum'].get('external') or {}
-            if row['split'] == 'train' and row['id'] in rebuilt:
+            if row['split'] == 'train' and row['id'] in rebuilt and external.get('source') not in DERIVE_FIRST:
                 source, children, digest = rebuilt[row['id']]
                 if not row['curriculum']['reference'].get('children') and digest_without_children(row) == digest:
                     row['curriculum']['reference']['children'] = children
@@ -79,7 +85,7 @@ def main():
                     stats[source]['rebuilt_row_differs'] += 1
             elif (row['split'] == 'train' and external.get('source') in DERIVED and external.get('framing') == 'neuralese-helper'
                   and not row['curriculum']['reference'].get('children')):
-                children = [c for c in DERIVED[external['source']](row) if c]
+                children = [c for c in DERIVED[external['source']](row, context) if c]
                 if children:
                     row['curriculum']['reference']['children'] = children
                     stats[external['source']]['derived'] += 1
