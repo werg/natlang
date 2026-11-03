@@ -84,3 +84,17 @@ test('comments and string contents cannot impersonate an authored nl function',a
     assert.equal((await checkAuthoring(crisp,{...spec,requires:{noNl:true}})).ok,true);
   }
 });
+
+test('a default export is called as the module itself, the usual natlang codebase form', async () => {
+  const folder = {
+    'step.nl': '---\nargs:\n  state: State\nreturns: State\n---\nAdvance the state with bump.\n',
+    'step/bump.ts': 'export default function bump(state: State, by: number): State {\nreturn { count: state.count + by };\n}\n',
+    'types.ts': 'export type State = { count: number };\n',
+  };
+  const run = { args: [{ count: 2 }, 3], expected: { count: 5 } };
+  assert.deepEqual(await checkAuthoring(folder, { module: 'step/bump.ts', export: 'default', runs: [run] }),
+    { ok: true, problems: [], results: [{ count: 5 }] });
+  const broken = { ...folder, 'step/bump.ts': folder['step/bump.ts'].replace('+ by', '- by') };
+  assert.deepEqual((await checkAuthoring(broken, { module: 'step/bump.ts', export: 'default', runs: [run] })).problems,
+    ['run 0: got {"count":-1}, expected {"count":5}']);
+});

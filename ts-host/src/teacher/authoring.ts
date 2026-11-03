@@ -14,7 +14,7 @@ import type { ModelTurn, ModelTurnOptions, ModelTurnRequest } from '../contracts
 import { openingText, type Message } from '../runtime/conversation.js';
 
 export type AuthoringSpec = {
-  /** The authored module, a path in the folder (for example "app.ts"), and the export to call. */
+  /** The authored module, a path in the folder (for example "app.ts"), and the export to call ("default": the module itself). */
   module: string;
   export: string;
   /** Calls to make and the results they must produce. */
@@ -179,6 +179,8 @@ async function runAuthoring(files: Record<string, string>, spec: AuthoringSpec, 
   const mounted: Record<string, string> = {};
   for (const [path, text] of Object.entries(files)) if (/\.(?:ts|nl)$/.test(path)) mounted[`${HARNESS}/${path}`] = text;
   const moduleName = spec.module.replace(/\.ts$/, '').split('/').join('.');
+  // A default export is the module's callable itself (`step.transition(...)`), the usual natlang codebase form.
+  const callee = spec.export === 'default' ? moduleName : `${moduleName}.${spec.export}`;
   mounted[`${HARNESS}.nl`] = `---\nargs:\n  payload: string\nreturns: string\n---\nRun the check.\n`;
   const results: unknown[] = [];
   for (const [index, run] of spec.runs.entries()) {
@@ -193,7 +195,7 @@ async function runAuthoring(files: Record<string, string>, spec: AuthoringSpec, 
             { calls: [['return_result', { status: 'failed', reason: `The authored export failed: ${last.slice(0, 400)}` }]] };
         }
         staged = true;
-        return { calls: [['eval', { code: `return JSON.stringify(await ${moduleName}.${spec.export}(...JSON.parse(payload)) ?? null);` }]] };
+        return { calls: [['eval', { code: `return JSON.stringify(await ${callee}(...JSON.parse(payload)) ?? null);` }]] };
       }
       const shown = openingText(request.messages as Message[]);
       const matches = [...(spec.oracle ?? []), ...(spec.argument_aliases ?? [])]

@@ -1,5 +1,24 @@
 # Model-facing changes and their measurement
 
+### 2026-11-03 — Decision-readout and multi-operation codebase RL task prompts (debt: live measurement)
+
+New RL task programs from `scripts/rl_tasks/sources/decisions.py` (source `decisions`: families `route`, `desk`,
+`inbox`, `tally`, `tree`, `verdict`, `folder_route`, `skill_route`) and `scripts/rl_tasks/sources/codebase_ops.py`
+(source `codebase-ops`: `trace`, `select`, `repair`, `feature`, `drive`), and the tune programs written by
+`scripts/rl_tasks/tune_programs.py`; see `plans/neuralese/BROAD_RL_TASKS_20261031.md`, "Decision-readout and
+multi-operation codebase families". The executing model sees: `readout: decision` functions with finite literal-union
+results (intents plus `out_of_scope`, spam/ham, scenario and question-type trees, supports/refutes/not_enough_info,
+proved/disproved/unknown) and root instructions that act on them in eval with `decide(fn, ...)`; one deployment-setting
+sentence per dataset (six per intent dataset) before each family's procedure wording (two to five per family); service
+declarations `desk.assign/escalate/finish`, `inbox.junk/restore/finish` and the codebase `apply/state/finish` drive
+services; desk routing tables published as skills (`<name>-desk/SKILL.md`, description quoted); folder-reducer
+instructions that move request files into team directories; repair instructions with a visible table of calls and
+their required results and the hint that one operator was changed; feature instructions that specify a new module's
+exact export, including the sibling import form `import fn from "./fn.ts";`. **Measurement debt:** about 48 live
+samples per family on the current student: task success; whether `decide` is used versus re-classifying in prose;
+whether drive rollouts plan with the codebase function before acting (extra moves change the confirmation code);
+whether skill-route rollouts read the covering skill; compile/type errors in feature modules (the sibling `.ts` import).
+
 ### 2026-10-31 — Memetic guidance evaluations deliver stored guidance through the program-guidance channel (debt: live outcome)
 
 `memetic_program.evaluate` used to append the candidate's `<natlang_program_guidance>` native-state block to a replaced
