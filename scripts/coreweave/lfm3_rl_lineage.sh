@@ -149,9 +149,13 @@ VENV=/home/werg/natlang/.venv-neuralese
 if [ ! -x "$VENV/bin/python" ]; then
   python3 -m venv --system-site-packages "$VENV" || { log '"event":"failed","step":"learner-venv"'; exit 2; }
 fi
+# rl_cloud.actor_uses_sglang: an explicit --engine sglang actor, or a raw LFM native-python actor that
+# production.adopt_actor_engine_defaults switches to SGLang at its next unbound collection.
 NEEDS_SGLANG=$(python3 -c "
 import json,sys;c=json.load(open(sys.argv[1]));a=c.get('actor_command') or []
-print(int(not c.get('mandatory_sft_only') and any(x=='--engine' and y=='sglang' for x,y in zip(a,a[1:]))))" "$CFG")
+e=a[a.index('--engine')+1] if '--engine' in a[:-1] else 'native'
+adopt=bool(a) and e=='native' and not (c.get('actor_engine_keep_native') is True or c.get('coefficient_policy') or c.get('actor_engine','native-python')!='native-python' or c.get('model')!='lfm')
+print(int(not c.get('mandatory_sft_only') and (e=='sglang' or adopt)))" "$CFG")
 SGL_VENV=; SGL_COMMIT=
 [ "$NEEDS_SGLANG" = 1 ] && install_sglang
 log "\"event\":\"actor_environment\",\"sglang\":$NEEDS_SGLANG,\"kind\":\"$KIND\""

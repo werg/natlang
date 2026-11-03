@@ -343,6 +343,14 @@ def is_sft(spec):
 
 
 SGLANG_BENCH = 'natlang_neuralese.serve.sglang_bench'
+DILOCO_ROLE = 'natlang_neuralese.train.diloco.cloud_role'
+DILOCO_PORT = 8080
+
+
+def diloco_role(spec):
+    """``coordinator``/``learner`` for a DiLoCo role lineage, else None."""
+    tune = spec.get('tune') or {}
+    return (tune.get('diloco') or {}).get('role') if tune.get('module') == DILOCO_ROLE else None
 
 
 def is_tune(spec):
@@ -716,6 +724,16 @@ def seed_tune(run, name):
         argv = ['all', '--out', str(stage_dir), '--workload', str(workload), '--checkpoint', str(parent),
                 '--base', run['hf'].split('=', 1)[1], '--export-dir', str(stage_dir.parent / 'sglang-hf'),
                 *tune.get('args', [])]
+    elif module == DILOCO_ROLE:
+        # One DiLoCo role (train/diloco/cloud_role.py): the coordinator (CPU sandbox, service port) or one learner. The
+        # run file gives the role's exact argv; its declared input files (training/held subsets, recipe controls) ship
+        # as exact inputs. Secrets (bearer token, coordinator URL and share token) arrive at launch, never in argv.
+        names = []
+        role = (tune.get('diloco') or {}).get('role')
+        if role not in ('coordinator', 'learner') or not tune.get('args') or tune['args'][0] != role:
+            raise SystemExit(f'{name}: a DiLoCo role names diloco.role and an argv starting with that role')
+        inputs = file_inputs(run, name, _file_records([Path(p) for p in tune.get('files', [])]))
+        argv = list(tune['args'])
     else:
         raise SystemExit(f'{name}: no cloud stage shard for module {module}')
     L.mkdir(parents=True)
@@ -825,15 +843,28 @@ def seed(run, name):
         cas = Path(run['root']) / '.cas'
         cas.mkdir(parents=True, exist_ok=True)
         shutil.copy(top, cas / top_sha)
-    ck_sha, ck_bytes = put_local(run, checkpoint)
+    # The template control's exact input closure (recipe resolver, stage inputs, protected custody; the runtime's own
+    # resolvers), so a current production control runs without hand-listed extras: files already committed in a
+    # readable store are exact ``file`` inputs, the rest one packed archive.
+    closure_path = hub(run) / 'closures' / f'{name}.json'
+    closure_path.parent.mkdir(parents=True, exist_ok=True)
+    runtime_tool(run['template_runtime'], 'closure', '--config', spec['template'], '-o', str(closure_path))
+    closure = read_json(closure_path)
+    allowed = set(spec.get('allow_missing', []))
+    missing = [m['path'] for m in closure['missing'] if m['path'] not in allowed]
+    if missing:
+        raise SystemExit(f'{name}: inputs the template names are absent on the DGX: {missing[:20]}')
+    inputs = file_inputs(run, name, closure['files'])
+    checkpoint_blob = put_checkpoint(run, checkpoint, L / 'parent' / 'checkpoint.pt')
     expected = spec['parent'].get('sha256')
-    if expected and expected != ck_sha:
-        raise SystemExit(f'parent checkpoint sha256 {ck_sha} != declared {expected}')
+    if expected and expected != checkpoint_blob['sha256']:
+        raise SystemExit(f'parent checkpoint sha256 {checkpoint_blob["sha256"]} != declared {expected}')
     record = {'schema': EXPORT_SCHEMA, 'seq': 'seed', 'lineage': name, 'lineage_dir': str(L), 'round': 0,
               'trained_rounds': 0, 'created': time.time(), 'state_sha256': None,
-              'blobs': [{'kind': 'top', 'sha256': top_sha, 'bytes': top_bytes, 'encoding': 'tar.zst'},
-                        {'kind': 'checkpoint', 'sha256': ck_sha, 'bytes': ck_bytes, 'encoding': 'raw',
-                         'path': str(L / 'parent' / 'checkpoint.pt')}],
+              'blobs': [{'kind': 'top', 'sha256': top_sha, 'bytes': top_bytes, 'encoding': 'tar.zst'}, checkpoint_blob],
+              'inputs': inputs, 'closure': {'path': str(closure_path), 'sha256': file_digest(closure_path),
+                                            'files': len(closure['files']), 'bytes': closure['bytes'],
+                                            'excluded': len(closure['excluded'])},
               'links': [], 'parent_source': str(checkpoint), 'dgx_verified': True, 'cloud_committed': True}
     store_json(exports / 'seed.json', record)
     note(run, f'{name} seed export: parent {checkpoint} ({ck_sha[:12]}), config from {spec["template"]} with '
@@ -1092,10 +1123,23 @@ def needs_sglang(run):
             return True
         if not is_rl(spec):
             continue
-        command = cloud_config(run, name).get('actor_command') or []
-        if any(a == '--engine' and b == 'sglang' for a, b in zip(command, command[1:])):
+        if actor_uses_sglang(cloud_config(run, name)):
             return True
     return False
+
+
+def actor_uses_sglang(config):
+    """An RL config whose actor runs (or, through ``production.adopt_actor_engine_defaults`` at its next unbound
+    collection, will run) the SGLang fork. Kept in step with the sandbox driver's copy in lfm3_rl_lineage.sh."""
+    if config.get('mandatory_sft_only'):
+        return False
+    command = config.get('actor_command') or []
+    engine = command[command.index('--engine') + 1] if '--engine' in command[:-1] else 'native'
+    if engine == 'sglang':
+        return True
+    return bool(command) and engine == 'native' and not (
+        config.get('actor_engine_keep_native') is True or config.get('coefficient_policy')
+        or config.get('actor_engine', 'native-python') != 'native-python' or config.get('model') != 'lfm')
 
 
 def bundle(run):
@@ -1139,12 +1183,21 @@ def render_job(run, name, rounds, check=False):
     # Exactly one GPU and explicit CPU/RAM minima per lineage (an RL lineage's actor and node workers need more than a
     # learner; AGENTS.md learner default 8 CPU / 64Gi).
     job['resources'] = {**job['resources'], **spec.get('resources', {}), 'gpu': 1}
+    if diloco_role(spec) == 'coordinator':
+        # The DiLoCo coordinator runs on a dedicated CPU-only sandbox (AGENTS.md: never cohosted with a learner) and
+        # serves the learners through its public share-token gateway.
+        job['resources'].pop('gpu')
+        job['service'] = {'port': DILOCO_PORT}
+        job['needs'] = {**job.get('needs', {}), 'gpu_memory_gb': 0}
+    if spec.get('minimum_resources'):  # the shape backoff floor (cwctl.create_with_shape_backoff)
+        job['minimum_resources'] = spec['minimum_resources']
     if spec.get('lifetime_hours'):  # a lineage with a declared GPU-hour ceiling (a bounded pilot shard)
         job['lifetime_hours'] = spec['lifetime_hours']
     if not is_sft(spec):  # RL lineages and tune shards run the code snapshot's ts-host
         job['env']['NATLANG_CW_BUILD_TSHOST'] = '1'
     if check:  # the CPU pipeline check: no GPU, small, short
         job['resources'] = {'cpu': '4', 'memory': '16Gi'}
+        job.pop('minimum_resources', None)
         job['lifetime_hours'] = 3
         job['kind'] = 'smoke'
         job['env']['NATLANG_RL_CHECK'] = '1'
@@ -1186,6 +1239,7 @@ def launch(run, name, account=None, dry_run=False, rounds=None, parent_later=Fal
     if not parent_later:
         lease_blobs(run, consumer, record_digests(run, record, name))
     secrets = {} if parent_later else {'rl-parent': json.dumps(parent_capability(run, record)).encode()}
+    secrets.update(diloco_secrets(run, name, state))
 
     def created(sandbox_id):
         state.setdefault('lineages', {})[name] = {'sandbox_id': sandbox_id, 'account': account, 'status': 'running',
@@ -1197,9 +1251,40 @@ def launch(run, name, account=None, dry_run=False, rounds=None, parent_later=Fal
         follow_logs(run, sandbox_id)
     entry = cwctl.launch(job, False, True, None, Path(state['bundle']), secrets=secrets,
                          on_created=created_and_followed, account=account)
+    if entry.get('service_url'):
+        state['lineages'][name]['service_url'] = entry['service_url']
+        store_json(hub(run) / 'run-state.json', state)
     note(run, f'{name} launched in {entry["sandbox_id"]} ({account}: {reason}) from export {record["seq"]} '
               f'(trained_rounds {record["trained_rounds"]}), job {job["id"]}')
     return entry
+
+
+def diloco_token(run, coordinator):
+    """The DiLoCo run's bearer token: created once on the DGX (owner-only), delivered to every role as a secret."""
+    path = hub(run) / 'diloco' / f'{coordinator}.token'
+    if not path.is_file():
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        import secrets as token_source
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, 'w') as stream:
+            stream.write(token_source.token_urlsafe(32))
+    return path.read_bytes().strip()
+
+
+def diloco_secrets(run, name, state):
+    """Secrets of a DiLoCo role: the bearer token; a learner also the running coordinator's URL and share token."""
+    spec = run['lineages'][name]
+    role = diloco_role(spec)
+    if role is None:
+        return {}
+    if role == 'coordinator':
+        return {'diloco-token': diloco_token(run, name)}
+    coordinator = spec['tune']['diloco']['coordinator']
+    live = state.get('lineages', {}).get(coordinator, {})
+    if live.get('status') != 'running' or not live.get('service_url'):
+        raise SystemExit(f'{name}: coordinator lineage {coordinator} is not running with a service URL')
+    return {'diloco-token': diloco_token(run, coordinator), 'diloco-url': live['service_url'].encode(),
+            'diloco-gateway': cwctl.share_token(live['sandbox_id'])}
 
 
 def follow_logs(run, sandbox_id):
