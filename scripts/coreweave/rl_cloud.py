@@ -343,7 +343,8 @@ def is_sft(spec):
 
 
 def is_tune(spec):
-    """A tune shard runs ``natlang_neuralese.tune.stage --shard I/N`` on a parent checkpoint (``"tune"``)."""
+    """A stage shard (``"tune"``) runs an adaptation stage module on a parent checkpoint: ``natlang_neuralese.tune.stage
+    --shard I/N`` (the default ``module``) or ``natlang_neuralese.tune.learned.bank_stage`` over an ``episodes`` pool."""
     return 'tune' in spec
 
 
@@ -683,20 +684,32 @@ def seed_tune(run, name):
     parent = Path(tune['parent']['path'])
     if sha256_file_hex_cached(parent.resolve(strict=True)) != tune['parent']['sha256']:
         raise SystemExit(f'{parent} is not the declared parent {tune["parent"]["sha256"]}')
-    stage_dir, programs = Path(tune['stage_dir']), Path(tune['programs'])
-    names = tune['program_names']
-    _main_python('import json, sys\nfrom natlang_neuralese.tune.stage import stage_programs\n'
-                 'stage_programs(sys.argv[1], sys.argv[2], json.loads(sys.argv[3]))',
-                 str(programs), str(stage_dir), json.dumps(names))
-    staged = [p for p in (stage_dir / 'programs').rglob('*') if p.is_file()]
-    inputs = file_inputs(run, name, _file_records([programs, *staged, *custody_inputs()]))
-    argv = ['--programs', str(programs), '--protection', str(REPO / 'training' / 'protected-worlds.json'),
-            '--continue-from', str(parent), '--out', str(stage_dir), '--device', 'cuda', '--shard', tune['shard'],
-            '--program-names', json.dumps(names), *tune.get('args', [])]
+    stage_dir = Path(tune['stage_dir'])
+    module = tune.get('module', 'natlang_neuralese.tune.stage')
+    if module == 'natlang_neuralese.tune.stage':
+        programs = Path(tune['programs'])
+        names = tune['program_names']
+        _main_python('import json, sys\nfrom natlang_neuralese.tune.stage import stage_programs\n'
+                     'stage_programs(sys.argv[1], sys.argv[2], json.loads(sys.argv[3]))',
+                     str(programs), str(stage_dir), json.dumps(names))
+        staged = [p for p in (stage_dir / 'programs').rglob('*') if p.is_file()]
+        inputs = file_inputs(run, name, _file_records([programs, *staged, *custody_inputs()]))
+        argv = ['--programs', str(programs), '--protection', str(REPO / 'training' / 'protected-worlds.json'),
+                '--continue-from', str(parent), '--out', str(stage_dir), '--device', 'cuda', '--shard', tune['shard'],
+                '--program-names', json.dumps(names), *tune.get('args', [])]
+    elif module == 'natlang_neuralese.tune.learned.bank_stage':
+        # The bank meta-learning stage: its episode pool files and the protection custody as exact inputs.
+        names = []
+        pool = Path(tune['episodes'])
+        inputs = file_inputs(run, name, _file_records([pool, pool.parent / 'rows.jsonl', *custody_inputs()]))
+        argv = ['--episodes', str(pool), '--protection', str(REPO / 'training' / 'protected-worlds.json'),
+                '--continue-from', str(parent), '--out', str(stage_dir), '--device', 'cuda', *tune.get('args', [])]
+    else:
+        raise SystemExit(f'{name}: no cloud stage shard for module {module}')
     L.mkdir(parents=True)
-    store_json(L / 'tune.json', {'schema': 'natlang.cloud-tune-shard/1', 'module': 'natlang_neuralese.tune.stage',
+    store_json(L / 'tune.json', {'schema': 'natlang.cloud-tune-shard/1', 'module': module,
                                  'argv': argv, 'stage_dir': str(stage_dir), 'parent': tune['parent'],
-                                 'shard': tune['shard'], 'program_names': names})
+                                 'shard': tune.get('shard'), 'program_names': names})
     checkpoint = put_checkpoint(run, parent, parent)
     top_sha, top_bytes = _tar_zst_put(run, L, ['tune.json'], f'{name}-seed-top')
     record = {'schema': EXPORT_SCHEMA, 'seq': 'seed', 'lineage': name, 'lineage_dir': str(L), 'round': 0,
@@ -705,7 +718,7 @@ def seed_tune(run, name):
               'checkpoint': str(parent), 'checkpoints': [str(parent)], 'links': [], 'inputs': inputs,
               'parent_source': tune['parent'], 'dgx_verified': True, 'cloud_committed': True}
     store_json(exports / 'seed.json', record)
-    note(run, f'{name} tune shard seed: {tune["shard"]} of {names} on {parent} ({tune["parent"]["sha256"][:12]}, '
+    note(run, f'{name} stage shard seed ({module}): {tune.get("shard")} of {names} on {parent} ({tune["parent"]["sha256"][:12]}, '
               f'{checkpoint["encoding"]}); {len(inputs)} inputs; stage {stage_dir}')
     return record
 

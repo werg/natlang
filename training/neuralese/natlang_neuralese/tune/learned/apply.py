@@ -4,6 +4,8 @@
 contract as `tune.build`, so `natlang tune --learned` validates, activates and rolls back its release through the
 ordinary pipeline. The plan is a `natlang.tune-plan/v1` plus ``learned``: ``{"bank": bank.json, "state": optimizer
 state.json, "store": operation artifact store, "scopes": {level: view size}, "steps": K, "patience": P, "seed": S}``.
+Without ``state`` the bank is a meta-learned bank (``bank_metalearning``'s ``bank-manifest.json``): the release is
+its inner fit (``fit_steps``, `inner_fit`), the deployment form of the meta-learner's inner step.
 
 Services (one implementation, used by the crisp episode here and by the Natlang `adapt` program through
 ``python -m natlang_neuralese.tune.learned service``): ``evidence`` (the permitted view), ``propose`` (a complete
@@ -49,9 +51,13 @@ class Context:
         self.engine.store = TensorStore(self.learned['store'])
         self.out = Path(out)
         learned, engine = self.learned, self.engine
-        self.bank = load_bank(engine, json.loads(Path(learned['bank']).read_text())['bank'])
-        state = json.loads(Path(learned['state']).read_text())
-        self.trainer = OuterTrainer(engine, self.bank, OuterRecipe.from_json(state['recipe']), [], state=state)
+        raw = json.loads(Path(learned['bank']).read_text())
+        self.bank = load_bank(engine, raw['bank'] if isinstance(raw.get('bank'), dict) else raw)
+        # Without an optimizer state the bank is used as meta-learned (`meta_bank`): adaptation is its inner fit.
+        self.trainer = None
+        if learned.get('state'):
+            state = json.loads(Path(learned['state']).read_text())
+            self.trainer = OuterTrainer(engine, self.bank, OuterRecipe.from_json(state['recipe']), [], state=state)
         incoming = learned.get('incoming')
         self.pc = ProgramContext(engine, self.bank, plan_path, out=out, scopes=learned['scopes'], build=incoming)
         pc = self.pc
@@ -161,6 +167,8 @@ class Context:
         context = dict(context, parent=parent or self.incoming_bundle(), program=context['program'],
                        writes=[w for w in context['writes'] if w['key'] in keys],
                        arrays=[a for a in context['arrays'] if a['view']['scope'] in scopes])
+        if self.trainer is None:
+            raise LearnedOptimizerError('this bank has no trained writer (a meta-learned bank): adapt it with refine')
         return propose(self.trainer, context, choose='sample' if sample else None, seed=seed)
 
     def _encoding(self, scope, probs, gains, *, chosen=None):
@@ -232,8 +240,22 @@ class Context:
         return self._carry(parent, adapters, mixtures, {}, actor='single-component-retrieval'), best_loss
 
 
+def inner_fit(context, *, steps):
+    """Deployment on a meta-learned bank: the meta-learner's inner step (`refine`, an in-bank fit of the mixtures
+    and soft states from the incoming bundle), kept only when it lowers the exact support loss."""
+    incoming = context.evaluate(None)
+    bundle = context.refine(None, steps=steps)
+    loss = context.evaluate(bundle)
+    accepted = loss < incoming
+    history = [{'step': 0, 'operator': 'refine', 'bundle': bundle['id'], 'supportLoss': loss, 'incumbentLoss': incoming,
+                'accepted': accepted}]
+    return (bundle, loss, history) if accepted else (None, incoming, history)
+
+
 def episode(context, *, steps, patience, seed):
     """The crisp operator policy over the services; returns ``(incumbent, incumbent loss, history)``."""
+    if context.trainer is None:
+        return inner_fit(context, steps=context.learned.get('fit_steps', 8))
     incumbent, incumbent_loss, history, stale = None, context.evaluate(None), [], 0
     for step in range(steps):
         bundle, proposal, behavior = context.propose(incumbent, sample=step > 0, seed=seed + step)
@@ -312,10 +334,12 @@ def main(argv=None):
         incumbent, _, history = episode(context, steps=learned.get('steps', 4), patience=learned.get('patience', 2),
                                         seed=learned.get('seed', 0))
         artifacts, soft_states = release_fragment(context, incumbent)
-        receipt = {'schema': 'natlang.lopt.apply-receipt/1', 'bank': context.bank.snapshot, 'writer': context.trainer.state['writer'],
-                   'head': context.trainer.state['head'], 'incomingLoss': incoming_loss,
+        trained = context.trainer is not None
+        receipt = {'schema': 'natlang.lopt.apply-receipt/1', 'bank': context.bank.snapshot,
+                   'writer': context.trainer.state['writer'] if trained else None,
+                   'head': context.trainer.state['head'] if trained else None, 'incomingLoss': incoming_loss,
                    'selected': None if incumbent is None else incumbent['id'], 'history': history,
-                   'operatorPolicy': 'crisp-greedy-then-sample-v1'}
+                   'operatorPolicy': 'crisp-greedy-then-sample-v1' if trained else 'bank-inner-fit-v1'}
         write_release(context.engine, context.manifest, context.out, artifacts, soft_states, receipt)
         if artifacts and 'gguf' in context.plan.get('exports', []):
             export_release_nodes(context.engine, context.plan, context.out, artifacts)
@@ -385,7 +409,8 @@ def handle(context, request):
             raise LearnedOptimizerError('a controller release identity is required')
         artifacts, soft_states = release_fragment(context, parent)
         receipt = {'schema': 'natlang.lopt.apply-receipt/1', 'bank': context.bank.snapshot,
-                   'writer': context.trainer.state['writer'], 'head': context.trainer.state['head'],
+                   'writer': context.trainer.state['writer'] if context.trainer else None,
+                   'head': context.trainer.state['head'] if context.trainer else None,
                    'incomingLoss': context.evaluate(None), 'selected': None if parent is None else parent['id'],
                    'history': request.get('history', []), 'operatorPolicy': 'natlang-controller-v1',
                    'controller': controller}

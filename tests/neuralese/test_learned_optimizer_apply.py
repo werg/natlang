@@ -188,3 +188,18 @@ def test_the_persistent_service_keeps_contexts_and_runs_commands(tmp_path):
     assert replies[3]['result'] == {'ran': 'ladder'} and calls == [('ladder', {'x': 1})]
     assert 'unknown adaptation service' in replies[4]['error']
     assert replies[5]['result']['incomingLoss'] > 0
+
+
+def test_a_meta_learned_bank_without_optimizer_state_deploys_by_its_inner_fit(tmp_path):
+    plan, bank, _ = operation(tmp_path)
+    value = json.loads(open(plan).read())
+    del value['learned']['state']
+    # The bank_metalearning stage writes the bare manifest (not wrapped in {"bank": ...}).
+    (tmp_path / 'bank.json').write_text(json.dumps(json.loads((tmp_path / 'bank.json').read_text())['bank']))
+    value['learned']['fit_steps'] = 4
+    open(plan, 'w').write(json.dumps(value))
+    assert main(['--plan', plan, '--out', str(tmp_path / 'out')]) == 0
+    receipt = json.loads((tmp_path / 'out' / 'result.json').read_text())['receipt']
+    assert receipt['operatorPolicy'] == 'bank-inner-fit-v1' and receipt['writer'] is None
+    assert receipt['history'][0]['operator'] == 'refine' and receipt['bank'] == bank.snapshot
+    assert (receipt['selected'] is not None) == receipt['history'][0]['accepted']

@@ -172,6 +172,9 @@ def run(args, parameters):
         raise SystemExit('this stage directory is bound to other episodes, protection or parameters')
     _write(bound, operation)
     recipe = recipe_of(parameters)
+    if args.dry_run:  # the cloud pipeline check: inputs, custody and parameters only, no model
+        _log('dry_run', held=len(held), meta_train=len(pool['families']) - len(held), recipe=recipe.as_json())
+        return 0
     engine = _engine(checkpoint, args.device, args.dtype, out / 'store')
     learner = MB.BankMetaLearner(engine, pool, recipe, out / 'learner', parent_sha256=parent)
     _log('start', step=learner.state['step'], parent=parent, held=len(held),
@@ -250,6 +253,7 @@ def main(argv=None):
         parser.add_argument('--' + key.replace('_', '-'), dest=key, action='store_const', const=True)
         parser.add_argument('--no-' + key.replace('_', '-'), dest=key, action='store_const', const=False)
     parser.add_argument('--recipe-overrides')
+    parser.add_argument('--dry-run', action='store_true')
     args = parser.parse_args(argv)
     os.environ.setdefault('OMP_NUM_THREADS', '1')
     return run(args, parse_parameters(args))

@@ -342,7 +342,7 @@ class _TrainAll:
 
 
 class BankMetaLearner:
-    """One operation's bank, live leaves, outer optimizer and history (``out/state.json`` + ``out/state.pt``)."""
+    """One operation's bank, live leaves, outer optimizer and history (``out/state.json`` + ``out/state.torch``)."""
 
     def __init__(self, engine, pool, recipe, out, *, parent_sha256):
         from .bank import new_bank, weight_svd_basis
@@ -387,7 +387,7 @@ class BankMetaLearner:
         same_parent = state['parent_sha256'] == self.state['parent_sha256']
         if same_parent and state['initial_bank'] != self.bank0.snapshot:
             raise LearnedOptimizerError('the saved state started from another initial bank')
-        tensors = torch.load(self.out / 'state.pt', map_location='cpu', weights_only=True)
+        tensors = torch.load(self.out / 'state.torch', map_location='cpu', weights_only=True)
         if tensors.get('step') != state['step']:
             raise LearnedOptimizerError('state tensors and record are from different steps')
         with torch.no_grad():
@@ -417,9 +417,9 @@ class BankMetaLearner:
                 tensors[f'component.{k}.P.{name}'], tensors[f'component.{k}.Q.{name}'] = P.detach().clone(), Q.detach().clone()
         for key, value in self.leaves['basis'].items():
             tensors['basis.' + key] = value.detach().clone()
-        partial = self.out / 'state.pt.partial'
+        partial = self.out / 'state.torch.partial'
         torch.save(tensors, partial)
-        partial.replace(self.out / 'state.pt')
+        partial.replace(self.out / 'state.torch')
         record = self.out / 'state.json.partial'
         record.write_text(json.dumps(self.state, indent=1, sort_keys=True))
         record.replace(self.out / 'state.json')
