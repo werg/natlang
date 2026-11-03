@@ -615,3 +615,19 @@ arithmetic), now rules for every batch:
 - **Producer notes**: `admit_authored` attaches `reference.children` for Neuralese producer helpers from replay-verified smoke
   scripts (`authored_child_notes.py`; per-call `$match` values, never constants).
 - **The family field is the bare family name**; the converter adds `auth_`.
+
+### Round 4 results and operating notes
+
+- Second-wave batches (w100 to w112) were all folder worlds with `expected_folders`; admitted counts after the Sonnet blind solve:
+  w100 11/16, w102 16/16, w104 14/16, w105 18/18, w106 15/16, w107 18/19, w108 16/16, w109 17/17, w110 17/20, w111 13/16,
+  w112 8/12 (w103 admitted 15 of 16, w85 never qualified, the 16th w103 row was not admitted because the batch-level novelty
+  gate matches the rows already in the pool). Dominant drop reasons: an unspecified output format the solver had to guess
+  (comma-list separator, singular/plural wording, line separator), a count that includes or excludes a case the text leaves open,
+  and judgment boundaries in readouts. The blind solve is cheap (about one minute per batch) and catches what qualification cannot.
+- The effect/state bar was met honestly by authored folder-world supply, not by shrinking the pool: strict share 22.4% at 6,666 rows
+  before, 30.0% after the wave, with `min_pool_rows` 6,666.
+- Novelty key gap: the exact-duplicate key digit-normalizes folder contents and file names, so folder-only variants of one program
+  (`01.md`/`02.md` entries, a long and a short world) can be flagged as duplicates. Authors work around it with letter file names;
+  round 5 should hash the folder file names and the normalized content explicitly.
+- Authors should state every written line format (separators, singular and plural wording, trailing newline) in the root, and the
+  count a returned number includes; these were the commonest blind-solve rejections.
