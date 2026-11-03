@@ -22,6 +22,11 @@ steps: study failures, one typed change per step, measure, keep only above the b
 DECLARATION`), and the problem texts `Workspace.problems` returns for invalid changes. **Debt:** about 48 supervisor
 episodes on the current parent: commit rate, typed-change validity on first proposal, changes per kind, evaluations
 used, support-claimed vs query-realized gain; and whether `iterateOn` is used as instructed or replaced by turns.
+Amended 2026-11-03 (late): the brief no longer carries `supportAttempts`/`supportSuccess` (they are measured inside the
+episode's actor lease); step 2/3 read `workspace.baseline()` (new method, "How the unchanged program did on its support
+invocations"). `fit(spec: FitSpec)` appears in the declaration only when the episode has a bank fit service. Input-class
+guidance is now delivered as a skill whose description is "Use for inputs where ..." (skill listing text), and
+function-scoped guidance only reaches that function's calls. Same measurement debt.
 
 ### 2026-11-03 — Guidance writer answers in plain text (writeGuidance; small live check, debt: 48-sample measurement)
 

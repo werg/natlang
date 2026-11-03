@@ -1089,6 +1089,15 @@ def _bind_collected_coefficient_policy(values,kwargs,binding,identity):
     values.update(coefficient_policy=str(target),coefficient_policy_sha256=binding['sha256'])
 
 
+def _collect_round(config, kwargs):
+    """Collect, then (memetic rounds only) the stage's distillation and promotion work on the same live actor."""
+    report = collect(**kwargs)
+    if config.get('memetic_round') is not None:
+        from .memetic_stage import after_collection
+        after_collection(config['memetic_round'], endpoint=kwargs['endpoints'][0], round_out=kwargs['out'])
+    return report
+
+
 def collect_with_actor(config, values, **kwargs):
     """Optional colocated actor lifecycle; its parent is the ledger/sandbox unit.
 
@@ -1124,7 +1133,7 @@ def collect_with_actor(config, values, **kwargs):
     control = kwargs.get('control')
     template = config.get('actor_command')
     if not template:
-        return collect(**kwargs)
+        return _collect_round(config, kwargs)
     if len(kwargs['endpoints']) != 1:
         raise ValueError('managed colocated actor requires one endpoint; external fleets use supervisor hooks')
     import time
@@ -1174,7 +1183,7 @@ def collect_with_actor(config, values, **kwargs):
                 time.sleep(.2)
             if config.get('after_actor_ready'):
                 run_command(config['after_actor_ready'], values)
-            return collect(**kwargs)
+            return _collect_round(config, kwargs)
         finally:
             if process.poll() is None:
                 process.terminate()  # explicit child PID; no pattern/process-wide kill

@@ -370,19 +370,27 @@ def adapter_evaluator(spec, endpoint, *, base=None, collect=None, identity=None,
         base = production_evaluator(spec, endpoint)
     if collect is None:
         from .production import collect
-    if identity is None:
-        from .memetic_program import actor_identity
-        identity = actor_identity(endpoint)
     settings = spec['eval']
+    resolved = {}
 
-    def evaluate(cases, guidance, adapter, *, name, out=None):
+    def actor():
+        # Resolved on the first adapted evaluation only: unadapted episodes never need it.
+        if 'identity' not in resolved:
+            if identity is not None:
+                resolved['identity'] = identity
+            else:
+                from .memetic_program import actor_identity
+                resolved['identity'] = actor_identity(endpoint)
+        return resolved['identity']
+
+    def evaluate(cases, guidance, adapter, *, name, out=None, samples=None):
         if adapter is None:
-            return base(cases, guidance, adapter, name=name, out=out)
+            return base(cases, guidance, adapter, name=name, out=out, samples=samples)
         if guidance:
             # A guidance state written by the base parent and imported by the adapted actor needs the
             # same-base-adapter-state consumption mode on the program-guidance channel; not wired yet.
             raise ValueError('evaluate an adapter fit without guidance changes (combined sets are not supported yet)')
-        binding = actor_binding(adapter, identity)
+        binding = actor_binding(adapter, actor())
         out = Path(out or spec['out']) / 'evals' / binding['effective_checkpoint_sha256'][:16] / name
         if (out / 'summary.json').exists():
             return json.loads((out / 'summary.json').read_text())
@@ -392,7 +400,7 @@ def adapter_evaluator(spec, endpoint, *, base=None, collect=None, identity=None,
         packet = out / 'cases.jsonl'
         packet.write_text(''.join(json.dumps(case, ensure_ascii=False) + '\n' for case in cases))
         report = collect(cases=packet, out=out / 'collection', endpoints=[endpoint],
-                         policy_id=identity['checkpoint_sha256'], rows=len(cases), group=settings['samples'],
+                         policy_id=actor()['checkpoint_sha256'], rows=len(cases), group=samples or settings['samples'],
                          workers=settings['workers'], root_mode='student', seed_base=settings['seed_base'],
                          case_seconds=settings['case_seconds'], max_model_requests=settings['max_model_requests'],
                          max_turns=settings['max_turns'], prompt_rendering='full', adapters=binding)

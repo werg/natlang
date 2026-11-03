@@ -24,9 +24,12 @@ writes episode specs and task rows, measures repetition, exports distillation ro
 from __future__ import annotations
 
 import argparse
+import contextlib
 import difflib
 import hashlib
 import json
+import math
+import time
 from pathlib import Path
 
 from ..common.hashing import canonical_json_sha256_hex
@@ -37,10 +40,12 @@ from .memetic_workspace import SPEC_SCHEMA, attempt_digest, attempt_steps
 STAGE_SCHEMA = 'natlang.memetic-stage/1'
 FAMILY = 'memetic_improve'
 PACKAGE = Path(__file__).resolve().parents[4] / 'applications' / 'memetic-improver'
-DEFAULTS = {'support': 4, 'query': 4, 'dev': 4, 'confirmation': 4, 'samples': 2, 'held_fraction': 0.2,
+DEFAULTS = {'support': 4, 'query': 4, 'max_query': 12, 'query_rollouts': 24, 'expensive_seconds': 300,
+            'dev': 4, 'confirmation': 4, 'samples': 2, 'held_fraction': 0.2,
             'min_success': 0.1, 'max_success': 0.85, 'near_duplicate': 0.9, 'max_worlds_per_family': 40,
-            'evaluations': 4, 'fits': 1, 'cost_weight': 0.05, 'episode_seconds': 5400, 'workers': 4,
-            'case_seconds': 900, 'max_model_requests': 48, 'max_turns': 40, 'seed': 'memetic-v1'}
+            'stale_parents': 3, 'evaluations': 4, 'fits': 1, 'cost_weight': 0.05, 'episode_seconds': 5400,
+            'workers': 4, 'case_seconds': 900, 'max_model_requests': 48, 'max_turns': 40, 'ablation': True,
+            'promotion_every': 4, 'promotion_samples': 2, 'seed': 'memetic-v1'}
 
 
 def _hash(*parts):
@@ -80,9 +85,12 @@ def components(cases):
 
 
 def world_text(case):
+    """What makes one world of a program differ from another: its inputs and everything in its semantics except the
+    program's own .nl sources (identical within a program by construction) and the hidden answer."""
     semantics = case.get('semantics') or {}
-    root = (semantics.get('files') or {}).get(semantics.get('root') or '', '')
-    return json.dumps(semantics.get('inputs'), sort_keys=True, ensure_ascii=False)[:4000] + '\n' + root[:2000]
+    files = {path: text for path, text in (semantics.get('files') or {}).items() if not path.endswith('.nl')}
+    rest = {key: value for key, value in semantics.items() if key not in ('files', 'expected', 'root')}
+    return json.dumps({'world': rest, 'files': files}, sort_keys=True, ensure_ascii=False, default=str)[:8000]
 
 
 def dedupe(groups, threshold):
@@ -123,13 +131,15 @@ def program_pool(cases, *, settings, protected=None):
 
 def split_program(entry, settings):
     """Support / query (meta-train) or support / dev / confirmation (held) worlds: one world per component, so
-    related worlds never straddle two slices."""
+    related worlds never straddle two slices. Query reserves up to ``max_query`` worlds; preparation sizes the slice it
+    actually uses by the program's measured cost (``prepare_program``)."""
     worlds = [group[0] for group in entry['components']]
     names = ('support', 'dev', 'confirmation') if entry['held'] else ('support', 'query')
+    sizes = {**settings, 'query': max(settings['query'], settings['max_query'])}
     out, at = {}, 0
     for name in names:
-        out[name] = worlds[at:at + settings[name]]
-        at += settings[name]
+        out[name] = worlds[at:at + sizes[name]]
+        at += sizes[name]
     return out
 
 
@@ -157,40 +167,112 @@ def mechanical_guidance(successes, limit=1500):
     return None
 
 
-def prepare_program(family, split, *, evaluate, settings, out):
-    """Evidence and baselines of one program under the current parent. ``evaluate(cases, guidance, adapter, name=)``
-    is the workspace evaluator (rl.memetic_workspace.production_evaluator or a test double)."""
-    out.mkdir(parents=True, exist_ok=True)
-    target = split.get('query') or split['dev']
+def query_plan(target, *, seconds_per_rollout, settings):
+    """The query slice and samples per world for a usable reward signal at bounded cost: cheap programs use every
+    reserved query world, expensive ones (above ``expensive_seconds`` per rollout) the minimum; samples per world fill
+    ``query_rollouts`` (2 to 4). Every candidate, baseline and ablation of the episode runs on exactly these worlds
+    with the same seeds, so their differences are paired."""
+    worlds = target if seconds_per_rollout <= settings['expensive_seconds'] else target[:settings['query']]
+    samples = min(4, max(settings['samples'], -(-settings['query_rollouts'] // max(1, len(worlds)))))
+    return worlds, samples
+
+
+def binomial_noise(success, rollouts):
+    """Standard error of a success rate over ``rollouts`` paired rollouts (reported with every anchor)."""
+    return round(math.sqrt(max(0., success * (1 - success)) / max(1, rollouts)), 4)
+
+
+def prepare_program(family, split, *, evaluate, settings, fitter=None, spec=None):
+    """Evidence and baselines of one program under the current parent (run once per program and parent inside the
+    episode's actor lease, ``ensure_prepared``). ``evaluate(cases, guidance, adapter, *, name, samples=None)`` is the
+    workspace evaluator (rl.memetic_workspace.production_evaluator or a test double)."""
+    started = time.monotonic()
     support = evaluate(split['support'], None, None, name='baseline-support')
+    rollouts = max(1, len(support['results']))
+    seconds = support.get('seconds', time.monotonic() - started) / rollouts
     attempts = [{'digest': attempt_digest(result, attempt_id=f'a{i + 1}', world=world),
                  'steps': attempt_steps(result)} for i, (world, result) in enumerate(support['results'])]
-    none = evaluate(target, None, None, name='baseline-target-none')
-    successes = [(world, result) for (world, result), item in zip(support['results'], attempts)
-                 if item['digest']['outcome'] == 'task_success']
-    default_text = mechanical_guidance(successes)
-    default = (dict(evaluate(target, default_text, None, name='baseline-target-default'), kind='mechanical-guidance',
-                    text=default_text) if default_text else None)
     # Admission reads the support evidence only: selecting programs on the query outcome that also anchors the
     # reward would bias the anchor (regression to the mean).
     headroom = support['success']
-    return {'family': family, 'support_success': support['success'], 'attempts': attempts,
-            'baselines': {'none': {'success': none['success'], 'dir': none.get('dir')},
-                          'default': None if default is None else {'success': default['success'], 'kind': default['kind'],
-                                                                   'text': default['text'], 'dir': default.get('dir')}},
-            'headroom': headroom,
-            'admitted': settings['min_success'] <= headroom <= settings['max_success']}
+    admitted = settings['min_success'] <= headroom <= settings['max_success']
+    prepared = {'schema': 'natlang.memetic-prepared/1', 'family': family, 'support_success': support['success'],
+                'attempts': attempts, 'headroom': headroom, 'admitted': admitted,
+                'seconds_per_rollout': round(seconds, 2), 'baselines': {'none': None, 'default': None}}
+    if not admitted:
+        return prepared
+    target, samples = query_plan(split.get('query') or split['dev'], seconds_per_rollout=seconds, settings=settings)
+    none = evaluate(target, None, None, name='baseline-query-none', samples=samples)
+    successes = [(world, result) for (world, result), item in zip(support['results'], attempts)
+                 if item['digest']['outcome'] == 'task_success']
+    default_text = mechanical_guidance(successes)
+    default = (evaluate(target, [{'function': None, 'text': default_text}], None, name='baseline-query-default',
+                        samples=samples) if default_text else None)
+    n = len(target) * samples
+    bank = None
+    if fitter is not None:
+        # The default crisp adaptation: the bank's inner fit with default settings on the verified support runs.
+        try:
+            fit = fitter(spec, {})
+            report = evaluate(target, None, fit['adapter'], name='baseline-query-bank', samples=samples)
+            bank = {'success': report['success'], 'kind': 'bank-default-fit', 'adapter': fit['adapter'],
+                    'support_loss': fit.get('support_loss'), 'dir': report.get('dir'),
+                    'noise': binomial_noise(report['success'], n)}
+        except ValueError as error:  # no verified support success to fit on, or a refused fit
+            bank = {'success': None, 'kind': 'bank-default-fit', 'unavailable': str(error)[:300]}
+    return {**prepared, 'query_ids': [case['id'] for case in target], 'query_samples': samples,
+            'baselines': {'none': {'success': none['success'], 'dir': none.get('dir'),
+                                   'noise': binomial_noise(none['success'], n)},
+                          'default': None if default is None else {
+                              'success': default['success'], 'kind': 'mechanical-guidance', 'text': default_text,
+                              'dir': default.get('dir'), 'noise': binomial_noise(default['success'], n)},
+                          **({'bank': bank} if bank is not None else {})}}
 
 
-def episode_spec(family, split, prepared, *, settings, out, parent_sha256):
+@contextlib.contextmanager
+def _locked(path):
+    import fcntl
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(str(path) + '.lock', 'a') as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+def ensure_prepared(spec, evaluate, fitter=None):
+    """The episode's per-parent preparation, computed once by whichever rollout of the group loads first (the others
+    wait on the lock and read it). Also records the program's support measurement for later admission."""
+    path = Path(spec['prepared_path'])
+    with _locked(path):
+        if path.exists():
+            return json.loads(path.read_text())
+        prepared = prepare_program(spec['program']['family'], {'support': spec['support'], 'query': spec['query']},
+                                   evaluate=evaluate, settings=spec['settings'], fitter=fitter, spec=spec)
+        prepared['parent_sha256'] = spec['parent_sha256']
+        write_json_durable(path, prepared)
+        memo = path.parent / 'measurements.json'
+        rows = json.loads(memo.read_text()) if memo.exists() else []
+        rows.append({'parent_sha256': spec['parent_sha256'], 'support_success': prepared['support_success'],
+                     'admitted': prepared['admitted']})
+        write_json_durable(memo, rows)
+        return prepared
+
+
+def episode_spec(family, split, *, settings, out, parent_sha256, prepared_path, stage_out):
     program_cases = split['support']
     return {'schema': SPEC_SCHEMA, 'parent_sha256': parent_sha256,
-            'program': {'id': f'memetic:{family}', 'family': family.split('@')[0],
+            'program': {'id': f'memetic:{family}', 'family': family.split('@')[0], 'key': family,
                         'files': program_cases[0]['semantics']['files'],
                         **brief(family, program_cases)},
             'support': split['support'], 'query': split.get('query') or split['dev'],
-            'evidence': {'attempts': prepared['attempts'], 'success': prepared['support_success']},
-            'baselines': prepared['baselines'],
+            'prepared_path': str(prepared_path), 'stage_out': str(stage_out),
+            # The parent's unchanged support collection (written by preparation; the bank fit reads only these runs).
+            'evidence': {'rollouts': str(Path(out) / 'evals' / parent_sha256[:16] / 'baseline-support' / 'collection'
+                                         / 'rollouts.jsonl')},
+            'settings': {key: settings[key] for key in ('min_success', 'max_success', 'query', 'query_rollouts',
+                                                        'expensive_seconds', 'samples', 'ablation')},
             'budget': {'evaluations': settings['evaluations'], 'fits': settings['fits']},
             'eval': {key: settings[key] for key in ('samples', 'workers', 'case_seconds', 'max_model_requests',
                                                     'max_turns')} | {'seed_base': 31000},
@@ -207,7 +289,6 @@ def episode_case(spec_path, spec, *, settings):
     spec_sha = hashlib.sha256(Path(spec_path).read_bytes()).hexdigest()
     program = spec['program']
     brief_value = {'family': program['family'], 'root': program['root'], 'functions': program['functions'],
-                   'supportAttempts': len(spec['evidence']['attempts']), 'supportSuccess': spec['evidence']['success'],
                    'budget': spec['budget']}
     world_ids = [case['id'] for case in spec['support'] + spec['query']]
     return {'version': 'natlang.program/2', 'id': f"memetic:{program['family']}:{spec_sha[:16]}", 'kind': 'lambda_source',
@@ -239,43 +320,57 @@ def repetition(cases):
             'mean_brief_similarity': round(similarity, 4)}
 
 
-def build(*, cases, out, evaluate_for, parent_sha256, settings, protected=None, families=None, log=print):
-    """Prepare programs and write episode specs and the ``memetic_improve`` task source. ``evaluate_for(out_dir, family)``
-    returns an evaluator bound to that directory and program."""
+def _excluded(memo_path, parents, settings):
+    """A program whose latest support measurement had no headroom waits ``stale_parents`` parents before it is
+    measured again (the parent changes every update, so a hopeless program would otherwise be re-prepared each round)."""
+    if not memo_path.exists():
+        return False
+    rows = json.loads(memo_path.read_text())
+    if not rows or rows[-1]['admitted']:
+        return False
+    since = len(parents) - 1 - max((i for i, p in enumerate(parents) if p == rows[-1]['parent_sha256']), default=-1)
+    return since < settings['stale_parents']
+
+
+def build(*, cases, out, parent_sha256, settings, protected=None, families=None, log=print):
+    """Write episode specs and the ``memetic_improve`` task source for one parent. Crisp and model-free (the
+    controller runs it when a memetic round is due); the parent's evidence and baselines are prepared lazily by the
+    first rollout of each episode inside the actor lease (``ensure_prepared``)."""
     settings = {**DEFAULTS, **(settings or {})}
     out = Path(out)
+    out.mkdir(parents=True, exist_ok=True)
+    parents_path = out / 'parents.json'
+    parents = json.loads(parents_path.read_text()) if parents_path.exists() else []
+    if parent_sha256 not in parents:
+        parents.append(parent_sha256)
+        write_json_durable(parents_path, parents)
     pool = program_pool(cases, settings=settings, protected=protected)
     chosen = [f for f in (families or sorted(pool)) if f in pool]
-    rows, programs = [], []
+    rows, held_rows, programs = [], [], []
     for family in chosen:
         entry = pool[family]
         split = split_program(entry, settings)
         directory = out / 'programs' / _hash(family)[:16]
-        prepared_path = directory / f'prepared-{parent_sha256[:16]}.json'
-        if prepared_path.exists():
-            prepared = json.loads(prepared_path.read_text())
-        else:
-            prepared = prepare_program(family, split, evaluate=evaluate_for(directory / 'baselines' / parent_sha256[:16], family),
-                                       settings=settings, out=directory)
-            write_json_durable(prepared_path, prepared)
-        programs.append({'family': family, 'held': entry['held'], 'headroom': prepared['headroom'],
-                         'admitted': prepared['admitted'], 'support_success': prepared['support_success'],
-                         'baselines': {k: (v or {}).get('success') for k, v in prepared['baselines'].items()}})
+        directory.mkdir(parents=True, exist_ok=True)
+        excluded = _excluded(directory / 'measurements.json', parents, settings)
+        programs.append({'family': family, 'held': entry['held'], 'excluded_without_headroom': excluded,
+                         'worlds': {name: len(value) for name, value in split.items()}})
         log(json.dumps({'event': 'memetic_program', **programs[-1]}))
-        if not prepared['admitted']:
+        if excluded:
             continue
-        spec = episode_spec(family, split, prepared, settings=settings, out=directory / 'episodes' / parent_sha256[:16],
-                            parent_sha256=parent_sha256)
+        spec = episode_spec(family, split, settings=settings, out=directory / 'episodes' / parent_sha256[:16],
+                            parent_sha256=parent_sha256, stage_out=out,
+                            prepared_path=directory / f'prepared-{parent_sha256[:16]}.json')
         spec_path = directory / f'spec-{parent_sha256[:16]}.json'
         write_json_durable(spec_path, spec)
-        row = episode_case(spec_path, spec, settings=settings)
-        (rows if not entry['held'] else []).append(row)
-        if entry['held']:
-            write_json_durable(directory / 'held-episode.json', row)
+        (held_rows if entry['held'] else rows).append(episode_case(spec_path, spec, settings=settings))
     source = out / f'memetic-tasks-{parent_sha256[:16]}.jsonl'
     source.write_text(''.join(json.dumps(row, ensure_ascii=False) + '\n' for row in rows))
+    held = out / f'memetic-held-{parent_sha256[:16]}.jsonl'
+    held.write_text(''.join(json.dumps(row, ensure_ascii=False) + '\n' for row in held_rows))
     receipt = {'schema': STAGE_SCHEMA, 'parent_sha256': parent_sha256, 'settings': settings,
                'task_source': {'path': str(source), 'sha256': hashlib.sha256(source.read_bytes()).hexdigest()},
+               'held_source': {'path': str(held), 'sha256': hashlib.sha256(held.read_bytes()).hexdigest()},
                'programs': programs, 'repetition': repetition(rows),
                'held_programs': sorted(f for f in chosen if pool[f]['held'])}
     write_json_durable(out / f'stage-{parent_sha256[:16]}.json', receipt)
@@ -301,20 +396,32 @@ def receipt_path(controller_out, parent_sha256):
     return Path(controller_out) / 'memetic' / f'stage-{parent_sha256[:16]}.json'
 
 
-def bind_round(config, declared, state, parent_sha256):
-    """The controller config of a due memetic round, or None. A round is due every ``memetic_every`` rounds; it uses
-    the memetic task source built for the current parent (``memetic_stage build --out <controller out>/memetic``);
-    without one the controller keeps ordinary rounds and records the pending build."""
+def protected_filter():
+    """The complete current protection union (held manifests and related worlds): such worlds never enter a program."""
+    from ..common.custody import ProtectedWorlds
+    protected_worlds = ProtectedWorlds.load()
+    return lambda case: bool(protected_worlds.related({'id': case['id'], 'source_groups': case.get('source_groups') or [],
+                                                       'source_ids': case.get('source_ids') or []}))
+
+
+def bind_round(config, declared, state, parent_sha256, *, protected=None):
+    """The controller config of a due memetic round, or None. A round is due every ``memetic_every`` rounds. The
+    controller builds the parent's memetic task source itself (crisp, model-free) from the declared program source;
+    the per-parent evidence and baselines are prepared inside the round's actor lease by the episodes."""
     parameters = declared['parameters']
     every = parameters.get('memetic_every', 4)
     if (state.get('round', 0) + 1) % every:
         return None
     path = receipt_path(config['out'], parent_sha256)
     memetic = state.setdefault('interleave', {}).setdefault('memetic', {'pending': None})
+    settings = {**DEFAULTS, **parameters.get('settings', {})}
+    program_source = declared['program_source']
     if not path.exists():
-        memetic['pending'] = {'round': state.get('round', 0), 'parent_sha256': parent_sha256,
-                              'reason': 'no memetic task source built for this parent'}
-        return None
+        source_path = Path(program_source['path'])
+        if hashlib.sha256(source_path.read_bytes()).hexdigest() != program_source['sha256']:
+            raise ValueError('memetic program source changed after its recipe binding')
+        build(cases=list(read_jsonl(source_path)), out=path.parent, parent_sha256=parent_sha256, settings=settings,
+              protected=protected if protected is not None else protected_filter())
     receipt = json.loads(path.read_text())
     source = Path(receipt['task_source']['path'])
     if (receipt.get('parent_sha256') != parent_sha256 or not source.is_file() or
@@ -325,13 +432,90 @@ def bind_round(config, declared, state, parent_sha256):
                               'reason': 'no program has curriculum headroom under this parent'}
         return None
     memetic['pending'] = None
+    index = state.get('round', 0) // every  # this memetic round's ordinal (stable across repeated binds)
     rows, group = parameters.get('programs_per_round', 2), parameters.get('group', 4)
-    bound = {**config, 'cases': str(source), 'rows_per_round': rows, 'group': group}
+    bound = {**config, 'cases': str(source), 'rows_per_round': rows, 'group': group,
+             'memetic_round': {'stage_out': str(path.parent), 'parent_sha256': parent_sha256,
+                               'receipt': {'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()},
+                               'promotion_due': index % settings['promotion_every'] == 0,
+                               'promotion_min_gain': parameters.get('promotion_min_gain', 0.05),
+                               'settings': settings}}
     if config.get('task_curriculum') is not None:
         # The selector's budget floor (16 tasks x 8 samples) is for ordinary rounds; an improvement episode runs its
         # program dozens of times, so a memetic round keeps its declared size.
         bound['task_curriculum'] = {**config['task_curriculum'], 'min_rows_per_round': rows, 'min_group': group}
     return bound
+
+
+def after_collection(round_info, *, endpoint, round_out, collect=None, log=print):
+    """Inside the memetic round's actor lease, after its collection: export distillation candidates, then run the
+    held-program promotion evaluation when due. Failures are recorded, never silently dropped, and do not discard the
+    round's collected learning."""
+    out = Path(round_info['stage_out'])
+    record = {'schema': 'natlang.memetic-after-collection/1', 'round_out': str(round_out),
+              'parent_sha256': round_info['parent_sha256']}
+    try:
+        record['distillation'] = distill(Path(round_out), out, endpoint=endpoint, parent_sha256=round_info['parent_sha256'])
+    except Exception as error:  # noqa: BLE001 - recorded for supervision
+        record['distillation_error'] = f'{type(error).__name__}: {error}'[:2000]
+    if round_info.get('promotion_due'):
+        try:
+            record['promotion'] = promote(out, round_info, endpoint=endpoint, collect=collect)
+        except Exception as error:  # noqa: BLE001 - recorded for supervision
+            record['promotion_error'] = f'{type(error).__name__}: {error}'[:2000]
+    Path(round_out).mkdir(parents=True, exist_ok=True)
+    write_json_durable(Path(round_out) / 'memetic-after-collection.json', record)
+    log(json.dumps({'event': 'memetic_after_collection', **{k: v for k, v in record.items() if k != 'distillation'}}))
+    return record
+
+
+def held_gains(rollouts, families):
+    """{program family: mean held-development gain over the anchor} from scored held episodes."""
+    gains = {}
+    for row in rollouts:
+        memetic = (row.get('reward') or {}).get('memetic')
+        if memetic is not None and row.get('task_id') in families:
+            gains.setdefault(families[row['task_id']], []).append(memetic['gain'])
+    return {family: sum(values) / len(values) for family, values in gains.items()}
+
+
+def promote(out, round_info, *, endpoint, collect=None):
+    """Held programs (never meta-trained) improved by the current parent's supervisor, scored on their development
+    worlds; compared with the previous evaluated parent on the same programs (paired). Confirmation worlds are spent
+    once, later, through common.acceptance."""
+    parent = round_info['parent_sha256']
+    receipt = json.loads((out / f'stage-{parent[:16]}.json').read_text())
+    held = Path(receipt['held_source']['path'])
+    rows = list(read_jsonl(held)) if held.exists() else []
+    if not rows:
+        return {'evaluated': False, 'reason': 'no held program has headroom under this parent'}
+    if collect is None:
+        from .production import collect
+    from .memetic_program import actor_identity
+    identity = actor_identity(endpoint)
+    if identity['checkpoint_sha256'] != parent:
+        raise ValueError('promotion actor serves another checkpoint than the memetic parent')
+    settings = round_info['settings']
+    target = out / 'promotion' / parent[:16]
+    report = collect(cases=held, out=target / 'collection', endpoints=[endpoint], policy_id=parent, rows=len(rows),
+                     group=settings['promotion_samples'], workers=settings['workers'], root_mode='student',
+                     seed_base=41000, case_seconds=settings['episode_seconds'],
+                     max_model_requests=4 * settings['max_model_requests'], max_turns=settings['max_turns'],
+                     prompt_rendering='full')
+    families = {row['id']: row['curriculum']['program_family'] for row in rows}
+    gains = held_gains(read_jsonl(target / 'collection' / 'rollouts.jsonl'), families)
+    history_path = out / 'promotion' / 'history.json'
+    history_path.parent.mkdir(parents=True, exist_ok=True)
+    history = json.loads(history_path.read_text()) if history_path.exists() else []
+    previous = next((item for item in reversed(history) if item['parent_sha256'] != parent and item['gains']), None)
+    decision = (promotion(gains, previous['gains'], min_gain=round_info.get('promotion_min_gain', 0.05))
+                if previous else {'promote': None, 'reason': 'first evaluated parent; it is the reference'})
+    entry = {'parent_sha256': parent, 'gains': gains, 'decision': decision,
+             'compared_with': previous['parent_sha256'] if previous else None,
+             'collection': {'scored': report.get('scored'), 'rollouts': report.get('rollouts')}}
+    history.append(entry)
+    write_json_durable(history_path, history)
+    return entry
 
 
 def promotion(candidate, published, *, min_gain=0.05):
@@ -354,8 +538,51 @@ def distillation_rows(rollouts):
         memetic = (rollout.get('reward') or {}).get('memetic')
         if memetic and memetic['gain'] > 0 and rollout['reward']['quality'] > memetic['anchor']:
             rows.append({'task_id': rollout['task_id'], 'sample': rollout['sample'], 'gain': memetic['gain'],
-                         'policy': rollout.get('policy')})
+                         'policy': rollout.get('policy'), 'query_dir': memetic.get('query_dir'),
+                         'committed': memetic.get('committed')})
     return rows
+
+
+def distill(round_out, out, *, endpoint, parent_sha256, export=None):
+    """Distillation candidates of one memetic round: (1) supervisor episodes that beat their anchor (already JOLT+
+    trained whole-graph in this round; listed for RFT/SFT with their exact actor); (2) the improved programs' verified
+    successful query runs lowered to producer/consumer SFT graphs with their exact guidance import
+    (rl.memetic_program.export_training_graphs). Writes ``distill/<parent>/manifest.json``; admission into the SFT
+    source goes through the ordinary source-append mechanism."""
+    rollouts_path = round_out / 'rollouts.jsonl'
+    rows = distillation_rows(read_jsonl(rollouts_path)) if rollouts_path.exists() else []
+    target = out / 'distill' / parent_sha256[:16]
+    graphs, problems = [], []
+    if export is None:
+        from .memetic_program import export_training_graphs, actor_identity
+        identity = actor_identity(endpoint)
+
+        def export(query_dir, destination, written):
+            return export_training_graphs(Path(query_dir) / 'collection', destination,
+                                          program_id=written['program_id'], confirmation_ids=set(),
+                                          written=written['written'], actor=identity, server=endpoint)
+    seen = set()
+    for row in rows:
+        query_dir = row.get('query_dir')
+        written_path = Path(query_dir) / 'guidance-written.json' if query_dir else None
+        if not query_dir or query_dir in seen:
+            continue
+        seen.add(query_dir)
+        if not written_path.exists():
+            problems.append({'query_dir': query_dir, 'reason': 'no single program-wide guidance state to import'})
+            continue
+        try:
+            graphs.append({'query_dir': query_dir, **export(query_dir, target / hashlib.sha256(query_dir.encode()).hexdigest()[:16],
+                                                            json.loads(written_path.read_text()))})
+        except ValueError as error:
+            problems.append({'query_dir': query_dir, 'reason': str(error)[:500]})
+    manifest = {'schema': 'natlang.memetic-distillation/1', 'parent_sha256': parent_sha256,
+                'round_out': str(round_out), 'supervisor_episodes': rows, 'guidance_graphs': graphs,
+                'problems': problems}
+    if rows or graphs or problems:
+        target.mkdir(parents=True, exist_ok=True)
+        write_json_durable(target / 'manifest.json', manifest)
+    return {'supervisor_episodes': len(rows), 'guidance_graph_files': len(graphs), 'problems': len(problems)}
 
 
 def main(argv=None):
@@ -369,24 +596,11 @@ def main(argv=None):
     b.add_argument('--settings', default='{}')
     args = parser.parse_args(argv)
     from .memetic_program import actor_identity
-    from .memetic_workspace import production_evaluator
-    from ..common.custody import ProtectedWorlds
-    protected_worlds = ProtectedWorlds.load()
-    identity = actor_identity(args.endpoint)
     settings = {**DEFAULTS, **json.loads(args.settings)}
-
-    def evaluate_for(directory, family):
-        return production_evaluator({'out': str(directory), 'eval': {**{k: settings[k] for k in (
-            'samples', 'workers', 'case_seconds', 'max_model_requests', 'max_turns')}, 'seed_base': 31000},
-            'program': {'id': f'memetic:{family}'}}, args.endpoint)
-
-    def protected(case):
-        return bool(protected_worlds.related({'id': case['id'], 'source_groups': case.get('source_groups') or [],
-                                              'source_ids': case.get('source_ids') or []}))
-    receipt = build(cases=list(read_jsonl(args.cases)), out=args.out, evaluate_for=evaluate_for,
-                    parent_sha256=identity['checkpoint_sha256'], settings=settings, protected=protected,
-                    families=args.families)
-    print(json.dumps({k: receipt[k] for k in ('task_source', 'repetition', 'held_programs')}))
+    receipt = build(cases=list(read_jsonl(args.cases)), out=args.out,
+                    parent_sha256=actor_identity(args.endpoint)['checkpoint_sha256'], settings=settings,
+                    protected=protected_filter(), families=args.families)
+    print(json.dumps({k: receipt[k] for k in ('task_source', 'held_source', 'repetition', 'held_programs')}))
 
 
 if __name__ == '__main__':

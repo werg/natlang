@@ -60,6 +60,8 @@ DECLARATION = '''declare const workspace: {
   reportDefect(text: string): Promise<{ recorded: true }>;
   /** Evaluations and fits left. */
   budget(): Promise<{ evaluations: number; fits: number }>;
+  /** How the unchanged program did on its support invocations. */
+  baseline(): Promise<{ attempts: number; success: number }>;
 };
 type Attempt = { id: string; world: string; outcome: string; failedChecks: string[]; returned: string; errors: string[] };
 type AttemptStep = { turn: number; tool: string; code?: string; arguments?: string; reasoning?: string; output: string };
@@ -73,7 +75,7 @@ type Change =
 type Evaluation = { ids: string[]; success: number; baseline: number; attempts: Attempt[]; evaluationsLeft: number };'''
 
 METHODS = ('failures', 'attempts', 'attempt', 'source', 'propose', 'evaluate', 'ablate', 'commit',
-           'reportDefect', 'budget')
+           'reportDefect', 'budget', 'baseline')
 # Offered only when the episode has an adapter-capable actor and a bank coefficient-fit service (fallow register M2).
 FIT_DECLARATION = '''
   /** Fit adapter weights (LoRA bank mixture coefficients) on the program's verified support runs; returns a change id. */
@@ -148,15 +150,31 @@ def attempt_steps(rollout_result, limit=40):
 
 
 def compose_guidance(changes):
-    """One program-guidance text from the guidance changes, scope by scope (the stored state's exact source text)."""
-    parts = []
+    """Scoped guidance entries ``[{function: None | name, text}]``: one program-wide text, and one text per scoped
+    function (the program-wide part first, then the function's own). Each entry becomes its own native state, imported
+    only by the calls it is for. Input-class guidance is not here: it becomes a skill (``input_skills``)."""
+    program = [change['text'].strip() for change in changes if change['scope']['kind'] == 'program']
+    functions = {}
     for change in changes:
-        scope = change['scope']
-        head = ('For every call of this program:' if scope['kind'] == 'program' else
-                f"For calls of {scope['name']}:" if scope['kind'] == 'function' else
-                f"For inputs where {scope['when']}:")
-        parts.append(head + '\n' + change['text'].strip())
-    return '\n\n'.join(parts)
+        if change['scope']['kind'] == 'function':
+            functions.setdefault(change['scope']['name'], []).append(change['text'].strip())
+    entries = [{'function': None, 'text': '\n\n'.join(program)}] if program else []
+    entries += [{'function': name, 'text': '\n\n'.join(program + parts)} for name, parts in sorted(functions.items())]
+    return entries
+
+
+def input_skills(changes, root):
+    """Input-class guidance as skills of the root function: the skill listing shows ``when`` as the description and
+    the called model loads the text only for inputs it fits (progressive disclosure, ts-host skills/disclosure.ts)."""
+    skills = []
+    for change in changes:
+        if change['scope']['kind'] == 'inputs':
+            name = 'for-' + (re.sub(r'[^a-z0-9]+', '-', change['scope']['when'].lower()).strip('-')[:32].strip('-') or 'inputs')
+            name = name + '-' + hashlib.sha256(change['scope']['when'].encode()).hexdigest()[:6]
+            skills.append({'kind': 'skill', 'function': Path(root).stem, 'name': name, 'action': 'create',
+                           'description': 'Use for inputs where ' + change['scope']['when'].strip(),
+                           'body': change['text'].strip()})
+    return skills
 
 
 def apply_changes(case, changes):
@@ -223,7 +241,7 @@ class Workspace:
     """One episode's workspace state. ``evaluator(cases, guidance_text, adapter, *, name)`` returns
     ``{'success': float, 'results': [(world, result)], 'dir': str}``; injected so tests run without a model."""
 
-    def __init__(self, spec, evaluator, *, fitter=None, check=check_program, run=None):
+    def __init__(self, spec, evaluator, *, fitter=None, check=check_program, run=None, prepare=None):
         if spec.get('schema') != SPEC_SCHEMA:
             raise ValueError('memetic workspace needs a natlang.memetic-episode/1 spec')
         self.spec = spec
@@ -237,7 +255,33 @@ class Workspace:
         self.state = (json.loads(self.state_path.read_text()) if self.state_path.exists() else
                       {'changes': {}, 'order': [], 'evaluations': [], 'fits': 0, 'committed': None, 'defects': []})
         self.program = spec['program']
-        self.attempts = {item['digest']['id']: item for item in spec['evidence']['attempts']}
+        self._prepare = prepare
+        self._prepared = None
+        # Evaluations are shared by the episode's rollouts: the same change set on the same worlds is measured once.
+        self.shared = Path(spec['out']) / 'shared'
+
+    @property
+    def prepared(self):
+        """The parent's support evidence and query baselines for this program (computed once per episode group)."""
+        if self._prepared is None:
+            if self._prepare is None:
+                raise ValueError('this workspace has no preparation')
+            self._prepared = self._prepare(self.spec, self.evaluate_cases, self.fitter)
+            if not self._prepared['admitted']:
+                raise ValueError('the program has no improvement headroom under this parent '
+                                 f"(support success {self._prepared['support_success']})")
+        return self._prepared
+
+    @property
+    def attempts(self):
+        if not hasattr(self, '_attempts'):
+            self._attempts = {item['digest']['id']: item for item in self.prepared['attempts']}
+        return self._attempts
+
+    def query_cases(self):
+        ids = self.prepared['query_ids']
+        by_id = {case['id']: case for case in self.spec['query']}
+        return [by_id[i] for i in ids]
 
     def _save(self):
         write_json_durable(self.state_path, self.state)
@@ -334,14 +378,18 @@ class Workspace:
         if len(adapters) > 1:
             raise ValueError('one adapter fit per change set')
         files = [change for _, change in changes if change['kind'] in ('instructions', 'signature', 'skill')]
-        return {'ids': [i for i, _ in changes], 'files': files, 'guidance': compose_guidance(guidance) or None,
+        files += input_skills(guidance, self.program['root'])
+        return {'ids': [i for i, _ in changes], 'files': files,
+                'guidance': compose_guidance([c for c in guidance if c['scope']['kind'] != 'inputs']) or None,
                 'adapter': adapters[0]['adapter'] if adapters else None}
 
-    def _run(self, cases, candidate, name):
+    def _run(self, cases, candidate, name, samples=None):
         changed = [apply_changes(case, candidate['files']) for case in cases]
-        return self.evaluate_cases(changed, candidate['guidance'], candidate['adapter'], name=name, out=self.out)
+        return self.evaluate_cases(changed, candidate['guidance'], candidate['adapter'], name=name, out=self.shared,
+                                   samples=samples)
 
     def evaluate(self, ids):
+        baseline = self.prepared['support_success']  # the parent's own measurement precedes any candidate's
         budget = self.spec['budget']['evaluations'] - len(self.state['evaluations'])
         candidate = self.candidate(ids)
         key = canonical_json_sha256_hex(candidate)
@@ -359,7 +407,7 @@ class Workspace:
         for (world, result), digest in zip(report['results'], attempts):
             self.attempts.setdefault(digest['id'], {'digest': digest, 'steps': attempt_steps(result)})
         self._save()
-        return {'ids': candidate['ids'], 'success': report['success'], 'baseline': self.spec['evidence']['success'],
+        return {'ids': candidate['ids'], 'success': report['success'], 'baseline': baseline,
                 'attempts': attempts, 'evaluationsLeft': budget}
 
     def ablate(self, ids):
@@ -375,7 +423,10 @@ class Workspace:
         if self.fitter is None:
             return {'problems': ['adapter fits are unavailable in this run (no bank coefficient-fit service is '
                                  'configured); use guidance, skills or patches']}
-        result = self.fitter(self.spec, spec or {})
+        try:
+            result = self.fitter(self.spec, spec or {})
+        except ValueError as error:  # FitProblem: the supervisor's own fit request was not applicable
+            return {'problems': list(getattr(error, 'problems', None) or [str(error)[:300]])}
         self.state['fits'] += 1
         change_id = 'c' + str(len(self.state['order']) + 1)
         self.state['changes'][change_id] = {'kind': 'adapter', 'adapter': result['adapter'], 'spec': spec or {}}
@@ -400,33 +451,67 @@ class Workspace:
         return {'evaluations': self.spec['budget']['evaluations'] - len(self.state['evaluations']),
                 'fits': self.spec['budget']['fits'] - self.state['fits']}
 
+    def baseline(self):
+        return {'attempts': len(self.prepared['attempts']), 'success': self.prepared['support_success']}
+
     # --- host-only outcome ----------------------------------------------------------------------------------------
     def score(self):
-        """Evaluate the committed change set on the private query worlds; the graded episode outcome."""
+        """Evaluate the committed change set on the private query worlds (the same worlds and seeds as the
+        baselines: paired); the graded episode outcome, with the consumer-use ablation of committed guidance."""
         cached = self.out / 'score.json'
         if cached.exists():
             return json.loads(cached.read_text())
+        prepared = self.prepared
         committed = self.state['committed']
         candidate = self.candidate(committed['ids'] if committed else [])
-        leak = leaked_answers(candidate, self.spec['query'])
+        query_cases = self.query_cases()
+        samples = prepared['query_samples']
+        leak = leaked_answers(candidate, query_cases)
         if leak:
             query = {'success': 0.0, 'refused': 'candidate text reproduces a query answer verbatim'}
         elif candidate['ids']:
-            query = self._run(self.spec['query'], candidate, 'query-' + canonical_json_sha256_hex(candidate)[:16])
+            query = self._run(query_cases, candidate, 'query-' + canonical_json_sha256_hex(candidate)[:16], samples)
         else:
-            query = {'success': self.spec['baselines']['none']['success']}
-        quality, anchor, gain, cost = memetic_reward(query['success'], self.spec['baselines'],
+            query = {'success': prepared['baselines']['none']['success']}
+        quality, anchor, gain, cost = memetic_reward(query['success'], prepared['baselines'],
             evaluations=len(self.state['evaluations']), fits=self.state['fits'], budget=self.spec['budget'],
             cost_weight=self.spec.get('cost_weight', 0.05), committed=committed is not None)
+        ablation = (self.ablation(candidate, query, query_cases, samples)
+                    if candidate['guidance'] and not leak and self.spec['settings'].get('ablation', True) else None)
         result = {'score': 100, 'done': True, 'moves': len(self.state['evaluations']),
                   'memetic': {'schema': 'natlang.memetic-outcome/1', 'quality': quality, 'anchor': anchor,
                               'gain': gain, 'cost': cost, 'query_success': query['success'],
+                              'noise': prepared['baselines']['none'].get('noise'),
+                              'query_worlds': len(query_cases), 'query_samples': samples,
                               'committed': committed, 'candidate': candidate,
-                              'baselines': self.spec['baselines'], 'defects': self.state['defects'],
+                              'baselines': prepared['baselines'], 'defects': self.state['defects'],
                               'evaluations': self.state['evaluations'], 'leak_refused': bool(leak),
-                              'query_dir': query.get('dir')}}
+                              'ablation': ablation, 'query_dir': query.get('dir')}}
         write_json_durable(cached, result)
         return result
+
+    def ablation(self, candidate, query, query_cases, samples):
+        """Actual vs shuffled vs no guidance on the query worlds (span basis: guidance that a shuffled text from
+        another program explains as well is a defect). Not part of the reward; recorded with every committed
+        guidance change."""
+        shuffled = shuffled_guidance(self.spec, candidate['guidance'])
+        result = {'actual': query['success'], 'none': self.prepared['baselines']['none']['success']}
+        if shuffled is None:
+            return {**result, 'shuffled': None, 'reason': 'no other program guidance under this parent yet'}
+        arm = {**candidate, 'guidance': [{'function': entry['function'], 'text': shuffled['text']}
+                                         for entry in candidate['guidance']]}
+        report = self._run(query_cases, arm, 'ablation-shuffled-' + canonical_json_sha256_hex(arm)[:16], samples)
+        return {**result, 'shuffled': report['success'], 'shuffled_source': shuffled['source'],
+                'distinguishable': query['success'] > report['success']}
+
+
+def offered(fits):
+    """The declaration and methods the supervisor sees: ``fit`` only when this episode has a bank fit service."""
+    if not fits:
+        return {'declaration': DECLARATION, 'methods': list(METHODS)}
+    head, tail = DECLARATION.split('\n};\n', 1)
+    return {'declaration': head + FIT_DECLARATION + '\n};\n' + tail + FIT_TYPE,
+            'methods': list(METHODS) + ['fit']}
 
 
 def run_directory(run):
@@ -435,9 +520,32 @@ def run_directory(run):
     return f"{safe}-{hashlib.sha256(str(run).encode()).hexdigest()[:12]}"
 
 
+def shuffled_guidance(spec, own):
+    """Guidance of ANOTHER program under the same parent: a committed guidance text from its episodes, else its
+    default (mechanical) guidance. None when no other program has any."""
+    own_texts = {entry['text'] for entry in own or []}
+    programs = Path(spec['stage_out']) / 'programs'
+    parent = spec['parent_sha256'][:16]
+    mine = Path(spec['prepared_path']).parent
+    for directory in sorted(programs.iterdir()) if programs.exists() else []:
+        if directory == mine:
+            continue
+        for score in sorted((directory / 'episodes' / parent / 'runs').glob('*/score.json')):
+            guidance = ((json.loads(score.read_text()).get('memetic') or {}).get('candidate') or {}).get('guidance')
+            if guidance and guidance[0]['text'] not in own_texts:
+                return {'text': guidance[0]['text'], 'source': str(score)}
+        prepared = directory / f'prepared-{parent}.json'
+        if prepared.exists():
+            default = (json.loads(prepared.read_text()).get('baselines') or {}).get('default')
+            if default and default.get('text') and default['text'] not in own_texts:
+                return {'text': default['text'], 'source': str(prepared)}
+    return None
+
+
 def leaked_answers(candidate, query_cases):
     """Defensive guard: a candidate whose texts contain a query world's expected answer verbatim is refused."""
-    texts = [candidate.get('guidance') or ''] + [json.dumps(change, ensure_ascii=False) for change in candidate['files']]
+    texts = [entry['text'] for entry in candidate.get('guidance') or []] + [
+        json.dumps(change, ensure_ascii=False) for change in candidate['files']]
     blob = '\n'.join(texts)
     for case in query_cases:
         expected = (case.get('semantics') or {}).get('expected')
@@ -467,47 +575,68 @@ def memetic_reward(query_success, baselines, *, evaluations, fits, budget, cost_
 # --- world process --------------------------------------------------------------------------------------------------
 
 def production_evaluator(spec, endpoint):
-    """Evaluate a changed program on a slice through the production collector, on the episode's actor."""
+    """Evaluate a changed program on a slice through the production collector, on the episode's actor (which must
+    serve the episode's parent checkpoint). ``guidance`` is the scoped entry list of ``compose_guidance``: each entry
+    is written as its own native state; one program-wide entry travels as one binding, scoped entries as a list
+    (each binding names its function). Results are cached by name and computed once under a lock, so the rollouts of
+    an episode group share identical evaluations."""
+    import time
     from ..eval.task_packet import read_jsonl
     from .memetic_program import write_state, archive_state, program_binding, actor_identity
+    from .memetic_stage import _locked
     from .production import collect
     identity = actor_identity(endpoint)
+    if spec.get('parent_sha256') and identity['checkpoint_sha256'] != spec['parent_sha256']:
+        raise ValueError('the episode actor serves another checkpoint than the episode parent')
     settings = spec['eval']
 
-    def evaluate(cases, guidance, adapter, *, name, out=None):
+    def evaluate(cases, guidance, adapter, *, name, out=None, samples=None):
         if adapter is not None:
             raise ValueError('adapter evaluation needs an adapter-capable actor; this episode has none')
         out = Path(out or spec['out']) / 'evals' / identity['checkpoint_sha256'][:16] / name
-        if (out / 'summary.json').exists():
-            return json.loads((out / 'summary.json').read_text())
-        out.mkdir(parents=True, exist_ok=True)
-        packet = out / 'cases.jsonl'
-        packet.write_text(''.join(json.dumps(case, ensure_ascii=False) + '\n' for case in cases))
-        binding = None
-        if guidance:
-            written = write_state(endpoint, guidance, identity)
-            binding = program_binding(spec['program']['id'], identity, guidance, written,
-                                      archive_state(endpoint, out, written))
-        report = collect(cases=packet, out=out / 'collection', endpoints=[endpoint],
-                         policy_id=identity['checkpoint_sha256'], rows=len(cases), group=settings['samples'],
-                         workers=settings['workers'], root_mode='student', seed_base=settings['seed_base'],
-                         case_seconds=settings['case_seconds'], max_model_requests=settings['max_model_requests'],
-                         max_turns=settings['max_turns'], program_guidance=binding, prompt_rendering='full')
-        results = []
-        rewards = read_jsonl(out / 'collection' / 'rewards.jsonl')
-        for reward in rewards:
-            path = out / 'collection' / f"row-{reward['group']:03d}" / f"sample-{reward['sample']:02d}" / 'results.jsonl'
-            result = (read_jsonl(path) or [None])[0] if path.exists() else None
-            if result is not None:
-                result.setdefault('outcome', {})['status'] = reward['outcome']
-            results.append((cases[reward['group']]['id'], result))
-        scored = [r for r in rewards if r['reward'] is not None]
-        summary = {'success': (sum(r['reward'] for r in scored) / len(scored)) if scored else 0.,
-                   'scored': len(scored), 'results': results, 'dir': str(out),
-                   **({'guidance_state': binding['native_state_id']} if binding else {}),
-                   'report': {key: report.get(key) for key in ('successes', 'scored', 'rollouts')}}
-        write_json_durable(out / 'summary.json', summary)
-        return summary
+        with _locked(out):
+            if (out / 'summary.json').exists():
+                return json.loads((out / 'summary.json').read_text())
+            started = time.monotonic()
+            out.mkdir(parents=True, exist_ok=True)
+            packet = out / 'cases.jsonl'
+            packet.write_text(''.join(json.dumps(case, ensure_ascii=False) + '\n' for case in cases))
+            bindings = []
+            for entry in guidance or []:
+                written = write_state(endpoint, entry['text'], identity)
+                binding = program_binding(spec['program']['id'], identity, entry['text'], written,
+                                          archive_state(endpoint, out, written))
+                if entry['function'] is not None:
+                    binding['function'] = entry['function']
+                bindings.append(binding)
+                if len(guidance) == 1 and entry['function'] is None:
+                    write_json_durable(out / 'guidance-written.json',
+                                       {'program_id': spec['program']['id'], 'written': written})
+            program_guidance = (None if not bindings else
+                                bindings[0] if len(bindings) == 1 and 'function' not in bindings[0] else bindings)
+            group = samples or settings['samples']
+            report = collect(cases=packet, out=out / 'collection', endpoints=[endpoint],
+                             policy_id=identity['checkpoint_sha256'], rows=len(cases), group=group,
+                             workers=settings['workers'], root_mode='student', seed_base=settings['seed_base'],
+                             case_seconds=settings['case_seconds'], max_model_requests=settings['max_model_requests'],
+                             max_turns=settings['max_turns'], program_guidance=program_guidance,
+                             prompt_rendering='full')
+            results = []
+            rewards = read_jsonl(out / 'collection' / 'rewards.jsonl')
+            for reward in rewards:
+                path = out / 'collection' / f"row-{reward['group']:03d}" / f"sample-{reward['sample']:02d}" / 'results.jsonl'
+                result = (read_jsonl(path) or [None])[0] if path.exists() else None
+                if result is not None:
+                    result.setdefault('outcome', {})['status'] = reward['outcome']
+                results.append((cases[reward['group']]['id'], result))
+            scored = [r for r in rewards if r['reward'] is not None]
+            summary = {'success': (sum(r['reward'] for r in scored) / len(scored)) if scored else 0.,
+                       'scored': len(scored), 'results': results, 'dir': str(out), 'samples': group,
+                       'seconds': round(time.monotonic() - started, 1),
+                       **({'guidance_states': [b['native_state_id'] for b in bindings]} if bindings else {}),
+                       'report': {key: report.get(key) for key in ('successes', 'scored', 'rollouts')}}
+            write_json_durable(out / 'summary.json', summary)
+            return summary
     return evaluate
 
 
@@ -532,7 +661,7 @@ def serve(stdin=sys.stdin, stdout=None):
         'fit': lambda w, a: w.fit(*(a.get('args') or [{}])[:1]),
         'commit': lambda w, a: w.commit(*((a.get('args') or []) + [[], ''])[:2]),
         'reportDefect': lambda w, a: w.report_defect(*(a.get('args') or [''])[:1]),
-        'budget': lambda w, a: w.budget(), 'score': lambda w, a: w.score(),
+        'budget': lambda w, a: w.budget(), 'baseline': lambda w, a: w.baseline(), 'score': lambda w, a: w.score(),
     }
     for line in stdin:
         request = json.loads(line)
@@ -542,8 +671,14 @@ def serve(stdin=sys.stdin, stdout=None):
                 endpoint = os.environ.get('NATLANG_MEMETIC_ENDPOINT') or spec.get('endpoint')
                 if not endpoint:
                     raise ValueError('the memetic workspace needs the episode actor endpoint (NATLANG_MEMETIC_ENDPOINT)')
-                workspace = Workspace(spec, production_evaluator(spec, endpoint), run=request.get('run'))
-                result = {'service': 'workspace', 'declaration': DECLARATION, 'methods': list(METHODS)}
+                from .memetic_stage import ensure_prepared
+                from .memetic_fit import adapter_evaluator, bank_fitter
+                service = os.environ.get('NATLANG_BANK_SERVICE')
+                fitter = (lambda episode, fit_spec: bank_fitter(episode, fit_spec, endpoint=service)) if service else None
+                workspace = Workspace(spec, adapter_evaluator(spec, endpoint, base=production_evaluator(spec, endpoint)),
+                                      run=request.get('run'), prepare=ensure_prepared, fitter=fitter)
+                workspace.prepared  # the parent's evidence and baselines, before the supervisor's first turn
+                result = {'service': 'workspace', **offered(fitter is not None)}
             elif workspace is None:
                 raise ValueError('load the episode first')
             else:
