@@ -262,7 +262,7 @@ HANDLERS['native_interleaved_rl'] = {
     'required_inputs':{'rl_task_source'},'optional_inputs':set(),
     'parameters':{'sft_stage','rl_rounds_per_window','start_with','rows_per_round','group','task_curriculum',
                   'rl_policy_loss','update_objective','max_model_requests','max_turns','case_seconds',
-                  'neuralese_use_bonus'},
+                  'neuralese_use_bonus','guidance_stage'},
     'result':'checkpoint.pt'}
 INTERLEAVED_RL_KINDS=frozenset({'native_interleaved_rl'})
 # Memetic meta-learning ("improve program P" episodes, rl/memetic_stage.py) rides on a declared interleaved RL stage:

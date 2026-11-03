@@ -26,7 +26,11 @@ SCHEMA = 'natlang.rl-sft-interleave/1'
 CONTROLLER_KEYS = {'rows_per_round': 'rows_per_round', 'group': 'group', 'task_curriculum': 'task_curriculum',
                    'rl_policy_loss': 'policy_loss', 'update_objective': 'update_objective',
                    'max_model_requests': 'max_model_requests', 'max_turns': 'max_turns',
-                   'case_seconds': 'case_seconds', 'neuralese_use_bonus': 'neuralese_use_bonus'}
+                   'case_seconds': 'case_seconds', 'neuralese_use_bonus': 'neuralese_use_bonus',
+                   # JOLT+ guidance authoring: 'backbone' records text twins without a writer; 'writer' runs the
+                   # (text) guidance writer, whose checked outputs seed the guidance learned operator (fallow C6).
+                   'guidance_stage': 'jolt_guidance_stage'}
+GUIDANCE_STAGES = ('backbone', 'writer')
 
 
 def validate_stage_parameters(parameters):
@@ -51,6 +55,8 @@ def validate_stage_parameters(parameters):
             raise ValueError('interleaved RL rl_policy_loss must be a canonical policy loss declaration')
     if parameters.get('update_objective', 'policy') not in ('policy', 'self-distillation'):
         raise ValueError('interleaved RL update_objective must be policy or self-distillation')
+    if parameters.get('guidance_stage', 'backbone') not in GUIDANCE_STAGES:
+        raise ValueError('interleaved RL guidance_stage is backbone or writer')
     bonus = parameters.get('neuralese_use_bonus')
     if bonus is not None and (type(bonus) not in (int, float) or not 0 <= bonus <= 1):
         raise ValueError('interleaved RL neuralese_use_bonus must be in [0, 1]')

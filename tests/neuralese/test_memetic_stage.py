@@ -432,3 +432,14 @@ def test_prepare_round_measures_selected_programs_before_collection(tmp_path, mo
     assert len(done) == 1 and done[0]['admitted'] is True and done[0]['support_success'] == 0.25
     spec_path = json.loads(open(receipt['task_source']['path']).readline())['semantics']['world']['task']
     assert stage.ensure_prepared(json.loads(open(spec_path).read()), None)['support_success'] == 0.25, 'read, not rerun'
+
+
+def test_interleaved_stage_declares_the_guidance_writer():
+    from natlang_neuralese.rl import interleave
+    from natlang_neuralese.rl.production import guidance_collection_options
+    base = {'sft_stage': 'sft', 'rl_rounds_per_window': 2}
+    interleave.validate_stage_parameters({**base, 'guidance_stage': 'writer'})
+    with pytest.raises(ValueError, match='backbone or writer'):
+        interleave.validate_stage_parameters({**base, 'guidance_stage': 'native'})
+    assert interleave.CONTROLLER_KEYS['guidance_stage'] == 'jolt_guidance_stage'
+    assert guidance_collection_options('writer') == {} and guidance_collection_options('backbone')['writer'] == 'off'

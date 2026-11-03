@@ -824,7 +824,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     records the effective adapted identity and its adapter binding."""
     if prompt_rendering not in (None,'full'):
         raise ValueError('native on-policy collection requires the full prompt contract')
-    if guidance_stage not in (None,'backbone'):
+    if guidance_stage not in (None,'backbone','writer'):
         raise ValueError('unsupported JOLT guidance stage')
     if guidance_stage=='backbone' and teacher_plan!='crisp':
         raise ValueError('backbone JOLT requires its declared crisp privileged-attempt plan')
