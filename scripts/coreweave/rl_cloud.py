@@ -1591,11 +1591,18 @@ def materialize(run, record):
             sandbox.untar_zst(source, L)
     for link in record.get('links', []):
         target = Path(link['path'])
-        if target.exists():
+        if target.exists() or target.is_symlink():
             target.unlink()
-        os.link(link['same_as'], target)
-    if record.get('state_sha256') and file_digest(L / 'state.json') != record['state_sha256']:
-        raise RuntimeError(f'{L}/state.json differs from export {record["seq"]}')
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if 'symlink_to' in link:
+            os.symlink(link['symlink_to'], target)
+        else:
+            os.link(link['same_as'], target)
+    # The exported state is the active controller's (an SFT lineage's window directory, an RL lineage's root), as the
+    # sandbox's own fetch checks it (2026-11-03: every corrected-mix export failed on <lineage>/state.json).
+    state = sandbox.controller(L)[0] / 'state.json'
+    if record.get('state_sha256') and file_digest(state) != record['state_sha256']:
+        raise RuntimeError(f'{state} differs from export {record["seq"]}')
 
 
 def export_lineage(run, name, live, log=print, get=True):
