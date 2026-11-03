@@ -15,7 +15,7 @@ from pathlib import Path
 
 from natlang_neuralese.common.jsonio import open_jsonl_text
 from natlang_neuralese.data.native_sources import NativeGraphSource
-from natlang_neuralese.data.native_graph_schema import communication_classification
+from natlang_neuralese.data.native_graph_schema import communication_classification, communication_payload_digests
 
 _WORKER_SOURCE = None
 _WORKER_AUDIT = None
@@ -41,6 +41,9 @@ def _parse_line(line):
     entry = {'id': example.id, 'groups': example.source_groups, 'binding': binding,
              'supervised_tokens': sum(weight > 0 for weight in example.target_weights),
              'forward_tokens': example.plan.token_count, **communication_classification(example)}
+    payloads = communication_payload_digests(example) if entry['communication'] else None
+    if payloads:
+        entry['payload_sha256'] = payloads
     base=(entry,len(example.plan.slot_sources),len(example.decisions))
     if _WORKER_AUDIT is None:return base
     from scripts.neuralese_data.audit_acquired_learning_signal import row_signal

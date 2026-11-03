@@ -23,6 +23,7 @@ from transformers import AutoTokenizer
 from natlang_neuralese.common.hashing import sha256_hex as sha256_bytes, sha256_file_hex as sha256_file
 
 from natlang_neuralese.data.native_graph_conversion import text_row_graph, witnessed_pair_graph
+from natlang_neuralese.data.native_graph_schema import edge_kind_of
 from natlang_neuralese.data.text_corpus import (gold_text_rows, tokenizer_fingerprint,
     authenticated_context_writer_sources, authenticated_crisp_context_messages)
 from natlang_neuralese.model.shared_state import ROLE_MARKERS
@@ -1224,6 +1225,11 @@ def _render_trajectory(task):
             occurrence = source_occurrences(writer_record, reader_record, edge['write_name'],
                 body, edge['body_sha256'], writer_occurrence_id=edge.get('writer_occurrence_id'),
                 reader_occurrence_id=edge.get('reader_occurrence_id'))
+            if edge_kind_of(occurrence.get('writer_source_kind'), edge.get('edge_kind')) == 'instruction':
+                # A constant inline instruction is soft-instruction context of its call, not communication: no
+                # producer/consumer pair row (the whole-trajectory chain graph carries it as an instruction import).
+                local['instruction_edges_not_paired'] += 1
+                continue
             occurrence_binding = {'edge_id': edge_identity, 'trajectory': chain,
                 'writer_source_row_sha256': (writer_record.get('source_ref') or {}).get('source_row_sha256'),
                 'reader_source_row_sha256': (reader_record.get('source_ref') or {}).get('source_row_sha256'),

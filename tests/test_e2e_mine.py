@@ -569,3 +569,17 @@ def test_derive_does_not_keep_a_known_unresolved_writer_because_it_has_a_valid_o
     omissions = [json.loads(l) for l in Path(str(stem) + '.omissions.jsonl').open()]
     assert {r['id'] for r in omissions} == {'writer', 'reader'}
     assert next(r for r in omissions if r['id'] == 'reader')['reason'] == 'trajectory_requires_authentication_repair'
+
+
+def test_inline_instruction_writer_edges_are_mined_with_an_explicit_instruction_kind():
+    spec = importlib.util.spec_from_file_location('e2e_edge_kind', Path(__file__).parents[1] / 'scripts/neuralese_data/e2e_mine.py')
+    module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+    rows = [native_row({'id': rid, 'split': 'train', 'source_ref': {'trajectory_id': 'chain'}})
+            for rid in ['writer', 'reader']]
+    base = {'kind': 'native-positional-state', 'writer_record_id': 'writer', 'gradient_edge': True}
+    refs = [{**base, 'name': 'site-1', 'body_sha256': 'a' * 64, 'writer_occurrence_id': 'nso_' + '1' * 64,
+             'reader_occurrence_id': 'nso_' + '2' * 64, 'source_kind': 'inline-instruction'},
+            {**base, 'name': 'result:b', 'body_sha256': 'b' * 64, 'writer_occurrence_id': 'nso_' + '3' * 64,
+             'reader_occurrence_id': 'nso_' + '4' * 64, 'source_kind': 'typed-text-result'}]
+    edges = module.edges_from_authenticated_decisions(rows, [{'id': 'reader', 'references': refs}])
+    assert [edge['edge_kind'] for edge in edges] == ['instruction', 'communication']

@@ -319,6 +319,8 @@ def _source_hash(examples):
                           'imports': list(invocation_dict(node)['imports']),
                           'producing': node.producing, 'logical_producing': node.logical_producing}
                          for node in item.plan.invocations]}
+        if getattr(item, 'instruction_imports', ()):
+            row['instruction_imports'] = list(item.instruction_imports)
         value = json.dumps(row, sort_keys=True, separators=(',', ':')).encode()
         digest.update(len(value).to_bytes(8, 'big'))
         digest.update(value)

@@ -4,6 +4,7 @@ These are schedule metadata, never another optimizer/RNG history. The live
 participant owns one current model/optimizer/FP8/RNG continuation stream.
 """
 from __future__ import annotations
+import hashlib
 import math
 import json
 from pathlib import Path
@@ -339,8 +340,47 @@ def checked_policy_history(proof):
     return dict(reference)
 
 
-def communication_minimum_quotas(entries, families, visits):
-    """Bind repeated native-communication visits to exact CE-family rows."""
+# At most this many readers of one identical payload receive the repeated communication quota (2026-11-03, S2).
+# Repeating a payload's state across more consumers adds consumer contexts, not producer information: three
+# readers per payload still exercise one imported state in several different consumer contexts (and 3 x the
+# 7-visit quota bounds that payload at 21 visits), where the uncapped quota gave one constant 23-token payload
+# 7 visits for each of ~99k readers. Rows beyond the cap keep their ordinary-epoch visits.
+DEFAULT_MAX_READERS_PER_PAYLOAD = 3
+
+
+def cap_readers_per_payload(entries, selected, max_readers):
+    """Choose which ``selected`` communication rows keep their repeated quota under a per-payload reader cap.
+
+    Rows are taken in a deterministic id-hash order (neutral to source order and stable under appends). A row
+    keeps its quota when at least one of its payloads still has capacity, and then occupies a reader slot of every
+    payload it carries. Rows without payload digests (indexes built before the digests existed, logical imports)
+    cannot be identified and keep the quota; they are counted as unknown coverage, never as distinct.
+    """
+    if max_readers is None:
+        return set(selected), {'max_readers_per_payload': None, 'capped_rows': 0, 'unknown_payload_rows': 0}
+    if type(max_readers) is not int or max_readers < 1:
+        raise ValueError('readers per identical payload must be a positive integer or None')
+    by_id = {entry['id']: entry for entry in entries}
+    used, kept, capped, unknown = {}, set(), 0, 0
+    for ident in sorted(selected, key=lambda ident: hashlib.sha256(ident.encode()).hexdigest()):
+        digests = by_id[ident].get('payload_sha256')
+        if not digests:
+            kept.add(ident)
+            unknown += 1
+            continue
+        if any(used.get(digest, 0) < max_readers for digest in digests):
+            kept.add(ident)
+            for digest in digests:
+                used[digest] = used.get(digest, 0) + 1
+        else:
+            capped += 1
+    return kept, {'max_readers_per_payload': max_readers, 'capped_rows': capped, 'unknown_payload_rows': unknown,
+                  'distinct_payloads': len(used)}
+
+
+def communication_minimum_quotas(entries, families, visits, *, max_readers_per_payload=DEFAULT_MAX_READERS_PER_PAYLOAD,
+                                 report=None):
+    """Bind repeated native-communication visits to exact CE-family rows, at most N readers per identical payload."""
     if type(visits) is not int or visits < 1 or len(entries) != len(families):
         raise ValueError('communication minimum needs positive integral visits and complete family map')
     selected = {}
@@ -351,10 +391,14 @@ def communication_minimum_quotas(entries, families, visits):
             selected[entry['id']] = visits
     if not selected:
         raise ValueError('communication quota requires actual native-communication graphs')
-    return selected
+    kept, cap_report = cap_readers_per_payload(entries, selected, max_readers_per_payload)
+    if report is not None:
+        report.update(cap_report)
+    return {ident: visits for ident in selected if ident in kept}
 
 
-def apply_communication_quota_options(options, previous_options, *, train, ce_policy, stage_id, requested_visits):
+def apply_communication_quota_options(options, previous_options, *, train, ce_policy, stage_id, requested_visits,
+                                      max_readers_per_payload=DEFAULT_MAX_READERS_PER_PAYLOAD):
     """Apply the ordinary trainer's source-bound communication quota policy."""
     previous_options=previous_options or {}
     previous_quota=previous_options.get('communication_quota_policy') or {}
@@ -370,13 +414,15 @@ def apply_communication_quota_options(options, previous_options, *, train, ce_po
         raise ValueError('communication minimum visits require an exact logical-family CE map')
     if previous_quota.get('stage_id')==stage_id and requested_visits<previous_quota.get('visits',1):
         raise ValueError('communication minimum visits cannot silently reduce an earned quota')
-    quota_rows=communication_minimum_quotas(train.entries,load_map(balance['map'],train),requested_visits)
+    cap_report={}
+    quota_rows=communication_minimum_quotas(train.entries,load_map(balance['map'],train),requested_visits,
+                                            max_readers_per_payload=max_readers_per_payload,report=cap_report)
     quota_values=dict(previous_options.get('_objective_required_visits') or {}) if previous_quota.get('stage_id')==stage_id else {}
     for ident,minimum in quota_rows.items():quota_values[ident]=max(int(quota_values.get(ident,0)),minimum)
     options['_objective_required_visits']=quota_values
     options['communication_quota_policy']={'schema':'natlang.communication-minimum-visits/1',
         'stage_id':stage_id,'source_sha256':train.file_sha256,'family_map':balance['map'],
-        'visits':requested_visits,'rows':len(quota_rows),'ordinary_epoch_quota':'unchanged',
+        'visits':requested_visits,'rows':len(quota_rows),'payload_reader_cap':cap_report,'ordinary_epoch_quota':'unchanged',
         'repetition':'repeated visits to the same exact graph; not independent examples'}
     return options
 

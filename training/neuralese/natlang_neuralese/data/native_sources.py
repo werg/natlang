@@ -84,11 +84,14 @@ class NativeGraphSource:
                 raise ValueError(f'{self.path}: expected {required_split} rows, got {example.split!r} in {example.id}')
             if example.id in self.bindings:
                 raise ValueError(f'{self.path}: duplicate example id {example.id!r}')
-            from .native_graph_schema import communication_classification
+            from .native_graph_schema import communication_classification, communication_payload_digests
             visits = {'id': example.id, 'groups': example.source_groups, 'binding': binding,
                       'supervised_tokens': sum(weight > 0 for weight in example.target_weights),
                       'forward_tokens': example.plan.token_count,
                       **communication_classification(example)}
+            payloads = communication_payload_digests(example) if visits['communication'] else None
+            if payloads:
+                visits['payload_sha256'] = payloads
             self.entries.append(visits)
             self.bindings[example.id] = binding
             self.groups.update(example.source_groups)
@@ -312,6 +315,8 @@ def _row_bindings(examples):
                             'imports': list(invocation_dict(node)['imports']),
                             'producing': node.producing, 'logical_producing': node.logical_producing}
                            for node in item.plan.invocations]}
+        if getattr(item, 'instruction_imports', ()):
+            value['instruction_imports'] = list(item.instruction_imports)
         if getattr(item, 'decisions', ()):
             value['decisions'] = [asdict(decision) for decision in item.decisions]
         result[item.id] = hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':')).encode()).hexdigest()

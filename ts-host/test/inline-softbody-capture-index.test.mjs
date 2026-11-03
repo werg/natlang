@@ -176,6 +176,12 @@ test('actual runtime collection preserves a captured soft body through materiali
   const writerOccurrence = converted.native_source_conversion.occurrences.find(item => item.role === 'producer');
   assert.equal(writerOccurrence.body, body);
   assert.equal(writerOccurrence.source_kind, 'inline-instruction');
+  // A constant inline instruction is soft-instruction context, explicitly not communication.
+  assert.equal(writerOccurrence.edge_kind, 'instruction');
+  assert.ok(converted.native_source_conversion.occurrences.filter(item => item.source_kind === 'inline-instruction')
+    .every(item => item.edge_kind === 'instruction'));
+  assert.ok(converted.native_source_conversion.occurrences.filter(item => item.source_kind !== 'inline-instruction')
+    .every(item => item.edge_kind === undefined));
   const sourceReceipt = converted.native_source_conversion.source_receipts.find(item =>
     item.schema === 'natlang.native-inline-instruction-source-receipt/1');
   assert.ok(sourceReceipt);

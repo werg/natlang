@@ -83,6 +83,8 @@ export type NativeSourceOccurrence = {
   body: string;
   body_sha256: string;
   source_kind: string;
+  /** `instruction` for an inline instruction writer/read pair; absent for communication (a child's actual value). */
+  edge_kind?: 'instruction';
   trajectory_id: string;
   source_row_sha256?: string;
   invocation_id: string;
@@ -248,7 +250,11 @@ function nativeSourceView(record: Record<string, unknown>, messages: Message[], 
     const bodySha = sha256Text(body);
     occurrences.push({ schema: 'natlang.native-source-occurrence/1',
       id: nativeOccurrenceId(trajectoryId, rowId, invocationId, role, path, reference), role, reference, path,
-      body, body_sha256: bodySha, source_kind: sourceKind, trajectory_id: trajectoryId,
+      body, body_sha256: bodySha, source_kind: sourceKind,
+      // An inline `nl` template body is a constant instruction the compiler made a writer/read pair of: it is
+      // soft-instruction context of its call, never communication (no quota, no communication exposure).
+      ...(sourceKind === 'inline-instruction' ? { edge_kind: 'instruction' as const } : {}),
+      trajectory_id: trajectoryId,
       ...(typeof sourceRef.source_row_sha256 === 'string' ? { source_row_sha256: sourceRef.source_row_sha256 } : {}),
       invocation_id: invocationId, ...(Number.isSafeInteger(decision.index) ? { decision_index: Number(decision.index) } : {}),
       ...(custody?.stop_gradient ? { stop_gradient: true as const } : {}),

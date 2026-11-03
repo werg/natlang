@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from natlang_neuralese.data.native_graph_schema import parse_graph
+from natlang_neuralese.data.native_graph_schema import parse_graph, edge_kind_of, INSTRUCTION_EDGE
 from scripts.neuralese_data.native_chain_sources import bind_chain
 from scripts.neuralese_data.build_native_semantic_pairs_e2e import source_occurrences, writer_payload
 
@@ -22,13 +22,14 @@ def assemble(chain, records, edges, rendered, *, tokenizer, tokenizer_fingerprin
     names = {rid: f'n{index}' for index, rid in enumerate(custody['records'])}
     edge_by_sha = {hashlib.sha256(json.dumps(e, sort_keys=True,
                     separators=(',', ':')).encode()).hexdigest(): e for e in edges}
-    expected_occurrences, writer_occurrences = {}, {}
+    expected_occurrences, writer_occurrences, edge_kinds = {}, {}, {}
     for edge_id, edge in edge_by_sha.items():
         writer, reader = records[edge['writer_record_id']], records[edge['reader_record_id']]
         body = writer_payload(writer, edge['write_name'], edge['body_sha256'])
         occurrence = source_occurrences(writer, reader, edge['write_name'], body, edge['body_sha256'],
             writer_occurrence_id=edge.get('writer_occurrence_id'), reader_occurrence_id=edge.get('reader_occurrence_id'))
         writer_occurrences[edge_id] = occurrence['writer_occurrence_id']
+        edge_kinds[edge_id] = edge_kind_of(occurrence.get('writer_source_kind'), edge.get('edge_kind'))
         ids, pointers = occurrence['reader_occurrence_ids'], occurrence['reader_json_pointers']
         if (not isinstance(writer_occurrences[edge_id], str) or not writer_occurrences[edge_id]
                 or not ids or len(ids) != len(pointers) or len(set(ids)) != len(ids)
@@ -120,7 +121,9 @@ def assemble(chain, records, edges, rendered, *, tokenizer, tokenizer_fingerprin
                 or producer['token_ids'][mapped_start:mapped_stop] != payload):
             raise ValueError('consumer payload differs from its authenticated producer span')
         by_id[rid]['imports'].append({'at': at, 'source': names[source],
-                                       'start': mapped_start, 'stop': mapped_stop})
+                                       'start': mapped_start, 'stop': mapped_stop,
+                                       # A constant instruction body is soft-instruction context, not communication.
+                                       **({'instruction': True} if edge_kinds[edge_id] == INSTRUCTION_EDGE else {})})
         final_consumer_bindings[rid].append({
             'edge_sha256': edge_id, 'occurrence_id': occurrence, 'source_pointer': read.get('source_pointer'),
             'source_record_id': source, 'import_at': at,

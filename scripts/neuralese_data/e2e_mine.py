@@ -29,6 +29,7 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 from source_review import pending_unpinned_source_groups, registry_sha256  # noqa: E402
 from neuralese_data.decision_holds import load_decision_holds  # noqa: E402
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_file_hex  # noqa: E402
+from natlang_neuralese.data.native_graph_schema import edge_kind_of  # noqa: E402
 from natlang_neuralese.common.paths import resolve_str  # noqa: E402
 from natlang_neuralese.common.jsonio import open_jsonl_text, iter_jsonl_rows  # noqa: E402
 from natlang_neuralese.common.custody import REGISTRY as PROTECTED_REGISTRY, ProtectedWorlds  # noqa: E402
@@ -330,6 +331,7 @@ def derive(stem, records, pieces, conversion, omissions, tokenizer):
             for x in v: walk(x)
     for r in kept: walk(r.get('messages')); walk(r.get('target'))
     stats = {'converted': True, 'rows': len(records), 'kept_records': len(kept), 'edges': len(edges), 'chains': len(chains),
+             'instruction_edges': sum(e.get('edge_kind') == 'instruction' for e in edges),
              'input_records': conversion.get('records', len(records)),
              'unreadable_input_records': conversion.get('unreadable', 0),
              'trajectories': len(groups), 'trajectories_failed_authentication': failed,
@@ -431,6 +433,8 @@ def edges_from_authenticated_decisions(records, decisions):
             seen.add(key)
             edges.append({'writer_record_id': writer, 'reader_record_id': reader,
                           'write_name': name, 'body_sha256': body, 'kind': name.split(':')[0],
+                          # `instruction`: an inline nl template body (constant instruction), not communication.
+                          'edge_kind': edge_kind_of(ref.get('source_kind')),
                           'writer_occurrence_id': writer_occurrence,
                           'reader_occurrence_id': reader_occurrence,
                           'trajectory': trajectory_of(by_id[reader]), 'family': family_of(by_id[reader]),
