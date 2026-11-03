@@ -1,5 +1,5 @@
-"""`python -m natlang_neuralese.tune.learned.lane`: glue of the LFM3 tuning and learned-optimizer lane
-(`training/neuralese/learned-optimizer/run-lfm3-lane.sh`).
+"""`python -m natlang_neuralese.tune.learned.lane`: the
+glue of the program-adaptation and learned-optimizer recipe stages (`tune.stage`, `tune.learned.stage`).
 
 - ``tune-result --program DIR --out FILE``: one program's tune outcome after ``natlang tune DIR --rounds`` and
   ``natlang tune DIR --evaluate development``: the selected round, its development success, the measured untuned and

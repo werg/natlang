@@ -1,4 +1,5 @@
-"""Tiny fixture for `run-lfm3-lane.sh --dry-run`: the whole lane on a tiny native LFM checkpoint, CPU, minutes.
+"""Tiny fixture for the dry runs of the program-adaptation and learned-optimizer stages (tune.stage, tune.learned.stage
+--dry-run): the whole chain on a tiny native LFM checkpoint, CPU, minutes.
 
     dry_run_fixture.py build --out DIR             tiny checkpoint, supply programs with persisted grouped splits
     dry_run_fixture.py tune --program P --checkpoint CK --out RESULT

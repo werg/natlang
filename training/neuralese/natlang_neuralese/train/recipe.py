@@ -59,6 +59,10 @@ def refuse_retired_parameters(parameters):
 
 def validate_stage_parameters(kind, parameters):
     """Validate parameter shapes whose CLI actions are not scalar values."""
+    if kind in ('program_adaptation', 'learned_optimizer'):
+        from .adaptation_stages import validate_parameters as validate_adaptation
+        validate_adaptation(kind, parameters)
+        return
     if kind == 'native_interleaved_rl':
         from ..rl.interleave import validate_stage_parameters as validate_interleaved
         validate_interleaved(parameters)
@@ -253,11 +257,16 @@ HANDLERS['native_interleaved_rl'] = {
 INTERLEAVED_RL_KINDS=frozenset({'native_interleaved_rl'})
 HEADLESS_NATIVE_KINDS = NATIVE_TRAINING_KINDS | COEFFICIENT_NATIVE_KINDS | INTERLEAVED_RL_KINDS
 NATIVE_IDENTITY_QUALIFICATION = 'native_state_runtime_qualified'
+# Program adaptation and the learned optimizer (train/adaptation_stages.py): stages on an earned backbone that train
+# program adapters/soft states and the optimizer's own parameters, never backbone weights or lineage exposure.
+from .adaptation_stages import ADAPTATION_KINDS, HANDLERS as _ADAPTATION_HANDLERS
+HANDLERS.update(_ADAPTATION_HANDLERS)
 
 
 def native_lineage(recipe):
     stages = recipe.get('stages') or []
-    return bool(stages) and all(stage.get('kind') in HEADLESS_NATIVE_KINDS for stage in stages)
+    return (any(stage.get('kind') in HEADLESS_NATIVE_KINDS for stage in stages) and
+            all(stage.get('kind') in HEADLESS_NATIVE_KINDS | ADAPTATION_KINDS for stage in stages))
 
 
 
@@ -486,7 +495,8 @@ def stage_input_args(resolved, kind, *, target='portable'):
     for role in ('rollouts', 'native_graphs', 'held_native_graphs', 'continued_native_graphs', 'source_predecessor_retirement',
                  'continued_held_native_graphs', 'foundation_native_graphs', 'foundation_declaration_recovery',
                  'withdrawn_native_graphs', 'retired_native_withdrawal', 'retired_native_withdrawal_set', 'standalone_diloco_parent', 'diloco_new_outer', 'pending_native_sources', 'pending_focus', 'unavailable_native_sources', 'source_classification_migration', 'source_correction',
-                 'ce_supervision_policy', 'objective_spec', 'rl_block_bundle', 'continue_from'):
+                 'ce_supervision_policy', 'objective_spec', 'rl_block_bundle', 'continue_from',
+                 *HANDLERS[kind].get('argument_roles', ())):
         if role in resolved and role in supported:
             args += ['--' + role.replace('_', '-'), resolved[role]['path']]
     return args
@@ -738,6 +748,9 @@ def load_recipe(path):
         if not isinstance(parameters, dict) or not set(parameters) <= HANDLERS[kind]['parameters']:
             raise ValueError('unknown stage parameters')
         validate_stage_parameters(kind, parameters)
+        if stage.get('promotion') is not None:
+            from .promotion import parse_declaration
+            parse_declaration(stage['promotion'])
         if kind in INTERLEAVED_RL_KINDS:
             sft = next((item for item in recipe['stages'] if item.get('id') == parameters.get('sft_stage')), None)
             if (sft is None or sft.get('kind') != 'native_state_sft' or parameters['sft_stage'] not in required
@@ -796,6 +809,10 @@ def declared_runtime_environment(recipe):
 
 def require_gate(report, kind, *, training_progress=False):
     """Require the exact completed receipt emitted by a current native stage."""
+    if kind in ADAPTATION_KINDS:
+        from .adaptation_stages import require_gate as require_adaptation_gate
+        require_adaptation_gate(report, kind)
+        return
     if kind in COEFFICIENT_NATIVE_KINDS:
         if (report.get('schema') != 'natlang.native-coefficient-training-report/1'
                 or report.get('completed') is not True
@@ -1932,6 +1949,9 @@ def main(argv=None):
                         help='write an immutable launch-intent receipt outside --out before running')
     parser.add_argument('--device', default='cuda')
     parser.add_argument('--until', help='run through a declared stage, retaining resumable state')
+    parser.add_argument('--stage', help='run one declared program-adaptation/learned-optimizer stage now: its backbone '
+                        'predecessor is satisfied by the stage\'s bound continue_from and behaviour parent_selection, '
+                        'so adaptation runs while backbone training continues')
     parser.add_argument('--inspect', action='store_true')
     parser.add_argument('--handoff', action='store_true',
                         help='resume an existing lineage on the newest code (the frozen runtime is replaced) and on a '
@@ -1962,6 +1982,9 @@ def main(argv=None):
         parser.error('only native positional-KV/hybrid-state recipes are executable')
     if args.until and args.until not in {stage['id'] for stage in recipe['stages']}:
         parser.error('unknown stopping stage')
+    if args.stage and next((stage['kind'] for stage in recipe['stages'] if stage['id'] == args.stage), None) \
+            not in ADAPTATION_KINDS:
+        parser.error('--stage runs a declared program_adaptation or learned_optimizer stage')
     if args.inspect:
         print(json.dumps(recipe, indent=2))
         return
@@ -2074,6 +2097,8 @@ def main(argv=None):
             directory = args.out / stage['id']
             report_path = args.out / (stage['id'] + '-report.json')
             kind = stage['kind']
+            if args.stage and stage['id'] != args.stage and not report_path.exists():
+                continue  # another stage's work; the selected stage checks what it depends on
             if report_path.exists():
                 report = json.loads(report_path.read_text())
                 require_gate(report['gate'], kind)
@@ -2087,9 +2112,19 @@ def main(argv=None):
                 if stage.get('admitted') is False:
                     raise ValueError('stage is declared but not admitted: ' + stage['id'] +
                                      (' (' + stage['admission'] + ')' if isinstance(stage.get('admission'), str) else ''))
+                from .promotion import require_stage_promotion
+                declared_stages = {item['id']: item for item in recipe['stages']}
                 for dependency in stage['requires']:
-                    predecessor = next(item for item in reports if item['id'] == dependency)
+                    predecessor = next((item for item in reports if item['id'] == dependency), None)
+                    if predecessor is None:
+                        # An adaptation stage binds an earned, behaviour-selected backbone explicitly instead of
+                        # waiting for continuous backbone training to finish.
+                        if not (kind in ADAPTATION_KINDS and declared_stages[dependency]['kind'] in HEADLESS_NATIVE_KINDS
+                                and {'continue_from', 'parent_selection'} <= set(stage_inputs[stage['id']])):
+                            raise ValueError('stage ' + stage['id'] + ' requires completed stage ' + dependency)
+                        continue
                     require_gate(predecessor['gate'], predecessor['kind'])
+                    require_stage_promotion(args.out, declared_stages[dependency], predecessor)
                 if HANDLERS[kind].get('controller'):
                     raise ValueError('stage ' + stage['id'] + ' runs through its controller '
                                      '(rl.production run with interleaved_rl_stage), not the stage runner')
@@ -2098,6 +2133,19 @@ def main(argv=None):
                 resolved = stage_inputs[stage['id']]
                 command += stage_input_args(resolved, kind, target='local')
                 command += ['--out', str(directory), '--device', args.device]
+                if kind in ADAPTATION_KINDS:
+                    earlier = [item for item in reports if item['id'] in stage['requires']]
+                    if 'continue_from' not in resolved:
+                        backbone = [item for item in earlier if item['kind'] in NATIVE_TRAINING_KINDS]
+                        if len(backbone) != 1:
+                            raise ValueError('adaptation stage ' + stage['id'] + ' needs one earned backbone: a completed '
+                                             'native predecessor, or continue_from with its parent_selection')
+                        command += ['--continue-from', backbone[0]['artifact']]
+                    if kind == 'learned_optimizer':
+                        adaptation = [item for item in earlier if item['kind'] == 'program_adaptation']
+                        if len(adaptation) != 1:
+                            raise ValueError('the learned optimizer requires one completed program_adaptation stage')
+                        command += ['--adaptation', adaptation[0]['artifact']]
                 native_predecessors = [name for name in stage['requires']
                     if next((item['kind'] for item in recipe['stages'] if item['id'] == name), None)
                        in NATIVE_TRAINING_KINDS]
@@ -2165,7 +2213,7 @@ def main(argv=None):
                 require_gate(gate, kind)
                 write_json(report_path, report)
             reports.append(report)
-            if args.until == stage['id']:
+            if args.until == stage['id'] or args.stage == stage['id']:
                 return 0
     print(json.dumps({'status': 'recipe_completed', 'completed_stages': [report['id'] for report in reports]}), flush=True)
 

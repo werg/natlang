@@ -129,7 +129,7 @@ Lane declaration and runbook: `training/neuralese/learned-optimizer/README.md` (
   `natlang tune ROOT --score-proposals REQUEST` seals each fragment (`pipeline.releaseFromBuild`, the export stage
   shared with fits), runs it on the target's query roots (training roots outside its support, else development)
   and writes `{bundle: {before, after}}`; `collect` reads the proposals back with those outcomes. The runbook runs
-  this round (`outer-rl-round.sh`) between supervised outer training and meta-examples; `TrainingServices` does the
+  this round (`learned.stage.outer_rl`) between supervised outer training and meta-examples; `TrainingServices` does the
   same when its operation names `outcomes`.
 
 ## LFM3-1.7B lane, teacher-free supply (2026-10-28)
@@ -165,7 +165,7 @@ cross-model dependence. Prepared on the worktree branch, nothing run on real mod
   continues on the published snapshot (keys follow their components; bank moments continue exactly without basis
   training, else restart with a recorded transition, never reinterpreted through the QR change of coordinates). Before
   this, a publication left the operation stale with no continuation (`refitLabels` relabeled against the old bank file).
-- **Lane.** `training/neuralese/learned-optimizer/run-lfm3-lane.sh <checkpoint> [op]` and `--dry-run`, replacing
+- **Lane.** Now the recipe stages `program_adaptation` (`tune.stage`) and `learned_optimizer` (`tune.learned.stage`), replacing
   the LFM2.5 lane script and specs (README beside it). Outer cycles run again after the meta-RL round, so a bank its
   policy update publishes is adopted and refit before meta-examples.
 
@@ -201,7 +201,7 @@ label-only refits after publications instead of full corpus refits (item 4).
    and server for `lfm3`) is on main. Per the owner's 2026-10-28 ordering, select the executing base from actual later
    SFT/RL progress and development task outcomes, not the early step-750 checkpoint. Start with one program to
    measure per-root time, row yield of self-teaching and the RL/development outcomes, then the full lane
-   (`run-lfm3-lane.sh`), sharded across sandboxes for the tunes. The first real bank-init validates BF16 numerics of
+   (the `program_adaptation` and `learned_optimizer` recipe stages), sharded across sandboxes for the tunes. The first real bank-init validates BF16 numerics of
    the lane engine (the shared paths were tested in FP32 fixtures).
 2. **Dense JOLT+ term in the tune trainer**: reuse the shared `rl/privileged_scoring.teacher_scores` (stop-gradient
    privileged-context targets aligned to the replay's actions) as an objective of program-tune RL rounds; no second
