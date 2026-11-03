@@ -65,6 +65,20 @@ and floors rounds at 16 tasks x 8 samples. Configs binding /1 adopt it through a
 recorded controller transition; sealed selections keep their recorded policy.
 Measure task-supply repetition with `scripts/rl_tasks/measure_repetition.py`.
 
+## Neuralese compaction is the intended runtime design (owner, 2026-11-03)
+
+Owner intent: Neuralese compacts and summarizes large values throughout the
+natlang runtime, including parameter/argument listings, large inputs, tool and
+service outputs, collections and documents rendered into model context. It also
+compacts context between model runs, carrying learned compressed state rather than
+full text. Training data includes bgkit-derived (and other) sources transformed
+into a Neuralese bottleneck: a Neuralese-prompted summarizer/extractor producer
+returns Neuralese to a parent lambda/consumer that must use it for the task outcome.
+The compaction and summarization operators are directly learned operators,
+trained parameters rather than only prose prompts. Exact KV/prefix reuse is a
+separate performance cache, not compaction. Track remaining gaps in the fallow
+register until each is live in runtime, data and training.
+
 ## Built capabilities must not lie fallow (owner, 2026-11-03)
 
 The SGLang actor was built and integrated, then left unused for days behind a
