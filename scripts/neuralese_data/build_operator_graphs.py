@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Learned-operator case files -> native graphs plus text-cut siblings (COMPACTION_OPERATOR_CONVERTERS.md §1).
 
-    build_operator_graphs.py --cases CASES/<operator>/<source>.port-records.jsonl [--operator NAME]
+    build_operator_graphs.py --cases CASES/<operator>/<source>.port-records.jsonl | CASES [--operator NAME]
         [--out-root DIR] [--corpus-id ID] [--workers 4] [--limit N]
 
 Writes OUT/<operator>/<source>/{graphs,textcut}-{train,test}.jsonl.zst, omissions.jsonl and receipt.json. A finished
@@ -126,6 +126,16 @@ def main(argv=None):
     parser.add_argument('--limit', type=int)
     parser.add_argument('--max-tokens', type=int, default=32768)
     args = parser.parse_args(argv)
+    if args.cases.is_dir():
+        # Every finished converter output under a cases root (its manifest is written last), each rendered once.
+        status = 0
+        for manifest in sorted(args.cases.glob('*/*.manifest.json')):
+            cases = manifest.with_name(manifest.name.removesuffix('.manifest.json') + '.port-records.jsonl')
+            forwarded = [item for item in (argv if argv is not None else sys.argv[1:])]
+            index = forwarded.index('--cases')
+            forwarded[index + 1] = str(cases)
+            status |= main(forwarded)
+        return status
     from natlang_neuralese.common.custody import ProtectedWorlds
     from scripts.neuralese_data.build_chain_graphs import PROTECTION
     from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import current_protection

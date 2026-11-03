@@ -1529,6 +1529,11 @@ def channel_checkpoint(model):
     attention_mode = getattr(model, 'native_attention_precision', 'ieee')
     if attention_mode != 'ieee':
         result['native_attention_precision'] = attention_mode
+    rows = getattr(model, 'operator_rows', None)
+    if rows is not None:
+        # Learned Neuralese operator rows (model/learned_operators.py) with their exact token bindings.
+        result['learned_operators'] = {'bindings': rows.binding_document(),
+            'state': {name: value.detach().clone() for name, value in rows.state_dict().items()}}
     return result
 
 
@@ -1578,6 +1583,18 @@ def restore_channel_checkpoint(model, state):
             model.extra_input_rows.copy_(state['extra_input_rows'])
             if not model.tied:model.extra_output_rows.copy_(state['extra_output_rows'])
         model.adapter.load_state_dict(state['adapter'], strict=True)
+    operators = state.get('learned_operators')
+    if operators is not None:
+        from .learned_operators import OperatorRows, registry_sha256
+        bindings = operators['bindings']['operators']
+        if operators['bindings'].get('registry_sha256') != registry_sha256(bindings):
+            raise ValueError('native checkpoint operator rows were saved under a different operator registry')
+        rows = OperatorRows(bindings, model.port.embedding_weight.shape[1],
+                            dtype=next(iter(operators['state'].values())).dtype, device=model.input_rows.device)
+        rows.load_state_dict(operators['state'], strict=True)
+        model.operator_rows = rows
+    elif getattr(model, 'operator_rows', None) is not None:
+        raise ValueError('native channel checkpoint lacks the operator rows this model carries')
     return model
 
 

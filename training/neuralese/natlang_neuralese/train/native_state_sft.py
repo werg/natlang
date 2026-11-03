@@ -243,7 +243,8 @@ def native_trainable_parameters(model):
     # native interface. The frozen vocabulary/readout and final norm follow the
     # existing shared full-layer backbone policy.
     interface_named = [('interface.' + name, parameter) for name, parameter in model.named_parameters()
-                       if name.startswith(('input_rows', 'output_rows', 'extra_input_rows', 'extra_output_rows', 'adapter.')) and parameter.requires_grad]
+                       if name.startswith(('input_rows', 'output_rows', 'extra_input_rows', 'extra_output_rows', 'adapter.',
+                                           'operator_rows.')) and parameter.requires_grad]
     return backbone_named + interface_named
 
 
@@ -254,6 +255,9 @@ def make_native_optimizer(model, *, lr, weight_decay=.1, latent_ns='quintic', in
 
     named = native_trainable_parameters(model)
     latent, ordinary = latent_split(named, 'muonsr')
+    # Learned operator rows are embedding rows like the role rows: AdamW at the learned-row rate, never Muon by shape.
+    ordinary += [(name, parameter) for name, parameter in latent if name.startswith('interface.operator_rows.')]
+    latent = [(name, parameter) for name, parameter in latent if not name.startswith('interface.operator_rows.')]
     if not latent:
         raise ValueError('native SFT found no MuonSR backbone/interface matrices')
     # Register finite-gradient checks before the optimizer's post-accumulate
@@ -770,6 +774,10 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
         supports = getattr(objective, 'shares_causal_prefixes', None)
         share = bool(share_causal_prefixes and supports is not None and supports(examples))
         allow_communication = share and allow_communication_prefixes
+    operator_rows = getattr(model, 'operator_rows', None)
+    with_operators = operator_rows is not None and any(getattr(example, 'operators', ()) for example in examples)
+    # Operator rows substitute embeddings at declared positions; keep every original row unaliased for them.
+    share = share and not with_operators
     shared = pack_causal_prefixes(examples, allow_communication=allow_communication) if share else None
     if shared is None:
         plan, target_weights, ownership, external_name_maps = pack_native_graphs(examples)
@@ -801,6 +809,14 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
         forward_inputs = objective.forward_inputs(context)
     else:
         forward_inputs = {}
+    if with_operators:
+        if shared is not None or 'embeddings' in forward_inputs:
+            raise ValueError('learned operator rows require the unshared packed layout and their own input embeddings')
+        from ..model.learned_operators import operator_embeddings, resolve_declared
+        spans = tuple(span for example, (first, _) in zip(examples, ownership)
+                      for span in resolve_declared(getattr(example, 'operators', ()), example.plan,
+                                                   operator_rows.bindings, offset=plan.offsets[first]))
+        forward_inputs = {**forward_inputs, 'embeddings': operator_embeddings(model, operator_rows, plan, spans)}
     graph_forward = getattr(objective, 'forward_graph', None) if objective is not None else None
     from .native_prefix_packing import communication_primal_rows
     from ..model.native_gradient_partitions import primal_row_reuse
@@ -1487,6 +1503,9 @@ def build_parser():
         help='refresh after this many new optimizer updates since restoration; independent of periodic checkpoint alignment')
     parser.add_argument('--learn-reasoning-boundaries', action=argparse.BooleanOptionalAction, default=False,
                         help='explicitly add learned existing reasoning token rows to an old parent')
+    parser.add_argument('--learned-operators', choices=('none', 'all'), default='none',
+        help='attach the learned Neuralese operator rows (model/learned_operators.py; text-initialized when added, a '
+             'recorded learned-row addition with new Adam moments); the declared operator stage sets all')
     parser.add_argument('--foundation-communication-batches', type=int,
         help='while the exact declared foundation is pending, communication batches per priority ordinary batch')
     parser.add_argument('--pending-rotation-anchor', default=None, help='Recorded source row identity for a standalone pending-batch branch')
@@ -2100,6 +2119,12 @@ def _main(argv=None, *, requested_refresh):
         if not qwen_inherited_norm_alias:
             norm_upgrade = upgrade_norm_precision(model, config, args.native_ordinary_precision)
             checkpoint_options['ordinary_precision_upgrade'] = norm_upgrade
+    operator_upgrade = None
+    if args.learned_operators == 'all' or getattr(model, 'operator_rows', None) is not None:
+        from ..model.learned_operators import attach_operator_rows
+        operator_upgrade = attach_operator_rows(model, tokenizer, tokenizer_fingerprint=config['tokenizer_fingerprint'])
+        if operator_upgrade['added']:
+            checkpoint_options['learned_operator_upgrade'] = operator_upgrade
     token_upgrade = None
     if args.learn_reasoning_boundaries:
         from ..model.native_model import upgrade_reasoning_tokens
@@ -2277,6 +2302,11 @@ def _main(argv=None, *, requested_refresh):
         token_history.append({**token_upgrade, 'at_global_step': int(saved_training.get('global_step', saved_training.get('step', 0))),
                               'weights_optimizer_rng_exposure': 'preserved'})
     checkpoint_options['token_row_upgrade_history'] = token_history
+    operator_history = list((saved_training.get('options') or {}).get('learned_operator_history') or [])
+    if operator_upgrade and operator_upgrade['added']:
+        operator_history.append({**operator_upgrade, 'at_global_step': int(saved_training.get('global_step', saved_training.get('step', 0))),
+                                 'weights_optimizer_rng_exposure': 'preserved; operator rows start with new zero Adam moments'})
+    checkpoint_options['learned_operator_history'] = operator_history
     norm_history = list((saved_training.get('options') or {}).get('ordinary_precision_history') or [])
     if norm_upgrade and norm_upgrade['previous_profile'] != norm_upgrade['profile']:
         norm_history.append({**norm_upgrade, 'at_global_step':int(saved_training.get('global_step',saved_training.get('step',0)))})
@@ -3050,6 +3080,8 @@ def _main(argv=None, *, requested_refresh):
         promoted_names += tuple(
             'interface.'+name for name in (token_upgrade or {}).get('promoted_parameters', {}))
         added_names = ('interface.extra_input_rows', 'interface.extra_output_rows') if token_upgrade and token_upgrade['added'] else ()
+        if operator_upgrade and operator_upgrade['added']:
+            added_names += tuple(operator_upgrade['parameter_names'])
         load_options = {'native_optimizer_migration': args.native_optimizer_migration}
         if added_names:load_options['allow_added_names'] = added_names
         if promoted_names:load_options['allow_promoted_names'] = promoted_names

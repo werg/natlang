@@ -203,3 +203,40 @@ def test_runtime_consumer_frames_equal_the_registry():
         line = next(line for line in source.splitlines() if line.strip().startswith(f"'{name}':"))
         assert f'open: {_json.dumps(spec.consumer_open)}'.replace('"', "'") in line, name
         assert f'close: {_json.dumps(spec.consumer_close)}'.replace('"', "'") in line, name
+
+
+def test_training_integration_routes_rows_packs_spans_and_round_trips_the_channel():
+    from natlang_neuralese.model.shared_state import channel_checkpoint, restore_channel_checkpoint
+    from natlang_neuralese.train.native_state_sft import make_native_optimizer, packed_graph_loss
+    from natlang_neuralese.data.native_graph import graph_loss
+    model = tiny_model()
+    model.operator_rows = OperatorRows(small_bindings(), model.port.embedding_weight.shape[1])
+    model.operator_rows.reset_to_text(model.port.embedding_weight)
+    with torch.no_grad():
+        for name in OPERATORS:
+            model.operator_rows.rows(name, 'slots').add_(0.3 * torch.randn_like(model.operator_rows.rows(name, 'slots')))
+    slots = small_bindings()['compact-value']['slot_token_ids']
+    examples = [parse_graph(graph_row(index, slots), tokenizer_fingerprint=FINGERPRINT) for index in range(3)]
+    assert all(example.operators for example in examples)
+    optimizer, named = make_native_optimizer(model, lr=1e-3, in_backward=False, learned_row_lr=5e-2)
+    operator_names = [name for name, _ in named if name.startswith('interface.operator_rows.')]
+    assert len(operator_names) == 2 * len(OPERATORS)
+    assert optimizer.native_learning_rates['effective_learned_rows'][operator_names[0]] == 5e-2
+    latent_ids = {id(parameter) for group in (optimizer.latent.param_groups if optimizer.latent else ())
+                  for parameter in group['params']}
+    assert not any(id(parameter) in latent_ids for name, parameter in named if name in operator_names)
+    packed, _ = packed_graph_loss(model, examples, checkpoint_layers=False)
+    separate = sum(graph_loss(model, example, checkpoint_layers=False)[0] for example in examples) / len(examples)
+    torch.testing.assert_close(packed, separate, rtol=1e-5, atol=1e-6)
+    model.zero_grad(set_to_none=True)
+    packed.backward()
+    assert float(model.operator_rows.rows('compact-value', 'slots').grad.abs().sum()) > 0
+    # Without rows the same graphs are the text-initialized form; the rows change the loss once they moved.
+    channel = channel_checkpoint(model)
+    fresh = tiny_model()
+    restore_channel_checkpoint(fresh, channel)
+    assert torch.equal(fresh.operator_rows.rows('compact-value', 'slots'), model.operator_rows.rows('compact-value', 'slots'))
+    stripped = tiny_model()
+    stripped.operator_rows = OperatorRows(small_bindings(), 32)
+    with pytest.raises(ValueError, match='lacks the operator rows'):
+        restore_channel_checkpoint(stripped, {key: value for key, value in channel.items() if key != 'learned_operators'})

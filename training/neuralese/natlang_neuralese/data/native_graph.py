@@ -54,8 +54,14 @@ def graph_loss(model, example, *, checkpoint_layers=True, chunk_tokens=128,
     if chunk_tokens < 1:
         raise ValueError('loss chunk size must be positive')
     model.port.checkpoint_layers = checkpoint_layers
+    rows = getattr(model, 'operator_rows', None)
+    embeddings = None
+    if rows is not None and getattr(example, 'operators', ()):
+        from ..model.learned_operators import operator_embeddings, resolve_declared
+        embeddings = operator_embeddings(model, rows, example.plan,
+                                         resolve_declared(example.operators, example.plan, rows.bindings))
     result = model(example.plan, external_blocks=external_blocks, external_identity=external_identity,
-                   retain_states=False)
+                   retain_states=False, **({'embeddings': embeddings} if embeddings is not None else {}))
     if objective is not None:
         return objective(model, example, result)
     return graph_loss_from_result(model, example, result, chunk_tokens=chunk_tokens,

@@ -50,6 +50,8 @@ def _durable_immutable(path: Path, payload: bytes):
 def _channel_tensors(model):
     from .shared_state import channel_checkpoint
     channel = channel_checkpoint(model)
+    if 'learned_operators' in channel:
+        raise ValueError('composite native checkpoints do not carry learned operator rows; write a full checkpoint')
     tensors = {'input_rows': channel.pop('input_rows')}
     output = channel.pop('output_rows')
     if output is not None:

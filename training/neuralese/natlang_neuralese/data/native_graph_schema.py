@@ -21,6 +21,8 @@ class NativeGraphExample:
     external_states: dict = field(default_factory=dict)
     # Finite decision readouts over sibling option nodes (data.decision_graph.GraphDecision).
     decisions: tuple = ()
+    # Learned Neuralese operator positions (model/learned_operators.py), as declared by the row.
+    operators: tuple = ()
 
 
 def _graph_fields(row, *, tokenizer_fingerprint):
@@ -70,8 +72,12 @@ def parse_graph(row, *, tokenizer_fingerprint):
     from .decision_graph import parse_decisions
     decisions = parse_decisions(row, nodes, weights)
     plan = compile_graph(nodes, external_sizes={name: binding['token_count'] for name, binding in external.items()})
+    operators = row.get('operators') or []
+    if not isinstance(operators, list) or any(not isinstance(entry, dict) for entry in operators):
+        raise ValueError('native graph operators must be a list of declared spans')
     return NativeGraphExample(row['id'], row['split'], tuple(row['source_groups']),
-                              tokenizer_fingerprint, plan, weights, external, decisions)
+                              tokenizer_fingerprint, plan, weights, external, decisions,
+                              tuple(dict(entry) for entry in operators))
 
 
 def indexed_graph_metadata(row, *, tokenizer_fingerprint):

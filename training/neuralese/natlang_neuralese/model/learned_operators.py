@@ -247,7 +247,12 @@ class ResolvedSpan:
 
 def resolve_spans(row: dict, plan, bindings: dict) -> tuple[ResolvedSpan, ...]:
     """Validate a row's declared operator positions against its compiled plan and the bound token IDs."""
-    declared = row.get(ROW_FIELD) or []
+    return resolve_declared(row.get(ROW_FIELD) or [], plan, bindings)
+
+
+def resolve_declared(declared, plan, bindings: dict, *, offset: int = 0) -> tuple[ResolvedSpan, ...]:
+    """``resolve_spans`` over a declared list; ``offset`` shifts physical positions (a graph packed after others)."""
+    declared = list(declared or [])
     if not isinstance(declared, list):
         raise ValueError('graph operators must be a list of declared spans')
     names = [node.name for node in plan.invocations]
@@ -275,8 +280,30 @@ def resolve_spans(row: dict, plan, bindings: dict) -> tuple[ResolvedSpan, ...]:
         if taken.intersection(positions):
             raise ValueError('graph operator spans overlap')
         taken.update(positions)
-        resolved.append(ResolvedSpan(name, kind, entry['node'], positions.start, positions.stop))
+        resolved.append(ResolvedSpan(name, kind, entry['node'], offset + positions.start, offset + positions.stop))
     return tuple(resolved)
+
+
+def attach_operator_rows(model, tokenizer, *, tokenizer_fingerprint, names=None):
+    """Give a native model text-initialized operator rows (a recorded learned-row addition), or keep its own.
+
+    Returns the upgrade record: the operators added now (empty when the model already carries exactly these
+    bindings), the registry digest and the parameter names a resumed optimizer must accept as new.
+    """
+    names = sorted(OPERATORS) if names is None else sorted(names)
+    wanted = {name: bind_tokens(tokenizer, name, tokenizer_fingerprint=tokenizer_fingerprint) for name in names}
+    existing = getattr(model, 'operator_rows', None)
+    if existing is not None:
+        if existing.bindings != wanted:
+            raise ValueError('model operator rows are bound to different operators or tokens; declare an explicit rebinding')
+        return {'schema': SCHEMA, 'added': [], 'registry_sha256': registry_sha256(names), 'parameter_names': []}
+    dtype = model.input_rows.dtype
+    rows = OperatorRows(wanted, model.port.embedding_weight.shape[1], dtype=dtype, device=model.port.embedding_weight.device)
+    rows.reset_to_text(model.port.embedding_weight)
+    model.operator_rows = rows
+    parameter_names = ['interface.operator_rows.' + name for name, _ in rows.named_parameters()]
+    return {'schema': SCHEMA, 'added': names, 'registry_sha256': registry_sha256(names),
+            'parameter_names': parameter_names, 'dtype': str(dtype), 'initialization': 'text-embedding-rows'}
 
 
 def operator_embeddings(model, rows: OperatorRows | None, plan, spans):

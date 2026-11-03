@@ -9,6 +9,11 @@ LEARNED_ROWS=frozenset('interface.'+name for name in
     ('input_rows','output_rows','extra_input_rows','extra_output_rows'))
 
 
+def is_learned_row(name):
+    """Role/sparse rows and learned Neuralese operator rows (model/learned_operators.py) share the learned-row rate."""
+    return name in LEARNED_ROWS or name.startswith('interface.operator_rows.')
+
+
 def validate_learned_row_rate(rate, *, name='learned_row_learning_rate'):
     if rate is not None and (type(rate) not in (int,float) or not math.isfinite(rate) or rate<=0):
         raise ValueError(name+' must be finite and positive, or omitted to retain saved rates')
@@ -28,11 +33,11 @@ def apply_native_learning_rates(optimizer,*,backbone_lr,learned_row_lr=None,inte
     current={names[id(parameter)]:group['lr'] for _,child in _children(optimizer)
              for group in child.param_groups for parameter in group['params']}
     rates={name:(learned_row_lr if learned_row_lr is not None else current[name])
-           if name in LEARNED_ROWS else backbone_lr for name in current}
+           if is_learned_row(name) else backbone_lr for name in current}
     if interface_row_lr is not None:
         rates.update({name:interface_row_lr for name in rates if name in INTERFACE_ROWS})
     changes=set_learning_rates(optimizer,named,rates)
     optimizer.native_learning_rates={'backbone_lr':backbone_lr,'declared_learned_row_lr':learned_row_lr,
         'declared_interface_row_lr':interface_row_lr,
-        'effective_learned_rows':{name:rate for name,rate in rates.items() if name in LEARNED_ROWS}}
+        'effective_learned_rows':{name:rate for name,rate in rates.items() if is_learned_row(name)}}
     return changes
