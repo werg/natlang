@@ -131,3 +131,14 @@ def test_stage_kind_validates_and_gates():
     adaptation_stages.require_gate(report, 'bank_metalearning')
     with pytest.raises(ValueError):
         adaptation_stages.require_gate({**report, 'confirmation': {'met': False}}, 'bank_metalearning')
+
+
+def test_whole_trajectory_sources_are_reduced_to_their_declared_assistant_targets():
+    graph = {'id': 'g', 'conversion': {'supervision_policy': {'assistant_target_tokens': 3}},
+             'nodes': [{'token_ids': [1, 2, 3, 4, 5], 'target_weights': [.05, 28.9, .25, 9.1, 1.25]}]}
+    out = MB.assistant_targets(graph)
+    assert out['nodes'][0]['target_weights'] == [0., 1., 0., 1., 1.] and out['supervision'] == 'assistant-output-only-v1'
+    graph['conversion']['supervision_policy']['assistant_target_tokens'] = 4
+    assert MB.assistant_targets(graph) is None  # a count that disagrees with the declaration is refused
+    plain = {'id': 'h', 'nodes': [{'token_ids': [1], 'target_weights': [.5]}]}
+    assert MB.assistant_targets(plain) is plain

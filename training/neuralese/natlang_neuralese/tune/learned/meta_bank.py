@@ -63,13 +63,32 @@ def _targets(graph):
     return sum(1 for node in graph['nodes'] for weight in node.get('target_weights') or () if weight > 0)
 
 
+def assistant_targets(graph):
+    """Output-only supervision of a whole-trajectory source graph (AGENTS.md "Supervise the model's own outputs"):
+    its declared assistant tokens keep unit weight, every context/feedback weight becomes zero. Such sources weight
+    assistant tokens at >= 1 and context below it; the count must equal the conversion's declared
+    ``assistant_target_tokens`` or the graph is refused (None). Graphs without that declaration keep their weights."""
+    policy = (graph.get('conversion') or {}).get('supervision_policy') or {}
+    declared = policy.get('assistant_target_tokens')
+    if declared is None:
+        return graph
+    nodes, count = [], 0
+    for node in graph['nodes']:
+        weights = [1. if w >= 1. else 0. for w in node.get('target_weights') or ()]
+        count += int(sum(weights))
+        nodes.append({**node, 'target_weights': weights})
+    if count != declared or not count:
+        return None
+    return {**graph, 'nodes': nodes, 'supervision': 'assistant-output-only-v1'}
+
+
 def graph_rows(paths, pattern, *, protected, max_tokens, prefix=None, families=None, index_only=False):
     """Rows of verified native graph sources whose id matches ``pattern`` (named groups ``family`` and ``world``).
     ``prefix``: cheap substring every candidate line contains; ``families``: keep only these; ``index_only``: rows
     carry the graph id instead of the graph (a cheap first pass over large sources). Protected-related, non-train,
     oversize and target-free graphs are skipped and counted."""
     regex = re.compile(pattern)
-    counts = {'read': 0, 'matched': 0, 'protected': 0, 'oversize': 0, 'no_target': 0, 'split': 0}
+    counts = {'read': 0, 'matched': 0, 'protected': 0, 'oversize': 0, 'no_target': 0, 'split': 0, 'unaligned_targets': 0}
     rows = []
     for path in paths:
         for line in _lines(path):
@@ -94,6 +113,10 @@ def graph_rows(paths, pattern, *, protected, max_tokens, prefix=None, families=N
                 continue
             if not _targets(graph):
                 counts['no_target'] += 1
+                continue
+            graph = assistant_targets(graph)
+            if graph is None:
+                counts['unaligned_targets'] += 1
                 continue
             rows.append({'family': match.group('family'), 'world': match.group('world'),
                          'graph': {'id': graph['id']} if index_only else graph,
