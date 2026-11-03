@@ -1,0 +1,15 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "natlang-rl-bgkit-kr-dev-20261104",
+  "owner": "dgx",
+  "path": "runs/natlang-rl-bgkit-kr-dev-20261104",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 1971135,
+      "sha256": "7efd3b081d70327d1706392c6935899fb26e580fb6e4a268d1b1f6d4373fdc90",
+      "lines": 151
+    }
+  ],
+  "bytes": 1971135
+}
