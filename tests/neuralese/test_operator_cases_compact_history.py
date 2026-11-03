@@ -9,6 +9,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
 from neuralese_data import operator_cases_compact_history as ch  # noqa: E402
 from neuralese_data.records import VERSION, group_key, license_, seal, source, validate  # noqa: E402
 
+def valid(case):
+    """Schema-valid; the sink adds `meta.operator_seed` after sealing, so only the content hash is exempt."""
+    return [e for e in validate(case) if 'sha256' not in e] == []
+
+
 TASK = {'role': 'user', 'content': 'Fix the bug in pkg/a.py'}
 
 
@@ -52,8 +57,9 @@ def test_s1_selection_keeps_only_verified_rows_and_caps_windows_per_trajectory(t
     assert windows['traj-0'] == ch.MAX_WINDOWS
     out = tmp_path / 'out' / 'compact-history'
     cases = [json.loads(line) for line in (out / 's1-swe.port-records.jsonl').read_text().splitlines()]
-    assert len(cases) == 3 and all(validate(case) == [] for case in cases)
+    assert len(cases) == 3 and all(valid(case) for case in cases)
     assert {case['outcome']['checked'] for case in cases} == {'swe-rebench-tests'}
+    assert all(case['sources'][0]['meta']['operator_seed']['provenance'] == 'mechanical:history-outline' for case in cases)
     assert all(case['sources'][0]['role'] == 'trajectory' and 'sources' in case['consumer']['withheld']
                for case in cases)
     rejects = json.loads((out / 's1-swe.manifest.json').read_text())['rejects']
@@ -119,7 +125,7 @@ def test_bgkit_join_keeps_resolved_windows_and_rejects_the_rest_by_reason(tmp_pa
     assert dict(sink.counts) == {'train': 2, 'test': 2}
     cases = [json.loads(line) for line in (out / 'compact-history' / 'bgkit-compaction-v2.port-records.jsonl')
              .read_text().splitlines()]
-    assert all(validate(case) == [] for case in cases)
+    assert all(valid(case) for case in cases)
     train = next(case for case in cases if case['split'] == 'train')
     assert train['outcome']['checked'] == 'swe-rebench-tests' and train['consumer']['context'][0] == TASK
     assert train['sources'][0]['messages'][0]['role'] == 'assistant'             # the system prompt is dropped

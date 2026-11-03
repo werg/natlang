@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import heapq
 import json
+import os
 import sys
 from collections import Counter
 from pathlib import Path
@@ -36,6 +37,7 @@ TRAIN_CAP, TEST_CAP = 15_000, 1_000
 MAX_WINDOWS = 2        # windows per trajectory overall
 OVERSAMPLE = 4         # candidates kept beyond the cap: trajectory cap, bench drops and dedupe rejects consume some
 VERIFIED = 'swe-rebench-tests'
+CACHE_WINDOW = 1 << 28  # bytes read between page-cache releases
 
 
 def load_bench_instances(path: Path = BENCH_KEYS) -> set:
@@ -71,9 +73,19 @@ class Pool:
         return sorted((-negative, offset, trajectory) for negative, offset, trajectory in self.heaps[split])
 
 
-def take_ranked(pool: Pool, windows: Counter, sink: CaseSink, build, label: str, taken: set) -> Counter:
+def release_cache(*streams):
+    """Flush and drop the page cache of bulk streams so a multi-GB pass stays inside the unit's memory budget."""
+    for stream in streams:
+        if hasattr(stream, 'flush') and not stream.closed and 'w' in getattr(stream, 'mode', ''):
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.posix_fadvise(stream.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
+
+
+def take_ranked(pool: Pool, windows: Counter, sink: CaseSink, build, label: str, taken: set,
+                streams=()) -> Counter:
     """Offer ranked candidates until each split cap is met; the per-trajectory window cap spans both sources."""
-    notes = Counter()
+    notes, offered = Counter(), 0
     for split in ('train', 'test'):
         for _, offset, trajectory in pool.ranked(split):
             if sink.counts[split] >= pool.caps[split]:
@@ -83,6 +95,9 @@ def take_ranked(pool: Pool, windows: Counter, sink: CaseSink, build, label: str,
                 sink.reject(f'{label}:{trajectory}', f'window-cap: more than {MAX_WINDOWS} windows per trajectory')
                 continue
             record = build(offset, split)
+            offered += 1
+            if offered % 500 == 0:
+                release_cache(sink.out, *streams)
             if sink.offer(record):
                 windows[trajectory] += 1
                 taken.add((trajectory, tuple((record['sources'][0].get('meta') or {}).get('span') or ())))
@@ -115,12 +130,15 @@ def s1_reason(record: dict, bench: set) -> str | None:
 
 
 def select_s1(path: Path, sink: CaseSink, bench: set, limit: int | None, caps: dict):
-    pool, dropped, offset = Pool(S1_NAME, caps), Counter(), 0
+    pool, dropped, offset, released = Pool(S1_NAME, caps), Counter(), 0, 0
     with open(path, 'rb') as stream:
         for count, line in enumerate(stream):
             if limit is not None and count >= limit:
                 break
             start, offset = offset, offset + len(line)
+            if offset - released >= CACHE_WINDOW:     # a 22 GB scan must not fill the unit's page-cache charge
+                os.posix_fadvise(stream.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
+                released = offset
             if VERIFIED.encode() not in line:        # cheap pre-filter: only SWE-rebench-verified rows are parsed
                 dropped['not-swe-rebench-verified'] += 1
                 continue
@@ -148,7 +166,7 @@ def convert_s1(out_root: Path, limit: int | None, windows: Counter, bench: set, 
             stream.seek(offset)
             return json.loads(stream.readline())
 
-        notes = take_ranked(pool, windows, sink, build, S1_NAME, taken)
+        notes = take_ranked(pool, windows, sink, build, S1_NAME, taken, (stream,))
         stream.close()
         sink.notes = ('S1 trajectory_continuation_swe rows with outcome.checked == swe-rebench-tests, records kept as '
                       f'sealed in S1 (split closure and protected moves already applied); eligible {dict(pool.eligible)}; '
@@ -212,33 +230,35 @@ def upstream_status(path: Path = UPSTREAM_TRAJECTORIES) -> dict:
 def bgkit_candidates(tasks_path: Path, status: dict, bench: set, limit: int | None, sink: CaseSink):
     """Task rows joined to the upstream resolved status; the drops are counted as sink rejects by reason."""
     import pyarrow.parquet as pq
-    table = pq.ParquetFile(tasks_path).read(columns=['family', 'instruction', 'target', 'split', 'meta'])
-    out = []
-    for index, row in enumerate(zip(*(table.column(name).to_pylist() for name in
-                                      ('family', 'instruction', 'target', 'split', 'meta')))):
-        if limit is not None and index >= limit:
-            break
-        family, instruction, target, split, meta = row
-        meta = json.loads(meta)
-        tid, span = meta['trajectory_id'], tuple(meta['span'])
-        record_id = f'{BGKIT_NAME}:{tid}:{span[0]}-{span[1]}'
-        if family != 'compaction':
-            sink.reject(record_id, f'not-a-continuation: family {family} targets a probe, not the next assistant message')
-        elif tid not in status:
-            sink.reject(record_id, 'no-upstream: trajectory not in the upstream resolved-status table')
-        elif not status[tid][2]:
-            sink.reject(record_id, 'unresolved: upstream tests did not resolve the instance')
-        else:
-            # The stored session is collapsed: [system, task, compaction marker, *recent steps]; the recent steps
-            # are upstream messages[stop : stop + n], the target is the next assistant message.
-            session = json.loads(instruction)
-            if len(session) < 4 or not (session[2].get('content') or '').startswith(COMPACTED_MARKER):
-                sink.reject(record_id, 'misaligned: stored session has no compaction marker')
-                continue
-            instance = status[tid][0]
-            out.append({'id': record_id, 'tid': tid, 'span': span, 'recent': len(session) - 3, 'target': target,
-                        'split': 'test' if split in ('eval', 'test') or instance in bench else 'train',
-                        'group': status[tid][3]})
+    names = ('family', 'instruction', 'target', 'split', 'meta')
+    out, index = [], 0
+    for batch in pq.ParquetFile(tasks_path).iter_batches(batch_size=1000, columns=list(names)):
+        for family, instruction, target, split, meta in zip(*(batch.column(name).to_pylist() for name in names)):
+            index += 1
+            if limit is not None and index > limit:
+                return out
+            meta = json.loads(meta)
+            tid, span = meta['trajectory_id'], tuple(meta['span'])
+            record_id = f'{BGKIT_NAME}:{tid}:{span[0]}-{span[1]}'
+            if family != 'compaction':
+                sink.reject(record_id, f'not-a-continuation: family {family} targets a probe, not the next '
+                                       'assistant message')
+            elif tid not in status:
+                sink.reject(record_id, 'no-upstream: trajectory not in the upstream resolved-status table')
+            elif not status[tid][2]:
+                sink.reject(record_id, 'unresolved: upstream tests did not resolve the instance')
+            else:
+                # The stored session is collapsed: [system, task, compaction marker, *recent steps]; the recent
+                # steps are upstream messages[stop : stop + n], the target is the next assistant message.
+                session = json.loads(instruction)
+                if len(session) < 4 or not (session[2].get('content') or '').startswith(COMPACTED_MARKER):
+                    sink.reject(record_id, 'misaligned: stored session has no compaction marker')
+                    continue
+                instance = status[tid][0]
+                out.append({'id': record_id, 'tid': tid, 'span': span, 'recent': len(session) - 3,
+                            'target': target,
+                            'split': 'test' if split in ('eval', 'test') or instance in bench else 'train',
+                            'group': status[tid][3]})
     return out
 
 
