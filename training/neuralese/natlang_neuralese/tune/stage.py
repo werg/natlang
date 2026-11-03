@@ -53,7 +53,7 @@ REPO = _logical_root('repo').resolve()
 LANE = REPO / 'training' / 'neuralese' / 'learned-optimizer'
 MANIFEST_SCHEMA = 'natlang.program-adaptation-manifest/1'
 DISTILL_SCHEMA = 'natlang.program-adaptation-distill/1'
-DEFAULT_NODE = '/home/werg/.local/share/natlang-dev/node-v24.0.1-linux-arm64/bin/node'
+DEFAULT_NODE = str(Path.home() / '.local/share/natlang-dev/node-v24.0.1-linux-arm64/bin/node')
 # The lane's tuner settings (PROGRAM_TUNING_RUNS_20261026.md limits; reply/action targets only).
 DEFAULT_TUNER = {'teacher': 'self', 'backend': 'native', 'softStates': True,
                  'execution': {'maxTurns': 12, 'maxTokens': 4096, 'maxSeconds': 120, 'maxFailureRepairs': 3},
