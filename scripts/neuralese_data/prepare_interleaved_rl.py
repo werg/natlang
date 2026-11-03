@@ -30,6 +30,10 @@ import re
 import sys
 from pathlib import Path
 
+# Task-source oracles that need runtime code newer than the interleave stage itself.
+REQUIRED_RUNTIME_COMMITS = (
+    ('577fc3271', 'codebase-ops repair/feature oracles call default exports; older runtimes grade every rollout wrong'),
+)
 DEFAULT_LOSS = {'schema': 'jolt-plus/1', 'beta_s': 1.0, 'beta_t': 0.5,
                 'outcome': {'schema': 'score-centered/1', 'k': 128, 'eps': 1e-6, 'importance': 'tis'}}
 
@@ -102,6 +106,14 @@ def prepare(args):
     runtime = Path(args.runtime).resolve(strict=True)
     if not (runtime / 'training/neuralese/natlang_neuralese/rl/interleave.py').is_file():
         raise SystemExit('runtime lacks rl/interleave.py: freeze a runtime from main first')
+    closure = runtime / 'runtime-input-closure.json'
+    if closure.is_file():
+        import subprocess
+        commit = json.loads(closure.read_text()).get('commit')
+        for required, reason in REQUIRED_RUNTIME_COMMITS:
+            if subprocess.run(['git', 'merge-base', '--is-ancestor', required, commit or 'missing'],
+                              capture_output=True).returncode != 0:
+                raise SystemExit(f'frozen runtime {commit} predates {required}: {reason}')
     previous_path = Path(args.previous_config).resolve(strict=True)
     previous = json.loads(previous_path.read_text())
     if not previous.get('mandatory_sft_only'):
