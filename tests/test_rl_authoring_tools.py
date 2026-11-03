@@ -314,7 +314,7 @@ def test_multi_operation_worlds_need_several_roots_over_shared_helpers():
     two = findings(operation('t1', 'close_day'), operation('t2', 'trial_balance'))
     assert all(not v['errors'] and not v['warnings'] for v in two.values())
     unshared = findings(operation('t1', 'close_day'), operation('t2', 'trial_balance', 'Other.'))
-    assert all(any('no helper file shared' in w for w in v['warnings']) for v in unshared.values())
+    assert all(any('no helper file' in e and 'identical' in e for e in v['errors']) for v in unshared.values())
 
 
 def test_iterate_needs_an_explicit_stop_and_a_real_iterateOn():
@@ -404,7 +404,7 @@ def test_blind_solve_packets_hide_answers_and_compare_uses_the_oracle(tmp_path):
             'inputs': {'x': 1}, 'expected': {'n': 2, 's': 'Ok'}, 'oracle': 'normalized', 'alias_answers': [{'n': 2, 's': 'fine'}],
             'wrong_answers': [{'n': 3, 's': 'Ok'}], 'groups': ['g'], 'smoke': {'code': 'x'}}
     row = blind_solve.packet_row(task)
-    assert row['returns'] == '{ n: number; s: string }' and set(row) == {'id', 'root', 'files', 'inputs', 'returns'}
+    assert row['returns'] == '{ n: number; s: string }' and set(row) == {'id', 'root', 'files', 'inputs', 'returns', 'answer_format'}
     ok = blind_solve.compare([task], {'t': {'answer': {'s': ' ok', 'n': 2.0}}})
     assert not ok['disagreements'] and ok['agree'] == 1
     assert blind_solve.compare([task], {'t': {'answer': {'n': 2, 's': 'fine'}}})['agree'] == 1

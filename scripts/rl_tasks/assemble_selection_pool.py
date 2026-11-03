@@ -11,6 +11,11 @@ interleaved RL stage binds (`rl_task_source`). It keeps verified rows byte-for-b
    that share, every effect/state row that survives the family cap is kept and the other rows are water-filled per
    generator down to the size that makes the share true. Rows are never duplicated or invented; scarce effect supply
    shrinks the pool and each admitted effect/state task grows it. Authored classes smaller than the cap stay whole.
+   Effect/state means the oracle verifies the world after the run (files, service state, repaired code; see
+   ``measure_repetition.program_features``); an author-declared complete returned state with no world is counted
+   separately and does not enter the quota. ``min_pool_rows`` bounds the shrinking: the receipt then reports the
+   honest share (``quota.met``) and the supply still missing, instead of dropping breadth to reach the bar.
+   Train rows related to any registered protected packet or held source are dropped before selection.
 2. Within a capped class, rows are taken round-robin across families and levels, preferring effect/state oracles and
    not-yet-taken normalized programs, so the cap drops repeated templates first.
 3. Family consolidation (only families with fewer than 20 distinct normalized programs in the pool; procedural
@@ -35,6 +40,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training' / 'neuralese'))
 from measure_repetition import program_features, report  # noqa: E402
+from natlang_neuralese.common.custody import ProtectedWorlds  # noqa: E402
 from natlang_neuralese.common.hashing import sha256_file_hex as sha256  # noqa: E402
 
 # Upstream dataset sources of the broad builder, grouped by the kind of reasoning their tasks need.
@@ -85,7 +91,10 @@ def apply_program_caps(rows, caps, dropped):
     return kept
 
 
-def load(paths, exclude_ids=(), program_caps=(), dropped=None):
+def load(paths, exclude_ids=(), program_caps=(), dropped=None, protected=None):
+    """Verified train rows of the inputs. ``protected`` (ProtectedWorlds) is the fail-closed custody guard: a train row
+    whose world is related to any registered evaluation-only packet or held source is never selectable, whatever its
+    input's own custody said (an input can predate the registration of its siblings' held rows)."""
     dropped = collections.Counter() if dropped is None else dropped
     excluded = set(exclude_ids)
     rows, seen = [], set()
@@ -102,6 +111,9 @@ def load(paths, exclude_ids=(), program_caps=(), dropped=None):
                 seen.add(row['id'])
                 if row['id'] in excluded:
                     dropped['excluded_ids'] += 1
+                    continue
+                if protected is not None and protected.related(row):
+                    dropped['protected_world_related'] += 1
                     continue
                 rows.append((row, program_features(row)))
     return apply_program_caps(rows, program_caps, dropped)
@@ -179,12 +191,13 @@ def usable_rows(members, family_cap):
     return sum(min(n, family_cap) for n in per_family.values())
 
 
-def select(classes, total, share, family_share, min_effect_share):
+def select(classes, total, share, family_share, min_effect_share, min_rows=0):
     """Choose the pool rows. Without a quota: generator caps (water-filling) plus the family cap, effect oracles
     first. With ``min_effect_share``: every effect/state row that survives the family cap is kept, and the other rows
     are water-filled per generator so that effect/state oracles are at least that share of the pool. No row is ever
     duplicated or invented: when verified effect/state supply is scarce the pool shrinks instead, and the pool size
-    rises with every admitted effect/state task."""
+    rises with every admitted effect/state task. ``min_rows`` is a floor on that shrinking: scarce supply must not cost
+    breadth, so the pool never shrinks below it and the quota then reports ``met: false`` with the honest share."""
     # A family (one program design or template) may hold at most family_share of the pool, effect oracles included:
     # the cap is solved jointly with the generator caps (two fixed-point passes suffice for these sizes).
     family_cap = total
@@ -197,22 +210,29 @@ def select(classes, total, share, family_share, min_effect_share):
     quota = {'min_effect_share': min_effect_share, 'applied': False}
     effect_kept = sum(1 for _, features in pool if features['effect_state_oracle'])
     if not min_effect_share or effect_kept >= min_effect_share * len(pool):
-        quota.update(effect_rows=effect_kept, rows=len(pool))
+        quota.update(effect_rows=effect_kept, rows=len(pool), effect_share=round(effect_kept / max(1, len(pool)), 4),
+                     met=effect_kept >= min_effect_share * len(pool))
         return pool, family_cap, limits, quota
     unconstrained = len(pool)
-    effects = {g: [m for m in members if m[1]['effect_state_oracle']] for g, members in classes.items()}
-    others = {g: [m for m in members if not m[1]['effect_state_oracle']] for g, members in classes.items()}
+    # Rows whose oracle verifies a world are the quota's effect rows. Authored complete-state records without a world
+    # (``returned_state_oracle``) are scarce, program-rich authored supply: they are kept whole like effect rows
+    # but never counted toward the share.
+    whole = {g: [m for m in members if m[1]['effect_state_oracle'] or m[1]['returned_state_oracle']]
+             for g, members in classes.items()}
+    others = {g: [m for m in members if not (m[1]['effect_state_oracle'] or m[1]['returned_state_oracle'])]
+              for g, members in classes.items()}
 
     def plan(cap):
-        """Effect rows kept (family cap `cap`), per-generator allowance of other rows, resulting pool size."""
+        """Whole-kept rows (family cap `cap`), per-generator allowance of other rows, resulting pool size."""
         counts = collections.Counter()
-        kept = {g: take(effects[g], len(effects[g]), cap, counts) for g in sorted(classes)}
-        effect_total = sum(len(v) for v in kept.values())
-        total_rows = int(effect_total / min_effect_share)
+        kept = {g: take(whole[g], len(whole[g]), cap, counts) for g in sorted(classes)}
+        kept_total = sum(len(v) for v in kept.values())
+        effect_total = sum(1 for v in kept.values() for _, f in v if f['effect_state_oracle'])
+        total_rows = max(int(effect_total / min_effect_share), min_rows, kept_total)
         generator_cap = int(share * total_rows)
         room = {g: max(0, min(usable_rows(others[g], cap), generator_cap - len(kept[g]))) for g in classes}
-        allowance = water_fill(room, total_rows - effect_total)
-        return kept, counts, allowance, effect_total + sum(allowance.values())
+        allowance = water_fill(room, total_rows - kept_total)
+        return kept, counts, allowance, kept_total + sum(allowance.values())
 
     family_cap = max(1, int(family_share * len(pool)))
     for _ in range(8):
@@ -226,23 +246,28 @@ def select(classes, total, share, family_share, min_effect_share):
     for generator in sorted(classes):
         pool += take(others[generator], allowance[generator], family_cap, family_counts)
     limits = {g: len(kept[g]) + allowance[g] for g in classes}
-    effect_total = sum(len(v) for v in kept.values())
-    quota.update(applied=True, effect_rows=effect_total, rows=len(pool), unconstrained_rows=unconstrained,
+    effect_total = sum(1 for v in kept.values() for _, f in v if f['effect_state_oracle'])
+    quota.update(applied=True, effect_rows=effect_total, returned_state_rows_kept=sum(
+        1 for v in kept.values() for _, f in v if f['returned_state_oracle']), rows=len(pool), unconstrained_rows=unconstrained,
+                 min_rows=min_rows, effect_share=round(effect_total / max(1, len(pool)), 4),
+                 met=effect_total >= min_effect_share * len(pool),
                  note='effect/state rows kept in full under the family cap; other rows water-filled per generator; '
                       'no row duplicated')
     return pool, family_cap, limits, quota
 
 
-def assemble(inputs, out, *, share, domains, family_share=0.05, min_effect_share=0.0, exclude_ids=(), program_caps=()):
+def assemble(inputs, out, *, share, domains, family_share=0.05, min_effect_share=0.0, exclude_ids=(), program_caps=(),
+             min_pool_rows=0, protected=None):
     out = Path(out)
     if out.exists():
         raise SystemExit(f'{out} exists')
     dropped = collections.Counter()
-    rows = load([path for path in inputs if Path(path).stat().st_size], exclude_ids, program_caps, dropped)
+    protected = ProtectedWorlds.load() if protected is None else protected
+    rows = load([path for path in inputs if Path(path).stat().st_size], exclude_ids, program_caps, dropped, protected)
     classes = collections.defaultdict(list)
     for row, features in rows:
         classes[features['generator']].append((row, features))
-    pool, family_cap, limits, quota = select(classes, len(rows), share, family_share, min_effect_share)
+    pool, family_cap, limits, quota = select(classes, len(rows), share, family_share, min_effect_share, min_pool_rows)
     merges = collections.Counter()
     written = []
     family_programs = collections.defaultdict(set)
@@ -291,6 +316,7 @@ def assemble(inputs, out, *, share, domains, family_share=0.05, min_effect_share
                'inputs': [{'path': str(Path(p).resolve()), 'sha256': sha256(p)} for p in inputs],
                'cases': {'path': 'cases.jsonl', 'sha256': sha256(cases), 'rows': len(ordered)},
                'exclude_ids': sorted(exclude_ids), 'program_caps': list(program_caps), 'dropped_before_selection': dict(dropped),
+               'protected_worlds_digest': protected.digest,
                'max_generator_share': share, 'max_family_share': family_share, 'family_cap_rows': family_cap,
                'quota': quota,
                'generator_classes': {c: {'available': len(m), 'kept': sum(1 for _, f in pool if f['generator'] == c)}
@@ -307,7 +333,7 @@ def assemble(inputs, out, *, share, domains, family_share=0.05, min_effect_share
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--cases', action='append', default=[], help='verified train cases JSONL (repeatable)')
-    parser.add_argument('--spec', help='JSON {"cases": [paths], "max_generator_share", "max_family_share", "min_effect_share", "exclude_ids": [ids], "program_caps": [{"source", "max_rows_per_program"}]}; '
+    parser.add_argument('--spec', help='JSON {"cases": [paths], "max_generator_share", "max_family_share", "min_effect_share", "min_pool_rows", "exclude_ids": [ids], "program_caps": [{"source", "max_rows_per_program"}]}; '
                         'empty or missing files (e.g. a not-yet-filled admitted/cases.jsonl) are skipped')
     parser.add_argument('--out', help='new output directory')
     parser.add_argument('--out-root', help='write a fresh selection-pool-<UTC time> here and update latest.json')
@@ -321,7 +347,7 @@ def main(argv=None):
     domains = json.loads(Path(args.domain_map).read_text()) if args.domain_map else DEFAULT_DOMAINS
     inputs, share, family_share = list(args.cases), args.max_generator_share, args.max_family_share
     min_effect = args.min_effect_share
-    exclude_ids, program_caps = [], []
+    exclude_ids, program_caps, min_pool_rows = [], [], 0
     if args.spec:
         spec = json.loads(Path(args.spec).read_text())
         inputs += spec['cases']
@@ -331,6 +357,7 @@ def main(argv=None):
             min_effect = spec.get('min_effect_share')
         exclude_ids += list(spec.get('exclude_ids', []))
         program_caps = list(spec.get('program_caps', []))
+        min_pool_rows = int(spec.get('min_pool_rows', 0))
     inputs = [path for path in inputs if Path(path).is_file()]
     if not inputs:
         raise SystemExit('no task source files')
@@ -344,7 +371,7 @@ def main(argv=None):
         raise SystemExit('give --out or --out-root')
     receipt = assemble(inputs, out, share=share, domains=domains, family_share=family_share,
                        min_effect_share=0.3 if min_effect is None else min_effect,
-                       exclude_ids=exclude_ids, program_caps=program_caps)
+                       exclude_ids=exclude_ids, program_caps=program_caps, min_pool_rows=min_pool_rows)
     if args.out_root:
         latest = {'pool': str(out.resolve()), 'cases': str((out / 'cases.jsonl').resolve()),
                   'sha256': receipt['cases']['sha256'], 'rows': receipt['cases']['rows']}

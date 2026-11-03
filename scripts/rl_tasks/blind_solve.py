@@ -7,6 +7,7 @@ alone. This tool automates the mechanical half of that audit:
 
   blind_solve.py packet TASKS.jsonl -o PACKET.jsonl   strip expected/wrong answers/aliases/reference/smoke/groups
   blind_solve.py compare TASKS.jsonl ANSWERS.json     compare a solver's answers with `expected` (and folders)
+  blind_solve.py prompt                               the uniform solver prompt (every packet row carries its answer_format)
 
 PACKET rows carry `id`, `root`, `files`, `inputs`, `folders` and `returns` (the root's declared type). ANSWERS is a
 JSON object `{task id: {"answer": <value>, "folders": {path: text}}}` (`folders` only for tasks with `folders`).
@@ -42,11 +43,31 @@ def root_returns(task):
         return text
 
 
+ANSWER_FORMAT = ('Answer with {"answer": <the value the root returns, in its declared type>}.')
+FOLDER_ANSWER_FORMAT = (
+    'Answer with {"answer": <the value the root returns, in its declared type>, "folders": {"<path>": "<exact text>", ...}} '
+    'where "folders" lists EVERY file that exists in the world folder after a correct run, with its full text: files the '
+    'run moved appear once under their new path (the old path is gone), files it wrote appear with the text the program '
+    'tells it to write, and files it never touched appear unchanged. A file that does not exist after the run must not '
+    'be listed. Copy file text exactly as the program writes it (including its trailing newline when the program writes one).')
+
+SOLVER_PROMPT = (
+    'You are the blind solver for authored natlang RL tasks. Each packet row has a root program, its helper files, '
+    'concrete inputs, (for folder tasks) the starting folder, and the declared return type. Solve every task by running '
+    'the program LITERALLY: simulate each helper as a reader that sees only the arguments it receives plus its own text, '
+    'in the order the root calls them, apply the root\'s code steps exactly, and write what the root returns. Do not '
+    'answer by intent. If a judgment has two defensible readings, give your best literal answer and add the id to '
+    '"ambiguous" with a one-line reason. Each row has an "answer_format": follow it exactly. Output one JSON object '
+    '{"answers": {<id>: {"answer": ..., "folders": {...}}}, "ambiguous": {<id>: <reason>}}, with "folders" only for rows '
+    'that have it.')
+
+
 def packet_row(task):
     row = {'id': task['id'], 'root': task['root'], 'files': task['files'], 'inputs': task.get('inputs', {}),
-           'returns': root_returns(task)}
+           'returns': root_returns(task), 'answer_format': ANSWER_FORMAT}
     if task.get('folders'):
         row['folders'] = task['folders']
+        row['answer_format'] = FOLDER_ANSWER_FORMAT
     return row
 
 
@@ -113,18 +134,25 @@ def main(argv=None):
     pack = sub.add_parser('packet')
     pack.add_argument('tasks')
     pack.add_argument('-o', '--out', required=True)
+    sub.add_parser('prompt', help='print the uniform solver prompt')
     comp = sub.add_parser('compare')
     comp.add_argument('tasks')
     comp.add_argument('answers')
     args = parser.parse_args(argv)
+    if args.cmd == 'prompt':
+        print(SOLVER_PROMPT)
+        return 0
     tasks = read_tasks(args.tasks)
     if args.cmd == 'packet':
         Path(args.out).write_text(''.join(json.dumps(packet_row(task)) + '\n' for task in tasks))
         print(json.dumps({'packet': args.out, 'tasks': len(tasks)}))
         return 0
-    result = compare(tasks, json.loads(Path(args.answers).read_text()))
+    given = json.loads(Path(args.answers).read_text())
+    ambiguous = given.get('ambiguous', {}) if 'answers' in given else {}
+    result = compare(tasks, given['answers'] if 'answers' in given else given)
+    result['ambiguous'] = ambiguous
     print(json.dumps(result, indent=1))
-    return 1 if result['disagreements'] or result['missing'] else 0
+    return 1 if result['disagreements'] or result['missing'] or ambiguous else 0
 
 
 if __name__ == '__main__':

@@ -197,9 +197,16 @@ def program_features(row):
     code = '\n'.join(text for text in semantics['files'].values())
     oracle = semantics.get('oracle')
     explicit = (curriculum_of(row).get('external') or {}).get('oracle_depth')
-    effect_state = (explicit == 'effect-state' if explicit in ('effect-state', 'answer') else
+    # Effect/state oracle = the oracle verifies the WORLD after the run: files, service state, repaired code. An author's
+    # declared ``oracle_depth: effect-state`` counts only with that evidence (folder files, services or effect keys); a
+    # returned record that merely is the full resulting state, with no world to be wrong, is counted separately as
+    # ``returned_state_oracle`` (2026-11-03: the tag alone had put 511 such rows into the 30% quota; strict share 22%).
+    world_evidence = bool(EFFECT_KEYS & set(semantics)) or bool(semantics.get('folder_files')) or bool(
+        semantics.get('services'))
+    effect_state = (explicit == 'effect-state' and world_evidence if explicit in ('effect-state', 'answer') else
                     bool(EFFECT_KEYS & set(semantics)) or (isinstance(oracle, dict) and oracle.get('level') in
                                                            ('constraints', 'authoring', 'state', 'effects')))
+    returned_state = explicit == 'effect-state' and not effect_state
     generator = (row.get('generation') or {}).get('generator') or 'unknown'
     external = curriculum_of(row).get('external') or {}
     source = str(external.get('source') or '')
@@ -229,7 +236,7 @@ def program_features(row):
         'decide_call': bool(re.search(r'\bdecide\(', code)), 'services': bool(semantics.get('services')),
         'single_call': curriculum.get('mode') == 'single_call',
         'generator': generator, 'dataset_wrapper': wrapper, 'effect_state_oracle': effect_state,
-        'call_depth_ge_3': depth >= 2,
+        'returned_state_oracle': returned_state, 'call_depth_ge_3': depth >= 2,
         'folder_reducer': bool(re.search(r'^kind:\s*directory-reducer', '\n'.join(
             split_file(t)[0] for t in files.values()), re.M)),
         'skills': any('/skills/' in path and path.endswith('SKILL.md') for path in semantics['files']),
@@ -248,7 +255,8 @@ def effective(counter):
 
 CONSTRUCTS = ('multi_function', 'call_depth_ge_3', 'neuralese_result', 'typed_neuralese_result',
               'neuralese_argument', 'neuralese_fan_in', 'iterate', 'neuralese_iterate', 'folder_reducer',
-              'readout_decision', 'decide_call', 'skills', 'services', 'effect_state_oracle', 'dataset_wrapper',
+              'readout_decision', 'decide_call', 'skills', 'services', 'effect_state_oracle', 'returned_state_oracle',
+              'dataset_wrapper',
               'single_call')
 
 

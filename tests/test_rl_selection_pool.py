@@ -33,7 +33,7 @@ def test_pool_caps_generators_and_families_and_prefers_new_programs(tmp_path):
                  for i in range(30)]
     source = tmp_path / 'cases.jsonl'
     source.write_text(''.join(json.dumps(row) + '\n' for row in rows))
-    receipt = pool.assemble([str(source)], tmp_path / 'pool', share=.2, domains={}, family_share=.1)
+    receipt = pool.assemble([str(source)], tmp_path / 'pool', share=.2, domains={}, family_share=.1, protected=Stub())
     kept = [json.loads(line) for line in (tmp_path / 'pool' / 'cases.jsonl').read_text().splitlines()]
     by_generator = {}
     for row in kept:
@@ -53,8 +53,9 @@ def test_effect_state_quota_shrinks_pool_without_duplicating_rows(tmp_path):
                  for i in range(10)]
     source = tmp_path / 'cases.jsonl'
     source.write_text(''.join(json.dumps(row) + '\n' for row in rows))
-    free = pool.assemble([str(source)], tmp_path / 'free', share=.3, domains={}, family_share=.2)
-    receipt = pool.assemble([str(source)], tmp_path / 'quota', share=.3, domains={}, family_share=.2, min_effect_share=.3)
+    free = pool.assemble([str(source)], tmp_path / 'free', share=.3, domains={}, family_share=.2, protected=Stub())
+    receipt = pool.assemble([str(source)], tmp_path / 'quota', share=.3, domains={}, family_share=.2, min_effect_share=.3,
+                            protected=Stub())
     kept = [json.loads(line) for line in (tmp_path / 'quota' / 'cases.jsonl').read_text().splitlines()]
     ids = [row['id'] for row in kept]
     assert len(ids) == len(set(ids))
@@ -73,9 +74,53 @@ def test_program_caps_and_excluded_ids_trim_program_poor_sources_without_touchin
     rows += [case(f'rich-{i}', f'rich{i % 3}', 'g/rich', body=f'rich program {chr(97 + i)}x{i}') for i in range(20)]
     source = tmp_path / 'cases.jsonl'
     source.write_text(''.join(json.dumps(row) + '\n' for row in rows))
-    receipt = pool.assemble([str(source)], tmp_path / 'capped', share=.9, domains={}, family_share=1.0,
+    receipt = pool.assemble([str(source)], tmp_path / 'capped', share=.9, domains={}, family_share=1.0, protected=Stub(),
                             exclude_ids=['poor-3', 'rich-0'], program_caps=[{'source': 'bgkit', 'max_rows_per_program': 8}])
     kept = {json.loads(line)['id'] for line in (tmp_path / 'capped' / 'cases.jsonl').read_text().splitlines()}
     assert sum(i.startswith('poor-') for i in kept) == 8 and 'poor-3' not in kept and 'rich-0' not in kept
     assert sum(i.startswith('rich-') for i in kept) == 19
     assert receipt['dropped_before_selection'] == {'excluded_ids': 2, 'bgkit': 21}
+
+
+def test_returned_state_without_a_world_is_not_effect_state_and_min_rows_bounds_the_shrinking(tmp_path):
+    rows = []
+    for name in 'abcd':
+        rows += [case(f'{name}-plain-{i}', f'{name}-plain{i % 12}', 'g/' + name, body=f'{name} plain {chr(97 + i % 26)}{i}')
+                 for i in range(200)]
+        rows += [case(f'{name}-eff-{i}', f'{name}-eff{i % 12}', 'g/' + name, body=f'{name} effect {i} step', effect=True)
+                 for i in range(10)]
+        for i in range(10):  # an author-declared "complete state" with no folder, service or effect check
+            row = case(f'{name}-ret-{i}', f'{name}-ret{i % 12}', 'g/' + name, body=f'{name} returned {i} state')
+            row['curriculum']['external'] = {'oracle_depth': 'effect-state'}
+            rows.append(row)
+    source = tmp_path / 'cases.jsonl'
+    source.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    strict = pool.assemble([str(source)], tmp_path / 'strict', share=.3, domains={}, family_share=.2, min_effect_share=.3,
+                           protected=Stub())
+    assert strict['quota']['effect_rows'] == 40 and strict['quota']['met']
+    floor = pool.assemble([str(source)], tmp_path / 'floor', share=.3, domains={}, family_share=.2, min_effect_share=.3,
+                          min_pool_rows=300, protected=Stub())
+    assert floor['cases']['rows'] >= 300 > strict['cases']['rows']
+    assert floor['quota']['effect_rows'] == 40 and not floor['quota']['met']
+    assert floor['quota']['effect_share'] < .3
+
+
+class Stub:
+    digest = 'stub'
+
+    def __init__(self, related=()):
+        self.ids = set(related)
+
+    def related(self, row):
+        return ['group'] if row['id'] in self.ids else []
+
+
+def test_train_rows_related_to_protected_worlds_are_never_selectable(tmp_path):
+    rows = [case(f'r-{i}', f'fam{i % 5}', 'g/r', body=f'program {i} {"y" * (i % 9)}') for i in range(40)]
+    source = tmp_path / 'cases.jsonl'
+    source.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    receipt = pool.assemble([str(source)], tmp_path / 'guarded', share=1.0, domains={}, family_share=1.0,
+                            protected=Stub({'r-3', 'r-4'}))
+    kept = {json.loads(line)['id'] for line in (tmp_path / 'guarded' / 'cases.jsonl').read_text().splitlines()}
+    assert not kept & {'r-3', 'r-4'} and receipt['dropped_before_selection']['protected_world_related'] == 2
+    assert receipt['protected_worlds_digest'] == 'stub'

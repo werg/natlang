@@ -11,7 +11,8 @@ are fiction. These checks read the authored task and its program files and rejec
   so sub-helper calls inside them never run;
 - ``skills`` files bound to a function that does not exist, or read by a function other than the one owning the
   folder (the runtime binds ``<folder>/skills/<name>/SKILL.md`` only to the call that owns ``<folder>``);
-- ``multi_operation_codebase`` on a world whose tasks run a single root operation (batch-level);
+- ``multi_operation_codebase`` on a world whose tasks run a single root operation, or whose roots share no helper file
+  (same name, identical text, in the folders of two or more roots) (batch-level);
 - ``iterateOn`` without an explicit stopping condition in its instructions, and an ``iterate`` tag without ``iterateOn``;
 - ``call_depth_3`` without a root -> helper -> sub-helper chain, or whose middle helper never calls its sub-helper;
   warning when the middle helper looks like a pass-through or the sub-helper like a one-line comparison;
@@ -266,9 +267,9 @@ def lint_batch(tasks):
                                         for sig in set().union(*(helper_signature(t) for t in group if t['root'] == root)))
         if not any(count >= 2 for count in by_helper.values()):
             for task in group:
-                report[task['id']]['warnings'].append(
-                    f'heuristic: multi_operation_codebase world {world} has {len(roots)} roots but no helper file '
-                    'shared between them')
+                report[task['id']]['errors'].append(
+                    f'multi_operation_codebase: world {world} has {len(roots)} roots but no helper file (same name, identical '
+                    'text) in the folders of two or more of them; one reusable program means shared helper files')
     return report
 
 
