@@ -1712,3 +1712,10 @@ def test_launch_backs_off_shape_on_resource_exhausted_and_records_grant(tmp_path
         raise Invalid('bad request')
     with pytest.raises(Invalid):
         cwctl.create_with_shape_backoff(job, 'cw3', {'cost': None}, refuse)
+
+
+def test_shape_ladder_default_rung_only_when_allowed():
+    ideal = {'gpu': 1, 'cpu': '8', 'memory': '64Gi'}
+    assert cwctl.shape_ladder(ideal, {'cpu': '4', 'memory': '32Gi'})[-1] == {'gpu': 1, 'cpu': '4', 'memory': '32Gi'}
+    ladder = cwctl.shape_ladder(ideal, {'cpu': '4', 'memory': '32Gi'}, allow_default=True)
+    assert ladder[-1] == {'gpu': 1} and ladder[-2] == {'gpu': 1, 'cpu': '4', 'memory': '32Gi'}

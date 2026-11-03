@@ -65,3 +65,16 @@ def test_prepared_control_relocates_window_and_refuses_a_started_control(tmp_pat
     (out / 'state.json').write_text('{}')
     with pytest.raises(SystemExit):
         prepared_boundary({'controller': str(control)})
+
+
+def test_render_job_carries_shape_floor_to_the_sandbox(tmp_path):
+    from scripts.coreweave.rl_cloud import render_job
+    run = {'id': 'r', 'root': '/cloud/r', 'job': 'scripts/coreweave/jobs/lfm3/rl-lineage.job.json',
+           'lineages': {'x': {'controller': '/c.json', 'resources': {'cpu': '8', 'memory': '64Gi'},
+                              'minimum_resources': {'cpu': '4', 'memory': '32Gi'}}}}
+    job = render_job(run, 'x', 0)
+    assert job['minimum_resources'] == {'cpu': '4', 'memory': '32Gi'} and job['resources']['gpu'] == 1
+    assert job['env']['NATLANG_CW_MIN_CPU'] == '4' and job['env']['NATLANG_CW_MIN_MEMORY'] == '32Gi'
+    assert 'allow_default_shape' not in job
+    check = render_job(run, 'x', 0, check=True)
+    assert 'minimum_resources' not in check and 'NATLANG_CW_MIN_MEMORY' not in check['env']

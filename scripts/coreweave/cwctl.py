@@ -346,9 +346,11 @@ def _gib(value) -> float:
     return float(text) / 2 ** 30
 
 
-def shape_ladder(resources: dict, minimum: dict | None = None) -> list[dict]:
+def shape_ladder(resources: dict, minimum: dict | None = None, allow_default: bool = False) -> list[dict]:
     """Requested shapes, ideal first, then CPU and RAM lowered stepwise (x0.75) to the workload's measured minimum
-    (``minimum_resources``; default half the ideal), the GPU count always unchanged."""
+    (``minimum_resources``; default half the ideal), the GPU count always unchanged. ``allow_default`` (a job's
+    ``allow_default_shape``) adds a last rung without any CPU/RAM request (the provider default), only for jobs that
+    can run at that size; the sandbox checks its assigned cgroup against the minimum before starting work."""
     ideal = dict(resources)
     minimum = dict(minimum or {})
     floor_cpu = float(minimum.get('cpu', max(1.0, float(ideal['cpu']) / 2))) if 'cpu' in ideal else None
@@ -367,6 +369,8 @@ def shape_ladder(resources: dict, minimum: dict | None = None) -> list[dict]:
         if shape == shapes[-1]:
             break
         shapes.append(shape)
+    if allow_default and resources.get('gpu') and ('cpu' in ideal or 'memory' in ideal):
+        shapes.append({'gpu': resources['gpu']})
     return shapes
 
 
@@ -473,7 +477,7 @@ def create_with_shape_backoff(job: dict, account: str, summary: dict, create):
     """Create the job's sandbox at its ideal shape, then at stepwise smaller CPU/RAM shapes down to its measured
     minimum while the cluster answers SandboxResourceExhausted (owner 2026-11-03); exactly the requested GPU count
     throughout. The granted shape is recorded on the launch entry and as a ``shape_granted`` event."""
-    ladder = shape_ladder(job['resources'], job.get('minimum_resources'))
+    ladder = shape_ladder(job['resources'], job.get('minimum_resources'), bool(job.get('allow_default_shape')))
     for index, shape in enumerate(ladder):
         shaped = {**job, 'resources': shape}
         request = jobs.sandbox_request(shaped, bootstrap_text())

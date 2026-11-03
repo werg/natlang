@@ -33,13 +33,34 @@ CODE=$NATLANG_REPO
 HELPER="$CODE/scripts/coreweave/rl_cloud_sandbox.py"
 WINDOW="$CODE/scripts/neuralese_data/sft_window.py"
 # A failed driver keeps the sandbox readable for NATLANG_CW_HOLD_ON_FAILURE seconds (logs, files) before it completes.
-trap 'rc=$?; if [ $rc -ne 0 ] && [ $rc -ne 143 ]; then sleep "${NATLANG_CW_HOLD_ON_FAILURE:-0}"; fi' EXIT
+trap 'rc=$?; if [ $rc -ne 0 ] && [ $rc -ne 143 ] && [ $rc -ne 75 ]; then sleep "${NATLANG_CW_HOLD_ON_FAILURE:-0}"; fi' EXIT
 log() { echo "{\"at\":\"$(date -u +%FT%TZ)\",\"lineage\":\"$LINEAGE\",$1}"; }
 t0=$(date +%s); since() { echo $(( $(date +%s) - $1 )); }
 { echo "== $(date -u +%FT%TZ) sandbox ${CW_SANDBOX_ID:-}"; nvidia-smi --query-gpu=name,memory.total,driver_version,compute_cap --format=csv
   echo "nproc $(nproc)"; echo "memory.max $(cat /sys/fs/cgroup/memory.max 2>/dev/null)"; echo "cpu.max $(cat /sys/fs/cgroup/cpu.max 2>/dev/null)"
   free -g; df -h "$WORK"; python3 --version; } >> "$OUT/host.txt" 2>&1
 log "\"event\":\"start\",\"gpu\":\"$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)\",\"nproc\":$(nproc)"
+# The launch may have backed off to a smaller CPU/RAM shape (cwctl.create_with_shape_backoff): refuse to start work on
+# an assigned cgroup below the job's measured minimum (NATLANG_CW_MIN_CPU / NATLANG_CW_MIN_MEMORY), without the
+# failure hold, so the sandbox ends at once and the launcher can try another account.
+if ! python3 - <<'PY'
+import os, sys
+def gib(v):
+    for s, f in (('Gi', 1), ('Mi', 1 / 1024), ('Ti', 1024), ('G', 1e9 / 2**30), ('M', 1e6 / 2**30)):
+        if v.endswith(s): return float(v[:-len(s)]) * f
+    return float(v) / 2**30
+want_cpu, want_mem = os.environ.get('NATLANG_CW_MIN_CPU', ''), os.environ.get('NATLANG_CW_MIN_MEMORY', '')
+try: quota, period = open('/sys/fs/cgroup/cpu.max').read().split()
+except OSError: quota, period = 'max', '1'
+cpus = os.cpu_count() if quota == 'max' else int(quota) / int(period)
+try: raw = open('/sys/fs/cgroup/memory.max').read().strip()
+except OSError: raw = 'max'
+mem = float('inf') if raw == 'max' else int(raw) / 2**30
+low = (want_cpu and cpus < float(want_cpu)) or (want_mem and mem < gib(want_mem) * 0.97)
+print(f'{{"assigned_cpu":{cpus},"assigned_memory_gib":{"null" if mem == float("inf") else round(mem, 1)},"min_cpu":"{want_cpu}","min_memory":"{want_mem}","below_minimum":{str(bool(low)).lower()}}}')
+sys.exit(3 if low else 0)
+PY
+then log '"event":"refused","step":"assigned-shape-below-minimum"'; exit 75; fi
 progress() { python3 "$HELPER" progress "$L"; }
 field() { python3 -c "import json,sys;v=json.loads(sys.argv[1]).get(sys.argv[2]);print('' if v is None else str(v).lower() if isinstance(v,bool) else v)" "$1" "$2"; }
 

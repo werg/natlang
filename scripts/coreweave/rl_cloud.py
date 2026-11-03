@@ -1278,6 +1278,12 @@ def render_job(run, name, rounds, check=False):
         job['needs'] = {**job.get('needs', {}), 'gpu_memory_gb': 0}
     if spec.get('minimum_resources'):  # the shape backoff floor (cwctl.create_with_shape_backoff)
         job['minimum_resources'] = spec['minimum_resources']
+    if spec.get('allow_default_shape'):
+        job['allow_default_shape'] = True
+    floor = job.get('minimum_resources') or {}
+    if floor:  # the sandbox refuses to start work on an assigned cgroup below the measured minimum
+        job['env']['NATLANG_CW_MIN_CPU'] = str(floor.get('cpu', ''))
+        job['env']['NATLANG_CW_MIN_MEMORY'] = str(floor.get('memory', ''))
     if spec.get('lifetime_hours'):  # a lineage with a declared GPU-hour ceiling (a bounded pilot shard)
         job['lifetime_hours'] = spec['lifetime_hours']
     if not is_sft(spec):  # RL lineages and tune shards run the code snapshot's ts-host
@@ -1285,6 +1291,9 @@ def render_job(run, name, rounds, check=False):
     if check:  # the CPU pipeline check: no GPU, small, short
         job['resources'] = {'cpu': '4', 'memory': '16Gi'}
         job.pop('minimum_resources', None)
+        job.pop('allow_default_shape', None)
+        job['env'].pop('NATLANG_CW_MIN_CPU', None)
+        job['env'].pop('NATLANG_CW_MIN_MEMORY', None)
         job['lifetime_hours'] = 3
         job['kind'] = 'smoke'
         job['env']['NATLANG_RL_CHECK'] = '1'
