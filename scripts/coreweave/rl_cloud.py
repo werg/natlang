@@ -628,8 +628,17 @@ def lineage_inputs(run, name, closure):
     return inputs + file_inputs(run, name, closure['files'])
 
 
+# Host system trees are the sandbox's own (another architecture and distribution): never a run input.
+SYSTEM_PREFIXES = tuple(f'/{name}/' for name in ('usr', 'etc', 'proc', 'sys', 'dev', 'tmp', 'var', 'run', 'lib', 'lib32',
+                                                 'lib64', 'libx32', 'bin', 'sbin', 'opt', 'snap', 'boot', 'root'))
+
+
 def file_inputs(run, name, files):
     """Exact files at their DGX paths: committed blobs in a readable store as ``file`` inputs, the rest packed once."""
+    system = [item['path'] for item in files if item['path'].startswith(SYSTEM_PREFIXES)
+              or '/.venv' in item['path'] or '/site-packages/' in item['path']]
+    if system:
+        raise SystemExit(f'{name}: closure names host system or Python-environment files as inputs: {system[:5]}')
     inputs, packed = [], []
     for item in files:
         found = locate(run, item['sha256'])

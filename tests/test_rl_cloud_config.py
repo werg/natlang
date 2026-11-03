@@ -110,3 +110,11 @@ def test_historical_checkpoint_symlinks_ship_once_and_stay_links(tmp_path, monke
     blobs, skipped, links = rc.historical_checkpoint_blobs(run, closure, '/cloud/parent/checkpoint.pt')
     assert [b['path'] for b in blobs] == [str(real)] and not skipped
     assert links == [{'path': str(alias), 'symlink_to': str(real)}]
+
+
+def test_file_inputs_refuse_host_system_files(tmp_path):
+    import pytest
+    import scripts.coreweave.rl_cloud as rc
+    with pytest.raises(SystemExit, match='host system'):
+        rc.file_inputs({'root': str(tmp_path)}, 'w', [{'path': '/lib/aarch64-linux-gnu/liblz4.so.1', 'sha256': 'a' * 64,
+                                                      'bytes': 1}])

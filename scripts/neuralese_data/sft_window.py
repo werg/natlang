@@ -322,7 +322,10 @@ def nested_json_references(roots, *, depth=NESTED_JSON_DEPTH):
 
 TRACE_CALL = re.compile(r'^(?:\d+\s+)?(open|openat|stat|lstat|newfstatat|statx|access|faccessat2?)\('
                         r'(?:AT_FDCWD, |-?\d+, )?"([^"]+)".*\)\s+=\s+(-?\d+)')
-TRACE_SYSTEM = ('/usr/', '/etc/', '/proc/', '/sys/', '/dev/', '/tmp/', '/var/tmp/', '/run/')
+# Host system trees (libraries, interpreters, devices, temporaries) are the sandbox's own, never closure inputs; on a
+# merged-/usr host the loader opens /lib/<arch>/... (2026-11-03: shipped DGX arm64 libraries broke an x86 fetch).
+TRACE_SYSTEM = tuple(f'/{name}/' for name in ('usr', 'etc', 'proc', 'sys', 'dev', 'tmp', 'var', 'run', 'lib', 'lib32',
+                                              'lib64', 'libx32', 'bin', 'sbin', 'opt', 'snap', 'boot', 'root'))
 
 
 def traced_reads(trace):
@@ -337,7 +340,8 @@ def traced_reads(trace):
             if not match or int(match.group(3)) < 0:
                 continue
             path = match.group(2)
-            if path.startswith('/') and not path.startswith(TRACE_SYSTEM) and '/__pycache__/' not in path:
+            if (path.startswith('/') and not path.startswith(TRACE_SYSTEM) and '/__pycache__/' not in path
+                    and not os.path.realpath(path).startswith(TRACE_SYSTEM)):
                 found.add(path)
     return sorted(path for path in found if Path(path).is_file())
 
