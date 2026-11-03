@@ -40,6 +40,7 @@ TASKS = Path.home() / 'bgkit-data-nvme' / 'bgkit2' / 'tasks' / 'compaction_v2.pa
 REBENCH_DIR = data_path('data_hdd', 'bgkit-data', 'swe_rebench')
 OUT = data_path('data_hdd', 'natlang-compaction-operators-20261103', 'swezero-eval')
 DATASETS = {'rebench': 'nebius/SWE-rebench', 'swegym': 'SWE-Gym/SWE-Gym-Raw'}
+FIXER = 'internlm/SWE-Fixer-Train-110K'
 SCHEMA = 'natlang.swezero-eval/1'
 TEST_TIMEOUT = 1800          # the harness default
 MAX_OUTPUT = 30 << 20        # sandbox read_file cap is 32 MiB
@@ -212,6 +213,19 @@ def prepare(kind: str, out: Path, swegym_parquet: Path | None, controls: int, se
     (out / f'{kind}.unlabelled.jsonl').write_text(''.join(json.dumps(j) + '\n' for j in labels_without))
     (out / f'{kind}.prepare.json').write_text(json.dumps(meta, indent=1))
     return meta
+
+
+def unlabelled_fixer(out: Path) -> int:
+    """SWE-Fixer-Train-110K publishes patches, test patches and issue text only: no FAIL_TO_PASS / PASS_TO_PASS lists and
+    no environment, so no test can be run honestly. Its trajectories are recorded as unlabelled, never inferred."""
+    targets = swe_zero_targets(FIXER, compaction_trajectory_ids())
+    out.mkdir(parents=True, exist_ok=True)
+    (out / 'fixer.unlabelled.jsonl').write_text(''.join(json.dumps({
+        **_ids(t), 'status': 'no-test-spec',
+        'reason': 'SWE-Fixer-Train-110K has no test lists or environments (fields: repo, pull_number, instance_id, '
+                  'base_commit, patch, test_patch, problem_statement, hints_text, created_at)'}) + '\n'
+        for t in targets))
+    return len(targets)
 
 
 def _ids(target: dict) -> dict:
@@ -550,7 +564,7 @@ def merge_labels(out: Path) -> Path:
     """One labels file for the converter: trajectory_id -> resolved, from every harness kind (controls excluded)."""
     path = out / 'labels.jsonl'
     rows = []
-    for kind in DATASETS:
+    for kind in (*DATASETS, 'fixer'):
         file = out / f'{kind}.labels.jsonl'
         if file.exists():
             rows += [json.loads(line) for line in file.read_text().splitlines()]
@@ -578,6 +592,7 @@ def main(argv=None):
             p.add_argument('--limit', type=int, default=None)
             p.add_argument('--builds-only', action='store_true', help='only instances built from the harness Dockerfiles')
     sub.add_parser('merge').add_argument('--out', default=str(OUT))
+    sub.add_parser('unlabelled-fixer').add_argument('--out', default=str(OUT))
     args = parser.parse_args(argv)
     out = Path(args.out)
     gym = Path(args.swegym_parquet) if getattr(args, 'swegym_parquet', None) else None
@@ -585,6 +600,8 @@ def main(argv=None):
         print(json.dumps(prepare(args.kind, out, gym, args.controls, args.seed)))
     elif args.command == 'run':
         print(json.dumps(run(args.kind, out, args.workers, args.accounts.split(','), args.limit, args.builds_only)))
+    elif args.command == 'unlabelled-fixer':
+        print(unlabelled_fixer(out))
     elif args.command == 'add-build':
         print(json.dumps(add_build(args.kind, out)))
     elif args.command == 'add-gold':

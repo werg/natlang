@@ -239,17 +239,29 @@ prompt as swe_compaction.py does (`_message`, `strip_markup`). Label: join `meta
 reject `no-upstream`. Groups `repo:<repo>`, `swe-instance:<instance_id>`; bench instances
 (`swe_compaction.load_bench_instances()`) → split `test`. Dedupe (b) against (a) by (trajectory_id, span).
 
-**Finding (2026-11-03): bgkit `compaction_v2` cannot be labelled.** Its 9,775 trajectory ids (UUIDs) are all SWE-Zero
-trajectories (`/home/werg/bgkit-data-nvme/capability_packaging/trajectories_ext/swe_zero/data`, 318,115 rows; all 9,775
-found locally: 6,091 SWE-Fixer-Train-110K, 3,402 SWE-Gym-Raw, 282 nebius/SWE-rebench). None of the Open-SWE-Traces
-subsets (`trajectories_ext/open_swe_traces`, scale-swe and swe-rebench-v2, 260k trajectories with a `resolved` column)
-contains any of these ids. SWE-Zero is execution-free by construction: its fields are instance_id, repo, license,
-trajectory_id, trajectory, model_patch, dataset; there is no resolved/test status and none is published upstream. The only
-local gold patches are the nebius/SWE-rebench parquet files (`/mnt/external/bgkit-data/swe_rebench`): 282 of the
-trajectories join, and only 7 have a model patch whose changed lines equal the gold patch (code check, not test
-resolution). Producing real resolved labels would need running the tests of 9,775 instances in their environments
-(`docker_image`/`install_config` exist only for the 282 SWE-rebench ones); SWE-Fixer/SWE-Gym environments are not local.
-No converter wiring is added; `no-upstream` is the honest reject.
+**bgkit `compaction_v2` labels come from local test execution (2026-11-03).** Its 9,775 trajectory ids (UUIDs) are all
+SWE-Zero trajectories (`/home/werg/bgkit-data-nvme/capability_packaging/trajectories_ext/swe_zero/data`; 6,091
+SWE-Fixer-Train-110K, 3,402 SWE-Gym-Raw, 282 nebius/SWE-rebench; one trajectory per instance). SWE-Zero is execution-free:
+there is no resolved status upstream, and none of the Open-SWE-Traces subsets contains these ids, so the OpenHands join above
+finds nothing. `scripts/neuralese_data/swezero_eval.py` produces the labels by running tests:
+
+- It applies each `model_patch` in the instance's environment and runs the harness's own eval script (SWE-rebench fork of
+  SWE-bench for `rebench`, SWE-Gym's SWE-Bench-Fork for `swegym`), grading with that harness's log parsers and report code.
+  The published instance images are x86_64 and the DGX is arm64, so each runs as a CoreWeave CPU sandbox image
+  (`Sandbox.run(container_image=...)`; no GPU), repeating `run_instance` step for step.
+- Instances without a published image are built in a sandbox from the harness's own base/env/instance Dockerfiles and
+  setup scripts (`build_in_sandbox`); failed builds stay unlabelled.
+- Every environment is validated by its gold patch (instance label stays `null` if gold does not resolve: its tests may not
+  run at all) and by a no-patch control (never resolves).
+- `labels.jsonl` (under `data_hdd/natlang-compaction-operators-20261103/swezero-eval/`): per trajectory id `resolved`
+  true / false / null with `status`, `test_log_sha256` (logs kept beside it), harness repository and commit, image and
+  sandbox provenance. `null` rows are rejected by the converter as `no-label-<status>`; only `resolved: true` is admitted
+  (`checked: swe-zero-local-tests`, `local_execution: true`).
+- SWE-Fixer-Train-110K publishes only patches, test patches and issue text (no FAIL_TO_PASS/PASS_TO_PASS lists, no
+  environments). Its 6,091 rows stay rejected (`no-label-no-test-spec`); nothing is inferred from patch similarity.
+  SWE-Gym-Raw likewise has null test lists for 3,288 of its 3,402 instances (only the 114 in validated SWE-Gym have them and
+  published images). SWE-rebench-V2 (32,079 tasks, own multi-language harness) contains 12 SWE-Fixer and 43 SWE-Gym-Raw
+  instances with test lists and images: a possible later extension, not evaluated.
 
 **Seed.** The bgkit `compaction`/`compaction_v2` `target` is the next assistant message, not a compaction note, so
 neither input has gold notes: the shared helper's `mechanical:history-outline` (actions, paths, errors, last step,
