@@ -327,9 +327,15 @@ def shape_exhausted(error: BaseException) -> bool:
     without an explicit quota error. Not an account limit; a smaller shape may be granted at once."""
     facts = error_facts(error)
     text = facts['error']
-    return (not facts['quota_error'] and facts['reason'] not in RETRYABLE_REASONS
+    return (not facts['quota_error'] and facts['reason'] not in SHAPE_INDEPENDENT_REASONS
             and (type(error).__name__ == 'SandboxResourceExhaustedError' or 'RESOURCE_EXHAUSTED' in text
                  or 'resource exhausted' in text.lower()))
+
+
+# Refusals a smaller shape cannot help: create throttling and the concurrent-sandbox quota. Everything else reported as
+# SandboxResourceExhausted, including CWSANDBOX_RUNNER_CAPACITY_EXHAUSTED ("runner capacity exhausted"), is the
+# cluster declining this CPU/RAM shape right now (observed 2026-11-03 on cw2/cw3 for 8 CPU / 64Gi GPU requests).
+SHAPE_INDEPENDENT_REASONS = {'CWSANDBOX_SERVERLESS_CREATE_THROTTLED', 'CWSANDBOX_OCCUPANCY_QUOTA_EXCEEDED'}
 
 
 def _gib(value) -> float:

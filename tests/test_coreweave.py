@@ -1676,7 +1676,7 @@ def test_launch_backs_off_shape_on_resource_exhausted_and_records_grant(tmp_path
     monkeypatch.setattr(cwctl, 'bootstrap_text', lambda: '#!/bin/sh\n')
 
     class SandboxResourceExhaustedError(Exception):
-        reason, metadata, retry_delay = None, {}, None
+        reason, metadata, retry_delay = 'CWSANDBOX_RUNNER_CAPACITY_EXHAUSTED', {}, None
 
     class Box:
         sandbox_id = 'box-1'
@@ -1701,6 +1701,9 @@ def test_launch_backs_off_shape_on_resource_exhausted_and_records_grant(tmp_path
     events = [json.loads(line) for line in (tmp_path / 'sandboxes.jsonl').read_text().splitlines()]
     assert [e['event'] for e in events] == ['shape_refused', 'shape_refused', 'shape_granted']
     assert events[-1]['granted'] == asked[2]
+    class Throttled(Exception):
+        reason, metadata, retry_delay = 'CWSANDBOX_SERVERLESS_CREATE_THROTTLED', {}, None
+    assert not cwctl.shape_exhausted(Throttled('429 resource exhausted'))
     # Any other refusal (e.g. an explicit quota error) is not a shape problem: it propagates at once.
     class Invalid(Exception):
         reason, metadata, retry_delay = 'CWSANDBOX_INVALID_REQUEST', {}, None

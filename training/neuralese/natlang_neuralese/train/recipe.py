@@ -1047,7 +1047,8 @@ def _data_continuation(old, new):
 
 
 def _new_outer_continuation(old, new):
-    """Permit a bound four-peer outer reset without changing any source roles."""
+    """Permit a bound outer reset of the actual peer cohort (any size: workers join as capacity appears) without
+    changing any source roles."""
     old_pin=old.get('standalone_diloco_parent');reference=new.get('diloco_new_outer')
     if not isinstance(reference,dict) or 'diloco_new_outer' in old or 'standalone_diloco_parent' in new:
         return False
@@ -1057,7 +1058,7 @@ def _new_outer_continuation(old, new):
         path=Path(reference['path']).resolve(strict=True)
         if sha(path)!=reference['sha256']:return False
         manifest=json.loads(path.read_text());members=manifest['peers']
-        if manifest['schema']!='natlang.diloco-new-outer-manifest/1' or manifest['workers']!=4 or len(members)!=4:return False
+        if manifest['schema']!='natlang.diloco-new-outer-manifest/1' or type(manifest['workers']) is not int or not 1<=manifest['workers']<=256 or len(members)!=manifest['workers']:return False
         peers=[]
         for index,item in enumerate(members):
             part=Path(item['path']).resolve(strict=True)
