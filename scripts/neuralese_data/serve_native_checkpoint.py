@@ -60,6 +60,9 @@ def main() -> None:
                              'engine); batches without an adapted request replay the base-only decode graph')
     parser.add_argument('--sglang-adapter-rank', type=int, default=32,
                         help='largest summed adapter rank per SGLang module and slot')
+    parser.add_argument('--sglang-projection', choices=('native', 'vendor'), default='native',
+                        help="LFM3 projections on SGLang: the learner's invariant native kernel, or one fused vendor "
+                             'BF16 GEMM (fp32 accumulate; the learner corrects the gap with importance weights)')
     parser.add_argument('--sglang-arg', action='append', default=[], help='extra sglang.launch_server argument')
     parser.add_argument('--hf-export-dir', type=Path, help='HF export cache (default: <store-dir or checkpoint dir>/sglang-hf/<sha>)')
     args = parser.parse_args()
@@ -229,6 +232,7 @@ def launch_sglang(engine, args, checkpoint):
     # NATLANG_SGLANG_PYTHONPATH: a fork worktree under test instead of the pinned checkout's editable install.
     process = subprocess.Popen(command, env={**os.environ, 'PYTHONPATH': backend_pythonpath,
                                              'PATH': path, 'CUDA_HOME': cuda,
+                                             'NATLANG_SGLANG_PROJECTION': args.sglang_projection,
                                              'NATLANG_ADAPTER_SLOTS': str(args.sglang_adapter_slots),
                                              'NATLANG_ADAPTER_RANK': str(args.sglang_adapter_rank)},
                                start_new_session=True)
@@ -261,7 +265,8 @@ def launch_sglang(engine, args, checkpoint):
             raise RuntimeError('SGLang server did not become healthy within 30 min')
         time.sleep(5)
     engine.bind_sglang(url, export_manifest=manifest, fork={key: fork[key] for key in ('repository', 'branch', 'commit')},
-                       adapter_slots=args.sglang_adapter_slots, adapter_rank=args.sglang_adapter_rank)
+                       adapter_slots=args.sglang_adapter_slots, adapter_rank=args.sglang_adapter_rank,
+                       projection=args.sglang_projection)
     return process
 
 

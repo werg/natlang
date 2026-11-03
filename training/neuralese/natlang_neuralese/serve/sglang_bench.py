@@ -110,7 +110,7 @@ def serve(args):
                '--context-length', '32768', '--max-total-tokens', str(args.max_total_tokens),
                '--max-running-requests', str(run), '--max-mamba-cache-size', str(8 * run),
                '--cuda-graph-max-bs-decode', str(run), '--incremental-streaming-output', '--stream-interval', '8',
-               '--skip-tokenizer-init', '--trust-remote-code']
+               '--skip-tokenizer-init', '--trust-remote-code', *args.sglang_arg]
     cuda = os.environ.get('CUDA_HOME', '/usr/local/cuda')
     env = {**os.environ, 'PYTHONPATH': str(root / 'training/neuralese'), 'CUDA_HOME': cuda,
            'PATH': os.pathsep.join([str(Path(python).parent), cuda + '/bin', os.environ.get('PATH', '')]),
@@ -135,7 +135,9 @@ def serve(args):
     export = json.loads((export_dir / 'natlang-export.json').read_text())
     _write(Path(args.out) / 'serve.json', {'ready_seconds': time.monotonic() - started, 'command': command,
         'fork': {k: fork[k] for k in ('repository', 'commit')}, 'checkpoint_sha256': export['checkpoint_sha256'],
-        'hf_export_weights_sha256': export['weights_sha256'], 'gpu': _gpu()})
+        'hf_export_weights_sha256': export['weights_sha256'], 'gpu': _gpu(),
+        'projection': os.environ.get('NATLANG_SGLANG_PROJECTION', 'native'),
+        'bf16_reduction': os.environ.get('NATLANG_BF16_REDUCTION', 'fp32-accumulate')})
     return process, url
 
 
@@ -234,9 +236,61 @@ def rescore(args, sample_files):
             'turn_mean_k3': _quantiles([t['mean_k3'] for t in turns]), 'per_turn': turns}
 
 
+def native_throughput(args, rows, lanes_list, steps=96):
+    """The native engine's decode on the same turns: prefill each lane's exact prompt (the engine's prefill path),
+    then force its recorded samples through the engine's batched decode step (native_step_batch for > 1 lane)
+    with the engine's sampling work per token (T=1 law, CPU multinomial, top-128 receipt)."""
+    import torch
+    from . import load_native_engine, configure_native_prefix_cache
+    from ..model.shared_state import native_step
+    from ..model.native_decode_batch import native_step_batch
+    from ..common.sampling import masked_log_distribution, encode_top_k
+    engine = load_native_engine(str(args.checkpoint), base=str(args.base), device='cuda', prompt_rendering='full')
+    configure_native_prefix_cache(engine, 2.0, None)
+    model = engine.shared_model
+    work = [r for r in rows if len(r['tokens']) > steps]
+    report = {'step': 'native', 'what': 'native engine decode: forced recorded samples, engine sampling work per token',
+              'lanes': {}}
+    with torch.inference_mode():
+        for lanes in lanes_list:
+            if lanes > len(work):
+                continue
+            chosen = work[:lanes]
+            started = time.monotonic()
+            caches = []
+            for row in chosen:
+                caches.append(engine._native_prefill_forward(row['prompt'], None)['cache'])
+            torch.cuda.synchronize()
+            prefill = time.monotonic() - started
+            started = time.monotonic()
+            generator = torch.Generator().manual_seed(0)
+            for step in range(steps):
+                ids = [row['tokens'][step] for row in chosen]
+                if lanes == 1:
+                    outputs = [native_step(model, torch.tensor([ids], device='cuda'), caches[0])]
+                else:
+                    outputs = native_step_batch(model, torch.tensor(ids, device='cuda')[:, None], caches,
+                                                producing=[False] * lanes)
+                logits = model.logits(torch.cat([o['h_final'][:, -1] for o in outputs], 0))
+                for lane in range(lanes):
+                    law = masked_log_distribution(logits[lane], 1.0, banned=[])
+                    torch.multinomial(law.exp().cpu(), 1, generator=generator)
+                    encode_top_k(law, 128)
+                caches = [o['cache'] for o in outputs]
+            torch.cuda.synchronize()
+            decode = time.monotonic() - started
+            report['lanes'][str(lanes)] = {'prefill_tokens': sum(len(r['prompt']) for r in chosen),
+                'prefill_seconds': prefill, 'decode_tokens': lanes * steps, 'decode_seconds': decode,
+                'decode_tok_s': lanes * steps / decode, 'per_stream_tok_s': steps / decode}
+            print(json.dumps({lanes: report['lanes'][str(lanes)]}), flush=True)
+            del caches, outputs
+    return report
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument('step', choices=('workload', 'serve-measure', 'rescore', 'all'))
+    p.add_argument('step', choices=('workload', 'serve-measure', 'rescore', 'native', 'all'))
+    p.add_argument('--native-lanes', type=int, nargs='*', default=[1, 4, 8])
     p.add_argument('--out', type=Path, required=True)
     p.add_argument('--workload', type=Path)
     p.add_argument('--roots', nargs='*', default=[])
@@ -247,7 +301,12 @@ def main(argv=None):
     p.add_argument('--concurrency', type=int, nargs='*', default=[1, 8, 32])
     p.add_argument('--max-tokens', type=int, default=1024); p.add_argument('--min-tokens', type=int, default=64)
     p.add_argument('--stop-ids', type=int, nargs='*', default=[124900])
+    p.add_argument('--sglang-arg', action='append', default=[], help='extra sglang.launch_server argument')
+    p.add_argument('--projection', choices=('native', 'vendor'),
+                   help="the fork's LFM3 projection policy (NATLANG_SGLANG_PROJECTION; default: the environment's)")
     args = p.parse_args(argv)
+    if args.projection:
+        os.environ['NATLANG_SGLANG_PROJECTION'] = args.projection
     args.out.mkdir(parents=True, exist_ok=True)
     if args.step == 'workload':
         _write(args.out / 'workload.json', build_workload(args.roots, args.workload))
@@ -270,6 +329,9 @@ def main(argv=None):
     if args.step in ('rescore', 'all'):
         files = sorted(str(f) for f in args.out.glob('samples-c*.jsonl'))
         _write(args.out / 'rescore.json', rescore(args, files))
+    if args.step == 'native' or (args.step == 'all' and args.native_lanes):
+        rows = [json.loads(line) for line in open(args.workload)]
+        _write(args.out / 'native.json', native_throughput(args, rows, args.native_lanes))
 
 
 if __name__ == '__main__':

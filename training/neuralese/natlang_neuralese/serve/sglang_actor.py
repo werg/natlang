@@ -138,7 +138,8 @@ class SglangEngine(Engine):
             self.__dict__['_native_training_state'] = _state.get('training') or _state.get('shared_training') or {}
             self.native_reloads = getattr(self, 'native_reloads', 0) + 1
 
-    def bind_sglang(self, url, *, export_manifest, fork, workers=512, adapter_slots=0, adapter_rank=32):
+    def bind_sglang(self, url, *, export_manifest, fork, workers=512, adapter_slots=0, adapter_rank=32,
+                    projection='native'):
         self.sglang_url, self.sglang_workers = url.rstrip('/'), workers
         # Native adapters on SGLang (fork NatlangAdapters): `adapter_slots` resident stacks of summed rank
         # <= `adapter_rank` per module; the front assigns slots and never reassigns one while a request uses it.
@@ -172,13 +173,15 @@ class SglangEngine(Engine):
         # Bound in every SGLang-sampled capture (rl.actors ``actor_export``, kind exact: the checkpoint's own weights
         # in another engine). The learner recomputes those tokens under its own forward, guards the engine mismatch
         # per episode and corrects it with the loss's importance weights (rl.native_replay DEFAULT_ENGINE_GUARD).
-        self.sglang_actor_export = {'kind': 'exact', 'format': f"sglang-hf-{export_manifest['dtype']}",
+        if projection not in ('native', 'vendor'):
+            raise ValueError('SGLang projection policy must be native or vendor')
+        self.sglang_actor_export = {'kind': 'exact', 'format': f"sglang-hf-{export_manifest['dtype']}-{projection}-projection",
                                     'sha256': export_manifest['weights_sha256']}
         binding = getattr(self, 'rl_policy_binding', None)
         if binding is not None:
             binding['serving_engine'] = {'engine': 'sglang', 'fork': dict(fork),
                 'hf_export_weights_sha256': export_manifest['weights_sha256'], 'dtype': export_manifest['dtype'],
-                'bf16_reduction': os.environ.get('NATLANG_BF16_REDUCTION', 'fp32-accumulate'),
+                'bf16_reduction': os.environ.get('NATLANG_BF16_REDUCTION', 'fp32-accumulate'), 'projection': projection,
                 'banned_token_ids': list(self.sglang_banned)}
             binding['actor_export'] = dict(self.sglang_actor_export)
         return self
