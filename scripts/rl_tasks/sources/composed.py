@@ -33,7 +33,9 @@ import re
 from collections import defaultdict
 from dataclasses import dataclass, field
 
+from ..child_notes import attach
 from ..common import SOURCES_DIR, distinct_wrong, make_case, nl_file, pick, resolve_str, text_digest
+from . import composed_notes as notes
 from .numeric import _plain_number, _sentence_keys, _tatqa_number, _tatqa_rights, html_table_rows
 
 SOURCE = 'composed'
@@ -70,7 +72,8 @@ def _files(program: Program) -> dict:
 
 def _case(program: Program, family: str, *, item: dict, inputs: dict, expected, oracle, level: int, returns=None,
           instruction_suffix: str = '', wrong=None, aliases=None, upstream: str, license_: str, license_note: str = '',
-          revision: str = '', difficulty=None, smoke_children=None, slice_='nested_scoped', reference_value=None):
+          revision: str = '', difficulty=None, smoke_children=None, slice_='nested_scoped', reference_value=None,
+          children=()):
     instruction = pick(program.instructions, item['unit'] + '|' + program.name)
     if instruction_suffix:
         instruction = instruction.rstrip() + '\n' + instruction_suffix
@@ -87,6 +90,7 @@ def _case(program: Program, family: str, *, item: dict, inputs: dict, expected, 
         reference_root=([['return_result', {'status': 'success', 'value': reference_value}]]
                         if reference_value is not None else None))
     c = case['curriculum']
+    attach(case, children)
     c['named'] = 'required'
     if program.iterate:
         c['iterate'] = 'required'
@@ -162,6 +166,10 @@ def musique_items(seed=20261103, limit=(1600, 160),
                 'question': r['question'], 'answer': r['answer'], 'aliases': list(r.get('answer_aliases') or []),
                 'documents': [{'title': p['title'], 'text': p['paragraph_text']} for p in r['paragraphs']],
                 'hops': hops, 'bridges': [x['answer'] for x in steps[:-1] if x.get('answer')],
+                'steps': [{'question': x['question'], 'answer': x['answer'], 'support': x.get('paragraph_support_idx')}
+                          for x in steps],
+                'support_titles': [p['title'] for p in r['paragraphs'] if p.get('is_supporting')],
+                'support_paragraph': {p['idx']: p['title'] for p in r['paragraphs']},
                 'shape': f'musique-{hops}hop'})
     return out
 
@@ -193,10 +201,17 @@ def twowiki_items(seed=20261103, scan=60000, limit=(2600, 200)):
             if isinstance(evidences, str):
                 evidences = json.loads(evidences)
             subjects = list(dict.fromkeys(e[0] for e in evidences if isinstance(e, (list, tuple)) and e))
+            support = r.get('supporting_facts') or {}
+            if isinstance(support, str):
+                support = ast.literal_eval(support)
+            support = list(zip(support.get('title') or [], support.get('sent_id') or []))
+            sentences = {t: list(s) for t, s in context if isinstance(s, (list, tuple))}
             out[split].append({
                 'source': '2wikimultihopqa', 'id': qid, 'split': split, 'unit': qid, 'groups': [f'2wiki-q:{qid}'],
                 'question': r['question'], 'answer': str(r['answer']), 'aliases': [], 'documents': docs,
-                'kind': r.get('type', 'qa'), 'subjects': subjects, 'shape': f'2wiki-{r.get("type", "qa")}'})
+                'kind': r.get('type', 'qa'), 'subjects': subjects, 'shape': f'2wiki-{r.get("type", "qa")}',
+                'evidences': [list(e) for e in evidences if isinstance(e, (list, tuple)) and len(e) == 3],
+                'support': support, 'sentences': {t: sentences[t] for t, _ in support if t in sentences}})
     return out
 
 
@@ -251,7 +266,8 @@ def clutrr_items(seed=20261103):
             out[split].append({
                 'source': 'clutrr', 'id': r['id'], 'split': split, 'unit': unit, 'groups': [unit], 'story': r['story'],
                 'anchor': anchor, 'target': target, 'answer': r['target_text'], 'hops': hops,
-                'path': ast.literal_eval(r['edge_types']), 'shape': f'clutrr-{hops}hops'})
+                'path': ast.literal_eval(r['edge_types']), 'proof': r.get('proof_state') or '',
+                'shape': f'clutrr-{hops}hops'})
     return out
 
 
@@ -273,6 +289,7 @@ def babi_items(seed=20261103, tasks=(1, 2, 3, 5, 6, 7, 8, 10, 11, 12, 13, 14), m
                 'source': 'babi', 'id': f'{r["story_id"]}:{text_digest(r["question"])[:8]}', 'split': split,
                 'unit': unit, 'groups': [unit], 'facts': [f'{f["id"]}. {f["text"]}' for f in r['context']],
                 'question': r['question'], 'answer': r['answer'], 'task': r['task'],
+                'support': [int(i) for i in (r.get('supporting_fact_ids') or [])],
                 'shape': f'babi-{r["task_name"]}'})
     return out
 
@@ -306,6 +323,11 @@ def trivia_items(seed=20261103, scan=12000, max_chars=60000, limit=(1200, 120)):
     return out
 
 
+def parse_list(value):
+    value = ast.literal_eval(value) if isinstance(value, str) else value
+    return list(value or [])
+
+
 def tatqa_items(seed=20261103):
     out = {'train': [], 'validation': []}
     for split, path in (('train', 'train'), ('validation', 'dev'), ('validation', 'test_gold')):
@@ -313,13 +335,16 @@ def tatqa_items(seed=20261103):
         random.Random(seed).shuffle(contexts)
         for ctx in contexts:
             unit = f'tatqa:context:{ctx["table"]["uid"]}'
-            paragraphs = [p['text'] for p in sorted(ctx['paragraphs'], key=lambda p: int(p['order']))]
+            ordered = sorted(ctx['paragraphs'], key=lambda p: int(p['order']))
+            paragraphs = [p['text'] for p in ordered]
+            position = {int(p['order']): i for i, p in enumerate(ordered)}
             for q in ctx['questions'][:3]:
                 out[split].append({
                     'source': 'tatqa', 'id': q['uid'], 'split': split, 'unit': unit, 'groups': [unit],
                     'question': q['question'], 'table': ctx['table']['table'], 'paragraphs': paragraphs,
                     'answer': q['answer'], 'kind': q['answer_type'], 'answer_from': q['answer_from'],
-                    'derivation': q.get('derivation') or '', 'shape': f'tatqa-{q["answer_type"]}-{q["answer_from"]}'})
+                    'derivation': q.get('derivation') or '', 'shape': f'tatqa-{q["answer_type"]}-{q["answer_from"]}',
+                    'rel': [position[int(i)] for i in parse_list(q.get('rel_paragraphs')) if int(i) in position]})
     return out
 
 
@@ -355,7 +380,9 @@ def multihiertt_items(seed=20261103, scan_factor=3, cap=1000):
             out[split].append({
                 'source': 'multihiertt', 'id': r['uid'], 'split': split, 'unit': unit, 'groups': [unit],
                 'question': qa['question'], 'tables': tables, 'paragraphs': paragraphs, 'answer': qa['answer'],
-                'kind': qa['question_type'], 'ops': ops, 'shape': f'multihiertt-{qa["question_type"]}'})
+                'kind': qa['question_type'], 'ops': ops, 'shape': f'multihiertt-{qa["question_type"]}',
+                'table_evidence': parse_list(qa.get('table_evidence')), 'text_evidence': parse_list(qa.get('text_evidence')),
+                'descriptions': dict(parse(r.get('table_description') or {})), 'program': str(qa.get('program') or '')})
     return out
 
 
@@ -563,7 +590,7 @@ RELAY_QUALITY_SHARPEN = Program(
     smoke_children={'collect_evidence': 'evidence note', 'sharpen': 'option-by-option note'})
 
 
-def _doc_case(program, family, item, level, pool, offset, extra_wrong=(), smoke=None):
+def _doc_case(program, family, item, level, pool, offset, extra_wrong=(), smoke=None, children=()):
     answer = item['answer']
     oracle, alts = _span_oracle(answer, item.get('aliases') or [])
     return _case(program, family, item=item, inputs={'question': item['question'], 'documents': item['documents']},
@@ -572,7 +599,7 @@ def _doc_case(program, family, item, level, pool, offset, extra_wrong=(), smoke=
                  aliases=[answer.upper(), 'The ' + answer + '.'] + alts[:2],
                  upstream='MuSiQue' if item['source'] == 'musique' else '2WikiMultihopQA',
                  license_='CC-BY-4.0' if item['source'] == 'musique' else 'Apache-2.0',
-                 difficulty=item['shape'], smoke_children={**(smoke or {}), **(
+                 difficulty=item['shape'], children=children, smoke_children={**(smoke or {}), **(
                      {'conclude': answer} if 'conclude' in program.helpers else {})})
 
 
@@ -601,15 +628,18 @@ def relay(train=RELAY_TRAIN, held=RELAY_HELD, seed=20261103):
         m_items = mus[split]
         w_items = [i for i in wiki[split] if i['kind'] in WIKI_LEVEL]
         for k, item in enumerate(m_items[:n[0]]):
-            out.append(_doc_case(RELAY_GATHER if k % 2 else RELAY_SELF, family, item, MUSIQUE_LEVEL[item['hops']],
-                                 mpool, k, item['bridges']))
+            program = RELAY_GATHER if k % 2 else RELAY_SELF
+            out.append(_doc_case(program, family, item, MUSIQUE_LEVEL[item['hops']], mpool, k, item['bridges'],
+                                 children=notes.musique_relay(program, item)))
         for k, item in enumerate(m_items[n[0]:n[0] + n[1]]):
-            out.append(_doc_case(RELAY_HOPS, family, item, MUSIQUE_LEVEL[item['hops']], mpool, k, item['bridges']))
+            out.append(_doc_case(RELAY_HOPS, family, item, MUSIQUE_LEVEL[item['hops']], mpool, k, item['bridges'],
+                                 children=notes.musique_relay(RELAY_HOPS, item)))
         for k, item in enumerate(w_items[:n[2]]):
             wrong = [s for s in item['subjects'] if s != item['answer']] if item['kind'] == 'comparison' else []
             program = (RELAY_HOPS if item['kind'] == 'compositional' and k % 3 == 0 else
                        RELAY_GATHER if k % 2 else RELAY_SELF)
-            out.append(_doc_case(program, family, item, WIKI_LEVEL[item['kind']], wpool, k, wrong))
+            out.append(_doc_case(program, family, item, WIKI_LEVEL[item['kind']], wpool, k, wrong,
+                                 children=notes.wiki_relay(program, item)))
         for k, item in enumerate(qual[split][:n[3] + n[4]]):
             program = RELAY_QUALITY if k < n[3] else RELAY_QUALITY_SHARPEN
             gold = item['answer']
@@ -617,7 +647,8 @@ def relay(train=RELAY_TRAIN, held=RELAY_HELD, seed=20261103):
                                                                  'options': item['options']},
                              expected=gold, oracle='exact', level=_quality_level(item, 2 if program is RELAY_QUALITY_SHARPEN else 1),
                              wrong=[l for l in LETTERS if l != gold][:2], upstream='emozilla/quality', license_='CC-BY-4.0',
-                             revision='7142df0', difficulty=item['shape'], smoke_children={'weigh': gold}))
+                             revision='7142df0', difficulty=item['shape'], smoke_children={'weigh': gold},
+                             children=notes.quality_relay(program, item)))
     return out
 
 
@@ -712,11 +743,12 @@ TYPED_CLUTRR = Program(
 
 def _clutrr_case(program, family, item, labels, smoke=None):
     gold = item['answer']
+    children = notes.clutrr_links(item) if program is DEEP_KIN else notes.clutrr_relations(item)
     return _case(program, family, item=item, inputs={'story': item['story'], 'anchor': item['anchor'],
                                                      'target': item['target']},
                  expected=gold, oracle='normalized', level=min(3, max(0, item['hops'] - 2)),
                  wrong=[l for l in labels if l != gold][:2], aliases=[gold.capitalize()], upstream='CLUTRR/v1',
-                 license_='CC-BY-NC-4.0', difficulty=item['shape'], smoke_children=smoke)
+                 license_='CC-BY-NC-4.0', difficulty=item['shape'], smoke_children=smoke, children=children)
 
 
 def typed(train=(350, 350, 550, 450), held=24, seed=20261103):
@@ -733,7 +765,7 @@ def typed(train=(350, 350, 550, 450), held=24, seed=20261103):
             wrong = [s for s in item['subjects'] if s != item['answer']] if item['kind'] == 'comparison' else []
             smoke = {'judge': item['answer']} if program is TYPED_JUDGE else None
             out.append(_doc_case(program, family, item, WIKI_LEVEL[item['kind']] + (k >= n[0] and item['kind'] != 'comparison'),
-                                 wpool, k, wrong, smoke))
+                                 wpool, k, wrong, smoke, children=notes.wiki_profiles(item)))
         pool = [q['answers']['text'][0] for i in squad[split][:3000] for q in i['questions']]
         for k, item in enumerate(squad[split][:n[2]]):
             qs = item['questions']
@@ -751,7 +783,8 @@ def typed(train=(350, 350, 550, 450), held=24, seed=20261103):
                          expected=gold, oracle={'level': 'normalized', 'normalization': 'qa-alias-map', 'threshold': 0.8},
                          level={2: 0, 3: 1, 4: 2, 5: 2}.get(len(qs), 3), wrong=[w for w in (swapped, other) if w != first],
                          aliases=[first] + ([alt] if alt != first else []), upstream='rajpurkar/squad',
-                         license_='CC-BY-SA-4.0', difficulty=item['shape'], reference_value=first)
+                         license_='CC-BY-SA-4.0', difficulty=item['shape'], reference_value=first,
+                         children=notes.squad_locate(item))
             case['semantics']['expected'] = gold
             out.append(case)
         for item in clutrr[split][:n[3]]:
@@ -942,7 +975,7 @@ def iterate(train=(330, 330, 300, 300, 420), held=24, seed=20261103):
                              expected=gold, oracle='exact', level=min(3, {2: 0, 3: 1, 5: 2, 8: 3}[k] + item['hard']),
                              wrong=[l for l in LETTERS if l != gold][:2], upstream='emozilla/quality',
                              license_='CC-BY-4.0', revision='7142df0', difficulty=f'{k}parts', slice_='iterate',
-                             smoke_children={'settle': gold}))
+                             smoke_children={'settle': gold}, children=notes.quality_parts(item, parts)))
             made += 1
         # bAbI: four facts per chunk; level by chunk count.
         pools = defaultdict(list)
@@ -960,7 +993,8 @@ def iterate(train=(330, 330, 300, 300, 420), held=24, seed=20261103):
                              wrong=distinct_wrong(item['answer'], pools[item['task']][k % 50:] + pools[item['task']], 2),
                              aliases=[item['answer'].upper()], upstream='facebook/babi_qa', license_='BSD-3-Clause',
                              difficulty=f'{len(chunks)}chunks', slice_='iterate',
-                             smoke_children={'answer_from_state': item['answer']}))
+                             smoke_children={'answer_from_state': item['answer']},
+                             children=notes.babi_states(item, chunks)))
         # TriviaQA: page sections, typed candidate state.
         tpool = [i['answer'] for i in trivia[split][:3000]]
         made = 0
@@ -978,7 +1012,8 @@ def iterate(train=(330, 330, 300, 300, 420), held=24, seed=20261103):
                              oracle=oracle, level=level, wrong=distinct_wrong(answer, tpool[k % 500:] + tpool, 2),
                              aliases=alts[:2], upstream='mandarjoshi/trivia_qa', license_='Apache-2.0',
                              license_note='evidence pages are Wikipedia text (CC-BY-SA)',
-                             difficulty=f'{len(sections)}sections', slice_='iterate'))
+                             difficulty=f'{len(sections)}sections', slice_='iterate',
+                             children=notes.trivia_candidates(item, sections)))
             made += 1
     return out
 
@@ -1126,7 +1161,8 @@ def fanin(train=(500, 220, 220, 450), held=24, seed=20261103):
                              inputs={'question': item['question'], 'table': item['table'], 'paragraphs': item['paragraphs']},
                              expected=expected, oracle=oracle, level=level, instruction_suffix=_tat_contract(returns),
                              wrong=wrong, aliases=aliases, upstream='NExTplusplus/TAT-QA', license_=dataset_license,
-                             license_note=license_note, revision=dataset_revision, difficulty=item['shape']))
+                             license_note=license_note, revision=dataset_revision, difficulty=item['shape'],
+                             children=notes.tatqa_notes(item, answer)))
             made += 1
         made = 0
         for item in mh[split]:
@@ -1159,7 +1195,7 @@ def fanin(train=(500, 220, 220, 450), held=24, seed=20261103):
                              inputs={'question': item['question'], 'tables': item['tables'], 'paragraphs': item['paragraphs']},
                              expected=expected, oracle=oracle, level=level, instruction_suffix=_tat_contract(returns),
                              wrong=wrong, aliases=aliases, upstream='psunlpgroup/MultiHiertt', license_='MIT',
-                             difficulty=f'{item["ops"]}ops'))
+                             difficulty=f'{item["ops"]}ops', children=notes.multihiertt_notes(item, program)))
             made += 1
         hpool = [i['answer'] for i in hy[split][:3000]]
         for k, item in enumerate(hy[split][:n[3]]):
@@ -1170,7 +1206,7 @@ def fanin(train=(500, 220, 220, 450), held=24, seed=20261103):
                              expected=item['answer'], oracle=dict(SPAN), level=level,
                              wrong=distinct_wrong(item['answer'], hpool[k:] + hpool[:k], 2),
                              aliases=[item['answer'].upper()], upstream='wenhuchen/HybridQA', license_='CC-BY-4.0',
-                             revision='f4ed68e', difficulty=f'{rows}rows'))
+                             revision='f4ed68e', difficulty=f'{rows}rows', children=notes.hybrid_notes(item)))
     return out
 
 
@@ -1308,7 +1344,7 @@ def deep(train=(800, 650, 450), held=24, seed=20261103):
         for k, item in enumerate(mus[split][skip:skip + n[0]]):
             program = DEEP_STEPS_CONFIRM if k % 2 else DEEP_STEPS
             out.append(_doc_case(program, family, item, MUSIQUE_LEVEL[item['hops']], mpool, k, item['bridges'],
-                                 {'solve_step': {'$turns': [['eval', {'code': 'const note = await read_passage(step, documents[0]);'}],
+                                 children=notes.musique_passage_notes(item), smoke={'solve_step': {'$turns': [['eval', {'code': 'const note = await read_passage(step, documents[0]);'}],
                                                             ['return_result', {'status': 'success', 'value': item['answer']}]]},
                                   'read_passage': 'passage note', 'confirm': item['answer']}))
         wpool = [i['answer'] for i in wiki[split][:3000] if i['answer'].lower() not in ('yes', 'no')]
@@ -1316,7 +1352,8 @@ def deep(train=(800, 650, 450), held=24, seed=20261103):
         for k, item in enumerate(w_items[:n[1]]):
             wrong = [s for s in item['subjects'] if s != item['answer']] if item['kind'] == 'comparison' else []
             level = {'comparison': 0, 'compositional': 1, 'inference': 2, 'bridge_comparison': 3}[item['kind']]
-            out.append(_doc_case(DEEP_LOOKUP, family, item, level, wpool, k, wrong, {'compare': item['answer']}))
+            out.append(_doc_case(DEEP_LOOKUP, family, item, level, wpool, k, wrong, {'compare': item['answer']},
+                                 children=notes.wiki_entry_notes(item)))
         for item in clutrr[split][:n[2]]:
             out.append(_clutrr_case(DEEP_KIN, family, item, labels))
     return out
