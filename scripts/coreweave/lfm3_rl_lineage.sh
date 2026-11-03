@@ -32,8 +32,12 @@ exec > >(tee -a "$OUT/driver.log") 2>&1
 CODE=$NATLANG_REPO
 HELPER="$CODE/scripts/coreweave/rl_cloud_sandbox.py"
 WINDOW="$CODE/scripts/neuralese_data/sft_window.py"
-# A failed driver keeps the sandbox readable for NATLANG_CW_HOLD_ON_FAILURE seconds (logs, files) before it completes.
-trap 'rc=$?; if [ $rc -ne 0 ] && [ $rc -ne 143 ] && [ $rc -ne 75 ]; then sleep "${NATLANG_CW_HOLD_ON_FAILURE:-0}"; fi' EXIT
+# A failed driver keeps the sandbox readable for NATLANG_CW_HOLD_ON_FAILURE seconds (logs, files) before it completes;
+# an in-place handover's newer driver owns the lineage and the older driver waits for it (driver_ownership.sh).
+OWNER=$OUT/driver-owner
+. "$(dirname "$0")/driver_ownership.sh"
+driver_take run
+trap 'driver_exit $?' EXIT
 log() { echo "{\"at\":\"$(date -u +%FT%TZ)\",\"lineage\":\"$LINEAGE\",$1}"; }
 t0=$(date +%s); since() { echo $(( $(date +%s) - $1 )); }
 { echo "== $(date -u +%FT%TZ) sandbox ${CW_SANDBOX_ID:-}"; nvidia-smi --query-gpu=name,memory.total,driver_version,compute_cap --format=csv
