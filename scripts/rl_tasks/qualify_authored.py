@@ -18,10 +18,12 @@ Run through the memory ledger on the DGX.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -35,6 +37,12 @@ from measure_repetition import write_text_atomic  # noqa: E402
 
 DEFAULT_RUNTIME = str(resolve('data_hdd', 'natlang-rl-authoring', 'runtime', 'ts-host'))
 UNION = resolve('data_nvme', 'broad-rl-tasks-20261031', 'union_groups_fast.py')
+# The protection closure hashes about 10 GB of held/train source bytes to build its union digest. A per-run isolated
+# hash cache made that a fixed ~25 minute cost per qualification; this dedicated persistent cache keeps the same exact
+# device/inode/size/mtime/ctime signature keys (a changed or replaced source misses and is rehashed), so the union
+# digest is recomputed on every run from the actual current protection inputs and recorded in the report.
+PROTECTION_HASH_CACHE = Path(os.environ.get('NATLANG_PROTECTION_HASH_CACHE')
+                             or resolve('data_hdd', 'natlang-rl-authoring', 'protection-cache', 'hash-cache.jsonl'))
 
 
 def node():
@@ -87,6 +95,7 @@ def main(argv=None):
                     str(out / 'smoke.json'), '100000'], env=env, check=True, cwd=REPO)
     smoke = json.loads((out / 'smoke.json').read_text())
     report['steps']['smoke'] = {k: smoke['summary'][k] for k in ('runs', 'accepted')}
+    report['steps']['smoke']['replayed'] = sum(1 for row in cases if row['curriculum']['external']['structure']['smoke'].get('replay'))
     for result in smoke['results']:
         for problem in result.get('arity_errors') or []:
             status[result['id']]['problems'].append('helper argument count (' + problem + ')')
@@ -100,9 +109,17 @@ def main(argv=None):
         if related:
             status[row['id']]['problems'].append('related to a protected world: ' + ', '.join(related))
     if UNION.is_file():
+        PROTECTION_HASH_CACHE.parent.mkdir(parents=True, exist_ok=True)
+        started = time.time()
         subprocess.run([sys.executable, str(UNION), str(out / 'cases.jsonl'), str(out / 'protection-union.json')],
-                       check=True, cwd=REPO, env={**env, 'PYTHONPATH': f'{REPO}/training/neuralese:{REPO}'})
+                       check=True, cwd=REPO, env={**env, 'PYTHONPATH': f'{REPO}/training/neuralese:{REPO}',
+                                                  'NATLANG_HASH_CACHE': str(PROTECTION_HASH_CACHE)})
         union = json.loads((out / 'protection-union.json').read_text())
+        report['steps']['protection_closure'] = {'seconds': round(time.time() - started, 1),
+                                                 'hash_cache': str(PROTECTION_HASH_CACHE),
+                                                 'union_digest': hashlib.sha256(json.dumps(
+                                                     {k: union[k] for k in ('train_sha256', 'held', 'packet_proof',
+                                                                            'protection')}, sort_keys=True).encode()).hexdigest()}
         for ident in union['conflicts']:
             status[ident]['problems'].append('held-set group closure conflict')
         report['steps']['custody'] = {'protected_worlds': 'checked', 'group_closure': union['status']}

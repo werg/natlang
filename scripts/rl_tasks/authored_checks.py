@@ -33,6 +33,7 @@ import sys
 from pathlib import Path
 
 THIN_WORDS = 20
+NEURALESE_CONSTRUCTS = frozenset({'typed_neuralese', 'neuralese_relay', 'neuralese_fan_in', 'iterate_neuralese'})
 ONE_LINE_WORDS = 25
 STOP_WORD = re.compile(r'\b(stop|stops|stopping|stopped|until|halt|halts|terminate|terminates|ends? when)\b', re.I)
 CODE = re.compile(r'```.*?```|`[^`\n]+`', re.S)
@@ -179,6 +180,18 @@ def lint_task(task):
             for problem in arity_problems(code, children_of(functions, path)):
                 errors.append(f'{path}: {problem}')
 
+    smoke = task.get('smoke') or {}
+    if constructs & NEURALESE_CONSTRUCTS and not smoke.get('replay'):
+        errors.append('Neuralese constructs need `smoke.replay: true`: the smoke code is then the whole root script '
+                      '(helpers answer with scripted values) and its returned value is judged by the oracle, so the '
+                      'exact steps behind `expected` are checked by a real run, not only by the blind solve')
+    if smoke.get('replay'):
+        tail = re.search(r'return\s+([^;]*?);?\s*$', str(smoke.get('code', '')).strip(), re.S)
+        if not tail:
+            errors.append('smoke.replay code must end with `return <answer>`')
+        elif re.fullmatch(r'"[^"]*"|\'[^\']*\'|-?\d[\d.]*|true|false|null', tail.group(1).strip()):
+            warnings.append('heuristic: smoke.replay returns a bare literal: the replay checks no code step; compute '
+                            'the answer from the helpers\' scripted values')
     if {'iterate', 'iterate_neuralese'} & constructs and not any('iterateOn' in b for _, b in functions.values()):
         errors.append('iterate/iterate_neuralese tag but no function uses iterateOn')
 

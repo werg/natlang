@@ -458,3 +458,22 @@ def test_folder_worlds_are_part_of_a_tasks_identity(tmp_path):
     same['id'] = 'c'
     authored_novelty.main([write(tmp_path / 'c.jsonl', [base, same]), '--pool', pool, '-o', str(out)])
     assert json.loads(out.read_text())['exact_duplicates'] == ['c']
+
+
+def test_neuralese_tasks_need_a_full_smoke_replay_judged_by_the_oracle():
+    import pytest
+    bare = task(constructs=['neuralese_relay'])
+    assert any('smoke.replay' in e for e in findings(bare)['desk-0001']['errors'])
+    replayed = dict(bare, smoke={'code': 'const n = await begin(x);\nreturn n.length;', 'children': {}, 'replay': True})
+    assert findings(replayed)['desk-0001']['errors'] == []
+    literal = dict(bare, smoke={'code': 'const n = await begin(x);\nreturn 3;', 'children': {}, 'replay': True})
+    assert any('bare literal' in w for w in findings(literal)['desk-0001']['warnings'])
+    case = authored.convert(folder_task(folders=None, expected_folders=None, wrong_code=[], constructs=[],
+                                        oracle_depth='answer', reference=None,
+                                        smoke={'code': 'return 2;', 'children': {}, 'replay': True}))
+    smoke = case['curriculum']['external']['structure']['smoke']
+    assert smoke['replay'] is True and smoke['root'] == [['eval', {'code': 'return 2;', 'finish': True}]]
+    with pytest.raises(ValueError, match='replay'):
+        authored.convert(folder_task(folders=None, expected_folders=None, wrong_code=[], constructs=[],
+                                     oracle_depth='answer', reference=None,
+                                     smoke={'code': 'const a = 1;', 'children': {}, 'replay': True}))

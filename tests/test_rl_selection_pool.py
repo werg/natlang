@@ -42,3 +42,23 @@ def test_pool_caps_generators_and_families_and_prefers_new_programs(tmp_path):
     # The single effect-checked template cannot dominate even though effect oracles are preferred.
     assert sum(row['family'] == 'template' for row in kept) <= receipt['family_cap_rows']
     assert receipt['cases']['rows'] == len(kept)
+
+
+def test_effect_state_quota_shrinks_pool_without_duplicating_rows(tmp_path):
+    rows = []
+    for name in 'abcd':
+        rows += [case(f'{name}-plain-{i}', f'{name}-plain{i % 12}', 'g/' + name, body=f'{name} plain {chr(97 + i % 26)}{i}')
+                 for i in range(200)]
+        rows += [case(f'{name}-eff-{i}', f'{name}-eff{i % 12}', 'g/' + name, body=f'{name} effect {i} step', effect=True)
+                 for i in range(10)]
+    source = tmp_path / 'cases.jsonl'
+    source.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    free = pool.assemble([str(source)], tmp_path / 'free', share=.3, domains={}, family_share=.2)
+    receipt = pool.assemble([str(source)], tmp_path / 'quota', share=.3, domains={}, family_share=.2, min_effect_share=.3)
+    kept = [json.loads(line) for line in (tmp_path / 'quota' / 'cases.jsonl').read_text().splitlines()]
+    ids = [row['id'] for row in kept]
+    assert len(ids) == len(set(ids))
+    effects = sum('effects' in row['semantics'] for row in kept)
+    assert effects == 40 and effects >= .3 * len(kept) - 1
+    assert receipt['quota']['applied'] and receipt['cases']['rows'] < free['cases']['rows']
+    assert not free['quota']['applied']

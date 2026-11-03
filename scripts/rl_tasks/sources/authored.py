@@ -118,6 +118,11 @@ def convert(task):
     smoke = task['smoke']
     if not isinstance(smoke, dict) or not isinstance(smoke.get('code'), str) or not isinstance(smoke.get('children'), dict):
         fail(task, 'smoke needs code (root eval script) and children (scripted helper answers by name)')
+    replay = smoke.get('replay', False)
+    if not isinstance(replay, bool):
+        fail(task, 'smoke.replay is true or false')
+    if replay and 'return' not in smoke['code']:
+        fail(task, 'smoke.replay runs the whole root script: it must end by returning the answer')
     world = 'authored:' + task['world']
     split = unit_split(world, 'train-carve', salt='rl-authored-20261103')
     family = 'auth_' + task['family']
@@ -150,10 +155,14 @@ def convert(task):
                          'checks': {'wrong_answers': wrong, 'alias_answers': aliases,
                                     **({'wrong_code': wrong_code} if wrong_code else {})},
                          'structure': {'name': family, 'constructs': sorted(constructs),
-                                       'smoke': {'root': [['eval', {'code': smoke['code']}],
-                                                          ['return_result', {'status': 'success',
-                                                                             'value': task['expected']}]],
-                                                 'children': smoke['children']}}}},
+                                       # replay: the whole root script runs against the scripted helper answers and its
+                                       # returned value is what the oracle judges (a real run of the exact code
+                                       # steps, Neuralese helpers included). Otherwise one pass proves the wiring only.
+                                       'smoke': {'root': ([['eval', {'code': smoke['code'], 'finish': True}]] if replay
+                                                          else [['eval', {'code': smoke['code']}],
+                                                                ['return_result', {'status': 'success',
+                                                                                   'value': task['expected']}]]),
+                                                 'replay': replay, 'children': smoke['children']}}}},
         'semantics': {'root': root, 'files': files, 'inputs': task['inputs'], 'expected': task['expected'],
                       # Declared aliases are alternate gold forms the oracle accepts (OracleSpec.alternates), in
                       # addition to what the oracle mode already ignores (record key order; case and spacing when

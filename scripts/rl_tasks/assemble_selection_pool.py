@@ -7,6 +7,10 @@ interleaved RL stage binds (`rl_task_source`). It keeps verified rows byte-for-b
 1. Generator balance: rows are classed by generator (``generation.generator``; the broad external builder is split
    into dataset / codebase / composed by source, and new builders carry their own generator ids). Water-filling picks
    a pool in which no class exceeds ``--max-generator-share`` of the rows; a class smaller than its cap is kept whole.
+   Effect/state quota (``--min-effect-share``, default 0.3): when the capped pool has fewer effect/state oracles than
+   that share, every effect/state row that survives the family cap is kept and the other rows are water-filled per
+   generator down to the size that makes the share true. Rows are never duplicated or invented; scarce effect supply
+   shrinks the pool and each admitted effect/state task grows it. Authored classes smaller than the cap stay whole.
 2. Within a capped class, rows are taken round-robin across families and levels, preferring effect/state oracles and
    not-yet-taken normalized programs, so the cap drops repeated templates first.
 3. Family consolidation (only families with fewer than 20 distinct normalized programs in the pool; procedural
@@ -124,7 +128,81 @@ def take(members, count, family_cap, family_counts):
     return chosen
 
 
-def assemble(inputs, out, *, share, domains, family_share=0.05):
+def water_fill(available, budget):
+    """Per-class allowances (a class never exceeds its availability) that total at most ``budget`` and are as equal
+    as they can be: classes smaller than the common level are kept whole."""
+    if sum(available.values()) <= budget:
+        return dict(available)
+    low, high = 0, max(available.values())
+    while low < high:
+        mid = (low + high + 1) // 2
+        if sum(min(n, mid) for n in available.values()) <= budget:
+            low = mid
+        else:
+            high = mid - 1
+    return {c: min(n, low) for c, n in available.items()}
+
+
+def usable_rows(members, family_cap):
+    per_family = collections.Counter(features['family'] for _, features in members)
+    return sum(min(n, family_cap) for n in per_family.values())
+
+
+def select(classes, total, share, family_share, min_effect_share):
+    """Choose the pool rows. Without a quota: generator caps (water-filling) plus the family cap, effect oracles
+    first. With ``min_effect_share``: every effect/state row that survives the family cap is kept, and the other rows
+    are water-filled per generator so that effect/state oracles are at least that share of the pool. No row is ever
+    duplicated or invented: when verified effect/state supply is scarce the pool shrinks instead, and the pool size
+    rises with every admitted effect/state task."""
+    # A family (one program design or template) may hold at most family_share of the pool, effect oracles included:
+    # the cap is solved jointly with the generator caps (two fixed-point passes suffice for these sizes).
+    family_cap = total
+    for _ in range(3):
+        limits = caps({g: usable_rows(m, family_cap) for g, m in classes.items()}, share)
+        family_cap = max(1, int(family_share * sum(limits.values())))
+    pool, family_counts = [], collections.Counter()
+    for generator, members in sorted(classes.items()):
+        pool += take(members, limits[generator], family_cap, family_counts)
+    quota = {'min_effect_share': min_effect_share, 'applied': False}
+    effect_kept = sum(1 for _, features in pool if features['effect_state_oracle'])
+    if not min_effect_share or effect_kept >= min_effect_share * len(pool):
+        quota.update(effect_rows=effect_kept, rows=len(pool))
+        return pool, family_cap, limits, quota
+    unconstrained = len(pool)
+    effects = {g: [m for m in members if m[1]['effect_state_oracle']] for g, members in classes.items()}
+    others = {g: [m for m in members if not m[1]['effect_state_oracle']] for g, members in classes.items()}
+
+    def plan(cap):
+        """Effect rows kept (family cap `cap`), per-generator allowance of other rows, resulting pool size."""
+        counts = collections.Counter()
+        kept = {g: take(effects[g], len(effects[g]), cap, counts) for g in sorted(classes)}
+        effect_total = sum(len(v) for v in kept.values())
+        total_rows = int(effect_total / min_effect_share)
+        generator_cap = int(share * total_rows)
+        room = {g: max(0, min(usable_rows(others[g], cap), generator_cap - len(kept[g]))) for g in classes}
+        allowance = water_fill(room, total_rows - effect_total)
+        return kept, counts, allowance, effect_total + sum(allowance.values())
+
+    family_cap = max(1, int(family_share * len(pool)))
+    for _ in range(8):
+        _, _, _, size = plan(family_cap)
+        new_cap = max(1, int(family_share * size))
+        if new_cap == family_cap:
+            break
+        family_cap = new_cap
+    kept, family_counts, allowance, _ = plan(family_cap)
+    pool = [item for g in sorted(classes) for item in kept[g]]
+    for generator in sorted(classes):
+        pool += take(others[generator], allowance[generator], family_cap, family_counts)
+    limits = {g: len(kept[g]) + allowance[g] for g in classes}
+    effect_total = sum(len(v) for v in kept.values())
+    quota.update(applied=True, effect_rows=effect_total, rows=len(pool), unconstrained_rows=unconstrained,
+                 note='effect/state rows kept in full under the family cap; other rows water-filled per generator; '
+                      'no row duplicated')
+    return pool, family_cap, limits, quota
+
+
+def assemble(inputs, out, *, share, domains, family_share=0.05, min_effect_share=0.0):
     out = Path(out)
     if out.exists():
         raise SystemExit(f'{out} exists')
@@ -132,19 +210,7 @@ def assemble(inputs, out, *, share, domains, family_share=0.05):
     classes = collections.defaultdict(list)
     for row, features in rows:
         classes[features['generator']].append((row, features))
-    # A family (one program design or template) may hold at most family_share of the pool, effect oracles included:
-    # the cap is solved jointly with the generator caps (two fixed-point passes suffice for these sizes).
-    family_cap = len(rows)
-    for _ in range(3):
-        usable = {}
-        for generator, members in classes.items():
-            per_family = collections.Counter(features['family'] for _, features in members)
-            usable[generator] = sum(min(n, family_cap) for n in per_family.values())
-        limits = caps(usable, share)
-        family_cap = max(1, int(family_share * sum(limits.values())))
-    pool, family_counts = [], collections.Counter()
-    for generator, members in sorted(classes.items()):
-        pool += take(members, limits[generator], family_cap, family_counts)
+    pool, family_cap, limits, quota = select(classes, len(rows), share, family_share, min_effect_share)
     merges = collections.Counter()
     written = []
     family_programs = collections.defaultdict(set)
@@ -193,6 +259,7 @@ def assemble(inputs, out, *, share, domains, family_share=0.05):
                'inputs': [{'path': str(Path(p).resolve()), 'sha256': sha256(p)} for p in inputs],
                'cases': {'path': 'cases.jsonl', 'sha256': sha256(cases), 'rows': len(ordered)},
                'max_generator_share': share, 'max_family_share': family_share, 'family_cap_rows': family_cap,
+               'quota': quota,
                'generator_classes': {c: {'available': len(m), 'kept': sum(1 for _, f in pool if f['generator'] == c)}
                                      for c, m in sorted(classes.items())},
                'family_merges': [{'from': a, 'to': b, 'rows': n} for (a, b), n in sorted(merges.items())],
@@ -213,15 +280,21 @@ def main(argv=None):
     parser.add_argument('--out-root', help='write a fresh selection-pool-<UTC time> here and update latest.json')
     parser.add_argument('--max-family-share', type=float, default=0.05)
     parser.add_argument('--max-generator-share', type=float, default=0.2)
+    parser.add_argument('--min-effect-share', type=float, default=None,
+                        help='effect/state oracle quota (default 0.3, the owner bar; 0 disables): keeps every effect '
+                             'row under the family cap and shrinks the other rows, never duplicating any')
     parser.add_argument('--domain-map', help='JSON object source-prefix -> domain (default: built-in map)')
     args = parser.parse_args(argv)
     domains = json.loads(Path(args.domain_map).read_text()) if args.domain_map else DEFAULT_DOMAINS
     inputs, share, family_share = list(args.cases), args.max_generator_share, args.max_family_share
+    min_effect = args.min_effect_share
     if args.spec:
         spec = json.loads(Path(args.spec).read_text())
         inputs += spec['cases']
         share = spec.get('max_generator_share', share)
         family_share = spec.get('max_family_share', family_share)
+        if min_effect is None:
+            min_effect = spec.get('min_effect_share')
     inputs = [path for path in inputs if Path(path).is_file()]
     if not inputs:
         raise SystemExit('no task source files')
@@ -233,7 +306,8 @@ def main(argv=None):
         out = Path(args.out)
     else:
         raise SystemExit('give --out or --out-root')
-    receipt = assemble(inputs, out, share=share, domains=domains, family_share=family_share)
+    receipt = assemble(inputs, out, share=share, domains=domains, family_share=family_share,
+                       min_effect_share=0.3 if min_effect is None else min_effect)
     if args.out_root:
         latest = {'pool': str(out.resolve()), 'cases': str((out / 'cases.jsonl').resolve()),
                   'sha256': receipt['cases']['sha256'], 'rows': receipt['cases']['rows']}
