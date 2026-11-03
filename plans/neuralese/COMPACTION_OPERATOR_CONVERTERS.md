@@ -37,6 +37,16 @@ graphs and applies the current protection union, decision holds and family holds
 | `split_groups` | World keys via `records.group_key(namespace, value)`: the same namespaces the existing converter for that store uses (repo, task, document, wiki title, instance). Related worlds must share a key. |
 | `lineage`, `license` | As the existing converter for that store sets them; record license as fact, never filter on it. |
 
+**Seeds (owner correction 2026-11-03).** An operator writes a generated producer span that training starts as a
+text summary related to the consumer's target (`LEARNED_COMPACTION_OPERATORS.md`, "Owner design correction"). Each
+source may carry `meta.operator_seed = {"text", "provenance", "origin"}` with provenance `gold` (a dataset span:
+supporting facts, reference summaries, answer sentences, relevant spans) or `checked` (exact code-derived text, e.g.
+the refs a `:refs` target lists). Never invent a summary and never use teacher-written text as a seed. A source
+without one gets the shared deterministic mechanical seed (`natlang_neuralese/data/operator_seeds.py seed_for`:
+answer lines, question/target overlap sentences, identifiers plus outline, outline with head/tail, or a history
+outline), filled by `CaseSink.offer` and, identically, by the renderer for older case files; the manifest counts
+seeds by provenance. The seed lives only in `meta`: the site never reads it as input.
+
 **Operator rules** (`operator_cases_common.RULES`, enforced by `CaseSink`):
 
 | Operator | Sources | Roles | Chars per source |
@@ -46,8 +56,8 @@ graphs and applies the current protection union, decision holds and family holds
 | `compact-history` | exactly 1 | trajectory | 8,000 – 200,000 (serialized) |
 | `extract` | 2 – 8 | document, passage, record, file, tool_output | 200 – 20,000 each |
 
-**Hard rules.** Never put the target or text derived from the target into `writer.*`, `sources` or
-`consumer.context`. Never read protected/held inputs as training data: keep each source's own held lists (bench keys,
+**Hard rules.** Never put the target or text derived from the target into `writer.*`, source text or
+`consumer.context` (the only target-related text is the seed in `sources[i].meta.operator_seed`). Never read protected/held inputs as training data: keep each source's own held lists (bench keys,
 `*_heldout` files, the S1 `final/` split closure) and leave the rest to the renderer. Selection under a cap is
 deterministic: sort candidates by `stable_rank(record_id, '<source-name>')` and keep the first N per split. Stream
 inputs (some files are 10-22 GB); never load a whole file. Put the converter at
@@ -80,11 +90,14 @@ The renderer emits `natlang.neuralese-native-graph/1` rows plus a top-level `ope
   template through `operator_site_messages`: placement `system` → `system: <operator prompt>`,
   `user: <writer.context…> <writer.instructions>\n\n<source text>`; placement `user-suffix` (history) →
   `<writer.context> <source messages as conversation> user: <operator prompt>`. Then the assistant reply is
-  `produce_open, K slot tokens, produce_close`. `producing = [[slot_start, slot_stop]]`; all weights 0.
+  `produce_open, <seed tokens, at most the operator's span cap>, produce_close`. `producing = [[seed_start,
+  seed_stop]]`; the seed tokens and `produce_close` have weight 1 (annealed by the trainer's
+  `operator_seed_schedule`), the site 0.
 * **Consumer node** `consumer`: `consumer.context` with one consume-marked import per producer
-  (`consume_open, <K imported slots>, consume_close`, joined by `\n`) at the start of its first user message, then
+  (`consume_open, <imported span>, consume_close`, joined by `\n`) at the start of its first user message, then
   `\n\n` and the original content; target reply weight 1, everything else 0.
-* `operators`: `{operator, version, node, kind: 'prompt'|'slots', start, stop}` for each producer.
+* `operators`: `{operator, version, node, kind: 'prompt'|'seed', start, stop[, provenance]}` for each producer;
+  `operator_conversion.seeds` records each seed's provenance, origin, tokens and clipping.
 * **Text-cut sibling** (`text_cut_of: <graph id>`): the consumer alone, reading the runtime's current text cut of the
   source (`cutText`, 2,000 shown characters, head/tail with the `<<cut off: …>>` note) instead of the state. It is
   the baseline the operator must beat in the ablation.
@@ -118,6 +131,10 @@ build the set of (a)'s text hashes first).
    lines? Answer as JSON {"lines": n, "first": "...", "last": "..."}.`` with the code-computed answer (label
    `checked`, `checked: "code:line-stats"`). Same groups.
 
+5. Seeds (checked): `:refs` cases carry `meta.operator_seed = {"text": "\n".join(the listed refs), "provenance":
+   "checked", "origin": "code:exact_refs_from"}`; `:lines` cases carry the code-computed line count with the first and
+   last non-empty lines (`origin: "code:line-stats"`).
+
 **Caps.** Train ≤ 30,000 cases total across both case kinds (prefer `:refs`), test ≤ 2,000. Output source name
 `tool-digest`. Expect roughly 20-30k train.
 
@@ -136,6 +153,9 @@ the first `: ` of the first prompt entry. `split_groups = [group_key("search-r1-
 `group_key("wiki", <title>)` for every page title in brackets `[id] Title` if present. Reject rows whose answer string
 does not occur (case-insensitive) in the pages (`answer-not-in-results`): the state must be able to carry it.
 
+**Seed.** None supplied: the shared helper selects the answer-bearing sentences of the pages
+(`mechanical:answer-lines`), which exist by the `answer-not-in-results` rule.
+
 **Caps.** Train ≤ 15,000, test ≤ 1,000 (upstream test rows only; this store is all train, so carve test by
 `stable_rank(question_group) % 100 < 3`). Source name `web-search-r1`.
 
@@ -153,6 +173,9 @@ rows whose single source passes the 4,096-char floor), `qa_trivia` (44,476).
 listing purpose, keeping the question: ``The call that receives this <role> answers: <consumer question>``
 (the consumer question is the first user message of `consumer.context`). Keep `consumer`, `target`,
 `split_groups`, `lineage`, `license` exactly.
+
+**Seed.** None supplied unless a family has a dataset-marked evidence span (then `gold`); otherwise the shared
+helper's answer lines or question-overlap sentences (`mechanical:answer-lines` / `mechanical:overlap-sentences`).
 
 **Caps.** Per family train caps: repo_qa 9,000; qa_narrative 5,000; qa_narrative_long 4,000; qa_long_context 4,000;
 qa_mcq 2,129; qa_multihop 3,000; qa_trivia 3,000 (total ≤ 30,129); test ≤ 300 per family. One output per family:
@@ -178,6 +201,10 @@ prompt as swe_compaction.py does (`_message`, `strip_markup`). Label: join `meta
 reject `no-upstream`. Groups `repo:<repo>`, `swe-instance:<instance_id>`; bench instances
 (`swe_compaction.load_bench_instances()`) → split `test`. Dedupe (b) against (a) by (trajectory_id, span).
 
+**Seed.** The bgkit `compaction`/`compaction_v2` `target` is the next assistant message, not a compaction note, so
+neither input has gold notes: the shared helper's `mechanical:history-outline` (actions, paths, errors, last step,
+budget scaled to the stretch) seeds every case. A future source with actual compaction notes supplies them as `gold`.
+
 **Caps.** Train ≤ 15,000 from each of (a) and (b) (≤ 2 windows per trajectory overall), test ≤ 1,000 each. Source
 names `s1-swe` and `bgkit-compaction-v2`. Streaming (a) is mandatory (one line at a time, `iter_jsonl`).
 
@@ -200,7 +227,8 @@ case["consumer"]["instructions"] + "\n\n" + case["request"]["name"] + ": " + cas
 `target` from `case["answer"]` with `kind` from `case["answer_kind"]` (`text` default); label `gold`,
 `checked: case["oracle"]`; `split = case["split"]`; `split_groups = case["groups"]`; lineage project `upstream`,
 store `case["dataset"]`, upstream_id `case["upstream_id"]`, revision `case["revision"]`; license
-`records.license_(case["license"]["spdx"])`. Skip task kinds whose answer is not a short text/choice (keep
+`records.license_(case["license"]["spdx"])`. Seed: each document's `view` (`meta.operator_seed`; `dataset-*` and the
+`none-line` distractor line → `gold`, `code-computed:greedy-rouge-oracle` → `checked`). Skip task kinds whose answer is not a short text/choice (keep
 `multi_news`/`qmsum` summaries: they are the summarizer cases; set `target.kind = "text"`).
 
 **Caps.** Train ≤ 8,000 per source, ≤ 30,000 total (stable_rank by case id), test ≤ 300 per source. Source name

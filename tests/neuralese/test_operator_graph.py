@@ -42,7 +42,8 @@ def test_every_operator_renders_a_valid_graph_with_bound_spans_and_text_cut(rend
             {'role': 'assistant', 'content': 'Looking at the file. ' * 50},
             {'role': 'user', 'content': 'Output: ' + text}]}]
     elif operator == 'extract':
-        sources = [{'role': 'document', 'text': text[:900], 'exact_refs': []},
+        sources = [{'role': 'document', 'text': text[:900], 'exact_refs': [],
+                    'meta': {'operator_seed': {'text': 'path src/app/main.py:12', 'provenance': 'gold', 'origin': 'unit'}}},
                    {'role': 'document', 'text': text[:700], 'exact_refs': []}]
     else:
         sources = [{'role': 'tool_output', 'text': text, 'exact_refs': []}]
@@ -53,16 +54,33 @@ def test_every_operator_renders_a_valid_graph_with_bound_spans_and_text_cut(rend
     assert len(spans) == 2 * len(sources)
     consumer = graph['nodes'][-1]
     assert [edge['source'] for edge in consumer['imports']] == [f'op{i}' for i in range(len(sources))]
-    for edge in consumer['imports']:
+    seeds = [span for span in spans if span.kind == 'seed']
+    for edge, node, seed in zip(consumer['imports'], graph['nodes'][:-1], seeds):
         assert consumer['token_ids'][edge['at'] - 1] == renderer.role_ids[2]
         assert consumer['token_ids'][edge['at']] == renderer.role_ids[3]
-        assert edge['stop'] - edge['start'] == OPERATORS[operator].slots
-    assert all(weight == 0 for node in graph['nodes'][:-1] for weight in node['target_weights'])
+        assert 0 < edge['stop'] - edge['start'] <= OPERATORS[operator].seed_cap
+        assert [edge['start'], edge['stop']] == node['producing'][0]
+        assert node['token_ids'][edge['start'] - 1] == renderer.role_ids[0]
+        assert node['token_ids'][edge['stop']] == renderer.role_ids[1] and edge['stop'] + 1 == len(node['token_ids'])
+        # Only the seed and its closing marker are supervised in the producer.
+        assert [i for i, w in enumerate(node['target_weights']) if w] == list(range(edge['start'], edge['stop'] + 1))
+    conversion = graph['operator_conversion']
+    assert len(conversion['seeds']) == len(sources) and conversion['span_tokens'] == [
+        edge['stop'] - edge['start'] for edge in consumer['imports']]
+    if operator == 'extract':
+        assert [seed['provenance'] for seed in conversion['seeds']] == ['gold', 'mechanical:outline']
+        assert 'main.py:12' in renderer.tokenizer.decode(
+            graph['nodes'][0]['token_ids'][consumer['imports'][0]['start']:consumer['imports'][0]['stop']])
+    else:
+        assert all(seed['provenance'].startswith('mechanical:') for seed in conversion['seeds'])
     supervised = [token for token, weight in zip(consumer['token_ids'], consumer['target_weights']) if weight]
     assert 'forty-two' in renderer.tokenizer.decode(supervised)
     assert cut['text_cut_of'] == graph['id']
     cut_text = renderer.tokenizer.decode(cut['nodes'][0]['token_ids'])
     assert ('<<cut off:' in cut_text) == (operator != 'extract') and 'forty-two' in cut_text
+    from natlang_neuralese.eval.neuralese_ablation import span_report
+    report = span_report({graph['id']: conversion})
+    assert report['spans'] == len(sources) and report['by_seed_provenance']
 
 
 def test_teacher_targets_and_wrong_site_counts_are_omitted(renderer):

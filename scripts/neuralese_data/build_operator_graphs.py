@@ -34,6 +34,7 @@ LFM3_ROLES = [125033, 125034, 125035, 125036]
 OUT_ROOT = data_path('data_hdd', 'natlang-compaction-operators-20261103', 'graphs')
 CODE = ('scripts/neuralese_data/build_operator_graphs.py', 'training/neuralese/natlang_neuralese/data/operator_graph.py',
         'training/neuralese/natlang_neuralese/model/learned_operators.py',
+        'training/neuralese/natlang_neuralese/data/operator_seeds.py',
         'training/neuralese/natlang_neuralese/data/port_record_graph.py',
         'training/neuralese/natlang_neuralese/serve/chat.py')
 _RENDERER = None
@@ -144,8 +145,11 @@ def main(argv=None):
     out = args.out_root / operator / source
     input_sha = sha256_file_hex(args.cases)
     receipt_path = out / 'receipt.json'
-    if receipt_path.exists() and json.loads(receipt_path.read_text())['input']['sha256'] == input_sha \
-            and json.loads(receipt_path.read_text()).get('limit') == args.limit:
+    from natlang_neuralese.model.learned_operators import registry_sha256 as _registry
+    previous = json.loads(receipt_path.read_text()) if receipt_path.exists() else None
+    # Complete only for the same input, limit and operator registry (a registry change re-renders every case).
+    if previous and previous['input']['sha256'] == input_sha and previous.get('limit') == args.limit \
+            and previous.get('registry_sha256') == _registry([operator]):
         print('already complete:', out)
         return 0
     out.mkdir(parents=True, exist_ok=True)

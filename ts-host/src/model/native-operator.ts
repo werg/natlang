@@ -1,6 +1,6 @@
 /**
  * The client of a native server's learned Neuralese operators (`POST /v1/neuralese/operator`, capability `operator/1`):
- * one prefill of the operator site on the server, whose K slot states are archived and returned as a Neuralese value.
+ * the server generates the operator's producer span after its site (greedy, up to the operator's cap) and archives that span's state, returned as a Neuralese value.
  */
 import { neuraleseRef } from '../native/neuralese.js';
 import type { Compactor } from '../native/operator-frames.js';

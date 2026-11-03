@@ -29,47 +29,54 @@ def tiny_model():
 
 
 def small_bindings(prompt_len=3):
-    """Bindings in the tiny vocabulary: prompt IDs 10.., slot IDs cycling 20..23."""
+    """Bindings in the tiny vocabulary: prompt IDs 10.."""
     out = {}
     for name, spec in OPERATORS.items():
         out[name] = {'schema': 'natlang.learned-operator/1', 'operator': name, 'version': spec.version,
                      'tokenizer_fingerprint': FINGERPRINT, 'prompt_token_ids': list(range(10, 10 + prompt_len)),
-                     'slot_token_ids': [20 + index % 4 for index in range(spec.slots)],
-                     'prompt_sha256': '0' * 64, 'slot_text_sha256': '0' * 64}
+                     'seed_cap': spec.seed_cap, 'prompt_sha256': '0' * 64}
     return out
 
 
-def graph_row(index, slots, *, name='compact-value', prompt=(10, 11, 12)):
-    """Producer: prompt rows, a value, then K slot positions in a producing span; consumer imports the slots."""
+PO, PC = 56, 57
+
+
+def seed_of(index):
+    """An input-specific seed of varying length (the producer span's starting text)."""
+    return [20 + (index * 3 + k) % 9 for k in range(2 + index % 3)]
+
+
+def graph_row(index, seed=None, *, name='compact-value', prompt=(10, 11, 12)):
+    """Producer: prompt rows, a value, produce_open, the seed (producing, CE 1) and produce_close; consumer imports it."""
+    seed = seed_of(index) if seed is None else seed
     value = [30 + (index * 7 + k) % 20 for k in range(5)]
-    producer = [1, *prompt, *value, *slots]
-    p_start, s_start = 1, 1 + len(prompt) + len(value)
+    producer = [1, *prompt, *value, PO, *seed, PC]
+    p_start, s_start = 1, 2 + len(prompt) + len(value)
+    s_stop = s_start + len(seed)
     consumer = [2, 3 + index % 5, 4, 5, 6 + index % 3]
+    version = OPERATORS[name].version
     return {'schema': SCHEMA, 'id': f'g{index}', 'split': 'train', 'source_groups': [f'world:{index}'],
             'tokenizer_fingerprint': FINGERPRINT,
-            'nodes': [{'name': 'producer', 'token_ids': producer, 'target_weights': [0.] * len(producer),
-                       'producing': [[s_start, s_start + len(slots)]]},
+            'nodes': [{'name': 'producer', 'token_ids': producer,
+                       'target_weights': [0.] * s_start + [1.] * (len(seed) + 1), 'producing': [[s_start, s_stop]]},
                       {'name': 'consumer', 'token_ids': consumer, 'target_weights': [0., 0., 1., 1., 1.],
-                       'imports': [{'at': 1, 'source': 'producer', 'start': s_start, 'stop': s_start + len(slots)}]}],
-            'operators': [{'operator': name, 'version': 1, 'node': 'producer', 'kind': 'prompt',
+                       'imports': [{'at': 1, 'source': 'producer', 'start': s_start, 'stop': s_stop}]}],
+            'operators': [{'operator': name, 'version': version, 'node': 'producer', 'kind': 'prompt',
                            'start': p_start, 'stop': p_start + len(prompt)},
-                          {'operator': name, 'version': 1, 'node': 'producer', 'kind': 'slots',
-                           'start': s_start, 'stop': s_start + len(slots)}]}
+                          {'operator': name, 'version': version, 'node': 'producer', 'kind': 'seed',
+                           'start': s_start, 'stop': s_stop, 'provenance': 'gold'}]}
 
 
-def test_bind_tokens_cycles_slot_text_and_round_trips_prompt():
+def test_bind_tokens_round_trips_prompt_and_binds_the_span_cap():
     binding = bind_tokens(CharTokenizer(), 'compact-history', tokenizer_fingerprint=FINGERPRINT)
     spec = OPERATORS['compact-history']
     assert CharTokenizer().decode(binding['prompt_token_ids']) == spec.prompt
-    assert len(binding['slot_token_ids']) == spec.slots
-    seed = [ord(ch) for ch in spec.slot_text]
-    assert binding['slot_token_ids'][:len(seed)] == seed
-    assert binding['slot_token_ids'][len(seed)] == seed[0]
+    assert binding['seed_cap'] == spec.seed_cap and 'slot_token_ids' not in binding
 
 
-def test_every_operator_has_dedicated_data_target_and_distinct_prompt():
+def test_every_operator_has_dedicated_data_target_distinct_prompt_and_span_cap():
     assert len({spec.prompt for spec in OPERATORS.values()}) == len(OPERATORS)
-    assert all(spec.data_target >= 20_000 and spec.slots >= 1 for spec in OPERATORS.values())
+    assert all(spec.data_target >= 20_000 and spec.seed_cap >= 128 for spec in OPERATORS.values())
     assert len(registry_sha256()) == 64
 
 
@@ -78,10 +85,10 @@ def test_text_initialized_rows_reproduce_the_text_forward_exactly_and_receive_gr
     bindings = small_bindings()
     rows = OperatorRows(bindings, model.port.embedding_weight.shape[1])
     rows.reset_to_text(model.port.embedding_weight)
-    row = graph_row(0, bindings['compact-value']['slot_token_ids'])
+    row = graph_row(0)
     example = parse_graph(row, tokenizer_fingerprint=FINGERPRINT)
     spans = resolve_spans(row, example.plan, rows.bindings)
-    assert [span.kind for span in spans] == ['prompt', 'slots']
+    assert [span.kind for span in spans] == ['prompt', 'seed']
     text = model(example.plan)['h_final']
     learned = model(example.plan, embeddings=operator_embeddings(model, rows, example.plan, spans))['h_final']
     assert torch.equal(text, learned)
@@ -89,35 +96,59 @@ def test_text_initialized_rows_reproduce_the_text_forward_exactly_and_receive_gr
     result = model(example.plan, embeddings=operator_embeddings(model, rows, example.plan, spans))
     loss, _ = graph_loss_from_result(model, example, result)
     loss.backward()
-    for kind in ('prompt', 'slots'):
-        grad = rows.rows('compact-value', kind).grad
-        assert grad is not None and float(grad.abs().sum()) > 0
-    assert rows.rows('extract', 'slots').grad is None
+    grad = rows.rows('compact-value').grad
+    assert grad is not None and float(grad.abs().sum()) > 0
+    assert rows.rows('extract').grad is None
 
 
-def test_resolve_spans_rejects_wrong_tokens_and_slots_outside_production():
+def test_resolve_spans_rejects_wrong_tokens_seeds_outside_production_and_over_cap():
     model = tiny_model()
     bindings = small_bindings()
     rows = OperatorRows(bindings, model.port.embedding_weight.shape[1])
-    row = graph_row(0, bindings['compact-value']['slot_token_ids'], prompt=(10, 11, 13))
+    row = graph_row(0, prompt=(10, 11, 13))
     example = parse_graph(row, tokenizer_fingerprint=FINGERPRINT)
     with pytest.raises(ValueError, match='differ from the bound'):
         resolve_spans(row, example.plan, rows.bindings)
-    row = graph_row(0, bindings['compact-value']['slot_token_ids'])
+    row = graph_row(0)
     row['nodes'][0]['producing'] = []
     row['nodes'][1]['imports'] = []
     example = parse_graph(row, tokenizer_fingerprint=FINGERPRINT)
     with pytest.raises(ValueError, match='producing span'):
         resolve_spans(row, example.plan, rows.bindings)
+    capped = {name: {**binding, 'seed_cap': 1} for name, binding in bindings.items()}
+    row = graph_row(0)
+    example = parse_graph(row, tokenizer_fingerprint=FINGERPRINT)
+    with pytest.raises(ValueError, match='span cap'):
+        resolve_spans(row, example.plan, capped)
+
+
+def test_seed_schedule_anneals_only_seed_weights():
+    from natlang_neuralese.model.learned_operators import seed_factor, seed_schedule, seed_weighted
+    schedule = seed_schedule({'start': 1.0, 'end': 0.1, 'updates': 10})
+    assert seed_factor(schedule, 0) == 1.0 and seed_factor(schedule, 10) == pytest.approx(0.1)
+    assert seed_factor(schedule, 5) == pytest.approx(0.55) and seed_factor(schedule, 50) == pytest.approx(0.1)
+    assert seed_factor(None, 3) == 1.0
+    for bad in ({'start': 2, 'end': 0, 'updates': 1}, {'start': 1, 'end': 0, 'updates': 0}, {'start': 1, 'end': 0}):
+        with pytest.raises(ValueError):
+            seed_schedule(bad)
+    row = graph_row(1)
+    example = parse_graph(row, tokenizer_fingerprint=FINGERPRINT)
+    scaled = seed_weighted(example, 0.25)
+    producer = row['nodes'][0]
+    s_start, s_stop = producer['producing'][0]
+    expected = [weight * (0.25 if s_start <= local <= s_stop else 1.) for local, weight in enumerate(producer['target_weights'])]
+    assert list(scaled.target_weights[:len(expected)]) == expected
+    assert scaled.target_weights[len(expected):] == example.target_weights[len(expected):]
+    assert seed_weighted(example, 1.) is example
 
 
 def test_rows_save_and_load_round_trip(tmp_path):
     rows = OperatorRows(small_bindings(), 8)
     with torch.no_grad():
-        rows.rows('extract', 'slots').normal_()
+        rows.rows('extract').normal_()
     save_rows(rows, tmp_path / 'rows.pt')
     loaded = load_rows(tmp_path / 'rows.pt')
-    assert torch.equal(loaded.rows('extract', 'slots'), rows.rows('extract', 'slots'))
+    assert torch.equal(loaded.rows('extract'), rows.rows('extract'))
     assert loaded.bindings == rows.bindings
 
 
@@ -130,9 +161,8 @@ def test_ablation_externalized_own_state_matches_actual_and_conditions_differ():
     rows.reset_to_text(model.port.embedding_weight)
     with torch.no_grad():
         for name in OPERATORS:
-            rows.rows(name, 'slots').add_(0.3 * torch.randn_like(rows.rows(name, 'slots')))
-    slots = bindings['compact-value']['slot_token_ids']
-    raw = [graph_row(index, slots) for index in range(4)]
+            rows.rows(name).add_(0.3 * torch.randn_like(rows.rows(name)))
+    raw = [graph_row(index) for index in range(4)]
     examples = [parse_graph(row, tokenizer_fingerprint=FINGERPRINT) for row in raw]
     spans = {example.id: resolve_spans(row, example.plan, rows.bindings) for row, example in zip(raw, examples)}
     # Importing a row's own captured state as external state reproduces the internal-import graph.
@@ -161,8 +191,9 @@ def test_ablation_externalized_own_state_matches_actual_and_conditions_differ():
         (0.,) * len(example.plan.invocations[0].token_ids))
 
 
-def test_serving_native_step_site_matches_the_training_graph_capture():
-    """The operator endpoint's incremental site (native_step with substituted rows) equals the graph producer."""
+def test_serving_generation_steps_match_the_training_graph_capture():
+    """The operator endpoint's path (site prefill with prompt rows, then one producing step per span token) equals
+    the graph producer's capture of the same span."""
     from natlang_neuralese.model.shared_state import capture_block, concatenate_captures, native_step
     from natlang_neuralese.model.learned_operators import ResolvedSpan
     model = tiny_model()
@@ -170,9 +201,8 @@ def test_serving_native_step_site_matches_the_training_graph_capture():
     rows = OperatorRows(bindings, model.port.embedding_weight.shape[1])
     rows.reset_to_text(model.port.embedding_weight)
     with torch.no_grad():
-        rows.rows('compact-value', 'slots').add_(0.2 * torch.randn_like(rows.rows('compact-value', 'slots')))
-        rows.rows('compact-value', 'prompt').add_(0.2 * torch.randn_like(rows.rows('compact-value', 'prompt')))
-    row = graph_row(0, bindings['compact-value']['slot_token_ids'])
+        rows.rows('compact-value').add_(0.2 * torch.randn_like(rows.rows('compact-value')))
+    row = graph_row(2)
     example = parse_graph(row, tokenizer_fingerprint=FINGERPRINT)
     spans = resolve_spans(row, example.plan, rows.bindings)
     identity = {'checkpoint_sha256': 'a' * 64, 'tokenizer_fingerprint': 'b' * 64, 'embedding_weight_sha256': 'c' * 64,
@@ -182,13 +212,15 @@ def test_serving_native_step_site_matches_the_training_graph_capture():
     with torch.no_grad():
         result = model(example.plan, embeddings=operator_embeddings(model, rows, example.plan, spans))
         graph_block = capture_block(result, 'producer', start, stop, text='', **identity)
-        ids = torch.tensor([producer['token_ids']])
-        site = [ResolvedSpan('compact-value', span.kind, 'site', span.start, span.stop) for span in spans]
-        embeddings = rows.apply(model.embed(ids), site)
-        prefix = native_step(model, ids[:, :start], embeddings=embeddings[:, :start])
-        capture = native_step(model, ids[:, start:stop], prefix['cache'], producing=True,
-                              embeddings=embeddings[:, start:stop])
-    fields = concatenate_captures([capture])
+        ids = torch.tensor([producer['token_ids'][:start]])
+        prompt = next(span for span in spans if span.kind == 'prompt')
+        embeddings = rows.apply(model.embed(ids), [ResolvedSpan('compact-value', 'prompt', 'site', prompt.start, prompt.stop)])
+        output = native_step(model, ids, embeddings=embeddings)
+        chunks = []
+        for token in producer['token_ids'][start:stop]:
+            output = native_step(model, torch.tensor([[token]]), output['cache'], producing=True)
+            chunks.append(output)
+    fields = concatenate_captures(chunks)
     for graph_layer, step_layer in zip(graph_block.layers, fields['layers']):
         for key, value in graph_layer.items():
             if key != 'kind':
@@ -214,13 +246,12 @@ def test_training_integration_routes_rows_packs_spans_and_round_trips_the_channe
     model.operator_rows.reset_to_text(model.port.embedding_weight)
     with torch.no_grad():
         for name in OPERATORS:
-            model.operator_rows.rows(name, 'slots').add_(0.3 * torch.randn_like(model.operator_rows.rows(name, 'slots')))
-    slots = small_bindings()['compact-value']['slot_token_ids']
-    examples = [parse_graph(graph_row(index, slots), tokenizer_fingerprint=FINGERPRINT) for index in range(3)]
+            model.operator_rows.rows(name).add_(0.3 * torch.randn_like(model.operator_rows.rows(name)))
+    examples = [parse_graph(graph_row(index), tokenizer_fingerprint=FINGERPRINT) for index in range(3)]
     assert all(example.operators for example in examples)
     optimizer, named = make_native_optimizer(model, lr=1e-3, in_backward=False, learned_row_lr=5e-2)
     operator_names = [name for name, _ in named if name.startswith('interface.operator_rows.')]
-    assert len(operator_names) == 2 * len(OPERATORS)
+    assert len(operator_names) == len(OPERATORS)
     assert optimizer.native_learning_rates['effective_learned_rows'][operator_names[0]] == 5e-2
     latent_ids = {id(parameter) for group in (optimizer.latent.param_groups if optimizer.latent else ())
                   for parameter in group['params']}
@@ -230,12 +261,12 @@ def test_training_integration_routes_rows_packs_spans_and_round_trips_the_channe
     torch.testing.assert_close(packed, separate, rtol=1e-5, atol=1e-6)
     model.zero_grad(set_to_none=True)
     packed.backward()
-    assert float(model.operator_rows.rows('compact-value', 'slots').grad.abs().sum()) > 0
+    assert float(model.operator_rows.rows('compact-value').grad.abs().sum()) > 0
     # Without rows the same graphs are the text-initialized form; the rows change the loss once they moved.
     channel = channel_checkpoint(model)
     fresh = tiny_model()
     restore_channel_checkpoint(fresh, channel)
-    assert torch.equal(fresh.operator_rows.rows('compact-value', 'slots'), model.operator_rows.rows('compact-value', 'slots'))
+    assert torch.equal(fresh.operator_rows.rows('compact-value'), model.operator_rows.rows('compact-value'))
     stripped = tiny_model()
     stripped.operator_rows = OperatorRows(small_bindings(), 32)
     with pytest.raises(ValueError, match='lacks the operator rows'):

@@ -4,7 +4,10 @@ One `natlang.port-record/1` case for one learned operator (model/learned_operato
 
 * producer node(s) ``op<i>``: the operator write site (``operator_site_messages``) rendered with the serving chat
   template and its generation prompt, the operator prompt's token IDs at the prompt position, then
-  ``produce_open, K slot tokens, produce_close``. ``producing`` covers the K slots; every weight is zero.
+  ``produce_open, seed tokens, produce_close``. The seed is the source's supplied gold/checked span
+  (``sources[i].meta.operator_seed``) or the shared deterministic mechanical seed (data/operator_seeds.py), clipped
+  to the operator's span cap. ``producing`` covers the seed; the seed tokens and the closing marker carry CE weight 1
+  (the trainer's declared seed schedule anneals it); the site itself has zero weight.
 * the consumer node: the case's consumer conversation with the operator's consumer frame, where each producer's
   state is imported between ``consume_open``/``consume_close``; the target reply is the only supervised span.
 * a text-cut sibling: the same consumer reading the runtime's current text cut of each source (ts-host
@@ -22,6 +25,7 @@ import hashlib
 import json
 
 from ..model.learned_operators import operator, operator_site_messages, registry_sha256
+from .operator_seeds import seed_for
 from .native_graph_schema import SCHEMA, parse_graph
 from .port_record_graph import _serving_messages, _target_message, _target_reply
 
@@ -96,10 +100,11 @@ class OperatorGraphRenderer:
         return ids, spans
 
     def site(self, name, *, instructions, source, context=(), tools=None):
-        """Token IDs of one operator write site with its slots: (ids, prompt span, slot span).
+        """Token IDs of one operator write site through ``produce_open``: (ids, prompt span).
 
-        The single definition of the site for training graphs and the serving endpoint (engine.native_operator).
-        ``source`` is text for 'system' operators and serving messages for 'user-suffix' operators.
+        The single definition of the site for training graphs and the serving endpoint (engine.native_operator),
+        which generates the producer span after it. ``source`` is text for 'system' operators and serving messages
+        for 'user-suffix' operators.
         """
         spec, binding = operator(name), self.bindings[name]
         prompt_id = _placeholder(f'operator-prompt:{name}')
@@ -107,9 +112,20 @@ class OperatorGraphRenderer:
                                           prompt_part={'type': 'native_state', 'id': prompt_id})
         ids, spans = self._render(messages, tools if spec.placement != 'system' else None,
                                   {prompt_id: list(binding['prompt_token_ids'])}, generation=True)
-        slot_start = len(ids) + 1
-        ids.extend([self.role_ids[0], *binding['slot_token_ids'], self.role_ids[1]])
-        return ids, spans[prompt_id], (slot_start, slot_start + spec.slots)
+        ids.append(self.role_ids[0])
+        return ids, spans[prompt_id]
+
+    def seed(self, name, record, source):
+        """(seed token IDs, seed record) of one source: its supplied seed, else the shared mechanical seed."""
+        spec = operator(name)
+        seed = seed_for(name, record, source)
+        ids = [token for token in self._ids(seed['text'], escaped=True) if token not in self.role_ids]
+        if not ids:
+            raise OperatorCaseError('seed-empty')
+        clipped = len(ids) > spec.seed_cap
+        return ids[:spec.seed_cap], {'provenance': seed['provenance'], 'origin': seed.get('origin'),
+                                     'tokens': min(len(ids), spec.seed_cap), 'clipped': clipped,
+                                     'text_sha256': hashlib.sha256(seed['text'].encode()).hexdigest()}
 
     def _producer(self, name, index, record, source, tools):
         spec = operator(name)
@@ -120,15 +136,20 @@ class OperatorGraphRenderer:
             if not isinstance(source.get('messages'), list):
                 raise OperatorCaseError('history-source-without-messages')
             site_source = _serving_messages(source['messages'])
-        ids, (prompt_start, prompt_stop), (slot_start, slot_stop) = self.site(
+        ids, (prompt_start, prompt_stop) = self.site(
             name, instructions=record['writer']['instructions'], source=site_source, context=context, tools=tools)
-        node = {'name': f'op{index}', 'token_ids': ids, 'target_weights': [0.] * len(ids),
-                'producing': [[slot_start, slot_stop]]}
+        seed_ids, seed = self.seed(name, record, source)
+        seed_start = len(ids)
+        weights = [0.] * len(ids) + [1.] * (len(seed_ids) + 1)
+        ids = [*ids, *seed_ids, self.role_ids[1]]
+        seed_stop = seed_start + len(seed_ids)
+        node = {'name': f'op{index}', 'token_ids': ids, 'target_weights': weights,
+                'producing': [[seed_start, seed_stop]]}
         declared = [{'operator': name, 'version': spec.version, 'node': node['name'], 'kind': 'prompt',
                      'start': prompt_start, 'stop': prompt_stop},
-                    {'operator': name, 'version': spec.version, 'node': node['name'], 'kind': 'slots',
-                     'start': slot_start, 'stop': slot_stop}]
-        return node, declared, (slot_start, slot_stop)
+                    {'operator': name, 'version': spec.version, 'node': node['name'], 'kind': 'seed',
+                     'start': seed_start, 'stop': seed_stop, 'provenance': seed['provenance']}]
+        return node, declared, (seed_start, seed_stop), seed
 
     def _consumer_messages(self, name, record, parts):
         """The consumer conversation with ``parts`` (the framed states or texts) placed per the operator."""
@@ -179,11 +200,11 @@ class OperatorGraphRenderer:
         if spec.sites == 'one' and len(sources) != 1:
             raise OperatorCaseError(f'site-count: {len(sources)} sources for a one-site operator')
         tools = record['consumer'].get('tools') or None
-        nodes, declared, slots = [], [], []
-        for index, source in enumerate(sources):
-            node, spans, slot = self._producer(name, index, record, source, tools)
-            nodes.append(node); declared.extend(spans); slots.append(slot)
         target = _target_message(_RowView(record))
+        nodes, declared, slots, seeds = [], [], [], []
+        for index, source in enumerate(sources):
+            node, spans, slot, seed = self._producer(name, index, record, source, tools)
+            nodes.append(node); declared.extend(spans); slots.append(slot); seeds.append(seed)
         try:
             target_ids = _target_reply(self.tokenizer, target, tools)
         except ValueError as error:
@@ -213,7 +234,9 @@ class OperatorGraphRenderer:
                       'outcome_label': record['outcome']['label'], 'outcome_checked': record['outcome'].get('checked'),
                       'lineage': record.get('lineage'), 'license': record.get('license'),
                       'source_chars': [len(source_text(source)) for source in sources],
-                      'slot_positions': spec.slots * len(sources), 'target_tokens': len(target_ids),
+                      'source_tokens': [len(node['token_ids']) for node in nodes],
+                      'seeds': seeds, 'span_tokens': [stop - start for start, stop in slots],
+                      'target_tokens': len(target_ids),
                       'context_weight': 0.0}
         graph = {'schema': SCHEMA, 'id': graph_id, 'split': split, 'source_groups': groups,
                  'tokenizer_fingerprint': self.fingerprint, 'nodes': [*nodes, consumer], 'operators': declared,

@@ -869,7 +869,7 @@ class Engine:
 
     def native_operator(self, name, *, instructions='', value=None, messages=None, context=(), tools=None, note='',
                         adapters=None):
-        """Run one learned Neuralese operator site (model/learned_operators.py) and archive its K slot states."""
+        """Run one learned Neuralese operator site (model/learned_operators.py): generate its producer span and archive it."""
         return self._native_run(lambda: self._native_operator_impl(name, instructions=instructions, value=value,
             messages=messages, context=context, tools=tools, note=note), adapters)
 
@@ -909,25 +909,45 @@ class Engine:
             raise RequestError("neuralese-operator-input", f"operator {name} compacts a list of messages")
         renderer, rows, state = self._operator_site()
         try:
-            ids, prompt, slots = renderer.site(name, instructions=instructions, source=source,
-                                               context=list(context or ()), tools=tools)
+            ids, prompt = renderer.site(name, instructions=instructions, source=source,
+                                        context=list(context or ()), tools=tools)
         except ValueError as error:
             raise RequestError("neuralese-operator-input", str(error)) from error
-        if len(ids) >= self.context:
+        if len(ids) + 2 >= self.context:
             raise RequestError("context-length", f"operator site of {len(ids)} tokens exceeds this model context")
+        cap = min(spec.seed_cap, self.context - len(ids) - 1)
+        close = self.role_tokens.produce_close
+        banned = [token for token in self.role_tokens.ids if token != close]
         tensor = torch.tensor([ids], dtype=torch.long, device=self.device)
+        generated, chunks, closed = [], [], False
         with torch.inference_mode():
-            embeddings = rows.apply(self.shared_model.embed(tensor), [ResolvedSpan(name, 'prompt', 'site', *prompt),
-                                                                       ResolvedSpan(name, 'slots', 'site', *slots)])
-            start, stop = slots
-            prefix = native_step(self.shared_model, tensor[:, :start], embeddings=embeddings[:, :start])
-            capture = native_step(self.shared_model, tensor[:, start:stop], prefix["cache"], producing=True,
-                                  embeddings=embeddings[:, start:stop])
-        block, record = self._native_store_capture(ids[start:stop], [capture], text=note)
+            embeddings = rows.apply(self.shared_model.embed(tensor), [ResolvedSpan(name, 'prompt', 'site', *prompt)])
+            output = native_step(self.shared_model, tensor, embeddings=embeddings)
+            cache = output["cache"]
+            while len(generated) < cap:
+                # Greedy: the operator's span is a deterministic function of its site.
+                logits = self.shared_model.logits(output["h_final"][:, -1])[0].float()
+                logits[banned] = float("-inf")
+                token = int(logits.argmax())
+                if token == close:
+                    closed = True
+                    break
+                output = native_step(self.shared_model, torch.tensor([[token]], dtype=torch.long, device=self.device),
+                                     cache, producing=True)
+                cache = output["cache"]
+                generated.append(token)
+                chunks.append(output)
+            if not chunks:
+                chunks.append(native_step(self.shared_model, torch.empty((1, 0), dtype=torch.long, device=self.device),
+                                          cache, producing=True))
+        # The stored text is the span's own decoded tokens (re-encoding provenance); the caller's note stays separate.
+        block, record = self._native_store_capture(generated, chunks,
+                                                   text=self.tokenizer.decode(generated, skip_special_tokens=False))
         meta = record.meta()
         meta["type"] = "Neuralese<string>"
         return {"id": record.id, "native_state": meta,
-                "operator": {"name": name, "version": spec.version, "slots": spec.slots, "site_tokens": len(ids),
+                "operator": {"name": name, "version": spec.version, "span_tokens": len(generated), "closed": closed,
+                             "span_cap": spec.seed_cap, "site_tokens": len(ids), "note": note,
                              "registry_sha256": registry_sha256([name]), "rows": state}}
 
     def native_write_text(self, text: str, *, value_type: str | None = None, adapters=None):

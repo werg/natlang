@@ -4,8 +4,10 @@
 
 Four new operator prompts in `training/neuralese/natlang_neuralese/model/learned_operators.py` (`compact-value`,
 `compact-params`, `compact-history`, `extract`; plans/neuralese/LEARNED_COMPACTION_OPERATORS.md). Each is the text
-initialization of learned prompt rows at an operator write site, followed by K slot positions whose state a consumer
-imports; the slot rows start from each operator's slot text. Consumers see the state framed as `Compacted value: `, `Compacted argument: `,
+initialization of learned prompt rows at an operator write site, followed by a generated producer span whose state a
+consumer imports (registry version 2, owner correction 2026-11-03: the version-1 fixed slot rows are retired; the
+prompts now say "Write Neuralese that stands in for ..."; the span is greedy-generated at serving and seeded by
+gold/checked/mechanical summaries in training). Consumers see the state framed as `Compacted value: `, `Compacted argument: `,
 `Earlier steps of this session, compacted: ` … `Continue from the most recent steps.` and
 `Extracts from the documents, one per document:` (ts-host `native/operator-frames.ts` `OPERATOR_FRAMES`; behind the agent's
 `compaction` setting, default `crisp`). The executing model sees them only inside operator

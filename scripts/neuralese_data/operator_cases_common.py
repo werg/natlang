@@ -6,7 +6,13 @@ shared renderer (natlang_neuralese/data/operator_graph.py) does that and applies
 
     with CaseSink('compact-value', 'tool-digest', converter=__file__, inputs=[path]) as sink:
         for record in records:
-            sink.offer(record)          # validates, dedupes, writes or records the reject reason
+            sink.offer(record)          # validates, dedupes, seeds, writes or records the reject reason
+
+Seeds (owner correction 2026-11-03): each source's ``meta.operator_seed = {text, provenance, origin}`` starts the
+operator's producer span. A converter supplies ``gold``/``checked`` seeds where its source has them (supporting
+facts, reference summaries, answer sentences, code-derived recall); ``offer`` fills every other source with the one
+shared deterministic mechanical seed (natlang_neuralese/data/operator_seeds.py ``seed_for``), so every written case
+carries an explicit seed and the manifest counts seeds by provenance.
 """
 from __future__ import annotations
 
@@ -75,6 +81,12 @@ def operator_problems(record: dict, operator: str) -> list[str]:
         problems.append(f'outcome.label {(record.get("outcome") or {}).get("label")!r} is not an imitation label')
     if not record.get('split_groups'):
         problems.append('split_groups empty')
+    from natlang_neuralese.data.operator_seeds import supplied_seed
+    for index, source in enumerate(sources):
+        try:
+            supplied_seed(source)
+        except ValueError as error:
+            problems.append(f'sources[{index}]: {error}')
     return problems
 
 
@@ -124,7 +136,7 @@ class CaseSink:
         self.inputs = [Path(item) for item in inputs]
         self.caps = dict(caps or {})
         self.notes = notes
-        self.counts, self.rejects, self.seen = Counter(), Counter(), set()
+        self.counts, self.rejects, self.seen, self.seeds = Counter(), Counter(), set(), Counter()
 
     def __enter__(self):
         self.tmp = self.path.with_suffix('.jsonl.tmp')
@@ -149,6 +161,11 @@ class CaseSink:
             self.reject(record['id'], 'duplicate: same sources and target')
             return False
         self.seen.add(target_key)
+        from natlang_neuralese.data.operator_seeds import seed_for
+        for source in record['sources']:
+            seed = seed_for(self.operator, record, source)
+            source.setdefault('meta', {})['operator_seed'] = seed
+            self.seeds[seed['provenance']] += 1
         split = 'test' if record['split'] in ('test', 'validation') else 'train'
         self.counts[split] += 1
         self.out.write(json.dumps(record, ensure_ascii=False, separators=(',', ':')) + '\n')
@@ -169,6 +186,7 @@ class CaseSink:
                     'output': {'path': str(self.path), 'sha256': _sha256_file(self.path),
                                'bytes': self.path.stat().st_size},
                     'counts': dict(self.counts), 'rejects': dict(self.rejects), 'caps': self.caps,
+                    'seed_provenance': dict(self.seeds),
                     'notes': self.notes, 'seconds': round(time.time() - self.started, 1),
                     'created': time.strftime('%Y-%m-%dT%H:%M:%S%z'),
                     'admission': 'operator-case; rendering, protection union and training admission are separate'}

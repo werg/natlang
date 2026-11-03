@@ -4,7 +4,7 @@ For every graph with internal producer->consumer imports, score the consumers' s
 
 * ``actual``: the graph as trained, one forward, consumers import their producers' state;
 * ``shuffled``: every internal import is replaced by the producer state of a *different* row (a derangement over
-  the scored rows, edge by edge; the donor's own length is imported, so slot counts and positions stay natural);
+  the scored rows, edge by edge; the donor's own length is imported, so span lengths and positions stay natural);
 * ``zeroed``: every internal import keeps its length but all imported keys, values, hybrid payloads and embeddings
   are zero.
 
@@ -12,6 +12,10 @@ Producers still execute in the ablated graphs (their own tokens are unchanged); 
 Consumers are the nodes with at least one internal import (``score='consumers'``) or every supervised node
 (``score='all'``). Optional ``text-cut`` rows (the consumer reading the runtime's text cut of the same value, see
 ``data/operator_graph.py``) are scored as a fourth, separately supplied condition with the same target tokens.
+
+Operator graphs (data/operator_graph.py) also report their producer span lengths against source size and break the
+use deltas down by seed provenance (``gold``/``checked``/``mechanical:<method>``), so learning can be compared by
+seed type (``span_report``).
 
 The metric is weighted target NLL per supervised token and token accuracy. ``use`` = NLL(shuffled) - NLL(actual)
 and NLL(zeroed) - NLL(actual): positive means consumers depend on the specific state they import. A learned operator
@@ -194,6 +198,56 @@ def summarize(per_row, *, score, seed):
             'use_nll_delta': use, 'actual_better_fraction': wins, 'per_row': per_row}
 
 
+def _quantiles(values):
+    values = sorted(values)
+    if not values:
+        return None
+    pick = lambda q: values[min(len(values) - 1, int(q * len(values)))]  # noqa: E731
+    return {'n': len(values), 'min': values[0], 'p10': pick(.1), 'p50': pick(.5), 'p90': pick(.9), 'max': values[-1],
+            'mean': sum(values) / len(values)}
+
+
+def span_report(conversions: dict, per_row=()) -> dict:
+    """Producer span length vs source size, by source-size bucket and by seed provenance; use deltas by provenance.
+
+    ``conversions`` maps graph id -> its ``operator_conversion`` record. Source size is the producer site's tokens.
+    """
+    buckets = ((0, 1024), (1024, 4096), (4096, 16384), (16384, None))
+    spans = []
+    for conversion in conversions.values():
+        for span, size, seed in zip(conversion.get('span_tokens') or [], conversion.get('source_tokens') or [],
+                                    conversion.get('seeds') or []):
+            spans.append((span, size, seed.get('provenance', 'unknown')))
+    by_bucket = {}
+    for low, high in buckets:
+        chosen = [(span, size) for span, size, _ in spans if size >= low and (high is None or size < high)]
+        if chosen:
+            by_bucket[f'{low}-{high or "inf"}'] = {'span_tokens': _quantiles([span for span, _ in chosen]),
+                                                   'span_per_source_token': _quantiles([span / size for span, size in chosen])}
+    by_provenance = {}
+    for provenance in sorted({item[2] for item in spans}):
+        chosen = [span for span, _, kind in spans if kind == provenance]
+        by_provenance[provenance] = {'span_tokens': _quantiles(chosen)}
+    for row in per_row:
+        conversion = conversions.get(row['id'])
+        if conversion is None:
+            continue
+        kinds = sorted({seed.get('provenance', 'unknown') for seed in conversion.get('seeds') or []})
+        key = kinds[0] if len(kinds) == 1 else 'mixed'
+        entry = by_provenance.setdefault(key, {}).setdefault('use', {})
+        for condition in ('shuffled', 'zeroed', 'text-cut'):
+            if condition in row:
+                delta = (row[condition]['nll_sum'] / row[condition]['weight']
+                         - row['actual']['nll_sum'] / row['actual']['weight'])
+                entry.setdefault(condition, []).append(delta)
+    for entry in by_provenance.values():
+        if 'use' in entry:
+            entry['use'] = {condition: {'rows': len(deltas), 'mean_nll_delta': sum(deltas) / len(deltas),
+                                        'actual_better_fraction': sum(delta > 0 for delta in deltas) / len(deltas)}
+                            for condition, deltas in entry['use'].items()}
+    return {'spans': len(spans), 'by_source_tokens': by_bucket, 'by_seed_provenance': by_provenance}
+
+
 def _read_jsonl(path, limit=None):
     import io
     opener = open
@@ -235,7 +289,7 @@ def main(argv=None):
     if args.text_init_operators:
         from ..model.learned_operators import OperatorRows
         rows = OperatorRows.text_initialized(model.port.embedding_weight, tokenizer, tokenizer_fingerprint=fingerprint)
-    examples, spans, raw_rows, skipped = [], {}, {}, {'no-internal-import': 0, 'over-max-tokens': 0}
+    examples, spans, conversions, skipped = [], {}, {}, {'no-internal-import': 0, 'over-max-tokens': 0}
     for row in _read_jsonl(args.graphs):
         if len(examples) >= args.limit:
             break
@@ -250,6 +304,8 @@ def main(argv=None):
             if rows is None:
                 raise SystemExit('graphs declare learned operator spans; pass --operator-rows or --text-init-operators')
             spans[example.id] = resolve_spans(row, example.plan, rows.bindings)
+        if isinstance(row.get('operator_conversion'), dict):
+            conversions[example.id] = row['operator_conversion']
         examples.append(example)
     text_cut = None
     if args.text_cut:
@@ -261,11 +317,14 @@ def main(argv=None):
                 text_cut[source] = parse_graph(row, tokenizer_fingerprint=fingerprint)
     report = ablate(model, examples, rows=rows, operator_spans=spans, score=args.score, seed=args.seed,
                     text_cut=text_cut)
+    if conversions:
+        report['operator_spans'] = span_report(conversions, report['per_row'])
     report.update({'checkpoint': args.checkpoint, 'graphs': args.graphs, 'text_cut': args.text_cut,
                    'operator_rows': args.operator_rows, 'skipped': skipped, 'seconds': time.time() - started})
     with open(args.out, 'w') as stream:
         json.dump(report, stream, indent=1)
-    json.dump({key: report[key] for key in ('rows', 'aggregate', 'use_nll_delta', 'actual_better_fraction', 'skipped')},
+    json.dump({key: report[key] for key in ('rows', 'aggregate', 'use_nll_delta', 'actual_better_fraction', 'skipped',
+                                            'operator_spans') if key in report},
               sys.stdout, indent=1)
     print()
     return 0

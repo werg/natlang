@@ -4,8 +4,10 @@
 One extractor site per document (Neuralese-prompted, shared task statement), feeding a parent that answers from all
 extracts without seeing the documents. Cases are the `natlang.broad-graph-case/1` rows of ``broad_graph_cases.py build``
 (upstream splits, S1 group closure and source-review holds are already applied there); the documents are the
-extractor's sources, the dataset gold answer is the target. Nothing here reads a per-document view: those are gold-derived
-and belong to the text-prompted graphs.
+extractor's sources, the dataset gold answer is the target. Each document's view seeds its extractor's producer span
+(``meta.operator_seed``, owner correction 2026-11-03): dataset supporting facts/paragraphs, answer-span sentences,
+highlighted cells, relevant spans and the dataset's "no relevant facts" line for distractors are ``gold``; the
+code-computed greedy ROUGE oracle against the Multi-News reference summary is ``checked``.
 
 Selection under the caps is deterministic: eligible cases sorted by ``stable_rank(case id)``. Train takes at most
 ``--train-cap`` per source and ``--total-cap`` overall; when the per-source maxima exceed the total the largest sources
@@ -66,6 +68,15 @@ def ineligible(case: dict) -> str | None:
     return None
 
 
+def document_seed(document: dict) -> dict | None:
+    """The gold/checked seed of one broad-case document from its view, or None (the shared mechanical seed then)."""
+    view, origin = document.get('view'), document.get('view_origin')
+    if not isinstance(view, str) or not view.strip() or not isinstance(origin, str):
+        return None
+    provenance = 'checked' if origin.startswith('code-computed:') else 'gold'
+    return {'text': view, 'provenance': provenance, 'origin': f'broad-case-view:{origin}'}
+
+
 def to_record(case: dict) -> dict:
     """The port record of one eligible case (section 6 mapping)."""
     oracle = case['oracle']
@@ -78,7 +89,9 @@ def to_record(case: dict) -> dict:
     record_id = 'broad-extract:' + ''.join(str(case['id']).split())
     return seal({
         'version': VERSION, 'id': record_id, 'family': 'extract_' + case['task_kind'], 'task': 'consume',
-        'sources': [source('document', doc['text'], title=doc.get('title')) for doc in case['documents']],
+        'sources': [source('document', doc['text'], title=doc.get('title'),
+                           meta=({'operator_seed': document_seed(doc)} if document_seed(doc) else None))
+                    for doc in case['documents']],
         'writer': {'instructions': WRITER_PREFIX + request['text'], 'result_type': RESULT_TYPE, 'context': []},
         'consumer': {'context': [{'role': 'user',
                                   'content': case['consumer']['instructions'] + '\n\n' + request['name'] + ': '

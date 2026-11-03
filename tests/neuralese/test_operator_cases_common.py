@@ -34,7 +34,9 @@ def test_sink_validates_dedupes_and_writes_manifest(tmp_path):
     lines = (tmp_path / 'compact-value' / 'unit.port-records.jsonl').read_text().splitlines()
     assert [json.loads(line)['id'] for line in lines] == ['test:value:0']
     manifest = json.loads((tmp_path / 'compact-value' / 'unit.manifest.json').read_text())
-    assert manifest['counts'] == {'train': 1} and manifest['operator_version'] == 1
+    assert manifest['counts'] == {'train': 1} and manifest['operator_version'] == 2
+    assert manifest['seed_provenance'] == {'mechanical:identifiers-outline': 1}
+    assert json.loads(lines[0])['sources'][0]['meta']['operator_seed']['provenance'] == 'mechanical:identifiers-outline'
     assert sum(manifest['rejects'].values()) == 3
 
 

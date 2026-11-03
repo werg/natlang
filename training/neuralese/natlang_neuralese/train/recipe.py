@@ -32,7 +32,7 @@ HANDLERS = {
                          'parameters': {'base', 'rank', 'dtype', 'native_linear_precision', 'native_attention_precision', 'epochs', 'batch_graphs', 'batch_tokens', 'accumulate_batches', 'sft_update_budget_reference', 'learning_rate', 'weight_decay',
                              'latent_ns', 'muon_rounding', 'eval_every', 'held_eval_tokens', 'held_eval_graphs', 'held_final_policy', 'checkpoint_every', 'checkpoint_seconds', 'async_checkpoint', 'checkpoint_layers', 'checkpoint_layer_group_size', 'checkpoint_direct_token_limit', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'chunk_tokens', 'ffn_chunk_tokens', 'communication_min_visits',
                              'quantization', 'fp8_training', 'fp8_recipe', 'fp8_amax_history_len', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'native_ordinary_precision', 'native_norm_execution', 'native_shared_execution', 'history_reasoning_policy', 'seed', 'task_eval', 'objective_continuation',
-                             'task_eval_every', 'forward_atol', 'gradient_atol', 'qualify_training_backend', 'resident_geometry_qualification', 'memory_qualification', 'sft_packed_geometry', 'communication_foundation', 'foundation_communication_batches', 'urgent_cohort_fairness', 'ordinary_cohort_fairness', 'communication_cohort_fairness', 'pending_rotation_anchor', 'refresh_at_checkpoint', 'refresh_foundation_readiness', 'refresh_after_updates', 'learn_reasoning_boundaries', 'learned_operators', 'share_causal_prefixes', 'cotangent_accumulator_backend', 'optimizer_state_storage', 'diloco', 'lr_warmup', 'lr_warmup_start', 'weight_ema', 'matrix_telemetry'}, 'result': 'checkpoint.pt'},
+                             'task_eval_every', 'forward_atol', 'gradient_atol', 'qualify_training_backend', 'resident_geometry_qualification', 'memory_qualification', 'sft_packed_geometry', 'communication_foundation', 'foundation_communication_batches', 'urgent_cohort_fairness', 'ordinary_cohort_fairness', 'communication_cohort_fairness', 'pending_rotation_anchor', 'refresh_at_checkpoint', 'refresh_foundation_readiness', 'refresh_after_updates', 'learn_reasoning_boundaries', 'learned_operators', 'operator_seed_schedule', 'share_causal_prefixes', 'cotangent_accumulator_backend', 'optimizer_state_storage', 'diloco', 'lr_warmup', 'lr_warmup_start', 'weight_ema', 'matrix_telemetry'}, 'result': 'checkpoint.pt'},
 
 }
 
@@ -111,6 +111,10 @@ def validate_stage_parameters(kind, parameters):
         validate_native_optimizer_migration(parameters.get('native_optimizer_migration'))
         if parameters.get('learned_operators', 'none') not in ('none', 'all'):
             raise ValueError('learned_operators is none or all (model/learned_operators.py)')
+        if parameters.get('operator_seed_schedule') not in (None, 'off'):
+            from ..model.learned_operators import seed_schedule
+            schedule = parameters['operator_seed_schedule']
+            seed_schedule(json.loads(schedule) if isinstance(schedule, str) else schedule)
         from .native_learning_rates import validate_learned_row_rate
         for name in ('learned_row_learning_rate','interface_row_learning_rate'):
             if name in parameters:
