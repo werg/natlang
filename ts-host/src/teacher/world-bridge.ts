@@ -6,6 +6,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { resolve } from 'node:path';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 /**
@@ -30,7 +31,8 @@ export class WorldBridge {
   private readonly pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
   private constructor(private readonly process: ChildProcessWithoutNullStreams) {
     createInterface({ input: process.stdout }).on('line', line => {
-      const reply = JSON.parse(line) as { id: number; result?: unknown; error?: string };
+      let reply: { id: number; result?: unknown; error?: string };
+      try { reply = JSON.parse(line); } catch { globalThis.process.stderr.write(`world process wrote a non-protocol line: ${line.slice(0, 200)}\n`); return; }
       const waiter = this.pending.get(reply.id);
       if (!waiter) return;
       this.pending.delete(reply.id);
@@ -48,17 +50,19 @@ export class WorldBridge {
    * Start a world process and load the task. SCIENCEWORLD_PYTHON / ALFWORLD_PYTHON name a Python with the package
    * installed; ALFWORLD_DATA points at ALFWorld's downloaded data.
    */
-  static async open(spec: WorldSpec): Promise<WorldBridge> {
+  static async open(spec: WorldSpec, runId?: string): Promise<WorldBridge> {
     if (spec.kind === 'memetic') {
       const repo = fileURLToPath(new URL('../../../', import.meta.url));
-      const python = process.env.NATLANG_MEMETIC_PYTHON ?? resolve(repo, '.venv-neuralese/bin/python');
+      const venv = resolve(repo, '.venv-neuralese/bin/python');
+      const python = process.env.NATLANG_MEMETIC_PYTHON ?? (existsSync(venv) ? venv : 'python3');
       const pythonPath = [resolve(repo, 'training/neuralese'), repo, process.env.PYTHONPATH].filter(Boolean).join(':');
       const child = spawn(python, ['-m', 'natlang_neuralese.rl.memetic_workspace', 'serve'],
-        { stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, PYTHONPATH: pythonPath } });
+        { stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, PYTHONPATH: pythonPath, NATLANG_NODE: process.execPath } });
       // Its nested collections log progress on stderr; drain it into the collector log so the pipe never fills.
       child.stderr.on('data', chunk => process.stderr.write(chunk));
       const bridge = new WorldBridge(child);
-      const loaded = await bridge.request('load', { task: spec.task }) as { service: string; declaration: string; methods: string[] };
+      // One workspace per rollout: the run id keys its changes, budget, commit and score.
+      const loaded = await bridge.request('load', { task: spec.task, run: runId ?? null }) as { service: string; declaration: string; methods: string[] };
       bridge.serviceName = loaded.service;
       bridge.declarationText = loaded.declaration;
       bridge.methods = loaded.methods;

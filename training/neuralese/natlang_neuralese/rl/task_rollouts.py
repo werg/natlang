@@ -412,7 +412,14 @@ def memetic_outcome(task: dict, result: dict | None) -> dict | None:
         return None
     memetic = ((result.get("outcome") or {}).get("world") or {}).get("memetic")
     if not isinstance(memetic, dict) or memetic.get("schema") != "natlang.memetic-outcome/1":
-        return None
+        # The episode ended without a scored workspace (repetition, a crash, a budget stop): a failed improvement,
+        # scored 0 against the same anchor as its group so the group stays comparable.
+        spec = json.loads(Path(world["task"]).read_text())
+        from .memetic_workspace import memetic_reward
+        _, anchor, _, _ = memetic_reward(0., spec["baselines"], evaluations=0, fits=0, budget=spec["budget"],
+                                         cost_weight=0., committed=True)
+        return {"schema": "natlang.memetic-outcome/1", "quality": 0., "anchor": anchor, "gain": -anchor,
+                "cost": 0., "query_success": 0., "unscored_workspace": True}
     quality = memetic.get("quality")
     if type(quality) not in (int, float) or not 0 <= quality <= 1:
         raise ValueError("memetic outcome quality must be in [0, 1]")

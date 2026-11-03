@@ -47,6 +47,13 @@ def _hash(*parts):
     return hashlib.sha256('\x1f'.join(str(p) for p in parts).encode()).hexdigest()
 
 
+def program_digest(case):
+    """Identity of a world's program: its exact natlang sources and root (inputs and services are the world)."""
+    semantics = case.get('semantics') or {}
+    files = {path: text for path, text in (semantics.get('files') or {}).items() if path.endswith('.nl')}
+    return canonical_json_sha256_hex({'root': semantics.get('root'), 'files': files})
+
+
 def components(cases):
     """Connected components of related worlds (shared source group or curriculum split group)."""
     parent = list(range(len(cases)))
@@ -99,7 +106,9 @@ def program_pool(cases, *, settings, protected=None):
             continue
         if protected is not None and protected(case):
             continue
-        families.setdefault(case['family'], []).append(case)
+        # A program is one exact source: worlds of a family whose .nl files differ are different programs (most
+        # families paraphrase their root per world), and a patch to one would not apply to the others.
+        families.setdefault(f"{case['family']}@{program_digest(case)[:12]}", []).append(case)
     pool = {}
     for family, rows in sorted(families.items()):
         rows = sorted(rows, key=lambda row: _hash(settings['seed'], row['id']))[:settings['max_worlds_per_family']]
@@ -162,7 +171,9 @@ def prepare_program(family, split, *, evaluate, settings, out):
     default_text = mechanical_guidance(successes)
     default = (dict(evaluate(target, default_text, None, name='baseline-target-default'), kind='mechanical-guidance',
                     text=default_text) if default_text else None)
-    headroom = (support['success'] + none['success']) / 2
+    # Admission reads the support evidence only: selecting programs on the query outcome that also anchors the
+    # reward would bias the anchor (regression to the mean).
+    headroom = support['success']
     return {'family': family, 'support_success': support['success'], 'attempts': attempts,
             'baselines': {'none': {'success': none['success'], 'dir': none.get('dir')},
                           'default': None if default is None else {'success': default['success'], 'kind': default['kind'],
@@ -174,7 +185,8 @@ def prepare_program(family, split, *, evaluate, settings, out):
 def episode_spec(family, split, prepared, *, settings, out, parent_sha256):
     program_cases = split['support']
     return {'schema': SPEC_SCHEMA, 'parent_sha256': parent_sha256,
-            'program': {'id': f'memetic:{family}', 'family': family, 'files': program_cases[0]['semantics']['files'],
+            'program': {'id': f'memetic:{family}', 'family': family.split('@')[0],
+                        'files': program_cases[0]['semantics']['files'],
                         **brief(family, program_cases)},
             'support': split['support'], 'query': split.get('query') or split['dev'],
             'evidence': {'attempts': prepared['attempts'], 'success': prepared['support_success']},
@@ -243,7 +255,7 @@ def build(*, cases, out, evaluate_for, parent_sha256, settings, protected=None, 
         if prepared_path.exists():
             prepared = json.loads(prepared_path.read_text())
         else:
-            prepared = prepare_program(family, split, evaluate=evaluate_for(directory / 'baselines', family),
+            prepared = prepare_program(family, split, evaluate=evaluate_for(directory / 'baselines' / parent_sha256[:16], family),
                                        settings=settings, out=directory)
             write_json_durable(prepared_path, prepared)
         programs.append({'family': family, 'held': entry['held'], 'headroom': prepared['headroom'],
@@ -252,7 +264,8 @@ def build(*, cases, out, evaluate_for, parent_sha256, settings, protected=None, 
         log(json.dumps({'event': 'memetic_program', **programs[-1]}))
         if not prepared['admitted']:
             continue
-        spec = episode_spec(family, split, prepared, settings=settings, out=directory / 'episodes', parent_sha256=parent_sha256)
+        spec = episode_spec(family, split, prepared, settings=settings, out=directory / 'episodes' / parent_sha256[:16],
+                            parent_sha256=parent_sha256)
         spec_path = directory / f'spec-{parent_sha256[:16]}.json'
         write_json_durable(spec_path, spec)
         row = episode_case(spec_path, spec, settings=settings)
@@ -297,7 +310,7 @@ def bind_round(config, declared, state, parent_sha256):
     if (state.get('round', 0) + 1) % every:
         return None
     path = receipt_path(config['out'], parent_sha256)
-    memetic = state.setdefault('interleave', {}).setdefault('memetic', {'rounds': [], 'pending': None})
+    memetic = state.setdefault('interleave', {}).setdefault('memetic', {'pending': None})
     if not path.exists():
         memetic['pending'] = {'round': state.get('round', 0), 'parent_sha256': parent_sha256,
                               'reason': 'no memetic task source built for this parent'}
@@ -312,12 +325,13 @@ def bind_round(config, declared, state, parent_sha256):
                               'reason': 'no program has curriculum headroom under this parent'}
         return None
     memetic['pending'] = None
-    rounds = memetic['rounds']
-    if not rounds or rounds[-1]['round'] != state.get('round', 0):
-        rounds.append({'round': state.get('round', 0), 'stage': declared['id'], 'parent_sha256': parent_sha256,
-                       'task_source': receipt['task_source']})
-    return {**config, 'cases': str(source), 'rows_per_round': parameters.get('programs_per_round', 2),
-            'group': parameters.get('group', 4)}
+    rows, group = parameters.get('programs_per_round', 2), parameters.get('group', 4)
+    bound = {**config, 'cases': str(source), 'rows_per_round': rows, 'group': group}
+    if config.get('task_curriculum') is not None:
+        # The selector's budget floor (16 tasks x 8 samples) is for ordinary rounds; an improvement episode runs its
+        # program dozens of times, so a memetic round keeps its declared size.
+        bound['task_curriculum'] = {**config['task_curriculum'], 'min_rows_per_round': rows, 'min_group': group}
+    return bound
 
 
 def promotion(candidate, published, *, min_gain=0.05):

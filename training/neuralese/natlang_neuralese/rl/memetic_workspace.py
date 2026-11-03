@@ -54,8 +54,6 @@ DECLARATION = '''declare const workspace: {
   evaluate(ids: string[]): Promise<Evaluation>;
   /** The support success rate with each listed change left out, one at a time. */
   ablate(ids: string[]): Promise<{ id: string; without: number }[]>;
-  /** Fit adapter weights (LoRA bank mixture coefficients) on the program's verified support runs; returns a change id. */
-  fit(spec: FitSpec): Promise<{ id: string; supportLoss: { before: number; after: number } } | { problems: string[] }>;
   /** Commit the final change set (possibly empty) with one sentence on what it fixes. Call once, at the end. */
   commit(ids: string[], reason: string): Promise<{ committed: string[] }>;
   /** Record a defect of the harness or of the task's check (it is not a program change and earns nothing). */
@@ -72,11 +70,16 @@ type Change =
   | { kind: "instructions"; file: string; find: string; replace: string }
   | { kind: "signature"; file: string; field: "args" | "returns"; name?: string; type: string }
   | { kind: "revert"; id: string };
-type FitSpec = { worlds?: string[]; components?: number; steps?: number; scope?: "all" | "attention" | "convolution"; init?: "learned" | "zero" };
 type Evaluation = { ids: string[]; success: number; baseline: number; attempts: Attempt[]; evaluationsLeft: number };'''
 
-METHODS = ('failures', 'attempts', 'attempt', 'source', 'propose', 'evaluate', 'ablate', 'fit', 'commit',
+METHODS = ('failures', 'attempts', 'attempt', 'source', 'propose', 'evaluate', 'ablate', 'commit',
            'reportDefect', 'budget')
+# Offered only when the episode has an adapter-capable actor and a bank coefficient-fit service (fallow register M2).
+FIT_DECLARATION = '''
+  /** Fit adapter weights (LoRA bank mixture coefficients) on the program's verified support runs; returns a change id. */
+  fit(spec: FitSpec): Promise<{ id: string; supportLoss: { before: number; after: number } } | { problems: string[] }>;'''
+FIT_TYPE = '''
+type FitSpec = { worlds?: string[]; components?: number; steps?: number; scope?: "all" | "attention" | "convolution"; init?: "learned" | "zero" };'''
 
 
 def _clip(text, limit):
@@ -192,13 +195,12 @@ def apply_changes(case, changes):
 
 
 def skill_folder(files, function):
-    """The folder of the function that reads the skill: the root folder for a root function, its callable folder
-    (the directory of its .nl file) for a child. A program's own ``skills/`` folder is bound to its functions."""
+    """The companion folder of the function that reads the skill: ``f.nl``'s skills live in ``f/skills/``, the folder
+    the loader binds to that function (ts-host runtime/loader.ts; improvement/skill-authoring.ts skillRoot)."""
     matches = [path for path in files if path.endswith('.nl') and Path(path).stem == function]
     if len(matches) != 1:
         raise ValueError(f'skill: no unique function named {function!r} in the program')
-    parent = str(Path(matches[0]).parent)
-    return '' if parent in ('', '.') else parent + '/'
+    return matches[0][:-3] + '/'
 
 
 def check_program(case, root=REPO):
@@ -210,7 +212,7 @@ def check_program(case, root=REPO):
               "try{m.loadVirtualNatlang(files,p)}catch(e){problems.push(p+': '+String(e.message||e).split('\\n')[0])}}"
               "process.stdout.write(JSON.stringify(problems))})")
     try:
-        output = subprocess.run(['node', '--input-type=module', '-e', script, json.dumps(files)], capture_output=True,
+        output = subprocess.run([os.environ.get('NATLANG_NODE', 'node'), '--input-type=module', '-e', script, json.dumps(files)], capture_output=True,
                                 text=True, timeout=120, check=True).stdout
     except (OSError, subprocess.SubprocessError) as error:
         return [f'the natlang loader could not check the program: {str(error)[:200]}']
@@ -221,14 +223,15 @@ class Workspace:
     """One episode's workspace state. ``evaluator(cases, guidance_text, adapter, *, name)`` returns
     ``{'success': float, 'results': [(world, result)], 'dir': str}``; injected so tests run without a model."""
 
-    def __init__(self, spec, evaluator, *, fitter=None, check=check_program):
+    def __init__(self, spec, evaluator, *, fitter=None, check=check_program, run=None):
         if spec.get('schema') != SPEC_SCHEMA:
             raise ValueError('memetic workspace needs a natlang.memetic-episode/1 spec')
         self.spec = spec
         self.evaluate_cases = evaluator
         self.fitter = fitter
         self.check = check
-        self.out = Path(spec['out'])
+        # Every rollout (sample, attempt) has its own workspace: changes, budget, commit and score never mix.
+        self.out = Path(spec['out']) / 'runs' / run_directory(run) if run is not None else Path(spec['out'])
         self.out.mkdir(parents=True, exist_ok=True)
         self.state_path = self.out / 'workspace.json'
         self.state = (json.loads(self.state_path.read_text()) if self.state_path.exists() else
@@ -336,23 +339,28 @@ class Workspace:
 
     def _run(self, cases, candidate, name):
         changed = [apply_changes(case, candidate['files']) for case in cases]
-        return self.evaluate_cases(changed, candidate['guidance'], candidate['adapter'], name=name)
+        return self.evaluate_cases(changed, candidate['guidance'], candidate['adapter'], name=name, out=self.out)
 
     def evaluate(self, ids):
         budget = self.spec['budget']['evaluations'] - len(self.state['evaluations'])
-        if budget <= 0:
-            raise ValueError('the evaluation budget is spent; commit the best change set')
         candidate = self.candidate(ids)
         key = canonical_json_sha256_hex(candidate)
         name = 'support-' + key[:16]
+        earlier = next((item for item in self.state['evaluations'] if item['key'] == key), None)
+        if earlier is None and budget <= 0:
+            raise ValueError('the evaluation budget is spent; commit the best change set')
         report = self._run(self.spec['support'], candidate, name)
         attempts = [attempt_digest(result, attempt_id=f'{name}:{index}', world=world)
                     for index, (world, result) in enumerate(report['results'])]
-        self.state['evaluations'].append({'ids': candidate['ids'], 'key': key, 'success': report['success'],
-                                          'dir': report.get('dir')})
+        if earlier is None:
+            self.state['evaluations'].append({'ids': candidate['ids'], 'key': key, 'success': report['success'],
+                                              'dir': report.get('dir')})
+            budget -= 1
+        for (world, result), digest in zip(report['results'], attempts):
+            self.attempts.setdefault(digest['id'], {'digest': digest, 'steps': attempt_steps(result)})
         self._save()
         return {'ids': candidate['ids'], 'success': report['success'], 'baseline': self.spec['evidence']['success'],
-                'attempts': attempts, 'evaluationsLeft': budget - 1}
+                'attempts': attempts, 'evaluationsLeft': budget}
 
     def ablate(self, ids):
         rows = []
@@ -421,6 +429,12 @@ class Workspace:
         return result
 
 
+def run_directory(run):
+    """A filesystem-safe, collision-free directory name for one rollout's run id."""
+    safe = re.sub(r'[^A-Za-z0-9._-]+', '_', str(run))[:80]
+    return f"{safe}-{hashlib.sha256(str(run).encode()).hexdigest()[:12]}"
+
+
 def leaked_answers(candidate, query_cases):
     """Defensive guard: a candidate whose texts contain a query world's expected answer verbatim is refused."""
     texts = [candidate.get('guidance') or ''] + [json.dumps(change, ensure_ascii=False) for change in candidate['files']]
@@ -460,10 +474,10 @@ def production_evaluator(spec, endpoint):
     identity = actor_identity(endpoint)
     settings = spec['eval']
 
-    def evaluate(cases, guidance, adapter, *, name):
+    def evaluate(cases, guidance, adapter, *, name, out=None):
         if adapter is not None:
             raise ValueError('adapter evaluation needs an adapter-capable actor; this episode has none')
-        out = Path(spec['out']) / 'evals' / name
+        out = Path(out or spec['out']) / 'evals' / identity['checkpoint_sha256'][:16] / name
         if (out / 'summary.json').exists():
             return json.loads((out / 'summary.json').read_text())
         out.mkdir(parents=True, exist_ok=True)
@@ -501,7 +515,11 @@ def serve(stdin=sys.stdin, stdout=None):
     """JSON-lines bridge (ts-host/src/teacher/world-bridge.ts): {id, op, ...args} -> {id, result | error}.
     Protocol lines go to the original stdout; anything else printed while handling (collector progress) goes to
     stderr, so it cannot corrupt the channel."""
-    stdout = stdout or sys.stdout
+    if stdout is None:
+        # Keep the protocol on a private copy of fd 1 and send fd 1 itself (Python prints, C extensions,
+        # subprocesses) to stderr, so nothing else can write into the channel.
+        stdout = os.fdopen(os.dup(1), 'w', buffering=1)
+        os.dup2(2, 1)
     sys.stdout = sys.stderr
     workspace = None
     handlers = {
@@ -524,7 +542,7 @@ def serve(stdin=sys.stdin, stdout=None):
                 endpoint = os.environ.get('NATLANG_MEMETIC_ENDPOINT') or spec.get('endpoint')
                 if not endpoint:
                     raise ValueError('the memetic workspace needs the episode actor endpoint (NATLANG_MEMETIC_ENDPOINT)')
-                workspace = Workspace(spec, production_evaluator(spec, endpoint))
+                workspace = Workspace(spec, production_evaluator(spec, endpoint), run=request.get('run'))
                 result = {'service': 'workspace', 'declaration': DECLARATION, 'methods': list(METHODS)}
             elif workspace is None:
                 raise ValueError('load the episode first')

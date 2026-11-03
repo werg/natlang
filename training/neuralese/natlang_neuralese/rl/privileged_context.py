@@ -334,6 +334,10 @@ def case_facts(case, *, custody, teacher_trajectories=(), attempt_feedback=()):
     earlier student attempts, ``{case_id, attempt, feedback, invocation?}``.
     """
     receipt = custody.check(case)
+    if ((case.get('semantics') or {}).get('world') or {}).get('kind') == 'memetic':
+        # An improvement episode has no verified reference: its expected value is not a fact, and the privileged
+        # context of memetic episodes is not designed yet (MEMETIC_META_LEARNING_REVIEW_20261103.md section 8).
+        return receipt, []
     curriculum = case.get('curriculum') or {}
     reference = curriculum.get('reference') or {}
     semantics = case.get('semantics') or {}

@@ -37,7 +37,7 @@ class Evaluator:
     def __init__(self):
         self.calls = []
 
-    def __call__(self, cases, guidance, adapter, *, name):
+    def __call__(self, cases, guidance, adapter, *, name, out=None):
         self.calls.append((name, [c['id'] for c in cases], guidance, [c['semantics']['files'] for c in cases]))
         rate = min(1., 0.25 + 0.25 * (guidance or '').count('For '))
         results = [(c['id'], fake_result('task_success' if i < round(rate * len(cases)) else 'semantic_mismatch'))
@@ -94,7 +94,7 @@ def test_changes_apply_to_files_scope_by_scope_and_skills_sit_with_their_functio
     assert candidate['guidance'] == ('For every call of this program:\nCall intent per ticket.\n\nFor calls of intent:\n'
                                      'Pick one label.\n\nFor inputs where a ticket mentions money:\nCheck transfers.')
     changed = ws.apply_changes(w.spec['support'][0], candidate['files'])
-    assert 'route/skills/intent-cues/SKILL.md' in changed['semantics']['files']
+    assert 'route/intent/skills/intent-cues/SKILL.md' in changed['semantics']['files'], 'the companion folder of intent'
     assert changed['semantics']['inputs'] == w.spec['support'][0]['semantics']['inputs']
     w.propose({'kind': 'revert', 'id': 'c2'})
     assert 'Pick one label' not in w.candidate(['c1', 'c2', 'c6'])['guidance']
@@ -108,8 +108,11 @@ def test_evaluate_ablate_budget_commit_and_held_score(tmp_path):
     assert first['success'] == 0.5 and first['baseline'] == 0.25 and first['evaluationsLeft'] == 2
     assert all(call[1] == ['fam-0', 'fam-1', 'fam-2'] for call in w.evaluate_cases.calls), 'only support worlds'
     assert w.ablate(['c1', 'c2']) == [{'id': 'c1', 'without': 0.5}, {'id': 'c2', 'without': 0.5}]
+    assert w.evaluate(['c1'])['evaluationsLeft'] == 1, 'an already measured change set costs nothing'
+    assert w.evaluate(['c1', 'c2'])['evaluationsLeft'] == 0
+    w.propose({'kind': 'guidance', 'scope': {'kind': 'program'}, 'text': 'c'})
     with pytest.raises(ValueError, match='budget is spent'):
-        w.evaluate(['c1'])
+        w.evaluate(['c3'])
     assert w.fit({}) == {'problems': ['adapter fits are unavailable in this run (no bank coefficient-fit service is '
                                       'configured); use guidance, skills or patches']}
     w.commit(['c1', 'c2'], 'routes every ticket')
@@ -159,15 +162,23 @@ def test_program_pool_keeps_related_worlds_together_and_drops_near_duplicates():
     rows.append(case(99, inputs=rows[5]['semantics']['inputs']))  # exact repeat of world 5's inputs
     settings = {**stage.DEFAULTS, 'held_fraction': 0., 'support': 3, 'query': 3}
     pool = stage.program_pool(rows, settings=settings)
-    groups = pool['fam']['components']
+    assert len(pool) == 1
+    key = next(iter(pool))
+    assert key.startswith('fam@')
+    groups = pool[key]['components']
     assert sum(1 for g in groups if {r['id'] for r in g} >= {'fam-0', 'fam-1', 'fam-2'}) == 1
     ids = [r['id'] for g in groups for r in g]
     assert not ({'fam-5', 'fam-99'} <= set(ids)), 'a near-duplicate world was kept'
-    split = stage.split_program(pool['fam'], settings)
+    split = stage.split_program(pool[key], settings)
     assert len(split['support']) == 3 and len(split['query']) == 3
     assert not {c['id'] for c in split['support']} & {c['id'] for c in split['query']}
     held = stage.program_pool(rows, settings={**settings, 'held_fraction': 1., 'dev': 3, 'confirmation': 3})
-    assert set(stage.split_program(held['fam'], settings)) == {'support', 'dev', 'confirmation'}
+    assert set(stage.split_program(next(iter(held.values())), settings)) == {'support', 'dev', 'confirmation'}
+    # Worlds whose sources differ are different programs.
+    other = [case(i, family='fam') for i in range(20, 32)]
+    for row in other:
+        row['semantics']['files'] = {'route.nl': ROOT.replace('Route every', 'Sort every'), 'route/intent.nl': CHILD}
+    assert len(stage.program_pool(rows + other, settings=settings)) == 2
 
 
 def test_build_prepares_baselines_curriculum_and_episode_rows(tmp_path):
@@ -176,7 +187,7 @@ def test_build_prepares_baselines_curriculum_and_episode_rows(tmp_path):
     receipt = stage.build(cases=rows, out=tmp_path, evaluate_for=lambda d, family: Evaluator(), parent_sha256='p' * 64,
                           settings=settings, log=lambda line: None)
     tasks = [json.loads(line) for line in open(receipt['task_source']['path'])]
-    assert len(tasks) == 2 and {t['curriculum']['program_family'] for t in tasks} == {'fam', 'other'}
+    assert len(tasks) == 2 and {t['curriculum']['program_family'].split('@')[0] for t in tasks} == {'fam', 'other'}
     task = tasks[0]
     assert task['family'] == stage.FAMILY and task['split'] == 'train'
     assert task['semantics']['world']['kind'] == 'memetic' and task['semantics']['root'] == 'improve_program.nl'
@@ -245,5 +256,37 @@ def test_stage_parameters_and_due_rounds(tmp_path):
                 settings={'held_fraction': 0., 'support': 3, 'query': 3}, log=lambda line: None)
     bound = stage.bind_round(config, declared, state, 'p' * 64)
     assert bound['rows_per_round'] == 3 and bound['group'] == 4 and bound['cases'].endswith('memetic-tasks-pppppppppppppppp.jsonl')
-    assert state['interleave']['memetic']['pending'] is None and state['interleave']['memetic']['rounds'][0]['round'] == 1
+    curriculum = stage.bind_round({**config, 'task_curriculum': {'schema': 'x', 'min_rows_per_round': 16, 'min_group': 8}},
+                                  declared, {'round': 1}, 'p' * 64)['task_curriculum']
+    assert (curriculum['min_rows_per_round'], curriculum['min_group']) == (3, 4), 'the selector floor keeps the memetic size'
+    assert state['interleave']['memetic']['pending'] is None
     assert stage.bind_round(config, declared, {'round': 1}, 'q' * 64) is None, 'another parent needs its own build'
+
+
+def test_each_rollout_has_its_own_workspace(tmp_path):
+    shared = spec(tmp_path)
+    first = ws.Workspace(shared, Evaluator(), check=lambda case: [], run='task-1/1')
+    second = ws.Workspace(shared, Evaluator(), check=lambda case: [], run='task-2/1')
+    first.propose({'kind': 'guidance', 'scope': {'kind': 'program'}, 'text': 'a'})
+    first.commit(['c1'], 'r')
+    assert second.state['committed'] is None and second.propose(
+        {'kind': 'guidance', 'scope': {'kind': 'program'}, 'text': 'b'}) == {'id': 'c1'}
+    assert first.score()['memetic']['query_success'] != second.score()['memetic']['query_success']
+
+
+def test_missing_workspace_score_is_a_failure_at_the_group_anchor(tmp_path):
+    path = tmp_path / 'spec.json'
+    path.write_text(json.dumps(spec(tmp_path)))
+    task = {'semantics': {'world': {'kind': 'memetic', 'task': str(path)}}}
+    fallback = memetic_outcome(task, {'outcome': {'status': 'repetition'}})
+    assert fallback['quality'] == 0. and fallback['anchor'] == 0.5 and fallback['unscored_workspace'] is True
+
+
+def test_memetic_rows_carry_no_privileged_facts():
+    from natlang_neuralese.rl.privileged_context import case_facts
+
+    class Custody:
+        def check(self, case):
+            return {'case_id': case['id']}
+    receipt, facts = case_facts({'id': 'm', 'semantics': {'expected': None, 'world': {'kind': 'memetic'}}}, custody=Custody())
+    assert facts == []
