@@ -31,3 +31,14 @@ def test_admission_references_are_followed_transitively_but_not_source_manifests
     found = window.nested_json_references(roots)
     # Bound references are shipped transitively; unbound paths are evidence; a source manifest is not expanded.
     assert found == sorted([str(admission), str(selected), str(manifest)])
+
+
+def test_historical_checkpoints_bound_in_admission_records_are_reported(tmp_path):
+    parent = tmp_path / 'old' / 'checkpoint.pt'
+    parent.parent.mkdir()
+    parent.write_bytes(b'x')
+    admission = tmp_path / 'admission.json'
+    admission.write_text(json.dumps({'transition': {'parent': {'path': str(parent), 'sha256': 'f' * 64},
+                                                    'child': {'path': '/absent/checkpoint.pt', 'sha256': 'e' * 64}}}))
+    found = window.nested_checkpoint_references([str(admission)], [])
+    assert found == {'/absent/checkpoint.pt': 'e' * 64, str(parent): 'f' * 64}

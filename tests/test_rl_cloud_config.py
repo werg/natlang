@@ -78,3 +78,19 @@ def test_render_job_carries_shape_floor_to_the_sandbox(tmp_path):
     assert 'allow_default_shape' not in job
     check = render_job(run, 'x', 0, check=True)
     assert 'minimum_resources' not in check and 'NATLANG_CW_MIN_MEMORY' not in check['env']
+
+
+def test_historical_checkpoints_ship_as_declared_bases_only(tmp_path, monkeypatch):
+    import scripts.coreweave.rl_cloud as rc
+    run = {'root': str(tmp_path), 'checkpoint_bases': [
+        {'sha256': 'b' * 64, 'bytes': 10, 'encoding': 'raw', 'source': 'x'},
+        {'sha256': 'c' * 64, 'bytes': 11, 'encoding': 'zip-delta', 'base': 'b' * 64, 'path': '/dgx/c.pt',
+         'receipt': {'sha256': 'r' * 64, 'bytes': 1}, 'payload': {'sha256': 'p' * 64, 'bytes': 2}}]}
+    monkeypatch.setattr(rc, 'locate', lambda run, digest: ('store', {'bytes': 1}))
+    closure = {'historical_checkpoints': [
+        {'path': '/dgx/parent.pt', 'sha256': 'c' * 64}, {'path': '/dgx/old.pt', 'sha256': 'b' * 64},
+        {'path': '/dgx/unknown.pt', 'sha256': 'd' * 64}, {'path': '/cloud/parent/checkpoint.pt', 'sha256': 'c' * 64}]}
+    blobs, skipped = rc.historical_checkpoint_blobs(run, closure, '/cloud/parent/checkpoint.pt')
+    assert [(b['path'], b['encoding']) for b in blobs] == [('/dgx/parent.pt', 'zip-delta'), ('/dgx/old.pt', 'raw')]
+    assert all(b['kind'] == 'checkpoint' and 'source' not in b for b in blobs)
+    assert [s['path'] for s in skipped] == ['/dgx/unknown.pt']
