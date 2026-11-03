@@ -102,7 +102,7 @@ Abbreviations: Ag = agentic, KR = knowledge reasoning. Paths: `ERS` = `/home/wer
 | 25 | TAT-QA / FinQA | KR | `ERS/tatqa/train.jsonl` (table, paragraphs, questions[answer, answer_type, scale, derivation]); `ERS/finqa/train.jsonl` | 2,201 ctx (~13k q) / 6,251 | MIT | dev+test held | 1,460 / 1,433 |
 | 26 | HybridQA | KR | `ERS/hybridqa/train.jsonl` + `WikiTables-WithLinks-*/{tables_tok,request_tok}/<table_id>.json` | 62,682 | CC-BY-4.0 | dev held; 30 shared tables dropped | 1,469 |
 | 27 | WTQ / MSR-SQA / WikiSQL / TabFact | KR | `ERS/wikitablequestions/train.jsonl`, `ERS/msr_sqa/default__train.jsonl`, `ERS/wikisql/default__train.jsonl`, `ERS/tabfact/tab_fact__train.jsonl` | 14,152 / 12,276 / 56,355 / ~92k | CC-BY-SA / MS-PL / BSD-3 / CC-BY-4.0 | tests held | ~1,500 each |
-| 28 | TableInstruct (TableBench train) | KR | `ERS/tableinstruct_tablebench/files/TableInstruct_instructions.jsonl` (qtype, qsubtype, table{columns,data}, question, answer) | 19,661 | Apache-2.0 | TableBench eval itself not downloaded; dedupe tables against it if added | **0** |
+| 28 | TableInstruct (TableBench train) | KR | `ERS/tableinstruct_tablebench/files/TableInstruct_instructions.jsonl` (id, qtype, qsubtype, instruction, instruction_type DP/TCoT/SCoT/PoT, table as a JSON string {columns,data}, question, response: reasoning or pandas code, **no gold answer field**) | 19,661 rows (~4.9k distinct questions in four prompt styles) | Apache-2.0 | TableBench eval itself not downloaded; dedupe tables against it if added | **0** |
 | 29 | Qasper | KR | `ERS/qasper/train.jsonl` (title, abstract, full_text[sections], figures_and_tables, qas[answers: yes_no / extractive_spans / unanswerable / free_form]) | 888 papers | CC-BY-4.0 | **dev + test held** (SCROLLS/LongBench) | **0** |
 | 30 | StrategyQA | KR | `ERS/strategyqa/data__train.jsonl` (question, answer bool, facts, decomposition, term) | 1,603 | MIT | test held | **0** |
 | 31 | MuSiQue / 2WikiMultihopQA | KR | `ERS/musique/train.jsonl` (20 paragraphs, question_decomposition, answer, aliases, answerable); `ERS/2wikimultihopqa/train.jsonl` (evidences triples, type) | 39,876 / 167,454 | CC-BY-4.0 / Apache-2.0 | validation held; MuSiQue protected seeds | 1,278 / 1,498 |
@@ -275,11 +275,16 @@ a `Neuralese<...>` result. "carry" is the state threaded through `iterateOn` or 
   answer_coordinates sets per step.
 
 **28. TableInstruct** (unused)
-- `table_analyst(table, questions[]) -> answers` across `qtype` FactChecking / NumericalReasoning / DataAnalysis.
-  Use `table` + `question` + `answer` only, never the PoT `instruction` prose. Oracle: normalized number / answer-list.
-  Skip free-form DataAnalysis answers (correlation descriptions) unless they are numeric.
-- `trend_label(table, column) -> "increase"|"decrease"|"no clear trend"` where the qsubtype is trend. Oracle: exact
-  label, only where computable by a stated monotonic rule from visible values.
+- Records have no gold `answer` field: `response` is the source model's reasoning or pandas code (`instruction_type`
+  DP/TCoT/SCoT/PoT repeats each question in four prompt styles; use one row per `question`). Derive the gold yourself
+  from `table` (a JSON string `{columns, data}`) by computing it in code, and only for questions with one exactly
+  computable answer (counts, sums, max/min, filters, lookups, rank). Never copy a value out of `response`, and skip
+  questions whose answer depends on interpretation, plus Visualization and free-form DataAnalysis rows. Clean the
+  escaped quotes in cell text before showing it.
+- `table_analyst(table, questions[]) -> answers` across FactChecking / NumericalReasoning. Use `table` + `question`
+  only, never the `instruction` prose. Oracle: normalized number / answer list from your computed gold.
+- `trend_label(table, column) -> "increase"|"decrease"|"no clear trend"` with the label computed by a stated monotonic
+  rule from the visible values. Oracle: exact label.
 
 **29. Qasper** (unused; train only)
 - `paper_qa(paper: Folder<section>, questions[]) -> (boolean|string|"unanswerable")[]`.

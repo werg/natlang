@@ -68,3 +68,54 @@ def test_claims_reserve_distinct_cells_record_finalizes_and_claims_expire(tmp_pa
     capsys.readouterr()
     authoring_rotation.main(['next', *base, '--worker', 'w3', '--claim-hours', '0'])
     assert json.loads(capsys.readouterr().out)['active_claims'] == 0
+
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts' / 'rl_tasks' / 'sources'))
+import authored  # noqa: E402
+
+
+def folder_task(**changes):
+    task = {'schema': 'natlang.rl-authored-task/1', 'id': 'returns-0001', 'author': {'model': 'm', 'worker': 'w'},
+            'family': 'returns_sorting', 'world': 'returns-w44', 'level': 1,
+            'constructs': ['folder_reducer', 'decision_readout', 'effect_state'], 'oracle_depth': 'effect-state',
+            'root': 'sort_returns.nl',
+            'files': {'sort_returns.nl': '---\nkind: directory-reducer\nargs: {}\nreturns: "number"\n---\nSort returns/.\n',
+                      'sort_returns/assess.nl': '---\nreadout: decision\nargs:\n  note: "string"\nreturns: "\\"a\\" | \\"b\\""\n---\nDecide.\n'},
+            'inputs': {}, 'folders': {'returns/r1.md': 'one\n', 'returns/r2.md': 'two\n'},
+            'expected_folders': {'a/r1.md': 'one\n', 'b/r2.md': 'two\n'}, 'expected': 2, 'oracle': 'exact',
+            'wrong_answers': [1, 3], 'alias_answers': [],
+            'reference': {'root': [['eval', {'code': 'return 2;', 'finish': True}]],
+                          'children': [{'match': ['one'], 'value': 'a'}, {'match': ['two'], 'value': 'b'}]},
+            'wrong_code': ['return 2;'],
+            'smoke': {'code': 'return 2;', 'children': {'assess': {'$match': [{'match': 'one', 'value': 'a'}]}}}}
+    task.update(changes)
+    return task
+
+
+def test_authored_folders_become_the_reducer_world_and_its_effect_oracle():
+    case = authored.convert(folder_task())
+    semantics = case['semantics']
+    assert semantics['folder_files'] == {'returns/r1.md': 'one\n', 'returns/r2.md': 'two\n'}
+    assert semantics['expected_files'] == {'a/r1.md': 'one\n', 'b/r2.md': 'two\n'}
+    assert semantics['files_oracle'] == {'compare': 'content', 'threshold': 1}
+    assert case['curriculum']['reference']['children'][1] == {'match': ['two'], 'value': 'b'}
+    assert case['curriculum']['external']['checks']['wrong_code'] == ['return 2;']
+    plain = authored.convert(folder_task(folders=None, expected_folders=None, wrong_code=[],
+                                         constructs=['decision_readout'], oracle_depth='answer',
+                                         reference=None))
+    assert 'folder_files' not in plain['semantics'] and 'wrong_code' not in plain['curriculum']['external']['checks']
+    assert plain['curriculum']['reference'] == {'root': [['return_result', {'status': 'success', 'value': 2}]]}
+
+
+def test_authored_folders_are_rejected_without_a_directory_reducer_root_or_with_unsafe_paths():
+    import pytest
+    bad = [folder_task(constructs=['decision_readout', 'effect_state']),
+           folder_task(files={**folder_task()['files'],
+                              'sort_returns.nl': '---\nargs: {}\nreturns: "number"\n---\nSort.\n'}),
+           folder_task(folders={'../escape.md': 'x'}),
+           folder_task(folders={'/abs.md': 'x'}),
+           folder_task(folders=None),
+           folder_task(oracle_depth='answer', constructs=['folder_reducer'])]
+    for task in bad:
+        with pytest.raises(ValueError):
+            authored.convert(task)

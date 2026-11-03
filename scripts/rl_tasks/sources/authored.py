@@ -27,6 +27,32 @@ CONSTRUCTS = frozenset({'call_depth_3', 'neuralese_relay', 'typed_neuralese', 'n
 ORACLES = frozenset({'exact', 'normalized'})
 NAME = re.compile(r'^[a-z][a-z0-9_]*$')
 FILE = re.compile(r'^[a-z][a-z0-9_]*(/[a-z][a-z0-9_-]*)*(\.nl|\.ts|/SKILL\.md)$')
+# World-folder items: relative paths of plain segments (no '..', no absolute paths, no hidden files).
+FOLDER_FILE = re.compile(r'^[A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$')
+
+
+def folder_map(task, key):
+    value = task.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, dict) or not value or not all(isinstance(text, str) for text in value.values()):
+        fail(task, f'{key} must map relative file paths to text')
+    for path in value:
+        if not FOLDER_FILE.match(path) or '..' in path.split('/'):
+            fail(task, f'{key} path {path!r} must be relative, without .. or hidden segments')
+    return value
+
+
+def reference_actions(task):
+    reference = task.get('reference')
+    if reference is None:
+        return {'root': [['return_result', {'status': 'success', 'value': task['expected']}]]}
+    if isinstance(reference, list):
+        return {'root': reference}
+    if (not isinstance(reference, dict) or not isinstance(reference.get('root'), list)
+            or not isinstance(reference.get('children', []), list)):
+        fail(task, 'reference is a root action list or {"root": [...], "children": [{"match": ..., "value": ...}]}')
+    return {'root': reference['root'], **({'children': reference['children']} if reference.get('children') else {})}
 
 
 def fail(task, message):
@@ -64,6 +90,21 @@ def convert(task):
             fail(task, f'file {path} must live in the root callable folder {stem}/')
         if path.endswith('.nl') and not files[path].startswith('---\n'):
             fail(task, f'{path} needs YAML frontmatter (args, returns)')
+    folders, expected_folders = folder_map(task, 'folders'), folder_map(task, 'expected_folders')
+    if folders is not None:
+        if 'folder_reducer' not in constructs:
+            fail(task, 'folders go with the folder_reducer construct')
+        if not re.search(r'^kind:\s*directory-reducer\s*$', files[root].split('---', 2)[1], re.M):
+            fail(task, 'folders need a root with `kind: directory-reducer` (the folder is the root\'s world)')
+    if expected_folders is not None and folders is None:
+        fail(task, 'expected_folders requires folders')
+    if expected_folders is not None and task['oracle_depth'] != 'effect-state':
+        fail(task, 'expected_folders is an effect-state oracle')
+    wrong_code = task.get('wrong_code', [])
+    if not isinstance(wrong_code, list) or not all(isinstance(code, str) and code for code in wrong_code):
+        fail(task, 'wrong_code must be a list of root eval scripts')
+    if wrong_code and task.get('reference') is None:
+        fail(task, 'wrong_code replaces the last reference eval; give a reference')
     wrong, aliases = task['wrong_answers'], task['alias_answers']
     if len(wrong) < 2 or any(json.dumps(w, sort_keys=True) == json.dumps(task['expected'], sort_keys=True) for w in wrong):
         fail(task, 'at least two wrong answers, none equal to expected')
@@ -92,8 +133,7 @@ def convert(task):
             'domain': 'other', 'mode': 'single_call', 'inline': 'optional',
             'evidence': {'world': [], 'retrieved': [], 'background': []}, 'assumptions': [], 'decisive': [],
             'plausible_actions': [], 'minimum_sequence': [],
-            'reference': {'root': task.get('reference') or [['return_result', {'status': 'success',
-                                                                               'value': task['expected']}]]},
+            'reference': reference_actions(task),
             'rl': {'level': task['level'], 'family': family, 'basis': 'authored-exact-oracle-reference-verified'},
             **({'iterate': 'required'} if {'iterate', 'iterate_neuralese'} & set(constructs) else {}),
             **({'named': 'required'} if len([p for p in files if p.endswith('.nl')]) > 1 else {}),
@@ -103,14 +143,20 @@ def convert(task):
                          'neuralese_room': '', 'framing': 'authored', 'constructs': sorted(constructs),
                          'subject_domain': task.get('domain', 'other'),
                          'oracle_depth': task['oracle_depth'],
-                         'checks': {'wrong_answers': wrong, 'alias_answers': aliases},
+                         'checks': {'wrong_answers': wrong, 'alias_answers': aliases,
+                                    **({'wrong_code': wrong_code} if wrong_code else {})},
                          'structure': {'name': family, 'constructs': sorted(constructs),
                                        'smoke': {'root': [['eval', {'code': smoke['code']}],
                                                           ['return_result', {'status': 'success',
                                                                              'value': task['expected']}]],
                                                  'children': smoke['children']}}}},
         'semantics': {'root': root, 'files': files, 'inputs': task['inputs'], 'expected': task['expected'],
-                      'oracle': task['oracle']},
+                      'oracle': task['oracle'],
+                      # The runtime materializes folder_files as the directory reducer's world folder and, with
+                      # expected_files, grades the folder the run leaves behind (collector.executeProgram).
+                      **({'folder_files': folders} if folders is not None else {}),
+                      **({'expected_files': expected_folders, 'files_oracle': {'compare': 'content', 'threshold': 1}}
+                         if expected_folders is not None else {})},
     }
 
 

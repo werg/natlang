@@ -59,7 +59,13 @@ One JSON object per line:
 | `alias_answers` | 0-3 alternative forms of the SAME correct result that should be accepted (reordered record keys, case/spacing variants for normalized). Must be type-valid. |
 | `smoke` | `{"code": "<root eval script>", "children": {"<helper name>": <scripted answer>}}`. The code calls the helpers the way the program intends (one pass is enough); each helper answers with its scripted value. It proves the call graph wires and type-checks. Typed Neuralese helpers answer with a record; `Neuralese<string>` helpers with text; `readout: decision` helpers with one of their options. |
 | `groups` | optional list of extra world/source identities (e.g. the dataset item id your task was inspired by) |
-| `reference` | optional; default is a direct return of `expected` |
+| `reference` | optional; default is a direct return of `expected`. Either a list of root actions, or `{"root": [...], "children": [{"match": ["<text the helper call receives>"], "value": <its answer>}, ...]}` when the root's script calls helpers (required for folder tasks: the reference must really do the moves/writes). |
+| `folders` | optional, only with `folder_reducer`: object relative path -> file text, e.g. `{"inbox/r-0412.md": "..."}`. These files are the task's world folder; the root (which must have `kind: directory-reducer`) reads, moves and writes them. Never have the root create its own items instead. |
+| `expected_folders` | optional, with `folders` and `oracle_depth: "effect-state"`: the complete folder after a correct run (every file that must exist, with its exact text). Files left behind or misplaced fail the task. |
+| `wrong_code` | optional (needs `reference`): 1-4 wrong root scripts that replace the reference's last eval, e.g. a sort that skips one category or moves everything to one place. Each must be rejected. Use these for effect tasks: a wrong returned value alone does not show the oracle checks the effects. |
+
+For the smoke of a per-item helper (one decision per file), give the child answer as
+`{"$match": [{"match": "<text in its call>", "value": <answer>}, ...]}` instead of one value.
 
 ### `.nl` file format
 
@@ -89,11 +95,33 @@ fields or `null`, never `undefined`.
 | `neuralese_fan_in` | two or more Neuralese-producing helpers (distinct roles, or one per item) whose outputs the parent combines |
 | `iterate` | the root uses `iterateOn` over items/steps with an explicit stopping condition |
 | `iterate_neuralese` | `iterateOn` whose carried state is (or contains) a Neuralese value |
-| `folder_reducer` | a helper with frontmatter `kind: directory-reducer` that reduces over a folder of items |
+| `folder_reducer` | the root has frontmatter `kind: directory-reducer` and works over the task's `folders` items (read each file with `folder.files("dir/*.md")` and `file.readText()`, act with `file.moveTo("dir/")` or writes); usually paired with `effect_state` + `expected_folders`. See the example below. |
 | `decision_readout` | a `readout: decision` helper whose distribution the parent acts on via `decide(...)` |
 | `skills` | `skills/<name>/SKILL.md` files the program loads and applies to choose or perform work |
 | `multi_operation_codebase` | the task's root is one of several operations of the same reusable program (same `family`, same helper files, different root functions across tasks of one world) |
 | `effect_state` | `expected` is the complete resulting state, checked field by field |
+
+Small `folder_reducer` example (`returns_desk_sorting`, level 1; qualified: reference, 4 negatives rejected, alias
+accepted, smoke; generator `/mnt/external/natlang-rl-authoring/examples/folder/make_folder_example.py`):
+
+```json
+{"root": "sort_returns.nl", "constructs": ["folder_reducer", "decision_readout", "effect_state"],
+ "oracle_depth": "effect-state", "inputs": {},
+ "files": {"sort_returns.nl": "---\nkind: directory-reducer\nargs: {}\nreturns: \"{ restock: number; refurbish: number; scrap: number }\"\n---\nSort the returned items waiting in returns/.\n1. For each file in returns/, read its note and let assess decide what happens to the item.\n2. Move the file to <decision>/<same name> (restock/, refurbish/ or scrap/). Leave nothing in returns/.\n3. Return how many files went to each decision.\n",
+           "sort_returns/assess.nl": "---\nreadout: decision\nargs:\n  note: \"string\"\nreturns: \"\\\"restock\\\" | \\\"refurbish\\\" | \\\"scrap\\\"\"\n---\nDecide what to do with a returned item from its inspection note: ...\n"},
+ "folders": {"returns/r-0412.md": "Kettle, box unopened, customer changed their mind. Seal intact.\n",
+             "returns/r-0414.md": "Toaster with a burnt-out heating element and a melted cord. Smells of smoke.\n"},
+ "expected_folders": {"restock/r-0412.md": "Kettle, box unopened, customer changed their mind. Seal intact.\n",
+                      "scrap/r-0414.md": "Toaster with a burnt-out heating element and a melted cord. Smells of smoke.\n"},
+ "expected": {"restock": 1, "refurbish": 0, "scrap": 1},
+ "reference": {"root": [["eval", {"code": "const counts = { restock: 0, refurbish: 0, scrap: 0 };\nfor (const file of await folder.files(\"returns/*.md\")) {\n  const d = await decide(assess, (await file.readText()).trim());\n  await file.moveTo(d.value + \"/\");\n  counts[d.value] += 1;\n}\nreturn counts;", "finish": true}]],
+               "children": [{"match": ["Kettle, box unopened"], "value": "restock"}, {"match": ["Toaster with a burnt-out"], "value": "scrap"}]},
+ "wrong_code": ["<the same script, but scrap files are not moved>", "<the same script, but every file goes to restock/>"],
+ "smoke": {"code": "<the reference script>", "children": {"assess": {"$match": [{"match": "Kettle", "value": "restock"}, {"match": "Toaster", "value": "scrap"}]}}}}
+```
+
+Negative and alias answers of a script reference replace only its final `return`, so the moves still happen and the
+returned value is what is judged.
 
 ## 4. Qualify your batch (mandatory)
 

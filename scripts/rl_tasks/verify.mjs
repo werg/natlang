@@ -94,7 +94,14 @@ function withAnswer(record, value) {
   const terminal = root.findLast(x => x[0] === 'return_result' && x[1]?.status === 'success');
   if (terminal) { terminal[1].value = value; return copy; }
   const last = root[root.length - 1];
-  if (last?.[0] === 'eval') { last[1] = { ...last[1], code: 'return ' + JSON.stringify(value) + ';' }; return copy; }
+  if (last?.[0] === 'eval') {
+    // Keep the script's effects (moved files, service calls) and replace only its final return, so an alias or wrong
+    // answer of an effect task is judged on its value rather than rejected for the effects it skipped.
+    const code = String(last[1].code ?? ''), tail = /(^|[;\n}])(\s*)return\s+[^;\n]+;?\s*$/.exec(code);
+    last[1] = { ...last[1], code: tail ? code.slice(0, tail.index + tail[1].length) + tail[2] + 'return ' + JSON.stringify(value) + ';'
+      : 'return ' + JSON.stringify(value) + ';' };
+    return copy;
+  }
   return undefined;
 }
 async function accepted(record) {

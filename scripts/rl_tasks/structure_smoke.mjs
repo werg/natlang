@@ -40,7 +40,14 @@ for (const [key, list] of chosen) for (const row of list) {
       const action = smoke.root[step++];
       return { calls: [action ?? ['return_result', { status: 'failed', reason: 'smoke script ended' }]] };
     }
-    const value = smoke.children[name];
+    let value = smoke.children[name];
+    // {"$match": [{"match": "<text>" | [...], "value": v}, ...]}: per-item answers (e.g. one decision per folder file),
+    // chosen by text the child's opening contains, like a reference child.
+    if (value && typeof value === 'object' && Array.isArray(value.$match)) {
+      const opening = openingText(context);
+      const hit = value.$match.find(entry => [entry.match].flat().every(text => opening.includes(text)));
+      value = hit ? hit.value : undefined;
+    }
     if (value === undefined) return { calls: [['return_result', { status: 'failed', reason: 'no smoke answer for ' + name }]] };
     // {"$turns": [[tool, args], ...]}: a child that acts (calls its own children in eval) before returning; turns are
     // counted per child invocation (its opening).
