@@ -36,7 +36,8 @@ RUN.json (schema natlang.rl-cloud-run/1):
    "lineages": {NAME: joint SFT: {"controller" (the DGX lineage's current window control), "window" (optional
                          refresh_after_updates), "prepared_control" (window 0 is that exact DGX-prepared, never-started
                          control, e.g. a corrected-mix boundary), "rebuild_window" (seed from an incomplete window's parent, forking
-                         from the DGX window), "config" (overrides), "resources", "account", "allow_missing"}
+                         from the DGX window), "config" (overrides), "resources", "account", "allow_missing",
+                         "service" (true: also expose the DiLoCo coordinator port, an elastic-session cohost)}
                       RL: {"template" (a DGX lineage config.json), "parent": {"checkpoint", "tokenizers"},
                            "config", "resources", "account"}},
    RL lineages also: "template_runtime" (a DGX RL runtime whose runs/ packets ship), "extras", "cloud_inputs"}
@@ -1350,6 +1351,10 @@ def render_job(run, name, rounds, check=False):
         job['resources'].pop('gpu')
         job['service'] = {'port': DILOCO_PORT}
         job['needs'] = {**job.get('needs', {}), 'gpu_memory_gb': 0}
+    elif spec.get('service'):
+        # A GPU learner that also cohosts an elastic DiLoCo coordinator (owner 2026-11-03, AGENTS 16a944ad1;
+        # train/diloco/join.py starts it beside the learner): the learner job plus the coordinator's service port.
+        job['service'] = {'port': DILOCO_PORT}
     if spec.get('minimum_resources'):  # the shape backoff floor (cwctl.create_with_shape_backoff)
         job['minimum_resources'] = spec['minimum_resources']
         above = [k for k in ('cpu', 'memory') if k in job['minimum_resources'] and k in job['resources']
