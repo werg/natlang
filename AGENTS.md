@@ -12,6 +12,20 @@ is1048576 forward tokens, with an already declared larger single window retained
 whole. A plan exceeding its bound must be corrected before SGD. Qualify the actual
 pending schedule, not only small fixtures, before claiming the cutover works.
 
+## Recipe review: scripted templates dominate the mixture (owner request, 2026-11-03)
+
+Independent sampled audits (`plans/neuralese/RECIPE_REVIEW_20261103/`) found
+that the `port_record_calls` wrapper and big2 template communication carry about 78%
+of quota-aware loss. Genuine natlang teaching receives about 6%; multi-node Neuralese about 2%;
+`iterateOn`/reducers/decisions/skills are rare. Only marker rows and the embedding
+adapter train. RL tasks are 98% one wrapper generator, and the selector yields no
+outcome spread. Tuning and metalearning are not recipe stages. Step counts and
+loss on this mixture are not capability progress. Correct the mixture (one row
+per wrapper task, template visit caps, withdrawals, diverse focus and admitted
+diverse sources) and cut over at the next window. Add interleaved RL with a
+spread-seeking selector and declared tuning/metalearner stages. Promote by paired
+protected-development outcomes. Preserve earned exposure and historical custody.
+
 # Main goal: keep moving forward (owner, 2026-10-11)
 
 ## Digest-cache maintenance stays bounded and off the source filesystem (engineering, 2026-11-02)
