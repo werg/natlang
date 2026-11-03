@@ -636,7 +636,7 @@ def verify_qualification(qualification_ref):
     if report != _with_recorded_protection_union(checked, report):
         raise ValueError('execution qualification differs from independently rechecked evidence')
     _verify_historical_file_ref(qualification_ref)
-    return checked
+    return report  # the rechecked qualification as recorded (its union digest is provenance)
 
 
 @with_historical_file_verification_session
