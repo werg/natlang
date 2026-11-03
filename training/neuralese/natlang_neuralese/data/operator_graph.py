@@ -158,11 +158,13 @@ class OperatorGraphRenderer:
         first = next((i for i, message in enumerate(messages) if message.get('role') == 'user'), None)
         if first is None:
             raise OperatorCaseError('consumer-without-user-message')
-        framed = [{'type': 'text', 'text': spec.consumer_open}] if spec.consumer_open else []
+        framed = [{'type': 'text', 'text': spec.consumer_open}] if spec.consumer_open and not spec.frame_each else []
         for position, part in enumerate(parts):
             if position:
                 framed.append({'type': 'text', 'text': spec.consumer_separator})
-            framed.append(part)
+            if spec.frame_each and spec.consumer_open and not part.get('inline'):
+                framed.append({'type': 'text', 'text': spec.consumer_open})
+            framed.append({key: value for key, value in part.items() if key != 'inline'})
         if spec.placement == 'system':
             framed.append({'type': 'text', 'text': spec.consumer_close})
             old = messages[first].get('content')
@@ -201,17 +203,26 @@ class OperatorGraphRenderer:
             raise OperatorCaseError(f'site-count: {len(sources)} sources for a one-site operator')
         tools = record['consumer'].get('tools') or None
         target = _target_message(_RowView(record))
+        # Sources the runtime would not cut are shown in full (no site); the others each get an operator site.
+        inline = [bool(spec.inline_below_chars) and len(source_text(source)) < spec.inline_below_chars
+                  for source in sources]
+        if all(inline):
+            raise OperatorCaseError('no-compacted-source: every source is below the runtime cut threshold')
+        compacted = [source for source, shown in zip(sources, inline) if not shown]
         nodes, declared, slots, seeds = [], [], [], []
-        for index, source in enumerate(sources):
+        for index, source in enumerate(compacted):
             node, spans, slot, seed = self._producer(name, index, record, source, tools)
             nodes.append(node); declared.extend(spans); slots.append(slot); seeds.append(seed)
         try:
             target_ids = _target_reply(self.tokenizer, target, tools)
         except ValueError as error:
             raise OperatorCaseError(f'target-render: {error}') from None
-        state_ids = [_placeholder(f'operator-state:{name}:{index}') for index in range(len(sources))]
+        state_ids = [_placeholder(f'operator-state:{name}:{index}') for index in range(len(compacted))]
         consume_open, consume_close = self.role_ids[2], self.role_ids[3]
-        messages = self._consumer_messages(name, record, [{'type': 'native_state', 'id': state} for state in state_ids])
+        states = iter(state_ids)
+        messages = self._consumer_messages(name, record, [
+            {'type': 'text', 'text': source_text(source), 'inline': True} if shown
+            else {'type': 'native_state', 'id': next(states)} for source, shown in zip(sources, inline)])
         ids, spans = self._render(messages, tools, {state: [consume_open, consume_close] for state in state_ids},
                                   generation=True)
         imports = [{'at': spans[state][0] + 1, 'source': f'op{index}', 'start': slot[0], 'stop': slot[1]}
@@ -233,7 +244,8 @@ class OperatorGraphRenderer:
                       'original_split': record['split'], 'family': record.get('family'),
                       'outcome_label': record['outcome']['label'], 'outcome_checked': record['outcome'].get('checked'),
                       'lineage': record.get('lineage'), 'license': record.get('license'),
-                      'source_chars': [len(source_text(source)) for source in sources],
+                      'source_chars': [len(source_text(source)) for source in compacted],
+                      'inline_source_chars': [len(source_text(source)) for source, shown in zip(sources, inline) if shown],
                       'source_tokens': [len(node['token_ids']) for node in nodes],
                       'seeds': seeds, 'span_tokens': [stop - start for start, stop in slots],
                       'target_tokens': len(target_ids),
@@ -241,8 +253,9 @@ class OperatorGraphRenderer:
         graph = {'schema': SCHEMA, 'id': graph_id, 'split': split, 'source_groups': groups,
                  'tokenizer_fingerprint': self.fingerprint, 'nodes': [*nodes, consumer], 'operators': declared,
                  'operator_conversion': conversion}
-        cut_messages = self._consumer_messages(name, record, [{'type': 'text', 'text': cut_text(source_text(source))}
-                                                              for source in sources])
+        cut_messages = self._consumer_messages(name, record, [
+            {'type': 'text', 'text': source_text(source), 'inline': True} if shown
+            else {'type': 'text', 'text': cut_text(source_text(source))} for source, shown in zip(sources, inline)])
         cut_ids, _ = self._render(cut_messages, tools, {}, generation=True)
         cut_context = len(cut_ids)
         cut_ids.extend(target_ids)

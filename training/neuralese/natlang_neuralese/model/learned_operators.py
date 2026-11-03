@@ -60,6 +60,11 @@ class Operator:
     consumer_open: str = ''
     consumer_close: str = '\n\n'
     consumer_separator: str = '\n'
+    # True: ``consumer_open`` precedes every state (one framed entry per argument); False: once before all states.
+    frame_each: bool = False
+    # Sources shorter than this are shown to the consumer in full, without an operator site, as the runtime shows
+    # arguments its listing does not cut (ts-host native/cutoff.ts SCOPE_VALUE_CHARS); 0 compacts every source.
+    inline_below_chars: int = 0
 
 
 VALUE_PROMPT = (
@@ -85,9 +90,9 @@ OPERATORS = {operator.name: operator for operator in (
              'Large tool/service outputs, documents and collections rendered into a call (renderValue).',
              'Compacted value: '),
     Operator('compact-params', 2, PARAMS_PROMPT, 'system', 384,
-             ('document', 'passage', 'file', 'record', 'schema', 'tool_output'), 'one', 25_000,
-             "A call's large arguments in its opening listing (inputsListing).",
-             'Compacted argument: '),
+             ('document', 'passage', 'file', 'record', 'schema', 'tool_output'), 'per-source', 25_000,
+             "A call's large arguments in its opening listing (inputsListing); one site per cut argument.",
+             'Compacted argument: ', frame_each=True, inline_below_chars=4096),
     Operator('compact-history', 2, HISTORY_PROMPT, 'user-suffix', 1024,
              ('trajectory',), 'one', 25_000,
              'Context carried between model runs (compact_history and the automatic near-limit compaction).',

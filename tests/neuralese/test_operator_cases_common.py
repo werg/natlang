@@ -43,3 +43,21 @@ def test_sink_validates_dedupes_and_writes_manifest(tmp_path):
 def test_extract_requires_several_documents():
     problems = operator_problems(record(0, 'x' * 3000), 'extract')
     assert any('sources: 1 not in [2, 8]' in problem for problem in problems)
+
+
+def test_compact_params_accepts_several_arguments_with_one_over_the_cut_floor():
+    rec = record(0, 'x' * 5000)
+    rec['sources'] = [{**rec['sources'][0], 'role': 'passage'}, {**rec['sources'][0], 'role': 'passage', 'text': 'y' * 300}]
+    assert operator_problems(rec, 'compact-params') == []
+    rec['sources'] = [{**rec['sources'][0], 'text': 'y' * 300}] * 2
+    assert any('compaction floor' in problem for problem in operator_problems(rec, 'compact-params'))
+    rec['sources'] = [{**rec['sources'][0], 'text': 'z' * 60_000}] * 2
+    assert any('above 110000' in problem for problem in operator_problems(rec, 'compact-params'))
+
+
+def test_filled_seeds_keep_records_valid(tmp_path):
+    from neuralese_data.records import validate
+    with CaseSink('compact-value', 'unit', converter=__file__, inputs=[__file__], out_root=tmp_path) as sink:
+        assert sink.offer(record(0, 'src/a.py:3 failed\n' * 200))
+    line = (tmp_path / 'compact-value' / 'unit.port-records.jsonl').read_text().splitlines()[0]
+    assert validate(json.loads(line)) == []

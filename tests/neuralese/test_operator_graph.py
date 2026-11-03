@@ -101,3 +101,29 @@ def test_cut_text_matches_the_runtime_cut():
     assert cut.startswith('line 0000') and cut.rstrip().endswith('line 0999')
     assert '<<cut off: ' in cut and f'of {len(text)} characters not shown>>' in cut
     assert cut_text('short') == 'short'
+
+
+def test_multi_argument_compact_params_compacts_long_arguments_and_shows_short_ones(renderer):
+    from natlang_neuralese.data.native_graph_schema import parse_graph
+    from natlang_neuralese.model.learned_operators import resolve_spans
+    long_a = 'first passage about the river Elbe and its bridges\n' * 120
+    long_b = 'second passage about the city archives in Dresden\n' * 110
+    short = 'A short note: the archive opened in 1902.'
+    sources = [{'role': 'passage', 'text': long_a, 'exact_refs': []},
+               {'role': 'passage', 'text': short, 'exact_refs': []},
+               {'role': 'passage', 'text': long_b, 'exact_refs': []}]
+    graph, cut = renderer.render(case('compact-params', sources), 'compact-params', corpus_id='unit',
+                                 source_row_sha256='1' * 64, source_ref={})
+    example = parse_graph(graph, tokenizer_fingerprint=renderer.fingerprint)
+    assert len(resolve_spans(graph, example.plan, renderer.bindings)) == 4
+    assert [node['name'] for node in graph['nodes']] == ['op0', 'op1', 'consumer']
+    consumer = renderer.tokenizer.decode(graph['nodes'][-1]['token_ids'])
+    assert consumer.count('Compacted argument: ') == 2 and short in consumer and 'river Elbe' not in consumer
+    assert consumer.index('Compacted argument: ') < consumer.index(short) < consumer.rindex('Compacted argument: ')
+    assert graph['operator_conversion']['inline_source_chars'] == [len(short)]
+    cut_consumer = renderer.tokenizer.decode(cut['nodes'][0]['token_ids'])
+    assert cut_consumer.count('<<cut off:') == 2 and short in cut_consumer
+    from natlang_neuralese.data.operator_graph import OperatorCaseError
+    with pytest.raises(OperatorCaseError, match='no-compacted-source'):
+        renderer.render(case('compact-params', [sources[1], sources[1]]), 'compact-params', corpus_id='unit',
+                        source_row_sha256='2' * 64, source_ref={})

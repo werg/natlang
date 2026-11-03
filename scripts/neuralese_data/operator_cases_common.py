@@ -26,7 +26,7 @@ from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from neuralese_data.records import normalize_text, validate  # noqa: E402
+from neuralese_data.records import normalize_text, seal, validate  # noqa: E402
 from natlang_neuralese.common.paths import resolve as data_path  # noqa: E402  (records.py puts it on sys.path)
 
 OUT_ROOT = Path(os.environ.get('NATLANG_OPERATOR_CASES') or data_path('data_hdd', 'natlang-compaction-operators-20261103', 'cases'))
@@ -37,8 +37,10 @@ SCHEMA = 'natlang.operator-cases/1'
 RULES = {
     'compact-value': {'sources': (1, 1), 'roles': {'tool_output', 'file', 'document', 'passage', 'record', 'schema',
                                                    'tool_doc'}, 'min_chars': 2000, 'max_chars': 120_000},
-    'compact-params': {'sources': (1, 1), 'roles': {'document', 'passage', 'file', 'record', 'schema', 'tool_output'},
-                       'min_chars': 4096, 'max_chars': 120_000},
+    # One site per argument the listing cuts (>= SCOPE_VALUE_CHARS 4096); shorter arguments of a multi-argument
+    # call are shown in full. The total keeps one rendered graph below the renderer's 32k-token cap.
+    'compact-params': {'sources': (1, 8), 'roles': {'document', 'passage', 'file', 'record', 'schema', 'tool_output'},
+                       'min_chars': 200, 'max_chars': 120_000, 'compact_min_chars': 4096, 'max_total_chars': 110_000},
     'compact-history': {'sources': (1, 1), 'roles': {'trajectory'}, 'min_chars': 8000, 'max_chars': 200_000},
     'extract': {'sources': (2, 8), 'roles': {'document', 'passage', 'record', 'file', 'tool_output'},
                 'min_chars': 200, 'max_chars': 20_000},
@@ -75,6 +77,16 @@ def operator_problems(record: dict, operator: str) -> list[str]:
             problems.append(f'sources[{index}]: {length} chars below {rules["min_chars"]}')
         if length > rules['max_chars']:
             problems.append(f'sources[{index}]: {length} chars above {rules["max_chars"]}')
+    lengths = []
+    for source in sources:
+        try:
+            lengths.append(len(source_text(source)))
+        except ValueError:
+            pass
+    if rules.get('compact_min_chars') and lengths and max(lengths) < rules['compact_min_chars']:
+        problems.append(f'no source reaches the compaction floor {rules["compact_min_chars"]}')
+    if rules.get('max_total_chars') and sum(lengths) > rules['max_total_chars']:
+        problems.append(f'sources total {sum(lengths)} chars above {rules["max_total_chars"]}')
     if 'sources' not in (record.get('consumer') or {}).get('withheld', []):
         problems.append('consumer must withhold sources')
     if (record.get('outcome') or {}).get('label') not in IMITATION_LABELS:
@@ -162,10 +174,15 @@ class CaseSink:
             return False
         self.seen.add(target_key)
         from natlang_neuralese.data.operator_seeds import seed_for
+        filled = False
         for source in record['sources']:
             seed = seed_for(self.operator, record, source)
-            source.setdefault('meta', {})['operator_seed'] = seed
+            if (source.get('meta') or {}).get('operator_seed') is None:
+                source.setdefault('meta', {})['operator_seed'] = seed
+                filled = True
             self.seeds[seed['provenance']] += 1
+        if filled:
+            seal(record)  # the content hash covers sources, so a filled seed reseals the record
         split = 'test' if record['split'] in ('test', 'validation') else 'train'
         self.counts[split] += 1
         self.out.write(json.dumps(record, ensure_ascii=False, separators=(',', ':')) + '\n')

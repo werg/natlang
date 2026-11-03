@@ -168,11 +168,22 @@ compacted listing.
 (13,046), `qa_narrative_long` (13,252), `qa_long_context` (10,860), `qa_mcq` (2,129), `qa_multihop` (89,660; use only
 rows whose single source passes the 4,096-char floor), `qa_trivia` (44,476).
 
-**Mapping.** Keep each record as is except: require exactly one source (multi-source rows: reject
-`multi-source`, they belong to §6), require label `gold`/`checked`, and rewrite `writer.instructions` into the
-listing purpose, keeping the question: ``The call that receives this <role> answers: <consumer question>``
+**Mapping.** Keep each record as is except: require label `gold`/`checked`, and rewrite `writer.instructions` into
+the listing purpose, keeping the question: ``The call that receives this <role> answers: <consumer question>``
 (the consumer question is the first user message of `consumer.context`). Keep `consumer`, `target`,
 `split_groups`, `lineage`, `license` exactly.
+
+**Multi-argument cases (coordinator request 2026-11-03).** A multi-passage record is a call with several large
+arguments: keep every source, in order, one per argument (1 to 8 sources). The renderer gives each source of at
+least 4,096 characters (the runtime listing's cut threshold, `SCOPE_VALUE_CHARS`) its own compact-params site and
+shows shorter sources to the consumer in full, as the runtime listing does; the consumer sees one
+`Compacted argument: <state>` entry per compacted argument. `CaseSink` rejects a case when no source reaches
+4,096 characters (`no source reaches the compaction floor`) or when the sources total more than 110,000
+characters (`sources total ... above 110000`, which keeps the rendered graph under the 32k-token cap). Measured on
+S1 samples: `qa_long_context` rows have 2-7 passages of about 5-20k characters each, and most fit. `qa_narrative_long`
+rows have 10-15 consecutive chunks of about 13k characters each (about 150k in total), so they exceed both the
+8-source and the total limit. They stay rejected (`sources: N not in [1, 8]` or the total), because no subset can
+be chosen without risking the answer's passage.
 
 **Seed.** None supplied unless a family has a dataset-marked evidence span (then `gold`); otherwise the shared
 helper's answer lines or question-overlap sentences (`mechanical:answer-lines` / `mechanical:overlap-sentences`).

@@ -132,5 +132,7 @@ Baselines on full67 (`ops/bf95-quality-source-zero-sgd-v2-1102`), weighted consu
 | compact-history smoke (S1 SWE checked, text-init) | 10 | 0.556 | 0.563 | 0.568 | 0.568 | small row-specific use |
 | extract smoke (hotpot, text-init) | 12 | 7.742 | 7.802 | 8.458 | 6.186 | documents are short, so the "text cut" is the whole text (upper bound) |
 
+| **extract v2, seeded spans** (broad-hotpotqa **held test**, gold supporting-fact seeds, text-init prompt rows, step 0) | 48 | 5.440 | 6.948 | 7.116 | 5.501 | consumers use the seeded span from step 0 (+1.51/+1.68 nats/token without it; actual better on 88%/85% of rows) and already match the whole-document text (hotpot documents are short, so the "text cut" is the full text). Spans: 190, median 10 tokens (p90 58, max 99) = median 4.9% of the producer site |
+
 These are the starting point the trained operators must beat; they are smoke-sized, not held-world results. The
 three operator smokes used the retired version-1 slot design; seeded-span graphs are re-rendered and re-measured.
