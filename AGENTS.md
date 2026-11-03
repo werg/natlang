@@ -48,8 +48,10 @@ moving parent. RL task families supply the episodes. Deployment tuning is the
 inner fit; an amortized coefficient predictor follows. The natlang learned
 updater over gradient digests becomes a later refinement, not the main line.
 Program tuning reruns per promoted parent (warm-started); its fits are baselines
-and distillation sources. Promote by held-family adaptation beating a
-non-meta-trained bank and plain per-program LoRA at matched compute.
+and distillation sources. Promote a bank snapshot when it beats the current published (or untrained) bank on held-family task
+outcomes, dev first and confirmation once (owner revision, 2026-11-03). Plain per-program LoRA and the
+parent are reported references across compute budgets, not gates; deployment tuning uses whichever
+adapts better at the available budget.
 
 ## Interleaved RL is a declared stage; selector /2 seeks outcome spread (engineering, 2026-11-03)
 
