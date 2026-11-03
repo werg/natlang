@@ -9,13 +9,12 @@ the novelty report says PASS. Admitted rows are the batch's verified converted c
 back by the audit), appended to ``POOL/cases.jsonl`` under the pool's lock and written atomically (temporary file,
 fsync, rename). A case id already in the pool is refused unless it is named in ``--supersede``, which replaces that row
 (a corrected copy of a task). ``POOL/admissions.jsonl`` gets one entry with the file hashes, the reviewer and the ids.
-Default POOL is /mnt/external/natlang-rl-authoring/admitted.
+Default POOL is natlang-rl-authoring/admitted under the data_hdd root (common.paths).
 """
 from __future__ import annotations
 
 import argparse
 import fcntl
-import hashlib
 import json
 import sys
 import time
@@ -23,12 +22,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from measure_repetition import write_text_atomic  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_file_hex as sha256  # noqa: E402
+from natlang_neuralese.common.paths import resolve_str  # noqa: E402
 
-DEFAULT_POOL = '/mnt/external/natlang-rl-authoring/admitted'
-
-
-def sha256(path):
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+DEFAULT_POOL = resolve_str('data_hdd', 'natlang-rl-authoring', 'admitted')
 
 
 def read_rows(path):
