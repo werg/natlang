@@ -158,4 +158,9 @@ def test_pool_drops_worlds_that_repeat_an_earlier_worlds_targets(tmp_path):
     pool = MB.build_pool(rows + [duplicate], held_fraction=.01, seed=0)
     worlds = [w['world'] for f in pool['families'].values() for w in f['worlds']]
     assert 'w9' not in worlds and len(worlds) == len(set(worlds))
+    # The cheap index pass (graph ids plus target digests) chooses exactly the families and worlds of the full pass.
+    index = [{**row, 'graph': {'id': row['graph']['id'], 'target_digest': MB.target_digest(row['graph'])}}
+             for row in rows + [duplicate]]
+    chosen = MB.build_pool(index, held_fraction=.01, seed=0)
+    assert [w['world'] for f in chosen['families'].values() for w in f['worlds']] == worlds
     engine.store.close()

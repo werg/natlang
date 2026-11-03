@@ -82,6 +82,16 @@ def assistant_targets(graph):
     return {**graph, 'nodes': nodes, 'supervision': 'assistant-output-only-v1'}
 
 
+def target_digest(graph):
+    """Digest of a graph's supervised target tokens (weight > 0), node by node: two worlds with equal digests teach
+    exactly the same targets. Index-only rows carry it precomputed."""
+    if 'target_digest' in graph:
+        return graph['target_digest']
+    key = [[tok for tok, w in zip(node.get('token_ids') or (), node.get('target_weights') or ()) if w > 0]
+           for node in graph.get('nodes') or ()]
+    return hashlib.sha256(json.dumps(key).encode()).hexdigest()
+
+
 def graph_rows(paths, pattern, *, protected, max_tokens, prefix=None, families=None, index_only=False):
     """Rows of verified native graph sources whose id matches ``pattern`` (named groups ``family`` and ``world``).
     ``prefix``: cheap substring every candidate line contains; ``families``: keep only these; ``index_only``: rows
@@ -119,7 +129,7 @@ def graph_rows(paths, pattern, *, protected, max_tokens, prefix=None, families=N
                 counts['unaligned_targets'] += 1
                 continue
             rows.append({'family': match.group('family'), 'world': match.group('world'),
-                         'graph': {'id': graph['id']} if index_only else graph,
+                         'graph': {'id': graph['id'], 'target_digest': target_digest(graph)} if index_only else graph,
                          'actor': {'kind': 'verified-source', 'source': str(path)}})
     return rows, counts
 
@@ -198,8 +208,7 @@ def build_pool(rows, *, held_fraction=.25, support_worlds=3, query_worlds=2, dev
         # score a dev world by memorizing it. Keep the first of each distinct target sequence.
         seen, distinct = set(), []
         for world in sorted(families[name], key=natural):
-            key = tuple(tuple(tok for tok, w in zip(node.get('token_ids') or (), node.get('target_weights') or ()) if w > 0)
-                        for row in families[name][world] for node in row['graph'].get('nodes') or ())
+            key = tuple(target_digest(row['graph']) for row in families[name][world])
             if key in seen:
                 continue
             seen.add(key)
