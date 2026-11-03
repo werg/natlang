@@ -79,6 +79,13 @@ trained parameters rather than only prose prompts. Exact KV/prefix reuse is a
 separate performance cache, not compaction. Track remaining gaps in the fallow
 register until each is live in runtime, data and training.
 
+Directly learned operators (owner, 2026-11-03) start from text: initialize each
+operator (compaction, summarization/extraction, guidance, skill and other
+prompt-embedding operators) from its natural-language prompt, embedded in the
+real rendered call, then let it morph through direct learning on sufficient
+dedicated data. Each operator needs its own adequate training data and measured
+use, never a nominal parameter with a handful of rows.
+
 ## Built capabilities must not lie fallow (owner, 2026-11-03)
 
 The SGLang actor was built and integrated, then left unused for days behind a
