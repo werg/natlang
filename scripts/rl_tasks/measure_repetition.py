@@ -114,7 +114,7 @@ def program_features(row):
             split_file(t)[0] for t in files.values()), re.M)),
         'skills': any('/skills/' in path and path.endswith('SKILL.md') for path in semantics['files']),
         'neuralese_iterate': 'iterateOn' in code and neuralese_results + neuralese_args > 0,
-        'family': row.get('family') or 'unspecified',
+        'family': (curriculum.get('rl') or {}).get('family') or row.get('family') or 'unspecified',
         'level': (curriculum.get('rl') or {}).get('level'),
     }
 
