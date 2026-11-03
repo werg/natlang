@@ -111,8 +111,10 @@ def prepare(args):
         import subprocess
         commit = json.loads(closure.read_text()).get('commit')
         for required, reason in REQUIRED_RUNTIME_COMMITS:
-            if subprocess.run(['git', 'merge-base', '--is-ancestor', required, commit or 'missing'],
-                              capture_output=True).returncode != 0:
+            from natlang_neuralese.common.paths import root
+            # The frozen tree is a git archive; ancestry is checked in the canonical checkout.
+            if subprocess.run(['git', '-C', str(root('repo')), 'merge-base', '--is-ancestor', required,
+                               commit or 'missing'], capture_output=True).returncode != 0:
                 raise SystemExit(f'frozen runtime {commit} predates {required}: {reason}')
     previous_path = Path(args.previous_config).resolve(strict=True)
     previous = json.loads(previous_path.read_text())
