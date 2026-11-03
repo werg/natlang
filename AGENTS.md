@@ -96,6 +96,17 @@ input), recording seed provenance. Then morph through end-to-end consumer-outcom
 learning with annealed text supervision. A span whose content is the same for
 every input, or that ablation cannot distinguish from shuffled state, is a defect.
 
+## Production training runs mainly in the cloud (owner, 2026-11-03)
+
+Production LFM3 training runs mainly on CoreWeave GPU sandboxes. Use DiLoCo across
+as many one-GPU learners as the four accounts grant, balanced across accounts, with
+coordinator primary and replica on CPU sandboxes in different accounts. Until
+DiLoCo is qualified, a single cloud learner carries the lineage through the
+`rl_cloud` SFT-window path. The DGX is a supporting resource: an optional extra
+worker, RL rollouts, data preparation, qualification and recovery hub. Its
+memory ledger is no longer the production bottleneck. Keep independent recovery
+exports on the DGX, and track GPU-hours per account against the opaque credit.
+
 ## Built capabilities must not lie fallow (owner, 2026-11-03)
 
 The SGLang actor was built and integrated, then left unused for days behind a
