@@ -38,7 +38,6 @@ and only case ids and outcome labels are copied back. Production learners and ch
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import shlex
@@ -50,14 +49,21 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(REPO / 'training/neuralese'), str(REPO)]
 
-W = Path(os.environ.get('NATLANG_LFM3_WORKSPACE', '/home/werg/data/lfm3-rl-dgx-20261029'))
-ROOT = Path(os.environ.get('NATLANG_POP_EVAL_ROOT', str(W / 'ops/pop-behavior-eval')))
-PYTHON = '/home/werg/natlang/.venv-neuralese/bin/python'
-LEDGER = str(REPO / 'scripts/memory_ledger.py')
-HF_BASE = '/home/werg/.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd'
+from natlang_neuralese.common.hashing import sha256_file_hex as digest  # noqa: E402
+from natlang_neuralese.common.jsonio import write_json_durable as write_json  # noqa: E402
+from natlang_neuralese.common.paths import resolve_str  # noqa: E402
 
-POP = 'pop-os'
-POP_RECOVERY = '/home/werg/data/natlang-independent-recovery-20261031'
+W = Path(os.environ.get('NATLANG_LFM3_WORKSPACE', resolve_str('data_nvme', 'lfm3-rl-dgx-20261029')))
+ROOT = Path(os.environ.get('NATLANG_POP_EVAL_ROOT', str(W / 'ops/pop-behavior-eval')))
+PYTHON = resolve_str('repo', '.venv-neuralese/bin/python')
+LEDGER = str(REPO / 'scripts/memory_ledger.py')
+HF_BASE = str(Path.home()) + '/.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd'
+
+# Pop's SSH host: NATLANG_POP_HOST, else "pop_host" in <root>/config.json. Pop mirrors the DGX data/repo layout.
+POP = os.environ.get('NATLANG_POP_HOST') or (json.loads((ROOT / 'config.json').read_text()).get('pop_host')
+                                             if (ROOT / 'config.json').is_file() else None)
+POP_REPO = resolve_str('repo')
+POP_RECOVERY = resolve_str('data_nvme', 'natlang-independent-recovery-20261031')
 POP_TRANSPORT_ROOT = POP_RECOVERY + '/matched75-transport-0f8a-1101'   # the peer cache whose delta base Pop holds
 POP_EVAL_ROOT = POP_RECOVERY + '/pop-behavior-eval'
 POP_BASE = POP_RECOVERY + '/base-config-only-40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd'
@@ -90,34 +96,17 @@ def log(**event):
     print(json.dumps({'at': round(time.time(), 1), **event}, sort_keys=True), flush=True)
 
 
-def write_json(path, value):
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    pending = path.with_name('.' + path.name + '.pending')
-    with pending.open('w') as f:
-        json.dump(value, f, indent=1, sort_keys=True)
-        f.write('\n')
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(pending, path)
-
-
 def read_json(path, default=None):
     path = Path(path)
     return json.loads(path.read_text()) if path.is_file() else default
 
 
-def digest(path):
-    h = hashlib.sha256()
-    with Path(path).open('rb') as f:
-        for block in iter(lambda: f.read(8 * 1024 * 1024), b''):
-            h.update(block)
-    return h.hexdigest()
-
-
 # ---- state -------------------------------------------------------------------------------------------------------
 
 def load_state():
+    for name in ('requests', 'preparations', 'evidence', 'comparisons', 'selections', 'transfers', 'pop-retirement',
+                 'dgx-retirement'):
+        (ROOT / name).mkdir(parents=True, exist_ok=True)
     state = read_json(ROOT / 'state.json')
     if state is None:
         state = {'schema': 'natlang.pop-behavior-eval-state/1', 'initialised': time.time(), 'parent': INITIAL_PARENT,
@@ -269,6 +258,8 @@ def prepare(kind, checkpoint, runtime, expect_sha):
 # ---- Pop ---------------------------------------------------------------------------------------------------------
 
 def ssh(command, *, input=None, timeout=600, check=True):
+    if not POP:
+        raise RuntimeError('set NATLANG_POP_HOST or "pop_host" in ' + str(ROOT / 'config.json'))
     result = subprocess.run(['ssh', '-o', 'ConnectTimeout=15', '-o', 'BatchMode=yes', POP, command], input=input,
                             text=True, capture_output=True, timeout=timeout)
     if check and result.returncode:
@@ -438,7 +429,7 @@ def run_on_pop(arm, prep, runtime, closure, comparison):
             subprocess.run(['scp', '-q', str(driver), f'{POP}:{work}/driver.py'], check=True, timeout=120)
             _pop_upload_json(job, f'{work}/job.json')
             unit = f'{name}-{int(time.time())}'
-            ssh(shlex.join(['/usr/bin/python3', '/home/werg/natlang/scripts/memory_ledger.py', 'run', '--unit', unit,
+            ssh(shlex.join(['/usr/bin/python3', POP_REPO + '/scripts/memory_ledger.py', 'run', '--unit', unit,
                             '--budget-gb', '7', '--class', 'experiment', '--no-resumable', '--container', name,
                             '--workdir', work, '--', '/usr/bin/python3', f'{work}/driver.py', f'{work}/job.json']))
             log(event='Pop evaluation started', arm=arm, unit=unit, step=prep['step'], source=source[:12])
@@ -613,6 +604,7 @@ def main(argv=None):
         value = {'checkpoint': str(Path(args.checkpoint).resolve(strict=True)), 'runtime': str(Path(args.runtime).resolve()),
                  'label': args.label, 'step': args.step, 'ema': not args.no_ema, 'requested': time.time(),
                  **({'sha256': args.sha256} if args.sha256 else {})}
+        (ROOT / 'requests').mkdir(parents=True, exist_ok=True)
         write_json(ROOT / 'requests' / f'{int(time.time() * 1000)}.json', value)
         print(json.dumps(value))
     elif args.command == 'status':
