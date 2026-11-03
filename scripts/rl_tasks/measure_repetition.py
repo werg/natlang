@@ -17,6 +17,7 @@ import argparse
 import collections
 import json
 import math
+import os
 import re
 import sys
 from pathlib import Path
@@ -34,6 +35,24 @@ OWN_GENERATOR_SOURCES = frozenset({'composed', 'decisions', 'codebase-ops'})
 # Semantics that verify effects or state (files, services, function checks, repaired codebases), not only an answer.
 EFFECT_KEYS = frozenset({'effects', 'expected_files', 'function_checks', 'operation', 'service_scopes', 'files_oracle',
                          'codebase_check', 'state_oracle'})
+
+
+def write_text_atomic(path, text):
+    """Write `text` to `path` through a temporary sibling, fsync and rename, then read it back. Any failure raises:
+    a missing or partial output file must never be mistaken for a result."""
+    path = Path(path)
+    temp = path.with_name(path.name + f'.tmp{os.getpid()}')
+    try:
+        with open(temp, 'w') as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp, path)
+    finally:
+        if temp.exists():
+            temp.unlink()
+    if path.read_text() != text:
+        raise OSError(f'{path} does not hold what was written')
 
 
 def normalize(text):
@@ -71,23 +90,43 @@ def code_skeleton(code):
     return re.sub(r'\s+', '', CODE_LITERAL.sub('L', code))
 
 
-def functional_signature(row):
-    """What the program does, independent of its prose: call graph, operation set and code steps.
+QUOTED_JSON = re.compile(r'"(?:[^"\\]|\\.)*"')
 
-    The signature binds every function's place in the callable folder, its declared argument and return types,
-    its kind/readout, which helpers (and iterateOn/decide) its body calls, the code spans its instructions spell out
-    and the reference's eval scripts, all with literals abstracted. Paragraphs that change no call, type or code
-    step (restated invariants, padding) do not change it; neither do changed rule wordings inside one helper.
+
+def _unquote(match):
+    try:
+        return json.loads(match.group(0))
+    except ValueError:
+        return match.group(0)
+
+
+def type_shape(text):
+    """A frontmatter type with its YAML quoting removed and string-literal members abstracted: `"{ a: number }[]"`
+    keeps its field names and shape, `"\\"x\\" | \\"y\\""` becomes `L|L`. (`normalize` blanks every quoted span, and
+    frontmatter types are quoted, so using it on types erased all argument and return types.)"""
+    return re.sub(r'\s+', '', re.sub(r'"[^"]*"', 'L', QUOTED_JSON.sub(_unquote, text)))
+
+
+def functional_signature(row):
+    """The structural half of a program's functional identity: call graph, operation set and code steps.
+
+    It binds every function's place in the callable folder (the root's own name is abstracted), its declared
+    argument and helper return types (field names kept, string literals abstracted), its kind/readout, which helpers (and
+    iterateOn/decide) its body calls, the code spans its instructions spell out and the reference's eval scripts,
+    all with literals abstracted. Rule wording inside one helper is not structure: `functional_words` carries it.
     """
     semantics = row['semantics']
+    stem = semantics['root'][:-3]
     files = {path: text for path, text in semantics['files'].items() if path.endswith('.nl')}
     helpers = {path.rsplit('/', 1)[-1][:-3] for path in files}
     functions = []
     for path, text in sorted(files.items()):
         header, body = split_file(text)
         calls = sorted({name for name in CALL.findall(body) if name in helpers or name in ('iterateOn', 'decide')})
-        functions.append({'path': path, 'args': normalize(frontmatter_field(header, 'args')),
-                          'returns': normalize(frontmatter_field(header, 'returns')),
+        functions.append({'path': 'ROOT' + path[len(stem):] if path.startswith(stem) else path,
+                          'args': type_shape(frontmatter_field(header, 'args')),
+                          # The root's answer shape is part of what the operation asks, which its prose carries.
+                          'returns': '' if path == semantics['root'] else type_shape(frontmatter_field(header, 'returns')),
                           'kind': bool(re.search(r'^kind:\s*directory-reducer', header, re.M)),
                           'readout': bool(re.search(r'^readout:\s*decision', header, re.M)),
                           'calls': calls, 'code': sorted({code_skeleton(span) for span in CODE_SPAN.findall(body)})})
@@ -97,6 +136,44 @@ def functional_signature(row):
     skills = sorted(path for path in semantics['files'] if path.endswith('SKILL.md'))
     return json.dumps({'functions': functions, 'reference_scripts': scripts, 'skills': skills,
                        'services': sorted(semantics.get('services') or {})}, sort_keys=True)
+
+
+# Functional programs: same structure (functional_signature) AND word-trigram Jaccard of the normalized program
+# prose >= FUNCTIONAL_JACCARD, assigned to the first matching earlier program ("leader"). Calibrated on the 12
+# audited round-1 batches against the auditors' distinct-program counts (tests/test_rl_authoring_tools.py): 10 of 12
+# batches within 30%, total 86 against 89. Known residuals: a batch whose variants differ by one rule sentence
+# inside an otherwise identical helper (w04/b0001: 8 behavioural programs, 2 found), and an operation set whose
+# questions share a long fixed program body but differ in what is asked (w02/b0002: 7 judged, 10 found).
+FUNCTIONAL_JACCARD = 0.7
+TOKEN = re.compile(r'[a-z_]+')
+
+
+def functional_words(row):
+    """Word trigrams of the normalized program prose, digits and quoted literals abstracted."""
+    semantics = row['semantics']
+    bodies = [split_file(text)[1] for path, text in sorted(semantics['files'].items()) if path.endswith('.nl')]
+    words = TOKEN.findall(normalize('\n'.join(bodies)).lower())
+    return frozenset(' '.join(words[i:i + 3]) for i in range(max(1, len(words) - 2)))
+
+
+class FunctionalPrograms:
+    """Distinct functional programs per family: leader clustering of (structure, prose) identities."""
+
+    def __init__(self):
+        self.leaders = collections.defaultdict(list)  # (family, structure) -> [word sets]
+        self.counts = collections.Counter()  # family -> number of distinct functional programs
+
+    def matches(self, family, structure, words):
+        return any(len(words & other) / max(1, len(words | other)) >= FUNCTIONAL_JACCARD
+                   for other in self.leaders.get((family, structure), ()))
+
+    def add(self, family, structure, words):
+        """Register a program; True when it is functionally new."""
+        if self.matches(family, structure, words):
+            return False
+        self.leaders[(family, structure)].append(words)
+        self.counts[family] += 1
+        return True
 
 
 def program_features(row):
@@ -138,6 +215,7 @@ def program_features(row):
     return {
         'instruction': normalize(root_body),
         'functional': functional_signature(row),
+        'functional_words': functional_words(row),
         'program': normalize('\n'.join(f'{p}\n{split_file(t)[1]}' for p, t in sorted(files.items()))),
         'structure': json.dumps({'nl_files': min(len(files), 6), 'depth': min(depth, 4),
                                  'neuralese_results': min(neuralese_results, 3), 'typed_results': min(typed_results, 3),
@@ -234,7 +312,7 @@ def main(argv=None):
     result = report(args.cases, args.label)
     text = json.dumps(result, indent=1, sort_keys=False)
     if args.out:
-        Path(args.out).write_text(text + '\n')
+        write_text_atomic(args.out, text + '\n')
     print(text)
 
 

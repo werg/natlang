@@ -8,8 +8,11 @@ Steps, each written under OUT_DIR:
  2. verify    reference replay admitted, every wrong answer rejected, alias acceptance measured   verified/
  3. smoke     the intended call graph runs with scripted helper answers and returns expected     smoke.json
  4. custody   no relation to a protected/held world (ProtectedWorlds registry + LFM3 held-set group closure)
- 5. report    per-task PASS/FAIL with reasons                                                       report.json
-A task passes when 1-4 pass for it. Alias rejections are reported (fix the oracle or the alias) but do not fail it.
+ 5. lint      static construct and contract checks (authored_checks.py): fake folder/readout/skill/iterate/depth/
+              multi-operation tags and helper calls with the wrong argument count; heuristics are warnings
+ 6. report    per-task PASS/FAIL with reasons                                                       report.json
+A task passes when 1-5 pass for it. Declared aliases are accepted by the oracle; a rejected alias fails the task.
+The smoke also fails a task whose smoke or reference script calls a root helper with the wrong number of arguments.
 Run through the memory ledger on the DGX.
 """
 from __future__ import annotations
@@ -23,9 +26,12 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
+sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE / 'sources'))
 sys.path.insert(0, str(REPO / 'training' / 'neuralese'))
 from natlang_neuralese.common.paths import resolve  # noqa: E402
+from authored_checks import lint_batch  # noqa: E402
+from measure_repetition import write_text_atomic  # noqa: E402
 
 DEFAULT_RUNTIME = str(resolve('data_hdd', 'natlang-rl-authoring', 'runtime', 'ts-host'))
 UNION = resolve('data_nvme', 'broad-rl-tasks-20261031', 'union_groups_fast.py')
@@ -61,7 +67,7 @@ def main(argv=None):
                           'family': row['family'], 'problems': []} for row in cases}
     if not cases:
         report['result'] = 'FAIL: nothing converted'
-        (out / 'report.json').write_text(json.dumps(report, indent=1) + '\n')
+        write_text_atomic(out / 'report.json', json.dumps(report, indent=1) + '\n')
         print(json.dumps(report['steps'])); return 1
     subprocess.run([node(), str(HERE / 'verify.mjs'), args.runtime, str(out / 'cases.jsonl'), str(out / 'verified'),
                     str(args.concurrency)], env=env, check=True, cwd=REPO)
@@ -75,14 +81,16 @@ def main(argv=None):
             if wrong['accepted'] is not False:
                 entry['problems'].append(f'wrong answer not rejected: {json.dumps(wrong["value"])[:200]}')
         for alias in result['aliases']:
-            if alias['accepted'] is False:
-                entry.setdefault('warnings', []).append(f'alias rejected: {json.dumps(alias["value"])[:200]}')
+            if alias['accepted'] is not True:
+                entry['problems'].append(f'alias not accepted: {json.dumps(alias["value"])[:200]}')
     subprocess.run([node(), str(HERE / 'structure_smoke.mjs'), args.runtime, str(out / 'cases.jsonl'),
                     str(out / 'smoke.json'), '100000'], env=env, check=True, cwd=REPO)
     smoke = json.loads((out / 'smoke.json').read_text())
     report['steps']['smoke'] = {k: smoke['summary'][k] for k in ('runs', 'accepted')}
     for result in smoke['results']:
-        if not result['accepted']:
+        for problem in result.get('arity_errors') or []:
+            status[result['id']]['problems'].append('helper argument count (' + problem + ')')
+        if not result['accepted'] and not result.get('arity_errors'):
             status[result['id']]['problems'].append(
                 f'smoke run failed ({result.get("status")}): {json.dumps(result.get("error") or result.get("detail"))[:300]}')
     from natlang_neuralese.common.custody import ProtectedWorlds, world_identities
@@ -98,12 +106,27 @@ def main(argv=None):
         for ident in union['conflicts']:
             status[ident]['problems'].append('held-set group closure conflict')
         report['steps']['custody'] = {'protected_worlds': 'checked', 'group_closure': union['status']}
+    tasks = [json.loads(line) for line in Path(args.tasks).read_text().splitlines() if line.strip()]
+    lint = lint_batch(tasks)
+    by_task = {entry['task']: entry for entry in status.values()}
+    for ident, found in lint.items():
+        entry = by_task.get(ident)
+        if entry is None:  # the task did not convert; the convert errors already fail the batch
+            continue
+        entry['problems'].extend(found['errors'])
+        if found['warnings']:
+            entry.setdefault('warnings', []).extend(found['warnings'])
+    report['steps']['lint'] = {'errors': sum(len(v['errors']) for v in lint.values()),
+                               'warnings': sum(len(v['warnings']) for v in lint.values()),
+                               'heuristics': 'warnings prefixed "heuristic:" are call_depth_3 pass-through / thin middle '
+                                             'helper / one-line sub-helper guesses and multi-operation shared-helper '
+                                             'guesses; they point the auditor at a task and fail nothing'}
     passed = [s for s in status.values() if not s['problems']]
     report['passed'] = len(passed)
     report['failed'] = len(status) - len(passed)
     report['tasks_status'] = status
     report['result'] = 'PASS' if not report['failed'] and not report['steps']['convert'].get('errors') else 'FAIL'
-    (out / 'report.json').write_text(json.dumps(report, indent=1) + '\n')
+    write_text_atomic(out / 'report.json', json.dumps(report, indent=1) + '\n')
     print(json.dumps({'result': report['result'], 'passed': report['passed'], 'failed': report['failed'],
                       'convert_errors': report['steps']['convert'].get('errors'),
                       'failures': {s['task']: s['problems'] for s in status.values() if s['problems']}}, indent=1))

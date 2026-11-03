@@ -48,29 +48,89 @@ def test_prose_apostrophes_are_not_string_literals():
     assert normalize("Route 'east' traffic") == normalize("Route 'west' traffic")
 
 
-def test_padding_paragraphs_are_not_functional_novelty(tmp_path):
-    def program(name, padding='', helper='tally'):
-        files = {'count.nl': '---\nargs:\n  items: "string[]"\nreturns: "number"\n---\nFor each item call `await '
-                             + helper + '(item)` and sum the results.\n' + padding,
-                 f'count/{helper}.nl': '---\nargs:\n  item: "string"\nreturns: "number"\n---\nScore the item.\n'}
-        row = case(name, 'tally', '', {'items': [name]})
-        row['semantics'].update(root='count.nl', files=files)
-        return row
-    paddings = ['Structural invariants: the sum never decreases while items remain to be scored.',
-                'Note that every item is visited exactly once and the order of visiting does not matter at all.',
-                'Remember that the result is a plain number which counts the scored total of all the items here.',
-                'An empty list has a total of zero; this follows directly from the summing rule stated above too.']
-    pool = write(tmp_path / 'pool.jsonl', [program('p0')])
-    padded = write(tmp_path / 'padded.jsonl', [program(f'q{i}', text) for i, text in enumerate(paddings)])
+def functional_program(name, helper='tally', text='For each item call `await tally(item)` and sum the results.',
+                       root_name='count', returns='number'):
+    files = {f'{root_name}.nl': '---\nargs:\n  items: "string[]"\nreturns: "' + returns + '"\n---\n' + text + '\n',
+             f'{root_name}/{helper}.nl': '---\nargs:\n  item: "string"\nreturns: "number"\n---\nScore the item.\n'}
+    row = case(name, 'tally', '', {'items': [name]})
+    row['semantics'].update(root=f'{root_name}.nl', files=files)
+    return row
+
+
+def test_renamed_roots_are_one_functional_program_and_new_helpers_are_new_programs(tmp_path):
+    pool = write(tmp_path / 'pool.jsonl', [functional_program('p0')])
     out = tmp_path / 'novelty.json'
-    assert authored_novelty.main([padded, '--pool', pool, '-o', str(out)]) == 1
+    renamed = write(tmp_path / 'renamed.jsonl', [functional_program(f'q{i}', root_name=f'count_{name}')
+                                                 for i, name in enumerate(['crates', 'bins', 'hives', 'rows'])])
+    assert authored_novelty.main([renamed, '--pool', pool, '-o', str(out)]) == 1
     report = json.loads(out.read_text())
     assert report['functional_repeats'] == ['q0', 'q1', 'q2', 'q3']
     assert report['families']['tally']['batch_new_functional'] == 0
-    real = write(tmp_path / 'real.jsonl', [program(f'r{i}', '', helper) for i, helper in
+    real = write(tmp_path / 'real.jsonl', [functional_program(f'r{i}', helper) for i, helper in
                                            enumerate(['weigh', 'rank', 'price', 'grade', 'audit'])])
     assert authored_novelty.main([real, '--pool', pool, '-o', str(out)]) == 0
     assert json.loads(out.read_text())['families']['tally']['batch_new_functional'] == 5
+
+
+def test_functional_programs_see_types_and_rule_sentences_but_not_literals():
+    from measure_repetition import FunctionalPrograms, functional_signature, functional_words
+    base = functional_program('a')
+    other_type = functional_program('b')
+    other_type['semantics']['files']['count/tally.nl'] = other_type['semantics']['files']['count/tally.nl'].replace(
+        '"number"', '"{ points: number }"')
+    assert functional_signature(base) != functional_signature(other_type)
+    root_type = functional_program('c', returns='{ total: number }')  # the root's answer shape is prose-carried
+    assert functional_signature(base) == functional_signature(root_type)
+    rule = 'Score every item. ' * 6 + 'An item named "x" counts double. ' + 'Sum the scores. ' * 6
+    other_rule = rule.replace('counts double', 'counts nothing and is skipped entirely')
+    literal = rule.replace('"x"', '"y"')
+    programs = FunctionalPrograms()
+    for name, text in (('a', rule), ('b', other_rule), ('c', literal)):
+        row = functional_program(name, text=text)
+        assert programs.add('tally', functional_signature(row), functional_words(row)) == (name != 'c')
+    assert programs.counts['tally'] == 2
+
+
+# The auditors' distinct-program counts for the 12 audited round-1 batches (plans/neuralese/RL_AUTHORING_AUDIT_ROUND1_20261103.md).
+AUDITED_PROGRAMS = {'w01/b0001': 10, 'w01/b0002': 6, 'w02/b0001': 12, 'w02/b0002': 7, 'w03/b0001': 4, 'w03/b0002': 3,
+                    'w04/b0001': 8, 'w04/b0002': 5, 'w05/b0001': 14, 'w05/b0002': 1, 'w06/b0001': 11, 'w06/b0002': 8}
+
+
+def test_functional_program_counts_match_the_audited_batches():
+    import glob
+    import pytest
+    from measure_repetition import FunctionalPrograms, program_features
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+    from natlang_neuralese.common.paths import resolve
+    audited = resolve('data_hdd', 'natlang-rl-authoring', 'batches')
+    if not audited.is_dir():
+        pytest.skip('audited authoring batches are not on this machine')
+    within, total = 0, 0
+    for batch, truth in AUDITED_PROGRAMS.items():
+        found = sorted(glob.glob(f'{audited}/{batch}/audited/qualified*/cases.jsonl')) or \
+            sorted(glob.glob(f'{audited}/{batch}/qualified*/cases.jsonl'))
+        if not found:
+            pytest.skip('audited authoring batches are incomplete on this machine')
+        programs = FunctionalPrograms()
+        counted = sum(programs.add(f['family'], f['functional'], f['functional_words'])
+                      for f in (program_features(json.loads(line)) for line in open(found[-1]) if line.strip()))
+        within += 0.7 <= counted / truth <= 1.3
+        total += counted
+    assert within >= 10 and abs(total - sum(AUDITED_PROGRAMS.values())) <= 0.3 * sum(AUDITED_PROGRAMS.values())
+
+
+def test_outputs_are_written_atomically_and_failures_are_loud(tmp_path):
+    import pytest
+    from measure_repetition import write_text_atomic
+    target = tmp_path / 'out.json'
+    write_text_atomic(target, '{}\n')
+    assert target.read_text() == '{}\n' and not list(tmp_path.glob('*.tmp*'))
+    with pytest.raises(OSError):
+        write_text_atomic(tmp_path / 'missing-dir' / 'out.json', '{}\n')
+    pool = write(tmp_path / 'pool.jsonl', [functional_program('p0')])
+    batch = write(tmp_path / 'batch.jsonl', [functional_program('q0')])
+    with pytest.raises(OSError):
+        authored_novelty.main([batch, '--pool', pool, '-o', str(tmp_path / 'missing-dir' / 'novelty.json')])
 
 
 def test_rotation_creates_a_missing_ledger(tmp_path, capsys):
@@ -163,3 +223,175 @@ def test_authored_folders_are_rejected_without_a_directory_reducer_root_or_with_
     for task in bad:
         with pytest.raises(ValueError):
             authored.convert(task)
+
+
+def test_rotation_credits_every_genuine_construct(tmp_path, capsys):
+    ledger = tmp_path / 'rotation.jsonl'
+    lists = {}
+    for name, values in (('datasets', ['ds1']), ('constructs', ['call_depth_3', 'iterate', 'skills']), ('problems', ['p1'])):
+        lists[name] = tmp_path / f'{name}.txt'
+        lists[name].write_text('\n'.join(values) + '\n')
+    cases = tmp_path / 'admitted.jsonl'
+    cases.write_text(''.join(json.dumps({'curriculum': {'external': {'constructs': constructs}}}) + '\n'
+                             for constructs in (['call_depth_3', 'iterate'], ['call_depth_3'], ['call_depth_3', 'iterate'])))
+    authoring_rotation.main(['record', '--ledger', str(ledger), '--dataset', 'ds1', '--construct', 'call_depth_3',
+                             '--problem', 'p1', '--worker', 'w', '--batch', 'b', '--credit-from', str(cases)])
+    entry = json.loads(capsys.readouterr().out)
+    assert entry['admitted'] == 3 and entry['credits'] == {'call_depth_3': 3, 'iterate': 2}
+    authoring_rotation.main(['next', '--ledger', str(ledger), *[f'--{k}={v}' for k, v in lists.items()], '--worker', 'w'])
+    assert json.loads(capsys.readouterr().out)['admitted_by_construct'] == {'call_depth_3': 3, 'iterate': 2}
+    authoring_rotation.main(['record', '--ledger', str(ledger), '--dataset', 'ds1', '--construct', 'skills',
+                             '--problem', 'p1', '--worker', 'w', '--batch', 'b2', '--admitted', '4'])
+    capsys.readouterr()
+    authoring_rotation.main(['next', '--ledger', str(ledger), *[f'--{k}={v}' for k, v in lists.items()], '--worker', 'w'])
+    assert json.loads(capsys.readouterr().out)['admitted_by_construct']['skills'] == 4
+
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts' / 'rl_tasks'))
+import authored_checks  # noqa: E402
+
+
+def nl(args='', returns='number', body='Do it.', readout=False, kind=None):
+    head = ('readout: decision\n' if readout else '') + (f'kind: {kind}\n' if kind else '')
+    argtext = 'args: {}\n' if not args else 'args:\n' + ''.join(f'  {a}: "string"\n' for a in args.split(','))
+    return f'---\n{head}{argtext}returns: "{returns}"\n---\n{body}\n'
+
+
+def task(**changes):
+    value = {'id': 'desk-0001', 'root': 'desk.nl', 'world': 'w', 'constructs': [],
+             'files': {'desk.nl': nl('items', body='Total the items.')}}
+    value.update(changes)
+    return value
+
+
+def findings(*tasks):
+    return authored_checks.lint_batch(list(tasks))
+
+
+def test_folder_reducer_needs_the_tasks_own_folders():
+    bare = task(constructs=['folder_reducer'], files={'desk.nl': nl(kind='directory-reducer')})
+    assert any('needs `folders`' in e for e in findings(bare)['desk-0001']['errors'])
+    ok = dict(bare, folders={'inbox/a.md': 'x'})
+    assert findings(ok)['desk-0001']['errors'] == []
+    assert any('directory-reducer' in e for e in findings(task(files={'desk.nl': nl(kind='directory-reducer')}))['desk-0001']['errors'])
+
+
+def test_decision_readouts_are_leaves_that_call_nothing():
+    files = {'desk.nl': nl('items', body='Judge with `await decide(judge, items)`.'),
+             'desk/judge.nl': nl('items', '\\"a\\" | \\"b\\"', 'Pick; use `await lookup(items)` if unsure.', readout=True),
+             'desk/lookup.nl': nl('items', body='Look it up.')}
+    errors = findings(task(files=files, constructs=['decision_readout']))['desk-0001']['errors']
+    assert any('judge' in e and 'calls lookup' in e for e in errors)
+    files = {**files, 'desk/judge.nl': nl('items', '\\"a\\" | \\"b\\"', 'Pick.', readout=True),
+             'desk/judge/deeper.nl': nl('items')}
+    assert any('owns a callable folder' in e for e in findings(task(files=files))['desk-0001']['errors'])
+    del files['desk/judge/deeper.nl']
+    assert findings(task(files=files))['desk-0001']['errors'] == []
+
+
+def test_skills_must_sit_where_the_runtime_binds_them():
+    skill = '---\nname: rules\ndescription: d\n---\nRule.\n'
+    files = {'desk.nl': nl('items', body='Call `await grade(items)`.'),
+             'desk/grade.nl': nl('items', body='Read `await read_code({ name: "skills.rules" })` and grade.'),
+             'desk/skills/rules/SKILL.md': skill}
+    errors = findings(task(files=files, constructs=['skills']))['desk-0001']['errors']
+    assert any('rules is bound to desk.nl' in e and 'desk/grade.nl' in e for e in errors)
+    files = {**files, 'desk/grade/skills/rules/SKILL.md': skill}
+    del files['desk/skills/rules/SKILL.md']
+    assert findings(task(files=files, constructs=['skills']))['desk-0001']['errors'] == []
+    orphan = {**files, 'desk/nobody/skills/rules/SKILL.md': skill}
+    assert any('no function desk/nobody.nl' in e for e in findings(task(files=orphan))['desk-0001']['errors'])
+
+
+def test_multi_operation_worlds_need_several_roots_over_shared_helpers():
+    def operation(ident, root, helper_text='Count.'):
+        return task(id=ident, root=f'{root}.nl', world='shop', constructs=['multi_operation_codebase'],
+                    files={f'{root}.nl': nl('items', body=f'Use `await count(items)`.'),
+                           f'{root}/count.nl': nl('items', body=helper_text)})
+    one = findings(operation('t1', 'close_day'), operation('t2', 'close_day'))
+    assert all(any('one root operation' in e for e in v['errors']) for v in one.values())
+    two = findings(operation('t1', 'close_day'), operation('t2', 'trial_balance'))
+    assert all(not v['errors'] and not v['warnings'] for v in two.values())
+    unshared = findings(operation('t1', 'close_day'), operation('t2', 'trial_balance', 'Other.'))
+    assert all(any('no helper file shared' in w for w in v['warnings']) for v in unshared.values())
+
+
+def test_iterate_needs_an_explicit_stop_and_a_real_iterateOn():
+    loop = 'Go through items with iterateOn and add each.'
+    errors = findings(task(files={'desk.nl': nl('items', body=loop)}, constructs=['iterate']))['desk-0001']['errors']
+    assert any('without an explicit stopping condition' in e for e in errors)
+    stopped = findings(task(files={'desk.nl': nl('items', body=loop + ' Stop when every item is added.')},
+                            constructs=['iterate']))
+    assert stopped['desk-0001']['errors'] == []
+    assert any('no function uses iterateOn' in e for e in findings(task(constructs=['iterate']))['desk-0001']['errors'])
+
+
+def test_call_depth_needs_a_chain_and_warns_on_pass_through_middles():
+    flat = task(constructs=['call_depth_3'], files={'desk.nl': nl('items', body='Call `await mid(items)`.'),
+                                                    'desk/mid.nl': nl('items', body='Total.')})
+    assert any('needs a root -> helper -> sub-helper chain' in e for e in findings(flat)['desk-0001']['errors'])
+    work = ' '.join(f'Step {i} of the middle helper does real work on the items.' for i in range(6))
+    chain = lambda mid_body, mid_returns='number': task(constructs=['call_depth_3'], files={  # noqa: E731
+        'desk.nl': nl('items', body='Call `await mid(items)`.'), 'desk/mid.nl': nl('items', mid_returns, mid_body),
+        'desk/mid/leaf.nl': nl('items', body='Score the items.')})
+    assert findings(chain(work + ' Then `await leaf(items)` and combine.', '{ a: number }'))['desk-0001'] == \
+        {'errors': [], 'warnings': []}
+    pass_through = findings(chain('Call `await leaf(items)` and return it.'))['desk-0001']
+    assert pass_through['errors'] == [] and all(w.startswith('heuristic:') for w in pass_through['warnings'])
+    assert len(pass_through['warnings']) == 1 and 'pass-through' in pass_through['warnings'][0]
+    never = findings(chain('Total the items by hand.'))['desk-0001']['errors']
+    assert any('never calls its sub-helper leaf' in e for e in never)
+
+
+def test_helper_calls_in_instructions_match_the_declared_argument_count():
+    files = {'desk.nl': nl('items', body='Call `const r = await grade(items, items, items);` then `await decide(pick, items)`.'),
+             'desk/grade.nl': nl('items,policy', body='Grade.'),
+             'desk/pick.nl': nl('items', '\\"a\\" | \\"b\\"', 'Pick.', readout=True)}
+    errors = findings(task(files=files))['desk-0001']['errors']
+    assert errors == ['desk.nl: grade is called with 3 argument(s) but declares 2']
+    assert authored_checks.arity_problems('await grade(a, b)', {'grade': (2, 2)}) == []
+    assert authored_checks.arity_problems('await decide(pick, a, b)', {'pick': (1, 1)}) != []
+    assert authored_checks.arity_problems('await grade({ a: [1, 2], b: "x, y" })', {'grade': (1, 1)}) == []
+
+
+def test_smoke_and_reference_scripts_get_the_same_argument_count_check():
+    import shutil
+    import subprocess
+    node = sorted(Path.home().glob('.local/share/natlang-dev/node-v24*/bin/node'), reverse=True) or [shutil.which('node')]
+    package = Path(__file__).resolve().parents[1] / 'ts-host' / 'package.json'
+    if not node[0] or not (package.parent / 'node_modules' / 'typescript').exists():
+        import pytest
+        pytest.skip('node or typescript is not available')
+    script = """
+import { createRequire } from 'node:module';
+import { helperArities, arityProblems } from '%s/scripts/rl_tasks/script_arity.mjs';
+const ts = createRequire('%s')('typescript');
+const readNatlangFrontmatter = () => ({ args: { items: 'string', 'policy?': 'string' } });
+const row = { semantics: { root: 'desk.nl', files: { 'desk.nl': '', 'desk/grade.nl': '---\\n---', 'desk/grade/deep.nl': '---\\n---' } } };
+const arities = helperArities(row, { readNatlangFrontmatter });
+const tools = { ts };
+console.log(JSON.stringify([arities, arityProblems('const a = await grade(x, y, z);', arities, tools),
+  arityProblems('const a = await grade(x); const b = await decide(grade, x, y);', arities, tools),
+  arityProblems('const a = await grade();', arities, tools)]));
+""" % (Path(__file__).resolve().parents[1], package)
+    out = subprocess.run([str(node[0]), '--input-type=module', '-e', script], capture_output=True, text=True, check=True)
+    arities, three, ok, none = json.loads(out.stdout)
+    assert arities == {'grade': [1, 2]}
+    assert three == ['grade is called with 3 argument(s) but declares 1 to 2']
+    assert ok == [] and none == ['grade is called with 0 argument(s) but declares 1 to 2']
+
+
+def test_authored_tasks_may_claim_no_construct_and_aliases_are_accepted_by_the_oracle():
+    import pytest
+    plain = authored.convert(folder_task(folders=None, expected_folders=None, wrong_code=[], constructs=[],
+                                         oracle_depth='answer', reference=None, alias_answers=[2.0]))
+    assert plain['curriculum']['external']['constructs'] == []
+    assert plain['semantics']['oracle'] == {'level': 'exact', 'alternates': [2.0]}
+    unaliased = authored.convert(folder_task(folders=None, expected_folders=None, wrong_code=[], constructs=[],
+                                             oracle_depth='answer', reference=None))
+    assert unaliased['semantics']['oracle'] == 'exact'
+    with pytest.raises(ValueError, match='alias'):
+        authored.convert(folder_task(folders=None, expected_folders=None, wrong_code=[], constructs=[],
+                                     oracle_depth='answer', reference=None, alias_answers=[3]))
+    with pytest.raises(ValueError):
+        authored.convert(folder_task(constructs='folder_reducer'))

@@ -73,8 +73,9 @@ def convert(task):
     if type(task['level']) is not int or not 0 <= task['level'] <= 3:
         fail(task, 'level must be 0, 1, 2 or 3')
     constructs = task['constructs']
-    if not constructs or not set(constructs) <= CONSTRUCTS:
-        fail(task, 'constructs must be a non-empty subset of ' + ', '.join(sorted(CONSTRUCTS)))
+    # An empty list is a correct task with no construct claim (a fake tag removed rather than simulated).
+    if not isinstance(constructs, list) or not set(constructs) <= CONSTRUCTS:
+        fail(task, 'constructs must be a list (empty when no construct applies) within ' + ', '.join(sorted(CONSTRUCTS)))
     if task['oracle'] not in ORACLES:
         fail(task, 'oracle must be exact or normalized')
     if task['oracle_depth'] not in ('answer', 'effect-state'):
@@ -106,8 +107,11 @@ def convert(task):
     if wrong_code and task.get('reference') is None:
         fail(task, 'wrong_code replaces the last reference eval; give a reference')
     wrong, aliases = task['wrong_answers'], task['alias_answers']
-    if len(wrong) < 2 or any(json.dumps(w, sort_keys=True) == json.dumps(task['expected'], sort_keys=True) for w in wrong):
+    canonical = lambda value: json.dumps(value, sort_keys=True)  # noqa: E731
+    if len(wrong) < 2 or any(canonical(w) == canonical(task['expected']) for w in wrong):
         fail(task, 'at least two wrong answers, none equal to expected')
+    if not isinstance(aliases, list) or any(canonical(a) == canonical(w) for a in aliases for w in wrong):
+        fail(task, 'alias_answers is a list of forms of the correct answer; none may equal a wrong answer')
     author = task['author']
     if not isinstance(author, dict) or not author.get('model') or not author.get('worker'):
         fail(task, 'author needs model and worker')
@@ -151,7 +155,10 @@ def convert(task):
                                                                              'value': task['expected']}]],
                                                  'children': smoke['children']}}}},
         'semantics': {'root': root, 'files': files, 'inputs': task['inputs'], 'expected': task['expected'],
-                      'oracle': task['oracle'],
+                      # Declared aliases are alternate gold forms the oracle accepts (OracleSpec.alternates), in
+                      # addition to what the oracle mode already ignores (record key order; case and spacing when
+                      # normalized).
+                      'oracle': {'level': task['oracle'], 'alternates': aliases} if aliases else task['oracle'],
                       # The runtime materializes folder_files as the directory reducer's world folder and, with
                       # expected_files, grades the folder the run leaves behind (collector.executeProgram).
                       **({'folder_files': folders} if folders is not None else {}),

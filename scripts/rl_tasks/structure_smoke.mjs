@@ -7,15 +7,31 @@
 // the scripted eval from `curriculum.external.structure.smoke.root`, and every named child answers its call with
 // the scripted value for its name (text for Neuralese<string>, a record for typed Neuralese results). It reports
 // whether the run finished with the expected answer and which child calls, Neuralese writes and Neuralese
-// arguments occurred. It qualifies program structure only: no model, no task outcome, no training admission.
+// arguments occurred. It also parses the smoke script and the reference's eval scripts and rejects a call to one of the
+// root's helpers (`h(...)` or `decide(h, ...)`) with more or fewer arguments than the helper declares: the runtime
+// drops extra arguments silently, so the scripted run alone would pass. It qualifies program structure only: no model,
+// no task outcome, no training admission.
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
+import { helperArities, arityProblems } from './script_arity.mjs';
 const [runtime, input, out, perShapeArg] = process.argv.slice(2);
 const { executeProgram } = await import(runtime + '/dist/teacher/collector.js');
 const { callName } = await import(runtime + '/dist/teacher/curriculum.js');
 const { openingText } = await import(runtime + '/dist/runtime/conversation.js');
 const { TOOLS_PROMPT } = await import(runtime + '/dist/native/prompt.js');
 const { createTeacherTextNeuralese } = await import(runtime + '/dist/model/teacher-text-neuralese.js');
+const { readNatlangFrontmatter } = await import(runtime + '/dist/runtime/loader.js');
+const ts = createRequire(runtime + '/package.json')('typescript');
+const arityTools = { ts, readNatlangFrontmatter };
 const perShape = Number(perShapeArg || 2);
+function scriptArityProblems(row, smoke) {
+  const arities = helperArities(row, arityTools), problems = [];
+  const scan = (label, actions) => { for (const action of actions ?? []) if (action?.[0] === 'eval' && action[1]?.code)
+    for (const problem of arityProblems(String(action[1].code), arities, arityTools)) problems.push(`${label}: ${problem}`); };
+  scan('smoke', smoke.root);
+  scan('reference', row.curriculum.reference?.root);
+  return problems;
+}
 const rows = fs.readFileSync(input, 'utf8').split('\n').filter(Boolean).map(JSON.parse);
 const chosen = new Map();
 for (const row of rows) {
@@ -61,6 +77,7 @@ for (const [key, list] of chosen) for (const row of list) {
     childCalls[name] = (childCalls[name] ?? 0) + 1;
     return { calls: [['return_result', { status: 'success', value }]] };
   };
+  const arity_errors = scriptArityProblems(row, smoke);
   let outcome, error;
   try {
     const run = await executeProgram(row, transport.wrap(driver), { systemPrompt: TOOLS_PROMPT, contextTokens: 16384,
@@ -69,11 +86,11 @@ for (const [key, list] of chosen) for (const row of list) {
     outcome = run.outcome;
   } catch (e) { error = String(e?.stack ?? e).slice(0, 1200); }
   const graph = JSON.stringify(outcome?.execution_graph ?? []);
-  results.push({ key, id: row.id, accepted: outcome?.accepted === true, status: outcome?.status, value: outcome?.value,
-    expected: row.semantics.expected, detail: outcome?.accepted ? undefined : JSON.stringify(outcome?.detail ?? null).slice(0, 600),
+  results.push({ key, id: row.id, accepted: outcome?.accepted === true && !arity_errors.length, arity_errors, status: outcome?.status, value: outcome?.value,
+    expected: row.semantics.expected, detail: outcome?.accepted && !arity_errors.length ? undefined : JSON.stringify(outcome?.detail ?? null).slice(0, 600),
     child_calls: childCalls, neuralese_refs_in_graph: (graph.match(/nzt1_/g) ?? []).length, tool_errors: errors.slice(0, 3), error });
 }
 const summary = { shapes: chosen.size, runs: results.length, accepted: results.filter(r => r.accepted).length,
-  failed: results.filter(r => !r.accepted).map(r => ({ key: r.key, id: r.id, status: r.status, detail: r.detail, error: r.error, tool_errors: r.tool_errors })) };
+  failed: results.filter(r => !r.accepted).map(r => ({ key: r.key, id: r.id, status: r.status, arity_errors: r.arity_errors, detail: r.detail, error: r.error, tool_errors: r.tool_errors })) };
 fs.writeFileSync(out, JSON.stringify({ schema: 'natlang.composed-structure-smoke/1', input, summary, results }, null, 1) + '\n');
 console.log(JSON.stringify({ shapes: summary.shapes, runs: summary.runs, accepted: summary.accepted }));

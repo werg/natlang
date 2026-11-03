@@ -7,7 +7,11 @@ successive batches differ; the ledger records what each batch actually admitted.
   authoring_rotation.py next   --ledger L.jsonl --datasets D.txt --constructs C.txt --problems P.txt --worker W \\
                                [--claim --batch DIR] [--claim-hours 6]
   authoring_rotation.py record --ledger L.jsonl --dataset D --construct C --problem P --worker W --batch DIR \\
-                               --admitted N
+                               --admitted N [--credit CONSTRUCT=N ...] [--credit-from ADMITTED_CASES.jsonl]
+A batch usually covers several constructs. ``record`` credits every genuine construct of the batch, not only the cell's
+primary one: ``--credit CONSTRUCT=N`` (repeatable) names the number of admitted tasks genuinely covering each, or
+``--credit-from`` reads them from the batch's admitted converted cases (``curriculum.external.constructs``; tags the
+audit removed are not there). Without either, only the primary construct is credited, as before.
 ``next --claim`` reserves the chosen cell for that batch (a pending ledger entry), so concurrent and sequential
 workers get different cells; ``record`` finalizes the batch's claim. A claim not recorded within ``--claim-hours``
 expires. Admitted counts come only from recorded entries.
@@ -52,7 +56,9 @@ def main(argv=None):
     nxt.add_argument('--claim-hours', type=float, default=6.)
     for key in ('dataset', 'construct', 'problem', 'worker', 'batch'):
         rec.add_argument('--' + key, required=True)
-    rec.add_argument('--admitted', type=int, required=True)
+    rec.add_argument('--admitted', type=int)
+    rec.add_argument('--credit', action='append', default=[], metavar='CONSTRUCT=N')
+    rec.add_argument('--credit-from', metavar='CASES.jsonl')
     args = parser.parse_args(argv)
     import fcntl
     # The ledger and its directory are created on first use; a missing ledger is an empty rotation.
@@ -64,8 +70,21 @@ def main(argv=None):
     recorded_batches = {entry['batch'] for entry in all_entries if entry.get('status', 'recorded') == 'recorded'}
     entries = [entry for entry in all_entries if entry.get('status', 'recorded') == 'recorded']
     if args.command == 'record':
+        credits = {}
+        if args.credit_from:
+            rows = [json.loads(line) for line in Path(args.credit_from).read_text().splitlines() if line.strip()]
+            credits = dict(collections.Counter(c for row in rows
+                                               for c in row['curriculum']['external'].get('constructs', [])))
+            if args.admitted is None:
+                args.admitted = len(rows)
+        for item in args.credit:
+            name, _, count = item.partition('=')
+            credits[name] = int(count)
+        if args.admitted is None:
+            raise SystemExit('record needs --admitted (or --credit-from)')
         entry = {'unix': time.time(), 'status': 'recorded', 'dataset': args.dataset, 'construct': args.construct,
-                 'problem': args.problem, 'worker': args.worker, 'batch': args.batch, 'admitted': args.admitted}
+                 'problem': args.problem, 'worker': args.worker, 'batch': args.batch, 'admitted': args.admitted,
+                 **({'credits': credits} if credits else {})}
         with open(args.ledger, 'a') as handle:
             handle.write(json.dumps(entry) + '\n')
         print(json.dumps(entry))
@@ -77,7 +96,8 @@ def main(argv=None):
         cell = (entry['dataset'], entry['construct'], entry['problem'])
         admitted[cell] += entry['admitted']
         batches[cell] += 1
-        by_construct[entry['construct']] += entry['admitted']
+        for construct, count in (entry.get('credits') or {entry['construct']: entry['admitted']}).items():
+            by_construct[construct] += count
         mode = 'B-original' if entry['dataset'].startswith('invented:') else 'A-dataset'
         by_mode[mode] += entry['admitted']
         if mode == 'B-original':
