@@ -90,19 +90,23 @@ def world_text(case):
     semantics = case.get('semantics') or {}
     files = {path: text for path, text in (semantics.get('files') or {}).items() if not path.endswith('.nl')}
     rest = {key: value for key, value in semantics.items() if key not in ('files', 'expected', 'root')}
-    return json.dumps({'world': rest, 'files': files}, sort_keys=True, ensure_ascii=False, default=str)[:8000]
+    return json.dumps({'world': rest, 'files': files}, sort_keys=True, ensure_ascii=False, default=str)[:400000]
 
 
 def dedupe(groups, threshold):
-    """Drop a component whose representative world nearly repeats a kept one (the bank pool's near-duplicate rule)."""
-    kept, texts = [], []
+    """Drop a component whose representative world nearly repeats a kept one: the corpus near-duplicate rule
+    (scripts/neuralese_data/dedup.py, bottom-k MinHash Jaccard over word 5-shingles); worlds too short to sketch
+    are compared exactly."""
+    from scripts.neuralese_data.dedup import jaccard_estimate, sketch
+    kept, seen = [], []
     for group in groups:
         text = world_text(group[0])
-        if any(difflib.SequenceMatcher(None, text, other, autojunk=False).quick_ratio() >= threshold and
-               difflib.SequenceMatcher(None, text, other, autojunk=False).ratio() >= threshold for other in texts):
+        signature = sketch(text)
+        if any((jaccard_estimate(signature, other) >= threshold) if signature and other else text == other_text
+               for other, other_text in seen):
             continue
         kept.append(group)
-        texts.append(text)
+        seen.append((signature, text))
     return kept
 
 
