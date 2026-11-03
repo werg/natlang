@@ -17,7 +17,7 @@ Nothing is launched and no checkpoint is written. Launch (DGX):
   python3 scripts/memory_ledger.py run --unit <unit> --budget-gb 110 --priority high -- \\
     env PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \\
     NATLANG_REPO=<runtime> PYTHONPATH=<runtime>/training/neuralese:<runtime> \\
-    /home/werg/natlang/.venv-neuralese/bin/python -m natlang_neuralese.rl.production run --config <config-out>
+    <repo>/.venv-neuralese/bin/python -m natlang_neuralese.rl.production run --config <config-out>
 
 Run this script with the frozen runtime's package on PYTHONPATH.
 """
