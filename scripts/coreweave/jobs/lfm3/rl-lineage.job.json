@@ -4,13 +4,13 @@
  "kind": "train",
  "placement": {
   "where": "coreweave",
-  "reason": "LFM3 whole-graph RL (JOLT+ or self-distillation), one lineage per GPU sandbox (plans/neuralese/LFM3_RL_CLOUD_20261031.md): the SGLang-fork actor collects a round, the native learner updates, alternating as alt_par.sh does per lineage on DGX. Full state exports at every round boundary to private W&B storage and the DGX hub (rl_cloud.py export)."
+  "reason": "LFM3 lineages, one per GPU sandbox (plans/neuralese/LFM3_RL_CLOUD_20261031.md): a joint-SFT lineage trains window after window from the earned DGX boundary; an RL lineage (JOLT+ or self-distillation) alternates its actor and learner as alt_par.sh does on DGX. Full state exports at every boundary (and periodically within an SFT window) to private W&B storage and the DGX hub (rl_cloud.py export)."
  },
  "image": "nvcr.io/nvidia/pytorch@sha256:f71fd67f6d71f685e0bd08ce6c8df48807624cc5d48886370d3471bc4f89d81d",
  "resources": {
   "gpu": 1,
-  "cpu": "16",
-  "memory": "96Gi"
+  "cpu": "8",
+  "memory": "64Gi"
  },
  "lifetime_hours": 720,
  "scratch": {
@@ -20,7 +20,6 @@
  "transport": "api",
  "env": {
   "HF_HUB_OFFLINE": "1",
-  "NATLANG_CW_BUILD_TSHOST": "1",
   "NATLANG_CW_COLLECT_WAIT": "60",
   "TORCHINDUCTOR_CACHE_DIR": "/work/.cache/inductor",
   "TRITON_CACHE_DIR": "/work/.cache/triton",
@@ -48,6 +47,6 @@
   "lineage_owner": "dgx",
   "moves_active_lineage": true
  },
- "resource_notes": "Explicit CPU and RAM minima (owner 2026-10-29; inference sandboxes >= 8 CPU). 16 CPU: 12-24 natlang node workers + the SGLang scheduler + controller during collection. 96Gi: DGX-measured per-lineage host use is about 18 GB while collecting (node workers 6.6, serve front 4.4, SGLang 2.7, controller up to 4) and about 17 GB learner RSS plus the 15 GB full-state checkpoint load while updating; replace with the measured cgroup peak (+25%) from the first rounds. GPU: the learner peaked at 64 GB CUDA on DGX (max graph forward 180k tokens), so H100-80GB or larger.",
- "bundle_plan": "rl_cloud.py bundle RUN.json (code snapshot, wheelhouse, SGLang fork source + x86_64 lock, HF base, custody packets, config dependencies, task source); rl_cloud.py launch RUN.json LINEAGE pushes it and the rl-parent capability."
+ "resource_notes": "Exactly one GPU, explicit CPU/RAM minima (owner 2026-10-29: learners 8 CPU / 64Gi; inference engines >= 8 CPU). The template default is the joint-SFT learner: DGX R38 window learner host RSS ~11-27 GB plus the 15 GB full-state checkpoint load. RL lineages (actor + 12-24 natlang node workers + learner; DGX-measured ~18 GB host while collecting) declare more in the run file's per-lineage \"resources\" (16 CPU / 96Gi). Replace with the measured cgroup peak (+25%) each call logs (call_done memory_peak). GPU: unconstrained; the learner's capacity qualification re-measures on the assigned GPU (DGX GB10 peaks ~64 GB CUDA).",
+ "bundle_plan": "rl_cloud.py seed RUN.json LINEAGE (window 0, input closure, parent ZIP delta), rl_cloud.py bundle RUN.json (code snapshot, wheelhouse, HF base; RL: custody packets, task source, SGLang fork only when used); rl_cloud.py launch RUN.json LINEAGE pushes the bundle and the rl-parent capability."
 }

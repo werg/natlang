@@ -4,7 +4,9 @@ Whole-graph RL (JOLT+ and rejection-sampled self-distillation) moves from the sh
 sandboxes spread over the four new accounts (cw1..cw4). The DGX is the hub: seeds, the newest verified state of every
 lineage, decisions. Code: `scripts/coreweave/rl_cloud.py` (DGX), `scripts/coreweave/lfm3_rl_lineage.sh` and
 `scripts/coreweave/rl_cloud_sandbox.py` (sandbox), job template `scripts/coreweave/jobs/lfm3/rl-lineage.job.json`.
-Run file (machine paths, not in the repo): `/home/werg/data/lfm3-rl-cloud/run.json`. Operations log:
+Run files (machine paths, not in the repo): current `/mnt/external/natlang-lfm3-cloud-20261103/run.json` (joint-SFT
+continuation of the earned DGX lineage, section "Joint-SFT lineages" below); the old fresh-init RL run
+`/home/werg/data/lfm3-rl-cloud/run.json` is held and obsolete. Operations log:
 `/home/werg/data/lfm3-rl-dgx-20261029/ops/decisions.log` (lines `cloud lfm3-rl-cloud-20261031: ...`).
 
 ## Shape
@@ -158,3 +160,56 @@ and template runtime `runtime-9fbae2582` (broad source 7bbf8e055 + Neuralese bon
 a deterministic tar.zst stored once as a content-addressed W&B blob (sha256-checked on fetch, DGX copy authoritative),
 restored at the same absolute path by the sandbox before the controller starts; the bundle no longer carries them. The DGX lineages switch to the same source and runtime at their next unbound round (cutover.sh);
 `lfm3-rl-broad-watch` reports per-source success of each lineage's first broad round with failure samples.
+
+## Joint-SFT lineages: continuing the earned DGX lineage (2026-11-03)
+
+The current DGX production work is the mandatory joint Natlang/native Neuralese SFT (`native_joint_sft_v4`, frozen
+runtime R38) run as *windows*: one mandatory supervised controller trains to its qualified semantic-refresh boundary
+(`refresh_after_updates`), stops with `awaiting_semantic_refresh` and `pending_native_checkpoint`, and the next window
+is a new controller continuing from that earned checkpoint (`native_supervised.continuation_config`). A cloud
+joint-SFT lineage runs exactly that, window after window, in one GPU sandbox:
+
+- Run file lineage `{"controller": DGX window config}`. `rl_cloud.py seed` reads that controller's **live** state:
+  a completed window continues as the next window (`scripts/neuralese_data/sft_window.py next`, the generalized DGX
+  window operator, run under the lineage's frozen runtime package); a window still training or failed offers only its
+  own parent (the same window rerun from it). A control the DGX has already moved past (a sibling `OPS/*/config.json`
+  naming it as `prior_control`) is refused. Window 0 lives at `ROOT/<lineage>/w000000`, the parent at
+  `ROOT/<lineage>/parent/checkpoint.pt`, the window index at `ROOT/<lineage>/lineage.json`.
+- Host-only controls are dropped, not copied: the DGX `admit-learner-100g.py` ledger wrapper and `update_lock.sh`
+  (`rl_cloud.sandbox_command`), the aarch64 llama.cpp converter; the resident source plan moves beside the window. The
+  sandbox owns its equivalents (`lfm3_rl_lineage.sh`: 40 GiB checkpoint floor, discrete CUDA, first-update profile and
+  behaviour-replay receipts per window; no lock with one lineage per GPU; no `NATLANG_CUDA_MEMORY_GB`, so capacity
+  qualification measures the assigned GPU).
+- Inputs: the frozen R38 runtime archive (installed whole at its DGX path, protected-input closure hash checked) and
+  the window's exact input closure (`sft_window.py closure`: every path the control names, the recipe resolver's files
+  and stage inputs, the runtime's protected-custody files; checkpoints, the runtime, the HF base, environment, scratch
+  and the window's own output excluded; >4 GiB external provenance excluded and reported). Files already committed in a
+  readable store (`blob_stores`: the private recovery store) become exact `file` inputs; only the rest is packed and
+  uploaded once. On 2026-11-03: 349 files, 7.07 GB, of which 248 (5.86 GB) were already private; 101 (1.21 GB) packed.
+- Parent: an exact ZIP delta (`artifact_zip_delta.py`) over the nearest declared full base whose bytes are on the DGX
+  (`checkpoint_bases`: `bf95…`, itself a delta over the raw private base `0c8e75f6…`), decoded once on the DGX before
+  upload; the sandbox fetches the raw base at cloud bandwidth and reconstructs the chain, each step verified against
+  its bound target hash. Trained deltas from `bf95` measured 3.2-3.7 GB vs 15.4 GB raw.
+- Progress: a window counts when it reaches its boundary with optimizer updates (no RL `trained_rounds` involved).
+  Exports select the actual resume checkpoints: a completed window's pending checkpoint; an interrupted window's
+  rolling slot plus the exact parent its `rolling_sft_resume` binds; else the controller parent. The window metadata
+  (state, controls, learner reports/receipts, resident plan; no checkpoints, reservations, locks or actor views) travels
+  as a `window` blob. A boundary is staged when it changes (state, control, checkpoint inode/size/mtime), after every
+  window and every `NATLANG_CW_STAGE_SECONDS` (default 1800) while a window trains.
+- Setup is conditional: the SGLang fork venv only for an RL actor with `--engine sglang`; the code-snapshot runtime
+  build and ts-host only for RL lineages bound to `ROOT/runtime`.
+- Resources: exactly one GPU, 8 CPU / 64Gi for a joint-SFT learner (job template default), 720 h lifetime; RL lineages
+  declare their own larger `resources`. `rl_cloud.py plan RUN.json` shows account placement (spread by load across the
+  eligible accounts), resources and the boundary a seed would select now, allocating nothing.
+
+    PY=/home/werg/.local/share/natlang/cw-venv/bin/python; RUN=/mnt/external/natlang-lfm3-cloud-20261103/run.json
+    $PY scripts/coreweave/rl_cloud.py plan $RUN
+    python3 scripts/memory_ledger.py run --unit rl-cloud-seed-joint --budget-gb 24 --priority high -- \
+      $PY scripts/coreweave/rl_cloud.py seed $RUN joint-sft      # loads the earned checkpoint once; builds the delta
+    $PY scripts/coreweave/rl_cloud.py bundle $RUN
+    $PY scripts/coreweave/rl_cloud.py launch $RUN joint-sft --dry-run
+    $PY scripts/coreweave/rl_cloud.py launch $RUN joint-sft      # then the exporter service as above
+
+One cloud joint-SFT lineage is one learner. Independent forks of the same window on the same data duplicate exposure
+rather than adding progress; several GPUs on this one lineage need DiLoCo (`diloco.py`, coordinator on a dedicated
+CPU sandbox, replica in another account), which this path does not provide.
