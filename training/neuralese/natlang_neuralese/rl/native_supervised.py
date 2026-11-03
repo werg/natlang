@@ -172,7 +172,8 @@ def continuation_config(config,stage,*,checkpoint,out):
                 {'path':str(source_state.resolve()),'sha256':sha256_file_hex_cached(source_state)},
                 Path(out)/'control-inputs',config['cases'])
             if selector is not None:result['task_selection_history']=selector
-        if source.get('execution_transition_admission') is not None:
+        if (source.get('execution_transition_admission') is not None
+                and not _successor_folded_admission(source,checkpoint)):
             result['execution_transition_source_controller']=snapshot_execution_source_controller(
                 {'path':str(source_state.resolve()),'sha256':sha256_file_hex_cached(source_state)},
                 Path(out)/'control-inputs')
@@ -183,6 +184,27 @@ def continuation_config(config,stage,*,checkpoint,out):
     bind_seed_sources(result,sources)
     bind_seed_objective(result,stage['kind'],sources)
     return result,sources
+
+
+def _successor_folded_admission(source, checkpoint):
+    """A trained successor carries its earned execution admission itself.
+
+    The controller still names the qualified parent it adopted. Once SGD has
+    folded that exact admission into the new checkpoint's execution history,
+    the continuation does not re-inherit the parent's controller authority.
+    """
+    if not source.get('checkpoint') or sha256_file_hex_cached(source['checkpoint'])==sha256_file_hex_cached(checkpoint):
+        return False
+    from ..train.checkpoint_policy import CheckpointPolicy
+    from ..train.native_execution_transition import require_qualified_for_training
+    training=CheckpointPolicy.load(checkpoint)['training']
+    history=(training.get('options') or {}).get('native_shared_execution_history') or []
+    folded=[entry for entry in history if isinstance(entry,dict) and isinstance(entry.get('qualification'),dict)]
+    if len(folded)!=1 or folded[0]['qualification'].get('admission')!=source['execution_transition_admission']:
+        return False
+    require_qualified_for_training(training,admission_ref=source['execution_transition_admission'],
+                                   checkpoint_path=str(checkpoint))
+    return True
 
 
 def snapshot_execution_source_controller(reference, directory):

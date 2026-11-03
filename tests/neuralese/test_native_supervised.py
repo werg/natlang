@@ -466,3 +466,21 @@ def test_mandatory_seed_inherits_controller_admission_and_rejects_config_injecti
     assert values['seed_trainer_args']==values['trainer_args']
     with pytest.raises(ValueError,match='owned by the controller'):
         supervised.prepare_seed_command({**config,'trainer_parameters':{'execution_transition_admission':'forged'}},tmp_path,values,state,tmp_path/'state.json')
+
+
+def test_trained_successor_carries_folded_execution_admission(tmp_path,monkeypatch):
+    from natlang_neuralese.train import checkpoint_policy, native_execution_transition as transition
+    parent=tmp_path/'parent.pt';parent.write_bytes(b'qualified parent')
+    child=tmp_path/'child.pt';child.write_bytes(b'earned child')
+    admission={'path':str(tmp_path/'selected.json'),'sha256':'a'*64}
+    source={'checkpoint':str(parent),'execution_transition_admission':admission}
+    def load(path,history):
+        return {'training':{'options':{'native_shared_execution_history':history}}}
+    checked=[]
+    monkeypatch.setattr(transition,'require_qualified_for_training',lambda training,**kw:checked.append(kw) or training)
+    folded=[{'qualification':{'admission':admission}}]
+    monkeypatch.setattr(checkpoint_policy.CheckpointPolicy,'load',staticmethod(lambda path:load(path,folded)))
+    assert supervised._successor_folded_admission(source,child) and checked[-1]['admission_ref']==admission
+    assert not supervised._successor_folded_admission(source,parent)
+    monkeypatch.setattr(checkpoint_policy.CheckpointPolicy,'load',staticmethod(lambda path:load(path,[{'qualification':{'admission':{'path':'other'}}}])))
+    assert not supervised._successor_folded_admission(source,child)
