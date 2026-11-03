@@ -175,6 +175,34 @@ def chunk_summary_seed(text: str, question: str = '') -> dict:
             'provenance': 'mechanical:chunk-summary', 'parts': [part for part, _ in chosen]}
 
 
+# Fact kinds the mechanical guidance seed leads with, and how it introduces each. Feedback/failure kinds describe a
+# mistaken attempt: the writer is told never to repeat a mistaken result (writeGuidance.nl step 4), so the mechanical
+# seed does not copy them either.
+GUIDANCE_FACT_LEADS = {
+    'expected_result': 'A correct result', 'expected_stop': 'A correct stop', 'expected_files': 'Files a correct result has',
+    'expected_effects': 'Effects a correct result has', 'child_value': 'A correct value for this call',
+    'reference_solution': 'A way to get there', 'minimum_sequence': 'Steps that get there',
+    'decisive': 'What decides it', 'teacher_trajectory': 'How a verified run did it',
+    'fit_hindsight': 'What worked'}
+
+
+def guidance_seed(facts: list) -> dict:
+    """The deterministic guidance of one writer site when no checked guidance exists: {text, provenance}.
+
+    Built only from the verified facts the writer was given, in their selected order: one numbered line per usable fact
+    (its kind's lead, then the fact text), clipped to a budget scaled to the facts' size. Input-specific by construction
+    (the facts are the call's own); feedback and failure facts are left out (they describe a mistaken attempt).
+    """
+    usable = [fact for fact in facts if isinstance(fact, dict) and fact.get('kind') in GUIDANCE_FACT_LEADS
+              and isinstance(fact.get('text'), str) and fact['text'].strip()]
+    if not usable:
+        raise ValueError('guidance-seed-without-usable-facts')
+    budget = budget_chars(sum(len(fact['text']) for fact in usable), floor=200, ceiling=2000, share=0.5)
+    lines = [f"{number}. {GUIDANCE_FACT_LEADS[fact['kind']]}: {fact['text'].strip()}"
+             for number, fact in enumerate(usable, 1)]
+    return {'text': _clip('\n'.join(lines), budget), 'provenance': 'mechanical:guidance-facts'}
+
+
 def supplied_seed(source: dict) -> dict | None:
     """A converter-supplied gold/checked seed, validated; None when absent."""
     seed = (source.get('meta') or {}).get('operator_seed')

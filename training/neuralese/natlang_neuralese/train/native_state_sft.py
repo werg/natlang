@@ -1513,8 +1513,9 @@ def build_parser():
         help='attach the learned Neuralese operator rows (model/learned_operators.py; text-initialized when added, a '
              'recorded learned-row addition with new Adam moments); the declared operator stage sets all')
     parser.add_argument('--operator-seed-schedule', default=None,
-        help='JSON {start, end, updates}: the CE weight of learned-operator seed spans, linear from start to end over '
-             'that many updates counted from its adoption (learned_operators.seed_schedule). Omitted with operator '
+        help='JSON {schema?, start, end, updates}: the CE weight of learned-operator seed spans, linear from start to end '
+             'over that many updates counted from its adoption (learned_operators.seed_schedule; default schema /2 keeps '
+             'the closing marker at weight 1, /1 anneals it with the seed). Omitted with operator '
              'rows: learned_operators.DEFAULT_SEED_SCHEDULE; "off" keeps seed weights at 1')
     parser.add_argument('--foundation-communication-batches', type=int,
         help='while the exact declared foundation is pending, communication batches per priority ordinary batch')
@@ -2320,15 +2321,21 @@ def _main(argv=None, *, requested_refresh):
     operator_seed_schedule = None
     requested_seed_schedule = getattr(args, 'operator_seed_schedule', None)
     if getattr(model, 'operator_rows', None) is not None and requested_seed_schedule != 'off':
-        from ..model.learned_operators import DEFAULT_SEED_SCHEDULE, seed_schedule
-        operator_seed_schedule = seed_schedule(json.loads(requested_seed_schedule)
-                                               if requested_seed_schedule else DEFAULT_SEED_SCHEDULE)
-        saved_schedule = (saved_training.get('options') or {}).get('operator_seed_schedule') or {}
-        same = all(saved_schedule.get(key) == operator_seed_schedule[key] for key in ('start', 'end', 'updates'))
-        # A carried schedule keeps its adoption step; a changed one is a declared transition starting now.
-        operator_seed_schedule['adopted_at_global_step'] = (saved_schedule['adopted_at_global_step'] if same and saved_schedule
-            else int(saved_training.get('global_step', saved_training.get('step', 0))))
+        from ..model.learned_operators import DEFAULT_SEED_SCHEDULE, seed_schedule, seed_schedule_transition
+        requested = seed_schedule(json.loads(requested_seed_schedule)
+                                  if requested_seed_schedule else DEFAULT_SEED_SCHEDULE)
+        saved_options = saved_training.get('options') or {}
+        # A carried schedule keeps its adoption step; a changed one (numbers or schema, e.g. /1 -> /2 whose closing
+        # marker keeps CE weight 1) is a recorded transition at this step; earlier updates keep their recorded schedule.
+        operator_seed_schedule, seed_transition = seed_schedule_transition(
+            saved_options.get('operator_seed_schedule'), requested,
+            int(saved_training.get('global_step', saved_training.get('step', 0))))
         checkpoint_options['operator_seed_schedule'] = operator_seed_schedule
+        seed_history = list(saved_options.get('operator_seed_schedule_history') or [])
+        if seed_transition is not None:
+            seed_history.append(seed_transition)
+        if seed_history:
+            checkpoint_options['operator_seed_schedule_history'] = seed_history
     norm_history = list((saved_training.get('options') or {}).get('ordinary_precision_history') or [])
     if norm_upgrade and norm_upgrade['previous_profile'] != norm_upgrade['profile']:
         norm_history.append({**norm_upgrade, 'at_global_step':int(saved_training.get('global_step',saved_training.get('step',0)))})
@@ -4282,7 +4289,8 @@ def _main(argv=None, *, requested_refresh):
             if seed_schedule_spec is not None:
                 from ..model.learned_operators import seed_factor, seed_weighted
                 seed_weight = seed_factor(seed_schedule_spec, global_step - seed_schedule_spec['adopted_at_global_step'])
-                micro_batches = [[seed_weighted(example, seed_weight) for example in micro] for micro in micro_batches]
+                micro_batches = [[seed_weighted(example, seed_weight, seed_schedule_spec) for example in micro]
+                                 for micro in micro_batches]
             batch = [example for micro in micro_batches for example in micro]
             batch_tokens = sum(train.entries[index]['forward_tokens'] for index in indices)
             cursor = indices[-1] + 1

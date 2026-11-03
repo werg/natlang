@@ -30,6 +30,7 @@ from .native_graph_schema import SCHEMA, parse_graph
 from .port_record_graph import _serving_messages, _target_message, _target_reply
 
 CONVERSION = 'natlang.operator-graph-conversion/1'
+GUIDANCE_CONVERSION = 'natlang.guidance-operator-graph-conversion/1'
 SHOWN_CHARS = 2000  # ts-host native/cutoff.ts SHOWN_CHARS
 IMITATION_LABELS = {'gold', 'checked'}
 
@@ -193,6 +194,9 @@ class OperatorGraphRenderer:
 
     def render(self, record: dict, name: str, *, corpus_id: str, source_row_sha256: str, source_ref: dict):
         """(graph row, text-cut row) for one case, or OperatorCaseError with the omission reason."""
+        if name == 'guidance':
+            return self.render_guidance(record, corpus_id=corpus_id, source_row_sha256=source_row_sha256,
+                                        source_ref=source_ref)
         spec = operator(name)
         if record.get('outcome', {}).get('label') not in IMITATION_LABELS:
             raise OperatorCaseError('target-not-imitation-label')
@@ -264,6 +268,129 @@ class OperatorGraphRenderer:
                     'nodes': [{'name': 'consumer', 'token_ids': cut_ids,
                                'target_weights': [0.] * cut_context + [1.] * len(target_ids)}],
                     'operator_conversion': {**conversion, 'variant': 'text-cut', 'shown_chars': SHOWN_CHARS}}
+        for row in (graph, text_cut):
+            try:
+                parse_graph(row, tokenizer_fingerprint=self.fingerprint)
+            except ValueError as error:
+                raise OperatorCaseError(f'graph-invalid: {error}') from None
+        return graph, text_cut
+
+
+    def privileged_rendering(self):
+        """The engine's guidance-turn rendering for this tokenizer (rl/privileged_context.PrivilegedRendering)."""
+        from types import SimpleNamespace
+        from .render import Renderer
+        from ..rl.privileged_context import PrivilegedRendering
+        from ..serve.chat import tokenizer_model_type
+        # The serving engine's own construction (serve/engine.py privileged rendering), so the digest matches.
+        renderer = Renderer(self.tokenizer, SimpleNamespace(open_id=self.role_ids[0], close_id=self.role_ids[1]))
+        return PrivilegedRendering.from_renderer(renderer, template=tokenizer_model_type(self.tokenizer),
+                                                 tokenizer_fingerprint=self.fingerprint,
+                                                 consume_open=self.role_ids[2], consume_close=self.role_ids[3])
+
+    def render_guidance(self, case: dict, *, corpus_id: str, source_row_sha256: str, source_ref: dict):
+        """(graph row, no-guidance-baseline rows) of one ``natlang.guidance-case/1`` (data/guidance_cases.py).
+
+        Producer ``op0``: the recorded writeGuidance call (its request messages and tools) with the operator prompt
+        rows on the writer's instruction text, then ``produce_open``, the seed (the checked text-writer guidance,
+        else the mechanical seed of the facts it was given) and ``produce_close``; seed and close carry CE weight 1.
+        Consumers ``consumer<i>``: each consuming invocation's recorded student-form first turn with the engine's
+        guidance turn (header, then the imported state between consume markers) spliced in after its leading
+        system turn, exactly as ``guidance_plan`` places it; its checked reply is the only supervised span. The
+        sibling is the same consumers with the facts as the engine's text turn (the runtime's text fallback): the
+        baseline the operator must beat.
+        """
+        from .operator_seeds import guidance_seed, supplied_seed
+        from .guidance_cases import SCHEMA as CASE_SCHEMA, check_case
+        if case.get('schema') != CASE_SCHEMA:
+            raise OperatorCaseError('not-a-guidance-case')
+        try:
+            check_case(case)
+        except ValueError as error:
+            raise OperatorCaseError(f'case-invalid: {error}') from None
+        if case['outcome'].get('label') not in IMITATION_LABELS:
+            raise OperatorCaseError('target-not-imitation-label')
+        spec, binding = operator('guidance'), self.bindings['guidance']
+        writer = case['writer']
+        site_text = '\n'.join(message['content'] for message in writer['messages'] if isinstance(message.get('content'), str))
+        if any(fact['text'] not in site_text for fact in writer['facts']):
+            raise OperatorCaseError('writer-site-lacks-facts: a credited fact is not in the recorded writer call')
+        tools = writer.get('tools') or None
+        try:
+            ids, (prompt_start, prompt_stop) = self.site('guidance', instructions='', tools=tools,
+                                                         source=_serving_messages(writer['messages']))
+        except ValueError as error:
+            raise OperatorCaseError(f'writer-site: {error}') from None
+        seed = supplied_seed({'meta': {'operator_seed': case['guidance']}}) if case.get('guidance') else None
+        if seed is None:
+            try:
+                seed = guidance_seed(writer['facts'])
+            except ValueError as error:
+                raise OperatorCaseError(str(error)) from None
+        seed_ids = [token for token in self._ids(seed['text'], escaped=True) if token not in self.role_ids]
+        if not seed_ids:
+            raise OperatorCaseError('seed-empty')
+        clipped = len(seed_ids) > spec.seed_cap
+        seed_ids = seed_ids[:spec.seed_cap]
+        seed_start, seed_stop = len(ids), len(ids) + len(seed_ids)
+        producer = {'name': 'op0', 'token_ids': [*ids, *seed_ids, self.role_ids[1]],
+                    'target_weights': [0.] * len(ids) + [1.] * (len(seed_ids) + 1), 'producing': [[seed_start, seed_stop]]}
+        declared = [{'operator': 'guidance', 'version': spec.version, 'node': 'op0', 'kind': 'prompt',
+                     'start': prompt_start, 'stop': prompt_stop},
+                    {'operator': 'guidance', 'version': spec.version, 'node': 'op0', 'kind': 'seed',
+                     'start': seed_start, 'stop': seed_stop, 'provenance': seed['provenance']}]
+        rendering = self.privileged_rendering()
+        state_turn, import_offset = rendering.state_turn()
+        # The engine's text fallback packs whole facts into its token budget (privileged_context.guidance_plan).
+        shown = []
+        for fact in writer['facts']:
+            if len(rendering.turn([*shown, fact['text']])) <= rendering.budget_tokens:
+                shown.append(fact['text'])
+        text_turn = rendering.turn(shown) if shown else []
+        consumers, baselines, target_tokens = [], [], []
+        for index, consumer in enumerate(case['consumers']):
+            context, _ = self._render(_serving_messages(consumer['context']), consumer.get('tools') or None, {},
+                                      generation=True)
+            try:
+                insert_at, _ = rendering.insertion_point(context)
+                target_ids = _target_reply(self.tokenizer, _target_message(_RowView({'target': consumer['target']})),
+                                           consumer.get('tools') or None)
+            except ValueError as error:
+                raise OperatorCaseError(f'consumer-render: {error}') from None
+            own = [*context[:insert_at], *state_turn, *context[insert_at:]]
+            consumers.append({'name': f'consumer{index}', 'token_ids': [*own, *target_ids],
+                              'target_weights': [0.] * len(own) + [1.] * len(target_ids),
+                              'imports': [{'at': insert_at + import_offset, 'source': 'op0',
+                                           'start': seed_start, 'stop': seed_stop}]})
+            cut = [*context[:insert_at], *text_turn, *context[insert_at:]]
+            baselines.append({'name': f'consumer{index}', 'token_ids': [*cut, *target_ids],
+                              'target_weights': [0.] * len(cut) + [1.] * len(target_ids)})
+            target_tokens.append(len(target_ids))
+        total = len(producer['token_ids']) + sum(len(node['token_ids']) for node in consumers)
+        if total > self.max_tokens:
+            raise OperatorCaseError(f'over-token-cap: {total} > {self.max_tokens}')
+        split = 'test' if case['split'] in ('test', 'validation') else 'train'
+        groups = sorted(set(case['split_groups']))
+        graph_id = f'operator:guidance:{source_row_sha256}'
+        conversion = {'schema': GUIDANCE_CONVERSION, 'operator': 'guidance', 'operator_version': spec.version,
+                      'registry_sha256': registry_sha256(['guidance']), 'corpus_id': corpus_id,
+                      'binding_sha256': hashlib.sha256(json.dumps(binding, sort_keys=True).encode()).hexdigest(),
+                      'rendering': rendering.declaration(), 'source_row_sha256': source_row_sha256,
+                      'source_ref': source_ref, 'original_id': case['id'], 'original_split': case['split'],
+                      'family': case.get('family'), 'outcome_label': case['outcome']['label'],
+                      'outcome_checked': case['outcome'].get('checked'), 'lineage': case.get('lineage'),
+                      'seeds': [{'provenance': seed['provenance'], 'origin': seed.get('origin'),
+                                 'tokens': len(seed_ids), 'clipped': clipped,
+                                 'text_sha256': hashlib.sha256(seed['text'].encode()).hexdigest()}],
+                      'facts': [{'id': fact['id'], 'kind': fact['kind']} for fact in writer['facts']],
+                      'span_tokens': [seed_stop - seed_start], 'site_tokens': len(ids),
+                      'target_tokens': target_tokens, 'context_weight': 0.0}
+        graph = {'schema': SCHEMA, 'id': graph_id, 'split': split, 'source_groups': groups,
+                 'tokenizer_fingerprint': self.fingerprint, 'nodes': [producer, *consumers], 'operators': declared,
+                 'operator_conversion': conversion}
+        text_cut = {'schema': SCHEMA, 'id': 'text-cut:' + graph_id, 'text_cut_of': graph_id, 'split': split,
+                    'source_groups': groups, 'tokenizer_fingerprint': self.fingerprint, 'nodes': baselines,
+                    'operator_conversion': {**conversion, 'variant': 'facts-text-turn'}}
         for row in (graph, text_cut):
             try:
                 parse_graph(row, tokenizer_fingerprint=self.fingerprint)

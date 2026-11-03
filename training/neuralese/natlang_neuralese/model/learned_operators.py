@@ -45,7 +45,8 @@ class Operator:
     # (plans/MODEL_FACING_CHANGES.md).
     prompt: str
     # 'system': the prompt is the site's system text; 'user-suffix': a final user message after the input
-    # conversation (history compaction keeps the conversation's own system/user messages in place).
+    # conversation (history compaction keeps the conversation's own system/user messages in place); 'call': the site is
+    # a recorded real call of a natlang function whose rendered instructions are the prompt text (the guidance writer).
     placement: str
     # Longest producer span in tokens: seeds are clipped to it and serving stops generating at it.
     seed_cap: int
@@ -56,7 +57,8 @@ class Operator:
     data_target: int
     purpose: str
     # How a consumer is shown the imported state(s): open + state (+ separator + state ...) + close. For 'user-suffix'
-    # operators the frame is its own user message after the first user message; otherwise it opens the first one.
+    # operators the frame is its own user message after the first user message; for 'call' operators it is its own
+    # system message after the leading system message; otherwise it opens the first user message.
     consumer_open: str = ''
     consumer_close: str = '\n\n'
     consumer_separator: str = '\n'
@@ -84,6 +86,22 @@ EXTRACT_PROMPT = (
     "combines this from several documents to complete its task and never sees the documents. Keep the facts the "
     "task needs exactly, and nothing else.")
 
+# applications/guidance-writer/writeGuidance.nl body, as the scope opening shows it (leading/trailing newlines
+# stripped), without its final period: in the call the body is followed by a blank line and LFM3 tokenizes ".\n\n" as
+# one token, so the rows stop before it and the site keeps the exact in-call token IDs.
+# tests/neuralese/test_guidance_operator.py pins it to the file: a change there is a version bump here.
+GUIDANCE_PROMPT = (
+    "1. consumer is a call about to run, and facts are verified facts about its task. consumer reads your guidance as "
+    "context before it starts; it is not shown as an answer.\n"
+    "2. Say what a correct result of consumer is, using the facts.\n"
+    "3. Say in a few numbered steps how consumer gets there from its own inputs.\n"
+    "4. When a fact is feedback from an earlier attempt, say what to do instead, so consumer reaches the correct result. "
+    "Describe only the correct way; do not repeat the mistaken result or action.\n"
+    "5. Keep it brief: only what helps consumer reach a correct result. Everything you need is in consumer and facts; "
+    "return the guidance text")
+# rl/privileged_context.PrivilegedRendering.header: the consumer's guidance turn opens with it.
+GUIDANCE_HEADER = 'Guidance for this call (training only):'
+
 OPERATORS = {operator.name: operator for operator in (
     Operator('compact-value', 2, VALUE_PROMPT, 'system', 512,
              ('tool_output', 'file', 'document', 'passage', 'record', 'schema', 'tool_doc'), 'one', 25_000,
@@ -101,6 +119,17 @@ OPERATORS = {operator.name: operator for operator in (
              ('document', 'passage', 'record', 'file', 'tool_output'), 'per-source', 30_000,
              'Neuralese-prompted extractor/summarizer whose state a parent lambda must use (bottleneck).',
              'Extracts from the documents, one per document:\n'),
+    # The guidance writer as a learned operator (MEMETIC_META_LEARNING_REVIEW_20261103.md section 6; fallow C6). Its prompt
+    # is the writer's own instruction text exactly as the native runtime renders it inside the real writeGuidance call
+    # (``Instructions:`` block of the scope opening), so the rows start as exactly that text; the site is the recorded
+    # call itself ('call' placement). The span cap matches the guidance budget a consumer renders
+    # (training-guidance.ts DEFAULT_GUIDANCE_BUDGET_TOKENS = 512). Consumers import the state the way the engine does
+    # (rl/privileged_context.PrivilegedRendering import form): its own system turn after the leading system turn.
+    Operator('guidance', 1, GUIDANCE_PROMPT, 'call', 512,
+             ('guidance_facts',), 'one', 20_000,
+             'The in-run guidance writer (applications/guidance-writer/writeGuidance.nl) writing one consumer call\'s '
+             'guidance from its selected verified facts; consumers are the program invocations importing it.',
+             GUIDANCE_HEADER + '\n', ''),
 )}
 
 
@@ -115,6 +144,8 @@ def operator_site_messages(name: str, *, instructions: str, source=None, context
     prompt = spec.prompt if prompt_part is None else prompt_part
     def content(part):
         return part if isinstance(part, str) else [part]
+    if spec.placement == 'call':
+        return call_site_messages(name, source, prompt_part)
     if spec.placement == 'system':
         if not isinstance(source, str):
             raise ValueError(f'operator {name} reads one text input')
@@ -124,6 +155,25 @@ def operator_site_messages(name: str, *, instructions: str, source=None, context
         raise ValueError(f'operator {name} compacts a list of conversation messages')
     return [*[dict(message) for message in context], *[dict(message) for message in source],
             {'role': 'user', 'content': content(prompt)}]
+
+
+def call_site_messages(name: str, messages, prompt_part=None):
+    """A 'call' operator's site: the recorded request messages of the real call, with the prompt part in place of the
+    single exact occurrence of the operator's prompt text (the function's rendered instructions)."""
+    spec = operator(name)
+    if not isinstance(messages, list) or not messages:
+        raise ValueError(f'operator {name} reads the recorded request messages of its call')
+    hits = [index for index, message in enumerate(messages)
+            if isinstance(message.get('content'), str) and spec.prompt in message['content']]
+    if len(hits) != 1 or messages[hits[0]]['content'].count(spec.prompt) != 1:
+        raise ValueError(f'operator {name} prompt must occur exactly once in its recorded call')
+    out = [dict(message) for message in messages]
+    if prompt_part is None:
+        return out
+    before, after = out[hits[0]]['content'].split(spec.prompt)
+    out[hits[0]]['content'] = [*([{'type': 'text', 'text': before}] if before else []), prompt_part,
+                               *([{'type': 'text', 'text': after}] if after else [])]
+    return out
 
 
 def operator(name: str) -> Operator:
@@ -198,6 +248,19 @@ class OperatorRows(nn.Module):
         rows = cls(bindings, embedding_weight.shape[1], dtype=dtype, device=embedding_weight.device)
         rows.reset_to_text(embedding_weight)
         return rows
+
+    @torch.no_grad()
+    def add(self, name, binding, embedding_weight):
+        """Add one operator's rows, text-initialized (a recorded learned-row addition to carried rows)."""
+        spec = operator(name)
+        if name in self.bindings or binding.get('version') != spec.version or binding.get('seed_cap') != spec.seed_cap:
+            raise ValueError(f'operator {name} is already bound or its binding differs from its registered version')
+        width = next(iter(self.prompt.values())).shape[1] if len(self.prompt) else embedding_weight.shape[1]
+        reference = next(iter(self.prompt.values()), None)
+        dtype = reference.dtype if reference is not None else torch.float32
+        ids = torch.tensor(binding['prompt_token_ids'], dtype=torch.long, device=embedding_weight.device)
+        self.bindings[name] = {key: (list(value) if isinstance(value, list) else value) for key, value in binding.items()}
+        self.prompt[_key(name)] = nn.Parameter(embedding_weight[ids].to(dtype).reshape(len(ids), width).clone())
 
     @torch.no_grad()
     def reset_to_text(self, embedding_weight):
@@ -290,9 +353,20 @@ def attach_operator_rows(model, tokenizer, *, tokenizer_fingerprint, names=None)
     wanted = {name: bind_tokens(tokenizer, name, tokenizer_fingerprint=tokenizer_fingerprint) for name in names}
     existing = getattr(model, 'operator_rows', None)
     if existing is not None:
-        if existing.bindings != wanted:
+        if any(existing.bindings.get(name, binding) != binding for name, binding in wanted.items()) \
+                or set(existing.bindings) - set(wanted):
             raise ValueError('model operator rows are bound to different operators or tokens; declare an explicit rebinding')
-        return {'schema': SCHEMA, 'added': [], 'registry_sha256': registry_sha256(names), 'parameter_names': []}
+        missing = sorted(set(wanted) - set(existing.bindings))
+        if not missing:
+            return {'schema': SCHEMA, 'added': [], 'registry_sha256': registry_sha256(names), 'parameter_names': []}
+        # A newly registered operator joins carried rows: its rows are text-initialized, the carried rows (values and
+        # optimizer history) are untouched.
+        for name in missing:
+            existing.add(name, wanted[name], model.port.embedding_weight)
+        return {'schema': SCHEMA, 'added': missing, 'registry_sha256': registry_sha256(names),
+                'parameter_names': ['interface.operator_rows.prompt.' + _key(name) for name in missing],
+                'dtype': str(model.input_rows.dtype), 'initialization': 'text-embedding-rows',
+                'carried': sorted(set(existing.bindings) - set(missing))}
     dtype = model.input_rows.dtype
     rows = OperatorRows(wanted, model.port.embedding_weight.shape[1], dtype=dtype, device=model.port.embedding_weight.device)
     rows.reset_to_text(model.port.embedding_weight)
@@ -328,25 +402,35 @@ def load_rows(path, *, device=None) -> OperatorRows:
     return rows
 
 
-SEED_SCHEDULE = 'natlang.operator-seed-schedule/1'
+# /1 (historical, never reinterpreted): the factor scales the seed tokens AND the closing marker.
+# /2 (default): the factor scales the seed body only; the closing marker keeps CE weight 1, so the producer close
+# (produce_close, never otherwise reliably supervised: fallow register C6) stays learned while the body anneals.
+SEED_SCHEDULE_V1 = 'natlang.operator-seed-schedule/1'
+SEED_SCHEDULE_V2 = 'natlang.operator-seed-schedule/2'
+SEED_SCHEDULE = SEED_SCHEDULE_V2
+SEED_SCHEDULES = (SEED_SCHEDULE_V1, SEED_SCHEDULE_V2)
 # Full seed CE at adoption, annealed over 2,000 updates to a 0.1 floor: the floor keeps the generator that writes the
 # span at serving time anchored to readable, input-specific content while consumer gradients reshape its state.
 DEFAULT_SEED_SCHEDULE = {'start': 1.0, 'end': 0.1, 'updates': 2000}
 
 
 def seed_schedule(spec) -> dict | None:
-    """Validate a declared seed-CE schedule: ``{start, end, updates}``, linear in optimizer updates, then ``end``.
+    """Validate a declared seed-CE schedule: ``{schema?, start, end, updates}``, linear in optimizer updates, then ``end``.
 
     The seed is a starting point, not a fixed target: its CE weight anneals while the consumer's outcome gradients
-    keep flowing through the producer span (owner correction 2026-11-03). None means no scaling (weight 1).
+    keep flowing through the producer span (owner correction 2026-11-03). None means no scaling (weight 1). A spec
+    without ``schema`` is the current default (/2); ``schema`` /1 selects the historical close-annealing semantics.
     """
     if spec is None:
         return None
-    if (not isinstance(spec, dict) or set(spec) - {'start', 'end', 'updates'}
+    if (not isinstance(spec, dict) or set(spec) - {'schema', 'start', 'end', 'updates'}
+            or spec.get('schema', SEED_SCHEDULE) not in SEED_SCHEDULES
             or any(type(spec.get(key)) not in (int, float) or not 0 <= spec[key] <= 1 for key in ('start', 'end'))
             or type(spec.get('updates')) is not int or spec['updates'] < 1):
-        raise ValueError('operator_seed_schedule is {start, end, updates}: weights in [0, 1] and a positive update count')
-    return {'schema': SEED_SCHEDULE, 'start': float(spec['start']), 'end': float(spec['end']), 'updates': spec['updates']}
+        raise ValueError('operator_seed_schedule is {schema?, start, end, updates}: a known schedule schema, weights in '
+                         '[0, 1] and a positive update count')
+    return {'schema': spec.get('schema', SEED_SCHEDULE), 'start': float(spec['start']), 'end': float(spec['end']),
+            'updates': spec['updates']}
 
 
 def seed_factor(schedule: dict | None, update: int) -> float:
@@ -357,20 +441,49 @@ def seed_factor(schedule: dict | None, update: int) -> float:
     return schedule['start'] + (schedule['end'] - schedule['start']) * progress
 
 
-def seed_weighted(example, factor: float):
-    """``example`` with its declared seed spans' CE weights (seed tokens and the closing marker) scaled by ``factor``.
+def seed_weighted(example, factor: float, schedule: dict | None = None):
+    """``example`` with its declared seed spans' CE weights scaled by ``factor``.
 
-    Every other weight, the graph and its imports are unchanged; an example without seed spans is returned as is.
+    Under ``schedule`` schema /2 (and when no schedule is given) the seed body is scaled and the closing marker keeps
+    its weight; under /1 the closing marker is scaled with the seed (its exact historical semantics). Every other
+    weight, the graph and its imports are unchanged; an example without seed spans is returned as is.
     """
     seeds = [entry for entry in getattr(example, 'operators', ()) if entry.get('kind') == 'seed']
     if not seeds or factor == 1.:
         return example
+    version = (schedule or {}).get('schema', SEED_SCHEDULE)
+    if version not in SEED_SCHEDULES:
+        raise ValueError(f'unknown operator seed schedule {version!r}')
+    close = 1 if version == SEED_SCHEDULE_V1 else 0
     import dataclasses
     names = [node.name for node in example.plan.invocations]
     weights = list(example.target_weights)
     for entry in seeds:
         index = names.index(entry['node'])
         node, offset = example.plan.invocations[index], example.plan.offsets[index]
-        for local in range(entry['start'], min(entry['stop'] + 1, len(node.token_ids))):
+        for local in range(entry['start'], min(entry['stop'] + close, len(node.token_ids))):
             weights[offset + local] *= factor
     return dataclasses.replace(example, target_weights=tuple(weights))
+
+
+def seed_schedule_transition(saved: dict | None, requested: dict, global_step: int) -> tuple[dict, dict | None]:
+    """(the schedule this run applies, its recorded transition or None) for a resume carrying ``saved``.
+
+    Same start/end/updates and schema: the saved adoption step is kept. Same numbers under a different schema (/1 ->
+    /2): the body anneal keeps its adoption step and the schema change is a recorded transition at ``global_step``
+    (the close weight changes from that update on; earlier updates keep /1). Different numbers: a new schedule
+    adopted now. A saved schedule without ``schema`` predates the field and is /1.
+    """
+    applied = dict(requested)
+    if not saved:
+        applied['adopted_at_global_step'] = global_step
+        return applied, None
+    old_schema = saved.get('schema', SEED_SCHEDULE_V1)
+    same_numbers = all(saved.get(key) == requested[key] for key in ('start', 'end', 'updates'))
+    applied['adopted_at_global_step'] = saved['adopted_at_global_step'] if same_numbers else global_step
+    if old_schema == requested['schema'] and same_numbers:
+        return applied, None
+    return applied, {'from': {key: saved.get(key) for key in ('schema', 'start', 'end', 'updates', 'adopted_at_global_step')},
+                     'to': {key: applied[key] for key in ('schema', 'start', 'end', 'updates', 'adopted_at_global_step')},
+                     'at_global_step': global_step,
+                     'weights_optimizer_rng_exposure': 'preserved'}

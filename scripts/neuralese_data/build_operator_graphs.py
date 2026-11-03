@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Learned-operator case files -> native graphs plus text-cut siblings (COMPACTION_OPERATOR_CONVERTERS.md §1).
 
-    build_operator_graphs.py --cases CASES/<operator>/<source>.port-records.jsonl | CASES [--operator NAME]
+    build_operator_graphs.py --cases CASES/<operator>/<source>.{port-records,guidance-cases}.jsonl | CASES [--operator NAME]
         [--out-root DIR] [--corpus-id ID] [--workers 4] [--limit N]
 
 Writes OUT/<operator>/<source>/{graphs,textcut}-{train,test}.jsonl.zst, omissions.jsonl and receipt.json. A finished
@@ -35,9 +35,12 @@ OUT_ROOT = data_path('data_hdd', 'natlang-compaction-operators-20261103', 'graph
 CODE = ('scripts/neuralese_data/build_operator_graphs.py', 'training/neuralese/natlang_neuralese/data/operator_graph.py',
         'training/neuralese/natlang_neuralese/model/learned_operators.py',
         'training/neuralese/natlang_neuralese/data/operator_seeds.py',
+        'training/neuralese/natlang_neuralese/data/guidance_cases.py',
         'training/neuralese/natlang_neuralese/data/port_record_graph.py',
         'training/neuralese/natlang_neuralese/serve/chat.py')
 _RENDERER = None
+# Port records (compaction/extraction operators) and guidance cases (the guidance operator, data/guidance_cases.py).
+CASE_SUFFIXES = ('.port-records.jsonl', '.guidance-cases.jsonl')
 
 
 def load_tokenizer():
@@ -131,7 +134,9 @@ def main(argv=None):
         # Every finished converter output under a cases root (its manifest is written last), each rendered once.
         status = 0
         for manifest in sorted(args.cases.glob('*/*.manifest.json')):
-            cases = manifest.with_name(manifest.name.removesuffix('.manifest.json') + '.port-records.jsonl')
+            stem = manifest.name.removesuffix('.manifest.json')
+            cases = next((manifest.with_name(stem + suffix) for suffix in CASE_SUFFIXES
+                          if manifest.with_name(stem + suffix).exists()), manifest.with_name(stem + CASE_SUFFIXES[0]))
             forwarded = [item for item in (argv if argv is not None else sys.argv[1:])]
             index = forwarded.index('--cases')
             forwarded[index + 1] = str(cases)
@@ -141,7 +146,8 @@ def main(argv=None):
     from scripts.neuralese_data.build_chain_graphs import PROTECTION
     from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import current_protection
     operator = args.operator or args.cases.parent.name
-    source = args.cases.name.removesuffix('.port-records.jsonl')
+    source = next((args.cases.name.removesuffix(suffix) for suffix in CASE_SUFFIXES
+                   if args.cases.name.endswith(suffix)), args.cases.name)
     out = args.out_root / operator / source
     input_sha = sha256_file_hex(args.cases)
     receipt_path = out / 'receipt.json'

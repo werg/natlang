@@ -133,7 +133,8 @@ def test_seed_schedule_anneals_only_seed_weights():
             seed_schedule(bad)
     row = graph_row(1)
     example = parse_graph(row, tokenizer_fingerprint=FINGERPRINT)
-    scaled = seed_weighted(example, 0.25)
+    # Historical schedule /1: the closing marker anneals with the seed (schedule /2: test_guidance_operator.py).
+    scaled = seed_weighted(example, 0.25, {**schedule, 'schema': 'natlang.operator-seed-schedule/1'})
     producer = row['nodes'][0]
     s_start, s_stop = producer['producing'][0]
     expected = [weight * (0.25 if s_start <= local <= s_stop else 1.) for local, weight in enumerate(producer['target_weights'])]
@@ -232,6 +233,8 @@ def test_runtime_consumer_frames_equal_the_registry():
     from pathlib import Path
     source = (Path(__file__).resolve().parents[2] / 'ts-host/src/native/operator-frames.ts').read_text()
     for name, spec in OPERATORS.items():
+        if spec.placement == 'call':
+            continue  # the guidance operator's consumers see the engine's guidance turn (test_guidance_operator.py)
         line = next(line for line in source.splitlines() if line.strip().startswith(f"'{name}':"))
         assert f'open: {_json.dumps(spec.consumer_open)}'.replace('"', "'") in line, name
         assert f'close: {_json.dumps(spec.consumer_close)}'.replace('"', "'") in line, name
