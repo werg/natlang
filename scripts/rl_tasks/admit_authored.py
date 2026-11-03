@@ -21,6 +21,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from authored_child_notes import with_notes  # noqa: E402
 from measure_repetition import write_text_atomic  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training' / 'neuralese'))
 from natlang_neuralese.common.hashing import sha256_file_hex as sha256  # noqa: E402
@@ -55,6 +56,10 @@ def admit(batch, qualified, novelty, drop, supersede, reviewer, note, pool, dry_
     unknown = dropped - {status[row['id']]['task'] for row in rows}
     if unknown:
         raise SystemExit(f'--drop names tasks not in the batch: {sorted(unknown)}')
+    # Reference notes for Neuralese producer helpers (fallow register S1): scripted notes of replay-verified smokes only.
+    with_children = [with_notes(row)[0] for row in admitted]
+    noted = sum(new is not old for new, old in zip(with_children, admitted))
+    admitted = with_children
     supersede = set(supersede or [])
     pool.mkdir(parents=True, exist_ok=True)
     cases_path = pool / 'cases.jsonl'
@@ -70,7 +75,7 @@ def admit(batch, qualified, novelty, drop, supersede, reviewer, note, pool, dry_
             raise SystemExit(f'case ids already admitted: {clashes[:5]}')
         merged = [row for row in existing if row['id'] not in supersede] + admitted
         summary = {'batch': str(batch), 'qualified': qualified, 'admitted': len(admitted), 'held': len(held),
-                   'superseded': len(supersede), 'pool_rows': len(merged)}
+                   'superseded': len(supersede), 'pool_rows': len(merged), 'rows_with_producer_notes': noted}
         if dry_run:
             return summary
         write_text_atomic(cases_path, ''.join(json.dumps(row, sort_keys=False) + '\n' for row in merged))

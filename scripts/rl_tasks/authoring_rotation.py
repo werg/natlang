@@ -45,7 +45,8 @@ def admitted_ids_by_batch(admissions):
         for line in path.read_text().splitlines():
             if line.strip():
                 entry = json.loads(line)
-                found.setdefault(entry['batch_dir'], []).extend(entry['admitted_case_ids'])
+                if 'batch_dir' in entry and 'admitted_case_ids' in entry:
+                    found.setdefault(entry['batch_dir'], []).extend(entry['admitted_case_ids'])
     return found
 
 

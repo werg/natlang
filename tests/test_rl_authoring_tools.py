@@ -477,3 +477,27 @@ def test_neuralese_tasks_need_a_full_smoke_replay_judged_by_the_oracle():
         authored.convert(folder_task(folders=None, expected_folders=None, wrong_code=[], constructs=[],
                                      oracle_depth='answer', reference=None,
                                      smoke={'code': 'const a = 1;', 'children': {}, 'replay': True}))
+
+
+def test_authored_child_notes_only_from_replay_verified_input_specific_notes():
+    import authored_child_notes as notes
+
+    def row(children, code, *, replay=True, reference=None):
+        files = {'root.nl': '---\nargs: {}\nreturns: "string"\n---\nx',
+                 'root/read.nl': '---\nargs:\n  s: "string"\nreturns: "Neuralese<string>"\n---\nWrite a note.'}
+        return {'id': 'r', 'split': 'train', 'semantics': {'root': 'root.nl', 'files': files},
+                'curriculum': {'reference': reference or {'root': []}, 'external': {'structure': {'smoke': {
+                    'replay': replay, 'root': [['eval', {'code': code}]], 'children': children}}}}}
+    note_a = 'Okafor holds plot P1 and is first in the queue for P2'
+    per_call = {'read': {'$match': [{'match': 'Okafor', 'value': note_a},
+                                    {'match': 'Ruiz', 'value': 'Ruiz asks to leave the queue for plot P5 on Friday'}]}}
+    got, _ = notes.derive(row(per_call, 'for (const s of items) await read(s);'))
+    assert [c['match'][1] for c in got] == ['Okafor', 'Ruiz'] and got[0]['provenance'] == 'checked'
+    assert got[0]['match'][0] == 'You are inside this call: read('
+    assert notes.derive(row({'read': {'$match': [{'match': 'a', 'value': note_a}, {'match': 'b', 'value': note_a}]}}, ''))[0] == []
+    assert notes.derive(row({'read': 'open'}, 'await read(x);'))[0] == []  # a constant is never a note
+    once = 'Okafor holds plot P1 and is first in the queue'
+    assert len(notes.derive(row({'read': once}, 'const n = await read(x);'))[0]) == 1
+    assert notes.derive(row({'read': once}, 'for (const x of xs) await read(x);'))[0] == []  # one value, many calls
+    new, why = notes.with_notes(row({'read': once}, 'await read(x);', replay=False))
+    assert new['curriculum']['reference'].get('children') is None and why == {'smoke_not_replay_verified': 1}
