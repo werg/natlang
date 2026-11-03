@@ -11,7 +11,6 @@
     "scripts/neuralese_data/inventory.py",
     "scripts/neuralese_data/schnitzel.py",
     "scripts/neuralese_data/splits.py",
-    "scripts/neuralese_data/swe_compaction.py",
     "scripts/neuralese_port_records.py",
     "scripts/neuralese_s3_subset.py",
     "scripts/prepare_training_exclusion_plan.py",

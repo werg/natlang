@@ -5,7 +5,6 @@ Subcommands:
   ledger            write the dataset ledger (training/neuralese_data_ledger.json)
   convert-bgkit     bgkit task stores → port records
   convert-schnitzel Schnitzeljagd tasks-* corpora → port records
-  convert-swe       SWE-rebench OpenHands trajectories → continuation records
   validate          check records against natlang.port-record/1, markup and leakage rules
   dedup             exact and near-duplicate analysis across record files
   protected         build the protected held-out set from bgkit benchmarks
@@ -25,7 +24,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from neuralese_data import agents, bgkit, dedup, finalize, inventory, schnitzel, schnitzel_turns, splits, swe_compaction, trajectory  # noqa: E402
+from neuralese_data import agents, bgkit, dedup, finalize, inventory, schnitzel, schnitzel_turns, splits, trajectory  # noqa: E402
 from neuralese_data.common import DEFAULT_OUTPUT_ROOT, Reject, Sink  # noqa: E402
 from neuralese_data.records import (SCHEMA_PATH, VERSION, canonical_json, leakage, require_schema_validator, validate,
                                     validate_with_schema)  # noqa: E402
@@ -118,22 +117,6 @@ def cmd_convert_schnitzel(args):
                 sink.reject(corpus, f"{split}:{i}", str(exc))
         summaries.append(sink.close())
     _write_summary(args.out, "schnitzeljagd", summaries)
-
-
-def cmd_convert_swe(args):
-    bench = swe_compaction.load_bench_instances()
-    sink = Sink(args.out, "upstream.swe-rebench-openhands")
-    for i, row in swe_compaction.iter_rows(args.limit, args.seed):
-        picks = swe_compaction.windows_for(row["trajectory"], args.windows, row["trajectory_id"])
-        if not picks:
-            sink.reject(swe_compaction.UPSTREAM, i, "too-short-trajectory")
-            continue
-        for recent_start, target in picks:
-            try:
-                sink.accept(swe_compaction.convert_window(i, row, recent_start, target, bench))
-            except Reject as exc:
-                sink.reject(swe_compaction.UPSTREAM, f"{i}:{target}", str(exc))
-    _write_summary(args.out, "swe", [sink.close()])
 
 
 def cmd_convert_agents(args):

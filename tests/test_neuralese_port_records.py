@@ -6,7 +6,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from neuralese_data import bgkit, dedup, inventory, schnitzel, splits, swe_compaction  # noqa: E402
+from neuralese_data import bgkit, dedup, inventory, schnitzel, splits  # noqa: E402
 from neuralese_data.common import Reject  # noqa: E402
 from neuralese_data.records import content_hash, exact_refs_from, strip_markup, validate  # noqa: E402
 from natlang_neuralese.data.records import read_record_rows, read_records  # noqa: E402
@@ -104,31 +104,6 @@ def test_schnitzel_multi_turn_rejected():
         assert "multi-turn" in str(exc)
     else:
         raise AssertionError("expected rejection")
-
-
-def trajectory(n_turns=8):
-    msgs = [{"role": "system", "content": "You are OpenHands."}, {"role": "user", "content": "Fix the bug in pkg/a.py"}]
-    for i in range(n_turns):
-        msgs.append({"role": "assistant", "content": f"step {i}", "tool_calls": [{"id": f"c{i}", "type": "function", "function": {"name": "bash", "arguments": "{\"cmd\": \"cat pkg/a.py\"}"}}]})
-        msgs.append({"role": "tool", "content": f"output {i} of pkg/a.py:{i}", "tool_call_id": f"c{i}", "name": "bash"})
-    return msgs
-
-
-def test_swe_windows_at_assistant_boundaries():
-    traj = trajectory()
-    picks = swe_compaction.windows_for(traj, 2, "seed")
-    assert picks and all(traj[r]["role"] == "assistant" and traj[t]["role"] == "assistant" for r, t in picks)
-    row = {"trajectory_id": "t1", "instance_id": "o__r-1", "repo": "o/r", "trajectory": traj, "resolved": 1,
-           "tools": [{"function": {"name": "bash", "description": "run", "parameters": None}}], "exit_status": "submit"}
-    recent, target = picks[0]
-    record = swe_compaction.convert_window(0, row, recent, target, set())
-    assert validate(record) == []
-    assert record["task"] == "continue" and record["outcome"]["label"] == "checked"
-    assert record["consumer"]["context"][0]["content"] == "Fix the bug in pkg/a.py"
-    assert all(m["role"] != "system" for m in record["sources"][0]["messages"])
-    assert record["consumer"]["tools"] == [{"function": {"name": "bash", "description": "run"}}]
-    protected = swe_compaction.convert_window(0, row, recent, target, {"o__r-1"})
-    assert protected["split"] == "test"
 
 
 def test_validate_catches_markup_and_tampering():

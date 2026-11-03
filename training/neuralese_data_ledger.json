@@ -361,7 +361,7 @@
    "family": null,
    "disposition": "excluded",
    "converter": null,
-   "reason": "bgkit chunking; rebuilt by swe_compaction.",
+   "reason": "bgkit chunking; rebuilt in S1 trajectory_continuation_swe.",
    "license": "CC-BY-4.0",
    "mirrors": []
   },
@@ -417,7 +417,7 @@
    "family": null,
    "disposition": "excluded",
    "converter": null,
-   "reason": "bgkit chunking of SWE-rebench OpenHands; rebuilt by swe_compaction.",
+   "reason": "bgkit chunking of SWE-rebench OpenHands; rebuilt in S1 trajectory_continuation_swe.",
    "license": "CC-BY-4.0",
    "mirrors": []
   },
@@ -537,7 +537,7 @@
    "family": null,
    "disposition": "excluded",
    "converter": null,
-   "reason": "bgkit segment/spine construction; continuation records are rebuilt from upstream trajectories (swe_compaction).",
+   "reason": "bgkit segment/spine construction; continuation records are rebuilt from upstream trajectories (S1 trajectory_continuation_swe).",
    "license": "CC-BY-4.0",
    "mirrors": [
     "/home/werg/bgkit-data-nvme/bgkit2/tasks/compaction_v2.arrow"
@@ -1471,7 +1471,7 @@
    "family": null,
    "disposition": "excluded",
    "converter": null,
-   "reason": "bgkit slot/spine framing of upstream trajectories; continuation records are rebuilt from upstream (agents, swe_compaction).",
+   "reason": "bgkit slot/spine framing of upstream trajectories; continuation records are rebuilt from upstream (agents; S1 trajectory_continuation_swe).",
    "license": "LicenseRef-mixed",
    "mirrors": []
   },
@@ -1601,7 +1601,7 @@
    "family": null,
    "disposition": "excluded",
    "converter": null,
-   "reason": "bgkit slot/spine framing of upstream trajectories; continuation records are rebuilt from upstream (agents, swe_compaction).",
+   "reason": "bgkit slot/spine framing of upstream trajectories; continuation records are rebuilt from upstream (agents; S1 trajectory_continuation_swe).",
    "license": "LicenseRef-mixed",
    "mirrors": [
     "/home/werg/bgkit-data-nvme/bgkit2/tasks/tool_slots_synth_v4_mapped.arrow"
@@ -4580,7 +4580,7 @@
    "rows": null,
    "family": null,
    "disposition": "migrated",
-   "converter": "swe_compaction",
+   "converter": "operator_cases_compact_history",
    "reason": "SWE-rebench OpenHands trajectories (67,074); continuation records rebuilt at message boundaries.",
    "license": "CC-BY-4.0"
   },
@@ -5257,7 +5257,7 @@
    "family": null,
    "disposition": "queued",
    "converter": "schnitzel.teacher_prefixes",
-   "reason": "hermes, ultrachat, swe_smith, openhands prefix-memory and cross-experience protocols. Not materialised locally (the hub cache holds only the SWE-smith README); openhands is covered by swe_compaction. Hermes (Apache-2.0), UltraChat and SWE-smith (MIT) need a download before conversion; cross-experience episodes handed to S2.",
+   "reason": "hermes, ultrachat, swe_smith, openhands prefix-memory and cross-experience protocols. Not materialised locally (the hub cache holds only the SWE-smith README); openhands is covered by S1 trajectory_continuation_swe. Hermes (Apache-2.0), UltraChat and SWE-smith (MIT) need a download before conversion; cross-experience episodes handed to S2.",
    "license": "LicenseRef-mixed"
   },
   {
