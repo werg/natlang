@@ -68,12 +68,20 @@ refused, the option is to route the few >262k graphs to a DGX worker, not to dro
   at an opaque <= $500 per account that is days, not weeks: track `cwctl.py accounts status` gpu_h per account and
   stop learners that are not merging.
 
-## Smoke (isolated, 2026-11-03)
+## Smoke dropped (owner 2026-11-03: production is its own smoke)
 
-Namespace `/mnt/external/natlang-diloco-smoke-20261103` (run file `cloud/run.json`, id `diloco-smoke-20261103`): CPU
-coordinator `coord` (cw3) and two learners `w0` (cw3), `w1` (cw4), full67 parent (71c3eb45, ZIP-delta chain),
-146 train / 8 held rows sampled from the 7b99d86d production source, `--stage-id diloco-smoke`, 2 local steps,
-quorum 1, capped ~1 GPU-hour. Results and sandbox IDs: section "Smoke results" below.
+The isolated smoke (`/mnt/external/natlang-diloco-smoke-20261103`) verified, before it was dropped: the full67
+ZIP-delta chain reconstruction in a sandbox, code/bundle install, `native_diloco init` from full67 in a CPU sandbox
+(88 fragments, current checkpoint format) and the coordinator's public share-token gateway. Its GPU learner was never
+granted (RUNNER_CAPACITY_EXHAUSTED on cw3/cw4 at every shape, 15:05-15:25), so no inner step or outer sync ran.
+Coordinator sandbox 589130e3 (cw3) was stopped at 15:25 with zero merges (nothing earned to export). The first
+production DiLoCo rounds are the qualification: watch actual merges, exports and recovery.
+
+## Production status
+
+Window 0 (`ops/corrected-mix-full67-w1-1103`, runtime v42) launched 16:25 CET in sandbox 7512cb2f (cw3) at the ideal
+shape (1 GPU RTX PRO 6000 Blackwell 96 GB, 8 CPU / 64Gi; floor 4 CPU / 32Gi). Exporter unit
+`rl-cloud-export-corrected-1`.
 
 ## Open for step 2
 
