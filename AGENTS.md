@@ -40,18 +40,17 @@ never protected/held inputs). Datasets are one source, not a limit: authors also
 invent original programs, domains and problem types continuously. Rotate domains and problem types; measure
 repetition against the existing pool before admitting each batch.
 
-Meta-learning main line (owner, 2026-11-03): continuous meta-learning of the
-shared LoRA bank/basis. Per program, fast weights are bank mixture coefficients
-fitted in a cheap inner step on support worlds; the basis is updated first-order
-from held query worlds, continuously alongside backbone training so it tracks the
-moving parent. RL task families supply the episodes. Deployment tuning is the
-inner fit; an amortized coefficient predictor follows. The natlang learned
-updater over gradient digests becomes a later refinement, not the main line.
-Program tuning reruns per promoted parent (warm-started); its fits are baselines
-and distillation sources. Promote a bank snapshot when it beats the current published (or untrained) bank on held-family task
-outcomes, dev first and confirmation once (owner revision, 2026-11-03). Plain per-program LoRA and the
-parent are reported references across compute budgets, not gates; deployment tuning uses whichever
-adapts better at the available budget.
+Meta-learning is the memetic path (owner correction, 2026-11-03; supersedes the same-day
+"bank meta-learning main line", which was a miscommunication). The backbone, executing a natlang
+improvement program, studies a program's invocations and failures and authors or revises its
+guidance, skills, prompts and adaptation choices (including which LoRA bank components/mixtures to fit,
+via the crisp bank fit as a service). It is trained by on-policy RL on "improve program P" episodes,
+rewarded by held-world task gains measured by exact oracles, with JOLT+ privileged context, so
+meta-improvement is a backbone skill that flows into general training. It is a declared recipe stage
+interleaved with SFT/RL, not a side project. Reuse the bank machinery (PCA-initialized bank, coefficient
+fits, held-family task-outcome evaluation) as mechanism and baselines. Successful improvements and the
+improved programs' verified runs distil into SFT/RL with exact actor provenance. Promote by held-family
+task outcomes, dev first and confirmation once.
 
 ## Interleaved RL is a declared stage; selector /2 seeks outcome spread (engineering, 2026-11-03)
 
