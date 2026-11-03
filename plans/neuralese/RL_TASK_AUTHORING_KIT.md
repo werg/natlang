@@ -47,7 +47,7 @@ One JSON object per line:
 | `shape` | short name of the call-graph pattern, e.g. `carried-notes-then-exact-apply` |
 | `domain` | free word: `operations`, `planning`, `finance`, `science`, `customer_service`, `code`, ... |
 | `world` | identity of the scenario world. Tasks that share facts (same store, same document set, same codebase, same customer) MUST share `world`; the split (train/dev/confirmation) is derived from it, so related tasks never cross splits. |
-| `level` | 0-3 real difficulty: 0 = one helper call and a direct answer; 1 = two or three steps; 2 = several dependent steps or carried state; 3 = long inputs, many items, corrections or competing constraints. Use all four levels in a family. |
+| `level` | 0-3 real difficulty: 0 = one helper call and a direct answer; 1 = two or three steps; 2 = several dependent steps or carried state; 3 = long inputs, many items, corrections or competing constraints. Use all four levels in a family. For constructs that need at least two helpers (relay, fan-in, depth 3), level 0 is the simplest two-call version: short clean inputs, no corrections, each helper used once. |
 | `constructs` | non-empty subset of: `call_depth_3`, `neuralese_relay`, `typed_neuralese`, `neuralese_fan_in`, `iterate`, `iterate_neuralese`, `folder_reducer`, `decision_readout`, `skills`, `multi_operation_codebase`, `effect_state` (definitions in section 3) |
 | `root` | the root file name, e.g. `"close_stock_day.nl"` (top level, ends in `.nl`) |
 | `files` | object path -> file text. The root plus its helpers. Helpers callable by the root live in the folder named like the root without `.nl` (`close_stock_day/absorb.nl`). A helper called by a helper lives in that helper's folder (`handle_claim/assess_parts/coverage_window.nl`). Skills: `root_folder/skills/<skill-name>/SKILL.md`. |
@@ -133,8 +133,12 @@ python3 scripts/memory_ledger.py run --unit rlnov-<worker>-<batch> --budget-gb 6
   --pool /mnt/external/natlang-rl-authoring/admitted/cases.jsonl -o $B/novelty.json
 ```
 
-Pass: no exact duplicates (after normalizing digits and quoted literals), at most 10% near duplicates (5-word shingle
-Jaccard >= 0.8 within a family), and every family either has 20+ distinct programs in total or gains 5+ in this batch.
+A task is its program together with its inputs. Several invocations of one program on materially different worlds
+and inputs are wanted (a multi-operation codebase is called many times). Pass: no exact duplicates (same program AND
+same inputs after normalizing digits and quoted literals: swapping a number or quoted value is not a new task), at most
+10% near duplicates (within a family, 5-word shingle Jaccard >= 0.8 for the programs AND for the inputs), and every
+family either has 20+ distinct programs in total or gains 5+ new programs in this batch. `novelty.json` reports
+distinct programs per family separately from tasks.
 Report both results to the supervisor; the supervisor moves passing batches into `admitted/` and records the rotation.
 
 ## 5. Exclusions
@@ -258,8 +262,13 @@ Each batch takes one **cell** = (seed, construct, problem type), where seed is a
 python3 scripts/rl_tasks/authoring_rotation.py next --ledger /mnt/external/natlang-rl-authoring/rotation.jsonl \
   --datasets /mnt/external/natlang-rl-authoring/rotation/datasets.txt \
   --constructs /mnt/external/natlang-rl-authoring/rotation/constructs.txt \
-  --problems /mnt/external/natlang-rl-authoring/rotation/problems.txt --worker <worker>
+  --problems /mnt/external/natlang-rl-authoring/rotation/problems.txt --worker <worker> \
+  --claim --batch /mnt/external/natlang-rl-authoring/batches/<worker>/<batch>
 ```
+
+`--claim` reserves the returned cell for your batch, so other workers (and your own next batch) get a different cell.
+`record` finalizes the claim. A claim not recorded within 6 hours (`--claim-hours`) expires. Always claim before
+writing a batch.
 
 `next` returns the least-covered construct, the mode that has admitted fewer tasks (A or B), and for mode A the
 least-used dataset x problem cell; for mode B it lists every invented domain already used so you choose a domain
