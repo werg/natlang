@@ -56,7 +56,17 @@ fi
 # 2. mirror the DGX absolute roots onto scratch
 for root in ${NATLANG_CW_MIRROR_ROOTS:-/home/werg /mnt/external}; do
   if [ ! -e "$root" ]; then
-    mkdir -p "$WORK/mirror$root" "$(dirname "$root")" && ln -s "$WORK/mirror$root" "$root" || die "mirror $root"
+    # A real directory when the container root has the scratch volume's capacity (the CoreWeave sandbox root and /work
+    # share one 7 TB backing store): Path.resolve() of a DGX path is then that DGX path, which custody checks compare
+    # with recorded logical paths (2026-11-03: sealed-collection operation check failed through the symlink). The
+    # scratch side keeps a symlink to it. Otherwise (small root) the DGX root is a symlink onto scratch.
+    if [ "${NATLANG_CW_MIRROR_MODE:-auto}" != symlink ] && [ -d "$WORK" ] && \
+       [ "$(df -Pk / | awk 'NR==2{print $4}')" -ge "$(df -Pk "$WORK" | awk 'NR==2{print int($4*0.9)}')" ]; then
+      mkdir -p "$root" "$(dirname "$WORK/mirror$root")" && { [ -e "$WORK/mirror$root" ] || ln -s "$root" "$WORK/mirror$root"; } \
+        || die "mirror $root"
+    else
+      mkdir -p "$WORK/mirror$root" "$(dirname "$root")" && ln -s "$WORK/mirror$root" "$root" || die "mirror $root"
+    fi
   fi
 done
 mkdir -p "$NATLANG_REPO"
