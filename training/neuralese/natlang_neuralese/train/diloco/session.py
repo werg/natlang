@@ -54,7 +54,7 @@ def prepare(args):
         raise SystemExit(f'{directory} is not empty')
     prep = directory / 'prep'
     prep.mkdir(parents=True)
-    runtime = os.environ.get('NATLANG_REPO') or os.getcwd()
+    runtime = os.getcwd()  # the lineage's frozen runtime, as lfm3_rl_lineage.sh runs sft_window.py
     window_tool = Path(args.window_tool).resolve()
     subprocess.run([sys.executable, str(window_tool), 'next', '--previous-config', args.boundary_config,
                     '--out', str(prep / 'out'), '--config-out', str(prep / 'config.json'), '--window', str(args.window),
@@ -152,8 +152,9 @@ def main(argv=None):
     p.add_argument('--max-staleness', type=int, default=2)
     p.add_argument('--grace-seconds', type=float, default=900.0)
     p.add_argument('--state-root', default='/work/diloco')
-    p.add_argument('--coordinator-code', default='/home/werg/natlang')
-    p.add_argument('--python', default='/home/werg/natlang/.venv-neuralese/bin/python')
+    p.add_argument('--coordinator-code', help='the bundle code the cohost serves the coordinator from '
+                   '(default: the machine profile repo root, the same path in every sandbox)')
+    p.add_argument('--python', help='default: <coordinator code>/.venv-neuralese/bin/python')
     p.add_argument('--window-tool', default=str(HERE.parents[4] / 'scripts' / 'neuralese_data' / 'sft_window.py'))
     r = commands.add_parser('relocate')
     r.add_argument('--session-dir', required=True)
@@ -164,6 +165,10 @@ def main(argv=None):
     r.add_argument('--id', required=True)
     r.add_argument('--output')
     args = parser.parse_args(argv)
+    if args.command == 'prepare':
+        from natlang_neuralese.common.paths import resolve_str
+        args.coordinator_code = args.coordinator_code or resolve_str('repo')
+        args.python = args.python or str(Path(args.coordinator_code) / '.venv-neuralese' / 'bin' / 'python')
     {'prepare': prepare, 'relocate': relocate}[args.command](args)
 
 

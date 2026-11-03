@@ -80,6 +80,10 @@ def next_window(previous_config, out, config_out, *, checkpoint_path=None, windo
     if not (boundary.get('kind') == 'semantic-refresh' and boundary.get('reached') is True
             and boundary.get('new_optimizer_updates', 0) >= 1):
         raise SystemExit('previous window did not reach an earned semantic-refresh boundary')
+    request = previous.parent / SESSION_REQUEST
+    if (request.is_file() and not Path(config_out).exists()
+            and Path(os.path.abspath(out)).parent == Path(os.path.abspath(previous)).parent):
+        prepare_session_window(request, previous_config, previous, Path(out), Path(config_out), parent)
     if Path(config_out).is_file():
         return adopt_prepared_window(Path(config_out), Path(out), previous_config, parent, ref)
     training = CheckpointPolicy.load(parent)['training']
@@ -138,6 +142,30 @@ def next_window(previous_config, out, config_out, *, checkpoint_path=None, windo
               'source_roles': sorted(sources)}
     print(json.dumps(result), flush=True)
     return result
+
+
+SESSION_REQUEST = 'diloco-session-request.json'
+
+
+def prepare_session_window(request, previous_config, previous, out, config_out, parent):
+    """A lineage that requested an elastic DiLoCo session (LINEAGE/diloco-session-request.json, written by its
+    operator before the boundary) builds the session from this boundary at once, in place (train/diloco/session.py:
+    the frozen runtime's own next window plus the common DiLoCo block, one never-started control per worker slot), and
+    takes its own slot's control relocated onto this next window. The request is then marked consumed, so a later
+    boundary continues normally."""
+    import subprocess
+    spec = json.loads(request.read_text())
+    tool = REPO / 'training/neuralese/natlang_neuralese/train/diloco/session.py'
+    session_dir = Path(spec['session_dir'])
+    if not (session_dir / 'session.json').is_file():
+        subprocess.run([sys.executable, str(tool), 'prepare', '--boundary-config', str(previous_config),
+                        '--session-dir', str(session_dir), *spec.get('prepare_args', [])], check=True)
+    main_env = {**os.environ, 'PYTHONPATH': f'{REPO}/training/neuralese:{REPO}'}
+    subprocess.run([sys.executable, str(tool), 'relocate', '--session-dir', str(session_dir),
+                    '--worker', str(spec['worker']), '--window-dir', os.path.abspath(out), '--parent', str(parent),
+                    '--prior-out', os.path.abspath(previous), '--id', f"{spec.get('id_prefix', 'lfm3')}-{out.name}",
+                    '--output', str(config_out)], check=True, env=main_env)
+    os.replace(request, request.with_name(request.name + f'.consumed-{out.name}'))
 
 
 def adopt_prepared_window(config_out, out, previous_config, parent, ref):
