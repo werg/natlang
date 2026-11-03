@@ -368,7 +368,7 @@ class BankMetaLearner:
     """One operation's bank, live leaves, outer optimizer and history (``out/state.json`` + ``out/state.torch``)."""
 
     def __init__(self, engine, pool, recipe, out, *, parent_sha256):
-        from .bank import new_bank, weight_svd_basis
+        from .bank import new_bank, orthonormalize, weight_svd_basis
         from .fit import placeholder_adapters
         from .mixture import MixtureFormat
         from ...model.native_adapters import create_adapter, target_parameters
@@ -381,7 +381,13 @@ class BankMetaLearner:
             raise LearnedOptimizerError('no target matrices selected')
         self.names = names
         torch.manual_seed(recipe.seed)
-        bank = new_bank(engine, weight_svd_basis(engine, names, recipe.rank), MixtureFormat())
+        basis = weight_svd_basis(engine, names, recipe.rank)
+        # Device SVDs (cuSOLVER) return columns orthonormal only to ~1e-4; the bank's exact invariants need them to
+        # FP32 precision: re-orthonormalize by QR (same span, sign-canonical R).
+        for side in (basis.left, basis.right):
+            for name in names:
+                side[name] = orthonormalize(side[name])[0].contiguous()
+        bank = new_bank(engine, basis, MixtureFormat())
         self.bank0 = bank.with_components(random_components(bank, recipe.components, recipe.component_rank, recipe.seed),
                                           reason='random initialization')
         self.placeholder = placeholder_adapters(engine, self.bank0, [SCOPE])[SCOPE]
