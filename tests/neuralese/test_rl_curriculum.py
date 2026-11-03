@@ -214,3 +214,25 @@ def test_spread_yield_counts_only_scored_groups():
     from natlang_neuralese.rl.curriculum import spread_yield
     assert spread_yield([{'scored':4,'spread':True},{'scored':4,'spread':False},{'scored':0,'spread':True}])=={
         'scored_groups':2,'groups_with_spread':1,'spread_fraction':.5}
+
+
+def test_class_quota_is_filled_by_the_selector_and_enforced_on_an_external_policy(monkeypatch):
+    import json
+    from types import SimpleNamespace
+    rows=[{'id':f'q-{index}','curriculum':{'rl':{'level':0,'family':f'f{index%7}','qualification':'qualified',
+           **({'mix_class':'effect_state'} if index%10==0 else {})}}} for index in range(100)]
+    budget={'rows':16,'group':8,'offset':3}
+    chosen=production.select_tasks(rows,[],budget,curriculum=DEFAULT_V2)
+    effect=[item['row'] for item in chosen if rows[item['row']]['curriculum']['rl'].get('mix_class')]
+    assert len(effect)>=6 and len({item['row'] for item in chosen})==16
+    # A pool without tagged rows selects exactly as the quota-free policy.
+    plain=[{**row,'curriculum':{'rl':{key:value for key,value in row['curriculum']['rl'].items() if key!='mix_class'}}} for row in rows]
+    assert production.select_tasks(plain,[],budget,curriculum=DEFAULT_V2)==production.select_tasks(
+        plain,[],budget,curriculum={**DEFAULT_V2,'class_quota':{}})
+    # An external policy that ignores the quota is refused.
+    ignoring=[item for item in chosen if item not in [c for c in chosen if rows[c['row']]['curriculum']['rl'].get('mix_class')]]
+    ignoring=ignoring[:-4]+[c for c in chosen if rows[c['row']]['curriculum']['rl'].get('mix_class')][:0]+chosen[-4:]
+    ignoring=list({item['row']:item for item in ignoring}.values())
+    monkeypatch.setattr(production.subprocess,'run',lambda argv,**kwargs:SimpleNamespace(stdout=json.dumps(ignoring)))
+    with pytest.raises(ValueError,match='class effect_state'):
+        production.select_tasks(rows,[],budget,curriculum=DEFAULT_V2,command=['natlang-selector'])

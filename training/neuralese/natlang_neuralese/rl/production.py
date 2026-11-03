@@ -1211,7 +1211,7 @@ def select_tasks(cases, stats, budget, *, command=None, curriculum=None):
     A command may execute the existing natlang runtime and return the same typed
     JSON. This mechanism validates identities/counts; policy wording is in S7.
     """
-    from .curriculum import task_descriptors, select, validate_breadth, policy_options
+    from .curriculum import task_descriptors, select, validate_breadth, validate_quota, policy_options
     tasks=task_descriptors(cases)
     if command:
         response = subprocess.run(command, input=json.dumps({'groupStats': stats,
@@ -1233,7 +1233,9 @@ def select_tasks(cases, stats, budget, *, command=None, curriculum=None):
         raise ValueError('selectTasks returned duplicate task rows')
     if len({item['samples'] for item in chosen}) > 1:
         raise ValueError('current collector fanout requires one shared group size per round')
-    if curriculum is not None:validate_breadth(cases,budget,curriculum,chosen)
+    if curriculum is not None:
+        validate_breadth(cases,budget,curriculum,chosen)
+        validate_quota(cases,budget,curriculum,chosen)
     return chosen
 
 

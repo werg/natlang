@@ -248,3 +248,17 @@ def validate_breadth(cases,budget,config,chosen):
     if expected and (not chosen or chosen[-1]['row']!=expected[-1]
                      or not set(expected)<={item['row'] for item in chosen}):
         raise ValueError('selectTrainingTasks must retain rotating breadth and finish with its final row')
+
+
+def validate_quota(cases,budget,config,chosen):
+    """An external selector must honour ``class_quota`` as the crisp one does: each class gets at least its share of the
+    round's rows, bounded by the class rows the pool has."""
+    config=policy_options(config)
+    if config['schema']!=V2_SCHEMA:return
+    count=min(budget['rows'],len(cases))
+    for name,share in (config.get('class_quota') or {}).items():
+        members=sum(1 for row in cases if metadata(row).get('mix_class')==name)
+        required=min(math.ceil(share*count),members)
+        got=sum(1 for item in chosen if metadata(cases[item['row']]).get('mix_class')==name)
+        if got<required:
+            raise ValueError(f'selectTrainingTasks must give class {name} at least {required} of {count} rows (got {got})')
