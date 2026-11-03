@@ -1181,6 +1181,14 @@ hindsight-kb training, have separate sandboxes: identify their ownership and
 preserve them. A control-plane `Running` label alone does not establish a healthy
 learner; monitor actual logs, progress and command responsiveness.
 
+Owner clarification (2026-11-03): `SandboxResourceExhausted` means the cluster
+cannot currently serve the requested shape: usually too many CPUs or too much RAM
+for its present state, not an account quota or an exhausted account. Request the
+ideal shape first, then back off stepwise (lower CPU and RAM toward the measured
+workload minimum, then drop optional constraints) until capacity is granted, keeping
+exactly one GPU. Record the granted shape, adapt execution to it, and do not
+describe the account as exhausted or retry the identical request in a tight loop.
+
 ## Sandbox recovery coverage (engineering finding, 2026-10-23)
 
 The quota incident stopped both learners, the teacher and both evaluators.
