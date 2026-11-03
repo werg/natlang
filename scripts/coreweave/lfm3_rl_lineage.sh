@@ -76,7 +76,7 @@ if [ -f "$L/tune.json" ]; then
   await_upload() { local seq; seq=$(ls "$E" | grep -E '^[0-9]{6}\.json$' | tail -1 | cut -c1-6)
     log "\"event\":\"await_export\",\"seq\":\"$seq\""; while [ -n "$seq" ] && [ ! -f "$E/$seq.uploaded" ]; do sleep 30; done; }
   if [ "${NATLANG_RL_CHECK:-0}" = 1 ]; then  # CPU check: the stage's dry run in a scratch stage directory
-    CHECK=$STAGE-check; mkdir -p "$CHECK"; cp -a "$STAGE/programs" "$CHECK/"
+    CHECK=$STAGE-check; mkdir -p "$CHECK"; cp -a "$STAGE/programs" "$CHECK/"; rm -f "$CHECK/programs/programs-prepared.json"
     for i in "${!ARGS[@]}"; do [ "${ARGS[$i]}" = --out ] && ARGS[$((i+1))]=$CHECK; done
     (cd "$CODE" && "$VENV/bin/python" -u -m "$MODULE" "${ARGS[@]}" --dry-run) > "$OUT/tune-check.log" 2>&1
     rc=$?; tail -20 "$OUT/tune-check.log"; log "\"event\":\"check_tune_dry_run\",\"rc\":$rc"
