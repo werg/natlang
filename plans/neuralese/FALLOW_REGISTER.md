@@ -108,6 +108,14 @@ working tree (seeded producer spans, all four operators).
 | S1 | JOLT+ privileged facts and SD targets for Neuralese **producer children** | `T/rl/privileged_context.py` (`child_value` facts, visibility rule); `scripts/rl_tasks/sources/composed.py` and the reader sources | **None.** 0 of 23,093 Neuralese RL cases (15,204 readers, 7,889 composed) carry `reference.children`, `decisive` or `evidence`, so producer children (`gather`, `read_page`, `profile`, `absorb`, …) receive no privileged context and have no note target. The MuSiQue per-hop `bridges` are loaded but used only as wrong-answer checks. | `data` | **H** | Emit `reference.children [{match, value}]` with gold notes (MuSiQue decomposition answers plus supporting sentences, HotpotQA supporting facts, 2Wiki evidence, gold cells, exact caller lists), with a mechanical fallback from `T/data/operator_seeds.py`. Start with composed.py (S), then each reader source. | unowned (RL-authoring agent?) |
 | S2 | Inline-instruction edges counted as communication | `ts-host/src/compiler/neuralese-conversion.ts:1490-1514` (`source_kind: inline-instruction`) | In production, ~99k of 117,789 big2 edges carry one identical 23-token instruction payload under 7× communication quotas. The same pattern appears in the loghub `.nl` rubric and the semantic-iterate placeholder seed. The corrected mix (untrained) withdraws 108,040 readers and caps the rest at 1–2 visits. | `wiring` (corrected mix not launched); the converter still labels these edges as communication | **H** | Launch the corrected mix. Give inline-instruction edges an explicit `instruction` kind, excluded from communication family, quota and focus accounting. Add a generic per-identical-payload reader cap (S). | supervisor + corrected-mix agent |
 
+S1 update (RL authoring, 2026-11-03): the composed, reader and bgkit sources now emit producer notes (`reference.children`); the
+authored pool gets them from replay-verified smoke scripts (`scripts/rl_tasks/authored_child_notes.py`, called by
+`admit_authored.py`): 103 of 570 producer sites of the admitted authored train rows carry `checked` notes (input-specific and
+per call, never constants; reference replay of the 64 noted rows passes). The remainder are structure-only smokes with
+placeholder notes or one script for repeated calls; round-4 briefs require per-call `$match` notes on every producer, so
+coverage grows with each admitted batch. Next action: bring the S1 sites of the older authored rows up by authoring
+replay smokes (round 5), and measure noted-versus-unnoted producer span quality. Owner: RL-authoring strand.
+
 ### bgkit knowledge-reasoning stores (K rows; census 2026-11-03)
 
 Source: `BGKIT_KR_CENSUS_20261103.md`. Five stores now have RL reader sources (`scripts/rl_tasks/sources/bgkit_reading.py`,
