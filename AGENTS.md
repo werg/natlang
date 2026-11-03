@@ -40,6 +40,17 @@ never protected/held inputs). Datasets are one source, not a limit: authors also
 invent original programs, domains and problem types continuously. Rotate domains and problem types; measure
 repetition against the existing pool before admitting each batch.
 
+Meta-learning main line (owner, 2026-11-03): continuous meta-learning of the
+shared LoRA bank/basis. Per program, fast weights are bank mixture coefficients
+fitted in a cheap inner step on support worlds; the basis is updated first-order
+from held query worlds, continuously alongside backbone training so it tracks the
+moving parent. RL task families supply the episodes. Deployment tuning is the
+inner fit; an amortized coefficient predictor follows. The natlang learned
+updater over gradient digests becomes a later refinement, not the main line.
+Program tuning reruns per promoted parent (warm-started); its fits are baselines
+and distillation sources. Promote by held-family adaptation beating a
+non-meta-trained bank and plain per-program LoRA at matched compute.
+
 ## Interleaved RL is a declared stage; selector /2 seeks outcome spread (engineering, 2026-11-03)
 
 Recipe kind `native_interleaved_rl` (`rl/interleave.py`) requires the joint SFT
