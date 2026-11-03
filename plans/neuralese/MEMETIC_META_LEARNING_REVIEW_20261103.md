@@ -143,10 +143,39 @@ bound to bf95 `71c3eb45`; H7 call-store "database is locked") are reported to th
 
 ## 6. Writer and native writing after the fix
 
-The text writer is the immediate path. Native producer-span writing becomes learnable through SFT rows whose targets
-include producer bodies and the close token: the text writer's own spans (`[produce_open] text [produce_close]`) are
-exactly such rows once distilled. Re-measure the close-token log-probability after those rows earn exposure; switch a
-writer to a native template write only when it closes spans live.
+The text writer is the immediate path (host writes the returned text as the writer's native state). Native writing
+must not stay off (coordinator correction 2026-11-03). Why the close marker (125034) gets no effective learning:
+
+- The marker rows are learnable: learned sparse `input_rows` (tied output), FP32 masters, AdamW at the learned-row
+  rate (model/shared_state.py; native optimizer routing). Routing is not the defect.
+- The objective almost never targets them. Producer nodes built by `data/provider_static_graph.py:97` (teacher text
+  encoders) and `data/provider_native_graph.py:163,352` (writer nodes) carry `target_weights` all 0.0, open, body and
+  close included: the state is exported but its authoring is never supervised. Inline producing spans inside a
+  supervised action target and `data/operator_graph.py` producers (seed + close at weight 1) are the only CE on the
+  close marker; the operator rows are new and small, and `learned_operators.seed_weighted` anneals the close marker
+  together with the seed toward 0.1. Measured outcome: close log-prob -18 to -35 at the writer site (writer61
+  replay), full67 native writes 0/4 closed live.
+- Census of the actual corrected v44b mix (3,000-row stride sample under its CE policy, `close_census.py`, unit
+  `memetic-census-1`): counts of close/open/body tokens with positive weight; result recorded in the fallow register
+  C6 when it lands.
+
+Plan (data and objective, anneal text to native; fallow register C6/C9):
+
+1. **Writer as a learned operator.** Register `guidance` in `model/learned_operators.py` (site: the rendered
+   `writeGuidance` call with its consumer and facts, the writer's prompt text-initialized in the real call) and
+   convert verified guidance into operator graphs with `data/operator_graph.py`: producer = site + `produce_open` +
+   seed + `produce_close`, consumers = the program's invocations importing the span, text-cut sibling as baseline.
+   Seeds: the text writer's own guidance from JOLT/memetic episodes whose consumer then succeeded (checked), else the
+   mechanical exemplar (section 5) with seed provenance. No new name the model sees.
+2. **Close marker never anneals.** The seed schedule scales seed body tokens only; the closing marker keeps weight 1
+   (a schedule-version change recorded as an objective transition, not a silent reinterpretation of /1).
+3. **Supervise producer close in existing graphs.** Give the close marker of writer-authored producing spans in the
+   provider graph converters CE weight 1 (body stays 0 where it is host text) in the next source revision, preserving
+   old row bindings' exposure through the ordinary append/correction mechanism.
+4. **Gate and anneal.** Re-measure close log-prob at the writer site on the writer61 replay set after the operator
+   rows earn exposure; when the native writer closes spans live (target >= 90% on ~48 samples), switch `writeGuidance`
+   to `Neuralese<string>` with template write while the seed weight anneals 1 -> 0.1 and consumer-outcome learning
+   carries the span (span basis). The text path remains the fallback per call when a span does not close.
 
 ## 7. Distillation
 
@@ -163,9 +192,18 @@ binding through the existing program-guidance binding; instruction/skill patches
   interleaved controller runs a memetic round every `memetic_every` rounds from `<controller out>/memetic/stage-<parent>.json`
   (built by `python -m natlang_neuralese.rl.memetic_stage build --out <controller out>/memetic --endpoint <actor>`);
   without it the controller records `interleave.memetic.pending` and keeps ordinary rounds.
-- Remaining blockers (fallow register M1-M5): automatic per-parent build inside the controller; adapter-capable actor
-  for `fit` and the bank baseline; automated actual/shuffled/none ablation; per-program tool-surface edits; live
-  48-sample measurement of the writer and supervisor prompts.
+- Production successor recipe (rebased on the live lineage, coordinator correction 2026-11-03):
+  `/home/werg/data/lfm3-rl-dgx-20261029/ops/memetic-successor-v44b-1103/recipe-runtime.json` = control
+  `ops/corrected-mix-full67-w1-v44b-1103` recipe + `interleaved_jolt_rl_v1` (task source: selection pool
+  `selection-pool-20261103T205416Z`) + `memetic_improve_v1` (`memetic_every` 4, `programs_per_round` 2, `group` 4).
+  It loads with `load_recipe`. Adoption requires a runtime frozen from main at or after 95104262d and the nine
+  launch root causes of `LFM3_DILOCO_CORRECTED_MIX_20261103.md` applied to cloud seeding; it is an RL-stage
+  transition for the controller at the next window, not a change to the running SFT window.
+- Remaining blockers (fallow register M1-M8): automatic per-parent build inside the controller (until then the stage
+  is inert: the controller records `interleave.memetic.pending`); adapter-capable actor for `fit` and the bank
+  baseline; automated actual/shuffled/none ablation and promotion/distillation wiring; per-program tool-surface edits;
+  scoped guidance routing (scopes are headings in one guidance state every call imports); evaluation noise (4 worlds x
+  2 samples); live 48-sample measurement of the writer and supervisor prompts.
 
 ## 9. First production episodes measure
 
@@ -176,4 +214,35 @@ parent; confirmation once. Nothing here claims capability lift until those held 
 
 ## 10. End-to-end check on the real model
 
-See section 11 (filled from the live run).
+See section 11.
+
+## 11. Independent review and end-to-end status (2026-11-03 late)
+
+An independent reviewer agent checked the integrated work against the four owner criteria. Fixed (95104262d):
+
+- B1: memetic rows went through `privileged_context.case_facts`, which would read the episode's `expected: None` as a
+  fact; memetic rows now get no privileged facts (JOLT facts for supervisors are not designed yet).
+- B2: programs were keyed by family, mixing different program sources; a program is now `family@sha12` of its
+  exact source files, and splits only group source-identical worlds.
+- B3: concurrent samples of one episode shared one workspace directory; each run now gets its own
+  `runs/<run>` directory (`open(spec, runId)` through the world bridge).
+- M1: admission used dev successes; it now uses support only (dev/confirmation stay unseen).
+- M2: an episode that ended without a scored workspace dropped out of its group; it now scores 0 against the
+  group's anchor (`unscored_workspace`).
+- M3: `fit` was offered although no adapter actor exists; it is withheld from the declared service (constants kept
+  for the adapter path, M2 in the register).
+- M5, M8, M9: skills go to the function's companion folder; repeated identical evaluations are free (cache) and
+  count once; baselines and episodes are namespaced by parent checkpoint; `bind_round` no longer overrides the task
+  curriculum floor and writes no round records; protocol lines from the world process are guarded.
+
+Open (register): B4 (no build in the controller, stage inert without a manual build), M4 scoped routing, M6 noise,
+M7 promotion/distillation/ablation unwired; minor: the leak guard covers string/dict expectations only, the
+repetition metric is coarse.
+
+End-to-end (criterion 4) is **not yet demonstrated**. Units `memetic-e2e-build-4` (family `ext_decisions_desk`,
+support 2, query 2, samples 2; built before the B2 fix, so mechanics only) and `memetic-e2e-episodes-1` (collect two
+samples, then `compile_replay` and `prepare_objective`) run against the shared DGX actor on :8270 (bf95 `71c3eb45`),
+which serves the full67 rollout collection at about 3.5 minutes per request. Outputs:
+`/mnt/external/natlang-memetic-20261103/e2e-v1/`. No episode has completed, so there is no evidence yet that the
+supervisor acts, edits apply, the reward is computed and the update replays on the real model, and no capability
+claim of any kind.
