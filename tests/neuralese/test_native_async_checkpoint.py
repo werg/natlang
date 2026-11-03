@@ -5,6 +5,7 @@ import os
 import random
 import threading
 import time
+from pathlib import Path
 
 import pytest
 import torch
@@ -178,6 +179,10 @@ def test_native_trainer_drains_on_update_and_schedule_close_errors_without_savin
     writes=[]
     real_write=trajectory_state.atomic_checkpoint
     def held_write(path,state,**kwargs):
+        if Path(path).name=='.actor-view-snapshot.pt':
+            # Post-commit actor-view publication stages its own file from the
+            # committed save; it is not a training-checkpoint serialization.
+            return real_write(path,state,**kwargs)
         writes.append(state['step'])
         entered.set()
         if not release.wait(10):raise TimeoutError('trainer exit test did not release async writer')
