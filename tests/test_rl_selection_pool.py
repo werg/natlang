@@ -68,6 +68,18 @@ def test_effect_state_share_keeps_every_candidate_and_tags_world_rows(tmp_path):
                    map(json.loads, (tmp_path / 'free' / 'cases.jsonl').read_text().splitlines()))
 
 
+def test_repeated_effect_template_rows_stay_in_the_pool_while_repeated_plain_rows_wait(tmp_path):
+    rows = [case(f'eff-{i}', 'repair', 'g/code', body='one repair template', effect=True) for i in range(30)]
+    rows += [case(f'plain-{i}', 'questions', 'g/code', body='one question template') for i in range(30)]
+    rows += [case(f'other-{i}', f'o{i % 5}', 'g/other', body=f'other program {chr(97 + i)}{i}') for i in range(20)]
+    source = tmp_path / 'cases.jsonl'
+    source.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    pool.assemble([str(source)], tmp_path / 'pool', share=.5, domains={}, family_share=1.0, min_effect_share=.3, protected=Stub())
+    kept = [json.loads(line)['id'] for line in (tmp_path / 'pool' / 'cases.jsonl').read_text().splitlines()]
+    assert sum(i.startswith('eff-') for i in kept) == 30
+    assert sum(i.startswith('plain-') for i in kept) < 30
+
+
 def test_selector_honours_the_class_quota_every_round_on_a_low_effect_pool(tmp_path):
     from natlang_neuralese.rl import production
     from natlang_neuralese.rl.curriculum import DEFAULT

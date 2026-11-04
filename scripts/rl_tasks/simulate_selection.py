@@ -70,6 +70,11 @@ def simulate(cases, *, rounds, rows, group, config, seed=1103):
             'functional_programs_in_pool': len(programs_pool),
             'distinct_families_sampled': len({metadata(cases[i])['family'] for i in selected}),
             'families_in_pool': len(families_pool),
+            'sampled_rows_by_generator': dict(collections.Counter(
+                features[i]['generator'] for i, n in picked.items() for _ in range(n))),
+            'sampled_effect_rows_by_generator': dict(collections.Counter(
+                features[i]['generator'] for i, n in picked.items() if i in strict for _ in range(n))),
+            'visits_p99_one_row': sorted(picked.values())[int(.99 * (len(picked) - 1))],
             'max_visits_one_row': max(picked.values())}
 
 

@@ -41,6 +41,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from measure_repetition import FunctionalPrograms, normalize, program_features, write_text_atomic  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training' / 'neuralese'))
+from natlang_neuralese.common.paths import resolve_str  # noqa: E402
 
 
 def shingles(text, size=5):
@@ -98,7 +100,7 @@ def rows(path):
 
 
 STATIC_POOL_BYTES = 50_000_000  # pools at least this large are indexed once and reused (the admitted pool changes each batch)
-INDEX_ROOT = Path(os.environ.get('NATLANG_NOVELTY_INDEX') or '/mnt/external/natlang-rl-authoring/novelty-index')
+INDEX_ROOT = Path(os.environ.get('NATLANG_NOVELTY_INDEX') or resolve_str('data_hdd', 'natlang-rl-authoring', 'novelty-index'))
 
 
 def crc_shingles(text):

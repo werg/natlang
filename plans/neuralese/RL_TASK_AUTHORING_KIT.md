@@ -631,3 +631,84 @@ arithmetic), now rules for every batch:
   round 5 should hash the folder file names and the normalized content explicitly.
 - Authors should state every written line format (separators, singular and plural wording, trailing newline) in the root, and the
   count a returned number includes; these were the commonest blind-solve rejections.
+
+## 15. Round 5 changes and results (2026-11-03/04)
+
+**Breadth restored; construct shares are enforced at selection time.** Reaching the 30% effect/state bar by shrinking the pool
+(11,275 to 6,666 rows) had cost distinct programs. The assembler (`assemble_selection_pool.py`) no longer drops candidates for a
+share: it applies only the generator and family caps, tags rows whose oracle verifies a world `curriculum.rl.mix_class =
+effect_state`, and records the `class_quota` the interleaved RL controller binds. Selector `natlang.rl-task-curriculum/2` carries
+`class_quota` (default effect_state 0.34), keeps its rotating breadth cursor, and fills the rest of every round's share from the
+tagged rows by the usual frontier / outcome-signal / family-exploration order (rows are never duplicated; an untagged pool selects as
+before; an external NL policy that ignores the quota is refused; continuations adopt the field through the recorded transition
+`task-curriculum-class-quota-20261103`). `scripts/rl_tasks/simulate_selection.py` runs the real `select_tasks` for hundreds of
+rounds against synthetic outcomes and reports the sampled mixture, so the claim is measured on the selector, not on the pool's own share.
+
+**Tools.** The novelty gate's exact key now includes a directory reducer's folder world by exact file names and contents (numbered
+`01.md`/`02.md` variants and long/short worlds are not duplicates; the near-duplicate text still normalizes), and a large static
+pool is indexed once per family (`/mnt/external/natlang-rl-authoring/novelty-index`): a run loads only its batch's families (seconds,
+about 1 GB; give the ledger unit 3 GB). `authored_child_notes.py mechanical TASKS.jsonl` attaches per-call notes of a corrected tasks
+file to admitted rows whose program cannot replay (provenance `mechanical:argument-extract`, never `checked`).
+`register_source_held.py` registers an assembled source's `held/` packets as evaluation-only. The round-5 author brief is
+`/mnt/external/natlang-rl-authoring/AUTHOR_BRIEF_ROUND5.md` (every root states an `Output contract:` paragraph: paths, line templates,
+separators, number format, empty case, sort key and tie-break, counted cases). Producer-note backfill brief:
+`AUTHOR_BRIEF_NOTES_BACKFILL.md`.
+
+### Round 5 results (2026-11-04)
+
+Pool: `selection-pools/selection-pool-20261104T003500Z` (sha256 `6e8a6c8dade33fa4b06ae39f60629ad440c59af0569231942fc2979cea2cdcc7`,
+25,296 train rows; `latest.json` promoted after verification: unique ids, all train, 0 rows related to any protected packet,
+tags equal the strict world-effect rows, receipt digests match). Breadth against the shrunk pool (6,722 rows, 3,123 programs,
+1,625 functional programs, 76.7% of 90 families with 20+ programs): all 3,123 programs and all 1,625 functional programs kept, 4,235
+of the 4,237 programs of the unshrunk 11,275-row pool kept (two later-audited authored rows are gone), 6,682 distinct programs and
+2,268 functional programs in all, 82.2% of families with 20+ programs. Strict world-effect supply: 3,092 rows (12.2% of the pool;
+894 authored, 1,208 codebase repairs, 522 decisions, 342 inline, 126 codebase ops). A first version of the assembler lost 1,204 of
+them (a repeated template is deferred behind new programs by the round-robin); effect/state rows are now exempt from both the
+repeat deferral and the generator cap, and the class's plain rows leave their room.
+
+Selection simulation (`simulate_selection.py`, the real `select_tasks`, synthetic outcomes; 400 rounds x 16 rows x 8 samples):
+sampled strict world-effect share 46.1%, minimum round 37.5%, 0 rounds below 30%, versus 42.4% mean and 84 of 400 rounds below
+30% without the quota; 3,850 distinct rows, 1,398 of 2,268 functional programs and all 90 families reached; effect samples come
+from authored (1,892), inline (454), decisions (259), codebase repairs (206, 7%) and ops (139) rows, so the repeated repair
+template does not dominate. A long run (1,500 rounds x 32 rows) reaches 76% of the pool, all 3,092 effect rows, all 2,268 functional
+programs and all families, with a mean effect share of 37.9% and a worst round of 34.4%. One row was visited 307 times in the long run:
+the selector keeps re-picking a stable mixed-outcome row, which synthetic constant pass rates exaggerate (watch real visit counts).
+
+Authoring wave (Haiku authors, Sonnet blind solves of every packet, 19 new batches and 3 backfills): 345 new rows admitted (285 with a verified world),
+across the families below; 86 older rows were superseded by notes-only backfills. A blind solve disagreement or ambiguity holds a
+task back together with its program when the defect is in the program text (36 tasks held back in the new batches):
+
+| batch | family | admitted | world-effect | functional programs | held back |
+|---|---|---:|---:|---:|---:|
+| w85 | sequential_evidence_diagnosis | 21 | 12 | 7 | 0 |
+| w103 | catalogue_correction_desk (16th row) | 1 | 1 | 1 | 0 |
+| w113 | sequential_evidence_diagnosis | 19 | 13 | 8 | 2 |
+| w114 | multi_source_reconciliation | 20 | 20 | 19 | 1 |
+| w115 | producer_note_relays | 20 | 14 | 15 | 1 |
+| w116 | skills_procedure_desk | 21 | 21 | 7 | 0 |
+| w119 | resource_limited_pipeline_planning | 21 | 16 | 8 | 0 |
+| w120 | request_routing_gates | 18 | 15 | 6 | 3 |
+| w121 | section_carry_obligation_readers | 17 | 17 | 17 | 4 |
+| w122 | confirmed_dialogue_state_updates | 18 | 12 | 6 | 3 |
+| w123 | apiary_book_ledger | 20 | 15 | 7 | 1 |
+| w124 | procedure_library_selection | 22 | 22 | 6 | 0 |
+| w125 | typed_evidence_diagnosis_desk | 17 | 10 | 6 | 6 |
+| w126 | rule_table_depth3_desks | 20 | 14 | 7 | 0 |
+| w127 | fact_desk_escalation | 18 | 17 | 7 | 4 |
+| w129 | multi_round_state_games | 20 | 14 | 7 | 0 |
+| w130 | library_loan_desk | 16 | 16 | 9 | 5 |
+| w131 | ops_directory_reducers | 21 | 21 | 21 | 0 |
+| w132 | exact_algorithm_state_workflows | 15 | 15 | 5 | 6 |
+
+Findings that are now rules: a helper that reads a line the notes do not have, note wording that differs from the helper's
+description, an unstated destination file name when moving, an unstated tie order, a rule that is silent on whether a re-fitted or
+reopened item clears its earlier record, and an output contract that contradicts a numbered step were the blind-solve rejections;
+reference child matching is first-match on fragments of the call opening, so helper instructions must not quote world entries
+(the symptom is a correct returned value and a wrong world). Producer-note coverage of admitted Neuralese producer sites rose from
+28.6% (194 of 679) to 57.8% (491 of 850) by notes-only backfills of w54, w45, w68, w57, w39, w72 and w59 (supersession, replay-verified)
+and a mechanical attach for w08 (13 rows); w33, w18, w26, w15, w27 and older batches without replayable smokes remain.
+
+Round-6 targets: whole-root replays (or mechanical attach with provenance) for the uncovered older batches (w33, w18, w26, w15, w27,
+w21, w32, w19, w30, w38, w11, w31, w06, w23); more authored supply with a world per task (the world-derived split puts almost all
+rows in train, so held authored rows are few: 13 new held rows this round); a stricter lint for the failure modes above; real visit
+counts from the live selector to confirm the repeated-row behaviour; and program growth for the smallest families.

@@ -140,7 +140,8 @@ def caps(sizes, share):
 
 def take(members, count, family_cap, family_counts):
     """Round-robin across (family, level), effect/state oracles first inside each queue; repeated normalized programs
-    come after every new program; no source family exceeds ``family_cap`` rows of the pool."""
+    (other than world-verifying effect/state rows) come after every new program; no source family exceeds
+    ``family_cap`` rows of the pool."""
     queues = collections.OrderedDict()
     for row, features in sorted(members, key=lambda item: (not item[1]['effect_state_oracle'], item[0]['id'])):
         queues.setdefault((features['family'], features['level']), collections.deque()).append((row, features))
@@ -155,7 +156,9 @@ def take(members, count, family_cap, family_counts):
             if family_counts[key[0]] >= family_cap:
                 del queues[key]
                 continue
-            while queue and queue[0][1]['program'] in programs:
+            # A repeated normalized program waits behind every new program, except a row whose oracle verifies a world:
+            # effect supply is scarce, and the selector's class quota and family exploration spread its use.
+            while queue and queue[0][1]['program'] in programs and not queue[0][1]['effect_state_oracle']:
                 repeats.setdefault(key, collections.deque()).append(queue.popleft())
             if queue:
                 admit(*queue.popleft())
@@ -190,7 +193,12 @@ def select(classes, total, share, family_share):
         family_cap = max(1, int(family_share * sum(limits.values())))
     pool, family_counts = [], collections.Counter()
     for generator, members in sorted(classes.items()):
-        pool += take(members, limits[generator], family_cap, family_counts)
+        # Scarce rows whose oracle verifies a world (or an authored complete returned state) are exempt from the generator
+        # cap: the other rows of the class shrink to leave their room, so the cap still bounds the class's plain supply.
+        scarce = [m for m in members if m[1]['effect_state_oracle'] or m[1]['returned_state_oracle']]
+        plain = [m for m in members if not (m[1]['effect_state_oracle'] or m[1]['returned_state_oracle'])]
+        kept = take(scarce, len(scarce), family_cap, family_counts)
+        pool += kept + take(plain, max(0, limits[generator] - len(kept)), family_cap, family_counts)
     return pool, family_cap, limits
 
 
