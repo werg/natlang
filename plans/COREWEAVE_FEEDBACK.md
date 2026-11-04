@@ -44,6 +44,13 @@ Format: **date: title.** what happened · impact · attribution · suggestion.
   process had died with 137. · We nearly misdiagnosed an OOM. · Platform reporting. · Report per-process exit codes
   or OOM-kill events.
 
+- **2026-11-04: sandboxes complete with no reason.** On 2026-11-04 every GPU sandbox ended in `completed` with an
+  empty RETURNCODE and no event or exit reason: d1 fea754f2 (cw2, running about 11.6 h), d4 66644e8f (cw2, about 1.7 h),
+  bankmeta 17382ab4 (cw1, about 18 h), and earlier w0/d2/d3 (cw4, around 11:00Z). For w0/d2/d3 we know of one cause on our
+  side (a driver that wasn't registered with the bootstrap); the others are unexplained. · All production training
+  stopped, and the DiLoCo coordinator state on d1 was lost. · Attribution unconfirmed. · A termination reason (who or
+  what ended it: entry exit, OOM, preemption, node drain, quota) on every completed sandbox.
+
 ## Recovery, snapshots and storage
 
 - **2026-10-23: no recovery from a quota cutoff.** Both normal and gateway file reads reject a completed sandbox, and
