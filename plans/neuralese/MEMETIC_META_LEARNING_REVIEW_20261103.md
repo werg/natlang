@@ -301,3 +301,22 @@ Live status at the end of the session (2026-11-04 ~02:00 CET; bf95 `71c3eb45` on
   preparation inside the lease: parent support 1/4 resolved successes (4/4 scored, 20 min), paired query baseline
   2/4. The default-guidance baseline and the two supervisor episodes (supervisor acts, edits apply, evaluation, reward,
   replay compile and JOLT+ objective preparation) were still running; criterion 4 is not yet demonstrated.
+
+## 13. Held withdrawal, distillation packages, parent gate, writer runaways (2026-11-04)
+
+- **Held programs withdrawn from ordinary RL (review M4, 29e049fd5).** `memetic_stage held-packet` picks 5 whole task
+  families (smallest eligible first) from the RL selection pool and writes them as an evaluation-only packet,
+  `runs/natlang-memetic-held-20261104` (111 rows: codebase repair_uses_typo, reasoning-gym prime_factorization and
+  leg_counting, bAbI tasks 12 and 14), registered as protection source `memetic-held-programs`. The pool was
+  re-assembled from w5's exact spec: `selection-pool-20261104T0200Z-w5-memetic-held` (25,426 rows; 0 id overlap and
+  0 related rows with the packet, where w5 had 111 and 677) and promoted to `latest.json`. Held programs now come only
+  from the packet (`held_program_source`); the controller refuses an RL task source that still contains them.
+  Historical exposure of those worlds in earlier pools is not undone.
+- **Distillation (M5, 8ffdaa0a1).** Round manifests become immutable, protection-checked native-graph source
+  additions with exact row bindings and actor provenance (`distill/admission-queue.jsonl`). Consumption at the window
+  boundary (source-correction `added` rows) is requested from the boundary owner; not yet wired.
+- **Parent gate (M7, d3b411b9f).** `select_parent` requires a non-regressing paired held-program memetic verdict
+  (tolerance 0.05) when the lineage declares the stage; missing evidence blocks the candidate.
+- **Writer runaways (d6a581063).** A truncated reply in a text-typed call is answered with "your next reply,
+  complete and without a tool call, is returned as the result". Pre-change sample: 12/17 completed, 6 runs with
+  truncated turns; the 48-sample post-change run is in `writer48-after`.
