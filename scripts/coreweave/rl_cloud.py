@@ -1406,6 +1406,16 @@ def render_job(run, name, rounds, check=False):
     return jobs.validate(job)
 
 
+def started(sandbox_id):
+    """Whether a sandbox whose start wait failed is nevertheless running (a transient poll error), re-read from the
+    control plane; a startup timeout, failure or unreadable sandbox counts as not started."""
+    try:
+        status = str(cwctl.read_sandbox(sandbox_id, patience=120).status).lower()
+    except Exception:
+        return False
+    return 'running' in status
+
+
 def launch(run, name, account=None, dry_run=False, rounds=None, parent_later=False, check=False):
     current = load_run(run['_path']) if run.get('_path') else run
     if current.get('launch_hold'):
@@ -1452,6 +1462,16 @@ def launch(run, name, account=None, dry_run=False, rounds=None, parent_later=Fal
         follow_logs(run, sandbox_id)
     entry = cwctl.launch(job, False, True, None, Path(state['bundle']), secrets=secrets,
                          on_created=created_and_followed, account=account)
+    if entry.get('wait_error') and not started(entry['sandbox_id']):
+        # Never scheduled or failed before Running (2026-11-04: StartupTimeout "no node was assigned" was reported as
+        # a grant): the lineage is not running; stop the record and fail the launch.
+        subprocess.run([sys.executable, str(HERE / 'cwctl.py'), 'stop', entry['sandbox_id']], check=False)
+        live = state['lineages'][name]
+        live.update(status='failed', stopped=time.time(), error=entry['wait_error'])
+        release_consumer(run, consumer)
+        store_json(hub(run) / 'run-state.json', state)
+        note(run, f'{name} sandbox {entry["sandbox_id"]} never started ({entry["wait_error"]}); launch failed')
+        raise SystemExit(f'{name}: sandbox {entry["sandbox_id"]} never started: {entry["wait_error"]}')
     if entry.get('service_url'):
         state['lineages'][name]['service_url'] = entry['service_url']
         store_json(hub(run) / 'run-state.json', state)

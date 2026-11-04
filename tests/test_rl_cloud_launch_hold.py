@@ -81,3 +81,33 @@ def test_monitor_restart_preserves_probe_deadline_and_retries_cleanup_promptly()
     assert autopilot.next_delay({'probes':[{'at':1000}]},3600,now=5000) == 1
     assert autopilot.next_delay({'probe_cleanup':{'sandbox_id':'probe-1'}},3600) == 30
     assert autopilot.next_delay({'entitled':['account']},3600) == 300
+
+
+def test_launch_fails_and_records_a_sandbox_that_never_started(monkeypatch, tmp_path):
+    rl_cloud = autopilot.rl_cloud
+    monkeypatch.setattr(rl_cloud, 'hub', lambda run: tmp_path)
+    (tmp_path / 'run-state.json').write_text('{"bundle": "/b.tar"}')
+    monkeypatch.setattr(rl_cloud, 'newest_verified', lambda run, name: {'seq': 1, 'trained_rounds': 0})
+    monkeypatch.setattr(rl_cloud, 'render_job', lambda *a: {'id': 'job', 'resources': {}, 'lifetime_hours': 1})
+    monkeypatch.setattr(rl_cloud, 'lease_blobs', lambda *a, **k: None)
+    monkeypatch.setattr(rl_cloud, 'record_digests', lambda *a: set())
+    monkeypatch.setattr(rl_cloud, 'parent_capability', lambda *a: {})
+    monkeypatch.setattr(rl_cloud, 'diloco_secrets', lambda *a: {})
+    monkeypatch.setattr(rl_cloud, 'follow_logs', lambda *a: None)
+    monkeypatch.setattr(rl_cloud, 'note', lambda *a: None)
+    released, stopped = [], []
+    monkeypatch.setattr(rl_cloud, 'release_consumer', lambda run, consumer: released.append(consumer))
+    monkeypatch.setattr(rl_cloud.subprocess, 'run', lambda argv, check: stopped.append(argv[-1]))
+    monkeypatch.setattr(rl_cloud, 'started', lambda sandbox_id: False)
+
+    def launch(job, *a, on_created, account, **k):
+        on_created('sbx-1')
+        return {'sandbox_id': 'sbx-1', 'wait_error': 'StartupTimeout: no node was assigned'}
+    monkeypatch.setattr(rl_cloud.cwctl, 'launch', launch)
+    run = {'lineages': {'d1': {'account': 'cw2'}}}
+    with pytest.raises(SystemExit, match='never started'):
+        rl_cloud.launch(run, 'd1')
+    import json
+    live = json.loads((tmp_path / 'run-state.json').read_text())['lineages']['d1']
+    assert live['status'] == 'failed' and 'StartupTimeout' in live['error']
+    assert stopped == ['sbx-1'] and released == ['launch:job']
