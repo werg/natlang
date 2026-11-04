@@ -565,6 +565,13 @@ def after_collection(round_info, *, endpoint, round_out, collect=None, log=print
         record['distillation'] = distill(Path(round_out), out, endpoint=endpoint, parent_sha256=round_info['parent_sha256'])
     except Exception as error:  # noqa: BLE001 - recorded for supervision
         record['distillation_error'] = f'{type(error).__name__}: {error}'[:2000]
+    if (record.get('distillation') or {}).get('guidance_graph_files'):
+        try:
+            geometry = round_info.get('sft_geometry') or served_geometry(endpoint)
+            package = package_distillation(out, tokenizer=geometry['tokenizer'], roles=geometry['roles'])
+            record['distillation_package'] = None if package is None else package['source']
+        except Exception as error:  # noqa: BLE001 - recorded for supervision
+            record['distillation_package_error'] = f'{type(error).__name__}: {error}'[:2000]
     try:
         record['ablation'] = ablate_round(out, round_info['parent_sha256'], endpoint=endpoint)
     except Exception as error:  # noqa: BLE001 - recorded for supervision
@@ -599,6 +606,81 @@ def ablate_round(out, parent_sha256, *, endpoint, evaluator=None):
         write_json_durable(target, result)
         done.append({'score': str(score), **{k: result.get(k) for k in ('actual', 'shuffled', 'none', 'distinguishable')}})
     return done
+
+
+PACKAGE_SCHEMA = 'natlang.memetic-distillation-package/1'
+
+
+def served_geometry(endpoint):
+    """Tokenizer fingerprint and role marker ids of the round's actor (the parent that produced the graphs)."""
+    from .memetic_program import request_json
+    info = request_json(endpoint, '/v1/neuralese/info')
+    state = info.get('native_state') or {}
+    roles = state.get('role_marker_ids')
+    if not isinstance(roles, list) or len(roles) != 4:
+        raise ValueError('actor omitted its native role marker ids')
+    return {'tokenizer': state['tokenizer_fingerprint'], 'roles': roles}
+
+
+def package_distillation(out, *, tokenizer, roles, protected=None, log=print):
+    """Turn every not-yet-packaged round manifest (``distill/<parent>/manifest.json``) into one immutable SFT source
+    addition for the joint SFT stage: the guidance producer/consumer graphs (exact actor = the parent that ran the
+    improved program), indexed with the production tokenizer and role markers, protection-checked, with each row's
+    exact binding. The window-boundary source correction adopts it as ``added`` rows (natlang.native-source-
+    correction/1); nothing here claims exposure. Appends the package to ``distill/admission-queue.jsonl``."""
+    from ..data.native_sources import NativeGraphSource
+    from ..common.custody import ProtectedWorlds
+    from ..common.jsonio import write_bytes_durable
+    out = Path(out)
+    queue_path = out / 'distill' / 'admission-queue.jsonl'
+    queued = {Path(m).resolve() for item in (read_jsonl(queue_path) if queue_path.exists() else [])
+              for m in item['manifests']}
+    manifests = [m for m in sorted((out / 'distill').glob('*/manifest.json')) if m.resolve() not in queued]
+    rows, actors, seen, problems = [], set(), set(), []
+    guard = ProtectedWorlds.load() if protected is None else protected
+    for manifest_path in manifests:
+        manifest = json.loads(manifest_path.read_text())
+        for item in manifest.get('guidance_graphs') or []:
+            graph_path = Path(item['path'])
+            if hashlib.sha256(graph_path.read_bytes()).hexdigest() != item['sha256']:
+                raise ValueError(f'distillation graphs changed after export: {graph_path}')
+            for row in read_jsonl(graph_path):
+                if row['id'] in seen:
+                    continue
+                if row.get('split') != 'train' or guard.related(row):
+                    problems.append({'id': row['id'], 'reason': 'not a train world unrelated to protected worlds'})
+                    continue
+                seen.add(row['id'])
+                rows.append(row)
+        for episode in manifest.get('supervisor_episodes') or []:
+            actors.add(episode.get('policy') or manifest['parent_sha256'])
+    if not rows:
+        return None
+    number = sum(1 for _ in read_jsonl(queue_path)) if queue_path.exists() else 0
+    target = out / 'distill' / f'package-{number:04d}'
+    target.mkdir(parents=True, exist_ok=False)
+    graphs = target / 'memetic-guidance-graphs.jsonl'
+    write_bytes_durable(graphs, ''.join(json.dumps(row, sort_keys=True) + '\n' for row in rows).encode())
+    indexed = NativeGraphSource(graphs, tokenizer, required_split='train', role_ids=roles)
+    if [entry['id'] for entry in indexed.entries] != [row['id'] for row in rows]:
+        raise ValueError('distillation package does not index as exactly its rows')
+    receipt = {'schema': PACKAGE_SCHEMA, 'source': {'kind': 'native-graphs', 'path': str(graphs),
+                                                    'sha256': hashlib.sha256(graphs.read_bytes()).hexdigest()},
+               'rows': [{'id': entry['id'], 'binding': entry['binding'], 'disposition': 'added',
+                         'communication': bool(entry.get('communication'))} for entry in indexed.entries],
+               'family': 'memetic-guidance', 'manifests': [str(m) for m in manifests],
+               'episode_actors': sorted(actors), 'tokenizer_fingerprint': tokenizer, 'role_ids': list(roles),
+               'protection_digest': guard.digest, 'problems': problems,
+               'ce_declaration': {'encoding': 'native-row-objectives-v1'},
+               'training_admission': False,
+               'scope': 'verified successful guided query runs of improved programs, actor = the parent that ran '
+                        'them; adoption is a recorded source correction at a window boundary'}
+    write_json_durable(target / 'receipt.json', receipt)
+    with open(queue_path, 'a') as handle:
+        handle.write(json.dumps({'package': str(target / 'receipt.json'), 'manifests': [str(m) for m in manifests],
+                                 'rows': len(rows)}) + '\n')
+    log(json.dumps({'event': 'memetic_distillation_package', 'package': str(target), 'rows': len(rows)}))
+    return receipt
 
 
 def held_gains(rollouts, families):

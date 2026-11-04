@@ -542,3 +542,32 @@ def test_parent_selection_is_gated_by_the_memetic_verdict():
     history[1]['comparisons']['r' * 64] = stage.promotion({'f': .18}, {'f': .2})
     assert select_parent('s', [receipt], memetic_history=history)['selected_sha256'] == 'c' * 64
     assert select_parent('s', [receipt], memetic_history=history[:1])['memetic']['reason'].startswith('no paired')
+
+
+def test_distillation_package_is_an_exact_protected_source_addition(tmp_path, monkeypatch):
+    out = tmp_path / 'm'
+    graphs = tmp_path / 'g.jsonl'
+    rows = [{'id': 'memetic:x:1', 'split': 'train', 'source_groups': ['memetic-program:p']},
+            {'id': 'memetic:x:2', 'split': 'train', 'source_groups': ['memetic-program:p']}]
+    graphs.write_text(''.join(json.dumps(r) + '\n' for r in rows))
+    manifest = out / 'distill' / 'pppp' / 'manifest.json'
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(json.dumps({'parent_sha256': 'p' * 64, 'supervisor_episodes': [{'policy': 'p' * 64}],
+                                    'guidance_graphs': [{'path': str(graphs),
+                                                         'sha256': hashlib.sha256(graphs.read_bytes()).hexdigest()}]}))
+
+    class FakeSource:
+        def __init__(self, path, tokenizer, required_split, role_ids):
+            self.entries = [{'id': json.loads(l)['id'], 'binding': 'b-' + json.loads(l)['id'], 'communication': True}
+                            for l in open(path)]
+    import natlang_neuralese.data.native_sources as sources
+    monkeypatch.setattr(sources, 'NativeGraphSource', FakeSource)
+
+    class Guard:
+        digest = 'd'
+        def related(self, row):
+            return []
+    receipt = stage.package_distillation(out, tokenizer='t', roles=[1, 2, 3, 4], protected=Guard(), log=lambda l: None)
+    assert [r['id'] for r in receipt['rows']] == ['memetic:x:1', 'memetic:x:2']
+    assert all(r['disposition'] == 'added' for r in receipt['rows']) and receipt['episode_actors'] == ['p' * 64]
+    assert stage.package_distillation(out, tokenizer='t', roles=[1, 2, 3, 4], protected=Guard(), log=lambda l: None) is None
