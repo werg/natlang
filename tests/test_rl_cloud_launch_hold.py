@@ -92,6 +92,8 @@ def test_launch_fails_and_records_a_sandbox_that_never_started(monkeypatch, tmp_
     monkeypatch.setattr(rl_cloud, 'lease_blobs', lambda *a, **k: None)
     monkeypatch.setattr(rl_cloud, 'record_digests', lambda *a: set())
     monkeypatch.setattr(rl_cloud, 'parent_capability', lambda *a: {})
+    monkeypatch.setattr(rl_cloud, 'prepare_launch', lambda *a: {})
+    monkeypatch.setattr(rl_cloud, 'launch_closure', lambda *a: ([], [], [], []))
     monkeypatch.setattr(rl_cloud, 'diloco_secrets', lambda *a: {})
     monkeypatch.setattr(rl_cloud, 'follow_logs', lambda *a: None)
     monkeypatch.setattr(rl_cloud, 'note', lambda *a: None)
@@ -157,6 +159,7 @@ def test_add_closure_ships_only_inputs_beyond_the_seed(monkeypatch, tmp_path):
     closure = {'missing': [], 'files': [{'path': '/data/old.json', 'sha256': '1'}, {'path': '/data/new.json', 'sha256': '2'},
                                        {'path': str(config.parent.parent / 'diloco-s2/recipe.json'), 'sha256': '3'}]}
     monkeypatch.setattr(rl_cloud, 'runtime_tool', lambda runtime, *a: rl_cloud.store_json(a[-1], closure) or {})
+    monkeypatch.setattr(rl_cloud, 'row_index_files', lambda run, files: [])
     packed = []
     monkeypatch.setattr(rl_cloud, 'file_inputs', lambda run, name, files: packed.extend(files) or
                         [{'kind': 'archive', 'path': f'/inputs/{name}', 'sha256': 'b', 'files': files}])

@@ -16,7 +16,11 @@ DGX: the sandbox gets per-object signed URLs (capabilities) for the private W&B 
                                                for RL lineages also the custody packets, task source and (only when an
                                                actor uses it) the SGLang fork source + x86_64 lock
   rl_cloud.py launch RUN.json LINEAGE [--account A] [--dry-run]
-                                               one GPU sandbox from the newest DGX-verified export of LINEAGE
+                                               one GPU sandbox from the newest DGX-verified export of LINEAGE: the seed
+                                               closure, every later control's closure (add-closure, run automatically
+                                               for the export's active control), session trees the export lacks, and a
+                                               closure manifest the sandbox preflights; an unshipped bound path fails
+                                               here, before any sandbox
   rl_cloud.py export RUN.json [--once] [--interval S]
                                                the exporter: uploads each lineage's newest staged export (sandbox ->
                                                W&B by signed PUT), then GETs it to the DGX hub (ROOT/<lineage>,
@@ -37,7 +41,11 @@ RUN.json (schema natlang.rl-cloud-run/1):
                          refresh_after_updates), "prepared_control" (window 0 is that exact DGX-prepared, never-started
                          control, e.g. a corrected-mix boundary), "rebuild_window" (seed from an incomplete window's parent, forking
                          from the DGX window), "config" (overrides), "resources", "account", "allow_missing",
-                         "service" (true: also expose the DiLoCo coordinator port, an elastic-session cohost)}
+                         "service" (true: also expose the DiLoCo coordinator port, an elastic-session cohost),
+                         "observed_reads" (default: seed traces a CPU controller start of window 0 under strace and
+                         ships its reads; a path reuses that trace; false opts out), "observed_reads_timeout",
+                         "observed_reads_budget_gb", "allow_unshipped" ({path: reason}: bound files or checkpoints
+                         deliberately not shipped; anything else unshipped fails seed/launch before a sandbox exists)}
                       RL: {"template" (a DGX lineage config.json), "parent": {"checkpoint", "tokenizers"},
                            "config", "resources", "account"}},
    RL lineages also: "template_runtime" (a DGX RL runtime whose runs/ packets ship), "extras", "cloud_inputs"}
@@ -656,7 +664,8 @@ def file_inputs(run, name, files):
     if packed:
         digest, size = _tar_zst_put(run, '/', [p['path'].lstrip('/') for p in packed], f'{name}-closure')
         inputs.append({'kind': 'archive', 'path': f'{run["root"]}/.inputs/{name}-closure', 'sha256': digest,
-                       'bytes': size, 'files': [{'path': p['path'], 'sha256': p['sha256']} for p in packed]})
+                       'bytes': size, 'files': [{'path': p['path'], 'sha256': p['sha256'], 'bytes': p.get('bytes')}
+                                                for p in packed]})
     return inputs
 
 
@@ -813,34 +822,12 @@ def seed_sft(run, name):
     store_json(window / 'config.json', config)
     store_json(L / 'lineage.json', {'schema': sandbox.LINEAGE_SCHEMA, 'origin': boundary,
                                     'windows': [{'index': 0, 'out': str(window), 'config': str(window / 'config.json')}]})
-    closure_path = hub(run) / 'closures' / f'{name}.json'
-    closure_path.parent.mkdir(parents=True, exist_ok=True)
-    runtime_tool(boundary['runtime'], 'closure', '--config', str(window / 'config.json'), '-o', str(closure_path),
-                 *observed_reads(spec))
-    closure = read_json(closure_path)
-    allowed = set(spec.get('allow_missing', []))
-    missing = [m['path'] for m in closure['missing'] if m['path'] not in allowed]
-    if missing:
-        raise SystemExit(f'{name}: inputs the control names are absent on the DGX: {missing[:20]}')
-    closure['files'] += origin_referenced_files(run, spec, boundary['parent'], {f['path'] for f in closure['files']})
-    inputs = lineage_inputs(run, name, closure)
-    checkpoint = put_checkpoint(run, boundary['parent'], parent_path)
-    historical, skipped, historical_links = historical_checkpoint_blobs(run, closure, parent_path)
-    if skipped:
-        print(json.dumps({'event': 'historical_checkpoints_not_shipped', 'items': skipped}), flush=True)
-    members = ['lineage.json'] + [str(p.relative_to(L)) for p in sorted(L.rglob('*')) if p != L / 'lineage.json'
-                                  and not str(p.relative_to(L)).startswith('parent')]
-    top_sha, top_bytes = _tar_zst_put(run, L, members, f'{name}-seed-top')
+    shipped = seed_closure(run, name, spec, boundary, L, window, parent_path)
     record = {'schema': EXPORT_SCHEMA, 'seq': 'seed', 'lineage': name, 'lineage_dir': str(L), 'round': 0,
               'trained_rounds': 0, 'created': time.time(), 'state_sha256': None, 'kind': 'sft',
-              'blobs': [{'kind': 'top', 'sha256': top_sha, 'bytes': top_bytes, 'encoding': 'tar.zst'}, checkpoint,
-                        *historical],
-              'checkpoint': str(parent_path), 'checkpoints': [str(parent_path)], 'links': historical_links,
-              'inputs': inputs,
-              'closure': {'path': str(closure_path), 'sha256': file_digest(closure_path), 'files': len(closure['files']),
-                          'bytes': closure['bytes'], 'excluded': len(closure['excluded'])},
-              'parent_source': boundary, 'dgx_verified': True, 'cloud_committed': True}
+              'parent_source': boundary, 'dgx_verified': True, 'cloud_committed': True, **shipped}
     store_json(exports / 'seed.json', record)
+    closure, inputs, checkpoint = shipped['closure'], shipped['inputs'], shipped['blobs'][1]
     note(run, f'{name} seed export ({boundary["mode"]}): parent {boundary["parent"]} ({boundary["parent_sha256"][:12]}, '
               f'{checkpoint["encoding"]}) from {spec["controller"]}; {len(inputs)} inputs, closure '
               f'{closure["bytes"] / 1e9:.2f} GB')
@@ -889,14 +876,272 @@ def relocate_control(config, window, parent_path, ident):
 
 
 def observed_reads(spec):
-    """``--observed-reads TRACE`` when the lineage declares the strace of a CPU controller start of this exact window
-    control (``observed_reads``): every regular file that start read becomes a closure member (sft_window.traced_reads)."""
+    """``--observed-reads TRACE`` when the lineage names an existing strace of a CPU controller start of this exact
+    window control (``observed_reads``: a path); empty otherwise (seed_closure then traces a start itself unless the
+    lineage opts out with ``observed_reads: false``)."""
     trace = spec.get('observed_reads')
-    if not trace:
+    if not isinstance(trace, str):
         return ()
     if not Path(trace).is_file():
         raise SystemExit(f'observed_reads trace {trace} is missing')
     return ('--observed-reads', str(trace))
+
+
+TRACE_IMAGE = 'python:3.12-slim'
+TRACE_VENV = REPO / '.venv-neuralese'
+TRACE_TIMEOUT_SECONDS = 3 * 3600
+TRACE_BUDGET_GB = 32
+ROW_INDEX = Path.home() / '.cache' / 'natlang' / 'row-index'
+
+
+def trace_argv(unit, L, copy, parent, config, runtime, work, visible):
+    """The docker command of a traced CPU controller start (closure_replay's environment): the host trees in
+    ``visible`` read-only (every input the start reads is reachable, shipped or not), a writable copy of the seed's
+    lineage tree at its lineage path, the parent read-only at the lineage parent path, the row-index cache writable (the
+    start builds missing entries on the DGX, which then ship), no network and no GPU. ``strace -f -e trace=%file``
+    records every file call; the learner stops where it needs CUDA for the model."""
+    state = Path(work) / 'state'
+    args = ['docker', 'run', '--rm', '--name', unit, '--user', f'{os.getuid()}:{os.getgid()}', '--network', 'none',
+            '--shm-size', '8g', '--cap-add', 'SYS_PTRACE', '--security-opt', 'seccomp=unconfined',
+            '-v', '/usr:/usr:ro', '-v', '/etc:/etc:ro']
+    for root in visible:
+        args += ['-v', f'{root}:{root}:ro']
+    args += ['-v', f'{ROW_INDEX}:{ROW_INDEX}', '-v', f'{copy}:{L}', '-v', f'{parent}:{Path(L) / "parent" / "checkpoint.pt"}:ro',
+             '-v', f'{state}:/replay-state', '-v', f'{work}:/trace', '--tmpfs', '/tmp:exec,size=16g',
+             '--tmpfs', '/var/tmp:exec,size=16g']
+    env = {'NATLANG_REPO': runtime, 'PYTHONPATH': f'{runtime}/training/neuralese:{runtime}',
+           'PATH': f'{TRACE_VENV}/bin:/usr/local/bin:/usr/bin:/bin', 'HF_HUB_OFFLINE': '1', 'PYTHONUNBUFFERED': '1',
+           'NATLANG_HASH_CACHE': '/replay-state/hash-cache.jsonl', 'OMP_NUM_THREADS': '1', 'MKL_NUM_THREADS': '1',
+           'CUDA_VISIBLE_DEVICES': '', 'HOME': str(Path.home()), 'XDG_CACHE_HOME': '/replay-state/cache',
+           'TRITON_CACHE_DIR': '/replay-state/triton', 'TORCHINDUCTOR_CACHE_DIR': '/replay-state/inductor',
+           'NATLANG_CHECKPOINT_MIN_FREE_BYTES': '42949672960', 'NATLANG_DISCRETE_CUDA_MEMORY': '1',
+           'NATLANG_ROW_INDEX_CACHE': str(ROW_INDEX)}
+    for key, value in env.items():
+        args += ['-e', f'{key}={value}']
+    return args + ['-w', str(runtime), TRACE_IMAGE, '/usr/bin/strace', '-f', '-qq', '-e', 'trace=%file', '-o',
+                   '/trace/start.strace', f'{TRACE_VENV}/bin/python', '-u', '-m', 'natlang_neuralese.rl.production',
+                   'run', '--config', str(config), '--rounds', '1']
+
+
+def run_traced_start(argv, unit, work, timeout, budget_gb):
+    """``argv`` (a docker run named ``unit``) as a memory-ledger unit declaring its container; waits for its exit status
+    (written by the wrapper) up to ``timeout`` seconds, then stops the container. Returns the exit status or None."""
+    work = Path(work)
+    rc_path = work / 'rc'
+    rc_path.unlink(missing_ok=True)
+    quoted = ' '.join(shlex_quote(a) for a in argv)
+    command = f'{quoted} > {shlex_quote(str(work / "controller.log"))} 2>&1; echo $? > {shlex_quote(str(rc_path))}'
+    subprocess.run(['/usr/bin/python3', str(REPO / 'scripts' / 'memory_ledger.py'), 'run', '--unit', unit,
+                    '--container', unit, '--budget-gb', str(budget_gb), '--priority', 'medium', '--no-resumable',
+                    '--wait', '3600', '--workdir', str(work), '--', '/bin/sh', '-c', command], check=True)
+    deadline = time.time() + timeout
+    while time.time() < deadline and not rc_path.is_file():
+        time.sleep(15)
+    if not rc_path.is_file():
+        subprocess.run(['docker', 'stop', unit], capture_output=True)
+        subprocess.run(['systemctl', '--user', 'stop', f'{unit}.service'], capture_output=True)
+        return None
+    return int(rc_path.read_text().strip() or -1)
+
+
+def shlex_quote(value):
+    import shlex
+    return shlex.quote(str(value))
+
+
+def trace_visible_roots(paths):
+    """Host trees a traced start sees read-only: /home and /mnt, plus the top-level tree of every path the predicted
+    closure names (never a system tree)."""
+    roots = {r for r in ('/home', '/mnt') if Path(r).is_dir()}
+    for path in paths:
+        parts = Path(path).parts
+        if len(parts) > 2 and not path.startswith(SYSTEM_PREFIXES) and not any(path.startswith(r + '/') for r in roots):
+            roots.add('/' + parts[1])
+    return sorted(roots)
+
+
+def trace_seed_start(run, name, spec, L, config, parent, predicted):
+    """The strace of a CPU controller start of the seed's window control (default at seed; ``observed_reads: false``
+    opts out, a path reuses an existing trace). Returns (trace path or None, receipt)."""
+    if spec.get('observed_reads') is False:
+        return None, {'status': 'opted-out'}
+    if isinstance(spec.get('observed_reads'), str):
+        return Path(spec['observed_reads']), {'status': 'declared', 'trace': spec['observed_reads']}
+    work = hub(run) / 'observed' / f'{name}-{time.strftime("%Y%m%dT%H%M%S")}'
+    copy = work / 'lineage'
+    shutil.copytree(L, copy, symlinks=True, ignore=lambda d, names: ['parent'] if Path(d) == Path(L) else [])
+    (copy / 'parent').mkdir(exist_ok=True)
+    (work / 'state').mkdir(parents=True, exist_ok=True)
+    unit = f'rl-cloud-trace-{name}-{time.strftime("%m%d%H%M%S")}'[:80]
+    visible = trace_visible_roots([f['path'] for f in predicted.get('files', [])] + [str(parent)])
+    argv = trace_argv(unit, L, copy, parent, config, predicted['runtime'], work, visible)
+    (work / 'docker.argv').write_text('\n'.join(argv) + '\n')
+    started = time.time()
+    rc = run_traced_start(argv, unit, work, spec.get('observed_reads_timeout', TRACE_TIMEOUT_SECONDS),
+                          spec.get('observed_reads_budget_gb', TRACE_BUDGET_GB))
+    trace = work / 'start.strace'
+    log = work / 'controller.log'
+    tail = log.read_text(errors='replace')[-4000:] if log.is_file() else ''
+    receipt = {'status': 'traced' if rc is not None else 'timeout', 'trace': str(trace), 'rc': rc, 'unit': unit,
+               'seconds': round(time.time() - started, 1), 'log': str(log),
+               'reached_cuda': 'cuda' in tail.lower(), 'visible': visible}
+    shutil.rmtree(copy, ignore_errors=True)
+    if not trace.is_file() or trace.stat().st_size == 0:
+        raise SystemExit(f'{name}: the traced CPU controller start produced no trace ({receipt}); fix it or set '
+                         f'lineages.{name}.observed_reads: false to seed from the predicted closure alone')
+    print(json.dumps({'event': 'observed_reads_traced', **receipt}), flush=True)
+    return trace, receipt
+
+
+def row_index_map(run):
+    """{entry name: source sha256} of the row-index cache (``natlang.row-index/1`` pickles keyed by their source's
+    content), cached in the hub by (name, bytes, mtime_ns) so a seed reads each entry once."""
+    import pickle
+    path = hub(run) / 'row-index-map.json'
+    cached = read_json(path, {})
+    out, changed = {}, False
+    for entry in sorted(ROW_INDEX.glob('*.pkl')) if ROW_INDEX.is_dir() else []:
+        try:
+            stat = entry.stat()
+        except OSError:
+            continue
+        stamp = [stat.st_size, stat.st_mtime_ns]
+        known = cached.get(entry.name)
+        if known and known['stamp'] == stamp:
+            out[entry.name] = known
+            continue
+        try:
+            with open(entry, 'rb') as handle:
+                value = pickle.load(handle)
+            source = ((value.get('key') or {}).get('source_sha256') if isinstance(value, dict) else None)
+        except Exception:  # an unreadable entry is a cache miss on the sandbox too
+            source = None
+        out[entry.name] = {'stamp': stamp, 'source_sha256': source}
+        changed = True
+    if changed or set(out) != set(cached):
+        store_json(path, out)
+    return {name: v['source_sha256'] for name, v in out.items() if v.get('source_sha256')}
+
+
+def row_index_files(run, files):
+    """The row-index cache entries of every closure source (keyed by the source's sha256): shipped as exact files at
+    their DGX path so the sandbox's graph index loads hit instead of rescanning (2026-11-04 d2: hand install)."""
+    sources = {f['sha256'] for f in files}
+    have = {f['path'] for f in files}
+    out = []
+    for entry, source in sorted(row_index_map(run).items()):
+        path = str(ROW_INDEX / entry)
+        if source in sources and path not in have and os.path.isfile(path):
+            out.append({'path': path, 'sha256': file_digest(path), 'bytes': os.path.getsize(path),
+                        'from': ['row-index-cache']})
+    return out
+
+
+def allowed_unshipped(spec):
+    """``lineages.NAME.allow_unshipped``: {path: reason} (or [{"path", "reason"}]) of control-bound files deliberately
+    not shipped. Every entry needs a reason."""
+    value = spec.get('allow_unshipped') or {}
+    if isinstance(value, list):
+        value = {item['path']: item.get('reason') for item in value}
+    empty = [p for p, reason in value.items() if not reason or not str(reason).strip()]
+    if empty:
+        raise SystemExit(f'allow_unshipped entries need a reason: {empty}')
+    return dict(value)
+
+
+def seed_closure(run, name, spec, boundary, L, window, parent_path):
+    """The exact input closure of an SFT seed and everything it ships, failing closed: the predicted closure (the
+    runtime's own resolvers), unioned with the reads of a traced CPU controller start (default; reads the prediction
+    missed are recorded as closure bugs and still shipped), the origin lineages' referenced files, the row-index cache
+    entries of every closure source, and the historical checkpoints the admission records bind. A bound file that is
+    absent on the DGX, too large to ship, or a bound checkpoint with no exact blob is an error before any upload
+    unless ``allow_unshipped`` names it with a reason. Returns the record fields (blobs, links, inputs, closure,
+    closure_manifest)."""
+    closure_path = hub(run) / 'closures' / f'{name}.json'
+    closure_path.parent.mkdir(parents=True, exist_ok=True)
+    config = window / 'config.json'
+    runtime_tool(boundary['runtime'], 'closure', '--config', str(config), '-o', str(closure_path), *observed_reads(spec))
+    trace, trace_receipt = None, {'status': 'declared', 'trace': spec['observed_reads']} if isinstance(
+        spec.get('observed_reads'), str) else None
+    if trace_receipt is None:
+        trace, trace_receipt = trace_seed_start(run, name, spec, L, config, boundary['parent'], read_json(closure_path))
+        if trace is not None:
+            runtime_tool(boundary['runtime'], 'closure', '--config', str(config), '-o', str(closure_path),
+                         '--observed-reads', str(trace))
+    closure = read_json(closure_path)
+    allowed = allowed_unshipped(spec)
+    allowed.update({p: 'allow_missing' for p in spec.get('allow_missing', [])})
+    missing = [m['path'] for m in closure['missing'] if m['path'] not in allowed]
+    if missing:
+        raise SystemExit(f'{name}: inputs the control names are absent on the DGX: {missing[:20]}')
+    large = [e['path'] for e in closure['excluded'] if e['reason'] == 'large' and e['path'] not in allowed]
+    if large:
+        raise SystemExit(f'{name}: bound files above the closure size limit are not shipped: {large[:20]}; list them '
+                         f'in lineages.{name}.allow_unshipped with a reason')
+    bugs = sorted(f['path'] for f in closure['files'] if f['from'] == ['observed-read']
+                  and not f['path'].startswith(str(ROW_INDEX) + '/'))
+    closure['files'] += origin_referenced_files(run, spec, boundary['parent'], {f['path'] for f in closure['files']})
+    closure['files'] += row_index_files(run, closure['files'])
+    inputs = lineage_inputs(run, name, closure)
+    checkpoint = put_checkpoint(run, boundary['parent'], parent_path)
+    historical, skipped, historical_links = historical_checkpoint_blobs(run, closure, parent_path)
+    unshipped = [s for s in skipped if s['path'] not in allowed]
+    if unshipped:
+        raise SystemExit(f'{name}: bound historical checkpoints have no exact blob in a readable store (declare them '
+                         f'as checkpoint_bases, or list them in allow_unshipped with a reason): '
+                         f'{[s["path"] for s in unshipped][:20]}')
+    # A continuation of another cloud lineage (an elastic DiLoCo worker cloned from its boundary) re-verifies the
+    # parent's folded execution admission, whose historical checkpoints only that lineage's own seed named
+    # (2026-11-04: corrected-mix-d1 failed on zero-sgd-source-adoption-67 absent). Ship them as that seed did.
+    for origin in spec.get('historical_from', []):
+        source = read_json(hub(run) / 'exports' / origin / 'seed.json')
+        origin_parent = str(lineage_dir(run, origin) / 'parent' / 'checkpoint.pt')
+        have = {b['path'] for b in historical}
+        historical += [b for b in source['blobs'] if b.get('kind') == 'checkpoint' and b['path'] != origin_parent
+                       and b['path'] not in have]
+        historical_links += [x for x in source.get('links', []) if x not in historical_links]
+    members = ['lineage.json'] + [str(p.relative_to(L)) for p in sorted(L.rglob('*')) if p != L / 'lineage.json'
+                                  and not str(p.relative_to(L)).startswith('parent')]
+    top_sha, top_bytes = _tar_zst_put(run, L, members, f'{name}-seed-top')
+    blobs = [{'kind': 'top', 'sha256': top_sha, 'bytes': top_bytes, 'encoding': 'tar.zst'}, checkpoint, *historical]
+    manifest = manifest_entries(closure['files'], [b for b in blobs if b['kind'] == 'checkpoint'], historical_links,
+                                inputs, L)
+    if bugs:
+        store_json(hub(run) / 'closures' / f'{name}-closure-bugs.json', {'lineage': name, 'observed_only': bugs})
+        note(run, f'{name}: {len(bugs)} reads of the traced start were missing from the predicted closure (shipped; '
+                  f'closure bugs in closures/{name}-closure-bugs.json)')
+    return {'blobs': blobs, 'checkpoint': str(parent_path), 'checkpoints': [str(parent_path)],
+            'links': historical_links, 'inputs': inputs, 'closure_manifest': manifest,
+            'closure': {'path': str(closure_path), 'sha256': file_digest(closure_path), 'files': len(closure['files']),
+                        'bytes': closure['bytes'], 'excluded': len(closure['excluded']),
+                        'config': str(config), 'config_sha256': file_digest(config), 'observed_reads': trace_receipt, 'observed_only': bugs,
+                        'row_index_entries': sum(f['from'] == ['row-index-cache'] for f in closure['files']),
+                        'allowed_unshipped': {p: r for p, r in allowed.items()
+                                              if p in {s['path'] for s in skipped} | set(large)
+                                              | {m['path'] for m in closure['missing']}}}}
+
+
+def manifest_entries(files, checkpoints, links, inputs, L):
+    """The closure manifest a launch ships (rl_cloud_sandbox.preflight): every closure file at its path with its bytes
+    and sha256, every checkpoint blob, every link, and each frozen runtime's closure receipt. Files under the lineage
+    directory and row-index cache entries are existence checks (a later export or the trainer may rewrite them)."""
+    lineage = str(L).rstrip('/') + '/'
+    out = {}
+    for item in files:
+        soft = item['path'].startswith(lineage) or item['path'].startswith(str(ROW_INDEX) + '/')
+        out[item['path']] = {'path': item['path'], 'bytes': item.get('bytes'), 'sha256': item.get('sha256'),
+                             'kind': 'file', 'check': 'exists' if soft else 'sha256'}
+    for blob in checkpoints:
+        out[blob['path']] = {'path': blob['path'], 'bytes': blob.get('bytes'), 'sha256': blob['sha256'],
+                             'kind': 'checkpoint', 'check': 'exists' if blob['path'].startswith(lineage) else 'sha256'}
+    for link in links:
+        out[link['path']] = {'path': link['path'], 'kind': 'link', 'check': 'exists'}
+    for item in inputs:
+        if item.get('kind') == 'runtime' and item.get('closure_sha256'):
+            path = str(Path(item['path']) / 'runtime-input-closure.json')
+            out[path] = {'path': path, 'bytes': None, 'sha256': item['closure_sha256'], 'kind': 'runtime',
+                         'check': 'sha256'}
+    return [out[p] for p in sorted(out)]
 
 
 def historical_checkpoint_blobs(run, closure, parent_path):
@@ -967,44 +1212,12 @@ def seed_prepared_sft(run, name, spec, exports, L):
     store_json(window / 'config.json', config)
     store_json(L / 'lineage.json', {'schema': sandbox.LINEAGE_SCHEMA, 'origin': boundary,
                                     'windows': [{'index': 0, 'out': str(window), 'config': str(window / 'config.json')}]})
-    closure_path = hub(run) / 'closures' / f'{name}.json'
-    closure_path.parent.mkdir(parents=True, exist_ok=True)
-    runtime_tool(boundary['runtime'], 'closure', '--config', str(window / 'config.json'), '-o', str(closure_path),
-                 *observed_reads(spec))
-    closure = read_json(closure_path)
-    allowed = set(spec.get('allow_missing', []))
-    missing = [m['path'] for m in closure['missing'] if m['path'] not in allowed]
-    if missing:
-        raise SystemExit(f'{name}: inputs the control names are absent on the DGX: {missing[:20]}')
-    closure['files'] += origin_referenced_files(run, spec, boundary['parent'], {f['path'] for f in closure['files']})
-    inputs = lineage_inputs(run, name, closure)
-    checkpoint = put_checkpoint(run, boundary['parent'], parent_path)
-    historical, skipped, historical_links = historical_checkpoint_blobs(run, closure, parent_path)
-    if skipped:
-        print(json.dumps({'event': 'historical_checkpoints_not_shipped', 'items': skipped}), flush=True)
-    # A continuation of another cloud lineage (an elastic DiLoCo worker cloned from its boundary) re-verifies the
-    # parent's folded execution admission, whose historical checkpoints only that lineage's own seed named
-    # (2026-11-04: corrected-mix-d1 failed on zero-sgd-source-adoption-67 absent). Ship them as that seed did.
-    for origin in spec.get('historical_from', []):
-        source = read_json(hub(run) / 'exports' / origin / 'seed.json')
-        origin_parent = str(lineage_dir(run, origin) / 'parent' / 'checkpoint.pt')
-        have = {b['path'] for b in historical}
-        historical += [b for b in source['blobs'] if b.get('kind') == 'checkpoint' and b['path'] != origin_parent
-                       and b['path'] not in have]
-        historical_links += [x for x in source.get('links', []) if x not in historical_links]
-    members = ['lineage.json'] + [str(p.relative_to(L)) for p in sorted(L.rglob('*')) if p != L / 'lineage.json'
-                                  and not str(p.relative_to(L)).startswith('parent')]
-    top_sha, top_bytes = _tar_zst_put(run, L, members, f'{name}-seed-top')
+    shipped = seed_closure(run, name, spec, boundary, L, window, parent_path)
     record = {'schema': EXPORT_SCHEMA, 'seq': 'seed', 'lineage': name, 'lineage_dir': str(L), 'round': 0,
               'trained_rounds': 0, 'created': time.time(), 'state_sha256': None, 'kind': 'sft',
-              'blobs': [{'kind': 'top', 'sha256': top_sha, 'bytes': top_bytes, 'encoding': 'tar.zst'}, checkpoint,
-                        *historical],
-              'checkpoint': str(parent_path), 'checkpoints': [str(parent_path)], 'links': historical_links,
-              'inputs': inputs,
-              'closure': {'path': str(closure_path), 'sha256': file_digest(closure_path), 'files': len(closure['files']),
-                          'bytes': closure['bytes'], 'excluded': len(closure['excluded'])},
-              'parent_source': boundary, 'dgx_verified': True, 'cloud_committed': True}
+              'parent_source': boundary, 'dgx_verified': True, 'cloud_committed': True, **shipped}
     store_json(exports / 'seed.json', record)
+    closure, inputs, checkpoint = shipped['closure'], shipped['inputs'], shipped['blobs'][1]
     note(run, f'{name} seed export (prepared control): parent {boundary["parent"]} ({boundary["parent_sha256"][:12]}, '
               f'{checkpoint["encoding"]}) from {spec["controller"]}; {len(inputs)} inputs, closure '
               f'{closure["bytes"] / 1e9:.2f} GB')
@@ -1109,11 +1322,20 @@ def add_runtime(run, name, runtime, archive):
 ADDED_INPUTS = 'added-inputs.json'
 
 
-def _add_inputs(run, name, items):
+def _add_inputs(run, name, items, checkpoints=(), links=(), manifest=(), closure=None):
+    """Merge inputs (and the checkpoint blobs, links and closure-manifest entries a later control binds) into the
+    lineage's added-inputs record; the same (kind, path) or path replaces its earlier entry."""
     path = hub(run) / 'exports' / name / ADDED_INPUTS
     record = read_json(path, {}) or {'schema': 'natlang.cloud-lineage-added-inputs/1', 'inputs': []}
     new = {(i['kind'], i['path']) for i in items}
     record['inputs'] = [i for i in record['inputs'] if (i['kind'], i['path']) not in new] + list(items)
+    for key, values in (('checkpoints', checkpoints), ('links', links), ('manifest', manifest)):
+        values = list(values)
+        if values or key in record:
+            paths = {v['path'] for v in values}
+            record[key] = [v for v in record.get(key, []) if v['path'] not in paths] + values
+    if closure is not None:
+        record['closures'] = [c for c in record.get('closures', []) if c['sha256'] != closure['sha256']] + [closure]
     store_json(path, record)
 
 
@@ -1121,61 +1343,96 @@ def add_closure(run, name, config_path):
     """Record the inputs a later window control of the lineage reads that its seed closure did not ship (in-place
     adopted recipes, CE policies, focus/correction files, newly registered protected packets): computed with the
     control's own runtime closure tool; files already committed in a store become ``file`` inputs, the rest one packed
-    archive. Every later launch restores them (lineage_seed_inputs). 2026-11-04: w0 113911e0 relaunched from export 13
-    lacked 115 files the v45 window bound (held packet cases, mix filters)."""
+    archive, plus the row-index entries of its sources and the historical checkpoints its admission records bind (an
+    error when one has no exact blob, unless ``allow_unshipped`` names it). Every later launch restores them
+    (lineage_seed_inputs, launch_blobs) and checks them in its closure manifest. 2026-11-04: w0 113911e0 relaunched
+    from export 13 lacked 115 files the v45 window bound (held packet cases, mix filters)."""
     config_path = Path(config_path).resolve(strict=True)
     config = read_json(config_path)
+    spec = run.get('lineages', {}).get(name, {})
+    config_sha = file_digest(config_path)
     runtime = (config.get('actor_environment') or {}).get('NATLANG_REPO') or str(Path(config['runtime']).parent)
-    closure_path = hub(run) / 'closures' / f'{name}-{file_digest(config_path)[:12]}.json'
+    closure_path = hub(run) / 'closures' / f'{name}-{config_sha[:12]}.json'
     closure_path.parent.mkdir(parents=True, exist_ok=True)
     runtime_tool(runtime, 'closure', '--config', str(config_path), '-o', str(closure_path))
     closure = read_json(closure_path)
-    if closure['missing']:
-        raise SystemExit(f'{name}: inputs {config_path} names are absent on the DGX: {[m["path"] for m in closure["missing"]][:20]}')
+    allowed = allowed_unshipped(spec)
+    allowed.update({p: 'allow_missing' for p in spec.get('allow_missing', [])})
+    missing = [m['path'] for m in closure['missing'] if m['path'] not in allowed]
+    if missing:
+        raise SystemExit(f'{name}: inputs {config_path} names are absent on the DGX: {missing[:20]}')
+    large = [e['path'] for e in closure.get('excluded', []) if e['reason'] == 'large' and e['path'] not in allowed]
+    if large:
+        raise SystemExit(f'{name}: {config_path} binds files above the closure size limit: {large[:20]}; list them in '
+                         f'lineages.{name}.allow_unshipped with a reason')
     shipped = set()
     for item in lineage_seed_inputs(run, name):
         if item['kind'] == 'file':
             shipped.add((item['path'], item['sha256']))
         for member in item.get('files', []):
             shipped.add((member['path'], member['sha256']))
-    lineage_dir = str(Path(config['out']).parent) + '/'
-    todo = [f for f in closure['files'] if (f['path'], f['sha256']) not in shipped and not f['path'].startswith(lineage_dir)
-            and not f['path'].endswith('.reservation.json')]
-    items = file_inputs(run, f'{name}-added-{file_digest(config_path)[:12]}', todo) if todo else []
-    if items:
-        _add_inputs(run, name, items)
-    return {'config': str(config_path), 'files': len(todo), 'inputs': len(items)}
+    lineage_root = str(Path(config['out']).parent) + '/'
+    files = [f for f in closure['files'] if not f['path'].endswith('.reservation.json')]
+    files += row_index_files(run, files)
+    todo = [f for f in files if (f['path'], f['sha256']) not in shipped and not f['path'].startswith(lineage_root)]
+    items = file_inputs(run, f'{name}-added-{config_sha[:12]}', todo) if todo else []
+    seed = read_json(hub(run) / 'exports' / name / 'seed.json', {}) or {}
+    added = read_json(hub(run) / 'exports' / name / ADDED_INPUTS, {}) or {}
+    have = {b['path'] for b in seed.get('blobs', []) + added.get('checkpoints', []) if b.get('path')}
+    historical, skipped, links = historical_checkpoint_blobs(run, closure, Path(config.get('checkpoint') or '/'))
+    skipped = [s for s in skipped if s['path'] not in have and s['path'] not in allowed
+               and not s['path'].startswith(lineage_root)]
+    if skipped:
+        raise SystemExit(f'{name}: {config_path} binds historical checkpoints with no exact blob in a readable store: '
+                         f'{[s["path"] for s in skipped][:20]}')
+    historical = [b for b in historical if b['path'] not in have]
+    manifest = manifest_entries(files, historical, links, items, Path(config['out']).parent)
+    _add_inputs(run, name, items, checkpoints=historical, links=links, manifest=manifest,
+                closure={'config': str(config_path), 'sha256': config_sha, 'closure': str(closure_path)})
+    return {'config': str(config_path), 'files': len(todo), 'inputs': len(items), 'checkpoints': len(historical)}
+
+
+def added_closure_configs(run, name):
+    return {c['sha256'] for c in (read_json(hub(run) / 'exports' / name / ADDED_INPUTS, {}) or {}).get('closures', [])}
 
 
 def launch_blobs(run, record, name=None):
     """The blobs a launch from ``record`` materializes. A tune shard's exports carry its stage directory, never its
-    read-only parent, so every launch of a shard also restores the seed's parent checkpoint."""
+    read-only parent, so every launch of a shard also restores the seed's parent checkpoint. Historical checkpoints the
+    seed shipped outside the lineage directory (execution-transition and source adoption proofs the earned frame
+    verifies at every trainer start) and those later controls bind (add_closure) travel with every launch: a lineage's
+    own exports never carry them (2026-11-04: w0 113911e0 relaunched from export 13 failed on
+    zero-sgd-source-adoption-67-full-v2-1102)."""
     out = list(record['blobs'])
-    seed = read_json(hub(run) / 'exports' / (name or record['lineage']) / 'seed.json', {}) or {}
-    if record.get('kind') == 'tune' and not any(b['kind'] == 'checkpoint' for b in out):
-        out += [b for b in seed['blobs'] if b['kind'] == 'checkpoint']
-    elif seed and seed is not record:
-        # Historical checkpoints the seed shipped outside the lineage directory (execution-transition and source
-        # adoption proofs the earned frame verifies at every trainer start): a lineage's own exports never carry them.
-        # 2026-11-04: w0 113911e0 relaunched from export 13 failed on zero-sgd-source-adoption-67-full-v2-1102.
-        lineage_dir = str(record.get('lineage_dir') or seed.get('lineage_dir') or '').rstrip('/') + '/'
+    lineage = name or record['lineage']
+    seed = read_json(hub(run) / 'exports' / lineage / 'seed.json', {}) or {}
+    if record.get('kind') == 'tune':
+        if not any(b['kind'] == 'checkpoint' for b in out):
+            out += [b for b in seed['blobs'] if b['kind'] == 'checkpoint']
+        return out
+    lineage_dir = str(record.get('lineage_dir') or seed.get('lineage_dir') or '').rstrip('/') + '/'
+    added = (read_json(hub(run) / 'exports' / lineage / ADDED_INPUTS, {}) or {}).get('checkpoints', [])
+    for blob in [*(seed.get('blobs', []) if seed is not record else []), *added]:
         have = {b['path'] for b in out if 'path' in b}
-        out += [b for b in seed.get('blobs', []) if b['kind'] == 'checkpoint' and b['path'] not in have
-                and not b['path'].startswith(lineage_dir)]
+        if blob['kind'] == 'checkpoint' and blob['path'] not in have and not blob['path'].startswith(lineage_dir):
+            out.append(blob)
     return out
 
 
 def launch_links(run, record, name=None):
     """The record's links plus the seed's (symlinks/hardlinks the seed's historical checkpoints are reached through)."""
     seed = read_json(hub(run) / 'exports' / (name or record['lineage']) / 'seed.json', {}) or {}
+    added = read_json(hub(run) / 'exports' / (name or record['lineage']) / ADDED_INPUTS, {}) or {}
     links = list(record.get('links', []))
-    paths = {link['path'] for link in links}
-    return links + [link for link in seed.get('links', []) if link['path'] not in paths]
+    for link in [*seed.get('links', []), *added.get('links', [])]:
+        if link['path'] not in {x['path'] for x in links}:
+            links.append(link)
+    return links
 
 
 def record_digests(run, record, name=None):
     """Every blob a launch from ``record`` reads: its blobs (and a delta's receipt, payload and base chain) and the
-    lineage's and run's inputs."""
+    lineage's, run's and the launch's own inputs."""
     out = set()
     for blob in launch_blobs(run, record, name):
         out.add(blob['sha256'])
@@ -1183,7 +1440,8 @@ def record_digests(run, record, name=None):
             out |= {blob['receipt']['sha256'], blob['payload']['sha256']}
             for digest, spec in base_specs(run, blob['base']).items():
                 out |= ({digest} if spec['encoding'] == 'raw' else {spec['receipt']['sha256'], spec['payload']['sha256']})
-    inputs = read_json(hub(run) / 'run-state.json', {}).get('inputs', []) + lineage_seed_inputs(run, name or record['lineage'])
+    inputs = (read_json(hub(run) / 'run-state.json', {}).get('inputs', []) + lineage_seed_inputs(run, name or record['lineage'])
+              + launch_extra(run, name or record['lineage'], record).get('inputs', []))
     return out | {i['sha256'] for i in inputs}
 
 
@@ -1191,10 +1449,136 @@ def _with_parts(run, value):
     return {**value, 'parts': part_urls(run, value['sha256'])}
 
 
-def parent_capability(run, record):
-    inputs = read_json(hub(run) / 'run-state.json', {}).get('inputs', []) + lineage_seed_inputs(run, record['lineage'])
+def launch_extra_path(run, name, record):
+    return hub(run) / 'launch-inputs' / name / f'{record["seq"]}.json'
+
+
+def launch_extra(run, name, record):
+    return read_json(launch_extra_path(run, name, record), {}) or {}
+
+
+def top_members(run, record):
+    """Member names of the record's top tar (from the DGX CAS copy; fetched from the store when pruned locally)."""
+    top = next((b for b in record['blobs'] if b['kind'] == 'top'), None)
+    if top is None:
+        return set()
+    cas = Path(run['root']) / '.cas'
+    cas.mkdir(parents=True, exist_ok=True)
+    if not (cas / top['sha256']).is_file():
+        get_blob(run, top['sha256'], cas / top['sha256'])
+    listing = subprocess.run(f'zstd -q -dc {shlex_quote(cas / top["sha256"])} | tar -t', shell=True,
+                             capture_output=True, text=True, check=True).stdout
+    return {line.rstrip('/') for line in listing.splitlines() if line}
+
+
+def prepare_launch(run, name, record):
+    """What a launch of an SFT lineage from a later export adds to the seed closure (stored per export, so leases,
+    retention and the capability see the same set):
+    - the inputs of the newest exported active window control when it differs from the seed control (add_closure
+      on the DGX mirror's control, recorded once per control);
+    - lineage-level session trees (diloco-sN/, prepared successor controls) from the DGX lineage mirror when the
+      export's top tar lacks them (exports before eab1e9ee0)."""
+    spec = run['lineages'][name]
+    if not is_sft(spec) or not isinstance(record.get('seq'), int):
+        return {}
+    L = Path(record['lineage_dir'])
+    out, config = sandbox.controller(L)
+    if record.get('state_sha256') and file_digest(out / 'state.json') != record['state_sha256']:
+        raise SystemExit(f'{name}: the DGX mirror {L} is not at export {record["seq"]} (state.json differs)')
+    seed = read_json(hub(run) / 'exports' / name / 'seed.json', {}) or {}
+    seed_config = (read_json((seed.get('closure') or {}).get('path', ''), {}) or {}).get('config') \
+        if (seed.get('closure') or {}).get('path') and Path(seed['closure']['path']).is_file() else None
+    sha = file_digest(config)
+    if (seed_config is None or Path(seed_config).resolve() != config.resolve()
+            or sha != (seed.get('closure') or {}).get('config_sha256', sha)) and sha not in added_closure_configs(run, name):
+        result = add_closure(run, name, config)
+        note(run, f'{name}: launch from export {record["seq"]} adds the closure of its active control {config} '
+                  f'({result["files"]} files, {result["checkpoints"]} checkpoints beyond the seed)')
+    windows = {Path(w['out']).name for w in read_json(L / 'lineage.json', {}).get('windows', [])}
+    members = top_members(run, record)
+    lacking = [p for p in sorted(L.iterdir()) if p.is_dir() and not p.is_symlink()
+               and p.name not in windows | {'parent', 'actor-tokenizers'} and p.name not in members]
+    extra = {'seq': record['seq'], 'session_dirs': [str(p) for p in lacking], 'inputs': [], 'manifest': []}
+    if lacking:
+        files = []
+        for directory in lacking:
+            for rel in sandbox._metadata_members(L, directory):
+                path = L / rel
+                if path.is_file():
+                    files.append({'path': str(path), 'bytes': path.stat().st_size, 'sha256': file_digest(path)})
+        extra['inputs'] = file_inputs(run, f'{name}-session-{record["seq"]}', files) if files else []
+        extra['manifest'] = manifest_entries(files, [], [], [], L)
+        note(run, f'{name}: export {record["seq"]} lacks lineage-level trees {[p.name for p in lacking]}; shipping '
+                  f'{len(files)} files from the DGX lineage mirror')
+    store_json(launch_extra_path(run, name, record), extra)
+    return extra
+
+
+def closure_manifest(run, name, record, blobs, links, inputs):
+    """The launch's closure manifest: the seed's (or, for a seed before manifests, its closure's files and bound
+    historical checkpoints), every later control's (add_closure), the launch's own additions, the launch's checkpoint
+    blobs and links, and each frozen runtime's closure receipt; one entry per path, the latest source winning."""
+    seed = read_json(hub(run) / 'exports' / name / 'seed.json', {}) or {}
+    L = Path(record.get('lineage_dir') or seed.get('lineage_dir') or lineage_dir(run, name))
+    entries = {}
+    if 'closure_manifest' in seed:
+        base = seed['closure_manifest']
+    elif (seed.get('closure') or {}).get('path') and Path(seed['closure']['path']).is_file():
+        closure = read_json(seed['closure']['path'])
+        base = manifest_entries(closure['files'], [], [], [], L) + [
+            {'path': c['path'], 'bytes': None, 'sha256': c['sha256'], 'kind': 'checkpoint', 'check': 'sha256'}
+            for c in closure.get('historical_checkpoints', [])
+            if c['path'] != str(L / 'parent' / 'checkpoint.pt')]
+    else:
+        base = []
+    added = (read_json(hub(run) / 'exports' / name / ADDED_INPUTS, {}) or {}).get('manifest', [])
+    launch = launch_extra(run, name, record).get('manifest', [])
+    current = manifest_entries([], [b for b in blobs if b.get('kind') == 'checkpoint' and b.get('path')], links, inputs, L)
+    for entry in [*base, *added, *launch, *current]:
+        entries[entry['path']] = entry
+    return [entries[p] for p in sorted(entries)]
+
+
+def require_shipped(name, manifest, inputs, blobs, links, L, allowed=()):
+    """Fail closed before any sandbox exists: every manifest path is restored by the launch (a file input, an archive
+    member, a frozen runtime, a checkpoint blob, a link, or the lineage tree the export carries) unless
+    ``allow_unshipped`` names it with a reason."""
+    shipped = {b['path'] for b in blobs if b.get('path')} | {link['path'] for link in links}
+    trees = [str(L).rstrip('/') + '/']
+    for item in inputs:
+        if item.get('kind') == 'file':
+            shipped.add(item['path'])
+        elif item.get('kind') == 'archive':
+            shipped |= {m['path'] for m in item.get('files', [])}
+        elif item.get('kind') == 'runtime':
+            trees.append(item['path'].rstrip('/') + '/')
+        elif item.get('extract_to'):
+            trees.append(item['path'].rstrip('/') + '/')
+            shipped.add(item['path'])
+    unshipped = [e['path'] for e in manifest if e['path'] not in shipped and e['path'] not in allowed
+                 and not any(e['path'].startswith(t) for t in trees)]
+    if unshipped:
+        raise SystemExit(f'{name}: {len(unshipped)} bound paths are not shipped by this launch (no sandbox created): '
+                         f'{unshipped[:30]}')
+
+
+def launch_closure(run, name, record):
+    """(inputs, blobs, links, manifest) of a launch from ``record``, checked: every manifest path is shipped."""
+    inputs = (read_json(hub(run) / 'run-state.json', {}).get('inputs', []) + lineage_seed_inputs(run, name)
+              + launch_extra(run, name, record).get('inputs', []))
+    blobs_, links = launch_blobs(run, record, name), launch_links(run, record, name)
+    manifest = closure_manifest(run, name, record, blobs_, links, inputs)
+    spec = run.get('lineages', {}).get(name, {})
+    require_shipped(name, manifest, inputs, blobs_, links, Path(record['lineage_dir']),
+                    {**allowed_unshipped(spec), **{p: 'allow_missing' for p in spec.get('allow_missing', [])}})
+    return inputs, blobs_, links, manifest
+
+
+def parent_capability(run, record, name=None):
+    name = name or record['lineage']
+    inputs, blobs_, links, manifest = launch_closure(run, name, record)
     out_blobs, bases = [], {}
-    for blob in launch_blobs(run, record):
+    for blob in blobs_:
         if blob['encoding'] == 'zip-delta':
             out_blobs.append({**blob, 'receipt': _with_parts(run, blob['receipt']),
                               'payload': _with_parts(run, blob['payload'])})
@@ -1207,7 +1591,7 @@ def parent_capability(run, record):
     return {'schema': PARENT_SCHEMA, 'lineage_dir': record['lineage_dir'], 'seq': record['seq'],
             'trained_rounds': record['trained_rounds'], 'state_sha256': record.get('state_sha256'),
             'checkpoint': record.get('checkpoint'), 'blobs': out_blobs, 'bases': bases,
-            'inputs': [_with_parts(run, i) for i in inputs], 'links': launch_links(run, record)}
+            'inputs': [_with_parts(run, i) for i in inputs], 'links': links, 'manifest': manifest}
 
 
 # -- blob retention (shared lease namespace: retention_leases.py) --------------------------------------------------------
@@ -1551,8 +1935,10 @@ def launch(run, name, account=None, dry_run=False, rounds=None, parent_later=Fal
     # A parent delivered later (deliver-parent) lets the sandbox build its environments while a seed still uploads.
     consumer = f"launch:{job['id']}"
     if not parent_later:
+        prepare_launch(run, name, record)
+        launch_closure(run, name, record)  # fail closed before any lease, capability or sandbox
         lease_blobs(run, consumer, record_digests(run, record, name))
-    secrets = {} if parent_later else {'rl-parent': json.dumps(parent_capability(run, record)).encode()}
+    secrets = {} if parent_later else {'rl-parent': json.dumps(parent_capability(run, record, name)).encode()}
     secrets.update(diloco_secrets(run, name, state))
 
     def created(sandbox_id):
@@ -1678,9 +2064,11 @@ def deliver_parent(run, name):
         raise SystemExit(f'{name}: nothing verified to deliver')
     box = cwctl.read_sandbox(live['sandbox_id'], patience=300)
     live['lease_consumer'] = live.get('lease_consumer') or f"launch:{live['job']}"
+    prepare_launch(run, name, record)
+    launch_closure(run, name, record)
     lease_blobs(run, live['lease_consumer'], record_digests(run, record, name))
     secrets = f"{json.loads(Path(REPO / run['job']).read_text())['scratch']['path']}/.coreweave/secrets"
-    capability = json.dumps(parent_capability(run, record)).encode()
+    capability = json.dumps(parent_capability(run, record, name)).encode()
     cwctl.cwaccounts.refuse_credentials({'rl-parent': capability})
     box.write_file(f'{secrets}/.rl-parent.tmp', capability).result(timeout=120)
     _exec(box, ['sh', '-c', f'chmod 600 {secrets}/.rl-parent.tmp && mv {secrets}/.rl-parent.tmp {secrets}/rl-parent'], 60)
