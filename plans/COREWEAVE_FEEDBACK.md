@@ -44,6 +44,11 @@ Format: **date: title.** what happened · impact · attribution · suggestion.
   process had died with 137. · We nearly misdiagnosed an OOM. · Platform reporting. · Report per-process exit codes
   or OOM-kill events.
 
+- **2026-11-04: quota exhaustion ends running sandboxes silently.** At 14:2xZ, creates in cw1, cw2 and cw3 returned
+  `RESOURCE_EXHAUSTED: quota exceeded, check plan and billing details`. The sandboxes that died earlier that day without a
+  reason (next entry) were most likely ended by the same exhaustion: no warning, no termination reason, and no grace
+  period to export. · All production training stopped. · Platform. · Warn at quota thresholds, report "quota" as the
+  termination reason, and allow a short export grace period.
 - **2026-11-04: sandboxes complete with no reason.** On 2026-11-04 every GPU sandbox ended in `completed` with an
   empty RETURNCODE and no event or exit reason: d1 fea754f2 (cw2, running about 11.6 h), d4 66644e8f (cw2, about 1.7 h),
   bankmeta 17382ab4 (cw1, about 18 h), and earlier w0/d2/d3 (cw4, around 11:00Z). For w0/d2/d3 we know of one cause on our
