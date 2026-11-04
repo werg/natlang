@@ -884,8 +884,46 @@ def _materialize_preference_capacity_request(source, objective, descriptor, *, i
     return binding(request_path)
 
 
-def _materialize_sft_capacity_request(source, descriptor, *, identity, runtime_code_sha256, request_path):
-    """Select actual maximum complete SFT graphs from the authenticated current geometry sidecar."""
+def _physical_prefix_maxima(source, slots, *, chunk=256):
+    """Rows with the largest aliased (physical) forward tokens and KV slots.
+
+    Prefix arithmetic v4 runs each exact raw prefix once, so memory follows the
+    aliased plan, not the logical row size: a heavily aliased 333k-token chain
+    can be physically smaller than an unaliased 110k-token graph. Physical never
+    exceeds logical, so scan rows in descending logical size and stop once no
+    remaining row's logical tokens or KV slots can beat the physical maxima.
+    """
+    from ..train.native_prefix_packing import causal_prefix_geometry
+    entries = source.entries
+    order = sorted(range(len(entries)), key=lambda i: (-entries[i]['forward_tokens'], i))
+    suffix_slots = [0] * (len(order) + 1)
+    for position in range(len(order) - 1, -1, -1):
+        suffix_slots[position] = max(suffix_slots[position + 1], slots[order[position]])
+    best = {'forward_tokens': (-1, None), 'kv_slots': (-1, None)}
+    scanned = position = 0
+    while position < len(order):
+        if (entries[order[position]]['forward_tokens'] <= best['forward_tokens'][0]
+                and suffix_slots[position] <= best['kv_slots'][0]):
+            break
+        batch = sorted(order[position:position + chunk])
+        for index, example in zip(batch, source.iter_indices(batch), strict=True):
+            tokens, kv = causal_prefix_geometry(example)
+            if (tokens, -index) > (best['forward_tokens'][0], -(best['forward_tokens'][1] or 0)):
+                best['forward_tokens'] = (tokens, index)
+            if (kv, -index) > (best['kv_slots'][0], -(best['kv_slots'][1] or 0)):
+                best['kv_slots'] = (kv, index)
+        scanned += len(batch)
+        position += chunk
+    return {key: {'index': index, 'physical': value} for key, (value, index) in best.items()}, scanned
+
+
+def _materialize_sft_capacity_request(source, descriptor, *, identity, runtime_code_sha256, request_path,
+                                      share_prefixes=False):
+    """Select actual maximum complete SFT graphs from the authenticated current geometry sidecar.
+
+    With physical prefix aliasing the learner's memory follows the aliased
+    plan, so the maxima of the aliased geometry are measured as well.
+    """
     from ..train.native_resident import binding, bound, _source_witness
     from ..train.native_packed_capacity import geometry_for_source
     from ..common.jsonio import write_json_durable
@@ -907,6 +945,11 @@ def _materialize_sft_capacity_request(source, descriptor, *, identity, runtime_c
         raise ValueError('SFT capacity requires a nonempty training source')
     selected = list(dict.fromkeys([max(range(len(slots)), key=lambda i: source.entries[i]['forward_tokens']),
                                   max(range(len(slots)), key=lambda i: slots[i])]))
+    physical = None
+    if share_prefixes:
+        physical, scanned = _physical_prefix_maxima(source, slots)
+        physical['scanned_rows'] = scanned
+        selected = list(dict.fromkeys([*selected, *(physical[key]['index'] for key in ('forward_tokens', 'kv_slots'))]))
     reference = min(range(len(slots)), key=lambda i: source.entries[i]['forward_tokens'])
     def row(index):
         entry = source.entries[index]
@@ -918,7 +961,8 @@ def _materialize_sft_capacity_request(source, descriptor, *, identity, runtime_c
     request = {'schema': 'natlang.native-memory-qualification-request/1', 'identity': identity,
                'runtime_code_sha256': runtime_code_sha256, 'source': binding(source.path),
                'indexes': _source_witness(source), 'split': 'train',
-               'cases': [row(index) for index in selected], 'reference': row(reference)}
+               'cases': [row(index) for index in selected], 'reference': row(reference),
+               **({'physical_prefix_maxima': physical} if physical is not None else {})}
     request_path = Path(request_path)
     request_path.parent.mkdir(parents=True, exist_ok=True)
     if request_path.exists():
@@ -961,8 +1005,10 @@ def _resolve_memory_qualification(reference, *, model, optimizer, train, roles, 
     request_path = (Path(args.out) / 'memory-qualification-requests' /
                     descriptor_path.stem / request_key / 'request.json')
     if schema == 'natlang.native-sft-capacity-cases/1':
+        from ..train.native_prefix_packing import ordinary_sft_physical_sharing_enabled
         return _materialize_sft_capacity_request(train, descriptor, identity=identity,
-            runtime_code_sha256=runtime_code_sha, request_path=request_path)
+            runtime_code_sha256=runtime_code_sha, request_path=request_path,
+            share_prefixes=ordinary_sft_physical_sharing_enabled(model, getattr(model, 'share_causal_prefixes', False)))
     return _materialize_preference_capacity_request(train, objective, descriptor,
         identity=identity, runtime_code_sha256=runtime_code_sha, request_path=request_path)
 

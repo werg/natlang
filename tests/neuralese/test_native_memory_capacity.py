@@ -808,3 +808,24 @@ def test_trainer_carries_measured_proof_from_restored_checkpoint_to_new_output(t
         assert reports[1]['numerical_reference']['passed']
         assert reports[0]['request']['path'] != reports[1]['request']['path']
         assert reports[1]['capacity']['parent_checkpoint_sha256'] == reports[0]['parent_checkpoint_sha256']
+
+
+def test_sft_capacity_adds_physical_prefix_maxima_and_prunes_by_logical_bound(monkeypatch):
+    """Prefix arithmetic v4: an aliased large chain can be physically smaller than an unaliased graph."""
+    from types import SimpleNamespace
+    from natlang_neuralese.eval import native_memory as memory
+    from natlang_neuralese.train import native_prefix_packing
+    logical = [333, 110, 90, 40, 10]
+    physical = {0: (50, 51), 1: (110, 111), 2: (90, 91), 3: (40, 41), 4: (10, 11)}
+    parsed = []
+    class Source:
+        entries = [{'forward_tokens': value} for value in logical]
+        def iter_indices(self, indices):
+            parsed.extend(indices)
+            return [SimpleNamespace(index=index) for index in indices]
+    monkeypatch.setattr(native_prefix_packing, 'causal_prefix_geometry', lambda example: physical[example.index])
+    maxima, scanned = memory._physical_prefix_maxima(Source(), [value + 1 for value in logical], chunk=1)
+    assert maxima['forward_tokens'] == {'index': 1, 'physical': 110}
+    assert maxima['kv_slots'] == {'index': 1, 'physical': 111}
+    # Rows whose logical size cannot exceed the physical maxima are never parsed.
+    assert sorted(parsed) == [0, 1] and scanned == 2
