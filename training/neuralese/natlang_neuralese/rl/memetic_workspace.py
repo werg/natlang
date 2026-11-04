@@ -490,8 +490,8 @@ class Workspace:
         quality, anchor, gain, cost = memetic_reward(query['success'], prepared['baselines'],
             evaluations=len(self.state['evaluations']), fits=self.state['fits'], budget=self.spec['budget'],
             cost_weight=self.spec.get('cost_weight', 0.05), committed=committed is not None)
-        ablation = (self.ablation(candidate, query, query_cases, samples)
-                    if candidate['guidance'] and not leak and self.spec['settings'].get('ablation', True) else None)
+        # The consumer-use ablation runs host-side after the round (memetic_stage.ablate_round), not in episode time.
+        ablation = None
         result = {'score': 100, 'done': True, 'moves': len(self.state['evaluations']),
                   'memetic': {'schema': 'natlang.memetic-outcome/1', 'quality': quality, 'anchor': anchor,
                               'gain': gain, 'cost': cost, 'query_success': query['success'],
@@ -500,7 +500,7 @@ class Workspace:
                               'committed': committed, 'candidate': candidate,
                               'baselines': prepared['baselines'], 'defects': self.state['defects'],
                               'evaluations': self.state['evaluations'], 'leak_refused': bool(leak),
-                              'ablation': ablation, 'query_dir': query.get('dir')}}
+                              'ablation': ablation, 'query_dir': query.get('dir'), 'score_path': str(cached)}}
         write_json_durable(cached, result)
         return result
 

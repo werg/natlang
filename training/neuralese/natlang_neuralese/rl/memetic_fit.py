@@ -392,6 +392,11 @@ def adapter_evaluator(spec, endpoint, *, base=None, collect=None, identity=None,
             raise ValueError('evaluate an adapter fit without guidance changes (combined sets are not supported yet)')
         binding = actor_binding(adapter, actor())
         out = Path(out or spec['out']) / 'evals' / binding['effective_checkpoint_sha256'][:16] / name
+        from .memetic_stage import _locked
+        with _locked(out):
+            return _adapted(cases, adapter, binding, out, samples)
+
+    def _adapted(cases, adapter, binding, out, samples):
         if (out / 'summary.json').exists():
             return json.loads((out / 'summary.json').read_text())
         out.mkdir(parents=True, exist_ok=True)

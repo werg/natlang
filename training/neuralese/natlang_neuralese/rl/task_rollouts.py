@@ -434,7 +434,10 @@ def memetic_reward_record(memetic: dict) -> dict:
     """The reward fields the learner reads (rl.native_replay.group_episode_advantages): the trivial-improvement
     anchor and the measured gain, cost and query success."""
     return {"anchor": float(memetic["anchor"]), "gain": float(memetic["gain"]), "cost": float(memetic["cost"]),
-            "query_success": float(memetic["query_success"])}
+            "query_success": float(memetic["query_success"]),
+            # Distillation and promotion read these (rl.memetic_stage.distill / held_gains).
+            "query_dir": memetic.get("query_dir"), "committed": memetic.get("committed"),
+            "unscored_workspace": bool(memetic.get("unscored_workspace")), "score_path": memetic.get("score_path")}
 
 
 def build_queue(packet: Path, rows: int, group: int, out: Path, *, temperature: float, case_seconds: int,
@@ -558,6 +561,10 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0,
         outcome = classify_case(result, finishes.get(entry["key"]))
         reward = reward_of(outcome, finishes.get(entry["key"]))
         memetic = memetic_outcome(packet[entry["index"]], result)
+        if memetic is not None and memetic.get("unscored_workspace") and reward is None:
+            # No workspace score and an unresolved run (wall-clock timeout, infrastructure): unresolved, not a
+            # failed improvement; it carries no reward.
+            memetic = None
         if memetic is not None:
             # An improvement episode's outcome is graded: its committed change set's success on held query worlds
             # (rl.memetic_workspace.Workspace.score), anchored on the best trivial improvement.

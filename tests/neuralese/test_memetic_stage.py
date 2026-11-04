@@ -138,7 +138,7 @@ def test_evaluate_ablate_budget_commit_and_held_score(tmp_path):
     assert scored['quality'] == pytest.approx(0.75 - 0.025)  # the evaluation budget spent, no fit
     query_calls = [call for call in w.evaluate_cases.calls if call[0].startswith('query-')]
     assert query_calls[-1][1] == ['fam-3', 'fam-4', 'fam-5'] and query_calls[-1][4] == 4, 'paired with the baselines'
-    assert scored['ablation']['shuffled'] is None, 'no other program has guidance yet'
+    assert scored['ablation'] is None, 'the ablation runs host-side after the round'
     assert w.score() == json.loads((tmp_path / 'ep' / 'score.json').read_text()), 'scored once'
 
 
@@ -239,18 +239,28 @@ def test_query_plan_sizes_by_cost():
 
 
 def test_ablation_uses_another_programs_guidance(tmp_path):
-    w = workspace(tmp_path)
-    other = tmp_path / 'stage' / 'programs' / 'zzz'
-    other.mkdir(parents=True)
-    (other / ('prepared-' + 'p' * 16 + '.json')).write_text(json.dumps(
-        {'baselines': {'default': {'text': 'A verified run of another program did X.'}}}))
-    w.propose({'kind': 'guidance', 'scope': {'kind': 'program'}, 'text': 'own'})
-    w.commit(['c1'], 'r')
-    ablation = w.score()['memetic']['ablation']
-    assert ablation['shuffled_source'].endswith('prepared-' + 'p' * 16 + '.json')
-    shuffled_call = [call for call in w.evaluate_cases.calls if call[0].startswith('ablation-shuffled-')][0]
-    assert shuffled_call[2] == [{'function': None, 'text': 'A verified run of another program did X.'}]
+    rows = [case(i) for i in range(10)] + [case(i, family='other') for i in range(10)]
+    out = tmp_path / 'm'
+    receipt = stage.build(cases=rows, out=out, parent_sha256='p' * 64,
+                          settings={'held_fraction': 0., 'support': 3, 'query': 3}, log=lambda line: None)
+    specs = [json.loads(open(json.loads(line)['semantics']['world']['task']).read())
+             for line in open(receipt['task_source']['path'])]
+    for value in specs:
+        stage.ensure_prepared(value, Evaluator())
+    mine = ws.Workspace(specs[0], Evaluator(), check=lambda case: [], prepare=stage.ensure_prepared, run='r1')
+    mine.propose({'kind': 'guidance', 'scope': {'kind': 'program'}, 'text': 'own'})
+    mine.commit(['c1'], 'r')
+    assert mine.score()['memetic']['ablation'] is None
+    evaluator = Evaluator()
+    done = stage.ablate_round(out, 'p' * 64, endpoint='http://a', evaluator=evaluator)
+    assert len(done) == 1
+    ablation = json.loads((mine.out / 'ablation.json').read_text())
+    assert 'prepared-' in ablation['shuffled_source'] and ablation['shuffled_source'] != specs[0]['prepared_path']
+    shuffled_call = [call for call in evaluator.calls if call[0].startswith('ablation-shuffled-')][0]
+    assert shuffled_call[2][0]['text'].startswith('A verified successful run')
     assert ablation['actual'] == 0.5 and ablation['none'] == 0.25 and ablation['distinguishable'] is False
+    assert stage.ablate_round(out, 'p' * 64, endpoint='http://a', evaluator=evaluator) == [], 'once per score'
+
 
 
 def test_promotion_and_distillation():
@@ -261,7 +271,8 @@ def test_promotion_and_distillation():
     assert [r['sample'] for r in rows] == [0]
 
 
-def test_after_collection_distills_and_promotes(tmp_path):
+def test_after_collection_distills_and_promotes(tmp_path, monkeypatch):
+    monkeypatch.setattr(ws, 'production_evaluator', lambda spec, endpoint: Evaluator())
     out = tmp_path / 'memetic'
     rows = [case(i) for i in range(12)]
     settings = {**stage.DEFAULTS, 'held_fraction': 1., 'support': 3, 'dev': 3, 'confirmation': 3}
@@ -276,10 +287,13 @@ def test_after_collection_distills_and_promotes(tmp_path):
     (round_out / 'rollouts.jsonl').write_text(json.dumps({'task_id': 't', 'sample': 0, 'policy': 'p' * 64, 'reward': {
         'quality': .6, 'memetic': {'gain': .2, 'anchor': .4, 'query_dir': str(query_dir)}}}) + '\n')
 
+    def read_admitted(path):
+        return [json.loads(line) for line in open(path)]
+
     def fake_collect(*, cases, out, **kwargs):
         out.mkdir(parents=True)
         (out / 'rollouts.jsonl').write_text(''.join(json.dumps({'task_id': row['id'], 'reward': {'memetic': {'gain': .1}}}) + '\n'
-                                                    for row in held_rows))
+                                                    for row in read_admitted(cases)))
         return {'scored': len(held_rows), 'rollouts': len(held_rows)}
     import natlang_neuralese.rl.memetic_program as program
     original = program.actor_identity
@@ -456,3 +470,28 @@ def test_unresolved_support_is_no_measurement(tmp_path):
     assert stage._excluded(memo, ['p' * 64], {'stale_parents': 3}) is False, 'measured again at the next parent'
     with pytest.raises(ValueError, match='did not resolve'):
         ws.Workspace(value, Evaluator(), check=lambda c: [], prepare=stage.ensure_prepared).prepared
+
+
+
+def test_memetic_rounds_keep_their_own_cursor(tmp_path):
+    memetic = {}
+    state = {'round': 3, 'offset': 40}
+    stage._memetic_cursor(state, memetic)
+    assert state['offset'] == 0 and memetic['ordinary_offset'] == 40
+    stage._memetic_cursor(state, memetic)  # repeated bind of the same round
+    assert state['offset'] == 0 and memetic['ordinary_offset'] == 40
+    state.update(round=4, offset=2)  # the memetic round advanced its cursor to 2
+    stage._ordinary_cursor(state, memetic)
+    assert state['offset'] == 40 and memetic['offset'] == 2 and memetic['active_round'] is None
+    state.update(round=7, offset=44)
+    stage._memetic_cursor(state, memetic)
+    assert state['offset'] == 2 and memetic['ordinary_offset'] == 44
+
+
+def test_unresolved_memetic_episode_has_no_reward_and_records_carry_distillation_fields():
+    from natlang_neuralese.rl.task_rollouts import memetic_reward_record
+    record = memetic_reward_record({'anchor': .5, 'gain': .1, 'cost': 0., 'query_success': .6, 'query_dir': '/q',
+                                    'committed': {'ids': ['c1'], 'reason': 'r'}})
+    assert record['query_dir'] == '/q' and record['committed']['ids'] == ['c1'] and record['unscored_workspace'] is False
+    rows = stage.distillation_rows([{'task_id': 't', 'sample': 0, 'reward': {'quality': .6, 'memetic': record}}])
+    assert rows[0]['query_dir'] == '/q'

@@ -44,7 +44,7 @@ PACKAGE = Path(__file__).resolve().parents[4] / 'applications' / 'memetic-improv
 DEFAULTS = {'support': 4, 'query': 4, 'max_query': 12, 'query_rollouts': 24, 'expensive_seconds': 300,
             'dev': 4, 'confirmation': 4, 'samples': 2, 'held_fraction': 0.2,
             'min_success': 0.1, 'max_success': 0.85, 'near_duplicate': 0.9, 'max_worlds_per_family': 40,
-            'stale_parents': 3, 'evaluations': 4, 'fits': 1, 'cost_weight': 0.05, 'episode_seconds': 5400,
+            'stale_parents': 3, 'evaluations': 4, 'fits': 1, 'cost_weight': 0.05, 'episode_seconds': 10800,
             'workers': 4, 'case_seconds': 900, 'max_model_requests': 48, 'max_turns': 40, 'ablation': True,
             'promotion_every': 4, 'promotion_samples': 2, 'seed': 'memetic-v1'}
 
@@ -127,7 +127,8 @@ def program_pool(cases, *, settings, protected=None):
         rows = sorted(rows, key=lambda row: _hash(settings['seed'], row['id']))[:settings['max_worlds_per_family']]
         groups = dedupe(sorted(components(rows), key=lambda g: _hash(settings['seed'], g[0]['id'])),
                         settings['near_duplicate'])
-        held = int(_hash(settings['seed'], 'held', family)[:8], 16) / 0xFFFFFFFF < settings['held_fraction']
+        # Held is decided per task family, so paraphrased sibling programs never straddle held and meta-trained.
+        held = int(_hash(settings['seed'], 'held', family.split('@')[0])[:8], 16) / 0xFFFFFFFF < settings['held_fraction']
         need = settings['support'] + (settings['dev'] + settings['confirmation'] if held else settings['query'])
         if len(groups) >= need:
             pool[family] = {'held': held, 'components': groups}
@@ -194,7 +195,9 @@ def prepare_program(family, split, *, evaluate, settings, fitter=None, spec=None
     started = time.monotonic()
     support = evaluate(split['support'], None, None, name='baseline-support')
     rollouts = max(1, len(support['results']))
-    seconds = support.get('seconds', time.monotonic() - started) / rollouts
+    # Wall time of a run with ``workers`` parallel rollouts: per-rollout latency is wall x parallelism / rollouts.
+    parallel = max(1, min(rollouts, settings.get('workers', 4)))
+    seconds = support.get('seconds', time.monotonic() - started) * parallel / rollouts
     attempts = [{'digest': attempt_digest(result, attempt_id=f'a{i + 1}', world=world),
                  'steps': attempt_steps(result)} for i, (world, result) in enumerate(support['results'])]
     # Admission reads the support evidence only: selecting programs on the query outcome that also anchors the
@@ -281,7 +284,7 @@ def episode_spec(family, split, *, settings, out, parent_sha256, prepared_path, 
             'evidence': {'rollouts': str(Path(out) / 'evals' / parent_sha256[:16] / 'baseline-support' / 'collection'
                                          / 'rollouts.jsonl')},
             'settings': {key: settings[key] for key in ('min_success', 'max_success', 'query', 'query_rollouts',
-                                                        'expensive_seconds', 'samples', 'ablation')},
+                                                        'expensive_seconds', 'samples', 'ablation', 'workers')},
             'budget': {'evaluations': settings['evaluations'], 'fits': settings['fits']},
             'eval': {key: settings[key] for key in ('samples', 'workers', 'case_seconds', 'max_model_requests',
                                                     'max_turns')} | {'seed_base': 31000},
@@ -413,16 +416,40 @@ def protected_filter():
                                                        'source_ids': case.get('source_ids') or []}))
 
 
+def _memetic_cursor(state, memetic):
+    """Memetic rounds rotate their own source with their own cursor: the controller's ``offset`` is swapped for the
+    memetic one for the round and swapped back at the next ordinary round, so the ordinary source's breadth rotation
+    never restarts because a memetic round ran (idempotent across repeated binds of one round)."""
+    current = state.get('round', 0)
+    if memetic.get('active_round') == current:
+        return
+    if memetic.get('active_round') is None:
+        memetic['ordinary_offset'] = state.get('offset', 0)
+    else:
+        memetic['offset'] = state.get('offset', 0)  # consecutive memetic rounds: keep the memetic progress
+    state['offset'] = memetic.get('offset', 0)
+    memetic['active_round'] = current
+
+
+def _ordinary_cursor(state, memetic):
+    if memetic.get('active_round') is None or memetic.get('active_round') == state.get('round', 0):
+        return
+    memetic['offset'] = state.get('offset', 0)
+    state['offset'] = memetic.pop('ordinary_offset', 0)
+    memetic['active_round'] = None
+
+
 def bind_round(config, declared, state, parent_sha256, *, protected=None):
     """The controller config of a due memetic round, or None. A round is due every ``memetic_every`` rounds. The
     controller builds the parent's memetic task source itself (crisp, model-free) from the declared program source;
     the per-parent evidence and baselines are prepared inside the round's actor lease by the episodes."""
     parameters = declared['parameters']
     every = parameters.get('memetic_every', 4)
+    memetic = state.setdefault('interleave', {}).setdefault('memetic', {'pending': None})
     if (state.get('round', 0) + 1) % every:
+        _ordinary_cursor(state, memetic)
         return None
     path = receipt_path(config['out'], parent_sha256)
-    memetic = state.setdefault('interleave', {}).setdefault('memetic', {'pending': None})
     settings = {**DEFAULTS, **parameters.get('settings', {})}
     program_source = declared['program_source']
     if not path.exists():
@@ -441,6 +468,7 @@ def bind_round(config, declared, state, parent_sha256, *, protected=None):
                               'reason': 'no program has curriculum headroom under this parent'}
         return None
     memetic['pending'] = None
+    _memetic_cursor(state, memetic)
     index = state.get('round', 0) // every  # this memetic round's ordinal (stable across repeated binds)
     rows, group = parameters.get('programs_per_round', 2), parameters.get('group', 4)
     bound = {**config, 'cases': str(source), 'rows_per_round': rows, 'group': group,
@@ -471,8 +499,14 @@ def prepare_round(cases_path, *, endpoint, log=print):
             continue
         spec = json.loads(Path(world['task']).read_text())
         started = time.monotonic()
-        value = ensure_prepared(spec, production_evaluator(spec, endpoint), fitter)
+        try:
+            value = ensure_prepared(spec, production_evaluator(spec, endpoint), fitter)
+        except Exception as error:  # noqa: BLE001 - one program's failure must not abort the round; recorded
+            prepared.append({'program': spec['program']['key'], 'error': f'{type(error).__name__}: {error}'[:500]})
+            log(json.dumps({'event': 'memetic_prepare_failed', **prepared[-1]}))
+            continue
         prepared.append({'program': spec['program']['key'], 'admitted': value['admitted'],
+                         'unresolved': value.get('unresolved', False),
                          'support_success': value['support_success'], 'seconds': round(time.monotonic() - started, 1)})
         log(json.dumps({'event': 'memetic_prepared', **prepared[-1]}))
     return prepared
@@ -489,6 +523,10 @@ def after_collection(round_info, *, endpoint, round_out, collect=None, log=print
         record['distillation'] = distill(Path(round_out), out, endpoint=endpoint, parent_sha256=round_info['parent_sha256'])
     except Exception as error:  # noqa: BLE001 - recorded for supervision
         record['distillation_error'] = f'{type(error).__name__}: {error}'[:2000]
+    try:
+        record['ablation'] = ablate_round(out, round_info['parent_sha256'], endpoint=endpoint)
+    except Exception as error:  # noqa: BLE001 - recorded for supervision
+        record['ablation_error'] = f'{type(error).__name__}: {error}'[:2000]
     if round_info.get('promotion_due'):
         try:
             record['promotion'] = promote(out, round_info, endpoint=endpoint, collect=collect)
@@ -500,12 +538,33 @@ def after_collection(round_info, *, endpoint, round_out, collect=None, log=print
     return record
 
 
+def ablate_round(out, parent_sha256, *, endpoint, evaluator=None):
+    """Actual vs shuffled vs none for every scored episode of this parent that committed guidance (host side, after
+    the round's collection, so it never eats an episode's time). Written next to each score as ablation.json."""
+    from .memetic_workspace import Workspace, production_evaluator
+    done = []
+    for score in sorted((out / 'programs').glob(f'*/episodes/{parent_sha256[:16]}/runs/*/score.json')):
+        target = score.parent / 'ablation.json'
+        memetic = json.loads(score.read_text()).get('memetic') or {}
+        if target.exists() or not (memetic.get('candidate') or {}).get('guidance') or memetic.get('leak_refused'):
+            continue
+        spec_path = score.parents[4] / f'spec-{parent_sha256[:16]}.json'
+        spec = json.loads(spec_path.read_text())
+        workspace = Workspace(spec, evaluator or production_evaluator(spec, endpoint), check=lambda case: [],
+                              prepare=ensure_prepared)
+        result = workspace.ablation(memetic['candidate'], {'success': memetic['query_success']},
+                                    workspace.query_cases(), workspace.prepared['query_samples'])
+        write_json_durable(target, result)
+        done.append({'score': str(score), **{k: result.get(k) for k in ('actual', 'shuffled', 'none', 'distinguishable')}})
+    return done
+
+
 def held_gains(rollouts, families):
     """{program family: mean held-development gain over the anchor} from scored held episodes."""
     gains = {}
     for row in rollouts:
         memetic = (row.get('reward') or {}).get('memetic')
-        if memetic is not None and row.get('task_id') in families:
+        if memetic is not None and row.get('task_id') in families and not memetic.get('unscored_workspace'):
             gains.setdefault(families[row['task_id']], []).append(memetic['gain'])
     return {family: sum(values) / len(values) for family, values in gains.items()}
 
@@ -528,6 +587,16 @@ def promote(out, round_info, *, endpoint, collect=None):
         raise ValueError('promotion actor serves another checkpoint than the memetic parent')
     settings = round_info['settings']
     target = out / 'promotion' / parent[:16]
+    # Measure the held programs under this parent first (outside the episodes' time); only admitted ones are run.
+    prepared = {item['program']: item for item in prepare_round(held, endpoint=endpoint)}
+    rows = [row for row in rows if prepared.get(json.loads(Path(row['semantics']['world']['task']).read_text())[
+        'program']['key'], {}).get('admitted')]
+    if not rows:
+        return {'evaluated': False, 'reason': 'no held program measured with headroom under this parent',
+                'prepared': list(prepared.values())}
+    target.mkdir(parents=True, exist_ok=True)
+    held = target / 'held-admitted.jsonl'
+    held.write_text(''.join(json.dumps(row, ensure_ascii=False) + '\n' for row in rows))
     report = collect(cases=held, out=target / 'collection', endpoints=[endpoint], policy_id=parent, rows=len(rows),
                      group=settings['promotion_samples'], workers=settings['workers'], root_mode='student',
                      seed_base=41000, case_seconds=settings['episode_seconds'],

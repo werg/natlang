@@ -883,6 +883,8 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
             if server:
                 # A memetic improvement episode's workspace runs its program on the episode's own actor.
                 child_env.setdefault('NATLANG_MEMETIC_ENDPOINT', server)
+                # The memetic workspace world runs under the collector's own Python (a frozen runtime's interpreter).
+                child_env.setdefault('NATLANG_MEMETIC_PYTHON', _sys.executable)
             if journal_spool_root is not None:
                 child_env['NATLANG_TEACHER_JOURNAL_SPOOL_ROOT'] = str(journal_spool_root)
             child = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, env=child_env)
