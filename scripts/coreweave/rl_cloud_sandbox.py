@@ -11,6 +11,8 @@ downloads use per-object signed URLs (capabilities) that the DGX issues with the
   prune LINEAGE_DIR EXPORTS_DIR       drop staged exports the DGX has uploaded and superseded, and superseded checkpoints
   activate LINEAGE_DIR OUT CONFIG     make an SFT window (or its new control) the active controller
   progress LINEAGE_DIR                the active controller and whether its last call earned durable progress (JSON)
+  preflight LINEAGE_DIR [REPORT]      every closure-manifest path present with its bytes/sha256 (one complete list of
+                                      misses in REPORT and one event; exit 1), before any controller or model load
 
 A lineage is either one RL controller at LINEAGE_DIR (``config.json``; progress = trained rounds) or a joint-SFT
 lineage of windows (``lineage.json``; each window a mandatory supervised controller, progress = a completed window).
@@ -625,6 +627,61 @@ def _restore_input(item, scratch):
     event(event='input_restored', kind=kind, path=str(target), sha256=item['sha256'], bytes=item['bytes'])
 
 
+MANIFEST_SCHEMA = 'natlang.cloud-closure-manifest/1'
+# Files at or below this size are re-hashed by the preflight; larger ones (shards, checkpoints) are size-checked: fetch
+# already verified every byte they were restored from, and the preflight exists to catch what was never shipped.
+PREFLIGHT_HASH_BYTES = 16 << 20
+
+
+def manifest_path(lineage):
+    """Where fetch keeps the launch's closure manifest (the capability secret is deleted after fetch)."""
+    lineage = Path(os.path.abspath(lineage))
+    return lineage.parent / '.closure' / f'{lineage.name}.json'
+
+
+def preflight(lineage, report=None):
+    """Check the closure manifest the DGX shipped with the launch (rl_cloud.closure_manifest): every path the control
+    binds exists here, small files with their exact sha256, large ones with their exact size, links as links. Every miss
+    is collected first: ONE event and ONE report file list them all (never the first missing file deep in the trainer).
+    Returns 0 when complete (or when the launch carried no manifest: an older DGX), 1 otherwise."""
+    path = manifest_path(lineage)
+    if not path.is_file():
+        event(event='preflight', status='skipped', reason='launch carried no closure manifest')
+        return 0
+    manifest = json.loads(path.read_text())
+    if manifest.get('schema') != MANIFEST_SCHEMA:
+        raise ValueError(f'{path} is not a {MANIFEST_SCHEMA} manifest')
+    started, problems, hashed = time.time(), [], 0
+    for entry in manifest['entries']:
+        target = Path(entry['path'])
+        if entry.get('kind') == 'link':
+            if not os.path.lexists(target):
+                problems.append({**entry, 'problem': 'missing'})
+            continue
+        if not target.exists():
+            problems.append({**entry, 'problem': 'missing'})
+            continue
+        if entry.get('check') == 'exists' or not target.is_file():
+            continue
+        size = target.stat().st_size
+        if entry.get('bytes') is not None and size != entry['bytes']:
+            problems.append({**entry, 'problem': 'size', 'actual_bytes': size})
+        elif entry.get('sha256') and size <= PREFLIGHT_HASH_BYTES:
+            hashed += 1
+            actual = file_digest(target)
+            if actual != entry['sha256']:
+                problems.append({**entry, 'problem': 'sha256', 'actual_sha256': actual})
+    result = {'schema': 'natlang.cloud-closure-preflight/1', 'manifest': str(path), 'entries': len(manifest['entries']),
+              'hashed': hashed, 'seconds': round(time.time() - started, 1), 'ok': not problems, 'problems': problems}
+    if report:
+        Path(report).parent.mkdir(parents=True, exist_ok=True)
+        write_json_durable(Path(report), result)
+    event(event='preflight', status='ok' if not problems else 'failed', entries=result['entries'], hashed=hashed,
+          problems=len(problems), missing=sum(p['problem'] == 'missing' for p in problems),
+          first=[p['path'] for p in problems[:10]], report=str(report) if report else None, seconds=result['seconds'])
+    return 0 if not problems else 1
+
+
 def fetch(parent, lineage):
     parent = json.loads(Path(parent).read_text())
     lineage = Path(lineage)
@@ -667,6 +724,13 @@ def fetch(parent, lineage):
     state = controller(lineage)[0] / 'state.json'
     if parent.get('state_sha256') and file_digest(state) != parent['state_sha256']:
         raise ValueError('restored state.json differs from the export')
+    # The closure manifest outlives the capability secret: the driver's preflight checks it before every controller call.
+    manifest = manifest_path(lineage)
+    if parent.get('manifest') is not None:
+        manifest.parent.mkdir(parents=True, exist_ok=True)
+        write_json_durable(manifest, {'schema': MANIFEST_SCHEMA, 'seq': parent.get('seq'), 'entries': parent['manifest']})
+    elif manifest.exists():
+        manifest.unlink()  # another launch's manifest never checks this one
     shutil.rmtree(scratch, ignore_errors=True)  # reconstructed bases are only intermediates
     exports = lineage.parent / '.exports' / lineage.name
     exports.mkdir(parents=True, exist_ok=True)
@@ -740,6 +804,8 @@ def main(argv):
     if command == 'activate':
         activate(*args)
         return 0
+    if command == 'preflight':
+        return preflight(*args)
     if command == 'progress':
         print(json.dumps(progress(*args)))
         return 0

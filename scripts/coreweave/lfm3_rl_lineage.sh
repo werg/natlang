@@ -66,6 +66,13 @@ sys.exit(3 if low else 0)
 PY
 then log '"event":"refused","step":"assigned-shape-below-minimum"'; exit 75; fi
 progress() { python3 "$HELPER" progress "$L"; }
+# Every closure path the DGX shipped (rl_cloud.closure_manifest) present with its bytes/sha256 before any controller call
+# or model load; one complete list of misses (event + report file), never the first missing file deep in the trainer.
+preflight() {
+  python3 "$HELPER" preflight "$L" "$OUT/closure-preflight.json" >> "$OUT/preflight.log" 2>&1 && return 0
+  tail -1 "$OUT/preflight.log"
+  log "\"event\":\"failed\",\"step\":\"closure-preflight\",\"report\":\"$OUT/closure-preflight.json\""; return 1
+}
 field() { python3 -c "import json,sys;v=json.loads(sys.argv[1]).get(sys.argv[2]);print('' if v is None else str(v).lower() if isinstance(v,bool) else v)" "$1" "$2"; }
 
 INPUTS=$ROOT/inputs
@@ -230,6 +237,7 @@ export NATLANG_CHECKPOINT_MIN_FREE_BYTES=${NATLANG_CHECKPOINT_MIN_FREE_BYTES:-42
 # NATLANG_RL_CHECK=1 (a CPU sandbox, rl_cloud.py launch --check): everything but the GPU work -- environments,
 # runtime, parent and inputs, custody load, imports, one export of the boundary through the DGX exporter -- then exit.
 if [ "${NATLANG_RL_CHECK:-0}" = 1 ]; then
+  preflight; log "\"event\":\"check_preflight\",\"rc\":$?"
   (cd "$R" && "$VENV/bin/python" -c 'import sys; from natlang_neuralese.common.custody import ProtectedWorlds; ProtectedWorlds.load(root=sys.argv[1]); import natlang_neuralese.rl.production, natlang_neuralese.rl.native_stage, natlang_neuralese.train.native_state_sft' "$R") \
     > "$OUT/check-learner.log" 2>&1; log "\"event\":\"check_learner_imports\",\"rc\":$?"
   if [ "$NEEDS_SGLANG" = 1 ]; then
@@ -313,6 +321,7 @@ while [ "$ROUNDS" -eq 0 ] || [ $i -lt "$ROUNDS" ]; do
       stage_periodically & stager=$!
     fi
   fi
+  preflight || { stop_stager; exit 4; }
   before=$(field "$P" trained_rounds); s=$(date +%s)
   log "\"event\":\"call_start\",\"kind\":\"$KIND\",\"controller\":\"$A\",\"trained_rounds\":$before"
   (cd "$R" && exec "$VENV/bin/python" -u -m natlang_neuralese.rl.production run --config "$CFG" --rounds 1) \
