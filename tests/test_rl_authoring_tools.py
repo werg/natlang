@@ -277,6 +277,25 @@ def test_folder_reducer_needs_the_tasks_own_folders():
     assert any('directory-reducer' in e for e in findings(task(files={'desk.nl': nl(kind='directory-reducer')}))['desk-0001']['errors'])
 
 
+def test_blind_failure_modes_are_flagged_statically():
+    root = nl(kind='directory-reducer', body=(
+        'Move each file from inbox/ to done/. Sort the moved names by date.\n'
+        'A reopened ticket is handled the same as any other.'))
+    base = task(constructs=['folder_reducer'], folders={'inbox/a.md': 'Ticket T-12 reopened on 2026-01-02\n'},
+                files={'desk.nl': root, 'desk/read.nl': nl('note', body='Read the line "Tool line: N" and the id T-12.')},
+                author={'model': 'm', 'worker': 'w140'})
+    report = findings(base)['desk-0001']
+    text = ' | '.join(report['warnings'])
+    assert 'destination file name' in text and 'no tie order' in text.replace('states no tie order', 'no tie order')
+    assert 'reopened' in text and 'Tool line:' in text and 'quotes world entries' in text
+    assert any('Output contract' in e for e in report['errors'])  # round-6 workers must state it
+    old = dict(base, author={'model': 'm', 'worker': 'w12'})
+    assert not any('Output contract' in e for e in findings(old)['desk-0001']['errors'])
+    # a scripted match fragment inside the helper's own instruction answers every call: an error for every task
+    leaky = dict(old, smoke={'children': {'read': {'$match': [{'match': 'Tool line', 'value': 'x'}]}}})
+    assert any('match fragment' in e for e in findings(leaky)['desk-0001']['errors'])
+
+
 def test_decision_readouts_are_leaves_that_call_nothing():
     files = {'desk.nl': nl('items', body='Judge with `await decide(judge, items)`.'),
              'desk/judge.nl': nl('items', '\\"a\\" | \\"b\\"', 'Pick; use `await lookup(items)` if unsure.', readout=True),
@@ -501,6 +520,32 @@ def test_authored_child_notes_only_from_replay_verified_input_specific_notes():
     assert notes.derive(row({'read': once}, 'for (const x of xs) await read(x);'))[0] == []  # one value, many calls
     new, why = notes.with_notes(row({'read': once}, 'await read(x);', replay=False))
     assert new['curriculum']['reference'].get('children') is None and why == {'smoke_not_replay_verified': 1}
+
+
+def test_argument_extract_notes_cover_string_producers_per_call_and_skip_typed_ones():
+    import authored_child_notes as notes
+    files = {'root.nl': '---\nargs:\n  turns: "string[]"\nreturns: "string"\n---\nx',
+             'root/absorb.nl': '---\nargs:\n  notes: "Neuralese<string>"\n  turn: "string"\nreturns: "Neuralese<string>"\n---\nUpdate.',
+             'root/fact.nl': '---\nargs:\n  turn: "string"\nreturns: "Neuralese<{ a: string }>"\n---\nFact.'}
+    row = {'id': 'r', 'split': 'train', 'semantics': {'root': 'root.nl', 'files': files, 'inputs': {'turns': [
+        'Owner: cancel the visit of Mango please', 'Clinic: noted, anything else for today', 'Owner: nothing else, thanks']}},
+        'curriculum': {'reference': {'root': []}, 'external': {'structure': {'smoke': {
+            'replay': False, 'root': [['eval', {'code': 'let n = "x";\nn = await absorb(n, turns[0]);\nawait fact(turns[0]);'}]],
+            'children': {'absorb': 'updated'}}}}}}
+    children, skipped = notes.argument_extract(row)
+    assert [c['match'][1] for c in children] == ['Owner: cancel the visit of Mango please', 'Clinic: noted, anything else for today',
+                                                 'Owner: nothing else, thanks']
+    assert all(c['provenance'] == 'mechanical:argument-extract' and c['match'][0].endswith('absorb(') for c in children)
+    assert children[0]['value'] == 'turn: Owner: cancel the visit of Mango please' and skipped == {'typed_producer': 1}
+
+
+def test_round6_workers_draw_a_larger_held_share_and_older_workers_keep_their_split():
+    worlds = [f'authored:world-{i}' for i in range(400)]
+    new = [authored.authored_split(w, {'worker': 'w140'}) for w in worlds]
+    old = [authored.authored_split(w, {'worker': 'w100'}) for w in worlds]
+    assert 0.2 < sum(s != 'train' for s in new) / 400 < 0.4 and {'dev', 'confirmation'} <= set(new)
+    assert sum(s != 'train' for s in old) / 400 < 0.12
+    assert old == [authored.unit_split(w, 'train-carve', salt='rl-authored-20261103') for w in worlds]
 
 
 def test_folder_only_variants_with_numbered_files_are_not_exact_duplicates(tmp_path):

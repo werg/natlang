@@ -120,6 +120,24 @@ def test_program_caps_and_excluded_ids_trim_program_poor_sources_without_touchin
     assert receipt['dropped_before_selection'] == {'excluded_ids': 2, 'bgkit': 21}
 
 
+def test_program_cap_rotation_changes_which_worlds_survive(tmp_path):
+    rows = []
+    for i in range(40):
+        row = case(f'poor-{i}', 'poor_fam', 'g/poor', body='one template over many worlds')
+        row['curriculum']['external'] = {'source': 'bgkit'}
+        rows.append(row)
+    rows += [case(f'rich-{i}', f'rich{i % 3}', 'g/rich', body=f'rich program {chr(97 + i)}x{i}') for i in range(20)]
+    source = tmp_path / 'cases.jsonl'
+    source.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    kept = []
+    for name, rotation in (('a', 'r1'), ('a2', 'r1'), ('b', 'r2')):
+        pool.assemble([str(source)], tmp_path / name, share=.9, domains={}, family_share=1.0, protected=Stub(),
+                      program_caps=[{'source': 'bgkit', 'max_rows_per_program': 8, 'rotation': rotation}])
+        kept.append({json.loads(line)['id'] for line in (tmp_path / name / 'cases.jsonl').read_text().splitlines()
+                     if json.loads(line)['id'].startswith('poor-')})
+    assert len(kept[0]) == 8 and kept[0] == kept[1] and kept[0] != kept[2]
+
+
 def test_returned_state_without_a_world_is_not_tagged_effect_state(tmp_path):
     rows = []
     for name in 'ab':

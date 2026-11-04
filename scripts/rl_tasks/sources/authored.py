@@ -20,6 +20,21 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from scripts.rl_tasks.common import CURRICULUM_VERSION, slug, text_digest, unit_split  # noqa: E402
 
 SCHEMA = 'natlang.rl-authored-task/1'
+# Round 6 (2026-11-04): the held authored packets were tiny (3% dev + 3% confirmation of worlds: 100 of 2,083 rows), so tasks
+# written by workers numbered ROUND6_FIRST_WORKER or higher draw their world's split with 30% held (15% dev, 15% confirmation).
+# Earlier workers (and notes-only backfill copies, which keep their original author) keep the original 94/3/3 draw, so no
+# existing row changes split. Related invocation worlds still share one split (the unit is the world).
+ROUND6_FIRST_WORKER = 136
+
+
+def authored_split(world, author):
+    match = re.fullmatch(r'w(\d+)', str(author.get('worker', '')))
+    if match and int(match.group(1)) >= ROUND6_FIRST_WORKER:
+        bucket = int(text_digest('rl-authored-20261104-held30|' + world)[:8], 16) % 100
+        return 'train' if bucket < 70 else ('dev' if bucket < 85 else 'confirmation')
+    return unit_split(world, 'train-carve', salt='rl-authored-20261103')
+
+
 GENERATOR = 'natlang.rl-authored-tasks/1'
 CONSTRUCTS = frozenset({'call_depth_3', 'neuralese_relay', 'typed_neuralese', 'neuralese_fan_in', 'iterate',
                         'iterate_neuralese', 'folder_reducer', 'decision_readout', 'skills', 'multi_operation_codebase',
@@ -124,7 +139,7 @@ def convert(task):
     if replay and 'return' not in smoke['code']:
         fail(task, 'smoke.replay runs the whole root script: it must end by returning the answer')
     world = 'authored:' + task['world']
-    split = unit_split(world, 'train-carve', salt='rl-authored-20261103')
+    split = authored_split(world, author)
     family = 'auth_' + task['family']
     case_id = f'auth:{slug(task["family"], 40)}:{slug(task["id"], 80)}:{text_digest(json.dumps(task, sort_keys=True))[:8]}'
     root_body = files[root].split('---', 2)[-1]

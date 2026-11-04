@@ -26,6 +26,14 @@ from measure_repetition import program_features  # noqa: E402
 PASS_BY_LEVEL = {0: .85, 1: .65, 2: .45, 3: .25}
 
 
+def _top_share(picked, keys, total, top=8):
+    """The ``top`` largest groups (family or program) by share of all sampled rows."""
+    groups = collections.Counter()
+    for index, count in picked.items():
+        groups[keys[index]] += count
+    return {str(key)[:80]: round(count / total, 4) for key, count in groups.most_common(top)}
+
+
 def simulate(cases, *, rounds, rows, group, config, seed=1103):
     from natlang_neuralese.rl import production
     from natlang_neuralese.rl.curriculum import metadata
@@ -74,6 +82,14 @@ def simulate(cases, *, rounds, rows, group, config, seed=1103):
                 features[i]['generator'] for i, n in picked.items() for _ in range(n))),
             'sampled_effect_rows_by_generator': dict(collections.Counter(
                 features[i]['generator'] for i, n in picked.items() if i in strict for _ in range(n))),
+            'sampled_share_by_generator': {g: round(n / total, 4) for g, n in sorted(collections.Counter(
+                features[i]['generator'] for i, n in picked.items() for _ in range(n)).items())},
+            'sampled_share_by_family_top': _top_share(picked, [metadata(row)['family'] for row in cases], total),
+            'sampled_share_by_program_top': _top_share(picked, [f['program'] for f in features], total),
+            'sampled_share_by_external_source': {k: round(v / total, 4) for k, v in sorted(collections.Counter(
+                s for i, n in picked.items()
+                for s in [str(((cases[i].get('curriculum') or {}).get('external') or {}).get('source') or 'other')]
+                for _ in range(n)).items())},
             'visits_p99_one_row': sorted(picked.values())[int(.99 * (len(picked) - 1))],
             'max_visits_one_row': max(picked.values())}
 

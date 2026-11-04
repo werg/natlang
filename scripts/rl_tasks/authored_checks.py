@@ -19,6 +19,15 @@ are fiction. These checks read the authored task and its program files and rejec
 - helper calls spelled out in the instructions (backticked code) with a different number of arguments than the
   helper declares.
 
+Round 6 adds the static counterparts of the blind-solve rejection modes of rounds 4-5 (``blind_failure_modes``): a helper that
+reads a labelled line or quotes a phrase no note contains, a helper instruction that quotes a world entry (the reference child
+matcher is first-match on fragments of the call opening), a move or write whose destination file name is not stated, a sort
+whose tie order is not stated, a reopened / corrected / re-fitted item whose earlier record is not said to be cleared or kept,
+and an ``Output contract:`` paragraph that is missing or whose templates and sort key contradict the numbered steps. Tasks by
+workers numbered ``ROUND6_FIRST_WORKER`` or higher get an error for a missing contract (and the
+scripted-match fragment inside a helper instruction, which is an error for every task); everything else is a ``heuristic:``
+warning, so the old batches can be measured without being failed.
+
 The call_depth_3 warnings are heuristics: pass-through means identical argument and return types to its sub-helper, thin
 means under ``THIN_WORDS`` words of its own besides the call; they point the auditor at a task, they do not decide it.
 Smoke and reference scripts get the same argument-count check in structure_smoke.mjs (it parses the code).
@@ -237,6 +246,142 @@ def lint_task(task):
                     and len(s_body.split()) < ONE_LINE_WORDS:
                 warnings.append(f'heuristic: sub-helper {sub_name} is a short yes/no comparison: exact comparisons '
                                 'belong in code, not in a helper')
+    new_errors, new_warnings = blind_failure_modes(task, functions)
+    return errors + new_errors, warnings + new_warnings
+
+
+ROUND6_FIRST_WORKER = 136
+ID_TOKEN = re.compile(r'\b[A-Za-z]{1,6}[-_]\d{1,5}\b')
+QUOTED = re.compile(r'["\u201c`]([^"\u201d`\n]{3,40})["\u201d`]')
+CODEISH = re.compile(r'[{}()=;<>\[\]|\\$]|=>|\.\w+\(')
+MOVE_WORDS = re.compile(r'\b(move|moves|moved|moving|file it|files it|archive|archives|refile|refiles)\b', re.I)
+NAME_RULE = re.compile(r'(same (file )?name|keeps? (its|their) (file )?name|<same|<name>|<file|<id>|file name|filename|renamed? to)', re.I)
+SORT_WORDS = re.compile(r'\b(sort|sorted|sorts|sorting|ordered by|in order of|ranked|ranks?)\b', re.I)
+TIE_WORDS = re.compile(r'\b(ties|tie|tied|then by|then the|break|breaks|equal|same (time|date|key|value|count|score)|identical)\b', re.I)
+REOPEN_WORDS = re.compile(r'\b(reopen\w*|re-open\w*|re-?fit\w*|re-?issue\w*|re-?submit\w*|reinstat\w*|reactivat\w*|'
+                          r'restor(?:e|es|ed)|retract\w*|supersed\w*|reversal|reverse[sd]?|undo\w*|corrected|corrections?)\b', re.I)
+CLEAR_WORDS = re.compile(r'\b(clear\w*|reset\w*|keeps?|kept|retain\w*|replac\w*|overwrit\w*|supersed\w*|remov\w*|drop\w*|'
+                         r'discard\w*|no longer|still (counts?|stands?|applies)|stands?|stays?|erase\w*|cancel\w*|ignor\w*|'
+                         r'wipe\w*|restart\w*|starts? (over|fresh|again)|latest|last (one|entry|line|note) wins)\b', re.I)
+SORT_KEY = re.compile(r'(?:sorted|sort|ordered|order|ranked)\s+(?:ascending|descending|alphabetically|numerically)?\s*by\s+([^.;,\n]+)', re.I)
+CONTRACT = re.compile(r'(?:^|\n)\s*\**Output contract:?\**:?(.*?)(?=\n\s*\n|$)', re.S | re.I)
+
+
+def world_corpus(task):
+    """All text of the task's world: folder files and input strings (flattened), lower-cased pieces kept for lookups."""
+    parts = list((task.get('folders') or {}).values()) + list((task.get('folders') or {}).keys())
+
+    def walk(value):
+        if isinstance(value, str):
+            parts.append(value)
+        elif isinstance(value, dict):
+            for key, item in value.items():
+                parts.append(str(key))
+                walk(item)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item)
+    walk(task.get('inputs'))
+    return '\n'.join(parts)
+
+
+def sentences(text):
+    return [part for part in re.split(r'(?<=[.!?])\s+|\n+', text) if part.strip()]
+
+
+def round6_worker(task):
+    match = re.fullmatch(r'w(\d+)', str((task.get('author') or {}).get('worker', '')))
+    return bool(match) and int(match.group(1)) >= ROUND6_FIRST_WORKER
+
+
+def blind_failure_modes(task, functions):
+    """(errors, warnings) for the static blind-solve failure modes (see the module docstring)."""
+    errors, warnings = [], []
+    strict = round6_worker(task)
+    corpus = world_corpus(task)
+    low = corpus.lower()
+    root = task['root']
+    root_body = functions.get(root, ('', ''))[1]
+    helpers = {p: hb for p, hb in functions.items() if p != root}
+
+    def mechanical(message):
+        warnings.append('heuristic: ' + message)
+
+    # 1. A helper reads a labelled line or quotes a phrase that no note / input / the root contains.
+    for path, (header, body) in helpers.items():
+        for phrase in sorted(set(QUOTED.findall(body))):
+            clean = phrase.strip()
+            if CODEISH.search(clean) or len(clean) < 4 or clean.lower() in header.lower():
+                continue
+            labelled = clean.endswith(':')
+            if not (labelled or ' ' in clean):
+                continue
+            if clean.lower() in low or clean.lower() in root_body.lower():
+                continue
+            if labelled or re.search(r'\b(line|lines|note|notes|starts?|begins?|reads?|says?|saying|contains?|mentions?)\b',
+                                     body[max(0, body.find(phrase) - 80):body.find(phrase)], re.I):
+                mechanical(f'{path} reads "{clean}" but no note, folder file or input of the world contains it: the helper '
+                           'describes wording the notes do not use (a solver must guess the mapping)')
+    # 2. A helper instruction quotes a world entry (id or long note line): first-match child scripting breaks.
+    ids = set(ID_TOKEN.findall(corpus))
+    lines = [line.strip() for line in corpus.splitlines() if len(line.strip()) >= 24]
+    for path, (header, body) in helpers.items():
+        quoted_ids = sorted(token for token in ids if re.search(rf'(?<![\w-]){re.escape(token)}(?![\w-])', body))
+        quoted_lines = [line for line in lines if line in body]
+        if quoted_ids or quoted_lines:
+            mechanical(f'{path} quotes world entries ({", ".join((quoted_ids + [l[:30] + "..." for l in quoted_lines])[:3])}): '
+                       'put no example ids or note lines in a helper instruction, because reference children match fragments of the '
+                       'call opening and a quoted entry makes every call match the first scripted child')
+    # 2b. The reference matcher's own symptom: a scripted `$match` fragment that occurs in the helper's instruction text matches
+    # EVERY call of that helper (the correct value with a wrong world). Applies to every task, not only round-6 workers.
+    scripted = (task.get('smoke') or {}).get('children') or {}
+    for name, value in scripted.items():
+        entries = value.get('$match') if isinstance(value, dict) else None
+        files = [(p_, hb) for p_, hb in helpers.items() if p_.rsplit('/', 1)[-1][:-3] == name]
+        for entry in entries or []:
+            fragment = str(entry.get('match', '')).strip().lower()
+            if len(fragment) < 3:
+                continue
+            for path, (header, body) in files:
+                if fragment in (header + '\n' + body).lower():
+                    errors.append(f'smoke child {name}: the match fragment "{entry["match"][:40]}" occurs in the instruction text of '
+                                  f'{path}, so every call of the helper opens with it and the first scripted entry answers all '
+                                  'calls (a correct value with a wrong world): match on text only the call arguments contain')
+    # 3. Destination file name unstated when the root moves files.
+    if task.get('folders') and MOVE_WORDS.search(root_body) and not NAME_RULE.search(root_body):
+        warnings.append('heuristic: the root moves files but no sentence says the destination file name (state e.g. '
+                        '`filed/<same name>`: a moved file keeps its exact name and text)')
+    # 4. Sorting without a tie order.
+    for path, (header, body) in functions.items():
+        if SORT_WORDS.search(body) and not TIE_WORDS.search(body):
+            warnings.append(f'heuristic: {path} sorts or ranks but states no tie order (name the tie-break key, or say that '
+                            'equal keys keep file-name order)')
+    # 5. Reopen / correction rule silent on clearing the earlier record.
+    for path, (header, body) in functions.items():
+        for number, sentence in enumerate(sentences(body)):
+            if REOPEN_WORDS.search(sentence):
+                window = ' '.join(sentences(body)[number:number + 2])
+                if not CLEAR_WORDS.search(window):
+                    warnings.append(f'heuristic: {path}: "{sentence.strip()[:70]}..." names a reopened / corrected / reversed item '
+                                    'without saying whether its earlier record is cleared or kept')
+                    break
+    # 6. Output contract present and consistent with the numbered steps.
+    contract = CONTRACT.search(root_body)
+    if not contract:
+        if strict:
+            errors.append('the root has no `Output contract:` paragraph (paths, line templates, separators, number format, '
+                          'empty case, sort key and tie-break, counted cases)')
+    else:
+        text = contract.group(1)
+        steps = root_body[:contract.start()] + root_body[contract.end():]
+        for template in sorted(set(re.findall(r'`([^`\n]*(?:\||<[^>]+>)[^`\n]*)`', text))):
+            if template.strip() and template not in steps and template not in root_body.replace(text, ''):
+                warnings.append(f'heuristic: the output contract template `{template[:50]}` is not the template of any numbered step: '
+                                'contract and steps must give the same line format')
+        keys_contract = [re.sub(r'\W+', ' ', k.lower()).split() for k in SORT_KEY.findall(text)]
+        keys_steps = [re.sub(r'\W+', ' ', k.lower()).split() for k in SORT_KEY.findall(steps)]
+        if keys_contract and keys_steps and not any(set(a) & set(b) for a in keys_contract for b in keys_steps):
+            warnings.append('heuristic: the output contract sorts by a different key than the numbered steps')
     return errors, warnings
 
 

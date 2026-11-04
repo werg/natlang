@@ -71,10 +71,12 @@ def domain_of(row, domains):
 def apply_program_caps(rows, caps, dropped):
     """Keep at most ``max_rows_per_program`` rows of each normalized program of the named external sources
     (``curriculum.external.source``): program-poor supplies (one template over thousands of worlds) would otherwise
-    shrink the pool's effective program count. The survivors are the rows with the smallest id hashes, which spreads
-    them over worlds; nothing is duplicated or altered."""
+    shrink the pool's effective program count. The survivors are the rows with the smallest id hashes (salted by the cap's
+    optional ``rotation`` string, so a later pool can rotate the retained worlds), which spreads them over worlds; nothing
+    is duplicated or altered."""
     import hashlib
     limits = {item['source']: int(item['max_rows_per_program']) for item in caps}
+    salts = {item['source']: str(item.get('rotation', '')) for item in caps}
     if not limits:
         return rows
     groups = collections.defaultdict(list)
@@ -86,7 +88,9 @@ def apply_program_caps(rows, caps, dropped):
         else:
             kept.append((row, features))
     for (source, _), members in groups.items():
-        members.sort(key=lambda item: hashlib.sha256(item[0]['id'].encode()).hexdigest())
+        # ``rotation`` (a per-source salt in the cap spec) changes which rows of a program survive, so successive pools
+        # rotate the retained worlds instead of always keeping the same smallest hashes.
+        members.sort(key=lambda item: hashlib.sha256((salts[source] + item[0]['id']).encode()).hexdigest())
         kept += members[:limits[source]]
         dropped[source] += max(0, len(members) - limits[source])
     order = {id(item[0]): index for index, item in enumerate(rows)}
