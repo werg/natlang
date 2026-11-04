@@ -210,6 +210,13 @@ def resume_checkpoints(out, config, state):
     slot = out / 'learner' / 'checkpoint.pt'
     if config.get('mandatory_sft_only') and slot.is_file() and not (parent.exists() and os.path.samefile(slot, parent)):
         return [slot, parent]
+    # An interleaved RL controller's active SFT window (rl/interleave.py) resumes in that window's own rolling slot
+    # (interleave._rolling_control); the slot and the window parent travel like a plain window's.
+    active = (state.get('interleave') or {}).get('active_window')
+    if config.get('interleaved_rl_stage') and active:
+        slot = Path(active['directory']) / 'learner' / 'checkpoint.pt'
+        if slot.is_file() and not (parent.exists() and os.path.samefile(slot, parent)):
+            return [slot, parent]
     return [parent]
 
 

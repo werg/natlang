@@ -348,3 +348,18 @@ def test_tune_shard_launches_always_restore_the_seed_parent(tmp_path, monkeypatc
     assert rl_cloud.record_digests({}, export) == {'a' * 64, 'c' * 64, 'd' * 64}
     sft = {'seq': 3, 'lineage': 'joint', 'blobs': export['blobs']}
     assert rl_cloud.launch_blobs({}, sft) == export['blobs']
+
+
+def test_interleaved_controller_exports_its_active_sft_window_rolling_slot(tmp_path):
+    out = tmp_path / 'w000004'
+    parent = tmp_path / 'parent.pt'
+    parent.write_bytes(b'parent')
+    window = out / 'sft-window-000000'
+    (window / 'learner').mkdir(parents=True)
+    slot = window / 'learner' / 'checkpoint.pt'
+    slot.write_bytes(b'rolling')
+    config = {'interleaved_rl_stage': 'interleaved_jolt_rl_v1'}
+    state = {'checkpoint': str(parent), 'interleave': {'active_window': {'window': 0, 'directory': str(window)}}}
+    assert sandbox.resume_checkpoints(out, config, state) == [slot, parent]
+    assert sandbox.resume_checkpoints(out, config, {'checkpoint': str(parent), 'interleave': {}}) == [parent]
+    assert sandbox.resume_checkpoints(out, {}, state) == [parent]

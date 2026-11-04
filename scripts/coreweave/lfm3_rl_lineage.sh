@@ -308,6 +308,10 @@ while [ "$ROUNDS" -eq 0 ] || [ $i -lt "$ROUNDS" ]; do
     stage_periodically & stager=$!
   else
     rebind || { log '"event":"failed","step":"actor rebind"'; exit 3; }
+    # An interleaved controller's SFT windows train for hours inside one call: export their rolling slots too.
+    if python3 -c "import json,sys;sys.exit(0 if json.load(open(sys.argv[1])).get('interleaved_rl_stage') else 1)" "$CFG"; then
+      stage_periodically & stager=$!
+    fi
   fi
   before=$(field "$P" trained_rounds); s=$(date +%s)
   log "\"event\":\"call_start\",\"kind\":\"$KIND\",\"controller\":\"$A\",\"trained_rounds\":$before"
