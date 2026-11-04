@@ -58,11 +58,14 @@ def prepare(args):
     window_tool = Path(args.window_tool).resolve()
     subprocess.run([sys.executable, str(window_tool), 'next', '--previous-config', args.boundary_config,
                     '--out', str(prep / 'out'), '--config-out', str(prep / 'config.json'), '--window', str(args.window),
-                    '--id', f'{args.run_id}-session'], cwd=runtime, check=True)
+                    '--id', f'{args.run_id}-session', *(['--runtime', args.runtime] if args.runtime else [])],
+                   cwd=runtime, check=True)
     base = json.loads((prep / 'config.json').read_text())
     stage_id = base['production_stage']
     old_recipe = Path(base['production_recipe'])
-    recipe = json.loads(old_recipe.read_text())
+    # --recipe: a successor recipe (e.g. one that adds interleaved RL stages) replaces the window's own copy; its
+    # lineage must still bind the control's recipe_lineage_sha256 (native_recipe_binding below refuses otherwise).
+    recipe = json.loads(Path(args.recipe or old_recipe).read_text())
     stage = next(s for s in recipe['stages'] if s['id'] == stage_id)
     block = {'run_id': args.run_id, 'workers': args.workers, 'coordinator_url': f'http://127.0.0.1:{args.relay_port}',
              'local_steps': args.local_steps, 'start_grace_seconds': args.start_grace_seconds,
@@ -165,6 +168,8 @@ def main(argv=None):
     p.add_argument('--coordinator-code', help='the bundle code the cohost serves the coordinator from '
                    '(default: the machine profile repo root, the same path in every sandbox)')
     p.add_argument('--python', help='default: this (the learner\'s) python')
+    p.add_argument('--recipe', help='successor recipe to bind instead of the prepared window\'s own copy')
+    p.add_argument('--runtime', help='frozen runtime for the session window (sft_window next --runtime)')
     p.add_argument('--window-tool', default=str(HERE.parents[4] / 'scripts' / 'neuralese_data' / 'sft_window.py'))
     r = commands.add_parser('relocate')
     r.add_argument('--session-dir', required=True)
