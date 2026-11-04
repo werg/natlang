@@ -1517,7 +1517,10 @@ def group_episode_advantages(members, *, jolt, mode):
         # Memetic improvement episodes (rl.memetic_stage): graded query success, centered on the larger of the group
         # mean and the best trivial improvement (no change, default crisp improvement), so a candidate that does not
         # beat doing the trivial thing never earns a positive advantage. Raw, never std-normalized.
-        if None in anchors or len(anchors) != 1:
+        # An episode that ended without a scored commit (e.g. request budget exhausted) carries no memetic record;
+        # it is a failed improvement (quality 0) of the same program and shares its group's anchor.
+        anchors.discard(None)
+        if len(anchors) != 1:
             raise ValueError('a memetic group shares one trivial-improvement anchor')
         if len(qualities) < 2:
             return [0.] * len(qualities)

@@ -169,6 +169,9 @@ def test_anchored_advantages_never_reward_the_trivial_improvement():
     assert values == [0.25, -0.25]
     with pytest.raises(ValueError, match='one trivial-improvement anchor'):
         group_episode_advantages([row(1., .25), row(.5, .5)], jolt=False, mode='grpo')
+    # An episode that never committed (request budget exhausted) has no memetic record: a failure at the group anchor.
+    exhausted = {'reward': {'quality': 0.0, 'execution_efficiency': {'cost': .03}}}
+    assert group_episode_advantages([exhausted, row(.75, .5)], jolt=True, mode='grpo') == [-.5, .25]
 
 
 def test_memetic_outcome_reads_only_memetic_worlds():
