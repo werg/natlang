@@ -727,3 +727,85 @@ Round-6 targets: whole-root replays (or mechanical attach with provenance) for t
 w21, w32, w19, w30, w38, w11, w31, w06, w23); more authored supply with a world per task (the world-derived split puts almost all
 rows in train, so held authored rows are few: 13 new held rows this round); a stricter lint for the failure modes above; real visit
 counts from the live selector to confirm the repeated-row behaviour; and program growth for the smallest families.
+
+## 16. Round 6 changes and results (2026-11-04)
+
+**Tools.** (1) `authored_checks.py` carries the static blind-failure checks (below); a scripted `$match` fragment of at least 6
+characters that occurs in the helper's own instruction text is an error for every task (first-match child scripting then answers every
+call), a missing `Output contract:` paragraph is an error for workers numbered 136 or higher, the rest are `heuristic:` warnings.
+(2) `sources/authored.py`: tasks of workers numbered 136 or higher draw their world's split with 30% held (15% dev, 15% confirmation);
+older workers and notes-only backfill copies (which keep their author) keep the 94/3/3 draw, so no existing row changes split.
+(3) `authored_child_notes.py extract` attaches argument-extract notes (`mechanical:argument-extract`: the call's own plain arguments,
+named, per call reached by the smoke script's argument expressions; typed producers and carried-note-only calls are skipped), and
+`mechanical --provenance mechanical:rule-derived` attaches typed per-call records computed by code that implements the helper's stated
+rule over the call's own arguments (named-argument matches such as `zone: string = "Z3"` are supported; existing notes are kept and only
+uncovered sites are added). (4) `assemble_selection_pool.py` program caps take an optional `rotation` salt (which worlds of a program
+survive). (5) `simulate_selection.py` reports sampled shares by generator, family, program and external source.
+
+**Lint catch counts** (all earlier batches' tasks, 213 held-back tasks against 2,279 others; the 41 round-6 held-back tasks had no lint
+findings because their authors cleared the lint first, so they are judgment ambiguities the lint cannot see): any new finding (except
+the missing contract) 96 of 213 held-back tasks versus 1,115 of 2,279 others; per check, held-back / others: tie order unstated 51 / 473,
+destination file name unstated 34 / 354, reopen-or-correction rule silent 24 / 202, quoted label absent from the world 18 / 320, quoted
+world entry in a helper 16 / 178, contract template differs from the steps 10 / 69, match fragment inside the helper instruction 5 / 25.
+Precision is low (the held-back base rate is 9.5%): only the match-fragment check is a mechanical bug (a correct value with a wrong
+world), the rest point the author at text to read. The blind solve remains the check for ambiguity.
+
+**Authoring wave.** 16 Haiku batches (w136-w151; w152 did not qualify and is a round-7 item), each qualified, novelty-gated and
+blind-solved by a Sonnet subagent from the packet alone; a flagged ambiguity or a disagreement holds a task back together with its
+siblings when the program text is at fault. 235 rows admitted (31 tasks held back; the authors' w148 extras and two w151 duty-schedule
+tasks that never qualified are not counted), 210 with a verified world:
+
+| batch | family | admitted | held back |
+|---|---|---:|---:|
+| w136 | sluice_shift_desk | 16 | 0 |
+| w137 | request_routing_gates | 17 | 2 |
+| w138 | folder_reconciliation_reducers | 13 | 3 |
+| w139 | skills_procedure_desk | 16 | 0 |
+| w140 | typed_evidence_diagnosis_desk | 16 | 5 |
+| w141 | quantity_reasoning_desks (new) | 16 | 0 |
+| w142 | request_to_call_queues (new) | 11 | 5 |
+| w143 | micro_codebase_repairs (new) | 14 | 4 |
+| w144 | multi_round_state_games | 16 | 0 |
+| w145 | cross_document_reconciliation | 16 | 0 |
+| w146 | resource_limited_pipeline_planning | 16 | 2 |
+| w147 | line_support_desk | 15 | 5 |
+| w148 | damaged_folder_reconciliation | 12 | 0 |
+| w149 | sequential_evidence_diagnosis | 14 | 2 |
+| w150 | clinic_chair_day | 13 | 3 |
+| w151 | long_document_digest_desks (new) | 14 | 0 |
+
+Held authored packets: 64 new held rows (32 dev, 32 confirmation) registered as `natlang-rl-authored-{dev,confirmation}-20261104r6`
+(164 held authored rows in all, 0 in the pool); the pool was built after the registration. Findings now rules: a folder world with
+Neuralese producers qualifies when the `reference` script does the moves and writes with literal code (it never calls the producers) and
+the real root is replayed in `smoke` (w136 `pour-precedence`); a step that contradicts the intro limits, a scripted readout answer that
+the helper's text contradicts (`Needs the drug today` scripted routine) and an id case that the expected folder changes (`b-11` written as
+`B-11`) were real defects the blind solve found; an `$match` fragment that also occurs inside another record's text (the same bulletin
+id) answers the wrong call.
+
+**Producer notes.** Train producer-site coverage of the admitted authored pool rose from 590 of 918 sites (64.3%) to 844 of 977
+(86.4%): replay-verified supersession of five old batches (w19, w30, w11, w31, w06b2: 39 rows, program, inputs, expected and split
+identical to the superseded rows), 405 argument-extract notes for the carried-string producers of w33, w18, w26, w15, w27, w21, w32, w11,
+w31, w06 (43 rows), and 590 rule-derived typed notes (w15, w27, w21, w32, w23, w38). Uncovered: no-argument openers (`begin_notes()`),
+calls whose discriminating text sits in a shared argument, and a few judgment-only calls. Provenance stays explicit (`checked`,
+`mechanical:rule-derived`, `mechanical:argument-extract`); no note is a constant.
+
+**Pool** `selection-pools/selection-pool-20261104T0830Z-r6b` (sha256 `75ba2f517eb1b42797e23c34cde214ca03efd1871a0aead4fafbf8c06340fe6c`,
+28,400 train rows, `latest.json` promoted after verification: unique ids, all train, 0 protected-related rows under digest
+`f79828b4...`, tags equal the 3,052 strict world-effect rows, receipt digests match, 0 held authored rows; the previous pointer is
+`latest.json.prev-20261104T0745Z-memetic-held`). Program caps: bgkit 24 rows per program with rotation salt `20261104` (was 40); the
+generator share cap is 0.225 instead of 0.2: with the bgkit class smaller the 20% water-filling shrank the pool to 23,075 rows and
+lost 367 programs (the dropped tail rows are program-rich), whereas 0.225 gives 8,363 distinct programs (live pool before: 6,955),
+effective programs 1,619 (1,452) and 94 families (4 new). Sampled mixtures of the two pools are the same, so the choice rests on breadth.
+
+Selection simulation (`simulate_selection.py`, 400 rounds x 16 rows x 8 samples, synthetic outcomes) on the new pool: sampled strict
+world-effect share 47.6% (live pool 46.6%), minimum round 37.5%, 0 rounds below 30% (without the quota: 45.0%, 67 rounds below);
+3,878 distinct rows, 1,446 of 2,468 functional programs and all 94 families reached; authored rows 36.5% of samples (live 34.6%), bgkit
+6.4% (6.9%), composed 6.5%, decisions 6.3%, codebase-ops 7.0%. The repeated codebase-repair template does not dominate:
+`repair_program.nl` is the largest single program at 2.56% of samples, its family `ext_codebase_natlang_codebase_effects` 3.2%, and
+codebase repairs are 206 of 3,048 effect samples (6.8%), so no cap was added.
+
+Round-7 targets: finish `confirmed_dialogue_state_updates` (w152: the replay smoke failed for all 21 tasks, 0 qualified; fix the
+smoke first), the two w151 duty-schedule tasks (a match fragment shared by two bulletin records) and the 4 extra w148 tasks;
+whole-root replays for the typed producers that only have rule-derived notes; no-argument opener producers; held-back tasks'
+programs rewritten for their ambiguity (judgment boundaries: urgency, category, same-message corrections); more programs for the
+four new families (7-10 each, 20 needed); real visit counts from the live selector.
