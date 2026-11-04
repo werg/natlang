@@ -700,6 +700,21 @@ task back together with its program when the defect is in the program text (36 t
 | w131 | ops_directory_reducers | 21 | 21 | 21 | 0 |
 | w132 | exact_algorithm_state_workflows | 15 | 15 | 5 | 6 |
 
+Wave 5 (w133 to w135, three more Haiku batches; Sonnet blind solves agreed on all 56 compared answers, four tasks flagged
+ambiguous by the solver and held back): 52 rows admitted (48 with a verified world) and no new held rows. The pool was reassembled
+(`selection-pools/selection-pool-20261104T010000Z-w5`, sha256 `a0a89c992d3d8da19201f64132c53cac8d5af20444ebdbda55e49f819e27f81c`, 25,426 train rows,
+`latest.json` now points at it; the previous pointer is kept as `latest.json.prev-20261104T0035Z-w5`): unique ids, all train, 0
+protected-related rows, tags equal the 3,140 strict world-effect rows (12.3% of the pool), 6,728 distinct programs, 2,294 functional
+programs, 82.2% of 90 families with 20+ programs. Selection simulation (400 rounds x 16 rows x 8 samples): sampled world-effect
+share 46.2%, minimum round 37.5%, 0 rounds below 30% (without the quota: 42.6%, 61 rounds below 30%); 3,859 distinct rows,
+1,395 functional programs and all 90 families reached.
+
+| batch | family | admitted | world-effect | functional programs | held back |
+|---|---|---:|---:|---:|---:|
+| w133 | harvest_ledger_operations | 16 | 12 | 7 | 4 (fridge forecast x3: negative stock covers; triage_cafe-0001: urgency boundary) |
+| w134 | tower_rota_repair | 18 | 18 | 6 | 0 |
+| w135 | catalogue_correction_desk | 18 | 18 | 8 | 0 |
+
 Findings that are now rules: a helper that reads a line the notes do not have, note wording that differs from the helper's
 description, an unstated destination file name when moving, an unstated tie order, a rule that is silent on whether a re-fitted or
 reopened item clears its earlier record, and an output contract that contradicts a numbered step were the blind-solve rejections;
