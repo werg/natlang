@@ -71,6 +71,7 @@ POP_PACKET = POP_RECOVERY + '/matched-instruction-baseline-1101/cases.jsonl'
 PACKET_SHA256 = '6fa6ca6c2e3a46c4b050da535e1a246c8f34d70f355ea047bcfe19a0653aa560'
 IMAGE = 'natlang:pop-causal-conv1d-torch214-cu134-sm89-v1'
 POP_PORT = 18530
+POP_BUDGET_GB = 6    # container --memory 5g plus the driver; Pop (14 GiB) admits only ~6.3 GiB beside its 1.8 GiB reserve
 POP_MIN_FREE = 8 * 2**30 + 512 * 2**20       # the baseline drivers' scratch floor
 CASES = list(range(0, 128, 8))
 # The exact task spec of the dev16 baselines (parent67 R34 12/16, earned179 R38 11/16).
@@ -450,7 +451,7 @@ def run_on_pop(arm, prep, runtime, closure, comparison, attempt=1):
             _pop_upload_json(job, f'{work}/job.json')
             unit = f'{name}-{int(time.time())}'
             ssh(shlex.join(['/usr/bin/python3', POP_REPO + '/scripts/memory_ledger.py', 'run', '--unit', unit,
-                            '--budget-gb', '7', '--class', 'experiment', '--no-resumable', '--container', name,
+                            '--budget-gb', str(POP_BUDGET_GB), '--class', 'experiment', '--no-resumable', '--container', name,
                             '--workdir', work, '--', '/usr/bin/python3', f'{work}/driver.py', f'{work}/job.json']))
             log(event='Pop evaluation started', arm=arm, unit=unit, step=prep['step'], source=source[:12])
             time.sleep(20)
