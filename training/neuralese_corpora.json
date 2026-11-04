@@ -734441,6 +734441,26 @@
       "note": "Held confirmation packet of the bgkit knowledge-reasoning RL reader source natlang-rl-bgkit-kr-20261103 (165 verified cases across searchqa, haystack, narrative, memory and pubmed families; split confirmation). Upstream validation/eval splits or a unit carve-out; related units (clue, story, summary, chat episode, abstract) share a split. For development and confirmation of RL reader outcomes; never a training source."
     },
     {
+      "id": "natlang-rl-authored-dev-20261104",
+      "owner": "dgx",
+      "path": "runs/natlang-rl-authored-dev-20261104",
+      "admission": "evaluation-only-never-training",
+      "include": [
+        "cases.jsonl"
+      ],
+      "note": "Held dev rows of the authored (Haiku-written, qualified) RL task pool: 9 verified cases in 8 worlds (split dev), registered 20261104. Related invocation worlds stay on one split. For development and confirmation of RL outcomes; never a training source."
+    },
+    {
+      "id": "natlang-rl-authored-confirmation-20261104",
+      "owner": "dgx",
+      "path": "runs/natlang-rl-authored-confirmation-20261104",
+      "admission": "evaluation-only-never-training",
+      "include": [
+        "cases.jsonl"
+      ],
+      "note": "Held confirmation rows of the authored (Haiku-written, qualified) RL task pool: 4 verified cases in 4 worlds (split confirmation), registered 20261104. Related invocation worlds stay on one split. For development and confirmation of RL outcomes; never a training source."
+    },
+    {
       "id": "natlang-rl-bgkit-kr-dev-20261104",
       "owner": "dgx",
       "path": "runs/natlang-rl-bgkit-kr-dev-20261104",
