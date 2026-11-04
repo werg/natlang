@@ -59,6 +59,12 @@ per-token eligibility mask:
    correction for an over-repeated exact target without dropping its graph or
    weakening a distinct consumer decision.
 
+9. Optional ``boundary_weights`` (``natlang.boundary-token-weight/1``, token mass only) raise each eligible target
+   position whose token is a declared Neuralese producer boundary (``produce_open``/``close``) to at least
+   ``min_weight`` reply tokens. One marker is otherwise one token among the thousands of a long graph (2026-11-04
+   C6 diagnostic: about 0.001 of each update's objective; produce_open ranked 15k-60k at supervised inline sites).
+   Only positions already supervised are raised; nothing becomes a target that was not one.
+
 ``mass: 'token'`` (the default for new runs, 2026-10-29) replaces steps 3 and 5: a decision's mass is the number of
 its eligible reply tokens (reasoning keeps its ``reasoning_share`` of that mass), invocations and graphs are not
 renormalized, and each graph contributes ``family_scale / token_reference * (sum of weighted token CE +
@@ -188,6 +194,35 @@ def _family_balance(value):
     return result
 
 
+BOUNDARY_WEIGHT_SCHEMA = 'natlang.boundary-token-weight/1'
+
+
+def _boundary_weights(value):
+    """Minimum own-output weight (in reply tokens) of supervised Neuralese producer boundary targets."""
+    if (not isinstance(value, dict) or set(value) != {'schema', 'token_ids', 'min_weight'}
+            or value['schema'] != BOUNDARY_WEIGHT_SCHEMA):
+        raise ValueError(f'boundary_weights is {{schema: {BOUNDARY_WEIGHT_SCHEMA}, token_ids, min_weight}}')
+    ids, weight = value['token_ids'], value['min_weight']
+    if (not isinstance(ids, list) or not ids or len(set(ids)) != len(ids)
+            or any(type(token) is not int or token < 0 for token in ids)):
+        raise ValueError('boundary_weights token_ids must be distinct nonnegative token IDs')
+    if type(weight) not in (int, float) or not math.isfinite(weight) or weight < 1:
+        raise ValueError('boundary_weights min_weight must be a finite number >= 1 reply token')
+    return {'schema': BOUNDARY_WEIGHT_SCHEMA, 'token_ids': sorted(ids), 'min_weight': float(weight)}
+
+
+def apply_boundary_weights(row, weights, objective):
+    """Raise supervised boundary positions of a flat graph weight vector to the declared minimum."""
+    declared = objective.get('boundary_weights')
+    if not declared:
+        return weights
+    ids = [token for node in row['nodes'] for token in node['token_ids']]
+    if len(ids) != len(weights):
+        raise ValueError('boundary weights need the graph\'s flat token layout')
+    boundary, floor = set(declared['token_ids']), declared['min_weight']
+    return [max(weight, floor) if weight > 0 and token in boundary else weight for token, weight in zip(ids, weights)]
+
+
 def _decision_factors(value):
     """Exact target-span multipliers for repeated emitted decisions.
 
@@ -238,7 +273,7 @@ def resolve(declaration):
     if name != NAME:
         raise ValueError(f'unknown supervision objective {name!r}')
     allowed = {'name', 'reasoning_share', 'reasoning_markers', 'family_balance', 'role_tokens', 'decision_readout',
-               'mass', 'decision_tokens', 'token_reference', 'decision_factors', *_FIXED}
+               'mass', 'decision_tokens', 'token_reference', 'decision_factors', 'boundary_weights', *_FIXED}
     if set(declaration) - allowed:
         raise ValueError('unknown own-output objective fields: ' + ', '.join(sorted(set(declaration) - allowed)))
     mass = declaration.get('mass', 'invocation')
@@ -273,6 +308,10 @@ def resolve(declaration):
             'role_tokens': _role_tokens(declaration.get('role_tokens'))}
     if 'decision_factors' in declaration:
         result['decision_factors'] = _decision_factors(declaration['decision_factors'])
+    if 'boundary_weights' in declaration:
+        if mass != 'token':
+            raise ValueError('boundary_weights belong to token mass')
+        result['boundary_weights'] = _boundary_weights(declaration['boundary_weights'])
     return result
 
 
@@ -512,6 +551,14 @@ def _raw_target_span_signature(ids, raw):
 
 def graph_weights(row, objective, *, factor_report=None):
     """Own-output weights and categories for a complete authenticated native graph row (all nodes, flat)."""
+    weights, categories = _graph_weights(row, objective, factor_report=factor_report)
+    conversion = row.get('conversion') or {}
+    if conversion.get('static_native_context') is not None or conversion.get('ordinary_context_windows') is not None:
+        return weights, categories  # derived from their parent row's graph_weights, which applied the floor
+    return apply_boundary_weights(row, list(weights), objective), categories
+
+
+def _graph_weights(row, objective, *, factor_report=None):
     role_tokens = objective['role_tokens']
     if row.get('tokenizer_fingerprint') != role_tokens['tokenizer_fingerprint']:
         raise ValueError('own-output role tokens belong to a different tokenizer than this graph')

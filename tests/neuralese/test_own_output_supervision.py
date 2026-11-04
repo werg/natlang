@@ -559,3 +559,27 @@ def test_trainer_token_mass_loss_is_the_scaled_sum_of_weighted_ce(family):
     torch.testing.assert_close(loss, expected, rtol=1e-5, atol=1e-6)
     assert sum(examples[0].target_weights) > sum(examples[1].target_weights)
     assert [item['own_output'] is not None for item in details] == [True, True]
+
+
+def test_boundary_weights_raise_only_supervised_producer_markers_and_change_identity():
+    OPEN, CLOSE = 50, 51
+    ids = turn(USER, [40, OPEN, 42, CLOSE]) + turn(ASSISTANT, [41, OPEN, 42, 42, CLOSE, 41])
+    graph = {'schema': SCHEMA, 'id': 'b', 'split': 'train', 'source_groups': ['g'], 'tokenizer_fingerprint': FP,
+             'nodes': [{'name': 'n', 'token_ids': ids, 'target_weights': [0.] + [1.] * (len(ids) - 1)}]}
+    plain = objective(mass='token')
+    floor = objective(mass='token', boundary_weights={'schema': 'natlang.boundary-token-weight/1',
+                                                      'token_ids': [CLOSE, OPEN], 'min_weight': 32})
+    before, _ = own.graph_weights(graph, plain)
+    after, _ = own.graph_weights(graph, floor)
+    for position, (token, a, b) in enumerate(zip(ids, before, after)):
+        if token in (OPEN, CLOSE) and a > 0:
+            assert b == 32.
+        else:
+            assert b == a                       # user-turn markers stay zero; other targets unchanged
+    assert sum(1 for t, b in zip(ids, after) if b == 32.) == 2
+    assert own.identity(floor)['sha256'] != own.identity(plain)['sha256']
+    assert floor['boundary_weights']['token_ids'] == [OPEN, CLOSE]
+    with pytest.raises(ValueError, match='token mass'):
+        objective(boundary_weights=floor['boundary_weights'])
+    with pytest.raises(ValueError, match='min_weight'):
+        objective(mass='token', boundary_weights={**floor['boundary_weights'], 'min_weight': 0.5})
