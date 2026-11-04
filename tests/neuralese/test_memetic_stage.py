@@ -579,3 +579,24 @@ def test_distillation_package_is_an_exact_protected_source_addition(tmp_path, mo
     assert [r['id'] for r in receipt['rows']] == ['memetic:x:1', 'memetic:x:2']
     assert all(r['disposition'] == 'added' for r in receipt['rows']) and receipt['episode_actors'] == ['p' * 64]
     assert stage.package_distillation(out, tokenizer='t', roles=[1, 2, 3, 4], protected=Guard(), log=lambda l: None) is None
+
+
+def test_mechanical_outline_keeps_relied_on_actions_of_the_shortest_success():
+    def attempt(*steps):
+        turns = []
+        for index, (tool, args, output) in enumerate(steps):
+            turns.append({'model_response': {'calls': [[tool, args]]},
+                          'context': [{'role': 'tool', 'content': steps[index - 1][2]}] if index else []})
+        return {'trajectory': turns}
+
+    noisy = attempt(('eval', {'code': 'const x = understand_clue;'}, 'ReferenceError: x is not defined'),
+                    ('read_code', {'name': 'understand_clue'}, 'source'),
+                    ('eval', {'code': 'const note = await understand_clue(question);'}, 'ok'),
+                    ('return_result', {'status': 'success', 'value': 'Oz'}, ''))
+    direct = attempt(('eval', {'code': 'const note = await understand_clue(question); return note;'}, 'ok'),
+                     ('eval', {'code': 'const notes = await Promise.all(snippets.map(s => read_snippet(note, s)));'}, 'ok'),
+                     ('return_result', {'status': 'success', 'value': 'Munchkins'}, ''))
+    text = stage.mechanical_guidance([('w1', noisy), ('w2', direct)])
+    assert 'read_code' not in text and 'ReferenceError' not in text and 'const x' not in text
+    # The noisy run relied on 2 actions (its errored eval and its source read drop out), the direct one on 3.
+    assert text.count('\n') == 2 and 'const note = await understand_clue(question);' in text and 'Oz' in text

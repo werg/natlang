@@ -29,6 +29,7 @@ import contextlib
 import difflib
 import hashlib
 import json
+import re
 import math
 import os
 import time
@@ -172,20 +173,30 @@ def brief(family, cases):
             'functions': sorted({Path(path).stem for path in files if path.endswith('.nl')})}
 
 
+# Steps of a successful attempt that the outline leaves out: looking around (source, history, transcript), and any
+# action whose result was an error, which the run recovered from rather than relied on.
+_OUTLINE_SKIPS = {'read_code', 'compact_history', 'transcript.search', 'reply'}
+_ERROR_OUTPUT = re.compile(r'\b\w*Error\b|\binvalid-|is not defined|no-such-|\berror:', re.IGNORECASE)
+
+
 def mechanical_guidance(successes, limit=1500):
-    """The default crisp improvement without a bank: the action outline of one verified successful support attempt,
-    stated as an example for other invocations (deterministic; input-specific and target-relevant)."""
+    """The default crisp improvement without a bank: the action outline of a verified successful support attempt,
+    stated as an example for other invocations (deterministic; input-specific and target-relevant). The outline keeps
+    the actions the run relied on (no exploration, no errored actions) and uses the attempt that needed fewest."""
+    outlines = []
     for world, result in successes:
-        steps = attempt_steps(result, limit=12)
-        lines = []
-        for step in steps:
-            what = step.get('code') or step.get('arguments') or ''
-            lines.append(f"{len(lines) + 1}. {step['tool']}" + (f": {what}" if what else ''))
-        if lines:
-            text = ('A verified successful run of this program on another invocation took these actions:\n'
-                    + '\n'.join(lines))
-            return text[:limit]
-    return None
+        steps = [step for step in attempt_steps(result, limit=200)
+                 if step['tool'] not in _OUTLINE_SKIPS and not _ERROR_OUTPUT.search(step.get('output') or '')]
+        if steps:
+            outlines.append(steps if len(steps) <= 12 else steps[:11] + steps[-1:])
+    if not outlines:
+        return None
+    lines = []
+    for step in min(outlines, key=len):
+        what = step.get('code') or step.get('arguments') or ''
+        lines.append(f"{len(lines) + 1}. {step['tool']}" + (f": {what}" if what else ''))
+    text = 'A verified successful run of this program on another invocation took these actions:\n' + '\n'.join(lines)
+    return text[:limit]
 
 
 def query_plan(target, *, seconds_per_rollout, settings):

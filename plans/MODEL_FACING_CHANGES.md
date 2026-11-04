@@ -1928,3 +1928,13 @@ write it out in full"). Motivation: the first real supervisor episode of memetic
 ext_bgkit_searchqa_reading) proposed skill `answer-by-clue-type` with body `...`, which was accepted and would have
 spent an evaluation on an empty skill (it scored 0/4 support against the 0.25 baseline). Its next proposal was body "Implementation details to be filled.", so a short to-be-written note (fewer than 12 words naming a fill-in/placeholder/TODO) is refused the same way. Unmeasured: count placeholder proposals and the next proposal after this error
 across the first production memetic rounds.
+
+## 2026-11-04: memetic mechanical default guidance outlines only relied-on actions
+
+`rl/memetic_stage.py` `mechanical_guidance` (the "default crisp improvement" baseline that anchors memetic rewards)
+now outlines, from the successful support attempt needing the fewest, only the actions the run relied on: errored
+actions and exploration (`read_code`, `compact_history`, `transcript.search`) drop out, and long outlines keep the
+first 11 plus the final action. Motivation: in e2e v3 (bf95 71c3eb45, bgkit searchqa reading) the old outline was the
+first 12 raw steps of a success, mostly a ReferenceError eval with prose comments, source reads and transcript
+searches; with it the program scored 0/4 on the paired query worlds against 2/4 with no guidance. Unmeasured (n=4):
+compare the default baseline against none on the first production memetic preparations.
