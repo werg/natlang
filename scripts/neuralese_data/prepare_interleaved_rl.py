@@ -46,11 +46,32 @@ def _require_new(path):
     return path
 
 
+def prior_state_path(previous_config):
+    """The controller state that ended at this control's boundary: the control's own once it has run, else (a never-started
+    prepared control) the completed prior window's, as its branch origin records it."""
+    own = Path(previous_config['out']) / 'state.json'
+    if own.is_file():
+        return own
+    origin = previous_config.get('branch_origin') or {}
+    prior = (origin.get('prepared_next_window') or {}).get('prior_out')
+    if prior and (Path(prior) / 'state.json').is_file():
+        return Path(prior) / 'state.json'
+    completed = (origin.get('actual_completed_controller') or {}).get('path')
+    if completed and Path(completed).is_file():
+        return Path(completed)
+    raise SystemExit(f'{own} is absent and the control records no completed prior controller state')
+
+
 def earned_parent(previous_config, checkpoint=None):
     from natlang_neuralese.train.native_resident import binding
     from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
     from natlang_neuralese.train.native_continuation import collect_sft_progress
-    state = json.loads((Path(previous_config['out']) / 'state.json').read_text())
+    own = Path(previous_config['out']) / 'state.json'
+    state = json.loads(prior_state_path(previous_config).read_text())
+    if not own.is_file():
+        # A never-started prepared control (a relocated DiLoCo session worker): its parent is its own checkpoint.
+        if checkpoint is None or Path(checkpoint).resolve() != Path(previous_config['checkpoint']).resolve():
+            raise SystemExit('a never-started control converts only with --checkpoint equal to its own checkpoint')
     if checkpoint is None:
         if state.get('phase') != 'awaiting_semantic_refresh':
             raise SystemExit(f'previous window is {state.get("phase")!r}; pass an explicit earned --checkpoint')
@@ -315,7 +336,7 @@ def prepare(args):
                   resident_data_directory=str(out / 'resident-data'), task_curriculum=CURRICULUM,
                   rows_per_round=args.rows_per_round, group=args.group, policy_loss=loss)
     bind_recipe_lineage(config, lineage)
-    previous_state_path = Path(previous['out']) / 'state.json'
+    previous_state_path = prior_state_path(previous)
     if previous_state.get('task_curriculum_history'):
         selector = selection_history.snapshot({'path': str(previous_state_path),
                                                'sha256': sha256_file_hex_cached(previous_state_path)},
