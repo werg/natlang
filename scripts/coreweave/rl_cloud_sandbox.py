@@ -489,11 +489,14 @@ def upload(capability):
     return 1 if failed else 0
 
 
-def download_parts(parts, destination, sha256, size):
-    """GET every part (signed URL) into its offset of ``destination``, each part and the whole verified."""
+def download_parts(parts, destination, sha256, size, workers=None):
+    """GET every part (signed URL) into its offset of ``destination``, each part and the whole verified. Parts download
+    concurrently (``NATLANG_FETCH_WORKERS``, default 8): one signed-URL stream ran at ~12 MB/s (2026-11-04)."""
+    from concurrent.futures import ThreadPoolExecutor
     with open(destination, 'wb') as out:
         out.truncate(size)
-    for part in parts:
+
+    def fetch(part):
         for attempt in range(5):
             digest, written = hashlib.sha256(), 0
             started = time.time()
@@ -508,14 +511,18 @@ def download_parts(parts, destination, sha256, size):
                     seconds = round(time.time() - started, 1)
                     event(event='fetched', blob=sha256, part=part['index'], bytes=written, seconds=seconds,
                           mb_per_s=round(written / 1e6 / max(seconds, 0.1), 1))
-                    break
+                    return
                 event(event='fetch_mismatch', blob=sha256, part=part['index'], written=written, attempt=attempt)
             except Exception as error:
                 event(event='fetch_error', blob=sha256, part=part['index'],
                       error=f'{type(error).__name__}: {error}'[:300], attempt=attempt)
             time.sleep(10 * (attempt + 1))
-        else:
-            raise RuntimeError(f'could not fetch part {part["index"]} of blob {sha256}')
+        raise RuntimeError(f'could not fetch part {part["index"]} of blob {sha256}')
+
+    workers = workers or int(os.environ.get('NATLANG_FETCH_WORKERS', '8'))
+    with ThreadPoolExecutor(max(1, min(workers, len(parts) or 1))) as pool:
+        for future in [pool.submit(fetch, part) for part in parts]:
+            future.result()
     if file_digest(destination) != sha256:
         raise RuntimeError(f'blob {sha256}: parts verified but the whole differs')
 
