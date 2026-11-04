@@ -526,3 +526,19 @@ def test_held_packet_withdraws_whole_families_and_never_meta_trains_them(tmp_pat
                              protected=lambda c: False)
     receipt = json.loads(open(bound['memetic_round']['receipt']['path']).read())
     assert receipt['held_programs'] and all(p.startswith('small@') for p in receipt['held_programs'])
+
+
+def test_parent_selection_is_gated_by_the_memetic_verdict():
+    from natlang_neuralese.train.promotion import select_parent, RECEIPT_SCHEMA
+    receipt = {'schema': RECEIPT_SCHEMA, 'phase': 'development', 'promoted': True, 'declaration_sha256': 'd',
+               'matched': True, 'delta': 1, 'unmatched_reasons': [], 'decision_reasons': [], 'case_transitions': [],
+               'candidate': {'checkpoint_sha256': 'c' * 64}, 'reference': {'checkpoint_sha256': 'r' * 64}}
+    history = [{'parent_sha256': 'r' * 64, 'gains': {'f': .2}, 'comparisons': {}},
+               {'parent_sha256': 'c' * 64, 'gains': {'f': .05},
+                'comparisons': {'r' * 64: stage.promotion({'f': .05}, {'f': .2})}}]
+    assert select_parent('s', [receipt])['selected_sha256'] == 'c' * 64, 'no memetic stage: behaviour alone'
+    blocked = select_parent('s', [receipt], memetic_history=history)
+    assert blocked['selected_sha256'] == 'r' * 64 and blocked['memetic']['passed'] is False
+    history[1]['comparisons']['r' * 64] = stage.promotion({'f': .18}, {'f': .2})
+    assert select_parent('s', [receipt], memetic_history=history)['selected_sha256'] == 'c' * 64
+    assert select_parent('s', [receipt], memetic_history=history[:1])['memetic']['reason'].startswith('no paired')

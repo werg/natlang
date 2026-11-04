@@ -304,9 +304,28 @@ def attach(out, stage_id, receipts):
     return record
 
 
-def select_parent(stage_id, receipts, *, candidate_path=None, reference_path=None):
+def memetic_gate(history, *, candidate, reference, tolerance=0.05):
+    """The memetic meta-learning verdict for a candidate parent (rl.memetic_stage.promote ``promotion/history.json``):
+    held-family improvement gains of the candidate's supervisor, paired with the reference's on the same held
+    programs. The candidate passes when it does not regress the mean held gain by more than ``tolerance``. A declared
+    memetic stage without a paired verdict for exactly this candidate/reference pair blocks the candidate."""
+    entry = next((item for item in reversed(history or []) if item.get('parent_sha256') == candidate
+                  and reference in (item.get('comparisons') or {})), None)
+    if entry is None:
+        return {'passed': False, 'reason': 'no paired memetic held-program verdict for this candidate and reference'}
+    decision = entry['comparisons'][reference]
+    delta = decision.get('mean_gain_delta')
+    if delta is None:
+        return {'passed': False, 'reason': 'memetic verdict shares no held program with the reference', 'entry': entry}
+    return {'passed': delta >= -tolerance, 'mean_gain_delta': delta, 'tolerance': tolerance,
+            'programs': decision.get('programs'), 'gains': entry.get('gains')}
+
+
+def select_parent(stage_id, receipts, *, candidate_path=None, reference_path=None, memetic_history=None,
+                  memetic_tolerance=0.05):
     """The behaviour-based choice between one candidate and its reference: the candidate only when every phase
-    promoted it; otherwise the reference stays the parent. Unmatched comparisons select nothing new."""
+    promoted it (and, when the recipe declares memetic meta-learning, its held-program memetic verdict does not
+    regress, ``memetic_gate``); otherwise the reference stays the parent. Unmatched comparisons select nothing new."""
     if not receipts or any(receipt.get('schema') != RECEIPT_SCHEMA for receipt in receipts):
         raise ValueError('select-parent needs behaviour-promotion receipts')
     pairs = {(receipt['candidate']['checkpoint_sha256'], receipt['reference']['checkpoint_sha256']) for receipt in receipts}
@@ -316,6 +335,10 @@ def select_parent(stage_id, receipts, *, candidate_path=None, reference_path=Non
         raise ValueError('select-parent needs the development comparison')
     candidate, reference = pairs.pop()
     promoted = all(receipt['promoted'] for receipt in receipts)
+    memetic = (None if memetic_history is None else
+               memetic_gate(memetic_history, candidate=candidate, reference=reference, tolerance=memetic_tolerance))
+    if memetic is not None and not memetic['passed']:
+        promoted = False
     selected = candidate if promoted else reference
     record = {'schema': SELECTION_SCHEMA, 'stage': stage_id, 'selected_sha256': selected,
               'selected_path': candidate_path if promoted else reference_path,
@@ -323,6 +346,7 @@ def select_parent(stage_id, receipts, *, candidate_path=None, reference_path=Non
               'comparisons': [{key: receipt[key] for key in ('phase', 'declaration_sha256', 'matched', 'delta', 'promoted',
                                                              'unmatched_reasons', 'decision_reasons', 'candidate',
                                                              'reference', 'case_transitions')} for receipt in receipts],
+              **({'memetic': memetic} if memetic is not None else {}),
               'held_data_training_admission': False,
               'scope': 'selection by paired protected-development outcomes; not aggregate loss or step count'}
     return record
@@ -361,6 +385,9 @@ def main(argv=None):
     three.add_argument('--candidate-path')
     three.add_argument('--reference-path')
     three.add_argument('--out', required=True)
+    three.add_argument('--memetic-history', help='rl.memetic_stage promotion/history.json: gates the candidate on its '
+                       'paired held-program memetic verdict (required when the recipe declares native_memetic_rl)')
+    three.add_argument('--memetic-tolerance', type=float, default=0.05)
     args = parser.parse_args(argv)
     if args.command == 'compare':
         if args.recipe:
@@ -387,7 +414,9 @@ def main(argv=None):
                           'phases': sorted(record['receipts'])}))
     else:
         record = select_parent(args.stage, [_load(path) for path in args.receipt],
-                               candidate_path=args.candidate_path, reference_path=args.reference_path)
+                               candidate_path=args.candidate_path, reference_path=args.reference_path,
+                               memetic_history=_load(args.memetic_history) if args.memetic_history else None,
+                               memetic_tolerance=args.memetic_tolerance)
         _write(args.out, record)
         print(json.dumps({'command': 'select-parent', 'selected_sha256': record['selected_sha256'],
                           'candidate_promoted': record['candidate_promoted']}))

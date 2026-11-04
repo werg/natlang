@@ -544,7 +544,11 @@ def process(state, candidate):
         save_state(state)
     receipt, path, select_parent = compare(raw, parent_eval, 'raw')
     candidate['comparison'] = str(path)
-    selection = select_parent(STAGE, [receipt], candidate_path=candidate['path'], reference_path=parent['path'])
+    # A lineage that runs memetic meta-learning (native_memetic_rl) gates its parent on the paired held-program verdict
+    # too: NATLANG_MEMETIC_PROMOTION_HISTORY names that controller's memetic/promotion/history.json.
+    memetic = os.environ.get('NATLANG_MEMETIC_PROMOTION_HISTORY')
+    selection = select_parent(STAGE, [receipt], candidate_path=candidate['path'], reference_path=parent['path'],
+                              memetic_history=json.loads(Path(memetic).read_text()) if memetic else None)
     selection_path = ROOT / 'selections' / f'{sha[:12]}-vs-{parent["sha256"][:12]}.json'
     write_json(selection_path, selection)
     candidate['selection'] = str(selection_path)

@@ -652,7 +652,12 @@ def promote(out, round_info, *, endpoint, collect=None):
     previous = next((item for item in reversed(history) if item['parent_sha256'] != parent and item['gains']), None)
     decision = (promotion(gains, previous['gains'], min_gain=round_info.get('promotion_min_gain', 0.05))
                 if previous else {'promote': None, 'reason': 'first evaluated parent; it is the reference'})
-    entry = {'parent_sha256': parent, 'gains': gains, 'decision': decision,
+    # Paired against every earlier evaluated parent, so parent selection can gate on the published reference
+    # (train.promotion.memetic_gate).
+    comparisons = {item['parent_sha256']: promotion(gains, item['gains'],
+                                                   min_gain=round_info.get('promotion_min_gain', 0.05))
+                   for item in history if item['parent_sha256'] != parent and item['gains']}
+    entry = {'parent_sha256': parent, 'gains': gains, 'decision': decision, 'comparisons': comparisons,
              'compared_with': previous['parent_sha256'] if previous else None,
              'collection': {'scored': report.get('scored'), 'rollouts': report.get('rollouts')}}
     history.append(entry)
