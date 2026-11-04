@@ -173,6 +173,10 @@ MEMORY_REQUEST_SCHEMA = 'natlang.sft-window-memory-parameters/1'
 # capacity request identity binds them, so the window's start re-measures capacity under the new layout.
 MEMORY_PARAMETERS = ('checkpoint_input_offload', 'checkpoint_input_offload_directory', 'chunk_tokens',
                      'ffn_chunk_tokens', 'checkpoint_layer_group_size')
+# Microbatch composition: how the scheduled graphs are grouped into packed microbatches and accumulated per update.
+# The row schedule and quotas are unchanged; the trainer records accumulate_batches_history and rescales the update
+# budget against its earned reference. Recorded as such (composition_changed), never as a memory-only change.
+COMPOSITION_PARAMETERS = ('batch_tokens', 'batch_graphs', 'accumulate_batches')
 
 
 def apply_memory_parameters(c, request, request_binding):
@@ -182,9 +186,15 @@ def apply_memory_parameters(c, request, request_binding):
     if request.get('schema') != MEMORY_REQUEST_SCHEMA:
         raise SystemExit(f'{TRAINER_PARAMETER_REQUEST}: schema must be {MEMORY_REQUEST_SCHEMA}')
     updates, removals = dict(request.get('set') or {}), list(request.get('remove') or [])
-    foreign = sorted((set(updates) | set(removals)) - set(MEMORY_PARAMETERS))
-    if foreign or not (updates or removals) or set(updates) & set(removals):
-        raise SystemExit(f'{TRAINER_PARAMETER_REQUEST} may only set or remove {MEMORY_PARAMETERS} (got {foreign})')
+    allowed = set(MEMORY_PARAMETERS) | set(COMPOSITION_PARAMETERS)
+    foreign = sorted((set(updates) | set(removals)) - allowed)
+    if (foreign or not (updates or removals) or set(updates) & set(removals)
+            or set(removals) & set(COMPOSITION_PARAMETERS)):
+        raise SystemExit(f'{TRAINER_PARAMETER_REQUEST} may only set {sorted(allowed)} or remove memory keys '
+                         f'(got {foreign})')
+    for key in COMPOSITION_PARAMETERS:
+        if key in updates and (type(updates[key]) is not int or updates[key] < 1):
+            raise SystemExit(f'{key} must be a positive integer')
     params = c['trainer_parameters']
     if updates.get('checkpoint_input_offload') is False and 'checkpoint_input_offload_directory' in params:
         removals.append('checkpoint_input_offload_directory')
@@ -201,6 +211,7 @@ def apply_memory_parameters(c, request, request_binding):
             changed[key] = [params.pop(key), None]
     return {'schema': MEMORY_REQUEST_SCHEMA, 'request': request_binding, 'changed': changed,
             'reason': request.get('reason'), 'math_changed': False,
+            'composition_changed': sorted(set(changed) & set(COMPOSITION_PARAMETERS)),
             'at': 'window boundary (never-started control; the window start re-measures capacity)'}
 
 

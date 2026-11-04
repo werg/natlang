@@ -64,3 +64,15 @@ def test_memory_request_refuses_other_keys_and_offload_without_directory():
         sft_window.apply_memory_parameters(c, _memory_request(set={'checkpoint_input_offload': True}), {})
     with pytest.raises(SystemExit):
         sft_window.apply_memory_parameters(c, {'set': {'chunk_tokens': 4096}}, {})
+
+
+def test_composition_request_is_recorded_separately_from_memory_changes():
+    c = {'trainer_parameters': {'batch_tokens': 16384, 'accumulate_batches': 16, 'chunk_tokens': 1024}}
+    record = sft_window.apply_memory_parameters(
+        c, _memory_request(set={'batch_tokens': 65536, 'accumulate_batches': 4, 'chunk_tokens': 4096}), {})
+    assert c['trainer_parameters'] == {'batch_tokens': 65536, 'accumulate_batches': 4, 'chunk_tokens': 4096}
+    assert record['composition_changed'] == ['accumulate_batches', 'batch_tokens']
+    with pytest.raises(SystemExit):
+        sft_window.apply_memory_parameters(c, _memory_request(remove=['batch_tokens']), {})
+    with pytest.raises(SystemExit):
+        sft_window.apply_memory_parameters(c, _memory_request(set={'accumulate_batches': 0}), {})
