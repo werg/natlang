@@ -46,6 +46,16 @@ def write(path, value):
     return path
 
 
+def unwrap_join(command):
+    """The trainer command under any earlier session's join.py wrapper. A session prepared from a window of a previous
+    session (s3 from d1's s2 boundary, 2026-11-04) otherwise nests both joins, and the inner one rejects the new
+    session's --diloco block."""
+    command = list(command)
+    while len(command) > 2 and Path(command[1]).name == 'join.py' and '--' in command:
+        command = command[command.index('--') + 1:]
+    return command
+
+
 def prepare(args):
     from natlang_neuralese.common.hashing import sha256_file_hex_cached
     from natlang_neuralese.train.recipe import load_recipe, native_recipe_binding
@@ -111,7 +121,7 @@ def prepare(args):
                             'parent': base['branch_origin']['parent'], 'window_updates': args.window,
                             'local_steps': args.local_steps}}
     session_path = write(directory / 'session.json', session)
-    seed = list(control['seed_command'])
+    seed = unwrap_join(control['seed_command'])
     for worker in range(args.workers):
         item = copy.deepcopy(control)
         # Every file join.py runs is named in the control itself, so the lineage closure ships it.
