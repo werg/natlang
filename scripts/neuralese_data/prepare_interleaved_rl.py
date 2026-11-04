@@ -117,8 +117,11 @@ def recipe_with_stages(previous_recipe_path, stages_from, out, *, sft_stage, sft
         sft['parameters']['task_eval']['runtime'] = str(Path(runtime) / 'ts-host')
     if ce_policy is not None:
         name = 'ce_policy_' + ce_policy['sha256'][:12]
+        replaced = sft['inputs'].get('ce_supervision_policy')
         recipe['input_bindings'][name] = {'path': ce_policy['path'], 'sha256': ce_policy['sha256']}
         sft['inputs']['ce_supervision_policy'] = name
+        if replaced and not any(replaced in (stage.get('inputs') or {}).values() for stage in recipe['stages']):
+            recipe['input_bindings'].pop(replaced)  # the transition's predecessor stays bound in the parent recipe
     path = Path(out) / 'recipe-runtime.json'
     write_json_durable(_require_new(path), recipe)
     load_recipe(path)
@@ -218,7 +221,12 @@ def prepare(args):
             raise SystemExit('--task-source differs from the declared stage task source')
         args.task_source = task['path']
     if not args.task_source:
-        raise SystemExit('--task-source or --stages-from is required')
+        from natlang_neuralese.train.recipe import load_recipe, resolve_stage_inputs
+        loaded = load_recipe(json.loads(Path(args.previous_config).read_text())['production_recipe'])
+        declared = next((stage for stage in loaded['stages'] if stage['kind'] == 'native_interleaved_rl'), None)
+        if declared is None:
+            raise SystemExit('--task-source or --stages-from is required')
+        args.task_source = resolve_stage_inputs(loaded, declared, {})['rl_task_source']['path']
     task_source = Path(args.task_source).resolve(strict=True)
     rows = 0
     with task_source.open() as handle:
@@ -244,7 +252,20 @@ def prepare(args):
                   'max_turns': previous.get('max_turns', 128), 'case_seconds': previous.get('case_seconds', 3600)}
     ce_policy = (boundary_weight_policy(previous, parent, args.boundary_weight, control)
                  if args.boundary_weight is not None else None)
-    if stages_from is not None:
+    own = json.loads(Path(previous['production_recipe']).read_text())
+    present = next((stage for stage in own['stages'] if stage['kind'] == 'native_interleaved_rl'), None)
+    if present is not None:
+        # A session worker control already runs the successor recipe (session.py prepare --recipe): its recipe and
+        # trainer recipe binding are the session template's; adopt them unchanged.
+        if args.boundary_weight is not None or args.sft_window_updates is not None:
+            raise SystemExit('the previous recipe already declares the interleaved stage: no further recipe changes')
+        if present['parameters'].get('start_with', 'rl') != args.start_with:
+            raise SystemExit(f"declared start_with is {present['parameters'].get('start_with', 'rl')!r}")
+        args.stage_id = present['id']
+        recipe = Path(previous['production_recipe']).resolve(strict=True)
+        parameters = present['parameters']
+        loss = parameters['rl_policy_loss']
+    elif stages_from is not None:
         recipe = recipe_with_stages(previous['production_recipe'], args.stages_from, control,
                                     sft_stage=previous['production_stage'], sft_window=args.sft_window_updates,
                                     runtime=runtime, ce_policy=ce_policy)

@@ -106,6 +106,10 @@ def main(argv=None):
     ap.add_argument('--config', required=True)
     ap.add_argument('--work', required=True)
     ap.add_argument('--writable', action='append', default=[])
+    ap.add_argument('--readonly', action='append', default=[],
+                    help='SRC[:DST] extra read-only file the sandbox holds at DST (e.g. an earned boundary checkpoint '
+                         'already in the lineage, staged without copying it)')
+    ap.add_argument('--source', help='lineage tree to stage instead of ROOT/<lineage> (e.g. a pruned copy)')
     ap.add_argument('--unit', default='closure-replay')
     ap.add_argument('--build-only', action='store_true')
     a = ap.parse_args(argv)
@@ -113,7 +117,10 @@ def main(argv=None):
     closure = json.loads(Path(a.closure).read_text())
     work = Path(a.work)
     work.mkdir(parents=True, exist_ok=True)
-    out, runtime, summary = mounts(run, a.lineage, closure, Path(a.parent), work, a.writable)
+    out, runtime, summary = mounts(run, a.lineage, closure, Path(a.parent), work, a.writable, source=a.source)
+    for spec in a.readonly:
+        src, _, dst = spec.partition(':')
+        out.extend(['-v', f'{src}:{dst or src}:ro'])
     env = environment(runtime, Path(a.config).parent)
     for k, v in env.items():
         out.extend(['-e', f'{k}={v}'])
