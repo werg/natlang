@@ -73,6 +73,8 @@ def test_typed_changes_are_checked_before_they_get_an_id(tmp_path):
     assert w.propose({'kind': 'skill', 'function': 'intent', 'name': 'intent-cues', 'description': 'Unclear intents',
                       'body': '...', 'action': 'create'})['problems'], 'a placeholder body is not a skill'
     assert w.propose({'kind': 'guidance', 'scope': {'kind': 'program'}, 'text': 'TODO'})['problems']
+    assert w.propose({'kind': 'skill', 'function': 'intent', 'name': 'intent-cues', 'description': 'Unclear intents',
+                      'body': 'Implementation details to be filled.', 'action': 'create'})['problems']
     assert w.propose({'kind': 'adapter', 'adapter': 'x'})['problems'], 'adapters come only from fit'
     assert w.propose({'kind': 'guidance', 'scope': {'kind': 'program'}, 'text': 'Use intent.'}) == {'id': 'c1'}
     assert w.propose({'kind': 'instructions', 'file': 'route.nl', 'find': 'Route every ticket.',

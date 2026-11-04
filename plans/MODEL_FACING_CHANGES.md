@@ -1926,5 +1926,5 @@ same failing action. Measure about 48 replays per variant of the failing first r
 written; write out its steps in full" (guidance: "text is the guidance itself, which the function reads as written;
 write it out in full"). Motivation: the first real supervisor episode of memetic e2e v3 (bf95 71c3eb45, program
 ext_bgkit_searchqa_reading) proposed skill `answer-by-clue-type` with body `...`, which was accepted and would have
-spent an evaluation on an empty skill. Unmeasured: count placeholder proposals and the next proposal after this error
+spent an evaluation on an empty skill (it scored 0/4 support against the 0.25 baseline). Its next proposal was body "Implementation details to be filled.", so a short to-be-written note (fewer than 12 words naming a fill-in/placeholder/TODO) is refused the same way. Unmeasured: count placeholder proposals and the next proposal after this error
 across the first production memetic rounds.

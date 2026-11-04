@@ -156,7 +156,11 @@ def attempt_steps(rollout_result, limit=40):
 def _placeholder(text):
     """A stand-in such as "..." or "TODO" rather than written text."""
     words = re.findall(r"[^\W\d_]{2,}", str(text).lower())
-    return len(words) < 2 and set(words) <= {'tbd', 'todo', 'tba', 'body', 'text', 'skill', 'guidance', 'placeholder'}
+    if len(words) < 2 and set(words) <= {'tbd', 'todo', 'tba', 'body', 'text', 'skill', 'guidance', 'placeholder'}:
+        return True
+    # A short note that the text is still to be written ("Implementation details to be filled.").
+    return len(words) < 12 and re.search(r"\b(to be (filled|added|written|determined|defined|completed)|fill(ed)? in"
+                                          r"( later)?|placeholder|tbd|todo|details later)\b", ' '.join(words)) is not None
 
 
 def compose_guidance(changes):
