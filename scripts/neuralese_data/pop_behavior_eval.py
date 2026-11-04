@@ -144,6 +144,9 @@ CLOUD = Path(os.environ.get('NATLANG_CLOUD_RUNS', resolve_str('data_hdd')))
 
 def controller_states():
     yield from sorted(W.glob('*/state.json'))
+    # The single-learner production line: ops/solo-<date>/<out|wN>/state.json, one controller per SFT window.
+    yield from sorted(W.glob('ops/solo-*/out/state.json'))
+    yield from sorted(W.glob('ops/solo-*/w[0-9]*/state.json'))
     yield from sorted(CLOUD.glob('natlang-lfm3-cloud-*/*/w[0-9][0-9][0-9][0-9][0-9][0-9]/state.json'))
 
 
@@ -158,9 +161,12 @@ def controller_progress():
 
 
 def lineage_runtime(state_path):
-    beside = state_path.parent / 'config.json'  # a cloud window keeps its control beside its state
-    config = read_json(beside if state_path.parent.parent != W and beside.is_file()
-                       else W / 'ops' / state_path.parent.name / 'config.json') or {}
+    # A cloud/solo window keeps its control beside its state (the solo first window beside its run root); a
+    # controller directly under the workspace has its config under ops/<name>.
+    candidates = [state_path.parent / 'config.json', state_path.parent.parent / 'config.json'] \
+        if state_path.parent.parent != W else []
+    candidates.append(W / 'ops' / state_path.parent.name / 'config.json')
+    config = read_json(next((c for c in candidates if c.is_file()), candidates[-1])) or {}
     runtime = (config.get('actor_environment') or {}).get('NATLANG_REPO')
     return runtime if runtime and Path(runtime, 'runtime-input-closure.json').is_file() else None
 
@@ -415,10 +421,10 @@ def pop_unit_state(unit):
     return dict(line.split('=', 1) for line in out.split('\n') if '=' in line)
 
 
-def run_on_pop(arm, prep, runtime, closure, comparison):
+def run_on_pop(arm, prep, runtime, closure, comparison, attempt=1):
     source = prep['source']['sha256']
     py = prep['python_runtime']['sha256']
-    label = f'{arm}-{prep["step"]}-{source[:12]}-py{py[:12]}'
+    label = f'{arm}-{prep["step"]}-{source[:12]}-py{py[:12]}' + (f'-a{attempt}' if attempt > 1 else '')
     work = f'{POP_EVAL_ROOT}/{label}'
     name = f'popeval-{arm}-{source[:12]}'
     transport_json = json.loads(Path(prep['transport']['path']).read_text())
@@ -487,7 +493,7 @@ def collect(label, work, prep):
             'step': prep['step']}
 
 
-def evaluate(state, arm, checkpoint, sha, runtime, comparison):
+def evaluate(state, arm, checkpoint, sha, runtime, comparison, attempt=1):
     closure = ensure_pop_runtime(runtime)
     kind = 'ema' if arm == 'ema' else 'raw'
     prep = prepare(kind, checkpoint, runtime, sha)
@@ -496,7 +502,26 @@ def evaluate(state, arm, checkpoint, sha, runtime, comparison):
     keep = {prep['source']['sha256']}
     make_pop_room(state, prep['view']['bytes'], keep)
     send(prep)
-    return run_on_pop(arm, prep, runtime, closure, comparison)
+    return run_on_pop(arm, prep, runtime, closure, comparison, attempt)
+
+
+# An evaluation whose summary is not eligible (a case ended unresolved or as an infrastructure error, e.g. a wall
+# timeout) has no task_successes: it is not a model outcome and cannot be paired. It is rerun under a fresh label,
+# keeping the earlier evidence, up to this many attempts; the last result is compared (and reported unmatched).
+MAX_EVAL_ATTEMPTS = 2
+
+
+def scored_evaluation(state, arm, checkpoint, sha, runtime, comparison, existing=None):
+    result = existing
+    while result is None or (result['successes'] is None and result.get('attempt', 1) < MAX_EVAL_ATTEMPTS):
+        attempt = result.get('attempt', 1) + 1 if result is not None else 1
+        if result is not None:
+            log(event='unscored evaluation rerun', arm=arm, sha256=sha, attempt=attempt, previous=result['label'])
+        result = evaluate(state, arm, checkpoint, sha, runtime, comparison, attempt)
+        if result is None:
+            return None
+        result['attempt'] = attempt
+    return result
 
 
 # ---- comparison / selection --------------------------------------------------------------------------------------
@@ -527,19 +552,21 @@ def process(state, candidate):
     source = str(pin) if pin.is_file() else candidate['path']
     save_state(state)
     parent = state['parent']
-    raw = candidate.get('raw') or evaluate(state, 'raw', source, sha, runtime,
+    raw = scored_evaluation(state, 'raw', source, sha, runtime,
         f'Automated Pop dev16 evaluation of {candidate.get("lineage")} step {candidate.get("step")} under its own '
-        f'runtime {Path(runtime).name}; paired against behavioural parent {parent["label"]}.')
+        f'runtime {Path(runtime).name}; paired against behavioural parent {parent["label"]}.', candidate.get('raw'))
     candidate['raw'] = raw
     save_state(state)
     key = f'{parent["sha256"]}:{raw["python_runtime_sha256"]}'
     parent_eval = state['parent_evals'].get(key)
-    if parent_eval is None:
+    if parent_eval is not None and parent_eval.get('python_runtime_sha256') != raw['python_runtime_sha256']:
+        parent_eval = None   # an entry filed under another runtime's key is not a runtime-matched arm: evaluate afresh
+    if parent_eval is None or parent_eval['successes'] is None:
         if not Path(parent['path']).is_file():
             raise RuntimeError(f'behavioural parent source {parent["path"]} is unavailable for the runtime-matched arm')
-        parent_eval = evaluate(state, 'parent', parent['path'], parent['sha256'], runtime,
+        parent_eval = scored_evaluation(state, 'parent', parent['path'], parent['sha256'], runtime,
             f'Behavioural parent {parent["label"]} re-evaluated under runtime {Path(runtime).name} so candidates of '
-            f'this runtime pair under identical limits/runtime.')
+            f'this runtime pair under identical limits/runtime.', parent_eval)
         state['parent_evals'][key] = parent_eval
         save_state(state)
     receipt, path, select_parent = compare(raw, parent_eval, 'raw')

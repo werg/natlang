@@ -156,7 +156,9 @@ def _arm_problems(arm, packet, cases, name):
 
 def _detail(score, arm, name):
     """Per-case outcomes from a run's ``task-score.json``, checked against its completed receipt."""
-    if score is None:
+    if score is None or type(arm['task_successes']) is not int:
+        # An unscored arm (ineligible run: unresolved/infrastructure cases) has no success count to check its
+        # outcome labels against and is already reported unmatched by ``_arm_problems``; its labels are not paired.
         return None
     for key in ('packet_sha256', 'case_indices', 'task_successes', 'cases'):
         if score.get(key) != arm[key]:
