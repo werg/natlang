@@ -956,6 +956,16 @@ def seed_prepared_sft(run, name, spec, exports, L):
     historical, skipped, historical_links = historical_checkpoint_blobs(run, closure, parent_path)
     if skipped:
         print(json.dumps({'event': 'historical_checkpoints_not_shipped', 'items': skipped}), flush=True)
+    # A continuation of another cloud lineage (an elastic DiLoCo worker cloned from its boundary) re-verifies the
+    # parent's folded execution admission, whose historical checkpoints only that lineage's own seed named
+    # (2026-11-04: corrected-mix-d1 failed on zero-sgd-source-adoption-67 absent). Ship them as that seed did.
+    for origin in spec.get('historical_from', []):
+        source = read_json(hub(run) / 'exports' / origin / 'seed.json')
+        origin_parent = str(lineage_dir(run, origin) / 'parent' / 'checkpoint.pt')
+        have = {b['path'] for b in historical}
+        historical += [b for b in source['blobs'] if b.get('kind') == 'checkpoint' and b['path'] != origin_parent
+                       and b['path'] not in have]
+        historical_links += [x for x in source.get('links', []) if x not in historical_links]
     members = ['lineage.json'] + [str(p.relative_to(L)) for p in sorted(L.rglob('*')) if p != L / 'lineage.json'
                                   and not str(p.relative_to(L)).startswith('parent')]
     top_sha, top_bytes = _tar_zst_put(run, L, members, f'{name}-seed-top')
