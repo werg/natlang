@@ -1083,7 +1083,30 @@ def newest_verified(run, name):
 
 
 def lineage_seed_inputs(run, name):
-    return (read_json(hub(run) / 'exports' / name / 'seed.json', {}) or {}).get('inputs', [])
+    """The seed's inputs plus every frozen runtime the lineage adopted in place after its seed (add-runtime): a relaunch
+    resumes the active window, whose control names its own runtime, not the seed's."""
+    seeded = (read_json(hub(run) / 'exports' / name / 'seed.json', {}) or {}).get('inputs', [])
+    added = read_json(hub(run) / 'exports' / name / 'added-runtimes.json', {}).get('inputs', [])
+    return seeded + [i for i in added if i['sha256'] not in {s['sha256'] for s in seeded}]
+
+
+def add_runtime(run, name, runtime, archive):
+    """Record a frozen runtime a lineage adopted in place (a window-boundary runtime transition) as a lineage input:
+    its archive is committed to the store and every later launch restores it beside the seed's runtime."""
+    runtime, archive = Path(runtime).resolve(strict=True), Path(archive).resolve(strict=True)
+    closure = runtime / 'runtime-input-closure.json'
+    if not closure.is_file():
+        raise SystemExit(f'{runtime} is not a frozen runtime (no runtime-input-closure.json)')
+    digest, size = file_digest(archive), archive.stat().st_size
+    if locate(run, digest) is None:
+        put_local(run, archive)
+    item = {'kind': 'runtime', 'path': str(runtime), 'sha256': digest, 'bytes': size,
+            'closure_sha256': file_digest(closure)}
+    path = hub(run) / 'exports' / name / 'added-runtimes.json'
+    record = read_json(path, {}) or {'schema': 'natlang.cloud-lineage-added-runtimes/1', 'inputs': []}
+    record['inputs'] = [i for i in record['inputs'] if i['path'] != item['path']] + [item]
+    store_json(path, record)
+    return item
 
 
 def launch_blobs(run, record, name=None):
@@ -1839,6 +1862,11 @@ def main(argv=None):
             p.add_argument('--dry-run', action='store_true')
             p.add_argument('--parent-later', action='store_true', help='deliver the parent with deliver-parent')
             p.add_argument('--check', action='store_true', help='CPU sandbox: pipeline check without GPU work')
+    p = sub.add_parser('add-runtime', help='record a frozen runtime the lineage adopted in place (shipped on relaunch)')
+    p.add_argument('run')
+    p.add_argument('lineage')
+    p.add_argument('--runtime', required=True)
+    p.add_argument('--archive', required=True, help='its archive_local_recovery_runtime.py tar.zst')
     for command in ('bundle', 'status', 'export', 'prune', 'plan'):
         p = sub.add_parser(command)
         p.add_argument('run')
@@ -1857,6 +1885,8 @@ def main(argv=None):
         print(json.dumps(launch(run, args.lineage, args.account, args.dry_run, args.rounds, args.parent_later,
                                 args.check),
                          indent=1, default=str))
+    elif args.command == 'add-runtime':
+        print(json.dumps(add_runtime(run, args.lineage, args.runtime, args.archive)))
     elif args.command == 'deliver-parent':
         deliver_parent(run, args.lineage)
     elif args.command == 'stop':

@@ -111,3 +111,23 @@ def test_launch_fails_and_records_a_sandbox_that_never_started(monkeypatch, tmp_
     live = json.loads((tmp_path / 'run-state.json').read_text())['lineages']['d1']
     assert live['status'] == 'failed' and 'StartupTimeout' in live['error']
     assert stopped == ['sbx-1'] and released == ['launch:job']
+
+
+def test_add_runtime_makes_relaunches_restore_an_in_place_adopted_runtime(monkeypatch, tmp_path):
+    rl_cloud = autopilot.rl_cloud
+    monkeypatch.setattr(rl_cloud, 'hub', lambda run: tmp_path / 'hub')
+    monkeypatch.setattr(rl_cloud, 'locate', lambda run, digest: None)
+    put = []
+    monkeypatch.setattr(rl_cloud, 'put_local', lambda run, path: put.append(path))
+    seed = {'kind': 'runtime', 'path': '/rt/v44', 'sha256': 'a' * 64}
+    rl_cloud.store_json(tmp_path / 'hub/exports/lin/seed.json', {'inputs': [seed]})
+    runtime = tmp_path / 'v45'
+    runtime.mkdir()
+    (runtime / 'runtime-input-closure.json').write_text('{}')
+    archive = tmp_path / 'v45.tar.zst'
+    archive.write_bytes(b'runtime')
+    item = rl_cloud.add_runtime({}, 'lin', runtime, archive)
+    assert put == [archive] and item['path'] == str(runtime)
+    assert rl_cloud.lineage_seed_inputs({}, 'lin') == [seed, item]
+    rl_cloud.add_runtime({}, 'lin', runtime, archive)  # idempotent per runtime path
+    assert rl_cloud.lineage_seed_inputs({}, 'lin') == [seed, item]
