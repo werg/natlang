@@ -160,7 +160,7 @@ def main(argv=None):
     p.add_argument('--state-root', default='/work/diloco')
     p.add_argument('--coordinator-code', help='the bundle code the cohost serves the coordinator from '
                    '(default: the machine profile repo root, the same path in every sandbox)')
-    p.add_argument('--python', help='default: <coordinator code>/.venv-neuralese/bin/python')
+    p.add_argument('--python', help='default: this (the learner\'s) python')
     p.add_argument('--window-tool', default=str(HERE.parents[4] / 'scripts' / 'neuralese_data' / 'sft_window.py'))
     r = commands.add_parser('relocate')
     r.add_argument('--session-dir', required=True)
@@ -174,7 +174,7 @@ def main(argv=None):
     if args.command == 'prepare':
         from natlang_neuralese.common.paths import resolve_str
         args.coordinator_code = args.coordinator_code or resolve_str('repo')
-        args.python = args.python or str(Path(args.coordinator_code) / '.venv-neuralese' / 'bin' / 'python')
+        args.python = args.python or sys.executable  # frozen runtimes carry no venv; the learner's own python
     {'prepare': prepare, 'relocate': relocate}[args.command](args)
 
 

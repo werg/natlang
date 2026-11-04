@@ -102,8 +102,10 @@ def cmd_request(args):
 
 
 def cmd_refresh(args):
-    script = r'''for p in /proc/[0-9]*; do c=$(tr "\0" " " < $p/cmdline 2>/dev/null);
-case "$c" in *"-m natlang_neuralese.train.native_state_sft "*) echo "${p#/proc/}";; esac; done'''
+    # The learner is the python child of the lineage's rl.production controller (never this exec's own shells).
+    script = r'''for p in /proc/[0-9]*; do c=$(tr "\0" " " < $p/cmdline 2>/dev/null); pp=$(awk '{print $4}' $p/stat 2>/dev/null);
+case "$c" in *python*" -m natlang_neuralese.train.native_state_sft "*)
+  case "$(tr "\0" " " < /proc/$pp/cmdline 2>/dev/null)" in *"-m natlang_neuralese.rl.production run"*) echo "${p#/proc/}";; esac;; esac; done'''
     pids = [x for x in run(args.sandbox, script).split() if x.isdigit()]
     if len(pids) != 1:
         raise SystemExit(f'expected exactly one native_state_sft learner, found {pids}')
