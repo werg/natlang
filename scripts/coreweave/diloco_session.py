@@ -36,7 +36,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import cwctl  # noqa: E402
 
-CHUNK = 256 * 1024
+CHUNK = 64 * 1024  # base64 exec arguments above ~128 KB fail (cwsandbox exec rc=7, 2026-11-04)
 
 
 def run(sandbox, script, check=True):

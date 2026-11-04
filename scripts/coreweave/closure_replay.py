@@ -34,16 +34,21 @@ NODE = Path.home() / '.nvm/versions/node/v22.22.0'
 IMAGE = 'python:3.12-slim'
 
 
-def mounts(run, lineage, closure, parent, work, writable):
+def mounts(run, lineage, closure, parent, work, writable, source=None, historical=None):
+    """Docker mounts for one lineage. ``source`` stages a lineage tree other than ROOT/<lineage> (a seed not yet
+    written there); ``historical`` = (blobs, links) the seed ships, when already resolved (e.g. ``historical_from``)."""
     import rl_cloud
     root = Path(run['root']) / lineage
-    blobs, skipped, links = rl_cloud.historical_checkpoint_blobs(run, closure, root / 'parent' / 'checkpoint.pt')
+    if historical is None:
+        blobs, skipped, links = rl_cloud.historical_checkpoint_blobs(run, closure, root / 'parent' / 'checkpoint.pt')
+    else:
+        (blobs, links), skipped = historical, []
     runtime = closure['runtime']
     copy = work / lineage
     if copy.exists():
         shutil.rmtree(copy)
     copy.mkdir(parents=True)
-    for p in root.iterdir():
+    for p in Path(source or root).iterdir():
         if p.name != 'parent':
             if p.is_dir():
                 shutil.copytree(p, copy / p.name, symlinks=True)
@@ -59,6 +64,11 @@ def mounts(run, lineage, closure, parent, work, writable):
     ro = lambda src, dst=None: out.extend(['-v', f'{src}:{dst or src}:ro'])
     for path in (VENV, HF, runtime, NODE):
         ro(path)
+    # The HF cache's snapshot links can point into a shared dedup blob store outside the model directory (the
+    # LFM3 safetensors does): mount every resolved target outside HF too, or the base weights are absent.
+    for target in sorted({os.path.realpath(p) for p in HF.rglob('*') if p.is_symlink()}):
+        if not target.startswith(str(HF) + '/') and os.path.isfile(target):
+            ro(target)
     for f in closure['files']:
         ro(f['path'])
     for b in blobs:
@@ -104,15 +114,7 @@ def main(argv=None):
     work = Path(a.work)
     work.mkdir(parents=True, exist_ok=True)
     out, runtime, summary = mounts(run, a.lineage, closure, Path(a.parent), work, a.writable)
-    window = Path(a.config).parent
-    env = {'NATLANG_REPO': runtime, 'PYTHONPATH': f'{runtime}/training/neuralese:{runtime}',
-           'PATH': f'{NODE}/bin:{VENV}/bin:/usr/bin:/bin', 'HF_HUB_OFFLINE': '1', 'PYTHONUNBUFFERED': '1',
-           'NATLANG_HASH_CACHE': '/replay-state/hash-cache.jsonl', 'OMP_NUM_THREADS': '1',
-           'MKL_NUM_THREADS': '1', 'CUDA_VISIBLE_DEVICES': '', 'HOME': str(Path.home()),
-           'NATLANG_CHECKPOINT_MIN_FREE_BYTES': '42949672960', 'NATLANG_DISCRETE_CUDA_MEMORY': '1',
-           'NATLANG_NATIVE_PROFILE_FIRST_UPDATE': f'{window}/learner/first-update-profile.json',
-           'NATLANG_POLICY_LOGPROB_RECEIPT': f'{window}/learner/behavior-replay-logprobs.json',
-           'NATLANG_ROW_INDEX_CACHE': str(Path.home() / '.cache/natlang/row-index')}
+    env = environment(runtime, Path(a.config).parent)
     for k, v in env.items():
         out.extend(['-e', f'{k}={v}'])
     command = ['docker', 'run', '--rm', '--name', a.unit, '--user', f'{os.getuid()}:{os.getgid()}',
@@ -126,6 +128,18 @@ def main(argv=None):
         return 0
     with open(work / 'controller.log', 'wb') as log:
         return subprocess.run(command, stdout=log, stderr=subprocess.STDOUT).returncode
+
+
+def environment(runtime, window):
+    """The controller environment of a sandbox start, CPU-only."""
+    return {'NATLANG_REPO': runtime, 'PYTHONPATH': f'{runtime}/training/neuralese:{runtime}',
+           'PATH': f'{NODE}/bin:{VENV}/bin:/usr/bin:/bin', 'HF_HUB_OFFLINE': '1', 'PYTHONUNBUFFERED': '1',
+           'NATLANG_HASH_CACHE': '/replay-state/hash-cache.jsonl', 'OMP_NUM_THREADS': '1',
+           'MKL_NUM_THREADS': '1', 'CUDA_VISIBLE_DEVICES': '', 'HOME': str(Path.home()),
+           'NATLANG_CHECKPOINT_MIN_FREE_BYTES': '42949672960', 'NATLANG_DISCRETE_CUDA_MEMORY': '1',
+           'NATLANG_NATIVE_PROFILE_FIRST_UPDATE': f'{window}/learner/first-update-profile.json',
+           'NATLANG_POLICY_LOGPROB_RECEIPT': f'{window}/learner/behavior-replay-logprobs.json',
+           'NATLANG_ROW_INDEX_CACHE': str(Path.home() / '.cache/natlang/row-index')}
 
 
 if __name__ == '__main__':

@@ -360,6 +360,10 @@ def protection_root_inputs(roots, records):
             _find_key(json.loads(path.read_text()), 'protection_root', named)
         except (ValueError, OSError):
             continue
+    # The parent checkpoint's folded admission history can name the checkout's protection root even when this control
+    # names no admission record (a later window, an elastic DiLoCo session control): the trainer still reloads it
+    # (2026-11-04 corrected-mix-d1: runs/natlang-rl-authored-dev-20261103b/cases.jsonl absent). Always ship it.
+    named.add(str(REPO))
     found = set()
     for root in sorted(named):
         root = Path(root)
