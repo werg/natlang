@@ -1965,8 +1965,34 @@ def main(argv=None):
         requested_refresh.restore()
 
 
+def resolve_training_projection_arithmetic():
+    """Projection arithmetic of this learner's plain updates, before the model is loaded (owner, 2026-11-04).
+
+    A declared ``NATLANG_PROJECTION_ARITHMETIC`` (vendor|invariant) wins. Otherwise discrete GPUs default to
+    ``vendor`` (one cuBLAS BF16 GEMM with FP32 accumulation per projection: forward, dX, dW) and integrated
+    unified-memory GPUs or CPU-only runs keep ``invariant``. Detection uses nvidia-smi and leaves CUDA uninitialized.
+    configure_native_precision binds the choice into the model config's process ``precision``.
+    """
+    declared = os.environ.get('NATLANG_PROJECTION_ARITHMETIC')
+    if declared is not None:
+        from ..model.native_weight_carrier import PROJECTION_ARITHMETICS
+        if declared not in PROJECTION_ARITHMETICS:
+            raise ValueError('NATLANG_PROJECTION_ARITHMETIC must be invariant or vendor')
+        return {'mode': declared, 'source': 'declared'}
+    from .hardware_profile import detect
+    device = detect(use_torch=False)
+    if device is None:
+        return {'mode': 'invariant', 'source': 'default-no-gpu'}
+    mode = 'invariant' if device.get('integrated') else 'vendor'
+    os.environ['NATLANG_PROJECTION_ARITHMETIC'] = mode
+    return {'mode': mode, 'source': 'default-' + ('integrated' if device.get('integrated') else 'discrete') + '-gpu',
+            'device': device}
+
+
 def _main(argv=None, *, requested_refresh):
     args = build_parser().parse_args(argv)
+    projection_resolution = resolve_training_projection_arithmetic()
+    print(json.dumps({'kind': 'native_training_projection_arithmetic', **projection_resolution}), flush=True)
     from .memory_policy import configure_native_compilation
     configure_native_compilation()
     static_specs = validate_static_args(args)
@@ -2075,6 +2101,25 @@ def _main(argv=None, *, requested_refresh):
         prefix_resolution = {'source': 'declared'}
     checkpoint_options['share_causal_prefixes'] = args.share_causal_prefixes
     checkpoint_options['share_causal_prefixes_resolution'] = prefix_resolution
+    # Process arithmetic like TF32/BF16 reduction: weights, optimizer, RNG and exposure carry over unchanged.
+    previous_projection = (((resume or shared_resume or {}).get('options') or {})
+                           .get('training_projection_arithmetic') or {}).get('mode')
+    if previous_projection is None and (resume or shared_resume):
+        previous_projection = 'invariant'
+    checkpoint_options['training_projection_arithmetic'] = {
+        **projection_resolution, 'previous': previous_projection,
+        'config_precision': (config.get('precision') or {}).get('training_update_projection')}
+    from ..model.native_weight_carrier import training_projection_arithmetic
+    if training_projection_arithmetic() == 'vendor' and str(args.device).startswith('cuda'):
+        # The DGX gate certifies its own cuBLAS; each learner verifies correct rounding on its actual GPU before SGD.
+        from ..maple.fused_moe import vendor_projection_self_check
+        projection_weights = [module.weight for module in model.modules() if type(module) is torch.nn.Linear]
+        projection_weights.append(model.port.output_weight)
+        checkpoint_options['training_projection_arithmetic']['self_check'] = vendor_projection_self_check(
+            projection_weights)
+        print(json.dumps({'kind': 'native_vendor_projection_self_check', 'passed': True,
+                          'shapes': len(checkpoint_options['training_projection_arithmetic']['self_check']['checks'])}),
+              flush=True)
     from .native_prefix_packing import (PREFIX_ARITHMETIC_VERSION,
         PREFIX_ARITHMETIC_QUALIFICATION_PATH, PREFIX_ARITHMETIC_QUALIFICATION_SHA256)
     qualification_path = Path(__file__).resolve().parents[4] / PREFIX_ARITHMETIC_QUALIFICATION_PATH

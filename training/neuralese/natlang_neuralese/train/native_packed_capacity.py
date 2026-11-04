@@ -484,6 +484,13 @@ def optimizer_shape_identity(model, optimizer):
     return canonical_json_sha256_hex(children)
 
 
+def _projection_identity():
+    """Vendor projection updates are bound; invariant keeps historical identities unchanged."""
+    from ..model.native_weight_carrier import training_projection_arithmetic
+    mode=training_projection_arithmetic()
+    return {} if mode=='invariant' else {'training_projection_arithmetic':mode}
+
+
 def oversize_execution_identity(model, optimizer, *, args, backend, objective_binding):
     """Bind the memory execution path; parameter values may change, shapes may not."""
     from ..common.hashing import canonical_json_sha256_hex
@@ -525,6 +532,7 @@ def oversize_execution_identity(model, optimizer, *, args, backend, objective_bi
             'fp8_training':getattr(args,'fp8_training',None),
             'fp8_recipe':getattr(args,'fp8_recipe',None),
             'share_causal_prefixes':bool(getattr(model,'share_causal_prefixes',False)),
+            **_projection_identity(),
             'objective':objective_binding}),
         'code':code,'parameter_signature_sha256':canonical_json_sha256_hex(params),
         'checkpoint_layer_group_size':getattr(model.port,'checkpoint_layer_group_size',1),

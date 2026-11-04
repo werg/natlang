@@ -1,0 +1,1255 @@
+{
+  "batches": [
+    {
+      "ce_abs_delta": 0.0,
+      "fp32_reference": {
+        "ce": 4.249200820922852,
+        "invariant": {
+          "cosine": 0.9949515905798343,
+          "missing": [],
+          "parameters": 288,
+          "relative_l2": 0.10053313584509274,
+          "worst_parameters": [
+            {
+              "cosine": 0.9363674281799155,
+              "name": "backbone.model.layers.2.self_attn.gate_proj.weight",
+              "relative_l2": 0.3553051571283285
+            },
+            {
+              "cosine": 0.9483401797398137,
+              "name": "backbone.model.layers.0.conv.conv.weight",
+              "relative_l2": 0.329667333614178
+            },
+            {
+              "cosine": 0.9515462593601303,
+              "name": "backbone.model.layers.1.conv.conv.weight",
+              "relative_l2": 0.3091547015208104
+            }
+          ]
+        },
+        "vendor": {
+          "cosine": 0.9949305150158024,
+          "missing": [],
+          "parameters": 288,
+          "relative_l2": 0.10073106265894136,
+          "worst_parameters": [
+            {
+              "cosine": 0.9361429845941199,
+              "name": "backbone.model.layers.2.self_attn.gate_proj.weight",
+              "relative_l2": 0.3565932664073328
+            },
+            {
+              "cosine": 0.9476765680955376,
+              "name": "backbone.model.layers.0.conv.conv.weight",
+              "relative_l2": 0.3317240038738191
+            },
+            {
+              "cosine": 0.9498528618197364,
+              "name": "backbone.model.layers.1.conv.conv.weight",
+              "relative_l2": 0.3141072156839653
+            }
+          ]
+        }
+      },
+      "gradients_vendor_vs_invariant": {
+        "cosine": 0.9999531062606296,
+        "missing": [],
+        "parameters": 288,
+        "relative_l2": 0.009685487102453351,
+        "worst_parameters": [
+          {
+            "cosine": 0.99971015297105,
+            "name": "backbone.model.layers.4.self_attn.q_norm.weight",
+            "relative_l2": 0.027872976953807447
+          },
+          {
+            "cosine": 0.9997514582296647,
+            "name": "backbone.model.layers.1.post_operator_norm.weight",
+            "relative_l2": 0.022782142903228497
+          },
+          {
+            "cosine": 0.9997606563758672,
+            "name": "backbone.model.layers.2.self_attn.q_norm.weight",
+            "relative_l2": 0.02190614802813184
+          },
+          {
+            "cosine": 0.9998023746598534,
+            "name": "backbone.model.layers.4.self_attn.k_norm.weight",
+            "relative_l2": 0.02072136035101133
+          },
+          {
+            "cosine": 0.9998013188791296,
+            "name": "backbone.model.layers.2.self_attn.k_norm.weight",
+            "relative_l2": 0.020471049715548494
+          },
+          {
+            "cosine": 0.9997918117932364,
+            "name": "backbone.model.layers.0.conv.conv.weight",
+            "relative_l2": 0.02040456944261882
+          },
+          {
+            "cosine": 0.9998575379712558,
+            "name": "backbone.model.layers.8.self_attn.q_norm.weight",
+            "relative_l2": 0.019987024079454515
+          },
+          {
+            "cosine": 0.999824829800849,
+            "name": "backbone.model.layers.0.operator_norm.weight",
+            "relative_l2": 0.018716568154467764
+          }
+        ]
+      },
+      "graphs": [
+        "edge:8e9c7ffc35f3f115ac9d3a5b33a2f0d816ba8f4e9628df8f6cb78c3829f2e645"
+      ],
+      "invariant": {
+        "ce": 4.248237133026123,
+        "seconds_with_audit": 48.385007921024226,
+        "triton_projection_calls": 2524,
+        "vendor_calls": 0
+      },
+      "tokens": 13270,
+      "vendor": {
+        "ce": 4.248237133026123,
+        "seconds_with_audit": 48.84957658604253,
+        "triton_projection_calls": 0,
+        "vendor_calls": 1682
+      }
+    },
+    {
+      "ce_abs_delta": 0.0,
+      "fp32_reference": {
+        "ce": 4.4070048332214355,
+        "invariant": {
+          "cosine": 0.9984026611615204,
+          "missing": [],
+          "parameters": 288,
+          "relative_l2": 0.056586333078359245,
+          "worst_parameters": [
+            {
+              "cosine": 0.9774771573489407,
+              "name": "backbone.model.layers.1.conv.conv.weight",
+              "relative_l2": 0.21607214194582128
+            },
+            {
+              "cosine": 0.983151699102115,
+              "name": "backbone.model.layers.2.self_attn.q_proj.weight",
+              "relative_l2": 0.18351877774755596
+            },
+            {
+              "cosine": 0.9858493063303253,
+              "name": "backbone.model.layers.0.conv.in_proj.weight",
+              "relative_l2": 0.16785632605848486
+            }
+          ]
+        },
+        "vendor": {
+          "cosine": 0.998387685693104,
+          "missing": [],
+          "parameters": 288,
+          "relative_l2": 0.056846567779144375,
+          "worst_parameters": [
+            {
+              "cosine": 0.978473442601299,
+              "name": "backbone.model.layers.1.conv.conv.weight",
+              "relative_l2": 0.21000216505530514
+            },
+            {
+              "cosine": 0.9831112844741717,
+              "name": "backbone.model.layers.2.self_attn.q_proj.weight",
+              "relative_l2": 0.18350956283165953
+            },
+            {
+              "cosine": 0.9856221482409271,
+              "name": "backbone.model.layers.0.conv.in_proj.weight",
+              "relative_l2": 0.16907745025262552
+            }
+          ]
+        }
+      },
+      "gradients_vendor_vs_invariant": {
+        "cosine": 0.9999574841922002,
+        "missing": [],
+        "parameters": 288,
+        "relative_l2": 0.009221223410038792,
+        "worst_parameters": [
+          {
+            "cosine": 0.999551777667765,
+            "name": "backbone.model.layers.5.post_operator_norm.weight",
+            "relative_l2": 0.03626268398738065
+          },
+          {
+            "cosine": 0.9996006982319351,
+            "name": "backbone.model.layers.2.self_attn.q_norm.weight",
+            "relative_l2": 0.02826042074783897
+          },
+          {
+            "cosine": 0.9997413213022185,
+            "name": "backbone.model.layers.2.self_attn.k_norm.weight",
+            "relative_l2": 0.02354161718758737
+          },
+          {
+            "cosine": 0.9998960758774074,
+            "name": "backbone.model.layers.1.operator_norm.weight",
+            "relative_l2": 0.01982536517064243
+          },
+          {
+            "cosine": 0.9998107517853768,
+            "name": "backbone.model.layers.0.operator_norm.weight",
+            "relative_l2": 0.019508923495109236
+          },
+          {
+            "cosine": 0.999848868911832,
+            "name": "backbone.model.layers.4.self_attn.k_norm.weight",
+            "relative_l2": 0.019218922471212242
+          },
+          {
+            "cosine": 0.9998363666700871,
+            "name": "backbone.model.layers.1.conv.conv.weight",
+            "relative_l2": 0.01911302315226305
+          },
+          {
+            "cosine": 0.9998341384976996,
+            "name": "backbone.model.layers.0.conv.conv.weight",
+            "relative_l2": 0.018633665893621303
+          }
+        ]
+      },
+      "graphs": [
+        "edge:effff84941b798f0ba209490c1878092a43e9e7a494df355cd629aef6ed31114"
+      ],
+      "invariant": {
+        "ce": 4.412234783172607,
+        "seconds_with_audit": 45.512386381975375,
+        "triton_projection_calls": 2524,
+        "vendor_calls": 0
+      },
+      "tokens": 12493,
+      "vendor": {
+        "ce": 4.412234783172607,
+        "seconds_with_audit": 47.26887418993283,
+        "triton_projection_calls": 0,
+        "vendor_calls": 1682
+      }
+    },
+    {
+      "ce_abs_delta": 0.0,
+      "fp32_reference": {
+        "ce": 1.56240975856781,
+        "invariant": {
+          "cosine": 0.9709564584488201,
+          "missing": [],
+          "parameters": 288,
+          "relative_l2": 0.24133118974119486,
+          "worst_parameters": [
+            {
+              "cosine": 0.20062182217369923,
+              "name": "backbone.model.layers.2.operator_norm.weight",
+              "relative_l2": 1.6533697079314782
+            },
+            {
+              "cosine": 0.8328223070911783,
+              "name": "backbone.model.layers.2.self_attn.k_norm.weight",
+              "relative_l2": 0.8395929205456005
+            },
+            {
+              "cosine": 0.8407246704122672,
+              "name": "backbone.model.layers.2.self_attn.q_norm.weight",
+              "relative_l2": 0.8090363837362221
+            }
+          ]
+        },
+        "vendor": {
+          "cosine": 0.9709564584488201,
+          "missing": [],
+          "parameters": 288,
+          "relative_l2": 0.24133118974119486,
+          "worst_parameters": [
+            {
+              "cosine": 0.20062182217369923,
+              "name": "backbone.model.layers.2.operator_norm.weight",
+              "relative_l2": 1.6533697079314782
+            },
+            {
+              "cosine": 0.8328223070911783,
+              "name": "backbone.model.layers.2.self_attn.k_norm.weight",
+              "relative_l2": 0.8395929205456005
+            },
+            {
+              "cosine": 0.8407246704122672,
+              "name": "backbone.model.layers.2.self_attn.q_norm.weight",
+              "relative_l2": 0.8090363837362221
+            }
+          ]
+        }
+      },
+      "gradients_vendor_vs_invariant": {
+        "cosine": 1.0,
+        "missing": [],
+        "parameters": 288,
+        "relative_l2": 5.761064438743454e-14,
+        "worst_parameters": [
+          {
+            "cosine": 0.9999999999996438,
+            "name": "interface.input_rows",
+            "relative_l2": 8.439897218191452e-07
+          },
+          {
+            "cosine": 1.0,
+            "name": "backbone.model.layers.0.conv.conv.weight",
+            "relative_l2": 0.0
+          },
+          {
+            "cosine": 1.0,
+            "name": "backbone.model.layers.0.conv.in_proj.weight",
+            "relative_l2": 0.0
+          },
+          {
+            "cosine": 1.0,
+            "name": "backbone.model.layers.0.conv.out_proj.weight",
+            "relative_l2": 0.0
+          },
+          {
+            "cosine": 1.0,
+            "name": "backbone.model.layers.0.feed_forward.w1.weight",
+            "relative_l2": 0.0
+          },
+          {
+            "cosine": 1.0,
+            "name": "backbone.model.layers.0.feed_forward.w3.weight",
+            "relative_l2": 0.0
+          },
+          {
+            "cosine": 1.0,
+            "name": "backbone.model.layers.0.feed_forward.w2.weight",
+            "relative_l2": 0.0
+          },
+          {
+            "cosine": 1.0,
+            "name": "backbone.model.layers.0.operator_norm.weight",
+            "relative_l2": 0.0
+          }
+        ]
+      },
+      "graphs": [
+        "text:whole-trajectory:teacher-program:125e12f367f7459f5e07:decision:0025:source-sha256:9ecc283b75315d1b3774d1ca5ea2348c99d7c80061f7375e886ff83c8251401e"
+      ],
+      "invariant": {
+        "ce": 1.5606698989868164,
+        "seconds_with_audit": 22.71851057803724,
+        "triton_projection_calls": 1372,
+        "vendor_calls": 0
+      },
+      "tokens": 5005,
+      "vendor": {
+        "ce": 1.5606698989868164,
+        "seconds_with_audit": 23.992909503052942,
+        "triton_projection_calls": 0,
+        "vendor_calls": 914
+      }
+    },
+    {
+      "ce_abs_delta": 0.0,
+      "fp32_reference": {
+        "ce": 1.8874762058258057,
+        "invariant": {
+          "cosine": 0.9840273782084016,
+          "missing": [],
+          "parameters": 288,
+          "relative_l2": 0.1781300248063282,
+          "worst_parameters": [
+            {
+              "cosine": 0.7943657608321271,
+              "name": "backbone.model.layers.1.conv.conv.weight",
+              "relative_l2": 0.6082470956611818
+            },
+            {
+              "cosine": 0.8270131948977207,
+              "name": "backbone.model.layers.1.operator_norm.weight",
+              "relative_l2": 0.5758969507569324
+            },
+            {
+              "cosine": 0.8270144933063575,
+              "name": "backbone.model.layers.2.ffn_norm.weight",
+              "relative_l2": 0.5724744117773334
+            }
+          ]
+        },
+        "vendor": {
+          "cosine": 0.9840273782084016,
+          "missing": [],
+          "parameters": 288,
+          "relative_l2": 0.1781300248063282,
+          "worst_parameters": [
+            {
+              "cosine": 0.7943657608321271,
+              "name": "backbone.model.layers.1.conv.conv.weight",
+              "relative_l2": 0.6082470956611818
+            },
+            {
+              "cosine": 0.8270131948977207,
+              "name": "backbone.model.layers.1.operator_norm.weight",
+              "relative_l2": 0.5758969507569324
+            },
+            {
+              "cosine": 0.8270144933063575,
+              "name": "backbone.model.layers.2.ffn_norm.weight",
+              "relative_l2": 0.5724744117773334
+            }
+          ]
+        }
+      },
+      "gradients_vendor_vs_invariant": {
+        "cosine": 1.0,
+        "missing": [],
+        "parameters": 288,
+        "relative_l2": 0.0,
+        "worst_parameters": [
+          {
+            "cosine": 1.0,
+            "name": "backbone.model.layers.0.conv.conv.weight",
+            "relative_l2": 0.0
+          },
+          {
+            "cosine": 1.0,
+            "name": "backbone.model.layers.0.conv.in_proj.weight",
+            "relative_l2": 0.0
+          },
+          {
+            "cosine": 1.0,
+            "name": "backbone.model.layers.0.conv.out_proj.weight",
+            "relative_l2": 0.0
+          },
+          {
+            "cosine": 1.0,
+            "name": "backbone.model.layers.0.feed_forward.w1.weight",
+            "relative_l2": 0.0
+          },
+          {
+            "cosine": 1.0,
+            "name": "backbone.model.layers.0.feed_forward.w3.weight",
+            "relative_l2": 0.0
+          },
+          {
+            "cosine": 1.0,
+            "name": "backbone.model.layers.0.feed_forward.w2.weight",
+            "relative_l2": 0.0
+          },
+          {
+            "cosine": 1.0,
+            "name": "backbone.model.layers.0.operator_norm.weight",
+            "relative_l2": 0.0
+          },
+          {
+            "cosine": 1.0,
+            "name": "backbone.model.layers.0.ffn_norm.weight",
+            "relative_l2": 0.0
+          }
+        ]
+      },
+      "graphs": [
+        "text:whole-trajectory:teacher-program:46fb3b0303bfc09009c2:decision:0024:source-sha256:8285f158078c865f853eb6a75921210e835419cf215dcfeeb75afab2c964d060"
+      ],
+      "invariant": {
+        "ce": 1.8852789402008057,
+        "seconds_with_audit": 31.290239483001642,
+        "triton_projection_calls": 1822,
+        "vendor_calls": 0
+      },
+      "tokens": 6942,
+      "vendor": {
+        "ce": 1.8852789402008057,
+        "seconds_with_audit": 33.480733850970864,
+        "triton_projection_calls": 0,
+        "vendor_calls": 1214
+      }
+    },
+    {
+      "ce_abs_delta": 0.0010428428649902344,
+      "fp32_reference": {
+        "ce": 3.0264594554901123,
+        "invariant": {
+          "cosine": 0.9961316106489726,
+          "missing": [],
+          "parameters": 288,
+          "relative_l2": 0.08787390165495797,
+          "worst_parameters": [
+            {
+              "cosine": 0.8313518683258285,
+              "name": "backbone.model.layers.2.operator_norm.weight",
+              "relative_l2": 0.5733014665208973
+            },
+            {
+              "cosine": 0.9306143582965628,
+              "name": "backbone.model.layers.1.conv.conv.weight",
+              "relative_l2": 0.37252534313188157
+            },
+            {
+              "cosine": 0.9446798677551215,
+              "name": "backbone.model.layers.2.self_attn.q_norm.weight",
+              "relative_l2": 0.35872285254926256
+            }
+          ]
+        },
+        "vendor": {
+          "cosine": 0.9957051133900887,
+          "missing": [],
+          "parameters": 288,
+          "relative_l2": 0.09276890673839366,
+          "worst_parameters": [
+            {
+              "cosine": 0.7812794361286217,
+              "name": "backbone.model.layers.2.operator_norm.weight",
+              "relative_l2": 0.6581805521687639
+            },
+            {
+              "cosine": 0.9275597562197151,
+              "name": "backbone.model.layers.1.conv.conv.weight",
+              "relative_l2": 0.38260349817286404
+            },
+            {
+              "cosine": 0.9409977439708338,
+              "name": "backbone.model.layers.2.self_attn.k_norm.weight",
+              "relative_l2": 0.37823628427236367
+            }
+          ]
+        }
+      },
+      "gradients_vendor_vs_invariant": {
+        "cosine": 0.999193771232137,
+        "missing": [],
+        "parameters": 288,
+        "relative_l2": 0.040652260263663705,
+        "worst_parameters": [
+          {
+            "cosine": 0.9857009598257789,
+            "name": "backbone.model.layers.2.self_attn.gate_proj.weight",
+            "relative_l2": 0.17208022658508615
+          },
+          {
+            "cosine": 0.9906082030983294,
+            "name": "backbone.model.layers.2.operator_norm.weight",
+            "relative_l2": 0.13953909018352792
+          },
+          {
+            "cosine": 0.9933053540012154,
+            "name": "backbone.model.layers.2.self_attn.q_proj.weight",
+            "relative_l2": 0.11857660117847746
+          },
+          {
+            "cosine": 0.9930925576390374,
+            "name": "backbone.model.layers.1.conv.conv.weight",
+            "relative_l2": 0.11850386037792422
+          },
+          {
+            "cosine": 0.9935372859707495,
+            "name": "backbone.model.layers.4.self_attn.q_proj.weight",
+            "relative_l2": 0.11368765580330924
+          },
+          {
+            "cosine": 0.994310408104856,
+            "name": "backbone.model.layers.0.feed_forward.w1.weight",
+            "relative_l2": 0.10774180892489066
+          },
+          {
+            "cosine": 0.9947535448373017,
+            "name": "backbone.model.layers.4.self_attn.k_norm.weight",
+            "relative_l2": 0.10501234722463569
+          },
+          {
+            "cosine": 0.9946023491716423,
+            "name": "backbone.model.layers.4.self_attn.q_norm.weight",
+            "relative_l2": 0.10470146451851349
+          }
+        ]
+      },
+      "graphs": [
+        "edge:8e9c7ffc35f3f115ac9d3a5b33a2f0d816ba8f4e9628df8f6cb78c3829f2e645",
+        "edge:effff84941b798f0ba209490c1878092a43e9e7a494df355cd629aef6ed31114",
+        "text:whole-trajectory:teacher-program:125e12f367f7459f5e07:decision:0025:source-sha256:9ecc283b75315d1b3774d1ca5ea2348c99d7c80061f7375e886ff83c8251401e",
+        "text:whole-trajectory:teacher-program:46fb3b0303bfc09009c2:decision:0024:source-sha256:8285f158078c865f853eb6a75921210e835419cf215dcfeeb75afab2c964d060"
+      ],
+      "invariant": {
+        "ce": 3.02714467048645,
+        "seconds_with_audit": 158.67352843401022,
+        "triton_projection_calls": 8617,
+        "vendor_calls": 0
+      },
+      "tokens": 37710,
+      "vendor": {
+        "ce": 3.0281875133514404,
+        "seconds_with_audit": 167.30227592692245,
+        "triton_projection_calls": 0,
+        "vendor_calls": 6404
+      }
+    }
+  ],
+  "checkpoint": {
+    "path": "/mnt/external/natlang-lfm3-cloud-corrected-20261103/corrected-mix-d1/parent/checkpoint.pt",
+    "sha256": "508cfefdc21c1de79961930b1f901835d59bd9422ea1856a70000cfee52268f0"
+  },
+  "cuda": "13.0",
+  "execution": {
+    "checkpoint_layer_group_size": 2,
+    "chunk_tokens": 1024,
+    "cotangent": "plain",
+    "ffn_chunk_tokens": 1024,
+    "share_causal_prefixes": true
+  },
+  "gates": {
+    "cross_mode_bound": true,
+    "projection_exactness": true,
+    "runtime_certificate": true,
+    "vendor_coverage": true
+  },
+  "graphs": [
+    {
+      "id": "edge:8e9c7ffc35f3f115ac9d3a5b33a2f0d816ba8f4e9628df8f6cb78c3829f2e645",
+      "line": 0,
+      "path": "/home/werg/natlang/runs/lfm3-mixture/joint-sft-v4-curated-20261031/mixture/cohorts/t1-communication-03.jsonl.zst",
+      "tokens": 13270
+    },
+    {
+      "id": "edge:effff84941b798f0ba209490c1878092a43e9e7a494df355cd629aef6ed31114",
+      "line": 3,
+      "path": "/home/werg/natlang/runs/lfm3-mixture/joint-sft-v4-curated-20261031/mixture/cohorts/t1-communication-03.jsonl.zst",
+      "tokens": 12493
+    },
+    {
+      "id": "text:whole-trajectory:teacher-program:125e12f367f7459f5e07:decision:0025:source-sha256:9ecc283b75315d1b3774d1ca5ea2348c99d7c80061f7375e886ff83c8251401e",
+      "line": 0,
+      "path": "/mnt/external/natlang-lfm3-data-20261028/corrected-mix-diverse-1103/filtered-03343c32d5933793.jsonl.zst",
+      "tokens": 5005
+    },
+    {
+      "id": "text:whole-trajectory:teacher-program:46fb3b0303bfc09009c2:decision:0024:source-sha256:8285f158078c865f853eb6a75921210e835419cf215dcfeeb75afab2c964d060",
+      "line": 1,
+      "path": "/mnt/external/natlang-lfm3-data-20261028/corrected-mix-diverse-1103/filtered-03343c32d5933793.jsonl.zst",
+      "tokens": 6942
+    }
+  ],
+  "hardware": "NVIDIA GB10",
+  "native_shared_execution": "ffn-stable-v1",
+  "optimizer_updates": 0,
+  "passed": true,
+  "precision": {
+    "cuda_bf16_reduced_precision_reduction": false,
+    "cuda_matmul_tf32": true,
+    "cudnn_tf32": true,
+    "float32_matmul": "high",
+    "training_update_projection": "vendor-cublas-bf16-fp32-accumulate"
+  },
+  "projection_exactness": {
+    "invariant.dX": {
+      "adjacent_bf16_mismatches": 8070,
+      "bound_violations": 0,
+      "calls": 5506,
+      "elements": 583735040,
+      "failures": [
+        {
+          "adjacent_bf16_mismatches": 0,
+          "cosine": 0.9999996663730468,
+          "dtype": "torch.bfloat16",
+          "max_abs": 4.76837158203125e-07,
+          "mismatched_elements": 0,
+          "reason": null,
+          "relative_l2": 0.0008252520062316718,
+          "shape": [
+            32,
+            2048
+          ]
+        },
+        {
+          "adjacent_bf16_mismatches": 0,
+          "cosine": 0.9999994879151698,
+          "dtype": "torch.bfloat16",
+          "max_abs": 2.9802322387695312e-08,
+          "mismatched_elements": 0,
+          "reason": null,
+          "relative_l2": 0.0010209651921868578,
+          "shape": [
+            32,
+            2048
+          ]
+        },
+        {
+          "adjacent_bf16_mismatches": 0,
+          "cosine": 0.9999995943337143,
+          "dtype": "torch.bfloat16",
+          "max_abs": 2.9802322387695312e-08,
+          "mismatched_elements": 0,
+          "reason": null,
+          "relative_l2": 0.0009074077910879109,
+          "shape": [
+            32,
+            2048
+          ]
+        },
+        {
+          "adjacent_bf16_mismatches": 0,
+          "cosine": 0.9999995234690296,
+          "dtype": "torch.bfloat16",
+          "max_abs": 2.9802322387695312e-08,
+          "mismatched_elements": 0,
+          "reason": null,
+          "relative_l2": 0.0009888591621965584,
+          "shape": [
+            32,
+            2048
+          ]
+        },
+        {
+          "adjacent_bf16_mismatches": 0,
+          "cosine": 0.9999995764486722,
+          "dtype": "torch.bfloat16",
+          "max_abs": 2.9802322387695312e-08,
+          "mismatched_elements": 0,
+          "reason": null,
+          "relative_l2": 0.0009306599066171157,
+          "shape": [
+            32,
+            2048
+          ]
+        },
+        {
+          "adjacent_bf16_mismatches": 0,
+          "cosine": 0.9999995983920215,
+          "dtype": "torch.bfloat16",
+          "max_abs": 2.9802322387695312e-08,
+          "mismatched_elements": 0,
+          "reason": null,
+          "relative_l2": 0.0009061765263616953,
+          "shape": [
+            32,
+            2048
+          ]
+        },
+        {
+          "adjacent_bf16_mismatches": 0,
+          "cosine": 0.9999992682228149,
+          "dtype": "torch.bfloat16",
+          "max_abs": 4.76837158203125e-07,
+          "mismatched_elements": 0,
+          "reason": null,
+          "relative_l2": 0.001225635394989655,
+          "shape": [
+            32,
+            2048
+          ]
+        },
+        {
+          "adjacent_bf16_mismatches": 0,
+          "cosine": 0.9999995904043056,
+          "dtype": "torch.bfloat16",
+          "max_abs": 2.9802322387695312e-08,
+          "mismatched_elements": 0,
+          "reason": null,
+          "relative_l2": 0.000915229275683649,
+          "shape": [
+            32,
+            2048
+          ]
+        }
+      ],
+      "passed": 1553,
+      "strict_passed": 1351,
+      "within_bound_calls": 5506,
+      "worst_cosine": 0.9999992026231965,
+      "worst_max_abs": 0.125,
+      "worst_relative_l2": 0.0012901213542562268
+    },
+    "invariant.forward": {
+      "adjacent_bf16_mismatches": 1329066,
+      "bound_violations": 0,
+      "calls": 13197,
+      "elements": 2615332888,
+      "failures": [
+        {
+          "adjacent_bf16_mismatches": 101,
+          "cosine": 0.9999999940168638,
+          "dtype": "torch.bfloat16",
+          "max_abs": 0.00390625,
+          "mismatched_elements": 101,
+          "reason": null,
+          "relative_l2": 0.00010941027546471882,
+          "shape": [
+            32,
+            7680
+          ]
+        },
+        {
+          "adjacent_bf16_mismatches": 98,
+          "cosine": 0.999999993278393,
+          "dtype": "torch.bfloat16",
+          "max_abs": 0.0078125,
+          "mismatched_elements": 98,
+          "reason": null,
+          "relative_l2": 0.00011596783526781127,
+          "shape": [
+            32,
+            7680
+          ]
+        },
+        {
+          "adjacent_bf16_mismatches": 88,
+          "cosine": 0.9999999930845289,
+          "dtype": "torch.bfloat16",
+          "max_abs": 0.001953125,
+          "mismatched_elements": 88,
+          "reason": null,
+          "relative_l2": 0.00011763093525003221,
+          "shape": [
+            32,
+            2048
+          ]
+        },
+        {
+          "adjacent_bf16_mismatches": 106,
+          "cosine": 0.9999999932821996,
+          "dtype": "torch.bfloat16",
+          "max_abs": 0.00390625,
+          "mismatched_elements": 106,
+          "reason": null,
+          "relative_l2": 0.00011594005224299291,
+          "shape": [
+            32,
+            7680
+          ]
+        },
+        {
+          "adjacent_bf16_mismatches": 103,
+          "cosine": 0.999999989813198,
+          "dtype": "torch.bfloat16",
+          "max_abs": 0.0078125,
+          "mismatched_elements": 103,
+          "reason": null,
+          "relative_l2": 0.0001427813755674793,
+          "shape": [
+            32,
+            7680
+          ]
+        },
+        {
+          "adjacent_bf16_mismatches": 95,
+          "cosine": 0.9999999935432489,
+          "dtype": "torch.bfloat16",
+          "max_abs": 0.00390625,
+          "mismatched_elements": 95,
+          "reason": null,
+          "relative_l2": 0.00011365854588295775,
+          "shape": [
+            32,
+            7680
+          ]
+        },
+        {
+          "adjacent_bf16_mismatches": 98,
+          "cosine": 0.999999993292392,
+          "dtype": "torch.bfloat16",
+          "max_abs": 0.00390625,
+          "mismatched_elements": 98,
+          "reason": null,
+          "relative_l2": 0.0001158483709508917,
+          "shape": [
+            32,
+            7680
+          ]
+        },
+        {
+          "adjacent_bf16_mismatches": 108,
+          "cosine": 0.9999999948674952,
+          "dtype": "torch.bfloat16",
+          "max_abs": 0.00390625,
+          "mismatched_elements": 108,
+          "reason": null,
+          "relative_l2": 0.00010133364083619925,
+          "shape": [
+            32,
+            7680
+          ]
+        }
+      ],
+      "passed": 4732,
+      "strict_passed": 717,
+      "within_bound_calls": 13197,
+      "worst_cosine": 0.9999992499786412,
+      "worst_max_abs": 0.125,
+      "worst_relative_l2": 0.0012410320374939038
+    },
+    "vendor.dW": {
+      "adjacent_bf16_mismatches": 3687,
+      "bound_violations": 0,
+      "calls": 4887,
+      "elements": 568395008,
+      "failures": [
+        {
+          "adjacent_bf16_mismatches": 0,
+          "cosine": 0.9999999849695888,
+          "dtype": "torch.bfloat16",
+          "max_abs": 2.9103830456733704e-11,
+          "mismatched_elements": 0,
+          "reason": null,
+          "relative_l2": 0.00017348821643850537,
+          "shape": [
+            4,
+            2048
+          ]
+        },
+        {
+          "adjacent_bf16_mismatches": 0,
+          "cosine": 0.999999965017351,
+          "dtype": "torch.bfloat16",
+          "max_abs": 2.9103830456733704e-11,
+          "mismatched_elements": 0,
+          "reason": null,
+          "relative_l2": 0.00026491433606245943,
+          "shape": [
+            4,
+            2048
+          ]
+        },
+        {
+          "adjacent_bf16_mismatches": 0,
+          "cosine": 0.9999999885864805,
+          "dtype": "torch.bfloat16",
+          "max_abs": 2.9802322387695312e-08,
+          "mismatched_elements": 0,
+          "reason": null,
+          "relative_l2": 0.00015114245175623157,
+          "shape": [
+            2,
+            2048
+          ]
+        },
+        {
+          "adjacent_bf16_mismatches": 0,
+          "cosine": 0.9999999917224831,
+          "dtype": "torch.bfloat16",
+          "max_abs": 2.9103830456733704e-11,
+          "mismatched_elements": 0,
+          "reason": null,
+          "relative_l2": 0.00012872827488576567,
+          "shape": [
+            4,
+            2048
+          ]
+        },
+        {
+          "adjacent_bf16_mismatches": 0,
+          "cosine": 0.9999999720099514,
+          "dtype": "torch.bfloat16",
+          "max_abs": 1.4901161193847656e-08,
+          "mismatched_elements": 0,
+          "reason": null,
+          "relative_l2": 0.00023685390172883218,
+          "shape": [
+            2,
+            2048
+          ]
+        },
+        {
+          "adjacent_bf16_mismatches": 0,
+          "cosine": 0.9999999680874406,
+          "dtype": "torch.bfloat16",
+          "max_abs": 2.9103830456733704e-11,
+          "mismatched_elements": 0,
+          "reason": null,
+          "relative_l2": 0.0002527879663819214,
+          "shape": [
+            4,
+            2048
+          ]
+        },
+        {
+          "adjacent_bf16_mismatches": 0,
+          "cosine": 0.9999999940048776,
+          "dtype": "torch.bfloat16",
+          "max_abs": 9.5367431640625e-07,
+          "mismatched_elements": 0,
+          "reason": null,
+          "relative_l2": 0.00010952250905897373,
+          "shape": [
+            32,
+            2048
+          ]
+        },
+        {
+          "adjacent_bf16_mismatches": 0,
+          "cosine": 0.9999999769189626,
+          "dtype": "torch.bfloat16",
+          "max_abs": 1.9073486328125e-06,
+          "mismatched_elements": 0,
+          "reason": null,
+          "relative_l2": 0.00021496951886937425,
+          "shape": [
+            32,
+            2048
+          ]
+        }
+      ],
+      "passed": 4097,
+      "strict_passed": 4062,
+      "within_bound_calls": 4887,
+      "worst_cosine": 0.9999988800005645,
+      "worst_max_abs": 0.0009765625,
+      "worst_relative_l2": 0.0015390893434779024
+    },
+    "vendor.dX": {
+      "adjacent_bf16_mismatches": 323,
+      "bound_violations": 0,
+      "calls": 4963,
+      "elements": 554775808,
+      "failures": [
+        {
+          "adjacent_bf16_mismatches": 0,
+          "cosine": 0.9999995021595629,
+          "dtype": "torch.bfloat16",
+          "max_abs": 5.960464477539063e-08,
+          "mismatched_elements": 0,
+          "reason": null,
+          "relative_l2": 0.001007965747975097,
+          "shape": [
+            32,
+            2048
+          ]
+        },
+        {
+          "adjacent_bf16_mismatches": 0,
+          "cosine": 0.9999995424914164,
+          "dtype": "torch.bfloat16",
+          "max_abs": 2.9802322387695312e-08,
+          "mismatched_elements": 0,
+          "reason": null,
+          "relative_l2": 0.0009676421959190963,
+          "shape": [
+            32,
+            2048
+          ]
+        },
+        {
+          "adjacent_bf16_mismatches": 0,
+          "cosine": 0.9999993695390738,
+          "dtype": "torch.bfloat16",
+          "max_abs": 2.9802322387695312e-08,
+          "mismatched_elements": 0,
+          "reason": null,
+          "relative_l2": 0.0011364250611632014,
+          "shape": [
+            32,
+            2048
+          ]
+        },
+        {
+          "adjacent_bf16_mismatches": 0,
+          "cosine": 0.999999619709458,
+          "dtype": "torch.bfloat16",
+          "max_abs": 5.960464477539063e-08,
+          "mismatched_elements": 0,
+          "reason": null,
+          "relative_l2": 0.0008808988595257068,
+          "shape": [
+            32,
+            2048
+          ]
+        },
+        {
+          "adjacent_bf16_mismatches": 0,
+          "cosine": 0.9999995675763368,
+          "dtype": "torch.bfloat16",
+          "max_abs": 2.9802322387695312e-08,
+          "mismatched_elements": 0,
+          "reason": null,
+          "relative_l2": 0.000941563245513558,
+          "shape": [
+            32,
+            2048
+          ]
+        },
+        {
+          "adjacent_bf16_mismatches": 0,
+          "cosine": 0.9999994705580135,
+          "dtype": "torch.bfloat16",
+          "max_abs": 2.9802322387695312e-08,
+          "mismatched_elements": 0,
+          "reason": null,
+          "relative_l2": 0.001042059970487321,
+          "shape": [
+            32,
+            2048
+          ]
+        },
+        {
+          "adjacent_bf16_mismatches": 0,
+          "cosine": 0.9999993956671245,
+          "dtype": "torch.bfloat16",
+          "max_abs": 2.9802322387695312e-08,
+          "mismatched_elements": 0,
+          "reason": null,
+          "relative_l2": 0.001114584385140661,
+          "shape": [
+            32,
+            2048
+          ]
+        },
+        {
+          "adjacent_bf16_mismatches": 0,
+          "cosine": 0.9999996367848669,
+          "dtype": "torch.bfloat16",
+          "max_abs": 2.9802322387695312e-08,
+          "mismatched_elements": 0,
+          "reason": null,
+          "relative_l2": 0.0008604237409895154,
+          "shape": [
+            32,
+            2048
+          ]
+        }
+      ],
+      "passed": 1474,
+      "strict_passed": 1432,
+      "within_bound_calls": 4963,
+      "worst_cosine": 0.9999992323177931,
+      "worst_max_abs": 0.0001220703125,
+      "worst_relative_l2": 0.0012630646091750237
+    },
+    "vendor.forward": {
+      "adjacent_bf16_mismatches": 1286443,
+      "bound_violations": 0,
+      "calls": 11896,
+      "elements": 2530104064,
+      "failures": [
+        {
+          "adjacent_bf16_mismatches": 2,
+          "cosine": 0.9999999704261866,
+          "dtype": "torch.bfloat16",
+          "max_abs": 0.00048828125,
+          "mismatched_elements": 2,
+          "reason": null,
+          "relative_l2": 0.00024350284774439623,
+          "shape": [
+            32,
+            2048
+          ]
+        },
+        {
+          "adjacent_bf16_mismatches": 91,
+          "cosine": 0.9999999930138136,
+          "dtype": "torch.bfloat16",
+          "max_abs": 0.00390625,
+          "mismatched_elements": 91,
+          "reason": null,
+          "relative_l2": 0.0001182263453494101,
+          "shape": [
+            32,
+            7680
+          ]
+        },
+        {
+          "adjacent_bf16_mismatches": 100,
+          "cosine": 0.9999999948997607,
+          "dtype": "torch.bfloat16",
+          "max_abs": 0.00390625,
+          "mismatched_elements": 100,
+          "reason": null,
+          "relative_l2": 0.00010101096310241922,
+          "shape": [
+            32,
+            7680
+          ]
+        },
+        {
+          "adjacent_bf16_mismatches": 113,
+          "cosine": 0.9999999934638814,
+          "dtype": "torch.bfloat16",
+          "max_abs": 0.00390625,
+          "mismatched_elements": 113,
+          "reason": null,
+          "relative_l2": 0.00011435739677009623,
+          "shape": [
+            32,
+            7680
+          ]
+        },
+        {
+          "adjacent_bf16_mismatches": 105,
+          "cosine": 0.9999999944079718,
+          "dtype": "torch.bfloat16",
+          "max_abs": 0.001953125,
+          "mismatched_elements": 105,
+          "reason": null,
+          "relative_l2": 0.00010577139902496545,
+          "shape": [
+            32,
+            2048
+          ]
+        },
+        {
+          "adjacent_bf16_mismatches": 98,
+          "cosine": 0.9999999949900207,
+          "dtype": "torch.bfloat16",
+          "max_abs": 0.00390625,
+          "mismatched_elements": 98,
+          "reason": null,
+          "relative_l2": 0.00010011476537085858,
+          "shape": [
+            32,
+            7680
+          ]
+        },
+        {
+          "adjacent_bf16_mismatches": 96,
+          "cosine": 0.9999999948489433,
+          "dtype": "torch.bfloat16",
+          "max_abs": 0.00390625,
+          "mismatched_elements": 96,
+          "reason": null,
+          "relative_l2": 0.00010151648760945721,
+          "shape": [
+            32,
+            7680
+          ]
+        },
+        {
+          "adjacent_bf16_mismatches": 123,
+          "cosine": 0.9999999919173458,
+          "dtype": "torch.bfloat16",
+          "max_abs": 0.0078125,
+          "mismatched_elements": 123,
+          "reason": null,
+          "relative_l2": 0.0001271724100825205,
+          "shape": [
+            32,
+            7680
+          ]
+        }
+      ],
+      "passed": 4052,
+      "strict_passed": 536,
+      "within_bound_calls": 11896,
+      "worst_cosine": 0.9999993044791035,
+      "worst_max_abs": 0.125,
+      "worst_relative_l2": 0.0011935194567590458
+    }
+  },
+  "runtime_certificate": {
+    "channel_restore_exact": true,
+    "complete_gradient_passed": true,
+    "consumer_ce_abs": 0.0,
+    "consumer_gradient_max_abs": 0.0,
+    "forward_max_abs": 0.0,
+    "gradient_scope": "complete-production-trainables",
+    "incremental_max_abs": 0.0,
+    "note": "flat side runs in a VJP carrier scope, so this certificate exercises the invariant kernel, not vendor projections",
+    "passed": true
+  },
+  "schema": "natlang.vendor-projection-gate/1",
+  "seconds": 1072.4007512310054,
+  "tolerances": {
+    "cross_mode_rtol": 0.1,
+    "forward_atol": 0.0001,
+    "gradient_atol": 1e-05,
+    "rtol": 0.0001
+  },
+  "torch": "2.11.0+cu130",
+  "trainable_parameters": 288
+}

@@ -76,12 +76,21 @@ def configure_native_precision():
     if bf16_mode not in ('fp32-accumulate', 'reduced'):
         raise ValueError('NATLANG_BF16_REDUCTION must be fp32-accumulate or reduced')
     torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction = (bf16_mode == 'reduced')
+    # Projection arithmetic of plain training updates (model/native_weight_carrier.py). The SFT learner defaults it
+    # to vendor on discrete GPUs (train/native_state_sft.resolve_training_projection_arithmetic); `invariant` is the
+    # explicit historical-replay option. Recorded only when vendor, so invariant processes keep their exact
+    # historical identities.
+    from .native_weight_carrier import set_training_projection_arithmetic
+    projection = set_training_projection_arithmetic(os.environ.get('NATLANG_PROJECTION_ARITHMETIC', 'invariant'))
     tf32 = mode == 'tf32'
     torch.set_float32_matmul_precision('high' if tf32 else 'highest')
     torch.backends.cuda.matmul.allow_tf32 = tf32
     torch.backends.cudnn.allow_tf32 = tf32
-    return {'float32_matmul': 'high' if tf32 else 'highest', 'cuda_matmul_tf32': tf32, 'cudnn_tf32': tf32,
-            'cuda_bf16_reduced_precision_reduction': bf16_mode == 'reduced'}
+    result = {'float32_matmul': 'high' if tf32 else 'highest', 'cuda_matmul_tf32': tf32, 'cudnn_tf32': tf32,
+              'cuda_bf16_reduced_precision_reduction': bf16_mode == 'reduced'}
+    if projection == 'vendor':
+        result['training_update_projection'] = 'vendor-cublas-bf16-fp32-accumulate'
+    return result
 
 
 def native_identity(model, config, *, checkpoint_sha256):

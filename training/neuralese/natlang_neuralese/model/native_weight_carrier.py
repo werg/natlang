@@ -40,6 +40,31 @@ def plain_training_active() -> bool:
     return _PLAIN_TRAINING[0] > 0 and torch.is_grad_enabled()
 
 
+# Projection arithmetic of plain training updates (``NATLANG_PROJECTION_ARITHMETIC``, bound into the model config's
+# process `precision` by model/native_model.configure_native_precision). `invariant`: canonical projections keep the
+# fixed 64-row-tile Triton kernel (historical replay). `vendor`: inside a plain update every projection, canonical
+# ones included, is one cuBLAS BF16 GEMM with FP32 accumulation for the forward, dX and dW (the arithmetic of the
+# SGLang vendor actor). Process-wide like _PLAIN_TRAINING: checkpoint recompute runs on autograd device threads.
+# Inference, carrier/VJP scopes (RL policy updates, certificates) and reference arithmetic are unaffected.
+PROJECTION_ARITHMETICS = ('invariant', 'vendor')
+_PROJECTION_ARITHMETIC = ['invariant']
+
+
+def set_training_projection_arithmetic(mode: str) -> str:
+    if mode not in PROJECTION_ARITHMETICS:
+        raise ValueError('NATLANG_PROJECTION_ARITHMETIC must be invariant or vendor')
+    _PROJECTION_ARITHMETIC[0] = mode
+    return mode
+
+
+def training_projection_arithmetic() -> str:
+    return _PROJECTION_ARITHMETIC[0]
+
+
+def vendor_projection_active() -> bool:
+    return _PROJECTION_ARITHMETIC[0] == 'vendor' and plain_training_active()
+
+
 @contextmanager
 def plain_training_arithmetic():
     """Ordinary autograd and vendor GEMMs for a training update (no carrier scope, no fixed-tile linear)."""

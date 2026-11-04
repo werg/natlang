@@ -207,3 +207,53 @@ block column, 16 per projection, which is slower than BF16. The FP8 pass costs o
 5. Selective activation checkpointing in the graph forward (keep the top K layers): at most ~7% (no checkpointing at
    all measured 6.6 vs 7.1 s), at ~3 GB per 1k tokens.
 6. Fused linear + cross-entropy readout (vocab 128k): ~0.3 s.
+
+## Vendor projection arithmetic for SFT updates (owner directive, 2026-11-04)
+
+The production learner ran canonical (`ffn-stable-v1`) projections through the invariant 64-row-tile Triton kernel
+in every plain update. That is the same kernel family that halved SGLang throughput before its vendor projection.
+`NATLANG_PROJECTION_ARITHMETIC=vendor` (model/native_weight_carrier.py, maple/fused_moe.`_VendorLinear`) makes
+every projection inside a plain update one cuBLAS BF16 GEMM with FP32 accumulation and one rounding. This covers the
+forward, dX and dW, canonical/forced projections and the readout. The forward keeps the aliased-prefix primal
+reuse; dX and dW use every row occurrence.
+
+- Default: the SFT learner (`native_state_sft.resolve_training_projection_arithmetic`) selects `vendor` on discrete
+  GPUs (nvidia-smi, no CUDA init) and `invariant` on integrated GB10/CPU. A declared env value wins; `invariant`
+  is the historical-replay option.
+- Binding: `configure_native_precision` records `precision.training_update_projection` in the model config
+  (vendor only, so invariant identities are unchanged). It is process arithmetic like TF32/BF16 reduction:
+  weights, optimizer, RNG and exposure carry over. Options record `training_projection_arithmetic`
+  (mode/source/previous). The oversize capacity identity binds it, so capacity re-measures under vendor.
+- Scope: only plain-training updates. Native actor inference, carrier/VJP scopes (RL policy updates, runtime
+  certificates) and reference arithmetic keep the invariant kernel, and the exact native replay gate is unchanged.
+  RL actors already sample with SGLang's vendor projection, so learner/actor arithmetic now matches more
+  closely; RL recompute stays guarded as is (engine guard + TIS).
+- On-device check: before SGD, a vendor learner runs `vendor_projection_self_check` on its actual GPU. It covers
+  every distinct projection shape at 1/64/4097/20000 rows, checking forward/dX/dW against the worst-case
+  FP32-accumulation bound (gamma_K·Σ|terms| + K·2^-126 underflow + 1 BF16 ulp), and fails closed. The receipt goes into the options.
+
+DGX gate (`scripts/neuralese_data/qualify_vendor_projection.py`). Inputs: the real earned checkpoint
+508cfefd (corrected-mix-d1 parent), production execution (plain, ffn-stable-v1, aliased-prefix packing, layer
+group 2, FFN chunk 1024), and complete real train graphs (two-node producer/consumer communication graphs of
+12-13k tokens, ordinary teacher-program graphs, and a packed 4-graph 37.7k-token batch).
+- Coverage: 0 Triton projection calls in every vendor pass (1682 vendor calls per communication graph).
+- Single graphs: vendor and invariant CE and complete 288-parameter gradients are bitwise equal on GB10 cuBLAS
+  (ordinary graphs), or within 0.0097 relative L2 (communication graphs).
+- Packed batch: CE delta 1.0e-3 and gradient relative L2 0.041, inside the declared cross-mode transition bound
+  (0.1; model/native_precision.transition_gradient_rtol). The cause: the invariant backward rounds each
+  invocation's dW to BF16 and sums the partials, while vendor uses one GEMM.
+- Against the exact gradient (same weights cast exactly to FP32, IEEE), vendor and invariant are equally close:
+  singles 0.1007/0.1005, 0.0568/0.0566, 0.2413/0.2413, 0.1781/0.1781; packed 0.0928 vs 0.0879 (cosine 0.9957
+  vs 0.9961).
+- Runtime certificate (`qualify_existing`, complete production trainables, 1e-4/1e-5) passes in the vendor
+  process. It exercises the invariant kernel (VJP scope), not vendor.
+- Per-projection exactness on sampled rows of every product, against FP64 products: zero elements outside the
+  FP32-accumulation bound is the gate. Passed: 0 violations in 11,896 vendor forward, 4,963 dX and 4,887 dW
+  calls, and in the invariant control. Without the underflow term, 5 dX calls of both kernels exceeded the
+  bound on tiny cotangents. The normwise rtol 1e-4 of the comparison policy is reported but is not a
+  single-GEMM bound: the qualified invariant kernel fails it against FP64 at the same rate (worst relative L2
+  1.8e-3 vs vendor 1.2e-3).
+
+Receipt: `plans/neuralese/vendor-projection-qualification-20261104.json` (all four gates passed).
+GB10 cuBLAS is not H100 cuBLAS. That is why the on-device self-check runs on every learner. The throughput gain is
+to be measured on the live H100 learner after deployment, not inferred from GB10.

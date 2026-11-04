@@ -793,6 +793,90 @@ class _InvariantLinear(torch.autograd.Function):
         return dx, dw, None, None, *anchor_grads
 
 
+class _VendorLinear(torch.autograd.Function):
+    """x @ wᵀ as cuBLAS GEMMs (BF16 operands, FP32 accumulation, one rounding) for the forward, dX and dW.
+
+    The forward reuses aliased prefix-row primals exactly as the invariant path does (identical rows of x give
+    identical rows of one GEMM); dX and dW use every original row occurrence, as autograd's F.linear would."""
+
+    @staticmethod
+    def forward(ctx, x, w):
+        from ..model.native_gradient_partitions import active_gradient_partitions, reused_linear_primal
+        ctx.save_for_backward(x, w)
+        return reused_linear_primal(x, active_gradient_partitions(), lambda operand: F.linear(operand, w))
+
+    @staticmethod
+    def backward(ctx, grad):
+        x, w = ctx.saved_tensors
+        return _vendor_adjoints(x, w, grad, ctx.needs_input_grad[0], ctx.needs_input_grad[1])
+
+
+def _vendor_adjoints(x, w, grad, input_gradient, weight_gradient):
+    return (grad.mm(w) if input_gradient else None, grad.t().mm(x) if weight_gradient else None)
+
+
+def accumulation_bound_violations(actual, left, right, details=None):
+    """Elements of a BF16 product ``left @ right`` (FP32 accumulation) outside the worst-case rounding bound.
+
+    BF16 x BF16 products are exact in FP32; any FP32 summation order of K terms errs by at most
+    gamma_K * sum|terms| + K * eta (gamma_K = K u / (1 - K u), u = 2^-24, eta = 2^-126 underflow; Higham), and the
+    final BF16 rounding by one BF16 ulp of the result. A correct kernel of any tiling or split-K order has zero violations; a wrong row, column,
+    transpose or accumulation dtype does not.
+    """
+    exact = left.double() @ right.double()
+    magnitude = left.double().abs() @ right.double().abs()
+    k = left.shape[-1]
+    gamma = k * 2.0 ** -24 / (1 - k * 2.0 ** -24)
+    ulp = exact.abs().clamp_min(2.0 ** -133) * 2.0 ** -7  # one BF16 ulp (8-bit significand) of |exact|
+    # Underflow: each of K FP32 products/partial sums may flush below the normal range (FTZ), eta = 2^-126 each.
+    underflow = k * 2.0 ** -126
+    violations = (actual.double() - exact).abs() > gamma * magnitude + ulp + underflow
+    if details is not None and bool(violations.any()):
+        details.append({'count': int(violations.sum()), 'max_error': float((actual.double() - exact).abs()[violations].max()),
+                        'max_exact': float(exact.abs()[violations].max()),
+                        'max_magnitude': float(magnitude[violations].max()), 'k': k})
+    return int(violations.sum())
+
+
+def vendor_projection_self_check(weights, *, rows=(1, 64, 4097, 20000), samples=32, seed=1104):
+    """On-device check of the vendor products for the model's actual projection weights.
+
+    For each distinct weight shape and several row counts (cuBLAS selects kernels per shape), the forward, dX and
+    dW of _VendorLinear on sampled rows/columns must lie within the FP32-accumulation rounding bound
+    (accumulation_bound_violations). Returns a receipt; raises on any violation.
+    """
+    generator = torch.Generator(device='cpu').manual_seed(seed)
+    seen, checks = set(), []
+    for weight in weights:
+        key = (tuple(weight.shape), weight.dtype, weight.device)
+        if key in seen or weight.ndim != 2 or weight.dtype != torch.bfloat16 or not weight.is_cuda:
+            continue
+        seen.add(key)
+        w = weight.detach()
+        for count in rows:
+            if count > 64 and count * max(w.shape) > 1 << 28:
+                continue  # bound the probe's own memory (the vocabulary readout); small row counts still run
+            x = torch.randn(count, w.shape[1], generator=generator).to(w.device, w.dtype).requires_grad_()
+            seed_grad = torch.randn(count, w.shape[0], generator=generator).to(w.device, w.dtype)
+            wl = w.clone().requires_grad_()
+            with torch.enable_grad():
+                out = _VendorLinear.apply(x, wl)
+                out.backward(seed_grad)
+            pick = torch.randperm(count, generator=generator)[:samples].to(w.device)
+            cols = torch.randperm(w.shape[0], generator=generator)[:samples].to(w.device)
+            xd = x.detach()
+            bad = {'forward': accumulation_bound_violations(out.detach()[pick], xd[pick], w.t()),
+                   'dX': accumulation_bound_violations(x.grad[pick], seed_grad[pick], w),
+                   'dW': accumulation_bound_violations(wl.grad[cols], seed_grad[:, cols].t(), xd)}
+            checks.append({'shape': list(w.shape), 'rows': count, 'bound_violations': bad})
+            if any(bad.values()):
+                raise RuntimeError('vendor projection products exceed the FP32-accumulation bound on this device: '
+                                   + str(checks[-1]))
+    return {'schema': 'natlang.vendor-projection-self-check/2', 'passed': True,
+            'bound': 'gamma_K*sum|terms| + 1 bf16 ulp', 'device': torch.cuda.get_device_name() if checks else None,
+            'checks': checks}
+
+
 def invariant_linear(x: torch.Tensor, w: torch.Tensor, *, precision="ieee", forward_storage_dtype=None,
                      cotangent_anchors=(), allow_plain_fastpath=True) -> torch.Tensor:
     from ..common.native_higher_order import active_reference_arithmetic,reference_linear
@@ -800,12 +884,18 @@ def invariant_linear(x: torch.Tensor, w: torch.Tensor, *, precision="ieee", forw
         return reference_linear(x,w)
     if precision not in {"ieee", "tf32x3", "tf32", "bf16", "bf16x6"}:
         raise ValueError("native fixed linear requires explicit ieee, tf32x3, tf32, bf16 or bf16x6 arithmetic")
-    from ..model.native_weight_carrier import plain_training_active
+    from ..model.native_weight_carrier import plain_training_active, vendor_projection_active
     if allow_plain_fastpath and not cotangent_anchors and precision == "ieee" and plain_training_active():
         # Plain training arithmetic: one vendor GEMM for the forward, dX and dW (FP32 accumulation, one rounding).
         weight = w.to(forward_storage_dtype) if forward_storage_dtype is not None else w
         if weight.dtype == x.dtype:
             return F.linear(x, weight)
+    if not cotangent_anchors and precision == "ieee" and vendor_projection_active():
+        # Declared vendor projection arithmetic also replaces canonical (forced-invariant) projections in a plain
+        # update, keeping the fixed-linear primal reuse of aliased prefix rows.
+        weight = w.to(forward_storage_dtype) if forward_storage_dtype is not None else w
+        if weight.dtype == x.dtype and x.ndim == 2:
+            return _VendorLinear.apply(x, weight)
     if torch.is_inference_mode_enabled():
         # Preserve the same effective stored operands; there is no autograd
         # graph in true inference, so no cotangent bookkeeping is consumed.
