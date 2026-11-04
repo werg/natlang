@@ -363,3 +363,19 @@ def test_interleaved_controller_exports_its_active_sft_window_rolling_slot(tmp_p
     assert sandbox.resume_checkpoints(out, config, state) == [slot, parent]
     assert sandbox.resume_checkpoints(out, config, {'checkpoint': str(parent), 'interleave': {}}) == [parent]
     assert sandbox.resume_checkpoints(out, {}, state) == [parent]
+
+
+def test_top_export_carries_lineage_level_session_controls(tmp_path):
+    L, window, parent = sft_lineage(tmp_path)
+    session = L / 'diloco-s2'
+    (session / 'workers' / 'worker-0').mkdir(parents=True)
+    (session / 'recipe-runtime.json').write_text('{}')
+    (session / 'workers' / 'worker-0' / 'config.json').write_text('{}')
+    (session / 'x.lock').write_text('')
+    exports = tmp_path / 'root' / '.exports' / 'joint'
+    staged = sandbox.stage(L, exports)
+    top = next(b for b in staged['blobs'] if b['kind'] == 'top')
+    listing = subprocess.run(f'zstd -dc {exports}/cas/{top["sha256"]} | tar -t', shell=True,
+                             capture_output=True, text=True, check=True).stdout.split()
+    assert 'diloco-s2/recipe-runtime.json' in listing and 'diloco-s2/workers/worker-0/config.json' in listing
+    assert not any(m.startswith(('w000000', 'parent')) for m in listing) and 'diloco-s2/x.lock' not in listing

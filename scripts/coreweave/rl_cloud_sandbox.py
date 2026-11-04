@@ -370,6 +370,13 @@ def stage(lineage, exports):
         top += ['actor-tokenizers'] + [f'actor-tokenizers/{m}' for m in _members(lineage / 'actor-tokenizers')]
     if not windows:  # an RL lineage's controller metadata lives at the top (and in its rounds)
         top += [m for m in _metadata_members(lineage, lineage) if '/' in m and not m.startswith('actor-tokenizers')]
+    else:
+        # Lineage-level control trees the windows bind (DiLoCo session directories with their recipe, worker controls
+        # and control inputs; boundary-prepared successor controls): a relaunch cannot resume a window without them.
+        # 2026-11-04: w0 113911e0 resumed from an export lacking diloco-s2/recipe-runtime.json and failed.
+        own = {Path(w['out']).name for w in windows} | {'parent', 'actor-tokenizers'}
+        for path in sorted(p for p in lineage.iterdir() if p.is_dir() and not p.is_symlink() and p.name not in own):
+            top += [path.name] + _metadata_members(lineage, path)
     digest, size, parts = _cas_put_archive(cas, lineage, top)
     blobs.append({'kind': 'top', 'sha256': digest, 'bytes': size, 'encoding': 'tar.zst', 'parts': parts})
     # SFT windows: a completed window's metadata once (carried forward), the active window's at every boundary
