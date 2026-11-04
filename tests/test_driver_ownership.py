@@ -51,3 +51,16 @@ def test_owner_without_successor_holds_then_exits(tmp_path):
     first = driver(tmp_path, 'first', 'exit 2', hold=5)
     first.wait(timeout=30)
     assert time.monotonic() - started >= 4.5 and events(tmp_path) == ['first exited']
+
+
+def test_owner_registers_with_the_bootstrap_control_dir(tmp_path):
+    control = tmp_path / 'cw'
+    script = tmp_path / 'reg.sh'
+    script.write_text(f'''OWNER={tmp_path}/owner
+NATLANG_CW_CONTROL_DIR={control}
+. {LIB}
+driver_take run
+driver_take run
+''')
+    assert subprocess.run(['bash', str(script)]).returncode == 0
+    assert (control / 'driver-owners').read_text() == f'{tmp_path}/owner\n'   # registered once

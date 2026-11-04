@@ -205,6 +205,15 @@ trap 'log term; kill -TERM $child 2>/dev/null' TERM INT
 wait $child; status=$?
 while kill -0 $child 2>/dev/null; do wait $child; status=$?; done  # a trapped TERM interrupts wait; keep waiting
 log exited "\"status\":$status"
+# A lineage driver handed over in place (driver_ownership.sh) may outlive the entry child: while any registered
+# owner ("pid start_ticks state") is alive, PID 1 waits (2026-11-04: b4caeaa0 completed under a live newer driver).
+owner_alive() { local pid ticks state; read -r pid ticks state < "$1" 2>/dev/null || return 1
+  [ -n "$ticks" ] && [ "$(sed 's/.*) //' "/proc/$pid/stat" 2>/dev/null | awk '{print $20}')" = "$ticks" ]; }
+while [ -f "$CW/driver-owners" ]; do
+  live=; while read -r owner; do owner_alive "$owner" && live=$owner; done < "$CW/driver-owners"
+  [ -z "$live" ] && break
+  log waiting-for-driver "\"owner\":\"$live\""; sleep 60
+done
 if [ -n "$watcher" ]; then kill -TERM $watcher 2>/dev/null; wait $watcher 2>/dev/null; fi
 mkdir -p "$CW"; echo "$status" > "$CW/exit-status"
 publish

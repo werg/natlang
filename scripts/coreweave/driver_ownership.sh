@@ -16,6 +16,12 @@ driver_take() {  # $1 = state; refuse (exit 75, no hold) while another live owne
     echo "{\"driver\":\"refused\",\"owner\":$pid}"; exit 75
   fi
   echo "$$ $(driver_ticks $$) $1" > "$OWNER.tmp" && mv "$OWNER.tmp" "$OWNER"
+  # Register the owner file with the sandbox bootstrap: PID 1 stays up while any registered owner lives, so the
+  # sandbox never completes under a live driver even when the entry driver itself is gone.
+  if [ -n "${NATLANG_CW_CONTROL_DIR:-}" ]; then
+    mkdir -p "$NATLANG_CW_CONTROL_DIR"
+    grep -qxF "$OWNER" "$NATLANG_CW_CONTROL_DIR/driver-owners" 2>/dev/null || echo "$OWNER" >> "$NATLANG_CW_CONTROL_DIR/driver-owners"
+  fi
 }
 driver_wait_newer() {  # wait while a live newer driver owns the lineage (it may hand over again)
   local pid ticks state
