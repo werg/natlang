@@ -131,3 +131,17 @@ def test_add_runtime_makes_relaunches_restore_an_in_place_adopted_runtime(monkey
     assert rl_cloud.lineage_seed_inputs({}, 'lin') == [seed, item]
     rl_cloud.add_runtime({}, 'lin', runtime, archive)  # idempotent per runtime path
     assert rl_cloud.lineage_seed_inputs({}, 'lin') == [seed, item]
+
+
+def test_relaunch_from_an_export_restores_the_seed_historical_checkpoints(monkeypatch, tmp_path):
+    rl_cloud = autopilot.rl_cloud
+    monkeypatch.setattr(rl_cloud, 'hub', lambda run: tmp_path)
+    seed = {'lineage_dir': '/root/lin', 'links': [{'path': '/h/link.pt', 'symlink_to': '/h/real.pt'}], 'blobs': [
+        {'kind': 'top', 'sha256': 't', 'encoding': 'tar.zst'},
+        {'kind': 'checkpoint', 'path': '/root/lin/parent/checkpoint.pt', 'sha256': 'p', 'encoding': 'raw'},
+        {'kind': 'checkpoint', 'path': '/h/proof/checkpoint.pt', 'sha256': 'h', 'encoding': 'raw'}]}
+    rl_cloud.store_json(tmp_path / 'exports/lin/seed.json', seed)
+    record = {'lineage': 'lin', 'lineage_dir': '/root/lin', 'links': [], 'blobs': [
+        {'kind': 'checkpoint', 'path': '/root/lin/w000003/learner/checkpoint.pt', 'sha256': 'w', 'encoding': 'raw'}]}
+    assert [b['sha256'] for b in rl_cloud.launch_blobs({}, record)] == ['w', 'h']
+    assert rl_cloud.launch_links({}, record) == seed['links']

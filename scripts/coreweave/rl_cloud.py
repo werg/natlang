@@ -1113,10 +1113,26 @@ def launch_blobs(run, record, name=None):
     """The blobs a launch from ``record`` materializes. A tune shard's exports carry its stage directory, never its
     read-only parent, so every launch of a shard also restores the seed's parent checkpoint."""
     out = list(record['blobs'])
+    seed = read_json(hub(run) / 'exports' / (name or record['lineage']) / 'seed.json', {}) or {}
     if record.get('kind') == 'tune' and not any(b['kind'] == 'checkpoint' for b in out):
-        seed = read_json(hub(run) / 'exports' / (name or record['lineage']) / 'seed.json')
         out += [b for b in seed['blobs'] if b['kind'] == 'checkpoint']
+    elif seed and seed is not record:
+        # Historical checkpoints the seed shipped outside the lineage directory (execution-transition and source
+        # adoption proofs the earned frame verifies at every trainer start): a lineage's own exports never carry them.
+        # 2026-11-04: w0 113911e0 relaunched from export 13 failed on zero-sgd-source-adoption-67-full-v2-1102.
+        lineage_dir = str(record.get('lineage_dir') or seed.get('lineage_dir') or '').rstrip('/') + '/'
+        have = {b['path'] for b in out if 'path' in b}
+        out += [b for b in seed.get('blobs', []) if b['kind'] == 'checkpoint' and b['path'] not in have
+                and not b['path'].startswith(lineage_dir)]
     return out
+
+
+def launch_links(run, record, name=None):
+    """The record's links plus the seed's (symlinks/hardlinks the seed's historical checkpoints are reached through)."""
+    seed = read_json(hub(run) / 'exports' / (name or record['lineage']) / 'seed.json', {}) or {}
+    links = list(record.get('links', []))
+    paths = {link['path'] for link in links}
+    return links + [link for link in seed.get('links', []) if link['path'] not in paths]
 
 
 def record_digests(run, record, name=None):
@@ -1153,7 +1169,7 @@ def parent_capability(run, record):
     return {'schema': PARENT_SCHEMA, 'lineage_dir': record['lineage_dir'], 'seq': record['seq'],
             'trained_rounds': record['trained_rounds'], 'state_sha256': record.get('state_sha256'),
             'checkpoint': record.get('checkpoint'), 'blobs': out_blobs, 'bases': bases,
-            'inputs': [_with_parts(run, i) for i in inputs], 'links': record.get('links', [])}
+            'inputs': [_with_parts(run, i) for i in inputs], 'links': launch_links(run, record)}
 
 
 # -- blob retention (shared lease namespace: retention_leases.py) --------------------------------------------------------
