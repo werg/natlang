@@ -70,6 +70,8 @@ def prepare(args):
     if stage['parameters'].get('refresh_after_updates') != args.window:
         raise SystemExit('the prepared window did not adopt the session window length')
     stage['parameters']['diloco'] = block
+    # DiLoCo learners keep no local weight EMA (native_state_sft refuses one); the coordinator keeps the global EMA.
+    stage['parameters']['weight_ema'] = 'off'
     # Inputs the prepared window wrote under its own directory (control-inputs snapshots, which bind each other's
     # paths) stay at that session path, which ships to every worker; only the window's own outputs relocate.
     text = json.dumps(base)
@@ -82,6 +84,7 @@ def prepare(args):
     control['production_recipe'] = str(recipe_path)
     for key in ('trainer_parameters', 'seed_trainer_parameters'):
         control[key]['diloco'] = block
+        control[key]['weight_ema'] = 'off'
         control[key]['recipe_binding'] = binding
     old_recipe.unlink()
     if any(not x.startswith('control-inputs/') for x in moved):
