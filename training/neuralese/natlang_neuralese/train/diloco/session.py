@@ -106,8 +106,9 @@ def prepare(args):
     seed = list(control['seed_command'])
     for worker in range(args.workers):
         item = copy.deepcopy(control)
+        # Every file join.py runs is named in the control itself, so the lineage closure ships it.
         item['seed_command'] = [seed[0], str(bin_dir / 'join.py'), '--session', str(session_path),
-                                '--worker', str(worker), '--', *seed]
+                                '--relay', str(bin_dir / 'relay.py'), '--worker', str(worker), '--', *seed]
         item['out'] = str(directory / 'workers' / f'worker-{worker}' / 'out')
         text = json.dumps(item).replace(json.dumps(str(prep / 'out') + '/resident-data')[1:-1],
                                         item['out'] + '/resident-data')

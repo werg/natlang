@@ -196,6 +196,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--session', required=True)
     parser.add_argument('--worker', type=int, required=True)
+    parser.add_argument('--relay', help='relay.py (named here so that the control\'s closure ships it)')
     args = parser.parse_args(argv[:split])
     command = argv[split + 1:]
     module = next((m for m in (TRAINER_MODULE, *STAGE_MODULES) if m in command), None)
@@ -203,6 +204,8 @@ def main(argv=None):
         raise SystemExit(f'join: the wrapped command must run {TRAINER_MODULE} or {STAGE_MODULES}')
     trainer = command[command.index(module) + 1:]
     session = json.loads(Path(args.session).read_text())
+    if args.relay:
+        session['relay'] = args.relay
     if session.get('schema') != SESSION_SCHEMA or not 0 <= args.worker < session['workers']:
         raise SystemExit('join: not an elastic DiLoCo session or worker outside its slots')
     block = json.loads(flag(trainer, '--diloco'))
