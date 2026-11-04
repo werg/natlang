@@ -157,16 +157,16 @@ def test_seed_fails_closed_on_unshipped_checkpoints_and_large_files(monkeypatch,
 
 def test_trace_command_sees_the_host_read_only_and_builds_row_index_entries(tmp_path):
     argv = rl_cloud.trace_argv('u1', '/root/lin', tmp_path / 'copy', '/dgx/parent.pt', '/root/lin/w000000/config.json',
-                               '/rt/v45', tmp_path, ['/home', '/mnt'])
+                               '/rt/v45', tmp_path, ['/vis-a', '/vis-b'])
     text = ' '.join(argv)
-    assert '-v /home:/home:ro' in text and '-v /mnt:/mnt:ro' in text
+    assert '-v /vis-a:/vis-a:ro' in text and '-v /vis-b:/vis-b:ro' in text
     assert f'-v {rl_cloud.ROW_INDEX}:{rl_cloud.ROW_INDEX} ' in text
     assert f'-v {tmp_path / "copy"}:/root/lin ' in text and '-v /dgx/parent.pt:/root/lin/parent/checkpoint.pt:ro' in text
     assert '--network none' in text and 'CUDA_VISIBLE_DEVICES=' in text and '--cap-add SYS_PTRACE' in text
     assert argv[argv.index('/usr/bin/strace'):][:6] == ['/usr/bin/strace', '-f', '-qq', '-e', 'trace=%file', '-o']
     assert argv[-4:] == ['--config', '/root/lin/w000000/config.json', '--rounds', '1']
-    assert rl_cloud.trace_visible_roots(['/data2/x/y.json', '/usr/lib/z', '/home/werg/a']) == \
-        sorted({'/data2'} | {r for r in ('/home', '/mnt') if Path(r).is_dir()})
+    defaults = set(rl_cloud.trace_visible_roots([]))
+    assert rl_cloud.trace_visible_roots(['/data2/x/y.json', '/usr/lib/z']) == sorted({'/data2'} | defaults)
 
 
 def test_row_index_entries_of_every_closure_source_ship(monkeypatch, tmp_path):
