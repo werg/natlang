@@ -70,6 +70,9 @@ def test_typed_changes_are_checked_before_they_get_an_id(tmp_path):
     assert w.propose({'kind': 'instructions', 'file': 'route.nl', 'find': 'absent', 'replace': 'y'})['problems']
     assert w.propose({'kind': 'skill', 'function': 'intent', 'name': 'Bad Name', 'description': 'd', 'body': 'b',
                       'action': 'create'})['problems']
+    assert w.propose({'kind': 'skill', 'function': 'intent', 'name': 'intent-cues', 'description': 'Unclear intents',
+                      'body': '...', 'action': 'create'})['problems'], 'a placeholder body is not a skill'
+    assert w.propose({'kind': 'guidance', 'scope': {'kind': 'program'}, 'text': 'TODO'})['problems']
     assert w.propose({'kind': 'adapter', 'adapter': 'x'})['problems'], 'adapters come only from fit'
     assert w.propose({'kind': 'guidance', 'scope': {'kind': 'program'}, 'text': 'Use intent.'}) == {'id': 'c1'}
     assert w.propose({'kind': 'instructions', 'file': 'route.nl', 'find': 'Route every ticket.',
@@ -111,8 +114,8 @@ def test_changes_apply_to_files_scope_by_scope_and_skills_sit_with_their_functio
 
 def test_evaluate_ablate_budget_commit_and_held_score(tmp_path):
     w = workspace(tmp_path)
-    w.propose({'kind': 'guidance', 'scope': {'kind': 'program'}, 'text': 'a'})
-    w.propose({'kind': 'guidance', 'scope': {'kind': 'function', 'name': 'route'}, 'text': 'b'})
+    w.propose({'kind': 'guidance', 'scope': {'kind': 'program'}, 'text': 'Note a.'})
+    w.propose({'kind': 'guidance', 'scope': {'kind': 'function', 'name': 'route'}, 'text': 'Note b.'})
     first = w.evaluate(['c1'])
     assert first['success'] == 0.5 and first['baseline'] == 0.25 and first['evaluationsLeft'] == 2
     assert w.baseline() == {'attempts': 3, 'success': 0.25}
@@ -126,7 +129,7 @@ def test_evaluate_ablate_budget_commit_and_held_score(tmp_path):
     assert w.ablate(['c1', 'c2']) == [{'id': 'c1', 'without': 0.5}, {'id': 'c2', 'without': 0.5}]
     assert w.evaluate(['c1'])['evaluationsLeft'] == 1, 'an already measured change set costs nothing'
     assert w.evaluate(['c1', 'c2'])['evaluationsLeft'] == 0
-    w.propose({'kind': 'guidance', 'scope': {'kind': 'program'}, 'text': 'c'})
+    w.propose({'kind': 'guidance', 'scope': {'kind': 'program'}, 'text': 'Note c.'})
     with pytest.raises(ValueError, match='budget is spent'):
         w.evaluate(['c3'])
     assert w.fit({}) == {'problems': ['adapter fits are unavailable in this run (no bank coefficient-fit service is '
@@ -322,7 +325,7 @@ def test_bridge_protocol_hides_score_and_reports_errors(tmp_path, monkeypatch):
     monkeypatch.setattr(ws, 'production_evaluator', lambda spec, endpoint: Evaluator())
     monkeypatch.setattr(ws, 'check_program', lambda case: [])
     requests = [{'id': 1, 'op': 'load', 'task': str(path)}, {'id': 2, 'op': 'failures'},
-                {'id': 3, 'op': 'propose', 'args': [{'kind': 'guidance', 'scope': {'kind': 'program'}, 'text': 't'}]},
+                {'id': 3, 'op': 'propose', 'args': [{'kind': 'guidance', 'scope': {'kind': 'program'}, 'text': 'Note t.'}]},
                 {'id': 4, 'op': 'attempt', 'args': ['missing']}, {'id': 5, 'op': 'commit', 'args': [['c1'], 'r']},
                 {'id': 6, 'op': 'score'}]
     out = io.StringIO()
@@ -380,10 +383,10 @@ def test_each_rollout_has_its_own_workspace(tmp_path):
     shared = spec(tmp_path)
     first = ws.Workspace(shared, Evaluator(), check=lambda case: [], run='task-1/1', prepare=stage.ensure_prepared)
     second = ws.Workspace(shared, Evaluator(), check=lambda case: [], run='task-2/1', prepare=stage.ensure_prepared)
-    first.propose({'kind': 'guidance', 'scope': {'kind': 'program'}, 'text': 'a'})
+    first.propose({'kind': 'guidance', 'scope': {'kind': 'program'}, 'text': 'Note a.'})
     first.commit(['c1'], 'r')
     assert second.state['committed'] is None and second.propose(
-        {'kind': 'guidance', 'scope': {'kind': 'program'}, 'text': 'b'}) == {'id': 'c1'}
+        {'kind': 'guidance', 'scope': {'kind': 'program'}, 'text': 'Note b.'}) == {'id': 'c1'}
     assert first.score()['memetic']['query_success'] != second.score()['memetic']['query_success']
 
 

@@ -153,6 +153,12 @@ def attempt_steps(rollout_result, limit=40):
     return steps[:limit]
 
 
+def _placeholder(text):
+    """A stand-in such as "..." or "TODO" rather than written text."""
+    words = re.findall(r"[^\W\d_]{2,}", str(text).lower())
+    return len(words) < 2 and set(words) <= {'tbd', 'todo', 'tba', 'body', 'text', 'skill', 'guidance', 'placeholder'}
+
+
 def compose_guidance(changes):
     """Scoped guidance entries ``[{function: None | name, text}]``: one program-wide text, and one text per scoped
     function (the program-wide part first, then the function's own). Each entry becomes its own native state, imported
@@ -336,6 +342,8 @@ class Workspace:
                 return ['an inputs scope says which inputs it is for in when']
             if not str(change.get('text') or '').strip():
                 return ['guidance needs text']
+            if _placeholder(change['text']):
+                return ['text is the guidance itself, which the function reads as written; write it out in full']
             return []
         if kind == 'revert':
             if change.get('id') not in self.state['changes']:
@@ -353,6 +361,8 @@ class Workspace:
             if change['action'] != 'retire' and not (str(change.get('description') or '').strip()
                                                      and str(change.get('body') or '').strip()):
                 return ['a skill needs a description (when to use it) and a body (what to do)']
+            if change['action'] != 'retire' and _placeholder(change['body']):
+                return ['body is the skill text the function reads as written; write out its steps in full']
         if kind == 'withhold' and (not isinstance(change.get('tools'), list) or not change['tools']
                                    or any(tool not in WITHHOLDABLE for tool in change['tools'])):
             return ['tools lists tools to withhold, from: ' + ', '.join(WITHHOLDABLE)]

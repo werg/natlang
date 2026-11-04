@@ -1918,3 +1918,13 @@ Motivation: 14% of full67's eval actions (37 of 264 on the practice set) started
 JavaScript import mixed with prose; the old error was a raw `';' expected.`, after which both checkpoints repeated the
 same failing action. Measure about 48 replays per variant of the failing first requests on the live executor
 (before/after wording) and record the rate of a different parseable next action. Unmeasured until then.
+
+## 2026-11-04: memetic workspace rejects placeholder skill bodies and guidance text
+
+`rl/memetic_workspace.py` `propose`: a skill body or guidance text that is a stand-in (no word, or a lone
+`TODO`/`TBD`/`body`/`text`, e.g. `...`) is refused with one sentence: "body is the skill text the function reads as
+written; write out its steps in full" (guidance: "text is the guidance itself, which the function reads as written;
+write it out in full"). Motivation: the first real supervisor episode of memetic e2e v3 (bf95 71c3eb45, program
+ext_bgkit_searchqa_reading) proposed skill `answer-by-clue-type` with body `...`, which was accepted and would have
+spent an evaluation on an empty skill. Unmeasured: count placeholder proposals and the next proposal after this error
+across the first production memetic rounds.
