@@ -236,3 +236,135 @@ def test_class_quota_is_filled_by_the_selector_and_enforced_on_an_external_polic
     monkeypatch.setattr(production.subprocess,'run',lambda argv,**kwargs:SimpleNamespace(stdout=json.dumps(ignoring)))
     with pytest.raises(ValueError,match='class effect_state'):
         production.select_tasks(rows,[],budget,curriculum=DEFAULT_V2,command=['natlang-selector'])
+
+
+def mixed_pool(count=60):
+    return [{'id':f'v-{index}','curriculum':{'rl':{'level':1,'family':'f','qualification':'qualified',
+             **({'mix_class':'effect_state'} if index%4==0 else {})}}} for index in range(count)]
+
+
+def observed_mixed(rows,visits=None,rounds=None):
+    """Every row observed once with a mixed outcome (the spread the selector seeks); ``visits`` overrides per row id."""
+    return [{'task_id':row['id'],'scored':8,'mean':.5,'spread':True,'observed_round':10,
+             'visits':(visits or {}).get(row['id'],1),'visit_rounds':(rounds or {}).get(row['id'],[10])} for row in rows]
+
+
+def test_record_visit_counts_each_round_once_and_never_overcounts_untracked_history():
+    from natlang_neuralese.rl.curriculum import record_visit,VISIT_ROUNDS_KEPT
+    first=record_visit(None,4)
+    assert first=={'visits':1,'visit_rounds':[4]}
+    second=record_visit({**first,'observed_round':4},9)
+    assert second=={'visits':2,'visit_rounds':[4,9]}
+    assert record_visit({**second,'observed_round':9},9)==second  # a retried collection of the same round
+    # An observation from before visit tracking is one visit, and its own round is not counted again.
+    assert record_visit({'observed_round':3,'task_id':'x'},3)=={'visits':1,'visit_rounds':[3]}
+    assert record_visit({'observed_round':3,'task_id':'x'},5)=={'visits':2,'visit_rounds':[5]}
+    state=None
+    for number in range(VISIT_ROUNDS_KEPT+10):state=record_visit(state,number)
+    assert state['visits']==VISIT_ROUNDS_KEPT+10 and len(state['visit_rounds'])==VISIT_ROUNDS_KEPT
+
+
+def test_visit_penalty_moves_an_overvisited_mixed_row_behind_fresh_rows_of_the_same_level():
+    rows=mixed_pool();budget={'rows':8,'group':8,'offset':3}  # breadth holds rows 3-4; rotation order then starts at row 5
+    off={**DEFAULT_V2,'visit_penalty':0,'visit_cap':0,'class_quota':{},'family_exploration_fraction':0.}
+    on={**off,'visit_penalty':1.0}
+    pick=lambda stats,config:[item['row'] for item in production.select_tasks(rows,stats,budget,curriculum=config)]
+    heavy=observed_mixed(rows,visits={'v-5':40})
+    # Without decay the mixed row is picked as soon as its rotation turn comes; with it, it waits behind fresher rows.
+    assert 5 in pick(heavy,off) and 5 not in pick(heavy,on)
+    # A pool where every row has the same visits has nothing to decay: the typical count is the row's own.
+    even=observed_mixed(rows,visits={row['id']:40 for row in rows})
+    assert pick(even,on)==pick(even,off)
+
+
+def test_visit_cap_ranks_capped_rows_last_inside_the_window_and_releases_them_after_it():
+    rows=mixed_pool();budget={'rows':8,'group':8,'offset':0}
+    config={**DEFAULT_V2,'visit_penalty':0,'visit_cap':2,'visit_cap_window':50,'class_quota':{},'family_exploration_fraction':0.}
+    hot=['v-5','v-6','v-7']
+    stats=observed_mixed(rows,visits={r:2 for r in hot},rounds={r:[8,10] for r in hot})
+    chosen={rows[item['row']]['id'] for item in production.select_tasks(rows,stats,budget,curriculum=config)}
+    assert not chosen&set(hot)
+    # The same visits older than the window no longer cap them.
+    old=observed_mixed(rows,visits={r:2 for r in hot},rounds={r:[8,10] for r in hot})
+    for item in old:item['observed_round']=200
+    for item in old:
+        if item['task_id'] not in hot:item['visit_rounds']=[200]
+    released=production.select_tasks(rows,old,budget,curriculum=config)
+    assert released==production.select_tasks(rows,old,budget,curriculum={**config,'visit_cap':0})
+
+
+def test_visit_cap_still_fills_the_round_when_the_pool_has_too_few_uncapped_rows():
+    rows=mixed_pool(10)
+    config={**DEFAULT_V2,'visit_penalty':1.,'visit_cap':1,'visit_cap_window':50,'class_quota':{}}
+    stats=observed_mixed(rows,visits={row['id']:5 for row in rows},rounds={row['id']:[9] for row in rows})
+    chosen=production.select_tasks(rows,stats,{'rows':8,'group':8,'offset':2},curriculum=config)
+    assert len(chosen)==8 and len({item['row'] for item in chosen})==8 and all(item['samples']==8 for item in chosen)
+
+
+def test_visit_decay_keeps_class_quota_breadth_and_floor():
+    rows=mixed_pool(200);budget={'rows':16,'group':8,'offset':20}
+    hot={row['id']:30 for row in rows[:60]}
+    stats=observed_mixed(rows,visits=hot,rounds={r:[7,8,9] for r in hot})
+    chosen=production.select_tasks(rows,stats,budget,curriculum=DEFAULT_V2)
+    from natlang_neuralese.rl.curriculum import breadth_rows
+    assert len(chosen)==16 and {item['row'] for item in chosen}>=set(breadth_rows(rows,budget,DEFAULT_V2))
+    effect=[item['row'] for item in chosen if rows[item['row']]['curriculum']['rl'].get('mix_class')]
+    assert len(effect)>=6  # ceil(.34*16)
+    assert not {item['row'] for item in chosen if rows[item['row']]['id'] in hot}-set(breadth_rows(rows,budget,DEFAULT_V2))
+
+
+def test_untracked_observations_and_a_disabled_decay_select_as_before():
+    rows=mixed_pool();budget={'rows':8,'group':8,'offset':5}
+    legacy=[{'task_id':row['id'],'scored':8,'mean':.5,'spread':True,'observed_round':3} for row in rows]
+    off={**DEFAULT_V2,'visit_penalty':0,'visit_cap':0}
+    assert production.select_tasks(rows,legacy,budget,curriculum=DEFAULT_V2)==production.select_tasks(rows,legacy,budget,curriculum=off)
+
+
+def test_repeated_selection_spreads_visits_across_the_pool():
+    from natlang_neuralese.rl.curriculum import record_visit
+    rows=mixed_pool(120)
+    def run(config,rounds=150):
+        history={};offset=0;visits={}
+        for number in range(rounds):
+            chosen=production.select_tasks(rows,list(history.values()),{'rows':16,'group':8,'offset':offset},curriculum=config)
+            for item in chosen:
+                row=rows[item['row']]
+                history[row['id']]={'task_id':row['id'],'scored':8,'mean':.5,'spread':True,'observed_round':number,
+                                     **record_visit(history.get(row['id']),number)}
+                visits[row['id']]=visits.get(row['id'],0)+1
+            offset=(chosen[-1]['row']+1)%len(rows)
+        return visits
+    off=run({**DEFAULT_V2,'visit_penalty':0,'visit_cap':0})
+    on=run(DEFAULT_V2)
+    assert len(on)>=len(off) and max(on.values())<max(off.values())
+    assert max(on.values())<=.6*max(off.values())
+
+
+def test_visit_decay_options_are_validated():
+    for bad in ({'visit_penalty':-1},{'visit_cap':-1},{'visit_cap_window':1.5},{'visit_cap':65},{'visit_penalty':float('nan')}):
+        with pytest.raises(ValueError,match='visit'):
+            production.select_tasks(cases(),[],{'rows':3,'group':8,'offset':0},curriculum={**DEFAULT_V2,**bad})
+    with pytest.raises(ValueError,match='/1 does not accept'):
+        production.select_tasks(cases(),[],{'rows':3,'group':8,'offset':0},curriculum={**DEFAULT,'visit_cap':2})
+
+
+def test_v2_config_without_visit_decay_adopts_it_through_its_own_recorded_transition(tmp_path):
+    state={'round':9};path=tmp_path/'state.json'
+    legacy={key:value for key,value in DEFAULT_V2.items() if not key.startswith('visit_')}
+    config={'task_curriculum':legacy,'rows_per_round':32,'group':8}
+    adopted=production.adopt_task_curriculum_defaults(config,state,path)
+    assert adopted['task_curriculum']==DEFAULT_V2 and (adopted['rows_per_round'],adopted['group'])==(32,8)
+    [record]=state['task_curriculum_transitions']
+    assert record['transition']==production.TASK_CURRICULUM_VISIT_DECAY_TRANSITION=='task-curriculum-visit-decay-20261104'
+    assert record['adopted_options']==['visit_cap','visit_cap_window','visit_penalty'] and record['round']==9
+    assert production.adopt_task_curriculum_defaults(config,state,path)==adopted and len(state['task_curriculum_transitions'])==1
+    # A sealed in-flight selection, the explicit opt-out and an already adopted config keep what they have.
+    assert production.adopt_task_curriculum_defaults(config,{},path,sealed_selection=True)==config
+    assert production.adopt_task_curriculum_defaults(adopted,{},path)==adopted
+    # An explicit opt-out of the decay itself is a complete declaration, not a missing field.
+    off={**DEFAULT_V2,'visit_penalty':0,'visit_cap':0}
+    assert production.adopt_task_curriculum_defaults({**config,'task_curriculum':off},{},path)['task_curriculum']==off
+    # A /2 config that also predates class_quota records the earlier transition for the combined default adoption.
+    older={key:value for key,value in legacy.items() if key!='class_quota'}
+    state={};production.adopt_task_curriculum_defaults({**config,'task_curriculum':older},state,path)
+    assert state['task_curriculum_transitions'][0]['transition']==production.TASK_CURRICULUM_CLASS_QUOTA_TRANSITION

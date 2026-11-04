@@ -97,6 +97,16 @@ least that share of every round from the tagged rows after the rotating breadth 
 through the recorded transition `task-curriculum-class-quota-20261103`). Measure the
 sampled mixture with `scripts/rl_tasks/simulate_selection.py`, not the pool's own share.
 
+## Selector /2 decays per-row visits (engineering, 2026-11-04)
+
+A stable mixed outcome keeps the spread the selector seeks, so it re-picked the same rows (r7 pool latent simulation,
+1,500 x 32: one row 372 visits, 245 rows 20+). The controller records each scored task's actual `visits`/`visit_rounds`;
+`visit_penalty` (1.0 level per doubling above the pool's mean visits) and `visit_cap` 2 per `visit_cap_window` 50 rounds
+rank over-visited rows behind fresh ones (a ranking, never a drop). Breadth, `class_quota`, frontiers and the 16x8 floor are
+unchanged. Adopted through `task-curriculum-visit-decay-20261104`; sealed selections keep their rows and policy. Fresh rows
+are mixed less often than re-picked mixed ones, so the sampled spread fraction falls (0.69 -> 0.54) while staying far above
+`spread_target`: that is the price of not memorising single tasks.
+
 ## Neuralese compaction is the intended runtime design (owner, 2026-11-03)
 
 Owner intent: Neuralese compacts and summarizes large values throughout the

@@ -56,3 +56,13 @@ program records with exact host verifiers, not invented student/teacher traces.
    the tag selects exactly as before; a config without `class_quota` adopts the default through the recorded transition
    `task-curriculum-class-quota-20261103`. `scripts/rl_tasks/simulate_selection.py` measures the sampled mixture, distinct
    rows, programs and families the selector actually reaches on a pool.
+
+8. Per-row visit decay (2026-11-04). A task with a stable mixed outcome keeps the spread the selector seeks, so on the
+   r7 pool (latent-outcome simulation, 1,500 rounds x 32 rows) it was re-selected without bound (one row 372 visits, 245
+   rows 20+). The controller now records each scored task's actual `visits` and recent `visit_rounds` on its latest
+   observation (idempotent per round; untracked history counts as one visit). Policy `/2` adds `visit_penalty` (levels of
+   frontier distance per doubling of a row's visits above the pool's mean observed visits, default 1.0), `visit_cap`
+   (default 2) and `visit_cap_window` (default 50 rounds): a row with `visit_cap` visits inside the window ranks behind
+   every uncapped candidate (a ranking, not a drop, so a small pool still fills the 16x8 floor). Rotating breadth,
+   `class_quota` and frontiers are unchanged; `visit_penalty: 0, visit_cap: 0` opts out. A /2 config without the fields
+   adopts them through `task-curriculum-visit-decay-20261104`; sealed selections keep their recorded rows and policy.

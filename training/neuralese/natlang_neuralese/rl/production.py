@@ -1751,10 +1751,16 @@ def run(config_path, *, rounds=None, stop=None):
             state.update(collected_task_ids=sorted(collected), attempted_task_ids=sorted(attempted), available_tasks=len(cases),
                 collected_task_fraction=len(collected & {r['id'] for r in cases}) / len(cases),
                 latest_reward=report, phase='select_update')
+            from .curriculum import record_visit, spread_yield
+            # Visit decay (selector /2): each scored task's actual visit count and recent visit rounds ride on its
+            # latest observation, derived from the previous one (idempotent for a retried collection of this round).
+            prior_visits = {**{g['task_id']: g for g in state.get('group_stats', [])},
+                            **state.get('task_curriculum_history', {})}
+            counted = {g['task_id']: record_visit(prior_visits.get(g['task_id']), state['round'])
+                       for g in report.get('groups', []) if g.get('scored', 0) > 0}
             grouped = {g['task_id']: g for g in state.get('group_stats', [])}
-            grouped.update({g['task_id']: g for g in report.get('groups', [])})
+            grouped.update({g['task_id']: {**g, **counted.get(g['task_id'], {})} for g in report.get('groups', [])})
             state['group_stats'] = list(grouped.values())
-            from .curriculum import spread_yield
             yields=state.setdefault('task_curriculum_spread_yield',[])
             yields[:]=[item for item in yields if item.get('round')!=state['round']]
             yields.append({'round':state['round'],'collection_attempt':attempt,'policy_id':policy,
@@ -1762,7 +1768,7 @@ def run(config_path, *, rounds=None, stop=None):
             history=state.setdefault('task_curriculum_history',{})
             for group in report.get('groups',[]):
                 if group.get('scored',0)>0:
-                    history[group['task_id']]={**group,'observed_policy_id':policy,
+                    history[group['task_id']]={**group,**counted[group['task_id']],'observed_policy_id':policy,
                         'observed_round':state['round'],'collection_attempt':attempt}
             # This idempotent latest observation is scheduling telemetry only.
             # Current-policy sampling probabilities remain in exact rollouts.
@@ -2075,6 +2081,7 @@ def adopt_policy_loss_defaults(config, state, state_path):
 
 TASK_CURRICULUM_V2_TRANSITION = 'task-curriculum-v2-spread-20261103'
 TASK_CURRICULUM_CLASS_QUOTA_TRANSITION = 'task-curriculum-class-quota-20261103'
+TASK_CURRICULUM_VISIT_DECAY_TRANSITION = 'task-curriculum-visit-decay-20261104'
 
 
 def adopt_task_curriculum_defaults(config, state, state_path, *, sealed_selection=False):
@@ -2106,11 +2113,14 @@ def adopt_task_curriculum_defaults(config, state, state_path, *, sealed_selectio
              'group': max(before['group'], adopted['min_group'])}
     if after == before:
         return config
-    # A /2 config that predates ``class_quota`` adopts the construct-share default through its own recorded transition.
+    # A /2 config that predates ``class_quota`` adopts the construct-share default through its own recorded transition;
+    # one that predates the per-row visit decay (visit_penalty/visit_cap/visit_cap_window) adopts it through its own.
     name = (TASK_CURRICULUM_V2_TRANSITION if schema == V1_SCHEMA or after['rows_per_round'] != before['rows_per_round']
-            or after['group'] != before['group'] else TASK_CURRICULUM_CLASS_QUOTA_TRANSITION)
+            or after['group'] != before['group'] else TASK_CURRICULUM_CLASS_QUOTA_TRANSITION if 'class_quota' not in current
+            else TASK_CURRICULUM_VISIT_DECAY_TRANSITION)
     record = {'schema': 'natlang.rl-task-curriculum-transition/1', 'transition': name,
-              'from': before, 'to': after, 'round': state.get('round')}
+              'from': before, 'to': after, 'round': state.get('round'),
+              'adopted_options': sorted(set(adopted) - set(current))}
     transitions = state.setdefault('task_curriculum_transitions', [])
     if not any(item.get('transition') == name and item.get('from') == before
                and item.get('to') == after for item in transitions):

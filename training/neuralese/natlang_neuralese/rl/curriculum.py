@@ -20,6 +20,15 @@ every round's rows. Rotating breadth keeps its exact cursor; the shortfall is
 filled from practice by the ordinary frontier, outcome and family-exploration
 order, restricted to that class. Rows are never duplicated and untagged pools
 (no row carries the class) select exactly as before.
+
+Visit decay (policy /2, 2026-11-04): a task whose outcome stays mixed keeps the spread the selector seeks, so without
+decay the same few rows are re-picked until they are memorised. Each observation carries the row's actual ``visits``
+and the rounds of its recent visits (``visit_rounds``, written by the controller). Practice then (a) charges every row
+``visit_penalty`` levels of frontier distance per doubling of its visits above the pool's typical (mean observed) visit
+count, and (b) ranks a row behind every other candidate once it has had ``visit_cap`` visits within the last
+``visit_cap_window`` rounds. The cap is a ranking, not a drop: a pool too small to fill the round still fills it, least
+recently over-visited rows last. Rotating breadth (its own cursor), ``class_quota`` shares, per-family frontiers and the
+``min_rows_per_round``/``min_group`` floor are untouched; unobserved rows have no visits.
 """
 import math
 
@@ -28,7 +37,9 @@ V2_SCHEMA='natlang.rl-task-curriculum/2'
 DEFAULT_V1={'schema':V1_SCHEMA,'breadth_fraction':.25,'promotion_success_rate':.6,
             'family_exploration_fraction':.5,'frontier_scope':'semantic-family'}
 DEFAULT={**DEFAULT_V1,'schema':V2_SCHEMA,'new_family_start':'median','spread_target':.3,
-         'difficulty_shift_limit':3,'min_rows_per_round':16,'min_group':8,'class_quota':{'effect_state':.34}}
+         'difficulty_shift_limit':3,'min_rows_per_round':16,'min_group':8,'class_quota':{'effect_state':.34},
+         'visit_penalty':1.0,'visit_cap':2,'visit_cap_window':50}
+VISIT_ROUNDS_KEPT=64  # observations retain this many most recent visit rounds; bounds visit_cap_window use
 V2_FIELDS=frozenset(DEFAULT)
 
 
@@ -77,6 +88,14 @@ def policy_options(value):
         if not isinstance(quota,dict) or any(not isinstance(name,str) or not name or type(share) not in (int,float)
                 or not math.isfinite(share) or not 0<=share<=1 for name,share in quota.items()) or sum(quota.values())>1:
             raise ValueError('task curriculum class_quota must map class names to shares in [0,1] summing to at most 1')
+        penalty=config['visit_penalty']
+        if type(penalty) not in (int,float) or not math.isfinite(penalty) or penalty<0:
+            raise ValueError('task curriculum visit_penalty must be finite and >= 0')
+        for key in ('visit_cap','visit_cap_window'):
+            if type(config[key]) is not int or config[key]<0:
+                raise ValueError('task curriculum '+key+' must be an integer >= 0')
+        if config['visit_cap']>VISIT_ROUNDS_KEPT:
+            raise ValueError('task curriculum visit_cap must not exceed the '+str(VISIT_ROUNDS_KEPT)+' retained visit rounds')
     return config
 
 
@@ -121,6 +140,28 @@ def difficulty_shift(stats,config):
         shift+=step
         if abs(shift)>=config['difficulty_shift_limit']:break
     return shift
+
+
+def record_visit(prior,round_number,limit=VISIT_ROUNDS_KEPT):
+    """Visit bookkeeping for one newly scored observation of a task, from its previous observation (or None).
+
+    Idempotent per round: a retried collection of the same round does not count twice. A prior observation that
+    predates visit tracking counts as one visit (a lower bound, never an over-count)."""
+    prior=prior or {}
+    visits=prior.get('visits') if type(prior.get('visits')) is int and prior['visits']>=0 else (1 if prior else 0)
+    rounds=[r for r in (prior.get('visit_rounds') or []) if type(r) is int]
+    if not prior:return {'visits':1,'visit_rounds':[round_number]}
+    if round_number in rounds or (not rounds and prior.get('observed_round')==round_number):
+        return {'visits':max(visits,1),'visit_rounds':rounds or [round_number]}
+    return {'visits':visits+1,'visit_rounds':(rounds+[round_number])[-limit:]}
+
+
+def _visits(group):
+    """(total visits, recent visit rounds) of an observation; an untracked observation is one visit."""
+    if not group:return 0,[]
+    visits=group.get('visits')
+    visits=visits if type(visits) is int and visits>=0 else 1
+    return visits,[r for r in (group.get('visit_rounds') or []) if type(r) is int]
 
 
 def _median_level(levels):
@@ -174,10 +215,25 @@ def select(cases,stats,budget,config):
                 if not scored or sum(group['mean']*group['scored'] for group in groups)/scored<config['promotion_success_rate']:
                     frontiers[family]=level;break
     breadth=breadth_rows(cases,budget,config);reserved=set(breadth)
+    penalty=config.get('visit_penalty',0) if v2 else 0
+    cap=config.get('visit_cap',0) if v2 else 0
+    window=config.get('visit_cap_window',0) if v2 else 0
+    counts=[_visits(group)[0] for group in observed.values()]
+    typical=max(1.,sum(counts)/len(counts)) if counts else 1.
+    now=1+max([group['observed_round'] for group in observed.values() if type(group.get('observed_round')) is int],default=-1)
+    def visit_cost(group):
+        """(capped, level penalty) from an observation's visits relative to the pool's typical visit count."""
+        visits,rounds=_visits(group)
+        capped=bool(cap and window and sum(1 for r in rounds if r>now-window)>=cap)
+        return capped,(penalty*math.log2(visits/typical) if penalty and visits>typical else 0.)
+    memo={}
     def priority(index):
+        if index in memo:return memo[index]
         task=tasks[index];group=observed.get(task['id']);mean=group['mean'] if group else None
         signal=0 if mean is not None and 0<mean<1 else 1 if mean is None else 2 if mean==0 else 3
-        return (abs(task['level']-frontiers[task['family']]),signal,(index-budget['offset'])%len(cases))
+        capped,extra=visit_cost(group)
+        memo[index]=(capped,abs(task['level']-frontiers[task['family']])+extra,signal,(index-budget['offset'])%len(cases))
+        return memo[index]
     practice=sorted((index for index in range(len(cases)) if index not in reserved),key=priority)
     count=min(budget['rows'],len(cases))
     slots=count-len(breadth)
@@ -211,13 +267,15 @@ def select(cases,stats,budget,config):
         exploration=representatives[:math.ceil(slots*config['family_exploration_fraction'])]
         picked=list(exploration);selected=set(exploration)
         families={tasks[index]['family'] for index in picked}
-        for index in candidates:
-            if len(picked)>=slots:break
-            if index not in selected and tasks[index]['family'] not in families:
-                picked.append(index);selected.add(index);families.add(tasks[index]['family'])
-        for index in candidates:
-            if len(picked)>=slots:break
-            if index not in selected:picked.append(index);selected.add(index)
+        # Rows at their visit cap rank behind every uncapped row, whatever their family.
+        for tier in ([i for i in candidates if not priority(i)[0]],[i for i in candidates if priority(i)[0]]):
+            for index in tier:
+                if len(picked)>=slots:break
+                if index not in selected and tasks[index]['family'] not in families:
+                    picked.append(index);selected.add(index);families.add(tasks[index]['family'])
+            for index in tier:
+                if len(picked)>=slots:break
+                if index not in selected:picked.append(index);selected.add(index)
         return picked
     chosen_practice=[]
     if v2:

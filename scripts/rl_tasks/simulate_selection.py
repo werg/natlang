@@ -64,7 +64,7 @@ def _top_share(picked, keys, total, top=8):
 
 def simulate(cases, *, rounds, rows, group, config, seed=1103, outcomes='level'):
     from natlang_neuralese.rl import production
-    from natlang_neuralese.rl.curriculum import metadata
+    from natlang_neuralese.rl.curriculum import metadata, record_visit
     rng = random.Random(seed)
     model = OutcomeModel(outcomes, random.Random(seed + 1))
     groups_total = groups_spread = 0
@@ -89,7 +89,8 @@ def simulate(cases, *, rounds, rows, group, config, seed=1103, outcomes='level')
             groups_spread += 0 < wins < item['samples']
             model.learned(family)
             history[row['id']] = {'task_id': row['id'], 'scored': item['samples'], 'mean': wins / item['samples'],
-                                  'spread': 0 < wins < item['samples'], 'observed_round': number}
+                                  'spread': 0 < wins < item['samples'], 'observed_round': number,
+                                  **record_visit(history.get(row['id']), number)}
         offset = (chosen[-1]['row'] + 1) % len(cases)
     tagged = {i for i, row in enumerate(cases) if metadata(row).get('mix_class') == 'effect_state'}
     strict = {i for i, f in enumerate(features) if f['effect_state_oracle']}
@@ -100,6 +101,7 @@ def simulate(cases, *, rounds, rows, group, config, seed=1103, outcomes='level')
     per_round_sorted = sorted(per_round)
     visits = sorted(picked.values())
     return {'rounds': rounds, 'rows_per_round': rows, 'group': group, 'pool_rows': len(cases), 'outcomes': outcomes,
+            'rows_with_20plus_visits': sum(1 for v in visits if v >= 20),
             'groups_sampled': groups_total, 'groups_with_outcome_spread': round(groups_spread / groups_total, 4),
             'visit_histogram': {'1': sum(1 for v in visits if v == 1), '2-4': sum(1 for v in visits if 2 <= v <= 4),
                                 '5-19': sum(1 for v in visits if 5 <= v <= 19), '20+': sum(1 for v in visits if v >= 20)},
@@ -142,17 +144,25 @@ def main(argv=None):
     parser.add_argument('--rows', type=int, default=16)
     parser.add_argument('--group', type=int, default=8)
     parser.add_argument('--compare-without-quota', action='store_true')
+    parser.add_argument('--no-visit-decay', action='store_true',
+                        help='disable the per-row visit decay (visit_penalty=0, visit_cap=0): the pre-2026-11-04 selector')
+    parser.add_argument('--visit-penalty', type=float, help='override visit_penalty (levels per doubling of visits)')
+    parser.add_argument('--visit-cap', type=int, help='override visit_cap')
+    parser.add_argument('--visit-cap-window', type=int, help='override visit_cap_window (rounds)')
     parser.add_argument('--outcomes', choices=('level', 'latent'), default='level',
                         help='synthetic outcome model: per-level pass rate, or per-task latent rates with family learning')
     parser.add_argument('-o', '--output', required=True)
     args = parser.parse_args(argv)
     from natlang_neuralese.rl.curriculum import DEFAULT
     cases = [json.loads(line) for line in open(args.cases) if line.strip()]
+    base = {**DEFAULT, 'visit_penalty': 0, 'visit_cap': 0} if args.no_visit_decay else DEFAULT
+    base = {**base, **{key: value for key, value in (('visit_penalty', args.visit_penalty), ('visit_cap', args.visit_cap),
+                                                      ('visit_cap_window', args.visit_cap_window)) if value is not None}}
     report = {'schema': 'natlang.rl-selection-simulation/1', 'cases': args.cases,
-              'config': DEFAULT, 'with_quota': simulate(cases, rounds=args.rounds, rows=args.rows, group=args.group, config=DEFAULT, outcomes=args.outcomes)}
+              'config': base, 'with_quota': simulate(cases, rounds=args.rounds, rows=args.rows, group=args.group, config=base, outcomes=args.outcomes)}
     if args.compare_without_quota:
         report['without_quota'] = simulate(cases, rounds=args.rounds, rows=args.rows, group=args.group,
-                                           config={**DEFAULT, 'class_quota': {}}, outcomes=args.outcomes)
+                                           config={**base, 'class_quota': {}}, outcomes=args.outcomes)
     Path(args.output).write_text(json.dumps(report, indent=1) + '\n')
     print(json.dumps(report))
     return 0
