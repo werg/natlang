@@ -933,13 +933,14 @@ def origin_referenced_files(run, spec, parent, have):
     model load (2026-11-04 corrected-mix-d1: corrected-mix/w000000/learner/packed-capacity-geometry absent). Full
     checkpoints stay historical blobs."""
     import re
-    import torch
     origins = [str(lineage_dir(run, origin)) + '/' for origin in spec.get('historical_from', [])]
     if not origins:
         return []
-    state = torch.load(parent, map_location='cpu', weights_only=False, mmap=True)
-    text = json.dumps(state.get('training'), default=lambda value: None)
-    del state
+    # The orchestration venv has no torch: read the frame with the learner environment (mmap, metadata only).
+    text = subprocess.run([str(REPO / '.venv-neuralese' / 'bin' / 'python'), '-c',
+                           'import json,sys,torch;s=torch.load(sys.argv[1],map_location="cpu",weights_only=False,'
+                           'mmap=True);print(json.dumps(s.get("training"),default=lambda v:None))', str(parent)],
+                          capture_output=True, text=True, check=True).stdout
     found = []
     for prefix in origins:
         for path in sorted(set(re.findall(re.escape(prefix) + r'[^"\\]*', text))):
