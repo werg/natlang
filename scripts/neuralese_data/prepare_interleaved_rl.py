@@ -220,10 +220,17 @@ def prepare(args):
     if closure.is_file():
         import subprocess
         commit = json.loads(closure.read_text()).get('commit')
+        checkout = Path(__file__).resolve().parents[2]
+        bundle = checkout / '.coreweave-code-commit'
+        # A cloud code bundle is a git archive without history: a runtime frozen at exactly the bundle's own commit
+        # contains every required commit this list names (each entry was added after its commit landed on main).
+        same_as_bundle = (not (checkout / '.git').exists() and bundle.is_file()
+                          and bundle.read_text().strip() == (commit or ''))
         for required, reason in REQUIRED_RUNTIME_COMMITS:
             # The frozen tree is a git archive (and NATLANG_REPO names it); ancestry is checked in the checkout this
-            # script runs from. Run it from the canonical checkout.
-            checkout = Path(__file__).resolve().parents[2]
+            # script runs from. Run it from the canonical checkout or a code bundle of the runtime's own commit.
+            if same_as_bundle:
+                continue
             if subprocess.run(['git', '-C', str(checkout), 'merge-base', '--is-ancestor', required,
                                commit or 'missing'], capture_output=True).returncode != 0:
                 raise SystemExit(f'frozen runtime {commit} predates {required}: {reason}')
