@@ -346,3 +346,10 @@ Run: `/home/werg/data/memetic-e2e-v3` (unit memetic-e2e3-3; actor bf95 `71c3eb45
   and false commit reasons. With n=4 per arm, a noise-level gain still earns a positive advantage. Production
   settings (24 query rollouts, noise about 0.1) narrow that; register M8 tracks realized noise against anchor gaps.
   There is no capability claim.
+
+**Writer 48-sample measurement after d6a581063** (`writer48-after`, bf95, actor shared with the e2e). Resolved runs
+completed 21/28. Runs that hit a truncated turn completed 10/11 (mostly in 2 turns), compared with 4/6 before (2 to 10
+turns). The remaining failures loop on `read_code` of the consumer's names until the wall-clock limit, now answered
+in the error (5b7a459eb). 20 runs got no first response within 15 minutes (saturated actor): they are unresolved, not
+outcomes. **Close-marker diagnostic:** see register C6 (ca52b1794). The close depends on body length and its
+effective weight, not on the site; a declared boundary weight is needed before native writing.
