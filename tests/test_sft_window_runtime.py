@@ -76,3 +76,11 @@ def test_composition_request_is_recorded_separately_from_memory_changes():
         sft_window.apply_memory_parameters(c, _memory_request(remove=['batch_tokens']), {})
     with pytest.raises(SystemExit):
         sft_window.apply_memory_parameters(c, _memory_request(set={'accumulate_batches': 0}), {})
+
+
+def test_next_cli_accepts_an_explicit_trainer_parameter_request(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(sft_window, 'next_window', lambda *a, **k: seen.update(k))
+    sft_window.main(['next', '--previous-config', 'p', '--out', 'o', '--config-out', 'c',
+                     '--trainer-parameter-request', '/r.json'])
+    assert seen['parameter_request'] == '/r.json'

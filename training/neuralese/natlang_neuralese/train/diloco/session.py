@@ -58,7 +58,9 @@ def prepare(args):
     window_tool = Path(args.window_tool).resolve()
     subprocess.run([sys.executable, str(window_tool), 'next', '--previous-config', args.boundary_config,
                     '--out', str(prep / 'out'), '--config-out', str(prep / 'config.json'), '--window', str(args.window),
-                    '--id', f'{args.run_id}-session', *(['--runtime', args.runtime] if args.runtime else [])],
+                    '--id', f'{args.run_id}-session', *(['--runtime', args.runtime] if args.runtime else []),
+                    *(['--trainer-parameter-request', args.trainer_parameter_request]
+                      if args.trainer_parameter_request else [])],
                    cwd=runtime, check=True)
     base = json.loads((prep / 'config.json').read_text())
     stage_id = base['production_stage']
@@ -170,6 +172,8 @@ def main(argv=None):
     p.add_argument('--python', help='default: this (the learner\'s) python')
     p.add_argument('--recipe', help='successor recipe to bind instead of the prepared window\'s own copy')
     p.add_argument('--runtime', help='frozen runtime for the session window (sft_window next --runtime)')
+    p.add_argument('--trainer-parameter-request', help='memory/composition trainer parameters for the session window '
+                   '(sft_window next --trainer-parameter-request)')
     p.add_argument('--window-tool', default=str(HERE.parents[4] / 'scripts' / 'neuralese_data' / 'sft_window.py'))
     r = commands.add_parser('relocate')
     r.add_argument('--session-dir', required=True)

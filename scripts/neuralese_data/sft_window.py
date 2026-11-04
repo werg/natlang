@@ -48,7 +48,8 @@ def _folded_admissions(training, options):
     return [e for e in history if isinstance(e, dict) and isinstance(e.get('qualification'), dict)]
 
 
-def next_window(previous_config, out, config_out, *, checkpoint_path=None, window=None, ident=None, runtime=None):
+def next_window(previous_config, out, config_out, *, checkpoint_path=None, window=None, ident=None, runtime=None,
+                parameter_request=None):
     """The next window from the previous window's actual earned boundary (generalizes the DGX
     prepare-earned-window-continuation operator; no host-only checks or wrappers)."""
     from natlang_neuralese.common.jsonio import write_json_durable
@@ -135,9 +136,12 @@ def next_window(previous_config, out, config_out, *, checkpoint_path=None, windo
     c.pop('rolling_sft_resume', None)  # a same-slot retry control never carries into a new window
     if checkpoint_path is not None:  # the same bytes at another lineage's path (a relocated cloud parent)
         c['checkpoint'] = str(checkpoint_path)
-    memory_request = previous.parent / TRAINER_PARAMETER_REQUEST
+    # An explicit request (e.g. the template window of a new elastic session, prepared outside the lineage directory)
+    # applies as given and is not consumed; the lineage's own request applies to its sibling next window.
+    memory_request = Path(parameter_request) if parameter_request else previous.parent / TRAINER_PARAMETER_REQUEST
     memory_transition = None
-    if memory_request.is_file() and Path(os.path.abspath(out)).parent == Path(os.path.abspath(previous)).parent:
+    if memory_request.is_file() and (parameter_request or
+                                     Path(os.path.abspath(out)).parent == Path(os.path.abspath(previous)).parent):
         memory_transition = apply_memory_parameters(c, json.loads(memory_request.read_text()), binding(memory_request))
     c['seed_trainer_parameters'] = copy.deepcopy(c['trainer_parameters'])
     if ident:
@@ -156,7 +160,7 @@ def next_window(previous_config, out, config_out, *, checkpoint_path=None, windo
                                  'controller_inheritance': 'omitted'} if folded else None),
         'new_optimizer_updates': 0, 'capability_lift_claimed': False}
     write_json_durable(config_out, c)
-    if memory_transition:
+    if memory_transition and not parameter_request:
         os.replace(memory_request, memory_request.with_name(memory_request.name + f'.consumed-{out.name}'))
     result = {'prepared': str(config_out), 'out': str(out), 'parent': ref, 'global_step': training['global_step'],
               'source_roles': sorted(sources),
@@ -609,6 +613,7 @@ def main(argv=None):
     p.add_argument('--window', type=int)
     p.add_argument('--id')
     p.add_argument('--runtime', help='frozen runtime for the new window (recorded runtime transition)')
+    p.add_argument('--trainer-parameter-request', help=f'an explicit {MEMORY_REQUEST_SCHEMA} request (not consumed)')
     p = sub.add_parser('rolling')
     p.add_argument('--config', required=True)
     p.add_argument('--config-out', required=True)
@@ -620,7 +625,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.command == 'next':
         next_window(args.previous_config, args.out, args.config_out, checkpoint_path=args.checkpoint_path,
-                    window=args.window, ident=args.id, runtime=args.runtime)
+                    window=args.window, ident=args.id, runtime=args.runtime,
+                    parameter_request=args.trainer_parameter_request)
     elif args.command == 'rolling':
         rolling(args.config, args.config_out)
     else:
