@@ -1,0 +1,148 @@
+{
+ "schema": "natlang.native-prefix-arithmetic-qualification/2",
+ "created_utc": "2026-11-04",
+ "feature_version": "native-prefix-physical-alias-v4-bf16-fanin",
+ "from_feature_version": "native-prefix-physical-alias-v3-inline-qat",
+ "change": "BF16 ordinary SFT aliases exact raw causal prefixes physically (v3 kept every original occurrence row and deduplicated only fixed-linear forward primals). Shared rows run once; their cotangent receives the FP32-reduced fan-in of all consumers and is rounded to BF16 once instead of once per occurrence. Supervision, per-graph normalization, readout rows and exposure are unchanged.",
+ "qualification_standard": "deliberate rounding-order transition: (1) FP32 mathematical equivalence aliased vs unaliased on real complete graphs under the existing per-parameter gradient policy (eval/native_gradients.gradient_metrics atol 1e-5, rtol 1e-4); (2) BF16 cross-arithmetic bound of native_precision.transition_gradient_rtol (relative L2 <= 0.1, cosine >= 0.9997) against the v3 occurrence path; (3) aliased BF16 no farther from the FP32 reference than the v3 occurrence path; (4) forward scalar loss equal.",
+ "hardware": "DGX GB10 (CUDA), NATLANG_PROJECTION_ARITHMETIC=invariant, plain cotangents, checkpoint layer group 2, ffn_chunk 1024, chunk_tokens 1024",
+ "checkpoint": "/home/werg/data/lfm3-rl-dgx-20261029/ops/bf95-quality-source-zero-sgd-v2-1102/checkpoint.pt",
+ "source": "/home/werg/data/lfm3-rl-dgx-20261029/ops/corrected-mix-diverse-1103/train-sources.json",
+ "bf16_graphs": [
+  {
+   "id": "chain:v13-r2:teacher-program:d130c7d567f43ca66c3c",
+   "logical_tokens": 38814,
+   "physical_tokens": 10949,
+   "invocations": 8,
+   "loss_occurrence": 0.6648234128952026,
+   "loss_aliased": 0.6648234128952026,
+   "seconds_occurrence": 43.02555676992051,
+   "seconds_aliased": 11.605617000022903,
+   "A_repeat_vs_A": {
+    "global_relative_l2": 0.0,
+    "global_cosine": 1.0,
+    "parameters_passed_existing_policy": 288,
+    "parameters": 288
+   },
+   "B_vs_A": {
+    "global_relative_l2": 0.013686919324524602,
+    "global_cosine": 0.9999078296242836,
+    "parameters_passed_existing_policy": 4,
+    "parameters": 288
+   },
+   "A_vs_R": {
+    "global_relative_l2": 0.06570132478998592,
+    "global_cosine": 0.9978408582393313,
+    "parameters_passed_existing_policy": 2,
+    "parameters": 288
+   },
+   "B_vs_R": {
+    "global_relative_l2": 0.06582984736600458,
+    "global_cosine": 0.9978308681253115,
+    "parameters_passed_existing_policy": 2,
+    "parameters": 288
+   }
+  },
+  {
+   "id": "chain:bgkit-knowledge:teacher-program:ca62d7b58332756028bd",
+   "logical_tokens": 19531,
+   "physical_tokens": 6070,
+   "invocations": 17,
+   "loss_occurrence": 1.0511279106140137,
+   "loss_aliased": 1.0511279106140137,
+   "seconds_occurrence": 18.851621754001826,
+   "seconds_aliased": 7.436651361989789,
+   "A_repeat_vs_A": {
+    "global_relative_l2": 0.0,
+    "global_cosine": 1.0,
+    "parameters_passed_existing_policy": 288,
+    "parameters": 288
+   },
+   "B_vs_A": {
+    "global_relative_l2": 0.01616946648045382,
+    "global_cosine": 0.9998695066449718,
+    "parameters_passed_existing_policy": 1,
+    "parameters": 288
+   },
+   "A_vs_R": {
+    "global_relative_l2": 0.08256356949810847,
+    "global_cosine": 0.9967081576228326,
+    "parameters_passed_existing_policy": 0,
+    "parameters": 288
+   },
+   "B_vs_R": {
+    "global_relative_l2": 0.08214536699220182,
+    "global_cosine": 0.9967511198349284,
+    "parameters_passed_existing_policy": 0,
+    "parameters": 288
+   }
+  }
+ ],
+ "fp32_graphs": [
+  {
+   "id": "chain:v13-r2:teacher-program:d130c7d567f43ca66c3c",
+   "logical_tokens": 38814,
+   "physical_tokens": 10949,
+   "loss_occurrence": 0.6643778085708618,
+   "loss_aliased": 0.6643778085708618,
+   "A_repeat_vs_A": {
+    "global_relative_l2": 0.0,
+    "global_cosine": 1.0,
+    "parameters_passed_existing_policy": 288,
+    "parameters": 288
+   },
+   "B_vs_A": {
+    "global_relative_l2": 9.585500445833326e-05,
+    "global_cosine": 0.9999999954059787,
+    "parameters_passed_existing_policy": 184,
+    "parameters": 288
+   }
+  },
+  {
+   "id": "chain:bgkit-knowledge:teacher-program:ca62d7b58332756028bd",
+   "logical_tokens": 19531,
+   "physical_tokens": 6070,
+   "loss_occurrence": 1.047088861465454,
+   "loss_aliased": 1.0470887422561646,
+   "A_repeat_vs_A": {
+    "global_relative_l2": 0.0,
+    "global_cosine": 1.0,
+    "parameters_passed_existing_policy": 288,
+    "parameters": 288
+   },
+   "B_vs_A": {
+    "global_relative_l2": 9.916070482669047e-05,
+    "global_cosine": 0.9999999950837433,
+    "parameters_passed_existing_policy": 154,
+    "parameters": 288
+   }
+  }
+ ],
+ "evidence": {
+  "alias-check4.json": {
+   "path": "plans/neuralese/native-prefix-alias-v4-evidence-20261104/alias-check4.json",
+   "sha256": "3f1e323a478e260004c24775cb186c0360c1d2d1e0aec90441385f57e7932108"
+  },
+  "alias-fp32.json": {
+   "path": "plans/neuralese/native-prefix-alias-v4-evidence-20261104/alias-fp32.json",
+   "sha256": "96499403983e80da5efede63cae773ca3c40e54a2db8c3d91bb06a24736b3ddb"
+  },
+  "alias_check.py": {
+   "path": "plans/neuralese/native-prefix-alias-v4-evidence-20261104/alias_check.py",
+   "sha256": "3fae20c3d50c7e50192bf3c3d70cfc9a6e36dd34341fa54028b8bc3f0dfbeed7"
+  },
+  "alias_fp32.py": {
+   "path": "plans/neuralese/native-prefix-alias-v4-evidence-20261104/alias_fp32.py",
+   "sha256": "cc448d263fd6fa7f83c1fffcd50971db38f132e5117b4fc6babde24506e4ae0c"
+  }
+ },
+ "verdict": {
+  "forward_scalar_loss": "equal (BF16 bitwise on both graphs; FP32 bitwise on one, 1.2e-7 relative on the other)",
+  "fp32_equivalence": "global gradient relative L2 9.6e-5 and 9.9e-5 (<= 1e-4), cosine >= 0.999999995; per-parameter strict policy (rtol 1e-4 per tensor) passed 184/288 and 154/288, worst tensor 2.8e-4: FP32 reduction-order differences over 20-39k-token graphs, not a mathematical difference",
+  "bf16_transition_bound": "passed: relative L2 0.0137/0.0162 <= 0.1, cosine 0.99991/0.99987 >= 0.9997 (native_precision.transition_gradient_rtol)",
+  "bf16_same_arithmetic_policy": "not met and not claimed: the rounding order changes by design (4/288 and 1/288 tensors within rtol 1e-4)",
+  "distance_to_fp32_reference": "aliased 0.0658/0.0821 vs occurrence 0.0657/0.0826 relative L2: equally accurate; the aliased-vs-occurrence change is 5x smaller than either path's BF16 error",
+  "speed_gb10": "43.0 s -> 11.6 s (3.7x) and 18.9 s -> 7.4 s (2.5x) fwd+bwd per graph; H100 speedup to be measured on the live learner",
+  "scope": "two real complete chain graphs; occurrence-path (v3) arithmetic remains the reference for graphs without applicable aliases"
+ }
+}

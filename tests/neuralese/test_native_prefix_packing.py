@@ -64,11 +64,17 @@ def test_prefix_logits_loss_and_all_gradients_match_disjoint_packing(family,chec
             torch.testing.assert_close(parameter.grad,other.grad,atol=3e-6,rtol=2e-4,msg=name)
 
 
-def test_bf16_ordinary_sft_keeps_original_gradient_occurrences():
+def test_bf16_ordinary_sft_aliases_raw_prefixes_with_bounded_gradient_change():
+    """Prefix arithmetic v4: BF16 ordinary SFT aliases exact raw prefixes physically.
+
+    Shared rows receive the summed cotangent of all consumers, a deliberate
+    rounding-order transition from per-occurrence BF16 cotangents. The scalar
+    CE and supervision are unchanged; gradients agree within the transition bound.
+    """
     from natlang_neuralese.train.native_prefix_packing import ordinary_sft_physical_sharing_enabled
     model=SharedStateModel(tiny('lfm').to(dtype=torch.bfloat16),(58,59,60,61),rank=4)
-    assert not ordinary_sft_physical_sharing_enabled(model, True)
-    assert ordinary_sft_physical_sharing_enabled(SharedStateModel(tiny('lfm'),(58,59,60,61),rank=4), True)
+    assert ordinary_sft_physical_sharing_enabled(model, True)
+    assert not ordinary_sft_physical_sharing_enabled(model, False)
     with torch.no_grad():model.adapter.up.weight.normal_(std=.1)
     for parameter in model.port.parameters():parameter.requires_grad_(True)
     reference=copy.deepcopy(model);rows=examples()
@@ -77,18 +83,20 @@ def test_bf16_ordinary_sft_keeps_original_gradient_occurrences():
     unshared,unshared_details=packed_graph_loss(reference,rows,share_causal_prefixes=False,
         checkpoint_layers=False,chunk_tokens=2)
     shared.backward();unshared.backward()
-    assert shared_details[0]['packed_physical_tokens'] == shared_details[0]['original_physical_tokens']
+    assert shared_details[0]['packed_physical_tokens'] < shared_details[0]['original_physical_tokens']
     assert shared_details[0]['supervised_tokens'] == unshared_details[0]['supervised_tokens']
     assert shared_details[0]['readout_forward_rows'] == shared_details[0]['readout_original_rows']
-    torch.testing.assert_close(shared.detach(),unshared.detach(),atol=0,rtol=0)
+    torch.testing.assert_close(shared.detach().float(),unshared.detach().float(),atol=2e-2,rtol=1e-2)
     actual=[];expected=[]
     for (name,parameter),(other_name,other) in zip(model.named_parameters(),reference.named_parameters()):
         assert name==other_name and (parameter.grad is None)==(other.grad is None),name
         if parameter.grad is not None:
-            actual.append(parameter.grad.detach().float().flatten())
-            expected.append(other.grad.detach().float().flatten())
+            actual.append(parameter.grad.detach().double().flatten())
+            expected.append(other.grad.detach().double().flatten())
     actual=torch.cat(actual);expected=torch.cat(expected)
-    torch.testing.assert_close(actual, expected, atol=0, rtol=0)
+    relative=float((actual-expected).norm()/expected.norm())
+    cosine=float(actual@expected/(actual.norm()*expected.norm()))
+    assert relative <= .1 and cosine >= .9997, (relative, cosine)
 
 
 def test_authenticated_producing_or_imported_graphs_alias_only_initial_raw_context():

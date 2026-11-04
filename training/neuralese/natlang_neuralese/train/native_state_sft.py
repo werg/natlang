@@ -769,10 +769,10 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
         raise ValueError('native graph has no ordinary CE targets; its declared offline/policy objective is required')
     targeted_graphs = sum(targeted)
     from .native_prefix_packing import pack_causal_prefixes, ordinary_sft_physical_sharing_enabled
-    # BF16 physical aliasing changes cotangent accumulation and can change real
-    # optimizer steps. Keep every original SFT row and use the separately
-    # proven fixed-linear primal reuse below, whose custom VJP retains each
-    # occurrence. Capacity must consequently count the actual unshared graph.
+    # Exact raw prefixes alias physically in every dtype (prefix arithmetic v4):
+    # shared rows run once and receive the cotangent fan-in of all consumers.
+    # Graphs without an applicable alias keep the fixed-linear primal reuse
+    # below. Capacity measures the same packed physical graph.
     if objective is None:
         share = ordinary_sft_physical_sharing_enabled(model, share_causal_prefixes)
         allow_communication = share and allow_communication_prefixes

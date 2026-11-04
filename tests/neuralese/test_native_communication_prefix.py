@@ -99,7 +99,8 @@ def test_outputs_kv_hybrid_and_complete_ce_gradients_match_explicit_cached_execu
     assert model.adapter.up.weight.grad.norm()>0
 
 
-def test_bf16_sft_keeps_occurrences_and_preserves_producer_consumer_supervision():
+def test_bf16_sft_aliases_raw_context_and_preserves_producer_consumer_supervision():
+    """Prefix arithmetic v4: raw initial context aliases in BF16; supervision is unchanged."""
     model=SharedStateModel(tiny('lfm').to(dtype=torch.bfloat16),(58,59,60,61),rank=4)
     for parameter in model.port.parameters():parameter.requires_grad_(True)
     reference=copy.deepcopy(model);rows=episodes(empty_relay=True)
@@ -107,19 +108,21 @@ def test_bf16_sft_keeps_occurrences_and_preserves_producer_consumer_supervision(
         checkpoint_layers=False,chunk_tokens=2)
     expected,expected_details=packed_graph_loss(reference,rows,share_causal_prefixes=False,
         checkpoint_layers=False,chunk_tokens=2)
-    assert actual_details[0]['packed_physical_tokens'] == actual_details[0]['original_physical_tokens']
+    assert actual_details[0]['packed_physical_tokens'] < actual_details[0]['original_physical_tokens']
     assert [item['supervised_tokens'] for item in actual_details] == [item['supervised_tokens'] for item in expected_details]
     assert [item['boundary_targets'] for item in actual_details] == [item['boundary_targets'] for item in expected_details]
-    torch.testing.assert_close(actual.detach(),expected.detach(),atol=0,rtol=0)
+    torch.testing.assert_close(actual.detach().float(),expected.detach().float(),atol=2e-2,rtol=1e-2)
     actual.backward();expected.backward()
     actual_gradients=[];expected_gradients=[]
     for (name,left),(other_name,right) in zip(model.named_parameters(),reference.named_parameters()):
         assert name==other_name and (left.grad is None)==(right.grad is None),name
         if left.grad is not None:
-            actual_gradients.append(left.grad.detach().float().flatten())
-            expected_gradients.append(right.grad.detach().float().flatten())
+            actual_gradients.append(left.grad.detach().double().flatten())
+            expected_gradients.append(right.grad.detach().double().flatten())
     actual_gradients=torch.cat(actual_gradients);expected_gradients=torch.cat(expected_gradients)
-    torch.testing.assert_close(actual_gradients, expected_gradients, atol=0, rtol=0)
+    relative=float((actual_gradients-expected_gradients).norm()/expected_gradients.norm())
+    cosine=float(actual_gradients@expected_gradients/(actual_gradients.norm()*expected_gradients.norm()))
+    assert relative <= .1 and cosine >= .9997, (relative, cosine)
 
 
 def test_qat_sampled_precision_gates_communication_prefix_packing_on_tiny_graphs():
@@ -134,8 +137,8 @@ def test_qat_sampled_precision_gates_communication_prefix_packing_on_tiny_graphs
         allow_communication_prefixes=_communication_prefix_allowed(None,bf16_precision))
     _,fp8_details=packed_graph_loss(model,rows,share_causal_prefixes=True,
         allow_communication_prefixes=_communication_prefix_allowed(None,fp8_precision))
-    assert bf16_details[0]['packed_physical_tokens'] == bf16_details[0]['original_physical_tokens']
-    assert fp8_details[0]['packed_physical_tokens'] == fp8_details[0]['original_physical_tokens']
+    assert bf16_details[0]['packed_physical_tokens'] < bf16_details[0]['original_physical_tokens']
+    assert fp8_details[0]['packed_physical_tokens'] < fp8_details[0]['original_physical_tokens']
 
 
 @pytest.mark.parametrize('point,fmt,activation', [
@@ -212,8 +215,8 @@ def test_inline_qat_communication_prefixes_keep_primal_gradients_and_graph_custo
         checkpoint_layers=False,chunk_tokens=2,precision=precision)
     expected,expected_details=native_training_update(reference,reference_optimizer,rows,
         checkpoint_layers=False,chunk_tokens=2,precision=(reference_q,point,.5,1.))
-    # BF16 SFT preserves physical occurrences, including with inline QAT.
-    assert actual_details[0]['packed_physical_tokens'] == actual_details[0]['original_physical_tokens']
+    # Prefix arithmetic v4: BF16 SFT aliases raw context, including with inline QAT.
+    assert actual_details[0]['packed_physical_tokens'] < actual_details[0]['original_physical_tokens']
     assert [item['supervised_tokens'] for item in actual_details] == [item['supervised_tokens'] for item in expected_details]
     assert [item['boundary_targets'] for item in actual_details] == [item['boundary_targets'] for item in expected_details]
     loss_abs=float((actual.detach().float()-expected.detach().float()).abs())

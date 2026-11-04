@@ -20,7 +20,7 @@ from test_shared_state import tiny
 
 
 @pytest.mark.parametrize('cotangent_backend,expected_mode',[('plain','plain'),('cpu_file','vjp')])
-def test_bf16_capacity_reports_actual_original_forward_and_slot_geometry(tmp_path, monkeypatch,cotangent_backend,expected_mode):
+def test_bf16_capacity_reports_actual_aliased_forward_and_slot_geometry(tmp_path, monkeypatch,cotangent_backend,expected_mode):
     from natlang_neuralese.train.native_prefix_packing import pack_causal_prefixes
     from natlang_neuralese.train.native_state_sft import pack_native_graphs
     path = tmp_path/'train.jsonl'
@@ -44,8 +44,9 @@ def test_bf16_capacity_reports_actual_original_forward_and_slot_geometry(tmp_pat
         [(0,[0,1],False)], args, backend=None, checkpoint_sha256='a'*64, global_step=17,
         prior_geometry=initial_geometry)
     proof = json.loads(Path(reference['proof']['path']).read_text())
-    assert proof['physical_geometry'] == [{'forward_tokens':expected.token_count,
-                                           'kv_slots':len(expected.slot_sources)}]
+    # Prefix arithmetic v4: BF16 capacity measures the physically aliased graph the learner runs.
+    assert proof['physical_geometry'] == [{'forward_tokens':shared.token_count,
+                                           'kv_slots':len(shared.slot_sources)}]
     assert calls[0][1]['production_packing'] is True
     assert calls[0][1]['cotangent_mode'] == expected_mode
 

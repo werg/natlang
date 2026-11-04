@@ -1,3 +1,24 @@
+## BF16 SFT aliases exact raw prefixes physically (engineering, 2026-11-04)
+
+Prefix arithmetic v4 (`native-prefix-physical-alias-v4-bf16-fanin`) supersedes
+the 2026-11-02 occurrence-row rule below. Corrected-mix updates are dominated
+by chain graphs. These re-render their whole history per invocation, so 82% of
+projection rows were duplicate raw prefixes. v3 deduplicated only forward linear
+primals, and every duplicate still ran attention/conv and full backward. v4
+runs each exact raw prefix row once; its cotangent receives the FP32-reduced
+fan-in of all consumers. Supervision, normalization, readout rows, exposure and
+capacity geometry follow the actual aliased graph. Qualification is a declared
+rounding-order transition on real complete graphs
+(`plans/neuralese/native-prefix-arithmetic-qualification-20261104.json`):
+- forward loss is equal;
+- FP32 aliased vs unaliased has global gradient relative L2 <= 1e-4;
+- BF16 gradients stay within the transition bound (relative L2 0.014-0.016,
+  cosine >= 0.99987);
+- BF16 is as close to the FP32 reference as v3 (0.066/0.082 vs 0.066/0.083).
+It is not a same-arithmetic 1e-4 match; do not claim one. GB10 per-graph
+fwd+bwd was 2.5-3.7x faster. Resumes adopt v4 through
+`prefix_sharing_arithmetic_history`.
+
 ## Promoted packed groups retain forward-only source reads (engineering, 2026-11-03)
 
 Focus reader identity must bind the first missing visit, matching one-time

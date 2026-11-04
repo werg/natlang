@@ -1,0 +1,163 @@
+{
+ "checkpoint": "/home/werg/data/lfm3-rl-dgx-20261029/ops/bf95-quality-source-zero-sgd-v2-1102/checkpoint.pt",
+ "graphs": [
+  {
+   "id": "chain:v13-r2:teacher-program:d130c7d567f43ca66c3c",
+   "forward_tokens": 38814,
+   "invocations": 8,
+   "A": {
+    "loss": 0.6643778085708618,
+    "seconds": 263.3847012480255,
+    "peak_gb": 21.630877184,
+    "physical_tokens": 38814
+   },
+   "A_repeat": {
+    "loss": 0.6643778085708618,
+    "seconds": 354.6042943240609,
+    "peak_gb": 21.630877184,
+    "physical_tokens": 38814
+   },
+   "A_repeat_vs_A": {
+    "global_relative_l2": 0.0,
+    "global_cosine": 1.0,
+    "parameters_passed_existing_policy": 288,
+    "parameters": 288,
+    "worst_relative_l2": [
+     [
+      0.0,
+      "port.hf.model.layers.9.post_operator_norm.weight"
+     ],
+     [
+      0.0,
+      "port.hf.model.layers.9.post_ffn_norm.weight"
+     ],
+     [
+      0.0,
+      "port.hf.model.layers.9.operator_norm.weight"
+     ],
+     [
+      0.0,
+      "port.hf.model.layers.9.ffn_norm.weight"
+     ],
+     [
+      0.0,
+      "port.hf.model.layers.9.feed_forward.w3.weight"
+     ]
+    ]
+   },
+   "B": {
+    "loss": 0.6643778085708618,
+    "seconds": 117.51195409009233,
+    "peak_gb": 19.319542272,
+    "physical_tokens": 10949
+   },
+   "B_vs_A": {
+    "global_relative_l2": 9.585500445833326e-05,
+    "global_cosine": 0.9999999954059787,
+    "parameters_passed_existing_policy": 184,
+    "parameters": 288,
+    "worst_relative_l2": [
+     [
+      0.00027562594259411316,
+      "port.hf.model.layers.2.self_attn.gate_proj.weight"
+     ],
+     [
+      0.0002537279458138303,
+      "port.hf.model.layers.1.conv.in_proj.weight"
+     ],
+     [
+      0.0002470615802986193,
+      "port.hf.model.layers.2.self_attn.k_proj.weight"
+     ],
+     [
+      0.00023023521826529548,
+      "port.hf.model.layers.1.feed_forward.w1.weight"
+     ],
+     [
+      0.00023015283250489365,
+      "port.hf.model.layers.0.conv.in_proj.weight"
+     ]
+    ]
+   }
+  },
+  {
+   "id": "chain:bgkit-knowledge:teacher-program:ca62d7b58332756028bd",
+   "forward_tokens": 19531,
+   "invocations": 17,
+   "A": {
+    "loss": 1.047088861465454,
+    "seconds": 116.0061767490115,
+    "peak_gb": 16.84905728,
+    "physical_tokens": 19531
+   },
+   "A_repeat": {
+    "loss": 1.047088861465454,
+    "seconds": 107.0813177889213,
+    "peak_gb": 16.84905728,
+    "physical_tokens": 19531
+   },
+   "A_repeat_vs_A": {
+    "global_relative_l2": 0.0,
+    "global_cosine": 1.0,
+    "parameters_passed_existing_policy": 288,
+    "parameters": 288,
+    "worst_relative_l2": [
+     [
+      0.0,
+      "port.hf.model.layers.9.post_operator_norm.weight"
+     ],
+     [
+      0.0,
+      "port.hf.model.layers.9.post_ffn_norm.weight"
+     ],
+     [
+      0.0,
+      "port.hf.model.layers.9.operator_norm.weight"
+     ],
+     [
+      0.0,
+      "port.hf.model.layers.9.ffn_norm.weight"
+     ],
+     [
+      0.0,
+      "port.hf.model.layers.9.feed_forward.w3.weight"
+     ]
+    ]
+   },
+   "B": {
+    "loss": 1.0470887422561646,
+    "seconds": 29.411385543993674,
+    "peak_gb": 16.355254272,
+    "physical_tokens": 6070
+   },
+   "B_vs_A": {
+    "global_relative_l2": 9.916070482669047e-05,
+    "global_cosine": 0.9999999950837433,
+    "parameters_passed_existing_policy": 154,
+    "parameters": 288,
+    "worst_relative_l2": [
+     [
+      0.0002233015175577749,
+      "port.hf.model.layers.16.self_attn.k_proj.weight"
+     ],
+     [
+      0.00022055701853800015,
+      "port.hf.model.layers.2.self_attn.k_proj.weight"
+     ],
+     [
+      0.0002122916137829514,
+      "port.hf.model.layers.18.self_attn.q_proj.weight"
+     ],
+     [
+      0.00020413212439821204,
+      "port.hf.model.layers.4.self_attn.k_proj.weight"
+     ],
+     [
+      0.00020261525218410103,
+      "port.hf.model.layers.1.conv.in_proj.weight"
+     ]
+    ]
+   }
+  }
+ ]
+}

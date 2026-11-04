@@ -8,15 +8,26 @@ declare support read every action through the returned original-token row maps
 """
 from ..model.native_graph_plan import Invocation, ImportSpan, compile_graph
 
-PREFIX_ARITHMETIC_VERSION = 'native-prefix-physical-alias-v3-inline-qat'
-PREFIX_ARITHMETIC_QUALIFICATION_PATH = 'plans/neuralese/native-prefix-arithmetic-qualification-20261031.json'
-PREFIX_ARITHMETIC_QUALIFICATION_SHA256 = '9b8ab874c5246ae591fcc970d5910db00a76082202cb0dd4b2a7a6f6699e840d'
+PREFIX_ARITHMETIC_VERSION = 'native-prefix-physical-alias-v4-bf16-fanin'
+PREFIX_ARITHMETIC_QUALIFICATION_PATH = 'plans/neuralese/native-prefix-arithmetic-qualification-20261104.json'
+PREFIX_ARITHMETIC_QUALIFICATION_SHA256 = '1014e99daa59267c3af87c1c0149235e54563e3dab919ac2eaea5c58e2f4bdd3'
 
 
 def ordinary_sft_physical_sharing_enabled(model, requested):
-    """Match learner geometry while retaining BF16 occurrence cotangents."""
-    import torch
-    return bool(requested and model.port.embedding_weight.dtype != torch.bfloat16)
+    """Alias exact raw causal prefixes in every activation dtype (v4).
+
+    v3 kept BF16 ordinary SFT on original occurrence rows, deduplicating only
+    fixed-linear forward primals: every duplicated prefix row still ran
+    attention/convolution and its full backward. Chain graphs re-render their
+    whole history per invocation (5-8x logical/physical), so v4 computes each
+    shared prefix row once and lets its cotangent receive the fan-in of all
+    consumers (FP32 inside the attention/convolution reductions, one BF16
+    rounding of the summed cotangent instead of one per occurrence). This is a
+    deliberate rounding-order transition, recorded through the prefix
+    arithmetic history and qualified on real complete graphs against both the
+    occurrence path and an FP32 reference (PREFIX_ARITHMETIC_QUALIFICATION_PATH).
+    """
+    return bool(requested)
 
 
 def pack_causal_prefixes(examples, *, allow_communication=True):

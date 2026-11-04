@@ -1,0 +1,287 @@
+{
+ "checkpoint": "/home/werg/data/lfm3-rl-dgx-20261029/ops/bf95-quality-source-zero-sgd-v2-1102/checkpoint.pt",
+ "graphs": [
+  {
+   "id": "chain:v13-r2:teacher-program:d130c7d567f43ca66c3c",
+   "forward_tokens": 38814,
+   "invocations": 8,
+   "A": {
+    "loss": 0.6648234128952026,
+    "seconds": 43.02555676992051,
+    "peak_gb": 10.42701568,
+    "physical_tokens": 38814
+   },
+   "A_repeat": {
+    "loss": 0.6648234128952026,
+    "seconds": 38.23381831403822,
+    "peak_gb": 10.42701568,
+    "physical_tokens": 38814
+   },
+   "A_repeat_vs_A": {
+    "global_relative_l2": 0.0,
+    "global_cosine": 1.0,
+    "parameters_passed_existing_policy": 288,
+    "parameters": 288,
+    "worst_relative_l2": [
+     [
+      0.0,
+      "port.hf.model.layers.9.post_operator_norm.weight"
+     ],
+     [
+      0.0,
+      "port.hf.model.layers.9.post_ffn_norm.weight"
+     ],
+     [
+      0.0,
+      "port.hf.model.layers.9.operator_norm.weight"
+     ],
+     [
+      0.0,
+      "port.hf.model.layers.9.ffn_norm.weight"
+     ],
+     [
+      0.0,
+      "port.hf.model.layers.9.feed_forward.w3.weight"
+     ]
+    ]
+   },
+   "B": {
+    "loss": 0.6648234128952026,
+    "seconds": 11.605617000022903,
+    "peak_gb": 10.374895616,
+    "physical_tokens": 10949
+   },
+   "B_vs_A": {
+    "global_relative_l2": 0.013686919324524602,
+    "global_cosine": 0.9999078296242836,
+    "parameters_passed_existing_policy": 4,
+    "parameters": 288,
+    "worst_relative_l2": [
+     [
+      0.07054294009179948,
+      "port.hf.model.layers.14.self_attn.q_norm.weight"
+     ],
+     [
+      0.06871190720474679,
+      "port.hf.model.layers.8.self_attn.q_norm.weight"
+     ],
+     [
+      0.06796424284503771,
+      "port.hf.model.layers.6.self_attn.q_norm.weight"
+     ],
+     [
+      0.06694444890575134,
+      "port.hf.model.layers.12.self_attn.q_norm.weight"
+     ],
+     [
+      0.06688981484954341,
+      "port.hf.model.layers.2.self_attn.q_norm.weight"
+     ]
+    ]
+   },
+   "R": {
+    "loss": 0.6643778085708618,
+    "seconds": 93.13241223397199,
+    "peak_gb": 19.319542272,
+    "physical_tokens": 10949
+   },
+   "A_vs_R": {
+    "global_relative_l2": 0.06570132478998592,
+    "global_cosine": 0.9978408582393313,
+    "parameters_passed_existing_policy": 2,
+    "parameters": 288,
+    "worst_relative_l2": [
+     [
+      0.30341366304563316,
+      "port.hf.model.layers.2.operator_norm.weight"
+     ],
+     [
+      0.1965414994632285,
+      "port.hf.model.layers.2.self_attn.q_norm.weight"
+     ],
+     [
+      0.17044564341468108,
+      "port.hf.model.layers.2.self_attn.k_norm.weight"
+     ],
+     [
+      0.16753539295765163,
+      "port.hf.model.layers.2.self_attn.q_proj.weight"
+     ],
+     [
+      0.15838957674212217,
+      "port.hf.model.layers.2.self_attn.k_proj.weight"
+     ]
+    ]
+   },
+   "B_vs_R": {
+    "global_relative_l2": 0.06582984736600458,
+    "global_cosine": 0.9978308681253115,
+    "parameters_passed_existing_policy": 2,
+    "parameters": 288,
+    "worst_relative_l2": [
+     [
+      0.3012324105084206,
+      "port.hf.model.layers.2.operator_norm.weight"
+     ],
+     [
+      0.1834915870809841,
+      "port.hf.model.layers.2.self_attn.q_norm.weight"
+     ],
+     [
+      0.1699629717437697,
+      "port.hf.model.layers.2.self_attn.k_norm.weight"
+     ],
+     [
+      0.16760735427318718,
+      "port.hf.model.layers.2.self_attn.q_proj.weight"
+     ],
+     [
+      0.15911985692620814,
+      "port.hf.model.layers.2.self_attn.k_proj.weight"
+     ]
+    ]
+   }
+  },
+  {
+   "id": "chain:bgkit-knowledge:teacher-program:ca62d7b58332756028bd",
+   "forward_tokens": 19531,
+   "invocations": 17,
+   "A": {
+    "loss": 1.0511279106140137,
+    "seconds": 18.851621754001826,
+    "peak_gb": 8.505414656,
+    "physical_tokens": 19531
+   },
+   "A_repeat": {
+    "loss": 1.0511279106140137,
+    "seconds": 18.752336209989153,
+    "peak_gb": 8.505414656,
+    "physical_tokens": 19531
+   },
+   "A_repeat_vs_A": {
+    "global_relative_l2": 0.0,
+    "global_cosine": 1.0,
+    "parameters_passed_existing_policy": 288,
+    "parameters": 288,
+    "worst_relative_l2": [
+     [
+      0.0,
+      "port.hf.model.layers.9.post_operator_norm.weight"
+     ],
+     [
+      0.0,
+      "port.hf.model.layers.9.post_ffn_norm.weight"
+     ],
+     [
+      0.0,
+      "port.hf.model.layers.9.operator_norm.weight"
+     ],
+     [
+      0.0,
+      "port.hf.model.layers.9.ffn_norm.weight"
+     ],
+     [
+      0.0,
+      "port.hf.model.layers.9.feed_forward.w3.weight"
+     ]
+    ]
+   },
+   "B": {
+    "loss": 1.0511279106140137,
+    "seconds": 7.436651361989789,
+    "peak_gb": 8.5352576,
+    "physical_tokens": 6070
+   },
+   "B_vs_A": {
+    "global_relative_l2": 0.01616946648045382,
+    "global_cosine": 0.9998695066449718,
+    "parameters_passed_existing_policy": 1,
+    "parameters": 288,
+    "worst_relative_l2": [
+     [
+      0.1832022425067671,
+      "port.hf.model.layers.18.self_attn.k_norm.weight"
+     ],
+     [
+      0.1792029681079358,
+      "port.hf.model.layers.2.self_attn.q_norm.weight"
+     ],
+     [
+      0.07387046726709966,
+      "port.hf.model.layers.6.self_attn.q_norm.weight"
+     ],
+     [
+      0.07264875408713739,
+      "port.hf.model.layers.4.self_attn.q_norm.weight"
+     ],
+     [
+      0.06456554504675745,
+      "port.hf.model.layers.8.self_attn.q_norm.weight"
+     ]
+    ]
+   },
+   "R": {
+    "loss": 1.0470887422561646,
+    "seconds": 29.495293383020908,
+    "peak_gb": 16.355254272,
+    "physical_tokens": 6070
+   },
+   "A_vs_R": {
+    "global_relative_l2": 0.08256356949810847,
+    "global_cosine": 0.9967081576228326,
+    "parameters_passed_existing_policy": 0,
+    "parameters": 288,
+    "worst_relative_l2": [
+     [
+      0.284857631706906,
+      "port.hf.model.layers.2.self_attn.q_norm.weight"
+     ],
+     [
+      0.24177048322823075,
+      "port.hf.model.layers.2.self_attn.gate_proj.weight"
+     ],
+     [
+      0.22275466343895267,
+      "port.hf.model.layers.1.post_ffn_norm.weight"
+     ],
+     [
+      0.2181919422531915,
+      "port.hf.model.layers.2.operator_norm.weight"
+     ],
+     [
+      0.21134392974139204,
+      "port.hf.model.layers.2.self_attn.q_proj.weight"
+     ]
+    ]
+   },
+   "B_vs_R": {
+    "global_relative_l2": 0.08214536699220182,
+    "global_cosine": 0.9967511198349284,
+    "parameters_passed_existing_policy": 0,
+    "parameters": 288,
+    "worst_relative_l2": [
+     [
+      0.23996840587753862,
+      "port.hf.model.layers.2.self_attn.gate_proj.weight"
+     ],
+     [
+      0.21962619364383892,
+      "port.hf.model.layers.1.post_ffn_norm.weight"
+     ],
+     [
+      0.21229126137046586,
+      "port.hf.model.layers.2.operator_norm.weight"
+     ],
+     [
+      0.20533703020541674,
+      "port.hf.model.layers.2.self_attn.q_proj.weight"
+     ],
+     [
+      0.20427891139243867,
+      "port.hf.model.layers.1.conv.conv.weight"
+     ]
+    ]
+   }
+  }
+ ]
+}
