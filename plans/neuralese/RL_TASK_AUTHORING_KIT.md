@@ -809,3 +809,56 @@ smoke first), the two w151 duty-schedule tasks (a match fragment shared by two b
 whole-root replays for the typed producers that only have rule-derived notes; no-argument opener producers; held-back tasks'
 programs rewritten for their ambiguity (judgment boundaries: urgency, category, same-message corrections); more programs for the
 four new families (7-10 each, 20 needed); real visit counts from the live selector.
+
+## 17. Round 7 changes and results (2026-11-04)
+
+**Tools.** (1) `authoring_rotation.py record` stores `cells`: the (seed, construct, problem) cells the admitted rows actually cover (seed from the
+row's `authored-group:<dataset>` or `invented:<subject_domain>`, problem type from keywords of the row's shape, family and root instruction);
+`next` counts these cells and the invented domains they name instead of the cell the batch was claimed for (round 6 recorded a long-document
+batch as rule-application-with-exceptions); `reconcile --problems problems.txt` derives them for every logged batch (146 entries rewritten, the
+old ledger kept as `.pre-reconcile-*`). Keyword typing is coarse; unrecognised rows are `unclassified`. (2) `authored_child_notes.py openers` attaches
+the literal start note of zero-argument producers (`begin_notes()`; provenance `mechanical:opener-text`, matched by signature alone: no input
+exists to specialise it, so it is program-level content and consumers can weigh it); `mechanical --replace mechanical:rule-derived --provenance
+checked` upgrades rule-derived notes once a whole-root replay passed. (3) `simulate_selection.py --outcomes latent` gives every task its own
+Beta-drawn pass rate and every family a learning curve (rows leave the spread band as the policy learns), and reports spread share, a visit
+histogram and the most visited rows. (4) Smoke and reference child fragments must occur in the call opening as rendered: a string argument
+is JSON-escaped (`\"`), a record argument is plain JSON, a Neuralese typed argument shows no readable quotes (key it on a value unique to the
+call), and a longer fragment list must precede a shorter one (first match wins). w152 lost all 21 tasks to the escaping rule in round 6.
+Brief: `AUTHOR_BRIEF_ROUND7.md` (with a wave-2 addendum).
+
+**Authoring.** Two waves of Haiku authors (w153-w162) plus repairs, each batch qualified, novelty-gated and blind-solved by a Sonnet subagent
+from the packet alone; a disagreement or flagged ambiguity holds a task back (with its program when the text is at fault). 237 rows admitted
+(the generator bug behind two w152 disagreements was the solver being right: `\w+` does not match `blow-dry`): w152 21 (smoke repair, requalified),
+w153 24, r7fix 6 (w148 ice-bookings and burst-relay extras with a literal-move reference, w151 duty-schedule with the bulletin keyed by date),
+w154 17 of 24, w155 20 of 24, w156 24 of 27, w157 18 of 23 (ambiguity rewrites of 16 held-back ids; 5 more stayed ambiguous: trailing newline of
+rejected files, two judgment boundaries), w158 24, w159 21 of 24, w160 20 of 24, w161 21 of 24 (the defect-budget rewrite stayed arguable),
+w162 21 of 25 (new family `service_world_operations`, 6 original applications with 2-3 operations over shared helpers). Held (never trained):
+74 new authored rows (44 dev, 30 confirmation; 238 registered in all) in `natlang-rl-authored-{dev,confirmation}-20261104r7`.
+Family sizes: quantity_reasoning_desks 8 -> 24 distinct programs, request_to_call_queues 8 -> about 25, micro_codebase_repairs 9 -> about 24,
+long_document_digest_desks 7 -> about 24 (the gate's functional counts are 60, 23, 24 and 53; its world text inflates them).
+Quarantined: `xdoc-depot-rebalance-0007` (admitted w23 row whose helper text yields "Northgate depot", not "Northgate": excluded from the pool).
+
+**Producer notes.** Train producer-site coverage of the admitted authored pool: 1,023 of 1,058 sites (96.7%, was 86.4%). 879 sites carry `checked`
+notes: the 88 rule-derived sites of w15, w21, w23, w27, w32, w38 were replayed whole (71 plain-typed copies, every producer answering its record,
+the oracle judging the root's result and folders; qualified PASS, 592 calls replayed against 590 notes) and upgraded, and 10 more batches got
+per-call replay-verified notes. 42 sites are opener notes, 89 argument-extract and 13 rule-derived (w08, w15, w18, w26, w27, w33, sup). 35 sites
+stay uncovered: prescribed one-line forms, identical notes for every call, duplicate call texts with different results (w45, w54, w59), and w15
+`check_section` (36 judgments no rule derives).
+
+**Pool** `selection-pools/selection-pool-20261104T1000Z-r7` (sha256 `c7226332706e4e9794c9fe7a63968e107d47f02b42eae7462b421047905f83ff`, 28,859
+train rows, `latest.json` promoted after verification; previous pointer `latest.json.prev-20261104T0800Z-r7`): unique ids, all train, 0 rows
+related to any protected packet under digest `786bb2d9...`, 0 held authored rows, tags equal the 3,194 strict world-effect rows, input hashes match.
+8,547 distinct programs (8,363), 1,656.6 effective (1,618.8), 95 families (94), 78.9% of families with 20+ programs (77.7%).
+Selection simulation (400 rounds x 16 rows x 8 samples): level model sampled world-effect share 48.9% (without the quota 47.6%, 50 rounds below 30%),
+0 rounds below 30%, 3,896 rows, 1,506 functional programs, 95 families; latent-outcome model 47.0%, 69.5% of groups with outcome spread, authored
+rows 37.7% of samples. Long run (1,500 x 32, latent): 38.4% effect share, 19,455 rows (67%), 2,579 functional programs, 245 rows visited 20+ times.
+No production RL round had run (the cloud lineage was still in its SFT window), so these are synthetic.
+
+Finding for round 8: in every long simulation the most visited rows are level-3 rows with a stable mixed outcome (286-372 visits of one row in 1,500
+rounds, in families as small as 1-2 worlds). The selector has no per-row visit decay; add one (or a family-level cap on the spread-seeking share)
+and confirm against real visit counts from the first interleaved rounds.
+
+Round-8 targets: held-back programs rewritten with stated rules (urgency of the tenancy defect budget, pilot vessel-name form, seed-library undo/cancelled
+keys, kiln withdraw order, cosmetic-vs-misuse warranty, assert invariant-vs-input, env pruning reserved variables, tide script-vs-library, rejected-file
+trailing newline); programs for the families still under 30 (service_world_operations 14 programs); a selector visit decay; real visit counts and
+outcome spread once interleaved RL rounds exist; typed producers of w39 and w45 (their replay copies tripped the protected-world check as copies).
