@@ -2,7 +2,10 @@
 the entries reach exactly the child call they are about through rl/privileged_context.applicable, and held cases stay
 untouched. No upstream data: items are small synthetic dicts of the loaders' normalized shape."""
 import json
+import sys
+from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training' / 'neuralese'))
 from natlang_neuralese.rl.privileged_context import Fact, _child_match, _child_text, applicable
 from scripts.rl_tasks import child_notes as cn
 from scripts.rl_tasks.sources import composed, composed_notes as notes

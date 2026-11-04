@@ -74,7 +74,7 @@ def test_native_optimizer_update_proceeds_while_exact_full_snapshot_is_written(t
         if not release.wait(10):raise TimeoutError('checkpoint test did not release writer')
         return real_write(path,value)
     monkeypatch.setattr(trajectory_state,'atomic_checkpoint',held_write)
-    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda:1<<50)
+    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda **_: 1<<50)
     policy=CheckpointPolicy(tmp_path,async_checkpoint=True)
     event=policy.save(state,async_allowed=True,async_optimizer=optimizer)
     assert event['async_pending'] and entered.wait(5)
@@ -102,7 +102,7 @@ def test_native_optimizer_update_proceeds_while_exact_full_snapshot_is_written(t
 
 def test_insufficient_memory_falls_back_to_synchronous_full_save(tmp_path,monkeypatch):
     from natlang_neuralese.train import trajectory_state
-    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda:1)
+    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda **_: 1)
     policy=CheckpointPolicy(tmp_path,async_checkpoint=True)
     state={'step':4,'model':{'weight':torch.ones(8)},'training':{'optimizer':{},'rng':{},'exposure_counts':{'a':4}}}
     event=policy.save(state,async_allowed=True,async_optimizer=torch.optim.AdamW([torch.nn.Parameter(torch.ones(2))]))
@@ -115,7 +115,7 @@ def test_insufficient_memory_falls_back_to_synchronous_full_save(tmp_path,monkey
 
 def test_async_publication_hook_runs_after_durable_exact_snapshot(tmp_path,monkeypatch):
     from natlang_neuralese.train import trajectory_state
-    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda:1<<50)
+    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda **_: 1<<50)
     observed=[]
     def publish(path,state,event):
         saved=torch.load(path,map_location='cpu',weights_only=False)
@@ -133,7 +133,7 @@ def test_async_publication_hook_runs_after_durable_exact_snapshot(tmp_path,monke
 def test_async_admission_preserves_previous_slot_when_atomic_disk_headroom_is_short(tmp_path,monkeypatch):
     from collections import namedtuple
     from natlang_neuralese.train import trajectory_state
-    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda:1<<50)
+    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda **_: 1<<50)
     policy=CheckpointPolicy(tmp_path,async_checkpoint=True)
     previous={'step':1,'model':{'weight':torch.ones(4)},'training':{'optimizer':{},'rng':{},'exposure_counts':{}}}
     policy.save(previous)
@@ -188,7 +188,7 @@ def test_native_trainer_drains_on_update_and_schedule_close_errors_without_savin
         if not release.wait(10):raise TimeoutError('trainer exit test did not release async writer')
         return real_write(path,state,**kwargs)
     monkeypatch.setattr(trajectory_state,'atomic_checkpoint',held_write)
-    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda:1<<50)
+    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda **_: 1<<50)
     original_update=trainer.native_training_update
     update_calls=[]
     def fail_inside_second_update(*args,**kwargs):
@@ -281,7 +281,7 @@ def test_failed_async_write_recovers_latest_state_before_returning(tmp_path,monk
         if len(calls)==1:raise OSError('simulated checkpoint device failure')
         return real_write(path,state)
     monkeypatch.setattr(trajectory_state,'atomic_checkpoint',fail_first)
-    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda:1<<50)
+    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda **_: 1<<50)
     parameter=torch.nn.Parameter(torch.ones(2))
     optimizer=torch.optim.AdamW([parameter])
     policy=CheckpointPolicy(tmp_path,async_checkpoint=True)
@@ -307,7 +307,7 @@ def test_forced_sync_save_and_finalize_drain_writer_before_consumption(tmp_path,
         if not release.wait(10):raise TimeoutError('checkpoint test did not release writer')
         return real_write(path,state)
     monkeypatch.setattr(trajectory_state,'atomic_checkpoint',held)
-    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda:1<<50)
+    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda **_: 1<<50)
     parameter=torch.nn.Parameter(torch.ones(3))
     optimizer=torch.optim.AdamW([parameter])
     policy=CheckpointPolicy(tmp_path,async_checkpoint=True)
@@ -338,7 +338,7 @@ def test_reserved_background_write_retains_separate_next_slot(tmp_path, monkeypa
         assert release.wait(10)
         return original(path, state, **kwargs)
     monkeypatch.setattr(trajectory_state, 'atomic_checkpoint', delayed)
-    monkeypatch.setattr(trajectory_state, 'available_system_memory_bytes', lambda: 1 << 50)
+    monkeypatch.setattr(trajectory_state, 'available_system_memory_bytes', lambda **_: 1 << 50)
     optimizer = torch.optim.AdamW([torch.nn.Parameter(torch.ones(2))])
     state = {'step': 1, 'training': {'optimizer': optimizer.state_dict(), 'rng': {},
                                     'exposure_counts': {'graph': 1}, 'options': {}}}
@@ -369,7 +369,7 @@ def test_policy_close_drains_live_writer_and_retires_empty_spare(tmp_path, monke
     from natlang_neuralese.train import trajectory_state
     monkeypatch.setenv('NATLANG_CHECKPOINT_TRANSFER_HEADROOM_FACTOR', '0')
     monkeypatch.setenv('NATLANG_CHECKPOINT_MIN_FREE_BYTES', '0')
-    monkeypatch.setattr(trajectory_state, 'available_system_memory_bytes', lambda: 1 << 50)
+    monkeypatch.setattr(trajectory_state, 'available_system_memory_bytes', lambda **_: 1 << 50)
     entered, release = threading.Event(), threading.Event()
     original = trajectory_state.atomic_checkpoint
     def delayed(path, state, **kwargs):
@@ -407,7 +407,7 @@ def test_policy_close_drains_live_writer_and_retires_empty_spare(tmp_path, monke
 
 def test_reserved_submit_failure_recovers_current_state_synchronously(tmp_path, monkeypatch):
     from natlang_neuralese.train import trajectory_state
-    monkeypatch.setattr(trajectory_state, 'available_system_memory_bytes', lambda: 1 << 50)
+    monkeypatch.setattr(trajectory_state, 'available_system_memory_bytes', lambda **_: 1 << 50)
     optimizer = torch.optim.AdamW([torch.nn.Parameter(torch.ones(2))])
     state = {'step': 2, 'training': {'optimizer': optimizer.state_dict(), 'rng': {},
                                     'exposure_counts': {'graph': 2}, 'options': {}}}
@@ -423,7 +423,7 @@ def test_reserved_submit_failure_recovers_current_state_synchronously(tmp_path, 
 
 def test_reserved_hook_failure_surfaces_after_durable_commit(tmp_path, monkeypatch):
     from natlang_neuralese.train import trajectory_state
-    monkeypatch.setattr(trajectory_state, 'available_system_memory_bytes', lambda: 1 << 50)
+    monkeypatch.setattr(trajectory_state, 'available_system_memory_bytes', lambda **_: 1 << 50)
     optimizer = torch.optim.AdamW([torch.nn.Parameter(torch.ones(2))])
     state = {'step': 3, 'training': {'optimizer': optimizer.state_dict(), 'rng': {},
                                     'exposure_counts': {'graph': 3}, 'options': {}}}
@@ -440,7 +440,7 @@ def test_reserved_hook_failure_surfaces_after_durable_commit(tmp_path, monkeypat
 
 def test_failed_reserved_writer_recovers_newer_full_state_in_spare(tmp_path, monkeypatch):
     from natlang_neuralese.train import trajectory_state
-    monkeypatch.setattr(trajectory_state, 'available_system_memory_bytes', lambda: 1 << 50)
+    monkeypatch.setattr(trajectory_state, 'available_system_memory_bytes', lambda **_: 1 << 50)
     original = trajectory_state.atomic_checkpoint
     calls = []
     def fail_first(path, state, **kwargs):
@@ -468,16 +468,17 @@ def test_async_admission_reserves_measured_future_device_growth(monkeypatch):
     from natlang_neuralese.train import trajectory_state
     from natlang_neuralese.train.checkpoint_safety import native_async_snapshot_headroom
     monkeypatch.setattr(torch.cuda, 'is_initialized', lambda: True)
+    monkeypatch.setattr(trajectory_state, 'page_cache_reclaimable_for_host_allocations', lambda: True)
     monkeypatch.setattr(torch.cuda, 'max_memory_reserved', lambda: 1000)
     monkeypatch.setattr(torch.cuda, 'memory_reserved', lambda: 500)
     optimizer = torch.optim.AdamW([torch.nn.Parameter(torch.ones(2))])
     state = {'model': torch.ones(2)}
-    monkeypatch.setattr(trajectory_state, 'available_system_memory_bytes', lambda: 1 << 40)
+    monkeypatch.setattr(trajectory_state, 'available_system_memory_bytes', lambda **_: 1 << 40)
     result = native_async_snapshot_headroom(state, optimizer)
     assert result['future_device_growth_allowance_bytes'] == 750
     assert result['required_headroom_bytes'] > result['snapshot_size_bound_bytes'] + 750
     monkeypatch.setattr(trajectory_state, 'available_system_memory_bytes',
-                        lambda: result['required_headroom_bytes'] - 1)
+                        lambda **_: result['required_headroom_bytes'] - 1)
     assert not native_async_snapshot_headroom(state, optimizer)['eligible']
 
 
@@ -485,11 +486,12 @@ def test_async_admission_preserves_lifetime_reserved_peak_across_step_peak_reset
     from natlang_neuralese.train import trajectory_state
     from natlang_neuralese.train.checkpoint_safety import native_async_snapshot_headroom
     monkeypatch.setattr(torch.cuda, 'is_initialized', lambda: True)
+    monkeypatch.setattr(trajectory_state, 'page_cache_reclaimable_for_host_allocations', lambda: True)
     monkeypatch.setattr(torch.cuda, 'max_memory_reserved', lambda: 1000)
     monkeypatch.setattr(torch.cuda, 'memory_reserved', lambda: 500)
     optimizer=torch.optim.AdamW([torch.nn.Parameter(torch.ones(2))])
     state={'model':torch.ones(2),'training':{'options':{'_cuda_lifetime_peak_reserved_bytes':2000}}}
-    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda:1<<40)
+    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda **_: 1<<40)
     result=native_async_snapshot_headroom(state,optimizer)
     assert result['device_peak_reserved_bytes']==2000
     assert result['future_device_growth_allowance_bytes']==2000
@@ -526,7 +528,7 @@ def test_scratch_reservation_drains_real_overlapping_checkpoint_to_free_space(tm
         entered.set();assert release.wait(10)
         return original(path,state,**kwargs)
     monkeypatch.setattr(trajectory_state,'atomic_checkpoint',delayed)
-    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda:1<<50)
+    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda **_: 1<<50)
     optimizer=torch.optim.AdamW([torch.nn.Parameter(torch.ones(2))])
     state={'step':1,'training':{'optimizer':optimizer.state_dict(),'rng':{},'exposure_counts':{'row':1},'options':{}}}
     policy=CheckpointPolicy(tmp_path,async_checkpoint=True)

@@ -141,7 +141,7 @@ def test_snapshot_actor_view_uses_selected_owner_state_without_source_reload(tmp
     from natlang_neuralese.train import trajectory_state
     path=tiny_complete(tmp_path);state=CheckpointPolicy.load(path);st=path.stat()
     signature=(st.st_dev,st.st_ino,st.st_size,st.st_mtime_ns)
-    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda:1024**3)
+    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda **_: 1024**3)
     real=CheckpointPolicy.load
     def load_view_only(candidate,*args,**kwargs):
         if __import__('pathlib').Path(candidate).resolve()==path.resolve():raise AssertionError('full source reread')
@@ -157,7 +157,7 @@ def test_snapshot_actor_view_rejects_insufficient_transfer_headroom(tmp_path,mon
     from natlang_neuralese.model.native_bundle import write_snapshot_actor_view
     from natlang_neuralese.train import trajectory_state
     path=tiny_complete(tmp_path);state=CheckpointPolicy.load(path);st=path.stat()
-    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda:0)
+    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda **_: 0)
     with pytest.raises(ValueError,match='headroom'):
         write_snapshot_actor_view(path,tmp_path/'snapshot-views',snapshot=state,
                                   decoded_source_stat=(st.st_dev,st.st_ino,st.st_size,st.st_mtime_ns))
@@ -171,7 +171,7 @@ def test_snapshot_view_preserves_storage_aliases_and_rejects_mutation(tmp_path,m
     state['backbone_state']={'weight':storage,'transpose':storage.t()}
     path=tmp_path/'alias.pt';torch.save(state,path);state=CheckpointPolicy.load(path);st=path.stat()
     signature=(st.st_dev,st.st_ino,st.st_size,st.st_mtime_ns)
-    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda:1024**3)
+    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda **_: 1024**3)
     result=write_snapshot_actor_view(path,tmp_path/'valid',snapshot=state,decoded_source_stat=signature)
     restored=load_actor_view(path,result['view_receipt'])['backbone_state']
     assert restored['weight'].untyped_storage().data_ptr()==restored['transpose'].untyped_storage().data_ptr()
@@ -195,7 +195,7 @@ def test_snapshot_owner_pins_full_source_and_bounds_pending_queue(tmp_path,monke
     from natlang_neuralese.train import trajectory_state
     source=tiny_complete(tmp_path);state=CheckpointPolicy.load(source)
     journal=tmp_path/'recovery';journal.mkdir();queue=SimpleNamespace(directory=journal)
-    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda:1024**3)
+    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda **_: 1024**3)
     result=publish_saved_snapshot(queue,source,state)
     assert result['status']=='ready'
     pending=json.loads((journal/'actor-view-pending.json').read_text());pin=__import__('pathlib').Path(pending['pin'])
@@ -221,7 +221,7 @@ def test_snapshot_owner_failure_keeps_full_source_pin_and_retry_record(tmp_path,
     assert __import__('pathlib').Path(pending['pin']).read_bytes()==source.read_bytes()
     from natlang_neuralese.train import trajectory_state
     monkeypatch.setattr(publisher,'write_snapshot_actor_view',actual)
-    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda:1024**3)
+    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda **_: 1024**3)
     assert publisher.retry_pending(journal)['status']=='ready'
 
 
@@ -234,7 +234,7 @@ def test_owner_transport_and_explicit_release_require_verified_full_source(tmp_p
     from natlang_neuralese.common import runtime_inventory
     from natlang_neuralese.train import trajectory_state
     source=tiny_complete(tmp_path);state=CheckpointPolicy.load(source);journal=tmp_path/'recovery';journal.mkdir()
-    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda:1024**3)
+    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda **_: 1024**3)
     assert owner.publish_saved_snapshot(SimpleNamespace(directory=journal),source,state)['status']=='ready'
     record=json.loads((journal/'actor-view-pending.json').read_text());pin=Path(record['pin'])
     monkeypatch.setattr(runtime_inventory,'python_runtime_binding',lambda:{'sha256':'a'*64})
@@ -268,7 +268,7 @@ def test_owner_transport_and_explicit_release_require_verified_full_source(tmp_p
 def test_checkpoint_policy_default_publishes_from_its_committed_owner_state(tmp_path,monkeypatch,asynchronous):
     from natlang_neuralese.train import trajectory_state,checkpoint_safety
     source=tiny_complete(tmp_path);state=CheckpointPolicy.load(source)
-    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda:1024**3)
+    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda **_: 1024**3)
     monkeypatch.setattr(checkpoint_safety,'native_async_snapshot_headroom',lambda *args,**kwargs:{'eligible':True})
     policy=CheckpointPolicy(tmp_path/'learner',prune_best=False,async_checkpoint=asynchronous)
     try:

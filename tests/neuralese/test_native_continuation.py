@@ -317,9 +317,10 @@ def test_actual_sft_foundation_stops_before_ordinary_and_shared_resume_consumes_
     from natlang_neuralese.train import trajectory_state
     from natlang_neuralese.train.checkpoint_safety import native_async_snapshot_headroom
     monkeypatch.setattr(torch.cuda,'is_initialized',lambda:True)
+    monkeypatch.setattr(trajectory_state,'page_cache_reclaimable_for_host_allocations',lambda:True)
     monkeypatch.setattr(torch.cuda,'max_memory_reserved',lambda:1000)
     monkeypatch.setattr(torch.cuda,'memory_reserved',lambda:500)
-    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda:1<<40)
+    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda **_: 1<<40)
     dummy_optimizer=torch.optim.AdamW([torch.nn.Parameter(torch.ones(2))])
     admission=native_async_snapshot_headroom({'training':final},dummy_optimizer)
     assert admission['device_peak_reserved_bytes']==5<<30
