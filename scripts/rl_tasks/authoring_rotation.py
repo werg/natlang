@@ -8,6 +8,9 @@ successive batches differ; the ledger records what each batch actually admitted.
                                [--claim --batch DIR] [--claim-hours 6]
   authoring_rotation.py record --ledger L.jsonl --dataset D --construct C --problem P --worker W --batch DIR \\
                                --admitted N [--credit CONSTRUCT=N ...] [--credit-from ADMITTED_CASES.jsonl]
+Each recorded entry also stores ``cells``: the (seed, construct, problem) cells its admitted rows actually cover (seed from
+the row's dataset group or ``invented:<subject domain>``, problem type from the row's shape/family/instruction keywords),
+which ``next`` counts instead of the cell the batch was claimed for; ``reconcile`` derives them for every logged batch.
 A batch usually covers several constructs. ``record`` credits every genuine construct of the batch, not only the cell's
 primary one: ``--credit CONSTRUCT=N`` (repeatable) names the number of admitted tasks genuinely covering each, or
 ``--credit-from`` reads them from the batch's admitted converted cases (``curriculum.external.constructs``; tags the
@@ -50,6 +53,55 @@ def admitted_ids_by_batch(admissions):
     return found
 
 
+# Problem types by the words of a row's shape, family and root instruction. The rotation cell a batch was CLAIMED for says
+# nothing about what it wrote (round 6: a long-document batch was recorded as rule-application-with-exceptions), so the
+# ledger derives the cells from the admitted rows themselves.
+PROBLEM_KEYWORDS = {
+    'running-ledger-with-corrections': ('ledger', 'running', 'carried', 'correction', 'balance', 'tally', 'supersed'),
+    'schedule-or-allocation-repair': ('schedule', 'rota', 'allocat', 'repair', 'assign', 'seating', 'roster', 'capacity', 'slot'),
+    'multi-source-reconciliation': ('reconcil', 'two sources', 'cross-check', 'cross document', 'cross-document', 'discrepan', 'merge', 'compare'),
+    'rule-application-with-exceptions': ('rule', 'exception', 'threshold', 'tariff', 'tier', 'policy', 'precedence', 'rate', 'price', 'pricing'),
+    'planning-with-resource-limits': ('plan', 'budget', 'limit', 'quota', 'resource', 'pipeline', 'stock', 'yield', 'weight'),
+    'diagnosis-from-evidence': ('diagnos', 'evidence', 'culprit', 'fault', 'cause', 'triage', 'symptom', 'clue', 'audit'),
+    'negotiation-or-multi-round-game': ('negotiat', 'multi-round', 'game', 'offer', 'bid', 'bracket', 'tournament'),
+    'document-obligation-tracking': ('obligation', 'clause', 'document', 'digest', 'minutes', 'contract', 'section', 'bulletin', 'report'),
+    'routing-and-escalation-gates': ('rout', 'escalat', 'gate', 'queue', 'ladder', 'dispatch', 'request', 'urgen'),
+    'codebase-operation-on-state': ('codebase', 'repo', 'module', 'source file', 'operation', 'rename', 'version', 'changelog', 'index'),
+}
+
+
+def problem_of(row, problems=None):
+    """The problem type a row's own text points at (``unclassified`` when no keyword of any type occurs)."""
+    external = row.get('curriculum', {}).get('external', {})
+    files = row.get('semantics', {}).get('files', {})
+    root = row.get('semantics', {}).get('root')
+    text = ' '.join([str(external.get('shape', '')), str(row.get('family', '')), str(external.get('subject_domain', '')),
+                     (files.get(root) or '')[:700]]).lower()
+    keywords = {k: v for k, v in PROBLEM_KEYWORDS.items() if not problems or k in problems}
+    scores = {k: sum(text.count(w) for w in words) for k, words in keywords.items()}
+    best = max(scores, key=lambda k: (scores[k], -list(keywords).index(k)), default=None)
+    return best if best and scores[best] else 'unclassified'
+
+
+def seed_of(row):
+    """The dataset a row drew from (``authored-group:<dataset>:<id>``) or ``invented:<subject domain>``."""
+    for group in row.get('source_groups') or []:
+        if group.startswith('authored-group:'):
+            return group.split(':')[1]
+    return 'invented:' + str(row.get('curriculum', {}).get('external', {}).get('subject_domain') or row.get('family'))
+
+
+def cells_of(rows, problems=None):
+    """Cells a set of admitted rows actually covers: one (seed, construct, problem) cell per construct of each row (a row
+    with no construct covers ``none``), counted in rows."""
+    found = collections.Counter()
+    for row in rows:
+        seed, problem = seed_of(row), problem_of(row, problems)
+        for construct in row['curriculum']['external'].get('constructs') or ['none']:
+            found[(seed, construct, problem)] += 1
+    return [{'dataset': d, 'construct': c, 'problem': p, 'rows': n} for (d, c, p), n in sorted(found.items())]
+
+
 def credits_of(rows):
     return dict(collections.Counter(c for row in rows for c in row['curriculum']['external'].get('constructs', [])))
 
@@ -87,6 +139,7 @@ def main(argv=None):
     fix = sub.add_parser('reconcile', help='rewrite recorded entries to the admitted rows of the admission log')
     fix.add_argument('--ledger', required=True)
     fix.add_argument('--pool', default=str(DEFAULT_POOL))
+    fix.add_argument('--problems', help='problems.txt (restricts the derived problem types to its names)')
     args = parser.parse_args(argv)
     import fcntl
     # The ledger and its directory are created on first use; a missing ledger is an empty rotation.
@@ -109,11 +162,14 @@ def main(argv=None):
                 continue
             rows = [pool[i] for i in dict.fromkeys(ids) if i in pool]
             credits = credits_of(rows)
-            if entry['admitted'] != len(rows) or (entry.get('credits') or {}) != credits:
+            cells = cells_of(rows, lines(args.problems) if args.problems else None)
+            if (entry['admitted'] != len(rows) or (entry.get('credits') or {}) != credits
+                    or entry.get('cells') != cells):
                 entry.update(admitted=len(rows), reconciled_from_admissions=True)
                 entry.pop('credits', None)
                 if credits:
                     entry['credits'] = credits
+                entry['cells'] = cells
                 changed += 1
         backup = Path(str(args.ledger) + f'.pre-reconcile-{int(time.time())}')
         backup.write_text(Path(args.ledger).read_text())
@@ -123,7 +179,7 @@ def main(argv=None):
     recorded_batches = {entry['batch'] for entry in all_entries if entry.get('status', 'recorded') == 'recorded'}
     entries = [entry for entry in all_entries if entry.get('status', 'recorded') == 'recorded']
     if args.command == 'record':
-        credits = {}
+        credits, cells = {}, []
         if args.credit_from:
             rows = [json.loads(line) for line in Path(args.credit_from).read_text().splitlines() if line.strip()]
             # Credit only admitted rows: the qualified cases file also holds the tasks the audit dropped (round 3
@@ -134,6 +190,7 @@ def main(argv=None):
                 rows = [row for row in rows if row['id'] in set(admitted_ids)]
                 args.admitted = len(rows)
             credits = credits_of(rows)
+            cells = cells_of(rows)
             if args.admitted is None:
                 args.admitted = len(rows)
         for item in args.credit:
@@ -143,7 +200,7 @@ def main(argv=None):
             raise SystemExit('record needs --admitted (or --credit-from)')
         entry = {'unix': time.time(), 'status': 'recorded', 'dataset': args.dataset, 'construct': args.construct,
                  'problem': args.problem, 'worker': args.worker, 'batch': args.batch, 'admitted': args.admitted,
-                 **({'credits': credits} if credits else {})}
+                 **({'credits': credits} if credits else {}), **({'cells': cells} if cells else {})}
         with open(args.ledger, 'a') as handle:
             handle.write(json.dumps(entry) + '\n')
         print(json.dumps(entry))
@@ -152,15 +209,27 @@ def main(argv=None):
     by_construct, by_mode = collections.Counter(), collections.Counter()
     invented = collections.Counter()
     for entry in entries:
-        cell = (entry['dataset'], entry['construct'], entry['problem'])
-        admitted[cell] += entry['admitted']
-        batches[cell] += 1
         for construct, count in (entry.get('credits') or {entry['construct']: entry['admitted']}).items():
             by_construct[construct] += count
-        mode = 'B-original' if entry['dataset'].startswith('invented:') else 'A-dataset'
-        by_mode[mode] += entry['admitted']
-        if mode == 'B-original':
-            invented[entry['dataset'][len('invented:'):]] += entry['admitted']
+        # The cells a batch covered (derived from its admitted rows) replace the cell it was claimed for.
+        covered = entry.get('cells') or [{'dataset': entry['dataset'], 'construct': entry['construct'],
+                                          'problem': entry['problem'], 'rows': entry['admitted']}]
+        seen_cells = set()
+        for item in covered:
+            cell = (item['dataset'], item['construct'], item['problem'])
+            admitted[cell] += item['rows']
+            seen_cells.add(cell)
+        for cell in seen_cells:
+            batches[cell] += 1
+        # Mode counts and invented domains count each row once, however many constructs it covers.
+        per_seed = collections.Counter()
+        for item in covered:
+            per_seed[item['dataset']] = max(per_seed[item['dataset']], item['rows'])
+        for seed, count in per_seed.items():
+            mode = 'B-original' if seed.startswith('invented:') else 'A-dataset'
+            by_mode[mode] += count
+            if mode == 'B-original':
+                invented[seed[len('invented:'):]] += count
     now = time.time()
     claimed = {(entry['dataset'], entry['construct'], entry['problem']) for entry in all_entries
                if entry.get('status') == 'claimed' and entry['batch'] not in recorded_batches
@@ -180,8 +249,10 @@ def main(argv=None):
     else:
         used = collections.Counter()
         for entry in entries:
-            if entry['dataset'].startswith('invented:') and entry['construct'] == construct:
-                used[entry['problem']] += entry['admitted']
+            for item in entry.get('cells') or [{'dataset': entry['dataset'], 'construct': entry['construct'],
+                                                'problem': entry['problem'], 'rows': entry['admitted']}]:
+                if item['dataset'].startswith('invented:') and item['construct'] == construct:
+                    used[item['problem']] += item['rows']
         busy = {cell[2] for cell in claimed if cell[0].startswith('invented:') and cell[1] == construct}
         problem = min(problems, key=lambda p: (p in busy, used[p], (problems.index(p) - offset) % len(problems)))
         choice = {'mode': mode, 'dataset': 'invented:<choose a NEW domain, not in invented_domains_used>',

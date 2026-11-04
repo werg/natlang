@@ -594,3 +594,66 @@ def test_large_pools_are_indexed_once_per_family_and_give_the_same_verdict(tmp_p
         assert authored_novelty.main([batch, '--pool', pool, '-o', str(large)]) == 1
         assert json.loads(large.read_text()) == json.loads(small.read_text())
     assert (tmp_path / 'index').is_dir() and any((tmp_path / 'index').glob('*/meta.pkl'))
+
+
+def test_rotation_records_the_cells_the_admitted_rows_cover_not_the_claimed_cell(tmp_path, capsys):
+    ledger = tmp_path / 'rotation.jsonl'
+    lists = {}
+    for name, values in (('datasets', ['ds1']), ('constructs', ['skills', 'iterate']),
+                         ('problems', ['routing-and-escalation-gates', 'codebase-operation-on-state'])):
+        lists[name] = tmp_path / f'{name}.txt'
+        lists[name].write_text('\n'.join(values) + '\n')
+
+    def row(domain, shape, constructs, groups=None):
+        return {'family': 'f', 'source_groups': groups or ['authored:t'], 'semantics': {'root': 'r.nl', 'files': {'r.nl': 'Escalate each request.'}},
+                'curriculum': {'external': {'constructs': constructs, 'subject_domain': domain, 'shape': shape}}}
+    cases = tmp_path / 'admitted.jsonl'
+    rows = [row('ferry_queue', 'queue-escalation-gate', ['iterate']),
+            row('repo_tools', 'rename-module-in-repo', ['skills'], ['authored-group:hybridqa:abc'])]
+    rows[1]['semantics']['files']['r.nl'] = 'Rename the module across the repo.'
+    cases.write_text(''.join(json.dumps(r) + '\n' for r in rows))
+    # The claim said skills / routing; the rows are an invented ferry domain on iterate and a hybridqa codebase seed on skills.
+    authoring_rotation.main(['record', '--ledger', str(ledger), '--dataset', 'ds1', '--construct', 'skills',
+                             '--problem', 'routing-and-escalation-gates', '--worker', 'w', '--batch', 'b', '--credit-from', str(cases),
+                             '--admissions', str(tmp_path / 'none.jsonl')])
+    entry = json.loads(capsys.readouterr().out)
+    cells = {(c['dataset'], c['construct'], c['problem']): c['rows'] for c in entry['cells']}
+    assert cells == {('invented:ferry_queue', 'iterate', 'routing-and-escalation-gates'): 1,
+                     ('hybridqa', 'skills', 'codebase-operation-on-state'): 1}
+    authoring_rotation.main(['next', '--ledger', str(ledger), *[f'--{k}={v}' for k, v in lists.items()], '--worker', 'w'])
+    out = json.loads(capsys.readouterr().out)
+    # one row per seed mode: the covered invented domain is listed, the claimed domain is not invented
+    assert out['admitted_by_mode'] == {'B-original': 1, 'A-dataset': 1}
+
+
+def test_zero_argument_openers_get_their_literal_start_note_and_rule_derived_notes_can_be_upgraded(tmp_path):
+    import authored_child_notes as notes
+    files = {'root.nl': '---\nargs:\n  lines: "string[]"\nreturns: "string"\n---\nx',
+             'root/begin_notes.nl': '---\nargs: {}\nreturns: "Neuralese<string>"\n---\nStart an empty account.',
+             'root/absorb.nl': '---\nargs:\n  notes: "Neuralese<string>"\n  line: "string"\nreturns: "Neuralese<string>"\n---\nUpdate.'}
+    row = {'id': 'r', 'split': 'train', 'semantics': {'root': 'root.nl', 'files': files},
+           'curriculum': {'reference': {'root': [], 'children': [
+               {'match': ['You are inside this call: absorb(', 'line one'], 'value': {'a': 1}, 'provenance': 'mechanical:rule-derived'}]},
+               'external': {'structure': {'smoke': {'replay': True, 'root': [['eval', {'code': 'let n = await begin_notes();\nn = await absorb(n, lines[0]);'}]],
+                                                    'children': {'begin_notes': 'account open, nothing recorded yet', 'absorb': 'x'}}}}}}
+    pool = tmp_path / 'pool'
+    pool.mkdir()
+    (pool / 'cases.jsonl').write_text(json.dumps(row) + '\n')
+    assert notes.zero_argument_sites(row) == ['begin_notes']
+    summary = notes.openers(pool)
+    assert summary['notes'] == 1
+    stored = json.loads((pool / 'cases.jsonl').read_text())
+    opener = [c for c in stored['curriculum']['reference']['children'] if c['provenance'] == 'mechanical:opener-text']
+    assert opener == [{'match': ['You are inside this call: begin_notes('], 'value': 'account open, nothing recorded yet',
+                       'provenance': 'mechanical:opener-text'}]
+    assert notes.openers(pool).get('notes', 0) == 0  # idempotent: the site is covered now
+    # a replay-verified per-call script replaces the rule-derived note of the same site when asked to
+    task = {'id': 'r', 'smoke': {'children': {'absorb': {'$match': [
+        {'match': 'line one', 'value': 'The account now holds the first line of the chat: line one recorded for later use.'}]}}}}
+    (pool / 'cases.jsonl').write_text(json.dumps({**row, 'id': 'auth:f:r:abc'}) + '\n')
+    tasks = tmp_path / 'tasks.jsonl'
+    tasks.write_text(json.dumps(task) + '\n')
+    summary = notes.mechanical(pool, tasks, provenance='checked', replace='mechanical:rule-derived')
+    stored = json.loads((pool / 'cases.jsonl').read_text())
+    assert summary['rows_with_notes'] == 1
+    assert [c['provenance'] for c in stored['curriculum']['reference']['children']] == ['checked']

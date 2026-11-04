@@ -5,6 +5,9 @@
   authored_child_notes.py mechanical TASKS.jsonl [--pool DIR] [--dry-run]
                                                                  attach per-call notes of a corrected tasks file to admitted rows
                                                                  whose program cannot replay (provenance ``mechanical``)
+  authored_child_notes.py openers [--pool DIR] [--dry-run]
+                                                                 attach the literal start note of zero-argument producer
+                                                                 helpers (``begin_notes()``; provenance mechanical:opener-text)
   authored_child_notes.py extract [--pool DIR] [--batch NAME ...] [--dry-run]
                                                                  attach argument-extract notes to admitted train rows whose
                                                                  ``Neuralese<string>`` producers have none, from the call
@@ -153,12 +156,16 @@ def backfill(pool, dry_run=False):
     return summary
 
 
-def mechanical(pool, tasks_path, dry_run=False, provenance='mechanical:argument-extract'):
+def mechanical(pool, tasks_path, dry_run=False, provenance='mechanical:argument-extract', replace=None):
     """Attach input-specific per-call notes from ``tasks_path`` (a corrected copy of an admitted batch whose only change is
     ``smoke.children``) to the admitted rows of the same task ids that have none. For programs that cannot be a full
     replay (their root reads typed Neuralese fields in code) the notes are deterministic extracts of each call's own
     arguments, not verified producer outputs: provenance is ``mechanical:argument-extract``, never ``checked``. The
-    same exclusions as ``derive`` apply (constants, short strings, identical notes, repeated calls with one script)."""
+    same exclusions as ``derive`` apply (constants, short strings, identical notes, repeated calls with one script).
+
+    ``replace`` names a provenance (``mechanical:rule-derived``) whose existing notes the new ones supersede for the
+    sites they cover: used to upgrade rule-derived notes to ``checked`` once a whole-root replay of the task (plain-typed
+    copy, every producer answering the scripted record, the oracle judging the root's final answer) has passed."""
     pool = Path(pool)
     tasks = {}
     for line in Path(tasks_path).read_text().splitlines():
@@ -172,7 +179,12 @@ def mechanical(pool, tasks_path, dry_run=False, provenance='mechanical:argument-
         for row in rows:
             task = tasks.get(row['id'].split(':')[2]) if row['id'].count(':') >= 3 else None
             existing = (row['curriculum'].get('reference') or {}).get('children') or []
-            have = {site for site in (site_of(c) for c in existing) if site}
+            have = {site for site in (site_of(c) for c in existing if not (replace and c.get('provenance') == replace)) if site}
+            if replace:
+                swappable = {site_of(c) for c in existing if c.get('provenance') == replace}
+                if task is not None and not swappable:
+                    out.append(row)
+                    continue
             if (task is None or row['split'] != 'train' or not (row['curriculum'].get('external') or {}).get('structure')
                     or not set(declared_sites(row)) - have):
                 out.append(row)
@@ -188,7 +200,9 @@ def mechanical(pool, tasks_path, dry_run=False, provenance='mechanical:argument-
             if not children:
                 out.append(row)
                 continue
-            children = existing + [{**child, 'provenance': provenance} for child in children]
+            covered = {site_of(c) for c in children}
+            kept = [c for c in existing if not (replace and c.get('provenance') == replace and site_of(c) in covered)]
+            children = kept + [{**child, 'provenance': provenance} for child in children]
             reference = dict(row['curriculum']['reference'])
             reference['children'] = children
             out.append({**row, 'curriculum': {**row['curriculum'], 'reference': reference}})
@@ -352,6 +366,67 @@ def extract(pool, batches=None, dry_run=False):
     return summary
 
 
+OPENER_PROVENANCE = 'mechanical:opener-text'
+OPENER_MIN_CHARS = 12
+
+
+def zero_argument_sites(row):
+    files = row['semantics']['files']
+    found = []
+    for site in declared_sites(row):
+        path = next((p for p in files if p.rsplit('/', 1)[-1] == site + '.nl' and p != row['semantics']['root']), None)
+        if path is not None and not declared_arg_names(files[path]):
+            found.append(site)
+    return found
+
+
+def openers(pool, dry_run=False):
+    """Attach the literal start note of each zero-argument producer helper (``begin_notes()``) that has none. Such a call
+    receives no argument, so nothing in its opening can tell calls apart and no note can depend on the call's input: the
+    note is the opening the helper's own text prescribes, scripted by the author in the task's smoke (a string of at least
+    ``OPENER_MIN_CHARS``). It is program-level content, provenance ``mechanical:opener-text``, matched by the call's
+    signature alone (a task calling the opener once per item gets the same start note each time, as the helper would write).
+    Typed and unscripted openers stay uncovered."""
+    pool = Path(pool)
+    with open(pool / 'cases.jsonl.lock', 'a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        rows = [json.loads(line) for line in (pool / 'cases.jsonl').read_text().splitlines() if line.strip()]
+        out, stats = [], collections.Counter()
+        for row in rows:
+            structure = (row['curriculum'].get('external') or {}).get('structure')
+            if row['split'] != 'train' or not structure:
+                out.append(row)
+                continue
+            existing = (row['curriculum'].get('reference') or {}).get('children') or []
+            have = {site_of(c) for c in existing}
+            scripted = structure['smoke'].get('children') or {}
+            added = []
+            for site in zero_argument_sites(row):
+                stats['zero_argument_sites'] += 1
+                if site in have:
+                    stats['already_covered'] += 1
+                    continue
+                note = scripted.get(site)
+                if not isinstance(note, str) or len(note.strip()) < OPENER_MIN_CHARS:
+                    stats['no_literal_note'] += 1
+                    continue
+                added.append({'match': [f'{CALL}{site}('], 'value': note.strip(), 'provenance': OPENER_PROVENANCE})
+            if not added:
+                out.append(row)
+                continue
+            reference = dict(row['curriculum']['reference'])
+            reference['children'] = existing + added
+            out.append({**row, 'curriculum': {**row['curriculum'], 'reference': reference}})
+            stats['rows_with_notes'] += 1
+            stats['notes'] += len(added)
+        summary = {'rows': len(rows), **stats}
+        if not dry_run and stats['rows_with_notes']:
+            write_text_atomic(pool / 'cases.jsonl', ''.join(json.dumps(row) + '\n' for row in out))
+            with open(pool / 'admissions.jsonl', 'a') as log:
+                log.write(json.dumps({'unix': __import__('time').time(), 'status': 'child-notes-openers', **summary}) + '\n')
+    return summary
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest='cmd', required=True)
@@ -362,19 +437,28 @@ def main(argv=None):
     mech.add_argument('tasks')
     mech.add_argument('--pool', default=DEFAULT_POOL)
     mech.add_argument('--dry-run', action='store_true')
+    mech.add_argument('--replace', metavar='PROVENANCE',
+                      help='replace the existing notes of this provenance for the sites the tasks file covers (e.g. '
+                           'mechanical:rule-derived after a passed whole-root replay)')
     mech.add_argument('--provenance', default='mechanical:argument-extract',
                       help='mechanical:argument-extract (extracts of the call arguments) or mechanical:rule-derived (the helper\'s '
                            'stated rule implemented in code over the call arguments, cross-checked against the task\'s own data)')
+    opn = sub.add_parser('openers', help='attach the literal start note of zero-argument producer helpers')
+    opn.add_argument('--pool', default=DEFAULT_POOL)
+    opn.add_argument('--dry-run', action='store_true')
     ext = sub.add_parser('extract')
     ext.add_argument('--pool', default=DEFAULT_POOL)
     ext.add_argument('--batch', action='append', default=[])
     ext.add_argument('--dry-run', action='store_true')
     args = parser.parse_args(argv)
+    if args.cmd == 'openers':
+        print(json.dumps(openers(args.pool, args.dry_run)))
+        return 0
     if args.cmd == 'extract':
         print(json.dumps(extract(args.pool, args.batch, args.dry_run)))
         return 0
     if args.cmd == 'mechanical':
-        print(json.dumps(mechanical(args.pool, args.tasks, args.dry_run, args.provenance)))
+        print(json.dumps(mechanical(args.pool, args.tasks, args.dry_run, args.provenance, args.replace)))
         return 0
     print(json.dumps(backfill(args.pool, args.dry_run)))
     return 0
