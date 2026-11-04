@@ -34,3 +34,22 @@ def test_assembly_rejects_packet_path_escape(tmp_path, monkeypatch):
     (new/'training/neuralese_corpora.json').write_text(json.dumps({'corpora':[{'id':'bad','admission':'evaluation-only-never-training','path':'../escape','include':['cases.jsonl']}]}))
     with pytest.raises(ValueError,match='safe runtime-relative'):
         assemble_protected_runtime_inputs(old,new)
+
+
+def test_assembly_copies_packets_of_every_evaluation_packet_registry_in_the_union(tmp_path, monkeypatch):
+    old=tmp_path/'old'; new=tmp_path/'new'
+    (new/'training').mkdir(parents=True)
+    (new/'training/neuralese_corpora.json').write_text('{"corpora": []}')
+    (new/'training/memetic-held-programs.json').write_text(json.dumps({'corpora':[
+        {'id':'memetic','admission':'evaluation-only-never-training','path':'runs/memetic','include':['cases.jsonl']}]}))
+    (new/'training/protected-worlds.json').write_text(json.dumps({'sources':[
+        {'id':'a','kind':'evaluation-packets','registry':'training/neuralese_corpora.json'},
+        {'id':'b','kind':'evaluation-packets','registry':'training/memetic-held-programs.json'}]}))
+    (old/'runs/memetic').mkdir(parents=True)
+    (old/'runs/memetic/cases.jsonl').write_text('held programs')
+    class Worlds:
+        digest='worlds'
+    monkeypatch.setattr(custody.ProtectedWorlds,'load',lambda **kwargs:Worlds())
+    result=assemble_protected_runtime_inputs(old,new)
+    assert (new/'runs/memetic/cases.jsonl').read_text()=='held programs'
+    assert [item['id'] for item in result['evaluation_packets']]==['memetic']

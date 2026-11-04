@@ -86,6 +86,92 @@ def successor_recipe(previous_recipe_path, out, *, stage_id, sft_stage, task_sou
     return path
 
 
+def recipe_with_stages(previous_recipe_path, stages_from, out, *, sft_stage, sft_window=None, runtime=None,
+                       ce_policy=None):
+    """The previous window's recipe plus the RL stages a declared successor recipe adds (interleaved, memetic), with
+    their input bindings. The joint SFT stage keeps its inputs and parameters except the declared changes: window
+    length, task-eval runtime and a CE objective transition (``ce_policy``). Returns the written recipe path."""
+    from natlang_neuralese.common.jsonio import write_json_durable
+    from natlang_neuralese.train.recipe import load_recipe, resolve_recipe_data
+    recipe = copy.deepcopy(resolve_recipe_data(previous_recipe_path))
+    donor = resolve_recipe_data(stages_from)
+    present = {stage['id'] for stage in recipe['stages']}
+    added = [copy.deepcopy(stage) for stage in donor['stages'] if stage['id'] not in present]
+    if not any(stage['kind'] == 'native_interleaved_rl' for stage in added):
+        raise SystemExit(f'{stages_from} adds no native_interleaved_rl stage to the previous recipe')
+    for stage in added:
+        if stage.get('parameters', {}).get('sft_stage', sft_stage) != sft_stage:
+            raise SystemExit(f'{stage["id"]} alternates with another SFT stage')
+        for name in (stage.get('inputs') or {}).values():
+            if name not in donor.get('input_bindings', {}):
+                raise SystemExit(f'{stage["id"]} input {name} is not bound in {stages_from}')
+            existing = recipe.setdefault('input_bindings', {}).get(name)
+            if existing is not None and existing != donor['input_bindings'][name]:
+                raise SystemExit(f'input binding {name} differs between the recipes')
+            recipe['input_bindings'][name] = donor['input_bindings'][name]
+        recipe['stages'].append(stage)
+    sft = next(stage for stage in recipe['stages'] if stage['id'] == sft_stage)
+    if sft_window is not None:
+        sft['parameters']['refresh_after_updates'] = sft_window
+    if runtime is not None and isinstance(sft['parameters'].get('task_eval'), dict):
+        sft['parameters']['task_eval']['runtime'] = str(Path(runtime) / 'ts-host')
+    if ce_policy is not None:
+        name = 'ce_policy_' + ce_policy['sha256'][:12]
+        recipe['input_bindings'][name] = {'path': ce_policy['path'], 'sha256': ce_policy['sha256']}
+        sft['inputs']['ce_supervision_policy'] = name
+    path = Path(out) / 'recipe-runtime.json'
+    write_json_durable(_require_new(path), recipe)
+    load_recipe(path)
+    return path
+
+
+def boundary_weight_policy(previous, parent, weight, out, token_ids=(125033, 125034)):
+    """CE objective transition at the earned boundary: the window's policy plus ``boundary_weights`` (producer
+    open/close at least ``weight`` reply tokens), ``objective_transition.from`` = the current objective, and the
+    quota-aware basis of the actual boundary frame (same source: remaining quotas and credits unchanged)."""
+    from natlang_neuralese.common.jsonio import write_json_durable
+    from natlang_neuralese.train.native_resident import binding
+    from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
+    from natlang_neuralese.train.native_continuation import collect_sft_progress
+    from natlang_neuralese.train.native_quota_aware_ce import make_basis
+    from natlang_neuralese.train.own_output_supervision import BOUNDARY_WEIGHT_SCHEMA, identity, policy_objective
+    from natlang_neuralese.train.recipe import load_recipe, resolve_stage_inputs
+    stage_id = previous['production_stage']
+    recipe = load_recipe(previous['production_recipe'])
+    stage = next(item for item in recipe['stages'] if item['id'] == stage_id)
+    current = resolve_stage_inputs(recipe, stage, {})['ce_supervision_policy']
+    policy = json.loads(Path(current['path']).read_text())
+    before = identity(policy_objective(policy))
+    policy['objective'] = {**policy['objective'], 'boundary_weights': {
+        'schema': BOUNDARY_WEIGHT_SCHEMA, 'token_ids': sorted(token_ids), 'min_weight': float(weight)}}
+    policy['objective_transition'] = {'from': before['sha256']}
+    training = CheckpointPolicy.load(Path(parent['path']))['training']
+    frame = collect_sft_progress(training, borrow_frames=True)[stage_id]
+    source = (frame.get('source_receipts') or [{}])[0].get('sha256')
+    parameters = stage['parameters']
+    policy['quota_aware_basis'] = make_basis(frame, stage_id=stage_id, source_sha256=source, candidate_sha256=source,
+                                             epochs=parameters.get('epochs'),
+                                             communication_min_visits=parameters.get('communication_min_visits'))
+    path = _require_new(Path(out) / 'ce-policy.json')
+    write_json_durable(path, policy)
+    after = identity(policy_objective(policy))
+    return {**binding(path), 'objective_transition': {'from': before, 'to': after}}
+
+
+def cloud_commands(previous):
+    """Cloud window controls run the trainer modules directly (no DGX admission wrapper); a DiLoCo worker's seed
+    command runs behind the session's join.py, which the RL learner command takes too (join.py wraps
+    natlang_neuralese.rl.native_stage: relay, worker env, exec)."""
+    seed, learner = list(previous['seed_command']), list(previous['learner_command'])
+    if learner[1] != '-m':
+        return None
+    if len(seed) > 2 and Path(seed[1]).name == 'join.py':
+        cut = seed.index('--')
+        if learner[1] == '-m' and Path(learner[1]).name != 'join.py':
+            learner = [seed[0], *seed[1:cut + 1], *learner]
+    return {'seed_command': seed, 'learner_command': learner}
+
+
 def learner_wrapper(previous_wrapper, out, runtime):
     text = Path(previous_wrapper).read_text()
     pattern = re.compile(r"^runtime=Path\('[^']*'\)$", re.M)
@@ -121,6 +207,18 @@ def prepare(args):
     previous = json.loads(previous_path.read_text())
     if not previous.get('mandatory_sft_only'):
         raise SystemExit('previous control is not a mandatory joint-SFT window')
+    stages_from = None
+    if args.stages_from:
+        from natlang_neuralese.train.recipe import load_recipe, resolve_stage_inputs
+        stages_from = load_recipe(args.stages_from)
+        declared = next(stage for stage in stages_from['stages'] if stage['kind'] == 'native_interleaved_rl')
+        args.stage_id = declared['id']
+        task = resolve_stage_inputs(stages_from, declared, {})['rl_task_source']
+        if args.task_source and Path(args.task_source).resolve() != Path(task['path']).resolve():
+            raise SystemExit('--task-source differs from the declared stage task source')
+        args.task_source = task['path']
+    if not args.task_source:
+        raise SystemExit('--task-source or --stages-from is required')
     task_source = Path(args.task_source).resolve(strict=True)
     rows = 0
     with task_source.open() as handle:
@@ -144,21 +242,43 @@ def prepare(args):
                   'task_curriculum': CURRICULUM, 'rl_policy_loss': loss, 'update_objective': 'policy',
                   'max_model_requests': previous.get('max_model_requests', 64),
                   'max_turns': previous.get('max_turns', 128), 'case_seconds': previous.get('case_seconds', 3600)}
-    recipe = successor_recipe(previous['production_recipe'], control, stage_id=args.stage_id,
-                              sft_stage=previous['production_stage'], task_source=task_source, parameters=parameters,
-                              sft_window=args.sft_window_updates)
+    ce_policy = (boundary_weight_policy(previous, parent, args.boundary_weight, control)
+                 if args.boundary_weight is not None else None)
+    if stages_from is not None:
+        recipe = recipe_with_stages(previous['production_recipe'], args.stages_from, control,
+                                    sft_stage=previous['production_stage'], sft_window=args.sft_window_updates,
+                                    runtime=runtime, ce_policy=ce_policy)
+        declared_parameters = next(stage for stage in json.loads(recipe.read_text())['stages']
+                                   if stage['id'] == args.stage_id)['parameters']
+        parameters = {**parameters, **declared_parameters, 'start_with': args.start_with}
+        if parameters != declared_parameters:
+            # start_with is the only per-boundary choice; record it in the stage itself.
+            body = json.loads(recipe.read_text())
+            next(stage for stage in body['stages'] if stage['id'] == args.stage_id)['parameters'] = parameters
+            write_json_durable(recipe, body)
+        loss = parameters['rl_policy_loss']
+    else:
+        if ce_policy is not None:
+            raise SystemExit('--boundary-weight needs --stages-from (the recipe successor binds the CE policy)')
+        recipe = successor_recipe(previous['production_recipe'], control, stage_id=args.stage_id,
+                                  sft_stage=previous['production_stage'], task_source=task_source,
+                                  parameters=parameters, sft_window=args.sft_window_updates)
     config = copy.deepcopy(previous)
     for key in ('mandatory_sft_only', 'rolling_sft_resume', 'execution_transition_source_controller',
                 'task_selection_history', 'branch_origin'):
         config.pop(key, None)
     lineage = recipe_lineage(previous)
-    wrapper = learner_wrapper(Path(previous['learner_command'][1]), control, runtime)
-    for key in ('learner_command', 'seed_command'):
-        command = list(config[key])
-        if command[1] != previous['learner_command'][1]:
-            raise SystemExit(f'{key} does not use the shared learner admission wrapper')
-        command[1] = str(wrapper)
-        config[key] = command
+    commands = cloud_commands(previous)
+    if commands is not None:
+        config.update(commands)
+    else:
+        wrapper = learner_wrapper(Path(previous['learner_command'][1]), control, runtime)
+        for key in ('learner_command', 'seed_command'):
+            command = list(config[key])
+            if command[1] != previous['learner_command'][1]:
+                raise SystemExit(f'{key} does not use the shared learner admission wrapper')
+            command[1] = str(wrapper)
+            config[key] = command
     environment = production.actor_runtime_configuration(runtime)
     config.update(environment)
     config['actor_command'] = production.bind_actor_runtime_command(config['actor_command'], runtime)
@@ -180,6 +300,9 @@ def prepare(args):
         'prior_controller_state': binding(previous_state_path), 'runtime': str(runtime),
         'interleaved_stage': args.stage_id, 'task_source': {'path': str(task_source), 'rows': rows,
                                                             'sha256': sha256_file_hex_cached(task_source)},
+        **({'ce_objective_transition': ce_policy} if ce_policy is not None else {}),
+        **({'stages_from': {'path': str(Path(args.stages_from).resolve()),
+                            'sha256': sha256_file_hex_cached(args.stages_from)}} if args.stages_from else {}),
         'reason': 'Start declared whole-graph JOLT+ RL interleaved with the joint SFT stage '
                   '(2026-11-03 recipe review), from the actual earned joint-SFT boundary.',
         'new_optimizer_updates': 0, 'capability_lift_claimed': False}
@@ -200,7 +323,12 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--previous-config', required=True, help='earned mandatory joint-SFT window control')
     parser.add_argument('--checkpoint', help='explicit earned parent (default: the window boundary checkpoint)')
-    parser.add_argument('--task-source', required=True, help='train-only RL task cases JSONL')
+    parser.add_argument('--task-source', help='train-only RL task cases JSONL (default: the --stages-from stage\'s)')
+    parser.add_argument('--stages-from', help='declared successor recipe whose added stages (interleaved RL, memetic) '
+                        'are adopted with their inputs and parameters')
+    parser.add_argument('--boundary-weight', type=float,
+                        help='CE objective transition: producer open/close boundary targets at least this many reply '
+                             'tokens (own-output boundary_weights)')
     parser.add_argument('--runtime', required=True, help='frozen runtime root containing rl/interleave.py')
     parser.add_argument('--control-dir', required=True, help='new directory for the recipe, wrapper and inputs')
     parser.add_argument('--config-out', required=True)

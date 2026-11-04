@@ -392,8 +392,16 @@ def assemble_protected_runtime_inputs(predecessor, destination, *, bound_files=(
     from .custody import ProtectedWorlds
     predecessor, destination = Path(predecessor).resolve(strict=True), Path(destination).resolve(strict=True)
     registry = destination / 'training/neuralese_corpora.json'
-    value = json.loads(registry.read_text())
-    entries = value.get('corpora', value) if isinstance(value, dict) else value
+    # Every evaluation-packet registry the protection union names (neuralese_corpora.json, memetic held programs, ...).
+    union = destination / 'training/protected-worlds.json'
+    protected = json.loads(union.read_text()) if union.is_file() else {}
+    registries = [registry, *(destination / item['registry'] for item in protected.get('sources', [])
+                              if item.get('kind') == 'evaluation-packets' and item.get('registry')
+                              and destination / item['registry'] != registry)]
+    entries = []
+    for path in registries:
+        value = json.loads(path.read_text())
+        entries.extend(value.get('corpora', value) if isinstance(value, dict) else value)
     packets = []
     for entry in entries:
         if (not isinstance(entry, dict) or entry.get('admission') != 'evaluation-only-never-training'
