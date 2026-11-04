@@ -75,7 +75,10 @@ def test_protection_roots_named_by_admission_records_ship_their_untracked_source
     record = tmp_path / 'qualification.json'
     record.write_text(json.dumps({'report': {'protection_root': str(root)}}))
     # The registry files tracked by the checkout arrive with the code bundle; the untracked held cases are shipped.
-    assert window.protection_root_inputs([str(record)], []) == [str(root / 'runs' / 'held' / 'cases.jsonl')]
+    # The canonical checkout (REPO) is always a protection root too (the parent's folded admission history can name it).
+    shipped = window.protection_root_inputs([str(record)], [])
+    assert str(root / 'runs' / 'held' / 'cases.jsonl') in shipped
+    assert not any(p.startswith(str(root)) and not p.endswith('cases.jsonl') for p in shipped)
 
 
 def test_traced_reads_keep_successful_regular_file_accesses_outside_system_paths(tmp_path, monkeypatch):
