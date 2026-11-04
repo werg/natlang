@@ -148,7 +148,7 @@ must not stay off (coordinator correction 2026-11-03). Why the close marker (125
 
 - The marker rows are learnable: learned sparse `input_rows` (tied output), FP32 masters, AdamW at the learned-row
   rate (model/shared_state.py; native optimizer routing). Routing is not the defect.
-- The objective almost never targets them. Producer nodes built by `data/provider_static_graph.py:97` (teacher text
+- (Corrected 2026-11-04 by live `boundary_targets` telemetry: the close marker IS supervised in every production update, 20-32 targets with tiny per-graph weight, from inline producing spans in supervised actions. The finding below is about the writer site's context, not a zero-weight row.) The objective almost never targets them at a writer-like site. Producer nodes built by `data/provider_static_graph.py:97` (teacher text
   encoders) and `data/provider_native_graph.py:163,352` (writer nodes) carry `target_weights` all 0.0, open, body and
   close included: the state is exported but its authoring is never supervised. Inline producing spans inside a
   supervised action target and `data/operator_graph.py` producers (seed + close at weight 1) are the only CE on the
