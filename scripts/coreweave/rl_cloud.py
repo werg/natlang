@@ -627,7 +627,9 @@ def lineage_inputs(run, name, closure):
     """The run inputs of an SFT lineage: its frozen runtime archive, every closure file already committed in a readable
     store as an exact ``file`` input (no DGX upload), the rest packed once as one ``archive`` of absolute paths."""
     inputs = []
-    spec = run['runtime_archive']
+    # A lineage seeded on a later frozen runtime (e.g. a DiLoCo session member joining on the session's runtime) names
+    # its own ``runtime_archive``; the run-level one stays the default.
+    spec = run['lineages'][name].get('runtime_archive') or run['runtime_archive']
     runtime, archive = Path(spec['runtime']), Path(spec['archive'])
     if str(runtime) != closure['runtime']:
         raise SystemExit(f'{name}: closure runtime {closure["runtime"]} is not the run runtime {runtime}')
