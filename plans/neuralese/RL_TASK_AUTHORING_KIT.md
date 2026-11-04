@@ -747,13 +747,13 @@ findings because their authors cleared the lint first, so they are judgment ambi
 the missing contract) 96 of 213 held-back tasks versus 1,115 of 2,279 others; per check, held-back / others: tie order unstated 51 / 473,
 destination file name unstated 34 / 354, reopen-or-correction rule silent 24 / 202, quoted label absent from the world 18 / 320, quoted
 world entry in a helper 16 / 178, contract template differs from the steps 10 / 69, match fragment inside the helper instruction 5 / 25.
-Precision is low (the held-back base rate is 9.5%): only the match-fragment check is a mechanical bug (a correct value with a wrong
+Precision is low (the held-back base rate is 8.6%): only the match-fragment check is a mechanical bug (a correct value with a wrong
 world), the rest point the author at text to read. The blind solve remains the check for ambiguity.
 
 **Authoring wave.** 16 Haiku batches (w136-w151; w152 did not qualify and is a round-7 item), each qualified, novelty-gated and
 blind-solved by a Sonnet subagent from the packet alone; a flagged ambiguity or a disagreement holds a task back together with its
 siblings when the program text is at fault. 235 rows admitted (31 tasks held back; the authors' w148 extras and two w151 duty-schedule
-tasks that never qualified are not counted), 210 with a verified world:
+tasks that never qualified are not counted), 205 with a verified world:
 
 | batch | family | admitted | held back |
 |---|---|---:|---:|
