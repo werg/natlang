@@ -1086,7 +1086,7 @@ def lineage_seed_inputs(run, name):
     """The seed's inputs plus every frozen runtime the lineage adopted in place after its seed (add-runtime): a relaunch
     resumes the active window, whose control names its own runtime, not the seed's."""
     seeded = (read_json(hub(run) / 'exports' / name / 'seed.json', {}) or {}).get('inputs', [])
-    added = read_json(hub(run) / 'exports' / name / 'added-runtimes.json', {}).get('inputs', [])
+    added = read_json(hub(run) / 'exports' / name / ADDED_INPUTS, {}).get('inputs', [])
     return seeded + [i for i in added if i['sha256'] not in {s['sha256'] for s in seeded}]
 
 
@@ -1102,11 +1102,49 @@ def add_runtime(run, name, runtime, archive):
         put_local(run, archive)
     item = {'kind': 'runtime', 'path': str(runtime), 'sha256': digest, 'bytes': size,
             'closure_sha256': file_digest(closure)}
-    path = hub(run) / 'exports' / name / 'added-runtimes.json'
-    record = read_json(path, {}) or {'schema': 'natlang.cloud-lineage-added-runtimes/1', 'inputs': []}
-    record['inputs'] = [i for i in record['inputs'] if i['path'] != item['path']] + [item]
-    store_json(path, record)
+    _add_inputs(run, name, [item])
     return item
+
+
+ADDED_INPUTS = 'added-inputs.json'
+
+
+def _add_inputs(run, name, items):
+    path = hub(run) / 'exports' / name / ADDED_INPUTS
+    record = read_json(path, {}) or {'schema': 'natlang.cloud-lineage-added-inputs/1', 'inputs': []}
+    new = {(i['kind'], i['path']) for i in items}
+    record['inputs'] = [i for i in record['inputs'] if (i['kind'], i['path']) not in new] + list(items)
+    store_json(path, record)
+
+
+def add_closure(run, name, config_path):
+    """Record the inputs a later window control of the lineage reads that its seed closure did not ship (in-place
+    adopted recipes, CE policies, focus/correction files, newly registered protected packets): computed with the
+    control's own runtime closure tool; files already committed in a store become ``file`` inputs, the rest one packed
+    archive. Every later launch restores them (lineage_seed_inputs). 2026-11-04: w0 113911e0 relaunched from export 13
+    lacked 115 files the v45 window bound (held packet cases, mix filters)."""
+    config_path = Path(config_path).resolve(strict=True)
+    config = read_json(config_path)
+    runtime = (config.get('actor_environment') or {}).get('NATLANG_REPO') or str(Path(config['runtime']).parent)
+    closure_path = hub(run) / 'closures' / f'{name}-{file_digest(config_path)[:12]}.json'
+    closure_path.parent.mkdir(parents=True, exist_ok=True)
+    runtime_tool(runtime, 'closure', '--config', str(config_path), '-o', str(closure_path))
+    closure = read_json(closure_path)
+    if closure['missing']:
+        raise SystemExit(f'{name}: inputs {config_path} names are absent on the DGX: {[m["path"] for m in closure["missing"]][:20]}')
+    shipped = set()
+    for item in lineage_seed_inputs(run, name):
+        if item['kind'] == 'file':
+            shipped.add((item['path'], item['sha256']))
+        for member in item.get('files', []):
+            shipped.add((member['path'], member['sha256']))
+    lineage_dir = str(Path(config['out']).parent) + '/'
+    todo = [f for f in closure['files'] if (f['path'], f['sha256']) not in shipped and not f['path'].startswith(lineage_dir)
+            and not f['path'].endswith('.reservation.json')]
+    items = file_inputs(run, f'{name}-added-{file_digest(config_path)[:12]}', todo) if todo else []
+    if items:
+        _add_inputs(run, name, items)
+    return {'config': str(config_path), 'files': len(todo), 'inputs': len(items)}
 
 
 def launch_blobs(run, record, name=None):
@@ -1878,6 +1916,10 @@ def main(argv=None):
             p.add_argument('--dry-run', action='store_true')
             p.add_argument('--parent-later', action='store_true', help='deliver the parent with deliver-parent')
             p.add_argument('--check', action='store_true', help='CPU sandbox: pipeline check without GPU work')
+    p = sub.add_parser('add-closure', help='record the inputs a later window control reads beyond the seed closure')
+    p.add_argument('run')
+    p.add_argument('lineage')
+    p.add_argument('--config', required=True)
     p = sub.add_parser('add-runtime', help='record a frozen runtime the lineage adopted in place (shipped on relaunch)')
     p.add_argument('run')
     p.add_argument('lineage')
@@ -1901,6 +1943,8 @@ def main(argv=None):
         print(json.dumps(launch(run, args.lineage, args.account, args.dry_run, args.rounds, args.parent_later,
                                 args.check),
                          indent=1, default=str))
+    elif args.command == 'add-closure':
+        print(json.dumps(add_closure(run, args.lineage, args.config)))
     elif args.command == 'add-runtime':
         print(json.dumps(add_runtime(run, args.lineage, args.runtime, args.archive)))
     elif args.command == 'deliver-parent':

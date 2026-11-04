@@ -145,3 +145,21 @@ def test_relaunch_from_an_export_restores_the_seed_historical_checkpoints(monkey
         {'kind': 'checkpoint', 'path': '/root/lin/w000003/learner/checkpoint.pt', 'sha256': 'w', 'encoding': 'raw'}]}
     assert [b['sha256'] for b in rl_cloud.launch_blobs({}, record)] == ['w', 'h']
     assert rl_cloud.launch_links({}, record) == seed['links']
+
+
+def test_add_closure_ships_only_inputs_beyond_the_seed(monkeypatch, tmp_path):
+    rl_cloud = autopilot.rl_cloud
+    monkeypatch.setattr(rl_cloud, 'hub', lambda run: tmp_path / 'hub')
+    rl_cloud.store_json(tmp_path / 'hub/exports/lin/seed.json', {'inputs': [
+        {'kind': 'archive', 'path': '/x', 'sha256': 'a', 'files': [{'path': '/data/old.json', 'sha256': '1'}]}]})
+    config = tmp_path / 'root/lin/w000003/config.json'
+    rl_cloud.store_json(config, {'out': str(config.parent), 'runtime': '/rt/v45/ts-host'})
+    closure = {'missing': [], 'files': [{'path': '/data/old.json', 'sha256': '1'}, {'path': '/data/new.json', 'sha256': '2'},
+                                       {'path': str(config.parent.parent / 'diloco-s2/recipe.json'), 'sha256': '3'}]}
+    monkeypatch.setattr(rl_cloud, 'runtime_tool', lambda runtime, *a: rl_cloud.store_json(a[-1], closure) or {})
+    packed = []
+    monkeypatch.setattr(rl_cloud, 'file_inputs', lambda run, name, files: packed.extend(files) or
+                        [{'kind': 'archive', 'path': f'/inputs/{name}', 'sha256': 'b', 'files': files}])
+    assert rl_cloud.add_closure({}, 'lin', config)['files'] == 1
+    assert [f['path'] for f in packed] == ['/data/new.json']
+    assert rl_cloud.lineage_seed_inputs({}, 'lin')[-1]['files'] == packed
