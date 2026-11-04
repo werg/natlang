@@ -822,6 +822,7 @@ def seed_sft(run, name):
     missing = [m['path'] for m in closure['missing'] if m['path'] not in allowed]
     if missing:
         raise SystemExit(f'{name}: inputs the control names are absent on the DGX: {missing[:20]}')
+    closure['files'] += origin_referenced_files(run, spec, boundary['parent'], {f['path'] for f in closure['files']})
     inputs = lineage_inputs(run, name, closure)
     checkpoint = put_checkpoint(run, boundary['parent'], parent_path)
     historical, skipped, historical_links = historical_checkpoint_blobs(run, closure, parent_path)
@@ -926,6 +927,29 @@ def historical_checkpoint_blobs(run, closure, parent_path):
     return blobs, skipped, links
 
 
+def origin_referenced_files(run, spec, parent, have):
+    """Files of a ``historical_from`` origin lineage that the parent checkpoint's saved training frame binds (capacity
+    proofs, packed geometry, memory qualifications, the window recipe): the trainer re-reads them at restore, after the
+    model load (2026-11-04 corrected-mix-d1: corrected-mix/w000000/learner/packed-capacity-geometry absent). Full
+    checkpoints stay historical blobs."""
+    import re
+    import torch
+    origins = [str(lineage_dir(run, origin)) + '/' for origin in spec.get('historical_from', [])]
+    if not origins:
+        return []
+    state = torch.load(parent, map_location='cpu', weights_only=False, mmap=True)
+    text = json.dumps(state.get('training'), default=lambda value: None)
+    del state
+    found = []
+    for prefix in origins:
+        for path in sorted(set(re.findall(re.escape(prefix) + r'[^"\\]*', text))):
+            if path in have or not os.path.isfile(path) or path.endswith('.pt'):
+                continue
+            found.append({'path': path, 'sha256': file_digest(path), 'bytes': os.path.getsize(path),
+                          'from': ['origin-lineage-reference']})
+    return found
+
+
 def seed_prepared_sft(run, name, spec, exports, L):
     """Seed export of a joint-SFT lineage whose window 0 is an exact DGX-prepared, never-started control."""
     boundary = prepared_boundary(spec)
@@ -951,6 +975,7 @@ def seed_prepared_sft(run, name, spec, exports, L):
     missing = [m['path'] for m in closure['missing'] if m['path'] not in allowed]
     if missing:
         raise SystemExit(f'{name}: inputs the control names are absent on the DGX: {missing[:20]}')
+    closure['files'] += origin_referenced_files(run, spec, boundary['parent'], {f['path'] for f in closure['files']})
     inputs = lineage_inputs(run, name, closure)
     checkpoint = put_checkpoint(run, boundary['parent'], parent_path)
     historical, skipped, historical_links = historical_checkpoint_blobs(run, closure, parent_path)

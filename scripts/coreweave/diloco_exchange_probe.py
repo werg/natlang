@@ -43,7 +43,7 @@ def main(argv=None):
     diloco = authority['diloco']
     settings = DilocoSettings(run_id=diloco['run_id'], workers=diloco['workers'], local_steps=diloco['local_steps'],
                               wire_dtype=diloco['wire_dtype'], coordinator_url=url, worker_id=a.worker,
-                              start_grace_seconds=0)
+                              start_grace_seconds=0, timeout_seconds=300.0)
     started = time.monotonic()
     masters = {n: v.clone() for n, v in _coordinator_surface(a.parent, None).items()}
     say('surface_loaded', tensors=len(masters), seconds=round(time.monotonic() - started, 1),
@@ -59,15 +59,20 @@ def main(argv=None):
         for part in fragment.slices:
             masters[part.name].view(-1)[part.offset:part.offset + part.length].add_(1e-3 * (a.worker + 1))
     deadline = time.monotonic() + a.timeout
-    steps = 0
-    while time.monotonic() < deadline:
-        steps += 1
+    # Exactly the session's local steps (no training): fragment 0 falls due at step H and uploads. Then only collect,
+    # without further steps (more steps would queue every other fragment at once, unlike a ~5-minute production
+    # update, and bury the coordinator in 88 concurrent merges).
+    result = None
+    for _ in range(settings.local_steps):
         result = learner.after_step(tokens=1)
-        if learner.versions[0] >= 1:
-            break
-        time.sleep(0.05 if steps < settings.local_steps else 2.0)
-    else:
-        raise SystemExit(f'fragment 0 never installed a merged version (steps {steps}, last error {learner.last_error})')
+    steps = learner.local_steps
+    say('fragment0_queued', pending=sorted(learner.pending), steps=steps)
+    while time.monotonic() < deadline and learner.versions[0] < 1:
+        learner._collect_uploads(steps)
+        learner._collect_downloads()
+        time.sleep(2.0)
+    if learner.versions[0] < 1:
+        raise SystemExit(f'fragment 0 never installed a merged version (last error {learner.last_error})')
     after = pack_fragment(masters, fragment)
     status = transport.json('GET', '/v1/manifest')
     say('merged_installed', version=learner.versions[0], steps=steps, merges=learner.merges,

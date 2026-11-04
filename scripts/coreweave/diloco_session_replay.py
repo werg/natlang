@@ -8,7 +8,8 @@ path. Every worker runs in its own container (closure_replay mounts) on one inte
 coordinator through their own relay, as in the cloud). Each container runs the real controller
 (``natlang_neuralese.rl.production run --rounds 1``): join.py waits for the secrets, starts the relay, the cohost
 initializes the coordinator from its parent and serves it, every worker computes and admits its role, and the trainer
-runs its CPU preflight until it needs CUDA.
+runs its CPU preflight until it needs CUDA. Checks after the model load (packed capacity, which re-reads the parent
+frame's capacity proofs) are NOT exercised here; ``origin_referenced_files`` ships what they read.
 
 Then each container runs the exchange probe (diloco_exchange_probe.py, under the worker's frozen runtime): a
 DiLoCo learner over the worker's parent masters, with its admitted role, installs the seed fragments, uploads fragment 0
@@ -82,6 +83,8 @@ def stage(run, name, work):
                and m['path'] not in set(spec.get('allow_missing', []))]
     if missing:
         raise SystemExit(f'{name}: inputs the control names are absent on the DGX: {missing[:20]}')
+    closure['files'] += rl_cloud.origin_referenced_files(run, spec, boundary['parent'],
+                                                         {f['path'] for f in closure['files']})
     historical, skipped, links = rl_cloud.historical_checkpoint_blobs(run, closure, parent_path)
     for origin in spec.get('historical_from', []):
         seed = rl_cloud.read_json(rl_cloud.hub(run) / 'exports' / origin / 'seed.json')
