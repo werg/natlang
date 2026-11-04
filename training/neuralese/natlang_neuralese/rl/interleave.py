@@ -87,6 +87,8 @@ def declared_stage(config):
             'memetic': None if memetic is None else {
                 'id': memetic['id'], 'parameters': effective_stage_parameters(memetic, [], recipe),
                 'program_source': resolve_stage_inputs(recipe, memetic, {})['program_source'],
+                # The registered evaluation-only memetic held packet (optional; rl.memetic_stage held-packet).
+                'held_program_source': resolve_stage_inputs(recipe, memetic, {}).get('held_program_source'),
                 'stage_sha256': canonical_json_sha256_hex(memetic)}}
 
 

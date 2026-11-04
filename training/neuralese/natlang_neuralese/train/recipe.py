@@ -270,7 +270,7 @@ INTERLEAVED_RL_KINDS=frozenset({'native_interleaved_rl'})
 # JOLT+ updates of the supervisor episodes. The stage never advances SFT exposure.
 HANDLERS['native_memetic_rl'] = {
     'module':'natlang_neuralese.rl.memetic_stage','controller':True,
-    'required_inputs':{'program_source'},'optional_inputs':set(),
+    'required_inputs':{'program_source'},'optional_inputs':{'held_program_source'},
     'parameters':{'rl_stage','memetic_every','programs_per_round','group','settings','promotion_min_gain'},
     'result':'checkpoint.pt'}
 MEMETIC_RL_KINDS=frozenset({'native_memetic_rl'})

@@ -1,0 +1,15 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "natlang-memetic-held-20261104",
+  "owner": "dgx",
+  "path": "runs/natlang-memetic-held-20261104",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 785425,
+      "sha256": "e0759cade67de5e4f3301fedea03eaebdcc4cc2b4d413f7cbec87c4b35b9ac96",
+      "lines": 111
+    }
+  ],
+  "bytes": 785425
+}

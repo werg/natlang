@@ -1,0 +1,15 @@
+{
+  "schema": "natlang.memetic-held-programs/1",
+  "corpora": [
+    {
+      "id": "natlang-memetic-held-20261104",
+      "owner": "dgx",
+      "path": "runs/natlang-memetic-held-20261104",
+      "admission": "evaluation-only-never-training",
+      "include": [
+        "cases.jsonl"
+      ],
+      "note": "Memetic meta-learning held programs (rl.memetic_stage held-packet over selection-pool-20261104T010000Z-w5): every train row of 5 whole task families (ext_natlang-codebase_natlang_codebase_repair_uses_typo, ext_reasoning-gym_prime_factorization, ext_reasoning-gym_leg_counting, ext_babi_task14, ext_babi_task12), 111 rows. Their support/development/confirmation worlds serve held-family memetic promotion only; registering them withdraws them (and related worlds) from ordinary RL pools. Historical exposure of these worlds in earlier pools is not undone."
+    }
+  ]
+}

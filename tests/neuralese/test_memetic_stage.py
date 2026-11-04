@@ -495,3 +495,34 @@ def test_unresolved_memetic_episode_has_no_reward_and_records_carry_distillation
     assert record['query_dir'] == '/q' and record['committed']['ids'] == ['c1'] and record['unscored_workspace'] is False
     rows = stage.distillation_rows([{'task_id': 't', 'sample': 0, 'reward': {'quality': .6, 'memetic': record}}])
     assert rows[0]['query_dir'] == '/q'
+
+
+def test_held_packet_withdraws_whole_families_and_never_meta_trains_them(tmp_path):
+    rows = [case(i, family=f) for f in ('big', 'small', 'mid') for i in range({'big': 30, 'small': 12, 'mid': 20}[f])]
+    settings = {**stage.DEFAULTS, 'support': 3, 'query': 3, 'dev': 3, 'confirmation': 3, 'held_families': 1}
+    families, held = stage.held_packet_rows(rows, settings=settings)
+    assert families == ['small'] and {r['family'] for r in held} == {'small'} and len(held) == 12
+    remaining = [r for r in rows if r['family'] != 'small']
+    pool = stage.program_pool(remaining, settings=settings, held_cases=[{**r, 'split': 'dev'} for r in held])
+    assert {k.split('@')[0]: v['held'] for k, v in pool.items()} == {'big': False, 'mid': False, 'small': True}
+    with pytest.raises(ValueError, match='overlap'):
+        stage.program_pool(rows, settings=settings, held_cases=held)
+    # The controller refuses an ordinary RL source that still holds them.
+    source = tmp_path / 'programs.jsonl'
+    source.write_text(''.join(json.dumps(r) + '\n' for r in remaining))
+    held_path = tmp_path / 'held.jsonl'
+    held_path.write_text(''.join(json.dumps({**r, 'split': 'dev'}) + '\n' for r in held))
+    sha = lambda p: hashlib.sha256(p.read_bytes()).hexdigest()
+    declared = {'id': 'm', 'parameters': {'rl_stage': 'rl', 'memetic_every': 1, 'settings': {'support': 3, 'query': 3,
+                                                                                            'dev': 3, 'confirmation': 3}},
+                'program_source': {'path': str(source), 'sha256': sha(source)},
+                'held_program_source': {'path': str(held_path), 'sha256': sha(held_path)}}
+    ordinary = tmp_path / 'ordinary.jsonl'
+    ordinary.write_text(''.join(json.dumps(r) + '\n' for r in rows))
+    with pytest.raises(ValueError, match='still contains memetic held worlds'):
+        stage.bind_round({'out': str(tmp_path / 'c1'), 'cases': str(ordinary)}, declared, {'round': 0}, 'p' * 64,
+                         protected=lambda c: False)
+    bound = stage.bind_round({'out': str(tmp_path / 'c2'), 'cases': str(source)}, declared, {'round': 0}, 'p' * 64,
+                             protected=lambda c: False)
+    receipt = json.loads(open(bound['memetic_round']['receipt']['path']).read())
+    assert receipt['held_programs'] and all(p.startswith('small@') for p in receipt['held_programs'])

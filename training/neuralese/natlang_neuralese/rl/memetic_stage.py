@@ -24,6 +24,7 @@ writes episode specs and task rows, measures repetition, exports distillation ro
 from __future__ import annotations
 
 import argparse
+import collections
 import contextlib
 import difflib
 import hashlib
@@ -46,7 +47,7 @@ DEFAULTS = {'support': 4, 'query': 4, 'max_query': 12, 'query_rollouts': 24, 'ex
             'min_success': 0.1, 'max_success': 0.85, 'near_duplicate': 0.9, 'max_worlds_per_family': 40,
             'stale_parents': 3, 'evaluations': 4, 'fits': 1, 'cost_weight': 0.05, 'episode_seconds': 10800,
             'workers': 4, 'case_seconds': 900, 'max_model_requests': 48, 'max_turns': 40, 'ablation': True,
-            'promotion_every': 4, 'promotion_samples': 2, 'seed': 'memetic-v1'}
+            'promotion_every': 4, 'promotion_samples': 2, 'held_families': 5, 'seed': 'memetic-v1'}
 
 
 def _hash(*parts):
@@ -111,8 +112,22 @@ def dedupe(groups, threshold):
     return kept
 
 
-def program_pool(cases, *, settings, protected=None):
-    """{family: {'held': bool, 'components': [[case]]}} over train-split, unprotected cases with enough worlds."""
+def program_pool(cases, *, settings, protected=None, held_cases=None):
+    """{family: {'held': bool, 'components': [[case]]}} over train-split, unprotected cases with enough worlds.
+
+    With ``held_cases`` (the registered evaluation-only memetic held packet, ``held-packet``), every program of
+    ``cases`` is meta-trained and the held programs come from that packet only: its worlds are in the protection
+    union, so the ordinary RL pool and ``cases`` no longer contain them. Without it, held is a seeded per-family
+    fraction (fixtures and sources that are not trained by ordinary RL)."""
+    if held_cases is not None:
+        train = program_pool(cases, settings={**settings, 'held_fraction': 0.}, protected=protected)
+        held = program_pool([{**case, 'split': 'train'} for case in held_cases],
+                            settings={**settings, 'held_fraction': 1.})
+        overlap = {case['id'] for entry in train.values() for group in entry['components'] for case in group} & {
+            case['id'] for entry in held.values() for group in entry['components'] for case in group}
+        if overlap or set(train) & set(held):
+            raise ValueError('memetic held programs overlap the meta-training program source')
+        return {**train, **held}
     families = {}
     for case in cases:
         if case.get('split') != 'train' or case.get('family') in (None, FAMILY):
@@ -344,7 +359,21 @@ def _excluded(memo_path, parents, settings):
     return since < settings['stale_parents']
 
 
-def build(*, cases, out, parent_sha256, settings, protected=None, families=None, log=print):
+def held_packet_rows(cases, *, settings, protected=None, count=None):
+    """The rows of the memetic held families: ``held_families`` whole task families (smallest eligible first, then
+    a seeded order), every train row of each (all its programs and related worlds), so held programs are never
+    meta-trained and their development and confirmation worlds never reach ordinary RL once registered."""
+    count = settings.get('held_families', 5) if count is None else count
+    eligible = program_pool(cases, settings={**settings, 'held_fraction': 1.}, protected=protected)
+    sizes = collections.Counter(case.get('family') for case in cases if case.get('split') == 'train')
+    families = sorted({key.split('@')[0] for key in eligible},
+                      key=lambda family: (sizes[family], _hash(settings['seed'], 'held', family)))[:count]
+    chosen = set(families)
+    return families, [case for case in cases if case.get('split') == 'train' and case.get('family') in chosen
+                      and not (protected is not None and protected(case))]
+
+
+def build(*, cases, out, parent_sha256, settings, protected=None, families=None, log=print, held_cases=None):
     """Write episode specs and the ``memetic_improve`` task source for one parent. Crisp and model-free (the
     controller runs it when a memetic round is due); the parent's evidence and baselines are prepared lazily by the
     first rollout of each episode inside the actor lease (``ensure_prepared``)."""
@@ -356,7 +385,7 @@ def build(*, cases, out, parent_sha256, settings, protected=None, families=None,
     if parent_sha256 not in parents:
         parents.append(parent_sha256)
         write_json_durable(parents_path, parents)
-    pool = program_pool(cases, settings=settings, protected=protected)
+    pool = program_pool(cases, settings=settings, protected=protected, held_cases=held_cases)
     chosen = [f for f in (families or sorted(pool)) if f in pool]
     rows, held_rows, programs = [], [], []
     for family in chosen:
@@ -456,8 +485,21 @@ def bind_round(config, declared, state, parent_sha256, *, protected=None):
         source_path = Path(program_source['path'])
         if hashlib.sha256(source_path.read_bytes()).hexdigest() != program_source['sha256']:
             raise ValueError('memetic program source changed after its recipe binding')
+        held_source = declared.get('held_program_source')
+        held_cases = None
+        if held_source is not None:
+            held_path = Path(held_source['path'])
+            if hashlib.sha256(held_path.read_bytes()).hexdigest() != held_source['sha256']:
+                raise ValueError('memetic held program source changed after its recipe binding')
+            held_cases = list(read_jsonl(held_path))
+            # Held development/confirmation worlds must not be ordinary RL rows (they are withdrawn through the
+            # protection union when the RL pool is assembled); refuse a controller whose task source still has them.
+            ordinary = {row['id'] for row in read_jsonl(Path(config['cases']))}
+            if ordinary & {case['id'] for case in held_cases}:
+                raise ValueError('the ordinary RL task source still contains memetic held worlds; assemble the pool '
+                                 'after registering the held packet')
         build(cases=list(read_jsonl(source_path)), out=path.parent, parent_sha256=parent_sha256, settings=settings,
-              protected=protected if protected is not None else protected_filter())
+              protected=protected if protected is not None else protected_filter(), held_cases=held_cases)
     receipt = json.loads(path.read_text())
     source = Path(receipt['task_source']['path'])
     if (receipt.get('parent_sha256') != parent_sha256 or not source.is_file() or
@@ -694,12 +736,31 @@ def main(argv=None):
     b.add_argument('--endpoint', required=True)
     b.add_argument('--families', nargs='*')
     b.add_argument('--settings', default='{}')
+    b.add_argument('--held-cases', type=Path, help='the registered memetic held packet (cases.jsonl)')
+    h = sub.add_parser('held-packet', help='write the evaluation-only memetic held packet from an RL selection pool')
+    h.add_argument('--pool', type=Path, required=True)
+    h.add_argument('--out', type=Path, required=True, help='new packet directory (cases.jsonl, receipt.json)')
+    h.add_argument('--settings', default='{}')
     args = parser.parse_args(argv)
+    if args.command == 'held-packet':
+        settings = {**DEFAULTS, **json.loads(args.settings)}
+        families, rows = held_packet_rows(list(read_jsonl(args.pool)), settings=settings, protected=protected_filter())
+        args.out.mkdir(parents=True, exist_ok=False)
+        packet = args.out / 'cases.jsonl'
+        packet.write_text(''.join(json.dumps({**row, 'split': 'dev'}, ensure_ascii=False) + '\n' for row in rows))
+        receipt = {'schema': 'natlang.memetic-held-packet/1', 'families': families, 'rows': len(rows),
+                   'pool': {'path': str(args.pool), 'sha256': hashlib.sha256(args.pool.read_bytes()).hexdigest()},
+                   'cases': {'path': 'cases.jsonl', 'sha256': hashlib.sha256(packet.read_bytes()).hexdigest()},
+                   'settings': settings}
+        write_json_durable(args.out / 'receipt.json', receipt)
+        print(json.dumps({k: receipt[k] for k in ('families', 'rows', 'cases')}))
+        return
     from .memetic_program import actor_identity
     settings = {**DEFAULTS, **json.loads(args.settings)}
     receipt = build(cases=list(read_jsonl(args.cases)), out=args.out,
                     parent_sha256=actor_identity(args.endpoint)['checkpoint_sha256'], settings=settings,
-                    protected=protected_filter(), families=args.families)
+                    protected=protected_filter(), families=args.families,
+                    held_cases=list(read_jsonl(args.held_cases)) if args.held_cases else None)
     print(json.dumps({k: receipt[k] for k in ('task_source', 'held_source', 'repetition', 'held_programs')}))
 
 

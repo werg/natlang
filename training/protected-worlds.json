@@ -8,6 +8,11 @@
       "registry": "training/neuralese_corpora.json"
     },
     {
+      "id": "memetic-held-programs",
+      "kind": "evaluation-packets",
+      "registry": "training/memetic-held-programs.json"
+    },
+    {
       "id": "held-union-source-groups",
       "kind": "source-groups",
       "path": "e2e-current-protection-bundle-20261015-v1/held-union/full/source-groups/text-data.jsonl",
