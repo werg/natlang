@@ -57,6 +57,8 @@ def validate_stage_parameters(parameters):
         raise ValueError('interleaved RL update_objective must be policy or self-distillation')
     if parameters.get('guidance_stage', 'backbone') not in GUIDANCE_STAGES:
         raise ValueError('interleaved RL guidance_stage is backbone or writer')
+    from .memetic_admission import validate_parameters as validate_distillation
+    validate_distillation(parameters)
     bonus = parameters.get('neuralese_use_bonus')
     if bonus is not None and (type(bonus) not in (int, float) or not 0 <= bonus <= 1):
         raise ValueError('interleaved RL neuralese_use_bonus must be in [0, 1]')
@@ -97,6 +99,7 @@ def bind_stage(config, state, state_path):
     declared = declared_stage(config)
     if declared is None:
         return config, None
+    declared['controller_out'] = config.get('out')
     if config.get('mandatory_sft_only'):
         raise ValueError('an interleaved RL controller is not a mandatory SFT-only continuation')
     result = dict(config)
@@ -134,7 +137,9 @@ def window_due(declared, state):
         return False
     interleave = state['interleave']
     if interleave.get('sft_complete'):
-        return False
+        # Newly queued memetic distillation packages reopen a completed joint SFT stage (rl/memetic_admission.py).
+        from .memetic_admission import unseen_packages
+        return bool(unseen_packages(declared.get('controller_out'), state))
     if interleave.get('active_window') is not None or interleave.get('pending_initial_window'):
         return True
     return state.get('round', 0) - interleave['rl_rounds_at_last_window'] >= declared['parameters']['rl_rounds_per_window']
@@ -189,14 +194,21 @@ def run_sft_window(config, declared, state, state_path, control):
         directory.mkdir(parents=True, exist_ok=True)
         source = {key: value for key, value in config.items() if key not in ('interleaved_rl_stage',)}
         source['resident_data_directory'] = str(directory / 'resident-data')
-        window_config, _ = continuation_config(source, declared['sft_stage'], checkpoint=state['checkpoint'],
+        # Pending memetic distillation packages become a recorded source append of this window; afterwards the
+        # lineage's windows continue on the appended source (rl/memetic_admission.py).
+        from .memetic_admission import prepare_window
+        recipe_path, sft_stage, admission = prepare_window(config, declared, state, state_path, directory)
+        if recipe_path is not None:
+            source['production_recipe'] = str(recipe_path)
+        window_config, _ = continuation_config(source, sft_stage, checkpoint=state['checkpoint'],
                                                out=str(directory))
         window_config.pop('rolling_sft_resume', None)
         parent = {'path': str(Path(state['checkpoint']).resolve(strict=True)),
                   'sha256': sha256_file_hex_cached(state['checkpoint'])}
         window_config['interleaved_window'] = {'schema': SCHEMA, 'stage': declared['id'], 'window': index,
             'parent': parent, 'controller_round': state.get('round', 0),
-            'sft_updates': declared['sft_window_updates']}
+            'sft_updates': declared['sft_window_updates'],
+            **({'memetic_admission': admission} if admission is not None else {})}
         write_json_durable(config_path, window_config)
         interleave['active_window'] = {'window': index, 'directory': str(directory),
             'config': {'path': str(config_path), 'sha256': sha256_file_hex_cached(config_path)},
