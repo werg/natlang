@@ -60,3 +60,12 @@ test('collector progress receipts come from actual successful execution, excludi
   assert.equal(receipts[2].invocation_id, 'synthetic-progress-run');
   assert.equal(completedActionProgress('not-running'), undefined);
 });
+
+test('a text-typed call is told that its next complete reply is the result, and that reply returns', async () => {
+  const requests = [];
+  const agent = new NativeToolAgent(request => { requests.push(structuredClone(request));
+    return requests.length === 1 ? truncated(0) : { text: 'Brief guidance.', completion_tokens: 3 }; }, { maxFailureRepairs: 1 });
+  const result = await interpreter({ agent: session => agent.run(session) }).run(lambda({ type: '() => string', instructions: 'Write brief guidance.' }));
+  assert.match(requests[1].messages.at(-1).content, /This call returns text: your next reply, complete and without a tool call, is returned as the result/);
+  assert.equal(result.value, 'Brief guidance.');
+});

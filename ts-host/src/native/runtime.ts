@@ -1332,6 +1332,14 @@ export class NativeSession {
    * A final reply's text as the result when the declared return type accepts it. Neuralese<string> text goes through
    * the typed block writer; a bare "done" asks for the already staged value.
    */
+  /** Whether a plain, complete reply would be this call's result (a text-typed call with nothing staged). */
+  takesTextResult(): boolean {
+    if (this.lam.type.kind !== 'lambda' || this.lam.return !== MISSING) return false;
+    const resolved = this.env.resolve(this.lam.type.returns);
+    const element = resolved.kind === 'neuralese' ? this.env.resolve(resolved.element) : resolved;
+    return element.kind === 'prim' && element.name === 'string';
+  }
+
   async acceptTextResult(text: string): Promise<boolean> {
     const answer = text.trim();
     if (this.lam.type.kind !== 'lambda' || this.lam.return !== MISSING || !answer || /^done[.!]?$/i.test(answer)) return false;

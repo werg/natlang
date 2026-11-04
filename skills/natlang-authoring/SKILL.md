@@ -71,6 +71,12 @@ Read [tuning](references/tuning.md) for when tuning pays off, writing and groupi
 
 ## Preserve the execution model
 
+A function declared `returns: string` (or `Neuralese<string>`) returns its plain,
+complete final reply when nothing is staged; no tool call is needed. Recovery: when
+the runtime reports "This call returns text: your next reply ... is returned as the
+result", answer with only the result and keep it short; do not continue the cut-off
+reasoning.
+
 When the host selects semantic execution, await callable-folder module entry
 and inline native boundaries. Captured mutable bindings are shared cells:
 complete the current step before consuming the next Fold event, and use bounded

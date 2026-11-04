@@ -1958,6 +1958,9 @@ export class NativeToolAgent {
           'The code in your reply was not run: code runs only when you call eval with it. ' : '';
         const feedback = response.truncated ? `Your reply was cut off ${limit === null ? 'at the length limit' : `at the ${limit}-token limit`} before any tool call. ` +
           (session.lam.return !== MISSING && !missing ? 'A complete typed result is already staged. Call return_result with {status: "success"} and omit value to return that exact result, or reply "done" to return it without a tool call.' :
+            // A text-typed call returns its plain reply: a model that thinks aloud in the reply must be told that the
+            // reply itself is the result, so it answers short instead of writing on (writer runaways, 2026-11-04).
+            session.takesTextResult() ? 'This call returns text: your next reply, complete and without a tool call, is returned as the result, so reply with only the result, shorter than the limit.' :
             'Take the next step with one tool call.') :
           unrun + (missing || 'The staged result is incomplete.');
         if (response.truncated && ++failureRepairs > (this.options.maxFailureRepairs ?? Infinity)) {

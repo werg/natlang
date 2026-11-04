@@ -1,5 +1,15 @@
 # Model-facing changes and their measurement
 
+### 2026-11-04 — Truncated reply in a text-typed call: "your next reply is the result" (debt: live measurement)
+
+`ts-host/src/native/agent.ts`: when a reply is cut off before any tool call in a call whose result is text
+(`string` / `Neuralese<string>`, nothing staged), the feedback now reads "This call returns text: your next reply,
+complete and without a tool call, is returned as the result, so reply with only the result, shorter than the limit."
+instead of "Take the next step with one tool call." (which pointed a writer that was thinking aloud at more tool
+work). Motivation: 3/12 live `writeGuidance` runs on bf95 ran away in 4,096-token prose turns without returning.
+**Measurement:** the 48-sample writer run (`/mnt/external/natlang-memetic-20261103/writer48`, completion rate, turns,
+runaways) before/after.
+
 ### 2026-11-03 — Scoped program guidance (M6) and `withhold:` tool restriction (M4) (debt: live measurement)
 
 (M6) Stored program guidance can be a list of scoped bindings; each call now imports only its own function's binding
