@@ -246,3 +246,47 @@ which serves the full67 rollout collection at about 3.5 minutes per request. Out
 `/mnt/external/natlang-memetic-20261103/e2e-v1/`. No episode has completed, so there is no evidence yet that the
 supervisor acts, edits apply, the reward is computed and the update replays on the real model, and no capability
 claim of any kind.
+
+## 12. Closing the open items (2026-11-04)
+
+Coordinator follow-up: the open M items meant the stage would not yet train meta-improvement. What changed:
+
+| Item | Now | Commits |
+| --- | --- | --- |
+| M1 controller build | A due memetic round builds the parent's task source itself (crisp, model-free, 2 s on the 6,665-row production pool: 66 programs from 21 families, 5 held). Evidence and baselines are prepared once per program and parent inside the round's actor lease **before** collection (`prepare_round`), so the episodes' time is spent improving. | 9991751d5, 55a10bfb8, 99a438662 |
+| M3 ablation | Actual vs shuffled (another program's committed or default guidance) vs none on the paired query worlds for every committed guidance; recorded in the outcome. | 9991751d5 |
+| M5 distillation | `after_collection` (in the lease, after collection) writes `distill/<parent>/manifest.json`: episodes beating their anchor, and the improved programs' verified query runs lowered to guidance producer/consumer SFT graphs. Appending them to the SFT source is the remaining wiring. | 9991751d5 |
+| M7 promotion | Every `promotion_every` memetic rounds the held programs are improved by the current parent and scored on development worlds; the paired gain is compared with the previous evaluated parent (`promotion/history.json`). The verdict does not yet gate the lineage's parent. | 9991751d5 |
+| M8 noise | Query reserves up to 12 worlds; cost-sized (cheap: every world, >= 24 rollouts; expensive: 4 worlds x up to 4 samples); candidate, baselines and ablation share worlds and seeds; identical change sets are measured once per group; binomial noise recorded with the anchor. | 9991751d5 |
+| M6 scoped guidance | One native state per scope: program-wide for every call, function binding (program + function part) only for that function's calls (ts-host per-call selection); input-class guidance becomes a root skill whose description is the class (progressive disclosure). | 7644f3dd8, 9991751d5 |
+| M4 tool surface | `withhold:` frontmatter (runtime refusal with a teaching error) and the workspace `withhold` change kind. | 7644f3dd8, c026f8ac6 |
+| M2 adapters | The actor already serves per-request bank adapters; `memetic_fit` fits the bank on the parent's verified support successes; `fit` is offered and baseline (b) includes the bank default fit when `NATLANG_BANK_SERVICE` is set. No real fit has run yet. | b03b17f77, 9991751d5 |
+| Pool dedupe | The old rule compared program text plus a 4 KB input prefix, collapsing all 22 typo-repair codebases into one world; it now compares world data with the corpus MinHash rule. | 9991751d5, 55a10bfb8 |
+
+Runtime: production cut over to v45 (bundle at b03b17f77) before these commits; the memetic stage adopts at the next
+runtime cut from main >= the commits above (successor recipe `ops/memetic-successor-v44b-1103`, README updated).
+
+Native writing (C6, steps 1-3 implemented by a helper, reviewed here): `guidance` learned operator (prompt rows on the
+real `writeGuidance` call site, seed cap 512) and its case converter (`data/guidance_cases.py`,
+`scripts/neuralese_data/build_guidance_cases.py`); operator seed schedule /2 keeps the close marker at CE weight 1
+while the seed body anneals (/1 unchanged, recorded transition); provider converters supervise the producer close
+marker under a new conversion identity (old rows keep their bindings and exposure) — 9c51e2f72, f148b34c6, 933b1d188.
+Supply: **zero** checked text-writer guidance records exist (JOLT ran `writer: off`). The interleaved stage now
+declares `guidance_stage: backbone | writer` (419b222f2) and the successor recipe sets `writer`, which is what produces
+them. The close-marker census of the v44b mix is still unmeasured (uncached index of one compressed source stalls it).
+
+Findings from the live runs (anomalies treated as bugs):
+- The first post-fix e2e (typo-repair codebases, 900 s per case) produced 4/4 **unscored** support rollouts (wall-clock
+  timeouts on the shared, loaded actor; evidence persistence on the external disk took 5-11 s per record). The stage
+  had measured that as 0% success. Fixed (2f1cf523d): unscored runs are no measurement; they neither admit nor
+  exclude a program. E2E moved to NVMe output, a reading program, 1800 s per case, on a dedicated low-priority actor
+  (:8271, bf95 `71c3eb45`) after the shared :8270 actor went away mid-run.
+- Writer probe with a 768-token turn cap: 0/3 (truncated prose). With production settings (no turn cap), samples split
+  into fast completions (about 1-1.5 min, input-specific, fact-grounded guidance that states the verified result, as
+  writeGuidance step 2 asks) and runaway runs that think aloud in 4,096-token visible-text turns without calling
+  `return_result`. Per-call wall clock now 600 s; 48-sample result below.
+- A memetic episode's world process runs a nested production collection (4 workers): the e2e unit was OOM-killed at a
+  4 GiB budget and needs about 12 GiB. A controller running memetic rounds must budget this per concurrent episode.
+- The GB10 actor generates about 45 tokens/s per stream; one reading-task rollout takes 10-20 minutes, so one memetic
+  episode (preparation + supervisor + evaluations + query) takes hours on the DGX. Production memetic rounds belong on
+  the cloud actors; the DGX e2e is a mechanics check only.
