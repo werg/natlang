@@ -320,3 +320,29 @@ Live status at the end of the session (2026-11-04 ~02:00 CET; bf95 `71c3eb45` on
 - **Writer runaways (d6a581063).** A truncated reply in a text-typed call is answered with "your next reply,
   complete and without a tool call, is returned as the result". Pre-change sample: 12/17 completed, 6 runs with
   truncated turns; the 48-sample post-change run is in `writer48-after`.
+
+## 14. Criterion 4: real-model end-to-end episodes (e2e v3, 2026-11-04)
+
+Run: `/home/werg/data/memetic-e2e-v3` (unit memetic-e2e3-3; actor bf95 `71c3eb45`, :8271, DGX, low priority). Program
+`ext_bgkit_searchqa_reading@1d06c3ed762e` (root `answer_by_clue_type` with Neuralese children `understand_clue`,
+`read_snippet`). Small settings: 2 support and 2 query worlds, 2 supervisor samples, 2 evaluations each.
+
+- **Preparation (in lease, 4,586 s):** parent support 1/4 (all scored); paired query baselines none 2/4 (noise 0.25)
+  and mechanical default 0/4. Anchor = 0.5.
+- **Supervisor episodes:** both proposed a skill for the root function. Sample 1 proposed body `...`, then
+  "Implementation details to be filled."; both scored 0/4 on support. It committed the second with a false reason
+  ("imports and implements answer_by_clue_type ..."). Paired query 0.667 vs anchor 0.5 (gain +0.167, inside the
+  0.25 noise): reward quality 0.64, 56 turns. Sample 0's real skill text also scored 0/4 support; it then exhausted
+  its 64 model requests without committing (quality 0).
+- **Training path:** both episodes compiled to whole-graph replays (64 and 56 invocations). The JOLT+ group advantage
+  refused the group (a None anchor from the uncommitted episode); fixed in fbb247383. Re-run on the saved rollouts:
+  advantages [-0.5, +0.142], JOLT+ native policy objective prepared over 2 whole graphs. `after_collection` ran
+  (distillation: 1 supervisor episode, 0 guidance graphs, because the commit was a skill and not guidance).
+- **Fixes from this run:** placeholder skill bodies and guidance text are refused with a one-sentence error
+  (def407ca7, ae7963c3e). The mechanical default outlines only the actions a success relied on (9da9018f6); the old
+  outline was mostly an errored eval and source reads, and it scored 0/4.
+- **What this does and does not show:** the mechanics now work end to end on the real model (supervisor acts, edits
+  apply and evaluate, paired reward, replay, objective). The bf95 supervisor's improvements are weak: placeholders
+  and false commit reasons. With n=4 per arm, a noise-level gain still earns a positive advantage. Production
+  settings (24 query rollouts, noise about 0.1) narrow that; register M8 tracks realized noise against anchor gaps.
+  There is no capability claim.
