@@ -239,9 +239,9 @@ def prepare(args):
             task_descriptors([row])
             rows += 1
     parent, step, previous_state = earned_parent(previous, args.checkpoint)
-    out = Path(args.out).resolve()
+    out = Path(args.out).resolve() if args.out else None
     control = Path(args.control_dir).resolve()
-    if out.exists() and any(out.iterdir()):
+    if out is not None and out.exists() and any(out.iterdir()):
         raise SystemExit(f'{out} is not empty')
     control.mkdir(parents=True, exist_ok=True)
     loss = json.loads(args.policy_loss) if args.policy_loss else DEFAULT_LOSS
@@ -284,6 +284,12 @@ def prepare(args):
         recipe = successor_recipe(previous['production_recipe'], control, stage_id=args.stage_id,
                                   sft_stage=previous['production_stage'], task_source=task_source,
                                   parameters=parameters, sft_window=args.sft_window_updates)
+    if args.recipe_only:
+        # The successor recipe alone (e.g. for session.py prepare --recipe); controls are prepared from it later.
+        result = {'recipe': str(recipe), 'ce_objective_transition': ce_policy, 'parent': parent,
+                  'global_step': step, 'stage': args.stage_id}
+        print(json.dumps(result), flush=True)
+        return result
     config = copy.deepcopy(previous)
     for key in ('mandatory_sft_only', 'rolling_sft_resume', 'execution_transition_source_controller',
                 'task_selection_history', 'branch_origin'):
@@ -352,9 +358,11 @@ def main(argv=None):
                              'tokens (own-output boundary_weights)')
     parser.add_argument('--runtime', required=True, help='frozen runtime root containing rl/interleave.py')
     parser.add_argument('--control-dir', required=True, help='new directory for the recipe, wrapper and inputs')
-    parser.add_argument('--config-out', required=True)
-    parser.add_argument('--out', required=True, help='new controller output directory')
-    parser.add_argument('--id', required=True)
+    parser.add_argument('--config-out')
+    parser.add_argument('--out', help='new controller output directory')
+    parser.add_argument('--id')
+    parser.add_argument('--recipe-only', action='store_true',
+                        help='write only the successor recipe (and its CE transition) into --control-dir')
     parser.add_argument('--stage-id', default='interleaved_jolt_rl_v1')
     parser.add_argument('--rl-rounds-per-window', type=int, default=2)
     parser.add_argument('--start-with', choices=('rl', 'sft'), default='rl')
@@ -363,7 +371,10 @@ def main(argv=None):
     parser.add_argument('--rows-per-round', type=int, default=16)
     parser.add_argument('--group', type=int, default=8)
     parser.add_argument('--policy-loss', help='canonical policy loss JSON (default JOLT+ tis)')
-    prepare(parser.parse_args(argv))
+    args = parser.parse_args(argv)
+    if not args.recipe_only and not (args.config_out and args.out and args.id):
+        parser.error('--config-out, --out and --id are required unless --recipe-only')
+    prepare(args)
 
 
 if __name__ == '__main__':
