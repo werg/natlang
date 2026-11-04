@@ -564,6 +564,12 @@ def put_checkpoint(run, source, target_path):
     from natlang_neuralese.common.hashing import sha256_file_hex_cached
     source = Path(source).resolve(strict=True)
     sha, size = sha256_file_hex_cached(source), source.stat().st_size
+    found = locate(run, sha)
+    if found is not None and found[1].get('bytes') == size:
+        # The exact bytes are already a committed blob (e.g. the boundary a cloud learner exported itself, uploaded
+        # at cloud bandwidth): a new worker fetches them directly. Building and uploading a delta from the DGX
+        # (2026-11-04: 22 min build + 5.9 GB at ~6 MB/s) only delayed the first DiLoCo session by ~1.5 h.
+        return {'sha256': sha, 'bytes': size, 'encoding': 'raw', 'kind': 'checkpoint', 'path': str(target_path)}
     declared = checkpoint_bases(run).get(sha)
     if declared is not None and declared['bytes'] == size:
         chain = base_specs(run, sha)
