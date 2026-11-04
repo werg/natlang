@@ -290,3 +290,14 @@ Findings from the live runs (anomalies treated as bugs):
 - The GB10 actor generates about 45 tokens/s per stream; one reading-task rollout takes 10-20 minutes, so one memetic
   episode (preparation + supervisor + evaluations + query) takes hours on the DGX. Production memetic rounds belong on
   the cloud actors; the DGX e2e is a mechanics check only.
+
+Live status at the end of the session (2026-11-04 ~02:00 CET; bf95 `71c3eb45` on a dedicated low-priority DGX actor):
+- Writer, production turn settings, 600 s per call, 12 of 48 diverse real JOLT inputs (48 families) so far: 9/12
+  returned guidance (median 760 characters, input-specific: mean fact-word overlap 0.27; no echo); 3/12 ran away in
+  4,096-token visible-text turns without `return_result`; 5 of 9 state the verified answer, as writeGuidance step 2
+  asks (acceptable inside JOLT+'s privileged teacher context, never in memetic guidance, which has no facts).
+  Measurement continues (`/mnt/external/natlang-memetic-20261103/writer48`, `analyze.py`).
+- E2E v3 (program `ext_bgkit_searchqa_reading@1d06c3ed762e`, `/home/werg/data/memetic-e2e-v3`): crisp build, then
+  preparation inside the lease: parent support 1/4 resolved successes (4/4 scored, 20 min), paired query baseline
+  2/4. The default-guidance baseline and the two supervisor episodes (supervisor acts, edits apply, evaluation, reward,
+  replay compile and JOLT+ objective preparation) were still running; criterion 4 is not yet demonstrated.
