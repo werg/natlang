@@ -69,3 +69,13 @@ test('a text-typed call is told that its next complete reply is the result, and 
   assert.match(requests[1].messages.at(-1).content, /This call returns text: your next reply, complete and without a tool call, is returned as the result/);
   assert.equal(result.value, 'Brief guidance.');
 });
+
+test('a text-typed call reading a function it does not have is told that its reply is the result', async () => {
+  const requests = [];
+  const agent = new NativeToolAgent(request => { requests.push(structuredClone(request));
+    return requests.length === 1 ? { calls: [['read_code', { name: 'assign' }]], completion_tokens: 3 } :
+      { text: 'Brief guidance.', completion_tokens: 3 }; });
+  const result = await interpreter({ agent: session => agent.run(session) }).run(lambda({ type: '() => string', instructions: 'Write brief guidance.' }));
+  assert.match(JSON.stringify(requests[1].messages.slice(-2)), /no-such-function[^"]*This call returns text: reply with the result itself, without a tool call/);
+  assert.equal(result.value, 'Brief guidance.');
+});

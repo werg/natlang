@@ -75,7 +75,9 @@ A function declared `returns: string` (or `Neuralese<string>`) returns its plain
 complete final reply when nothing is staged; no tool call is needed. Recovery: when
 the runtime reports "This call returns text: your next reply ... is returned as the
 result", answer with only the result and keep it short; do not continue the cut-off
-reasoning.
+reasoning. A `no-such-function` error that ends "This call returns text: reply with
+the result itself" means the call has no functions to read: stop reading code and
+reply with the result.
 
 When the host selects semantic execution, await callable-folder module entry
 and inline native boundaries. Captured mutable bindings are shared cells:

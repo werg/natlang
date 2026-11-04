@@ -1938,3 +1938,15 @@ first 11 plus the final action. Motivation: in e2e v3 (bf95 71c3eb45, bgkit sear
 first 12 raw steps of a success, mostly a ReferenceError eval with prose comments, source reads and transcript
 searches; with it the program scored 0/4 on the paired query worlds against 2/4 with no guidance. Unmeasured (n=4):
 compare the default baseline against none on the first production memetic preparations.
+
+## 2026-11-04: a text-typed call reading a missing function is told its reply is the result
+
+`ts-host/src/native/runtime.ts`: a `no-such-function` rejection, in a text-typed call (`returns: string` /
+`Neuralese<string>`, nothing staged) that has no functions of its own, ends with "This call returns text: reply with
+the result itself, without a tool call". Motivation: in the 48-sample guidance-writer measurement after d6a581063
+(`/mnt/external/natlang-memetic-20261103/writer48-after`, bf95 71c3eb45), resolved runs completed 21/28. Of the runs
+that hit a truncated turn, 10/11 completed, mostly in 2 turns, compared with 4/6 before. The remaining failures loop
+on `read_code` of the consumer program's names (`assign`, `desk`, `finish`, `intent`), which all come back
+`no-such-function`, until the wall-clock limit. 20 further runs got no first response within 15 minutes because the
+actor was saturated by the concurrent memetic e2e; those are unresolved, not writer outcomes. Unmeasured: re-run
+about 48 writer samples on an idle actor.

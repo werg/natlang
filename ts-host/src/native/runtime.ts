@@ -1897,6 +1897,8 @@ export class NativeSession {
         requested === this.lam.functionName ? `${requested} is the call you are executing: the opening message has all of its ` +
           `signature and instructions. ${SELF_CALL_ADVICE.replace(/\.$/, '')}` :
         inScope.includes(requested) ? `${requested} is a value in this call's eval scope: inspect it with eval, for example console.log(${requested})` :
+        // A text-typed call with no functions of its own (a writer) has nothing to read: its reply is its result.
+        !own.length && this.takesTextResult() ? 'This call returns text: reply with the result itself, without a tool call' :
         undefined;
       throw new Reject([{ path: requested, code: 'no-such-function', expected: what ? `${readable}. ${what}` : readable }]);
     }
