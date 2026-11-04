@@ -539,6 +539,14 @@ def test_argument_extract_notes_cover_string_producers_per_call_and_skip_typed_o
     assert children[0]['value'] == 'turn: Owner: cancel the visit of Mango please' and skipped == {'typed_producer': 1}
 
 
+def test_scripted_named_argument_matches_are_not_escaped_and_root_script_children_are_not_sites():
+    import authored_child_notes as notes
+    assert notes.match_key('zone: string = "Z3"') == 'zone: string = "Z3"'
+    assert notes.match_key('He said "go" now') == 'He said \\"go\\" now'
+    assert notes.site_of({'match': ['You are inside this call: read(', 'x']}) == 'read'
+    assert notes.site_of({'match': ['Kettle, box unopened'], 'value': 'restock'}) is None
+
+
 def test_round6_workers_draw_a_larger_held_share_and_older_workers_keep_their_split():
     worlds = [f'authored:world-{i}' for i in range(400)]
     new = [authored.authored_split(w, {'worker': 'w140'}) for w in worlds]

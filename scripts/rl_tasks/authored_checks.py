@@ -340,7 +340,7 @@ def blind_failure_modes(task, functions):
         files = [(p_, hb) for p_, hb in helpers.items() if p_.rsplit('/', 1)[-1][:-3] == name]
         for entry in entries or []:
             fragment = str(entry.get('match', '')).strip().lower()
-            if len(fragment) < 3:
+            if len(fragment) < 6:
                 continue
             for path, (header, body) in files:
                 if fragment in (header + '\n' + body).lower():

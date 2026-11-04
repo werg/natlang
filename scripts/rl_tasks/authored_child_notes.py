@@ -39,7 +39,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training' / 'neuralese'))
-from child_notes import CALL, declared_sites, fragment, rendered  # noqa: E402
+from child_notes import CALL, declared_sites, fragment, rendered, string_key  # noqa: E402
 from measure_repetition import write_text_atomic  # noqa: E402
 from natlang_neuralese.common.paths import resolve_str  # noqa: E402
 
@@ -51,6 +51,24 @@ LOOP = re.compile(r'\b(for|while)\s*\(|\.(map|forEach|reduce|flatMap)\(|\biterat
 def smoke_code(row):
     smoke = row['curriculum']['external']['structure']['smoke']
     return '\n'.join(step[1].get('code', '') for step in smoke.get('root', []) if step and step[0] == 'eval')
+
+
+NAMED_ARG = re.compile(r'^([A-Za-z_]\w*): string = "(.*)"$', re.S)
+
+
+def match_key(match):
+    """The call-opening text a scripted ``match`` stands for: a raw fragment of an argument (escaped as the runtime prints a
+    string value), or the named form ``name: string = "value"`` of a whole string argument."""
+    named = NAMED_ARG.match(match)
+    return string_key(named.group(1), named.group(2)) if named else rendered(match)
+
+
+def site_of(entry):
+    """The producer helper a reference child entry answers (None for a root-script child that matches other text)."""
+    match = entry.get('match')
+    match = [match] if isinstance(match, str) else match or []
+    found = re.match(re.escape(CALL) + r'([\w$]+)\(', match[0]) if match else None
+    return found.group(1) if found else None
 
 
 def good_note(value):
@@ -78,7 +96,7 @@ def derive(row):
                 if not isinstance(match, str) or not good_note(note):
                     skipped['constant_or_short_note'] += 1
                     continue
-                children.append({'match': [f'{CALL}{site}(', rendered(match)], 'value': note, 'provenance': 'checked'})
+                children.append({'match': [f'{CALL}{site}(', match_key(match)], 'value': note, 'provenance': 'checked'})
         else:
             calls = len(re.findall(rf'\b{re.escape(site)}\s*\(', code))
             if calls != 1 or LOOP.search(code):
@@ -154,7 +172,7 @@ def mechanical(pool, tasks_path, dry_run=False, provenance='mechanical:argument-
         for row in rows:
             task = tasks.get(row['id'].split(':')[2]) if row['id'].count(':') >= 3 else None
             existing = (row['curriculum'].get('reference') or {}).get('children') or []
-            have = {re.match(re.escape(CALL) + r'([\w$]+)\(', c['match'][0]).group(1) for c in existing}
+            have = {site for site in (site_of(c) for c in existing) if site}
             if (task is None or row['split'] != 'train' or not (row['curriculum'].get('external') or {}).get('structure')
                     or not set(declared_sites(row)) - have):
                 out.append(row)
