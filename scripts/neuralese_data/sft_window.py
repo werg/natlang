@@ -135,6 +135,10 @@ def next_window(previous_config, out, config_out, *, checkpoint_path=None, windo
     c.pop('rolling_sft_resume', None)  # a same-slot retry control never carries into a new window
     if checkpoint_path is not None:  # the same bytes at another lineage's path (a relocated cloud parent)
         c['checkpoint'] = str(checkpoint_path)
+    memory_request = previous.parent / TRAINER_PARAMETER_REQUEST
+    memory_transition = None
+    if memory_request.is_file() and Path(os.path.abspath(out)).parent == Path(os.path.abspath(previous)).parent:
+        memory_transition = apply_memory_parameters(c, json.loads(memory_request.read_text()), binding(memory_request))
     c['seed_trainer_parameters'] = copy.deepcopy(c['trainer_parameters'])
     if ident:
         c['id'] = ident
@@ -143,20 +147,61 @@ def next_window(previous_config, out, config_out, *, checkpoint_path=None, windo
         'actual_completed_controller': binding(previous / 'state.json'), 'prior_control': binding(previous_config),
         'scored_graph_anchor': anchor, 'changed_controls': {
             **({'refresh_after_updates': [prior_window, window]} if window is not None and window != prior_window else {}),
-            **({'runtime': [str(prior_runtime), str(runtime)]} if runtime is not None else {})},
+            **({'runtime': [str(prior_runtime), str(runtime)]} if runtime is not None else {}),
+            **({'trainer_parameters': memory_transition['changed']} if memory_transition else {})},
         **({'runtime_transition': runtime_transition} if runtime_transition else {}),
+        **({'trainer_parameter_transition': memory_transition} if memory_transition else {}),
         'reason': 'Next window of the same joint SFT continuation from the actual earned boundary.',
         'execution_admission': ({'folded_in_parent_history': folded[0]['qualification']['admission'],
                                  'controller_inheritance': 'omitted'} if folded else None),
         'new_optimizer_updates': 0, 'capability_lift_claimed': False}
     write_json_durable(config_out, c)
+    if memory_transition:
+        os.replace(memory_request, memory_request.with_name(memory_request.name + f'.consumed-{out.name}'))
     result = {'prepared': str(config_out), 'out': str(out), 'parent': ref, 'global_step': training['global_step'],
-              'source_roles': sorted(sources)}
+              'source_roles': sorted(sources),
+              **({'trainer_parameter_transition': memory_transition['changed']} if memory_transition else {})}
     print(json.dumps(result), flush=True)
     return result
 
 
 SESSION_REQUEST = 'diloco-session-request.json'
+TRAINER_PARAMETER_REQUEST = 'trainer-parameter-request.json'
+MEMORY_REQUEST_SCHEMA = 'natlang.sft-window-memory-parameters/1'
+# Execution-memory knobs only: activation-checkpoint input storage, readout/FFN row chunking and layer grouping change
+# where intermediate tensors live and how rows are tiled, never the loss, data, optimizer or schedule. The learner's
+# capacity request identity binds them, so the window's start re-measures capacity under the new layout.
+MEMORY_PARAMETERS = ('checkpoint_input_offload', 'checkpoint_input_offload_directory', 'chunk_tokens',
+                     'ffn_chunk_tokens', 'checkpoint_layer_group_size')
+
+
+def apply_memory_parameters(c, request, request_binding):
+    """A lineage operator's LINEAGE/trainer-parameter-request.json (written before the boundary) changes execution
+    memory parameters of the next window: {"schema": MEMORY_REQUEST_SCHEMA, "set": {key: value}, "remove": [key],
+    "reason": str}. Any other key is refused. Returns the recorded transition; the request is consumed with the window."""
+    if request.get('schema') != MEMORY_REQUEST_SCHEMA:
+        raise SystemExit(f'{TRAINER_PARAMETER_REQUEST}: schema must be {MEMORY_REQUEST_SCHEMA}')
+    updates, removals = dict(request.get('set') or {}), list(request.get('remove') or [])
+    foreign = sorted((set(updates) | set(removals)) - set(MEMORY_PARAMETERS))
+    if foreign or not (updates or removals) or set(updates) & set(removals):
+        raise SystemExit(f'{TRAINER_PARAMETER_REQUEST} may only set or remove {MEMORY_PARAMETERS} (got {foreign})')
+    params = c['trainer_parameters']
+    if updates.get('checkpoint_input_offload') is False and 'checkpoint_input_offload_directory' in params:
+        removals.append('checkpoint_input_offload_directory')
+    if (updates.get('checkpoint_input_offload', params.get('checkpoint_input_offload')) is True
+            and not updates.get('checkpoint_input_offload_directory', params.get('checkpoint_input_offload_directory'))):
+        raise SystemExit('checkpoint_input_offload needs checkpoint_input_offload_directory')
+    changed = {}
+    for key, value in updates.items():
+        if params.get(key) != value:
+            changed[key] = [params.get(key), value]
+            params[key] = value
+    for key in removals:
+        if key in params:
+            changed[key] = [params.pop(key), None]
+    return {'schema': MEMORY_REQUEST_SCHEMA, 'request': request_binding, 'changed': changed,
+            'reason': request.get('reason'), 'math_changed': False,
+            'at': 'window boundary (never-started control; the window start re-measures capacity)'}
 
 
 def prepare_session_window(request, previous_config, previous, out, config_out, parent):

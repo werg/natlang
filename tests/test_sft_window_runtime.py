@@ -37,3 +37,30 @@ def test_rebind_runtime_refuses_learner_commands_naming_the_old_runtime(tmp_path
         sft_window.rebind_runtime(c, old, new)
     with pytest.raises(SystemExit):
         sft_window.rebind_runtime({'runtime': f'{old}/ts-host'}, old, tmp_path / 'not-frozen')
+
+
+def _memory_request(**kw):
+    return {'schema': sft_window.MEMORY_REQUEST_SCHEMA, **kw}
+
+
+def test_memory_request_turns_offload_off_and_records_each_change():
+    c = {'trainer_parameters': {'checkpoint_input_offload': True, 'checkpoint_input_offload_directory': '/scratch',
+                                'chunk_tokens': 1024, 'ffn_chunk_tokens': 1024, 'learning_rate': 1e-5}}
+    record = sft_window.apply_memory_parameters(
+        c, _memory_request(set={'checkpoint_input_offload': False, 'chunk_tokens': 4096, 'ffn_chunk_tokens': 4096}),
+        {'path': 'req', 'sha256': 'x'})
+    assert c['trainer_parameters'] == {'checkpoint_input_offload': False, 'chunk_tokens': 4096,
+                                       'ffn_chunk_tokens': 4096, 'learning_rate': 1e-5}
+    assert record['changed'] == {'checkpoint_input_offload': [True, False], 'chunk_tokens': [1024, 4096],
+                                 'ffn_chunk_tokens': [1024, 4096], 'checkpoint_input_offload_directory': ['/scratch', None]}
+    assert record['math_changed'] is False
+
+
+def test_memory_request_refuses_other_keys_and_offload_without_directory():
+    c = {'trainer_parameters': {'checkpoint_input_offload': False, 'learning_rate': 1e-5}}
+    with pytest.raises(SystemExit):
+        sft_window.apply_memory_parameters(c, _memory_request(set={'learning_rate': 2e-5}), {})
+    with pytest.raises(SystemExit):
+        sft_window.apply_memory_parameters(c, _memory_request(set={'checkpoint_input_offload': True}), {})
+    with pytest.raises(SystemExit):
+        sft_window.apply_memory_parameters(c, {'set': {'chunk_tokens': 4096}}, {})
