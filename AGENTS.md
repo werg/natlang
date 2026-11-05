@@ -1,3 +1,18 @@
+## Corrected-mix regression: LR collapse and marker-weight spam (engineering, 2026-11-05)
+
+Dev16 task_success fell 12/16 (bf95) -> 10/16 (step 93) -> 0/16 (129) -> 2/16 (140) -> 1/16 (204). Two causes:
+1. Between 93 and 129, as the update-budget LR multiplier rose 0.4 -> 1.0 (backbone about 2e-5) on the corrected mix,
+   the model fell into a "repeat the failing action, ignore the error feedback" attractor. On probe contexts it
+   repeated the failing action 12/12 times, against 0/12 for bf95 and step 93. This predates the marker weight and
+   prefix v4.
+2. `--boundary-weight 32` (producer marker min_weight) concentrated 1-9% of each update's objective on 2-26 marker
+   tokens. By step 204 the model answered `return_result` with a native_state (P(open marker) 0.71, against 0
+   before), whatever the declared result type, and looped until the budget ran out.
+Rules: do not pass `--boundary-weight` above a few tokens without per-boundary dev evidence. Raise backbone LR only
+when paired dev16 at the new rate holds. The production restart (ops/bf95-lowlr-1105) uses backbone 4e-6, row LR
+2e-4, the pre-s3 CE policy and 8-update windows, each evaluated on Pop. Steps 93-217 of corrected-mix/s3/solo are
+diagnostic only, not parents. Evidence: decisions.log 2026-11-05 and the diagnosis probes it cites.
+
 ## BF16 SFT aliases exact raw prefixes physically (engineering, 2026-11-04)
 
 Prefix arithmetic v4 (`native-prefix-physical-alias-v4-bf16-fanin`) supersedes
