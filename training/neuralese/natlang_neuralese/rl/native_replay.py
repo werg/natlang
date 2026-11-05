@@ -237,6 +237,9 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
             if not structural and capture.get('decision_sample') is not None:
                 from .decision_policy import validate_decision_sample
                 decision_sample = validate_decision_sample(capture)
+                if engine is not None:
+                    # Option scores served by another engine's export: guarded like its tokens, not exact parity.
+                    decision_sample['actor_export'] = engine
         elif forced_capture:
             if law.get('probabilities')!='exact-forced-sequence' or any(sample.get('forced') is not True
                     or sample.get('logp') is not None for sample in capture.get('samples') or []):
@@ -524,6 +527,7 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
         decision_actions.append({'kind': 'decision', 'turn': name, 'temperature': sample['temperature'],
             'chosen': sample['chosen'], 'behavior_logps': sample['behavior_logps'], 'prompt_tokens': prompt,
             'option_nodes': list(option_nodes),
+            **({'actor_export': sample['actor_export']} if 'actor_export' in sample else {}),
             'options': [[{'query': offsets[option] + prompt + index - 1, 'local_query': prompt + index - 1,
                           'token_id': token, 'temperature': 1., 'allowed_token_ids': None, 'banned_token_ids': None}
                          for index, token in enumerate(continuation)]
@@ -980,7 +984,7 @@ class NativePolicyObjective:
         self.engine_guard=(engine_guard_declaration(self.spec['actor_engine_guard'])
                            if 'actor_engine_guard' in self.spec else None)
         if self.engine_guard is None and any('actor_export' in action for row in self.rows.values()
-                                             for action in row.get('actions') or ()):
+                                             for action in (*(row.get('actions') or ()), *(row.get('decision_actions') or ()))):
             raise ValueError('engine-sampled native policy rows need their declared engine-mismatch guard')
         self.engine_guard_records=[]
         if 'actors' in self.spec:
@@ -1223,12 +1227,12 @@ class NativePolicyObjective:
             if names!=self.invocation_source_names:
                 raise ValueError('native invocation objective actor names differ from exact packed ownership')
         hidden = result['h_final'][0]
-        decision_probe_required=any(row.get('decision_actions') and self.can_compare_behavior_actor(row)
+        decision_probe_required=any(native_sampled_actions(row.get('decision_actions')) and self.can_compare_behavior_actor(row)
                                     for row in self.rows.values())
         if (not getattr(self,'_behavior_logprob_probe_done',False)
-                and any((native_sampled_actions(row.get('actions')) or row.get('decision_actions')) and self.can_compare_behavior_actor(row) for row in self.rows.values())
-                and not any((self.rows[example.id].get('decision_actions') if decision_probe_required else
-                             (native_sampled_actions(self.rows[example.id].get('actions')) or self.rows[example.id].get('decision_actions')))
+                and any((native_sampled_actions(row.get('actions')) or native_sampled_actions(row.get('decision_actions'))) and self.can_compare_behavior_actor(row) for row in self.rows.values())
+                and not any((native_sampled_actions(self.rows[example.id].get('decision_actions')) if decision_probe_required else
+                             (native_sampled_actions(self.rows[example.id].get('actions')) or native_sampled_actions(self.rows[example.id].get('decision_actions'))))
                             and self.can_compare_behavior_actor(self.rows[example.id])
                             for example in context['examples'])):
             raise ValueError('first native learner forward must include a same-actor episode with required decisions for pre-SGD logprob parity')
@@ -1261,15 +1265,18 @@ class NativePolicyObjective:
             # another engine (SGLang, llama.cpp) are recomputed here and guarded per episode instead.
             native_actions=native_sampled_actions(actions)
             engine_actions=[action for action in actions if 'actor_export' in action]
-            if (same_actor and (native_actions or row.get('decision_actions'))
-                    and (not decision_probe_required or row.get('decision_actions'))
+            native_decisions=native_sampled_actions(row.get('decision_actions'))
+            engine_decisions=[action for action in row.get('decision_actions') or () if 'actor_export' in action]
+            if (same_actor and (native_actions or native_decisions)
+                    and (not decision_probe_required or native_decisions)
                     and not getattr(self,'_behavior_logprob_probe_done',False)):
                 behavior_logprob_probe(model,hidden,native_actions,graph_id=example.id,policy=self.identity,
-                    destination=probe,limit=None,atol=1e-4,decision_actions=row.get('decision_actions') or (),
+                    destination=probe,limit=None,atol=1e-4,decision_actions=native_decisions,
                     decision_physical_rows=rows)
                 self._behavior_logprob_probe_done=True
-            if engine_actions:
-                record=self._engine_guard(model,hidden,example.id,engine_actions,same_actor)
+            if engine_actions or engine_decisions:
+                record=self._engine_guard(model,hidden,example.id,engine_actions,same_actor,
+                                          decisions=engine_decisions,physical_rows=rows)
                 engine_records.append(record)
                 if not record['accepted']:
                     continue
@@ -1338,16 +1345,27 @@ class NativePolicyObjective:
             **({'engine_guard': engine_summary} if engine_summary is not None else {}),
             **({'codec_execution':result['codec_execution']} if 'codec_execution' in result else {})}
 
-    def _engine_guard(self, model, hidden, graph_id, actions, same_actor):
-        """Recompute every engine-sampled token of one episode and apply the declared mismatch guard."""
+    def _engine_guard(self, model, hidden, graph_id, actions, same_actor, *, decisions=(), physical_rows=None):
+        """Recompute every engine-sampled token and engine-scored decision option of one episode and apply the
+        declared mismatch guard (a decision contributes the log-policy of each of its options)."""
         import os
         learner=[]
+        behavior=[action['behavior_logp'] for action in actions]
         with torch.no_grad():
             for start in range(0,len(actions),16):
                 learner.extend(token_action_logps(model,hidden,actions[start:start+16],chunk_tokens=16).float().cpu().tolist())
+            if decisions:
+                from .decision_policy import decision_log_policy
+                for action in decisions:
+                    queries=action['options'] if physical_rows is None else [
+                        [{**token,'query':physical_rows[token['query']]} for token in option] for option in action['options']]
+                    actual=decision_log_policy(model,hidden,action,queries=queries).float().cpu().tolist()
+                    if len(actual)!=len(action['behavior_logps']):raise ValueError('decision option coverage differs')
+                    learner.extend(actual); behavior.extend(float(x) for x in action['behavior_logps'])
         record={'schema':'natlang.actor-engine-mismatch/1','graph_id':graph_id,
-                'exports':sorted({action['actor_export'] for action in actions}),'same_actor':bool(same_actor),
-                **engine_mismatch(learner,[action['behavior_logp'] for action in actions],self.engine_guard),
+                'exports':sorted({action['actor_export'] for action in (*actions,*decisions)}),'same_actor':bool(same_actor),
+                **({'decisions':len(decisions)} if decisions else {}),
+                **engine_mismatch(learner,behavior,self.engine_guard),
                 'guard':self.engine_guard}
         self.engine_guard_records.append(record)
         log=os.environ.get('NATLANG_ENGINE_GUARD_LOG')
@@ -1697,7 +1715,8 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
                 **({'invocation_actors':replay.invocation_actors} if replay.invocation_actors is not None else {})}
             graphs.append(graph)
     stale = any('actor_checkpoint_sha256' in row for row in objective_rows.values())
-    engine_sampled = any('actor_export' in action for row in objective_rows.values() for action in row['actions'])
+    engine_sampled = any('actor_export' in action for row in objective_rows.values()
+                         for action in (*row['actions'], *(row.get('decision_actions') or ())))
     if engine_sampled and mode == 'grpo' and policy_loss is not None and policy_loss['schema'] != 'clipped-ratio/1' and (
             policy_loss.get('outcome', policy_loss)['importance'] == 'none'):
         raise ValueError('engine-sampled episodes need an importance-corrected loss (tis or mis)')

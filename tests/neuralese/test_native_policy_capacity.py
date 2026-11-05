@@ -273,3 +273,21 @@ def test_lfm_continuations_adopt_sglang_actor_through_recorded_transition(tmp_pa
         assert production.adopt_actor_engine_defaults({**config,**kept},state,path,**kwargs)['actor_command']==config['actor_command']
     assert production.adopt_actor_engine_defaults(config,{'active_update_round':'r'},path)==config
     assert production.adopt_actor_engine_defaults(adopted,state,path)==adopted
+
+
+def test_engine_scored_decisions_are_guarded_not_exact_gated(monkeypatch):
+    """SGLang-scored decide options join the per-episode engine guard; only native decisions take the exact probe."""
+    from types import SimpleNamespace
+    from natlang_neuralese.rl import decision_policy
+    from natlang_neuralese.rl.native_replay import DEFAULT_ENGINE_GUARD, NativePolicyObjective, native_sampled_actions
+    native={'kind':'decision','behavior_logps':[-.1,-2.4],'options':[[{'query':0}],[{'query':1}]]}
+    engine={**native,'actor_export':'exact:sglang-hf-bfloat16'}
+    assert native_sampled_actions([native,engine])==[native]
+    monkeypatch.setattr(decision_policy,'decision_log_policy',
+                        lambda model,hidden,action,queries=None:torch.tensor([-.1,-2.4])+torch.tensor([.02,-.02]))
+    owner=SimpleNamespace(engine_guard=dict(DEFAULT_ENGINE_GUARD),engine_guard_records=[])
+    record=NativePolicyObjective._engine_guard(owner,None,torch.zeros(2,1),'g',[],True,decisions=[engine],
+                                               physical_rows=[0,1])
+    assert record['accepted'] and record['decisions']==1 and record['tokens']==2 and abs(record['max_abs']-.02)<1e-6
+    far={**engine,'behavior_logps':[-2.4,-.1]}
+    assert not NativePolicyObjective._engine_guard(owner,None,torch.zeros(2,1),'g',[],True,decisions=[far])['accepted']
