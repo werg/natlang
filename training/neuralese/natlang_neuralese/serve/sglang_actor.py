@@ -728,6 +728,7 @@ class SglangEngine(Engine):
     def _sglang_score_bound(self, item, plan, continuations, request, adapter):
         from .native_learning import decision_response
         seq = Sequence(request, None, prompt_plan=plan)
+        seq.native_actor_export = getattr(self, 'sglang_actor_export', None)  # option scores come from the export
         ids = self._sglang_prompt(seq)
         custom = {**({IMPORT_KEY: seq.sglang_imports} if seq.sglang_imports else {}), **({ADAPTER_KEY: adapter} if adapter else {})}
         params = {'temperature': 0.0, 'max_new_tokens': 1, **({'custom_params': custom} if custom else {})}

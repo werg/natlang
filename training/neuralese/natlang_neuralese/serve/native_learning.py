@@ -107,7 +107,9 @@ def decision_response(item, sequence, continuations, results):
             'policy':dict(sequence.native_rl_policy),'adapter_binding':sequence.native_rl_adapter_binding,
             **({'privileged': sequence.native_guidance_receipt} if sequence.native_guidance_receipt is not None else {}),
             'prompt':sequence.native_rl_prompt,'continuations':continuations,
-            'native_state_imports':sequence.native_imports}
+            'native_state_imports':sequence.native_imports,
+            **({'actor_export': dict(sequence.native_actor_export)}
+               if getattr(sequence, 'native_actor_export', None) else {})}
     return response
 
 

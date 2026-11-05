@@ -501,8 +501,12 @@ def test_decide_scores_on_sglang_with_the_native_decision_capture(tmp_path):
         return {'meta_info': {'input_token_logprobs': [[None, request['input_ids'][request['logprob_start_len']], None]]
                               + [[-0.25, t, None] for t in cont]}}
     front._sglang_generate = generate
+    front.sglang_actor_export = {'kind': 'exact', 'format': 'sglang-hf-bfloat16-vendor-projection', 'sha256': 'e' * 64}
     actual = decide_native(front, body)
-    assert actual['native_decision_capture'] == expected['native_decision_capture']
+    capture = dict(actual['native_decision_capture'])
+    # SGLang-scored options carry the export, so the learner guards them instead of the exact native probe.
+    assert capture.pop('actor_export') == front.sglang_actor_export and 'actor_export' not in expected['native_decision_capture']
+    assert capture == expected['native_decision_capture']
     assert actual['tokens'] == expected['tokens'] and actual['native_state_imports'] == expected['native_state_imports']
     assert actual['log_probs'] == [-0.25 * n for n in expected['tokens']]
     assert all(r['sampling_params']['custom_params']['natlang_import'] for r in sent) and front.native_fallbacks == 0

@@ -518,6 +518,11 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
         for ident,values in writers.items() for name,start,stop,occurrence in values)
     offsets = {node.name: offset for node, offset in zip(plan.invocations, plan.offsets)}
     decision_actions = []
+    # Captures before 2026-11-06 did not record the export on SGLang-scored decisions. In an episode whose sampled
+    # tokens all came from one engine export and none from the native engine, its decisions were scored there too.
+    engines = {action['actor_export'] for action in actions if 'actor_export' in action}
+    inferred_engine = (next(iter(engines)) if len(engines) == 1 and all('actor_export' in action for action in actions)
+                       else None)
     for name, item in prepared.items():
         sample = item['decision_sample']
         if sample is None:
@@ -527,7 +532,8 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
         decision_actions.append({'kind': 'decision', 'turn': name, 'temperature': sample['temperature'],
             'chosen': sample['chosen'], 'behavior_logps': sample['behavior_logps'], 'prompt_tokens': prompt,
             'option_nodes': list(option_nodes),
-            **({'actor_export': sample['actor_export']} if 'actor_export' in sample else {}),
+            **({'actor_export': sample['actor_export']} if 'actor_export' in sample
+               else {'actor_export': inferred_engine, 'actor_export_inferred': True} if inferred_engine else {}),
             'options': [[{'query': offsets[option] + prompt + index - 1, 'local_query': prompt + index - 1,
                           'token_id': token, 'temperature': 1., 'allowed_token_ids': None, 'banned_token_ids': None}
                          for index, token in enumerate(continuation)]
