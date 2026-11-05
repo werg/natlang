@@ -279,9 +279,10 @@ def _child_match(child):
 def _child_text(child):
     """The verified answer of a reference child call: its ``value``, or what its verified actions (``calls``/``call``,
     ending in return_result) return. Steps before the return are shown too."""
-    if child.get('value') is not None:
-        return ANSWER_PREFIX + json.dumps(child['value'], sort_keys=True, ensure_ascii=False) + '.'
     calls = child.get('calls') or ([child['call']] if child.get('call') is not None else [])
+    # A verified null answer (``"value": null`` with no calls) is an answer, not a missing one.
+    if child.get('value') is not None or ('value' in child and not calls):
+        return ANSWER_PREFIX + json.dumps(child['value'], sort_keys=True, ensure_ascii=False) + '.'
     if not calls or not (isinstance(calls[-1], list) and len(calls[-1]) == 2 and calls[-1][0] == 'return_result'
                          and isinstance(calls[-1][1], dict)):
         raise ValueError('a reference child needs a value or verified calls ending in return_result')

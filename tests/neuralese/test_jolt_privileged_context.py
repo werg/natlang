@@ -588,3 +588,10 @@ def test_reference_failure_count_is_not_an_attempt_list():
     case['curriculum']['reference']['failures'] = -1
     with pytest.raises(ValueError, match='nonnegative count'):
         case_facts(case, custody=custody())
+
+
+def test_a_verified_null_child_answer_is_an_answer():
+    from natlang_neuralese.rl.privileged_context import ANSWER_PREFIX, _child_text
+    assert _child_text({'match': ['read_passage('], 'value': None}) == ANSWER_PREFIX + 'null.'
+    with pytest.raises(ValueError):
+        _child_text({'match': ['read_passage(']})
