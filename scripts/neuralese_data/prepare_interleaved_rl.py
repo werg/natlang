@@ -85,7 +85,8 @@ def earned_parent(previous_config, checkpoint=None):
     return binding(path), training.get('global_step'), state
 
 
-def successor_recipe(previous_recipe_path, out, *, stage_id, sft_stage, task_source, parameters, sft_window=None):
+def successor_recipe(previous_recipe_path, out, *, stage_id, sft_stage, task_source, parameters, sft_window=None,
+                     stage_parameters=None, focus=None):
     from natlang_neuralese.common.jsonio import write_json_durable
     from natlang_neuralese.common.hashing import sha256_file_hex_cached
     from natlang_neuralese.train.recipe import load_recipe, resolve_recipe_data
@@ -96,6 +97,10 @@ def successor_recipe(previous_recipe_path, out, *, stage_id, sft_stage, task_sou
         # The SFT window length is the joint stage's semantic-refresh cadence (as sft_window.py next --window).
         next(stage for stage in recipe['stages'] if stage['id'] == sft_stage)['parameters']['refresh_after_updates'] = \
             sft_window
+    if stage_parameters:
+        apply_stage_parameters(recipe, sft_stage, stage_parameters)
+    if focus is not None:
+        rebind_pending_focus(recipe, sft_stage, focus)
     name = 'rl_task_source_' + re.sub(r'[^a-z0-9]+', '_', Path(task_source).parent.name.lower()).strip('_')[:48]
     recipe.setdefault('input_bindings', {})[name] = {'path': str(Path(task_source).resolve(strict=True)),
                                                      'sha256': sha256_file_hex_cached(task_source)}
@@ -107,8 +112,73 @@ def successor_recipe(previous_recipe_path, out, *, stage_id, sft_stage, task_sou
     return path
 
 
+# Execution and optimizer controls of a window. The interleaved controller rebuilds every SFT window's trainer
+# parameters from the recipe stage (native_supervised.continuation_config), not from the previous window's control,
+# so an LR/memory decision made on the window config alone silently reverts to the recipe's values at the first
+# interleaved window (2026-11-05: the bf95 low-LR restart would have returned to 2e-5).
+WINDOW_PARAMETER_KEYS = ('learning_rate', 'interface_row_learning_rate', 'learned_row_learning_rate', 'batch_tokens',
+                         'batch_graphs', 'accumulate_batches', 'chunk_tokens', 'ffn_chunk_tokens',
+                         'checkpoint_input_offload', 'lr_warmup', 'lr_warmup_start', 'weight_decay')
+WINDOW_PARAMETER_PREFIXES = ('checkpoint_input_offload_',)
+
+
+def window_parameter_overrides(previous, recipe, sft_stage):
+    """Stage-parameter changes that make the recipe's SFT stage produce the previous window's effective trainer
+    parameters (None removes a key the previous window does not set)."""
+    actual = previous.get('trainer_parameters') or {}
+    declared = next(stage for stage in recipe['stages'] if stage['id'] == sft_stage)['parameters']
+    changes = {}
+    for key in sorted(set(actual) | set(declared)):
+        if key not in WINDOW_PARAMETER_KEYS and not key.startswith(WINDOW_PARAMETER_PREFIXES):
+            continue
+        if actual.get(key) != declared.get(key):
+            changes[key] = actual.get(key)
+    return changes
+
+
+def apply_stage_parameters(recipe, sft_stage, changes):
+    parameters = next(stage for stage in recipe['stages'] if stage['id'] == sft_stage)['parameters']
+    for key, value in changes.items():
+        if value is None:
+            parameters.pop(key, None)
+        else:
+            parameters[key] = value
+
+
+def pending_focus_binding(focus_path, parent_training, sft_stage):
+    """A new one-time focus request for the SFT stage: bound, authenticated, and admissible against the parent's
+    actual focus history (the prior request completed, or the new one names it in ``supersedes``)."""
+    from natlang_neuralese.common.hashing import sha256_file_hex_cached
+    from natlang_neuralese.train.native_continuation import collect_sft_progress
+    from natlang_neuralese.train.native_pending_focus import FINISHED, dependencies
+    path = Path(focus_path).resolve(strict=True)
+    reference = {'path': str(path), 'sha256': sha256_file_hex_cached(path)}
+    document, _ = dependencies(reference)
+    frame = collect_sft_progress(parent_training, borrow_frames=True)[sft_stage]
+    history = (frame.get('options') or {}).get('pending_focus_history') or []
+    if history and history[-1].get('request', {}).get('sha256') == reference['sha256']:
+        return reference, 'already the parent\'s focus request'
+    if history and history[-1].get('state') not in FINISHED:
+        named = (document.get('supersedes') or {}).get('request_sha256')
+        if named != history[-1]['request']['sha256']:
+            raise SystemExit(f'parent focus {history[-1]["request"]["sha256"][:12]} is {history[-1].get("state")!r}: the '
+                             'new focus request must name it in "supersedes" (request_sha256, reason)')
+        return reference, 'supersedes the parent\'s active focus request'
+    return reference, 'parent focus history finished' if history else 'parent has no focus history'
+
+
+def rebind_pending_focus(recipe, sft_stage, reference):
+    stage = next(item for item in recipe['stages'] if item['id'] == sft_stage)
+    old = stage['inputs'].get('pending_focus')
+    name = 'pending_focus_' + reference['sha256'][:12]
+    recipe.setdefault('input_bindings', {})[name] = dict(reference)
+    stage['inputs']['pending_focus'] = name
+    if old and old != name and not any(old in (item.get('inputs') or {}).values() for item in recipe['stages']):
+        recipe['input_bindings'].pop(old, None)
+
+
 def recipe_with_stages(previous_recipe_path, stages_from, out, *, sft_stage, sft_window=None, runtime=None,
-                       ce_policy=None):
+                       ce_policy=None, stage_parameters=None, focus=None):
     """The previous window's recipe plus the RL stages a declared successor recipe adds (interleaved, memetic), with
     their input bindings. The joint SFT stage keeps its inputs and parameters except the declared changes: window
     length, task-eval runtime and a CE objective transition (``ce_policy``). Returns the written recipe path."""
@@ -136,6 +206,10 @@ def recipe_with_stages(previous_recipe_path, stages_from, out, *, sft_stage, sft
         sft['parameters']['refresh_after_updates'] = sft_window
     if runtime is not None and isinstance(sft['parameters'].get('task_eval'), dict):
         sft['parameters']['task_eval']['runtime'] = str(Path(runtime) / 'ts-host')
+    if stage_parameters:
+        apply_stage_parameters(recipe, sft_stage, stage_parameters)
+    if focus is not None:
+        rebind_pending_focus(recipe, sft_stage, focus)
     if ce_policy is not None:
         name = 'ce_policy_' + ce_policy['sha256'][:12]
         replaced = sft['inputs'].get('ce_supervision_policy')
@@ -281,12 +355,23 @@ def prepare(args):
     ce_policy = (boundary_weight_policy(previous, parent, args.boundary_weight, control)
                  if args.boundary_weight is not None else None)
     own = json.loads(Path(previous['production_recipe']).read_text())
+    stage_parameters = focus = None
+    if not args.keep_recipe_window_parameters:
+        from natlang_neuralese.train.recipe import resolve_recipe_data
+        stage_parameters = window_parameter_overrides(previous, resolve_recipe_data(previous['production_recipe']),
+                                                      previous['production_stage'])
+    if args.pending_focus:
+        from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
+        focus, focus_note = pending_focus_binding(args.pending_focus, CheckpointPolicy.load(Path(parent['path']))['training'],
+                                                  previous['production_stage'])
+        print(json.dumps({'pending_focus': focus, 'admission': focus_note}), flush=True)
     present = next((stage for stage in own['stages'] if stage['kind'] == 'native_interleaved_rl'), None)
     if present is not None:
         # A session worker control already runs the successor recipe (session.py prepare --recipe): its recipe and
         # trainer recipe binding are the session template's; adopt them unchanged.
-        if args.boundary_weight is not None or args.sft_window_updates is not None:
+        if args.boundary_weight is not None or args.sft_window_updates is not None or args.pending_focus:
             raise SystemExit('the previous recipe already declares the interleaved stage: no further recipe changes')
+        stage_parameters = None  # its recipe is the session template's, adopted unchanged
         if present['parameters'].get('start_with', 'rl') != args.start_with:
             raise SystemExit(f"declared start_with is {present['parameters'].get('start_with', 'rl')!r}")
         args.stage_id = present['id']
@@ -296,7 +381,8 @@ def prepare(args):
     elif stages_from is not None:
         recipe = recipe_with_stages(previous['production_recipe'], args.stages_from, control,
                                     sft_stage=previous['production_stage'], sft_window=args.sft_window_updates,
-                                    runtime=runtime, ce_policy=ce_policy)
+                                    runtime=runtime, ce_policy=ce_policy, stage_parameters=stage_parameters,
+                                    focus=focus)
         declared_parameters = next(stage for stage in json.loads(recipe.read_text())['stages']
                                    if stage['id'] == args.stage_id)['parameters']
         parameters = {**parameters, **declared_parameters, 'start_with': args.start_with}
@@ -311,11 +397,12 @@ def prepare(args):
             raise SystemExit('--boundary-weight needs --stages-from (the recipe successor binds the CE policy)')
         recipe = successor_recipe(previous['production_recipe'], control, stage_id=args.stage_id,
                                   sft_stage=previous['production_stage'], task_source=task_source,
-                                  parameters=parameters, sft_window=args.sft_window_updates)
+                                  parameters=parameters, sft_window=args.sft_window_updates,
+                                  stage_parameters=stage_parameters, focus=focus)
     if args.recipe_only:
         # The successor recipe alone (e.g. for session.py prepare --recipe); controls are prepared from it later.
         result = {'recipe': str(recipe), 'ce_objective_transition': ce_policy, 'parent': parent,
-                  'global_step': step, 'stage': args.stage_id}
+                  'global_step': step, 'stage': args.stage_id, 'sft_stage_parameter_changes': stage_parameters}
         print(json.dumps(result), flush=True)
         return result
     config = copy.deepcopy(previous)
@@ -369,7 +456,8 @@ def prepare(args):
         raise SystemExit('declared stage does not bind the prepared task source')
     result = {'prepared': str(config_out), 'recipe': str(recipe), 'out': str(out), 'parent': parent,
               'global_step': step, 'task_rows': rows, 'stage': declared['id'],
-              'sft_window_updates': declared['sft_window_updates'], 'runtime': str(runtime)}
+              'sft_window_updates': declared['sft_window_updates'], 'runtime': str(runtime),
+              'sft_stage_parameter_changes': stage_parameters}
     print(json.dumps(result), flush=True)
     return result
 
@@ -384,6 +472,13 @@ def main(argv=None):
     parser.add_argument('--boundary-weight', type=float,
                         help='CE objective transition: producer open/close boundary targets at least this many reply '
                              'tokens (own-output boundary_weights)')
+    parser.add_argument('--pending-focus', help='new one-time SFT focus request (natlang.native-pending-focus/1) bound '
+                        'as the joint stage\'s pending_focus input; it must name the parent\'s active request in '
+                        '"supersedes" unless that request finished')
+    parser.add_argument('--keep-recipe-window-parameters', action='store_true',
+                        help='keep the recipe stage\'s own LR/batch/offload/chunk parameters. By default the SFT stage '
+                             'adopts the previous window\'s effective trainer parameters, because every interleaved '
+                             'window is rebuilt from the recipe stage')
     parser.add_argument('--runtime', required=True, help='frozen runtime root containing rl/interleave.py')
     parser.add_argument('--control-dir', required=True, help='new directory for the recipe, wrapper and inputs')
     parser.add_argument('--config-out')

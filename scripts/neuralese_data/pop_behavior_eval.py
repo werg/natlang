@@ -151,6 +151,9 @@ def controller_states():
     # The bf95 low-LR restart (2026-11-05): window 0 is its own directory, later windows wN beneath it.
     yield from sorted(W.glob('ops/bf95-lowlr-*/state.json'))
     yield from sorted(W.glob('ops/bf95-lowlr-*/w[0-9]*/state.json'))
+    # The interleaved successor (interleave-v49): its controller wN holds the RL rounds, each SFT window runs in
+    # wN/sft-window-NNNNNN with its own state and config.
+    yield from sorted(W.glob('ops/bf95-lowlr-*/w[0-9]*/sft-window-[0-9]*/state.json'))
     yield from sorted(CLOUD.glob('natlang-lfm3-cloud-*/*/w[0-9][0-9][0-9][0-9][0-9][0-9]/state.json'))
 
 
