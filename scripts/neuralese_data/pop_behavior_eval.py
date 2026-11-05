@@ -148,6 +148,9 @@ def controller_states():
     # The single-learner production line: ops/solo-<date>/<out|wN>/state.json, one controller per SFT window.
     yield from sorted(W.glob('ops/solo-*/out/state.json'))
     yield from sorted(W.glob('ops/solo-*/w[0-9]*/state.json'))
+    # The bf95 low-LR restart (2026-11-05): window 0 is its own directory, later windows wN beneath it.
+    yield from sorted(W.glob('ops/bf95-lowlr-*/state.json'))
+    yield from sorted(W.glob('ops/bf95-lowlr-*/w[0-9]*/state.json'))
     yield from sorted(CLOUD.glob('natlang-lfm3-cloud-*/*/w[0-9][0-9][0-9][0-9][0-9][0-9]/state.json'))
 
 
