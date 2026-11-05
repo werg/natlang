@@ -12,6 +12,7 @@ Run with the package of the runtime that trains the lineage on PYTHONPATH (a fro
 functions that runtime already has):
 
   sft_window.py next --previous-config CFG --out DIR --config-out PATH [--checkpoint-path P] [--window N] [--id ID] [--runtime R]
+                     [--pending-focus FOCUS.json]
   sft_window.py rolling --config CFG --config-out PATH
   sft_window.py closure --config CFG -o OUT.json     exact input files a window's controller and learner read
 """
@@ -48,8 +49,39 @@ def _folded_admissions(training, options):
     return [e for e in history if isinstance(e, dict) and isinstance(e.get('qualification'), dict)]
 
 
+def adopt_pending_focus(recipe, stage, focus_path, options):
+    """Rebind the stage's one-time pending focus to ``focus_path`` (a successor of the active request).
+
+    The new request is verified by the trainer's own loader. Against the checkpoint's recorded focus history it must
+    declare ``supersedes`` exactly when a request is still active, and then name that request's SHA-256: the trainer
+    refuses anything else at start, so the mismatch is reported here, before a window is built. Rows already earned
+    stay ordinary exposure; only unconsumed promotion ends (native_pending_focus.supersede_declared_focus).
+    """
+    from natlang_neuralese.train.native_pending_focus import FINISHED, dependencies
+    from natlang_neuralese.train.native_resident import binding
+    path = Path(focus_path).resolve(strict=True)
+    reference = {'path': str(path), 'sha256': binding(path)['sha256']}
+    doc, _ = dependencies(reference)
+    history = options.get('pending_focus_history') or []
+    last = history[-1] if history else None
+    if last is not None and last['request']['sha256'] == reference['sha256']:
+        return None  # already the checkpoint's request: nothing to rebind
+    declared = (doc.get('supersedes') or {}).get('request_sha256')
+    active = last['request']['sha256'] if last is not None and last.get('state') not in FINISHED else None
+    if active is not None and declared != active:
+        raise SystemExit(f'pending focus {path} must declare supersedes.request_sha256 = {active} '
+                         f'(the checkpoint\'s active focus); it declares {declared!r}')
+    if active is None and declared is not None:
+        raise SystemExit(f'pending focus {path} declares a supersession but the checkpoint has no active focus')
+    name = stage['inputs'].get('pending_focus') or 'pending_focus_request'
+    recipe['input_bindings'][name] = reference
+    stage['inputs']['pending_focus'] = name
+    return {'previous': last['request'] if last is not None else None, 'request': reference, 'supersedes': active,
+            'rows': len(doc['rows'])}
+
+
 def next_window(previous_config, out, config_out, *, checkpoint_path=None, window=None, ident=None, runtime=None,
-                parameter_request=None):
+                parameter_request=None, pending_focus=None):
     """The next window from the previous window's actual earned boundary (generalizes the DGX
     prepare-earned-window-continuation operator; no host-only checks or wrappers)."""
     from natlang_neuralese.common.jsonio import write_json_durable
@@ -118,11 +150,12 @@ def next_window(previous_config, out, config_out, *, checkpoint_path=None, windo
     runtime = Path(runtime).resolve() if runtime is not None else None
     if runtime == prior_runtime:
         runtime = None
+    focus_transition = adopt_pending_focus(recipe, stage, pending_focus, options) if pending_focus else None
     if window is not None and window != prior_window:
         stage['parameters']['refresh_after_updates'] = window
     if runtime is not None and isinstance(stage['parameters'].get('task_eval'), dict):
         stage['parameters']['task_eval']['runtime'] = str(runtime / 'ts-host')
-    if (window is not None and window != prior_window) or runtime is not None:
+    if (window is not None and window != prior_window) or runtime is not None or focus_transition:
         recipe_path = out / 'recipe-runtime.json'
         write_json_durable(recipe_path, recipe)
         load_recipe(recipe_path)
@@ -152,6 +185,7 @@ def next_window(previous_config, out, config_out, *, checkpoint_path=None, windo
         'scored_graph_anchor': anchor, 'changed_controls': {
             **({'refresh_after_updates': [prior_window, window]} if window is not None and window != prior_window else {}),
             **({'runtime': [str(prior_runtime), str(runtime)]} if runtime is not None else {}),
+            **({'pending_focus': focus_transition} if focus_transition else {}),
             **({'trainer_parameters': memory_transition['changed']} if memory_transition else {})},
         **({'runtime_transition': runtime_transition} if runtime_transition else {}),
         **({'trainer_parameter_transition': memory_transition} if memory_transition else {}),
@@ -614,6 +648,8 @@ def main(argv=None):
     p.add_argument('--id')
     p.add_argument('--runtime', help='frozen runtime for the new window (recorded runtime transition)')
     p.add_argument('--trainer-parameter-request', help=f'an explicit {MEMORY_REQUEST_SCHEMA} request (not consumed)')
+    p.add_argument('--pending-focus', help='a natlang.native-pending-focus/1 request that replaces the stage\'s pending '
+                   'focus for this window (must declare supersedes naming the checkpoint\'s active request)')
     p = sub.add_parser('rolling')
     p.add_argument('--config', required=True)
     p.add_argument('--config-out', required=True)
@@ -626,7 +662,7 @@ def main(argv=None):
     if args.command == 'next':
         next_window(args.previous_config, args.out, args.config_out, checkpoint_path=args.checkpoint_path,
                     window=args.window, ident=args.id, runtime=args.runtime,
-                    parameter_request=args.trainer_parameter_request)
+                    parameter_request=args.trainer_parameter_request, pending_focus=args.pending_focus)
     elif args.command == 'rolling':
         rolling(args.config, args.config_out)
     else:

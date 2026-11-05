@@ -84,3 +84,49 @@ def test_next_cli_accepts_an_explicit_trainer_parameter_request(monkeypatch):
     sft_window.main(['next', '--previous-config', 'p', '--out', 'o', '--config-out', 'c',
                      '--trainer-parameter-request', '/r.json'])
     assert seen['parameter_request'] == '/r.json'
+
+
+def _focus(tmp_path, name, *, supersedes=None):
+    import hashlib
+    evidence = tmp_path / 'evidence.json'
+    evidence.write_text('{}')
+    reference = {'path': str(evidence), 'sha256': hashlib.sha256(evidence.read_bytes()).hexdigest()}
+    doc = {'schema': 'natlang.native-pending-focus/1',
+           'rows': [{'id': 'r0', 'binding': 'a' * 64, 'source_sha256': 'b' * 64, 'split': 'train', 'evidence': [reference]}]}
+    if supersedes:
+        doc['supersedes'] = {'request_sha256': supersedes, 'reason': 'core focus'}
+    path = tmp_path / name
+    path.write_text(json.dumps(doc))
+    return path, hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def test_pending_focus_adoption_rebinds_the_stage_input_and_names_the_active_request(tmp_path):
+    old = 'c' * 64
+    history = [{'request': {'path': '/old/focus.json', 'sha256': old}, 'state': 'active'}]
+    recipe = {'input_bindings': {'old_focus': {'path': '/old/focus.json', 'sha256': old}}}
+    stage = {'inputs': {'pending_focus': 'old_focus'}}
+    path, sha = _focus(tmp_path, 'core.json', supersedes=old)
+    record = sft_window.adopt_pending_focus(recipe, stage, path, {'pending_focus_history': history})
+    assert recipe['input_bindings']['old_focus'] == {'path': str(path), 'sha256': sha}
+    assert stage['inputs']['pending_focus'] == 'old_focus'
+    assert record['supersedes'] == old and record['previous']['sha256'] == old and record['rows'] == 1
+    # the request the checkpoint already runs is a no-op
+    assert sft_window.adopt_pending_focus(recipe, stage, path, {'pending_focus_history': [
+        {'request': {'path': str(path), 'sha256': sha}, 'state': 'active'}]}) is None
+
+
+def test_pending_focus_adoption_refuses_a_supersession_that_the_trainer_would_reject(tmp_path):
+    active = [{'request': {'path': '/old/focus.json', 'sha256': 'c' * 64}, 'state': 'active'}]
+    finished = [{'request': {'path': '/old/focus.json', 'sha256': 'c' * 64}, 'state': 'complete'}]
+    recipe, stage = {'input_bindings': {}}, {'inputs': {}}
+    plain, _ = _focus(tmp_path, 'plain.json')
+    wrong, _ = _focus(tmp_path, 'wrong.json', supersedes='d' * 64)
+    named, _ = _focus(tmp_path, 'named.json', supersedes='c' * 64)
+    with pytest.raises(SystemExit, match='must declare supersedes'):
+        sft_window.adopt_pending_focus(recipe, stage, plain, {'pending_focus_history': active})
+    with pytest.raises(SystemExit, match='must declare supersedes'):
+        sft_window.adopt_pending_focus(recipe, stage, wrong, {'pending_focus_history': active})
+    with pytest.raises(SystemExit, match='no active focus'):
+        sft_window.adopt_pending_focus(recipe, stage, named, {'pending_focus_history': finished})
+    assert sft_window.adopt_pending_focus(recipe, stage, plain, {'pending_focus_history': finished})['supersedes'] is None
+    assert stage['inputs']['pending_focus'] == 'pending_focus_request'
