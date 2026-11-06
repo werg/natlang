@@ -71,7 +71,7 @@ POP_PACKET = POP_RECOVERY + '/matched-instruction-baseline-1101/cases.jsonl'
 PACKET_SHA256 = '6fa6ca6c2e3a46c4b050da535e1a246c8f34d70f355ea047bcfe19a0653aa560'
 IMAGE = 'natlang:pop-causal-conv1d-torch214-cu134-sm89-v1'
 POP_PORT = 18530
-POP_BUDGET_GB = 5.5  # container --memory 5g plus the driver; Pop (14 GiB) admitted only 6.9 GiB free beside a 1.5 GiB reserve (2026-11-06)
+POP_BUDGET_GB = 5.0  # the container is capped at --memory 5g; Pop (14 GiB) shows ~6.8 GiB free after ~4.4 GiB kernel slab, beside a 1.4 GiB reserve (2026-11-06)
 POP_MIN_FREE = 8 * 2**30 + 512 * 2**20       # the baseline drivers' scratch floor
 CASES = list(range(0, 128, 8))
 # The exact task spec of the dev16 baselines (parent67 R34 12/16, earned179 R38 11/16).
