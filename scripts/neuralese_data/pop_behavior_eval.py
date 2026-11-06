@@ -71,6 +71,7 @@ POP_PACKET = POP_RECOVERY + '/matched-instruction-baseline-1101/cases.jsonl'
 PACKET_SHA256 = '6fa6ca6c2e3a46c4b050da535e1a246c8f34d70f355ea047bcfe19a0653aa560'
 IMAGE = 'natlang:pop-causal-conv1d-torch214-cu134-sm89-v1'
 POP_PORT = 18530
+EMA_ADMISSION_WAIT = 600
 POP_BUDGET_GB = 5.0  # the container is capped at --memory 5g; Pop (14 GiB) shows ~6.8 GiB free after ~4.4 GiB kernel slab, beside a 1.4 GiB reserve (2026-11-06)
 POP_MIN_FREE = 8 * 2**30 + 512 * 2**20       # the baseline drivers' scratch floor
 CASES = list(range(0, 128, 8))
@@ -273,8 +274,17 @@ def prepare(kind, checkpoint, runtime, expect_sha):
         command += ['--base', HF_BASE]
     env = [f'NATLANG_REPO={runtime}', f'PYTHONPATH={runtime}/training/neuralese:{runtime}', 'OMP_NUM_THREADS=4',
            f'NATLANG_HASH_CACHE={ROOT}/hash-cache.jsonl', 'CUDA_VISIBLE_DEVICES=', 'PYTHONDONTWRITEBYTECODE=1']
-    unit, status, result = ledger_unit(f'popeval-{kind}-{expect_sha[:12]}', ['/usr/bin/ionice', '-c2', '-n6', *command],
-                                       budget_gb=8 if kind == 'raw' else 40, workdir=runtime, env=env)
+    try:
+        # The EMA arm needs 40 GiB on the DGX, which never fits beside a live learner: a bounded wait, then skip it
+        # (2026-11-06: a 24 h admission wait stalled every later candidate behind one EMA view).
+        unit, status, result = ledger_unit(f'popeval-{kind}-{expect_sha[:12]}',
+                                           ['/usr/bin/ionice', '-c2', '-n6', *command],
+                                           budget_gb=8 if kind == 'raw' else 40, workdir=runtime, env=env,
+                                           **({} if kind == 'raw' else {'wait': EMA_ADMISSION_WAIT}))
+    except subprocess.CalledProcessError:
+        if kind != 'ema':
+            raise
+        return {'absent': True, 'skipped': f'not admitted within {EMA_ADMISSION_WAIT} s beside the learner'}
     if status == 3 and kind == 'ema':
         return {'absent': True, 'unit': unit}
     if status != 0 or not receipt.is_file():
