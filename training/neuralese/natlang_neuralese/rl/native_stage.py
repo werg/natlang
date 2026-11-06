@@ -241,10 +241,14 @@ def _partial_learner_resume(args):
     behavior = sha256_file_hex_cached(args.continue_from)
     expected_rollouts = {str(Path(p).resolve(strict=True)): sha256_file_hex_cached(p) for p in args.rollouts}
 
+    declared_loss = getattr(args, 'rl_policy_loss', None)
+    if isinstance(declared_loss, str):
+        declared_loss = json.loads(declared_loss)  # the CLI declaration; the admission records it parsed
+
     def admission_matches(admission):
         return (admission.get('schema') == 'natlang.native-rl-admission/1'
             and (admission.get('policy') or {}).get('checkpoint_sha256') == behavior
-            and admission.get('policy_loss') == getattr(args, 'rl_policy_loss', None)
+            and admission.get('policy_loss') == declared_loss
             and admission.get('rollouts') == expected_rollouts
             and admission.get('native_graphs_sha256') == sha256_file_hex_cached(out / 'rl-native-graphs.jsonl')
             and admission.get('objective_sha256') == sha256_file_hex_cached(out / 'rl-native-objective.json'))

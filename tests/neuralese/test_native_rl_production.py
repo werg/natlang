@@ -394,11 +394,11 @@ def test_partial_learner_resume_after_an_exceptional_exit(tmp_path,tamper):
     behavior=put('behavior.pt','actor98'); checkpoint=put('checkpoint.pt','learner103')
     rollouts=put('rollouts.jsonl','r1'); graph=put('rl-native-graphs.jsonl','graph')
     objective=put('rl-native-objective.json','objective'); put('progress.json','{"global_step":103}')
-    put('rl-data-receipt.json',json.dumps({'schema':'natlang.native-rl-admission/1',
+    put('rl-data-receipt.json',json.dumps({'schema':'natlang.native-rl-admission/1','policy_loss':{'schema':'jolt-plus/1'},
         'policy':{'checkpoint_sha256':sha256_file_hex(behavior)},'rollouts':{str(rollouts):sha256_file_hex(rollouts)},
         'native_graphs_sha256':sha256_file_hex(graph),'objective_sha256':sha256_file_hex(objective)}))
     if tamper!='none':{'rollouts':rollouts,'objective':objective}[tamper].write_text('changed')
-    args=SimpleNamespace(out=tmp_path,continue_from=behavior,rollouts=[rollouts])
+    args=SimpleNamespace(out=tmp_path,continue_from=behavior,rollouts=[rollouts],rl_policy_loss='{"schema": "jolt-plus/1"}')
     if tamper=='none':
         assert _partial_learner_resume(args)=={'path':str(checkpoint),'sha256':sha256_file_hex(checkpoint)}
     else:
