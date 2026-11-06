@@ -2,6 +2,10 @@
 from __future__ import annotations
 from collections import Counter
 
+# Runtime writes that encode a returned value (plain text or JSON) as native state: no sampled producer, so the
+# turn's capture records no write for them (bf95-lowlr w2 round 1: 54 typed-json-result turns were refused).
+TYPED_RESULT_KINDS = ('typed-text-result', 'typed-json-result')
+
 
 def _source(event):
     inputs=event.get('inputs')
@@ -20,7 +24,7 @@ def capture_occurrences(name,capture,nodes):
     Different origins require explicit transported source-occurrence metadata.
     """
     writes=[event for event in nodes.values() if event.get('kind')=='block_write' and event.get('turn')==name]
-    forced=[event for event in writes if event.get('source_kind')=='typed-text-result' and event.get('producer') is None]
+    forced=[event for event in writes if event.get('source_kind') in TYPED_RESULT_KINDS and event.get('producer') is None]
     writes=[event for event in writes if event not in forced]
     reads=[event for event in nodes.values() if event.get('kind')=='block_read' and event.get('turn')==name]
     for event in writes+reads:
@@ -66,7 +70,7 @@ def graph_binding(name,capture,nodes):
     binding={'graph_turn':name,'written_nodes':{item['id']:item['node'] for item in writes if write_counts[item['id']]==1},
         'read_bindings':{item['source_state_id']:item['source'] for item in reads if read_counts[item['source_state_id']]==1 and item['source']!='external'}}
     forced=[event for event in nodes.values() if event.get('kind')=='block_write' and event.get('turn')==name
-            and event.get('source_kind')=='typed-text-result' and event.get('producer') is None]
+            and event.get('source_kind') in TYPED_RESULT_KINDS and event.get('producer') is None]
     if forced:
         for event in forced:
             if (event.get('format')!='native-state' or not isinstance(event.get('source_capture'),dict)

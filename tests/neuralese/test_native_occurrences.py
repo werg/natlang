@@ -96,3 +96,17 @@ def test_actual_engine_duplicate_import_capture_scores_and_live_source_gradient(
         gradient=torch.autograd.grad(-values[index].mean(),model.adapter.up.weight)[0]
         assert gradient.norm()>0
     run_native(engine,execute)
+
+
+@pytest.mark.parametrize('kind', ['typed-text-result', 'typed-json-result'])
+def test_runtime_typed_result_writes_bind_without_a_captured_write(kind):
+    """The runtime encodes a returned text or JSON value as native state; the turn's capture records no write."""
+    policy = {'checkpoint_sha256': 'a' * 64}
+    capture = {'policy': policy, 'prompt': [{'kind': 'tokens', 'token_ids': [1], 'producing': [False]}], 'writes': []}
+    nodes = {'turn': {'node': 'turn', 'kind': 'model_turn'},
+             'w': {'node': 'w', 'kind': 'block_write', 'turn': 'turn', 'block': 'b', 'source_kind': kind,
+                   'producer': None, 'format': 'native-state', 'source_capture': {'policy': policy},
+                   'native_identity': policy, 'text_body_sha256': 'c' * 64,
+                   'inputs': [{'node': 'turn', 'port': 'result-source'}]}}
+    binding = graph_binding('turn', capture, nodes)
+    assert [write['node'] for write in binding['text_result_writes']] == ['w']
