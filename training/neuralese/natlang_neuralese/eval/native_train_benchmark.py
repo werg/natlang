@@ -101,6 +101,129 @@ def read_only_comparison(model, batch, *, layouts=((True, 1024), (False, 2048)),
         restore_training_rng_state(rng, device)
 
 
+PRODUCTION_KNOBS = ('batch_tokens', 'accumulate', 'checkpoint_layer_group_size', 'ffn_chunk_tokens', 'chunk_tokens',
+                    'checkpoint_input_offload', 'checkpoint_direct_token_limit')
+
+
+def _configure_production_knobs(model, case, *, offload_directory):
+    """Apply one case's execution knobs exactly as the trainer's setup does."""
+    from ..common.checkpoint_offload import configure_checkpoint_input_offload
+    offload = case['checkpoint_input_offload']
+    if offload not in ('off', 'cpu', 'file'):
+        raise ValueError('checkpoint_input_offload must be off, cpu or file')
+    configure_checkpoint_input_offload(model.port, enabled=offload != 'off',
+        directory=offload_directory if offload == 'file' else None)
+    model.port.checkpoint_layer_group_size = int(case['checkpoint_layer_group_size'])
+    model.port.ffn_chunk_tokens = int(case['ffn_chunk_tokens'])
+    model.port.checkpoint_layers = True
+    model.checkpoint_direct_token_limit = int(case['checkpoint_direct_token_limit'])
+
+
+def production_matrix(model, optimizer, examples, cases, *, out, report, offload_directory,
+                      sft_update_reference=16, backend=None):
+    """Time one fixed ordered graph sample under each case's packing and execution knobs.
+
+    Each case partitions the same complete graphs with the trainer's batch_boundaries
+    and accumulates ``accumulate`` microbatches per optimizer update, as the learner
+    does. Updates are diagnostic and stay in this process; nothing is written to a
+    production path. Cases run sequentially on a shared GPU, so repeat the first
+    case at the end to bound drift from other tenants.
+    """
+    entries = [{'forward_tokens': example.plan.token_count} for example in examples]
+    graph_tokens = sum(entry['forward_tokens'] for entry in entries)
+    for case in cases:
+        missing = [key for key in PRODUCTION_KNOBS if key not in case]
+        if missing:
+            raise ValueError(f'case {case.get("name")} lacks {missing}')
+        _configure_production_knobs(model, case, offload_directory=offload_directory)
+        bounds = batch_boundaries(entries, batch_graphs=1, batch_tokens=int(case['batch_tokens']))
+        micro = [examples[first:last] for first, last in bounds]
+        updates = [micro[i:i + int(case['accumulate'])] for i in range(0, len(micro), int(case['accumulate']))]
+        record = {**case, 'graphs': len(examples), 'graph_tokens': graph_tokens, 'microbatches': len(micro),
+                  'updates': [], 'status': 'running'}
+        report['cases'].append(record)
+        out.write_text(json.dumps(report, indent=2) + '\n')
+        torch.cuda.synchronize(); torch.cuda.reset_peak_memory_stats()
+        hook = getattr(model.port, 'activation_checkpoint', None)
+        try:
+            for warm in range(int(case.get('warmup_updates', 0))):
+                native_training_update(model, optimizer, updates[warm][-1], backend=backend, checkpoint_layers=True,
+                    chunk_tokens=int(case['chunk_tokens']), accumulate=updates[warm][:-1],
+                    sft_update_reference=sft_update_reference)
+            torch.cuda.synchronize(); begin = time.monotonic()
+            for update in updates:
+                torch.cuda.synchronize(); start = time.monotonic()
+                loss, _ = native_training_update(model, optimizer, update[-1], backend=backend, checkpoint_layers=True,
+                    chunk_tokens=int(case['chunk_tokens']), accumulate=update[:-1],
+                    sft_update_reference=sft_update_reference)
+                torch.cuda.synchronize()
+                record['updates'].append({'seconds': time.monotonic() - start, 'loss': float(loss.detach()),
+                    'graphs': sum(len(batch) for batch in update),
+                    'forward_tokens': sum(example.plan.token_count for batch in update for example in batch),
+                    'microbatch_tokens': [sum(example.plan.token_count for example in batch) for batch in update]})
+            total = time.monotonic() - begin
+        except torch.cuda.OutOfMemoryError as error:
+            record.update(status='out_of_memory', error=str(error)[:500])
+            out.write_text(json.dumps(report, indent=2) + '\n'); print(json.dumps(record), flush=True)
+            optimizer.zero_grad(set_to_none=True); torch.cuda.empty_cache()
+            continue
+        record.update(status='complete', seconds=total, optimizer_updates=len(updates),
+            graphs_per_hour=len(examples) * 3600 / total, forward_tokens_per_second=graph_tokens / total,
+            peak_cuda_allocated_bytes=torch.cuda.max_memory_allocated(),
+            peak_cuda_reserved_bytes=torch.cuda.max_memory_reserved(),
+            checkpoint_input_offload_snapshot=(hook.snapshot() if callable(getattr(hook, 'snapshot', None)) else None))
+        out.write_text(json.dumps(report, indent=2) + '\n')
+        print(json.dumps({key: value for key, value in record.items() if key != 'updates'}), flush=True)
+    return report
+
+
+def run_production_matrix(args):
+    import random
+    from ..model.native_weight_carrier import COTANGENT_BACKENDS
+    cases = json.loads(Path(args.matrix).read_text())
+    torch.manual_seed(711)
+    model, _, roles, config, parent_state = load_native_checkpoint(args.checkpoint, device='cuda')
+    if args.cotangent_backend not in COTANGENT_BACKENDS:
+        raise ValueError('unknown cotangent backend')
+    model.native_cotangent_accumulator_backend = args.cotangent_backend
+    del parent_state
+    source = NativeGraphSource(args.graphs, config['tokenizer_fingerprint'], required_split='train',
+                               pair_model=args.pair_model, role_ids=roles.ids)
+    eligible = [index for index, entry in enumerate(source.entries)
+                if args.min_graph_tokens <= entry['forward_tokens'] <= args.max_graph_tokens]
+    chooser = random.Random(args.sample_seed)
+    indices = sorted(chooser.sample(eligible, args.sample_graphs))
+    # One monotone streaming pass over the compressed source, then a fixed mixed order.
+    examples = list(source.iter_indices(indices))
+    if [example.id for example in examples] != [source.entries[index]['id'] for index in indices]:
+        raise ValueError('source returned different sampled graphs')
+    order = list(range(len(indices))); chooser.shuffle(order)
+    indices = [indices[i] for i in order]; examples = [examples[i] for i in order]
+    backend = None
+    if args.fp8_training != 'off':
+        from ..train.fp8_backend import make_backend
+        backend = make_backend(args.fp8_training, model.port.hf, device='cuda')
+        model.port.activation_checkpoint = backend.checkpoint
+    model.train()
+    optimizer, _ = make_native_optimizer(model, lr=args.learning_rate, learned_row_lr=args.row_learning_rate,
+                                         interface_row_lr=args.row_learning_rate)
+    report = {'schema': 'natlang.native-train-production-matrix/1', 'checkpoint': args.checkpoint,
+              'graphs': source.receipt(), 'sample': {'seed': args.sample_seed, 'indices': indices,
+              'ids': [source.entries[index]['id'] for index in indices],
+              'forward_tokens': [source.entries[index]['forward_tokens'] for index in indices],
+              'eligible_rows': len(eligible), 'min_graph_tokens': args.min_graph_tokens,
+              'max_graph_tokens': args.max_graph_tokens},
+              'cotangent_backend': args.cotangent_backend, 'fp8': args.fp8_training,
+              'native_compile': __import__('os').environ.get('NATLANG_NATIVE_COMPILE', '1'),
+              'hardware': torch.cuda.get_device_name(), 'torch': torch.__version__,
+              'optimizer_state': 'fresh diagnostic moments; production timing excludes EMA and checkpoint writes',
+              'updates_are_temporary_diagnostics': True, 'cases': []}
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    production_matrix(model, optimizer, examples, cases, out=args.out, report=report,
+                      offload_directory=args.offload_directory, backend=backend)
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parent = parser.add_mutually_exclusive_group(required=True)
@@ -118,7 +241,21 @@ def main(argv=None):
     parser.add_argument('--read-only', action='store_true',
         help='Compare checkpoint1024/direct2048 full gradients without optimizer updates')
     parser.add_argument('--start-index', type=int, default=0)
+    parser.add_argument('--matrix', type=Path,
+        help='JSON list of production knob cases timed over one fixed sampled graph set (requires --checkpoint)')
+    parser.add_argument('--sample-graphs', type=int, default=24)
+    parser.add_argument('--sample-seed', type=int, default=1103)
+    parser.add_argument('--min-graph-tokens', type=int, default=1)
+    parser.add_argument('--max-graph-tokens', type=int, default=32768)
+    parser.add_argument('--cotangent-backend', default='plain')
+    parser.add_argument('--offload-directory', type=Path)
+    parser.add_argument('--learning-rate', type=float, default=1e-6)
+    parser.add_argument('--row-learning-rate', type=float, default=1e-4)
     args = parser.parse_args(argv)
+    if args.matrix is not None:
+        if not args.checkpoint:
+            raise ValueError('the production matrix profiles an actual checkpoint')
+        return run_production_matrix(args)
     if args.repeats < 2 or min(args.chunks) < 1:
         raise ValueError('profile at least two updates and positive whole-readout chunks')
     torch.manual_seed(711)
