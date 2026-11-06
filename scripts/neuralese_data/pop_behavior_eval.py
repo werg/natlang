@@ -72,6 +72,9 @@ PACKET_SHA256 = '6fa6ca6c2e3a46c4b050da535e1a246c8f34d70f355ea047bcfe19a0653aa56
 IMAGE = 'natlang:pop-causal-conv1d-torch214-cu134-sm89-v1'
 POP_PORT = 18530
 EMA_ADMISSION_WAIT = 600
+# Raw views peaked at 7.2-8.0 GiB (8.0 at the cap: checkpoint page cache); 8 + the 8 GiB reserve missed a 15.9 GiB
+# DGX headroom beside the 96 GiB learner by 0.1 GiB (2026-11-06).
+RAW_PREP_GB = 7.5
 POP_BUDGET_GB = 5.0  # the container is capped at --memory 5g; Pop (14 GiB) shows ~6.8 GiB free after ~4.4 GiB kernel slab, beside a 1.4 GiB reserve (2026-11-06)
 POP_MIN_FREE = 8 * 2**30 + 512 * 2**20       # the baseline drivers' scratch floor
 CASES = list(range(0, 128, 8))
@@ -279,7 +282,7 @@ def prepare(kind, checkpoint, runtime, expect_sha):
         # (2026-11-06: a 24 h admission wait stalled every later candidate behind one EMA view).
         unit, status, result = ledger_unit(f'popeval-{kind}-{expect_sha[:12]}',
                                            ['/usr/bin/ionice', '-c2', '-n6', *command],
-                                           budget_gb=8 if kind == 'raw' else 40, workdir=runtime, env=env,
+                                           budget_gb=RAW_PREP_GB if kind == 'raw' else 40, workdir=runtime, env=env,
                                            **({} if kind == 'raw' else {'wait': EMA_ADMISSION_WAIT}))
     except subprocess.CalledProcessError:
         if kind != 'ema':
