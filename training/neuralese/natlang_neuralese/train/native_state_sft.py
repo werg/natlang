@@ -657,13 +657,18 @@ def merge_update_details(parts, scored):
                 for part in parts for item in part]
     if not all(isinstance(part, dict) for part in parts):
         raise ValueError('accumulated micro-batches returned different detail kinds')
-    if any(set(part)!=set(parts[0]) for part in parts):
+    # A micro-batch without engine-sampled episodes has no engine-guard summary; every other field is always present.
+    optional = {'engine_guard'}
+    if any(set(part)-optional!=set(parts[0])-optional for part in parts):
         raise ValueError('accumulated micro-batches returned different detail fields')
     weights = [count / sum(scored) for count in scored] if sum(scored) else [1. / len(parts)] * len(parts)
     merged = {}
-    for key in parts[0]:
+    for key in dict.fromkeys(key for part in parts for key in part):
         values = [part.get(key) for part in parts]
-        if key=='jolt':
+        if key=='engine_guard':
+            from ..rl.native_replay import merge_engine_guard
+            merged[key]=merge_engine_guard(values)
+        elif key=='jolt':
             merged[key]=merge_jolt_details(values,weights)
         elif key=='score_centering':
             merged[key]=merge_score_centering(values)

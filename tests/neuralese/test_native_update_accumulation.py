@@ -439,3 +439,18 @@ def test_sft_budget_control_is_recorded_for_mapping_details(monkeypatch):
     _,details=trainer.native_training_update(model,optimizer,graphs,checkpoint_layers=False,sft_update_reference=4)
     assert details['sft_update_budget']['scored_graphs']==1
     assert details['sft_update_budget']['multiplier']==.25
+
+
+def test_merge_update_details_combines_engine_guard_summaries():
+    """Each micro-batch reports its own engine-mismatch summary (bf95-lowlr w2 round 0 failed on 'disagree')."""
+    from natlang_neuralese.train.native_state_sft import merge_update_details
+    guard = lambda episodes, rejected, tokens, max_abs, mean_abs, k3: {
+        'episodes': episodes, 'rejected': rejected, 'tokens': tokens, 'max_abs': max_abs, 'mean_abs': mean_abs,
+        'max_mean_k3': k3}
+    first = {'sampled_tokens': 10, 'episodes': 1, 'objective': 'grpo', 'engine_guard': guard(1, 0, 10, .2, .01, .001)}
+    second = {'sampled_tokens': 30, 'episodes': 1, 'objective': 'grpo', 'engine_guard': guard(1, 1, 30, .9, .05, .02)}
+    native = {'sampled_tokens': 5, 'episodes': 1, 'objective': 'grpo'}
+    merged = merge_update_details([first, second, native], [1, 1, 1])
+    assert merged['engine_guard'] == {'episodes': 2, 'rejected': 1, 'tokens': 40, 'max_abs': .9,
+                                      'mean_abs': (.01 * 10 + .05 * 30) / 40, 'max_mean_k3': .02}
+    assert merged['sampled_tokens'] == 45 and merged['objective'] == 'grpo'

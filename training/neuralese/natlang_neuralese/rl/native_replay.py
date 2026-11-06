@@ -1397,6 +1397,19 @@ def summarize_engine_guard(records):
             'max_mean_k3': max(record['mean_k3'] for record in records)}
 
 
+def merge_engine_guard(summaries):
+    """One accumulated update's engine-guard summary from its micro-batches' summaries (None: no engine episodes)."""
+    summaries = [item for item in summaries if item is not None]
+    if not summaries:
+        return None
+    tokens = sum(item['tokens'] for item in summaries)
+    return {'episodes': sum(item['episodes'] for item in summaries),
+            'rejected': sum(item['rejected'] for item in summaries), 'tokens': tokens,
+            'max_abs': max(item['max_abs'] for item in summaries),
+            'mean_abs': sum(item['mean_abs'] * item['tokens'] for item in summaries) / max(1, tokens),
+            'max_mean_k3': max(item['max_mean_k3'] for item in summaries)}
+
+
 def _physical_rows(context, example):
     """The example's original-token -> packed physical row map (exact causal-prefix sharing or plain offsets)."""
     rows = context.get('physical_rows', {}).get(example.id)
