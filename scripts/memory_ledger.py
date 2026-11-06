@@ -92,6 +92,19 @@ UNMEASURED_HIGH_EXPERIMENT_GRACE = 90.0
 DEFAULT_THROUGHPUT = 150e6  # bytes/s when nothing was measured yet (v3: 46.8 GB in ~250 s, ~190 MB/s)
 
 
+
+def _systemd_run_expands_environment():
+    """systemd-run 254+ expands $VAR in the command unless told not to; older managers (Pop: 249) have neither the
+    expansion nor the option, so the argv already reaches the unit verbatim."""
+    try:
+        out = subprocess.run(['systemd-run', '--version'], capture_output=True, text=True).stdout.split()
+        return int(out[1]) >= 254
+    except (OSError, ValueError, IndexError):
+        return True
+
+
+NO_EXPAND = ['--expand-environment=no'] if _systemd_run_expands_environment() else []
+
 def mem_available():
     with open('/proc/meminfo') as stream:
         for line in stream:
@@ -676,7 +689,7 @@ def launch(spec):
     subprocess.run(['systemctl', '--user', 'reset-failed', unit], capture_output=True)
     # Arguments are already an argv vector. In particular, a shell script's
     # ${local} belongs to that shell, not the systemd manager's environment.
-    command = ['systemd-run', '--user', '--expand-environment=no', '--unit', unit, '-p', f'MemoryMax={int(host_max * GIB)}',
+    command = ['systemd-run', '--user', *NO_EXPAND, '--unit', unit, '-p', f'MemoryMax={int(host_max * GIB)}',
                '-p', 'MemorySwapMax=0', '-p', f'OOMScoreAdjust={PRIORITY_OOM[spec["priority"]]}',
                '-p', f'OOMPolicy={spec["oom_policy"]}',
                '--working-directory', os.path.abspath(spec['workdir']),
@@ -737,7 +750,7 @@ def detached_waiter_command(argv, unit):
     split = rest.index('--') if '--' in rest else len(rest)
     head = [a for a in rest[:split] if a != '--detach']
     name = unit.removesuffix('.service') + '-waiter'
-    return ['systemd-run', '--user', '--quiet', '--collect', '--unit', name, '--expand-environment=no', '--working-directory', os.getcwd(),
+    return ['systemd-run', '--user', '--quiet', '--collect', '--unit', name, *NO_EXPAND, '--working-directory', os.getcwd(),
             sys.executable, os.path.abspath(rest[0])] + head[1:] + rest[split:]
 
 
