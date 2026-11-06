@@ -454,3 +454,23 @@ def test_merge_update_details_combines_engine_guard_summaries():
     assert merged['engine_guard'] == {'episodes': 2, 'rejected': 1, 'tokens': 40, 'max_abs': .9,
                                       'mean_abs': (.01 * 10 + .05 * 30) / 40, 'max_mean_k3': .02}
     assert merged['sampled_tokens'] == 45 and merged['objective'] == 'grpo'
+
+
+def test_merge_update_details_accepts_a_micro_batch_without_conditional_terms():
+    """A micro-batch whose episode the engine guard rejected carries only counts (bf95-lowlr w2 round 1 update 5
+    failed on 'different detail fields'); its zero JOLT terms keep their optimizer share."""
+    from natlang_neuralese.train.native_state_sft import merge_update_details
+    jolt = {'student_outcome': .4, 'student_opsd': .2, 'teacher_outcome': .1, 'teacher_kl': .3,
+            'unprivileged_episodes': 1, 'privileged_episodes': 1, 'positions': {'student': 10, 'teacher': 10},
+            'guidance': {'blocks': 1, 'writer_blocks': 0, 'text_fallbacks': 1, 'verbatim_reference': 0},
+            'mean_kl': {'student': .05, 'teacher': .07}}
+    guard = {'episodes': 1, 'rejected': 0, 'tokens': 10, 'max_abs': .1, 'mean_abs': .01, 'max_mean_k3': .001}
+    full = {'sampled_tokens': 10, 'sampled_decisions': 0, 'episodes': 1, 'objective': 'grpo',
+            'policy_loss': 'jolt-plus/1', 'score_centering': {'positions': 10, 'rho_max': 1.5, 'w_y_zero_fraction': .1},
+            'jolt': jolt, 'engine_guard': guard}
+    rejected = {'sampled_tokens': 0, 'sampled_decisions': 0, 'episodes': 0, 'objective': 'grpo',
+                'engine_guard': {**guard, 'rejected': 1, 'max_abs': 3.}}
+    merged = merge_update_details([full, rejected], [1, 1])
+    assert merged['policy_loss'] == 'jolt-plus/1' and merged['score_centering'] == full['score_centering']
+    assert merged['jolt']['student_outcome'] == .4 * .5 and merged['jolt']['positions'] == {'student': 10, 'teacher': 10}
+    assert merged['engine_guard']['rejected'] == 1 and merged['episodes'] == 1

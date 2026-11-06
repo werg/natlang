@@ -657,21 +657,29 @@ def merge_update_details(parts, scored):
                 for part in parts for item in part]
     if not all(isinstance(part, dict) for part in parts):
         raise ValueError('accumulated micro-batches returned different detail kinds')
-    # A micro-batch without engine-sampled episodes has no engine-guard summary; every other field is always present.
-    optional = {'engine_guard'}
+    # Conditional fields: a micro-batch without engine-sampled episodes has no engine-guard summary, one without
+    # privileged twins no JOLT terms, one without centered scores no centering summary, and a micro-batch whose every
+    # episode the engine guard rejected carries only counts. Every other field is always present.
+    optional = {'engine_guard', 'jolt', 'score_centering', 'policy_loss', 'codec_execution'}
     if any(set(part)-optional!=set(parts[0])-optional for part in parts):
         raise ValueError('accumulated micro-batches returned different detail fields')
     weights = [count / sum(scored) for count in scored] if sum(scored) else [1. / len(parts)] * len(parts)
     merged = {}
     for key in dict.fromkeys(key for part in parts for key in part):
         values = [part.get(key) for part in parts]
+        present = [(weight, value) for weight, value in zip(weights, values) if value is not None]
         if key=='engine_guard':
             from ..rl.native_replay import merge_engine_guard
             merged[key]=merge_engine_guard(values)
         elif key=='jolt':
-            merged[key]=merge_jolt_details(values,weights)
+            # A micro-batch without JOLT terms contributes zero to them; its optimizer share stays in the weights.
+            merged[key]=merge_jolt_details([value for _, value in present],[weight for weight, _ in present])
         elif key=='score_centering':
-            merged[key]=merge_score_centering(values)
+            merged[key]=merge_score_centering([value for _, value in present])
+        elif key in optional:
+            if any(value != present[0][1] for _, value in present):
+                raise ValueError(f'accumulated micro-batches disagree on objective detail {key!r}')
+            merged[key] = present[0][1]
         elif all(type(value) is int for value in values):
             merged[key] = sum(values)
         elif all(isinstance(value, (int, float)) and not isinstance(value, bool) for value in values):
