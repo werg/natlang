@@ -543,7 +543,10 @@ def _defer_long_graphs(args, graphs, objective, *, share=True):
 
     The limit applies to the forward tokens the learner actually runs: the exact causal-prefix packing of the
     episode's turns (on by default) when the objective supports it (NativePolicyObjective.shares_causal_prefixes:
-    no per-invocation behavior actors, no archived external states), else every turn's full rendered rows."""
+    no per-invocation behavior actors, no archived external states), else every turn's full rendered rows. It bounds
+    the packed plan's KV slots too: a long chain shares its prefixes into few forward tokens while every turn still
+    attends over its whole history (bf95-lowlr w2 round 0 on the GB10: 639k shared forward tokens, 2.16M KV slots,
+    out of memory)."""
     limit = args.max_graph_forward_tokens
     if limit is None:
         return None
@@ -557,13 +560,14 @@ def _defer_long_graphs(args, graphs, objective, *, share=True):
     for row in graphs:
         example = parse_graph(row, tokenizer_fingerprint=fingerprint)
         supported = share and not behavior and not getattr(example, 'external_states', None)
-        sizes[example.id] = (causal_prefix_geometry(example, share=supported)[0], example.plan.token_count)
-    long = {key for key, (size, _) in sizes.items() if size > limit}
-    record = {'reason': 'packed episode graph exceeds the learner forward-token limit',
+        forward, slots = causal_prefix_geometry(example, share=supported)
+        sizes[example.id] = (forward, example.plan.token_count, slots)
+    long = {key for key, (size, _, slots) in sizes.items() if size > limit or slots > limit}
+    record = {'reason': 'packed episode graph exceeds the learner forward-token/KV-slot limit',
               'max_graph_forward_tokens': limit, 'path': None, 'share_causal_prefixes': share,
               'episodes': [{'id': key, 'task_id': objective['rows'][key].get('task_id'),
                             'sample': objective['rows'][key].get('sample'), 'forward_tokens': sizes[key][0],
-                            'original_tokens': sizes[key][1],
+                            'original_tokens': sizes[key][1], 'kv_slots': sizes[key][2],
                             'sampled_tokens': len(objective['rows'][key]['actions'])} for key in sorted(long)]}
     if not long:
         return record

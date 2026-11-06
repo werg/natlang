@@ -323,22 +323,29 @@ def test_long_graph_deferral_keeps_deferred_episodes_whole(tmp_path, monkeypatch
     from types import SimpleNamespace
     from natlang_neuralese.rl import native_stage
     import natlang_neuralese.data.native_graph_schema as schema
-    sizes = {'short': 10, 'long': 500}
+    # 'chain': few forward tokens, but every turn attends over its whole history (many KV slots).
+    sizes = {'short': (10, 10), 'long': (500, 500), 'chain': (50, 400)}
     monkeypatch.setattr(schema, 'parse_graph', lambda row, tokenizer_fingerprint: SimpleNamespace(
-        id=row['id'], external_states={}, plan=SimpleNamespace(token_count=sizes[row['id']], slot_sources=())))
-    graphs = [{'id': 'short', 'nodes': []}, {'id': 'long', 'nodes': [{'token_ids': [1]}]}]
+        id=row['id'], external_states={}, plan=SimpleNamespace(token_count=sizes[row['id']][0],
+                                                               slot_sources=range(sizes[row['id']][1]))))
+    graphs = [{'id': 'short', 'nodes': []}, {'id': 'long', 'nodes': [{'token_ids': [1]}]}, {'id': 'chain', 'nodes': []}]
     objective = {'policy': {'tokenizer_fingerprint': 'f'},
                  'rows': {'short': {'task_id': 't1', 'sample': 0, 'actions': [1]},
-                          'long': {'task_id': 't2', 'sample': 1, 'actions': [1, 2]}}}
+                          'long': {'task_id': 't2', 'sample': 1, 'actions': [1, 2]},
+                          'chain': {'task_id': 't3', 'sample': 2, 'actions': [3]}}}
     # Deferral runs on the admitted graphs in memory, before the round's graph/objective files are written.
     record = native_stage._defer_long_graphs(SimpleNamespace(max_graph_forward_tokens=100, out=tmp_path),
                                              graphs, objective, share=False)
     assert [row['id'] for row in graphs] == ['short'] and set(objective['rows']) == {'short'}
-    assert record['episodes'] == [{'id': 'long', 'task_id': 't2', 'sample': 1, 'forward_tokens': 500,
-                                   'original_tokens': 500, 'sampled_tokens': 2}]
+    assert record['episodes'] == [
+        {'id': 'chain', 'task_id': 't3', 'sample': 2, 'forward_tokens': 50, 'original_tokens': 50, 'kv_slots': 400,
+         'sampled_tokens': 1},
+        {'id': 'long', 'task_id': 't2', 'sample': 1, 'forward_tokens': 500, 'original_tokens': 500, 'kv_slots': 500,
+         'sampled_tokens': 2}]
     kept = [json.loads(line) for line in (tmp_path/'deferred-long-graphs.jsonl').read_text().splitlines()]
     assert kept == [{'graph': {'id': 'long', 'nodes': [{'token_ids': [1]}]},
-                     'objective_row': {'task_id': 't2', 'sample': 1, 'actions': [1, 2]}}]
+                     'objective_row': {'task_id': 't2', 'sample': 1, 'actions': [1, 2]}},
+                    {'graph': {'id': 'chain', 'nodes': []}, 'objective_row': {'task_id': 't3', 'sample': 2, 'actions': [3]}}]
     assert record['path']['path'].endswith('deferred-long-graphs.jsonl')
 
 
