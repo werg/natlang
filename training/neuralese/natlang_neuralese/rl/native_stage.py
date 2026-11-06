@@ -236,13 +236,31 @@ def _partial_learner_resume(args):
                                              out / 'native-training-receipt.json')
     if not checkpoint.exists() and not report_path.exists() and not receipt_path.exists():
         return None
-    if not all(path.is_file() for path in (checkpoint, report_path, receipt_path, out / 'rl-data-receipt.json')):
-        raise ValueError('partial learner lacks its complete checkpoint, report and admission custody')
-    report, receipt, admission = (json.loads(path.read_text()) for path in
-                                   (report_path, receipt_path, out / 'rl-data-receipt.json'))
-    actual = sha256_file_hex_cached(checkpoint)
+    admission_path = out / 'rl-data-receipt.json'
+    actual = sha256_file_hex_cached(checkpoint) if checkpoint.is_file() else None
     behavior = sha256_file_hex_cached(args.continue_from)
     expected_rollouts = {str(Path(p).resolve(strict=True)): sha256_file_hex_cached(p) for p in args.rollouts}
+
+    def admission_matches(admission):
+        return (admission.get('schema') == 'natlang.native-rl-admission/1'
+            and (admission.get('policy') or {}).get('checkpoint_sha256') == behavior
+            and admission.get('policy_loss') == getattr(args, 'rl_policy_loss', None)
+            and admission.get('rollouts') == expected_rollouts
+            and admission.get('native_graphs_sha256') == sha256_file_hex_cached(out / 'rl-native-graphs.jsonl')
+            and admission.get('objective_sha256') == sha256_file_hex_cached(out / 'rl-native-objective.json'))
+
+    if (checkpoint.is_file() and not report_path.exists() and not receipt_path.exists()
+            and admission_path.is_file() and (out / 'progress.json').is_file()):
+        # An exceptional exit (crash, OOM) writes no stop report, but every committed update's rolling checkpoint is
+        # durable. Its behavior admission binds the same policy, rollouts, graphs and objective; the trainer's own
+        # continuation checks then authenticate the checkpoint's step, cursor, exposure and optimizer state.
+        if not admission_matches(json.loads(admission_path.read_text())):
+            raise ValueError('crashed partial learner differs from its behavior admission')
+        return {'path': str(checkpoint.resolve()), 'sha256': actual}
+    if not all(path.is_file() for path in (checkpoint, report_path, receipt_path, admission_path)):
+        raise ValueError('partial learner lacks its complete checkpoint, report and admission custody')
+    report, receipt, admission = (json.loads(path.read_text()) for path in
+                                   (report_path, receipt_path, admission_path))
     boundary = report.get('continuation_boundary') or {}
     if (report.get('schema') != 'natlang.neuralese-native-sft-report/1'
             or report.get('completed') is not False
@@ -255,12 +273,7 @@ def _partial_learner_resume(args):
             or receipt.get('continuation') != report.get('continuation')
             or receipt.get('continuation_boundary') != report.get('continuation_boundary')
             or boundary.get('checkpoint_sha256') != actual
-            or admission.get('schema') != 'natlang.native-rl-admission/1'
-            or (admission.get('policy') or {}).get('checkpoint_sha256') != behavior
-            or admission.get('policy_loss') != getattr(args, 'rl_policy_loss', None)
-            or admission.get('rollouts') != expected_rollouts
-            or admission.get('native_graphs_sha256') != sha256_file_hex_cached(out / 'rl-native-graphs.jsonl')
-            or admission.get('objective_sha256') != sha256_file_hex_cached(out / 'rl-native-objective.json')):
+            or not admission_matches(admission)):
         raise ValueError('partial learner differs from its checkpoint, behavior admission or saved report')
     return {'path':str(checkpoint.resolve()), 'sha256':actual}
 

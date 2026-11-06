@@ -381,6 +381,29 @@ def test_partial_learner_resume_keeps_behavior_policy_and_checks_custody(tmp_pat
         with pytest.raises((ValueError,KeyError)): _partial_learner_resume(args)
 
 
+
+@pytest.mark.parametrize('tamper',['none','rollouts','objective'])
+def test_partial_learner_resume_after_an_exceptional_exit(tmp_path,tamper):
+    """A crash writes no stop report: the durable rolling checkpoint resumes under its behavior admission
+    (bf95-lowlr w2 round 1 lost five committed updates to a merge error)."""
+    from types import SimpleNamespace
+    from natlang_neuralese.rl.native_stage import _partial_learner_resume
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    def put(name, content):
+        path=tmp_path/name;path.write_text(content);return path
+    behavior=put('behavior.pt','actor98'); checkpoint=put('checkpoint.pt','learner103')
+    rollouts=put('rollouts.jsonl','r1'); graph=put('rl-native-graphs.jsonl','graph')
+    objective=put('rl-native-objective.json','objective'); put('progress.json','{"global_step":103}')
+    put('rl-data-receipt.json',json.dumps({'schema':'natlang.native-rl-admission/1',
+        'policy':{'checkpoint_sha256':sha256_file_hex(behavior)},'rollouts':{str(rollouts):sha256_file_hex(rollouts)},
+        'native_graphs_sha256':sha256_file_hex(graph),'objective_sha256':sha256_file_hex(objective)}))
+    if tamper!='none':{'rollouts':rollouts,'objective':objective}[tamper].write_text('changed')
+    args=SimpleNamespace(out=tmp_path,continue_from=behavior,rollouts=[rollouts])
+    if tamper=='none':
+        assert _partial_learner_resume(args)=={'path':str(checkpoint),'sha256':sha256_file_hex(checkpoint)}
+    else:
+        with pytest.raises(ValueError): _partial_learner_resume(args)
+
 def test_native_stage_real_partial_resume_preserves_behavior(tmp_path, monkeypatch):
     test_native_stage_real_shared_parent_update_and_rejects_stale_actor_replay(
         tmp_path, False, partial_test=True, monkeypatch=monkeypatch)
