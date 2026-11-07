@@ -233,6 +233,20 @@ def test_timeout_kills_stuck_child_advances_and_resume_skips_finished(tmp_path, 
     assert len(processes) == 2
 
 
+def test_a_stop_that_reached_the_child_first_records_no_attempt(tmp_path, monkeypatch):
+    queue, journal = tmp_path / 'queue.jsonl', tmp_path / 'journal.jsonl'
+    source = tmp_path / 'source.ir.jsonl'
+    source_rows(source, 2)
+    entries = [queue_entry(tmp_path, key=str(i), index=i, source=source, output=tmp_path / 'out.jsonl') for i in range(2)]
+    queue.write_text(''.join(json.dumps(row) + '\n' for row in entries))
+    processes = successful_child(monkeypatch, return_codes=[143])   # the child died of the same SIGTERM
+    monkeypatch.setattr(queue_module, 'STOP_REQUESTED', [15])        # the handler ran, wait() returned normally
+    with pytest.raises(KeyboardInterrupt):
+        run_queue(queue, journal, TS_HOST, seconds=1)
+    rows = [json.loads(row) for row in journal.read_text().splitlines()]
+    assert [row['event'] for row in rows] == ['start'] and len(processes) == 1   # pending again on the next start
+
+
 def test_entry_turn_budget_is_passed_and_recorded(tmp_path, monkeypatch):
     queue, journal = tmp_path / 'queue.jsonl', tmp_path / 'journal.jsonl'
     entry = queue_entry(tmp_path, key='world', max_turns=48)

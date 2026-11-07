@@ -12,7 +12,7 @@ python3 /home/werg/natlang/scripts/neuralese_data/restart_controller.py \
 
 Without `--runtime-from-main` it only restarts (same runtime; use it after editing `config.json`: endpoints,
 `remote_endpoints`, `remote_workers`, `workers`, `after_collection`, ...). Flags: `--grace S` (default 600) / `--patient`,
-`--no-preflight`, `--commit SHA`, `--freeze-only` (prepare the successor runtime ahead of time, stops nothing),
+`--no-preflight`, `--commit SHA`, `--use-runtime vNN-MMDD` (rebind to an already frozen runtime), `--freeze-only` (prepare the successor runtime ahead of time, stops nothing),
 `--dry-run` (prints unit, next unit and the exact ledger launch command), `--unit` (default: the active
 `bf95-lowlr-<name>[-rN]`).
 

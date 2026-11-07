@@ -6,7 +6,7 @@ Built and tested; not cut over. The live controller (`bf95-lowlr-w3`, frozen run
 
 | piece | where |
 | --- | --- |
-| remote endpoints in the controller | `rl/production.py`: config `remote_endpoints`, `remote_workers`, `remote_actor_ready_seconds`, hook `after_collection`; `round_endpoints`, `round_remote_workers`, `worker_slots`, `weighted_split` |
+| remote endpoints in the controller | `rl/production.py`: config `remote_endpoints`, `remote_workers`, `remote_actor_ready_seconds`, hook `after_collection`; `worker_slots`, `weighted_split` |
 | Pop actor lifecycle (hooks) | `scripts/neuralese_data/pop_rl_actor.py start / stop / status` |
 | Pop container launch | `scripts/neuralese_data/pop_dev16_driver.py`, job `mode: rl-actor` (same image, limits and serving flags as the dev16 eval) |
 | view prepare / send / runtime install | `pop_behavior_eval.py` (`prepare('rl', ...)`, `send`, `ensure_pop_runtime`, `make_pop_room`) and `pop_eval_prepare.py rl` |

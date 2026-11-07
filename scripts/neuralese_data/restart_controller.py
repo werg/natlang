@@ -2,7 +2,7 @@
 """Restart a live interleaved RL controller at any time: stop it cooperatively, optionally move it to a runtime frozen
 from current main, relaunch it under a fresh ledger unit and check that it resumed.
 
-    python3 scripts/neuralese_data/restart_controller.py CONTROL_OUT [--runtime-from-main] [--commit SHA]
+    python3 scripts/neuralese_data/restart_controller.py CONTROL_OUT [--runtime-from-main [--commit SHA] | --use-runtime vNN-MMDD]
         [--grace SECONDS | --patient] [--no-preflight] [--dry-run | --freeze-only]
 
 CONTROL_OUT is the controller's ``out`` directory (it holds config.json, state.json, controller.log).  Every phase
@@ -34,8 +34,12 @@ import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO / 'training/neuralese'))
+from natlang_neuralese.common.paths import resolve  # noqa: E402  (stdlib-only)
+
 LEDGER = REPO / 'scripts/memory_ledger.py'
-DATA = Path('/home/werg/data/lfm3-rl-dgx-20261029')
+DATA = resolve('data_nvme', 'lfm3-rl-dgx-20261029')
+HASH_CACHE = resolve('data_hdd', 'natlang-lfm3-cloud-corrected-20261103', 'hash-cache.jsonl')
 OPS = DATA / 'ops/bf95-lowlr-1105'
 REBIND = OPS / 'interleave-v49/rebind-runtime.sh'
 BINDINGS = OPS / 'interleave-v49/v50-bindings.json'
@@ -96,7 +100,7 @@ def read_json(path):
     return json.loads(path.read_text()) if path.is_file() else None
 
 
-def write_json(path, value):
+def save_json(path, value):
     tmp = Path(str(path) + '.tmp')
     tmp.write_text(json.dumps(value, indent=1) + '\n')
     os.replace(tmp, path)
@@ -159,7 +163,7 @@ def freeze(spec, commit, log):
     payload = (f'cd {REPO} && exec env PYTHONPATH={REPO}/training/neuralese:{REPO} {PYTHON} '
                f'scripts/neuralese_data/freeze_native_runtime.py --commit {sha} --predecessor {predecessor} '
                f'--out {new} --control-bindings {BINDINGS} >> {log} 2>&1')
-    started = run([sys.executable, LEDGER, 'run', '--unit', unit, '--budget-gb', '16', '--priority', 'low',
+    started = run([sys.executable, LEDGER, 'run', '--unit', unit, '--budget-gb', '8', '--priority', 'low',
                    '--wait', '900', '--workdir', REPO, '--env', env, '--', '/bin/sh', '-c', payload])
     if started.returncode:
         raise SystemExit('freeze not admitted: ' + (started.stderr or started.stdout)[-400:])
@@ -209,7 +213,7 @@ def preflight(unit, out, runtime):
     the policy checkpoint, so it runs as a ledger unit (the stopped controller's claim is free by now)."""
     scratch, log = Path(out) / 'restart-preflight', Path(out) / 'restart-preflight.log'
     payload = (f'cd {runtime} && exec env NATLANG_REPO={runtime} PYTHONPATH={runtime}/training/neuralese:{runtime} '
-               f'HF_HUB_OFFLINE=1 OMP_NUM_THREADS=1 NATLANG_HASH_CACHE={os.environ.get("NATLANG_HASH_CACHE", "/mnt/external/natlang-lfm3-cloud-corrected-20261103/hash-cache.jsonl")} '
+               f'HF_HUB_OFFLINE=1 OMP_NUM_THREADS=1 NATLANG_HASH_CACHE={os.environ.get("NATLANG_HASH_CACHE", HASH_CACHE)} '
                f'{PYTHON} -m natlang_neuralese.rl.production preflight --config {Path(out) / "config.json"} '
                f'--scratch {scratch} > {log} 2>&1')
     name = f'{unit}-preflight'
@@ -249,6 +253,7 @@ def main(argv=None):
     p.add_argument('--unit', help='current controller unit (default: bf95-lowlr-<name>[-rN], the active one)')
     p.add_argument('--runtime-from-main', action='store_true', help='freeze main into a successor runtime and rebind to it')
     p.add_argument('--commit', help='commit to freeze (default HEAD of the canonical checkout)')
+    p.add_argument('--use-runtime', metavar='TAG', help='rebind to an already frozen runtime (e.g. v58-1107) instead of freezing')
     p.add_argument('--grace', type=float, default=600., help='seconds of cooperative stop before the unit is stopped hard')
     p.add_argument('--patient', action='store_true', help='never escalate: wait for the clean update boundary')
     p.add_argument('--no-preflight', action='store_true')
@@ -273,7 +278,11 @@ def main(argv=None):
         except OSError:
             raise SystemExit('another restart of this controller is running')
         new_tag = None
-        if a.runtime_from_main or a.freeze_only:
+        if a.use_runtime:
+            if not (DATA / f'runtime-native-corrected-mix-{a.use_runtime}/runtime-input-closure.json').is_file():
+                raise SystemExit(f'runtime {a.use_runtime} is not a frozen runtime')
+            new_tag = a.use_runtime
+        elif a.runtime_from_main or a.freeze_only:
             new_tag = freeze(spec, a.commit, out / f'restart-freeze-{time.strftime("%Y%m%d-%H%M%S")}.log')
             print(f'frozen runtime {new_tag}', flush=True)
             if a.freeze_only:
@@ -300,7 +309,7 @@ def main(argv=None):
                     print(f'rolled back to {old_tag}; relaunching the old runtime', flush=True)
         spec.setdefault('units', []).append(new_unit)
         spec['unit'] = new_unit
-        write_json(out / 'launch.json', spec)
+        save_json(out / 'launch.json', spec)
         launched_at = time.time()
         started = run(ledger_command(spec, new_unit))
         if started.returncode:
