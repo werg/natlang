@@ -420,12 +420,13 @@ def make_pop_room(state, incoming_bytes, keep):
 
 
 def prune_dgx(state):
-    """Remove this watcher's own DGX views except the behavioural parent's and the peer delta base (sender view)."""
+    """Remove this watcher's own DGX views (and the Pop RL actor's rl-views) except the behavioural parent's and the peer
+    delta base (sender view)."""
     keep = {state['parent']['sha256']}
     hint = pop_python('import sys,json,os;p=sys.argv[1]+"/.natlang-actor-transfer.json";'
                       'print(json.dumps(json.load(open(p)) if os.path.exists(p) else None))', POP_TRANSPORT_ROOT)
     removed = []
-    for kind in ('views', 'ema'):
+    for kind in ('views', 'ema', 'rl-views'):
         for directory in sorted((ROOT / kind).glob('*')):
             if directory.name in keep or (hint and str(directory) in hint['sender_view']):
                 continue

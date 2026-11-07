@@ -42,6 +42,7 @@ from scripts.neuralese_data import pop_behavior_eval as pbe  # noqa: E402
 RL_PORT = 18531
 STATE = pbe.ROOT / 'rl-actor.json'
 EXPORT_FORMAT = 'native-pop-rtx4060-bf16'
+RL_MEMORY_GB = 4   # container cap and ledger claim; measured peak 2.8 GiB at 4 concurrent requests (the eval claims 5)
 
 
 def log(**event):
@@ -123,7 +124,7 @@ def start(args):
            'runtime_closure_sha256': closure, 'base': pbe.POP_BASE, 'image': pbe.IMAGE, 'step': prep['step'],
            'source_sha256': source, 'stage': f'{pbe.POP_TRANSPORT_ROOT}/{source}', 'view': prep['view']['path'],
            'view_sha256': prep['view']['sha256'], 'work': work, 'min_free_bytes': pbe.POP_MIN_FREE,
-           'actor_export_format': EXPORT_FORMAT,
+           'actor_export_format': EXPORT_FORMAT, 'memory': f'{RL_MEMORY_GB}g',
            'transport': {'name': Path(prep['transport']['path']).name, 'sha256': prep['transport']['sha256'],
                          'view_receipt_name': prep['view_receipt']['sha256'] + '.json',
                          'view_receipt_sha256': prep['view_receipt']['sha256'], 'scope': transport_json['scope']}}
@@ -133,13 +134,17 @@ def start(args):
     pbe._pop_upload_json(job, f'{work}/job.json')
     unit = f'{name}-{int(time.time())}'
     pbe.ssh(shlex.join(['/usr/bin/python3', pbe.POP_REPO + '/scripts/memory_ledger.py', 'run', '--unit', unit,
-                        '--budget-gb', str(pbe.POP_BUDGET_GB), '--reserve-gb', str(pbe.POP_RESERVE_GB),
+                        '--budget-gb', str(RL_MEMORY_GB), '--reserve-gb', str(pbe.POP_RESERVE_GB),
                         '--class', 'experiment', '--no-resumable', '--container', name, '--workdir', work, '--',
                         '/usr/bin/python3', f'{work}/driver.py', f'{work}/job.json']))
     result = {'endpoint': endpoint, 'unit': unit, 'container': name, 'policy_id': source, 'work': work,
               'prepared_seconds': round(time.time() - started, 1)}
     pbe.write_json(STATE, result)
     pbe.write_json(pbe.RL_ACTOR_MARKER, {'started': time.time(), 'policy_id': source, 'endpoint': endpoint, 'unit': unit})
+    try:
+        pbe.prune_dgx(state)   # older derived DGX views (rl-views included); the one just sent stays as the next delta base
+    except Exception as error:
+        log(event='DGX view pruning failed', error=repr(error)[:300])
     deadline = time.monotonic() + args.ready_seconds
     while time.monotonic() < deadline:
         if pbe.pop_unit_state(unit).get('ActiveState') in ('inactive', 'failed'):
@@ -159,6 +164,12 @@ def stop(_args=None):
     if state:
         stop_unit(state)
         pbe.ssh(shlex.join(['docker', 'rm', '-f', state['container']]), check=False, timeout=60)
+        # The collector fetched the stored blocks before this hook ran; the work directory keeps only its logs.
+        work = state['work']
+        # The container wrote them as root: remove them from a throwaway container.
+        pbe.ssh(shlex.join(['docker', 'run', '--rm', '-v', f'{work}:/work', 'alpine:3.21', 'sh', '-c',
+                            'rm -rf ' + ' '.join(f'/work/{name}' for name in ('store', 'inductor', 'triton', 'hf', 'cuda'))]),
+                check=False, timeout=120)
         STATE.unlink(missing_ok=True)
         log(event='Pop RL actor stopped', unit=state['unit'])
     release()

@@ -98,8 +98,9 @@ def main(job_path):
     lease.write_text(json.dumps({'role': 'rl-rollout-actor' if rl else 'protected-development-evaluation', 'checkpoint_sha256': job['source_sha256'],
                                  'consumer': name, 'started': time.time(),
                                  'release': 'after actual container shutdown; no training admission'}) + '\n')
-    cmd = ['docker', 'run', '-d', '--name', name, '--gpus', 'all', '--network', 'host', '--cpus', '3', '--memory', '5g',
-           '--memory-swap', '5g', '--read-only', '--tmpfs', '/tmp:rw,size=1g', '--log-opt', 'max-size=10m',
+    memory = job.get('memory', '5g')   # the RL actor measured at most 2.8 GiB of host memory (Pop is short of RAM)
+    cmd = ['docker', 'run', '-d', '--name', name, '--gpus', 'all', '--network', 'host', '--cpus', '3', '--memory', memory,
+           '--memory-swap', memory, '--read-only', '--tmpfs', '/tmp:rw,size=1g', '--log-opt', 'max-size=10m',
            '--log-opt', 'max-file=2', '-v', f'{runtime}:/repo:ro', '-v', f'{base}:/base:ro',
            '-v', f'{checkpoint}:/checkpoint.pt:ro', '-v', f'{stage}:/transport:ro',
            *([] if rl else ['-v', f'{packet.parent}:/packet:ro']), '-v', f'{work}:/work', '-v', '/usr/bin/node:/usr/bin/node:ro']

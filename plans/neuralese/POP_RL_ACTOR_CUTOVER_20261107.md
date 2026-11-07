@@ -68,9 +68,31 @@ See risk 1.
    `collection-binding.json` endpoints, `actor-prompt-binding.json`, per-worker journals, the Pop container (`docker ps`
    shows `poprl-<sha12>`), and the learner's `engine_guard` summary (rejected episodes, `max_abs`, `max_mean_k3`).
 
-## Measurements (2026-11-07, w3 step-98 policy a854332c, scratch runtime = v57 + these files)
+## Measurements (2026-11-07, w3 step-98 policy a854332c, scratch runtime = v57 + these files, all from the DGX)
 
-See the report that accompanied this note; numbers are repeated here once the runs finished (below).
+- Cold start of the hook (view prepared and cached, delta/already-verified send, container start and attestation): 33 s; first
+  time including the 70 s view preparation and runtime install: 127 s. Teardown: container removed, GPU back to 2 MiB.
+- Pop actor alone, 4 concurrent requests (4 workers, real w3 tasks, full prompt, top-k 128, context 32768): decode 54-58 tok/s
+  aggregate (about 14 tok/s per stream), prefill about 360-620 tok/s (turn prompts are 4k+ tokens). The DGX SGLang actor
+  measured at the same time: about 167 tok/s. Pop is therefore about a third of the DGX actor.
+- Pop GPU memory 6.1-7.1 GiB used of 8.0 (the actor caps itself at 90%); container host memory at most 2.8 GiB. The 4 GiB
+  container cap (the RL claim; the eval uses 5) held without OOM kill for a 6-minute run at 4 concurrent requests.
+- Concurrency sustained: 4 active sequences (all 4 workers), no queueing. Two real collections completed through
+  `collect()` against Pop alone (4 rollouts each, `collection_complete`, actor receipt with `actor_view.scope
+  rl-controller-pin` and `actor_export`); 3 of 4 rollouts of each hit the shortened case wall (900 s / 360 s), expected at
+  this speed.
+- Two-endpoint run through `collect_with_actor` (managed DGX native actor on the same view + Pop, `remote_workers`
+  {workers 1, weight 1}, hooks start/stop): hook reused the already-serving Pop actor, the remote attested through the full
+  `validate_actor_receipts`, 3 workers (queue split 2/1/1, endpoints 8201/8201/Pop), receipts of both endpoints in
+  `score.json`, `after_collection` stopped Pop, collection complete.
+- Blocks: the collected episodes used no Neuralese state, so no block bundle was produced. Fetching a stored block over HTTP
+  from Pop works: 961-token block, 143 MiB, 15 MiB/s.
+- Pop vs DGX native actor log-probs (same view, same deterministic seed, temperature 1, 3 prompts x 200 tokens, while the
+  sampled prefix agrees: 129/200, 200/200, 80/200 tokens): mean |d logp| 0.011 / 0.006 / 0.022, max 0.17 / 0.10 / 0.17,
+  mean k3 4e-4 / 1.5e-4 / 8.5e-4. That is 100x the learner's exact gate (1e-4) and well inside the engine guard
+  (max 1.5, mean k3 0.01): the reason for the `actor_export` binding. This compares two actors, not a learner recompute (the
+  DGX native actor and the learner share arithmetic; the SGLang path has the same guard). No cheaper learner-side probe exists
+  (the guard runs inside the update; `NATLANG_ENGINE_GUARD_LOG` records it per episode).
 
 ## Risks and open items
 
@@ -83,6 +105,9 @@ See the report that accompanied this note; numbers are repeated here once the ru
    per-worker journals after the first round and adjust `remote_workers` (it applies to the next unbound round).
 3. Pop GPU memory reached 7.1 GiB used of 8.0 (the actor caps itself at 90%) with 4 concurrent requests; long contexts at
    4 concurrent may OOM a request (it becomes an infrastructure error outcome, like other transient failures). Hence 3 workers.
+   Pop host memory is tight: `available` was 5.3 GiB and falling (unreclaimable kernel slab 3.9 GiB, vmalloc 3.7 GiB), the eval's
+   5 + 0.5 GiB ledger claim was refused at 5.4 free; the RL actor claims 4 + 0.5 (container cap 4g) and the next evals may need
+   the same reduction or a Pop reboot.
 4. Neuralese blocks of Pop-sampled episodes are fetched over HTTP at the end of collection: a 961-token block is 143 MiB and
    fetched at 15 MiB/s from the DGX (wifi + tailscale). Round 0 of w3 had 4.5 GB of blocks for 144 rollouts (3% Neuralese-using),
    so Pop's share is well under 1 GB per round.
