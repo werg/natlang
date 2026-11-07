@@ -76,6 +76,9 @@ EMA_ADMISSION_WAIT = 600
 # DGX headroom beside the 96 GiB learner by 0.1 GiB (2026-11-06).
 RAW_PREP_GB = 7.5
 POP_BUDGET_GB = 5.0  # the container is capped at --memory 5g; Pop (14 GiB) shows ~6.8 GiB free after ~4.4 GiB kernel slab, beside a 1.4 GiB reserve (2026-11-06)
+# The hard container cap bounds the unit, so the ledger reserve beside it can be small: by 2026-11-07 Pop's kernel held
+# ~7.5 GiB (3.7 GiB unreclaimable slab + 3.7 GiB vmalloc, no sudo to reboot) and 6.0 GiB free refused 5.0 + 1.2 default.
+POP_RESERVE_GB = 0.5
 POP_MIN_FREE = 8 * 2**30 + 512 * 2**20       # the baseline drivers' scratch floor
 CASES = list(range(0, 128, 8))
 # The exact task spec of the dev16 baselines (parent67 R34 12/16, earned179 R38 11/16).
@@ -470,7 +473,8 @@ def run_on_pop(arm, prep, runtime, closure, comparison, attempt=1):
             _pop_upload_json(job, f'{work}/job.json')
             unit = f'{name}-{int(time.time())}'
             ssh(shlex.join(['/usr/bin/python3', POP_REPO + '/scripts/memory_ledger.py', 'run', '--unit', unit,
-                            '--budget-gb', str(POP_BUDGET_GB), '--class', 'experiment', '--no-resumable', '--container', name,
+                            '--budget-gb', str(POP_BUDGET_GB), '--reserve-gb', str(POP_RESERVE_GB), '--class', 'experiment',
+                            '--no-resumable', '--container', name,
                             '--workdir', work, '--', '/usr/bin/python3', f'{work}/driver.py', f'{work}/job.json']))
             log(event='Pop evaluation started', arm=arm, unit=unit, step=prep['step'], source=source[:12])
             time.sleep(20)
