@@ -181,6 +181,11 @@ def stop_cooperatively(unit, out, grace, patient):
     state_path = Path(out) / 'state.json'
     phase = (read_json(state_path) or {}).get('phase')
     print(f'stopping {unit} (state phase {phase!r}): SIGTERM to the controller, collectors/actor/trainer follow its lead', flush=True)
+    active = (read_json(state_path) or {}).get('active_update_round')
+    log = Path(active) / 'learner/train.jsonl' if active and phase == 'updating' else None
+    if log is not None and log.is_file():
+        print(f'  learner: last committed update {(time.time() - log.stat().st_mtime) / 60:.0f} min ago (an update takes about '
+              '35-45 min; the clean stop waits for the boundary, an escalated stop redoes the in-flight update)', flush=True)
     systemctl('kill', '--kill-whom=main', '-s', 'SIGTERM', unit)
     began = time.monotonic()
     while True:

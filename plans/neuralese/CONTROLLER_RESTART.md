@@ -34,6 +34,12 @@ What it does, in order:
 `bf95-chain-N` (the old window chain) watches the old unit name; after a restart it exits with "unexpected phase"
 (`requested_stop`). The interleaved controller needs no chain (it runs until stopped), so nothing else to do.
 
+Prepared: runtime `runtime-native-corrected-mix-v58-1107` (frozen from 6f4b3bf8b, contains all of the below). The first restart onto it:
+`restart_controller.py OUT --use-runtime v58-1107`. Tested here: stop/relaunch/resume mechanics on a fake controller unit (clean stop,
+escalated stop, repeated `-rN` names), rebind round trip on a scratch copy, real freeze, binding compare against the live round-1
+binding. Not run against the live controller: the preflight (it loads the policy checkpoint, needs a free ~40 GB claim) and the
+learner resume under v58.
+
 ## What makes a restart seamless (code on main, commits below)
 
 * `collect()` no longer binds `endpoints` or `remote_workers` (transport, not provenance; each endpoint's policy identity is
