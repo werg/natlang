@@ -719,7 +719,7 @@ def collection_binding(*, cases, endpoints, policy_id, rows, offset, group, root
                        neuralese_server, case_seconds, max_model_requests, max_turns, expected_native=None,
                        behavior_top_k=None, system_prompt=None, prompt_rendering=None, guidance_stage=None,
                        coefficient_policy=None, context_tokens=None, neuralese_use_bonus=None,
-                       program_guidance=None, adapters=None):
+                       program_guidance=None, adapters=None, remote_workers=None):
     """The exact provenance a collection binds (no side effects): cases, policy, sampling, runtime and actor."""
     from ..common.hashing import sha256_file_hex, sha256_hex, canonical_json_sha256_hex
     runtime = Path(runtime or root('repo') / 'ts-host')
@@ -742,7 +742,8 @@ def collection_binding(*, cases, endpoints, policy_id, rows, offset, group, root
            if system_prompt is not None else {}),
         **({'guided': True, 'program_guidance_sha256': canonical_json_sha256_hex(program_guidance)}
            if program_guidance is not None else {}),
-        **({'adapters': adapters} if adapters is not None else {})}
+        **({'adapters': adapters} if adapters is not None else {}),
+        **({'remote_workers': remote_workers} if remote_workers is not None else {})}
     coefficient_runtime=None
     if coefficient_policy is not None:
         from ..model.native_coefficient_policy import runtime_binding
@@ -794,12 +795,42 @@ def guidance_collection_options(stage):
     return {'selection':'crisp', 'writer':'off'} if stage == 'backbone' else {}
 
 
+def weighted_split(entries, weights):
+    """Deterministic proportional split (smooth weighted round-robin): worker k receives about weights[k] / sum(weights)
+    of the entries, interleaved in order. Equal weights give ``entries[k::len(weights)]``."""
+    total, current, shares = sum(weights), [0.] * len(weights), [[] for _ in weights]
+    for entry in entries:
+        for k, weight in enumerate(weights):
+            current[k] += weight
+        k = max(range(len(weights)), key=lambda i: (current[i], -i))
+        current[k] -= total
+        shares[k].append(entry)
+    return shares
+
+
+def worker_slots(endpoints, workers, remote_workers):
+    """[(endpoint, entry weight)] per collector worker. Without ``remote_workers`` the workers round-robin over the
+    endpoints with equal shares (external fleets). With it, ``workers`` run on the managed endpoint (endpoints[0], weight
+    1) and each remote endpoint adds its own {workers, weight}: a slower remote GPU takes fewer entries per worker, so it
+    cannot stretch the round."""
+    if remote_workers is None:
+        return [(endpoints[i % len(endpoints)].rstrip('/'), 1.) for i in range(workers)]
+    if set(remote_workers) != set(endpoints[1:]) or any(
+            not isinstance(spec, dict) or set(spec) != {'workers', 'weight'} or type(spec['workers']) is not int
+            or spec['workers'] < 1 or type(spec['weight']) not in (int, float) or not 0 < spec['weight'] < float('inf')
+            for spec in remote_workers.values()):
+        raise ValueError('remote_workers needs {workers>=1, weight>0} for exactly each remote endpoint')
+    return ([(endpoints[0].rstrip('/'), 1.)] * workers
+            + [(url.rstrip('/'), float(remote_workers[url]['weight'])) for url in endpoints[1:]
+               for _ in range(remote_workers[url]['workers'])])
+
+
 def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, workers=4,
             root_mode='student', runtime=None, seed_base=700000, neuralese_server=True,
             case_seconds=600, max_model_requests=128, max_turns=160, control=None, expected_native=None, coefficient_policy=None,
             behavior_top_k=None, teacher_attempts=0, teacher_plan='nl',
             system_prompt=None, prompt_rendering=None, guidance_stage=None, context_tokens=None,
-            neuralese_use_bonus=None, program_guidance=None, adapters=None):
+            neuralese_use_bonus=None, program_guidance=None, adapters=None, remote_workers=None):
     """Bounded subprocess fanout; existing collector and exact task verifier. ``behavior_top_k`` also records the
     actors' top-k sampler log-probs at every sampled position (score-centered RL); None leaves collection unchanged.
     ``teacher_attempts`` JOLT+ teacher attempts per group (the crisp plan; ``teacher_plan='nl'`` lets
@@ -848,7 +879,8 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         expected_native=expected_native, behavior_top_k=behavior_top_k, system_prompt=system_prompt,
         prompt_rendering=prompt_rendering, guidance_stage=guidance_stage, coefficient_policy=coefficient_policy,
         context_tokens=context_tokens, neuralese_use_bonus=bonus_setting(neuralese_use_bonus),
-        program_guidance=program_guidance, adapters=adapters)
+        program_guidance=program_guidance, adapters=adapters, remote_workers=remote_workers)
+    slots = worker_slots(endpoints, workers, remote_workers)
     coefficient_runtime = (binding.get('coefficient_policy') or {}).get('runtime')
     if coefficient_policy is not None:
         coefficient_policy = Path(coefficient_policy).resolve(strict=True)
@@ -949,12 +981,15 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     # A partial response is not usable without its exact communication inputs.
     # Authenticate and hydrate the full archive before any collector can replay.
     retained_artifacts(restore=True)
-    phase = {'entries': entries, 'name': ''}
+    def shares(items):
+        return ([items[k::len(slots)] for k in range(len(slots))] if remote_workers is None
+                else weighted_split(items, [weight for _, weight in slots]))
+    phase = {'entries': entries, 'name': '', 'shares': shares(entries)}
     def worker(index):
         queue = directory / f"queue-{phase['name']}{index}.jsonl"
         journal = directory / f"journal-{phase['name']}{index}.jsonl"
-        endpoint = endpoints[index % len(endpoints)].rstrip('/')
-        selected = phase['entries'][index::workers]
+        endpoint, _ = slots[index]
+        selected = phase['shares'][index]
         for entry in selected:
             entry['rl_endpoint'] = endpoint
         queue.write_text(''.join(json.dumps(e) + '\n' for e in selected))
@@ -973,8 +1008,8 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         (out / 'queue.jsonl').write_text(''.join(json.dumps(e) + '\n' for e in entries))
     teachers = {'entries': [], 'refusal': None}
     try:
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            results = list(pool.map(worker, range(workers)))
+        with ThreadPoolExecutor(max_workers=len(slots)) as pool:
+            results = list(pool.map(worker, range(len(slots))))
         if teacher_attempts and not (control and control.stop.requested):
             from .jolt import teacher_entries
             write_journal_and_queue()
@@ -990,9 +1025,9 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
                     for entry in teachers['entries']:
                         entry['context_tokens'] = context_tokens
                 entries.extend(teachers['entries'])
-                phase.update(entries=teachers['entries'], name='teacher-')
-                with ThreadPoolExecutor(max_workers=workers) as pool:
-                    results += list(pool.map(worker, range(workers)))
+                phase.update(entries=teachers['entries'], name='teacher-', shares=shares(teachers['entries']))
+                with ThreadPoolExecutor(max_workers=len(slots)) as pool:
+                    results += list(pool.map(worker, range(len(slots))))
     except BaseException as collection_error:
         try:
             retained_artifacts()
@@ -1110,6 +1145,14 @@ def round_endpoints(config, round_dir):
     return endpoints
 
 
+def round_remote_workers(config, round_dir):
+    """The recorded per-remote worker split of a bound round (None: none bound); see round_endpoints."""
+    receipt = Path(round_dir) / 'collection-binding.json'
+    if receipt.is_file() and len(round_endpoints(config, round_dir)) > len(config['endpoints']):
+        return json.loads(receipt.read_text()).get('remote_workers')
+    return None
+
+
 def _remote_actor_usable(url, managed_url, kwargs, values, *, seconds, control):
     """(usable, reason): the remote actor attests the round's policy, native identity, runtime and prompt contract
     exactly as the managed actor must (validate_actor_receipts) within ``seconds``. A stop request raises."""
@@ -1198,6 +1241,8 @@ def collect_with_actor(config, values, **kwargs):
     if (bound_remote and not all(url in remote for url in bound_remote)) or managed_url in remote:
         raise ValueError('managed colocated actor takes one endpoint plus declared remote_endpoints; '
                          'external fleets use supervisor hooks')
+    if any(url not in (config.get('remote_workers') or {}) for url in remote):
+        raise ValueError('every remote_endpoints entry needs its remote_workers {workers, weight} split')
     if remote and kwargs.get('coefficient_policy') is not None:
         remote = []   # a remote Pop actor serves ordinary checkpoints only
     # A round whose binding is written collects on exactly its recorded endpoints (every bound remote is required);
@@ -1264,7 +1309,9 @@ def collect_with_actor(config, values, **kwargs):
                     elif bound:
                         raise RuntimeError(f'bound remote RL actor {url} is unavailable: {reason}; the round was bound '
                                            'to it and must resume on exactly its recorded endpoints')
-                kwargs = {**kwargs, 'endpoints': [managed_url, *usable]}
+                specs = kwargs.get('remote_workers') if bound else config.get('remote_workers')
+                kwargs = {**kwargs, 'endpoints': [managed_url, *usable],
+                          **({'remote_workers': {url: specs[url] for url in usable}} if specs and usable else {})}
             return _collect_round(config, kwargs)
         finally:
             if process.poll() is None:
@@ -1496,6 +1543,7 @@ def prepare_round_collection(config, state, round_dir, selected_path, selection,
         and config.get('update_objective', 'policy') == 'policy'
         and config.get('actor_engine', 'native-python') == 'native-python' else 0)
     kwargs = dict(cases=selected_path, out=round_dir, endpoints=round_endpoints(config, round_dir), policy_id=policy,
+        **({'remote_workers': rw} if (rw := round_remote_workers(config, round_dir)) else {}),
         rows=len(selection), offset=0, group=selection[0]['samples'], workers=config.get('workers', 4),
         root_mode=config.get('root_mode', 'student'), runtime=config.get('runtime'),
         seed_base=700000 + state['round'] * 1000000, neuralese_server=config.get('neuralese_server', True),
@@ -1610,7 +1658,7 @@ def resume_preflight(config_path, scratch):
     binding = collection_binding(**{key: kwargs[key] for key in ('cases', 'endpoints', 'policy_id', 'rows',
         'offset', 'group', 'root_mode', 'runtime', 'seed_base', 'neuralese_server', 'case_seconds',
         'max_model_requests', 'max_turns', 'behavior_top_k', 'prompt_rendering', 'guidance_stage',
-        'coefficient_policy', 'context_tokens', 'neuralese_use_bonus') if key in kwargs}, expected_native=expected_native)
+        'coefficient_policy', 'context_tokens', 'neuralese_use_bonus', 'remote_workers') if key in kwargs}, expected_native=expected_native)
     recorded = json.loads(receipt.read_text())
     binding, _ = resolve_neuralese_bonus(recorded, binding)
     binding, _ = resolve_collection_binding(recorded, binding, kwargs['teacher_attempts'], kwargs['teacher_plan'])

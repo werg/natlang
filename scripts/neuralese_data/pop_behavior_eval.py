@@ -338,6 +338,7 @@ def ensure_pop_runtime(runtime):
     log(event='installing runtime on Pop', runtime=runtime)
     parent, name = str(Path(runtime).parent), Path(runtime).name
     staging = f'{runtime}.installing'
+    ssh(shlex.join(['mkdir', '-p', parent]))
     ssh(shlex.join(['mkdir', staging]))   # fails when a previous attempt left it: inspect rather than overwrite
     tar = subprocess.Popen(['tar', '--zstd', '-C', parent, '-cf', '-', name], stdout=subprocess.PIPE)
     subprocess.run(['ssh', '-o', 'ConnectTimeout=15', POP, shlex.join(['tar', '--zstd', '-C', staging, '-xf', '-'])],

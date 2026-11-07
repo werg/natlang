@@ -258,7 +258,8 @@ def _remote_actor_harness(tmp_path,monkeypatch,attesting):
     """Managed actor on http://dgx plus remote endpoints; ``attesting`` is the set of URLs whose actor serves the policy."""
     from natlang_neuralese.rl import actor_client
     import time
-    events=[]
+    class Events(list):pass
+    events=Events()
     class Process:
         pid=5
         def __init__(self,*a,**kw):self.stopped=False
@@ -278,21 +279,27 @@ def _remote_actor_harness(tmp_path,monkeypatch,attesting):
         events.append(argv[0])
         if argv[0]=='teardown-fails':raise RuntimeError('pop gone')
     monkeypatch.setattr(production,'run_command',command)
-    monkeypatch.setattr(production,'collect',lambda **kw:events.append(('collect',kw['endpoints']))or {'done':True})
+    collected=[]
+    monkeypatch.setattr(production,'collect',lambda **kw:(collected.append(kw),events.append(('collect',kw['endpoints'])))and {'done':True})
     config={'actor_command':['actor'],'after_actor_ready':['start-pop'],'after_collection':['teardown-fails'],
-            'endpoints':['http://dgx'],'remote_endpoints':['http://pop'],'remote_actor_ready_seconds':.05}
+            'endpoints':['http://dgx'],'remote_endpoints':['http://pop'],'remote_actor_ready_seconds':.05,
+            'remote_workers':{'http://pop':{'workers':1,'weight':.25}}}
     kwargs=dict(out=tmp_path,endpoints=['http://dgx'],policy_id='cur',prompt_rendering='full',neuralese_server=False)
+    events.collected=collected
     return events,config,{'out':str(tmp_path),'policy_id':'cur'},kwargs
 
 
 def test_remote_actor_joins_a_fresh_round_only_when_it_attests_and_is_torn_down(tmp_path,monkeypatch):
     events,config,values,kwargs=_remote_actor_harness(tmp_path,monkeypatch,{'http://dgx','http://pop'})
     assert production.collect_with_actor(config,values,**kwargs)=={'done':True}
+    collected=events.collected
     assert events==['start-pop',('collect',['http://dgx','http://pop']),'terminate','teardown-fails']  # teardown failure is logged only
+    assert collected[-1]['remote_workers']=={'http://pop':{'workers':1,'weight':.25}}
     second=tmp_path/'unreachable';second.mkdir()
     events,config,values,kwargs=_remote_actor_harness(second,monkeypatch,{'http://dgx'})
     assert production.collect_with_actor(config,values,**kwargs)=={'done':True}
     assert events==['start-pop',('collect',['http://dgx']),'terminate','teardown-fails']  # unreachable remote: managed alone
+    assert 'remote_workers' not in events.collected[-1]
 
 
 def test_bound_round_resumes_on_exactly_its_recorded_endpoints(tmp_path,monkeypatch):
@@ -637,3 +644,18 @@ def test_collection_binding_binds_the_agent_context_budget_only_when_set(tmp_pat
                   max_model_requests=32, max_turns=48)
     assert 'context_tokens' not in production.collection_binding(**common)
     assert production.collection_binding(**common, context_tokens=32768)['context_tokens'] == 32768
+
+
+def test_weighted_split_and_worker_slots_keep_a_slow_remote_from_stretching_the_round():
+    items=list(range(40))
+    assert production.weighted_split(items,[1.]*4)==[items[k::4] for k in range(4)]
+    shares=production.weighted_split(items,[1.,1.,1.,1.,.5])
+    assert [len(share) for share in shares]==[9,9,9,9,4] and sorted(sum(shares,[]))==items
+    assert production.weighted_split(items,[1.,1.])==production.weighted_split(items,[1.,1.])  # deterministic
+    # without remote_workers: equal round-robin (external fleets, unchanged)
+    assert production.worker_slots(['http://a','http://b/'],3,None)==[('http://a',1.),('http://b',1.),('http://a',1.)]
+    slots=production.worker_slots(['http://dgx','http://pop/'],2,{'http://pop/':{'workers':1,'weight':.25}})
+    assert slots==[('http://dgx',1.),('http://dgx',1.),('http://pop',.25)]
+    for bad in ({}, {'http://pop':{'workers':0,'weight':1}}, {'http://pop':{'workers':1}}, {'http://x':{'workers':1,'weight':1}}):
+        with pytest.raises(ValueError,match='remote_workers'):
+            production.worker_slots(['http://dgx','http://pop'],2,bad)
