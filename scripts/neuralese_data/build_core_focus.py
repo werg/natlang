@@ -24,7 +24,6 @@ from __future__ import annotations
 import argparse
 import collections
 import glob
-import hashlib
 import io
 import json
 import random
@@ -33,8 +32,11 @@ import sys
 import time
 from pathlib import Path
 
-CLASS_DIR = Path('/mnt/external/natlang-lfm3-data-20261028/corrected-mix-diverse-1103')
-OPS = Path('/home/werg/data/lfm3-rl-dgx-20261029/ops/corrected-mix-diverse-1103')
+from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file
+from natlang_neuralese.common.paths import resolve_str
+
+CLASS_DIR = Path(resolve_str('data_hdd', 'natlang-lfm3-data-20261028/corrected-mix-diverse-1103'))
+OPS = Path(resolve_str('data_nvme', 'lfm3-rl-dgx-20261029/ops/corrected-mix-diverse-1103'))
 SCHEMA = 'natlang.native-pending-focus/1'
 REPORT_SCHEMA = 'natlang.core-focus-report/1'
 CODING_FAMILIES = {'coding-swe', 'coding-sessions', 'acquired-d13', 'agent-sessions'}
@@ -86,11 +88,6 @@ def rows_of(path):
                     yield json.loads(line)
 
 
-def sha256_file(path):
-    with open(path, 'rb') as handle:
-        return hashlib.file_digest(handle, 'sha256').hexdigest()
-
-
 def leaf_paths(manifest):
     result = {}
 
@@ -109,7 +106,7 @@ def scan_features(entries, cohorts, family, paths, cache):
         return {r['id']: r for r in zjsonl(cache)}
     import zstandard
     from tokenizers import Tokenizer
-    tok = Tokenizer.from_file(glob.glob('/home/werg/.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/*/tokenizer.json')[0])
+    tok = Tokenizer.from_file(glob.glob(str(Path.home() / '.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/*/tokenizer.json'))[0])
     rx = {k: re.compile(v) for k, v in RX.items()}
     wanted = {}
     for entry, cohort in zip(entries, cohorts):
