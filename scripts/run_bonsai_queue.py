@@ -30,6 +30,7 @@ OUTPUT_ACCOUNTING_VERSION = 'natlang.supervisor_output_accounting/2'
 OBSERVATION_POLICY_VERSION = 'natlang.collection_observations/2'
 REPETITION_GUARD_POLL_SECONDS = 1.0
 ACTIVITY_HEARTBEAT_SECONDS = 30.0
+STOP_REQUESTED = []
 
 
 class ProviderStreamOverflow(RuntimeError):
@@ -991,6 +992,10 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                     child.kill()
                     child.wait()
                 raise
+        if STOP_REQUESTED:
+            # A stop that reached the child before this supervisor must not become a recorded attempt: without a
+            # finish row the entry stays pending and its retained partial job resumes on the next start.
+            raise KeyboardInterrupt('queue stopped')
         try:
             if observer:
                 _, observation = observer.poll()
@@ -1085,6 +1090,7 @@ if __name__ == '__main__':
     if args.model_concurrency is not None and args.model_concurrency < 1:
         parser.error('--model-concurrency must be positive')
     def stop(signum, frame):
+        STOP_REQUESTED.append(signum)
         raise KeyboardInterrupt('queue stopped')
     signal.signal(signal.SIGTERM, stop)
     raise SystemExit(run_queue(args.queue, args.journal, args.runtime, args.case_seconds, args.model_id, args.provider,

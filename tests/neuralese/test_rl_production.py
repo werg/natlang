@@ -302,24 +302,17 @@ def test_remote_actor_joins_a_fresh_round_only_when_it_attests_and_is_torn_down(
     assert 'remote_workers' not in events.collected[-1]
 
 
-def test_bound_round_resumes_on_exactly_its_recorded_endpoints(tmp_path,monkeypatch):
+def test_a_resumed_round_collects_on_whatever_endpoints_attest_now(tmp_path,monkeypatch):
     events,config,values,kwargs=_remote_actor_harness(tmp_path,monkeypatch,{'http://dgx','http://pop'})
-    (tmp_path/'collection-binding.json').write_text(json.dumps({'endpoints':['http://dgx','http://pop']}))
-    assert production.round_endpoints(config,tmp_path)==['http://dgx','http://pop']
-    kwargs['endpoints']=production.round_endpoints(config,tmp_path)
+    # a round bound by an earlier start (with or without the remote): endpoints are transport, the set follows the config
+    (tmp_path/'collection-binding.json').write_text(json.dumps({'cases_sha256':'a'}))
     assert production.collect_with_actor(config,values,**kwargs)=={'done':True}
     assert events[1]==('collect',['http://dgx','http://pop'])
-    # the bound remote cannot be brought up: fail, never silently collect on a different set
+    # the remote that the earlier start used is gone: the round continues on the managed actor alone
     events,config,values,kwargs=_remote_actor_harness(tmp_path,monkeypatch,{'http://dgx'})
-    kwargs['endpoints']=production.round_endpoints(config,tmp_path)
-    with pytest.raises(RuntimeError,match='bound remote RL actor http://pop is unavailable'):
-        production.collect_with_actor(config,values,**kwargs)
-    assert not any(isinstance(e,tuple) for e in events)
-    # a round bound to the managed actor alone never gains a remote; an unknown bound endpoint is a binding change
-    (tmp_path/'collection-binding.json').write_text(json.dumps({'endpoints':['http://dgx']}))
-    assert production.round_endpoints(config,tmp_path)==['http://dgx']
-    (tmp_path/'collection-binding.json').write_text(json.dumps({'endpoints':['http://dgx','http://other']}))
-    assert production.round_endpoints(config,tmp_path)==['http://dgx']
+    assert production.collect_with_actor(config,values,**kwargs)=={'done':True}
+    assert events[1]==('collect',['http://dgx'])
+    assert 'remote_workers' not in events.collected[-1]
 
 
 def test_python_actor_runtime_is_bound_and_mixed_replicas_rejected():
@@ -639,7 +632,7 @@ def test_collection_binding_binds_the_agent_context_budget_only_when_set(tmp_pat
     cases = tmp_path / 'cases.jsonl'
     cases.write_text('{}\n')
     (tmp_path / 'ts-host' / 'dist').mkdir(parents=True)
-    common = dict(cases=cases, endpoints=['http://x'], policy_id='p', rows=1, offset=0, group=2, root_mode='student',
+    common = dict(cases=cases, policy_id='p', rows=1, offset=0, group=2, root_mode='student',
                   runtime=tmp_path / 'ts-host', seed_base=0, neuralese_server=True, case_seconds=60,
                   max_model_requests=32, max_turns=48)
     assert 'context_tokens' not in production.collection_binding(**common)

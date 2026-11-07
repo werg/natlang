@@ -44,7 +44,7 @@ def resume_amended_collection(reference, request, *, validate_actors):
         if type(source_ref.get('bytes')) is not int or source_path.stat().st_size!=source_ref['bytes']:
             raise ValueError('completed withdrawal source cases size differs from its binding')
         original_cases=source_path
-    expected.update(policy_id=request['policy_id'], rows=request['rows'], endpoints=request['endpoints'],
+    expected.update(policy_id=request['policy_id'], rows=request['rows'],
                     cases_sha256=sha256_file_hex_cached(original_cases),temperature=1.,guided=False)
     if any(binding.get(key)!=value for key,value in expected.items()):
         raise ValueError('amended collection policy or sampling differs')

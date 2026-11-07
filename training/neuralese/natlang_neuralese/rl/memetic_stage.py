@@ -742,6 +742,9 @@ def promote(out, round_info, *, endpoint, collect=None):
     history_path = out / 'promotion' / 'history.json'
     history_path.parent.mkdir(parents=True, exist_ok=True)
     history = json.loads(history_path.read_text()) if history_path.exists() else []
+    for item in history:
+        if item['parent_sha256'] == parent:   # a restart after the entry was appended: it is already recorded
+            return item
     previous = next((item for item in reversed(history) if item['parent_sha256'] != parent and item['gains']), None)
     decision = (promotion(gains, previous['gains'], min_gain=round_info.get('promotion_min_gain', 0.05))
                 if previous else {'promote': None, 'reason': 'first evaluated parent; it is the reference'})

@@ -36,7 +36,7 @@ def resume_sealed_collection(reference, request, *, validate_actors):
                 'case_seconds': 600, 'max_model_requests': 128, 'max_turns': 160,
                 'neuralese_server': True}
     expected = {key: request.get(key, default) for key, default in defaults.items()}
-    expected.update(policy_id=request['policy_id'], rows=request['rows'], endpoints=request['endpoints'],
+    expected.update(policy_id=request['policy_id'], rows=request['rows'],
                     cases_sha256=sha256_file_hex_cached(Path(request['cases'])), temperature=1., guided=False)
     if any(binding.get(key) != value for key, value in expected.items()):
         raise ValueError('sealed collection policy/cases/sampling contract changed')

@@ -715,12 +715,13 @@ def bind_collection_prompt(entries, mode):
     return entries
 
 
-def collection_binding(*, cases, endpoints, policy_id, rows, offset, group, root_mode, runtime, seed_base,
+def collection_binding(*, cases, policy_id, rows, offset, group, root_mode, runtime, seed_base,
                        neuralese_server, case_seconds, max_model_requests, max_turns, expected_native=None,
                        behavior_top_k=None, system_prompt=None, prompt_rendering=None, guidance_stage=None,
                        coefficient_policy=None, context_tokens=None, neuralese_use_bonus=None,
-                       program_guidance=None, adapters=None, remote_workers=None):
-    """The exact provenance a collection binds (no side effects): cases, policy, sampling, runtime and actor."""
+                       program_guidance=None, adapters=None):
+    """The exact provenance a collection binds (no side effects): cases, policy, sampling, runtime and actor.
+    Endpoints and worker counts are transport, not provenance (rl.collection_generations): each start records its own."""
     from ..common.hashing import sha256_file_hex, sha256_hex, canonical_json_sha256_hex
     runtime = Path(runtime or root('repo') / 'ts-host')
     binding = {'schema': 'natlang.rl-collection-binding/1',
@@ -729,7 +730,7 @@ def collection_binding(*, cases, endpoints, policy_id, rows, offset, group, root
         'seed_base': seed_base, 'temperature': 1., 'guided': False,
         'case_seconds': case_seconds, 'max_model_requests': max_model_requests, 'max_turns': max_turns,
         **({'guidance_stage':guidance_stage} if guidance_stage is not None else {}),
-        'endpoints': endpoints, 'neuralese_server': neuralese_server,
+        'neuralese_server': neuralese_server,
         **({'prompt_rendering':prompt_rendering} if prompt_rendering is not None else {}),
         **({'context_tokens': context_tokens} if context_tokens is not None else {}),
         **({'neuralese_use_bonus': neuralese_use_bonus} if neuralese_use_bonus is not None else {}),
@@ -742,8 +743,7 @@ def collection_binding(*, cases, endpoints, policy_id, rows, offset, group, root
            if system_prompt is not None else {}),
         **({'guided': True, 'program_guidance_sha256': canonical_json_sha256_hex(program_guidance)}
            if program_guidance is not None else {}),
-        **({'adapters': adapters} if adapters is not None else {}),
-        **({'remote_workers': remote_workers} if remote_workers is not None else {})}
+        **({'adapters': adapters} if adapters is not None else {})}
     coefficient_runtime=None
     if coefficient_policy is not None:
         from ..model.native_coefficient_policy import runtime_binding
@@ -781,6 +781,18 @@ def _legacy_collection_binding(recorded):
     if isinstance(actor, dict) and 'semantic_adapter_sha256' in actor and actor['semantic_adapter_sha256'] is None:
         recorded = {**recorded, 'expected_native_actor': {k: v for k, v in actor.items() if k != 'semantic_adapter_sha256'}}
     return recorded
+
+
+def compare_recorded_binding(recorded, binding, teacher_attempts, teacher_plan, *, allow_code_change=True):
+    """(strict differences, accepted code changes, Neuralese bonus, effective teacher attempts) of resuming a collection
+    bound as ``recorded`` with the freshly computed ``binding``. Endpoints and worker counts are transport and never
+    differ; collector/actor code identity may change on resume (recorded per start) unless ``allow_code_change`` is off."""
+    from .collection_generations import comparable_binding, code_changes
+    old = comparable_binding(_legacy_collection_binding(recorded), code=allow_code_change)
+    new, bonus = resolve_neuralese_bonus(old, comparable_binding(binding, code=allow_code_change))
+    new, teacher_attempts = resolve_collection_binding(old, new, teacher_attempts, teacher_plan)
+    return (_binding_differences(old, new), code_changes(recorded, binding) if allow_code_change else {},
+            bonus, teacher_attempts)
 
 
 def guidance_collection_options(stage):
@@ -830,7 +842,8 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
             case_seconds=600, max_model_requests=128, max_turns=160, control=None, expected_native=None, coefficient_policy=None,
             behavior_top_k=None, teacher_attempts=0, teacher_plan='nl',
             system_prompt=None, prompt_rendering=None, guidance_stage=None, context_tokens=None,
-            neuralese_use_bonus=None, program_guidance=None, adapters=None, remote_workers=None):
+            neuralese_use_bonus=None, program_guidance=None, adapters=None, remote_workers=None,
+            allow_code_change=True):
     """Bounded subprocess fanout; existing collector and exact task verifier. ``behavior_top_k`` also records the
     actors' top-k sampler log-probs at every sampled position (score-centered RL); None leaves collection unchanged.
     ``teacher_attempts`` JOLT+ teacher attempts per group (the crisp plan; ``teacher_plan='nl'`` lets
@@ -852,7 +865,10 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     ``adapters`` (``natlang.memetic-adapter-actor/1``-style ``{'entries': [{id, scale}], ...}`` binding) runs every
     request of every rollout with exactly that native adapter stack (``x_natlang_adapters``): an adapter-composed
     actor, bound in full into the collection binding. The server attests the base checkpoint; each captured turn
-    records the effective adapted identity and its adapter binding."""
+    records the effective adapted identity and its adapter binding.
+    A restart resumes the round (rl.collection_generations): ``endpoints``, ``workers`` and ``remote_workers`` are
+    transport and may differ from the previous start; so may the collector/actor code identity unless
+    ``allow_code_change`` is off. Attempted entries of every earlier start are never dispatched again."""
     if prompt_rendering not in (None,'full'):
         raise ValueError('native on-policy collection requires the full prompt contract')
     if guidance_stage not in (None,'backbone','writer'):
@@ -873,28 +889,34 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         raise ValueError('native adapters need the native-state server')
     out = Path(out).resolve()
     out.mkdir(parents=True, exist_ok=True)
-    binding = collection_binding(cases=cases, endpoints=endpoints, policy_id=policy_id, rows=rows, offset=offset,
+    binding = collection_binding(cases=cases, policy_id=policy_id, rows=rows, offset=offset,
         group=group, root_mode=root_mode, runtime=runtime, seed_base=seed_base, neuralese_server=neuralese_server,
         case_seconds=case_seconds, max_model_requests=max_model_requests, max_turns=max_turns,
         expected_native=expected_native, behavior_top_k=behavior_top_k, system_prompt=system_prompt,
         prompt_rendering=prompt_rendering, guidance_stage=guidance_stage, coefficient_policy=coefficient_policy,
         context_tokens=context_tokens, neuralese_use_bonus=bonus_setting(neuralese_use_bonus),
-        program_guidance=program_guidance, adapters=adapters, remote_workers=remote_workers)
+        program_guidance=program_guidance, adapters=adapters)
     slots = worker_slots(endpoints, workers, remote_workers)
     coefficient_runtime = (binding.get('coefficient_policy') or {}).get('runtime')
     if coefficient_policy is not None:
         coefficient_policy = Path(coefficient_policy).resolve(strict=True)
     receipt = out / 'collection-binding.json'
     recorded = json.loads(receipt.read_text()) if receipt.exists() else None
-    binding, bonus = resolve_neuralese_bonus(recorded, binding)
-    binding, teacher_attempts = resolve_collection_binding(recorded, binding, teacher_attempts, teacher_plan)
-    if recorded is not None:
-        if _legacy_collection_binding(recorded) != binding:
-            raise ValueError('RL collection resume policy/cases/sampling/runtime changed')
-    elif (out / 'score.json').exists():
-        raise ValueError('completed RL collection has no provenance binding')
-    else:
+    from .collection_generations import Generations, dispatch, persist_teacher_plan, load_teacher_plan
+    generations = Generations(out)
+    changed_code = {}
+    if recorded is None:
+        binding, bonus = resolve_neuralese_bonus(None, binding)
+        binding, teacher_attempts = resolve_collection_binding(None, binding, teacher_attempts, teacher_plan)
+        if (out / 'score.json').exists():
+            raise ValueError('completed RL collection has no provenance binding')
         write_json_durable(receipt, binding)
+    else:
+        strict, changed_code, bonus, teacher_attempts = compare_recorded_binding(
+            recorded, binding, teacher_attempts, teacher_plan, allow_code_change=allow_code_change)
+        if strict:
+            raise ValueError('RL collection resume policy/cases/sampling/runtime changed: ' + ', '.join(strict[:6]))
+        binding = _legacy_collection_binding(recorded)   # the round's identity: custody is bound to its exact bytes
     if (out / 'score.json').exists():
         saved = json.loads((out / 'score.json').read_text())
         if saved.get('collection_complete'):
@@ -923,6 +945,10 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         receipts = {url:info.get('rl_policy_binding') for url,info in infos.items()}
         return validate_actor_receipts(receipts, policy_id=policy_id, neuralese_server=neuralese_server, expected_native=expected_native,expected_coefficient=coefficient_runtime)
     actors = actor_receipts()
+    generation = generations.generation()
+    generations.record('start', generation=generation, endpoints=[url.rstrip('/') for url in endpoints],
+                       workers=workers, remote_workers=remote_workers, slots=[[url, weight] for url, weight in slots],
+                       actor_receipts=actors, code_changes=changed_code, allow_code_change=allow_code_change)
     preparation = prepare(SimpleNamespace(cases=Path(cases), out=out, rows=rows, offset=offset,
         group=group, temperature=1., case_seconds=case_seconds,
         max_model_requests=max_model_requests, max_turns=max_turns,
@@ -969,12 +995,17 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     if not (runtime / 'dist/teacher/cli.js').is_file():
         raise FileNotFoundError('RL requires the built natlang collector runtime')
     native_custody = all(actor.get('communication') == 'native-state' for actor in actors.values())
+    plan_path = out / 'teacher-plan.json'
+    # A previous start may have planned (and partly run) the JOLT+ teacher attempts: reuse that exact plan.
+    teachers = (load_teacher_plan(plan_path, [entry['key'] for entry in entries]) if teacher_attempts else None)
+    planned = teachers is not None
+    teachers = teachers or {'entries': [], 'refusal': None}
     def retained_artifacts(*, restore=False):
         if native_custody:
             from .native_partial_custody import retain_partial_artifacts
             if actor_receipts() != actors:
                 raise ValueError('RL actor policy changed before retained artifact custody')
-            retain_partial_artifacts(entries, out, policy_id=policy_id, binding=binding,
+            retain_partial_artifacts(entries + teachers['entries'], out, policy_id=policy_id, binding=binding,
                                      servers=[NativeActorClient(url) for url in endpoints], restore=restore)
             if actor_receipts() != actors:
                 raise ValueError('RL actor policy changed during retained artifact custody')
@@ -984,50 +1015,59 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     def shares(items):
         return ([items[k::len(slots)] for k in range(len(slots))] if remote_workers is None
                 else weighted_split(items, [weight for _, weight in slots]))
-    phase = {'entries': entries, 'name': '', 'shares': shares(entries)}
-    def worker(index):
-        queue = directory / f"queue-{phase['name']}{index}.jsonl"
-        journal = directory / f"journal-{phase['name']}{index}.jsonl"
-        endpoint, _ = slots[index]
-        selected = phase['shares'][index]
-        for entry in selected:
-            entry['rl_endpoint'] = endpoint
-        queue.write_text(''.join(json.dumps(e) + '\n' for e in selected))
-        command = [sys.executable, str(root('repo') / 'scripts/run_bonsai_queue.py'), str(queue), str(journal),
-            '--runtime', str(runtime), '--server', endpoint, '--chat-completions-url', endpoint + '/v1/chat/completions',
-            '--model-id', 'natlang-rl', '--model-concurrency', '1', '--chat-request-config', str(config)]
-        if neuralese_server:
-            command.append('--neuralese-server')
-        with (directory / f"worker-{phase['name']}{index}.log").open('a') as log:
-            code = _run_collector(command, log, control,
-                custody_receipt=directory/f"worker-{phase['name']}{index}-process-custody.json")
-        return {'worker': index, 'returncode': code, 'journal': str(journal)}
-    def write_journal_and_queue():
-        (out / 'journal.jsonl').write_text(''.join(Path(r['journal']).read_text()
-            for r in results if Path(r['journal']).exists()))
-        (out / 'queue.jsonl').write_text(''.join(json.dumps(e) + '\n' for e in entries))
-    teachers = {'entries': [], 'refusal': None}
+    # Entries finished by an earlier start keep the endpoint that sampled them (the rollout's recorded provenance).
+    sampled_on = generations.finished_endpoints()
+    for entry in entries:
+        if entry['key'] in sampled_on:
+            entry['rl_endpoint'] = sampled_on[entry['key']]
+    results = []
+
+    def run_phase(batch, name):
+        def run_worker(index, tag, queue, journal):
+            endpoint, _ = slots[index]
+            command = [sys.executable, str(root('repo') / 'scripts/run_bonsai_queue.py'), str(queue), str(journal),
+                '--runtime', str(runtime), '--server', endpoint, '--chat-completions-url', endpoint + '/v1/chat/completions',
+                '--model-id', 'natlang-rl', '--model-concurrency', '1', '--chat-request-config', str(config)]
+            if neuralese_server:
+                command.append('--neuralese-server')
+            with (directory / f"worker-{tag}.log").open('a') as log:
+                return _run_collector(command, log, control,
+                                      custody_receipt=directory / f"worker-{tag}-process-custody.json")
+        done = generations.attempted()
+        phase_results, pending = dispatch(batch, directory=directory, generation=generation, phase=name,
+            endpoints=[endpoint for endpoint, _ in slots], split=shares, run_worker=run_worker, attempted=done)
+        generations.record('dispatch', generation=generation, phase=name or 'student', entries=len(batch),
+                           pending=pending, returncodes=[r['returncode'] for r in phase_results])
+        results.extend(phase_results)
+
+    def write_journal_and_queue(*, teachers_too=True):
+        (out / 'journal.jsonl').write_text(generations.merge())
+        (out / 'queue.jsonl').write_text(''.join(json.dumps(e) + '\n' for e in
+                                                 entries + (teachers['entries'] if teachers_too else [])))
     try:
-        with ThreadPoolExecutor(max_workers=len(slots)) as pool:
-            results = list(pool.map(worker, range(len(slots))))
+        run_phase(entries, '')
         if teacher_attempts and not (control and control.stop.requested):
             from .jolt import teacher_entries
-            write_journal_and_queue()
+            write_journal_and_queue(teachers_too=False)
             score(out, out / 'student-rollouts.jsonl', neuralese_bonus=bonus)
             from .jolt import plan_command
-            teachers = teacher_entries(entries, list(read_jsonl(out / 'student-rollouts.jsonl')),
-                                       cases=Path(cases), config=config, out=out, attempts=teacher_attempts,
-                                       seed_base=seed_base, **guidance_collection_options(guidance_stage), plan_command=(plan_command(endpoints[0])
-                                                                          if teacher_plan == 'nl' else None))
+            if not planned:
+                teachers = teacher_entries(entries, list(read_jsonl(out / 'student-rollouts.jsonl')),
+                                           cases=Path(cases), config=config, out=out, attempts=teacher_attempts,
+                                           seed_base=seed_base, **guidance_collection_options(guidance_stage), plan_command=(plan_command(endpoints[0])
+                                                                              if teacher_plan == 'nl' else None))
+                if teachers['entries']:
+                    bind_collection_prompt(teachers['entries'],prompt_rendering)
+                    if context_tokens is not None:
+                        for entry in teachers['entries']:
+                            entry['context_tokens'] = context_tokens
+                # Persisted before the first teacher starts: a restart reuses this exact plan and its keys.
+                persist_teacher_plan(plan_path, [entry['key'] for entry in entries], teachers)
             if teachers['entries']:
-                bind_collection_prompt(teachers['entries'],prompt_rendering)
-                if context_tokens is not None:
-                    for entry in teachers['entries']:
-                        entry['context_tokens'] = context_tokens
-                entries.extend(teachers['entries'])
-                phase.update(entries=teachers['entries'], name='teacher-', shares=shares(teachers['entries']))
-                with ThreadPoolExecutor(max_workers=len(slots)) as pool:
-                    results += list(pool.map(worker, range(len(slots))))
+                for entry in teachers['entries']:
+                    if entry['key'] in sampled_on:
+                        entry['rl_endpoint'] = sampled_on[entry['key']]
+                run_phase(teachers['entries'], 'teacher-')
     except BaseException as collection_error:
         try:
             retained_artifacts()
@@ -1131,28 +1171,6 @@ def _bind_collected_coefficient_policy(values,kwargs,binding,identity):
     values.update(coefficient_policy=str(target),coefficient_policy_sha256=binding['sha256'])
 
 
-def round_endpoints(config, round_dir):
-    """The endpoints a round's collection uses: ``config['endpoints']``, or the recorded binding's endpoints when the
-    round was bound with remote actors (``remote_endpoints``). A resume must collect on exactly the bound set."""
-    endpoints = list(config['endpoints'])
-    receipt = Path(round_dir) / 'collection-binding.json'
-    if receipt.is_file():
-        recorded = json.loads(receipt.read_text()).get('endpoints')
-        remote = config.get('remote_endpoints') or []
-        if (isinstance(recorded, list) and recorded[:len(endpoints)] == endpoints
-                and all(url in remote for url in recorded[len(endpoints):])):
-            return recorded
-    return endpoints
-
-
-def round_remote_workers(config, round_dir):
-    """The recorded per-remote worker split of a bound round (None: none bound); see round_endpoints."""
-    receipt = Path(round_dir) / 'collection-binding.json'
-    if receipt.is_file() and len(round_endpoints(config, round_dir)) > len(config['endpoints']):
-        return json.loads(receipt.read_text()).get('remote_workers')
-    return None
-
-
 def _remote_actor_usable(url, managed_url, kwargs, values, *, seconds, control):
     """(usable, reason): the remote actor attests the round's policy, native identity, runtime and prompt contract
     exactly as the managed actor must (validate_actor_receipts) within ``seconds``. A stop request raises."""
@@ -1200,6 +1218,12 @@ def _collect_round(config, kwargs):
     return report
 
 
+def _memetic_after_pending(config, round_dir):
+    """A memetic round's distillation/ablation/promotion record is written last: absent means it did not finish."""
+    return (config.get('memetic_round') is not None
+            and not (Path(round_dir) / 'memetic-after-collection.json').exists())
+
+
 def collect_with_actor(config, values, **kwargs):
     """Optional colocated actor lifecycle; its parent is the ledger/sandbox unit.
 
@@ -1231,23 +1255,23 @@ def collect_with_actor(config, values, **kwargs):
         if continuation is not None:
             from .sealed_collection import resume_sealed_collection
             return resume_sealed_collection(continuation, kwargs, validate_actors=validate_actor_receipts)
-        return collect(**kwargs)  # sealed packet already owns exact durable blocks
+        if not _memetic_after_pending(config, kwargs['out']):
+            return collect(**kwargs)  # sealed packet already owns exact durable blocks
+        # A stop during the memetic distillation/promotion left the collection complete but its after-collection
+        # work undone: take the actor lease again and run it (collect returns the sealed report immediately).
     control = kwargs.get('control')
     template = config.get('actor_command')
     if not template:
         return _collect_round(config, kwargs)
     remote = list(config.get('remote_endpoints') or [])
-    managed_url, *bound_remote = kwargs['endpoints']
-    if (bound_remote and not all(url in remote for url in bound_remote)) or managed_url in remote:
+    managed_url, *extra_endpoints = kwargs['endpoints']
+    if extra_endpoints or managed_url in remote:
         raise ValueError('managed colocated actor takes one endpoint plus declared remote_endpoints; '
                          'external fleets use supervisor hooks')
     if any(url not in (config.get('remote_workers') or {}) for url in remote):
         raise ValueError('every remote_endpoints entry needs its remote_workers {workers, weight} split')
     if remote and kwargs.get('coefficient_policy') is not None:
         remote = []   # a remote Pop actor serves ordinary checkpoints only
-    # A round whose binding is written collects on exactly its recorded endpoints (every bound remote is required);
-    # a fresh round adds each declared remote that attests the policy in time.
-    bound = (Path(kwargs['out']) / 'collection-binding.json').is_file()
     import time
     command = []
     for part in template:
@@ -1300,16 +1324,13 @@ def collect_with_actor(config, values, **kwargs):
                 if type(seconds) not in (int, float) or not 0 < seconds < float('inf'):
                     raise ValueError('remote_actor_ready_seconds must be finite and positive')
                 usable = []
-                for url in (bound_remote if bound else remote):
+                for url in remote:
                     ok, reason = _remote_actor_usable(url, managed_url, kwargs, values, seconds=seconds, control=control)
                     print(json.dumps({'event': 'remote RL actor', 'endpoint': url, 'usable': ok, 'reason': reason,
                                       'round': str(values['out'])}), flush=True)
                     if ok:
                         usable.append(url)
-                    elif bound:
-                        raise RuntimeError(f'bound remote RL actor {url} is unavailable: {reason}; the round was bound '
-                                           'to it and must resume on exactly its recorded endpoints')
-                specs = kwargs.get('remote_workers') if bound else config.get('remote_workers')
+                specs = config.get('remote_workers')
                 kwargs = {**kwargs, 'endpoints': [managed_url, *usable],
                           **({'remote_workers': {url: specs[url] for url in usable}} if specs and usable else {})}
             return _collect_round(config, kwargs)
@@ -1542,8 +1563,8 @@ def prepare_round_collection(config, state, round_dir, selected_path, selection,
         if policy_loss is not None and policy_loss['schema'] == 'jolt-plus/1'
         and config.get('update_objective', 'policy') == 'policy'
         and config.get('actor_engine', 'native-python') == 'native-python' else 0)
-    kwargs = dict(cases=selected_path, out=round_dir, endpoints=round_endpoints(config, round_dir), policy_id=policy,
-        **({'remote_workers': rw} if (rw := round_remote_workers(config, round_dir)) else {}),
+    kwargs = dict(cases=selected_path, out=round_dir, endpoints=list(config['endpoints']), policy_id=policy,
+        allow_code_change=not config.get('strict_code_identity', False),
         rows=len(selection), offset=0, group=selection[0]['samples'], workers=config.get('workers', 4),
         root_mode=config.get('root_mode', 'student'), runtime=config.get('runtime'),
         seed_base=700000 + state['round'] * 1000000, neuralese_server=config.get('neuralese_server', True),
@@ -1655,15 +1676,15 @@ def resume_preflight(config_path, scratch):
     continuation = (config.get('sealed_collection_continuations') or {}).get(str(Path(round_dir).resolve()))
     if continuation is not None:
         return {**report, 'ok': False, 'status': 'unchecked', 'reason': 'sealed collection continuation'}
-    binding = collection_binding(**{key: kwargs[key] for key in ('cases', 'endpoints', 'policy_id', 'rows',
+    binding = collection_binding(**{key: kwargs[key] for key in ('cases', 'policy_id', 'rows',
         'offset', 'group', 'root_mode', 'runtime', 'seed_base', 'neuralese_server', 'case_seconds',
         'max_model_requests', 'max_turns', 'behavior_top_k', 'prompt_rendering', 'guidance_stage',
-        'coefficient_policy', 'context_tokens', 'neuralese_use_bonus', 'remote_workers') if key in kwargs}, expected_native=expected_native)
+        'coefficient_policy', 'context_tokens', 'neuralese_use_bonus') if key in kwargs}, expected_native=expected_native)
     recorded = json.loads(receipt.read_text())
-    binding, _ = resolve_neuralese_bonus(recorded, binding)
-    binding, _ = resolve_collection_binding(recorded, binding, kwargs['teacher_attempts'], kwargs['teacher_plan'])
-    differences = _binding_differences(_legacy_collection_binding(recorded), binding)
-    report['collection'] = {'ok': not differences, 'differences': differences}
+    differences, code_changed, _, _ = compare_recorded_binding(
+        recorded, binding, kwargs['teacher_attempts'], kwargs['teacher_plan'],
+        allow_code_change=kwargs.get('allow_code_change', True))
+    report['collection'] = {'ok': not differences, 'differences': differences, 'accepted_code_changes': code_changed}
     learner = {'ok': True, 'checked_episodes': 0}
     rollouts = round_dir / 'rollouts.jsonl'
     if policy_loss is not None and policy_loss['schema'] == 'jolt-plus/1' and rollouts.exists():

@@ -39,15 +39,16 @@ Add to `ops/bf95-lowlr-1105/w3/config.json` (all other keys unchanged; `endpoint
 `<NEWRT>` is the new frozen runtime. The Pop address is the tailscale IP `ssh -G pop-os` resolves to (the actor binds exactly it;
 the DGX reaches it, measured). `remote_workers` is required for every remote: `workers` run on the managed endpoint (weight 1 each);
 each remote adds its own workers, and a worker's weight is its relative share of entries (`weighted_split`, deterministic). With
-the numbers above Pop takes about 3x0.4 / (4 + 3x0.4) = 23% of the entries on 3 concurrent requests. `remote_workers` is bound
-into the collection binding together with the endpoint list (only when a remote joined); a round without a remote binds exactly
-as before.
+the numbers above Pop takes about 3x0.4 / (4 + 3x0.4) = 23% of the entries on 3 concurrent requests. Endpoints and `remote_workers` are
+transport, not provenance (2026-11-07, plans/neuralese/CONTROLLER_RESTART.md): the collection binding no longer records them,
+each (re)start appends its actual endpoints and actor receipts to `round-N/generations.jsonl`, and a restart may add or remove
+Pop, or change worker counts, at any time.
 
-Fresh round: the remote is included only if it attests the round's policy, native identity, Python runtime, prompt rendering within
-`remote_actor_ready_seconds` after `after_actor_ready` (full `validate_actor_receipts` against the managed actor); otherwise the
-round collects on the DGX alone (logged as `remote RL actor ... usable: false`). Bound round (resume): exactly the recorded
-endpoints and `remote_workers`; a bound remote that cannot be brought up fails the resume with a clear error (it never collects
-on another set). The hooks never fail the round: `start` exits 0 when Pop is unreachable, busy or unattested; `after_collection`
+Every (re)start of a round's collection: the remote is included only if it attests the round's policy, native identity, Python
+runtime, prompt rendering within `remote_actor_ready_seconds` after `after_actor_ready` (full `validate_actor_receipts` against
+the managed actor); otherwise the round continues on the DGX alone (logged as `remote RL actor ... usable: false`). Entries that
+earlier starts finished are never redone; pending ones are split over whatever endpoints are usable now. The hooks never fail
+the round: `start` exits 0 when Pop is unreachable, busy or unattested; `after_collection`
 runs in the controller's `finally` after the DGX actor has stopped and a failure is only logged.
 
 Optional hook flag `--defer-to-eval`: skip Pop for the round while the watcher has a queued, running or undiscovered candidate.
@@ -59,10 +60,9 @@ See risk 1.
    --predecessor runtime-native-corrected-mix-v57-1106 --out runtime-native-corrected-mix-vNN-1107 --control-bindings
    ops/bf95-lowlr-1105/interleave-v49/v50-bindings.json` (git archive of the commit, Node closure, protected inputs, file pool seal;
    what produced v50-v57, logs in `interleave-v49/freeze-vNN.log`).
-2. Rebind w3 between rounds (the collection binding pins the actor Python inventory, which changes with any package change):
-   `interleave-v49/rebind-runtime.sh w3 v57-1106 vNN-1107` after the in-flight round's collection completes. It rewrites the config
-   paths, `native_actor_python_runtime`, `native_actor_assets`, `actor_environment`, the learner admission wrapper and `env.sh`. The
-   controller and learner then run vNN. Add the keys above in the same edit.
+2. Rebind and restart at any time (no round boundary needed any more): `scripts/neuralese_data/restart_controller.py
+   ops/bf95-lowlr-1105/w3 --runtime-from-main` does the freeze, cooperative stop, `rebind-runtime.sh`, preflight and relaunch in one
+   command (plans/neuralese/CONTROLLER_RESTART.md). Add the config keys above before running it (or `--freeze-only` first).
 3. Restart `pop-behavior-eval` (new unit name through the ledger) so the watcher loads `wait_for_rl_actor`; its state is persistent.
 4. The first round after the cutover is the real qualification: check `controller.log` for `remote RL actor ... usable`,
    `collection-binding.json` endpoints, `actor-prompt-binding.json`, per-worker journals, the Pop container (`docker ps`

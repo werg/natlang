@@ -141,7 +141,7 @@ def fixture(tmp_path):
                                 'sha256': hashlib.sha256(evidence).hexdigest()}]}
     path = jobs / 'case.partial.json'
     path.write_text(json.dumps(partial))
-    return actor, state, artifact_id, path, [{'jobs': str(jobs)}], identity
+    return actor, state, artifact_id, path, [{'key': 's7-task-000', 'jobs': str(jobs)}], identity
 
 
 def test_actual_native_dependency_bundle_survives_actor_loss_before_replay(tmp_path):
