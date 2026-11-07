@@ -1096,6 +1096,55 @@ def _bind_collected_coefficient_policy(values,kwargs,binding,identity):
     values.update(coefficient_policy=str(target),coefficient_policy_sha256=binding['sha256'])
 
 
+def round_endpoints(config, round_dir):
+    """The endpoints a round's collection uses: ``config['endpoints']``, or the recorded binding's endpoints when the
+    round was bound with remote actors (``remote_endpoints``). A resume must collect on exactly the bound set."""
+    endpoints = list(config['endpoints'])
+    receipt = Path(round_dir) / 'collection-binding.json'
+    if receipt.is_file():
+        recorded = json.loads(receipt.read_text()).get('endpoints')
+        remote = config.get('remote_endpoints') or []
+        if (isinstance(recorded, list) and recorded[:len(endpoints)] == endpoints
+                and all(url in remote for url in recorded[len(endpoints):])):
+            return recorded
+    return endpoints
+
+
+def _remote_actor_usable(url, managed_url, kwargs, values, *, seconds, control):
+    """(usable, reason): the remote actor attests the round's policy, native identity, runtime and prompt contract
+    exactly as the managed actor must (validate_actor_receipts) within ``seconds``. A stop request raises."""
+    import time
+    from .actor_client import NativeActorClient
+    deadline = time.monotonic() + seconds
+    reason = 'not reachable'
+    while True:
+        if control is not None and control.stop.requested:
+            raise InterruptedError('remote actor wait stop requested')
+        try:
+            info = json.loads(NativeActorClient(url, timeout=3).get_bytes('/v1/neuralese/info'))
+        except (OSError, ValueError) as error:
+            info, reason = None, f'{type(error).__name__}: {error}'[:300]
+        if info is not None:
+            if (info.get('rl_policy_binding') or {}).get('checkpoint_sha256') == values['policy_id']:
+                mode = kwargs.get('prompt_rendering')
+                if mode is not None and (info.get('prompt_rendering') != mode
+                        or not re.fullmatch(r'[0-9a-f]{64}', str(info.get('prompt_rendering_identity_sha256', '')))):
+                    return False, 'actor did not attest the full prompt rendering contract'
+                managed = json.loads(NativeActorClient(managed_url, timeout=3).get_bytes('/v1/neuralese/info'))
+                try:
+                    validate_actor_receipts({managed_url: managed.get('rl_policy_binding'),
+                                             url: info.get('rl_policy_binding')},
+                        policy_id=values['policy_id'], neuralese_server=kwargs.get('neuralese_server', True),
+                        expected_native=kwargs.get('expected_native'))
+                except ValueError as error:
+                    return False, str(error)[:300]
+                return True, 'attested'
+            reason = 'serves another policy'
+        if time.monotonic() >= deadline:
+            return False, reason
+        time.sleep(1.)
+
+
 def _collect_round(config, kwargs):
     """Collect, then (memetic rounds only) the stage's distillation and promotion work on the same live actor."""
     if config.get('memetic_round') is not None:
@@ -1144,8 +1193,16 @@ def collect_with_actor(config, values, **kwargs):
     template = config.get('actor_command')
     if not template:
         return _collect_round(config, kwargs)
-    if len(kwargs['endpoints']) != 1:
-        raise ValueError('managed colocated actor requires one endpoint; external fleets use supervisor hooks')
+    remote = list(config.get('remote_endpoints') or [])
+    managed_url, *bound_remote = kwargs['endpoints']
+    if (bound_remote and not all(url in remote for url in bound_remote)) or managed_url in remote:
+        raise ValueError('managed colocated actor takes one endpoint plus declared remote_endpoints; '
+                         'external fleets use supervisor hooks')
+    if remote and kwargs.get('coefficient_policy') is not None:
+        remote = []   # a remote Pop actor serves ordinary checkpoints only
+    # A round whose binding is written collects on exactly its recorded endpoints (every bound remote is required);
+    # a fresh round adds each declared remote that attests the policy in time.
+    bound = (Path(kwargs['out']) / 'collection-binding.json').is_file()
     import time
     command = []
     for part in template:
@@ -1193,6 +1250,21 @@ def collect_with_actor(config, values, **kwargs):
                 time.sleep(.2)
             if config.get('after_actor_ready'):
                 run_command(config['after_actor_ready'], values)
+            if remote:
+                seconds = config.get('remote_actor_ready_seconds', 300)
+                if type(seconds) not in (int, float) or not 0 < seconds < float('inf'):
+                    raise ValueError('remote_actor_ready_seconds must be finite and positive')
+                usable = []
+                for url in (bound_remote if bound else remote):
+                    ok, reason = _remote_actor_usable(url, managed_url, kwargs, values, seconds=seconds, control=control)
+                    print(json.dumps({'event': 'remote RL actor', 'endpoint': url, 'usable': ok, 'reason': reason,
+                                      'round': str(values['out'])}), flush=True)
+                    if ok:
+                        usable.append(url)
+                    elif bound:
+                        raise RuntimeError(f'bound remote RL actor {url} is unavailable: {reason}; the round was bound '
+                                           'to it and must resume on exactly its recorded endpoints')
+                kwargs = {**kwargs, 'endpoints': [managed_url, *usable]}
             return _collect_round(config, kwargs)
         finally:
             if process.poll() is None:
@@ -1203,6 +1275,11 @@ def collect_with_actor(config, values, **kwargs):
             else:
                 from ..train.loop import wait_forwarding_signals
                 wait_forwarding_signals(process)
+            if config.get('after_collection'):
+                try:
+                    run_command(config['after_collection'], values)
+                except Exception as error:   # teardown of an auxiliary actor never masks the collection's own outcome
+                    print(json.dumps({'event': 'after_collection hook failed', 'error': repr(error)[:500]}), flush=True)
 
 
 def select_tasks(cases, stats, budget, *, command=None, curriculum=None):
@@ -1418,7 +1495,7 @@ def prepare_round_collection(config, state, round_dir, selected_path, selection,
         if policy_loss is not None and policy_loss['schema'] == 'jolt-plus/1'
         and config.get('update_objective', 'policy') == 'policy'
         and config.get('actor_engine', 'native-python') == 'native-python' else 0)
-    kwargs = dict(cases=selected_path, out=round_dir, endpoints=config['endpoints'], policy_id=policy,
+    kwargs = dict(cases=selected_path, out=round_dir, endpoints=round_endpoints(config, round_dir), policy_id=policy,
         rows=len(selection), offset=0, group=selection[0]['samples'], workers=config.get('workers', 4),
         root_mode=config.get('root_mode', 'student'), runtime=config.get('runtime'),
         seed_base=700000 + state['round'] * 1000000, neuralese_server=config.get('neuralese_server', True),

@@ -29,7 +29,8 @@ def main() -> None:
     parser.add_argument('--transport-recovery-receipt',type=Path)
     parser.add_argument('--transport-recovery-receipt-sha256')
     parser.add_argument('--training-source-sha256')
-    parser.add_argument('--transport-scope',choices=('independent-recovery','diagnostic-local-pin'))
+    parser.add_argument('--transport-scope',choices=('independent-recovery','diagnostic-local-pin','rl-controller-pin'))
+    parser.add_argument('--actor-export-format',help='bind this exact-weights export format in the receipt and every capture (an actor on another device: the learner guards the engine mismatch)')
     parser.add_argument('--coefficient-policy', type=Path)
     parser.add_argument('--coefficient-policy-sha256')
     parser.add_argument('--coefficient-rebase-out', type=Path)
@@ -79,7 +80,7 @@ def main() -> None:
     recovery_values=(args.transport_recovery_receipt,args.transport_recovery_receipt_sha256)
     if any((*transport_values,*recovery_values)) and (not all(transport_values) or args.native_actor_view or args.native_participant
             or (args.transport_scope=='independent-recovery' and not all(recovery_values))
-            or (args.transport_scope=='diagnostic-local-pin' and any(recovery_values))):
+            or (args.transport_scope!='independent-recovery' and any(recovery_values))):
         parser.error('transported actor requires all exact receipt bindings and no full-source actor view or participant')
     if bool(args.coefficient_policy) != bool(args.coefficient_policy_sha256):
         parser.error('coefficient policy requires its exact SHA-256')
@@ -133,6 +134,8 @@ def main() -> None:
     if args.store_dir is not None:
         from natlang_neuralese.serve.store import TensorStore
         engine.store = TensorStore(args.store_dir)
+    if args.actor_export_format:
+        engine.set_actor_export({'kind': 'exact', 'format': args.actor_export_format, 'sha256': args.checkpoint_sha256})
     if args.coefficient_policy:
         from natlang_neuralese.model.native_coefficient_policy import policy_core, rebase_policy
         from natlang_neuralese.rl.native_coefficient_stage import bind_policy

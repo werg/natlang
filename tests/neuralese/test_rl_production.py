@@ -254,6 +254,67 @@ def test_managed_ready_hook_uses_same_live_actor_before_collection(tmp_path,monk
     assert events==['train']
 
 
+def _remote_actor_harness(tmp_path,monkeypatch,attesting):
+    """Managed actor on http://dgx plus remote endpoints; ``attesting`` is the set of URLs whose actor serves the policy."""
+    from natlang_neuralese.rl import actor_client
+    import time
+    events=[]
+    class Process:
+        pid=5
+        def __init__(self,*a,**kw):self.stopped=False
+        def poll(self):return 0 if self.stopped else None
+        def terminate(self):events.append('terminate');self.stopped=True
+        def wait(self,*a,**kw):return 0
+    class Server:
+        def __init__(self,url,**kw):self.url=url
+        def get_bytes(self,path):
+            if self.url not in attesting:raise OSError('refused')
+            return json.dumps({'rl_policy_binding':{'checkpoint_sha256':'cur'},'prompt_rendering':'full',
+                               'prompt_rendering_identity_sha256':'a'*64}).encode()
+    monkeypatch.setattr(production.subprocess,'Popen',Process)
+    monkeypatch.setattr(actor_client,'NativeActorClient',Server)
+    monkeypatch.setattr(time,'sleep',lambda _:None)
+    def command(argv,values):
+        events.append(argv[0])
+        if argv[0]=='teardown-fails':raise RuntimeError('pop gone')
+    monkeypatch.setattr(production,'run_command',command)
+    monkeypatch.setattr(production,'collect',lambda **kw:events.append(('collect',kw['endpoints']))or {'done':True})
+    config={'actor_command':['actor'],'after_actor_ready':['start-pop'],'after_collection':['teardown-fails'],
+            'endpoints':['http://dgx'],'remote_endpoints':['http://pop'],'remote_actor_ready_seconds':.05}
+    kwargs=dict(out=tmp_path,endpoints=['http://dgx'],policy_id='cur',prompt_rendering='full',neuralese_server=False)
+    return events,config,{'out':str(tmp_path),'policy_id':'cur'},kwargs
+
+
+def test_remote_actor_joins_a_fresh_round_only_when_it_attests_and_is_torn_down(tmp_path,monkeypatch):
+    events,config,values,kwargs=_remote_actor_harness(tmp_path,monkeypatch,{'http://dgx','http://pop'})
+    assert production.collect_with_actor(config,values,**kwargs)=={'done':True}
+    assert events==['start-pop',('collect',['http://dgx','http://pop']),'terminate','teardown-fails']  # teardown failure is logged only
+    second=tmp_path/'unreachable';second.mkdir()
+    events,config,values,kwargs=_remote_actor_harness(second,monkeypatch,{'http://dgx'})
+    assert production.collect_with_actor(config,values,**kwargs)=={'done':True}
+    assert events==['start-pop',('collect',['http://dgx']),'terminate','teardown-fails']  # unreachable remote: managed alone
+
+
+def test_bound_round_resumes_on_exactly_its_recorded_endpoints(tmp_path,monkeypatch):
+    events,config,values,kwargs=_remote_actor_harness(tmp_path,monkeypatch,{'http://dgx','http://pop'})
+    (tmp_path/'collection-binding.json').write_text(json.dumps({'endpoints':['http://dgx','http://pop']}))
+    assert production.round_endpoints(config,tmp_path)==['http://dgx','http://pop']
+    kwargs['endpoints']=production.round_endpoints(config,tmp_path)
+    assert production.collect_with_actor(config,values,**kwargs)=={'done':True}
+    assert events[1]==('collect',['http://dgx','http://pop'])
+    # the bound remote cannot be brought up: fail, never silently collect on a different set
+    events,config,values,kwargs=_remote_actor_harness(tmp_path,monkeypatch,{'http://dgx'})
+    kwargs['endpoints']=production.round_endpoints(config,tmp_path)
+    with pytest.raises(RuntimeError,match='bound remote RL actor http://pop is unavailable'):
+        production.collect_with_actor(config,values,**kwargs)
+    assert not any(isinstance(e,tuple) for e in events)
+    # a round bound to the managed actor alone never gains a remote; an unknown bound endpoint is a binding change
+    (tmp_path/'collection-binding.json').write_text(json.dumps({'endpoints':['http://dgx']}))
+    assert production.round_endpoints(config,tmp_path)==['http://dgx']
+    (tmp_path/'collection-binding.json').write_text(json.dumps({'endpoints':['http://dgx','http://other']}))
+    assert production.round_endpoints(config,tmp_path)==['http://dgx']
+
+
 def test_python_actor_runtime_is_bound_and_mixed_replicas_rejected():
     from copy import deepcopy
     policy = '1' * 64

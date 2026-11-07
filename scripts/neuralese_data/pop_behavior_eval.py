@@ -268,8 +268,10 @@ def ledger_unit(name, command, *, budget_gb, workdir, env=(), wait=86400):
         time.sleep(15)
 
 
-def prepare(kind, checkpoint, runtime, expect_sha):
-    out = ROOT / ('views' if kind == 'raw' else 'ema')
+def prepare(kind, checkpoint, runtime, expect_sha, wait=None):
+    """Preparation receipt of one actor view; kind rl is the controller's own policy for a Pop RL rollout actor
+    (scripts/neuralese_data/pop_rl_actor.py; own view directory, scope rl-controller-pin); ``wait`` bounds admission."""
+    out = ROOT / {'raw': 'views', 'rl': 'rl-views', 'ema': 'ema'}[kind]
     receipt = ROOT / 'preparations' / f'{kind}-{expect_sha}.json'
     existing = read_json(receipt)
     if existing and Path(existing['transport']['path']).is_file():
@@ -285,8 +287,8 @@ def prepare(kind, checkpoint, runtime, expect_sha):
         # (2026-11-06: a 24 h admission wait stalled every later candidate behind one EMA view).
         unit, status, result = ledger_unit(f'popeval-{kind}-{expect_sha[:12]}',
                                            ['/usr/bin/ionice', '-c2', '-n6', *command],
-                                           budget_gb=RAW_PREP_GB if kind == 'raw' else 40, workdir=runtime, env=env,
-                                           **({} if kind == 'raw' else {'wait': EMA_ADMISSION_WAIT}))
+                                           budget_gb=40 if kind == 'ema' else RAW_PREP_GB, workdir=runtime, env=env,
+                                           **({'wait': wait} if wait else {'wait': EMA_ADMISSION_WAIT} if kind == 'ema' else {}))
     except subprocess.CalledProcessError:
         if kind != 'ema':
             raise
@@ -517,7 +519,29 @@ def collect(label, work, prep):
             'step': prep['step']}
 
 
+# A Pop RL rollout actor (pop_rl_actor.py start) owns Pop's one GPU from its start to its stop; the controller's
+# teardown hook removes the marker. A marker older than this is a crashed collection, not a live one.
+RL_ACTOR_MARKER = ROOT / 'rl-actor-active.json'
+RL_ACTOR_MAX_SECONDS = 6 * 3600
+
+
+def rl_actor_active():
+    marker = read_json(RL_ACTOR_MARKER)
+    return bool(marker) and time.time() - marker['started'] < RL_ACTOR_MAX_SECONDS
+
+
+def wait_for_rl_actor():
+    """Rollouts have priority over evaluations: wait until no RL actor holds Pop."""
+    announced = False
+    while rl_actor_active():
+        if not announced:
+            log(event='waiting for the Pop RL actor to stop', marker=read_json(RL_ACTOR_MARKER))
+            announced = True
+        time.sleep(60)
+
+
 def evaluate(state, arm, checkpoint, sha, runtime, comparison, attempt=1):
+    wait_for_rl_actor()
     closure = ensure_pop_runtime(runtime)
     kind = 'ema' if arm == 'ema' else 'raw'
     prep = prepare(kind, checkpoint, runtime, sha)
@@ -526,6 +550,7 @@ def evaluate(state, arm, checkpoint, sha, runtime, comparison, attempt=1):
     keep = {prep['source']['sha256']}
     make_pop_room(state, prep['view']['bytes'], keep)
     send(prep)
+    wait_for_rl_actor()
     return run_on_pop(arm, prep, runtime, closure, comparison, attempt)
 
 

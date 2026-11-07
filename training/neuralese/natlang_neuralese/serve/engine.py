@@ -151,6 +151,10 @@ class Sequence:
 
 
 class Engine:
+    # An actor whose arithmetic differs from the learner's device (another GPU) binds this export in every capture; the learner
+    # then guards the engine mismatch per episode instead of applying the exact native replay gate (``set_actor_export``).
+    actor_export_default: dict | None = None
+
     def __init__(self, backbone, tokenizer, store: TensorStore, dialect: str,
                  max_block: int = 64, model_name: str = "natlang-native", device: str = "cpu",
                  prefill_tokens: int | None = None, context: int | None = None,
@@ -249,13 +253,19 @@ class Engine:
         except Exception as error:
             future.set_exception(error)
             return future
-        self._incoming.put(Sequence(request, future, prompt_plan=plan))
+        self._incoming.put(Sequence(request, future, prompt_plan=plan, native_actor_export=self.actor_export_default))
         return future
+
+    def set_actor_export(self, export: dict) -> None:
+        """Bind ``export`` ({kind, format, sha256}, rl.actors) into this actor's receipt and every capture."""
+        self.actor_export_default = dict(export)
+        self.rl_policy_binding['actor_export'] = dict(export)
 
     def generate(self, request: GenerationRequest) -> dict:
         """Run one request to completion on the calling thread (no scheduler)."""
         request.request_id = request.request_id or f"chatcmpl-{next(self._ids)}"
-        sequence = Sequence(request, Future(), prompt_plan=self._prompt_plan(request.messages, request.tools))
+        sequence = Sequence(request, Future(), prompt_plan=self._prompt_plan(request.messages, request.tools),
+                            native_actor_export=self.actor_export_default)
         with torch.inference_mode():
             while not sequence.future.done():
                 self._round([sequence])

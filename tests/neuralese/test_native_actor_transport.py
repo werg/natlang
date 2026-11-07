@@ -101,3 +101,34 @@ def test_diagnostic_scope_has_no_recovery_claim_and_cannot_be_rl_policy(source,t
     with pytest.raises(ValueError,match='diagnostic-only'):
         validate_actor_receipts({'actor':{'checkpoint_sha256':binding['sha256'],'actor_view':state['actor_view']}},
                                 policy_id=binding['sha256'],neuralese_server=True)
+
+
+def test_rl_controller_pin_scope_is_an_rl_policy_and_its_export_binds_every_capture(source,tmp_path,monkeypatch):
+    """A remote device's actor (Pop RL rollouts): admitted as an RL policy, with the actor export bound in the receipt
+    and in every capture, so the learner guards the cross-device mismatch instead of the exact native replay gate."""
+    from natlang_neuralese.rl.production import validate_actor_receipts
+    from natlang_neuralese.serve.engine import GenerationRequest
+    engine,path,state,_=source;binding=_file_binding(path)
+    manifest=prepare_actor_transport(path,tmp_path/'rl',scope='rl-controller-pin')
+    value=json.loads(Path(manifest['path']).read_text());folder=Path(manifest['path']).parent
+    proof=next(p for p in folder.glob('*.json') if not p.name.endswith('.transport.json'))
+    view=folder/value['view']['path']
+    refs={'transport':manifest,'view_receipt':_file_binding(proof),'recovery_receipt':None,
+          'source_sha256':binding['sha256'],'scope':'rl-controller-pin'}
+    transported=load_native_engine(str(view),device='cpu',transported_actor=refs)
+    assert value['scope']=='rl-controller-pin' and value['recovery_receipt'] is None
+    export={'kind':'exact','format':'native-pop-rtx4060-bf16','sha256':value['view']['sha256']}
+    transported.set_actor_export(export)
+    receipt=transported.rl_policy_binding
+    assert receipt['actor_export']==export and receipt['checkpoint_sha256']==binding['sha256']
+    validate_actor_receipts({'pop':{'checkpoint_sha256':binding['sha256'],'actor_view':receipt['actor_view']}},
+                            policy_id=binding['sha256'],neuralese_server=False)   # no diagnostic-only refusal
+    transported.start()
+    try:
+        reply=transported.generate(GenerationRequest(messages=[{'role':'user','content':'t4'}],temperature=.8,seed=3,max_tokens=2,rl_capture=True))
+    finally:
+        transported.stop()
+    assert reply['x_natlang_rl_capture']['actor_export']==export
+    plain=load_native_engine(str(view),device='cpu',transported_actor=refs)
+    assert plain.actor_export_default is None and 'actor_export' not in plain.rl_policy_binding
+    for engine_ in (plain,transported):engine_.store.close()

@@ -6,6 +6,7 @@ the runtime that trained the checkpoint, so the transport binds the Python runti
 
     pop_eval_prepare.py raw  --checkpoint CK --out VIEWS --receipt R.json [--expect-sha256 S]
     pop_eval_prepare.py ema  --checkpoint CK --out EMA   --receipt R.json --base HF_BASE [--expect-sha256 S]
+    pop_eval_prepare.py rl   --checkpoint CK --out VIEWS --receipt R.json [--expect-sha256 S]   (scope rl-controller-pin)
 
 raw: ``native_bundle.prepare_actor_transport(scope='diagnostic-local-pin')``: a model-only view read in place from
 the source (no copy, no pin or hardlink added to the learner directory).
@@ -66,9 +67,10 @@ def immutable(path, raw):
 
 def raw_view(args):
     from natlang_neuralese.model.native_bundle import prepare_actor_transport
-    binding = prepare_actor_transport(args.checkpoint, args.out, scope='diagnostic-local-pin')
+    scope = 'rl-controller-pin' if args.kind == 'rl' else 'diagnostic-local-pin'
+    binding = prepare_actor_transport(args.checkpoint, args.out, scope=scope)
     transport = json.loads(Path(binding['path']).read_text())
-    return {'kind': 'raw', 'transport': binding, 'source': transport['source'], 'step': transport['step'],
+    return {'kind': args.kind, 'transport': binding, 'source': transport['source'], 'step': transport['step'],
             'view': transport['view'], 'view_receipt': transport['view_receipt'],
             'python_runtime': transport['python_runtime'], 'scope': transport['scope']}
 
@@ -132,7 +134,7 @@ def ema_view(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument('kind', choices=('raw', 'ema'))
+    parser.add_argument('kind', choices=('raw', 'rl', 'ema'))
     parser.add_argument('--checkpoint', required=True)
     parser.add_argument('--out', required=True)
     parser.add_argument('--receipt', required=True)
@@ -145,7 +147,7 @@ def main():
         raise SystemExit(f'natlang_neuralese resolved outside the bound runtime: {natlang_neuralese.__file__}')
     before = stat5(args.checkpoint)
     started = time.time()
-    result = raw_view(args) if args.kind == 'raw' else ema_view(args)
+    result = ema_view(args) if args.kind == 'ema' else raw_view(args)
     after = stat5(args.checkpoint)
     if before != after:
         raise SystemExit(f'source changed during preparation: {before} {after}')

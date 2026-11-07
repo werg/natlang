@@ -115,7 +115,7 @@ def decision_response(item, sequence, continuations, results):
 
 def _score_rendered(engine, item, plan, continuations, bindings):
     request = decision_request(item, bindings)
-    sequence = Sequence(request, None, prompt_plan=plan)
+    sequence = Sequence(request, None, prompt_plan=plan, native_actor_export=engine.actor_export_default)
     engine._native_prefill(sequence)
     base_cache, base_logits = sequence.cache, sequence.logits
     results = [_score_from_cache(engine, base_cache, base_logits, own) for own in continuations]

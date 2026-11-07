@@ -263,12 +263,17 @@ def prepare_actor_view(checkpoint, out):
     return reference
 
 
+# diagnostic-local-pin: evaluation evidence (refused as an RL policy); rl-controller-pin: the same local-pin verification for
+# the controller's own policy checkpoint, whose actor a remote host serves for RL collection (no remote recovery claim).
+TRANSPORT_SCOPES = ('independent-recovery', 'diagnostic-local-pin', 'rl-controller-pin')
+
+
 def prepare_actor_transport(checkpoint, out, recovery_receipt=None, *, scope='independent-recovery'):
     """Seal an inference view to a separately verified private full-state recovery."""
     from ..common.runtime_inventory import python_runtime_binding
     from .native_composite import _durable_immutable
     import hashlib
-    if scope not in ('independent-recovery','diagnostic-local-pin'):
+    if scope not in TRANSPORT_SCOPES:
         raise ValueError('unsupported actor transport custody scope')
     if (scope=='independent-recovery') != (recovery_receipt is not None):
         raise ValueError('actor transport recovery receipt does not match custody scope')
@@ -310,7 +315,7 @@ def load_transported_actor_view(view, *, transport, view_receipt, recovery_recei
             raise ValueError('transport input requires exact trusted binding')
         if _file_binding(reference['path'])!=reference:raise ValueError('transport input binding changed')
         return json.loads(Path(reference['path']).read_text())
-    if scope not in ('independent-recovery','diagnostic-local-pin'):
+    if scope not in TRANSPORT_SCOPES:
         raise ValueError('unsupported actor transport custody scope')
     if (scope=='independent-recovery') != (recovery_receipt is not None):
         raise ValueError('actor transport recovery receipt does not match custody scope')
@@ -524,7 +529,7 @@ def main():
     export = commands.add_parser('export');export.add_argument('--checkpoint',required=True);export.add_argument('--out',required=True);export.add_argument('--participant')
     verify = commands.add_parser('verify');verify.add_argument('--bundle',required=True)
     view = commands.add_parser('actor-view');view.add_argument('--checkpoint',required=True);view.add_argument('--out',required=True)
-    transport = commands.add_parser('actor-transport');transport.add_argument('--checkpoint',required=True);transport.add_argument('--out',required=True);transport.add_argument('--recovery-receipt');transport.add_argument('--scope',choices=('independent-recovery','diagnostic-local-pin'),required=True)
+    transport = commands.add_parser('actor-transport');transport.add_argument('--checkpoint',required=True);transport.add_argument('--out',required=True);transport.add_argument('--recovery-receipt');transport.add_argument('--scope',choices=TRANSPORT_SCOPES,required=True)
     args = parser.parse_args()
     if args.action == 'actor-view':
         print(json.dumps(prepare_actor_view(args.checkpoint,args.out),sort_keys=True))
