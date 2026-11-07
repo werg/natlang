@@ -74,3 +74,27 @@ def test_unscored_arm_is_reported_unmatched_not_an_error():
                       candidate_detail=unscored_detail, reference_detail=scored_detail)
     assert receipt['matched'] is False and receipt['promoted'] is False
     assert any('not a finished, eligible, scored run' in reason for reason in receipt['unmatched_reasons'])
+
+
+def test_rl_actor_marker_holds_evaluations_and_pending_eval_is_read_only(tmp_path, monkeypatch):
+    """A Pop RL rollout actor owns the GPU while its marker is fresh; a stale marker is a crashed collection."""
+    import time
+    workspace = tmp_path / 'ws'
+    workspace.mkdir()
+    monkeypatch.setenv('NATLANG_POP_EVAL_ROOT', str(tmp_path / 'eval'))
+    module = load(monkeypatch, workspace, tmp_path / 'ext')
+    root = tmp_path / 'eval'
+    root.mkdir()
+    assert module.rl_actor_active() is False
+    (root / 'rl-actor-active.json').write_text(json.dumps({'started': time.time()}))
+    assert module.rl_actor_active() is True
+    slept = []
+    monkeypatch.setattr(module.time, 'sleep', lambda s: (slept.append(s), (root / 'rl-actor-active.json').unlink()))
+    module.wait_for_rl_actor()          # waits once, until the teardown hook removes the marker
+    assert slept == [60]
+    (root / 'rl-actor-active.json').write_text(json.dumps({'started': time.time() - module.RL_ACTOR_MAX_SECONDS - 1}))
+    assert module.rl_actor_active() is False
+    state = {'candidates': {}, 'controllers': {}, 'parent': {'sha256': 'p' * 64}}
+    assert module.eval_pending(state) is False
+    state['candidates']['x'] = {'status': 'running'}
+    assert module.eval_pending(state) is True

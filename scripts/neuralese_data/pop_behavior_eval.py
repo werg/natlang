@@ -246,6 +246,17 @@ def pick(state):
     return chosen
 
 
+def eval_pending(state):
+    """True when an evaluation holds or awaits Pop: a queued/running candidate, or a checkpoint the watcher has not
+    discovered yet (read-only: nothing is written to the state)."""
+    if any(c['status'] in ('queued', 'running') for c in state['candidates'].values()):
+        return True
+    return any(state['controllers'].get(str(path)) != progress['checkpoint_sha256']
+               and progress['checkpoint_sha256'] not in state['candidates']
+               and progress['checkpoint_sha256'] != state['parent']['sha256']
+               for path, progress in controller_progress())
+
+
 def newer_waiting(state, candidate):
     return any(c['status'] == 'queued' and c['discovered'] > candidate['discovered'] for c in state['candidates'].values())
 

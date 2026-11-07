@@ -94,6 +94,9 @@ def start(args):
         return previous
     if previous:
         stop_unit(previous)
+    if args.defer_to_eval and pbe.eval_pending(pbe.read_json(pbe.ROOT / 'state.json') or {'candidates': {}, 'controllers': {},
+                                                                                       'parent': {'sha256': ''}}):
+        raise RuntimeError('a dev16 evaluation holds or awaits Pop (--defer-to-eval): this round collects on the DGX alone')
     host = args.bind_host or pop_host_address()
     endpoint = f'http://{host}:{args.port}'
     pbe.ssh('true', timeout=30)
@@ -170,6 +173,9 @@ def main(argv=None):
     s.add_argument('--runtime', required=True, help='the frozen runtime that serves the policy (also installed on Pop)')
     s.add_argument('--port', type=int, default=RL_PORT)
     s.add_argument('--bind-host')
+    s.add_argument('--defer-to-eval', action='store_true',
+                   help='skip Pop for this round while the evaluation watcher has a queued/running/undiscovered '
+                        'candidate (default: rollouts take Pop; the watcher then waits for the collection to end)')
     s.add_argument('--ready-seconds', type=int, default=600)
     s.add_argument('--prepare-wait', type=int, default=900, help='ledger admission bound of the DGX view preparation')
     commands.add_parser('stop')
