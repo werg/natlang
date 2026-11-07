@@ -263,6 +263,7 @@ def main(argv=None):
     p.add_argument('--patient', action='store_true', help='never escalate: wait for the clean update boundary')
     p.add_argument('--no-preflight', action='store_true')
     p.add_argument('--resume-seconds', type=float, default=300.)
+    p.add_argument('--config-patch', type=Path, help='JSON object merged into config.json after the stop (top-level keys; null deletes)')
     p.add_argument('--dry-run', action='store_true', help='print the plan and the launch command; change nothing')
     p.add_argument('--freeze-only', action='store_true', help='only freeze the successor runtime (nothing is stopped)')
     a = p.parse_args(argv)
@@ -296,6 +297,17 @@ def main(argv=None):
         if held(out / 'controller.lock'):
             raise SystemExit('controller.lock is still held after the stop: a process of the old controller survives; '
                              'find it (fuser controller.lock) and stop it by PID')
+        if a.config_patch:
+            patch = read_json(a.config_patch)
+            config = read_json(out / 'config.json')
+            save_json(out / f'config.pre-patch-{time.strftime("%Y%m%d-%H%M%S")}.json', config)
+            for key, value in patch.items():
+                if value is None:
+                    config.pop(key, None)
+                else:
+                    config[key] = value
+            save_json(out / 'config.json', config)
+            print(f'config patched: {sorted(patch)}', flush=True)
         rebound = False
         if new_tag:
             done = run(['bash', REBIND, out, old_tag, new_tag])
