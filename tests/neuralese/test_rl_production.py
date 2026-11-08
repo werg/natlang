@@ -646,19 +646,22 @@ def test_dispatch_steals_work_so_a_fast_slot_takes_more_and_a_dead_slot_stops(tm
     ran={0:[],1:[],2:[]}
     def run_worker(index,name,queue,journal):
         done={json.loads(line)['key'] for line in journal.read_text().splitlines()} if journal.exists() else set()
+        assert not (index==2 and done)
         todo=[json.loads(line) for line in queue.read_text().splitlines() if json.loads(line)['key'] not in done]
         assert len(todo)==1   # the collector reruns its own queue and skips what its journal finished
         if index==2:
             return 9   # dead endpoint
         time.sleep(.06 if index==0 else .005)
         ran[index].append(todo[0]['key'])
-        with journal.open('a') as stream:stream.write(json.dumps({'key':todo[0]['key']})+'\n')
-        return 0
+        with journal.open('a') as stream:stream.write(json.dumps({'event':'finish','key':todo[0]['key']})+'\n')
+        return 2 if index==0 else 0   # an incomplete episode exits nonzero but finished: the slot keeps working
     results,pending=dispatch(entries,directory=tmp_path,generation=1,phase='',endpoints=['http://slow','http://fast','http://dead'],
                              run_worker=run_worker,attempted={'k0'})
-    # the dead slot took one entry, left it pending and stopped; the fast slot did most of the rest
-    assert pending==23 and len(set(ran[0]+ran[1]))==22 and len(ran[1])>2*len(ran[0])
-    assert {r['worker']:r['returncode'] for r in results}[2]==9
+    # the dead slot (no finish row) took one entry, left it pending and stopped; the slow slot kept working through its
+    # nonzero exits; the fast slot did most of the rest
+    assert pending==23 and len(set(ran[0]+ran[1]))==22 and len(ran[1])>2*len(ran[0])>0
+    assert {r['worker']:(r['entries'],r['returncode']) for r in results}[2]==(1,9)
+    assert {r['worker']:r['returncode'] for r in results}[0]==2 and len(ran[0])>1
     assert dispatch(entries,directory=tmp_path,generation=2,phase='',endpoints=['http://a'],run_worker=run_worker,
                     attempted={e['key'] for e in entries},stopped=lambda:False)==([],0)
 

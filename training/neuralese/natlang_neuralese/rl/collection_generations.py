@@ -128,7 +128,7 @@ def dispatch(entries, *, directory, generation, phase, endpoints, run_worker, at
     entry when its previous one finishes, appends it to its own queue file and reruns its collector on that queue and
     journal (the collector skips keys its journal already finished). A static split left the faster Pop actor idle for
     hours while DGX slots still held most of a round. A slot that never takes an entry starts no collector; a stop
-    request ends every slot after its current entry, and a slot whose collector exits nonzero stops taking work. Returns (results, pending count)."""
+    request ends every slot after its current entry, and a slot whose collector leaves its entry unfinished stops taking work. Returns (results, pending count)."""
     directory = Path(directory)
     pending = [entry for entry in entries if entry['key'] not in attempted]
     directory.mkdir(parents=True, exist_ok=True)
@@ -148,8 +148,12 @@ def dispatch(entries, *, directory, generation, phase, endpoints, run_worker, at
             taken.append(entry)
             queue.write_text(''.join(json.dumps(item) + '\n' for item in taken))
             codes.append(run_worker(index, name, queue, journal))
-            if codes[-1]:
-                break   # a dead collector or endpoint must not drain the shared queue; its entry stays pending
+            # The collector exits nonzero for an ordinary incomplete or timed-out episode (still a finish row). A
+            # collector that left its entry without a finish row died or lost its endpoint: that slot stops taking
+            # work so it cannot drain the shared queue; the entry stays pending for the next start.
+            if not any(row.get('event') == 'finish' and row.get('key') == entry['key']
+                       for row in (read_jsonl(journal) if journal.exists() else ())):
+                break
         if not taken:
             return None
         return {'worker': index, 'generation': generation, 'entries': len(taken),
