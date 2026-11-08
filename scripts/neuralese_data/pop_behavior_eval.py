@@ -291,6 +291,14 @@ def prepare(kind, checkpoint, runtime, expect_sha, wait=None):
     if (existing and existing.get('runtime') == str(runtime) and Path(existing['transport']['path']).is_file()
             and (Path(existing['transport']['path']).parent / existing['view']['path']).is_file()):
         return existing
+    # prune_dgx removes a view's .pt and keeps its receipts; a later preparation would resolve those receipts to the
+    # missing file (2026-11-08, step 105). Retire receipts of a view directory without any view before re-preparing.
+    stale = out / expect_sha
+    if stale.is_dir() and not any(stale.glob('*.pt')):
+        retired = ROOT / 'dgx-retirement' / f'stale-receipts-{expect_sha[:12]}-{int(time.time())}'
+        retired.mkdir(parents=True, exist_ok=True)
+        for item in stale.glob('*.json'):
+            os.replace(item, retired / item.name)
     command = [PYTHON, str(REPO / 'scripts/neuralese_data/pop_eval_prepare.py'), kind, '--checkpoint', str(checkpoint),
                '--out', str(out), '--receipt', str(receipt), '--expect-sha256', expect_sha]
     if kind == 'ema':
