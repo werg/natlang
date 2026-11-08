@@ -166,11 +166,12 @@ def stop(_args=None):
     if state:
         stop_unit(state)
         pbe.ssh(shlex.join(['docker', 'rm', '-f', state['container']]), check=False, timeout=60)
-        # The collector fetched the stored blocks before this hook ran; the work directory keeps only its logs.
+        # The store stays: this hook also runs when a controller stops or crashes mid-round, before the collector has
+        # bundled the round's blocks (2026-11-08: deleting it lost 22 native states of Pop-sampled rollouts). Only
+        # compile caches are removed; the container wrote them as root, so from a throwaway container.
         work = state['work']
-        # The container wrote them as root: remove them from a throwaway container.
         pbe.ssh(shlex.join(['docker', 'run', '--rm', '-v', f'{work}:/work', 'alpine:3.21', 'sh', '-c',
-                            'rm -rf ' + ' '.join(f'/work/{name}' for name in ('store', 'inductor', 'triton', 'hf', 'cuda'))]),
+                            'rm -rf ' + ' '.join(f'/work/{name}' for name in ('inductor', 'triton', 'hf', 'cuda'))]),
                 check=False, timeout=120)
         STATE.unlink(missing_ok=True)
         log(event='Pop RL actor stopped', unit=state['unit'])
