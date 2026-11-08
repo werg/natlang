@@ -209,6 +209,9 @@ def main(argv=None):
     # default): episodes above it are deferred, kept whole in deferred-long-graphs.jsonl and recorded in the
     # data receipt, never silently dropped.
     parser.add_argument('--max-graph-forward-tokens', type=int)
+    # A group's over-limit negative-advantage episode cannot train, so its positive members are deferred with it
+    # (default on; this switch opts out). Otherwise only the successes of a looping group would update the policy.
+    parser.add_argument('--no-group-balance-deferral', dest='group_balance_deferral', action='store_false')
     args, trainer = parser.parse_known_args(argv)
     from .production import validate_native_policy_trainer_cli
     validate_native_policy_trainer_cli(trainer)
@@ -441,7 +444,10 @@ def _admit_and_train(args,trainer,*,operation_request=None):
     args.out.mkdir(parents=True, exist_ok=True)
     graph_path, objective_path = args.out/'rl-native-graphs.jsonl', args.out/'rl-native-objective.json'
     # Deferral runs on the admitted graphs in memory, so the (large) graph and objective files are written once.
+    # A round admitted earlier by code without group balancing keeps that behaviour on a resume.
+    _keep_historical_deferral(args)
     deferred = _defer_long_graphs(args, graphs, objective, share='--no-share-causal-prefixes' not in trainer)
+    balanced = (deferred or {}).pop('group_balance_deferred', None)
     if not graphs:
         raise ValueError('every admitted native policy episode exceeds --max-graph-forward-tokens')
     from .episode_order import mix_episodes, order_receipt
@@ -481,6 +487,7 @@ def _admit_and_train(args,trainer,*,operation_request=None):
         **({'zero_signal_projection':zero_signal} if zero_signal is not None else {}),
         'omissions':{'unscored':[{'task_id':row.get('task_id'),'sample':row.get('sample')} for row in rows if row.get('reward') is None],
                      **({'deferred_long_graphs':deferred} if deferred is not None else {}),
+                     **({'group_balance_deferred':balanced} if balanced is not None else {}),
                      },
         'episodes': len(graphs), 'sampled_tokens': sum(len(row['actions']) for row in objective['rows'].values()),
         'neuralese_bonus_episodes': sum(bool(row.get('neuralese_bonus')) for row in objective['rows'].values()),
@@ -554,6 +561,33 @@ def _release_host_memory():
         pass
 
 
+def _keep_historical_deferral(args):
+    """Resume a round first admitted before group-balance deferral exactly as it was admitted: its receipt has
+    deferral accounting without the group_balance_deferred class."""
+    receipt = args.out / 'rl-data-receipt.json'
+    if not getattr(args, 'group_balance_deferral', False) or not receipt.is_file():
+        return
+    try:
+        omissions = json.loads(receipt.read_text()).get('omissions') or {}
+    except ValueError:
+        return
+    if 'deferred_long_graphs' in omissions and 'group_balance_deferred' not in omissions:
+        args.group_balance_deferral = False
+
+
+def _group_balance_members(objective, long):
+    """Positive-advantage members of every advantage group (task, JOLT role) with an over-limit negative member.
+    The advantage is the one each objective row carries."""
+    rows = objective['rows']
+    def group(key):
+        return (rows[key].get('task_id'), (rows[key].get('jolt') or {}).get('role'))
+    def advantage(key):
+        value = rows[key].get('advantage')
+        return value if type(value) in (int, float) else 0.
+    affected = {group(key) for key in long if advantage(key) < 0}
+    return {key for key in rows if key not in long and group(key) in affected and advantage(key) > 0}
+
+
 def _defer_long_graphs(args, graphs, objective, *, share=True):
     """Apply --max-graph-forward-tokens to the admitted graphs in place (before they are written): keep deferred
     episodes whole beside the round, return the record.
@@ -586,14 +620,31 @@ def _defer_long_graphs(args, graphs, objective, *, share=True):
                             'sample': objective['rows'][key].get('sample'), 'forward_tokens': sizes[key][0],
                             'original_tokens': sizes[key][1], 'kv_slots': sizes[key][2],
                             'sampled_tokens': len(objective['rows'][key]['actions'])} for key in sorted(long)]}
+    balance = getattr(args, 'group_balance_deferral', False)
+    balanced = _group_balance_members(objective, long) if balance and long else set()
+    if balance:
+        record['group_balance_deferred'] = {
+            'reason': 'positive members of a group whose negative members exceed the learner limit',
+            'path': None, 'episodes': [
+                {'id': key, 'task_id': objective['rows'][key].get('task_id'), 'sample': objective['rows'][key].get('sample'),
+                 'advantage': objective['rows'][key]['advantage']}
+                for key in sorted(balanced, key=lambda k: (str(objective['rows'][k].get('task_id')),
+                                                           objective['rows'][k].get('sample') or 0))]}
     if not long:
         return record
+    if balanced:
+        balanced_path = args.out / 'deferred-group-balance.jsonl'
+        write_bytes_durable(balanced_path, ''.join(json.dumps({'graph': row, 'objective_row': objective['rows'][row['id']]})
+                                                   + '\n' for row in graphs if row['id'] in balanced).encode())
+        record['group_balance_deferred']['path'] = {'path': str(balanced_path.resolve()),
+                                                    'sha256': sha256_file_hex_cached(balanced_path)}
     deferred_path = args.out / 'deferred-long-graphs.jsonl'
     write_bytes_durable(deferred_path, ''.join(json.dumps({'graph': row, 'objective_row': objective['rows'][row['id']]})
                                                + '\n' for row in graphs if row['id'] in long).encode())
     record['path'] = {'path': str(deferred_path.resolve()), 'sha256': sha256_file_hex_cached(deferred_path)}
-    graphs[:] = [row for row in graphs if row['id'] not in long]
-    objective['rows'] = {key: row for key, row in objective['rows'].items() if key not in long}
+    drop = long | balanced
+    graphs[:] = [row for row in graphs if row['id'] not in drop]
+    objective['rows'] = {key: row for key, row in objective['rows'].items() if key not in drop}
     return record
 
 

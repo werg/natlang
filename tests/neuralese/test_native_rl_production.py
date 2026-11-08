@@ -349,6 +349,61 @@ def test_long_graph_deferral_keeps_deferred_episodes_whole(tmp_path, monkeypatch
     assert record['path']['path'].endswith('deferred-long-graphs.jsonl')
 
 
+def _balance_fixture(monkeypatch):
+    from types import SimpleNamespace
+    import natlang_neuralese.data.native_graph_schema as schema
+    sizes = {'loop': 500, 'win1': 10, 'win2': 10, 'zero': 10, 'other_win': 10, 'other_loss': 10, 't_win': 10}
+    monkeypatch.setattr(schema, 'parse_graph', lambda row, tokenizer_fingerprint: SimpleNamespace(
+        id=row['id'], external_states={}, plan=SimpleNamespace(token_count=sizes[row['id']],
+                                                               slot_sources=range(sizes[row['id']]))))
+    def row(task, sample, advantage, role=None):
+        return {'task_id': task, 'sample': sample, 'actions': [1], 'advantage': advantage,
+                **({'jolt': {'role': role}} if role else {})}
+    graphs = [{'id': key, 'nodes': []} for key in sizes]
+    objective = {'policy': {'tokenizer_fingerprint': 'f'}, 'rows': {
+        'loop': row('A', 0, -1.0, 'student'), 'win1': row('A', 1, 0.7, 'student'), 'win2': row('A', 2, 0.7, 'student'),
+        'zero': row('A', 3, 0.0, 'student'), 't_win': row('A', 4, 0.5, 'teacher'),
+        'other_win': row('B', 0, 1.0, 'student'), 'other_loss': row('B', 1, -1.0, 'student')}}
+    return graphs, objective
+
+
+def test_group_balance_defers_positive_members_of_a_group_with_a_deferred_loop(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from natlang_neuralese.rl import native_stage
+    graphs, objective = _balance_fixture(monkeypatch)
+    args = SimpleNamespace(max_graph_forward_tokens=100, out=tmp_path, group_balance_deferral=True)
+    record = native_stage._defer_long_graphs(args, graphs, objective, share=False)
+    # The over-limit negative defers as before; its group's positives follow; zero advantage, the teacher group and
+    # other tasks keep training.
+    assert [e['id'] for e in record['episodes']] == ['loop']
+    balanced = record['group_balance_deferred']
+    assert balanced['reason'] == 'positive members of a group whose negative members exceed the learner limit'
+    assert balanced['episodes'] == [{'id': 'win1', 'task_id': 'A', 'sample': 1, 'advantage': 0.7},
+                                    {'id': 'win2', 'task_id': 'A', 'sample': 2, 'advantage': 0.7}]
+    assert {row['id'] for row in graphs} == {'zero', 't_win', 'other_win', 'other_loss'} == set(objective['rows'])
+    kept = [json.loads(line)['graph']['id'] for line in (tmp_path/'deferred-group-balance.jsonl').read_text().splitlines()]
+    assert kept == ['win1', 'win2'] and balanced['path']['path'].endswith('deferred-group-balance.jsonl')
+
+
+def test_group_balance_opt_out_and_historical_resume_keep_old_behaviour(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from natlang_neuralese.rl import native_stage
+    graphs, objective = _balance_fixture(monkeypatch)
+    off = SimpleNamespace(max_graph_forward_tokens=100, out=tmp_path, group_balance_deferral=False)
+    record = native_stage._defer_long_graphs(off, graphs, objective, share=False)
+    assert 'group_balance_deferred' not in record and len(graphs) == 6
+    # A resume of a round admitted before this class existed does not change its graph set.
+    (tmp_path/'rl-data-receipt.json').write_text(json.dumps({'omissions': {'deferred_long_graphs': {'episodes': []}}}))
+    resumed = SimpleNamespace(out=tmp_path, group_balance_deferral=True)
+    native_stage._keep_historical_deferral(resumed)
+    assert resumed.group_balance_deferral is False
+    (tmp_path/'rl-data-receipt.json').write_text(json.dumps({'omissions': {'deferred_long_graphs': {'episodes': []},
+                                                                           'group_balance_deferred': {'episodes': []}}}))
+    again = SimpleNamespace(out=tmp_path, group_balance_deferral=True)
+    native_stage._keep_historical_deferral(again)
+    assert again.group_balance_deferral is True
+
+
 @pytest.mark.parametrize('tamper', ['none','checkpoint','report','receipt','behavior','rollouts','graph','objective'])
 def test_partial_learner_resume_keeps_behavior_policy_and_checks_custody(tmp_path,tamper):
     from types import SimpleNamespace
