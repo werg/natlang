@@ -167,7 +167,7 @@ def freeze(spec, commit, log):
     payload = (f'cd {REPO} && exec env PYTHONPATH={REPO}/training/neuralese:{REPO} {PYTHON} '
                f'scripts/neuralese_data/freeze_native_runtime.py --commit {sha} --predecessor {predecessor} '
                f'--out {new} --control-bindings {BINDINGS} >> {log} 2>&1')
-    started = run([sys.executable, LEDGER, 'run', '--unit', unit, '--budget-gb', '8', '--priority', 'low',
+    started = run([sys.executable, LEDGER, 'run', '--unit', unit, '--budget-gb', '3', '--priority', 'low',
                    '--wait', '900', '--workdir', REPO, '--env', env, '--', '/bin/sh', '-c', payload])
     if started.returncode:
         raise SystemExit('freeze not admitted: ' + (started.stderr or started.stdout)[-400:])
