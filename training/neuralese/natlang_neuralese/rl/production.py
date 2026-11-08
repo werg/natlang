@@ -830,7 +830,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
             behavior_top_k=None, teacher_attempts=0, teacher_plan='nl',
             system_prompt=None, prompt_rendering=None, guidance_stage=None, context_tokens=None,
             neuralese_use_bonus=None, program_guidance=None, adapters=None, remote_workers=None,
-            allow_code_change=True):
+            allow_code_change=True, lost_block_exclusions=None):
     """Bounded subprocess fanout; existing collector and exact task verifier. ``behavior_top_k`` also records the
     actors' top-k sampler log-probs at every sampled position (score-centered RL); None leaves collection unchanged.
     ``teacher_attempts`` JOLT+ teacher attempts per group (the crisp plan; ``teacher_plan='nl'`` lets
@@ -1083,6 +1083,20 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
                                            'plan': teachers.get('plan'),
                                            'student_guidance_refusal': guidance_refusal}
     from .graph_replay import block_ids, save_bundle
+    if lost_block_exclusions:
+        # Reviewed, explicit exclusion of rollouts whose native-state inputs no actor store holds any more (2026-11-08:
+        # a stop hook deleted the Pop actor's store before bundling). Never fabricated or silently dropped: the scored
+        # rollouts stay in the unfiltered file and the report names every excluded sample and the reason.
+        excluded = {(item['group'], item['sample']) for item in lost_block_exclusions['samples']}
+        scored = list(read_jsonl(out / 'rollouts.jsonl'))
+        if len(excluded) != len(lost_block_exclusions['samples']) or not excluded <= {(r['group'], r['sample']) for r in scored}:
+            raise ValueError('lost-block exclusions must name distinct scored rollouts of this collection')
+        (out / 'rollouts.lost-block-unfiltered.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in scored))
+        (out / 'rollouts.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in scored
+                                                   if (r['group'], r['sample']) not in excluded))
+        report['lost_block_exclusions'] = {'excluded': sorted([list(key) for key in excluded]),
+                                           'reason': lost_block_exclusions['reason'],
+                                           'unfiltered_rollouts': str(out / 'rollouts.lost-block-unfiltered.jsonl')}
     rollouts = list(read_jsonl(out / 'rollouts.jsonl'))
     if any(block_ids(rollouts)):
         from .actor_client import NativeActorClient
@@ -1572,7 +1586,9 @@ def prepare_round_collection(config, state, round_dir, selected_path, selection,
         teacher_attempts=teacher_attempts, teacher_plan=config.get('jolt_teacher_plan', 'nl'),
         guidance_stage=config.get('jolt_guidance_stage'), prompt_rendering=config.get('prompt_rendering'),
         context_tokens=config.get('context_tokens'),
-        neuralese_use_bonus=bonus_setting(config.get('neuralese_use_bonus')))
+        neuralese_use_bonus=bonus_setting(config.get('neuralese_use_bonus')),
+        **({'lost_block_exclusions': lost}
+           if (lost := (config.get('lost_block_exclusions') or {}).get(str(Path(round_dir).resolve()))) else {}))
     return config, values, policy, policy_loss, expected_native, kwargs
 
 

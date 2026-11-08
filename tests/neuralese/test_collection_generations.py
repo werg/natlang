@@ -184,3 +184,19 @@ def test_a_round_bound_by_an_older_controller_resumes_with_new_transport_and_cod
     old = {k: v for k, v in recorded.items() if not k.startswith('jolt')}
     strict, _, _, teachers = production.compare_recorded_binding(old, current, 1, 'crisp')
     assert strict == [] and teachers == 0
+
+
+def test_lost_block_exclusions_drop_only_named_scored_rollouts_and_record_them(tmp_path, monkeypatch):
+    h = Harness(tmp_path, monkeypatch, entries=2)
+    h.budget = 99
+    rows = [{'group': 0, 'sample': 0, 'reward': 1.}, {'group': 0, 'sample': 1, 'reward': 0.}]
+    monkeypatch.setattr(production, 'score', lambda out, emit, **kw: (
+        Path(emit).write_text(''.join(json.dumps(r) + '\n' for r in rows)), {'scored': 2})[1])
+    lost = {'reason': 'actor store deleted before bundling', 'samples': [{'group': 0, 'sample': 1}]}
+    report = h.collect(lost_block_exclusions=lost)
+    assert [r['sample'] for r in read_jsonl(h.out / 'rollouts.jsonl')] == [0]
+    assert len(list(read_jsonl(h.out / 'rollouts.lost-block-unfiltered.jsonl'))) == 2
+    assert report['lost_block_exclusions']['excluded'] == [[0, 1]]
+    (h.out / 'score.json').unlink()
+    with pytest.raises(ValueError, match='lost-block exclusions'):
+        h.collect(lost_block_exclusions={'reason': 'x', 'samples': [{'group': 3, 'sample': 0}]})
