@@ -285,7 +285,9 @@ def prepare(kind, checkpoint, runtime, expect_sha, wait=None):
     out = ROOT / {'raw': 'views', 'rl': 'rl-views', 'ema': 'ema'}[kind]
     receipt = ROOT / 'preparations' / f'{kind}-{expect_sha}.json'
     existing = read_json(receipt)
-    if existing and Path(existing['transport']['path']).is_file():
+    # Reuse a view only when it was prepared under this runtime: a parent re-evaluated for a newer candidate runtime
+    # otherwise ran its old runtime's view and never paired (2026-11-08: step 99 compared v38 parent vs v58 candidate).
+    if existing and existing.get('runtime') == str(runtime) and Path(existing['transport']['path']).is_file():
         return existing
     command = [PYTHON, str(REPO / 'scripts/neuralese_data/pop_eval_prepare.py'), kind, '--checkpoint', str(checkpoint),
                '--out', str(out), '--receipt', str(receipt), '--expect-sha256', expect_sha]
