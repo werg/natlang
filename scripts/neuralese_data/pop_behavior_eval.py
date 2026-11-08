@@ -308,10 +308,19 @@ def prepare(kind, checkpoint, runtime, expect_sha, wait=None):
     try:
         # The EMA arm needs 40 GiB on the DGX, which never fits beside a live learner: a bounded wait, then skip it
         # (2026-11-06: a 24 h admission wait stalled every later candidate behind one EMA view).
-        unit, status, result = ledger_unit(f'popeval-{kind}-{expect_sha[:12]}',
-                                           ['/usr/bin/ionice', '-c2', '-n6', *command],
-                                           budget_gb=40 if kind == 'ema' else RAW_PREP_GB, workdir=runtime, env=env,
-                                           **({'wait': wait} if wait else {'wait': EMA_ADMISSION_WAIT} if kind == 'ema' else {}))
+        if kind == 'rl' and os.environ.get('NATLANG_LEDGER_UNIT'):
+            # The RL controller's own hook: its fixed claim already covers this preparation (collection uses a fraction
+            # of the learner budget), and a separate low-priority unit can never be admitted beside that claim
+            # (2026-11-08, w4 round 0 blocked 900 s). Run it inside the controller's unit.
+            unit = os.environ['NATLANG_LEDGER_UNIT'] + ':inline-rl-prepare'
+            done = subprocess.run(['/usr/bin/ionice', '-c2', '-n6', *command], cwd=runtime,
+                                  env={**os.environ, **dict(item.split('=', 1) for item in env)})
+            status, result = done.returncode, 'inline'
+        else:
+            unit, status, result = ledger_unit(f'popeval-{kind}-{expect_sha[:12]}',
+                                               ['/usr/bin/ionice', '-c2', '-n6', *command],
+                                               budget_gb=40 if kind == 'ema' else RAW_PREP_GB, workdir=runtime, env=env,
+                                               **({'wait': wait} if wait else {'wait': EMA_ADMISSION_WAIT} if kind == 'ema' else {}))
     except subprocess.CalledProcessError:
         if kind != 'ema':
             raise
