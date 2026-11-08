@@ -1000,7 +1000,11 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
             from .native_partial_custody import retain_partial_artifacts
             if actor_receipts() != actors:
                 raise ValueError('RL actor policy changed before retained artifact custody')
-            retain_partial_artifacts(entries + teachers['entries'], out, policy_id=policy_id, binding=binding,
+            # Only unfinished entries can resume from a partial; a finished entry's leftover partial may reference
+            # blocks held by an actor that has since gone (the Pop actor's store after it shut down).
+            finished = generations.attempted()
+            retain_partial_artifacts([entry for entry in entries + teachers['entries'] if entry['key'] not in finished],
+                                     out, policy_id=policy_id, binding=binding,
                                      servers=[NativeActorClient(url) for url in endpoints], restore=restore)
             if actor_receipts() != actors:
                 raise ValueError('RL actor policy changed during retained artifact custody')
