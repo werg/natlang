@@ -939,9 +939,17 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
                 'actors':{url:{'mode':info['prompt_rendering'],'sha256':info['prompt_rendering_identity_sha256']}
                           for url,info in infos.items()}}
             path=out/'actor-prompt-binding.json'
-            if path.exists() and json.loads(path.read_text())!=prompt_binding:
-                raise ValueError('RL actor prompt rendering changed within the bound collection')
-            if not path.exists():write_json_durable(path,prompt_binding)
+            if path.exists():
+                bound=json.loads(path.read_text())
+                # Actors are transport: one may join or leave a resumed round (e.g. the Pop actor attached after a
+                # restart), but the policy and the single rendering identity every actor attests stay fixed.
+                identities={(a['mode'],a['sha256']) for a in (*bound['actors'].values(),*prompt_binding['actors'].values())}
+                if ({k:v for k,v in bound.items() if k!='actors'}!={k:v for k,v in prompt_binding.items() if k!='actors'}
+                        or len(identities)!=1):
+                    raise ValueError('RL actor prompt rendering changed within the bound collection')
+                if set(prompt_binding['actors'])-set(bound['actors']):
+                    write_json_durable(path,{**bound,'actors':{**bound['actors'],**prompt_binding['actors']}})
+            else:write_json_durable(path,prompt_binding)
         receipts = {url:info.get('rl_policy_binding') for url,info in infos.items()}
         return validate_actor_receipts(receipts, policy_id=policy_id, neuralese_server=neuralese_server, expected_native=expected_native,expected_coefficient=coefficient_runtime)
     actors = actor_receipts()
