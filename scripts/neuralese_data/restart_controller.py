@@ -123,8 +123,12 @@ def derive_launch(unit):
 
 
 def ledger_command(spec, unit):
+    # The ledger workdir is the runtime the payload runs (AGENTS.md: frozen runtime launches use it as --workdir); a
+    # runtime switch rewrites only the payload, so the old unit's WorkingDirectory would otherwise be carried over.
+    found = RUNTIME_RE.findall(spec['payload'])
+    workdir = str(DATA / f'runtime-native-corrected-mix-{found[0]}') if found else spec['workdir']
     argv = [sys.executable, LEDGER, 'run', '--unit', unit, '--budget-gb', str(spec['budget_gb']),
-            '--priority', spec['priority'], '--workdir', spec['workdir'], '--wait', '600']
+            '--priority', spec['priority'], '--workdir', workdir, '--wait', '600']
     if spec.get('fixed_claim'):
         argv.append('--fixed-claim')
     return [*argv, '--', '/bin/sh', '-c', spec['payload']]
