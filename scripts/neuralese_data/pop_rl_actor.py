@@ -86,10 +86,13 @@ def stop_unit(state):
 
 
 def start(args):
-    # A previous actor of this lineage that still serves the same policy (the controller restarted mid-collection)
-    # keeps its block store: the collector's retained-partial custody needs it. Anything else is stopped first.
+    # A previous actor of this lineage that still serves the same policy under the same runtime (the controller
+    # restarted mid-collection) keeps its block store. One under another runtime is replaced: the controller refuses
+    # replicas whose Python runtimes disagree, and retained-partial custody rehydrates a fresh actor's store.
     previous = pbe.read_json(STATE)
-    if previous and attested(previous['endpoint'], args.policy_id) and previous['policy_id'] == args.policy_id:
+    runtime = str(Path(args.runtime).resolve(strict=True))
+    if (previous and previous['policy_id'] == args.policy_id and previous.get('runtime') == runtime
+            and attested(previous['endpoint'], args.policy_id)):
         pbe.write_json(pbe.RL_ACTOR_MARKER, {**pbe.read_json(pbe.RL_ACTOR_MARKER, {}), 'started': time.time()})
         log(event='Pop RL actor already serves the policy', endpoint=previous['endpoint'])
         return previous
@@ -107,7 +110,6 @@ def start(args):
     pbe.write_json(pbe.RL_ACTOR_MARKER, {'started': time.time(), 'policy_id': args.policy_id, 'endpoint': endpoint,
                                          'unit': None})
     started = time.time()
-    runtime = str(Path(args.runtime).resolve(strict=True))
     closure = pbe.ensure_pop_runtime(runtime)
     prep = pbe.prepare('rl', args.checkpoint, runtime, args.policy_id, wait=args.prepare_wait)
     state = pbe.read_json(pbe.ROOT / 'state.json') or {'parent': {'sha256': ''}}
@@ -137,7 +139,7 @@ def start(args):
                         '--budget-gb', str(RL_MEMORY_GB), '--reserve-gb', str(pbe.POP_RESERVE_GB),
                         '--class', 'experiment', '--no-resumable', '--container', name, '--workdir', work, '--',
                         '/usr/bin/python3', f'{work}/driver.py', f'{work}/job.json']))
-    result = {'endpoint': endpoint, 'unit': unit, 'container': name, 'policy_id': source, 'work': work,
+    result = {'endpoint': endpoint, 'unit': unit, 'container': name, 'policy_id': source, 'work': work, 'runtime': runtime,
               'prepared_seconds': round(time.time() - started, 1)}
     pbe.write_json(STATE, result)
     pbe.write_json(pbe.RL_ACTOR_MARKER, {'started': time.time(), 'policy_id': source, 'endpoint': endpoint, 'unit': unit})
