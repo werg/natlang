@@ -45,7 +45,10 @@ class Harness:
     def collector(self, command, log, control, custody_receipt=None):
         queue, journal = Path(command[2]), Path(command[3])
         endpoint = command[command.index('--server') + 1]
+        finished = {row['key'] for row in read_jsonl(journal) if row['event'] == 'finish'} if journal.exists() else set()
         for entry in read_jsonl(queue):
+            if entry['key'] in finished:   # run_bonsai_queue: restart skips attempted entries
+                continue
             self.ran.append((entry['key'], endpoint, journal.name))
             with journal.open('a') as stream:
                 stream.write(json.dumps({'event': 'start', 'key': entry['key']}) + '\n')

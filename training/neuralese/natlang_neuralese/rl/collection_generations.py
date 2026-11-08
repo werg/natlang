@@ -17,6 +17,7 @@ import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Lock
 
 from ..common.jsonio import read_jsonl, write_json_durable
 
@@ -121,30 +122,41 @@ class Generations:
         return ''.join(path.read_text() for path in self.journals())
 
 
-def dispatch(entries, *, directory, generation, phase, endpoints, split, run_worker, attempted):
+def dispatch(entries, *, directory, generation, phase, endpoints, run_worker, attempted, stopped=lambda: False):
     """Run the pending ``entries`` of one phase ('' student, 'teacher-') over one worker slot per ``endpoints`` item with
-    ``run_worker(index, name, queue, journal)`` (the collector's exit code). Writes this generation's queue files; a slot
-    with nothing to do starts no collector. Returns (results, pending count)."""
+    ``run_worker(index, name, queue, journal)`` (the collector's exit code). Slots steal work: each takes the next pending
+    entry when its previous one finishes, appends it to its own queue file and reruns its collector on that queue and
+    journal (the collector skips keys its journal already finished). A static split left the faster Pop actor idle for
+    hours while DGX slots still held most of a round. A slot that never takes an entry starts no collector; a stop
+    request ends every slot after its current entry, and a slot whose collector exits nonzero stops taking work. Returns (results, pending count)."""
     directory = Path(directory)
     pending = [entry for entry in entries if entry['key'] not in attempted]
-    shares = split(pending)
     directory.mkdir(parents=True, exist_ok=True)
+    remaining, lock = list(reversed(pending)), Lock()
 
     def worker(index):
-        selected = shares[index]
-        if not selected:
-            return None
         endpoint = endpoints[index]
         name = f'g{generation}-{phase}{index}'
         queue, journal = directory / f'queue-{name}.jsonl', directory / f'journal-{name}.jsonl'
-        for entry in selected:
+        taken, codes = [], []
+        while not stopped():
+            with lock:
+                if not remaining:
+                    break
+                entry = remaining.pop()
             entry['rl_endpoint'] = endpoint
-        queue.write_text(''.join(json.dumps(entry) + '\n' for entry in selected))
-        return {'worker': index, 'generation': generation, 'returncode': run_worker(index, name, queue, journal),
-                'journal': str(journal)}
+            taken.append(entry)
+            queue.write_text(''.join(json.dumps(item) + '\n' for item in taken))
+            codes.append(run_worker(index, name, queue, journal))
+            if codes[-1]:
+                break   # a dead collector or endpoint must not drain the shared queue; its entry stays pending
+        if not taken:
+            return None
+        return {'worker': index, 'generation': generation, 'entries': len(taken),
+                'returncode': next((code for code in codes if code), 0), 'journal': str(journal)}
 
-    with ThreadPoolExecutor(max_workers=len(shares)) as pool:
-        results = [result for result in pool.map(worker, range(len(shares))) if result is not None]
+    with ThreadPoolExecutor(max_workers=len(endpoints)) as pool:
+        results = [result for result in pool.map(worker, range(len(endpoints))) if result is not None]
     return results, len(pending)
 
 

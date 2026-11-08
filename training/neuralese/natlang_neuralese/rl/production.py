@@ -807,24 +807,11 @@ def guidance_collection_options(stage):
     return {'selection':'crisp', 'writer':'off'} if stage == 'backbone' else {}
 
 
-def weighted_split(entries, weights):
-    """Deterministic proportional split (smooth weighted round-robin): worker k receives about weights[k] / sum(weights)
-    of the entries, interleaved in order. Equal weights give ``entries[k::len(weights)]``."""
-    total, current, shares = sum(weights), [0.] * len(weights), [[] for _ in weights]
-    for entry in entries:
-        for k, weight in enumerate(weights):
-            current[k] += weight
-        k = max(range(len(weights)), key=lambda i: (current[i], -i))
-        current[k] -= total
-        shares[k].append(entry)
-    return shares
-
-
 def worker_slots(endpoints, workers, remote_workers):
     """[(endpoint, entry weight)] per collector worker. Without ``remote_workers`` the workers round-robin over the
     endpoints with equal shares (external fleets). With it, ``workers`` run on the managed endpoint (endpoints[0], weight
-    1) and each remote endpoint adds its own {workers, weight}: a slower remote GPU takes fewer entries per worker, so it
-    cannot stretch the round."""
+    1) and each remote endpoint adds its own {workers, weight}. Dispatch steals work across slots
+    (collection_generations.dispatch), so the recorded weight no longer sets a slot's share of the round."""
     if remote_workers is None:
         return [(endpoints[i % len(endpoints)].rstrip('/'), 1.) for i in range(workers)]
     if set(remote_workers) != set(endpoints[1:]) or any(
@@ -1020,9 +1007,6 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     # A partial response is not usable without its exact communication inputs.
     # Authenticate and hydrate the full archive before any collector can replay.
     retained_artifacts(restore=True)
-    def shares(items):
-        return ([items[k::len(slots)] for k in range(len(slots))] if remote_workers is None
-                else weighted_split(items, [weight for _, weight in slots]))
     # Entries finished by an earlier start keep the endpoint that sampled them (the rollout's recorded provenance).
     sampled_on = generations.finished_endpoints()
     for entry in entries:
@@ -1043,7 +1027,8 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
                                       custody_receipt=directory / f"worker-{tag}-process-custody.json")
         done = generations.attempted()
         phase_results, pending = dispatch(batch, directory=directory, generation=generation, phase=name,
-            endpoints=[endpoint for endpoint, _ in slots], split=shares, run_worker=run_worker, attempted=done)
+            endpoints=[endpoint for endpoint, _ in slots], run_worker=run_worker, attempted=done,
+            stopped=lambda: bool(control and control.stop.requested))
         generations.record('dispatch', generation=generation, phase=name or 'student', entries=len(batch),
                            pending=pending, returncodes=[r['returncode'] for r in phase_results])
         results.extend(phase_results)

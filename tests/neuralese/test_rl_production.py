@@ -639,12 +639,31 @@ def test_collection_binding_binds_the_agent_context_budget_only_when_set(tmp_pat
     assert production.collection_binding(**common, context_tokens=32768)['context_tokens'] == 32768
 
 
-def test_weighted_split_and_worker_slots_keep_a_slow_remote_from_stretching_the_round():
-    items=list(range(40))
-    assert production.weighted_split(items,[1.]*4)==[items[k::4] for k in range(4)]
-    shares=production.weighted_split(items,[1.,1.,1.,1.,.5])
-    assert [len(share) for share in shares]==[9,9,9,9,4] and sorted(sum(shares,[]))==items
-    assert production.weighted_split(items,[1.,1.])==production.weighted_split(items,[1.,1.])  # deterministic
+def test_dispatch_steals_work_so_a_fast_slot_takes_more_and_a_dead_slot_stops(tmp_path):
+    import time
+    from natlang_neuralese.rl.collection_generations import dispatch
+    entries=[{'key':f'k{i}'} for i in range(24)]
+    ran={0:[],1:[],2:[]}
+    def run_worker(index,name,queue,journal):
+        done={json.loads(line)['key'] for line in journal.read_text().splitlines()} if journal.exists() else set()
+        todo=[json.loads(line) for line in queue.read_text().splitlines() if json.loads(line)['key'] not in done]
+        assert len(todo)==1   # the collector reruns its own queue and skips what its journal finished
+        if index==2:
+            return 9   # dead endpoint
+        time.sleep(.06 if index==0 else .005)
+        ran[index].append(todo[0]['key'])
+        with journal.open('a') as stream:stream.write(json.dumps({'key':todo[0]['key']})+'\n')
+        return 0
+    results,pending=dispatch(entries,directory=tmp_path,generation=1,phase='',endpoints=['http://slow','http://fast','http://dead'],
+                             run_worker=run_worker,attempted={'k0'})
+    # the dead slot took one entry, left it pending and stopped; the fast slot did most of the rest
+    assert pending==23 and len(set(ran[0]+ran[1]))==22 and len(ran[1])>2*len(ran[0])
+    assert {r['worker']:r['returncode'] for r in results}[2]==9
+    assert dispatch(entries,directory=tmp_path,generation=2,phase='',endpoints=['http://a'],run_worker=run_worker,
+                    attempted={e['key'] for e in entries},stopped=lambda:False)==([],0)
+
+
+def test_worker_slots_bind_remote_workers():
     # without remote_workers: equal round-robin (external fleets, unchanged)
     assert production.worker_slots(['http://a','http://b/'],3,None)==[('http://a',1.),('http://b',1.),('http://a',1.)]
     slots=production.worker_slots(['http://dgx','http://pop/'],2,{'http://pop/':{'workers':1,'weight':.25}})
