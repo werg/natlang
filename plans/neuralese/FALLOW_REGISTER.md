@@ -19,11 +19,13 @@ mechanism, or excluded explicitly.
 `W` = `/home/werg/data/lfm3-rl-dgx-20261029`, `T` = `training/neuralese/natlang_neuralese`,
 `NSS` = `T/train/native_state_sft.py`.
 
-## Production state (2026-11-09)
+## Production state (2026-11-09 evening)
 
-The w4 controller runs interleaved JOLT+ RL (bf95-lowlr lineage) on the DGX with Pop as a second rollout actor and
-the dev16 evaluator. Cloud is gone. The hourly heartbeat clears this register: each entry is either integrated into
-the live run or removed with a reason.
+The w5 controller (`ops/bf95-lowlr-1105/w5`) runs interleaved JOLT+ RL from step 92 with `beta_s 0` after the w4
+regression diagnosis (`RL_REGRESSION_DIAGNOSIS_20261109.md`). It runs from the checkout, not a frozen runtime, so
+fixes on main reach it at the next episode or update. Pop is the second rollout actor and the dev16 evaluator. Cloud
+is gone. The hourly heartbeat clears this register: each entry is either integrated into the live run or removed with
+a reason.
 
 ## Register
 
@@ -56,7 +58,6 @@ table is roughly ordered by impact. The current ranking by impact × ease is
 | 20 | llama.cpp NVFP4 actors / GGUF serving of current LFM3 (committed decision #10, local serving) | `llama_cpp_converter` in config (`/home/werg/data/llama-neuralese-a6401bb`), `actor_engine: llama-cpp` (`T/rl/production.py`) | RL actor path never used. **Profiles fixed 2026-11-03:** `nativeSources.lfm-latest` now reads `W/ops/pop-behavior-eval/behavioural-parent.json`, which the Pop watcher rewrites on each promotion (currently full67). `natlang setup --native lfm-latest --gguf q8_0` re-pins both profiles. | `wiring` (RL actor only) | L–M | After a promotion, rerun the setup (through the ledger). Let SGLang supersede the llama.cpp RL actor (decision #17). | S | supervisor |
 
 | 22 | Prepared data not in the mix | rest27 pairs (39,134, never verified or graphed: `runs/lfm3-communication/verify.py`); recovered D02/D21, native-sft-v13-r2, static-s7k, evidence-terminal, first-wave renders (`LFM3_DATA_COVERAGE_AUDIT_20261031.md` §4/§6); full D12–D16 acquired action trajectories; 22 of 45 S3 port families unconverted; broad Neuralese graphs (`NEURALESE_BROAD_GRAPHS_20261031.md`); Luna design-brief tranche and held-shapes seeds 52116–18; 13,802-row ready append | Not admitted. | `covered` in part (corrected-mix agent) | **H** | Confirm with the corrected-mix agent which items it takes on. These may fall outside its scope: rest27 verification, the 22 S3 families, broad graphs, and the 13,802-row append. Assign them explicitly. | M–L | corrected-mix agent + supervisor |
-| 24 | Deferred long RL graphs (`--max-graph-forward-tokens`) | `T/rl/native_stage.py` `_defer_long_graphs` → `deferred-long-graphs.jsonl` | **Built 2026-11-09 (40758e0da): over-limit episodes train their longest import-closed turn prefix with the original advantage; deferral is only the fallback. Deploy: runtime frozen from main >= 40758e0da at the round-2 collection restart; leaves the register when a live round records `truncated`.** **No consumer.** w3 round 1 deferred 22 of 144 episodes, 14 of them budget-exhausted loops: the worst loops never receive their negative advantage while successes train (2026-11-08; dev16 13→9 with a repeat-the-failing-action attractor). | `wiring` | **H** | Default-on consecutive-repeat stop in RL collection so loops end whole as `repetition` under the limit (Sonnet agent, 2026-11-08); then train or explicitly exclude the remaining long graphs. | M | supervisor |
 
 ### Memetic meta-learning (M rows; 2026-11-03)
 
@@ -165,6 +166,8 @@ aspects are **not** covered by them:
    idle while the DGX GPU ran evaluations alongside (or instead of) training.
 
 ## Removed 2026-11-09
+
+- #24 deferred long RL graphs: live. Truncation (40758e0da) and its search fix (68c289e3d) run in w5, which runs from the checkout since 19:00.
 
 - #1 Committed learning rates (backbone 2e-5 Muon-scaled, rows/adapter 1e-3, EMA eval: live since 2026-11-04 (committed rates in the corrected-mix controls).
 - #2 Interleaved whole-graph JOLT+ RL (`native_interleaved_rl` stage): live: the w4 controller runs interleaved JOLT+ RL rounds with SFT windows.
