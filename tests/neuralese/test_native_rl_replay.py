@@ -390,3 +390,12 @@ def test_all_success_cost_objective_binds_the_optimizer_control(cost_policy):
     assert 0 < scale <= .05
     assert all(row['efficiency_only_update_scale']==scale for row in rows)
     assert max(abs(row['advantage']) for row in rows)==pytest.approx(scale)
+
+
+def test_singleton_jolt_teacher_is_centered_on_its_student_group_mean():
+    """Review F2 (2026-11-09): a one-attempt teacher group centered on itself always had advantage 0."""
+    from natlang_neuralese.rl.native_replay import group_episode_advantages
+    teacher = lambda quality: [{'reward': {'quality': quality}}]
+    assert group_episode_advantages(teacher(1), jolt=True, mode='grpo') == [0.]
+    assert group_episode_advantages(teacher(1), jolt=True, mode='grpo', baseline=.25) == [.75]
+    assert group_episode_advantages(teacher(0), jolt=True, mode='grpo', baseline=.25) == [-.25]

@@ -332,3 +332,14 @@ def test_behavior_parity_only_applies_to_exact_loaded_behavior_parent():
     assert not obj.can_compare_behavior_actor({})
     with pytest.raises(ValueError,match='loaded checkpoint'):
         obj.bind_initial_checkpoint('not-a-sha')
+
+
+def test_zero_signal_projection_omits_twins_whose_role_coefficient_is_zero():
+    """Review F5 (2026-11-09): with beta_s 0 a zero-advantage student twin carries no loss term."""
+    from natlang_neuralese.rl.native_stage import skip_zero_signal_jolt
+    graphs=[{'id':x} for x in ('student','teacher')]
+    rows={'student':{'advantage':0.,'jolt':{'role':'student','privileged':{'state':'x'}}},
+          'teacher':{'advantage':0.,'jolt':{'role':'teacher','privileged':{'state':'y'}}}}
+    objective={'mode':'grpo','policy_loss':{'schema':'jolt-plus/1','beta_s':0.,'beta_t':.5},'rows':rows}
+    kept,_,receipt=skip_zero_signal_jolt(graphs,objective)
+    assert [x['id'] for x in kept]==['teacher'] and receipt['omitted_graph_ids']==['student']

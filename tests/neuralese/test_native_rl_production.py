@@ -693,3 +693,18 @@ def test_partial_learner_resume_after_an_exceptional_exit(tmp_path,tamper):
 def test_native_stage_real_partial_resume_preserves_behavior(tmp_path, monkeypatch):
     test_native_stage_real_shared_parent_update_and_rejects_stale_actor_replay(
         tmp_path, False, partial_test=True, monkeypatch=monkeypatch)
+
+
+def test_truncation_search_skips_a_cut_that_splits_a_shared_receipt(tmp_path, monkeypatch):
+    """Review F12b (2026-11-09): one inadmissible midpoint must not hide valid shorter or longer prefixes."""
+    from natlang_neuralese.rl import native_stage
+    graph, row = _episode('long', lengths=(30, 30, 30, 30))
+    graph['external_states'] = {'x': {'id': 'nzs1_' + 'a' * 52, 'token_count': 4}}
+    for node in graph['nodes'][1:3]:  # turns 2 and 3 share one archived external state with consumption receipts
+        node['imports'] = [{'at': 5, 'source': 'x', 'start': 0, 'stop': 4, 'logical': False}]
+    row['external_consumption_receipts'] = {'x': [{'consumer': 'c#turn2'}, {'consumer': 'c#turn3'}]}
+    monkeypatch.setattr(native_stage, '_packed_geometry', lambda candidate, *a, **k: (
+        sum(len(node['token_ids']) for node in candidate['nodes']), None,
+        sum(len(node['token_ids']) for node in candidate['nodes'])))
+    result = native_stage._truncate_episode(graph, row, limit=90, fingerprint='f', share=False, behavior=False)
+    assert result is not None and result[2]['kept_turns'] == 3

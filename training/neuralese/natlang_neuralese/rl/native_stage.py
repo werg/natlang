@@ -398,7 +398,7 @@ def _completed_operation_replay(args, request):
 
 
 def skip_zero_signal_jolt(graphs, objective):
-    """Omit only complete episodes whose JOLT outcome and privileged terms are both zero."""
+    """Omit only complete episodes whose JOLT outcome and privileged terms are both zero (no twin, or beta 0)."""
     import math
     if (objective.get('mode')!='grpo' or (objective.get('policy_loss') or {}).get('schema')!='jolt-plus/1'):
         return graphs,objective,None
@@ -406,10 +406,13 @@ def skip_zero_signal_jolt(graphs, objective):
     if len(ids)!=len(set(ids)) or set(ids)!=set(rows):
         raise ValueError('JOLT graph/objective identity differs before zero-signal projection')
     omitted=[]
+    loss=objective['policy_loss']
     for ident in ids:
         row=rows[ident];info=row.get('jolt');advantage=row.get('advantage')
+        # A twin under a zero role coefficient (e.g. beta_s 0) carries no term either (review F5, 2026-11-09).
+        silent_twin=isinstance(info,dict) and loss.get('beta_s' if info.get('role')=='student' else 'beta_t')==0
         if (isinstance(info,dict) and info.get('role') in ('student','teacher')
-                and info.get('privileged') is None and type(advantage) in (int,float)
+                and (info.get('privileged') is None or silent_twin) and type(advantage) in (int,float)
                 and math.isfinite(advantage) and advantage==0):
             omitted.append(ident)
     if not omitted:return graphs,objective,None
@@ -417,7 +420,7 @@ def skip_zero_signal_jolt(graphs, objective):
     projected={**objective,'rows':{key:value for key,value in rows.items() if key not in omitted_set}}
     disposition={'schema':'natlang.jolt-zero-signal-projection/1','omitted_graph_ids':omitted,
         'omitted_count':len(omitted),'active_count':len(kept),'omitted_graph_visits':0,
-        'reason':'zero centered outcome advantage and no privileged twin; no active decision KL or writer term',
+        'reason':'zero centered outcome advantage and no privileged twin (or a zero role KL coefficient); no active decision KL or writer term',
         'normalization':'active episodes and their sampled actions only; explicit change from retaining zero-loss episodes',
         'coverage':'original scored rollouts and complete execution graphs remain immutable evidence'}
     projected['zero_signal_projection']=disposition
@@ -679,13 +682,14 @@ def _truncate_episode(graph, row, *, limit, fingerprint, share, behavior):
         return {**graph, 'nodes': keep,
                 'external_states': {name: value for name, value in (graph.get('external_states') or {}).items()
                                     if name in used}}
+    # Receipt admissibility is not monotone in the prefix length: search capacity only among admissible cuts, so one
+    # cut that splits a shared receipt does not hide shorter or longer valid prefixes (review F12b, 2026-11-09).
+    candidates = [kept for kept in candidates if build(kept) is not None]
     best = None
     low, high = 0, len(candidates) - 1
     while low <= high:
         middle = (low + high) // 2
         candidate = build(candidates[middle])
-        if candidate is None:
-            return None
         forward, _, slots = _packed_geometry(candidate, fingerprint, share=share, behavior=behavior)
         if forward <= limit and slots <= limit:
             best, low = (candidates[middle], candidate, forward, slots), middle + 1

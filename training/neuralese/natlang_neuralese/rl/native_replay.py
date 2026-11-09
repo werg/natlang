@@ -1543,7 +1543,7 @@ def invocation_behavior_policy(rollouts,*,identity,roles,fetch_block):
         'base_native_identity':dict(identity),'collector_policy_role':'base-runtime-metadata','episodes':episodes},identity)
 
 
-def group_episode_advantages(members, *, jolt, mode):
+def group_episode_advantages(members, *, jolt, mode, baseline=None):
     """Advantages of one scored group, or None when std-normalized GRPO has nothing to learn from it.
 
     Centering uses binary task outcome (``quality``) only: JOLT+ subtracts the group mean, GRPO normalizes by the
@@ -1582,7 +1582,11 @@ def group_episode_advantages(members, *, jolt, mode):
     reporting_varies = reporting_spread([row['reward'] for row in members])
     success_only = bool(qualities) and all(quality == 1 for quality in qualities)
     efficiency_varies = len(set(efficiency_costs)) > 1
-    if jolt:
+    if jolt and baseline is not None:
+        # JOLT+ teacher attempts are centered on their world's student group mean, a baseline independent of the
+        # teacher sample: a singleton teacher group centered on itself always had advantage 0 (review F2, 2026-11-09).
+        advantages = [quality - baseline for quality in qualities]
+    elif jolt:
         mean = sum(qualities) / len(qualities)
         advantages = [quality - mean if len(qualities) > 1 else 0. for quality in qualities]
     elif mode == 'grpo' and not stats['spread'] and not any(bonuses) and not (
@@ -1652,8 +1656,11 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
         grouped.setdefault(key, []).append(rollout)
     graphs, objective_rows = [], {}
     adapter_binding, binding_seen = None, False
-    for members in grouped.values():
-        advantages = group_episode_advantages(members, jolt=jolt is not None, mode=mode)
+    student_means = {key[:2]: sum(row['reward']['quality'] for row in members) / len(members)
+                     for key, members in grouped.items() if jolt is not None and key[2] == 'student'}
+    for key, members in grouped.items():
+        advantages = group_episode_advantages(members, jolt=jolt is not None, mode=mode,
+            baseline=student_means.get(key[:2]) if jolt is not None and key[2] == 'teacher' else None)
         if advantages is None:
             continue
         costs=[float((row['reward'].get('execution_efficiency') or {}).get('cost') or 0.) for row in members]
