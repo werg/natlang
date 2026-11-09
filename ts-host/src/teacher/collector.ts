@@ -1345,8 +1345,11 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
             (response.raw_response.natlang_action_provenance as Record<string, unknown>).kind === 'authored_reference_root_eval' &&
             (response.raw_response.natlang_action_provenance as Record<string, unknown>).code_sha256 === authoredRoot.sha256)
           authoredRootUsed = true;
-        await appendEvidence([{ kind: 'provider_frame', source: 'journal_replay', request_sha256: requestSha256,
-          invocation_id: request.invocation_id ?? null, request: structuredClone(request),
+        // The same canonical action frame a fresh turn writes (`persist` below): a resumed attempt's evidence file
+        // holds only this attempt's records, so a replayed turn must be a `teacher_action_frame` too or a
+        // budget-terminated resumed episode loses its saved prefix (rl/task_rollouts.py _budget_terminated_prefix).
+        await appendEvidence([{ kind: 'teacher_action_frame', source: 'journal_replay', request_sha256: requestSha256,
+          invocation_id: request.invocation_id ?? null,
           response_frame: trajectoryTurn(request, response), saved_turn_index: partial.turns.indexOf(recorded) }]);
       } else {
         const persist = async (turn: ModelTurn, source: 'live_provider' | 'handoff_replay' | 'seeded_failure' | 'authored_reference_root' = 'live_provider') => {
@@ -1408,6 +1411,10 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
           if (!capture) throw new Error('saved decision lost its native capture');
           if (nativeStore && replayRemote) await archiveNeuraleseReplyArtifacts({x_natlang_rl_capture:capture}, replayRemote, nativeStore,
             [request.messages, capture]);
+          // A saved decision is one more canonical decision frame of this attempt's evidence, equal to the entry
+          // already in `partial.decisions` (the fresh branch writes the same record when it samples).
+          await appendEvidence([{kind:'decision_action_frame', request_sha256:requestSha, invocation_id:call,
+            request:structuredClone(request), scores:structuredClone(scores)}]);
           const id = `native-turn:${randomUUID()}`;
           activeRecorder()?.record({ messages: structuredClone(request.messages), reply: {role:'assistant',content:null},
             blocks: [], decision: {options: [...request.options]},

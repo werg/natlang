@@ -75,7 +75,8 @@ def test_score_routes_groups_by_spread(tmp_path):
 def _budget_prefix_fixture(tmp_path, *, graph_turn="inv#turn1", pending=False, manifest_tamper=False,
                            native_pair=False, stale_attempt=False, missing_frame=False, split="train",
                            saved_raw_calls=False, mismatched_saved_raw_calls=False, root_dependency=False,
-                           decision=False, omit_last=False, tamper_decision=False):
+                           decision=False, omit_last=False, tamper_decision=False,
+                           frame_source="live_provider", legacy_replay_frames=False):
     from natlang_neuralese.rl.task_rollouts import build_queue
     task = {**authored_root_row(_row()), "id": "budget-prefix-task", "split": split}
     packet_path = tmp_path / "packet.jsonl"
@@ -176,7 +177,9 @@ def _budget_prefix_fixture(tmp_path, *, graph_turn="inv#turn1", pending=False, m
         *([] if missing_frame else [
             {"kind": "teacher_action_frame", "source": "authored_reference_root", "request_sha256": f"{8:064x}",
              "invocation_id": root_invocation, "response_frame": root_frame, "saved_turn_index": 0},
-            *[{"kind": "teacher_action_frame", "source": "live_provider", "request_sha256": f"{index + 10:064x}",
+            *[{"kind": "provider_frame" if legacy_replay_frames else "teacher_action_frame",
+               "source": "journal_replay" if legacy_replay_frames else frame_source,
+               "request_sha256": f"{index + 10:064x}",
                "invocation_id": invocation, "response_frame": frame, "saved_turn_index": index + 1}
               for index, (invocation, frame) in enumerate(frames)]
         ]),
@@ -279,6 +282,38 @@ def test_budget_prefix_keeps_sampled_decision_turns_as_scored_failure(tmp_path):
         "inv#turn1", "dec#turn1"}
     from natlang_neuralese.rl.episode_graph import whole_episode_turns
     whole_episode_turns(row)
+
+
+def test_resumed_budget_prefix_recovers_replayed_actions_and_decisions(tmp_path):
+    """A resumed attempt's evidence holds only journal-replayed turns (canonical `teacher_action_frame`, source
+    `journal_replay`, bound to the saved turn index) plus a replayed decision's `decision_action_frame`; the
+    prefix is recovered with the same custody checks as a fresh one."""
+    row = _emit_budget_rollout(tmp_path, decision=True, frame_source="journal_replay")
+    assert row["unscored"] is None and row["reward"]["quality"] == 0.0
+    assert [turn["invocation_id"] for turn in row["turns"]] == ["inv", "dec"]
+    from natlang_neuralese.rl.episode_graph import whole_episode_turns
+    whole_episode_turns(row)
+
+
+def test_replayed_frame_with_a_mismatched_saved_turn_is_not_recovered(tmp_path):
+    task, entries, finish = _budget_prefix_fixture(tmp_path, frame_source="journal_replay")
+    evidence = next(Path(entries[0]["jobs"]).glob("*.evidence-*.jsonl"))
+    text = evidence.read_text().replace('"saved_turn_index":1', '"saved_turn_index":0')
+    assert text != evidence.read_text()
+    # re-seal the manifest so only the custody binding (not the file hash) is what fails
+    partial_path = next(evidence.parent.glob("*.partial.json"))
+    partial = json.loads(partial_path.read_text())
+    evidence.write_text(text)
+    partial["evidence_snapshots"][0].update(bytes=len(text.encode()), sha256=hashlib.sha256(text.encode()).hexdigest())
+    partial_path.write_text(json.dumps(partial) + "\n")
+    assert _budget_terminated_prefix(entries[0], task, finish, packet_source_path=tmp_path / "packet.jsonl",
+                                     packet_source_sha256=hashlib.sha256((tmp_path / "packet.jsonl").read_bytes()).hexdigest()) is None
+
+
+def test_legacy_provider_frame_replay_is_never_a_partial_sample(tmp_path):
+    """Pre-fix collectors wrote replayed turns as `provider_frame` and nothing for replayed decisions."""
+    row = _emit_budget_rollout(tmp_path, legacy_replay_frames=True)
+    assert row["reward"] is None and row["unscored"] == "budget_prefix_capture_unavailable"
 
 
 def test_budget_prefix_decision_must_match_its_saved_decision(tmp_path):

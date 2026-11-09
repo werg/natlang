@@ -359,6 +359,11 @@ def _budget_terminated_prefix(entry: dict[str, Any], task: dict[str, Any], finis
         return None
     cut = min((index for index, row in omitted if row.get("original_kind") != "provider_exchange"), default=None)
     kept_payloads = [(index, row) for index, row in enumerate(payloads) if cut is None or index < cut]
+    # A replayed (resumed) turn is the same canonical `teacher_action_frame` as a fresh one (source `journal_replay`,
+    # bound to its saved turn index). Older collectors wrote it as a `provider_frame` and wrote no frame for a replayed
+    # decision; an attempt with that record holds only part of its episode, so it is never a training sample.
+    if any(isinstance(row, dict) and row.get("kind") == "provider_frame" for _, row in kept_payloads):
+        return None
     all_action_frames = [row for _, row in kept_payloads if isinstance(row, dict) and
                          row.get("kind") == "teacher_action_frame"]
     policy_sources = {"live_provider", "journal_replay", "handoff_replay"}

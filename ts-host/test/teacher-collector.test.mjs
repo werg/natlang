@@ -345,6 +345,50 @@ test('native collector journals model replies and replays them after an interrup
   } finally { await new Promise(resolve => server.close(resolve)); }
 });
 
+test('a resumed attempt writes the canonical action frame for every replayed turn, as for a fresh one', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'teacher-replay-frames-'));
+  const server = createServer((request, response) => {
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'continue' } }],
+      usage: { prompt_tokens: 10, completion_tokens: 2 } }));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const item = { index: 0, record: record('replay-frames') };
+    const run = async (driver) => {
+      for (const n of [1, 2, 3, 4]) await driver({ messages: [{ role: 'user', content: `turn ${n}` }], tools: [] });
+      return { trace: [] };
+    };
+    const base = { ...config(dir), workers: 1, endpoint: `http://127.0.0.1:${server.address().port}`,
+      systemPrompt: defaultSystemPrompt, transportRetries: 0,
+      execution: { identity: 'replay-frames/1', run: async (_record, driver) => run(driver) } };
+    const evidenceOf = async () => {
+      const partial = JSON.parse(await readFile(join(base.jobs, `${jobKey(item)}.partial.json`), 'utf8'));
+      const manifest = partial.evidence_snapshots.at(-1);
+      const rows = (await readFile(join(base.jobs, manifest.path), 'utf8')).trim().split('\n').filter(Boolean)
+        .map(line => JSON.parse(line).payload);
+      return { partial, rows };
+    };
+    const first_options = { ...base, maxModelRequests: 2 };
+    assert.deepEqual((await collectBatch([item], first_options, nativeJobRunner(first_options))).missing, [0]);
+    const first = await evidenceOf();
+    assert.equal(first.partial.turns.length, 2);
+    // Resume: the two saved turns are replayed, one more is live, then the (renewed) budget stops the case.
+    const resumed_options = { ...base, maxModelRequests: 1 };
+    assert.deepEqual((await collectBatch([item], resumed_options, nativeJobRunner(resumed_options))).missing, [0]);
+    const { partial, rows } = await evidenceOf();
+    const frames = rows.filter(row => row?.kind === 'teacher_action_frame');
+    assert.equal(rows.some(row => row?.kind === 'provider_frame'), false, 'no second, non-canonical frame kind');
+    assert.deepEqual(frames.map(frame => frame.source).slice(0, 2), ['journal_replay', 'journal_replay']);
+    assert.deepEqual(frames.map(frame => frame.saved_turn_index), partial.turns.map((_, index) => index),
+      'every saved turn, replayed or fresh, has one frame bound to its saved index');
+    for (const frame of frames) {
+      assert.equal(frame.request_sha256, partial.turns[frame.saved_turn_index].request_sha256);
+      assert.equal(frame.response_frame.phase, 'action');
+    }
+  } finally { await new Promise(resolve => server.close(resolve)); }
+});
+
 test('requests wait for room in the shared KV buffer, first come first served, and an oversized one runs alone', async () => {
   const kv = new KvBudget(100), order = [];
   await kv.acquire(60); order.push('a');
