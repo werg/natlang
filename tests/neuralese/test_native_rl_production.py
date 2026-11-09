@@ -319,7 +319,7 @@ def test_long_graph_limit_records_and_refuses_on_the_real_stage(tmp_path):
             extra_args=('--max-graph-forward-tokens', '1'))
 
 
-def test_long_graph_deferral_keeps_deferred_episodes_whole(tmp_path, monkeypatch):
+def test_long_graph_deferral_keeps_deferred_episodes_whole_without_truncation(tmp_path, monkeypatch):
     from types import SimpleNamespace
     from natlang_neuralese.rl import native_stage
     import natlang_neuralese.data.native_graph_schema as schema
@@ -334,7 +334,8 @@ def test_long_graph_deferral_keeps_deferred_episodes_whole(tmp_path, monkeypatch
                           'long': {'task_id': 't2', 'sample': 1, 'actions': [1, 2]},
                           'chain': {'task_id': 't3', 'sample': 2, 'actions': [3]}}}
     # Deferral runs on the admitted graphs in memory, before the round's graph/objective files are written.
-    record = native_stage._defer_long_graphs(SimpleNamespace(max_graph_forward_tokens=100, out=tmp_path),
+    record = native_stage._defer_long_graphs(SimpleNamespace(max_graph_forward_tokens=100, out=tmp_path,
+                                                            truncate_long_graphs=False),
                                              graphs, objective, share=False)
     assert [row['id'] for row in graphs] == ['short'] and set(objective['rows']) == {'short'}
     assert record['episodes'] == [
@@ -371,7 +372,8 @@ def test_group_balance_defers_positive_members_of_a_group_with_a_deferred_loop(t
     from types import SimpleNamespace
     from natlang_neuralese.rl import native_stage
     graphs, objective = _balance_fixture(monkeypatch)
-    args = SimpleNamespace(max_graph_forward_tokens=100, out=tmp_path, group_balance_deferral=True)
+    args = SimpleNamespace(max_graph_forward_tokens=100, out=tmp_path, group_balance_deferral=True,
+                           truncate_long_graphs=False)
     record = native_stage._defer_long_graphs(args, graphs, objective, share=False)
     # The over-limit negative defers as before; its group's positives follow; zero advantage, the teacher group and
     # other tasks keep training.
@@ -389,7 +391,8 @@ def test_group_balance_opt_out_and_historical_resume_keep_old_behaviour(tmp_path
     from types import SimpleNamespace
     from natlang_neuralese.rl import native_stage
     graphs, objective = _balance_fixture(monkeypatch)
-    off = SimpleNamespace(max_graph_forward_tokens=100, out=tmp_path, group_balance_deferral=False)
+    off = SimpleNamespace(max_graph_forward_tokens=100, out=tmp_path, group_balance_deferral=False,
+                          truncate_long_graphs=False)
     record = native_stage._defer_long_graphs(off, graphs, objective, share=False)
     assert 'group_balance_deferred' not in record and len(graphs) == 6
     # A resume of a round admitted before this class existed does not change its graph set.
@@ -402,6 +405,234 @@ def test_group_balance_opt_out_and_historical_resume_keep_old_behaviour(tmp_path
     again = SimpleNamespace(out=tmp_path, group_balance_deferral=True)
     native_stage._keep_historical_deferral(again)
     assert again.group_balance_deferral is True
+
+
+def _episode(episode_id, lengths=(30, 30, 30, 30, 30, 30), *, producer=None, task='T', sample=0, advantage=-1.0,
+             order=None, twin=False):
+    """A real native policy episode: one graph node per turn, one sampled action per turn (token at local query 3).
+    producer=(turn, consumer): the producer exports tokens 10-20 and the consumer imports them at its position 5.
+    order permutes the node list (still producers first). twin adds a '#privileged' twin node per turn."""
+    from natlang_neuralese.rl.native_replay import graph_identity
+    from natlang_neuralese.data.native_graph_schema import parse_graph
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+    names = [f'c#turn{i + 1}' for i in range(len(lengths))]
+    def node(name, index, suffix=''):
+        ids = [1000 * (index + 1) + j + (7 if suffix else 0) * (j == 3) for j in range(lengths[index])]
+        value = {'name': name + suffix, 'token_ids': ids, 'imports': [], 'producing': [], 'logical_producing': [],
+                 'target_weights': [0.] * len(ids)}
+        if producer and index == producer[0] and not suffix:
+            value['producing'] = [[10, 20]]
+        if producer and index == producer[1]:
+            value['imports'] = [{'at': 5, 'source': names[producer[0]] + suffix, 'start': 10, 'stop': 20,
+                                 'logical': False}]
+        return value
+    nodes = [node(name, index) for index, name in enumerate(names)]
+    if order:
+        nodes = [nodes[index] for index in order]
+    graph_nodes = {value['name']: value for value in nodes}
+    actions, offsets, position = [], {}, 0
+    for value in nodes:
+        offsets[value['name']] = position
+        position += len(value['token_ids'])
+    for name in names:
+        graph_nodes[name]['target_weights'][4] = 1.
+        actions.append({'turn': name, 'local_query': 3, 'query': offsets[name] + 3, 'token_id': 1, 'sample': 0,
+                        'temperature': 1., 'allowed_token_ids': None, 'banned_token_ids': None, 'behavior_logp': -1.})
+    row = {'episode_turns': names, 'actions': actions, 'advantage': advantage, 'task_id': task, 'sample': sample,
+           'external_consumption_receipts': {}}
+    if twin:
+        twins = [node(name, index, '#privileged') for index, name in enumerate(names)]
+        for value in twins:
+            offsets[value['name']] = position
+            position += len(value['token_ids'])
+        nodes.extend(twins)
+        for action in actions:
+            action['twin_query'] = offsets[action['turn'] + '#privileged'] + 3
+        row['jolt'] = {'role': 'student', 'twin_turns': [value['name'] for value in twins], 'policy_turns': [],
+                       'privileged': {}}
+    graph = {'schema': 'natlang.neuralese-native-graph/1', 'id': episode_id, 'split': 'train', 'source_groups': ['g'],
+             'tokenizer_fingerprint': 'f', 'nodes': nodes, 'external_states': {}}
+    example = parse_graph(graph, tokenizer_fingerprint='f')
+    row['graph_sha256'] = canonical_json_sha256_hex(graph_identity(example))
+    return graph, row
+
+
+def _truncation_args(tmp_path, limit, **extra):
+    from types import SimpleNamespace
+    return SimpleNamespace(max_graph_forward_tokens=limit, out=tmp_path, **extra)
+
+
+def _fit(graph, share=False):
+    from natlang_neuralese.rl import native_stage
+    forward, _, slots = native_stage._packed_geometry(graph, 'f', share=share, behavior=False)
+    return forward, slots
+
+
+def test_long_episode_is_truncated_to_its_longest_fitting_prefix_and_keeps_its_advantage(tmp_path):
+    from natlang_neuralese.rl import native_stage
+    from natlang_neuralese.data.native_graph_schema import parse_graph
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+    from natlang_neuralese.rl.native_replay import graph_identity
+    graph, row = _episode('long', producer=(1, 3), advantage=-0.8)
+    short_graph, short_row = _episode('short', lengths=(30, 30), task='U', advantage=0.5)
+    whole = _fit(graph)
+    limit = max(_fit(_episode('x', lengths=(30,) * 3, producer=(1, 2))[0]))  # exactly three turns' geometry
+    assert max(whole) > limit
+    graphs, objective = [graph, short_graph], {'policy': {'tokenizer_fingerprint': 'f'},
+                                               'rows': {'long': row, 'short': short_row}}
+    record = native_stage._defer_long_graphs(_truncation_args(tmp_path, limit), graphs, objective, share=False)
+    assert [g['id'] for g in graphs] == ['long', 'short'] and set(objective['rows']) == {'long', 'short'}
+    assert record['episodes'] == [] and record['path'] is None
+    [info] = record['truncated']
+    assert info['id'] == 'long' and info['kept_turns'] == 3 and info['total_turns'] == 6
+    assert info['forward_tokens_before'] == whole[0] and info['forward_tokens_after'] <= limit
+    assert info['kv_slots_before'] == whole[1] and info['kv_slots_after'] <= limit
+    assert (info['sampled_tokens_kept'], info['sampled_tokens_total']) == (3, 6)
+    kept = objective['rows']['long']
+    assert kept['advantage'] == -0.8 and kept['episode_turns'] == ['c#turn1', 'c#turn2', 'c#turn3']
+    assert [action['turn'] for action in kept['actions']] == kept['episode_turns']
+    assert 'graph_nodes' not in kept
+    # The kept graph is a valid graph, its queries address the same tokens and its identity matches the row.
+    example = parse_graph(graphs[0], tokenizer_fingerprint='f')
+    assert [node.name for node in example.plan.invocations] == kept['episode_turns']
+    for action in kept['actions']:
+        node = example.plan.invocations.index(next(n for n in example.plan.invocations if n.name == action['turn']))
+        assert action['query'] == example.plan.offsets[node] + 3
+        assert example.target_weights[action['query'] + 1] == 1.
+    assert kept['graph_sha256'] == canonical_json_sha256_hex(graph_identity(example))
+    assert objective['rows']['short'] is short_row
+    original = [json.loads(line) for line in (tmp_path/'truncated-long-graphs.jsonl').read_text().splitlines()]
+    assert len(original) == 1 and len(original[0]['graph']['nodes']) == 6 and len(original[0]['objective_row']['actions']) == 6
+    assert record['truncated_originals']['path'].endswith('truncated-long-graphs.jsonl')
+
+
+def test_truncated_episode_keeps_imports_closed_and_skips_open_prefixes(tmp_path):
+    from natlang_neuralese.rl import native_stage
+    from natlang_neuralese.data.native_graph_schema import parse_graph
+    # Turn 2 (episode order) consumes the state exported by turn 4, listed before it in the graph: prefixes of 2 and
+    # 3 turns would leave the consumer without its producer, so the cut may only fall at 1 or at 4+ turns.
+    graph, row = _episode('long', producer=(3, 1), order=(0, 3, 1, 2, 4, 5))
+    limit = _fit(_episode('x', lengths=(30,) * 3)[0])[0] + 1  # three plain turns fit; the closed prefix is longer
+    four = _fit(_episode('x', lengths=(30,) * 4, producer=(3, 1), order=(0, 3, 1, 2))[0])
+    assert four[0] > limit
+    result = native_stage._truncate_episode(graph, row, limit=max(four), fingerprint='f', share=False, behavior=False)
+    assert result is not None and result[2]['kept_turns'] == 4
+    new_graph, new_row, _ = result
+    names = {node['name'] for node in new_graph['nodes']}
+    assert all(edge['source'] in names for node in new_graph['nodes'] for edge in node['imports'])
+    parse_graph(new_graph, tokenizer_fingerprint='f')
+    # Below the closed four-turn prefix only turn 1 fits: the open two/three-turn prefixes are never chosen.
+    one = _fit(_episode('x', lengths=(30,))[0])
+    result = native_stage._truncate_episode(graph, row, limit=max(one), fingerprint='f', share=False, behavior=False)
+    assert result is not None and result[2]['kept_turns'] == 1 and result[1]['episode_turns'] == ['c#turn1']
+
+
+def test_truncation_rebases_privileged_twin_queries_and_drops_later_twins(tmp_path):
+    from natlang_neuralese.rl import native_stage
+    from natlang_neuralese.data.native_graph_schema import parse_graph
+    graph, row = _episode('long', twin=True)
+    limit = _fit(_episode('x', lengths=(30,) * 4, twin=True)[0], share=False)
+    result = native_stage._truncate_episode(graph, row, limit=max(limit), fingerprint='f', share=False, behavior=False)
+    new_graph, new_row, info = result
+    assert info['kept_turns'] == 4
+    assert new_row['jolt']['twin_turns'] == [f'c#turn{i}#privileged' for i in range(1, 5)]
+    example = parse_graph(new_graph, tokenizer_fingerprint='f')
+    offsets = dict(zip((node.name for node in example.plan.invocations), example.plan.offsets))
+    assert 'graph_nodes' not in new_row or set(new_row['graph_nodes']) == set(new_row['episode_turns'])
+    assert len(new_row['actions']) == 4
+    for action in new_row['actions']:
+        assert action['twin_query'] == offsets[action['turn'] + '#privileged'] + 3
+        assert action['query'] == offsets[action['turn']] + 3
+
+
+@pytest.mark.parametrize('order', ['producer-first', 'consumer-first'])
+def test_truncating_a_real_prepared_producer_consumer_episode_trains_the_kept_prefix(tmp_path, order):
+    """Real prepare_objective rows: the producer's turn is a closed prefix of the episode, the consumer's is not."""
+    from test_native_rl_replay import actor_rollout
+    from test_rl_episode_graph import attach_execution_graph
+    from natlang_neuralese.rl import native_stage
+    from natlang_neuralese.rl.native_replay import prepare_objective, NativePolicyObjective
+    from natlang_neuralese.data.native_graph import parse_graph
+    from natlang_neuralese.train.native_state_sft import packed_graph_loss
+    model, roles, identity, _, block, turns = actor_rollout('lfm')
+    if order == 'producer-first':
+        turns = turns[::-1]
+    raw = [{'messages': [], 'target': {}, 'invocation_id': turn['graph_turn'], 'sampling': turn['sampling'],
+            'replay': {'raw_calls_retained': True}} for turn in turns]
+    positive = {'task_id': 'fixture-task', 'sample': 0, 'split': 'train', 'group': 'g', 'reward': {'quality': 1},
+                'policy': {'checkpoint_sha256': identity['checkpoint_sha256']}, 'turns': raw}
+    negative = copy.deepcopy(positive); negative.update(sample=1, reward={'quality': 0})
+    episodes = [positive, negative]
+    attach_execution_graph(episodes)
+    graphs, spec = prepare_objective(episodes, identity=identity, roles=roles, fetch_block=lambda key: block, mode='grpo')
+    fingerprint = identity['tokenizer_fingerprint']
+    whole = native_stage._packed_geometry(graphs[0], fingerprint, share=False, behavior=False)
+    producer_only = max(whole[0], whole[2]) - 1
+    original_actions = len(spec['rows'][graphs[0]['id']]['actions'])
+    record = native_stage._defer_long_graphs(_truncation_args(tmp_path, producer_only), graphs, spec, share=False)
+    if order == 'consumer-first':
+        # The consumer comes first in episode order but imports the producer's state: no prefix but the whole
+        # episode is closed, so both episodes defer as before.
+        assert graphs == [] and len(record['episodes']) == 2 and record['truncated'] == []
+        return
+    assert record['episodes'] == [] and {info['kept_turns'] for info in record['truncated']} == {1}
+    assert all(0 < info['sampled_tokens_kept'] < info['sampled_tokens_total'] == original_actions
+               for info in record['truncated'])
+    path = tmp_path/'objective.json'; path.write_text(json.dumps(spec))
+    objective = NativePolicyObjective(path)
+    for graph in graphs:
+        example = parse_graph(graph, tokenizer_fingerprint=fingerprint)
+        loss, details = packed_graph_loss(model, [example], objective=objective)
+        assert torch.isfinite(loss) and details['sampled_tokens'] == len(spec['rows'][graph['id']]['actions'])
+
+
+def test_episode_whose_first_turn_exceeds_the_limit_is_still_deferred(tmp_path):
+    from natlang_neuralese.rl import native_stage
+    graph, row = _episode('long')
+    graphs, objective = [graph], {'policy': {'tokenizer_fingerprint': 'f'}, 'rows': {'long': row}}
+    record = native_stage._defer_long_graphs(_truncation_args(tmp_path, 5), graphs, objective, share=False)
+    assert graphs == [] and objective['rows'] == {}
+    assert [e['id'] for e in record['episodes']] == ['long'] and record['truncated'] == []
+    assert record['path']['path'].endswith('deferred-long-graphs.jsonl')
+    assert not (tmp_path/'truncated-long-graphs.jsonl').exists()
+
+
+def test_group_balance_ignores_truncated_episodes_and_opt_out_defers_them(tmp_path):
+    from natlang_neuralese.rl import native_stage
+    def build():
+        loop, loop_row = _episode('loop', task='A', sample=0, advantage=-1.0)
+        win, win_row = _episode('win', lengths=(30, 30), task='A', sample=1, advantage=0.7)
+        return [loop, win], {'policy': {'tokenizer_fingerprint': 'f'}, 'rows': {'loop': loop_row, 'win': win_row}}
+    limit = max(_fit(_episode('x', lengths=(30,) * 3)[0]))
+    graphs, objective = build()
+    record = native_stage._defer_long_graphs(_truncation_args(tmp_path/'on', limit, group_balance_deferral=True),
+                                             graphs, objective, share=False) if (tmp_path/'on').mkdir() is None else None
+    # The negative loop trains truncated, so its group's success is not removed with it.
+    assert [e['id'] for e in record['truncated']] == ['loop'] and record['episodes'] == []
+    assert record['group_balance_deferred']['episodes'] == []
+    assert {g['id'] for g in graphs} == {'loop', 'win'} == set(objective['rows'])
+    # With truncation disabled the loop is deferred and drags the win out with it, as before.
+    (tmp_path/'off').mkdir()
+    graphs, objective = build()
+    record = native_stage._defer_long_graphs(_truncation_args(tmp_path/'off', limit, group_balance_deferral=True,
+                                                              truncate_long_graphs=False), graphs, objective, share=False)
+    assert 'truncated' not in record and [e['id'] for e in record['episodes']] == ['loop']
+    assert [e['id'] for e in record['group_balance_deferred']['episodes']] == ['win'] and graphs == []
+
+
+def test_historical_round_without_truncation_record_resumes_with_deferral(tmp_path):
+    from types import SimpleNamespace
+    from natlang_neuralese.rl import native_stage
+    (tmp_path/'rl-data-receipt.json').write_text(json.dumps({'omissions': {'deferred_long_graphs': {'episodes': []},
+        'group_balance_deferred': {'episodes': []}}}))
+    args = SimpleNamespace(out=tmp_path, group_balance_deferral=True, truncate_long_graphs=True)
+    native_stage._keep_historical_deferral(args)
+    assert args.truncate_long_graphs is False and args.group_balance_deferral is True
+    (tmp_path/'rl-data-receipt.json').write_text(json.dumps({'omissions': {'deferred_long_graphs': {'episodes': [],
+        'truncated': []}, 'group_balance_deferred': {'episodes': []}}}))
+    args = SimpleNamespace(out=tmp_path, group_balance_deferral=True, truncate_long_graphs=True)
+    native_stage._keep_historical_deferral(args)
+    assert args.truncate_long_graphs is True
 
 
 @pytest.mark.parametrize('tamper', ['none','checkpoint','report','receipt','behavior','rollouts','graph','objective'])

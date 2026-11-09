@@ -205,11 +205,14 @@ def main(argv=None):
     # rollout objective or trainer arguments.
     parser.add_argument('--publication-owner-pointer', type=Path)
     parser.add_argument('--publication-role', choices=('lfm', 'mellum'))
-    # Learner forward-token bound per episode graph (measured on its exact causal-prefix packing, the learner's
-    # default): episodes above it are deferred, kept whole in deferred-long-graphs.jsonl and recorded in the
-    # data receipt, never silently dropped.
+    # Learner forward-token/KV-slot bound per episode graph (measured on its exact causal-prefix packing, the
+    # learner's default): an episode above it is truncated to its longest fitting prefix of turns and trained there
+    # with its own advantage (truncated-long-graphs.jsonl keeps the whole episode); only an episode with no valid
+    # fitting prefix is deferred whole to deferred-long-graphs.jsonl. Both are recorded in the data receipt, never
+    # silently dropped. The switch opts out of truncation (every over-limit episode is deferred, as before).
     parser.add_argument('--max-graph-forward-tokens', type=int)
-    # A group's over-limit negative-advantage episode cannot train, so its positive members are deferred with it
+    parser.add_argument('--no-truncate-long-graphs', dest='truncate_long_graphs', action='store_false')
+    # A group's deferred (not truncated) negative-advantage episode cannot train, so its positive members are deferred with it
     # (default on; this switch opts out). Otherwise only the successes of a looping group would update the policy.
     parser.add_argument('--no-group-balance-deferral', dest='group_balance_deferral', action='store_false')
     args, trainer = parser.parse_known_args(argv)
@@ -562,17 +565,20 @@ def _release_host_memory():
 
 
 def _keep_historical_deferral(args):
-    """Resume a round first admitted before group-balance deferral exactly as it was admitted: its receipt has
-    deferral accounting without the group_balance_deferred class."""
+    """Resume a round first admitted before group-balance deferral or truncation exactly as it was admitted: its
+    receipt has deferral accounting without the group_balance_deferred class or the truncated list."""
     receipt = args.out / 'rl-data-receipt.json'
-    if not getattr(args, 'group_balance_deferral', False) or not receipt.is_file():
+    if not receipt.is_file():
         return
     try:
         omissions = json.loads(receipt.read_text()).get('omissions') or {}
     except ValueError:
         return
+    deferral = omissions.get('deferred_long_graphs')
     if 'deferred_long_graphs' in omissions and 'group_balance_deferred' not in omissions:
         args.group_balance_deferral = False
+    if isinstance(deferral, dict) and 'truncated' not in deferral:
+        args.truncate_long_graphs = False  # admitted when every over-limit episode was deferred: keep that set
 
 
 def _group_balance_members(objective, long):
@@ -588,40 +594,227 @@ def _group_balance_members(objective, long):
     return {key for key in rows if key not in long and group(key) in affected and advantage(key) > 0}
 
 
+def _packed_geometry(graph, fingerprint, *, share, behavior):
+    """(forward tokens, original tokens, KV slots) of one graph row as the learner packs it."""
+    from ..data.native_graph_schema import parse_graph
+    from ..train.native_prefix_packing import causal_prefix_geometry
+    example = parse_graph(graph, tokenizer_fingerprint=fingerprint)
+    supported = share and not behavior and not getattr(example, 'external_states', None)
+    forward, slots = causal_prefix_geometry(example, share=supported)
+    return forward, example.plan.token_count, slots
+
+
+def _turn_owners(row, nodes):
+    """{graph node name: index of the episode turn that owns it}: the turn itself, a sampled decision's option nodes,
+    a turn's text-result writers and the JOLT+ twin of any of those. None when a node has no owner."""
+    turns = row['episode_turns']
+    index = {name: i for i, name in enumerate(turns)}
+    owner = dict(index)
+    for decision in row.get('decision_actions') or ():
+        for option in decision['option_nodes']:
+            owner[option] = index[decision['turn']]
+    for write in row.get('text_result_writes') or ():
+        owner[write['node']] = index[write['source_turn']]
+    from .jolt import PRIVILEGED_SUFFIX
+    info = row.get('jolt') or {}
+    suffix = PRIVILEGED_SUFFIX.get(info.get('role'))
+    for twin in info.get('twin_turns') or ():
+        if suffix is None or not twin.endswith(suffix) or owner.get(twin[:-len(suffix)]) is None:
+            return None
+        owner[twin] = owner[twin[:-len(suffix)]]
+    if any(node['name'] not in owner for node in nodes):
+        return None
+    return owner, index
+
+
+def _truncate_episode(graph, row, *, limit, fingerprint, share, behavior):
+    """The longest prefix of the episode's turns (rollout order) whose packed geometry fits ``limit``, as
+    (graph row, objective row, record), or None when no valid prefix exists (the caller then defers the episode).
+
+    Each action term of a turn depends only on that turn's own tokens and its imports, never on a later turn, so the
+    kept turns' terms are exactly those of the whole episode and keep its advantage; the dropped turns' terms are
+    omitted (truncated policy gradient). A kept set is valid when it is closed under imports: every kept consumer's
+    producer (also a twin's, a decision option's or a text writer's, all owned by a turn) is kept. compile_graph
+    already requires producers before consumers in node order, and a kept subsequence keeps that order. Global
+    action queries are rebased onto the kept nodes' offsets. Refused (None): per-invocation behavior actors,
+    unowned nodes, no kept sampled action, and archived external states with consumption receipts that are shared
+    between a kept and a dropped consumer (their receipts are not attributable to one consumer)."""
+    if behavior or not isinstance(row.get('episode_turns'), list) or not graph.get('nodes'):
+        return None
+    try:
+        owners = _turn_owners(row, graph['nodes'])
+        if owners is None:
+            return None
+        owner, turn_index = owners
+        action_turn = [turn_index[action['turn']] for action in row['actions']]
+        decision_turn = [turn_index[action['turn']] for action in row.get('decision_actions') or ()]
+    except (KeyError, TypeError):
+        return None
+    nodes, turns = graph['nodes'], row['episode_turns']
+    names = {node['name'] for node in nodes}
+    need = [-1] * len(turns)
+    for node in nodes:
+        for edge in node.get('imports', ()):
+            if edge['source'] in names:
+                need[owner[node['name']]] = max(need[owner[node['name']]], owner[edge['source']])
+    candidates, reach = [], -1
+    for kept in range(1, len(turns) + 1):
+        reach = max(reach, need[kept - 1])
+        if reach < kept and (any(t < kept for t in action_turn) or any(t < kept for t in decision_turn)):
+            candidates.append(kept)
+    import bisect
+    old_offsets, total = [], 0
+    for node in nodes:
+        old_offsets.append(total)
+        total += len(node['token_ids'])
+    receipts = row.get('external_consumption_receipts') or {}
+
+    def build(kept):
+        keep = [node for node in nodes if owner[node['name']] < kept]
+        used = {edge['source'] for node in keep for edge in node.get('imports', ())}
+        shared = {edge['source'] for node in nodes if owner[node['name']] >= kept for edge in node.get('imports', ())
+                  } & used
+        if any(receipts.get(name) for name in shared):
+            return None
+        return {**graph, 'nodes': keep,
+                'external_states': {name: value for name, value in (graph.get('external_states') or {}).items()
+                                    if name in used}}
+    best = None
+    low, high = 0, len(candidates) - 1
+    while low <= high:
+        middle = (low + high) // 2
+        candidate = build(candidates[middle])
+        if candidate is None:
+            return None
+        forward, _, slots = _packed_geometry(candidate, fingerprint, share=share, behavior=behavior)
+        if forward <= limit and slots <= limit:
+            best, low = (candidates[middle], candidate, forward, slots), middle + 1
+        else:
+            high = middle - 1
+    if best is None:
+        return None
+    kept, new_graph, forward, slots = best
+    new_offsets, position = {}, 0
+    for node in new_graph['nodes']:
+        new_offsets[node['name']] = position
+        position += len(node['token_ids'])
+    old_by_name = {node['name']: (offset, len(node['token_ids'])) for node, offset in zip(nodes, old_offsets)}
+
+    def rebase(query):
+        node = nodes[bisect.bisect_right(old_offsets, query) - 1]
+        offset, count = old_by_name[node['name']]
+        if node['name'] not in new_offsets or not 0 <= query - offset < count:
+            raise ValueError('episode truncation lost an action query')
+        return new_offsets[node['name']] + query - offset
+
+    def moved(action):
+        value = {**action, 'query': rebase(action['query'])}
+        if 'twin_query' in action:
+            value['twin_query'] = rebase(action['twin_query'])
+        return value
+    actions = [moved(action) for action, turn in zip(row['actions'], action_turn) if turn < kept]
+    decisions = []
+    for action, turn in zip(row.get('decision_actions') or (), decision_turn):
+        if turn < kept:
+            value = dict(action)
+            value['options'] = [[{**item, 'query': rebase(item['query'])} for item in option]
+                                for option in action['options']]
+            if action.get('twin_options') is not None:
+                value['twin_options'] = [[{**item, 'query': rebase(item['query'])} for item in option]
+                                         for option in action['twin_options']]
+            decisions.append(value)
+    new_row = {key: value for key, value in row.items() if key not in {'decision_actions', 'text_result_writes',
+                                                                        'protocol_failures', 'graph_nodes'}}
+    kept_turns = turns[:kept]
+    new_row.update(episode_turns=list(kept_turns), actions=actions)
+    if decisions:
+        new_row['decision_actions'] = decisions
+    writes = [write for write in row.get('text_result_writes') or () if turn_index[write['source_turn']] < kept]
+    if writes:
+        new_row['text_result_writes'] = writes
+    failures = {name: value for name, value in (row.get('protocol_failures') or {}).items()
+                if turn_index.get(name, kept) < kept}
+    if failures:
+        new_row['protocol_failures'] = failures
+    info = row.get('jolt')
+    twin_names = set((info or {}).get('twin_turns') or ())
+    present = [node['name'] for node in new_graph['nodes']]
+    graph_nodes = [name for name in present if name not in twin_names]
+    if set(graph_nodes) != set(kept_turns):
+        new_row['graph_nodes'] = graph_nodes
+    if info is not None:
+        new_info = {**info, 'twin_turns': [name for name in present if name in twin_names]}
+        if 'policy_turns' in info:
+            new_info['policy_turns'] = [name for name in info['policy_turns'] if owner.get(name, kept) < kept]
+        if isinstance(info.get('privileged'), dict):
+            new_info['privileged'] = {name: value for name, value in info['privileged'].items()
+                                      if owner.get(name, kept) < kept}
+        new_row['jolt'] = new_info
+    new_row['external_consumption_receipts'] = {name: value for name, value in receipts.items()
+                                                if name in new_graph['external_states']}
+    from ..common.hashing import canonical_json_sha256_hex
+    from ..data.native_graph_schema import parse_graph
+    from .native_replay import graph_identity
+    example = parse_graph(new_graph, tokenizer_fingerprint=fingerprint)
+    if dict(zip((node.name for node in example.plan.invocations), example.plan.offsets)) != new_offsets:
+        raise ValueError('episode truncation changed the packed node offsets')
+    new_row['graph_sha256'] = canonical_json_sha256_hex(graph_identity(example))
+    record = {'kept_turns': kept, 'total_turns': len(turns), 'forward_tokens_after': forward, 'kv_slots_after': slots,
+              'sampled_tokens_kept': len(actions), 'sampled_tokens_total': len(row['actions'])}
+    return new_graph, new_row, record
+
+
 def _defer_long_graphs(args, graphs, objective, *, share=True):
-    """Apply --max-graph-forward-tokens to the admitted graphs in place (before they are written): keep deferred
-    episodes whole beside the round, return the record.
+    """Apply --max-graph-forward-tokens to the admitted graphs in place (before they are written): truncate an
+    over-limit episode to its longest fitting prefix of turns, defer (keep whole beside the round) only an episode
+    with no valid fitting prefix; return the record.
 
     The limit applies to the forward tokens the learner actually runs: the exact causal-prefix packing of the
     episode's turns (on by default) when the objective supports it (NativePolicyObjective.shares_causal_prefixes:
     no per-invocation behavior actors, no archived external states), else every turn's full rendered rows. It bounds
     the packed plan's KV slots too: a long chain shares its prefixes into few forward tokens while every turn still
     attends over its whole history (bf95-lowlr w2 round 0 on the GB10: 639k shared forward tokens, 2.16M KV slots,
-    out of memory)."""
+    out of memory).
+
+    Deferring every over-limit episode removed exactly the budget-exhausting loops (the model repeats a failing
+    action), the worst failure mode, from training while its group's successes trained. Truncation (default; opt out
+    with --no-truncate-long-graphs) keeps the episode with its advantage and trains the actions of its first turns
+    (_truncate_episode). ``truncated`` records each; ``episodes`` lists only the deferred fallbacks, and the group
+    balance considers only those. The whole truncated episodes are kept in truncated-long-graphs.jsonl."""
     limit = args.max_graph_forward_tokens
     if limit is None:
         return None
     if type(limit) is not int or limit < 1:
         raise ValueError('--max-graph-forward-tokens must be a positive integer')
-    from ..data.native_graph_schema import parse_graph
-    from ..train.native_prefix_packing import causal_prefix_geometry
     behavior = objective.get('schema') == 'natlang.native-policy-objective/2'
     fingerprint = (objective['base_native_identity'] if behavior else objective['policy'])['tokenizer_fingerprint']
-    sizes = {}
-    for row in graphs:
-        example = parse_graph(row, tokenizer_fingerprint=fingerprint)
-        supported = share and not behavior and not getattr(example, 'external_states', None)
-        forward, slots = causal_prefix_geometry(example, share=supported)
-        sizes[example.id] = (forward, example.plan.token_count, slots)
+    sizes = {row['id']: _packed_geometry(row, fingerprint, share=share, behavior=behavior) for row in graphs}
     long = {key for key, (size, _, slots) in sizes.items() if size > limit or slots > limit}
+    by_id = {row['id']: row for row in graphs}
+    truncating = getattr(args, 'truncate_long_graphs', True)
+    replaced = {}
+    if truncating:
+        for key in sorted(long):
+            result = _truncate_episode(by_id[key], objective['rows'][key], limit=limit, fingerprint=fingerprint,
+                                       share=share, behavior=behavior)
+            if result is not None:
+                replaced[key] = result
+    deferred = long - set(replaced)
     record = {'reason': 'packed episode graph exceeds the learner forward-token/KV-slot limit',
               'max_graph_forward_tokens': limit, 'path': None, 'share_causal_prefixes': share,
               'episodes': [{'id': key, 'task_id': objective['rows'][key].get('task_id'),
                             'sample': objective['rows'][key].get('sample'), 'forward_tokens': sizes[key][0],
                             'original_tokens': sizes[key][1], 'kv_slots': sizes[key][2],
-                            'sampled_tokens': len(objective['rows'][key]['actions'])} for key in sorted(long)]}
+                            'sampled_tokens': len(objective['rows'][key]['actions'])} for key in sorted(deferred)]}
     balance = getattr(args, 'group_balance_deferral', False)
-    balanced = _group_balance_members(objective, long) if balance and long else set()
+    balanced = _group_balance_members(objective, deferred) if balance and deferred else set()
+    for key in balanced:
+        replaced.pop(key, None)  # a group-balance drop supersedes truncating the same episode
+    if truncating:
+        record['truncated'] = [
+            {'id': key, 'task_id': objective['rows'][key].get('task_id'), 'sample': objective['rows'][key].get('sample'),
+             **info, 'forward_tokens_before': sizes[key][0], 'kv_slots_before': sizes[key][2]}
+            for key, (_, _, info) in sorted(replaced.items())]
     if balance:
         record['group_balance_deferred'] = {
             'reason': 'positive members of a group whose negative members exceed the learner limit',
@@ -632,17 +825,28 @@ def _defer_long_graphs(args, graphs, objective, *, share=True):
                                                            objective['rows'][k].get('sample') or 0))]}
     if not long:
         return record
+    if replaced:
+        truncated_path = args.out / 'truncated-long-graphs.jsonl'
+        write_bytes_durable(truncated_path, ''.join(json.dumps({'graph': by_id[key], 'objective_row': objective['rows'][key]})
+                                                    + '\n' for key in sorted(replaced)).encode())
+        record['truncated_originals'] = {'path': str(truncated_path.resolve()),
+                                         'sha256': sha256_file_hex_cached(truncated_path)}
+        for key, (graph, row, _) in replaced.items():
+            by_id[key] = graph
+            objective['rows'][key] = row
+        graphs[:] = [by_id[row['id']] for row in graphs]
     if balanced:
         balanced_path = args.out / 'deferred-group-balance.jsonl'
         write_bytes_durable(balanced_path, ''.join(json.dumps({'graph': row, 'objective_row': objective['rows'][row['id']]})
                                                    + '\n' for row in graphs if row['id'] in balanced).encode())
         record['group_balance_deferred']['path'] = {'path': str(balanced_path.resolve()),
                                                     'sha256': sha256_file_hex_cached(balanced_path)}
-    deferred_path = args.out / 'deferred-long-graphs.jsonl'
-    write_bytes_durable(deferred_path, ''.join(json.dumps({'graph': row, 'objective_row': objective['rows'][row['id']]})
-                                               + '\n' for row in graphs if row['id'] in long).encode())
-    record['path'] = {'path': str(deferred_path.resolve()), 'sha256': sha256_file_hex_cached(deferred_path)}
-    drop = long | balanced
+    if deferred:
+        deferred_path = args.out / 'deferred-long-graphs.jsonl'
+        write_bytes_durable(deferred_path, ''.join(json.dumps({'graph': row, 'objective_row': objective['rows'][row['id']]})
+                                                   + '\n' for row in graphs if row['id'] in deferred).encode())
+        record['path'] = {'path': str(deferred_path.resolve()), 'sha256': sha256_file_hex_cached(deferred_path)}
+    drop = deferred | balanced
     graphs[:] = [row for row in graphs if row['id'] not in drop]
     objective['rows'] = {key: row for key, row in objective['rows'].items() if key not in drop}
     return record
