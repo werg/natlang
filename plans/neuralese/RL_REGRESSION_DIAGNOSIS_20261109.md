@@ -204,3 +204,12 @@ and 9. If w5 also declines, the cause is elsewhere: the common drift, noise, or 
 Scoring budget-exhaustion and unresolved rollouts as failures, and checking the outcome term's normalisation, are the
 next fixes. A redesigned student twin should get process hints only (attempt feedback, verified-failure warnings),
 never answer facts.
+
+**Update:** 7be84ffbd makes budget-exhausted episodes train as scored failures. In the w4 round-1 data all 14 were
+affected:
+- 8 were already captured;
+- 4 lost their prefix to `decision_action_frame` turns being ignored;
+- 2 lost it to an omitted oversized action record.
+
+w5 was restarted onto runtime v69-1109, which includes this fix, during round 0 collection. So w5 tests "no student
+OPSD term + loops penalised" together.
