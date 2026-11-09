@@ -13,6 +13,8 @@ import json
 import re
 import subprocess
 import sys
+import time
+from threading import Lock
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
@@ -830,7 +832,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
             behavior_top_k=None, teacher_attempts=0, teacher_plan='nl',
             system_prompt=None, prompt_rendering=None, guidance_stage=None, context_tokens=None,
             neuralese_use_bonus=None, program_guidance=None, adapters=None, remote_workers=None,
-            allow_code_change=True, lost_block_exclusions=None):
+            allow_code_change=True, lost_block_exclusions=None, late_endpoints=()):
     """Bounded subprocess fanout; existing collector and exact task verifier. ``behavior_top_k`` also records the
     actors' top-k sampler log-probs at every sampled position (score-centered RL); None leaves collection unchanged.
     ``teacher_attempts`` JOLT+ teacher attempts per group (the crisp plan; ``teacher_plan='nl'`` lets
@@ -855,7 +857,11 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     records the effective adapted identity and its adapter binding.
     A restart resumes the round (rl.collection_generations): ``endpoints``, ``workers`` and ``remote_workers`` are
     transport and may differ from the previous start; so may the collector/actor code identity unless
-    ``allow_code_change`` is off. Attempted entries of every earlier start are never dispatched again."""
+    ``allow_code_change`` is off. Attempted entries of every earlier start are never dispatched again.
+    ``late_endpoints`` (remote endpoints that did not attest the policy at round start, e.g. Pop while a dev16
+    evaluation holds it) keep their worker slots: each slot waits until its actor attests the round's policy, which then
+    joins the round's actor receipts (a ``join`` generation event). Every remote slot rechecks its actor before taking
+    an entry, so a dead remote actor waits instead of fast-failing the shared queue."""
     if prompt_rendering not in (None,'full'):
         raise ValueError('native on-policy collection requires the full prompt contract')
     if guidance_stage not in (None,'backbone','writer'):
@@ -884,6 +890,10 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         context_tokens=context_tokens, neuralese_use_bonus=bonus_setting(neuralese_use_bonus),
         program_guidance=program_guidance, adapters=adapters)
     slots = worker_slots(endpoints, workers, remote_workers)
+    late = {url.rstrip('/') for url in late_endpoints}
+    if late - {url.rstrip('/') for url in endpoints[1:]}:
+        raise ValueError('late_endpoints must be remote endpoints of this collection')
+    live = [url for url in endpoints if url.rstrip('/') not in late]   # actors attested in this round (mutable)
     coefficient_runtime = (binding.get('coefficient_policy') or {}).get('runtime')
     if coefficient_policy is not None:
         coefficient_policy = Path(coefficient_policy).resolve(strict=True)
@@ -910,7 +920,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
             return saved
     from .actor_client import NativeActorClient
     def actor_receipts():
-        infos = {url: json.loads(NativeActorClient(url).get_bytes('/v1/neuralese/info')) for url in endpoints}
+        infos = {url: json.loads(NativeActorClient(url).get_bytes('/v1/neuralese/info')) for url in live}
         if prompt_rendering == 'full':
             # llama.cpp applies its chat template to the messages exactly as recorded: the full contract by
             # construction. The controller states that identity; the server has no Python renderer to attest.
@@ -1005,7 +1015,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
             finished = generations.attempted()
             retain_partial_artifacts([entry for entry in entries + teachers['entries'] if entry['key'] not in finished],
                                      out, policy_id=policy_id, binding=binding,
-                                     servers=[NativeActorClient(url) for url in endpoints], restore=restore)
+                                     servers=[NativeActorClient(url) for url in live], restore=restore)
             if actor_receipts() != actors:
                 raise ValueError('RL actor policy changed during retained artifact custody')
     # A partial response is not usable without its exact communication inputs.
@@ -1017,6 +1027,37 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         if entry['key'] in sampled_on:
             entry['rl_endpoint'] = sampled_on[entry['key']]
     results = []
+    join_lock, attested_at = Lock(), {}
+
+    def ready(index):
+        url = slots[index][0]
+        if url == endpoints[0].rstrip('/'):
+            return True
+        with join_lock:
+            if time.monotonic() - attested_at.get(url, -1e9) < 10:
+                return True
+            try:
+                info = json.loads(NativeActorClient(url, timeout=3).get_bytes('/v1/neuralese/info'))
+            except (OSError, ValueError):
+                return False
+            if (info.get('rl_policy_binding') or {}).get('checkpoint_sha256') != policy_id:
+                return False
+            if url in late:
+                live.append(url)
+                try:
+                    joined = actor_receipts()
+                except ValueError as error:
+                    live.remove(url)
+                    print(json.dumps({'event': 'late RL actor refused', 'endpoint': url, 'error': str(error)[:300]}),
+                          flush=True)
+                    return False
+                late.discard(url)
+                actors.clear()
+                actors.update(joined)
+                generations.record('join', generation=generation, endpoint=url, actor_receipts=joined)
+                print(json.dumps({'event': 'late RL actor joined', 'endpoint': url, 'round': str(out)}), flush=True)
+            attested_at[url] = time.monotonic()
+            return True
 
     def run_phase(batch, name):
         def run_worker(index, tag, queue, journal):
@@ -1032,7 +1073,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         done = generations.attempted()
         phase_results, pending = dispatch(batch, directory=directory, generation=generation, phase=name,
             endpoints=[endpoint for endpoint, _ in slots], run_worker=run_worker, attempted=done,
-            stopped=lambda: bool(control and control.stop.requested))
+            stopped=lambda: bool(control and control.stop.requested), ready=ready)
         generations.record('dispatch', generation=generation, phase=name or 'student', entries=len(batch),
                            pending=pending, returncodes=[r['returncode'] for r in phase_results])
         results.extend(phase_results)
@@ -1100,7 +1141,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     rollouts = list(read_jsonl(out / 'rollouts.jsonl'))
     if any(block_ids(rollouts)):
         from .actor_client import NativeActorClient
-        servers = [NativeActorClient(url) for url in endpoints]
+        servers = [NativeActorClient(url) for url in live]
         origins = {}
         def fetch(block_id):
             from .graph_replay import verified_bundle_bytes
@@ -1341,9 +1382,10 @@ def collect_with_actor(config, values, **kwargs):
                                       'round': str(values['out'])}), flush=True)
                     if ok:
                         usable.append(url)
+                # An actor not ready yet (Pop while a dev16 evaluation holds it) joins the round when it attests.
                 specs = config.get('remote_workers')
-                kwargs = {**kwargs, 'endpoints': [managed_url, *usable],
-                          **({'remote_workers': {url: specs[url] for url in usable}} if specs and usable else {})}
+                kwargs = {**kwargs, 'endpoints': [managed_url, *remote], 'late_endpoints': [u for u in remote if u not in usable],
+                          **({'remote_workers': {url: specs[url] for url in remote}} if specs else {})}
             return _collect_round(config, kwargs)
         finally:
             if process.poll() is None:

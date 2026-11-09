@@ -294,12 +294,14 @@ def test_remote_actor_joins_a_fresh_round_only_when_it_attests_and_is_torn_down(
     assert production.collect_with_actor(config,values,**kwargs)=={'done':True}
     collected=events.collected
     assert events==['start-pop',('collect',['http://dgx','http://pop']),'terminate','teardown-fails']  # teardown failure is logged only
-    assert collected[-1]['remote_workers']=={'http://pop':{'workers':1,'weight':.25}}
+    assert collected[-1]['remote_workers']=={'http://pop':{'workers':1,'weight':.25}} and collected[-1]['late_endpoints']==[]
     second=tmp_path/'unreachable';second.mkdir()
     events,config,values,kwargs=_remote_actor_harness(second,monkeypatch,{'http://dgx'})
     assert production.collect_with_actor(config,values,**kwargs)=={'done':True}
-    assert events==['start-pop',('collect',['http://dgx']),'terminate','teardown-fails']  # unreachable remote: managed alone
-    assert 'remote_workers' not in events.collected[-1]
+    # unreachable remote (Pop held by a dev16 evaluation): its slots stay in the round and join when it attests
+    assert events==['start-pop',('collect',['http://dgx','http://pop']),'terminate','teardown-fails']
+    assert events.collected[-1]['late_endpoints']==['http://pop']
+    assert events.collected[-1]['remote_workers']=={'http://pop':{'workers':1,'weight':.25}}
 
 
 def test_a_resumed_round_collects_on_whatever_endpoints_attest_now(tmp_path,monkeypatch):
@@ -308,11 +310,10 @@ def test_a_resumed_round_collects_on_whatever_endpoints_attest_now(tmp_path,monk
     (tmp_path/'collection-binding.json').write_text(json.dumps({'cases_sha256':'a'}))
     assert production.collect_with_actor(config,values,**kwargs)=={'done':True}
     assert events[1]==('collect',['http://dgx','http://pop'])
-    # the remote that the earlier start used is gone: the round continues on the managed actor alone
+    # the remote that the earlier start used is gone: the round continues on the managed actor, the remote may rejoin
     events,config,values,kwargs=_remote_actor_harness(tmp_path,monkeypatch,{'http://dgx'})
     assert production.collect_with_actor(config,values,**kwargs)=={'done':True}
-    assert events[1]==('collect',['http://dgx'])
-    assert 'remote_workers' not in events.collected[-1]
+    assert events[1]==('collect',['http://dgx','http://pop']) and events.collected[-1]['late_endpoints']==['http://pop']
 
 
 def test_python_actor_runtime_is_bound_and_mixed_replicas_rejected():
@@ -664,6 +665,32 @@ def test_dispatch_steals_work_so_a_fast_slot_takes_more_and_a_dead_slot_stops(tm
     assert {r['worker']:r['returncode'] for r in results}[0]==2 and len(ran[0])>1
     assert dispatch(entries,directory=tmp_path,generation=2,phase='',endpoints=['http://a'],run_worker=run_worker,
                     attempted={e['key'] for e in entries},stopped=lambda:False)==([],0)
+
+
+def test_dispatch_ready_gate_lets_a_late_actor_join_and_a_down_actor_wait(tmp_path):
+    import time
+    from natlang_neuralese.rl.collection_generations import dispatch
+    entries=[{'key':f'k{i}'} for i in range(12)]
+    ran={0:[],1:[]}
+    start=time.monotonic()
+    def ready(index):
+        return index==0 or time.monotonic()-start>.05   # slot 1's actor attests only after a while
+    def run_worker(index,name,queue,journal):
+        done={json.loads(line)['key'] for line in journal.read_text().splitlines()} if journal.exists() else set()
+        todo=[json.loads(line) for line in queue.read_text().splitlines() if json.loads(line)['key'] not in done]
+        time.sleep(.03)
+        ran[index].append(todo[0]['key'])
+        with journal.open('a') as stream:stream.write(json.dumps({'event':'finish','key':todo[0]['key']})+'\n')
+        return 0
+    results,pending=dispatch(entries,directory=tmp_path,generation=1,phase='',endpoints=['http://dgx','http://pop'],
+                             run_worker=run_worker,attempted=set(),ready=ready,poll_seconds=.01)
+    assert pending==12 and sorted(ran[0]+ran[1])==sorted(e['key'] for e in entries)
+    assert ran[1] and ran[0][0] not in ran[1]   # the late slot joined mid-phase and took remaining work
+    # an actor that never attests takes nothing and does not hold the phase open once the queue is drained
+    ran={0:[],1:[]}
+    results,_=dispatch(entries,directory=tmp_path/'b',generation=1,phase='',endpoints=['http://dgx','http://pop'],
+                       run_worker=run_worker,attempted=set(),ready=lambda index:index==0,poll_seconds=.01)
+    assert len(ran[0])==12 and not ran[1] and [r['worker'] for r in results]==[0]
 
 
 def test_worker_slots_bind_remote_workers():

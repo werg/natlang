@@ -41,6 +41,7 @@ from scripts.neuralese_data import pop_behavior_eval as pbe  # noqa: E402
 
 RL_PORT = 18531
 STATE = pbe.ROOT / 'rl-actor.json'
+WAITER = pbe.ROOT / 'rl-actor-waiter.json'   # a deferred start waiting for the dev16 evaluation to release Pop
 EXPORT_FORMAT = 'native-pop-rtx4060-bf16'
 RL_MEMORY_GB = 8   # container cap and ledger claim; 4 GiB was OOM-killed after 4 h at 3 workers (anon 4.2 GiB, 2026-11-09)
 
@@ -85,6 +86,11 @@ def stop_unit(state):
             time.sleep(2)
 
 
+def eval_pending():
+    return pbe.eval_pending(pbe.read_json(pbe.ROOT / 'state.json') or {'candidates': {}, 'controllers': {},
+                                                                         'parent': {'sha256': ''}})
+
+
 def start(args):
     # A previous actor of this lineage that still serves the same policy under the same runtime (the controller
     # restarted mid-collection) keeps its block store. One under another runtime is replaced: the controller refuses
@@ -98,9 +104,23 @@ def start(args):
         return previous
     if previous:
         stop_unit(previous)
-    if args.defer_to_eval and pbe.eval_pending(pbe.read_json(pbe.ROOT / 'state.json') or {'candidates': {}, 'controllers': {},
-                                                                                       'parent': {'sha256': ''}}):
-        raise RuntimeError('a dev16 evaluation holds or awaits Pop (--defer-to-eval): this round collects on the DGX alone')
+    if args.defer_to_eval and eval_pending():
+        if not args.after_eval:
+            # The round starts on the DGX now; a waiter starts this actor once the evaluation releases Pop, and the
+            # controller's slots for it join the round when it attests the policy (rl.production late_endpoints).
+            unit = f'pop-rl-actor-late-{int(time.time())}'
+            command = [sys.executable, str(Path(__file__).resolve()), 'start', '--checkpoint', args.checkpoint,
+                       '--policy-id', args.policy_id, '--runtime', args.runtime, '--port', str(args.port),
+                       '--ready-seconds', str(args.ready_seconds), '--prepare-wait', str(args.prepare_wait),
+                       '--defer-to-eval', '--after-eval', *(['--bind-host', args.bind_host] if args.bind_host else [])]
+            subprocess.run(['systemd-run', '--user', '--quiet', '--collect', '--unit', unit,
+                            f'--setenv=POP_RL_WAITER_UNIT={unit}', '--', *command], check=True, timeout=60)
+            pbe.write_json(WAITER, {'unit': unit, 'policy_id': args.policy_id, 'started': time.time()})
+            log(event='Pop RL actor deferred until the dev16 evaluation releases Pop', unit=unit)
+            return {'deferred': unit}
+        while eval_pending():
+            time.sleep(30)
+        log(event='dev16 evaluation released Pop; starting the deferred RL actor')
     host = args.bind_host or pop_host_address()
     endpoint = f'http://{host}:{args.port}'
     pbe.ssh('true', timeout=30)
@@ -164,6 +184,12 @@ def start(args):
 
 
 def stop(_args=None):
+    waiter = pbe.read_json(WAITER)
+    if waiter:
+        # A round that ends (or a controller that stops) before the evaluation released Pop cancels its waiter.
+        if waiter['unit'] != os.environ.get('POP_RL_WAITER_UNIT'):
+            subprocess.run(['systemctl', '--user', 'stop', waiter['unit']], check=False, timeout=60)
+        WAITER.unlink(missing_ok=True)
     state = pbe.read_json(STATE)
     if state:
         stop_unit(state)
@@ -190,8 +216,10 @@ def main(argv=None):
     s.add_argument('--port', type=int, default=RL_PORT)
     s.add_argument('--bind-host')
     s.add_argument('--defer-to-eval', action='store_true',
-                   help='skip Pop for this round while the evaluation watcher has a queued/running/undiscovered '
-                        'candidate (default: rollouts take Pop; the watcher then waits for the collection to end)')
+                   help='while the evaluation watcher has a queued/running/undiscovered candidate, return at once and '
+                        'start the actor from a background waiter when Pop is released; the round joins it then '
+                        '(default: rollouts take Pop; the watcher then waits for the collection to end)')
+    s.add_argument('--after-eval', action='store_true', help=argparse.SUPPRESS)
     s.add_argument('--ready-seconds', type=int, default=600)
     s.add_argument('--prepare-wait', type=int, default=900, help='ledger admission bound of the DGX view preparation')
     commands.add_parser('stop')

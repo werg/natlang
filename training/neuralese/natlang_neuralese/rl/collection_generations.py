@@ -122,13 +122,18 @@ class Generations:
         return ''.join(path.read_text() for path in self.journals())
 
 
-def dispatch(entries, *, directory, generation, phase, endpoints, run_worker, attempted, stopped=lambda: False):
+def dispatch(entries, *, directory, generation, phase, endpoints, run_worker, attempted, stopped=lambda: False,
+             ready=None, poll_seconds=15.):
     """Run the pending ``entries`` of one phase ('' student, 'teacher-') over one worker slot per ``endpoints`` item with
     ``run_worker(index, name, queue, journal)`` (the collector's exit code). Slots steal work: each takes the next pending
     entry when its previous one finishes, appends it to its own queue file and reruns its collector on that queue and
     journal (the collector skips keys its journal already finished). A static split left the faster Pop actor idle for
     hours while DGX slots still held most of a round. A slot that never takes an entry starts no collector; a stop
-    request ends every slot after its current entry, and a slot whose collector leaves its entry unfinished stops taking work. Returns (results, pending count)."""
+    request ends every slot after its current entry, and a slot whose collector leaves its entry unfinished stops taking work. ``ready(index)``, when given, is
+    asked before each entry: a slot whose actor is not (yet) serving the round's policy waits instead of taking work, so
+    an actor that joins mid-round (Pop after a dev16 evaluation) picks up the remaining entries, and an actor that died
+    loses at most its current entry instead of fast-failing the queue (2026-11-09: 20 entries drained in 26 min).
+    Returns (results, pending count)."""
     directory = Path(directory)
     pending = [entry for entry in entries if entry['key'] not in attempted]
     directory.mkdir(parents=True, exist_ok=True)
@@ -140,6 +145,12 @@ def dispatch(entries, *, directory, generation, phase, endpoints, run_worker, at
         queue, journal = directory / f'queue-{name}.jsonl', directory / f'journal-{name}.jsonl'
         taken, codes = [], []
         while not stopped():
+            if ready is not None and not ready(index):
+                with lock:
+                    if not remaining:
+                        break
+                time.sleep(poll_seconds)
+                continue
             with lock:
                 if not remaining:
                     break
