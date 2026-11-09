@@ -206,3 +206,68 @@ def test_verified_expected_failed_stop_and_accepted_complete_result_are_distinct
     assert classify_case(result, {'status': 'complete'}) == 'task_success'
     result['outcome']['oracle']['accepted'] = False
     assert classify_case(result, {'status': 'complete'}) != 'task_success'
+
+
+def completed_wrong(**outcome):
+    return {"outcome": {"status": "done", "accepted": False, "checks": {"expected_status": True, "answer": False},
+                        "value": "wrong", **outcome}}
+
+
+@pytest.mark.parametrize("literal", ["HTTP 500", "connection refused", "ECONNRESET", "server unavailable",
+                                     "provider request retry exhausted", "repeated the same action again"])
+def test_model_authored_text_cannot_make_a_completed_wrong_answer_unscored(literal):
+    finish = {"status": "complete", "resource_limit_reason": None}
+    result = completed_wrong(
+        action_ledger=[{"name": "eval", "outcome": "ok", "arguments": {"code": f"return 'boom: {literal}'"}}],
+        invocation_ledger=[{"completion_status": "done", "completion_source": "execution_graph",
+                            "completion_detail": f'"{literal}"'}], detail=f'"{literal}"')
+    assert classify_case(result, finish) == "semantic_mismatch"
+    assert classify_case(result, {"status": "complete_with_skips"}) == "semantic_mismatch"
+
+
+@pytest.mark.parametrize("phrase", ["wall budget exhausted", "episode wall-clock budget exhausted",
+                                    "model request budget exhausted"])
+def test_model_terminal_reason_naming_a_budget_is_not_budget_evidence(phrase):
+    finish = {"status": "complete", "resource_limit_reason": None}
+    # completed wrong answer whose returned value / nested stop reason quote a budget phrase
+    result = completed_wrong(detail=f'"{phrase}"', invocation_ledger=[
+        {"completion_status": "quiesced", "completion_source": "execution_graph",
+         "completion_detail": f"blocked: {phrase}"}])
+    assert classify_case(result, finish) == "semantic_mismatch"
+    # an explicit blocked/failed stop reason is model text even when the episode is not completed
+    for prefix in ("blocked", "error"):
+        stopped = {"outcome": {"status": "quiesced", "accepted": False, "detail": f"{prefix}: {phrase}",
+                               "invocation_ledger": [], "action_ledger": [], "scope_failures": []}}
+        assert classify_case(stopped, finish) == "semantic_mismatch"
+
+
+def test_host_written_wall_budget_detail_stays_unscored():
+    result = {"outcome": {"status": "quiesced", "accepted": False, "detail": "episode wall-clock budget exhausted",
+                          "invocation_ledger": [], "action_ledger": [], "scope_failures": []}}
+    assert classify_case(result, {"status": "complete", "resource_limit_reason": None}) == "unresolved"
+
+
+def test_host_transport_and_abort_evidence_still_classify_infrastructure():
+    finish = {"status": "complete", "resource_limit_reason": None}
+    unfinished = {"status": "quiesced", "accepted": False, "detail": "root eval did not finish",
+                  "invocation_ledger": [], "action_ledger": [], "scope_failures": []}
+    assert classify_case({"error": "ProviderRequestRetriesExhaustedError: HTTP 503", "outcome": unfinished},
+                         finish) == "infrastructure_error"
+    transport = {"status": "incomplete", "output_accounting": {"job_states": [{"state": "transport_failed"}]}}
+    assert classify_case({"outcome": unfinished}, transport) == "infrastructure_error"
+    # ...but a finished answer the oracle rejected stays a model failure
+    assert classify_case({"error": "HTTP 503", **completed_wrong()}, finish) == "semantic_mismatch"
+    aborted = completed_wrong(invocation_ledger=[{"completion_status": "failed",
+                                                  "completion_source": "runtime_invocation_trace",
+                                                  "completion_detail": "This operation was aborted"}])
+    assert classify_case(aborted, finish) == "infrastructure_error"
+
+
+def test_failed_terminal_is_scored_like_blocked():
+    finish = {"status": "complete", "resource_limit_reason": None}
+    for status in ("blocked", "failed"):
+        result = {"outcome": {"status": "quiesced", "accepted": False, "rejection_reasons": ["expected_status", "answer"],
+                              "scope_failures": [{"failure_kind": "runtime", "message": "sample not delivered"}],
+                              "action_ledger": [{"name": "return_result", "outcome": "blocked",
+                                                 "arguments": {"status": status, "reason": "sample not delivered"}}]}}
+        assert classify_case(result, finish) == "semantic_mismatch", status

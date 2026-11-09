@@ -20,7 +20,7 @@ _CLASSIFIER_SHA256 = hashlib.sha256(_CLASSIFIER_SOURCE.read_bytes()).hexdigest()
 def classification_binding():
     if hashlib.sha256(_CLASSIFIER_SOURCE.read_bytes()).hexdigest() != _CLASSIFIER_SHA256:
         raise ValueError('outcome classifier changed after import; restart from a frozen runtime')
-    return {'version': 'verified-terminal-babi-article/2', 'path': str(_CLASSIFIER_SOURCE),
+    return {'version': 'host-evidence-terminal-babi-article/3', 'path': str(_CLASSIFIER_SOURCE),
             'sha256': _CLASSIFIER_SHA256}
 
 TASK_OUTCOMES = (
@@ -136,6 +136,66 @@ def accepted_babi_article_answer(result, finish=None):
     return bool(expected) and actual == 'the ' + expected and not expected.startswith('the ')
 
 
+_MODEL_TERMINAL = re.compile(r"^(?:blocked|error): ")
+# Host-written interruption details are plain lowercase phrases. A model's own stop reason is always prefixed
+# ("blocked: " / "error: ", ts-host runtime.ts return_result), and a `done` detail is the dumped return value.
+_HOST_WALL_DETAIL = re.compile(r"[a-z ,-]{0,60}wall(?:-clock)? budget exhausted")
+_HOST_REQUEST_DETAIL = re.compile(
+    r"[a-z ,-]{0,60}(?:model request budget exhausted|episode (?:turn|token) budget exhausted)(?: before [a-z ]+)?")
+_TRANSPORT = re.compile(
+    r"(econnrefused|econnreset|connection refused|connection reset|provider request retry exhausted|http 5\d\d|server unavailable)")
+_COMPLETED_FINISH = {"complete", "complete_with_skips"}
+
+
+def _host_incomplete_details(outcome: dict[str, Any]) -> list[str]:
+    """Interruption details written by the host runtime, never the model's terminal reason or return value.
+
+    A `done` root's `detail` and a `done` invocation's `completion_detail` are dumped return values, and an explicit
+    blocked/failed return carries the model's own reason; none can evidence a limit or a transport fault."""
+    details: list[Any] = [] if outcome.get("status") == "done" else [outcome.get("detail")]
+    ledger = outcome.get("invocation_ledger")
+    if isinstance(ledger, list):
+        for invocation in ledger:
+            if isinstance(invocation, dict) and invocation.get("completion_status") != "done":
+                details.append(invocation.get("completion_detail"))
+    return [detail.strip().casefold() for detail in details
+            if isinstance(detail, str) and not _MODEL_TERMINAL.match(detail.strip())]
+
+
+def _completed_oracle_rejection(outcome: dict[str, Any], finish: dict[str, Any] | None) -> bool:
+    """A finished episode whose task oracle rejected the final answer: a verified model failure."""
+    return (outcome.get("status") == "done" and outcome.get("accepted") is False
+            and (finish or {}).get("status") in _COMPLETED_FINISH
+            and isinstance(outcome.get("checks"), dict)
+            and any(value is False for value in outcome["checks"].values()))
+
+
+def _host_transport_failure(result: dict[str, Any], finish: dict[str, Any] | None) -> bool:
+    """Transport faults from the host's own records: the collector's error field and the finish accounting."""
+    if _TRANSPORT.search(_text(result.get("error"))):
+        return True
+    states = (((finish or {}).get("output_accounting") or {}).get("job_states")) or []
+    for state in states if isinstance(states, list) else []:
+        if not isinstance(state, dict):
+            continue
+        error = state.get("terminal_error")
+        if state.get("state") == "transport_failed" or (
+                isinstance(error, dict) and _TRANSPORT.search(_text(error.get("error")))):
+            return True
+    return False
+
+
+def _host_aborted_invocation(outcome: dict[str, Any]) -> bool:
+    """The host aborted a nested invocation (memory floor), recorded by the runtime's own invocation trace."""
+    ledger = outcome.get("invocation_ledger")
+    return isinstance(ledger, list) and any(
+        isinstance(invocation, dict) and invocation.get("completion_status") == "failed"
+        and invocation.get("completion_source") == "runtime_invocation_trace"
+        and isinstance(invocation.get("completion_detail"), str)
+        and invocation["completion_detail"].strip().casefold() == "this operation was aborted"
+        for invocation in ledger)
+
+
 def classify_case(result: dict[str, Any] | None, finish: dict[str, Any] | None) -> str:
     """Use explicit terminal evidence; repeated action-shape counts alone are not a failure label."""
     if finish and finish.get('status') == 'repetition' and finish.get('resource_limit_reason') == 'identical_turn_limit':
@@ -189,55 +249,29 @@ def classify_case(result: dict[str, Any] | None, finish: dict[str, Any] | None) 
     if outcome.get("resource_limit_reason") or outcome.get("resource_limit"):
         return "budget_exhaustion"
 
-    incomplete_details = [outcome.get("detail")]
-    failed_invocation_details: list[str] = []
-    invocations = outcome.get("invocation_ledger")
-    if isinstance(invocations, list):
-        for invocation in invocations:
-            if not isinstance(invocation, dict):
-                continue
-            detail = invocation.get("completion_detail")
-            incomplete_details.append(detail)
-            if invocation.get("completion_status") == "failed" and isinstance(detail, str):
-                failed_invocation_details.append(detail.casefold())
-    if any(re.search(r"\b(?:wall(?:-clock)? budget exhausted)\b",
-                     str(detail).casefold()) for detail in incomplete_details if isinstance(detail, str)):
+    # Host-recorded interruption of a nested invocation (the collector recovered the exact output) is not a
+    # model answer, even when the final result was rejected.
+    if _host_aborted_invocation(outcome):
+        return "infrastructure_error"
+    # A finished episode whose oracle rejected the answer is a verified model failure. Nothing the model wrote
+    # (code, arguments, return values, stop reasons) can turn it into an unscored outcome, so no text heuristic
+    # below may run first.
+    if _completed_oracle_rejection(outcome, finish):
+        return "semantic_mismatch"
+    if _host_transport_failure(result, finish):
+        return "infrastructure_error"
+
+    host_details = _host_incomplete_details(outcome)
+    if any(_HOST_WALL_DETAIL.fullmatch(detail) for detail in host_details):
         # Older mixed-limit messages do not establish whether a deterministic
         # turn/token limit or the host's wall-clock timeout actually fired.
         return "unresolved"
-    if any(re.search(r"\b(model request budget exhausted|episode (?:turn|token) budget exhausted)\b",
-                     str(detail).casefold()) for detail in incomplete_details if isinstance(detail, str)):
+    if any(_HOST_REQUEST_DETAIL.fullmatch(detail) for detail in host_details):
         return "budget_exhaustion"
-    # A recovered collector finish can be complete even when a nested runtime
-    # invocation was interrupted by the host memory floor. The invocation ledger
-    # retains the abort while the queue journal records the recovered exact output.
-    if any(detail == "this operation was aborted" for detail in failed_invocation_details):
-        return "infrastructure_error"
-    if any(isinstance(detail, str) and
-           re.match(r"^model_incomplete:\s*(terminated_without_result|truncated_without_action)\b", detail.casefold())
-           for detail in incomplete_details):
+    if any(re.match(r"^model_incomplete:\s*(terminated_without_result|truncated_without_action)\b", detail)
+           for detail in host_details):
         return "model_incomplete"
 
-    details = _text({
-        "failure_reason": outcome.get("failure_reason"),
-        "rejection_reasons": outcome.get("rejection_reasons"),
-        "scope_failures": outcome.get("scope_failures"),
-        "action_ledger": outcome.get("action_ledger"),
-        "invocation_ledger": outcome.get("invocation_ledger"),
-        "detail": outcome.get("detail"),
-        "error": result.get("error"),
-        "finish": finish,
-    })
-    if re.search(r"(econnrefused|econnreset|connection refused|connection reset|provider request retry exhausted|http 5\d\d|server unavailable)", details):
-        return "infrastructure_error"
-    # Recoverable action errors are history, not the terminal failure. An
-    # observed completed result rejected by the task oracle is a wrong answer
-    # even if the model previously needed to repair a malformed eval.
-    if (outcome.get("status") == "done" and outcome.get("accepted") is False
-            and (finish or {}).get("status") in {"complete", "complete_with_skips"}
-            and isinstance(outcome.get("checks"), dict)
-            and any(value is False for value in outcome["checks"].values())):
-        return "semantic_mismatch"
     scope_failures = outcome.get("scope_failures")
     if isinstance(scope_failures, list):
         for failure in scope_failures:
@@ -248,7 +282,7 @@ def classify_case(result: dict[str, Any] | None, finish: dict[str, Any] | None) 
                 return "infrastructure_error"
             if re.search(r"\b(syntaxerror|typeerror|referenceerror|rangeerror|not a function|cannot read properties|undefined variable|unknown identifier)\b", message):
                 return "invalid_action"
-    if re.search(r"\b(repeated|repetition|stuck in a loop|same action.*again)\b", details):
+    if any(detail.startswith("model_incomplete: repeated_failed_action") for detail in host_details):
         return "repetition"
     actions = outcome.get("action_ledger")
     if isinstance(actions, list):
@@ -268,7 +302,8 @@ def classify_case(result: dict[str, Any] | None, finish: dict[str, Any] | None) 
                 and last_action.get("name") == "return_result"
                 and last_action.get("outcome") == "blocked"
                 and isinstance(last_action.get("arguments"), dict)
-                and last_action["arguments"].get("status") == "blocked"):
+                # The runtime maps return_result status "failed" to the same blocked terminal.
+                and last_action["arguments"].get("status") in {"blocked", "failed"}):
             return "semantic_mismatch"
         return "unresolved"
     if outcome.get("status") not in {"done", "failed", "quiesced"}:
