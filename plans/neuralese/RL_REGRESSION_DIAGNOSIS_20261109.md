@@ -253,3 +253,23 @@ w4 artifacts, and what has been done.
 
 **Running:** the end-to-end learner sanity test (advantage attachment, overfit and sign-flip, reference gradient,
 BF16 survival), now also asked to compare micro-batch partitions under the old and new code.
+
+### Review follow-up (2026-11-09 16:35)
+
+- **F2:** fixed in 68c289e3d. Teacher attempts are centered on their world's student group mean.
+- **F5:** the zero-advantage, `beta_s 0` exposure in w5 is fixed in 68c289e3d (such episodes are omitted).
+  - The remaining edge case is an update in which *every* episode is guard-rejected, which still lets the optimizer
+    advance. That never happened in w4 round 1 (0 rejections). It stays open as a deliberate low-priority item;
+    `engine_guard` telemetry records it if it occurs.
+- **F12b:** fixed in 68c289e3d. The truncation search runs only over admissible cuts.
+- **F7:** deliberate decision for now: no learner-time re-centering, because the guard runs inside the forward pass,
+  after advantages are fixed.
+  - Incidence in w4 round 1 was 0.
+  - Re-centering would need a guard pre-pass. Revisit if `engine_guard` telemetry shows rejections.
+- **F3, F4, F13:**
+  - fixes written; tests are running;
+  - w4 impact measured as zero: no classifier transitions, and all 144 of 144 keys finished in rounds 0 and 1.
+- **F6, F8/F9, F10:** Sonnet agent in progress.
+- **Advantage attachment:** verified correct by the sanity agent (0 mismatches over 78 episodes). The GPU tests
+  (overfit, reference gradient, packing invariance) are queued with 20 GiB freed by temporarily lowering w5's claim
+  to 76 GiB, which is restored automatically.
