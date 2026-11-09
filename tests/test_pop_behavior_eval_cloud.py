@@ -98,3 +98,142 @@ def test_rl_actor_marker_holds_evaluations_and_pending_eval_is_read_only(tmp_pat
     assert module.eval_pending(state) is False
     state['candidates']['x'] = {'status': 'running'}
     assert module.eval_pending(state) is True
+
+
+def _watcher(tmp_path, monkeypatch):
+    workspace = tmp_path / 'ws'
+    workspace.mkdir()
+    monkeypatch.setenv('NATLANG_POP_EVAL_ROOT', str(tmp_path / 'eval'))
+    module = load(monkeypatch, workspace, tmp_path / 'ext')
+    (tmp_path / 'eval' / 'requests').mkdir(parents=True)
+    state = {'candidates': {}, 'controllers': {}, 'parent': {'sha256': 'p' * 64}, 'parent_evals': {}}
+    return module, state, tmp_path / 'eval' / 'requests'
+
+
+def _request(requests, name, sha, runtime, **extra):
+    (requests / f'{name}.json').write_text(json.dumps({'checkpoint': '/ck.pt', 'sha256': sha, 'runtime': runtime,
+                                                       'label': 'x', 'step': 7, **extra}))
+
+
+def _events(capsys):
+    return [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.startswith('{')]
+
+
+def test_duplicate_request_is_logged_but_an_explicit_attempt_or_new_runtime_runs_fresh(tmp_path, monkeypatch, capsys):
+    module, state, requests = _watcher(tmp_path, monkeypatch)
+    sha = 'a' * 64
+    state['candidates'][sha] = {'sha256': sha, 'status': 'done', 'runtime': '/old-runtime', 'path': '/ck.pt'}
+    # The same checkpoint under the same runtime and no attempt label is an idempotent duplicate, with a disposition.
+    _request(requests, '1', sha, '/old-runtime')
+    module.discover(state)
+    assert list(state['candidates']) == [sha]
+    duplicate = [e for e in _events(capsys) if e.get('event') == 'request-duplicate']
+    assert len(duplicate) == 1 and 'already done' in duplicate[0]['disposition'] and '--attempt' in duplicate[0]['hint']
+    # The review's case: same SHA, another runtime, a new repeat label.
+    _request(requests, '2', sha, '/new-runtime', attempt='repeat 2')
+    module.discover(state)
+    fresh = state['candidates'][f'{sha}#repeat-2']
+    assert fresh['status'] == 'queued' and fresh['runtime'] == '/new-runtime' and fresh['attempt'] == 'repeat-2'
+    assert state['candidates'][sha]['status'] == 'done'
+    assert any(e.get('event') == 'requested' and e['attempt'] == 'repeat-2' for e in _events(capsys))
+    # A new attempt label under the SAME runtime is also a fresh run; repeating that label is a duplicate again.
+    _request(requests, '3', sha, '/old-runtime', attempt='again')
+    module.discover(state)
+    assert state['candidates'][f'{sha}#again']['status'] == 'queued'
+    _request(requests, '4', sha, '/old-runtime', attempt='again')
+    module.discover(state)
+    assert len(state['candidates']) == 3
+    assert any(e.get('event') == 'request-duplicate' for e in _events(capsys))
+    # Another runtime without any label is a different measurement as well (keyed by the runtime's name).
+    _request(requests, '5', sha, '/other-runtime')
+    module.discover(state)
+    assert state['candidates'][f'{sha}#other-runtime']['status'] == 'queued'
+    # A failed candidate is requeued under its own key, as before.
+    state['candidates'][sha]['status'] = 'failed'
+    _request(requests, '6', sha, '/old-runtime')
+    module.discover(state)
+    assert state['candidates'][sha]['status'] == 'queued'
+
+
+def test_execution_identity_binds_the_runtime_closure_driver_and_image(tmp_path, monkeypatch):
+    module, _, _ = _watcher(tmp_path, monkeypatch)
+    monkeypatch.setattr(module, 'pop_image_id', lambda: 'sha256:' + '1' * 64)
+    monkeypatch.setattr(module, '_task_runtime_sha256', lambda runtime: ('t-' + runtime, None))
+    driver = tmp_path / 'driver.py'
+    driver.write_text('print(1)')
+    monkeypatch.setattr(module, 'DRIVER', driver)
+    base = module.execution_identity('/rt-a', 'c' * 64, 'p' * 64)
+    assert module.execution_identity('/rt-a', 'c' * 64, 'p' * 64) is base
+    assert module.execution_identity('/rt-b', 'c' * 64, 'p' * 64)['identity_sha256'] != base['identity_sha256']  # TS host
+    assert module.execution_identity('/rt-a', 'd' * 64, 'p' * 64)['identity_sha256'] != base['identity_sha256']   # closure
+    assert module.execution_identity('/rt-a', 'c' * 64, 'q' * 64)['identity_sha256'] != base['identity_sha256']   # python
+    driver.write_text('print(2)')
+    changed_driver = module.execution_identity('/rt-a', 'c' * 64, 'p' * 64)
+    assert changed_driver['identity_sha256'] != base['identity_sha256']
+    monkeypatch.setattr(module, 'pop_image_id', lambda: 'sha256:' + '2' * 64)
+    assert module.execution_identity('/rt-a', 'c' * 64, 'p' * 64)['identity_sha256'] == changed_driver['identity_sha256']  # cached
+    module._IDENTITY_CACHE.clear()
+    assert module.execution_identity('/rt-a', 'c' * 64, 'p' * 64)['identity_sha256'] != changed_driver['identity_sha256']  # image
+    identity = module.execution_identity('/rt-a', 'c' * 64, 'p' * 64)
+    launch = {'runtime_receipt_sha256': 'c' * 64, 'driver_sha256': identity['fields']['driver_sha256'],
+              'task_spec_sha256': module.SPEC_SHA256, 'image_id': 'sha256:' + '2' * 64,
+              'execution_identity_sha256': identity['identity_sha256']}
+    assert module.verify_launch(identity, launch) == []
+    problems = module.verify_launch(identity, {**launch, 'driver_sha256': 'x', 'image_id': 'sha256:other'})
+    assert len(problems) == 2 and problems[0].startswith('driver_sha256') and problems[1].startswith('image_id')
+    assert any(p.startswith('execution_identity_sha256') for p in module.verify_launch(identity, {**launch, 'execution_identity_sha256': None}))
+
+
+def _receipt(sha, step, successes, python='p' * 64):
+    return {'status': 'finished', 'training_admission': False, 'contract': {'checkpoint_sha256': sha, 'step': step, 'spec_sha256': 's' * 64},
+            'actor_info': {'prompt_rendering_identity_sha256': 'r' * 64, 'serving_config_identity_sha256': 'v' * 64,
+                           'rl_policy_binding': {'python_runtime': {'sha256': python}, 'serving_precision': {'p': 1},
+                                                 'history_reasoning': {'h': 1}, 'native_identity': {'tokenizer_fingerprint': 't'}}},
+            'summary': {'eligible': True, 'schema': 'natlang.in-run-task-eval/1', 'task_successes': successes, 'cases': 2,
+                        'packet_sha256': 'f' * 64, 'case_indices': [0, 8], 'outcome_counts': {}, 'prompt_rendering': 'full'}}
+
+
+def test_promotion_requires_the_same_verified_execution_identity():
+    from natlang_neuralese.train.promotion import compare
+    declaration = {'schema': 'natlang.behavior-promotion-declaration/1', 'packet': {'path': '/p', 'sha256': 'f' * 64},
+                   'cases': [0, 8], 'compare_to': 'parent', 'min_delta': 1, 'max_case_regressions': None, 'confirmation': None}
+    run = lambda **kw: compare(declaration, phase='development', candidate=_receipt('a' * 64, 2, 2),
+                               reference=_receipt('b' * 64, 1, 1), **kw)
+    execution = lambda identity, verified=True: {'identity_sha256': identity, 'verified': verified,
+                                                 'fields': {'driver_sha256': identity, 'image_id': 'i'}}
+    # The receipts alone are equal on every tracked field: matched, exactly as before identities existed.
+    assert run()['promoted'] is True
+    same = run(candidate_execution=execution('x' * 64), reference_execution=execution('x' * 64))
+    assert same['promoted'] is True and same['execution_identity_sha256'] == 'x' * 64
+    other = run(candidate_execution=execution('x' * 64), reference_execution=execution('y' * 64))
+    assert other['matched'] is False and other['promoted'] is False
+    assert 'identical execution environment: driver_sha256' in other['unmatched_reasons'][0]
+    unverified = run(candidate_execution=execution('x' * 64, False), reference_execution=execution('x' * 64))
+    assert unverified['matched'] is False and 'unverified' in unverified['unmatched_reasons'][0]
+    one = run(candidate_execution=execution('x' * 64))
+    assert one['matched'] is False and 'only one arm' in one['unmatched_reasons'][0]
+
+
+def test_collect_checks_the_launch_record_against_the_requested_identity(tmp_path, monkeypatch):
+    module, _, _ = _watcher(tmp_path, monkeypatch)
+    monkeypatch.setattr(module, 'pop_image_id', lambda: 'sha256:' + '1' * 64)
+    monkeypatch.setattr(module, '_task_runtime_sha256', lambda runtime: ('t', None))
+    identity = module.execution_identity('/rt', 'c' * 64, 'p' * 64)
+    good = {'container_id': 'k' * 64, 'runtime_receipt_sha256': 'c' * 64, 'driver_sha256': identity['fields']['driver_sha256'],
+            'task_spec_sha256': module.SPEC_SHA256, 'image_id': 'sha256:' + '1' * 64, 'arm': 'raw',
+            'execution_identity_sha256': identity['identity_sha256']}
+    completed = {'summary': {'task_successes': 3, 'cases': 16},
+                 'actor_info': {'rl_policy_binding': {'python_runtime': {'sha256': 'p' * 64}}}}
+    served = {}
+    def fake_run(argv, **kwargs):
+        destination = Path(argv[-1])
+        destination.write_text(json.dumps(served['launch'] if destination.name == 'launch.json' else completed))
+    monkeypatch.setattr(module.subprocess, 'run', fake_run)
+    monkeypatch.setattr(module, 'pop_python', lambda *a, **k: {'cases_detail': []})
+    prep = {'python_runtime': {'sha256': 'p' * 64}, 'source': {'sha256': 'a' * 64}, 'step': 5}
+    served['launch'] = good
+    result = module.collect('good', '/work', prep, identity)
+    assert result['execution']['verified'] is True and result['execution']['launch']['container_id'] == 'k' * 64
+    served['launch'] = {**good, 'runtime_receipt_sha256': 'bad'}
+    result = module.collect('bad', '/work', prep, identity)
+    assert result['execution']['verified'] is False and 'runtime_closure_sha256' in result['execution']['problems'][0]

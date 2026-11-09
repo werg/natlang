@@ -21,7 +21,22 @@ never waits on it, and it spends no DGX GPU time (owner "frugal eval": Pop is id
    to a SHA not yet seen. The runtime is the lineage config's `actor_environment.NATLANG_REPO`
    (`W/ops/<lineage>/config.json`). Controllers present when the watcher first started are history.
 2. **Marked for eval.** `pop_behavior_eval.py request CHECKPOINT --runtime RUNTIME [--sha256 S] [--step N] [--label L]
-   [--no-ema]` writes `requests/<ms>.json`. Requested candidates are never dropped as superseded.
+   [--no-ema] [--attempt LABEL]` writes `requests/<ms>.json`. Requested candidates are never dropped as superseded.
+   A request is idempotent only for the same checkpoint SHA under the same runtime and attempt label: it is then
+   logged as `request-duplicate` with its disposition and not queued. Another runtime, or an explicit `--attempt`
+   label, queues a fresh candidate (state key `SHA#label`, results labelled `-t<label>`), whose launch must be a new
+   container.
+
+## Execution identity (2026-11-09, review F8/F9)
+
+Result labels, Pop work directories, the parent-evaluation cache (`state.json` `parent_evals` key
+`parent:python:identity16`) and promotion all use one identity: `execution_identity()` hashes the Python runtime,
+the frozen runtime closure (`runtime-input-closure.json`), `task_eval_runtime_identity` of the runtime (full TS host
+closure and every executing Python module, resolved from the frozen runtime, never the checkout), the driver script,
+the task spec/packet and the Pop image (name and resolved id). `collect` checks Pop's `launch.json` against the
+requested identity and records `execution.verified`; `train/promotion.compare` takes both arms' `execution` and
+reports unmatched (never promotes) unless both are verified and equal. Results recorded before identities existed
+are not reused or paired.
 
 One evaluation runs at a time. When a newer window-boundary candidate is queued, older queued ones are recorded as
 superseded. A running candidate's EMA arm is skipped when a newer candidate is waiting.

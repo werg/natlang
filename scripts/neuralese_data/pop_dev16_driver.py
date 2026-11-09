@@ -123,7 +123,8 @@ def main(job_path):
             'image_id': subprocess.check_output(['docker', 'image', 'inspect', image, '--format', '{{.Id}}'], text=True).strip(),
             'task_spec_sha256': spec_sha, 'mode': job.get('mode', 'evaluation'), 'transport_sha256': (transport or {}).get('sha256'),
             'inference_view_sha256': job['view_sha256'], 'driver_sha256': digest(__file__),
-            'comparison': job.get('comparison')}, indent=2) + '\n')
+            'comparison': job.get('comparison'), 'execution_identity_sha256': job.get('execution_identity_sha256')},
+            indent=2) + '\n')
         for _ in range(450):
             if subprocess.check_output(['docker', 'inspect', '-f', '{{.State.Running}}', name], text=True).strip() != 'true':
                 raise RuntimeError('actor exited before readiness')

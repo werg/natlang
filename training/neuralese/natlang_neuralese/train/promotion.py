@@ -137,6 +137,25 @@ def arm_identity(receipt):
     }
 
 
+def _execution_problems(candidate, reference):
+    """Reasons two arms' recorded execution identities (the full runtime closure, TS task runtime, driver and image they
+    were actually launched under: pop_behavior_eval.execution_identity) are not the same measurement environment.
+    ``None`` for both means the caller did not supply them (a comparison of receipts alone, as before)."""
+    if candidate is None and reference is None:
+        return []
+    if not isinstance(candidate, dict) or not isinstance(reference, dict):
+        return ['execution identity (runtime closure, driver, image) is recorded for only one arm']
+    missing = [name for name, value in (('candidate', candidate), ('reference', reference))
+               if not isinstance(value.get('identity_sha256'), str) or value.get('verified') is not True]
+    if missing:
+        return ['execution identity is unverified against the launch record for: ' + ', '.join(missing)]
+    if candidate['identity_sha256'] != reference['identity_sha256']:
+        fields = sorted(key for key in set(candidate.get('fields') or {}) | set(reference.get('fields') or {})
+                        if (candidate.get('fields') or {}).get(key) != (reference.get('fields') or {}).get(key))
+        return ['arms were not run under the identical execution environment: ' + (', '.join(fields) or 'identity')]
+    return []
+
+
 def _arm_problems(arm, packet, cases, name):
     problems = []
     if arm['schema'] != EVALUATION_SUMMARY_SCHEMA:
@@ -173,7 +192,7 @@ def _detail(score, arm, name):
 
 
 def compare(declaration, *, phase, candidate, reference, candidate_detail=None, reference_detail=None,
-            sources=None):
+            sources=None, candidate_execution=None, reference_execution=None):
     """One ``natlang.behavior-promotion/1`` receipt (pure; never raises on a losing or unmatched comparison)."""
     declaration = parse_declaration(declaration)
     if phase not in PHASES:
@@ -187,6 +206,7 @@ def compare(declaration, *, phase, candidate, reference, candidate_detail=None, 
     mismatched = [field for field in MATCHED_FIELDS if cand[field] is None or cand[field] != ref[field]]
     if mismatched:
         reasons.append('arms were not run under identical limits/runtime: ' + ', '.join(mismatched))
+    reasons += _execution_problems(candidate_execution, reference_execution)
     if cand['checkpoint_sha256'] is not None and cand['checkpoint_sha256'] == ref['checkpoint_sha256']:
         reasons.append('candidate and reference are the same checkpoint')
     matched = not reasons
@@ -217,6 +237,8 @@ def compare(declaration, *, phase, candidate, reference, candidate_detail=None, 
             'candidate': {key: cand[key] for key in ('checkpoint_sha256', 'step', 'task_successes', 'cases', 'outcome_counts')},
             'reference': {key: ref[key] for key in ('checkpoint_sha256', 'step', 'task_successes', 'cases', 'outcome_counts')},
             'matched_identity': {field: cand[field] for field in MATCHED_FIELDS} if matched else None,
+            **({'execution_identity_sha256': candidate_execution['identity_sha256']}
+               if matched and isinstance(candidate_execution, dict) else {}),
             'matched': matched, 'unmatched_reasons': reasons, 'delta': delta, 'case_transitions': transitions,
             'promoted': matched and not decision, 'decision_reasons': decision,
             **({'sources': sources} if sources else {}),

@@ -199,6 +199,28 @@ def checkpoint_global_step(progress, checkpoint):
     return progress.get('step')
 
 
+def request_duplicate(state, sha, runtime, attempt):
+    """The candidate that already covers a request, or None. A request is a duplicate only of an entry for the same
+    checkpoint under the same frozen runtime and the same explicit attempt label (none = none) that is not failed or
+    superseded: another runtime or a new attempt label is a different measurement and must run."""
+    for key, existing in state['candidates'].items():
+        if (existing['sha256'] == sha and existing['status'] not in ('superseded', 'failed')
+                and existing.get('runtime') == runtime and existing.get('attempt') == attempt):
+            return {'key': key, 'status': existing['status'],
+                    'why': f'checkpoint {sha[:12]} is already {existing["status"]} under this runtime and attempt'}
+    return None
+
+
+def candidate_key(state, sha, runtime, attempt):
+    """State key of a requested candidate: the checkpoint SHA (as before) for its first entry, SHA#attempt or
+    SHA#runtime-name for a repeat. A failed/superseded entry under the chosen key is replaced, as before."""
+    existing = state['candidates'].get(sha)
+    if existing is None or (existing['status'] in ('superseded', 'failed') and existing.get('runtime') == runtime
+                            and existing.get('attempt') == attempt):
+        return sha
+    return f'{sha}#{attempt or Path(runtime).name}'
+
+
 def discover(state):
     for state_path, progress in controller_progress():
         key, sha = str(state_path), progress['checkpoint_sha256']
@@ -221,13 +243,23 @@ def discover(state):
         done = request.with_suffix('.accepted')
         request.rename(done)
         sha = value.get('sha256') or digest(value['checkpoint'])
-        if sha in state['candidates'] and state['candidates'][sha]['status'] not in ('superseded', 'failed'):
+        attempt = attempt_tag(value.get('attempt'))
+        duplicate = request_duplicate(state, sha, value['runtime'], attempt)
+        if duplicate is not None:
+            # Idempotent submission: the same checkpoint under the same runtime and attempt is already measured or
+            # pending. Say so; an intentional repeat names a new --attempt label (or another runtime).
+            log(event='request-duplicate', disposition=f'not queued: {duplicate["why"]}', sha256=sha,
+                checkpoint=value['checkpoint'], runtime=value['runtime'], attempt=attempt, existing=duplicate['key'][:80],
+                existing_status=duplicate['status'], request=str(done),
+                hint='pass --attempt LABEL for a fresh measurement of the same checkpoint')
             continue
-        state['candidates'][sha] = {
+        key = candidate_key(state, sha, value['runtime'], attempt)
+        state['candidates'][key] = {
             'sha256': sha, 'path': value['checkpoint'], 'runtime': value['runtime'], 'lineage': value.get('label'),
             'step': value.get('step'), 'trigger': 'request', 'discovered': time.time(), 'status': 'queued',
-            'ema': value.get('ema', True), 'request': str(done)}
-        log(event='requested', sha256=sha, checkpoint=value['checkpoint'])
+            'ema': value.get('ema', True), 'request': str(done), **({'attempt': attempt} if attempt else {})}
+        log(event='requested', sha256=sha, checkpoint=value['checkpoint'], runtime=value['runtime'], attempt=attempt,
+            key=key[:80])
     save_state(state)
 
 
@@ -357,6 +389,71 @@ def runtime_files(runtime):
     return sorted(str(p.relative_to(root)) for p in root.rglob('*') if p.is_file() and not p.is_symlink())
 
 
+DRIVER = REPO / 'scripts/neuralese_data/pop_dev16_driver.py'
+_IDENTITY_CACHE = {}
+
+
+def _task_runtime_sha256(runtime):
+    """Hash of ``task_eval_runtime_identity`` of a frozen runtime: its complete TS host closure (built CLI, npm manifests,
+    dependency tree) and every Python module the runtime executes, as the in-run task evaluation binds them. The
+    identity resolves its repository from NATLANG_REPO, which is the frozen runtime here (the code that runs on Pop),
+    never this checkout."""
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+    from natlang_neuralese.eval.task_cadence import task_eval_runtime_identity
+    previous = os.environ.get('NATLANG_REPO')
+    os.environ['NATLANG_REPO'] = str(runtime)
+    try:
+        return canonical_json_sha256_hex(task_eval_runtime_identity({'runtime': str(Path(runtime) / 'ts-host')})), None
+    except Exception as error:   # an old runtime without the full closure: record it, bind what exists
+        return None, f'{type(error).__name__}: {error}'[:300]
+    finally:
+        if previous is None:
+            os.environ.pop('NATLANG_REPO', None)
+        else:
+            os.environ['NATLANG_REPO'] = previous
+
+
+def pop_image_id():
+    """The resolved id of the Pop container image (None when Pop cannot say)."""
+    out = ssh(shlex.join(['docker', 'image', 'inspect', IMAGE, '--format', '{{.Id}}']), check=False).strip()
+    return out if out.startswith('sha256:') else None
+
+
+def execution_identity(runtime, closure, python_runtime_sha256):
+    """The complete execution environment of one evaluation: the Python runtime, the frozen runtime closure, the TS task
+    runtime closure, the driver script, the task spec/packet and the container image (name and resolved id). One value
+    keys result labels and the parent-evaluation cache and is compared in promotion; the launch record is checked
+    against it when results are collected."""
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+    key = (str(runtime), closure, python_runtime_sha256, digest(DRIVER))
+    if key not in _IDENTITY_CACHE:
+        task_runtime, task_error = _task_runtime_sha256(runtime)
+        fields = {'python_runtime_sha256': python_runtime_sha256, 'runtime_closure_sha256': closure,
+                  'task_runtime_sha256': task_runtime, 'driver_sha256': key[3], 'image': IMAGE,
+                  'image_id': pop_image_id(), 'spec_sha256': SPEC_SHA256, 'packet_sha256': PACKET_SHA256}
+        _IDENTITY_CACHE[key] = {'schema': 'natlang.pop-eval-execution-identity/1', 'fields': fields,
+                                'identity_sha256': canonical_json_sha256_hex(fields),
+                                **({'task_runtime_error': task_error} if task_error else {})}
+        if task_error:
+            log(event='task runtime identity degraded', runtime=str(runtime), error=task_error)
+    return _IDENTITY_CACHE[key]
+
+
+def verify_launch(identity, launch):
+    """Problems between the requested identity and the launch record Pop wrote when the evaluation actually started."""
+    fields, problems = identity['fields'], []
+    for name, actual in (('runtime_closure_sha256', launch.get('runtime_receipt_sha256')),
+                         ('driver_sha256', launch.get('driver_sha256')), ('spec_sha256', launch.get('task_spec_sha256'))):
+        if actual != fields[name]:
+            problems.append(f'{name}: requested {fields[name]}, launched {actual}')
+    if launch.get('execution_identity_sha256') != identity['identity_sha256']:
+        problems.append(f'execution_identity_sha256: requested {identity["identity_sha256"]}, '
+                        f'launched {launch.get("execution_identity_sha256")}')
+    if fields['image_id'] is not None and launch.get('image_id') != fields['image_id']:
+        problems.append(f'image_id: requested {fields["image_id"]}, launched {launch.get("image_id")}')
+    return problems
+
+
 def ensure_pop_runtime(runtime):
     """Install the checkpoint's frozen runtime on Pop at the same path when it is missing (exact file inventory)."""
     closure = runtime_closure_sha(runtime)
@@ -480,16 +577,28 @@ def pop_unit_state(unit):
     return dict(line.split('=', 1) for line in out.split('\n') if '=' in line)
 
 
-def run_on_pop(arm, prep, runtime, closure, comparison, attempt=1):
+def attempt_tag(value):
+    """Filesystem- and unit-safe form of an explicit attempt label (None stays None)."""
+    if value is None:
+        return None
+    import re
+    return re.sub(r'[^A-Za-z0-9_.-]+', '-', str(value)).strip('-')[:40] or 'attempt'
+
+
+def run_on_pop(arm, prep, runtime, closure, comparison, attempt=1, identity=None, tag=None):
     source = prep['source']['sha256']
     py = prep['python_runtime']['sha256']
-    label = f'{arm}-{prep["step"]}-{source[:12]}-py{py[:12]}' + (f'-a{attempt}' if attempt > 1 else '')
+    # The label (and so Pop's work directory and its reusable completed.json) is bound to the complete execution
+    # identity and to the request's explicit attempt label: another runtime, driver, image or attempt never reuses it.
+    label = (f'{arm}-{prep["step"]}-{source[:12]}-py{py[:12]}-x{identity["identity_sha256"][:12]}'
+             + (f'-t{tag}' if tag else '') + (f'-a{attempt}' if attempt > 1 else ''))
     work = f'{POP_EVAL_ROOT}/{label}'
     name = f'popeval-{arm}-{source[:12]}'
     transport_json = json.loads(Path(prep['transport']['path']).read_text())
     job = {'arm': arm, 'name': name, 'port': POP_PORT, 'runtime': runtime, 'runtime_closure_sha256': closure,
            'base': POP_BASE, 'packet': POP_PACKET, 'packet_sha256': PACKET_SHA256, 'spec': SPEC,
            'spec_sha256': SPEC_SHA256, 'image': IMAGE, 'step': prep['step'], 'source_sha256': source,
+           'execution_identity_sha256': identity['identity_sha256'],
            'stage': f'{POP_TRANSPORT_ROOT}/{source}', 'view': prep['view']['path'], 'view_sha256': prep['view']['sha256'],
            'work': work, 'min_free_bytes': POP_MIN_FREE, 'comparison': comparison,
            'transport': ({'name': Path(prep['transport']['path']).name, 'sha256': prep['transport']['sha256'],
@@ -522,7 +631,7 @@ def run_on_pop(arm, prep, runtime, closure, comparison, attempt=1):
         if fields.get('ExecMainStatus') not in ('0', None):
             tail = ssh(shlex.join(['journalctl', '--user', '-u', unit + '.service', '-n', '30', '--no-pager']), check=False)
             raise RuntimeError(f'Pop unit {unit} failed (exit {fields.get("ExecMainStatus")}): {tail[-1500:]}')
-    return collect(label, work, prep)
+    return collect(label, work, prep, identity)
 
 
 DETAIL = r'''
@@ -537,7 +646,7 @@ print(json.dumps(detail))
 '''
 
 
-def collect(label, work, prep):
+def collect(label, work, prep, identity):
     out = ROOT / 'evidence' / label
     out.mkdir(parents=True, exist_ok=True)
     for name in ('evaluation/completed.json', 'launch.json'):
@@ -546,8 +655,22 @@ def collect(label, work, prep):
     write_json(out / 'detail.json', {**detail, 'scope': 'per-case outcome labels only; protected packet content stays '
                                                          'on Pop; evidence, never training data'})
     completed = read_json(out / 'completed.json')
-    log(event='collected', label=label, successes=completed['summary']['task_successes'], cases=completed['summary']['cases'])
+    launch = read_json(out / 'launch.json') or {}
+    problems = verify_launch(identity, launch)
+    actual_python = (((completed.get('actor_info') or {}).get('rl_policy_binding') or {}).get('python_runtime') or {}).get('sha256')
+    if actual_python != identity['fields']['python_runtime_sha256']:
+        problems.append(f'python_runtime_sha256: requested {identity["fields"]["python_runtime_sha256"]}, collected {actual_python}')
+    # `verified` is what promotion requires: the collected execution is the requested one, and the launch is a fresh
+    # container (a collected record that replays another evaluation's container is not a new measurement).
+    execution = {**identity, 'verified': not problems, 'launch': {key: launch.get(key) for key in (
+        'container_id', 'runtime_receipt_sha256', 'driver_sha256', 'image_id', 'task_spec_sha256', 'arm')},
+        'collected_at': time.time(), **({'problems': problems} if problems else {})}
+    if problems:
+        log(event='collected execution differs from the requested identity', label=label, problems=problems)
+    log(event='collected', label=label, successes=completed['summary']['task_successes'], cases=completed['summary']['cases'],
+        execution=identity['identity_sha256'][:12], verified=not problems)
     return {'label': label, 'completed': str(out / 'completed.json'), 'detail': str(out / 'detail.json'),
+            'execution': execution,
             'successes': completed['summary']['task_successes'], 'cases': completed['summary']['cases'],
             'python_runtime_sha256': prep['python_runtime']['sha256'], 'checkpoint_sha256': prep['source']['sha256'],
             'step': prep['step']}
@@ -574,18 +697,19 @@ def wait_for_rl_actor():
         time.sleep(60)
 
 
-def evaluate(state, arm, checkpoint, sha, runtime, comparison, attempt=1):
+def evaluate(state, arm, checkpoint, sha, runtime, comparison, attempt=1, tag=None):
     wait_for_rl_actor()
     closure = ensure_pop_runtime(runtime)
     kind = 'ema' if arm == 'ema' else 'raw'
     prep = prepare(kind, checkpoint, runtime, sha)
     if prep.get('absent'):
         return None
+    identity = execution_identity(runtime, closure, prep['python_runtime']['sha256'])
     keep = {prep['source']['sha256']}
     make_pop_room(state, prep['view']['bytes'], keep)
     send(prep)
     wait_for_rl_actor()
-    return run_on_pop(arm, prep, runtime, closure, comparison, attempt)
+    return run_on_pop(arm, prep, runtime, closure, comparison, attempt, identity, tag)
 
 
 # An evaluation whose summary is not eligible (a case ended unresolved or as an infrastructure error, e.g. a wall
@@ -594,13 +718,13 @@ def evaluate(state, arm, checkpoint, sha, runtime, comparison, attempt=1):
 MAX_EVAL_ATTEMPTS = 2
 
 
-def scored_evaluation(state, arm, checkpoint, sha, runtime, comparison, existing=None):
+def scored_evaluation(state, arm, checkpoint, sha, runtime, comparison, existing=None, tag=None):
     result = existing
     while result is None or (result['successes'] is None and result.get('attempt', 1) < MAX_EVAL_ATTEMPTS):
         attempt = result.get('attempt', 1) + 1 if result is not None else 1
         if result is not None:
             log(event='unscored evaluation rerun', arm=arm, sha256=sha, attempt=attempt, previous=result['label'])
-        result = evaluate(state, arm, checkpoint, sha, runtime, comparison, attempt)
+        result = evaluate(state, arm, checkpoint, sha, runtime, comparison, attempt, tag)
         if result is None:
             return None
         result['attempt'] = attempt
@@ -609,7 +733,7 @@ def scored_evaluation(state, arm, checkpoint, sha, runtime, comparison, existing
 
 # ---- comparison / selection --------------------------------------------------------------------------------------
 
-def compare(candidate_eval, parent_eval, phase_label):
+def compare(candidate_eval, parent_eval, phase_label, tag=None):
     from natlang_neuralese.train.promotion import compare as promotion_compare, select_parent
     sources = {name: {'path': value, 'sha256': digest(value)} for name, value in (
         ('candidate', candidate_eval['completed']), ('candidate_detail', candidate_eval['detail']),
@@ -617,13 +741,31 @@ def compare(candidate_eval, parent_eval, phase_label):
     receipt = promotion_compare(DECLARATION, phase='development', candidate=read_json(candidate_eval['completed']),
                                 reference=read_json(parent_eval['completed']),
                                 candidate_detail=read_json(candidate_eval['detail']),
-                                reference_detail=read_json(parent_eval['detail']), sources=sources)
-    name = f'{phase_label}-{candidate_eval["checkpoint_sha256"][:12]}-vs-{parent_eval["checkpoint_sha256"][:12]}'
+                                reference_detail=read_json(parent_eval['detail']), sources=sources,
+                                candidate_execution=candidate_eval.get('execution'),
+                                reference_execution=parent_eval.get('execution'))
+    name = (f'{phase_label}-{candidate_eval["checkpoint_sha256"][:12]}-vs-{parent_eval["checkpoint_sha256"][:12]}'
+            + (f'-t{tag}' if tag else ''))
     path = ROOT / 'comparisons' / f'{name}.json'
     write_json(path, receipt)
     log(event='compared', arm=phase_label, candidate=candidate_eval['successes'], parent=parent_eval['successes'],
         matched=receipt['matched'], promoted=receipt['promoted'], receipt=str(path))
     return receipt, path, select_parent
+
+
+def check_fresh_execution(state, candidate, result):
+    """An explicit repeat is a new measurement: its launch record must be a container no other evaluation of this
+    checkpoint used (an accepted request alone proves nothing)."""
+    container = ((result.get('execution') or {}).get('launch') or {}).get('container_id')
+    if candidate.get('attempt') is None or container is None:
+        return
+    for key, other in state['candidates'].items():
+        if other is candidate or other['sha256'] != candidate['sha256']:
+            continue
+        previous = (((other.get('raw') or {}).get('execution') or {}).get('launch') or {}).get('container_id')
+        if previous == container:
+            raise RuntimeError(f'attempt {candidate["attempt"]!r} reused the execution record (container {container[:12]}) '
+                               f'of {key[:80]}: not a fresh measurement')
 
 
 def process(state, candidate):
@@ -635,15 +777,24 @@ def process(state, candidate):
     source = str(pin) if pin.is_file() else candidate['path']
     save_state(state)
     parent = state['parent']
+    tag = attempt_tag(candidate.get('attempt'))
     raw = scored_evaluation(state, 'raw', source, sha, runtime,
         f'Automated Pop dev16 evaluation of {candidate.get("lineage")} step {candidate.get("step")} under its own '
-        f'runtime {Path(runtime).name}; paired against behavioural parent {parent["label"]}.', candidate.get('raw'))
+        f'runtime {Path(runtime).name}; paired against behavioural parent {parent["label"]}.',
+        # A result recorded before execution identities existed (no verified launch record) is not reused.
+        candidate.get('raw') if (candidate.get('raw') or {}).get('execution') else None, tag)
     candidate['raw'] = raw
     save_state(state)
-    key = f'{parent["sha256"]}:{raw["python_runtime_sha256"]}'
+    check_fresh_execution(state, candidate, raw)
+    # The parent arm is cached per complete execution identity (runtime closure, TS task runtime, driver, image,
+    # Python runtime), not per Python runtime alone: results measured under any other environment, including entries
+    # filed before identities were recorded, never pair.
+    identity = raw['execution']['identity_sha256']
+    key = f'{parent["sha256"]}:{raw["python_runtime_sha256"]}:{identity[:16]}'
     parent_eval = state['parent_evals'].get(key)
-    if parent_eval is not None and parent_eval.get('python_runtime_sha256') != raw['python_runtime_sha256']:
-        parent_eval = None   # an entry filed under another runtime's key is not a runtime-matched arm: evaluate afresh
+    if parent_eval is not None and (parent_eval.get('python_runtime_sha256') != raw['python_runtime_sha256']
+                                    or (parent_eval.get('execution') or {}).get('identity_sha256') != identity):
+        parent_eval = None   # an entry filed under another environment's key is not a matched arm: evaluate afresh
     if parent_eval is None or parent_eval['successes'] is None:
         if not Path(parent['path']).is_file():
             raise RuntimeError(f'behavioural parent source {parent["path"]} is unavailable for the runtime-matched arm')
@@ -652,14 +803,14 @@ def process(state, candidate):
             f'this runtime pair under identical limits/runtime.', parent_eval)
         state['parent_evals'][key] = parent_eval
         save_state(state)
-    receipt, path, select_parent = compare(raw, parent_eval, 'raw')
+    receipt, path, select_parent = compare(raw, parent_eval, 'raw', tag)
     candidate['comparison'] = str(path)
     # A lineage that runs memetic meta-learning (native_memetic_rl) gates its parent on the paired held-program verdict
     # too: NATLANG_MEMETIC_PROMOTION_HISTORY names that controller's memetic/promotion/history.json.
     memetic = os.environ.get('NATLANG_MEMETIC_PROMOTION_HISTORY')
     selection = select_parent(STAGE, [receipt], candidate_path=candidate['path'], reference_path=parent['path'],
                               memetic_history=json.loads(Path(memetic).read_text()) if memetic else None)
-    selection_path = ROOT / 'selections' / f'{sha[:12]}-vs-{parent["sha256"][:12]}.json'
+    selection_path = ROOT / 'selections' / f'{sha[:12]}-vs-{parent["sha256"][:12]}{"-t" + tag if tag else ""}.json'
     write_json(selection_path, selection)
     candidate['selection'] = str(selection_path)
     if selection['candidate_promoted']:
@@ -667,7 +818,7 @@ def process(state, candidate):
         # source pin of this exact checkpoint over the rolling slot.
         state['parent'] = {'sha256': sha, 'step': candidate.get('step'), 'label': f'{candidate.get("lineage")}-{candidate.get("step")}',
                            'path': source, 'selection': str(selection_path)}
-        state['parent_evals'][f'{sha}:{raw["python_runtime_sha256"]}'] = raw
+        state['parent_evals'][f'{sha}:{raw["python_runtime_sha256"]}:{identity[:16]}'] = raw
         write_parent_pointer(state['parent'])
         log(event='promoted', sha256=sha, step=candidate.get('step'))
     save_state(state)
@@ -677,11 +828,12 @@ def process(state, candidate):
         else:
             ema = evaluate(state, 'ema', source, sha, runtime,
                 f'Weight EMA of {candidate.get("lineage")} step {candidate.get("step")} (second arm, committed '
-                f'decision #2) under runtime {Path(runtime).name}; paired against behavioural parent {parent["label"]}.')
+                f'decision #2) under runtime {Path(runtime).name}; paired against behavioural parent {parent["label"]}.',
+                tag=tag)
             if ema is None:
                 candidate['ema_eval'] = {'absent': True}
             else:
-                ema_receipt, ema_path, _ = compare(ema, state['parent_evals'][key], 'ema')
+                ema_receipt, ema_path, _ = compare(ema, state['parent_evals'][key], 'ema', tag)
                 candidate['ema_eval'] = {**ema, 'comparison': str(ema_path), 'promoted_by_rule': ema_receipt['promoted'],
                                          'note': 'EMA export is evaluation evidence only, never a resumable parent'}
         save_state(state)
@@ -721,6 +873,8 @@ def main(argv=None):
     request.add_argument('checkpoint')
     request.add_argument('--runtime', required=True, help='frozen runtime that trained the checkpoint')
     request.add_argument('--label')
+    request.add_argument('--attempt', help='explicit attempt label: a repeat measurement of an already evaluated '
+                                           'checkpoint (same weights) runs fresh instead of being accepted as a duplicate')
     request.add_argument('--step', type=int)
     request.add_argument('--no-ema', action='store_true')
     request.add_argument('--sha256', help='known SHA-256 of the checkpoint (otherwise hashed at discovery)')
@@ -731,6 +885,7 @@ def main(argv=None):
             parser.error('--runtime must be a frozen runtime directory (runtime-input-closure.json)')
         value = {'checkpoint': str(Path(args.checkpoint).resolve(strict=True)), 'runtime': str(Path(args.runtime).resolve()),
                  'label': args.label, 'step': args.step, 'ema': not args.no_ema, 'requested': time.time(),
+                 **({'attempt': args.attempt} if args.attempt else {}),
                  **({'sha256': args.sha256} if args.sha256 else {})}
         (ROOT / 'requests').mkdir(parents=True, exist_ok=True)
         write_json(ROOT / 'requests' / f'{int(time.time() * 1000)}.json', value)
