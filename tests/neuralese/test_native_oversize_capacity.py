@@ -159,6 +159,29 @@ def test_retained_capacity_keeps_accumulated_gradients_during_backward(mode):
     assert all(p.grad is None for p in params)
 
 
+@pytest.mark.parametrize('mode', ['plain', 'vjp'])
+def test_retained_capacity_holds_fp32_accumulated_gradients_for_bf16_parameters(mode):
+    """Production sums an accumulated update's gradients in FP32 (4 bytes per BF16 parameter), so capacity must hold them."""
+    from test_shared_state import tiny
+    from test_native_optimizer_checkpointing import examples
+    from natlang_neuralese.model.shared_state import SharedStateModel
+    from natlang_neuralese.train.native_state_sft import make_native_optimizer
+    from natlang_neuralese.eval.native_memory import qualify_capacity
+    model=SharedStateModel(tiny('lfm'),(58,59,60,61),rank=4).to(torch.bfloat16)
+    optimizer,_=make_native_optimizer(model,lr=3e-6,in_backward=True)
+    params=[p for _,p in optimizer._native_named_parameters if p.requires_grad]
+    dtypes=[]
+    result=qualify_capacity(model,optimizer,examples()[:1],checkpoint_sha256='a'*64,source_binding={},
+        cotangent_mode=mode,retained_gradients=True,
+        gradient_observer=lambda name,gradient:dtypes.append(gradient.dtype))
+    assert result['passed'] and result['retained_gradient_dtype']=='float32'
+    assert dtypes and set(dtypes)=={torch.float32}
+    assert all(p.grad is None and p.grad_dtype==p.dtype for p in params)
+    released=qualify_capacity(model,optimizer,examples()[:1],checkpoint_sha256='a'*64,source_binding={},
+        cotangent_mode=mode,retained_gradients=False)
+    assert released['passed'] and released['retained_gradient_dtype'] is None
+
+
 def test_retained_gradient_allocation_oom_is_reported_without_update(monkeypatch):
     from test_shared_state import tiny
     from test_native_optimizer_checkpointing import examples

@@ -27,6 +27,7 @@ from ..common.jsonio import write_json_durable as write_json
 from ..model.native_model import (CHECKPOINT_SCHEMA, load_native_checkpoint, load_native_model, model_state,
                                   native_identity)
 from .checkpoint_policy import CheckpointPolicy
+from .gradient_accumulation import GRADIENT_ACCUMULATION_DTYPE, Float32GradientAccumulation
 from .loop import capture_training_rng_state, restore_training_rng_state
 from .native_source_streams import scheduling_rank, stream_pending_batches
 from .native_continuation import (collect_sft_progress, restore_sft_progress, progress_obligations,
@@ -527,10 +528,15 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
     budget_scale = min(1., sum(scored)/sft_update_reference) if sft_update_reference else 1.
     total_scale = budget_scale * efficiency_scale
     rates=[(group,group['lr'],group.get('qat_latent_lr')) for group in optimizer.param_groups] if total_scale!=1. or sft_update_reference else []
+    exact_accumulation = contextlib.ExitStack()
     try:
         for group,rate,qat_rate in rates:
             group['lr']=rate*total_scale
             if qat_rate is not None: group['qat_latent_lr']=qat_rate*total_scale
+        # Several micro-batches sum their gradients in FP32 (never in BF16 ``.grad``); entered before the first
+        # backward, left after the optimizer step and the sparse-row telemetry (also on failure).
+        gradient_sums = (exact_accumulation.enter_context(Float32GradientAccumulation(model, optimizer))
+                         if len(micro_batches) > 1 else None)
         from ..model.native_weight_carrier import ParameterCotangentScope, plain_training_arithmetic
         for index, (micro, share) in enumerate(zip(micro_batches, shares)):
             from .memory_policy import enforce_ledger_cuda_limit
@@ -577,6 +583,9 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
                               'host_elapsed_seconds': time.monotonic() - micro_started}), flush=True)
         if optimizer.latent is not None:
             optimizer.latent._armed = None
+        if gradient_sums is not None:
+            gradient_sums.finish()
+            print(json.dumps({'kind': 'native_gradient_accumulation', **gradient_sums.allocation_report()}), flush=True)
         loss = torch.stack(losses).sum() if len(losses) > 1 else losses[0]
         details = merged_details
         if efficiency_scale!=1.:
@@ -606,6 +615,7 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
         optimizer.zero_grad(set_to_none=True)
         raise
     finally:
+        exact_accumulation.close()
         for group,rate,qat_rate in rates:
             group['lr']=rate
             if qat_rate is not None:group['qat_latent_lr']=qat_rate
@@ -2244,6 +2254,17 @@ def _main(argv=None, *, requested_refresh):
             'at_global_step': int(saved_training.get('global_step', saved_training.get('step', 0)) or 0),
             'weights_optimizer_rng_exposure': 'preserved'})
     checkpoint_options['accumulate_batches_history'] = accumulation_history
+    # Checkpoints from before 2026-11-09 summed an update's micro-batch gradients in the parameters' BF16 ``.grad``;
+    # they now sum in FP32 (train/gradient_accumulation.py). Weights, optimizer, RNG and exposure carry over.
+    gradient_dtype_history = list(saved_options.get('gradient_accumulation_dtype_history') or [])
+    previous_gradient_dtype = saved_options.get('gradient_accumulation_dtype') or 'bfloat16'
+    if saved_training and previous_gradient_dtype != GRADIENT_ACCUMULATION_DTYPE:
+        gradient_dtype_history.append({'schema': 'natlang.gradient-accumulation-dtype-transition/1',
+            'from': previous_gradient_dtype, 'to': GRADIENT_ACCUMULATION_DTYPE,
+            'at_global_step': int(saved_training.get('global_step', saved_training.get('step', 0)) or 0),
+            'applies_when': 'accumulate_batches > 1', 'weights_optimizer_rng_exposure': 'preserved'})
+    checkpoint_options['gradient_accumulation_dtype'] = GRADIENT_ACCUMULATION_DTYPE
+    checkpoint_options['gradient_accumulation_dtype_history'] = gradient_dtype_history
     # Checkpoints from before Kahan rounding wrote MuonSR matrices stochastically; a switch starts a zero residual.
     rounding_history = list(saved_options.get('muon_rounding_history') or [])
     rounding_changed=bool(saved_training and (saved_options.get('muon_rounding') or 'stochastic') != args.muon_rounding)

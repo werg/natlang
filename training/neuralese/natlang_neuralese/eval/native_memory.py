@@ -16,6 +16,7 @@ import torch
 
 from ..train.loop import capture_training_rng_state, restore_training_rng_state
 from ..train.optim_restore import _children
+from ..train.gradient_accumulation import GRADIENT_ACCUMULATION_DTYPE, LOW_PRECISION
 
 
 class CapacityStateChangedError(RuntimeError):
@@ -290,8 +291,12 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
                     'ledger_cuda_limit':row['ledger_cuda_limit'],
                     'qat_point':None if precision is None else {'point':precision[1],'mix':float(precision[2])}}),flush=True)
                 if retained_gradients:
+                    # Production sums accumulated gradients in FP32 (train/gradient_accumulation.py): 4 bytes per
+                    # low-precision parameter, held from the first micro-batch's backward on.
                     for _,parameter in named:
-                        if parameter.requires_grad:parameter.grad=torch.zeros_like(parameter)
+                        if parameter.requires_grad:
+                            if parameter.dtype in LOW_PRECISION:parameter.grad_dtype=torch.float32
+                            parameter.grad=torch.zeros_like(parameter,dtype=torch.float32 if parameter.dtype in LOW_PRECISION else None)
                 phase='forward'
                 with _HostPeak() as host:
                     from ..model.native_weight_carrier import ParameterCotangentScope, plain_training_arithmetic
@@ -333,7 +338,9 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
                     row['checkpoint_input_offload']=hook.snapshot()
             finally:
                 loss=None
-                for _,parameter in named:parameter.grad=None
+                for _,parameter in named:
+                    parameter.grad=None
+                    if retained_gradients and parameter.dtype in LOW_PRECISION:parameter.grad_dtype=parameter.dtype
                 row['seconds']=time.monotonic()-started
                 row['cuda_peak_allocated_bytes']=(torch.cuda.max_memory_allocated(device) if device.type=='cuda' else 0)
                 row['cuda_peak_reserved_bytes']=(torch.cuda.max_memory_reserved(device) if device.type=='cuda' else 0)
@@ -375,6 +382,7 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
             **({'objective':objective.binding()} if objective is not None else {}),
             'optimizer_updates':0,'gradients_released_per_parameter':not retained_gradients,'whole_graphs':True,
             'retained_accumulation_gradients':bool(retained_gradients),
+            'retained_gradient_dtype':GRADIENT_ACCUMULATION_DTYPE if retained_gradients else None,
             'cotangent_mode':cotangent_mode,'production_packing':production_packing,
             'qat_point':({'point':precision[1],'mix':float(precision[2]),'loss_weight':float(precision[3])} if precision is not None else None),
             'task_quality_qualified':False,'cpu_and_all_cuda_rng_restored':True,
@@ -672,6 +680,7 @@ def _run_one_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoi
                         and capacity.get('parent_checkpoint_sha256') == previous.get('parent_checkpoint_sha256')),
                     ('source', capacity.get('source') == request['source']),
                     ('retained_gradients', capacity.get('retained_accumulation_gradients') == (getattr(args,'accumulate_batches',1)>1)),
+                    ('retained_gradient_dtype', capacity.get('retained_gradient_dtype') == (GRADIENT_ACCUMULATION_DTYPE if getattr(args,'accumulate_batches',1)>1 else None)),
                     ('cotangent_mode', capacity.get('cotangent_mode') == _cotangent_mode(args)),
                     ('cases', [row.get('id') for row in capacity.get('cases', [])] == [row['id'] for row in selected]
                         and len(capacity.get('cases') or []) == len(selected)

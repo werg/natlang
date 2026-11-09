@@ -1,7 +1,9 @@
 """Accumulated native updates: several packed micro-batches, one optimizer step on their summed gradient."""
+import contextlib
 import copy
 import json
 
+import pytest
 import torch
 
 from test_native_optimizer_checkpointing import examples
@@ -68,6 +70,186 @@ def test_two_micro_batches_step_once_like_one_batch_of_all_graphs():
     assert all(parameter.grad is None for parameter in split_optimizer.latent.param_groups[0]['params'])
     assert len(actual_details) == len(expected_details) == 3
     assert actual_details[0]['original_physical_tokens'] == expected_details[0]['original_physical_tokens']
+
+
+def four_graphs():
+    from test_native_optimizer_checkpointing import SCHEMA, parse_graph
+    result = []
+    for index in range(4):
+        row = {'schema': SCHEMA, 'id': str(index), 'split': 'train', 'source_groups': ['train'],
+               'tokenizer_fingerprint': 'fixture', 'nodes': [
+                   {'name': 'writer', 'token_ids': [1, 58, 5 + index, 7, 8, 59], 'producing': [[2, 5]],
+                    'target_weights': [0, 1, .25, 1, .5, 1]},
+                   {'name': 'reader', 'token_ids': [3, 60, 61, 11 + index, 12, 13, 2],
+                    'imports': [{'source': 'writer', 'start': 2, 'stop': 5, 'at': 2}],
+                    'target_weights': [0, .25, 0, 1, 1, 1, 1]}]}
+        result.append(parse_graph(row, tokenizer_fingerprint='fixture'))
+    return result
+
+
+def bf16_model(state, dtype, backend, ordinary_profile):
+    from natlang_neuralese.model.native_parameter_precision import BF16_SR_PROFILE
+    from natlang_neuralese.model.shared_state import SharedStateModel
+    from natlang_neuralese.train.native_state_sft import make_native_optimizer
+    model = SharedStateModel(tiny('lfm'), (58, 59, 60, 61), rank=4)
+    model.load_state_dict(state[0])
+    model.port.hf.load_state_dict(state[1])
+    model = model.to(dtype)
+    if ordinary_profile:
+        model.native_ordinary_precision = BF16_SR_PROFILE
+    if backend:
+        model.native_cotangent_accumulator_backend = backend
+    # An effectively zero rate: the update only exposes the gradients its optimizer consumes.
+    optimizer, _ = make_native_optimizer(model, lr=1e-12, learned_row_lr=1e-12, weight_decay=0., in_backward=True,
+                                         muon_rounding='kahan')
+    return model, optimizer
+
+
+def consumed_gradients(model, optimizer):
+    """Every gradient exactly as its optimizer consumes it (float64 copies)."""
+    names = {id(parameter): name for name, parameter in model.named_parameters()}
+    seen = {}
+    latent_update = optimizer.latent._update
+
+    def latent(parameter, group):
+        seen[names[id(parameter)]] = parameter.grad.detach().double().clone()
+        return latent_update(parameter, group)
+    optimizer.latent._update = latent
+    step = optimizer.step
+
+    def ordinary(*args, **kwargs):
+        for name, parameter in model.named_parameters():
+            if parameter.grad is not None:
+                seen[name] = parameter.grad.detach().double().clone()
+        return step(*args, **kwargs)
+    optimizer.step = ordinary
+    return seen
+
+
+@pytest.mark.parametrize('backend,ordinary_profile', [('plain', True), (None, False)])
+def test_bf16_micro_batch_gradients_sum_in_fp32_with_opposite_sign_advantages(monkeypatch, backend, ordinary_profile):
+    """The 2026-11-09 sanity test: a BF16 ``.grad`` rounded the running sum after every micro-batch (16 in production RL).
+    With cancelling advantages the FP32 sum equals the exact sum of the micro-batches' own gradients."""
+    from natlang_neuralese.train import native_state_sft as trainer
+    from natlang_neuralese.train.gradient_accumulation import Float32GradientAccumulation
+    from natlang_neuralese.model.shared_state import SharedStateModel
+    reference_model = SharedStateModel(tiny('lfm'), (58, 59, 60, 61), rank=4)
+    state = (copy.deepcopy(reference_model.state_dict()), copy.deepcopy(reference_model.port.hf.state_dict()))
+    graphs, signs = four_graphs(), (1., -1., 1., -1.)
+    real, strict = trainer.packed_graph_loss, set()
+
+    def run(micro, advantages, *, exact_sum=True, dtype=torch.bfloat16, outer=False):
+        model, optimizer = bf16_model(state, dtype, backend, ordinary_profile)
+        seen = consumed_gradients(model, optimizer)
+        iterator = iter(advantages)
+        monkeypatch.setattr(trainer, 'packed_graph_loss',
+                            lambda model, batch, **kwargs: (lambda loss, details: (loss * next(iterator), details))(
+                                *real(model, batch, **kwargs)))
+        if not exact_sum:  # the BF16 ``.grad`` sum of before 2026-11-09
+            monkeypatch.setattr(trainer, 'Float32GradientAccumulation', _NoAccumulation)
+        with (Float32GradientAccumulation(model, optimizer) if outer else contextlib.nullcontext()) as sums:
+            if outer:  # one micro-batch never enters the context itself: finish it as the multi-micro update does
+                step = optimizer.step
+                optimizer.step = lambda *args, **kwargs: (sums.finish(), step(*args, **kwargs))[1]
+            trainer.native_training_update(model, optimizer, micro[-1], accumulate=micro[:-1],
+                                           checkpoint_layers=True, chunk_tokens=3)
+        monkeypatch.undo()
+        assert all(parameter.grad is None or parameter.grad.dtype == parameter.dtype for parameter in model.parameters())
+        assert all(parameter.grad_dtype == parameter.dtype for parameter in model.parameters())
+        # Parameters whose optimizer reads the FP32 total itself (everything but a plain torch AdamW).
+        exact_consumers = {id(parameter) for child in (optimizer.latent, optimizer.auxiliary)
+                           if getattr(child, 'accepts_float32_gradients', False)
+                           for group in child.param_groups for parameter in group['params']}
+        strict.update(name for name, parameter in model.named_parameters() if id(parameter) in exact_consumers)
+        return seen
+    terms = [run([[graph]], [sign], outer=True) for graph, sign in zip(graphs, signs)]
+    exact = {name: sum(term[name] for term in terms) / len(graphs) for name in terms[0]}
+    fp32 = run([[graph] for graph in graphs], signs)
+    bf16 = run([[graph] for graph in graphs], signs, exact_sum=False)
+
+    def error(value, names):
+        names = sorted(names)
+        return float(sum((value[name] - exact[name]).square().sum() for name in names).sqrt()
+                     / sum(exact[name].square().sum() for name in names).sqrt())
+    assert exact.keys() == fp32.keys() == bf16.keys() and len(exact) > 10 and len(strict) > 10
+    cancellation = float(sum(exact[name].square().sum() for name in exact).sqrt()
+                         / sum(sum(term[name].square().sum() for term in terms) / len(graphs) ** 2 for name in exact).sqrt())
+    assert cancellation < .9  # the opposite-sign advantages cancel part of every term
+    assert error(fp32, strict) < 1e-6, error(fp32, strict)  # FP32 summation order only
+    assert error(bf16, strict) > 1e-3 and error(bf16, strict) > 1000 * error(fp32, strict), (
+        error(bf16, strict), error(fp32, strict))
+    # A parameter whose optimizer needs a parameter-dtype gradient gets the exact total cast once (BF16 spacing).
+    assert error(fp32, exact.keys()) < 2 ** -8
+
+
+class _NoAccumulation:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def finish(self):
+        pass
+
+    def allocation_report(self):
+        return {}
+
+
+def test_float32_accumulation_casts_once_for_other_optimizers_and_restores_dtypes_on_failure():
+    from natlang_neuralese.train.gradient_accumulation import Float32GradientAccumulation
+    weight = torch.nn.Parameter(torch.ones(8, dtype=torch.bfloat16))
+    optimizer = torch.optim.AdamW([weight], lr=1e-3)  # needs a parameter-dtype gradient
+    model = torch.nn.ParameterList([weight])
+    pieces = [torch.full((8,), value, dtype=torch.bfloat16) for value in (1., 2 ** -9, 2 ** -9, 2 ** -9)]
+    with Float32GradientAccumulation(model, optimizer) as accumulation:
+        for piece in pieces:  # 1 + 3 * 2**-9: each BF16 partial sum would round the 2**-9 pieces away or up
+            (weight * piece).sum().backward()
+        assert weight.grad.dtype == torch.float32
+        exact = weight.grad.clone()
+        accumulation.finish()
+        assert weight.grad.dtype == torch.bfloat16 and torch.equal(weight.grad, exact.to(torch.bfloat16))
+        optimizer.step()
+    assert weight.grad is None or weight.grad.dtype == torch.bfloat16
+    summed = torch.zeros(8, dtype=torch.bfloat16)
+    for piece in pieces:
+        summed += piece
+    assert not torch.equal(summed.float(), exact)  # the BF16 sum is what this replaces
+    optimizer.zero_grad(set_to_none=True)
+    with pytest.raises(RuntimeError, match='boom'):
+        with Float32GradientAccumulation(model, optimizer):
+            (weight * pieces[0]).sum().backward()
+            raise RuntimeError('boom')
+    assert weight.grad is None and weight.grad_dtype == torch.bfloat16
+    with pytest.raises(RuntimeError, match='empty gradient boundary'):
+        weight.grad = torch.ones(8, dtype=torch.bfloat16)
+        Float32GradientAccumulation(model, optimizer).__enter__()
+    assert weight.grad_dtype == torch.bfloat16
+
+
+def test_accumulated_update_with_nonfinite_gradient_clears_fp32_sums_and_dtypes(monkeypatch):
+    from natlang_neuralese.train import native_state_sft as trainer
+    model, optimizer = build()
+    model = model.to(torch.bfloat16)
+    model.native_cotangent_accumulator_backend = 'plain'
+    optimizer, _ = trainer.make_native_optimizer(model, lr=1e-3, learned_row_lr=.003, in_backward=True)
+    graphs = examples()
+    real = trainer.packed_graph_loss
+    calls = []
+
+    def poisoned(model, batch, **kwargs):
+        loss, details = real(model, batch, **kwargs)
+        calls.append(1)
+        return (loss * float('nan') if len(calls) == 2 else loss), details
+    monkeypatch.setattr(trainer, 'packed_graph_loss', poisoned)
+    with pytest.raises(FloatingPointError):
+        trainer.native_training_update(model, optimizer, graphs[1:], accumulate=[graphs[:1]],
+                                       checkpoint_layers=True, chunk_tokens=3)
+    assert all(parameter.grad is None and parameter.grad_dtype == parameter.dtype for parameter in model.parameters())
+    assert all(not child['state'] for child in (optimizer.state_dict()['adamw'],) if child)
 
 
 def test_efficiency_only_controls_actual_muon_and_adam_update_with_history(monkeypatch):
@@ -174,8 +356,17 @@ def test_trainer_steps_once_per_accumulated_group_and_records_the_transition(tmp
     out = tmp_path / 'run'
     saved = run(out, 1, epochs='0.4')
     assert observed == [[1], [1]] and saved['global_step'] == 2
+    assert saved['options']['gradient_accumulation_dtype'] == 'float32'
+    assert saved['options']['gradient_accumulation_dtype_history'] == []
+    # A checkpoint written before 2026-11-09 summed accumulated gradients in BF16; resuming records the change.
+    legacy = torch.load(out / 'checkpoint.pt', weights_only=False, map_location='cpu')
+    for key in ('gradient_accumulation_dtype', 'gradient_accumulation_dtype_history'):
+        legacy['training']['options'].pop(key)
+    torch.save(legacy, out / 'checkpoint.pt')
     observed.clear()
     saved = run(out, 2, resume=True)
+    assert [(item['from'], item['to'], item['at_global_step']) for item in
+            saved['options']['gradient_accumulation_dtype_history']] == [('bfloat16', 'float32', 2)]
     # Three remaining single-graph batches: one update of two micro-batches, then one of the last.
     assert observed == [[1, 1], [1]]
     assert saved['global_step'] == 4

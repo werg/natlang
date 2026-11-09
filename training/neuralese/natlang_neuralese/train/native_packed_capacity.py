@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 
 from ..data.native_sources import NativeGraphSource
+from .gradient_accumulation import GRADIENT_ACCUMULATION_DTYPE
 
 _index_geometry = contextvars.ContextVar('native_packed_geometry_index', default=None)
 
@@ -527,7 +528,9 @@ def oversize_execution_identity(model, optimizer, *, args, backend, objective_bi
             'ffn_chunk_tokens':getattr(model.port,'ffn_chunk_tokens',0),
             'checkpoint_storage':checkpoint_storage,
             'cotangent_mode':'plain' if (getattr(args,'cotangent_accumulator_backend',None) or getattr(args,'native_cotangent_accumulator_backend',None))=='plain' else 'vjp',
-            'retained_gradients':int(args.accumulate_batches)>1,'production_packing':True,
+            'retained_gradients':int(args.accumulate_batches)>1,
+            'retained_gradient_dtype':GRADIENT_ACCUMULATION_DTYPE if int(args.accumulate_batches)>1 else None,
+            'production_packing':True,
             'quantization':getattr(args,'quantization',None),
             'fp8_training':getattr(args,'fp8_training',None),
             'fp8_recipe':getattr(args,'fp8_recipe',None),
