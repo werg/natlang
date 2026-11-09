@@ -12,21 +12,22 @@ selection uses real task outcomes without manual steps. Operator note: plans/neu
 
 Triggers. (1) A controller ``W/<lineage>/state.json`` whose ``last_learner_progress`` names a committed checkpoint
 SHA not seen before (the learner writes it at each window boundary/stop); its runtime is the lineage config's
-``actor_environment.NATLANG_REPO``. Controllers already present when the watcher was initialised are history, not
+``actor_environment.NATLANG_REPO`` (the canonical checkout). Controllers already present when the watcher was initialised are history, not
 work. (2) A request file ``<root>/requests/*.json`` (``request`` writes one). One evaluation runs at a time; when a
 newer candidate is queued, older queued candidates are recorded as superseded and skipped.
 
 Per candidate, every step is a separate low-priority ledger unit or an ssh/scp exchange, and every step is
 restartable (outputs are content addressed and reused):
-  1. prepare the model-only actor view inside the checkpoint's own runtime (pop_eval_prepare.py raw); the source is
+  1. prepare the model-only actor view from the DGX checkout (pop_eval_prepare.py raw); the source is
      read in place, never copied, pinned or written;
   2. make room on Pop (keep the behavioural parent's view and the peer delta base) and send the view with
      scripts/coreweave/send_actor_transport.py (ZIP delta against the last view Pop has, else full);
   3. run pop_dev16_driver.py on Pop under Pop's memory ledger: the baseline spec (sha f28b1b8c..., cases
      range(0,128,8), one worker, full prompt, 2048 prefill, 0.25 GiB prefix cache, same image and container limits);
   4. collect completed.json and a minimal per-case outcome detail (case id/outcome only) back to the DGX;
-  5. make sure the behavioural parent has a receipt under the SAME runtime (promotion pairs only identical runtimes),
-     evaluating it once per runtime when missing;
+  5. make sure the behavioural parent has a receipt under the same measurement environment (spec, packet, driver, image;
+     the git commits that served each arm are recorded in the comparison, never a pairing field), evaluating it once
+     per environment when missing;
   6. write the paired train/promotion.py comparison and a parent selection; a promoted candidate becomes the new
      behavioural parent (``<root>/behavioural-parent.json``, the pointer the lfm-latest profile follows);
   7. when the checkpoint carries a weight EMA and no newer candidate waits, evaluate the EMA as a second arm
@@ -182,7 +183,7 @@ def lineage_runtime(state_path):
     candidates.append(W / 'ops' / state_path.parent.name / 'config.json')
     config = read_json(next((c for c in candidates if c.is_file()), candidates[-1])) or {}
     runtime = (config.get('actor_environment') or {}).get('NATLANG_REPO')
-    return runtime if runtime and Path(runtime, 'runtime-input-closure.json').is_file() else None
+    return runtime if runtime and Path(runtime).is_dir() else None
 
 
 def checkpoint_global_step(progress, checkpoint):
@@ -201,8 +202,8 @@ def checkpoint_global_step(progress, checkpoint):
 
 def request_duplicate(state, sha, runtime, attempt):
     """The candidate that already covers a request, or None. A request is a duplicate only of an entry for the same
-    checkpoint under the same frozen runtime and the same explicit attempt label (none = none) that is not failed or
-    superseded: another runtime or a new attempt label is a different measurement and must run."""
+    checkpoint under the same checkout and the same explicit attempt label (none = none) that is not failed or
+    superseded: another checkout path or a new attempt label is a different measurement and must run."""
     for key, existing in state['candidates'].items():
         if (existing['sha256'] == sha and existing['status'] not in ('superseded', 'failed')
                 and existing.get('runtime') == runtime and existing.get('attempt') == attempt):
@@ -236,7 +237,7 @@ def discover(state):
             f'{state_path.parent.parent.parent.name}/{state_path.parent.parent.name}/{state_path.parent.name}',
             'step': checkpoint_global_step(progress, progress['checkpoint']), 'trigger': 'window-boundary',
             'discovered': time.time(), 'status': 'queued' if runtime else 'blocked',
-            **({} if runtime else {'reason': 'lineage config names no frozen runtime'}), 'ema': True}
+            **({} if runtime else {'reason': 'lineage config names no code checkout'}), 'ema': True}
         log(event='discovered', sha256=sha, lineage=state_path.parent.name)
     for request in sorted((ROOT / 'requests').glob('*.json')):
         value = read_json(request)
@@ -317,10 +318,9 @@ def prepare(kind, checkpoint, runtime, expect_sha, wait=None):
     out = ROOT / {'raw': 'views', 'rl': 'rl-views', 'ema': 'ema'}[kind]
     receipt = ROOT / 'preparations' / f'{kind}-{expect_sha}.json'
     existing = read_json(receipt)
-    # Reuse a view only when it was prepared under this runtime: a parent re-evaluated for a newer candidate runtime
-    # otherwise ran its old runtime's view and never paired (2026-11-08: step 99 compared v38 parent vs v58 candidate).
-    # The view file is pruned separately from its transport receipt: reuse only when both are still present.
-    if (existing and existing.get('runtime') == str(runtime) and Path(existing['transport']['path']).is_file()
+    # A view is code-independent (code identity is recorded provenance in its transport manifest): reuse it while the
+    # view file is present. The view file is pruned separately from its transport receipt: reuse only when both are.
+    if (existing and Path(existing['transport']['path']).is_file()
             and (Path(existing['transport']['path']).parent / existing['view']['path']).is_file()):
         return existing
     # prune_dgx removes a view's .pt and keeps its receipts; a later preparation would resolve those receipts to the
@@ -380,37 +380,8 @@ def pop_python(code, *args, timeout=600):
     return json.loads(ssh(shlex.join(['python3', '-I', '-', *map(str, args)]), input=code, timeout=timeout))
 
 
-def runtime_closure_sha(runtime):
-    return digest(Path(runtime) / 'runtime-input-closure.json')
-
-
-def runtime_files(runtime):
-    root = Path(runtime)
-    return sorted(str(p.relative_to(root)) for p in root.rglob('*') if p.is_file() and not p.is_symlink())
-
-
 DRIVER = REPO / 'scripts/neuralese_data/pop_dev16_driver.py'
 _IDENTITY_CACHE = {}
-
-
-def _task_runtime_sha256(runtime):
-    """Hash of ``task_eval_runtime_identity`` of a frozen runtime: its complete TS host closure (built CLI, npm manifests,
-    dependency tree) and every Python module the runtime executes, as the in-run task evaluation binds them. The
-    identity resolves its repository from NATLANG_REPO, which is the frozen runtime here (the code that runs on Pop),
-    never this checkout."""
-    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
-    from natlang_neuralese.eval.task_cadence import task_eval_runtime_identity
-    previous = os.environ.get('NATLANG_REPO')
-    os.environ['NATLANG_REPO'] = str(runtime)
-    try:
-        return canonical_json_sha256_hex(task_eval_runtime_identity({'runtime': str(Path(runtime) / 'ts-host')})), None
-    except Exception as error:   # an old runtime without the full closure: record it, bind what exists
-        return None, f'{type(error).__name__}: {error}'[:300]
-    finally:
-        if previous is None:
-            os.environ.pop('NATLANG_REPO', None)
-        else:
-            os.environ['NATLANG_REPO'] = previous
 
 
 def pop_image_id():
@@ -419,31 +390,62 @@ def pop_image_id():
     return out if out.startswith('sha256:') else None
 
 
-def execution_identity(runtime, closure, python_runtime_sha256):
-    """The complete execution environment of one evaluation: the Python runtime, the frozen runtime closure, the TS task
-    runtime closure, the driver script, the task spec/packet and the container image (name and resolved id). One value
-    keys result labels and the parent-evaluation cache and is compared in promotion; the launch record is checked
-    against it when results are collected."""
+def code_on_dgx():
+    from natlang_neuralese.common.code_provenance import code_provenance
+    return code_provenance(REPO)
+
+
+def sync_pop_checkout():
+    """Fast-forward Pop's checkout of the canonical repository to origin/main (``git pull --ff-only``), rebuild the
+    TypeScript collector when ts-host changed, and return the commit and dirty flag it now runs. Pop runs this checkout
+    directly (no runtime copy); a failed pull or build is recorded and the checkout keeps what it has (provenance,
+    never a refusal)."""
+    git = lambda *args: shlex.join(['git', '-C', POP_REPO, *args])
+    out = ssh(git('rev-parse', 'HEAD') + '; ' + git('pull', '--ff-only', '--quiet', 'origin', 'main') + ' 2>&1; '
+              + git('rev-parse', 'HEAD') + '; ' + git('status', '--porcelain', '--untracked-files=no') + ' | wc -l',
+              check=False, timeout=300)
+    lines = out.strip().splitlines()
+    try:
+        before, commit, dirty = lines[0].strip(), lines[-2].strip(), int(lines[-1]) > 0
+    except (IndexError, ValueError):
+        raise RuntimeError('cannot read the Pop checkout commit: ' + out[-400:])
+    notes = lines[1:-2]
+    result = {'schema': 'natlang.code-provenance/1', 'git_commit': commit, 'dirty': dirty, 'pulled': not notes}
+    if notes:
+        log(event='Pop checkout pull failed; running its current commit', commit=commit, detail=' '.join(notes)[:300])
+    if before != commit or not ssh(shlex.join(['test', '-f', POP_REPO + '/ts-host/dist/teacher/cli.js']) + ' && echo ok',
+                                   check=False).strip():
+        changed = ssh(git('diff', '--name-only', before, commit, '--', 'ts-host', 'scripts/stage-npm-package.mjs'), check=False)
+        if changed.strip() or before == commit:
+            build = subprocess.run(['ssh', '-o', 'ConnectTimeout=15', '-o', 'BatchMode=yes', POP,
+                                    f'cd {shlex.quote(POP_REPO)}/ts-host && npm run build:node'], capture_output=True,
+                                   text=True, timeout=1800)
+            result['collector_build'] = 'ok' if build.returncode == 0 else 'failed'
+            if build.returncode:
+                log(event='Pop collector build failed; keeping the previous dist', detail=(build.stderr or build.stdout)[-400:])
+    return result
+
+
+def execution_identity(code):
+    """The measurement environment of one evaluation: the driver script, the task spec/packet and the container image
+    (name and resolved id). One value keys result labels and the parent-evaluation cache and is compared in promotion;
+    the launch record is checked against it when results are collected. The code that ran (``code``: the Pop checkout's
+    git commit and dirty flag, and the DGX checkout's) is recorded provenance, not part of the identity: promotion
+    pairs arms across code changes and shows both commits in its receipt."""
     from natlang_neuralese.common.hashing import canonical_json_sha256_hex
-    key = (str(runtime), closure, python_runtime_sha256, digest(DRIVER))
+    key = (digest(DRIVER), code['pop']['git_commit'])
     if key not in _IDENTITY_CACHE:
-        task_runtime, task_error = _task_runtime_sha256(runtime)
-        fields = {'python_runtime_sha256': python_runtime_sha256, 'runtime_closure_sha256': closure,
-                  'task_runtime_sha256': task_runtime, 'driver_sha256': key[3], 'image': IMAGE,
-                  'image_id': pop_image_id(), 'spec_sha256': SPEC_SHA256, 'packet_sha256': PACKET_SHA256}
-        _IDENTITY_CACHE[key] = {'schema': 'natlang.pop-eval-execution-identity/1', 'fields': fields,
-                                'identity_sha256': canonical_json_sha256_hex(fields),
-                                **({'task_runtime_error': task_error} if task_error else {})}
-        if task_error:
-            log(event='task runtime identity degraded', runtime=str(runtime), error=task_error)
+        fields = {'driver_sha256': key[0], 'image': IMAGE, 'image_id': pop_image_id(),
+                  'spec_sha256': SPEC_SHA256, 'packet_sha256': PACKET_SHA256}
+        _IDENTITY_CACHE[key] = {'schema': 'natlang.pop-eval-execution-identity/2', 'fields': fields,
+                                'identity_sha256': canonical_json_sha256_hex(fields), 'code': code}
     return _IDENTITY_CACHE[key]
 
 
 def verify_launch(identity, launch):
     """Problems between the requested identity and the launch record Pop wrote when the evaluation actually started."""
     fields, problems = identity['fields'], []
-    for name, actual in (('runtime_closure_sha256', launch.get('runtime_receipt_sha256')),
-                         ('driver_sha256', launch.get('driver_sha256')), ('spec_sha256', launch.get('task_spec_sha256'))):
+    for name, actual in (('driver_sha256', launch.get('driver_sha256')), ('spec_sha256', launch.get('task_spec_sha256'))):
         if actual != fields[name]:
             problems.append(f'{name}: requested {fields[name]}, launched {actual}')
     if launch.get('execution_identity_sha256') != identity['identity_sha256']:
@@ -452,44 +454,6 @@ def verify_launch(identity, launch):
     if fields['image_id'] is not None and launch.get('image_id') != fields['image_id']:
         problems.append(f'image_id: requested {fields["image_id"]}, launched {launch.get("image_id")}')
     return problems
-
-
-def ensure_pop_runtime(runtime):
-    """Install the checkpoint's frozen runtime on Pop at the same path when it is missing (exact file inventory)."""
-    closure = runtime_closure_sha(runtime)
-    probe = pop_python('import sys,os,hashlib,json\np=sys.argv[1]+"/runtime-input-closure.json"\n'
-                       'print(json.dumps(hashlib.sha256(open(p,"rb").read()).hexdigest() if os.path.isfile(p) else None))',
-                       runtime)
-    if probe == closure:
-        return closure
-    if probe is not None:
-        raise RuntimeError(f'Pop holds another runtime at {runtime}; preserve it and investigate')
-    log(event='installing runtime on Pop', runtime=runtime)
-    parent, name = str(Path(runtime).parent), Path(runtime).name
-    staging = f'{runtime}.installing'
-    ssh(shlex.join(['mkdir', '-p', parent]))
-    ssh(shlex.join(['mkdir', staging]))   # fails when a previous attempt left it: inspect rather than overwrite
-    tar = subprocess.Popen(['tar', '--zstd', '-C', parent, '-cf', '-', name], stdout=subprocess.PIPE)
-    subprocess.run(['ssh', '-o', 'ConnectTimeout=15', POP, shlex.join(['tar', '--zstd', '-C', staging, '-xf', '-'])],
-                   stdin=tar.stdout, check=True, timeout=3600)
-    if tar.wait():
-        raise RuntimeError('runtime archive failed')
-    manifest = _pop_upload_json({path: digest(Path(runtime) / path) for path in runtime_files(runtime)},
-                                f'{staging}.manifest.json')
-    pop_python(INSTALL_RUNTIME, staging, name, manifest, runtime, timeout=3600)
-    log(event='runtime installed on Pop', runtime=runtime)
-    return closure
-
-
-INSTALL_RUNTIME = r'''
-import hashlib,json,os,sys
-from pathlib import Path
-staging,name,manifest,target=sys.argv[1:5];root=Path(staging)/name
-want=json.loads(Path(manifest).read_text())
-have={str(p.relative_to(root)):hashlib.sha256(p.read_bytes()).hexdigest() for p in root.rglob('*') if p.is_file() and not p.is_symlink()}
-assert have==want,'installed runtime inventory differs from the DGX runtime'
-os.rename(root,target);os.rmdir(staging);os.unlink(manifest);print('{}')
-'''
 
 
 def _pop_upload_json(value, remote_path):
@@ -585,17 +549,17 @@ def attempt_tag(value):
     return re.sub(r'[^A-Za-z0-9_.-]+', '-', str(value)).strip('-')[:40] or 'attempt'
 
 
-def run_on_pop(arm, prep, runtime, closure, comparison, attempt=1, identity=None, tag=None):
+def run_on_pop(arm, prep, runtime, comparison, attempt=1, identity=None, tag=None):
     source = prep['source']['sha256']
-    py = prep['python_runtime']['sha256']
-    # The label (and so Pop's work directory and its reusable completed.json) is bound to the complete execution
-    # identity and to the request's explicit attempt label: another runtime, driver, image or attempt never reuses it.
-    label = (f'{arm}-{prep["step"]}-{source[:12]}-py{py[:12]}-x{identity["identity_sha256"][:12]}'
+    commit = identity['code']['pop']['git_commit'] or 'unknown'
+    # The label (and so Pop's work directory and its reusable completed.json) is bound to the execution identity, the
+    # Pop checkout commit and the request's explicit attempt label: other code, driver, image or attempt never reuses it.
+    label = (f'{arm}-{prep["step"]}-{source[:12]}-c{commit[:10]}-x{identity["identity_sha256"][:12]}'
              + (f'-t{tag}' if tag else '') + (f'-a{attempt}' if attempt > 1 else ''))
     work = f'{POP_EVAL_ROOT}/{label}'
     name = f'popeval-{arm}-{source[:12]}'
     transport_json = json.loads(Path(prep['transport']['path']).read_text())
-    job = {'arm': arm, 'name': name, 'port': POP_PORT, 'runtime': runtime, 'runtime_closure_sha256': closure,
+    job = {'arm': arm, 'name': name, 'port': POP_PORT, 'runtime': POP_REPO, 'code': identity['code']['pop'],
            'base': POP_BASE, 'packet': POP_PACKET, 'packet_sha256': PACKET_SHA256, 'spec': SPEC,
            'spec_sha256': SPEC_SHA256, 'image': IMAGE, 'step': prep['step'], 'source_sha256': source,
            'execution_identity_sha256': identity['identity_sha256'],
@@ -657,14 +621,12 @@ def collect(label, work, prep, identity):
     completed = read_json(out / 'completed.json')
     launch = read_json(out / 'launch.json') or {}
     problems = verify_launch(identity, launch)
-    actual_python = (((completed.get('actor_info') or {}).get('rl_policy_binding') or {}).get('python_runtime') or {}).get('sha256')
-    if actual_python != identity['fields']['python_runtime_sha256']:
-        problems.append(f'python_runtime_sha256: requested {identity["fields"]["python_runtime_sha256"]}, collected {actual_python}')
+    actual_code = (((completed.get('actor_info') or {}).get('rl_policy_binding') or {}).get('code') or {}).get('git_commit')
     # `verified` is what promotion requires: the collected execution is the requested one, and the launch is a fresh
     # container (a collected record that replays another evaluation's container is not a new measurement).
     execution = {**identity, 'verified': not problems, 'launch': {key: launch.get(key) for key in (
-        'container_id', 'runtime_receipt_sha256', 'driver_sha256', 'image_id', 'task_spec_sha256', 'arm')},
-        'collected_at': time.time(), **({'problems': problems} if problems else {})}
+        'container_id', 'code_commit', 'driver_sha256', 'image_id', 'task_spec_sha256', 'arm')},
+        'served_code_commit': actual_code, 'collected_at': time.time(), **({'problems': problems} if problems else {})}
     if problems:
         log(event='collected execution differs from the requested identity', label=label, problems=problems)
     log(event='collected', label=label, successes=completed['summary']['task_successes'], cases=completed['summary']['cases'],
@@ -672,7 +634,7 @@ def collect(label, work, prep, identity):
     return {'label': label, 'completed': str(out / 'completed.json'), 'detail': str(out / 'detail.json'),
             'execution': execution,
             'successes': completed['summary']['task_successes'], 'cases': completed['summary']['cases'],
-            'python_runtime_sha256': prep['python_runtime']['sha256'], 'checkpoint_sha256': prep['source']['sha256'],
+            'checkpoint_sha256': prep['source']['sha256'],
             'step': prep['step']}
 
 
@@ -699,17 +661,17 @@ def wait_for_rl_actor():
 
 def evaluate(state, arm, checkpoint, sha, runtime, comparison, attempt=1, tag=None):
     wait_for_rl_actor()
-    closure = ensure_pop_runtime(runtime)
+    code = {'dgx': code_on_dgx(), 'pop': sync_pop_checkout()}
     kind = 'ema' if arm == 'ema' else 'raw'
     prep = prepare(kind, checkpoint, runtime, sha)
     if prep.get('absent'):
         return None
-    identity = execution_identity(runtime, closure, prep['python_runtime']['sha256'])
+    identity = execution_identity(code)
     keep = {prep['source']['sha256']}
     make_pop_room(state, prep['view']['bytes'], keep)
     send(prep)
     wait_for_rl_actor()
-    return run_on_pop(arm, prep, runtime, closure, comparison, attempt, identity, tag)
+    return run_on_pop(arm, prep, runtime, comparison, attempt, identity, tag)
 
 
 # An evaluation whose summary is not eligible (a case ended unresolved or as an infrastructure error, e.g. a wall
@@ -786,14 +748,13 @@ def process(state, candidate):
     candidate['raw'] = raw
     save_state(state)
     check_fresh_execution(state, candidate, raw)
-    # The parent arm is cached per complete execution identity (runtime closure, TS task runtime, driver, image,
-    # Python runtime), not per Python runtime alone: results measured under any other environment, including entries
-    # filed before identities were recorded, never pair.
+    # The parent arm is cached per measurement environment (driver, spec, packet, image): results measured under any
+    # other environment, including entries filed before this identity form, never pair. The commits of both arms are
+    # recorded in the comparison receipt.
     identity = raw['execution']['identity_sha256']
-    key = f'{parent["sha256"]}:{raw["python_runtime_sha256"]}:{identity[:16]}'
+    key = f'{parent["sha256"]}:{identity[:16]}'
     parent_eval = state['parent_evals'].get(key)
-    if parent_eval is not None and (parent_eval.get('python_runtime_sha256') != raw['python_runtime_sha256']
-                                    or (parent_eval.get('execution') or {}).get('identity_sha256') != identity):
+    if parent_eval is not None and (parent_eval.get('execution') or {}).get('identity_sha256') != identity:
         parent_eval = None   # an entry filed under another environment's key is not a matched arm: evaluate afresh
     if parent_eval is None or parent_eval['successes'] is None:
         if not Path(parent['path']).is_file():
@@ -818,7 +779,7 @@ def process(state, candidate):
         # source pin of this exact checkpoint over the rolling slot.
         state['parent'] = {'sha256': sha, 'step': candidate.get('step'), 'label': f'{candidate.get("lineage")}-{candidate.get("step")}',
                            'path': source, 'selection': str(selection_path)}
-        state['parent_evals'][f'{sha}:{raw["python_runtime_sha256"]}:{identity[:16]}'] = raw
+        state['parent_evals'][f'{sha}:{identity[:16]}'] = raw
         write_parent_pointer(state['parent'])
         log(event='promoted', sha256=sha, step=candidate.get('step'))
     save_state(state)
@@ -871,7 +832,7 @@ def main(argv=None):
     commands.add_parser('status')
     request = commands.add_parser('request')
     request.add_argument('checkpoint')
-    request.add_argument('--runtime', required=True, help='frozen runtime that trained the checkpoint')
+    request.add_argument('--runtime', default=str(REPO), help='code checkout that serves the view (default: this checkout)')
     request.add_argument('--label')
     request.add_argument('--attempt', help='explicit attempt label: a repeat measurement of an already evaluated '
                                            'checkpoint (same weights) runs fresh instead of being accepted as a duplicate')
@@ -881,8 +842,6 @@ def main(argv=None):
     args = parser.parse_args(argv)
     os.environ.setdefault('NATLANG_HASH_CACHE', str(ROOT / 'hash-cache.jsonl'))
     if args.command == 'request':
-        if not Path(args.runtime, 'runtime-input-closure.json').is_file():
-            parser.error('--runtime must be a frozen runtime directory (runtime-input-closure.json)')
         value = {'checkpoint': str(Path(args.checkpoint).resolve(strict=True)), 'runtime': str(Path(args.runtime).resolve()),
                  'label': args.label, 'step': args.step, 'ema': not args.no_ema, 'requested': time.time(),
                  **({'attempt': args.attempt} if args.attempt else {}),

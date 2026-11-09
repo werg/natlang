@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Serve the live RL policy from the Pop laptop as a second rollout actor (controller hooks).
 
-    pop_rl_actor.py start --checkpoint CK --policy-id SHA --runtime R [--port 18531] [--bind-host IP]
+    pop_rl_actor.py start --checkpoint CK --policy-id SHA [--port 18531] [--bind-host IP]
     pop_rl_actor.py stop
     pop_rl_actor.py status
 
@@ -10,8 +10,9 @@
 its one GPU) or fails to attest, the controller's own attestation poll drops the endpoint and the round collects on
 the managed DGX actor alone.
 
-start reuses the Pop behavioural-evaluation machinery (pop_behavior_eval.py): installs the policy's frozen runtime on
-Pop, prepares the model-only view of the policy checkpoint on the DGX under that runtime (scope ``rl-controller-pin``;
+start reuses the Pop behavioural-evaluation machinery (pop_behavior_eval.py): fast-forwards Pop's checkout of the
+canonical repository (``git pull``; Pop runs it directly, no runtime copy), prepares the model-only view of the policy
+checkpoint on the DGX from the DGX checkout (scope ``rl-controller-pin``;
 the diagnostic scope is refused as an RL policy), sends it as an exact delta, and launches pop_dev16_driver.py in
 ``rl-actor`` mode under Pop's memory ledger: the evaluation's container image, limits and serving flags, bound to the
 Pop tailscale address, with a block store so the collector fetches the stored RL blocks over HTTP. The actor attests
@@ -31,7 +32,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-# The controller's frozen NATLANG_REPO would redirect the DGX helper paths (venv, ledger) into the frozen tree.
+# The controller's NATLANG_REPO/PYTHONPATH name the canonical checkout; the helper imports below resolve it from this file.
 os.environ.pop('NATLANG_REPO', None)
 os.environ.pop('PYTHONPATH', None)
 REPO = Path(__file__).resolve().parents[2]
@@ -92,13 +93,13 @@ def eval_pending():
 
 
 def start(args):
-    # A previous actor of this lineage that still serves the same policy under the same runtime (the controller
-    # restarted mid-collection) keeps its block store. One under another runtime is replaced: the controller refuses
-    # replicas whose Python runtimes disagree, and retained-partial custody rehydrates a fresh actor's store.
+    # A previous actor of this lineage that still serves the same policy (the controller restarted mid-collection)
+    # keeps its block store and its code: an actor process keeps the code it started with, and the controller records
+    # each actor's commit from its attestation. One serving another policy is replaced; retained-partial custody
+    # rehydrates a fresh actor's store.
     previous = pbe.read_json(STATE)
-    runtime = str(Path(args.runtime).resolve(strict=True))
-    if (previous and previous['policy_id'] == args.policy_id and previous.get('runtime') == runtime
-            and attested(previous['endpoint'], args.policy_id)):
+    runtime = str(REPO)
+    if previous and previous['policy_id'] == args.policy_id and attested(previous['endpoint'], args.policy_id):
         pbe.write_json(pbe.RL_ACTOR_MARKER, {**pbe.read_json(pbe.RL_ACTOR_MARKER, {}), 'started': time.time()})
         log(event='Pop RL actor already serves the policy', endpoint=previous['endpoint'])
         return previous
@@ -110,7 +111,7 @@ def start(args):
             # controller's slots for it join the round when it attests the policy (rl.production late_endpoints).
             unit = f'pop-rl-actor-late-{int(time.time())}'
             command = [sys.executable, str(Path(__file__).resolve()), 'start', '--checkpoint', args.checkpoint,
-                       '--policy-id', args.policy_id, '--runtime', args.runtime, '--port', str(args.port),
+                       '--policy-id', args.policy_id, '--port', str(args.port),
                        '--ready-seconds', str(args.ready_seconds), '--prepare-wait', str(args.prepare_wait),
                        '--defer-to-eval', '--after-eval', *(['--bind-host', args.bind_host] if args.bind_host else [])]
             subprocess.run(['systemd-run', '--user', '--quiet', '--collect', '--unit', unit,
@@ -130,7 +131,7 @@ def start(args):
     pbe.write_json(pbe.RL_ACTOR_MARKER, {'started': time.time(), 'policy_id': args.policy_id, 'endpoint': endpoint,
                                          'unit': None})
     started = time.time()
-    closure = pbe.ensure_pop_runtime(runtime)
+    code = {'dgx': pbe.code_on_dgx(), 'pop': pbe.sync_pop_checkout()}
     prep = pbe.prepare('rl', args.checkpoint, runtime, args.policy_id, wait=args.prepare_wait)
     state = pbe.read_json(pbe.ROOT / 'state.json') or {'parent': {'sha256': ''}}
     pbe.make_pop_room(state, prep['view']['bytes'], {prep['source']['sha256']})
@@ -138,12 +139,11 @@ def start(args):
     source = prep['source']['sha256']
     if source != args.policy_id:
         raise RuntimeError('prepared view binds another source than the controller policy')
-    py = prep['python_runtime']['sha256']
-    work = f'{pbe.POP_EVAL_ROOT}/rl-actor-{prep["step"]}-{source[:12]}-py{py[:12]}'
+    work = f'{pbe.POP_EVAL_ROOT}/rl-actor-{prep["step"]}-{source[:12]}-c{(code["pop"]["git_commit"] or "unknown")[:10]}'
     name = f'poprl-{source[:12]}'
     transport_json = json.loads(Path(prep['transport']['path']).read_text())
-    job = {'mode': 'rl-actor', 'arm': 'rl', 'name': name, 'port': args.port, 'host': host, 'runtime': runtime,
-           'runtime_closure_sha256': closure, 'base': pbe.POP_BASE, 'image': pbe.IMAGE, 'step': prep['step'],
+    job = {'mode': 'rl-actor', 'arm': 'rl', 'name': name, 'port': args.port, 'host': host, 'runtime': pbe.POP_REPO,
+           'code': code['pop'], 'base': pbe.POP_BASE, 'image': pbe.IMAGE, 'step': prep['step'],
            'source_sha256': source, 'stage': f'{pbe.POP_TRANSPORT_ROOT}/{source}', 'view': prep['view']['path'],
            'view_sha256': prep['view']['sha256'], 'work': work, 'min_free_bytes': pbe.POP_MIN_FREE,
            'actor_export_format': EXPORT_FORMAT, 'memory': f'{RL_MEMORY_GB}g',
@@ -212,7 +212,7 @@ def main(argv=None):
     s = commands.add_parser('start')
     s.add_argument('--checkpoint', required=True)
     s.add_argument('--policy-id', required=True)
-    s.add_argument('--runtime', required=True, help='the frozen runtime that serves the policy (also installed on Pop)')
+    s.add_argument('--runtime', help=argparse.SUPPRESS)   # accepted and ignored: hooks of configs written before run-from-checkout
     s.add_argument('--port', type=int, default=RL_PORT)
     s.add_argument('--bind-host')
     s.add_argument('--defer-to-eval', action='store_true',

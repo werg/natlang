@@ -37,6 +37,6 @@
     "commit": "6104c53e2c",
     "branch": "tail-mass-exact (local fork checkout, not pushed, not the pin)",
     "adds": "custom_params.natlang_top_k_mass: records end with the exact FP32 tail mass (review F6). The natlang front already sends it and reads it; against the pinned commit it is ignored and receipts fall back to the clamped float16 reconstruction.",
-    "cutover": "push the branch, set commit above to it, move the fork checkout HEAD in the same step as the next frozen runtime (serve_native_checkpoint attests HEAD == commit, so a live controller's frozen runtime would refuse to launch SGLang against a moved checkout)."
+    "cutover": "The commit above is a recommendation, not a gate (owner, 2026-11-09): serve_native_checkpoint records the fork checkout's actual commit and dirty flag in the actor attestation (serving_engine.fork) and warns when it differs. To adopt: merge the branch into the fork's working branch, push it, set commit above, and move the fork checkout HEAD."
   }
 }

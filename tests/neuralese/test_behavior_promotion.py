@@ -55,12 +55,14 @@ def test_paired_comparison_promotes_only_at_or_above_the_reference_plus_delta():
     assert tie['matched'] and not tie['promoted'] and 'min_delta' in tie['decision_reasons'][0]
 
 
-def test_arms_under_different_runtimes_or_limits_are_unmatched_not_regressions():
-    # The 2026-11-02 12/16 vs 11/16 comparison ran its arms under runtime34 and runtime19: not paired evidence.
-    result = promotion.compare(declaration(), phase='development', candidate=receipt('b' * 64, 3, runtime='x' * 64),
-                               reference=receipt('c' * 64, 1))
-    assert not result['matched'] and not result['promoted'] and result['delta'] is None
-    assert 'python_runtime_sha256' in result['unmatched_reasons'][0]
+def test_arms_under_different_code_pair_and_record_both_commits_but_other_limits_are_unmatched():
+    # Code identity is provenance (owner, 2026-11-09): arms served by different commits still pair, and the receipt names
+    # both commits. Different specs/limits remain unmatched evidence, not regressions.
+    cand, ref = receipt('b' * 64, 3, runtime='x' * 64), receipt('c' * 64, 1)
+    cand['actor_info']['rl_policy_binding']['code'] = {'git_commit': 'a' * 40}
+    ref['actor_info']['rl_policy_binding']['code'] = {'git_commit': 'b' * 40}
+    result = promotion.compare(declaration(), phase='development', candidate=cand, reference=ref)
+    assert result['matched'] and result['code_commits'] == {'candidate': 'a' * 40, 'reference': 'b' * 40}
     other_spec = promotion.compare(declaration(), phase='development', candidate=receipt('b' * 64, 3, spec='y' * 64),
                                    reference=receipt('c' * 64, 1))
     assert 'spec_sha256' in other_spec['unmatched_reasons'][0]
@@ -120,7 +122,7 @@ def test_losing_candidate_keeps_its_reference_as_the_selected_parent():
     assert promotion.require_parent_selection(selection, 'c' * 64)
     with pytest.raises(ValueError, match='not the behaviour-selected parent'):
         promotion.require_parent_selection(selection, 'b' * 64)
-    unmatched = promotion.compare(declaration(), phase='development', candidate=receipt('b' * 64, 3, runtime='x' * 64),
+    unmatched = promotion.compare(declaration(), phase='development', candidate=receipt('b' * 64, 3, spec='x' * 64),
                                   reference=receipt('c' * 64, 2))
     with pytest.raises(ValueError, match='no matched'):
         promotion.require_parent_selection(promotion.select_parent('sft', [unmatched]), 'c' * 64)

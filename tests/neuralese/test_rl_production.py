@@ -424,9 +424,11 @@ def test_actor_runtime_requires_and_binds_rendering_assets_before_launch(tmp_pat
     for name in ('pieces.json','rendering-contract-fixtures.json'):(assets/name).write_text('{}')
     config={**production.actor_runtime_configuration(tmp_path),'actor_command':[sys.executable,str(entry)]}
     assert production.validate_actor_runtime_configuration(config)
-    (assets/'pieces.json').write_text('{"changed":true}')
-    with pytest.raises(ValueError,match='rendering assets'):
-        production.validate_actor_runtime_configuration(config)
+    (assets/'pieces.json').write_text('{"changed":true}')   # changed asset bytes are code provenance, not a refusal
+    assert production.validate_actor_runtime_configuration(config)
+    assert production.actor_runtime_configuration(tmp_path)['native_actor_assets'] != config['native_actor_assets']
+    with pytest.raises(ValueError,match='repository disagree'):
+        production.validate_actor_runtime_configuration({**config,'actor_environment':{**config['actor_environment'],'PYTHONPATH':'/elsewhere'}})
 
 
 @pytest.mark.parametrize('successes',[True,False])

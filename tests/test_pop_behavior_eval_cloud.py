@@ -155,27 +155,30 @@ def test_duplicate_request_is_logged_but_an_explicit_attempt_or_new_runtime_runs
     assert state['candidates'][sha]['status'] == 'queued'
 
 
-def test_execution_identity_binds_the_runtime_closure_driver_and_image(tmp_path, monkeypatch):
+def code(pop='a' * 40, dgx='d' * 40):
+    return {'dgx': {'git_commit': dgx, 'dirty': False}, 'pop': {'git_commit': pop, 'dirty': False}}
+
+
+def test_execution_identity_binds_driver_and_image_and_records_the_code_commits(tmp_path, monkeypatch):
     module, _, _ = _watcher(tmp_path, monkeypatch)
     monkeypatch.setattr(module, 'pop_image_id', lambda: 'sha256:' + '1' * 64)
-    monkeypatch.setattr(module, '_task_runtime_sha256', lambda runtime: ('t-' + runtime, None))
     driver = tmp_path / 'driver.py'
     driver.write_text('print(1)')
     monkeypatch.setattr(module, 'DRIVER', driver)
-    base = module.execution_identity('/rt-a', 'c' * 64, 'p' * 64)
-    assert module.execution_identity('/rt-a', 'c' * 64, 'p' * 64) is base
-    assert module.execution_identity('/rt-b', 'c' * 64, 'p' * 64)['identity_sha256'] != base['identity_sha256']  # TS host
-    assert module.execution_identity('/rt-a', 'd' * 64, 'p' * 64)['identity_sha256'] != base['identity_sha256']   # closure
-    assert module.execution_identity('/rt-a', 'c' * 64, 'q' * 64)['identity_sha256'] != base['identity_sha256']   # python
+    base = module.execution_identity(code())
+    assert module.execution_identity(code()) is base
+    # the code that ran is provenance, not part of the identity: another Pop commit keeps the same identity (and so pairs)
+    newer = module.execution_identity(code(pop='b' * 40))
+    assert newer['identity_sha256'] == base['identity_sha256'] and newer['code']['pop']['git_commit'] == 'b' * 40
     driver.write_text('print(2)')
-    changed_driver = module.execution_identity('/rt-a', 'c' * 64, 'p' * 64)
+    changed_driver = module.execution_identity(code())
     assert changed_driver['identity_sha256'] != base['identity_sha256']
     monkeypatch.setattr(module, 'pop_image_id', lambda: 'sha256:' + '2' * 64)
-    assert module.execution_identity('/rt-a', 'c' * 64, 'p' * 64)['identity_sha256'] == changed_driver['identity_sha256']  # cached
+    assert module.execution_identity(code())['identity_sha256'] == changed_driver['identity_sha256']  # cached
     module._IDENTITY_CACHE.clear()
-    assert module.execution_identity('/rt-a', 'c' * 64, 'p' * 64)['identity_sha256'] != changed_driver['identity_sha256']  # image
-    identity = module.execution_identity('/rt-a', 'c' * 64, 'p' * 64)
-    launch = {'runtime_receipt_sha256': 'c' * 64, 'driver_sha256': identity['fields']['driver_sha256'],
+    assert module.execution_identity(code())['identity_sha256'] != changed_driver['identity_sha256']  # image
+    identity = module.execution_identity(code())
+    launch = {'code_commit': 'a' * 40, 'driver_sha256': identity['fields']['driver_sha256'],
               'task_spec_sha256': module.SPEC_SHA256, 'image_id': 'sha256:' + '2' * 64,
               'execution_identity_sha256': identity['identity_sha256']}
     assert module.verify_launch(identity, launch) == []
@@ -217,23 +220,23 @@ def test_promotion_requires_the_same_verified_execution_identity():
 def test_collect_checks_the_launch_record_against_the_requested_identity(tmp_path, monkeypatch):
     module, _, _ = _watcher(tmp_path, monkeypatch)
     monkeypatch.setattr(module, 'pop_image_id', lambda: 'sha256:' + '1' * 64)
-    monkeypatch.setattr(module, '_task_runtime_sha256', lambda runtime: ('t', None))
-    identity = module.execution_identity('/rt', 'c' * 64, 'p' * 64)
-    good = {'container_id': 'k' * 64, 'runtime_receipt_sha256': 'c' * 64, 'driver_sha256': identity['fields']['driver_sha256'],
+    identity = module.execution_identity(code())
+    good = {'container_id': 'k' * 64, 'code_commit': 'a' * 40, 'driver_sha256': identity['fields']['driver_sha256'],
             'task_spec_sha256': module.SPEC_SHA256, 'image_id': 'sha256:' + '1' * 64, 'arm': 'raw',
             'execution_identity_sha256': identity['identity_sha256']}
     completed = {'summary': {'task_successes': 3, 'cases': 16},
-                 'actor_info': {'rl_policy_binding': {'python_runtime': {'sha256': 'p' * 64}}}}
+                 'actor_info': {'rl_policy_binding': {'code': {'git_commit': 'a' * 40}}}}
     served = {}
     def fake_run(argv, **kwargs):
         destination = Path(argv[-1])
         destination.write_text(json.dumps(served['launch'] if destination.name == 'launch.json' else completed))
     monkeypatch.setattr(module.subprocess, 'run', fake_run)
     monkeypatch.setattr(module, 'pop_python', lambda *a, **k: {'cases_detail': []})
-    prep = {'python_runtime': {'sha256': 'p' * 64}, 'source': {'sha256': 'a' * 64}, 'step': 5}
+    prep = {'source': {'sha256': 'a' * 64}, 'step': 5}
     served['launch'] = good
     result = module.collect('good', '/work', prep, identity)
     assert result['execution']['verified'] is True and result['execution']['launch']['container_id'] == 'k' * 64
-    served['launch'] = {**good, 'runtime_receipt_sha256': 'bad'}
+    assert result['execution']['served_code_commit'] == 'a' * 40
+    served['launch'] = {**good, 'driver_sha256': 'bad'}
     result = module.collect('bad', '/work', prep, identity)
-    assert result['execution']['verified'] is False and 'runtime_closure_sha256' in result['execution']['problems'][0]
+    assert result['execution']['verified'] is False and 'driver_sha256' in result['execution']['problems'][0]

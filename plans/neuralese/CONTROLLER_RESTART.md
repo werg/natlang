@@ -17,9 +17,8 @@ python3 scripts/neuralese_data/restart_controller.py OUT
 
 `--in-place` needs the controller under `scripts/neuralese_data/controller_supervisor.py` (the unit's main process; it
 relaunches the controller on exit 75 and forwards SIGTERM/SIGINT/SIGUSR1). `--to-checkout` installs it. Plain restart flags:
-`--grace S` (default 600) / `--patient`, `--no-preflight`, `--dry-run`, `--unit`. The frozen-runtime flags
-(`--runtime-from-main`, `--use-runtime`, `--freeze-only`) are LEGACY until the last controller has moved; see
-`RUN_FROM_CHECKOUT_20261109.md`.
+`--grace S` (default 600) / `--patient`, `--no-preflight`, `--dry-run`, `--unit`. The frozen-runtime flags and
+`freeze_native_runtime.py` are deleted; see `RUN_FROM_CHECKOUT_20261109.md`.
 
 Plain restart, in order: (1) cooperative stop: SIGTERM to the controller only; it stops its workers and actor and archives
 retained partials; a learner/SFT trainer finishes its update and checkpoints; after `--grace` the unit is stopped hard;

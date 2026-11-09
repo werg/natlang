@@ -43,9 +43,6 @@ def main(job_path):
     if not rl and (work / 'evaluation/completed.json').exists():
         print(json.dumps({'state': 'already completed', 'work': str(work)}), flush=True)
         return
-    closure = runtime / 'runtime-input-closure.json'
-    if digest(closure) != job['runtime_closure_sha256']:
-        raise RuntimeError('Pop runtime closure differs from the checkpoint runtime')
     spec_sha = raw = packet = None
     if not rl:
         packet = Path(job['packet'])
@@ -108,7 +105,10 @@ def main(job_path):
            'NATLANG_BF16_REDUCTION': 'fp32-accumulate', 'NATLANG_NATIVE_COMPILE': '0', 'HF_HUB_OFFLINE': '1',
            'TRANSFORMERS_OFFLINE': '1', 'HF_HOME': '/work/hf', 'HF_MODULES_CACHE': '/work/hf/modules',
            'TRITON_CACHE_DIR': '/work/triton', 'TORCHINDUCTOR_CACHE_DIR': '/work/inductor', 'CUDA_CACHE_PATH': '/work/cuda',
-           'NATLANG_HASH_CACHE': '/work/hash-cache.jsonl', 'PYTHONUNBUFFERED': '1'}
+           'NATLANG_HASH_CACHE': '/work/hash-cache.jsonl', 'PYTHONUNBUFFERED': '1',
+           # The mounted checkout is the code that serves: its commit is recorded in the actor receipt (code_provenance).
+           'NATLANG_CODE_COMMIT': (job.get('code') or {}).get('git_commit') or '',
+           'NATLANG_CODE_DIRTY': '1' if (job.get('code') or {}).get('dirty') else '0'}
     for key, value in env.items():
         cmd += ['-e', f'{key}={value}']
     cmd += [image, 'python', '-c', bootstrap]
@@ -119,7 +119,7 @@ def main(job_path):
         container = subprocess.check_output(cmd, text=True, timeout=60).strip()
         (work / 'launch.json').write_text(json.dumps({
             'container_id': container, 'step': job['step'], 'checkpoint_sha256': job['source_sha256'],
-            'arm': job['arm'], 'runtime_receipt_sha256': job['runtime_closure_sha256'],
+            'arm': job['arm'], 'code_commit': (job.get('code') or {}).get('git_commit'),
             'image_id': subprocess.check_output(['docker', 'image', 'inspect', image, '--format', '{{.Id}}'], text=True).strip(),
             'task_spec_sha256': spec_sha, 'mode': job.get('mode', 'evaluation'), 'transport_sha256': (transport or {}).get('sha256'),
             'inference_view_sha256': job['view_sha256'], 'driver_sha256': digest(__file__),

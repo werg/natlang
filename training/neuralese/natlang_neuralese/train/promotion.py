@@ -46,9 +46,10 @@ SELECTION_SCHEMA = 'natlang.behavior-parent-selection/1'
 EVALUATION_SUMMARY_SCHEMA = 'natlang.in-run-task-eval/1'
 MAX_PROMOTION_CASES = 32
 PHASES = ('development', 'confirmation')
-# The arm identity that must agree for a comparison to be paired under identical limits.
+# The arm identity that must agree for a comparison to be paired under identical limits. The code that served an arm is
+# recorded provenance (``code_commit``), not a pairing field: production runs from the checkout (owner, 2026-11-09).
 MATCHED_FIELDS = ('spec_sha256', 'packet_sha256', 'case_indices', 'prompt_rendering', 'prompt_rendering_identity_sha256',
-                  'serving_config_identity_sha256', 'python_runtime_sha256', 'serving_precision_sha256',
+                  'serving_config_identity_sha256', 'serving_precision_sha256',
                   'history_reasoning_sha256', 'tokenizer_fingerprint')
 
 
@@ -113,7 +114,6 @@ def arm_identity(receipt):
     """The comparable identity and outcome of one held-actor evaluation receipt (``completed.json``)."""
     contract, info, summary = receipt.get('contract') or {}, receipt.get('actor_info') or {}, receipt.get('summary') or {}
     policy = info.get('rl_policy_binding') or {}
-    runtime = policy.get('python_runtime') or {}
     return {
         'checkpoint_sha256': contract.get('checkpoint_sha256'),
         'step': contract.get('step'),
@@ -130,7 +130,7 @@ def arm_identity(receipt):
         'prompt_rendering': summary.get('prompt_rendering'),
         'prompt_rendering_identity_sha256': info.get('prompt_rendering_identity_sha256'),
         'serving_config_identity_sha256': info.get('serving_config_identity_sha256'),
-        'python_runtime_sha256': runtime.get('sha256'),
+        'code_commit': (policy.get('code') or {}).get('git_commit'),
         'serving_precision_sha256': _hash_or_none(policy.get('serving_precision')),
         'history_reasoning_sha256': _hash_or_none(policy.get('history_reasoning')),
         'tokenizer_fingerprint': (policy.get('native_identity') or {}).get('tokenizer_fingerprint'),
@@ -138,7 +138,7 @@ def arm_identity(receipt):
 
 
 def _execution_problems(candidate, reference):
-    """Reasons two arms' recorded execution identities (the full runtime closure, TS task runtime, driver and image they
+    """Reasons two arms' recorded execution identities (the spec, packet, driver and image they
     were actually launched under: pop_behavior_eval.execution_identity) are not the same measurement environment.
     ``None`` for both means the caller did not supply them (a comparison of receipts alone, as before)."""
     if candidate is None and reference is None:
@@ -237,6 +237,7 @@ def compare(declaration, *, phase, candidate, reference, candidate_detail=None, 
             'candidate': {key: cand[key] for key in ('checkpoint_sha256', 'step', 'task_successes', 'cases', 'outcome_counts')},
             'reference': {key: ref[key] for key in ('checkpoint_sha256', 'step', 'task_successes', 'cases', 'outcome_counts')},
             'matched_identity': {field: cand[field] for field in MATCHED_FIELDS} if matched else None,
+            'code_commits': {'candidate': cand['code_commit'], 'reference': ref['code_commit']},
             **({'execution_identity_sha256': candidate_execution['identity_sha256']}
                if matched and isinstance(candidate_execution, dict) else {}),
             'matched': matched, 'unmatched_reasons': reasons, 'delta': delta, 'case_transitions': transitions,

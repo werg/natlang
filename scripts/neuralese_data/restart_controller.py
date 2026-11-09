@@ -24,10 +24,6 @@ the new controller re-attaches (rl/detached_processes.py).  Every other restart 
    the controller ``preflight`` under the checkout; a refusal restores the files and relaunches as before;
 3. relaunch through ``memory_ledger.py run`` as ``<base>-rN`` with the recorded launch spec (``launch.json`` next to the
    config, derived from the old unit the first time), and wait for the resumed controller to rewrite its state.
-
-LEGACY (delete once every controller runs from the checkout): ``--runtime-from-main [--commit SHA]``, ``--use-runtime
-vNN-MMDD`` and ``--freeze-only`` freeze a runtime from main and rebind to it (``freeze_native_runtime.py``,
-``rebind-runtime.sh``).
 """
 from __future__ import annotations
 
@@ -49,10 +45,7 @@ LEDGER = REPO / 'scripts/memory_ledger.py'
 DATA = resolve('data_nvme', 'lfm3-rl-dgx-20261029')
 HASH_CACHE = resolve('data_hdd', 'natlang-lfm3-cloud-corrected-20261103', 'hash-cache.jsonl')
 OPS = DATA / 'ops/bf95-lowlr-1105'
-REBIND = OPS / 'interleave-v49/rebind-runtime.sh'
-BINDINGS = OPS / 'interleave-v49/v50-bindings.json'
 PYTHON = REPO / '.venv-neuralese/bin/python'
-NODE_BIN = Path.home() / '.local/share/natlang-dev/node-v24.0.1-linux-arm64/bin'
 GIB = 2 ** 30
 RUNTIME_RE = re.compile(r'runtime-native-corrected-mix-(v\d+-\d{4})')
 FROZEN_PATH_RE = re.compile(re.escape(str(DATA)) + r'/runtime-native-corrected-mix-v\d+-\d{4}')
@@ -279,12 +272,6 @@ def restore_files(restore):
         os.replace(copy, path)
 
 
-def next_runtime_tag(current):
-    numbers = [int(m[1]) for p in DATA.glob('runtime-native-corrected-mix-v*-*')
-               if (m := re.fullmatch(r'runtime-native-corrected-mix-v(\d+)-\d{4}', p.name))]
-    return f"v{max(numbers) + 1}-{time.strftime('%m%d')}"
-
-
 def wait_unit(unit, seconds, poll=5.):
     deadline = time.monotonic() + seconds
     while time.monotonic() < deadline:
@@ -292,30 +279,6 @@ def wait_unit(unit, seconds, poll=5.):
             return True
         time.sleep(poll)
     return unit_state(unit) in ('gone', 'failed', 'inactive')
-
-
-def freeze(spec, commit, log):
-    """Freeze main (or ``commit``) into the next runtime through the ledger; returns its tag."""
-    tag = next_runtime_tag(current_runtime(spec))
-    sha = run(['git', '-C', REPO, 'rev-parse', '--verify', (commit or 'HEAD') + '^{commit}'], check=True).stdout.strip()
-    new = DATA / f'runtime-native-corrected-mix-{tag}'
-    predecessor = DATA / f'runtime-native-corrected-mix-{current_runtime(spec)}'
-    unit = f'freeze-controller-{tag}'
-    env = f'PATH={NODE_BIN}:{os.environ["PATH"]}'
-    payload = (f'cd {REPO} && exec env PYTHONPATH={REPO}/training/neuralese:{REPO} {PYTHON} '
-               f'scripts/neuralese_data/freeze_native_runtime.py --commit {sha} --predecessor {predecessor} '
-               f'--out {new} --control-bindings {BINDINGS} >> {log} 2>&1')
-    started = run([sys.executable, LEDGER, 'run', '--unit', unit, '--budget-gb', '3', '--priority', 'low',
-                   '--wait', '900', '--workdir', REPO, '--env', env, '--', '/bin/sh', '-c', payload])
-    if started.returncode:
-        raise SystemExit('freeze not admitted: ' + (started.stderr or started.stdout)[-400:])
-    print(f'freezing {sha[:9]} into {new.name} (unit {unit}, log {log})', flush=True)
-    time.sleep(5)
-    while unit_state(unit) not in ('gone', 'failed', 'inactive'):
-        time.sleep(10)
-    if not (new / 'runtime-input-closure.json').is_file():
-        raise SystemExit(f'freeze failed: no {new.name}/runtime-input-closure.json; see {log}')
-    return tag
 
 
 def stop_cooperatively(unit, out, grace, patient):
@@ -449,29 +412,19 @@ def main(argv=None):
     p.add_argument('--at-round-boundary', action='store_true',
                    help='wait (up to --boundary-wait seconds) for the controller to finish its current update and begin the next round')
     p.add_argument('--boundary-wait', type=float, default=10800.)
-    p.add_argument('--runtime-from-main', action='store_true', help='LEGACY: freeze main into a successor runtime and rebind to it')
-    p.add_argument('--commit', help='LEGACY: commit to freeze (default HEAD of the canonical checkout)')
-    p.add_argument('--use-runtime', metavar='TAG', help='LEGACY: rebind to an already frozen runtime (e.g. v58-1107)')
     p.add_argument('--grace', type=float, default=600., help='seconds of cooperative stop before the unit is stopped hard')
     p.add_argument('--patient', action='store_true', help='never escalate: wait for the clean update boundary')
     p.add_argument('--no-preflight', action='store_true')
     p.add_argument('--resume-seconds', type=float, default=300.)
     p.add_argument('--config-patch', type=Path, help='JSON object merged into config.json after the stop (top-level keys; null deletes)')
     p.add_argument('--dry-run', action='store_true', help='print the plan and the launch command; change nothing')
-    p.add_argument('--freeze-only', action='store_true', help='LEGACY: only freeze the successor runtime (nothing is stopped)')
     a = p.parse_args(argv)
     out = a.out.resolve()
     unit = pick_unit(out, a.unit)
     spec = read_json(out / 'launch.json') or derive_launch(unit)
     spec['unit'] = unit
     old_tag = current_runtime(spec)
-    legacy = a.runtime_from_main or a.use_runtime or a.freeze_only
-    if legacy and old_tag is None:
-        raise SystemExit('this controller already runs from the checkout: a plain restart picks up the newest main; '
-                         'the frozen-runtime flags apply only to controllers still launched from a frozen runtime')
-    if a.to_checkout and legacy:
-        raise SystemExit('--to-checkout and the frozen-runtime flags are alternatives')
-    if a.in_place and (legacy or a.to_checkout):
+    if a.in_place and a.to_checkout:
         raise SystemExit('--in-place is a restart without any runtime change')
     if a.to_checkout and old_tag is None:
         raise SystemExit('this controller already runs from the checkout (its launch payload names no frozen runtime)')
@@ -495,7 +448,7 @@ def main(argv=None):
                                    'a refusal restores every file and relaunches the frozen runtime'}
         print(json.dumps(report, indent=1))
         return 0
-    if old_tag is not None and not a.to_checkout and not legacy:
+    if old_tag is not None and not a.to_checkout:
         print(f'note: this controller still runs from frozen runtime {old_tag}; --to-checkout moves it to the checkout', flush=True)
     with open(out / 'restart.lock', 'w') as lock:
         try:
@@ -506,16 +459,6 @@ def main(argv=None):
             ok, detail = restart_in_place(unit, out, a.boundary_wait if a.at_round_boundary else a.resume_seconds)
             print(json.dumps({**plan, 'mode': 'in-place', 'resumed': ok, 'detail': detail}, indent=1))
             return 0 if ok else 1
-        new_tag = None
-        if a.use_runtime:
-            if not (DATA / f'runtime-native-corrected-mix-{a.use_runtime}/runtime-input-closure.json').is_file():
-                raise SystemExit(f'runtime {a.use_runtime} is not a frozen runtime')
-            new_tag = a.use_runtime
-        elif a.runtime_from_main or a.freeze_only:
-            new_tag = freeze(spec, a.commit, out / f'restart-freeze-{time.strftime("%Y%m%d-%H%M%S")}.log')
-            print(f'frozen runtime {new_tag}', flush=True)
-            if a.freeze_only:
-                return 0
         if a.at_round_boundary:
             wait_round_boundary(out, a.boundary_wait)
         outcome = stop_cooperatively(unit, out, a.grace, a.patient) if unit_state(unit) != 'gone' else 'already stopped'
@@ -533,8 +476,8 @@ def main(argv=None):
                     config[key] = value
             save_json(out / 'config.json', config)
             print(f'config patched: {sorted(patch)}', flush=True)
-        rebound = False
         restore = []
+        rebound = False
         if a.to_checkout:
             restore, spec = apply_migration(out, spec, time.strftime('%Y%m%d-%H%M%S'))
             print(f'migrated to run from the checkout {REPO}: {[str(path) for path, _ in restore]}', flush=True)
@@ -547,21 +490,6 @@ def main(argv=None):
                     restore = []
                     print('restored the frozen-runtime files; relaunching as before', flush=True)
             rebound = bool(restore)
-        elif new_tag:
-            done = run(['bash', REBIND, out, old_tag, new_tag])
-            print(done.stdout + done.stderr, flush=True)
-            if done.returncode:
-                raise SystemExit('rebind failed; the controller is stopped on its old runtime (relaunch with the same command)')
-            rebound = True
-            spec['payload'] = spec['payload'].replace(f'runtime-native-corrected-mix-{old_tag}', f'runtime-native-corrected-mix-{new_tag}')
-            if not a.no_preflight:
-                ok, detail = preflight(new_unit, out, DATA / f'runtime-native-corrected-mix-{new_tag}')
-                print(f'preflight under {new_tag}: {"ok" if ok else "REFUSED"} {detail}', flush=True)
-                if not ok:
-                    run(['bash', REBIND, out, new_tag, old_tag])
-                    spec['payload'] = spec['payload'].replace(new_tag, old_tag)
-                    rebound, new_tag = False, None
-                    print(f'rolled back to {old_tag}; relaunching the old runtime', flush=True)
         spec.setdefault('units', []).append(new_unit)
         spec['unit'] = new_unit
         save_json(out / 'launch.json', spec)
@@ -570,8 +498,8 @@ def main(argv=None):
         if started.returncode:
             raise SystemExit('relaunch not admitted by the ledger: ' + (started.stderr or started.stdout)[-500:])
         ok, detail = wait_resumed(new_unit, out, launched_at, a.resume_seconds)
-        print(json.dumps({**plan, 'stop': outcome, 'runtime_after': 'checkout' if rebound and a.to_checkout else (new_tag or old_tag or 'checkout'),
-                          'rebound': rebound, 'resumed': ok, 'detail': detail}, indent=1))
+        print(json.dumps({**plan, 'stop': outcome, 'runtime_after': 'checkout' if rebound else (old_tag or 'checkout'),
+                          'migrated': rebound, 'resumed': ok, 'detail': detail}, indent=1))
         return 0 if ok else 1
 
 

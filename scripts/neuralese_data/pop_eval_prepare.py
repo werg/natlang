@@ -72,12 +72,12 @@ def raw_view(args):
     transport = json.loads(Path(binding['path']).read_text())
     return {'kind': args.kind, 'transport': binding, 'source': transport['source'], 'step': transport['step'],
             'view': transport['view'], 'view_receipt': transport['view_receipt'],
-            'python_runtime': transport['python_runtime'], 'scope': transport['scope']}
+            'code': transport.get('code'), 'scope': transport['scope']}
 
 
 def ema_view(args):
     import torch
-    from natlang_neuralese.common.runtime_inventory import python_runtime_binding
+    from natlang_neuralese.common.code_provenance import code_provenance
     from natlang_neuralese.model.native_model import load_native_checkpoint, model_state
     from natlang_neuralese.train.native_state_sft import native_trainable_parameters
     from natlang_neuralese.train.trajectory_state import atomic_checkpoint
@@ -121,7 +121,7 @@ def ema_view(args):
                 'training_source': {'sha256': source_sha, 'bytes': source_bytes},
                 'view': {'path': view.name, 'sha256': view_sha, 'bytes': view_bytes},
                 'view_receipt': {'sha256': receipt_sha, 'bytes': len(receipt_raw)},
-                'step': step, 'python_runtime': python_runtime_binding(), 'training_resume': False}
+                'step': step, 'code': code_provenance(), 'training_resume': False}
     manifest_raw = (json.dumps(manifest, indent=2, sort_keys=True) + '\n').encode()
     manifest_sha = hashlib.sha256(manifest_raw).hexdigest()
     manifest_path = out / (manifest_sha + '.transport.json')
@@ -129,7 +129,7 @@ def ema_view(args):
     return {'kind': 'ema', 'transport': {'path': str(manifest_path), 'sha256': manifest_sha, 'bytes': len(manifest_raw)},
             'source': manifest['source'], 'training_source': manifest['training_source'], 'step': step,
             'view': manifest['view'], 'view_receipt': manifest['view_receipt'],
-            'python_runtime': manifest['python_runtime'], 'scope': manifest['scope']}
+            'code': manifest['code'], 'scope': manifest['scope']}
 
 
 def main():
@@ -141,10 +141,7 @@ def main():
     parser.add_argument('--base')
     parser.add_argument('--expect-sha256')
     args = parser.parse_args()
-    runtime = os.environ['NATLANG_REPO']
-    import natlang_neuralese
-    if not natlang_neuralese.__file__.startswith(runtime):
-        raise SystemExit(f'natlang_neuralese resolved outside the bound runtime: {natlang_neuralese.__file__}')
+    runtime = os.environ.get('NATLANG_REPO') or str(Path(__file__).resolve().parents[2])
     before = stat5(args.checkpoint)
     started = time.time()
     result = ema_view(args) if args.kind == 'ema' else raw_view(args)

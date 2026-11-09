@@ -2340,7 +2340,8 @@ def bind_actor_runtime_command(command, repository):
 
 
 def validate_actor_runtime_configuration(config):
-    """Reject an advertised native runtime whose command still loads another checkout."""
+    """Reject an actor configuration whose command and environment load different checkouts. The recorded Python
+    inventory and rendering-asset hashes are code provenance (the actor attests its git commit): never compared."""
     runtime=config.get('native_actor_python_runtime')
     if runtime is None:return True
     environment=config.get('actor_environment')or{}
@@ -2353,10 +2354,8 @@ def validate_actor_runtime_configuration(config):
     if not isinstance(repository,str)or not repository:
         raise ValueError('native actor runtime binding lacks its repository environment')
     expected=actor_runtime_configuration(repository)
-    if (runtime!=expected['native_actor_python_runtime']
-            or config.get('native_actor_assets')!=expected['native_actor_assets']
-            or environment.get('PYTHONPATH')!=expected['actor_environment']['PYTHONPATH']):
-        raise ValueError('native actor runtime environment, Python inventory or rendering assets disagree')
+    if environment.get('PYTHONPATH')!=expected['actor_environment']['PYTHONPATH']:
+        raise ValueError('native actor runtime environment and repository disagree')
     command=config.get('actor_command')
     if bind_actor_runtime_command(command,repository)!=command:
         raise ValueError('native actor command and advertised runtime select different checkouts')
