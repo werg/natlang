@@ -1,3 +1,12 @@
+## RL round scheduling: per-group teachers and Pop pre-collection (engineering, 2026-11-10)
+
+`rl/teacher_feed.py`: each group is scored and its JOLT+ teachers planned (batch of `jolt_teacher_plan_batch` groups, 1 for the
+crisp plan) as soon as its students finish; the teachers join the shared work-stealing queue (`jolt_teacher_overlap: false` opts out;
+`teacher-plan.json` /2 is appended per batch, a /1 whole-round plan resumes the old way). `rl/precollect.py`: while round N's learner
+runs, Pop collects round N+1's students from the policy-N actor (`round-N+1-pre`; `precollect: false` opts out); the round imports
+them as one-update-stale episodes (rollout `policy.checkpoint_sha256` N, learner `--rl-actors`, TIS plus engine guard). Never admit
+older policies: no pre-collection runs when an SFT window falls between the update and the next collection. Fallow #25 tracks deployment.
+
 ## Corrected-mix regression: LR collapse and marker-weight spam (engineering, 2026-11-05)
 
 Dev16 task_success fell 12/16 (bf95) -> 10/16 (step 93) -> 0/16 (129) -> 2/16 (140) -> 1/16 (204). Two causes:

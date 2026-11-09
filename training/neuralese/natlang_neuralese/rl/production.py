@@ -863,7 +863,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
             system_prompt=None, prompt_rendering=None, guidance_stage=None, context_tokens=None,
             neuralese_use_bonus=None, program_guidance=None, adapters=None, remote_workers=None,
             lost_block_exclusions=None, late_endpoints=(), slot_poll_seconds=15., teacher_overlap=True,
-            teacher_plan_batch=None):
+            teacher_plan_batch=None, drain=None, teacher_phase=True):
     """Bounded subprocess fanout; existing collector and exact task verifier. ``behavior_top_k`` also records the
     actors' top-k sampler log-probs at every sampled position (score-centered RL); None leaves collection unchanged.
     ``teacher_attempts`` JOLT+ teacher attempts per group (the crisp plan; ``teacher_plan='nl'`` lets
@@ -897,7 +897,10 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     students still run (rl.teacher_feed): each group is scored and planned as soon as its students finish, in batches of
     ``teacher_plan_batch`` finished groups (default 1 for the crisp plan, 4 for the NL plan; an idle slot flushes at once),
     and its teachers join the shared work-stealing queue. A round whose ``teacher-plan.json`` was written by the old
-    whole-round planner resumes through the old path."""
+    whole-round planner resumes through the old path.
+    ``drain`` (a ``threading.Event``) ends the collection gracefully once set: no new entry is taken, in-flight episodes
+    finish (a hard stop would kill them) and the report says which keys finished (rl.precollect).
+    ``teacher_phase=False`` collects the students only (JOLT+ student guidance stays; no teacher plan or entries)."""
     if prompt_rendering not in (None,'full'):
         raise ValueError('native on-policy collection requires the full prompt contract')
     if guidance_stage not in (None,'backbone','writer'):
@@ -1067,7 +1070,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
                 entry['context_tokens'] = context_tokens
 
     feed = None
-    if teacher_attempts and not legacy_plan:
+    if teacher_attempts and teacher_phase and not legacy_plan:
         feed = TeacherFeed(
             path=plan_path, students=entries, attempts=teacher_attempts,
             batch=teacher_plan_batch or (1 if teacher_plan == 'crisp' else DEFAULT_BATCH),
@@ -1105,6 +1108,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     join_lock, attested_at = Lock(), {}
     from .detached_processes import restart_requested, detached_workers, entry_in_flight, alive as process_alive
     halted = lambda: bool(control and control.stop.requested) or restart_requested()
+    draining = lambda: drain is not None and drain.is_set()
     attached = {}   # slot index -> record of a worker a previous controller detached (finishing its own episode)
 
     def ready(index):
@@ -1175,7 +1179,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
                                    workers=[{'pid': r['pid'], 'key': entry_in_flight(r), 'journal': r['journal']} for r in running])
             phase_results, counts = dispatch(batch, directory=directory, generation=generation, phase=name,
                 endpoints=[endpoint for endpoint, _ in slots], run_worker=run_worker, attempted=done,
-                stopped=halted, ready=ready, poll_seconds=slot_poll_seconds, feed=feed,
+                stopped=lambda: halted() or draining(), ready=ready, poll_seconds=slot_poll_seconds, feed=feed,
                 outside_busy=lambda: any(process_alive(r) for r in attached.values()))
             generations.record('dispatch', generation=generation, phase=name or 'student', entries=len(batch),
                                teacher_overlap=feed is not None,
@@ -1185,14 +1189,14 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
             while not halted() and any(process_alive(r) for r in running):
                 time.sleep(1.)
             passes += 1
-            if halted() or not running or passes >= 3 or not unfinished(batch, generations.attempted()):
+            if halted() or draining() or not running or passes >= 3 or not unfinished(batch, generations.attempted()):
                 break
 
     def require_finished(batch, name):
         """Seal nothing with a missing terminal row: a slot whose collector exited without a finish row leaves its
         key pending. Unless a stop was requested (the caller then reports an interrupted collection), the round
         fails loudly and the next start re-dispatches exactly the unfinished keys."""
-        if halted():
+        if halted() or draining():
             return
         missing = unfinished(batch, generations.attempted())
         if missing:
@@ -1213,16 +1217,16 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
             batch = entries + teachers['entries']
             run_phase(batch, '', feed=feed)
             require_finished(entries, '')
-            if not halted() and not feed.complete():   # a stalled planner pass: plan the rest now and run it
+            if not halted() and not draining() and not feed.complete():   # a stalled planner pass: plan the rest now and run it
                 batch.extend(feed.poll(flush=True))
                 run_phase(batch, '', feed=feed)
-            if not halted():
+            if not halted() and not draining():
                 require_finished(teachers['entries'], 'teacher-')
         else:
             run_phase(entries, '')
             # The JOLT+ teacher plan below is fixed from the scored student sample, so the sample must be complete.
             require_finished(entries, '')
-        if teacher_attempts and feed is None and not halted():
+        if teacher_attempts and teacher_phase and feed is None and not halted() and not draining():
             from .jolt import teacher_entries
             write_journal_and_queue(teachers_too=False)
             score(out, out / 'student-rollouts.jsonl', neuralese_bonus=bonus)
@@ -1259,7 +1263,14 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
             retained_artifacts()
     write_journal_and_queue()
     report = score(out, out / 'rollouts.jsonl', neuralese_bonus=bonus)
-    if teacher_attempts:
+    from .precollect import RECEIPT as PRE_RECEIPT, stamp_rollouts
+    pre_receipt = json.loads((out / PRE_RECEIPT).read_text()) if (out / PRE_RECEIPT).exists() else None
+    if pre_receipt is not None:
+        # Episodes Pop pre-collected against the previous policy keep that behaviour policy on their rollouts.
+        report['pre_collected'] = {'episodes': stamp_rollouts(out / 'rollouts.jsonl', pre_receipt),
+                                   'behavior_policy_id': pre_receipt['behavior_policy_id'],
+                                   'staleness_updates': pre_receipt['staleness_updates']}
+    if teacher_attempts and teacher_phase:
         report['jolt_teacher_attempts'] = {'requested_per_group': teacher_attempts,
                                            'entries': len(teachers['entries']), 'refusal': teachers['refusal'],
                                            'plan': teachers.get('plan'),
@@ -1290,6 +1301,12 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
             if previous is not None:
                 origins[block_id] = 'retained-verified-prior-actor-lease'
                 return previous
+            if pre_receipt is not None and pre_receipt.get('blocks_manifest'):
+                archived = verified_bundle_bytes(out / pre_receipt['blocks_manifest'], block_id,
+                                                 policy_id=pre_receipt['behavior_policy_id'])
+                if archived is not None:
+                    origins[block_id] = 'pre-collection-bundle-' + pre_receipt['behavior_policy_id'][:12]
+                    return archived
             errors = []
             for server in servers:
                 try:
@@ -1423,11 +1440,14 @@ def _memetic_after_pending(config, round_dir):
             and not (Path(round_dir) / 'memetic-after-collection.json').exists())
 
 
-def collect_with_actor(config, values, **kwargs):
+def collect_with_actor(config, values, keep_remote_actor=False, **kwargs):
     """Optional colocated actor lifecycle; its parent is the ledger/sandbox unit.
 
     The entire actor lease ends only AFTER collect has durably archived blocks.
     External fleets use the same collect function and explicit supervisor hooks.
+    ``keep_remote_actor``: the remote actor keeps serving this round's policy after the collection (``after_collection``
+    is not run): Pop pre-collects the next round on it while the learner runs (rl.precollect), and the caller runs the
+    hook when that does not happen.
     """
     rescored = (config.get('reward_reclassification_continuations') or {}).get(str(Path(kwargs['out']).resolve()))
     if rescored is not None:
@@ -1574,7 +1594,7 @@ def collect_with_actor(config, values, **kwargs):
                 else:
                     from ..train.loop import wait_forwarding_signals
                     wait_forwarding_signals(process)
-            if config.get('after_collection') and not detaching:
+            if config.get('after_collection') and not detaching and not keep_remote_actor:
                 try:
                     run_command(config['after_collection'], values)
                 except Exception as error:   # teardown of an auxiliary actor never masks the collection's own outcome
@@ -2060,10 +2080,38 @@ def run(config_path, *, rounds=None, stop=None):
             from ..train.recipe import stage_parameter_args
             config, values, policy, policy_loss, expected_native, collect_kwargs = prepare_round_collection(
                 config, state, round_dir, selected_path, selection, control)
+            from . import precollect
+            pre_receipt = None
+            if attempt == 0 and precollect.pre_directory(round_dir).exists() and not (round_dir / 'collection-binding.json').exists():
+                # Pop pre-collected this round's students against the previous policy while the learner ran.
+                try:
+                    precollect.settle(precollect.pre_directory(round_dir), collect, control)
+                    pre_receipt = precollect.import_into_round(precollect.pre_directory(round_dir), round_dir, state,
+                                                               learner_policy_id=policy)
+                except Exception as error:
+                    pre_receipt = {'rejected': 'settle failed: ' + repr(error)[:300]}
+                if pre_receipt is not None:
+                    history = state.setdefault('precollection_history', [])
+                    history.append({'round': state['round'], 'learner_policy_id': policy,
+                                    **({'rejected': pre_receipt['rejected']} if 'rejected' in pre_receipt else
+                                       {'behavior_policy_id': pre_receipt['behavior_policy_id'],
+                                        'episodes': len(pre_receipt['keys']),
+                                        'staleness_updates': pre_receipt['staleness_updates']})})
+                    write_json_durable(state_path, state)
+                    print(json.dumps({'event': 'pre-collection', 'round': state['round'], **history[-1]}), flush=True)
+            elif attempt == 0 and (round_dir / precollect.RECEIPT).exists():
+                pre_receipt = json.loads((round_dir / precollect.RECEIPT).read_text())
+            if pre_receipt is not None and ('rejected' in pre_receipt or not pre_receipt['keys']):
+                pre_receipt = None
+            if pre_receipt is not None:
+                actors_path = round_dir / 'rl-actors.json'
+                write_json_durable(actors_path, precollect.actors_declaration(pre_receipt, policy))
+                values['rl_actors'] = str(actors_path)
+            pre_ok, pre_reason = precollect.eligible(config, state, interleaved, policy_loss)
             if config.get('before_collect'):
                 run_command(config['before_collect'], values)
             try:
-                report = collect_with_actor(config, values, **collect_kwargs)
+                report = collect_with_actor(config, values, keep_remote_actor=pre_ok, **collect_kwargs)
             except InterruptedError:
                 state['phase'] = 'requested_stop'
                 write_json_durable(state_path, state)
@@ -2241,6 +2289,8 @@ def run(config_path, *, rounds=None, stop=None):
                     run_command(config['before_update'], values)
                 if not already_complete:
                     command=config['seed_command'] if mode == 'seed' else config['learner_command']
+                    if mode == 'grpo' and values.get('rl_actors'):
+                        command = [*command, '--rl-actors', '{rl_actors}']   # one-update-stale pre-collected episodes
                     if mode == 'seed':
                         from .native_supervised import prepare_seed_command
                         command=prepare_seed_command(config,stage_out,values,state,state_path,
@@ -2250,7 +2300,24 @@ def run(config_path, *, rounds=None, stop=None):
                     from ..common.code_provenance import code_provenance
                     state['update_code'] = code_provenance(fresh=True)
                     write_json_durable(state_path, state)
-                    run_command(command, values)
+                    handle = None
+                    if pre_ok and mode == 'grpo' and amended_groups is None and not report.get('reward_reclassification'):
+                        handle = _begin_precollection(config, state, cases, selection, collect_kwargs, round_dir, control)
+                    try:
+                        run_command(command, values)
+                    except BaseException:
+                        if pre_ok and handle is None:
+                            _release_remote_actor(config, values)
+                        raise
+                    finally:
+                        if handle is not None:
+                            drained = handle.finish()   # no new entry; in-flight episodes finish; the blocks are bundled
+                            print(json.dumps({'event': 'pre-collection drained', 'directory': str(handle.directory),
+                                              'error': drained}), flush=True)
+                            if drained is not None:   # it never ran (the remote actor did not serve the policy): free Pop
+                                _release_remote_actor(config, values)
+                    if pre_ok and handle is None:
+                        _release_remote_actor(config, values)
                 no_signal_path=stage_out/'zero-signal-report.json'
                 if no_signal_path.is_file():
                     if mode!='grpo' or len(rft_stages)!=1 or (stage_out/'checkpoint.pt').exists() or learner_report.exists():
@@ -2345,6 +2412,31 @@ def run(config_path, *, rounds=None, stop=None):
             write_json_durable(state_path, state)
             completed += 1
         return state
+
+
+def _release_remote_actor(config, values):
+    """Stop the remote actor a round kept alive for pre-collection that did not happen."""
+    if config.get('after_collection'):
+        try:
+            run_command(config['after_collection'], values)
+        except Exception as error:
+            print(json.dumps({'event': 'after_collection hook failed', 'error': repr(error)[:500]}), flush=True)
+
+
+def _begin_precollection(config, state, cases, selection, collect_kwargs, round_dir, control):
+    """Seal the next round's selection and start its Pop students (best effort: never fails the update)."""
+    from . import precollect
+    try:
+        sealed = precollect.seal_next_selection(config, state, cases, selection, Path(config['out']), select_tasks)
+        if sealed is None:
+            return None
+        number, chosen, selected = sealed
+        return precollect.begin(config=config, state=state, round_kwargs=collect_kwargs, number=number,
+                                selection=chosen, selected=selected, out=Path(config['out']), collect=collect,
+                                control=control, log=lambda line: print(line, flush=True))
+    except Exception as error:
+        print(json.dumps({'event': 'pre-collection not started', 'error': repr(error)[:400]}), flush=True)
+        return None
 
 
 def actor_runtime_configuration(repository):
