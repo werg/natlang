@@ -1621,6 +1621,10 @@ differences from a known-good path. Record what was ruled out and how.
 
 # Machine ownership and coordination
 
+Owner, 2026-11-09: the coord inbox is retired. No Pop agent runs; the DGX supervisor drives Pop directly over ssh
+(the RL actor and dev16 evals). Do not check `coord.py inbox` in monitoring cycles. The coordination rules below
+apply again only if a second concurrent agent is started.
+
 - Use `/home/werg/natlang` as the canonical development checkout on both Pop and
   DGX. The Pop agent owns execution/resource management on Pop; the DGX agent
   owns execution/resource management on DGX. Do not launch new jobs from retired
