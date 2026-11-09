@@ -672,3 +672,22 @@ def test_rollout_turns_keep_collector_completion_token_counter():
     result = {'trajectory': [{'phase': 'action', 'context': [], 'assistant': {'content': '', 'calls': []},
                              'model_response': {'raw_calls': [], 'completion_tokens': 17}}]}
     assert rollout_turns(result)[0]['usage'] == {'completion_tokens': 17}
+
+
+def test_group_scoring_for_the_teacher_plan_scores_only_finished_groups_in_scratch(tmp_path):
+    from natlang_neuralese.rl.teacher_feed import score_student_groups
+    packet = [authored_root_row(_row()), {**authored_root_row(_row()), "id": "row-2"}]
+    (tmp_path / "packet.jsonl").write_text("".join(json.dumps(r) + "\n" for r in packet))
+    entries = build_queue(tmp_path / "packet.jsonl", 2, 2, tmp_path, temperature=1.0, case_seconds=60,
+                          max_model_requests=8, max_turns=4, seed_base=0)
+    (tmp_path / "preparation.json").write_text(json.dumps({
+        "root_mode": "authored", "packet_sha256": hashlib.sha256((tmp_path / "packet.jsonl").read_bytes()).hexdigest()}))
+    failed = {"outcome": {"status": "failed", "detail": "model_incomplete: terminated_without_result"}}
+    done = {"outcome": {"status": "done", "accepted": True}}
+    for entry, result in zip(entries, [done, failed]):   # group 0 finished; group 1 has no results yet
+        Path(entry["output"]).parent.mkdir(parents=True, exist_ok=True)
+        Path(entry["output"]).write_text(json.dumps(result) + "\n")
+    journal = [{"event": "finish", "key": e["key"], "status": "complete"} for e in entries[:2]]
+    rows = score_student_groups(tmp_path, entries[:2], journal, score=score)
+    assert [(r["group"], r["sample"], r["reward"]["quality"]) for r in rows] == [(0, 0, 1.0), (0, 1, 0.0)]
+    assert not (tmp_path / "score.json").exists() and not (tmp_path / "rewards.jsonl").exists()

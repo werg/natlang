@@ -862,7 +862,8 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
             behavior_top_k=None, teacher_attempts=0, teacher_plan='nl',
             system_prompt=None, prompt_rendering=None, guidance_stage=None, context_tokens=None,
             neuralese_use_bonus=None, program_guidance=None, adapters=None, remote_workers=None,
-            lost_block_exclusions=None, late_endpoints=(), slot_poll_seconds=15.):
+            lost_block_exclusions=None, late_endpoints=(), slot_poll_seconds=15., teacher_overlap=True,
+            teacher_plan_batch=None):
     """Bounded subprocess fanout; existing collector and exact task verifier. ``behavior_top_k`` also records the
     actors' top-k sampler log-probs at every sampled position (score-centered RL); None leaves collection unchanged.
     ``teacher_attempts`` JOLT+ teacher attempts per group (the crisp plan; ``teacher_plan='nl'`` lets
@@ -891,7 +892,12 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     ``late_endpoints`` (remote endpoints that did not attest the policy at round start, e.g. Pop while a dev16
     evaluation holds it) keep their worker slots: each slot waits until its actor attests the round's policy, which then
     joins the round's actor receipts (a ``join`` generation event). Every remote slot rechecks its actor before taking
-    an entry, so a dead remote actor waits instead of fast-failing the shared queue."""
+    an entry, so a dead remote actor waits instead of fast-failing the shared queue.
+    ``teacher_overlap`` (default on; ``jolt_teacher_overlap: false`` opts out) plans the JOLT+ teacher attempts while the
+    students still run (rl.teacher_feed): each group is scored and planned as soon as its students finish, in batches of
+    ``teacher_plan_batch`` finished groups (default 1 for the crisp plan, 4 for the NL plan; an idle slot flushes at once),
+    and its teachers join the shared work-stealing queue. A round whose ``teacher-plan.json`` was written by the old
+    whole-round planner resumes through the old path."""
     if prompt_rendering not in (None,'full'):
         raise ValueError('native on-policy collection requires the full prompt contract')
     if guidance_stage not in (None,'backbone','writer'):
@@ -931,6 +937,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     recorded = json.loads(receipt.read_text()) if receipt.exists() else None
     from .collection_generations import (Generations, IncompleteCollection, dispatch, persist_teacher_plan,
                                          load_teacher_plan, unfinished)
+    from .teacher_feed import TeacherFeed, DEFAULT_BATCH, score_student_groups
     generations = Generations(out)
     if recorded is None:
         binding, bonus = resolve_neuralese_bonus(None, binding)
@@ -1037,9 +1044,42 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     native_custody = all(actor.get('communication') == 'native-state' for actor in actors.values())
     plan_path = out / 'teacher-plan.json'
     # A previous start may have planned (and partly run) the JOLT+ teacher attempts: reuse that exact plan.
-    teachers = (load_teacher_plan(plan_path, [entry['key'] for entry in entries]) if teacher_attempts else None)
+    student_keys = [entry['key'] for entry in entries]
+    legacy_plan = bool(teacher_attempts) and TeacherFeed.is_legacy_plan(plan_path, student_keys)
+    teachers = (load_teacher_plan(plan_path, student_keys) if teacher_attempts and legacy_plan else None)
     planned = teachers is not None
     teachers = teachers or {'entries': [], 'refusal': None}
+
+    def score_groups(members):
+        return score_student_groups(out, members, (row for path in generations.journals() for row in generations.rows(path)),
+                                    score=score, bonus=bonus)
+
+    def plan_teacher_batch(members, rows, carry):
+        from .jolt import teacher_entries, plan_command
+        return teacher_entries(members, rows, cases=Path(cases), config=config, out=out, attempts=teacher_attempts,
+                               seed_base=seed_base, **guidance_collection_options(guidance_stage), carry=carry,
+                               plan_command=plan_command(endpoints[0]) if teacher_plan == 'nl' else None)
+
+    def bind_teacher_entries(batch_entries):
+        bind_collection_prompt(batch_entries, prompt_rendering)
+        if context_tokens is not None:
+            for entry in batch_entries:
+                entry['context_tokens'] = context_tokens
+
+    feed = None
+    if teacher_attempts and not legacy_plan:
+        feed = TeacherFeed(
+            path=plan_path, students=entries, attempts=teacher_attempts,
+            batch=teacher_plan_batch or (1 if teacher_plan == 'crisp' else DEFAULT_BATCH),
+            finished=generations.attempted, score_rows=score_groups, plan_batch=plan_teacher_batch,
+            bind=bind_teacher_entries,
+            on_plan=lambda batch: generations.record(
+                'teacher_plan', generation=generation, groups=batch['groups'], budget=batch['budget'],
+                carry=batch['carry'], attempts=len(batch['entries']), plan=batch['plan'], refusal=batch['refusal']))
+        if not teacher_overlap and not feed.batches:
+            feed = None   # opt-out: the old whole-round plan after the student phase
+        else:
+            teachers = feed.teachers
     def retained_artifacts(*, restore=False):
         if native_custody:
             from .native_partial_custody import retain_partial_artifacts
@@ -1100,7 +1140,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
             attested_at[url] = time.monotonic()
             return True
 
-    def run_phase(batch, name):
+    def run_phase(batch, name, feed=None):
         def run_worker(index, tag, queue, journal):
             endpoint, _ = slots[index]
             # Every episode starts a fresh collector process from the checkout as it is now. A rebuild of the
@@ -1119,9 +1159,9 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
                 return _run_collector(command, log, control,
                                       custody_receipt=directory / f"worker-{tag}-process-custody.json",
                                       detach_path=directory / f"worker-{tag}-detached.json")
-        keys = {entry['key'] for entry in batch}
         passes = 0
         while True:
+            keys = {entry['key'] for entry in batch}   # a feed grows the batch (teacher entries) while it runs
             # Workers a previous controller left running finish their own episodes; their entries are not dispatched
             # again while they run, and their slots stay busy. An entry whose worker died unfinished is dispatched on the
             # next pass.
@@ -1135,8 +1175,10 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
                                    workers=[{'pid': r['pid'], 'key': entry_in_flight(r), 'journal': r['journal']} for r in running])
             phase_results, counts = dispatch(batch, directory=directory, generation=generation, phase=name,
                 endpoints=[endpoint for endpoint, _ in slots], run_worker=run_worker, attempted=done,
-                stopped=halted, ready=ready, poll_seconds=slot_poll_seconds)
+                stopped=halted, ready=ready, poll_seconds=slot_poll_seconds, feed=feed,
+                outside_busy=lambda: any(process_alive(r) for r in attached.values()))
             generations.record('dispatch', generation=generation, phase=name or 'student', entries=len(batch),
+                               teacher_overlap=feed is not None,
                                pending=counts['initial'], attempted=counts['attempted'], finished=counts['finished'],
                                remaining=counts['remaining'], returncodes=[r['returncode'] for r in phase_results])
             results.extend(phase_results)
@@ -1163,10 +1205,24 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         (out / 'queue.jsonl').write_text(''.join(json.dumps(e) + '\n' for e in
                                                  entries + (teachers['entries'] if teachers_too else [])))
     try:
-        run_phase(entries, '')
-        # The JOLT+ teacher plan below is fixed from the scored student sample, so the sample must be complete.
-        require_finished(entries, '')
-        if teacher_attempts and not halted():
+        if feed is not None:
+            # Teachers of finished groups are planned and queued while the other students still run.
+            for entry in teachers['entries']:
+                if entry['key'] in sampled_on:
+                    entry['rl_endpoint'] = sampled_on[entry['key']]
+            batch = entries + teachers['entries']
+            run_phase(batch, '', feed=feed)
+            require_finished(entries, '')
+            if not halted() and not feed.complete():   # a stalled planner pass: plan the rest now and run it
+                batch.extend(feed.poll(flush=True))
+                run_phase(batch, '', feed=feed)
+            if not halted():
+                require_finished(teachers['entries'], 'teacher-')
+        else:
+            run_phase(entries, '')
+            # The JOLT+ teacher plan below is fixed from the scored student sample, so the sample must be complete.
+            require_finished(entries, '')
+        if teacher_attempts and feed is None and not halted():
             from .jolt import teacher_entries
             write_journal_and_queue(teachers_too=False)
             score(out, out / 'student-rollouts.jsonl', neuralese_bonus=bonus)
@@ -1742,6 +1798,7 @@ def prepare_round_collection(config, state, round_dir, selected_path, selection,
         control=control, expected_native=expected_native,
         **({'behavior_top_k': behavior_top_k(policy_loss)} if behavior_top_k(policy_loss) else {}),
         teacher_attempts=teacher_attempts, teacher_plan=config.get('jolt_teacher_plan', 'nl'),
+        teacher_overlap=config.get('jolt_teacher_overlap', True), teacher_plan_batch=config.get('jolt_teacher_plan_batch'),
         guidance_stage=config.get('jolt_guidance_stage'), prompt_rendering=config.get('prompt_rendering'),
         context_tokens=config.get('context_tokens'),
         neuralese_use_bonus=bonus_setting(config.get('neuralese_use_bonus')),

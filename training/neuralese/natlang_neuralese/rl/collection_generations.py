@@ -118,7 +118,7 @@ def unfinished(entries, finished):
 
 
 def dispatch(entries, *, directory, generation, phase, endpoints, run_worker, attempted, stopped=lambda: False,
-             ready=None, poll_seconds=15.):
+             ready=None, poll_seconds=15., feed=None, outside_busy=None):
     """Run the pending ``entries`` of one phase ('' student, 'teacher-') over one worker slot per ``endpoints`` item with
     ``run_worker(index, name, queue, journal)`` (the collector's exit code). Slots steal work: each takes the next pending
     entry when its previous one finishes, appends it to its own queue file and reruns its collector on that queue and
@@ -128,6 +128,11 @@ def dispatch(entries, *, directory, generation, phase, endpoints, run_worker, at
     asked before each entry: a slot whose actor is not (yet) serving the round's policy waits instead of taking work, so
     an actor that joins mid-round (Pop after a dev16 evaluation) picks up the remaining entries, and an actor that died
     loses at most its current entry instead of fast-failing the queue (2026-11-09: 20 entries drained in 26 min).
+    ``feed`` (rl.teacher_feed.TeacherFeed) supplies more entries while the queue runs: a planner thread polls it, and the
+    entries it returns (JOLT+ teacher attempts of groups whose students all finished) join the END of the shared queue and
+    are appended to ``entries``, so an idle slot takes them while other students still run. Slots then wait, instead of
+    ending, while the queue is empty and the feed is open; the feed closes when every group is planned, or when nothing
+    runs and nothing is queued (``outside_busy()``: workers detached by an earlier controller still running).
     Returns (results, counts): ``counts`` gives the ``initial`` pending entries of this call, how many were
     ``attempted`` (taken by a slot), how many ``finished`` (a finish row exists) and how many ``remaining`` unfinished
     (never taken, or taken by a collector that left no finish row)."""
@@ -135,6 +140,7 @@ def dispatch(entries, *, directory, generation, phase, endpoints, run_worker, at
     pending = [entry for entry in entries if entry['key'] not in attempted]
     directory.mkdir(parents=True, exist_ok=True)
     remaining, lock = list(reversed(pending)), Lock()
+    state = {'active': 0, 'closed': feed is None, 'error': None}
 
     def worker(index):
         endpoint = endpoints[index]
@@ -142,20 +148,30 @@ def dispatch(entries, *, directory, generation, phase, endpoints, run_worker, at
         queue, journal = directory / f'queue-{name}.jsonl', directory / f'journal-{name}.jsonl'
         taken, codes = [], []
         while not stopped():
+            with lock:
+                drained = not remaining and state['closed']
+                waiting = not remaining and not state['closed']
+            if drained:
+                break
+            if waiting:   # the feed may still queue teacher entries: stay (a slot that ends cannot take them)
+                time.sleep(poll_seconds)
+                continue
             if ready is not None and not ready(index):
-                with lock:
-                    if not remaining:
-                        break
                 time.sleep(poll_seconds)
                 continue
             with lock:
                 if not remaining:
-                    break
+                    continue
                 entry = remaining.pop()
-            entry['rl_endpoint'] = endpoint
-            taken.append(entry)
-            queue.write_text(''.join(json.dumps(item) + '\n' for item in taken))
-            codes.append(run_worker(index, name, queue, journal))
+                state['active'] += 1
+            try:
+                entry['rl_endpoint'] = endpoint
+                taken.append(entry)
+                queue.write_text(''.join(json.dumps(item) + '\n' for item in taken))
+                codes.append(run_worker(index, name, queue, journal))
+            finally:
+                with lock:
+                    state['active'] -= 1
             # The collector exits nonzero for an ordinary incomplete or timed-out episode (still a finish row). A
             # collector that left its entry without a finish row died or lost its endpoint: that slot stops taking
             # work so it cannot drain the shared queue; the entry stays pending for the next start.
@@ -167,8 +183,43 @@ def dispatch(entries, *, directory, generation, phase, endpoints, run_worker, at
         return {'worker': index, 'generation': generation, 'entries': len(taken),
                 'returncode': next((code for code in codes if code), 0), 'journal': str(journal)}
 
-    with ThreadPoolExecutor(max_workers=len(endpoints)) as pool:
-        results = [result for result in pool.map(worker, range(len(endpoints))) if result is not None]
+    def planner():
+        try:
+            while not stopped():
+                with lock:
+                    idle = not remaining
+                    quiet = idle and state['active'] == 0 and not (outside_busy is not None and outside_busy())
+                # A slot would idle (or nothing runs): plan what has finished now instead of waiting for a full batch.
+                new = feed.poll(flush=idle)
+                if new:
+                    with lock:
+                        remaining[0:0] = list(reversed(new))   # the end of the queue (taken from the right)
+                        entries.extend(new)
+                        pending.extend(new)
+                    continue
+                if feed.complete() or quiet:
+                    break
+                time.sleep(min(poll_seconds, 5.))
+        except BaseException as error:   # surfaced by dispatch after the slots end
+            state['error'] = error
+        finally:
+            with lock:
+                state['closed'] = True
+
+    import threading
+    thread = threading.Thread(target=planner, name='teacher-feed', daemon=True) if feed is not None else None
+    if thread is not None:
+        thread.start()
+    try:
+        with ThreadPoolExecutor(max_workers=len(endpoints)) as pool:
+            results = [result for result in pool.map(worker, range(len(endpoints))) if result is not None]
+    finally:
+        if thread is not None:
+            with lock:
+                state['closed'] = state['closed'] or stopped()
+            thread.join(timeout=5.)
+    if state['error'] is not None:
+        raise state['error']
     finished = {row['key'] for result in results for row in (read_jsonl(result['journal']) if Path(result['journal']).exists() else ())
                 if row.get('event') == 'finish'}
     counts = {'initial': len(pending), 'attempted': sum(result['entries'] for result in results),

@@ -628,7 +628,7 @@ def plan_teacher_attempts(groups, *, default, budget, command=None):
 
 
 def teacher_entries(student_entries, student_rows, *, cases, config, out, attempts, seed_base, custody=None,
-                    selection=None, writer=None, plan_command=None):
+                    selection=None, writer=None, plan_command=None, carry=0):
     """JOLT+ teacher-attempt collector entries for the scored student groups of one collection.
 
     Each attempt samples the same world after its group's students with ``guidance_controls`` (role teacher): the
@@ -637,6 +637,8 @@ def teacher_entries(student_entries, student_rows, *, cases, config, out, attemp
     re-verifies what the actor recorded. Returns ``{'entries': [...], 'refusal': None | reason}``; a world without
     custody or facts gets no teacher attempt. ``attempts`` is the crisp count per group and its budget scale;
     ``plan_command`` (``plan_command(endpoint)``) runs the NL ``planTeacherAttempts`` that may skip or add attempts.
+    ``carry`` is unspent budget of earlier batches of the same round (teacher_feed plans finished groups as they
+    complete): this call's budget is ``attempts`` per planned group plus ``carry``; ``accounting`` reports it.
     """
     import copy
     from ..common.jsonio import iter_jsonl_rows, write_json_durable
@@ -672,8 +674,8 @@ def teacher_entries(student_entries, student_rows, *, cases, config, out, attemp
                           'meanQuality': sum(qualities) / len(qualities) if qualities else 0.,
                           'feedback': [text for text in map(attempt_feedback, members) if text][:MAX_FEEDBACK_ATTEMPTS],
                           'facts': len(facts)})
-    plan, record = plan_teacher_attempts(summaries, default=attempts, budget=attempts * len(summaries),
-                                         command=plan_command)
+    budget = attempts * len(summaries) + carry
+    plan, record = plan_teacher_attempts(summaries, default=attempts, budget=budget, command=plan_command)
     for first, members, case in firsts:
         size = max(entry['sample'] for entry in student_entries if entry['group'] == first['group']) + 1
         for attempt in range(plan[first['group']]):
@@ -699,4 +701,5 @@ def teacher_entries(student_entries, student_rows, *, cases, config, out, attemp
                          output=str(directory / 'results.jsonl'), chat_request_config=str(controls),
                          jolt_role='teacher')
             entries.append(entry)
-    return {'entries': entries, 'refusal': None, 'plan': record}
+    return {'entries': entries, 'refusal': None, 'plan': record,
+            'accounting': {'budget': budget, 'planned': len(entries)}}

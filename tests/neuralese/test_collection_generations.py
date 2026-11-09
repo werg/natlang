@@ -38,6 +38,8 @@ class Harness:
                       'output': str(self.out / f'r{i}.jsonl'), 'jobs': str(self.out), 'log': str(self.out / 'l')}
                      for i in range(entries)]
             (self.out / 'queue.jsonl').write_text(''.join(json.dumps(e) + '\n' for e in queue))
+            (self.out / 'packet.jsonl').write_text('{}\n')
+            (self.out / 'preparation.json').write_text('{}')
             return {'ids': ['t'] * entries}
         monkeypatch.setattr(production, 'prepare', prepare)
         monkeypatch.setattr(production, 'score', lambda out, emit, **kw: (Path(emit).write_text(''), {'scored': 1})[1])
@@ -142,7 +144,131 @@ def test_a_code_change_never_blocks_a_resume_and_each_start_records_its_commit(t
         h.collect(rows=1)
 
 
-def test_teacher_plan_is_persisted_and_reused_by_a_restart(tmp_path, monkeypatch):
+class Gated(Harness):
+    """The last student waits until ``gate`` plans exist: proof that teachers are planned while students still run."""
+
+    def __init__(self, *a, gate=1, **k):
+        super().__init__(*a, **k)
+        self.gate, self.plans, self.finished_at_plan = gate, [], []
+
+    def collector(self, command, log, control, custody_receipt=None, detach_path=None):
+        import time
+        queue = [e['key'] for e in read_jsonl(command[2])]
+        if f's7-task-{self.entries - 1:03d}' in queue:
+            end = time.monotonic() + 20
+            while len(self.plans) < self.gate and time.monotonic() < end:
+                time.sleep(0.02)
+        return super().collector(command, log, control, custody_receipt, detach_path)
+
+
+def test_teachers_are_planned_while_students_still_run_and_the_budget_carries(tmp_path, monkeypatch):
+    from natlang_neuralese.rl import jolt
+    h = Gated(tmp_path, monkeypatch, entries=4, gate=1)
+    h.budget = 99
+    monkeypatch.setattr(jolt, 'student_guidance', lambda *a, **k: None)
+
+    def plan(student_entries, rows, *, carry=0, attempts, **kw):
+        groups = sorted({e['group'] for e in student_entries})
+        h.finished_at_plan.append(len(Generations(h.out).attempted()))
+        h.plans.append({'groups': groups, 'carry': carry})
+        # only group 0 asks for a teacher: the rest of the budget stays for later batches
+        entries = [{**e, 'key': f's7-task-{e["group"]:03d}-t00', 'jolt_role': 'teacher'}
+                   for e in student_entries if e['group'] == 0]
+        return {'entries': entries, 'refusal': None, 'plan': {'implementation': 'crisp'},
+                'accounting': {'budget': attempts * len(groups) + carry, 'planned': len(entries)}}
+    monkeypatch.setattr(jolt, 'teacher_entries', plan)
+    report = h.collect(teacher_attempts=1, teacher_plan='crisp', prompt_rendering=None, slot_poll_seconds=0.02)
+    assert h.plans[0]['carry'] == 0 and h.finished_at_plan[0] < 4   # planned before the last student finished
+    covered = [g for p in h.plans for g in p['groups']]
+    assert sorted(covered) == [0, 1, 2, 3]                          # every group planned exactly once
+    assert h.plans[1]['carry'] == len(h.plans[0]['groups']) - 1 if len(h.plans) > 1 else True
+    assert sorted(finishes(h.out)) == sorted([f's7-task-{i:03d}' for i in range(4)] + ['s7-task-000-t00'])
+    saved = json.loads((h.out / 'teacher-plan.json').read_text())
+    assert saved['schema'] == 'natlang.rl-teacher-plan/2' and len(saved['student_keys']) == 4
+    assert report['jolt_teacher_attempts']['entries'] == 1
+    events = [row for row in read_jsonl(h.out / 'generations.jsonl') if row['event'] == 'teacher_plan']
+    assert sorted(g for row in events for g in row['groups']) == [0, 1, 2, 3]
+    assert [row['key'] for row in read_jsonl(h.out / 'queue.jsonl')][-1] == 's7-task-000-t00'
+
+
+def test_teacher_plan_is_persisted_per_batch_and_reused_by_a_restart(tmp_path, monkeypatch):
+    from natlang_neuralese.rl import jolt
+    h = Harness(tmp_path, monkeypatch, entries=2)
+    monkeypatch.setattr(jolt, 'student_guidance', lambda *a, **k: None)
+    plans = []
+
+    def plan(student_entries, rows, *, carry=0, attempts, **kw):
+        plans.append(sorted({e['group'] for e in student_entries}))
+        teachers = [{**e, 'key': f's7-task-{e["group"]:03d}-t{len(plans):02d}', 'jolt_role': 'teacher'}
+                    for e in student_entries]
+        return {'entries': teachers, 'refusal': None, 'plan': {'implementation': 'crisp'},
+                'accounting': {'budget': attempts * len(plans[-1]) + carry, 'planned': len(teachers)}}
+    monkeypatch.setattr(jolt, 'teacher_entries', plan)
+    kwargs = dict(teacher_attempts=1, teacher_plan='crisp', prompt_rendering=None, workers=1, slot_poll_seconds=0.02,
+                  teacher_plan_batch=2)
+    h.budget = 2                      # both students finish; the teachers are killed mid-run
+    with pytest.raises(IncompleteCollection, match='teacher collection incomplete: 2 of 2'):
+        h.collect(**kwargs)
+    saved = json.loads((h.out / 'teacher-plan.json').read_text())
+    assert saved['schema'] == 'natlang.rl-teacher-plan/2'
+    keys = sorted(e['key'] for b in saved['batches'] for e in b['entries'])
+    assert keys == ['s7-task-000-t01', 's7-task-001-t01'] and plans == [[0, 1]]
+    h.budget, h.ran = 99, []
+    h.collect(**kwargs)
+    assert plans == [[0, 1]]          # not re-planned: the started teacher keys are the ones that now finish
+    assert sorted(key for key, *_ in h.ran) == keys
+    assert sorted(finishes(h.out)) == ['s7-task-000', 's7-task-000-t01', 's7-task-001', 's7-task-001-t01']
+
+
+def test_a_round_planned_by_the_old_whole_round_planner_resumes_unchanged(tmp_path, monkeypatch):
+    from natlang_neuralese.rl import jolt
+    from natlang_neuralese.rl.collection_generations import persist_teacher_plan
+    h = Harness(tmp_path, monkeypatch, entries=2)
+    monkeypatch.setattr(jolt, 'student_guidance', lambda *a, **k: None)
+    monkeypatch.setattr(jolt, 'teacher_entries', lambda *a, **k: pytest.fail('a recorded plan is never re-planned'))
+    h.out.mkdir(parents=True, exist_ok=True)
+    teacher = {'key': 's7-task-000-t00', 'index': 0, 'group': 0, 'sample': 2, 'seed': 9, 'jolt_role': 'teacher',
+               'output': str(h.out / 't.jsonl'), 'jobs': str(h.out), 'log': str(h.out / 'l')}
+    persist_teacher_plan(h.out / 'teacher-plan.json', ['s7-task-000', 's7-task-001'],
+                         {'entries': [teacher], 'refusal': None, 'plan': {'implementation': 'crisp'}})
+    h.budget = 99
+    report = h.collect(teacher_attempts=1, teacher_plan='crisp', prompt_rendering=None)
+    assert json.loads((h.out / 'teacher-plan.json').read_text())['schema'] == 'natlang.rl-teacher-plan/1'
+    assert sorted(finishes(h.out)) == ['s7-task-000', 's7-task-000-t00', 's7-task-001']
+    assert report['jolt_teacher_attempts']['entries'] == 1
+
+
+def test_dispatch_feed_entries_are_taken_by_idle_slots_and_a_stalled_student_does_not_hang(tmp_path):
+    class Feed:
+        def __init__(self): self.sent, self.polls = False, 0
+        def poll(self, *, flush=False):
+            self.polls += 1
+            if self.sent or not (tmp_path / 'k0-done').exists():
+                return []
+            self.sent = True
+            return [{'key': 'teacher0'}]
+        def complete(self): return False   # k1's students never finish: only the quiet rule can close the feed
+
+    ran = []
+
+    def run_worker(index, name, queue, journal):
+        key = json.loads(queue.read_text().splitlines()[-1])['key']
+        ran.append(key)
+        if key == 'k0':
+            (tmp_path / 'k0-done').write_text('1')
+        if key != 'k1':   # k1's collector dies without a finish row
+            with journal.open('a') as stream:
+                stream.write(json.dumps({'event': 'finish', 'key': key}) + '\n')
+        return 0
+
+    entries = [{'key': 'k0'}, {'key': 'k1'}]
+    results, counts = dispatch(entries, directory=tmp_path, generation=1, phase='', endpoints=['a', 'b'],
+                               run_worker=run_worker, attempted=set(), poll_seconds=0.02, feed=Feed())
+    assert sorted(ran) == ['k0', 'k1', 'teacher0'] and [e['key'] for e in entries] == ['k0', 'k1', 'teacher0']
+    assert counts == {'initial': 3, 'attempted': 3, 'finished': 2, 'remaining': 1}
+
+
+def test_opt_out_plans_the_whole_round_after_the_students_and_reuses_it_on_restart(tmp_path, monkeypatch):
     from natlang_neuralese.rl import jolt
     h = Harness(tmp_path, monkeypatch, entries=2)
     monkeypatch.setattr(jolt, 'student_guidance', lambda *a, **k: None)
@@ -153,7 +279,7 @@ def test_teacher_plan_is_persisted_and_reused_by_a_restart(tmp_path, monkeypatch
         teacher = {**student_entries[0], 'key': f's7-task-000-t0{len(plans)}', 'jolt_role': 'teacher'}
         return {'entries': [teacher], 'refusal': None, 'plan': {'implementation': 'crisp'}}
     monkeypatch.setattr(jolt, 'teacher_entries', plan)
-    kwargs = dict(teacher_attempts=1, teacher_plan='crisp', prompt_rendering=None)
+    kwargs = dict(teacher_attempts=1, teacher_plan='crisp', prompt_rendering=None, teacher_overlap=False)
     h.budget = 2                      # both students finish; the teacher is killed mid-run
     with pytest.raises(IncompleteCollection, match='teacher collection incomplete: 1 of 1'):
         h.collect(**kwargs)
@@ -240,5 +366,19 @@ def test_teacher_plan_is_not_fixed_on_an_incomplete_student_sample(tmp_path, mon
     monkeypatch.setattr(jolt, 'teacher_entries', lambda *a, **k: planned.append(1) or {'entries': [], 'refusal': None})
     monkeypatch.setattr(jolt, 'student_guidance', lambda *a, **k: None)
     with pytest.raises(IncompleteCollection, match='2 of 4'):
-        h.collect(teacher_attempts=1)
+        h.collect(teacher_attempts=1, teacher_overlap=False)   # the opt-out plans only a complete sample
     assert planned == [] and not (h.out / 'teacher-plan.json').exists()
+
+
+def test_overlap_plans_only_the_groups_whose_students_all_finished(tmp_path, monkeypatch):
+    from natlang_neuralese.rl import jolt
+    h = Harness(tmp_path, monkeypatch, entries=4)
+    h.budget = 2
+    seen = []
+    monkeypatch.setattr(jolt, 'teacher_entries', lambda students, rows, **k: seen.append(sorted({e['group'] for e in students}))
+                        or {'entries': [], 'refusal': None, 'plan': {'implementation': 'crisp'}})
+    monkeypatch.setattr(jolt, 'student_guidance', lambda *a, **k: None)
+    with pytest.raises(IncompleteCollection, match='2 of 4'):
+        h.collect(teacher_attempts=1, teacher_plan='crisp', slot_poll_seconds=0.02)
+    assert sorted(g for batch in seen for g in batch) == sorted(
+        int(key.rsplit('-', 1)[1]) for key in finishes(h.out))   # exactly the finished students' groups

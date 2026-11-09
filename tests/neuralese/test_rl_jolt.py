@@ -499,6 +499,9 @@ def test_teacher_and_student_entries_carry_the_worlds_guidance_controls(tmp_path
     result = teacher_entries(entries, students, cases=cases, config=config, out=tmp_path, attempts=1,
                              seed_base=700000, custody=custody())
     assert result['refusal'] is None and len(result['entries']) == 1  # the protected world gets no teacher
+    assert result['accounting'] == {'budget': 1, 'planned': 1}   # attempts x planned groups; carry adds to the budget
+    assert teacher_entries(entries, students, cases=cases, config=config, out=tmp_path, attempts=1, seed_base=700000,
+                           custody=custody(), carry=3)['accounting'] == {'budget': 4, 'planned': 1}
     entry = result['entries'][0]
     assert (entry['jolt_role'], entry['group'], entry['sample'], entry['key']) == ('teacher', 0, 2, 's7-task-000-t00')
     assert entry['seed'] not in {e['seed'] for e in entries}
