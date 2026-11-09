@@ -43,7 +43,7 @@ class Harness:
         monkeypatch.setattr(production, 'score', lambda out, emit, **kw: (Path(emit).write_text(''), {'scored': 1})[1])
         monkeypatch.setattr(production, '_run_collector', self.collector)
 
-    def collector(self, command, log, control, custody_receipt=None):
+    def collector(self, command, log, control, custody_receipt=None, detach_path=None):
         queue, journal = Path(command[2]), Path(command[3])
         endpoint = command[command.index('--server') + 1]
         finished = {row['key'] for row in read_jsonl(journal) if row['event'] == 'finish'} if journal.exists() else set()

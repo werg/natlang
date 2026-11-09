@@ -642,24 +642,28 @@ class RunControl:
     """Share one stop request across explicit child processes and thread workers."""
     def __init__(self, stop):
         self.stop = stop
+        self._forwarded = set()
 
-    def wait(self, child, *, stop_file=None, stop_request=None):
-        forwarded = False
+    def wait(self, child, *, stop_file=None, stop_request=None, timeout=None):
+        """Wait for ``child``, forwarding a stop request once per child. With ``timeout`` the wait raises TimeoutExpired
+        after that many seconds so a caller can poll other conditions."""
+        deadline = None if timeout is None else time.monotonic() + timeout
         while True:
-            if self.stop.requested and not forwarded:
+            if self.stop.requested and id(child) not in self._forwarded:
                 if stop_file is not None:
                     write_json_durable(stop_file, {'schema': 'natlang.native-rl-bridge-stop/1',
                         'checkpoint_requested': True, 'request': stop_request})
                 elif child.poll() is None:
                     child.terminate()  # exact child PID, trainer checkpoints before exiting
-                forwarded = True
+                self._forwarded.add(id(child))
             try:
                 return child.wait(timeout=.2)
             except subprocess.TimeoutExpired:
-                pass
+                if deadline is not None and time.monotonic() >= deadline:
+                    raise
 
 
-def _run_collector(command, log, control, *, shutdown_grace=30., custody_receipt=None):
+def _run_collector(command, log, control, *, shutdown_grace=30., custody_receipt=None, detach_path=None):
     """Drain exactly this collector's session before partial custody can run."""
     import os
     import inspect
@@ -677,6 +681,7 @@ def _run_collector(command, log, control, *, shutdown_grace=30., custody_receipt
         write_json_durable(custody_receipt,{'schema':'natlang.rl-collector-process-custody/1',
             'helper':helper_binding,'scope':'owned worker session only','command':command})
     session_process,cleanup_session=guard.session_process,guard.cleanup_session
+    from .detached_processes import restart_requested, record_process
     process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
                                start_new_session=True)
     owner = session_process(process.pid)
@@ -687,10 +692,22 @@ def _run_collector(command, log, control, *, shutdown_grace=30., custody_receipt
         process.wait()
         raise RuntimeError('collector lost its exact owned session identity')
     owner['guard'] = session_process(os.getpid())
+    detached = False
     try:
-        return process.wait() if control is None else control.wait(process)
+        # A restart in place (SIGUSR1) leaves the worker running: it finishes its episode on the code it started with and
+        # the relaunched controller re-attaches (rl.detached_processes). Any other stop still terminates it.
+        while True:
+            try:
+                return process.wait(timeout=.2) if control is None else control.wait(process, timeout=.2)
+            except subprocess.TimeoutExpired:
+                if restart_requested() and detach_path is not None:
+                    record_process(detach_path, process.pid, command=command, queue=command[2], journal=command[3],
+                                   endpoint=command[command.index('--server') + 1])
+                    detached = True
+                    return None
     finally:
-        cleanup_session(owner, process, shutdown_grace, session_only=True)
+        if not detached:
+            cleanup_session(owner, process, shutdown_grace, session_only=True)
         if sha256_file_hex(helper)!=helper_binding['sha256']:
             # The checkout may advance while a worker runs (code identity is provenance, never a refusal): the cleanup
             # above already used the helper this process imported.
@@ -820,7 +837,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
             behavior_top_k=None, teacher_attempts=0, teacher_plan='nl',
             system_prompt=None, prompt_rendering=None, guidance_stage=None, context_tokens=None,
             neuralese_use_bonus=None, program_guidance=None, adapters=None, remote_workers=None,
-            lost_block_exclusions=None, late_endpoints=()):
+            lost_block_exclusions=None, late_endpoints=(), slot_poll_seconds=15.):
     """Bounded subprocess fanout; existing collector and exact task verifier. ``behavior_top_k`` also records the
     actors' top-k sampler log-probs at every sampled position (score-centered RL); None leaves collection unchanged.
     ``teacher_attempts`` JOLT+ teacher attempts per group (the crisp plan; ``teacher_plan='nl'`` lets
@@ -1021,8 +1038,14 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
             entry['rl_endpoint'] = sampled_on[entry['key']]
     results = []
     join_lock, attested_at = Lock(), {}
+    from .detached_processes import restart_requested, detached_workers, entry_in_flight, alive as process_alive
+    halted = lambda: bool(control and control.stop.requested) or restart_requested()
+    attached = {}   # slot index -> record of a worker a previous controller detached (finishing its own episode)
 
     def ready(index):
+        busy = attached.get(index)
+        if busy is not None and process_alive(busy):
+            return False   # the slot's detached worker is still running its episode
         url = slots[index][0]
         if url == endpoints[0].rstrip('/'):
             return True
@@ -1069,21 +1092,40 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
                 command.append('--neuralese-server')
             with (directory / f"worker-{tag}.log").open('a') as log:
                 return _run_collector(command, log, control,
-                                      custody_receipt=directory / f"worker-{tag}-process-custody.json")
-        done = generations.attempted()
-        phase_results, counts = dispatch(batch, directory=directory, generation=generation, phase=name,
-            endpoints=[endpoint for endpoint, _ in slots], run_worker=run_worker, attempted=done,
-            stopped=lambda: bool(control and control.stop.requested), ready=ready)
-        generations.record('dispatch', generation=generation, phase=name or 'student', entries=len(batch),
-                           pending=counts['initial'], attempted=counts['attempted'], finished=counts['finished'],
-                           remaining=counts['remaining'], returncodes=[r['returncode'] for r in phase_results])
-        results.extend(phase_results)
+                                      custody_receipt=directory / f"worker-{tag}-process-custody.json",
+                                      detach_path=directory / f"worker-{tag}-detached.json")
+        keys = {entry['key'] for entry in batch}
+        passes = 0
+        while True:
+            # Workers a previous controller left running finish their own episodes; their entries are not dispatched
+            # again while they run, and their slots stay busy. An entry whose worker died unfinished is dispatched on the
+            # next pass.
+            running = [r for r in detached_workers(directory) if entry_in_flight(r) in keys]
+            for record in running:
+                tag = Path(record['path']).name[len('worker-'):-len('-detached.json')]
+                attached[int(re.search(r'(\d+)$', tag)[1])] = record
+            done = generations.attempted() | {entry_in_flight(r) for r in running}
+            if running:
+                generations.record('attach', generation=generation, phase=name or 'student',
+                                   workers=[{'pid': r['pid'], 'key': entry_in_flight(r), 'journal': r['journal']} for r in running])
+            phase_results, counts = dispatch(batch, directory=directory, generation=generation, phase=name,
+                endpoints=[endpoint for endpoint, _ in slots], run_worker=run_worker, attempted=done,
+                stopped=halted, ready=ready, poll_seconds=slot_poll_seconds)
+            generations.record('dispatch', generation=generation, phase=name or 'student', entries=len(batch),
+                               pending=counts['initial'], attempted=counts['attempted'], finished=counts['finished'],
+                               remaining=counts['remaining'], returncodes=[r['returncode'] for r in phase_results])
+            results.extend(phase_results)
+            while not halted() and any(process_alive(r) for r in running):
+                time.sleep(1.)
+            passes += 1
+            if halted() or not running or passes >= 3 or not unfinished(batch, generations.attempted()):
+                break
 
     def require_finished(batch, name):
         """Seal nothing with a missing terminal row: a slot whose collector exited without a finish row leaves its
         key pending. Unless a stop was requested (the caller then reports an interrupted collection), the round
         fails loudly and the next start re-dispatches exactly the unfinished keys."""
-        if control and control.stop.requested:
+        if halted():
             return
         missing = unfinished(batch, generations.attempted())
         if missing:
@@ -1099,7 +1141,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         run_phase(entries, '')
         # The JOLT+ teacher plan below is fixed from the scored student sample, so the sample must be complete.
         require_finished(entries, '')
-        if teacher_attempts and not (control and control.stop.requested):
+        if teacher_attempts and not halted():
             from .jolt import teacher_entries
             write_journal_and_queue(teachers_too=False)
             score(out, out / 'student-rollouts.jsonl', neuralese_bonus=bonus)
@@ -1130,8 +1172,10 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         raise
     else:
         # This also runs after cooperative interruption, before the caller can
-        # retire the actor and lose newly produced, unscored partial artifacts.
-        retained_artifacts()
+        # retire the actor and lose newly produced, unscored partial artifacts. A restart in place leaves the actor and
+        # its running workers alive (their partial artifacts stay in the actor store), so nothing is retired.
+        if not restart_requested():
+            retained_artifacts()
     write_journal_and_queue()
     report = score(out, out / 'rollouts.jsonl', neuralese_bonus=bonus)
     if teacher_attempts:
@@ -1285,7 +1329,8 @@ def _collect_round(config, kwargs):
         from .memetic_stage import prepare_round
         prepare_round(kwargs['cases'], endpoint=kwargs['endpoints'][0])
     report = collect(**kwargs)
-    if config.get('memetic_round') is not None:
+    from .detached_processes import restart_requested
+    if config.get('memetic_round') is not None and not (restart_requested() and not report.get('collection_complete')):
         from .memetic_stage import after_collection
         after_collection(config['memetic_round'], endpoint=kwargs['endpoints'][0], round_out=kwargs['out'])
     return report
@@ -1369,9 +1414,32 @@ def collect_with_actor(config, values, **kwargs):
         ready_seconds=config.get('actor_ready_seconds',900)
         if type(ready_seconds) not in (int,float) or not 0<ready_seconds<float('inf'):
             raise ValueError('actor_ready_seconds must be finite and positive')
-        process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
-                                   **({'env': environment} if environment is not None else {}))
+        from .detached_processes import AdoptedProcess, alive as process_alive, load_record, record_process, restart_requested
+        pid_path = Path(values['out']) / 'actor.pid.json'
+        previous = load_record(pid_path)
+        process = None
+        if previous is not None and process_alive(previous):
+            # A restart in place left the managed actor running: adopt it while it still attests this round's policy
+            # (its code, loaded model and block store continue), else retire it and start the round's actor.
+            try:
+                running = json.loads(NativeActorClient(kwargs['endpoints'][0], timeout=3).get_bytes('/v1/neuralese/info'))
+            except (OSError, ValueError):
+                running = {}
+            if previous.get('policy_id') == values['policy_id'] and (
+                    running.get('rl_policy_binding') or {}).get('checkpoint_sha256') == values['policy_id']:
+                process = AdoptedProcess(previous)
+                print(json.dumps({'event': 'adopted the running RL actor', 'pid': previous['pid'],
+                                  'round': str(values['out'])}), flush=True)
+            else:
+                AdoptedProcess(previous).terminate()
+                AdoptedProcess(previous).wait(timeout=120)
+        if process is None:
+            process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
+                                       **({'env': environment} if environment is not None else {}))
+            record_process(pid_path, process.pid, policy_id=values['policy_id'], endpoint=kwargs['endpoints'][0],
+                           command=command)
         deadline=time.monotonic()+ready_seconds
+        detaching = False
         try:
             while True:
                 if time.monotonic()>=deadline:
@@ -1407,17 +1475,25 @@ def collect_with_actor(config, values, **kwargs):
                 specs = config.get('remote_workers')
                 kwargs = {**kwargs, 'endpoints': [managed_url, *remote], 'late_endpoints': [u for u in remote if u not in usable],
                           **({'remote_workers': {url: specs[url] for url in remote}} if specs else {})}
-            return _collect_round(config, kwargs)
+            report = _collect_round(config, kwargs)
+            # A restart in place with unfinished collection leaves the actor (and the remote actors) running for the
+            # relaunched controller; every other outcome ends the actor lease.
+            detaching = restart_requested() and not report.get('collection_complete')
+            return report
         finally:
-            if process.poll() is None:
-                process.terminate()  # explicit child PID; no pattern/process-wide kill
-            # Keep polling so Python handles stop signals while the actor exits.
-            if control is not None:
-                control.wait(process)
+            if detaching:
+                print(json.dumps({'event': 'restart in place: the RL actor keeps running', 'pid': process.pid,
+                                  'round': str(values['out'])}), flush=True)
             else:
-                from ..train.loop import wait_forwarding_signals
-                wait_forwarding_signals(process)
-            if config.get('after_collection'):
+                if process.poll() is None:
+                    process.terminate()  # explicit child PID; no pattern/process-wide kill
+                # Keep polling so Python handles stop signals while the actor exits.
+                if control is not None:
+                    control.wait(process)
+                else:
+                    from ..train.loop import wait_forwarding_signals
+                    wait_forwarding_signals(process)
+            if config.get('after_collection') and not detaching:
                 try:
                     run_command(config['after_collection'], values)
                 except Exception as error:   # teardown of an auxiliary actor never masks the collection's own outcome
@@ -1811,7 +1887,8 @@ def run(config_path, *, rounds=None, stop=None):
             return execute(initial,state,state_path,control)
         completed = 0
         while rounds is None or completed < rounds:
-            if control is not None and control.stop.requested:
+            from .detached_processes import restart_requested
+            if (control is not None and control.stop.requested) or restart_requested():
                 state['phase'] = 'requested_stop'
                 write_json_durable(state_path, state)
                 return state
@@ -1909,7 +1986,8 @@ def run(config_path, *, rounds=None, stop=None):
                 state['phase'] = 'requested_stop'
                 write_json_durable(state_path, state)
                 return state
-            if control is not None and control.stop.requested:
+            from .detached_processes import restart_requested
+            if (control is not None and control.stop.requested) or (restart_requested() and not report.get('collection_complete')):
                 state.update(phase='stopped_collecting', latest_reward=report)
                 write_json_durable(state_path, state)
                 return state
@@ -2616,11 +2694,15 @@ def main(argv=None):
         raise SystemExit(0 if result['ok'] else 3)
     if a.command == 'run':
         from ..train.loop import StopSignal
+        from .detached_processes import install_restart_signal, restart_requested, RESTART_EXIT
         stop = StopSignal().install()
+        install_restart_signal()
         try:
             run(a.config, rounds=a.rounds, stop=stop)
         finally:
             stop.restore()
+        if restart_requested() and not stop.requested:
+            raise SystemExit(RESTART_EXIT)   # the supervisor relaunches the controller from the checkout as it is now
     else:
         print(json.dumps(collect(cases=a.cases, out=a.out, endpoints=a.endpoint, policy_id=a.policy_id,
             rows=a.rows, group=a.group, workers=a.workers, runtime=a.runtime,coefficient_policy=a.coefficient_policy)))

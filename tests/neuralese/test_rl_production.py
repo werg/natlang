@@ -261,7 +261,7 @@ def _remote_actor_harness(tmp_path,monkeypatch,attesting):
     class Events(list):pass
     events=Events()
     class Process:
-        pid=5
+        pid=2**22+5   # no such process: an adoption record for it is never alive
         def __init__(self,*a,**kw):self.stopped=False
         def poll(self):return 0 if self.stopped else None
         def terminate(self):events.append('terminate');self.stopped=True
@@ -287,6 +287,33 @@ def _remote_actor_harness(tmp_path,monkeypatch,attesting):
     kwargs=dict(out=tmp_path,endpoints=['http://dgx'],policy_id='cur',prompt_rendering='full',neuralese_server=False)
     events.collected=collected
     return events,config,{'out':str(tmp_path),'policy_id':'cur'},kwargs
+
+
+def test_a_restart_in_place_keeps_the_actor_and_the_relaunched_controller_adopts_it(tmp_path, monkeypatch):
+    import subprocess as sp, sys
+    from natlang_neuralese.rl import detached_processes as dp
+    actor = sp.Popen([sys.executable, '-c', 'import time; time.sleep(60)'], start_new_session=True)   # before the harness fakes Popen
+    events, config, values, kwargs = _remote_actor_harness(tmp_path, monkeypatch, {'http://dgx'})
+    config.pop('remote_endpoints'), config.pop('remote_workers'), config.pop('after_actor_ready')
+    try:
+        dp.record_process(tmp_path / 'actor.pid.json', actor.pid, policy_id='cur', endpoint='http://dgx')
+        # the round is incomplete and a restart was requested: the actor is left running, no teardown hook runs
+        monkeypatch.setattr(production, 'collect', lambda **kw: events.append('collect') or {'collection_complete': False})
+        dp.RESTART.set()
+        production.collect_with_actor(config, values, **kwargs)
+        assert events == ['collect'] and actor.poll() is None and dp.alive(dp.load_record(tmp_path / 'actor.pid.json'))
+        # the relaunched controller found it attesting this policy: it is adopted (no new actor process), then ends
+        # the lease normally when the collection completes
+        dp.RESTART.clear()
+        events.clear()
+        monkeypatch.setattr(production, 'collect', lambda **kw: events.append('collect') or {'collection_complete': True})
+        production.collect_with_actor(config, values, **kwargs)
+        assert events == ['collect', 'teardown-fails'] and 'terminate' not in events   # Process.terminate would log; adopted
+        actor.wait(timeout=10)
+    finally:
+        dp.RESTART.clear()
+        if actor.poll() is None:
+            actor.kill()
 
 
 def test_remote_actor_joins_a_fresh_round_only_when_it_attests_and_is_torn_down(tmp_path,monkeypatch):

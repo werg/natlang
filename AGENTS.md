@@ -95,7 +95,7 @@ stage and binds the RL task source, selector, round budget and JOLT+ loss. An RL
 controller with `interleaved_rl_stage` alternates `rl_rounds_per_window` RL rounds
 with one existing mandatory SFT window to that stage's `refresh_after_updates`
 boundary; SFT quotas/exposure stay in the carried frames. Prepare the control with
-`scripts/neuralese_data/prepare_interleaved_rl.py` under a runtime frozen from main.
+`scripts/neuralese_data/prepare_interleaved_rl.py` from the checkout.
 Task selector `natlang.rl-task-curriculum/2` starts new families at their median
 level, shifts practice by outcome-spread fraction (<0.3 moves one level per round)
 and floors rounds at 16 tasks x 8 samples. Configs binding /1 adopt it through a
@@ -454,8 +454,12 @@ comprehensive training on the entire evolving production recipe.
   handover or clean-run boundary is not a reason to leave it disabled.
 - **Share code; one implementation per concept.** Extend shared trainers, loaders, objectives and evaluators instead
   of forking.
-- **Verify the effective code after loaders.** A sealed controller or frozen runtime can still carry the old code:
-  test the fix as the production process actually loads it. Deployment counts, not commits.
+- **Production runs from the checkout; code identity is provenance (owner, 2026-11-09).** The RL controller, collector
+  workers, learner and actors run from `/home/werg/natlang` (Pop: `git pull`); a running process keeps its code, every newly
+  started worker, learner or actor gets current main, and no check refuses to start, resume or attest because code changed:
+  rounds, updates, checkpoints and actors record the git commit and dirty flag instead (`common/code_provenance.py`). Still
+  refused: wrong policy SHA, model/tokenizer identity, artifact schema/version. Restart with
+  `restart_controller.py OUT --in-place` (workers and actor keep running); deployment counts, not commits.
 
 Older custody/continuation findings from this section are in `plans/neuralese/ENGINEERING_FINDINGS.md`.
 
@@ -612,8 +616,8 @@ afterwards. The rules below are consequences of this one.
   `PYTHONPATH=/home/werg/natlang/training/neuralese:/home/werg/natlang`; Node builds use the Node24 bin under
   `/home/werg/.local/share/natlang-dev/`; `os.pidfd_open` guards need host `/usr/bin/python3`. Ledger units do not
   inherit the caller's shell environment.
-- Frozen runtime launches use that runtime as the ledger `--workdir` and bind `NATLANG_REPO`/`PYTHONPATH` to it,
-  otherwise the checkout's `scripts` package shadows the frozen helpers.
+- Production launches use the checkout as the ledger `--workdir` with `NATLANG_REPO`/`PYTHONPATH` bound to it; there are
+  no frozen runtimes (a controller still on one moves with `restart_controller.py OUT --to-checkout`).
 - Do not add or remove hardlinks to source/manifest/index files while live readers stream them (ctime changes
   invalidate strict reader checks).
 - Shared checkout: stage only your own paths; never push mid-rebase/merge; never stage `node_modules` symlinks.

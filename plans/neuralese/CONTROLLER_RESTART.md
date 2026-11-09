@@ -3,49 +3,36 @@
 Owner requirement: "I want us to be nimble": change code, add or remove actor endpoints, change worker counts, and restart
 the interleaved RL controller at ANY time, without waiting for a round or window boundary.
 
-## One command
+## Commands (2026-11-09: production runs from the checkout)
 
 ```
-python3 /home/werg/natlang/scripts/neuralese_data/restart_controller.py \
-    /home/werg/data/lfm3-rl-dgx-20261029/ops/bf95-lowlr-1105/w3 --runtime-from-main
+# restart the controller inside its unit; collector workers and the managed actor keep running, the relaunched controller
+# (newest main) re-attaches. During collection it detaches at once; during an update/SFT window it finishes first.
+python3 scripts/neuralese_data/restart_controller.py OUT --in-place
+# one-time move of a controller that still runs from a frozen runtime (stop, rewrite config/wrapper/env.sh/launch.json, preflight, relaunch)
+python3 scripts/neuralese_data/restart_controller.py OUT --to-checkout [--at-round-boundary] [--dry-run]
+# plain stop/relaunch (config edits: endpoints, workers, after_collection, ...)
+python3 scripts/neuralese_data/restart_controller.py OUT
 ```
 
-Without `--runtime-from-main` it only restarts (same runtime; use it after editing `config.json`: endpoints,
-`remote_endpoints`, `remote_workers`, `workers`, `after_collection`, ...). Flags: `--grace S` (default 600) / `--patient`,
-`--no-preflight`, `--commit SHA`, `--use-runtime vNN-MMDD` (rebind to an already frozen runtime), `--freeze-only` (prepare the successor runtime ahead of time, stops nothing),
-`--dry-run` (prints unit, next unit and the exact ledger launch command), `--unit` (default: the active
-`bf95-lowlr-<name>[-rN]`).
+`--in-place` needs the controller under `scripts/neuralese_data/controller_supervisor.py` (the unit's main process; it
+relaunches the controller on exit 75 and forwards SIGTERM/SIGINT/SIGUSR1). `--to-checkout` installs it. Plain restart flags:
+`--grace S` (default 600) / `--patient`, `--no-preflight`, `--dry-run`, `--unit`. The frozen-runtime flags
+(`--runtime-from-main`, `--use-runtime`, `--freeze-only`) are LEGACY until the last controller has moved; see
+`RUN_FROM_CHECKOUT_20261109.md`.
 
-What it does, in order:
-
-1. `--runtime-from-main`: `freeze_native_runtime.py` from HEAD of main (through the ledger, unit `freeze-controller-vNN-MMDD`,
-   low priority; the live controller keeps running). The tag is the next free `vNN`.
-2. Cooperative stop: SIGTERM to the controller process only (`systemctl kill --kill-whom=main`). The controller stops its
-   collector workers and the actor, archives retained partial artifacts and scores what it has; a learner/SFT trainer finishes
-   its current update and checkpoints. After `--grace` seconds the whole unit is stopped (`systemctl stop`; the trainer's
-   rolling checkpoint then resumes at its last committed update). `--patient` waits for the clean boundary instead.
-3. `--runtime-from-main`: `interleave-v49/rebind-runtime.sh OUT OLD NEW` (config paths, actor python inventory, learner admission
-   wrapper, env.sh), then `production preflight` under the new runtime. A refusal restores the old runtime (rebind in reverse)
-   and relaunches on it.
-4. Relaunch through `memory_ledger.py run` as `<base>-rN` (fresh unit name, ledger claim 104.8 GB high priority, fixed claim: the
-   spec is recorded in `OUT/launch.json`, derived from the running unit the first time), then wait until the new controller
-   holds `controller.lock`, has rewritten `state.json` and logged no traceback; prints the state phase.
-
-`bf95-chain-N` (the old window chain) watches the old unit name; after a restart it exits with "unexpected phase"
-(`requested_stop`). The interleaved controller needs no chain (it runs until stopped), so nothing else to do.
-
-Prepared: runtime `runtime-native-corrected-mix-v58-1107` (frozen from 6f4b3bf8b, contains all of the below). The first restart onto it:
-`restart_controller.py OUT --use-runtime v58-1107`. Tested here: stop/relaunch/resume mechanics on a fake controller unit (clean stop,
-escalated stop, repeated `-rN` names), rebind round trip on a scratch copy, real freeze, binding compare against the live round-1
-binding. Not run against the live controller: the preflight (it loads the policy checkpoint, needs a free ~40 GB claim) and the
-learner resume under v58.
+Plain restart, in order: (1) cooperative stop: SIGTERM to the controller only; it stops its workers and actor and archives
+retained partials; a learner/SFT trainer finishes its update and checkpoints; after `--grace` the unit is stopped hard;
+(2) relaunch through `memory_ledger.py run` as `<base>-rN` from `launch.json`; (3) wait until the new controller holds
+`controller.lock` and has rewritten `state.json`.
 
 ## What makes a restart seamless (code on main, commits below)
 
 * `collect()` no longer binds `endpoints` or `remote_workers` (transport, not provenance; each endpoint's policy identity is
   authenticated by `actor_receipts()` at every start). Old bindings that contain them still resume (compare ignores them).
-* Collector/actor **code identity** (`runtime` map, `collector_sha256`, `expected_native_actor.python_runtime`) may change on
-  resume (default; `strict_code_identity: true` in the config opts out). Each start records the old and new digests.
+* Collector/actor **code identity** is provenance, never a gate: bindings carry no dist hash map, collector hash or Python
+  inventory; each start records the git commit and dirty flag of the controller and every actor (`generations.jsonl`
+  `code`, `code_changes`; `score.json` `code`; the completed-update record `code`).
 * Every start of a round's collection is a *generation*, appended to `round-N/generations.jsonl` (endpoints, worker count,
   slots, actor receipts, accepted code changes, per-phase pending counts). Workers write new journal files per generation
   (`workers/journal-g2-0.jsonl`, `journal-g2-teacher-0.jsonl`); nothing is overwritten. Entries with a `finish` row in ANY

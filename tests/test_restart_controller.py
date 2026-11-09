@@ -41,6 +41,7 @@ def test_unit_names_count_up_from_every_known_restart(monkeypatch):
 # ---- run from the checkout (owner, 2026-11-09) ---------------------------------------------------------------------
 
 import json
+import pytest
 
 FROZEN = f'{rc.DATA}/runtime-native-corrected-mix-v71-1109'
 
@@ -137,3 +138,23 @@ def test_dry_run_to_checkout_prints_the_plan_and_changes_nothing(tmp_path, monke
     assert report['to'] == 'checkout' and report['next_unit'] == 'bf95-lowlr-w5-r1'
     assert report['migration']['actor_environment']['NATLANG_REPO'] == str(rc.REPO)
     assert {p.name: p.read_bytes() for p in out.iterdir()} == before
+
+
+def test_the_migrated_launch_runs_the_controller_under_the_supervisor_and_in_place_needs_it(tmp_path, monkeypatch, capsys):
+    spec = {'unit': 'u', 'payload': f'cd {FROZEN} && exec env NATLANG_REPO={FROZEN} {rc.PYTHON} -u -m natlang_neuralese.rl.production '
+                                    f'run --config /o/config.json >> /o/controller.log 2>&1',
+            'workdir': FROZEN, 'budget_gb': 100, 'priority': 'high', 'fixed_claim': True}
+    launch = rc.migrate_launch(spec)
+    assert launch['payload'] == (f'cd {rc.REPO} && exec env NATLANG_REPO={rc.REPO} {rc.PYTHON} {rc.REPO}/{rc.SUPERVISOR} -- '
+                                 f'{rc.PYTHON} -u -m natlang_neuralese.rl.production run --config /o/config.json >> /o/controller.log 2>&1')
+    assert rc.migrate_launch(launch)['payload'] == launch['payload']        # idempotent
+    out = tmp_path / 'w5'
+    out.mkdir()
+    monkeypatch.setattr(rc, 'pick_unit', lambda o, e=None: 'u')
+    monkeypatch.setattr(rc, 'units_named', lambda prefix: ['u'])
+    rc.save_json(out / 'launch.json', spec)
+    with pytest.raises(SystemExit, match='does not run under controller_supervisor'):
+        rc.main([str(out), '--in-place', '--dry-run'])
+    rc.save_json(out / 'launch.json', launch)
+    assert rc.main([str(out), '--in-place', '--dry-run']) == 0
+    assert json.loads(capsys.readouterr().out)['mode'] == 'in-place'

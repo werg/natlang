@@ -2,7 +2,7 @@
 """Restart a live interleaved RL controller at any time: stop it cooperatively, relaunch it under a fresh ledger unit
 from the canonical checkout and check that it resumed.
 
-    python3 scripts/neuralese_data/restart_controller.py CONTROL_OUT [--to-checkout [--at-round-boundary]]
+    python3 scripts/neuralese_data/restart_controller.py CONTROL_OUT [--in-place | --to-checkout] [--at-round-boundary]
         [--grace SECONDS | --patient] [--no-preflight] [--dry-run]
 
 CONTROL_OUT is the controller's ``out`` directory (it holds config.json, state.json, controller.log).  Production runs
@@ -187,9 +187,22 @@ def migrate_config(config):
     return new, changes
 
 
+SUPERVISOR = 'scripts/neuralese_data/controller_supervisor.py'
+
+
+def with_supervisor(payload):
+    """``payload`` (``... exec env K=V... python -u -m natlang_neuralese.rl.production run ...``) with the controller run
+    under controller_supervisor.py: ``--in-place`` restarts then keep the unit, cgroup, claim, workers and actor."""
+    if SUPERVISOR in payload:
+        return payload
+    return re.sub(r'(\S*python\S*)( -u)? -m natlang_neuralese\.rl\.production run ',
+                  lambda m: f'{PYTHON} {REPO}/{SUPERVISOR} -- {m[1]}{m[2] or ""} -m natlang_neuralese.rl.production run ',
+                  payload, count=1)
+
+
 def migrate_launch(spec):
-    """launch.json with the payload and ledger workdir of the checkout."""
-    return {**spec, 'payload': _retarget(spec['payload']), 'workdir': str(REPO)}
+    """launch.json with the payload and ledger workdir of the checkout, the controller under the supervisor."""
+    return {**spec, 'payload': with_supervisor(_retarget(spec['payload'])), 'workdir': str(REPO)}
 
 
 def migrate_text(text):
@@ -379,6 +392,29 @@ def wait_resumed(unit, out, launched_at, seconds):
     return False, 'state.json was not rewritten by the new controller in time'
 
 
+def restart_in_place(unit, out, seconds):
+    """SIGUSR1 to the unit's main process (controller_supervisor.py), which forwards it to the controller: during
+    collection the controller detaches (collector workers and the managed actor keep running, rl.detached_processes), during
+    an update or SFT window it finishes it and exits at the round boundary; the supervisor then starts the controller
+    again from the checkout as it is now, inside the same unit and ledger claim. Nothing is stopped, rebound or re-admitted."""
+    log = Path(out) / 'controller.log'
+    before = log.stat().st_size if log.is_file() else 0
+    launched_at = time.time()
+    print(f'restart in place: SIGUSR1 to {unit} (collection detaches at once; an update finishes first)', flush=True)
+    systemctl('kill', '--kill-whom=main', '-s', 'SIGUSR1', unit)
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if unit_state(unit) not in ('active', 'activating'):
+            return False, f'{unit} is {unit_state(unit)}; tail of controller.log: ' + (log.read_text()[-600:] if log.is_file() else '')
+        tail = log.read_bytes()[before:].decode(errors='replace') if log.is_file() else ''
+        if 'controller_supervisor: restarting' in tail:
+            break
+        time.sleep(3)
+    else:
+        return False, 'the controller did not restart in time (an update in flight finishes first; pass a larger --resume-seconds)'
+    return wait_resumed(unit, out, launched_at, max(60., deadline - time.monotonic()))
+
+
 def wait_round_boundary(out, seconds, poll=3.):
     """Wait until the controller has finished its current update/window and begins another round: ``state.round``
     advances (or the controller sits in ``collect`` of a round that has no collection binding yet). A bounded wait: on
@@ -405,6 +441,9 @@ def main(argv=None):
     p.add_argument('--to-checkout', action='store_true',
                    help='move a controller launched from a frozen runtime to run from the checkout (config, admission '
                         'wrapper, env.sh, launch.json, state record); --dry-run prints every change')
+    p.add_argument('--in-place', action='store_true',
+                   help='restart the controller inside its unit without stopping workers or the actor (needs a controller '
+                        'launched under controller_supervisor.py; --to-checkout does that)')
     p.add_argument('--at-round-boundary', action='store_true',
                    help='wait (up to --boundary-wait seconds) for the controller to finish its current update and begin the next round')
     p.add_argument('--boundary-wait', type=float, default=10800.)
@@ -430,11 +469,21 @@ def main(argv=None):
                          'the frozen-runtime flags apply only to controllers still launched from a frozen runtime')
     if a.to_checkout and legacy:
         raise SystemExit('--to-checkout and the frozen-runtime flags are alternatives')
+    if a.in_place and (legacy or a.to_checkout):
+        raise SystemExit('--in-place is a restart without any runtime change')
     if a.to_checkout and old_tag is None:
         raise SystemExit('this controller already runs from the checkout (its launch payload names no frozen runtime)')
     new_unit = next_unit(unit, spec.get('units', []))
     plan = {'out': str(out), 'unit': unit, 'next_unit': new_unit, 'runtime': old_tag or 'checkout', 'budget_gb': spec['budget_gb'],
             'priority': spec['priority'], 'fixed_claim': spec['fixed_claim']}
+    if a.in_place and SUPERVISOR not in spec['payload']:
+        raise SystemExit('this controller does not run under controller_supervisor.py: its next restart is a stop/relaunch '
+                         '(plain, or --to-checkout, which also moves it under the supervisor); --in-place works from then on')
+    if a.dry_run and a.in_place:
+        print(json.dumps({**plan, 'mode': 'in-place', 'signal': 'SIGUSR1 to the unit main process (the supervisor)',
+                          'collection': 'workers and actor keep running; the relaunched controller re-attaches',
+                          'update': 'finishes first; the controller restarts at the round boundary'}, indent=1))
+        return 0
     if a.dry_run:
         report = {**plan, 'launch': ledger_command(spec, new_unit)[2:]}
         if a.to_checkout:
@@ -451,6 +500,10 @@ def main(argv=None):
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError:
             raise SystemExit('another restart of this controller is running')
+        if a.in_place:
+            ok, detail = restart_in_place(unit, out, a.boundary_wait if a.at_round_boundary else a.resume_seconds)
+            print(json.dumps({**plan, 'mode': 'in-place', 'resumed': ok, 'detail': detail}, indent=1))
+            return 0 if ok else 1
         new_tag = None
         if a.use_runtime:
             if not (DATA / f'runtime-native-corrected-mix-{a.use_runtime}/runtime-input-closure.json').is_file():
