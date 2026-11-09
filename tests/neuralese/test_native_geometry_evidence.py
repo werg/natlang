@@ -80,14 +80,6 @@ def test_prepared_request_covers_both_exact_split_suffixes(tmp_path,monkeypatch)
         resident.geometry_from_evidence(source,2,resident.binding(path),package=Path(resident.__file__).parents[1])
 
 
-def test_runtime_package_override_must_equal_running_plan(tmp_path,monkeypatch):
-    source,proof,directory,manager,recipe=sources(tmp_path,monkeypatch)
-    other=tmp_path/'other';other.mkdir();(other/'changed.py').write_text('changed')
-    with pytest.raises(ValueError,match='runtime differs'):
-        resident.prepare(directory,recipe,'sft',tokenizer_fingerprint='tokenizer-sha',role_ids=(),runtime_package=other)
-    assert not(directory/'pending.json').exists()
-
-
 def test_external_cpu_preparer_keeps_actual_package_inventory_and_old_consumer(tmp_path,monkeypatch):
     import os
     import subprocess

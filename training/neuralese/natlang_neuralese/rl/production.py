@@ -642,23 +642,50 @@ class RunControl:
     """Share one stop request across explicit child processes and thread workers."""
     def __init__(self, stop):
         self.stop = stop
-        self._forwarded = set()
 
-    def wait(self, child, *, stop_file=None, stop_request=None, timeout=None):
-        """Wait for ``child``, forwarding a stop request once per child. With ``timeout`` the wait raises TimeoutExpired
-        after that many seconds so a caller can poll other conditions."""
-        deadline = None if timeout is None else time.monotonic() + timeout
+    def wait(self, child, *, stop_file=None, stop_request=None):
+        forwarded = False
         while True:
-            if self.stop.requested and id(child) not in self._forwarded:
+            if self.stop.requested and not forwarded:
                 if stop_file is not None:
                     write_json_durable(stop_file, {'schema': 'natlang.native-rl-bridge-stop/1',
                         'checkpoint_requested': True, 'request': stop_request})
                 elif child.poll() is None:
                     child.terminate()  # exact child PID, trainer checkpoints before exiting
-                self._forwarded.add(id(child))
+                forwarded = True
             try:
                 return child.wait(timeout=.2)
             except subprocess.TimeoutExpired:
+                pass
+
+
+class _DetachRequested(Exception):
+    """A restart in place was requested while a collector worker was running."""
+
+
+class _Watched:
+    """A collector process whose waits end with _DetachRequested once a restart in place is requested, so the worker can
+    be left running (the stop path still terminates it: terminate() is forwarded)."""
+
+    def __init__(self, process):
+        self._process = process
+        self.pid = process.pid
+
+    def poll(self):
+        return self._process.poll()
+
+    def terminate(self):
+        self._process.terminate()
+
+    def wait(self, timeout=None):
+        from .detached_processes import restart_requested
+        deadline = None if timeout is None else time.monotonic() + timeout
+        while True:
+            try:
+                return self._process.wait(timeout=.2 if deadline is None else max(0.01, min(.2, deadline - time.monotonic())))
+            except subprocess.TimeoutExpired:
+                if restart_requested():
+                    raise _DetachRequested
                 if deadline is not None and time.monotonic() >= deadline:
                     raise
 
@@ -681,7 +708,7 @@ def _run_collector(command, log, control, *, shutdown_grace=30., custody_receipt
         write_json_durable(custody_receipt,{'schema':'natlang.rl-collector-process-custody/1',
             'helper':helper_binding,'scope':'owned worker session only','command':command})
     session_process,cleanup_session=guard.session_process,guard.cleanup_session
-    from .detached_processes import restart_requested, record_process
+    from .detached_processes import record_process
     process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
                                start_new_session=True)
     owner = session_process(process.pid)
@@ -696,15 +723,13 @@ def _run_collector(command, log, control, *, shutdown_grace=30., custody_receipt
     try:
         # A restart in place (SIGUSR1) leaves the worker running: it finishes its episode on the code it started with and
         # the relaunched controller re-attaches (rl.detached_processes). Any other stop still terminates it.
-        while True:
-            try:
-                return process.wait(timeout=.2) if control is None else control.wait(process, timeout=.2)
-            except subprocess.TimeoutExpired:
-                if restart_requested() and detach_path is not None:
-                    record_process(detach_path, process.pid, command=command, queue=command[2], journal=command[3],
-                                   endpoint=command[command.index('--server') + 1])
-                    detached = True
-                    return None
+        watched = _Watched(process) if detach_path is not None else process
+        return watched.wait() if control is None else control.wait(watched)
+    except _DetachRequested:
+        record_process(detach_path, process.pid, command=command, queue=command[2], journal=command[3],
+                       endpoint=command[command.index('--server') + 1])
+        detached = True
+        return None
     finally:
         if not detached:
             cleanup_session(owner, process, shutdown_grace, session_only=True)

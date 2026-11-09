@@ -265,9 +265,8 @@ def test_collection_binding_records_adapters(tmp_path):
     from natlang_neuralese.rl.production import collection_binding
     cases = tmp_path / 'cases.jsonl'
     cases.write_text('{}\n')
-    (tmp_path / 'runtime' / 'dist').mkdir(parents=True)
     common = dict(cases=cases, policy_id=PARENT, rows=1, offset=0, group=2, root_mode='student',
-                  runtime=tmp_path / 'runtime', seed_base=1, neuralese_server=True, case_seconds=1,
+                  seed_base=1, neuralese_server=True, case_seconds=1,
                   max_model_requests=1, max_turns=1)
     assert 'adapters' not in collection_binding(**common)
     binding = {'schema': MF.ACTOR_SCHEMA, 'entries': [{'id': 'nnt1_adapter', 'scale': 1.0}]}

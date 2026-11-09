@@ -21,16 +21,17 @@ _CACHE = {}
 
 def _git(root, *args):
     try:
-        done = subprocess.run(['git', '-c', 'safe.directory=*', '-C', str(root), *args], capture_output=True,
-                              text=True, timeout=30)
-    except (OSError, subprocess.SubprocessError):
+        process = subprocess.Popen(['git', '-c', 'safe.directory=*', '-C', str(root), *args], stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, text=True)
+        out, _ = process.communicate(timeout=30)
+    except Exception:   # provenance never fails a run: an unreadable checkout records no commit
         return None
-    return done.stdout.strip() if done.returncode == 0 else None
+    return out.strip() if process.returncode == 0 else None
 
 
 def repository_root(package=None):
     """The checkout that holds this package (``natlang_neuralese`` lives at ``<repo>/training/neuralese``)."""
-    return Path(package).resolve() if package is not None else Path(__file__).resolve().parents[3]
+    return Path(package).resolve() if package is not None else Path(__file__).resolve().parents[4]
 
 
 def compute(root):
