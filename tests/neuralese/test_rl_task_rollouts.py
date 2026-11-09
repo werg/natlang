@@ -74,7 +74,8 @@ def test_score_routes_groups_by_spread(tmp_path):
 
 def _budget_prefix_fixture(tmp_path, *, graph_turn="inv#turn1", pending=False, manifest_tamper=False,
                            native_pair=False, stale_attempt=False, missing_frame=False, split="train",
-                           saved_raw_calls=False, mismatched_saved_raw_calls=False, root_dependency=False):
+                           saved_raw_calls=False, mismatched_saved_raw_calls=False, root_dependency=False,
+                           decision=False, omit_last=False, tamper_decision=False):
     from natlang_neuralese.rl.task_rollouts import build_queue
     task = {**authored_root_row(_row()), "id": "budget-prefix-task", "split": split}
     packet_path = tmp_path / "packet.jsonl"
@@ -109,8 +110,20 @@ def _budget_prefix_fixture(tmp_path, *, graph_turn="inv#turn1", pending=False, m
             {"kind": "block_read", "node": "reader", "turn": "consumer#turn1", "block": "state",
              "inputs": [{"node": "writer", "block": "state"}]},
         ]
+    decision_capture = {"prompt": [{"kind": "tokens", "token_ids": [7], "producing": [False]}], "writes": [],
+                        "decision_sample": {"chosen": 1}}
+    decision_scores = {"log_probs": [-1.0, -0.5], "tokens": [1, 2], "native_decision_capture": decision_capture,
+                       "chosen": 1}
+    decision_request = {"messages": [{"role": "user", "content": "pick"}], "options": ["a", "b"],
+                        "invocation_id": "dec", "invocation_role": "student"}
+    decision_sha = f"{99:064x}"
+    if decision:
+        graph_events.append({"kind": "model_turn", "node": "dec#turn1", "call_id": "dec", "inputs": []})
+        frame_specs.append(("dec", "dec#turn1", None))
     frames = []
     for invocation_id, node, sampling in frame_specs:
+        if invocation_id == "dec":
+            continue
         frame = {"phase": "action", "invocation_id": invocation_id,
                  "context": [{"role": "user", "content": "q"}],
                  "tools_offered": [{"type": "function", "function": {"name": "eval", "parameters": {"type": "object"}}}],
@@ -135,9 +148,10 @@ def _budget_prefix_fixture(tmp_path, *, graph_turn="inv#turn1", pending=False, m
                             "block": "reference", "inputs": []})
         child_events.append({"kind": "block_read", "node": "child-reader", "turn": f"{frames[0][0]}#turn1",
                              "block": "reference", "inputs": [{"node": "root-writer", "block": "reference"}]})
+    invocations = [invocation for invocation, _ in frames] + (["dec"] if decision else [])
     child_events = [*({"kind": "invocation", "node": f"call:{invocation}", "call_id": invocation,
                        "inputs": [{"node": root_call_node, "port": "caller"}]}
-                      for invocation, _ in frames),
+                      for invocation in invocations),
                     *[{**event, "inputs": [{"node": f"call:{event['call_id']}", "port": "invocation"}]}
                       if event.get("kind") == "model_turn" else event for event in child_events]]
     trace_rows = [{"kind": "trace_event", "trace_role": "root", "invocation_id": f"root/execution-{execution}",
@@ -155,10 +169,10 @@ def _budget_prefix_fixture(tmp_path, *, graph_turn="inv#turn1", pending=False, m
          "run_id": root_invocation, "logical_run_id": "root",
          "execution_attempt_id": execution, "status": "interrupted",
          "failure_reason": "whole-case model request budget exceeded (4)", "pending_children": pending,
-         "root_event_count": len(root_events), "invocation_count": len(frames)},
+         "root_event_count": len(root_events), "invocation_count": len(invocations)},
         *trace_rows,
         *[{"kind": "invocation_snapshot", "call_id": invocation, "event_count": child_counts.get(invocation, 0)}
-          for invocation, _ in frames],
+          for invocation in invocations],
         *([] if missing_frame else [
             {"kind": "teacher_action_frame", "source": "authored_reference_root", "request_sha256": f"{8:064x}",
              "invocation_id": root_invocation, "response_frame": root_frame, "saved_turn_index": 0},
@@ -166,7 +180,14 @@ def _budget_prefix_fixture(tmp_path, *, graph_turn="inv#turn1", pending=False, m
                "invocation_id": invocation, "response_frame": frame, "saved_turn_index": index + 1}
               for index, (invocation, frame) in enumerate(frames)]
         ]),
+        *([{"kind": "decision_action_frame", "request_sha256": decision_sha, "invocation_id": "dec",
+            "request": decision_request, "scores": decision_scores}] if decision else []),
     ]
+    if omit_last:
+        # the last policy turn's action record exceeded the collector's byte limit
+        omitted_index = max(i for i, row in enumerate(payloads) if row["kind"] == "teacher_action_frame")
+        payloads[omitted_index] = {"kind": "record_omitted", "reason": "record_exceeded_byte_limit", "bytes": 9,
+                                   "payload_sha256": "e" * 64, "original_kind": "teacher_action_frame"}
     records = [json.dumps({"version": "natlang.teacher_partial_evidence_record/1", "attempt_id": attempt,
                            "sequence": index, "payload": payload}, separators=(",", ":"))
                for index, payload in enumerate(payloads)]
@@ -185,6 +206,8 @@ def _budget_prefix_fixture(tmp_path, *, graph_turn="inv#turn1", pending=False, m
                                      {"raw_response": {"transport": "native-collector"}}),
                                   "text": ""}}
                     for index, (invocation, frame) in enumerate(frames)]],
+        **({"decisions": [{"request_sha256": decision_sha, "scores": {**decision_scores, "chosen": 0}
+                           if tamper_decision else decision_scores}]} if decision else {}),
         "request_attempt_ids": [attempt, "newer-attempt"] if stale_attempt else [attempt], "evidence_snapshots": [{
             "schema": "natlang.teacher_partial_evidence/1", "path": evidence_path.name,
             "attempt_id": attempt, "status": "execution_interrupted", "records": len(payloads),
@@ -232,6 +255,54 @@ def test_scored_model_budget_prefix_reconstructs_exact_whole_graph(tmp_path):
     assert row["source_revisions"] == ["fixture/v1"]
     assert row["source_custody"]["packet_sha256"] == hashlib.sha256((tmp_path / "packet.jsonl").read_bytes()).hexdigest()
     assert row["source_custody"]["packet_row_sha256"] == hashlib.sha256((tmp_path / "packet.jsonl").read_bytes()).hexdigest()
+
+
+def _emit_budget_rollout(tmp_path, **options):
+    task, entries, finish = _budget_prefix_fixture(tmp_path, **options)
+    (tmp_path / "packet.jsonl").write_text(json.dumps(task) + "\n")
+    (tmp_path / "queue.jsonl").write_text("".join(json.dumps(row) + "\n" for row in entries))
+    (tmp_path / "journal.jsonl").write_text(json.dumps(finish) + "\n")
+    emitted = tmp_path / "native-rollouts.jsonl"
+    score(tmp_path, emit=emitted)
+    return json.loads(emitted.read_text().splitlines()[0])
+
+
+def test_budget_prefix_keeps_sampled_decision_turns_as_scored_failure(tmp_path):
+    """A closed-set decision is a model turn of the graph (`decision_action_frame`); the episode keeps it."""
+    row = _emit_budget_rollout(tmp_path, decision=True)
+    assert row["unscored"] is None and row["reward"]["quality"] == 0.0
+    assert [turn["invocation_id"] for turn in row["turns"]] == ["inv", "dec"]
+    decision = row["turns"][1]
+    assert decision["target"] == {"role": "assistant", "content": "b"}
+    assert decision["sampling"]["decision_sample"] == {"chosen": 1}
+    assert {event["node"] for event in row["execution_graph"] if event.get("kind") == "model_turn"} == {
+        "inv#turn1", "dec#turn1"}
+    from natlang_neuralese.rl.episode_graph import whole_episode_turns
+    whole_episode_turns(row)
+
+
+def test_budget_prefix_decision_must_match_its_saved_decision(tmp_path):
+    row = _emit_budget_rollout(tmp_path, decision=True, tamper_decision=True)
+    assert row["reward"] is None and row["unscored"] == "budget_prefix_capture_unavailable"
+
+
+def test_budget_prefix_trains_turns_before_an_omitted_oversized_record(tmp_path):
+    """The collector replaces a record over its byte limit with `record_omitted`: the episode is trained on the
+    turns captured before it (producer only: its consumer's read and turn leave the graph), still a failure."""
+    row = _emit_budget_rollout(tmp_path, native_pair=True, omit_last=True)
+    assert row["unscored"] is None and row["reward"]["quality"] == 0.0
+    assert [turn["invocation_id"] for turn in row["turns"]] == ["producer"]
+    assert {event["node"] for event in row["execution_graph"] if event.get("kind") == "model_turn"} == {
+        "producer#turn1"}
+    assert not any(event.get("kind") == "block_read" for event in row["execution_graph"])
+    assert row["budget_termination_evidence"]["truncated_at_omitted_record"]["kept_turns"] == 1
+    from natlang_neuralese.rl.episode_graph import whole_episode_turns
+    whole_episode_turns(row)
+
+
+def test_budget_prefix_with_no_captured_turn_before_omission_stays_unscored(tmp_path):
+    row = _emit_budget_rollout(tmp_path, omit_last=True)
+    assert row["reward"] is None and row["unscored"] == "budget_prefix_capture_unavailable"
 
 
 def test_budget_prefix_keeps_producer_and_consumer_as_one_graph(tmp_path):

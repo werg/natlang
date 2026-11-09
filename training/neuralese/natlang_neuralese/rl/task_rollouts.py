@@ -185,6 +185,59 @@ def execution_efficiency(rollout: dict[str, Any], weight: float | None = None) -
             'failure_report_credit': grounded_failure_report_credit(rollout.get('turns') or [])}
 
 
+def _decision_frame(row: dict[str, Any], unmatched: list[Any]) -> dict[str, Any] | None:
+    """The trajectory step of a sampled closed-set decision, rebuilt from its `decision_action_frame` evidence row
+    exactly as the collector pushes it into a completed episode's trajectory (the readout is the chosen option, no
+    tool calls, the native capture as `rl_sampling`). The row must equal an unused entry of the partial's separately
+    saved decisions (same request hash and scores), so a decision turn is custody-checked like an action turn."""
+    request, scores, request_sha = row.get("request"), row.get("scores"), row.get("request_sha256")
+    if (not isinstance(request, dict) or not isinstance(scores, dict) or not isinstance(request_sha, str) or
+            not re.fullmatch(r"[0-9a-f]{64}", request_sha) or not isinstance(request.get("messages"), list) or
+            not isinstance(request.get("options"), list) or request.get("invocation_id") != row.get("invocation_id") or
+            not isinstance(row.get("invocation_id"), str) or not row["invocation_id"]):
+        return None
+    capture, log_probs = scores.get("native_decision_capture"), scores.get("log_probs")
+    if (not isinstance(capture, dict) or not isinstance(log_probs, list) or len(log_probs) != len(request["options"]) or
+            not log_probs):
+        return None
+    chosen = scores.get("chosen")
+    if chosen is None:
+        chosen = max(range(len(log_probs)), key=lambda i: log_probs[i])
+    if type(chosen) is not int or not 0 <= chosen < len(request["options"]) or \
+            not isinstance(request["options"][chosen], str):
+        return None
+    match = next((i for i, saved in enumerate(unmatched) if isinstance(saved, dict) and
+                  saved.get("request_sha256") == request_sha and saved.get("scores") == scores), None)
+    if match is None:
+        return None
+    del unmatched[match]
+    text = request["options"][chosen]
+    imports = capture.get("native_state_imports")
+    return {"phase": "action", "invocation_id": row["invocation_id"], "context": copy.deepcopy(request["messages"]),
+            "request_sha256": request_sha, "tools_offered": [],
+            "model_response": {"calls": [], "text": text, "raw_calls": [], "rl_sampling": copy.deepcopy(capture),
+                               **({"native_state_imports": copy.deepcopy(imports)} if isinstance(imports, list) else {})},
+            "assistant": {"content": text, "reasoning": None, "calls": []}}
+
+
+def _graph_of_turn_prefix(graph: list[dict[str, Any]], kept_names: list[str]) -> list[dict[str, Any]]:
+    """The execution graph of an episode cut to its first turns: drop the model turns after the cut, the block
+    reads/writes they own, and (transitively) every event that takes one of those as an input."""
+    kept = set(kept_names)
+    dropped = {event["node"] for event in graph
+               if (event.get("kind") == "model_turn" and event["node"] not in kept) or
+               (event.get("kind") in {"block_write", "block_read"} and event.get("turn") not in kept)}
+    changed = True
+    while changed:
+        changed = False
+        for event in graph:
+            if event["node"] not in dropped and any(isinstance(edge, dict) and edge.get("node") in dropped
+                                                    for edge in event["inputs"]):
+                dropped.add(event["node"])
+                changed = True
+    return [event for event in graph if event["node"] not in dropped]
+
+
 def _budget_terminated_prefix(entry: dict[str, Any], task: dict[str, Any], finish: dict[str, Any] | None,
                               *, packet_source_path: Path, packet_source_sha256: str | None
                               ) -> dict[str, Any] | None:
@@ -295,17 +348,39 @@ def _budget_terminated_prefix(entry: dict[str, Any], task: dict[str, Any], finis
         return None
     if sum(row.get("kind") == "execution_snapshot" for row in payloads if isinstance(row, dict)) != 1:
         return None
-    all_action_frames = [row for row in payloads if isinstance(row, dict) and
+    # A record over the collector's byte limit is replaced by a `record_omitted` marker. Losing a provider
+    # exchange is harmless (nothing below reads it); losing a turn's action/decision frame means the episode's
+    # turns are captured only up to that point, so it is trained on the turns before it (a chronological prefix
+    # is import-closed: a consumer never precedes its producer). Any other omission (trace, snapshot) is ambiguous.
+    omitted = [(index, row) for index, row in enumerate(payloads) if isinstance(row, dict) and
+               row.get("kind") == "record_omitted"]
+    if any(row.get("original_kind") not in {"provider_exchange", "teacher_action_frame", "decision_action_frame"}
+           for _, row in omitted):
+        return None
+    cut = min((index for index, row in omitted if row.get("original_kind") != "provider_exchange"), default=None)
+    kept_payloads = [(index, row) for index, row in enumerate(payloads) if cut is None or index < cut]
+    all_action_frames = [row for _, row in kept_payloads if isinstance(row, dict) and
                          row.get("kind") == "teacher_action_frame"]
     policy_sources = {"live_provider", "journal_replay", "handoff_replay"}
     known_sources = policy_sources | {"authored_reference_root"}
     if any(row.get("source") not in known_sources for row in all_action_frames):
         return None
-    action_frames = [row for row in all_action_frames if row.get("source") in policy_sources]
-    frames = [row.get("response_frame") for row in action_frames]
-    verified_action_frames = action_frames + [row for row in all_action_frames
-                                              if row.get("source") == "authored_reference_root"]
-    verified_frames = [row.get("response_frame") for row in verified_action_frames]
+    saved_decisions = partial.get("decisions")
+    unmatched_decisions = list(saved_decisions) if isinstance(saved_decisions, list) else []
+    ordered_frames: list[tuple[dict[str, Any] | None, dict[str, Any]]] = []  # (teacher action row or None, frame)
+    for _, row in kept_payloads:
+        if not isinstance(row, dict):
+            continue
+        if row.get("kind") == "teacher_action_frame" and row.get("source") in policy_sources | {"authored_reference_root"}:
+            ordered_frames.append((row, row.get("response_frame")))
+        elif row.get("kind") == "decision_action_frame":
+            frame = _decision_frame(row, unmatched_decisions)
+            if frame is None:
+                return None
+            ordered_frames.append((None, frame))
+    frames = [frame for row, frame in ordered_frames if row is None or row.get("source") in policy_sources]
+    verified_action_frames = all_action_frames
+    verified_frames = [frame for row, frame in ordered_frames]
     if (not frames or any(not isinstance(frame, dict) or frame.get("phase") != "action" or
                           not isinstance(frame.get("invocation_id"), str) or
                           not isinstance(frame.get("context"), list) or
@@ -316,7 +391,7 @@ def _budget_terminated_prefix(entry: dict[str, Any], task: dict[str, Any], finis
     if not isinstance(saved_turns, list):
         return None
     saved_indexes = []
-    for evidence_row, frame in zip(verified_action_frames, verified_frames):
+    for evidence_row, frame in zip(all_action_frames, [frame for row, frame in ordered_frames if row is not None]):
         index = evidence_row.get("saved_turn_index")
         if (type(index) is not int or index < 0 or index >= len(saved_turns) or
                 index in saved_indexes or not isinstance(evidence_row.get("request_sha256"), str) or
@@ -335,8 +410,6 @@ def _budget_terminated_prefix(entry: dict[str, Any], task: dict[str, Any], finis
                 not isinstance(model_response.get("raw_calls"), list) or
                 response.get("text", "") != model_response.get("text", "")):
             return None
-    if any(row.get("kind") == "record_omitted" for row in payloads if isinstance(row, dict)):
-        return None
 
     trace_rows = [row for row in payloads if isinstance(row, dict) and row.get("kind") == "trace_event"]
     invocation_rows = [row for row in payloads if isinstance(row, dict) and row.get("kind") == "invocation_snapshot"]
@@ -395,13 +468,17 @@ def _budget_terminated_prefix(entry: dict[str, Any], task: dict[str, Any], finis
     if not turns:
         return None
     try:
-        from .episode_graph import validate_rollout_graph
+        from .episode_graph import rollout_turn_names, validate_rollout_graph
+        if cut is not None:
+            graph = _graph_of_turn_prefix(graph, rollout_turn_names(turns))
         validate_rollout_graph({"turns": turns, "execution_graph": graph})
     except (TypeError, ValueError):
         return None
     return {"turns": turns, "trajectory": frames, "execution_graph": graph,
             "evidence": {"path": str(evidence_path), "sha256": manifest["sha256"],
-                         "attempt_id": manifest["attempt_id"], "failure_reason": snapshot["failure_reason"]}}
+                         "attempt_id": manifest["attempt_id"], "failure_reason": snapshot["failure_reason"],
+                         **({"truncated_at_omitted_record": {"record_index": cut, "kept_turns": len(turns)}}
+                            if cut is not None else {})}}
 
 
 def memetic_outcome(task: dict, result: dict | None) -> dict | None:
