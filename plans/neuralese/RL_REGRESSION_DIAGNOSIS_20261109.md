@@ -169,3 +169,38 @@ Round 1 also had 20 `infrastructure_error` rollouts, from the Pop actor OOM at 0
 - A null pipeline round (LR 0, bit-identical weights). If dev16 still moves, the eval or checkpoint path is at fault.
 
 Production (`bf95-lowlr-w4-r12`) is stopped until a cause is found. The resume point is step 92 or a corrected parent.
+
+## Finding and fix in flight (2026-11-09 ~15:30)
+
+**The privileged facts reveal the answer.** `rl/privileged_context.py:case_facts` puts into the twin's context:
+- "The verified result of this program is …" (`expected_result`);
+- the expected stop status;
+- expected files and effects;
+- reference solutions;
+- minimum steps and decisive evidence.
+
+The student OPSD term, `beta_s * KL(pi(.|s) || sg pi(.|s,c))` at every sampled position, therefore trains the student
+toward a policy that *knows the answer*. The student learns to emit answers without first acquiring the information.
+This is the classic privileged-information leakage of on-policy self-distillation, and it predicts exactly the observed
+confident `semantic_mismatch` answers.
+
+With the outcome term not detectably present in the update (diagnostic 4), this pull is the only directed component.
+
+**Run w5** (`ops/bf95-lowlr-1105/w5`, control `interleave-v49/control-w5`):
+- same as w4 but `policy_loss.beta_s = 0`, in both the config and the recipe's `rl_policy_loss`;
+- restarted from step 92;
+- runtime frozen from main at 2f027b77f, which includes the long-episode truncation 40758e0da.
+
+The teacher term (`beta_t`) and the outcome term are unchanged.
+
+**Prediction:** if leakage is the cause, w5 holds dev16 at about 12–13 over its first two rounds where w4 fell to 11
+and 9. If w5 also declines, the cause is elsewhere: the common drift, noise, or an outcome-signal bug.
+
+**Follow-up regardless of the result:** the outcome signal is too weak to see.
+- About 45% of rollouts are unscored.
+- Only 7–8 of 16 groups have outcome spread.
+- The update is dominated by an advantage-independent drift.
+
+Scoring budget-exhaustion and unresolved rollouts as failures, and checking the outcome term's normalisation, are the
+next fixes. A redesigned student twin should get process hints only (attempt feedback, verified-failure warnings),
+never answer facts.
