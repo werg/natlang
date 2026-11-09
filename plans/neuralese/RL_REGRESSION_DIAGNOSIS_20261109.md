@@ -78,17 +78,39 @@ Round 1 also had 20 `infrastructure_error` rollouts, from the Pop actor OOM at 0
    - Path: `ops/diag-random-1109/checkpoint.pt`, sha 6ad98d7d9d75…
    - If it also drops to about 9, then the update's size or noise is the problem, not its direction. If it stays at
      about 11, training is pushing in a harmful direction.
-4. **Direction test, in progress** (`ops/diag-direction-1109/`, `analysis.json`):
-   - Method: rebuild the round-1 objective and measure per-token Δlogp (97 → 102) against advantage, split into
-     student and teacher tokens.
-   - Interim, **10 of 78 episodes** measured:
-     - Positive-advantage student tokens moved *down* (episode-mean Δlogp −0.0005 ± 0.0005).
-     - Teacher tokens also moved down (−0.0007).
-     - Correlation between advantage and Δlogp is −0.16 (n=7, p≈0.7).
-   - No negative-advantage episodes are in the sample yet.
-   - Queue check: all 78 episodes have an endpoint record and none mismatch.
-   - Not significant yet, but **the sign is the opposite of what the objective should do**. A sign error, an
-     advantage/reward misalignment, a token-mask misalignment or a logprob-to-token offset would all look like this.
+4. **Direction test, complete** (`ops/diag-direction-1109/REPORT.md`; 78 episodes, 1.12M sampled tokens):
+   - **Rebuild:** episode set, token totals, ordered-identities hash and deferral lists match the learner's receipts,
+     and `rl-native-graphs.jsonl` is byte-identical. The per-episode advantages can't be checked, because the
+     receipt doesn't store them.
+   - **Δlogp (step 97 → 102) is the same for every advantage class:**
+     - positive-advantage student episodes −0.00056 ± 0.00013;
+     - negative-advantage −0.00054 ± 0.00011;
+     - zero-advantage −0.00057 ± 0.00010;
+     - teacher −0.00068.
+
+     The positive-minus-negative gap is −2e-5 ± 1.7e-4, the advantage correlation is −0.045 (p 0.60), and its sign
+     flips across the five update batches. **The outcome signal is not detectably present in the update.**
+   - **The update is a common drift, independent of advantage:** rare sampled tokens gain probability (+0.055 for
+     behaviour logp < −5) and mid-probability tokens lose it.
+   - **The only directed movement is toward the privileged twin.** KL to the twin falls 1.9%, and the correlation
+     with the twin gap is +0.11.
+   - **Loss magnitudes:**
+     - the twin-KL term is about 0.005–0.02, while the outcome term is 1e-5–1e-3;
+     - on six probed episodes the outcome gradient was 35–60% of the KL gradient's norm and roughly orthogonal to it.
+
+     So the JOLT+ teacher term dominates. Combined with the common drift, RL as configured is mostly "move toward
+     the privileged-context policy plus noise". That fits the confident-wrong failures: a privileged-context policy
+     answers without needing the information the student lacks.
+   - **Actor agreement with the step-97 learner:**
+     - the DGX native engine matches to 2e-8 mean (max 1.9e-6);
+     - Pop and SGLang-sampled episodes differ by 0.0147 nats mean (max 0.58; 3.5% of tokens > 0.1). This is not
+       biased beyond the k3 estimate, and the guard rejects none of them.
+
+     Pop's per-token mismatch is the same size as the whole 5-update movement (mean |Δ| 0.0195).
+   - **Caveats:**
+     - the Δ spans five updates, which dilutes each one;
+     - the 40 sampled decision actions were not measured;
+     - graphs were run unpacked.
 
 ## Known defects (real, possibly contributing)
 
@@ -110,7 +132,7 @@ Round 1 also had 20 `infrastructure_error` rollouts, from the Pop actor OOM at 0
    - a target mask shifted by one token;
    - advantages attached to the wrong episodes after shuffling, packing, or dropping unscored/deferred rows;
    - prefix aliasing (`native-prefix-physical-alias-v4`) mixing rows between episodes.
-2. **JOLT+ teacher term.** The privileged teacher may teach the student to answer confidently without the
+2. **JOLT+ teacher term (now the lead suspect, see diagnostic 4).** The privileged teacher may teach the student to answer confidently without the
    information. This would match the confident-wrong failures. Check its weight (`beta_t 0.5`) relative to the
    outcome term, and whether privileged facts leak into student targets.
 3. **Reward asymmetries:**
@@ -137,8 +159,10 @@ Round 1 also had 20 `infrastructure_error` rollouts, from the Pop actor OOM at 0
 
 ## Planned next tests
 
-- Finish the direction test on all 78 episodes, including negative-advantage episodes and the Pop vs DGX endpoint
-  split.
+- Find out why the outcome term is 10–1000x smaller than the twin-KL term. Is `score-centered/1` / `k 128`
+  normalisation or token-mean averaging shrinking it? Is that scale intended?
+- Explain the advantage-independent common drift: rare tokens up, mid-probability tokens down. Candidates are the
+  twin KL, entropy-like effects of the k3 estimator, TIS weights, and the AdamW stochastic-rounding norm-gain noise.
 - Random-direction control result (`raw-97rand`).
 - An independent plain-PyTorch reference gradient on one round-1 batch, compared with the learner's gradient
   (cosine, sign per parameter group).
