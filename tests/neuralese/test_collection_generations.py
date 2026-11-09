@@ -5,7 +5,8 @@ from pathlib import Path
 import pytest
 
 from natlang_neuralese.rl import production
-from natlang_neuralese.rl.collection_generations import Generations, comparable_binding, code_changes
+from natlang_neuralese.rl.collection_generations import (Generations, IncompleteCollection, comparable_binding,
+                                                         code_changes, dispatch)
 from natlang_neuralese.common.jsonio import read_jsonl
 
 REPO = Path(__file__).resolve().parents[2]
@@ -71,13 +72,19 @@ def finishes(out):
 def test_restart_with_other_endpoints_and_workers_runs_only_pending_entries_once(tmp_path, monkeypatch):
     h = Harness(tmp_path, monkeypatch)
     h.budget = 3
-    first = h.collect()
-    assert first['collection_complete'] is True   # (no stop control: the fake collector just ran out of budget)
+    # The fake collector dies after 3 finishes: the round must not seal, it stays resumable.
+    with pytest.raises(IncompleteCollection, match='3 of 6 expected keys have no finish row'):
+        h.collect()
+    assert not (h.out / 'score.json').exists()
     assert len(finishes(h.out)) == 3
+    events = read_jsonl(h.out / 'generations.jsonl')
+    dispatched = [row for row in events if row['event'] == 'dispatch'][0]
+    assert (dispatched['pending'], dispatched['finished'], dispatched['remaining']) == (6, 3, 3)
+    incomplete = [row for row in events if row['event'] == 'incomplete'][0]
+    assert incomplete['finished'] == 3 and len(incomplete['missing']) == 3
     binding = json.loads((h.out / 'collection-binding.json').read_text())
     assert 'endpoints' not in binding and 'remote_workers' not in binding   # transport is not provenance
     # restart: a remote joins, workers change; the 3 finished entries stay finished, the 3 others run
-    (h.out / 'score.json').unlink()
     h.ran.clear()
     h.budget = 99
     h.collect(endpoints=['http://a', 'http://b'], workers=1, remote_workers={'http://b': {'workers': 2, 'weight': 1}})
@@ -100,12 +107,13 @@ def test_restart_with_other_endpoints_and_workers_runs_only_pending_entries_once
 def test_the_interrupted_entry_is_retried_not_counted_and_a_completed_round_dispatches_nothing(tmp_path, monkeypatch):
     h = Harness(tmp_path, monkeypatch, entries=4)
     h.budget = 1
-    h.collect()
+    with pytest.raises(IncompleteCollection):
+        h.collect()
     started = Generations(h.out).started()
     assert len(started) > 1 and len(Generations(h.out).attempted()) == 1   # the killed entry has a start only
-    (h.out / 'score.json').unlink()
     h.budget, h.ran = 99, []
-    h.collect()
+    complete = h.collect()
+    assert complete['collection_keys'] == {'expected': 4, 'finished': 4, 'unfinished': []}
     assert len(h.ran) == 3 and len(set(finishes(h.out))) == 4 == len(finishes(h.out))
     h.ran.clear()
     assert h.collect(endpoints=['http://elsewhere'], workers=7)['collection_complete'] is True
@@ -115,8 +123,8 @@ def test_the_interrupted_entry_is_retried_not_counted_and_a_completed_round_disp
 def test_code_identity_may_change_on_resume_but_sampling_may_not(tmp_path, monkeypatch):
     h = Harness(tmp_path, monkeypatch, entries=2)
     h.budget = 1
-    h.collect()
-    (h.out / 'score.json').unlink()
+    with pytest.raises(IncompleteCollection):
+        h.collect()
     (h.runtime / 'dist/new.js').write_text('changed collector code')   # a successor runtime
     h.budget = 99
     h.collect()
@@ -142,10 +150,10 @@ def test_teacher_plan_is_persisted_and_reused_by_a_restart(tmp_path, monkeypatch
     monkeypatch.setattr(jolt, 'teacher_entries', plan)
     kwargs = dict(teacher_attempts=1, teacher_plan='crisp', prompt_rendering=None)
     h.budget = 2                      # both students finish; the teacher is killed mid-run
-    h.collect(**kwargs)
+    with pytest.raises(IncompleteCollection, match='teacher collection incomplete: 1 of 1'):
+        h.collect(**kwargs)
     saved = json.loads((h.out / 'teacher-plan.json').read_text())
     assert saved['teachers']['entries'][0]['key'] == 's7-task-000-t01' and len(plans) == 1
-    (h.out / 'score.json').unlink()
     h.budget, h.ran = 99, []
     h.collect(**kwargs)
     assert len(plans) == 1            # not re-planned: the started teacher key is the one that now finishes
@@ -200,3 +208,31 @@ def test_lost_block_exclusions_drop_only_named_scored_rollouts_and_record_them(t
     (h.out / 'score.json').unlink()
     with pytest.raises(ValueError, match='lost-block exclusions'):
         h.collect(lost_block_exclusions={'reason': 'x', 'samples': [{'group': 3, 'sample': 0}]})
+
+
+def test_dispatch_reports_initial_attempted_finished_and_remaining(tmp_path):
+    entries = [{'key': f'k{i}'} for i in range(4)]
+
+    def run_worker(index, name, queue, journal):
+        taken = [json.loads(line)['key'] for line in queue.read_text().splitlines()]
+        with journal.open('a') as stream:   # finishes the first entry, then the collector dies on the second
+            stream.write(json.dumps({'event': 'finish', 'key': taken[-1]}) + '\n') if len(taken) == 1 else None
+        return 1
+
+    results, counts = dispatch(entries, directory=tmp_path, generation=1, phase='', endpoints=['a'],
+                               run_worker=run_worker, attempted={'k0'})
+    # k0 was finished earlier; one slot takes k1 (finished) and k2 (left without a finish row) and stops there
+    assert counts == {'initial': 3, 'attempted': 2, 'finished': 1, 'remaining': 2}
+    assert results[0]['entries'] == 2
+
+
+def test_teacher_plan_is_not_fixed_on_an_incomplete_student_sample(tmp_path, monkeypatch):
+    h = Harness(tmp_path, monkeypatch, entries=4)
+    h.budget = 2
+    planned = []
+    from natlang_neuralese.rl import jolt
+    monkeypatch.setattr(jolt, 'teacher_entries', lambda *a, **k: planned.append(1) or {'entries': [], 'refusal': None})
+    monkeypatch.setattr(jolt, 'student_guidance', lambda *a, **k: None)
+    with pytest.raises(IncompleteCollection, match='2 of 4'):
+        h.collect(teacher_attempts=1)
+    assert planned == [] and not (h.out / 'teacher-plan.json').exists()

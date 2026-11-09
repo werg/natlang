@@ -656,15 +656,15 @@ def test_dispatch_steals_work_so_a_fast_slot_takes_more_and_a_dead_slot_stops(tm
         ran[index].append(todo[0]['key'])
         with journal.open('a') as stream:stream.write(json.dumps({'event':'finish','key':todo[0]['key']})+'\n')
         return 2 if index==0 else 0   # an incomplete episode exits nonzero but finished: the slot keeps working
-    results,pending=dispatch(entries,directory=tmp_path,generation=1,phase='',endpoints=['http://slow','http://fast','http://dead'],
+    results,counts=dispatch(entries,directory=tmp_path,generation=1,phase='',endpoints=['http://slow','http://fast','http://dead'],
                              run_worker=run_worker,attempted={'k0'})
     # the dead slot (no finish row) took one entry, left it pending and stopped; the slow slot kept working through its
     # nonzero exits; the fast slot did most of the rest
-    assert pending==23 and len(set(ran[0]+ran[1]))==22 and len(ran[1])>2*len(ran[0])>0
+    assert counts=={'initial':23,'attempted':23,'finished':22,'remaining':1} and len(set(ran[0]+ran[1]))==22 and len(ran[1])>2*len(ran[0])>0
     assert {r['worker']:(r['entries'],r['returncode']) for r in results}[2]==(1,9)
     assert {r['worker']:r['returncode'] for r in results}[0]==2 and len(ran[0])>1
     assert dispatch(entries,directory=tmp_path,generation=2,phase='',endpoints=['http://a'],run_worker=run_worker,
-                    attempted={e['key'] for e in entries},stopped=lambda:False)==([],0)
+                    attempted={e['key'] for e in entries},stopped=lambda:False)==([],{'initial':0,'attempted':0,'finished':0,'remaining':0})
 
 
 def test_dispatch_ready_gate_lets_a_late_actor_join_and_a_down_actor_wait(tmp_path):
@@ -682,9 +682,9 @@ def test_dispatch_ready_gate_lets_a_late_actor_join_and_a_down_actor_wait(tmp_pa
         ran[index].append(todo[0]['key'])
         with journal.open('a') as stream:stream.write(json.dumps({'event':'finish','key':todo[0]['key']})+'\n')
         return 0
-    results,pending=dispatch(entries,directory=tmp_path,generation=1,phase='',endpoints=['http://dgx','http://pop'],
+    results,counts=dispatch(entries,directory=tmp_path,generation=1,phase='',endpoints=['http://dgx','http://pop'],
                              run_worker=run_worker,attempted=set(),ready=ready,poll_seconds=.01)
-    assert pending==12 and sorted(ran[0]+ran[1])==sorted(e['key'] for e in entries)
+    assert counts=={'initial':12,'attempted':12,'finished':12,'remaining':0} and sorted(ran[0]+ran[1])==sorted(e['key'] for e in entries)
     assert ran[1] and ran[0][0] not in ran[1]   # the late slot joined mid-phase and took remaining work
     # an actor that never attests takes nothing and does not hold the phase open once the queue is drained
     ran={0:[],1:[]}

@@ -122,6 +122,22 @@ class Generations:
         return ''.join(path.read_text() for path in self.journals())
 
 
+class IncompleteCollection(RuntimeError):
+    """Expected queue keys have no terminal ``finish`` row; the collection must be resumed, never sealed."""
+
+    def __init__(self, phase, expected, missing):
+        self.phase, self.expected, self.missing = phase, expected, list(missing)
+        super().__init__(f"RL {phase or 'student'} collection incomplete: {len(self.missing)} of {expected} expected "
+                         f"keys have no finish row (restart resumes them): {', '.join(self.missing[:8])}"
+                         + (' ...' if len(self.missing) > 8 else ''))
+
+
+def unfinished(entries, finished):
+    """Keys of ``entries`` without a terminal ``finish`` row in ``finished`` (process exit codes prove nothing: a
+    valid terminal failure exits nonzero, and a dead collector can exit zero)."""
+    return [entry['key'] for entry in entries if entry['key'] not in finished]
+
+
 def dispatch(entries, *, directory, generation, phase, endpoints, run_worker, attempted, stopped=lambda: False,
              ready=None, poll_seconds=15.):
     """Run the pending ``entries`` of one phase ('' student, 'teacher-') over one worker slot per ``endpoints`` item with
@@ -133,7 +149,9 @@ def dispatch(entries, *, directory, generation, phase, endpoints, run_worker, at
     asked before each entry: a slot whose actor is not (yet) serving the round's policy waits instead of taking work, so
     an actor that joins mid-round (Pop after a dev16 evaluation) picks up the remaining entries, and an actor that died
     loses at most its current entry instead of fast-failing the queue (2026-11-09: 20 entries drained in 26 min).
-    Returns (results, pending count)."""
+    Returns (results, counts): ``counts`` gives the ``initial`` pending entries of this call, how many were
+    ``attempted`` (taken by a slot), how many ``finished`` (a finish row exists) and how many ``remaining`` unfinished
+    (never taken, or taken by a collector that left no finish row)."""
     directory = Path(directory)
     pending = [entry for entry in entries if entry['key'] not in attempted]
     directory.mkdir(parents=True, exist_ok=True)
@@ -172,7 +190,12 @@ def dispatch(entries, *, directory, generation, phase, endpoints, run_worker, at
 
     with ThreadPoolExecutor(max_workers=len(endpoints)) as pool:
         results = [result for result in pool.map(worker, range(len(endpoints))) if result is not None]
-    return results, len(pending)
+    finished = {row['key'] for result in results for row in (read_jsonl(result['journal']) if Path(result['journal']).exists() else ())
+                if row.get('event') == 'finish'}
+    counts = {'initial': len(pending), 'attempted': sum(result['entries'] for result in results),
+              'finished': sum(entry['key'] in finished for entry in pending)}
+    counts['remaining'] = counts['initial'] - counts['finished']
+    return results, counts
 
 
 def persist_teacher_plan(path, student_keys, teachers):

@@ -899,7 +899,8 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         coefficient_policy = Path(coefficient_policy).resolve(strict=True)
     receipt = out / 'collection-binding.json'
     recorded = json.loads(receipt.read_text()) if receipt.exists() else None
-    from .collection_generations import Generations, dispatch, persist_teacher_plan, load_teacher_plan
+    from .collection_generations import (Generations, IncompleteCollection, dispatch, persist_teacher_plan,
+                                         load_teacher_plan, unfinished)
     generations = Generations(out)
     changed_code = {}
     if recorded is None:
@@ -1071,12 +1072,25 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
                 return _run_collector(command, log, control,
                                       custody_receipt=directory / f"worker-{tag}-process-custody.json")
         done = generations.attempted()
-        phase_results, pending = dispatch(batch, directory=directory, generation=generation, phase=name,
+        phase_results, counts = dispatch(batch, directory=directory, generation=generation, phase=name,
             endpoints=[endpoint for endpoint, _ in slots], run_worker=run_worker, attempted=done,
             stopped=lambda: bool(control and control.stop.requested), ready=ready)
         generations.record('dispatch', generation=generation, phase=name or 'student', entries=len(batch),
-                           pending=pending, returncodes=[r['returncode'] for r in phase_results])
+                           pending=counts['initial'], attempted=counts['attempted'], finished=counts['finished'],
+                           remaining=counts['remaining'], returncodes=[r['returncode'] for r in phase_results])
         results.extend(phase_results)
+
+    def require_finished(batch, name):
+        """Seal nothing with a missing terminal row: a slot whose collector exited without a finish row leaves its
+        key pending. Unless a stop was requested (the caller then reports an interrupted collection), the round
+        fails loudly and the next start re-dispatches exactly the unfinished keys."""
+        if control and control.stop.requested:
+            return
+        missing = unfinished(batch, generations.attempted())
+        if missing:
+            generations.record('incomplete', generation=generation, phase=name or 'student', expected=len(batch),
+                               finished=len(batch) - len(missing), missing=missing)
+            raise IncompleteCollection(name.rstrip('-'), len(batch), missing)
 
     def write_journal_and_queue(*, teachers_too=True):
         (out / 'journal.jsonl').write_text(generations.merge())
@@ -1084,6 +1098,8 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
                                                  entries + (teachers['entries'] if teachers_too else [])))
     try:
         run_phase(entries, '')
+        # The JOLT+ teacher plan below is fixed from the scored student sample, so the sample must be complete.
+        require_finished(entries, '')
         if teacher_attempts and not (control and control.stop.requested):
             from .jolt import teacher_entries
             write_journal_and_queue(teachers_too=False)
@@ -1106,6 +1122,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
                     if entry['key'] in sampled_on:
                         entry['rl_endpoint'] = sampled_on[entry['key']]
                 run_phase(teachers['entries'], 'teacher-')
+                require_finished(teachers['entries'], 'teacher-')
     except BaseException as collection_error:
         try:
             retained_artifacts()
@@ -1167,9 +1184,14 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         report['block_bundle'] = str(out / 'blocks/manifest.json')
     if actor_receipts() != actors:
         raise ValueError('RL actor policy changed during collection')
+    expected_keys = [entry['key'] for entry in entries + teachers['entries']]
+    missing_keys = unfinished(entries + teachers['entries'], generations.attempted())
     report.update(**({'coefficient_policy':binding['coefficient_policy']} if coefficient_runtime is not None else {}),
                   collector_workers=results, preparation=preparation,
-                  actor_receipts=actors, collection_complete=not (control and control.stop.requested))
+                  actor_receipts=actors,
+                  collection_keys={'expected': len(expected_keys), 'finished': len(expected_keys) - len(missing_keys),
+                                   'unfinished': missing_keys},
+                  collection_complete=not (control and control.stop.requested) and not missing_keys)
     write_json_durable(out / 'score.json', report)
     return report
 
