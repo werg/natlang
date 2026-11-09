@@ -6,7 +6,7 @@ import torch
 from natlang_neuralese.train.optim import MuonSR
 
 
-def run(dtype, rounding, steps=300, lr=2e-5):
+def run(dtype, rounding, steps=300, lr=2e-5, compensation_dtype=None):
     torch.manual_seed(5)
     weight = (torch.randn(64, 128) * .02).to(torch.bfloat16).float()  # one representable start for every run
     parameter = torch.nn.Parameter(weight.to(dtype))
@@ -17,6 +17,9 @@ def run(dtype, rounding, steps=300, lr=2e-5):
         # Identical BF16-representable gradients for every precision, so only the weight writes differ.
         parameter.grad = torch.randn(64, 128, generator=generator).to(torch.bfloat16).to(dtype)
         optimizer.step()
+        if compensation_dtype is not None:  # the buffer as stored before 2026-11-09: rounded after every update
+            state = optimizer.state[parameter]
+            state['compensation'] = state['compensation'].to(compensation_dtype)
     return parameter.detach().float(), optimizer
 
 
@@ -31,7 +34,53 @@ def test_kahan_tracks_the_fp32_trajectory_where_stochastic_rounding_drifts():
     assert kahan_error < .1 * stochastic_error, (float(kahan_error), float(stochastic_error))
     # The BF16 weight itself stays within rounding of the reference instead of drifting.
     assert (kahan - reference).abs().max() < 2 ** -7 * reference.abs().max()
-    assert state['compensation'].dtype == torch.bfloat16 and state['compensation'].abs().max() > 0
+    assert state['compensation'].dtype == torch.float32 and state['compensation'].abs().max() > 0
+
+
+def test_fp32_compensation_tracks_the_fp32_trajectory_better_than_a_bf16_buffer():
+    """2026-11-09 sanity test: the BF16 buffer's own rounding was 6-11% of the tracked update at production rates."""
+    reference, _ = run(torch.float32, 'stochastic', steps=400, lr=2e-6)
+    errors = {}
+    for label, dtype in (('fp32', None), ('bf16', torch.bfloat16)):
+        weight, optimizer = run(torch.bfloat16, 'kahan', steps=400, lr=2e-6, compensation_dtype=dtype)
+        state = optimizer.state[optimizer.param_groups[0]['params'][0]]
+        errors[label] = float((weight + state['compensation'].float() - reference).square().mean().sqrt())
+    assert errors['fp32'] < .05 * errors['bf16'], errors
+
+
+def test_bf16_compensation_is_promoted_exactly_on_load_and_lazily_at_the_step():
+    _, optimizer = run(torch.bfloat16, 'kahan', steps=5, compensation_dtype=torch.bfloat16)
+    parameter = optimizer.param_groups[0]['params'][0]
+    legacy = optimizer.state[parameter]['compensation']
+    assert legacy.dtype == torch.bfloat16
+    saved = copy.deepcopy(optimizer.state_dict())
+    restored_parameter = torch.nn.Parameter(parameter.detach().clone())
+    restored = MuonSR([{'params': [restored_parameter], 'lr': 2e-5, 'weight_decay': .1, 'name': 'w'}], lr=2e-5,
+                      rounding='kahan')
+    restored.load_state_dict(saved)
+    promoted = restored.state[restored_parameter]['compensation']
+    assert promoted.dtype == torch.float32 and torch.equal(promoted, legacy.float())
+    assert restored.promoted_compensation_buffers == 1
+    # State that reached the optimizer through torch's dtype-casting loader is promoted at its next step.
+    restored.state[restored_parameter]['compensation'] = legacy.clone()
+    restored_parameter.grad = torch.ones_like(restored_parameter)
+    restored.step()
+    assert restored.state[restored_parameter]['compensation'].dtype == torch.float32
+
+
+def test_float32_gradient_is_consumed_without_being_modified_and_matches_the_bf16_gradient_step():
+    gradient = torch.randn(64, 128, generator=torch.Generator().manual_seed(3)).to(torch.bfloat16)
+    results = []
+    for dtype in (torch.bfloat16, torch.float32):
+        parameter = torch.nn.Parameter((torch.randn(64, 128, generator=torch.Generator().manual_seed(4)) * .02).bfloat16())
+        parameter.grad_dtype = dtype
+        optimizer = MuonSR([{'params': [parameter], 'lr': 1e-3, 'weight_decay': .1, 'name': 'w'}], lr=1e-3,
+                           rounding='kahan')
+        parameter.grad = gradient.to(dtype)
+        optimizer.step()
+        assert torch.equal(parameter.grad, gradient.to(dtype))  # the Nesterov mix did not write into .grad
+        results.append((parameter.detach().clone(), optimizer.state[parameter]['compensation'].clone()))
+    assert torch.equal(results[0][0], results[1][0]) and torch.equal(results[0][1], results[1][1])
 
 
 def test_kahan_residual_survives_a_state_round_trip_and_rounding_is_validated():
@@ -42,7 +91,7 @@ def test_kahan_residual_survives_a_state_round_trip_and_rounding_is_validated():
     restored.load_state_dict(saved)
     original = optimizer.state[optimizer.param_groups[0]['params'][0]]['compensation']
     assert torch.equal(restored.state[parameter]['compensation'], original)
-    assert restored.state[parameter]['compensation'].dtype == torch.bfloat16
+    assert restored.state[parameter]['compensation'].dtype == torch.float32
     try:
         MuonSR([{'params': [parameter], 'lr': 1., 'name': 'w'}], lr=1., rounding='floor')
     except ValueError as error:
@@ -57,7 +106,7 @@ def test_outer_fragment_install_preserves_kahan_residual_and_rounding_across_res
     p=torch.nn.Parameter(torch.tensor([[1.,2.],[3.,4.]],dtype=torch.bfloat16))
     latent=MuonSR([{'params':[p],'lr':1e-4,'name':'weight'}],lr=1e-4,rounding='kahan')
     latent.set_state_storage('cpu')
-    latent.state[p]['compensation']=torch.tensor([[.001,.002],[.003,.004]],dtype=torch.bfloat16)
+    latent.state[p]['compensation']=torch.tensor([[.001,.002],[.003,.004]],dtype=torch.float32)
     latent.state[p]['momentum']=torch.ones_like(p)
     owner=SimpleNamespace(latent=latent);named=[('weight',p)]
     surface=TensorSurface(dict(named),install_hook=compensated_install_hook(named,owner))
@@ -67,7 +116,7 @@ def test_outer_fragment_install_preserves_kahan_residual_and_rounding_across_res
     comp=latent.state[p]['compensation']
     assert torch.equal(p.flatten()[[0,3]],old_p.flatten()[[0,3]])
     assert torch.equal(comp.flatten()[[0,3]],old_c.flatten()[[0,3]])
-    expected=(old_c.flatten()[1:3].float()+values-p.detach().flatten()[1:3].float()).to(torch.bfloat16)
+    expected=old_c.flatten()[1:3].float()+(values-p.detach().flatten()[1:3].float())
     assert torch.equal(comp.flatten()[1:3],expected)
     assert torch.equal(latent.state[p]['momentum'],torch.ones_like(p))
     saved=latent.state_dict();p2=torch.nn.Parameter(p.detach().clone())
@@ -78,6 +127,20 @@ def test_outer_fragment_install_preserves_kahan_residual_and_rounding_across_res
     another=Fragment(1,(Slice('weight',0,1),));v2=torch.tensor([1.003])
     install_fragment(surface,another,v2);install_fragment(s2,another,v2)
     assert torch.equal(p,p2) and torch.equal(latent.state[p]['compensation'],resumed.state[p2]['compensation'])
+
+
+def test_outer_fragment_install_keeps_a_legacy_bf16_residual_dtype_until_the_next_step():
+    from types import SimpleNamespace
+    from natlang_neuralese.train.diloco.protocol import Fragment,Slice,TensorSurface,install_fragment
+    from natlang_neuralese.train.native_diloco import compensated_install_hook
+    p=torch.nn.Parameter(torch.tensor([[1.,2.],[3.,4.]],dtype=torch.bfloat16))
+    latent=MuonSR([{'params':[p],'lr':1e-4,'name':'weight'}],lr=1e-4,rounding='kahan')
+    latent.state[p]['compensation']=torch.tensor([[.001,.002],[.003,.004]],dtype=torch.bfloat16)
+    surface=TensorSurface({'weight':p},install_hook=compensated_install_hook([('weight',p)],SimpleNamespace(latent=latent)))
+    install_fragment(surface,Fragment(0,(Slice('weight',1,2),)),torch.tensor([2.003,3.006]))
+    assert latent.state[p]['compensation'].dtype==torch.bfloat16
+    p.grad=torch.ones_like(p);latent.step()
+    assert latent.state[p]['compensation'].dtype==torch.float32
 
 
 def test_outer_fragment_install_refuses_bad_compensation_before_any_write():

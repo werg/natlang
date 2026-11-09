@@ -742,6 +742,10 @@ def optimizer_state_size_upper_bound(optimizer, lazy=True):
                 if family == 'lion':
                     if 'momentum' not in state:
                         total += parameter.numel() * 2  # one BF16 momentum
+                    if (getattr(child, 'rounding', None) == 'kahan' and parameter.dtype == torch.bfloat16
+                            and ('compensation' not in state or state['compensation'].dtype != torch.float32)):
+                        # MuonSR's Kahan residual is FP32 (BF16 until 2026-11-09; a restored BF16 buffer is promoted).
+                        total += parameter.numel() * 4
                 elif family == 'adamini':
                     if 'momentum' not in state:  # BF16 first moment, FP32 per-row second moment and step counts
                         rows = parameter.numel() // parameter.shape[-1]

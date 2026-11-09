@@ -372,3 +372,37 @@ def test_projection_addition_preserves_stacked_muonsr_norms_and_rejects_wrong_sh
         report = restore_optimizer_state(after, saved, after_named, **kwargs)
         assert report['mode'] == 'by-name' and report['initialized'] == ['token_choice_projection.weight']
         assert equal(before.latent.state_dict(), after.latent.state_dict())
+
+
+def test_named_restore_promotes_a_legacy_bf16_muonsr_compensation_and_records_the_transition():
+    from natlang_neuralese.train.optim import latent_options
+
+    def port(ordinary, latent):
+        return PortMuonAdamW([('norm', ordinary)], lr=1e-3, vocab_size=VOCAB, auxiliary_rounding='kahan',
+            latent=[('latent', latent, 1e-3, 1)], latent_optimizer='muonsr',
+            latent_options=latent_options('muonsr', weight_decay=.1, rounding='kahan'))
+    generator = torch.Generator().manual_seed(2)
+    ordinary = torch.nn.Parameter(torch.ones(8, dtype=torch.bfloat16))
+    latent = torch.nn.Parameter((torch.randn(8, 8, generator=generator) * .02).bfloat16())
+    original = port(ordinary, latent)
+    for _ in range(3):
+        ordinary.grad = torch.randn(8, generator=generator).bfloat16()
+        latent.grad = torch.randn(8, 8, generator=generator).bfloat16()
+        original.step()
+    saved = original.state_dict()
+    legacy_state = saved['muonsr']['state'][0]
+    exact = legacy_state['compensation'].clone()
+    legacy_state['compensation'] = exact.bfloat16()  # as stored before 2026-11-09
+    named = [('norm', ordinary), ('latent', latent)]
+    ordinary2, latent2 = torch.nn.Parameter(ordinary.detach().clone()), torch.nn.Parameter(latent.detach().clone())
+    restored = port(ordinary2, latent2)
+    restore_optimizer_state(restored, saved, [('norm', ordinary2), ('latent', latent2)])
+    state = restored.latent.state[latent2]
+    assert state['compensation'].dtype == torch.float32
+    assert torch.equal(state['compensation'], exact.bfloat16().float())
+    assert [item['schema'] for item in restored.state_dict()['native_optimizer_transitions']] == [
+        'natlang.muon-compensation-transition/1']
+    # The next step keeps the FP32 buffer and its exact (promoted) value as the starting residual.
+    latent2.grad = torch.randn(8, 8, generator=generator).bfloat16()
+    restored.step()
+    assert restored.latent.state[latent2]['compensation'].dtype == torch.float32

@@ -191,6 +191,12 @@ class PortMuonAdamW(torch.optim.Optimizer):
         if adopt_kahan:
             self._native_optimizer_transitions = [*self._native_optimizer_transitions,
                 {'schema': 'natlang.adamw-rounding-transition/1', 'from': 'stochastic', 'to': 'kahan'}]
+        promoted = getattr(self.latent, 'promoted_compensation_buffers', 0) if self.latent is not None else 0
+        if promoted:
+            # MuonSR's Kahan residual was BF16 until 2026-11-09; the restored buffers are promoted exactly to FP32.
+            self._native_optimizer_transitions = [*self._native_optimizer_transitions,
+                {'schema': 'natlang.muon-compensation-transition/1', 'from': 'bfloat16', 'to': 'float32',
+                 'promoted_buffers': int(promoted)}]
         return result
 
     def _load_unnamed_state_dict(self, state_dict, *, allow_added_names=(), allow_promoted_names=()):
@@ -274,6 +280,9 @@ class AdamWSR(torch.optim.Optimizer):
     stochastic rounding (``stochastic_round_``), so updates below BF16 resolution (small learned sparse rows, norm
     gains) survive in expectation instead of being rounded away. FP32 parameters are written exactly (the same values
     as torch AdamW's single-tensor path). State keys match torch AdamW (``step``, ``exp_avg``, ``exp_avg_sq``)."""
+
+    # Reads ``p.grad.float()``: an FP32 ``.grad`` (train/gradient_accumulation.py) is consumed unrounded.
+    accepts_float32_gradients = True
 
     def __init__(self, params, lr: float = 1e-3, betas=(0.9, 0.999), eps: float = 1e-8, weight_decay: float = 1e-2):
         super().__init__(params, dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay))
@@ -618,19 +627,24 @@ class MuonSR(LionSR):
     a third fewer matmuls), configuration kept across ``load_state_dict``. Mellum2 was pretrained and SFT'd with this
     Muon (Nesterov 0.95, 5 NS steps, 0.2 sqrt(max(m, n)) scale, wd 0.1; Mellum2 report arXiv:2605.31268)."""
 
+    # Reads ``p.grad.float()``: an FP32 ``.grad`` (train/gradient_accumulation.py) is consumed unrounded.
+    accepts_float32_gradients = True
+
     def __init__(self, params, lr: float, momentum: float = 0.95, weight_decay: float = 0.0, ns_steps: int = 5,
                  idle_fraction: float = 0.0, ns: str = "quintic", rounding: str = "stochastic"):
         torch.optim.Optimizer.__init__(self, params, dict(lr=lr, momentum=momentum, weight_decay=weight_decay,
                                                           ns_steps=ns_steps, idle_fraction=idle_fraction))
         if rounding not in ("stochastic", "kahan"):
             raise ValueError("MuonSR rounding is 'stochastic' or 'kahan'")
-        # ``kahan``: a BF16 latent rounds to nearest and keeps its rounding residual in a BF16 ``compensation``
-        # buffer added back before the next update. Stochastic rounding is unbiased, but at fine-tuning rates
+        # ``kahan``: a BF16 latent rounds to nearest and keeps its rounding residual in an FP32 ``compensation``
+        # buffer added back before the next update (BF16 until 2026-11-09: the buffer's own rounding was 6-11% of the
+        # tracked update at LFM3's production rate; restored BF16 buffers are promoted exactly). Stochastic rounding is unbiased, but at fine-tuning rates
         # (updates ~1/30 of a BF16 spacing) its variance random-walked the LFM3 weights (about 35% of the change
         # energy; plans/neuralese/LFM3_REGRESSION_INVESTIGATION_20261029.md). Configuration, kept across loads.
         self.chunk, self.fused, self.ns, self.rounding = None, False, ns, rounding
         self.state_storage = 'device'
         self._hooks, self._gated, self._armed = [], False, None
+        self.promoted_compensation_buffers = 0
         for group in self.param_groups:
             for p in group["params"]:
                 if p.ndim < 2 or p.shape[-2] % (group.get("split_rows", 1) or 1):
@@ -658,8 +672,14 @@ class MuonSR(LionSR):
                       for index, entry in state_dict['state'].items()},
         }
         super().load_state_dict(ordinary)
+        self.promoted_compensation_buffers = 0
         for index, values in saved.items():
             for key, value in values.items():
+                if key == 'compensation' and value.dtype != torch.float32:
+                    # Exact promotion of a pre-2026-11-09 BF16 residual (``_update`` also promotes lazily, for state
+                    # that reached the optimizer through torch's dtype-casting loader).
+                    value = value.float()
+                    self.promoted_compensation_buffers += 1
                 self.state[parameters[index]][key] = value.to(parameters[index].device, copy=True)
         self.set_state_storage(self.state_storage)
 
@@ -703,6 +723,9 @@ class MuonSR(LionSR):
             return self._fused_update(p, group, state)
         beta = group["momentum"]
         g = p.grad.float()
+        # An FP32 ``.grad`` (the exact sum of an accumulated update's micro-batches) is its own ``.float()``: keep it
+        # unmodified, the Nesterov mix below must not write into the caller's gradient.
+        shared_gradient = g is p.grad
         active = None
         if p.ndim > 2:  # a stack of matrices (experts): leave idle ones alone
             norms = torch.linalg.vector_norm(g, dim=(-2, -1))
@@ -717,7 +740,8 @@ class MuonSR(LionSR):
         # is the gate and up projections its pretraining Muon saw as two matrices; half the Newton-Schulz cost).
         split = group.get("split_rows", 1) or 1
         rows, cols = p.shape[-2] // split, p.shape[-1]
-        nesterov = g.add_(m, alpha=beta).view(*p.shape[:-2], split, rows, cols)
+        nesterov = (g.add(m, alpha=beta) if shared_gradient else g.add_(m, alpha=beta)).view(
+            *p.shape[:-2], split, rows, cols)
         with region("optim/muonsr.newton_schulz"):
             direction = newton_schulz(nesterov, group["ns_steps"], variant=getattr(self, "ns", "quintic")).view(p.shape)
         if active is not None:
@@ -725,15 +749,20 @@ class MuonSR(LionSR):
         scale = 0.2 * math.sqrt(max(rows, cols))
         value = p.float()
         if kahan:
-            if "compensation" not in state:
-                state["compensation"] = torch.zeros_like(p, dtype=torch.bfloat16)
-            value.add_(state["compensation"].float())
+            compensation = state.get("compensation")
+            if compensation is None:
+                state["compensation"] = torch.zeros_like(p, dtype=torch.float32)
+            elif compensation.dtype != torch.float32:
+                # A BF16 buffer from before the FP32 transition (2026-11-09) or one that torch's optimizer loader cast
+                # to the parameter dtype: its value is exact in FP32, and it is carried in FP32 from here on.
+                state["compensation"] = compensation.float()
+            value.add_(state["compensation"])
         if group["weight_decay"]:
             decay = 1 - group["lr"] * group["weight_decay"]
             value.mul_(decay if active is None else 1 - (1 - decay) * active)
         value.add_(direction.float(), alpha=-group["lr"] * scale)
         if kahan:
-            p.copy_(value)  # round to nearest; the residual carries to the next update
+            p.copy_(value)  # round to nearest; the FP32 residual carries to the next update
             state["compensation"].copy_(value - p.float())
         elif p.dtype == torch.bfloat16:
             stochastic_round_(p, value)
@@ -824,6 +853,7 @@ class AdamMiniSR(LionSR):
         self.skip_idle, self.cautious = skip_idle, cautious
         self.idle_updates, self.updates = {}, {}
         self._hooks, self._gated, self._armed = [], False, None
+        self.promoted_compensation_buffers = 0
         for group in self.param_groups:
             for p in group["params"]:
                 if p.ndim < 2 or p.shape[-2] % group["block_rows"]:

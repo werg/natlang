@@ -6,6 +6,8 @@ import torch
 
 POLICY = 'native-ordinary-to-adamw-new-history-v1'
 SCHEMA = 'natlang.native-optimizer-transition/1'
+# Self-contained state-precision transitions recorded by PortMuonAdamW.load_state_dict (not parameter routing).
+PRECISION_TRANSITION_SCHEMAS = frozenset({'natlang.adamw-rounding-transition/1', 'natlang.muon-compensation-transition/1'})
 
 
 def validate_native_optimizer_migration(value):
@@ -112,6 +114,11 @@ def validate_transition_history(history,schema):
     actual={item['name']:item for item in schema}
     if not isinstance(history,list):raise OptimizerRestoreError('native optimizer transition history must be an explicit record list')
     for record in history:
+        if isinstance(record,dict) and record.get('schema') in PRECISION_TRANSITION_SCHEMAS:
+            # Rounding/precision transitions of optimizer state carry no parameter routing to bind.
+            if not isinstance(record.get('from'),str) or not isinstance(record.get('to'),str):
+                raise OptimizerRestoreError('native optimizer precision transition provenance is malformed')
+            continue
         if (not isinstance(record,dict) or record.get('schema')!=SCHEMA or record.get('policy')!=POLICY
                 or not isinstance(record.get('parameters'),list) or not record['parameters']):
             raise OptimizerRestoreError('native optimizer transition provenance is malformed')

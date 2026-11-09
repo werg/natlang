@@ -222,9 +222,10 @@ def compensated_install_hook(named, optimizer):
                     state=latent.state[p]
                     if 'compensation' not in state:
                         device='cpu' if getattr(latent,'state_storage','device')=='cpu' else p.device
-                        state['compensation']=torch.zeros(p.shape,dtype=torch.bfloat16,device=device);created.append((p,state,was_present))
+                        state['compensation']=torch.zeros(p.shape,dtype=torch.float32,device=device);created.append((p,state,was_present))
                     tensor=state['compensation']
-                    if tensor.shape!=p.shape or tensor.dtype!=torch.bfloat16:
+                    # FP32 residual (BF16 before 2026-11-09: a restored BF16 buffer keeps its dtype until MuonSR's next step).
+                    if tensor.shape!=p.shape or tensor.dtype not in (torch.float32,torch.bfloat16):
                         raise ValueError('Muon compensation shape or dtype differs from its parameter')
                     comp=tensor.reshape(-1)[part.offset:part.offset+part.length]
                     before_comp=comp.clone()

@@ -203,3 +203,62 @@ def test_production_width_weighted_role_readout_matches_independent_float64_ce_a
     reference=(torch.nn.functional.cross_entropy(logits,labels,reduction='none')*weight).sum()/weight.sum()
     torch.testing.assert_close(loss.double(),reference,atol=2e-6,rtol=0)
     torch.testing.assert_close(model.output_rows.grad.double(),oracle[list(model.marker_ids)],atol=2e-7,rtol=2e-6)
+
+
+def bf16_optimizer(rounding='kahan'):
+    from natlang_neuralese.model.native_parameter_precision import BF16_SR_PROFILE
+    model = build('lfm').to(torch.bfloat16)
+    model.native_ordinary_precision = BF16_SR_PROFILE
+    optimizer, _ = make_native_optimizer(model, lr=1e-3, in_backward=True, muon_rounding=rounding)
+    return model, optimizer
+
+
+def test_bf16_muon_compensation_resume_records_an_fp32_transition_that_later_resumes_accept():
+    """2026-11-09: MuonSR's Kahan residual is FP32. A checkpoint with BF16 buffers resumes through a recorded transition
+    (promotion is exact); the record is accepted by every later resume, and is not repeated."""
+    model, optimizer = bf16_optimizer()
+    for _ in range(2):
+        native_training_update(model, optimizer, examples(), checkpoint_layers=True, chunk_tokens=3)
+    legacy = copy.deepcopy(optimizer.state_dict())
+    assert all(state['compensation'].dtype == torch.float32 for state in legacy['muonsr']['state'].values())
+    for state in legacy['muonsr']['state'].values():
+        state['compensation'] = state['compensation'].bfloat16()  # the buffer as stored before the transition
+    assert 'native_optimizer_transitions' not in legacy
+    resumed_model = copy.deepcopy(model)
+    resumed = make_native_optimizer(resumed_model, lr=1e-3, in_backward=True, muon_rounding='kahan')[0]
+    resumed.load_state_dict(copy.deepcopy(legacy))
+    transitions = resumed.state_dict()['native_optimizer_transitions']
+    assert [(item['schema'], item['from'], item['to']) for item in transitions] == [
+        ('natlang.muon-compensation-transition/1', 'bfloat16', 'float32')]
+    assert transitions[0]['promoted_buffers'] == len(legacy['muonsr']['state'])
+    for index, state in resumed.state_dict()['muonsr']['state'].items():
+        assert state['compensation'].dtype == torch.float32
+        assert torch.equal(state['compensation'], legacy['muonsr']['state'][index]['compensation'].float())
+    native_training_update(resumed_model, resumed, examples(), checkpoint_layers=True, chunk_tokens=3)
+    again = make_native_optimizer(copy.deepcopy(resumed_model), lr=1e-3, in_backward=True, muon_rounding='kahan')[0]
+    again.load_state_dict(copy.deepcopy(resumed.state_dict()))
+    assert again.state_dict()['native_optimizer_transitions'] == transitions  # accepted, not repeated
+
+
+def test_stochastic_adamw_resume_transition_record_is_accepted_by_the_next_resume():
+    from natlang_neuralese.train.optim import PortMuonAdamW
+
+    def port(rounding, parameter):
+        latent = torch.nn.Parameter(torch.ones((4, 4), dtype=torch.bfloat16))
+        return PortMuonAdamW([('norm', parameter)], lr=1e-3, vocab_size=64, latent=[('latent', latent, 1e-3, 1)],
+                             latent_optimizer='muonsr', auxiliary_rounding=rounding)
+    old_parameter = torch.nn.Parameter(torch.ones(4, dtype=torch.bfloat16))
+    old = port('stochastic', old_parameter)
+    old_parameter.grad = torch.ones(4, dtype=torch.bfloat16)
+    old.auxiliary.step()
+    first = port('kahan', torch.nn.Parameter(old_parameter.detach().clone()))
+    first.load_state_dict(old.state_dict())
+    record = first.state_dict()['native_optimizer_transitions']
+    assert [item['schema'] for item in record] == ['natlang.adamw-rounding-transition/1']
+    second = port('kahan', torch.nn.Parameter(old_parameter.detach().clone()))
+    second.load_state_dict(copy.deepcopy(first.state_dict()))  # used to fail transition-provenance validation
+    assert second.state_dict()['native_optimizer_transitions'] == record
+    malformed = copy.deepcopy(first.state_dict())
+    malformed['native_optimizer_transitions'][0]['to'] = None
+    with pytest.raises(OptimizerRestoreError, match='precision transition provenance is malformed'):
+        port('kahan', torch.nn.Parameter(old_parameter.detach().clone())).load_state_dict(malformed)

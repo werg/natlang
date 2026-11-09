@@ -373,3 +373,25 @@ def test_kahan_auxiliary_optimizer_state_bound_counts_fp32_moments_and_compensat
     optimizer = PortMuonAdamW([('norm', ordinary)], lr=1e-3, vocab_size=64,
         latent=[('latent', latent, 1e-3, 1)], latent_optimizer='muonsr', auxiliary_rounding='kahan')
     assert optimizer_state_size_upper_bound(optimizer, lazy=True) >= 3 * ordinary.numel() * 4 + 4
+
+
+def test_muonsr_kahan_state_bound_counts_the_fp32_compensation_and_a_restored_bf16_promotion():
+    from natlang_neuralese.train.optim import PortMuonAdamW, latent_options
+    ordinary = torch.nn.Parameter(torch.ones(4, dtype=torch.bfloat16))
+    latent = torch.nn.Parameter(torch.ones((4, 4), dtype=torch.bfloat16))
+    optimizer = PortMuonAdamW([('norm', ordinary)], lr=1e-3, vocab_size=64, auxiliary_rounding='kahan',
+        latent=[('latent', latent, 1e-3, 1)], latent_optimizer='muonsr',
+        latent_options=latent_options('muonsr', weight_decay=0., rounding='kahan'))
+    auxiliary_bound = 3 * ordinary.numel() * 4 + 4
+    # Before any step: BF16 momentum (2 bytes) and the FP32 compensation (4 bytes) per element.
+    assert optimizer_state_size_upper_bound(optimizer, lazy=True) >= auxiliary_bound + latent.numel() * 6
+    ordinary.grad, latent.grad = torch.ones_like(ordinary), torch.ones_like(latent)
+    optimizer.step()
+    state = optimizer.latent.state[latent]
+    assert state['compensation'].dtype == torch.float32
+    exact = sum(tensor.numel() * tensor.element_size() for tensor in state.values() if torch.is_tensor(tensor))
+    assert exact == latent.numel() * 6
+    assert optimizer_state_size_upper_bound(optimizer, lazy=False) >= exact
+    # A BF16 buffer that reached the optimizer unpromoted is bounded at its promoted size.
+    state['compensation'] = state['compensation'].bfloat16()
+    assert optimizer_state_size_upper_bound(optimizer, lazy=True) >= auxiliary_bound + latent.numel() * 6
