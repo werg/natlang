@@ -276,9 +276,11 @@ def make_native_optimizer(model, *, lr, weight_decay=.1, latent_ns='quintic', in
                     _raise_nonfinite(name)
             parameter.register_post_accumulate_grad_hook(finite_before_muon)
     # An all-BF16 model (declared ordinary precision profile, e.g. LFM3) writes its AdamW-routed parameters (learned
-    # sparse rows, embedding adapter, norm gains, conv kernels) with stochastic rounding; FP32-master profiles do not.
+    # sparse rows, embedding adapter, norm gains, conv kernels) with Kahan-compensated rounding and FP32 moments
+    # (stochastic rounding until 2026-11-09; resumes adopt it through a recorded transition); FP32-master profiles
+    # use plain AdamW.
     from ..model.native_parameter_precision import BF16_SR_PROFILE
-    rounding = 'stochastic' if getattr(model, 'native_ordinary_precision', None) == BF16_SR_PROFILE else 'nearest'
+    rounding = 'kahan' if getattr(model, 'native_ordinary_precision', None) == BF16_SR_PROFILE else 'nearest'
     optimizer = PortMuonAdamW(ordinary, lr=lr, vocab_size=int(model.port.embedding_weight.shape[0]),
         auxiliary_rounding=rounding,
         embedding_ids={id(model.port.embedding_weight)}, force_adamw_ids={id(parameter) for _,parameter in ordinary},

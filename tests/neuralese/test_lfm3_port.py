@@ -380,12 +380,12 @@ def test_adamwsr_matches_adamw_in_fp32_and_keeps_small_bf16_updates_in_expectati
     assert stochastic.dtype == torch.bfloat16 and optimizers[1].state[stochastic]['exp_avg'].dtype == torch.bfloat16
 
 
-def test_all_bf16_native_optimizer_moves_small_sparse_row_updates_with_stochastic_rounding(tmp_path):
+def test_all_bf16_native_optimizer_moves_small_sparse_row_updates_with_compensated_rounding(tmp_path):
     from natlang_neuralese.data.native_graph import SCHEMA, parse_graph
     from natlang_neuralese.model.native_model import load_native_model
     from natlang_neuralese.train.native_state_sft import (make_native_optimizer, packed_graph_loss,
                                                           sparse_row_updates)
-    from natlang_neuralese.train.optim import AdamWSR
+    from natlang_neuralese.train.optim import AdamWKahan
     from tokenizers import Tokenizer, models, pre_tokenizers
     from transformers import PreTrainedTokenizerFast
     tiny_lfm3_hf().save_pretrained(tmp_path, safe_serialization=True)
@@ -403,15 +403,15 @@ def test_all_bf16_native_optimizer_moves_small_sparse_row_updates_with_stochasti
                       'imports': [{'at': 1, 'source': 'producer', 'start': 1, 'stop': 4}]}]}
     example = parse_graph(raw, tokenizer_fingerprint='1' * 64)
     changes = {}
-    for rounding in ('stochastic', 'nearest'):
+    for rounding in ('kahan', 'nearest'):
         torch.manual_seed(5)
         model, _, _, _ = load_native_model(tmp_path, rank=4, dtype=torch.bfloat16)
         # Per-step updates (~lr) well below the role rows' BF16 spacing.
         optimizer, _ = make_native_optimizer(model, lr=2e-5, weight_decay=0., in_backward=False,
                                              learned_row_lr=2e-5)
-        assert isinstance(optimizer.auxiliary, AdamWSR) and optimizer.auxiliary_rounding == 'stochastic'
+        assert isinstance(optimizer.auxiliary, AdamWKahan) and optimizer.auxiliary_rounding == 'kahan'
         assert {entry['dtype'] for entry in optimizer.schema} == {'torch.bfloat16'}
-        assert optimizer.state_dict()['adamw_rounding'] == 'stochastic'
+        assert optimizer.state_dict()['adamw_rounding'] == 'kahan'
         if rounding == 'nearest':  # the same routing with round-to-nearest writes, for contrast
             optimizer.auxiliary = torch.optim.AdamW(optimizer.auxiliary.param_groups, lr=2e-5, weight_decay=0.)
         with torch.no_grad():  # rows of magnitude 0.5-1 (BF16 spacing >= 2**-9): every step is far below it
@@ -425,11 +425,14 @@ def test_all_bf16_native_optimizer_moves_small_sparse_row_updates_with_stochasti
             optimizer.auxiliary.step()
             telemetry = sparse_row_updates(model, before)
             optimizer.zero_grad(set_to_none=True)
-        changes[rounding] = float((model.input_rows.detach().float() - start.float()).abs().sum())
+        effective = model.input_rows.detach().float()
+        if rounding == 'kahan':  # sub-ULP steps accumulate exactly in the compensation until they cross a spacing
+            effective = effective + optimizer.auxiliary.state[model.input_rows]['compensation']
+        changes[rounding] = float((effective - start.float()).abs().sum())
         rows = telemetry['input_rows']
         assert rows['dtype'] == 'torch.bfloat16' and all(row['gradient_present'] for row in rows['rows'])
     assert changes['nearest'] == 0
-    assert changes['stochastic'] > 0
+    assert changes['kahan'] > 0
 
 
 @pytest.mark.parametrize('chunks', [((0, 5), *((i, i + 1) for i in range(5, 17))),
@@ -514,3 +517,34 @@ def test_fresh_shared_packed_ordinary_graphs_match_independent_hf_and_keep_conte
     torch.testing.assert_close(result[:,:len(first)],expected_first,atol=2e-5,rtol=2e-5)
     torch.testing.assert_close(result[:,len(first):],expected_second,atol=2e-5,rtol=2e-5)
     torch.testing.assert_close(changed_result[:,len(first):],result[:,len(first):],atol=0,rtol=0)
+
+
+
+def test_adamw_kahan_accumulates_sub_ulp_updates_exactly_and_adopts_stochastic_state():
+    """2026-11-09: stochastic-rounding noise was 100-1700x the update signal on LFM3 norm gains and conv kernels."""
+    from natlang_neuralese.train.optim import AdamWKahan, AdamWSR, PortMuonAdamW
+    reference = torch.full((64,), 1.0, dtype=torch.float32, requires_grad=True)
+    gain = torch.nn.Parameter(torch.full((64,), 1.0, dtype=torch.bfloat16))
+    exact, kahan = torch.optim.AdamW([reference], lr=1e-5, weight_decay=0.), AdamWKahan([gain], lr=1e-5, weight_decay=0.)
+    for _ in range(400):  # every step (1e-5) is far below the BF16 spacing at 1.0 (2**-7 above, 2**-8 below)
+        reference.grad = torch.ones(64); gain.grad = torch.ones(64, dtype=torch.bfloat16)
+        exact.step(); kahan.step()
+    effective = gain.detach().float() + kahan.state[gain]['compensation']
+    torch.testing.assert_close(effective, reference.detach(), rtol=0, atol=1e-6)
+    assert float(gain.detach().float().mean()) < 1.0  # the stored BF16 weight moved deterministically, every element
+    assert len(set(gain.detach().float().tolist())) == 1
+    # A stochastic-rounding checkpoint resumes under Kahan through a recorded transition.
+    def port(rounding, parameter):
+        latent = torch.nn.Parameter(torch.ones((4, 4), dtype=torch.bfloat16))
+        return PortMuonAdamW([('norm', parameter)], lr=1e-3, vocab_size=64, latent=[('latent', latent, 1e-3, 1)],
+                             latent_optimizer='muonsr', auxiliary_rounding=rounding)
+    old_param = torch.nn.Parameter(torch.ones(4, dtype=torch.bfloat16))
+    old = port('stochastic', old_param); assert isinstance(old.auxiliary, AdamWSR)
+    old_param.grad = torch.ones(4, dtype=torch.bfloat16); old.auxiliary.step()
+    new_param = torch.nn.Parameter(old_param.detach().clone())
+    new = port('kahan', new_param); new.load_state_dict(old.state_dict())
+    assert new.state_dict()['native_optimizer_transitions'][-1]['to'] == 'kahan'
+    new_param.grad = torch.ones(4, dtype=torch.bfloat16); new.auxiliary.step()
+    assert new.auxiliary.state[new_param]['exp_avg'].dtype == torch.float32
+    with pytest.raises(ValueError, match='AdamW rounding differs'):
+        port('stochastic', torch.nn.Parameter(torch.ones(4, dtype=torch.bfloat16))).load_state_dict(new.state_dict())

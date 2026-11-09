@@ -712,7 +712,7 @@ def _optimizer_family(optimizer):
     muon_type = getattr(torch.optim, 'Muon', None)
     if (muon_type is not None and isinstance(optimizer, muon_type)) or type(optimizer).__name__ == 'Muon':
         return 'muon'
-    if isinstance(optimizer, torch.optim.AdamW) or type(optimizer).__name__ == 'AdamWSR':
+    if isinstance(optimizer, torch.optim.AdamW) or type(optimizer).__name__ in ('AdamWSR', 'AdamWKahan'):
         return 'adamw'
     raise CheckpointReserveError(
         f'checkpoint reserve does not know optimizer state layout for {type(optimizer).__name__}')
@@ -720,6 +720,7 @@ def _optimizer_family(optimizer):
 
 def optimizer_state_size_upper_bound(optimizer, lazy=True):
     """Exact initialized slots plus (``lazy``) layout-specific lazy state for warm-up optimizers."""
+    import torch
     children = ((getattr(optimizer, 'muon', None), getattr(optimizer, 'auxiliary', None),
                  getattr(optimizer, 'latent', None))
                 if hasattr(optimizer, 'muon') else (optimizer,))
@@ -748,6 +749,13 @@ def optimizer_state_size_upper_bound(optimizer, lazy=True):
                 elif family == 'muon':
                     if 'momentum_buffer' not in state:
                         total += parameter.numel() * parameter.element_size()
+                elif type(child).__name__ == 'AdamWKahan':
+                    # FP32 moments and (BF16 parameters) an FP32 compensation; restored BF16 state is promoted.
+                    for name in ('exp_avg', 'exp_avg_sq', *(('compensation',) if parameter.dtype == torch.bfloat16 else ())):
+                        if name not in state or state[name].dtype != torch.float32:
+                            total += parameter.numel() * 4
+                    if 'step' not in state:
+                        total += torch_float32_scalar_bytes()
                 else:
                     # torch.optim.AdamW stores moments in parameter dtype and
                     # one FP32 scalar step. AMSGrad adds one maximum moment.

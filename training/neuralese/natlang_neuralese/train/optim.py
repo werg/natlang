@@ -114,7 +114,8 @@ class PortMuonAdamW(torch.optim.Optimizer):
         self._constructed = True
 
     def _auxiliary_optimizer(self, params, **options):
-        kind = AdamWSR if getattr(self, 'auxiliary_rounding', 'nearest') == 'stochastic' else torch.optim.AdamW
+        kind = {'stochastic': AdamWSR, 'kahan': AdamWKahan}.get(getattr(self, 'auxiliary_rounding', 'nearest'),
+                                                                 torch.optim.AdamW)
         return kind(params, **options)
 
     def _groups(self):
@@ -171,18 +172,26 @@ class PortMuonAdamW(torch.optim.Optimizer):
         return state
 
     def load_state_dict(self, state_dict, *, allow_added_names=(), allow_promoted_names=(), native_optimizer_migration=None):
-        if state_dict.get('adamw_rounding', 'nearest') != self.auxiliary_rounding:
+        saved_rounding = state_dict.get('adamw_rounding', 'nearest')
+        # Declared rounding transition: AdamWKahan promotes the saved BF16 moments and starts a zero compensation.
+        adopt_kahan = saved_rounding == 'stochastic' and self.auxiliary_rounding == 'kahan'
+        if saved_rounding != self.auxiliary_rounding and not adopt_kahan:
             raise ValueError('port optimiser checkpoint AdamW rounding differs: '
-                             f"{state_dict.get('adamw_rounding', 'nearest')} vs {self.auxiliary_rounding}")
+                             f"{saved_rounding} vs {self.auxiliary_rounding}")
         if all(isinstance(item.get('name'),str) for item in self.schema):
             from .optim_restore import load_named_port_state
-            return load_named_port_state(self,state_dict,allow_added_names=allow_added_names,
-                                         allow_promoted_names=allow_promoted_names,
-                                         native_optimizer_migration=native_optimizer_migration)
-        if native_optimizer_migration is not None:
+            result = load_named_port_state(self,state_dict,allow_added_names=allow_added_names,
+                                           allow_promoted_names=allow_promoted_names,
+                                           native_optimizer_migration=native_optimizer_migration)
+        elif native_optimizer_migration is not None:
             raise ValueError('native optimizer migration requires complete named parameter contracts')
-        return self._load_unnamed_state_dict(state_dict,allow_added_names=allow_added_names,
-                                             allow_promoted_names=allow_promoted_names)
+        else:
+            result = self._load_unnamed_state_dict(state_dict,allow_added_names=allow_added_names,
+                                                   allow_promoted_names=allow_promoted_names)
+        if adopt_kahan:
+            self._native_optimizer_transitions = [*self._native_optimizer_transitions,
+                {'schema': 'natlang.adamw-rounding-transition/1', 'from': 'stochastic', 'to': 'kahan'}]
+        return result
 
     def _load_unnamed_state_dict(self, state_dict, *, allow_added_names=(), allow_promoted_names=()):
         if state_dict.get("format") == FORMAT and state_dict.get("schema") != self.schema and (allow_added_names or allow_promoted_names):
@@ -256,7 +265,7 @@ def make_port_optimizer(policy: str, backbone, heads, lr: float, momentum: float
                          momentum=momentum)
 
 
-AUXILIARY_ROUNDINGS = ("nearest", "stochastic")
+AUXILIARY_ROUNDINGS = ("nearest", "stochastic", "kahan")
 
 
 class AdamWSR(torch.optim.Optimizer):
@@ -303,6 +312,54 @@ class AdamWSR(torch.optim.Optimizer):
                 value = p.float().mul_(1 - group["lr"] * group["weight_decay"])
                 value.addcdiv_(m, (v / second).sqrt_().add_(group["eps"]), value=-group["lr"] / first)
                 self._write(p, value)
+        return None
+
+
+class AdamWKahan(AdamWSR):
+    """AdamWSR with compensated (Kahan) BF16 writes and FP32 moments: the exact FP32 result of each step is
+    ``p + compensation``; ``p`` gets its nearest BF16 value and ``compensation`` the remainder, so sub-ULP updates
+    accumulate deterministically instead of as stochastic-rounding noise. The 2026-11-09 sanity test measured
+    stochastic-rounding noise energy 100-1700x the update signal per step on LFM3's AdamW-routed norm gains and
+    conv kernels (about 0.4M elements). Optimizer-state load casts state to the parameter dtype (torch), so moments
+    and compensation are promoted back to FP32 at the next step; FP32 parameters are written exactly."""
+
+    @torch.no_grad()
+    def step(self, closure=None):
+        if closure is not None:
+            raise ValueError("AdamWKahan does not support closures")
+        for group in self.param_groups:
+            beta1, beta2 = group["betas"]
+            for p in group["params"]:
+                if p.grad is None:
+                    continue
+                if p.grad.is_sparse:
+                    raise ValueError("AdamWKahan needs dense gradients")
+                state = self.state[p]
+                if not state:
+                    state["step"] = torch.zeros((), dtype=torch.float32)
+                    state["exp_avg"] = torch.zeros_like(p, dtype=torch.float32)
+                    state["exp_avg_sq"] = torch.zeros_like(p, dtype=torch.float32)
+                for key in ("exp_avg", "exp_avg_sq"):
+                    if state[key].dtype != torch.float32:
+                        state[key] = state[key].float()
+                compensation = state.get("compensation")
+                if p.dtype == torch.bfloat16 and (compensation is None or compensation.dtype != torch.float32):
+                    state["compensation"] = (torch.zeros_like(p, dtype=torch.float32) if compensation is None
+                                             else compensation.float())
+                state["step"] += 1
+                step = float(state["step"])
+                g = p.grad.float()
+                m = state["exp_avg"].mul_(beta1).add_(g, alpha=1 - beta1)
+                v = state["exp_avg_sq"].mul_(beta2).addcmul_(g, g, value=1 - beta2)
+                first, second = 1 - beta1 ** step, 1 - beta2 ** step
+                value = p.float()
+                if p.dtype == torch.bfloat16:
+                    value.add_(state["compensation"])
+                value.mul_(1 - group["lr"] * group["weight_decay"])
+                value.addcdiv_(m, (v / second).sqrt_().add_(group["eps"]), value=-group["lr"] / first)
+                p.copy_(value)
+                if p.dtype == torch.bfloat16:
+                    state["compensation"].copy_(value - p.float())
         return None
 
 

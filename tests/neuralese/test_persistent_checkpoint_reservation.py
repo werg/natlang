@@ -363,3 +363,13 @@ def test_gb10_floor_applies_only_to_configured_hot_paths(tmp_path,monkeypatch):
     assert checkpoint_minimum_free_bytes(tmp_path/'elsewhere/checkpoint.pt')==512*1024**2
     monkeypatch.setenv('NATLANG_CHECKPOINT_MIN_FREE_BYTES','123')
     assert checkpoint_minimum_free_bytes(data/'training/checkpoint.pt')==123
+
+
+
+def test_kahan_auxiliary_optimizer_state_bound_counts_fp32_moments_and_compensation():
+    from natlang_neuralese.train.optim import PortMuonAdamW
+    ordinary = torch.nn.Parameter(torch.ones(4, dtype=torch.bfloat16))
+    latent = torch.nn.Parameter(torch.ones((4, 4), dtype=torch.bfloat16))
+    optimizer = PortMuonAdamW([('norm', ordinary)], lr=1e-3, vocab_size=64,
+        latent=[('latent', latent, 1e-3, 1)], latent_optimizer='muonsr', auxiliary_rounding='kahan')
+    assert optimizer_state_size_upper_bound(optimizer, lazy=True) >= 3 * ordinary.numel() * 4 + 4
