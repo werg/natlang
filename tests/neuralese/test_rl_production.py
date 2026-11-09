@@ -731,3 +731,12 @@ def test_worker_slots_bind_remote_workers():
     for bad in ({}, {'http://pop':{'workers':0,'weight':1}}, {'http://pop':{'workers':1}}, {'http://x':{'workers':1,'weight':1}}):
         with pytest.raises(ValueError,match='remote_workers'):
             production.worker_slots(['http://dgx','http://pop'],2,bad)
+
+
+def test_actor_custody_compares_policy_identity_not_code_provenance():
+    recorded = {'dgx': {'checkpoint_sha256': 'a' * 64, 'code': {'git_commit': '1'}},
+                'pop': {'checkpoint_sha256': 'a' * 64, 'code': {'git_commit': '1'}}}
+    relaunched = {**recorded, 'pop': {'checkpoint_sha256': 'a' * 64, 'code': {'git_commit': '2'}}}
+    assert production.same_actor_policy(relaunched, recorded)
+    assert production.same_actor_policy({'dgx': recorded['dgx']}, recorded)   # an actor left the round
+    assert not production.same_actor_policy({**recorded, 'pop': {'checkpoint_sha256': 'b' * 64}}, recorded)

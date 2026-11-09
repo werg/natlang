@@ -839,6 +839,15 @@ def guidance_collection_options(stage):
     return {'selection':'crisp', 'writer':'off'} if stage == 'backbone' else {}
 
 
+def same_actor_policy(current, recorded):
+    """Whether every actor present at both points serves the identity recorded at the collection's start. Each
+    receipt's ``code`` is provenance (owner 2026-11-09), not identity: an actor relaunched mid-round on newer code with
+    the same policy (w5 round 0: the Pop actor restarted for its memory settings) keeps custody."""
+    def identity(receipt):
+        return {key: value for key, value in (receipt or {}).items() if key != 'code'}
+    return all(identity(current[url]) == identity(recorded[url]) for url in set(current) & set(recorded))
+
+
 def worker_slots(endpoints, workers, remote_workers):
     """[(endpoint, entry weight)] per collector worker. Without ``remote_workers`` the workers round-robin over the
     endpoints with equal shares (external fleets). With it, ``workers`` run on the managed endpoint (endpoints[0], weight
@@ -1086,7 +1095,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     def retained_artifacts(*, restore=False):
         if native_custody:
             from .native_partial_custody import retain_partial_artifacts
-            if actor_receipts() != actors:
+            if not same_actor_policy(actor_receipts(), actors):
                 raise ValueError('RL actor policy changed before retained artifact custody')
             # Only unfinished entries can resume from a partial; a finished entry's leftover partial may reference
             # blocks held by an actor that has since gone (the Pop actor's store after it shut down).
@@ -1094,7 +1103,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
             retain_partial_artifacts([entry for entry in entries + teachers['entries'] if entry['key'] not in finished],
                                      out, policy_id=policy_id, binding=binding,
                                      servers=[NativeActorClient(url) for url in live], restore=restore)
-            if actor_receipts() != actors:
+            if not same_actor_policy(actor_receipts(), actors):
                 raise ValueError('RL actor policy changed during retained artifact custody')
     # A partial response is not usable without its exact communication inputs.
     # Authenticate and hydrate the full archive before any collector can replay.
@@ -1323,7 +1332,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         manifest['collection_binding'] = binding
         write_json_durable(out / 'blocks/manifest.json', manifest)
         report['block_bundle'] = str(out / 'blocks/manifest.json')
-    if actor_receipts() != actors:
+    if not same_actor_policy(actor_receipts(), actors):
         raise ValueError('RL actor policy changed during collection')
     expected_keys = [entry['key'] for entry in entries + teachers['entries']]
     missing_keys = unfinished(entries + teachers['entries'], generations.attempted())
