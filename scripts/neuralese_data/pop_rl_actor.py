@@ -42,7 +42,7 @@ from scripts.neuralese_data import pop_behavior_eval as pbe  # noqa: E402
 RL_PORT = 18531
 STATE = pbe.ROOT / 'rl-actor.json'
 EXPORT_FORMAT = 'native-pop-rtx4060-bf16'
-RL_MEMORY_GB = 4   # container cap and ledger claim; measured peak 2.8 GiB at 4 concurrent requests (the eval claims 5)
+RL_MEMORY_GB = 8   # container cap and ledger claim; 4 GiB was OOM-killed after 4 h at 3 workers (anon 4.2 GiB, 2026-11-09)
 
 
 def log(**event):
@@ -130,7 +130,9 @@ def start(args):
            'transport': {'name': Path(prep['transport']['path']).name, 'sha256': prep['transport']['sha256'],
                          'view_receipt_name': prep['view_receipt']['sha256'] + '.json',
                          'view_receipt_sha256': prep['view_receipt']['sha256'], 'scope': transport_json['scope']}}
-    pbe.ssh(shlex.join(['mkdir', '-p', work]))
+    # A restart under the same policy reuses this work dir (and its block store); the previous driver copy came from a
+    # sealed read-only runtime file, so it is replaced rather than overwritten.
+    pbe.ssh(shlex.join(['mkdir', '-p', work]) + ' && ' + shlex.join(['rm', '-f', f'{work}/driver.py']))
     subprocess.run(['scp', '-q', str(REPO / 'scripts/neuralese_data/pop_dev16_driver.py'), f'{pbe.POP}:{work}/driver.py'],
                    check=True, timeout=120)
     pbe._pop_upload_json(job, f'{work}/job.json')
