@@ -478,7 +478,8 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
     ``accumulate``: earlier micro-batches of the same optimizer update (``--accumulate-batches``). Their backwards
     run outside ``in_backward()``, so the gated MuonSR hooks stay idle and every gradient accumulates in ``.grad``;
     ``batch`` is the last micro-batch, whose backward steps each latent with the whole update's gradient. Each
-    micro-batch's loss is weighted by its scored-graph count. Invocation-normalized objectives use an update
+    micro-batch's loss is weighted by its scored-graph count, except policy objectives, which declare
+    ``planned_actions`` and are one action mean over the complete update. Invocation-normalized objectives use an update
     graph mean; token-mass objectives use a fixed 64-graph reference so packing cannot change graph coefficients.
     Without accumulation a 32k-token batch of ~4 graphs drove each
     fixed-size Muon step and the weights random-walked (plans/neuralese/LFM3_REGRESSION_INVESTIGATION_20261029.md)."""
@@ -501,8 +502,13 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
     if len(modes)>1:raise ValueError('one update cannot mix token-mass and graph-normalized examples')
     # Token-mass CE is an additive objective. A fixed recorded reference
     # preserves each graph's coefficient when packed update sizes change.
+    planned = ([objective.planned_actions(micro) for micro in micro_batches]
+               if hasattr(objective, 'planned_actions') else None)
     if objective is None and modes=={'token'} and sum(scored):
         shares=[count / TOKEN_MASS_GRAPH_REFERENCE for count in scored]
+    elif planned is not None and sum(planned):
+        # Policy objectives are one action mean over the complete update (NativePolicyObjective.planned_actions).
+        shares = [count / sum(planned) for count in planned]
     else:
         shares = ([count / sum(scored) for count in scored] if sum(scored) else [1. / len(micro_batches)] * len(micro_batches))
     loss_weight = None if precision is None or precision[3] == 1.0 else float(precision[3])

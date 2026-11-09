@@ -1214,6 +1214,16 @@ class NativePolicyObjective:
                 identities[packed_name] = source_identity
         return {'external_blocks': blocks, 'external_identity': identities} if blocks else {}
 
+    def planned_actions(self, examples):
+        """Admitted sampled tokens + decisions of these graphs: the update's declared normalization mass.
+
+        The policy loss is a global action mean over the complete optimizer update. Each micro-batch returns its
+        action sum over its own planned mass and the trainer weights it by planned/total, so the update gradient
+        does not depend on how graphs are packed into micro-batches. Guard-rejected episodes stay in the
+        denominator and contribute zero."""
+        return sum(len(self.rows[example.id]['actions']) + len(self.rows[example.id].get('decision_actions') or ())
+                   for example in examples)
+
     def __call__(self, model, result, context):
         from .policy_math import clipped_token_loss
         from ..model.native_adapters import require_model_execution_actor
@@ -1342,7 +1352,7 @@ class NativePolicyObjective:
                     'objective': self.spec['mode'], 'engine_guard': engine_summary}
             raise ValueError('native objective batch has no actual sampled actions')
         from .jolt import summarize_jolt
-        return torch.stack(losses).sum() / count, {'sampled_tokens': count - decision_count,
+        return torch.stack(losses).sum() / self.planned_actions(context['examples']), {'sampled_tokens': count - decision_count,
             'sampled_decisions': decision_count,
             'episodes': len(losses), 'objective': self.spec['mode'],
             **({'policy_loss': self.policy_loss['schema']} if self.policy_loss is not None else {}),

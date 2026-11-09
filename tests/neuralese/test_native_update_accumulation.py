@@ -231,11 +231,10 @@ def test_real_jolt_student_teacher_microbatches_retain_distinct_role_telemetry(t
     objective=objective_for(tmp_path,spec)
     batch=[forward(model,graph,identity)[0] for graph in graphs]
     reference=copy.deepcopy(model)
-    expected=[]
-    for example in batch:
-        value,_=packed_graph_loss(reference,[example],objective=objective,checkpoint_layers=True,chunk_tokens=8,collect_accuracy=False)
-        expected.append(value)
-    ((expected[0]+expected[1])/2).backward()
+    # The policy loss is one action mean over the complete update: the accumulated two-micro-batch update must
+    # equal the same graphs in ONE micro-batch (packing-invariant), not a mean of per-micro-batch means.
+    value,_=packed_graph_loss(reference,batch,objective=objective,checkpoint_layers=True,chunk_tokens=8,collect_accuracy=False)
+    value.backward()
     reference_grad={n:p.grad.detach().clone() for n,p in reference.named_parameters() if p.grad is not None}
     optimizer,_=make_native_optimizer(model,lr=1e-3,in_backward=True)
     seen=stepped_gradients(model,optimizer)
@@ -474,3 +473,25 @@ def test_merge_update_details_accepts_a_micro_batch_without_conditional_terms():
     assert merged['policy_loss'] == 'jolt-plus/1' and merged['score_centering'] == full['score_centering']
     assert merged['jolt']['student_outcome'] == .4 * .5 and merged['jolt']['positions'] == {'student': 10, 'teacher': 10}
     assert merged['engine_guard']['rejected'] == 1 and merged['episodes'] == 1
+
+
+def test_policy_update_is_one_action_mean_whatever_the_micro_batch_partition(monkeypatch):
+    """Review F1 (2026-11-09): micro-batch action means weighted by graph count reversed this update's sign."""
+    from natlang_neuralese.train import native_state_sft as trainer
+    model,optimizer=build();graphs=examples()[:2]
+    parameter=next(p for p in model.parameters() if p.requires_grad)
+    value={graphs[0].id:(1.,1),graphs[1].id:(-.02,100)}  # (mean action loss, planned actions) per graph
+
+    class Objective:
+        def planned_actions(self,micro):return sum(value[example.id][1] for example in micro)
+
+    def packed(model_,micro,**kwargs):
+        mean=sum(value[e.id][0]*value[e.id][1] for e in micro)/sum(value[e.id][1] for e in micro)
+        return parameter.sum()*0.+mean,{'episodes':len(micro)}
+    monkeypatch.setattr(trainer,'packed_graph_loss',packed)
+    monkeypatch.setattr(trainer,'merge_update_details',lambda parts,scored:parts[-1])
+    monkeypatch.setattr('natlang_neuralese.rl.native_replay.efficiency_only_update_scale',lambda *a:1.)
+    split,_=trainer.native_training_update(model,optimizer,graphs[1:],accumulate=[graphs[:1]],objective=Objective(),
+                                           checkpoint_layers=True,chunk_tokens=3)
+    whole,_=trainer.native_training_update(model,optimizer,graphs,objective=Objective(),checkpoint_layers=True,chunk_tokens=3)
+    assert abs(float(split)-(1.-2.)/101)<1e-7 and abs(float(whole)-(1.-2.)/101)<1e-7
