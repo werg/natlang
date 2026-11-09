@@ -673,3 +673,131 @@ problem requires a redo or continued training, preserving exact state and
 recording the evidence. Comprehensive training is the objective, not a ban on
 interruptions or sensible course corrections.
 
+
+## Adaptive production training: custody and continuation findings (2026-10-15..27)
+
+- **Qualify current foundations on an explicit shared-stage request.** Retain
+  genuine completed producer/consumer exposure. Repeated synchronous zero-update
+  qualification must not replace full-source SGD between ordinary SFT/DPO/RL
+  continuations. Publish a genuine qualified zero-update boundary through the
+  exact normal mechanism without epoch, source-visit or optimizer-update credit;
+  then continue training. Preserve unfinished full-recipe obligations.
+- **Keep launch checks nonmutating and necessary** (engineering lesson, 2026-10-20).
+  Run normal metadata/argument preflight once; let the real entry perform its
+  required state, numerical and capacity checks before updates. Do not execute
+  an entire administrative entry in the canonical production directory first:
+  it can leave strict-write launch records that block the real learner. Put
+  diagnostics in an isolated namespace, preserve concrete failure evidence,
+  and avoid repeated whole-entry barriers while useful training is stopped.
+- **Avoid redundant supervision barriers** (engineering practice, 2026-10-20).
+  Routine data append payloads that change only counts, paths and authenticated
+  generations may proceed through the already reviewed mechanism with an
+  independent operator review and the normal schema, source/held, custody,
+  geometry and compare-and-swap checks. They do not need another round trip to
+  the root agent. Review mechanism changes separately. Record the actual
+  reviewer and standing authorization; never claim an individual review that
+  did not occur. Preserve exact exposure and continue useful training.
+- **Bring in deferred improvements** (owner, 2026-10-16). Keep a current
+  inventory of deferred data, performance, training and inference work; actively
+  integrate each ready improvement. An old handover, incomplete source census,
+  clean-run boundary or another model's unrelated qualification is not a reason
+  to leave useful work disabled. Preserve real numerical, task-quality and
+  foundation prerequisites, and resolve their concrete blockers.
+  Independent model improvements may advance independently; propagate shared
+  fixes and retain exact optimizer/RNG/exposure through adaptive continuations.
+- **Share code as much as possible and distribute all generalizable insights
+  across all models.** A useful fix, optimization, data improvement or recipe
+  insight on one line must promptly be considered and propagated to the other
+  lines and machines. Extend the shared trainers, loaders, objectives,
+  evaluators and recipe inheritance instead of creating per-model forks.
+  Keep only necessary architecture-specific behavior/settings separate, state
+  why they differ, and communicate shared decisions through coordination.
+- **Verify the effective control code after loaders.** A fix in the installed
+  package can be overwritten by a sealed controller or publisher source closure.
+  Rebase every control layer onto shared fixes, preserve required operational
+  behavior, update mechanism identities, and test after the complete loader has
+  run. A passing default-module test does not prove that the production
+  controller executes the fix. This applies to both model lines.
+- **Rebind capacity declarations after runtime changes** (engineering finding,
+  2026-10-27). Even a checkpoint-control-only backport changes the exact Python
+  inventory. Update the affected recipe and seed memory requests to the actual
+  runtime while retaining source, objective, geometry and reference checks; let
+  the real restored entry perform qualification before updates. Retain failed
+  operation records and reserve an unused operation namespace when continuing
+  from the latest earned full state. Do not silently skip comprehensive SFT
+  because a resolved failure remains memoized under an unchanged signature.
+- **Keep recovered work ahead of historical operations.** Restarting the full
+  mandatory schedule after an external optimizer continuation must reserve an
+  unused operation namespace in the same lineage. Never let a completed bridge
+  result from an older attempt replace the newer earned parent. Verify the
+  actual checkpoint and cursor, and observe the real optimizer child advancing;
+  a live coordinator or a launched request alone is not resumed training.
+- **Reuse actual controller custody across continuations** (engineering finding,
+  2026-10-21). Pass the coordinator's continuously held canonical lease descriptor
+  through worker threads into completed/runtime configuration; opening the same
+  lock again can self-contend. A normal resident publication changes bootstrap
+  metadata: verify and refresh the actual adopted configuration rather than
+  discarding its data or weakening custody checks. Preserve concrete configuration
+  tracebacks and diagnose a blocked retry signature. Exercise this path after the
+  complete sealed controller/publisher loaders; a previously shared guard fix can
+  still be missing from their frozen source closures.
+- **Publish completed resident training before adopting its next stage**
+  (engineering finding, 2026-10-22). A supervised stage can finish after several
+  live data appends while the coordinator still holds its bootstrap recipe.
+  Use the real completed request and result through the normal publication
+  helper to bind the earned checkpoint, actual resident configuration and next
+  cursor. Updating bootstrap metadata alone does not publish the adopted recipe.
+  Preserve optimizer/RNG/exposure and verify the next real optimizer child.
+
+Historical reader replay (engineering finding, 2026-10-22): recipe inputs can
+include the exact classification reader implementation. A changed reader is not
+a byte-identical relocation. Replay historical completed adaptations and drained
+handoffs using the package that actually prepared their metadata, with complete
+code inventory and bound recipe checks before and after isolated CPU replay.
+Both old and future plans in a completed adaptation were enumerated by that
+adaptation's implementation; its old numerical package is not automatically the
+original metadata reader. Preserve strict source/held, lineage and exposure
+checks. Include committed resident histories and both effective sealed control
+closures in validation before cutover. A live scheduler holding the canonical
+lease can still be blocked: monitor its actual configuration_errors and retry
+signature alongside real optimizer progress. When a normal publication advances
+the earned parent, rebind a completed invocation to that actual state through
+the existing continuation mechanism rather than reusing an obsolete invocation.
+
+
+## Working practice: launch, receipt and copy findings (2026-10-22..11-01)
+
+- A ledger unit's explicit relative executable path resolves in its admitted
+  `--workdir`. Bare executable names retain PATH lookup. Use an absolute script
+  path for an intended checkout when inspecting or recovering older launches:
+  older `systemd-run` invocation paths resolved against the caller's checkout
+  before changing directory. Verify the tested checkout's path and revision in
+  the actual check log; a worktree claim alone is not evidence of its tests.
+- For DGX administrative ownership guards requiring `os.pidfd_open`, use the
+  host `/usr/bin/python3`; the CoreWeave SDK venv lacks that API. Invoke SDK
+  operations through its venv as a subprocess when both capabilities are needed.
+  Compile the assembled remote Python body before transport, not only the
+  outer launcher. Honor each receipt's binding schema: compare path/SHA fields
+  explicitly and check declared byte counts against the actual file; a legacy
+  two-field binding is not unequal evidence merely because another includes bytes.
+- Reuse authenticated live parser/index caches for CPU preparation and isolated
+  consumer checks. Cache isolation is not an objective. Verify exact source,
+  tokenizer, role, parser-policy and entry identities before reuse; preserve
+  cold work only when no valid completed cache exists. Locate artifacts through
+  registries and bound manifests; do not leave unbounded content searches or
+  directory crawls running across the external disk after the answer is known.
+- Bound dirty file-cache memory during large artifact copies (engineering finding,
+  2026-10-22): a small Python heap does not bound a ledger unit's memory. Flush
+  and synchronize bounded write windows, release clean cache when appropriate,
+  and resume an interrupted copy only after validating its actual prefix. Verify
+  full content before replacing a logical path; preserve source and live readers.
+- Do not add or remove hardlinks to source, manifest or index files while live
+  native readers validate or stream them. Link-count changes alter ctime even
+  when bytes remain unchanged and correctly invalidate strict reader checks.
+  Copy for live backup staging or drain the affected readers first; keep the
+  strict checks. Immutable checkpoint pinning has its own checked-stat protocol.
+- Restart transient ledger services through the ledger with a fresh unit name
+  (engineering finding, 2026-10-22). A stopped transient unit may already have
+  been collected, so `systemctl start` can fail even after a clean stop. Preserve
+  the existing state/lease namespace, verify the new actual process and update
+  supervision bindings; never treat scheduling the wrapper as resumed work.

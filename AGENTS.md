@@ -439,145 +439,37 @@ comprehensive training on the entire evolving production recipe.
 
 ## Adaptive production training (standing owner instructions, 2026-10-15)
 
-- **Best possible models as soon as possible is the objective. We are not
-  doing science.** Do not optimize operations for clean, frozen, reproducible
-  runs or controlled comparisons at the expense of useful training. Existing
-  runs are work in progress, not experiments that must remain untouched.
-- **Constantly improve the recipe and keep going.** Monitor the models and
-  their processes, investigate concrete impediments, and greedily exploit useful
-  data, fixes and insights as soon as they are available. Do not let repeated
-  probes, qualification windows, packaging or handoffs become substitutes for
-  production training. Use focused checks that resolve a real correctness or
-  operational concern, then return the GPUs to useful training promptly.
-- **Comprehensive means the entire production recipe on the models and all
-  usable available data.** Stages may differ, but progress through them; a short
-  warmup, partial epoch, isolated stage or smoke run is not the goal. Track
-  actual stage progress and data exposure, and resolve what prevents remaining
-  stages or data from being used. Do not claim that downloaded or registered
-  data has been trained on.
-- **Adapt live.** Add newly usable data promptly rather than waiting for a
-  distant clean run or an unrelated conversion batch. Stop/reload/resume
-  immediately when needed; retain optimizer/RNG state when continuing
-  is appropriate. The supervisor may stop and tweak any run at any time for a
-  potential improvement and judges whether to continue or redo it. Preserve
-  useful checkpoints and record the practical reason; do not require a new
-  lineage or a clean experimental restart for routine changes.
-- **Checks serve production.** Keep checks that protect actual task quality,
-  valid gradients/numerics, held-data separation, data quality, recoverable
-  progress and functioning runtime/transport. Similarity to the untrained base
-  is not the objective: base-relative KL/agreement are telemetry, never a stop
-  or qualification barrier. Exact state and artifact identities support safe
-  continuation and debugging; they are not a scientific-purity requirement.
-- **Qualify current foundations on an explicit shared-stage request.** Retain
-  genuine completed producer/consumer exposure. Repeated synchronous zero-update
-  qualification must not replace full-source SGD between ordinary SFT/DPO/RL
-  continuations. Publish a genuine qualified zero-update boundary through the
-  exact normal mechanism without epoch, source-visit or optimizer-update credit;
-  then continue training. Preserve unfinished full-recipe obligations.
-- **Keep launch checks nonmutating and necessary** (engineering lesson, 2026-10-20).
-  Run normal metadata/argument preflight once; let the real entry perform its
-  required state, numerical and capacity checks before updates. Do not execute
-  an entire administrative entry in the canonical production directory first:
-  it can leave strict-write launch records that block the real learner. Put
-  diagnostics in an isolated namespace, preserve concrete failure evidence,
-  and avoid repeated whole-entry barriers while useful training is stopped.
-- **Avoid redundant supervision barriers** (engineering practice, 2026-10-20).
-  Routine data append payloads that change only counts, paths and authenticated
-  generations may proceed through the already reviewed mechanism with an
-  independent operator review and the normal schema, source/held, custody,
-  geometry and compare-and-swap checks. They do not need another round trip to
-  the root agent. Review mechanism changes separately. Record the actual
-  reviewer and standing authorization; never claim an individual review that
-  did not occur. Preserve exact exposure and continue useful training.
-- **Bring in deferred improvements** (owner, 2026-10-16). Keep a current
-  inventory of deferred data, performance, training and inference work; actively
-  integrate each ready improvement. An old handover, incomplete source census,
-  clean-run boundary or another model's unrelated qualification is not a reason
-  to leave useful work disabled. Preserve real numerical, task-quality and
-  foundation prerequisites, and resolve their concrete blockers.
-  Independent model improvements may advance independently; propagate shared
-  fixes and retain exact optimizer/RNG/exposure through adaptive continuations.
-- **Share code as much as possible and distribute all generalizable insights
-  across all models.** A useful fix, optimization, data improvement or recipe
-  insight on one line must promptly be considered and propagated to the other
-  lines and machines. Extend the shared trainers, loaders, objectives,
-  evaluators and recipe inheritance instead of creating per-model forks.
-  Keep only necessary architecture-specific behavior/settings separate, state
-  why they differ, and communicate shared decisions through coordination.
-- **Verify the effective control code after loaders.** A fix in the installed
-  package can be overwritten by a sealed controller or publisher source closure.
-  Rebase every control layer onto shared fixes, preserve required operational
-  behavior, update mechanism identities, and test after the complete loader has
-  run. A passing default-module test does not prove that the production
-  controller executes the fix. This applies to both model lines.
-- **Rebind capacity declarations after runtime changes** (engineering finding,
-  2026-10-27). Even a checkpoint-control-only backport changes the exact Python
-  inventory. Update the affected recipe and seed memory requests to the actual
-  runtime while retaining source, objective, geometry and reference checks; let
-  the real restored entry perform qualification before updates. Retain failed
-  operation records and reserve an unused operation namespace when continuing
-  from the latest earned full state. Do not silently skip comprehensive SFT
-  because a resolved failure remains memoized under an unchanged signature.
-- **Keep recovered work ahead of historical operations.** Restarting the full
-  mandatory schedule after an external optimizer continuation must reserve an
-  unused operation namespace in the same lineage. Never let a completed bridge
-  result from an older attempt replace the newer earned parent. Verify the
-  actual checkpoint and cursor, and observe the real optimizer child advancing;
-  a live coordinator or a launched request alone is not resumed training.
-- **Reuse actual controller custody across continuations** (engineering finding,
-  2026-10-21). Pass the coordinator's continuously held canonical lease descriptor
-  through worker threads into completed/runtime configuration; opening the same
-  lock again can self-contend. A normal resident publication changes bootstrap
-  metadata: verify and refresh the actual adopted configuration rather than
-  discarding its data or weakening custody checks. Preserve concrete configuration
-  tracebacks and diagnose a blocked retry signature. Exercise this path after the
-  complete sealed controller/publisher loaders; a previously shared guard fix can
-  still be missing from their frozen source closures.
-- **Publish completed resident training before adopting its next stage**
-  (engineering finding, 2026-10-22). A supervised stage can finish after several
-  live data appends while the coordinator still holds its bootstrap recipe.
-  Use the real completed request and result through the normal publication
-  helper to bind the earned checkpoint, actual resident configuration and next
-  cursor. Updating bootstrap metadata alone does not publish the adopted recipe.
-  Preserve optimizer/RNG/exposure and verify the next real optimizer child.
+- **Best possible models as soon as possible; we are not doing science.** Runs are work in progress, not frozen
+  experiments. Improve the recipe continuously and adopt useful data, fixes and insights as soon as they are ready.
+  Focused checks resolve real correctness concerns, then the GPUs go back to training.
+- **Comprehensive means the entire recipe on all usable data.** Track actual stage progress and data exposure;
+  downloaded or registered data is not trained data.
+- **Adapt live.** Stop, reconfigure and resume whenever an improvement warrants it, keeping optimizer/RNG/exposure
+  when continuing. Record the reason; no clean restart is needed for routine changes.
+- **Checks serve production.** Keep checks that protect task quality, numerics, held-data separation, data quality,
+  recoverability and runtime function. Base-relative KL/agreement is telemetry, never a stop.
+- **Keep launch checks nonmutating.** Preflight once; let the real entry run its own state/capacity checks. Never run
+  an administrative entry in the production directory first (it can leave records that block the real learner).
+- **Bring in deferred improvements.** Keep an inventory of deferred work and integrate each ready item; an old
+  handover or clean-run boundary is not a reason to leave it disabled.
+- **Share code; one implementation per concept.** Extend shared trainers, loaders, objectives and evaluators instead
+  of forking.
+- **Verify the effective code after loaders.** A sealed controller or frozen runtime can still carry the old code:
+  test the fix as the production process actually loads it. Deployment counts, not commits.
 
-Historical reader replay (engineering finding, 2026-10-22): recipe inputs can
-include the exact classification reader implementation. A changed reader is not
-a byte-identical relocation. Replay historical completed adaptations and drained
-handoffs using the package that actually prepared their metadata, with complete
-code inventory and bound recipe checks before and after isolated CPU replay.
-Both old and future plans in a completed adaptation were enumerated by that
-adaptation's implementation; its old numerical package is not automatically the
-original metadata reader. Preserve strict source/held, lineage and exposure
-checks. Include committed resident histories and both effective sealed control
-closures in validation before cutover. A live scheduler holding the canonical
-lease can still be blocked: monitor its actual configuration_errors and retry
-signature alongside real optimizer progress. When a normal publication advances
-the earned parent, rebind a completed invocation to that actual state through
-the existing continuation mechanism rather than reusing an obsolete invocation.
+Older custody/continuation findings from this section are in `plans/neuralese/ENGINEERING_FINDINGS.md`.
 
-These instructions supersede earlier requirements for frozen experimental
-runs, base-drift hard stops or clean-run comparisons where they conflict.
+The main goal in everything is to keep moving the work forward: keep training moving and the machines doing useful
+work. Don't be overly cautious and don't wait for the owner. If something is sensible, do it, record why and keep
+going. Raise with the owner only what is truly theirs to decide.
 
-The main goal in everything is to keep moving the work forward: move training
-along and keep the machines doing useful work. Don't be overly cautious, and
-don't wait for the owner to approve decisions. If something is sensible, do it,
-record why, brief the other machine, and keep going. Raise with the owner only
-what is truly theirs to decide, and keep working on everything else in the
-meantime.
+Don't reject an approach because our implementation of it failed (owner, 2026-10-11). A worse loss, degraded
+behaviour or an unexplained numerical gap is a bug until proven otherwise: compare against an exact reference,
+localize the divergence, fix it, and re-measure before judging the approach.
 
-Don't reject an approach because our implementation of it failed (owner,
-2026-10-11). A worse loss, degraded behaviour or an unexplained numerical gap is a
-bug until proven otherwise: compare against an exact reference, localize the
-divergence, fix it, and re-measure before judging the approach itself.
-
-When something doesn't make sense, assume a bug and run a wide, varied dragnet
-for it (owner, 2026-10-11). Usually there is a bug. Don't give up, and don't settle
-for the naive explanation ("BF16 noise", "the approach doesn't work", "the model
-can't learn this"). Check many hypotheses in parallel: data and masking, rendering
-and templates, dtype and upcasts, caches and state carried between steps, kernels,
-optimizer state and resume, gradient flow, loss weighting, evaluation code, and
-differences from a known-good path. Record what was ruled out and how.
+When something doesn't make sense, assume a bug and run a wide, varied dragnet (owner, 2026-10-11): data and
+masking, rendering and templates, dtype and upcasts, caches and carried state, kernels, optimizer state and resume,
+gradient flow, loss weighting, evaluation code, and differences from a known-good path. Record what was ruled out.
 
 # Machine ownership and coordination
 
@@ -710,96 +602,29 @@ afterwards. The rules below are consequences of this one.
 
 # Working practice on shared machines
 
-- Frozen runtime launches use that runtime as their actual ledger `--workdir`,
-  as well as binding `NATLANG_REPO` and `PYTHONPATH`. Python's initial cwd can
-  otherwise import the canonical checkout's regular `scripts` package ahead
-  of the frozen helper closure. On2026-11-01 the collector correctly refused
-  this mixed process-custody helper before any rollout; changing only runtime
-  environment metadata was insufficient. Preserve the refusal and fix launch
-  ownership rather than weakening exact helper checks.
-- DGX launch environments are explicit: project/data tests use
-  `/home/werg/natlang/.venv-neuralese/bin/python`; CoreWeave SDK orchestration
-  uses `/home/werg/.local/share/natlang/cw-venv/bin/python`. Pass
-  `PYTHONPATH=/home/werg/natlang/training/neuralese:/home/werg/natlang` inside
-  the ledger command for project/data entrypoints. Node builds use the Node24
-  bin directory under `/home/werg/.local/share/natlang-dev/`. Do not assume a
-  caller's shell environment is forwarded into a ledger unit. Verify these
-  environments before launching substantial jobs; repeated import/launcher
-  failures are a shared operational bug to fix, not useful qualification.
-- A ledger unit's explicit relative executable path resolves in its admitted
-  `--workdir`. Bare executable names retain PATH lookup. Use an absolute script
-  path for an intended checkout when inspecting or recovering older launches:
-  older `systemd-run` invocation paths resolved against the caller's checkout
-  before changing directory. Verify the tested checkout's path and revision in
-  the actual check log; a worktree claim alone is not evidence of its tests.
-- For DGX administrative ownership guards requiring `os.pidfd_open`, use the
-  host `/usr/bin/python3`; the CoreWeave SDK venv lacks that API. Invoke SDK
-  operations through its venv as a subprocess when both capabilities are needed.
-  Compile the assembled remote Python body before transport, not only the
-  outer launcher. Honor each receipt's binding schema: compare path/SHA fields
-  explicitly and check declared byte counts against the actual file; a legacy
-  two-field binding is not unequal evidence merely because another includes bytes.
-- Reuse authenticated live parser/index caches for CPU preparation and isolated
-  consumer checks. Cache isolation is not an objective. Verify exact source,
-  tokenizer, role, parser-policy and entry identities before reuse; preserve
-  cold work only when no valid completed cache exists. Locate artifacts through
-  registries and bound manifests; do not leave unbounded content searches or
-  directory crawls running across the external disk after the answer is known.
 - On DGX every build, test and probe runs through the memory ledger
-  (`scripts/memory_ledger.py run --unit <family>-<id> --budget-gb N -- ...`;
-  units run asynchronously, so wait for the unit to finish and read its log).
-  Never report a merge as verified when the ledgered tests did not run.
-- `memory_ledger.py adopt` changes accounting; it does not resize an existing
-  unit's kernel `MemoryMax`. When a lightweight waiter becomes a larger job,
-  admit its real budget and explicitly set and verify the actual cgroup limit
-  before allocating its working set, or launch a fresh correctly budgeted unit.
-  Disposable RAM-backed readback files count toward that host budget too.
-- Bound dirty file-cache memory during large artifact copies (engineering finding,
-  2026-10-22): a small Python heap does not bound a ledger unit's memory. Flush
-  and synchronize bounded write windows, release clean cache when appropriate,
-  and resume an interrupted copy only after validating its actual prefix. Verify
-  full content before replacing a logical path; preserve source and live readers.
-- Do not add or remove hardlinks to source, manifest or index files while live
-  native readers validate or stream them. Link-count changes alter ctime even
-  when bytes remain unchanged and correctly invalidate strict reader checks.
-  Copy for live backup staging or drain the affected readers first; keep the
-  strict checks. Immutable checkpoint pinning has its own checked-stat protocol.
-- Restart transient ledger services through the ledger with a fresh unit name
-  (engineering finding, 2026-10-22). A stopped transient unit may already have
-  been collected, so `systemctl start` can fail even after a clean stop. Preserve
-  the existing state/lease namespace, verify the new actual process and update
-  supervision bindings; never treat scheduling the wrapper as resumed work.
-- Ledger priority (owner, 2026-10-11): pass `--priority high` for training and
-  GPU direct/E2E runs, `low` for data generation, rendering and check-main, and
-  leave smokes/evals at the default `medium`. Claims may be generous: admission
-  uses real headroom, and lower-priority resumable units are preempted and
-  requeued (plans/MEMORY_ADMISSION.md).
-- In the shared checkout, stage only your own paths. Never push while a rebase
-  or merge is unfinished. Never stage `node_modules` symlinks.
-- Before pushing, run `scripts/check-main.sh --quick` (ratchets, spec links,
-  ts-host typecheck; about 10 s). After a change that touches tests or runtime
-  code, run the full `scripts/check-main.sh` under the memory ledger (usage in
-  its header). Main stays green: a red step is fixed or routed to its owner via
-  coord, never skipped.
-- Give standalone tests a disposable, unit-specific `NATLANG_HASH_CACHE`.
-  `check-main.sh` supplies one by default. Test fixture identities accumulated
-  millions of entries in the shared production cache and caused real metadata
-  job memory failures; cache isolation preserves the same exact hash verifiers.
-- Set `OMP_NUM_THREADS=1` and `MKL_NUM_THREADS=1` for standalone small numerical
-  tests, as `check-main.sh` already does, unless a test needs explicit parallelism.
-  On2026-11-02 the same35 update/norm checks took75.41s and691 CPU-seconds
-  with default pools versus9.61s and10.93 CPU-seconds with one thread. This
-  changes test resource use, not production trainer threading or arithmetic.
-- When resolving a merge conflict, keep both sides unless you know a side was
-  removed on purpose; a dropped section of AGENTS.md or a plan is lost silently.
-- Stop processes by systemd unit name or an explicit PID, never by pattern.
-- Every agent on these machines is expressly authorized and instructed by the owner (2026-10-12) to stop,
-  kill, delete, restart and relaunch any process, systemd unit, ledger job or container, and to remove
-  (`docker rm`) or prune containers, without asking: e.g. an orphan left running after its ledger unit stopped,
-  a job starving training, a failed or stuck job that needs relaunching with its original command, or a job that
-  must move to newer code. Do it, record why, and brief the other machine when it affects shared work. Every
-  container an agent starts gets `--name <ledger unit>` and is declared to the ledger
-  (`memory_ledger.py run --container <name>`) so its memory is counted and it is stopped with its unit.
+  (`scripts/memory_ledger.py run --unit <family>-<id> --budget-gb N -- ...`; units are asynchronous, so wait and read
+  the log). Priority: `--priority high` for training/GPU runs, `low` for data generation and check-main, default
+  `medium` for smokes/evals. Never report tests as passed when the ledgered run did not happen.
+- `memory_ledger.py adopt` changes accounting only; it does not resize a unit's `MemoryMax`. Restart a stopped
+  transient service with a fresh unit name.
+- Environments: tests and data use `/home/werg/natlang/.venv-neuralese/bin/python` with
+  `PYTHONPATH=/home/werg/natlang/training/neuralese:/home/werg/natlang`; Node builds use the Node24 bin under
+  `/home/werg/.local/share/natlang-dev/`; `os.pidfd_open` guards need host `/usr/bin/python3`. Ledger units do not
+  inherit the caller's shell environment.
+- Frozen runtime launches use that runtime as the ledger `--workdir` and bind `NATLANG_REPO`/`PYTHONPATH` to it,
+  otherwise the checkout's `scripts` package shadows the frozen helpers.
+- Do not add or remove hardlinks to source/manifest/index files while live readers stream them (ctime changes
+  invalidate strict reader checks).
+- Shared checkout: stage only your own paths; never push mid-rebase/merge; never stage `node_modules` symlinks.
+  When resolving a merge conflict keep both sides unless one was removed on purpose.
+- Before pushing run `scripts/check-main.sh --quick`; after runtime/test changes run the full `check-main.sh` under
+  the ledger. Main stays green.
+- Standalone tests get a disposable `NATLANG_HASH_CACHE` and `OMP_NUM_THREADS=1 MKL_NUM_THREADS=1`
+  (`check-main.sh` sets both).
+- Stop processes by systemd unit name or explicit PID, never by pattern. Every agent may stop, kill, restart,
+  relaunch or remove any process, unit, ledger job or container without asking (owner, 2026-10-12); record why.
+  Containers get `--name <ledger unit>` and are declared with `memory_ledger.py run --container <name>`.
 
 # Neuralese training foundation
 
