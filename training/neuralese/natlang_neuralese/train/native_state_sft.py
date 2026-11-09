@@ -644,8 +644,9 @@ def merge_score_centering(values):
         raise ValueError('accumulated score-centering details changed schema')
     result={'positions':count}
     for key in keys-{'positions'}:
-        if key=='rho_max':result[key]=max(v[key] for v in values)
-        elif key.endswith('_mean') or key=='w_y_zero_fraction':
+        if key.endswith('_max'):result[key]=max(v[key] for v in values)
+        elif key.endswith('_min'):result[key]=min(v[key] for v in values)
+        elif key.endswith('_mean') or key.endswith('_fraction'):
             result[key]=sum(v[key]*v['positions'] for v in values)/count
         else:raise ValueError('unknown accumulated score-centering detail '+key)
     return result

@@ -597,7 +597,7 @@ def token_action_logps(model, hidden, actions, *, chunk_tokens=128, readout=None
     return torch.stack(logps)
 
 
-_CENTERING_FIELDS = ('rho', 'alpha', 'tail_q', 'tail_p', 'w_y', 'y_in_top_k')
+from .policy_math import CENTERING_FIELDS as _CENTERING_FIELDS
 
 
 def validate_policy_decision_branches(plan, row):
@@ -758,19 +758,24 @@ def behavior_logprob_probe(model, hidden, actions, *, graph_id, policy, destinat
 
 
 def behavior_top_k_tensors(actions, k, device):
-    """Padded [n, k] sampler top-k IDs (-1) and log q (-inf), truncated to the loss k."""
-    from ..common.sampling import decode_top_k_arrays
+    """Padded [n, k] sampler top-k IDs (-1) and log q (-inf), truncated to the loss k, with the sampler's exact
+    tail mass [n] (1 - sum of the kept head's q; NaN for receipts without the versioned exact-mass field)."""
+    from ..common.sampling import decode_top_k_arrays, top_k_mass
     ids = torch.full((len(actions), k), -1, dtype=torch.long)
     logq = torch.full((len(actions), k), float('-inf'), dtype=torch.float32)
+    tail = torch.full((len(actions),), float('nan'), dtype=torch.float32)
     for row, action in enumerate(actions):
         receipt = action.get('behavior_top_k')
         if not isinstance(receipt, dict) or receipt.get('k', 0) < k:
             raise ValueError('score-centered action lacks its sampler top-k with k >= the declared loss k')
-        values, logps = decode_top_k_arrays({'ids': receipt['ids'], 'logps': receipt['logps']})
+        values, logps = decode_top_k_arrays({key: value for key, value in receipt.items() if key != 'k'})
         width = min(k, len(values))
         ids[row, :width] = torch.from_numpy(values[:width])
         logq[row, :width] = torch.from_numpy(logps[:width])
-    return ids.to(device), logq.to(device)
+        mass = top_k_mass(receipt)
+        if mass is not None:  # exact tail of the full receipt plus the (float16) entries dropped by the loss k
+            tail[row] = mass[1] + float(torch.from_numpy(logps[width:]).double().exp().sum())
+    return ids.to(device), logq.to(device), tail.to(device)
 
 
 def score_centered_action_loss(model, hidden, actions, advantage, policy_loss, *, chunk_tokens=128, readout=None,
@@ -796,11 +801,12 @@ def score_centered_action_loss(model, hidden, actions, advantage, policy_loss, *
                            tuple(action['banned_token_ids']) if action.get('banned_token_ids') is not None else None), []).append(index)
     terms = [None] * len(actions)
     stats = {name: [] for name in _CENTERING_FIELDS}
-    def score(states, labels, behavior, ids, logq, temperature, allowed, banned):
+    def score(states, labels, behavior, ids, logq, tail_q, temperature, allowed, banned):
         from ..common.sampling import masked_log_distribution
         log_probs = masked_log_distribution((readout or model.logits)(states), temperature, allowed=allowed, banned=banned)
         surrogate, details = score_centered_surrogate(log_probs, labels, behavior, ids, logq,
-            importance=policy_loss['importance'], eps=policy_loss['eps'], masked=bool(allowed is not None or banned))
+            importance=policy_loss['importance'], eps=policy_loss['eps'], masked=bool(allowed is not None or banned),
+            tail_q=tail_q)
         return (surrogate, *(details[name] for name in _CENTERING_FIELDS))
     from ..common.native_higher_order import capture_reference_execution,active_reference_arithmetic
     if active_reference_arithmetic() is not None:
@@ -814,11 +820,11 @@ def score_centered_action_loss(model, hidden, actions, advantage, policy_loss, *
             labels = torch.tensor([action['token_id'] for action in chosen], device=hidden.device)
             behavior = torch.tensor([action['behavior_logp'] for action in chosen], device=hidden.device, dtype=torch.float32)
             if top_k is None:
-                ids, logq = behavior_top_k_tensors(chosen, policy_loss['k'], hidden.device)
+                ids, logq, tail_q = behavior_top_k_tensors(chosen, policy_loss['k'], hidden.device)
             else:
                 rows = torch.tensor(selected)
-                ids, logq = top_k[0][rows].to(hidden.device), top_k[1][rows].to(hidden.device)
-            surrogate, *details = checkpoint(score, hidden[queries], labels, behavior, ids, logq,
+                ids, logq, tail_q = (value[rows].to(hidden.device) for value in top_k)
+            surrogate, *details = checkpoint(score, hidden[queries], labels, behavior, ids, logq, tail_q,
                                              temperature, allowed, banned, use_reentrant=False)
             for index, value in zip(selected, (-a * surrogate).unbind()):
                 terms[index] = value
@@ -834,7 +840,10 @@ def summarize_score_centering(diagnostics):
     joined = {name: torch.cat([value[name] for value in diagnostics]) for name in _CENTERING_FIELDS}
     return {'positions': int(joined['rho'].numel()),
             **{name + '_mean': float(value.mean()) for name, value in joined.items()},
-            'rho_max': float(joined['rho'].max()), 'w_y_zero_fraction': float((joined['w_y'] == 0).float().mean())}
+            'rho_max': float(joined['rho'].max()), 'w_y_zero_fraction': float((joined['w_y'] == 0).float().mean()),
+            'alpha_min': float(joined['alpha'].min()), 'alpha_max': float(joined['alpha'].max()),
+            'head_excess_max': float(joined['head_excess'].max()),
+            'head_excess_positive_fraction': float((joined['head_excess'] > 0).float().mean())}
 
 
 def _validate_adapter_transition(engine,before_identity,before_binding,after_identity,after_binding,bundle,archive_owner):
@@ -1308,6 +1317,9 @@ class NativePolicyObjective:
                            for action in actions]
                 terms, parts = jolt_action_loss(model, hidden, actions, row, self.policy_loss,
                     chunk_tokens=self.spec.get('chunk_tokens', 128), top_k=self._top_k_cache[example.id])
+                centered = parts.pop('centering', None)
+                if centered:
+                    diagnostics.append(centered)  # JOLT's outcome term is the same centered estimator: same telemetry
                 jolt_parts.append(parts)
             elif self.policy_loss is not None:
                 if example.id not in self._top_k_cache:

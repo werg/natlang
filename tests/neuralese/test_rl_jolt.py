@@ -153,9 +153,9 @@ def literal_reference(model, hidden, row, declaration):
     kl = (log_p.exp() * (log_p - log_q)).sum(1)
     labels = torch.tensor([a['token_id'] for a in actions])
     behavior = torch.tensor([a['behavior_logp'] for a in actions])
-    ids, logq = behavior_top_k_tensors(actions, K, 'cpu')
+    ids, logq, tail = behavior_top_k_tensors(actions, K, 'cpu')
     outcome = -row['advantage'] * literal_surrogate(log_p, labels, behavior, ids, logq,
-                                                   declaration['outcome']['importance'], declaration['outcome']['eps'])
+                                                   declaration['outcome']['importance'], declaration['outcome']['eps'], tail)
     return outcome.sum() / len(actions), beta * kl.sum() / len(actions)
 
 
@@ -184,6 +184,12 @@ def test_each_jolt_term_matches_its_reference_gradient(tmp_path, role, mode):
         # Students: the consumers' 8 tokens; teachers also train the two writers' 6 tokens each.
         assert details['policy_loss'] == 'jolt-plus/1' and details['sampled_tokens'] == (8 if role == 'student' else 20)
         parts = details['jolt']
+        # The estimator's score-centering telemetry is surfaced (it used to be discarded): receipts from encode_top_k
+        # carry the exact tail, and the float16 head-mass excess is reported.
+        centering = details['score_centering']
+        assert centering['positions'] == details['sampled_tokens'] and centering['tail_exact_mean'] == 1.
+        assert centering['head_excess_max'] >= 0 and 0 <= centering['head_excess_positive_fraction'] <= 1
+        assert centering['alpha_min'] <= centering['alpha_mean'] <= centering['alpha_max']
         assert parts['privileged_episodes'] == 1 and parts['unprivileged_episodes'] == 0
         if mode == 'text-twin':  # backbone stage: the teacher's text turn, recorded for the twin only
             assert parts['guidance']['writer_blocks'] == 0 and parts['guidance']['text_fallbacks'] == 2

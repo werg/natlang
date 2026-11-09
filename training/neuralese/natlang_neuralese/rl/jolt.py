@@ -106,13 +106,13 @@ def reverse_kl(logits, twin_logits):
 
 
 def jolt_terms(logits, twin_logits, labels, behavior_logp, top_ids, top_logq, advantage, *, beta, outcome,
-               masked):
+               masked, tail_q=None):
     """Per-position JOLT+ loss pieces from scaled/masked logits: (outcome -A U, KL(p || sg p~), total, details)."""
     from .policy_math import score_centered_surrogate
     kl = reverse_kl(logits, twin_logits)
     if advantage != 0:
         surrogate, details = score_centered_surrogate(torch.log_softmax(logits.float(), -1), labels, behavior_logp,
-            top_ids, top_logq, importance=outcome['importance'], eps=outcome['eps'], masked=masked)
+            top_ids, top_logq, importance=outcome['importance'], eps=outcome['eps'], masked=masked, tail_q=tail_q)
         outcome_loss = -float(advantage) * surrogate
     else:
         outcome_loss, details = torch.zeros_like(kl), {}
@@ -428,6 +428,7 @@ def jolt_action_loss(model, hidden, actions, row, declaration, *, chunk_tokens=1
     """Per-action JOLT+ losses of one admitted episode from the single packed forward of actual + twin views."""
     from torch.utils.checkpoint import checkpoint
     from .native_replay import behavior_top_k_tensors
+    from .policy_math import CENTERING_FIELDS
     if chunk_tokens < 1:
         raise ValueError('native RL loss chunks must be positive')
     info = row['jolt']
@@ -446,15 +447,19 @@ def jolt_action_loss(model, hidden, actions, row, declaration, *, chunk_tokens=1
                           []).append(index)
     terms = [None] * len(actions)
     sums = {'outcome': 0., 'kl': 0.}
-    def score(states, twin_states, labels, behavior, ids, logq, temperature, allowed, banned):
+    centered = {name: [] for name in CENTERING_FIELDS}
+    def score(states, twin_states, labels, behavior, ids, logq, tail_q, temperature, allowed, banned):
         from ..common.sampling import masked_logits
         head = readout or model.logits
         logits = masked_logits(head(states), temperature, allowed=allowed, banned=banned)
         with torch.no_grad():  # the twin is a stop-gradient target; recomputed rather than stored
             twin = masked_logits(head(twin_states), temperature, allowed=allowed, banned=banned)
-        outcome_loss, kl, total, _ = jolt_terms(logits, twin, labels, behavior, ids, logq, advantage,
-            beta=beta, outcome=outcome, masked=bool(allowed is not None or banned))
-        return total, outcome_loss.detach(), kl.detach()
+        outcome_loss, kl, total, details = jolt_terms(logits, twin, labels, behavior, ids, logq, advantage,
+            beta=beta, outcome=outcome, masked=bool(allowed is not None or banned), tail_q=tail_q)
+        # Score-centering telemetry (head-mass excess, tail mass, rho, alpha, ...), empty for a zero-advantage episode.
+        centering = (torch.stack([details[name].detach().float() for name in CENTERING_FIELDS]) if details
+                     else torch.zeros(len(CENTERING_FIELDS), 0, device=logits.device))
+        return total, outcome_loss.detach(), kl.detach(), centering
     from ..common.native_higher_order import capture_reference_execution, active_reference_arithmetic
     if active_reference_arithmetic() is not None:
         from ..model.native_adapters import capture_native_execution
@@ -469,12 +474,15 @@ def jolt_action_loss(model, hidden, actions, row, declaration, *, chunk_tokens=1
             labels = torch.tensor([action['token_id'] for action in chosen], device=device)
             behavior = torch.tensor([action['behavior_logp'] for action in chosen], device=device, dtype=torch.float32)
             if top_k is None:
-                ids, logq = behavior_top_k_tensors(chosen, outcome['k'], device)
+                ids, logq, tail_q = behavior_top_k_tensors(chosen, outcome['k'], device)
             else:
                 rows = torch.tensor(selected)
-                ids, logq = top_k[0][rows].to(device), top_k[1][rows].to(device)
-            total, outcome_loss, kl = checkpoint(score, hidden[queries], hidden[twin_queries_].detach(), labels,
-                behavior, ids, logq, temperature, allowed, banned, use_reentrant=False)
+                ids, logq, tail_q = (value[rows].to(device) for value in top_k)
+            total, outcome_loss, kl, centering = checkpoint(score, hidden[queries], hidden[twin_queries_].detach(),
+                labels, behavior, ids, logq, tail_q, temperature, allowed, banned, use_reentrant=False)
+            if centering.shape[1]:
+                for name, value in zip(CENTERING_FIELDS, centering.unbind()):
+                    centered[name].append(value.cpu())
             for index, value in zip(selected, total.unbind()):
                 terms[index] = value
             sums['outcome'] += float(outcome_loss.sum())
@@ -482,7 +490,9 @@ def jolt_action_loss(model, hidden, actions, row, declaration, *, chunk_tokens=1
     return torch.stack(terms), {'role': role, 'privileged': privileged, 'positions': len(actions), 'beta': beta,
                                 'guidance': info.get('guidance'),
                                 'advantage': advantage,
-                                'outcome_sum': sums['outcome'], 'kl_sum': sums['kl']}
+                                'outcome_sum': sums['outcome'], 'kl_sum': sums['kl'],
+                                'centering': ({name: torch.cat(values) for name, values in centered.items()}
+                                              if centered['rho'] else None)}
 
 
 def summarize_jolt(parts, count):

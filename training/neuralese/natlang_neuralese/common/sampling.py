@@ -76,14 +76,40 @@ def validate_behavior_top_k_declaration(value):
     return value
 
 
+# Exact mass receipt (versioned field ``mass_v1`` of a top-k receipt). The float16 log-probabilities lose about
+# 2^-11 relative precision each, so 1 - sum(exp(logps)) is not the sampler's tail mass: it can be negative or badly
+# wrong when the head holds nearly everything. The actor records the FP32 tail mass summed directly over the tail
+# entries (and the FP32 head mass). Receipts without the field keep the reconstructed path (clamped and reported).
+TOP_K_MASS_FIELD = 'mass_v1'
+
+
 def encode_top_k(log_probs, k):
-    """Top-k of one normalized 1-D log distribution as a compact JSON receipt."""
+    """Top-k of one normalized 1-D log distribution as a compact JSON receipt (with its exact FP32 head/tail mass)."""
     import base64
-    values, ids = torch.topk(log_probs.detach().float(), min(k, log_probs.shape[-1]))
+    log_probs = log_probs.detach().float()
+    values, ids = torch.topk(log_probs, min(k, log_probs.shape[-1]))
+    probs = log_probs.exp()
+    head = float(probs.gather(-1, ids).sum(dtype=torch.float64))
+    tail = float(probs.index_fill(-1, ids, 0.).sum(dtype=torch.float64))
     ids = ids.to('cpu', torch.int32).numpy().astype('<i4')
     logps = values.to('cpu').numpy().astype('<f2')
     return {'ids': base64.b64encode(ids.tobytes()).decode('ascii'),
-            'logps': base64.b64encode(logps.tobytes()).decode('ascii')}
+            'logps': base64.b64encode(logps.tobytes()).decode('ascii'),
+            TOP_K_MASS_FIELD: {'head': head, 'tail': tail}}
+
+
+def top_k_mass(receipt):
+    """(head, tail) FP32 masses of a receipt that carries the versioned exact-mass field, else None; validated."""
+    mass = receipt.get(TOP_K_MASS_FIELD) if isinstance(receipt, dict) else None
+    if mass is None:
+        return None
+    if (not isinstance(mass, dict) or set(mass) != {'head', 'tail'}
+            or any(type(mass[key]) not in (int, float) or isinstance(mass[key], bool) for key in mass)):
+        raise ValueError('behavior top-k exact mass must be {head, tail} numbers')
+    head, tail = float(mass['head']), float(mass['tail'])
+    if not (0. <= head <= 1. + 1e-4 and 0. <= tail <= 1. + 1e-4) or abs(head + tail - 1.) > 1e-3:
+        raise ValueError('behavior top-k exact mass is not a probability split')
+    return head, tail
 
 
 def decode_top_k_arrays(receipt):
@@ -93,8 +119,8 @@ def decode_top_k_arrays(receipt):
     where per-receipt torch operator overhead dominated the preparation time."""
     import base64
     import numpy as np
-    if not isinstance(receipt, dict) or set(receipt) != {'ids', 'logps'}:
-        raise ValueError('behavior top-k receipt must contain exactly ids and logps')
+    if not isinstance(receipt, dict) or set(receipt) - {TOP_K_MASS_FIELD} != {'ids', 'logps'}:
+        raise ValueError('behavior top-k receipt must contain exactly ids and logps (and optionally its exact mass)')
     try:
         ids = np.frombuffer(base64.b64decode(receipt['ids'], validate=True), dtype='<i4')
         logps = np.frombuffer(base64.b64decode(receipt['logps'], validate=True), dtype='<f2')

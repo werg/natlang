@@ -634,3 +634,69 @@ def test_privileged_state_guidance_imports_on_sglang_like_the_native_engine(tmp_
     assert any(segment.get('privileged') and segment['kind'] == 'native_state' for segment in mine['prompt'])
     assert actual['native_state']['imports'] == expected['native_state']['imports'] and front.native_fallbacks == 0
     assert sent[0]['sampling_params']['custom_params']['natlang_import']
+
+
+def test_record_with_the_forks_exact_tail_mass_decodes_and_adds_back_dropped_entries():
+    from natlang_neuralese.serve.sglang_actor import record_tail_mass
+    plain = record(-0.25, [7, 3, 9], [-0.25, -1.5, -3.0])
+    raw = base64.b64decode(plain) + np.array([0.125], '<f4').tobytes()
+    text = base64.b64encode(raw).decode()
+    logp, ids, logps = decode_record(text, 3)
+    assert logp == -0.25 and ids.tolist() == [7, 3, 9] and logps.astype(float).tolist() == [-0.25, -1.5, -3.0]
+    assert record_tail_mass(plain, 3) is None and record_tail_mass(text, 3) == pytest.approx(0.125)
+    assert record_tail_mass(text, 2) == pytest.approx(0.125 + np.exp(-3.0), rel=1e-3)
+    with pytest.raises(RequestError):
+        decode_record(text, 4)
+
+
+def _front(tmp_path):
+    import threading
+    from test_native_serving_adapters import engine_fixture
+    from natlang_neuralese.serve import load_native_engine
+    native = engine_fixture(tmp_path, 'lfm')
+    front = load_native_engine(str(tmp_path / 'native.pt'), device='cpu', dtype=native.backbone.embedding_weight.dtype,
+                               engine_class=SglangEngine)
+    front.sglang_banned = sorted(front.role_tokens.ids)
+    front._sglang_lock, front.sglang_requests, front.sglang_tokens, front.native_fallbacks = threading.Lock(), 0, 0, 0
+    front.native_fallback_reasons = {}
+    return front
+
+
+@pytest.mark.parametrize('honored', [True, False])
+def test_sampling_seed_is_forwarded_and_the_response_records_whether_the_backend_honors_it(tmp_path, honored):
+    front = _front(tmp_path)
+    front.__dict__['_sglang_seed_support'] = honored
+    tokens = list(front.tokenizer('t4 t5', add_special_tokens=False)['input_ids']) + [sorted(front.stop_ids)[0]]
+    records = [base64.b64encode(base64.b64decode(record(-0.5, [t, t + 1], [-0.5, -1.5]))
+                                + np.array([0.01], '<f4').tobytes()).decode() for t in tokens]
+    sent = []
+    front._sglang_generate = lambda body: (sent.append(body), {'output_ids': tokens, 'meta_info': {'natlang_top_k': records}})[1]
+    response = front.generate(GenerationRequest(messages=[{'role': 'user', 'content': 't4'}], temperature=1.0,
+                                                max_tokens=16, rl_capture=True, rl_top_k=2, native_recording=True,
+                                                request_id='r', seed=1234))
+    body = sent[0]['sampling_params']
+    assert body['sampling_seed'] == 1234 and body['custom_params']['natlang_top_k_mass'] is True
+    capture = response['x_natlang_rl_capture']
+    assert capture['sampling_law']['seed'] == 1234 and 'seed_honored' not in capture['sampling_law']
+    assert response['x_natlang_sampling_seed'] == {'seed': 1234, 'honored': honored}
+    from natlang_neuralese.common.sampling import top_k_mass
+    assert all(top_k_mass(sample['top_k']) == (pytest.approx(0.99), pytest.approx(0.01)) for sample in capture['samples'])
+
+
+def test_server_info_decides_whether_the_seed_is_honored(tmp_path, monkeypatch):
+    import io
+    import urllib.request
+    front = _front(tmp_path)
+    front.sglang_url = 'http://sglang.invalid'
+    def serve(payload):
+        monkeypatch.setattr(urllib.request, 'urlopen', lambda request, timeout=None: io.BytesIO(json.dumps(payload).encode()))
+        front.__dict__.pop('_sglang_seed_support', None)
+        return front._sglang_seed_honored()
+    assert serve({'enable_deterministic_inference': True}) is True
+    assert serve({'server_args': {'enable_deterministic_inference': False}}) is False
+    assert serve({'something': 1}) is False
+    def down(request, timeout=None):
+        raise OSError('down')
+    monkeypatch.setattr(urllib.request, 'urlopen', down)
+    front.__dict__.pop('_sglang_seed_support', None)
+    assert front._sglang_seed_honored() is False

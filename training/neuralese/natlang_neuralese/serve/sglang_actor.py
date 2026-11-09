@@ -35,9 +35,11 @@ import numpy as np
 
 from .chat import RequestError
 from .engine import Engine, Sequence, _insert_privileged, derive_seed
+from ..common.sampling import TOP_K_MASS_FIELD
 from .native_protocol import FAILURE_CODES, capture_enabled, failure_descriptor
 
 TOP_K_KEY = 'natlang_top_k'
+TOP_K_MASS_KEY = 'natlang_top_k_mass'
 CAPTURE_KEY = 'natlang_capture'
 IMPORT_KEY = 'natlang_import'
 ADAPTER_KEY = 'natlang_adapter'
@@ -45,15 +47,29 @@ BAN_BIAS = -1e30
 
 
 def decode_record(text, k):
-    """(sampled logp, ids[k], logps[k]) of one fork record carrying K >= k entries."""
+    """(sampled logp, ids[k], logps[k]) of one fork record carrying K >= k entries (and optionally a trailing tail mass)."""
     raw = base64.b64decode(text)
-    width = (len(raw) - 4) // 6
-    if len(raw) != 4 + 6 * width or width < k:
+    width = (len(raw) - 4 - (len(raw) - 4) % 6) // 6
+    if (len(raw) - 4) % 6 not in (0, 4) or width < k:
         raise RequestError('sglang-actor-capture', f'top-k record has {width} entries, need {k}')
     logp = float(np.frombuffer(raw[:4], dtype='<f4')[0])
     ids = np.frombuffer(raw[4:4 + 4 * width], dtype='<i4')[:k]
-    logps = np.frombuffer(raw[4 + 4 * width:], dtype='<f2')[:k]
+    logps = np.frombuffer(raw[4 + 4 * width:4 + 6 * width], dtype='<f2')[:k]
     return logp, ids, logps
+
+
+def record_tail_mass(text, k):
+    """Exact FP32 probability outside the first k entries of one fork record, or None without the fork's tail field
+    (`natlang_top_k_mass`). The fork's tail follows its K recorded entries; entries k..K are added back from their
+    float16 values (only batches mixing different k carry any)."""
+    raw = base64.b64decode(text)
+    if (len(raw) - 4) % 6 != 4:
+        return None
+    width = (len(raw) - 8) // 6
+    tail = float(np.frombuffer(raw[-4:], dtype='<f4')[0])
+    if width > k:
+        tail += float(np.exp(np.frombuffer(raw[4 + 4 * width:4 + 6 * width], dtype='<f2')[k:].astype(np.float64)).sum())
+    return tail
 
 
 class SglangEngine(Engine):
@@ -389,6 +405,32 @@ class SglangEngine(Engine):
             return super().generate(request)
         return self._sglang_run(Sequence(request, Future(), prompt_plan=plan))
 
+    def _sglang_seed_honored(self):
+        """Whether the SGLang backend applies a request's `sampling_seed`: its sampler seeds the draw only under
+        `--enable-deterministic-inference` (otherwise the field is ignored; the flashinfer backend rejects it). Read
+        once from the server's own resolved arguments; an unreadable server counts as not honoring."""
+        known = self.__dict__.get('_sglang_seed_support')
+        if known is None:
+            known = False
+            for path in ('/server_info', '/get_server_info'):
+                try:
+                    with urllib.request.urlopen(self.sglang_url + path, timeout=30) as response:
+                        info = json.loads(response.read())
+                except (urllib.error.URLError, OSError, ValueError):
+                    continue
+                found = []
+                def visit(value):
+                    if isinstance(value, dict):
+                        if 'enable_deterministic_inference' in value:
+                            found.append(value['enable_deterministic_inference'])
+                        for item in value.values():
+                            visit(item)
+                visit(info)
+                known = bool(found) and all(item is True for item in found)
+                break
+            self.__dict__['_sglang_seed_support'] = known
+        return known
+
     def _sglang_generate(self, body):
         """One SGLang /generate call."""
         try:
@@ -416,6 +458,8 @@ class SglangEngine(Engine):
                                               'adapters': bindings} if bindings else None)
         seq.native_sampling_seed = (int(request.seed) if request.seed is not None else
                                     derive_seed('native-chat', request.request_id))
+        if request.temperature is not None and request.temperature > 0:
+            seq.native_seed_honored = self._sglang_seed_honored()
         plan = list(seq.prompt_plan or ())
         self._validate_native_state_modes(request.native_state_modes, {
             value['id'] if isinstance(value, dict) else value for kind, value in plan
@@ -467,6 +511,7 @@ class SglangEngine(Engine):
         params = {'temperature': float(request.temperature) if sampling else 0.0,
                   'stop_token_ids': sorted(self.stop_ids), 'skip_special_tokens': False,
                   'no_stop_trim': True, 'custom_params': {TOP_K_KEY: max(k, 1),
+                                                          **({TOP_K_MASS_KEY: True} if k else {}),
                                                           **({IMPORT_KEY: seq.sglang_imports} if seq.sglang_imports else {}),
                                                           **({ADAPTER_KEY: adapter} if adapter else {})}}
         if self.sglang_banned:
@@ -492,6 +537,11 @@ class SglangEngine(Engine):
                     # A templated write stops at its span's close: the template suffix follows it, not a sample.
                     stops = sorted(set(self.stop_ids) | ({self.role_tokens.produce_close} if seq.native_template_suffix else set()))
                     sampling_params = {**params, 'max_new_tokens': room, 'stop_token_ids': stops}
+                    if sampling:
+                        # The backend's draw is a function of (seed, token position): one seed serves a whole reply;
+                        # each continuation request (a guidance redraw, a forced feed) gets its own derived seed.
+                        sampling_params['sampling_seed'] = (seq.native_sampling_seed if not part else
+                                                            derive_seed('sglang-part', seq.native_sampling_seed, part))
                     # Guidance bans apply at one position (the rewound one): draw that token alone under them.
                     bans = seq.bans.get(seq.native_own_position) if seq.guide is not None else None
                     if bans:
@@ -626,7 +676,8 @@ class SglangEngine(Engine):
         for token, record in zip(output, records):
             if state['done']:
                 raise RequestError('sglang-actor-capture', 'SGLang returned tokens after the stop token')
-            self._sglang_token(seq, int(token), decode_record(record, k), k, sampling, state)
+            tail = record_tail_mass(record, k) if k and sampling else None
+            self._sglang_token(seq, int(token), (*decode_record(record, k), tail), k, sampling, state)
             if self._sglang_rewound(seq, state):
                 return
         if seq.request.on_delta is not None and seq.guide is None:
@@ -638,7 +689,8 @@ class SglangEngine(Engine):
         state['index'] += 1
         if token in self.sglang_banned:
             raise RequestError('sglang-actor-capture', f'SGLang sampled banned role marker {token}')
-        logp, top_ids, top_logps = record
+        logp, top_ids, top_logps, *extra = record
+        tail_mass = extra[0] if extra else None
         marker = self.role_tokens
         terminal = token in self.stop_ids
         producing_input = seq.native_capture_open and token not in (marker.produce_open, marker.produce_close)
@@ -651,7 +703,10 @@ class SglangEngine(Engine):
                       'terminal': terminal, 'query_own_position': seq.native_own_position - 1}
             if k:
                 sample['top_k'] = {'ids': base64.b64encode(top_ids.astype('<i4').tobytes()).decode('ascii'),
-                                   'logps': base64.b64encode(top_logps.astype('<f2').tobytes()).decode('ascii')}
+                                   'logps': base64.b64encode(top_logps.astype('<f2').tobytes()).decode('ascii'),
+                                   # The fork's exact FP32 tail beside the float16 entries (versioned receipt field).
+                                   **({TOP_K_MASS_FIELD: {'head': 1. - tail_mass, 'tail': tail_mass}}
+                                      if tail_mass is not None and 0. <= tail_mass <= 1. else {})}
             seq.rl_samples.append(sample)
         if terminal:
             if seq.native_capture_open:

@@ -258,6 +258,11 @@ def test_accumulated_centering_uses_position_weighted_means():
     b={'positions':6,'rho_mean':3.,'rho_max':5.,'w_y_zero_fraction':.5}
     result=merge_update_details([{'score_centering':a},{'score_centering':b}],[1,1])['score_centering']
     assert result=={'positions':8,'rho_mean':2.5,'rho_max':5.,'w_y_zero_fraction':.375}
+    a.update(alpha_min=.5,head_excess_max=1e-4,head_excess_positive_fraction=.5,tail_exact_mean=1.)
+    b.update(alpha_min=.25,head_excess_max=3e-4,head_excess_positive_fraction=0.,tail_exact_mean=0.)
+    result=merge_update_details([{'score_centering':a},{'score_centering':b}],[1,1])['score_centering']
+    assert (result['alpha_min'],result['head_excess_max'])==(.25,3e-4)
+    assert result['head_excess_positive_fraction']==.125 and result['tail_exact_mean']==.25
 
 
 def test_sft_budget_scales_every_actual_group_and_restores_on_success_and_failure(monkeypatch):

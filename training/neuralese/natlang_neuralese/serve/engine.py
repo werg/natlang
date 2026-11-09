@@ -132,6 +132,7 @@ class Sequence:
     native_write_open_sample: int | None = None
     native_own_position: int = 0
     native_sampling_seed: int | None = None
+    native_seed_honored: bool | None = None
     native_sample_top_k: dict | None = None
     native_forced_tokens: list[int] = field(default_factory=list)
     native_forced_replay: bool = False
@@ -715,6 +716,7 @@ class Engine:
         seq.native_sampling_seed = (int(seq.request.seed) if seq.request.seed is not None else
                                     derive_seed("native-chat", seq.request.request_id))
         seq.rng = torch.Generator(device="cpu").manual_seed(seq.native_sampling_seed)
+        seq.native_seed_honored = True
         template_prefix, template_suffix = self._native_template_plan(seq)
         plan = list(seq.prompt_plan or ())
         if seq.request.privileged_context is not None:
@@ -1591,6 +1593,9 @@ class Engine:
                 "native_state": {"blocks": [record.meta() for record in records], "imports": seq.native_imports}}
         if seq.guide is not None:
             response['x_natlang_guidance'] = {'rejections': seq.guide.rejections}
+        if seq.native_seed_honored is not None:
+            # Beside the capture, not inside it: the replay validates the capture's sampling law key for key.
+            response['x_natlang_sampling_seed'] = {'seed': seq.native_sampling_seed, 'honored': seq.native_seed_honored}
         if seq.request.rl_capture or seq.native_protocol_failure is not None:
             response["x_natlang_rl_capture"] = {"schema": ("natlang.native-teacher-forced-capture/1"
                     if seq.native_forced_replay else "natlang.native-structural-capture/1"

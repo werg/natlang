@@ -14,7 +14,7 @@ def f(ratio, mode):
     return importance_weight(ratio, mode)
 
 
-def literal_surrogate(log_probs, labels, behavior_logp, top_ids, top_logq, mode, eps):
+def literal_surrogate(log_probs, labels, behavior_logp, top_ids, top_logq, mode, eps, tail_q=None):
     """Direct transcription of -R(sg[w_y] log p_y - sum_H sg[q_v w_v - alpha p_v] log p_v), float64."""
     log_probs = log_probs.double()
     p = log_probs.detach().exp()
@@ -24,7 +24,8 @@ def literal_surrogate(log_probs, labels, behavior_logp, top_ids, top_logq, mode,
         ids = top_ids[row][valid]
         q = top_logq[row][valid].double().exp()
         p_h = p[row, ids]
-        rho = (1 - q.sum()).clamp(min=eps) / (1 - p_h.sum()).clamp(min=eps)
+        actor_tail = (1 - q.sum()) if tail_q is None or not torch.isfinite(tail_q[row]) else tail_q[row].double()
+        rho = actor_tail.clamp(min=eps) / (1 - p_h.sum()).clamp(min=eps)
         alpha = rho * f(1 / rho, mode)
         w = f(p_h / q, mode)
         y = labels[row]
@@ -280,9 +281,9 @@ def test_engine_capture_to_trainer_matches_reference_under_sampler_mismatch(tmp_
                 labels = torch.tensor([a['token_id'] for a in actions])
                 behavior = torch.tensor([a['behavior_logp'] for a in actions])
                 from natlang_neuralese.rl.native_replay import behavior_top_k_tensors
-                ids, logq = behavior_top_k_tensors(actions, k, 'cpu')
+                ids, logq, tail = behavior_top_k_tensors(actions, k, 'cpu')
                 mismatch.append(float((log_probs.detach().gather(1, labels[:, None]).squeeze(1) - behavior).abs().max()))
-                value = literal_surrogate(log_probs, labels, behavior, ids, logq, mode, 1e-6)
+                value = literal_surrogate(log_probs, labels, behavior, ids, logq, mode, 1e-6, tail)
                 return (-row['advantage'] * value).sum() / len(actions), {}
         reference = Reference(objective.path)
         reference.bind_actor(engine)
@@ -410,3 +411,80 @@ def test_continuations_adopt_tis_through_a_recorded_transition(tmp_path):
     assert adopt_policy_loss_defaults(kept, {}, state_path) is kept
     clipped = {'policy_loss': {'schema': 'clipped-ratio/1'}}
     assert adopt_policy_loss_defaults(clipped, {}, state_path) is clipped
+
+
+def _review_counterexample():
+    """The independent review's F6 case: 128 head tokens holding 0.9999 and one tail token of probability 1e-4."""
+    probs = torch.full((129,), 0.9999 / 128, dtype=torch.float64)
+    probs[128] = 1e-4
+    return probs.float().log()
+
+
+def _actions_of(receipt, k):
+    return [{'behavior_top_k': {'k': k, **receipt}}]
+
+
+def test_receipt_records_the_exact_tail_mass_beside_the_float16_entries():
+    from natlang_neuralese.common.sampling import TOP_K_MASS_FIELD, top_k_mass
+    log_probs = _review_counterexample()
+    receipt = encode_top_k(log_probs, 128)
+    head, tail = top_k_mass(receipt)
+    assert tail == pytest.approx(1e-4, rel=1e-5) and head == pytest.approx(0.9999, abs=1e-6)
+    decode_top_k(receipt)  # the versioned field does not disturb the packed arrays
+    ids, logps = decode_top_k(receipt)
+    assert float(logps.exp().double().sum()) > 1.0 > head  # the float16 head alone overshoots one
+    assert set(receipt) == {'ids', 'logps', TOP_K_MASS_FIELD}
+    bare = {key: value for key, value in receipt.items() if key != TOP_K_MASS_FIELD}
+    assert top_k_mass(bare) is None
+    with pytest.raises(ValueError):
+        top_k_mass({**receipt, TOP_K_MASS_FIELD: {'head': .9, 'tail': .5}})
+    with pytest.raises(ValueError):
+        top_k_mass({**receipt, TOP_K_MASS_FIELD: {'head': .9999}})
+
+
+def test_score_centering_uses_the_exact_tail_and_old_receipts_clamp_and_report_the_excess():
+    from natlang_neuralese.common.sampling import TOP_K_MASS_FIELD
+    from natlang_neuralese.rl.native_replay import behavior_top_k_tensors
+    from natlang_neuralese.rl.policy_math import score_centering_weights
+    log_probs = _review_counterexample()
+    receipt = encode_top_k(log_probs, 128)
+    labels, behavior = torch.tensor([128]), log_probs[128:129]  # the sampled token is the single tail token
+    detached = log_probs[None]  # the learner equals the actor
+    ids, logq, tail = behavior_top_k_tensors(_actions_of(receipt, 128), 128, 'cpu')
+    assert float(tail[0]) == pytest.approx(1e-4, rel=1e-5)
+    _, exact = score_centering_weights(detached, labels, behavior, ids, logq, tail_q=tail)
+    assert float(exact['tail_exact'][0]) == 1. and float(exact['tail_q'][0]) == pytest.approx(1e-4, rel=1e-5)
+    assert float(exact['alpha'][0]) == pytest.approx(1., abs=1e-3)  # identical policies: no tail correction
+    assert float(exact['head_excess'][0]) > 0  # the decoded float16 head still overshoots
+    # An old receipt (no mass field): the reconstructed tail is clamped at 0 (it would be negative) and reported.
+    old = {key: value for key, value in receipt.items() if key != TOP_K_MASS_FIELD}
+    ids_o, logq_o, tail_o = behavior_top_k_tensors(_actions_of(old, 128), 128, 'cpu')
+    assert torch.isnan(tail_o).all()
+    _, legacy = score_centering_weights(detached, labels, behavior, ids_o, logq_o, tail_q=tail_o)
+    assert float(legacy['tail_exact'][0]) == 0. and float(legacy['tail_q'][0]) == 0.
+    assert float(legacy['head_excess'][0]) > 4e-4 and float(legacy['alpha'][0]) < .02
+    _, omitted = score_centering_weights(detached, labels, behavior, ids_o, logq_o)
+    assert float(omitted['alpha'][0]) == float(legacy['alpha'][0])
+
+
+def test_truncated_loss_k_adds_the_dropped_entries_to_the_exact_tail():
+    from natlang_neuralese.rl.native_replay import behavior_top_k_tensors
+    log_probs = torch.log_softmax(torch.randn(300) * 2, -1)
+    receipt = encode_top_k(log_probs, 64)
+    ids, logq, tail = behavior_top_k_tensors(_actions_of(receipt, 64), 16, 'cpu')
+    top = torch.topk(log_probs, 16).values.double().exp().sum()
+    assert float(tail[0]) == pytest.approx(float(1 - top), abs=3e-3)  # float16 only on the 48 dropped entries
+    assert ids.shape == (1, 16)
+
+
+def test_exact_tail_changes_the_surrogate_weights_only_through_alpha():
+    from natlang_neuralese.rl.policy_math import score_centered_surrogate
+    log_probs = _review_counterexample()[None].double().float()
+    labels, behavior = torch.tensor([128]), log_probs[0, 128:129]
+    receipt = encode_top_k(log_probs[0], 128)
+    ids, logq = (value[None] for value in decode_top_k(receipt))
+    exact_tail = torch.tensor([1e-4])
+    legacy, diag_legacy = score_centered_surrogate(log_probs, labels, behavior, ids, logq)
+    fixed, diag_fixed = score_centered_surrogate(log_probs, labels, behavior, ids, logq, tail_q=exact_tail)
+    assert float(diag_fixed['alpha'][0]) > 10 * float(diag_legacy['alpha'][0])
+    assert torch.isfinite(legacy).all() and torch.isfinite(fixed).all()

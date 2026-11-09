@@ -97,8 +97,11 @@ def importance_weight(ratio, mode):
     raise ValueError('unsupported importance mode')
 
 
+CENTERING_FIELDS = ('rho', 'alpha', 'tail_q', 'tail_p', 'w_y', 'y_in_top_k', 'head_excess', 'tail_exact')
+
+
 def score_centered_surrogate(log_probs, labels, behavior_logp, top_ids, top_logq, *, importance='none', eps=1e-6,
-                             masked=None):
+                             masked=None, tail_q=None):
     """Per-position surrogate U whose gradient is the score-centered estimator; the loss is -R U.
 
     ``log_probs`` [n, V]: the trainer's current normalized log distribution under the sampler's exact
@@ -114,6 +117,8 @@ def score_centered_surrogate(log_probs, labels, behavior_logp, top_ids, top_logq
     which avoids cancellation when the trainer's top-k holds nearly all mass. Entries with q_v = 0 (masked by the
     sampler) carry no weight. y may lie inside or outside H; its term is the same either way.
     ``masked`` (optional) tells whether the law masks tokens (log p = -inf); None checks the values.
+    ``tail_q`` (optional [n]) is the sampler's exact FP32 tail mass 1 - sum_H q (NaN where unknown); without it the
+    tail is reconstructed from the float16 receipt, clamped at 0, with the head-mass excess reported.
     Returns (U [n], detached per-position diagnostics).
     """
     if (log_probs.ndim != 2 or labels.shape != (log_probs.shape[0],)
@@ -124,7 +129,7 @@ def score_centered_surrogate(log_probs, labels, behavior_logp, top_ids, top_logq
     log_probs = log_probs.float()
     detached = log_probs.detach()
     weights, diagnostics = score_centering_weights(detached, labels, behavior_logp, top_ids, top_logq,
-                                                   importance=importance, eps=eps)
+                                                   importance=importance, eps=eps, tail_q=tail_q)
     # Masked tokens have p = 0, zero weight and log p = -inf; keep 0 * log 0 at zero value and gradient.
     if masked is None:
         masked = not bool(torch.isfinite(detached).all())
@@ -134,10 +139,13 @@ def score_centered_surrogate(log_probs, labels, behavior_logp, top_ids, top_logq
 
 
 @torch.no_grad()
-def score_centering_weights(detached, labels, behavior_logp, top_ids, top_logq, *, importance='none', eps=1e-6):
+def score_centering_weights(detached, labels, behavior_logp, top_ids, top_logq, *, importance='none', eps=1e-6,
+                            tail_q=None):
     """Dense stop-gradient coefficients c [n, V] with grad U = sum_v c_v s_v (single switch point for the shared
     stable-softmax module): c = w_y e_y - sum_H q_v w_v e_v - alpha p_tail. The tail term uses the trainer tail
-    probabilities directly (no 1 - sum_H p cancellation)."""
+    probabilities directly (no 1 - sum_H p cancellation). The actor tail is the receipt's exact FP32 ``tail_q`` where
+    given; otherwise 1 - sum_H q of the float16 receipt, clamped at 0 (the decoded head mass can exceed 1 by the
+    quantization error; the excess is a diagnostic)."""
     width = detached.shape[1]
     detached = detached.float()
     top_logq = top_logq.float()
@@ -160,7 +168,17 @@ def score_centering_weights(detached, labels, behavior_logp, top_ids, top_logq, 
     held = torch.where(valid.any(1, keepdim=True), zero, weights.gather(1, fill_ids))
     weights.scatter_(1, fill_ids, held)
     tail_p = weights.sum(1)
-    tail_q = 1 - q_h.sum(1)
+    head_q = q_h.sum(1)
+    head_excess = (head_q - 1).clamp(min=0)
+    tail_q_reconstructed = (1 - head_q).clamp(min=0)
+    if tail_q is None:
+        tail_exact = torch.zeros_like(head_q)
+        tail_q = tail_q_reconstructed
+    else:
+        tail_q = tail_q.to(device=head_q.device, dtype=torch.float32)
+        known = torch.isfinite(tail_q)
+        tail_exact = known.float()
+        tail_q = torch.where(known, tail_q.clamp(min=0), tail_q_reconstructed)
     rho = tail_q.clamp(min=eps) / tail_p.clamp(min=eps)
     alpha = rho * importance_weight(1 / rho, importance)
     w_y = importance_weight((detached.gather(1, labels[:, None]).squeeze(1)
@@ -171,16 +189,17 @@ def score_centering_weights(detached, labels, behavior_logp, top_ids, top_logq, 
     weights.scatter_add_(1, safe_ids, -(q_h * w_h))
     weights.scatter_add_(1, labels[:, None], w_y[:, None])
     diagnostics = {'rho': rho, 'alpha': alpha, 'tail_q': tail_q, 'tail_p': tail_p, 'w_y': w_y,
-                   'y_in_top_k': (top_ids == labels[:, None]).any(1)}
+                   'y_in_top_k': (top_ids == labels[:, None]).any(1), 'head_excess': head_excess,
+                   'tail_exact': tail_exact}
     return weights, diagnostics
 
 
 def score_centered_token_loss(log_probs, labels, behavior_logp, top_ids, top_logq, advantage, *,
-                              importance='none', eps=1e-6):
+                              importance='none', eps=1e-6, tail_q=None):
     """L_t = -R U_t, the declared score-centered/1 loss of each sampled position."""
     a = torch.as_tensor(advantage, dtype=torch.float32, device=log_probs.device)
     if not torch.isfinite(a).all():
         raise ValueError('nonfinite advantage')
     surrogate, diagnostics = score_centered_surrogate(log_probs, labels, behavior_logp, top_ids, top_logq,
-                                                      importance=importance, eps=eps)
+                                                      importance=importance, eps=eps, tail_q=tail_q)
     return -a * surrogate, diagnostics
