@@ -8,7 +8,9 @@ from the canonical checkout and check that it resumed.
 CONTROL_OUT is the controller's ``out`` directory (it holds config.json, state.json, controller.log).  Production runs
 directly from the canonical checkout (owner, 2026-11-09): a running process keeps its code, every newly
 started worker, learner or actor gets current main, and every record names the git commit that produced it
-(rl/collection_generations, common/code_provenance).  Every phase resumes from its durable state
+(rl/collection_generations, common/code_provenance).  ``--in-place`` (the controller runs under controller_supervisor.py)
+restarts only the controller process, inside its unit, with SIGUSR1: collector workers and the managed actor keep running and
+the new controller re-attaches (rl/detached_processes.py).  Every other restart resumes from durable state
 (plans/neuralese/CONTROLLER_RESTART.md lists the cost per phase):
 
 1. cooperative stop: SIGTERM to the controller process only.  It stops its collector workers and actor, archives retained
