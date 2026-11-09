@@ -139,7 +139,9 @@ def start(args):
     source = prep['source']['sha256']
     if source != args.policy_id:
         raise RuntimeError('prepared view binds another source than the controller policy')
-    work = f'{pbe.POP_EVAL_ROOT}/rl-actor-{prep["step"]}-{source[:12]}-c{(code["pop"]["git_commit"] or "unknown")[:10]}'
+    # Keyed by policy only: the actor's code commit is provenance (job['code']), and a relaunch on newer code must keep
+    # the block store, or blocks sampled before it are lost at bundling (w5 round 0, 2026-11-10).
+    work = f'{pbe.POP_EVAL_ROOT}/rl-actor-{prep["step"]}-{source[:12]}'
     name = f'poprl-{source[:12]}'
     transport_json = json.loads(Path(prep['transport']['path']).read_text())
     job = {'mode': 'rl-actor', 'arm': 'rl', 'name': name, 'port': args.port, 'host': host, 'runtime': pbe.POP_REPO,

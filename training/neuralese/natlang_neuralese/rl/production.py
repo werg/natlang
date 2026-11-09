@@ -1326,6 +1326,12 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
                     return raw
                 except Exception as error:
                     errors.append(str(error))
+            # Copies of earlier Pop actor stores of this policy (<controller out>/recovered-pop-stores/rl-actor-<step>-
+            # <policy12>-<code>/<xx>/<id>.safetensors, the store's own byte format): an actor relaunched mid-round
+            # starts with an empty store. save_bundle verifies the content ID of whatever bytes this returns.
+            for path in sorted((out.parent / 'recovered-pop-stores').glob(f'*-{policy_id[:12]}-*/*/{block_id}.safetensors')):
+                origins[block_id] = 'recovered-store:' + path.parent.parent.name
+                return path.read_bytes()
             raise RuntimeError('RL block unavailable on every endpoint: ' + block_id + ': ' + '; '.join(errors))
         manifest = save_bundle(rollouts, out / 'blocks', policy_id=policy_id, fetch=fetch)
         manifest['actor_origins'] = origins
