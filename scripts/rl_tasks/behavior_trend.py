@@ -17,10 +17,14 @@ Read-only; it decides nothing by itself.
 import argparse
 import glob
 import json
+import sys
 from pathlib import Path
 
+sys.path[:0] = [str(Path(__file__).resolve().parents[2] / 'training/neuralese')]
+from natlang_neuralese.common.paths import resolve  # noqa: E402
+
 LOOP = ('budget_exhaustion', 'repetition')
-EVIDENCE = Path('/home/werg/data/lfm3-rl-dgx-20261029/ops/pop-behavior-eval/evidence')
+EVIDENCE = resolve('data_nvme', 'lfm3-rl-dgx-20261029', 'ops/pop-behavior-eval/evidence')
 
 
 def loop_rate(counts):
