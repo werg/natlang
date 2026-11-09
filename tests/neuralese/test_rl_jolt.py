@@ -563,3 +563,16 @@ def test_backbone_student_and_teacher_use_verified_text_guidance(tmp_path):
     g=json.loads(open(teachers['entries'][0]['chat_request_config']).read())['x_natlang_guidance']
     assert g['role']=='teacher' and g['writer']=='off' and g['selection']=='crisp'
     assert guidance_collection_options(None)=={}, 'general guidance keeps its native-writer default'
+
+
+def test_zero_student_coefficient_builds_no_student_twin():
+    """With beta_s 0 a student twin carries no term; building it doubled the episode's forward tokens (2026-11-09)."""
+    model, roles, identity = load('lfm')
+    episode = episode_with_top_k(model, roles, identity)
+    graphs, spec = prepare(rollouts(episode.turns), episode, roles, identity,
+                           declaration={**DECLARATION, 'beta_s': 0.})
+    for graph in graphs:
+        row = spec['rows'][graph['id']]
+        assert row['jolt']['privileged'] is None and 'beta_s is 0' in row['jolt']['refusal']
+        assert {n['name'] for n in graph['nodes']} == set(row['episode_turns'])
+        assert all('twin_query' not in action for action in row['actions'])

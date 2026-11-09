@@ -302,7 +302,7 @@ def check_episode_guidance(rollout, turns):
     return role
 
 
-def add_privileged_twin(replay, rollout, graph, source, *, turns):
+def add_privileged_twin(replay, rollout, graph, source, *, turns, beta=None):
     """Append the episode's whole-graph twin to ``graph``; bind every sampled action to its twin query.
 
     Returns (actions, the row's JOLT+ record). The in-run guidance policy's turns (``selectGuidanceFacts`` and the
@@ -316,12 +316,17 @@ def add_privileged_twin(replay, rollout, graph, source, *, turns):
       their target weights.
 
     A student episode without verified guidance keeps its plain outcome term; the record names the refusal.
+    ``beta``: the role's KL coefficient. A student under beta 0 gets no twin at all (it would carry no term but
+    double the episode's forward tokens); its record names that reason the way a refusal is named.
     """
     from ..model.native_graph_plan import compile_graph, invocation_dict
     from ..common.custody import CustodyError
     from .privileged_scoring import student_form, teacher_form, writer_span
     role = check_episode_guidance(rollout, turns)
     flagged = policy_turns(turns)
+    if role == 'student' and beta == 0:
+        return _without(replay, graph, flagged), {'role': role, 'privileged': None,
+            'refusal': 'student KL coefficient beta_s is 0: no twin', 'policy_turns': sorted(flagged)}
     text_owner = {write['node']: turn['graph_turn'] for turn in turns for write in turn.get('text_result_writes',[])}
     flagged_graph = flagged | {node for node, owner in text_owner.items() if owner in flagged}
     try:

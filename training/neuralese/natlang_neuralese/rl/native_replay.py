@@ -1729,7 +1729,8 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
             jolt_row = None
             if jolt is not None:
                 from .jolt import add_privileged_twin
-                actions, jolt_row = add_privileged_twin(replay, rollout, graph, privileged, turns=turns)
+                actions, jolt_row = add_privileged_twin(replay, rollout, graph, privileged, turns=turns,
+                    beta=jolt['beta_s' if rollout.get('jolt_role', 'student') == 'student' else 'beta_t'])
                 for action, queries in zip(decisions, jolt_row.pop('decision_twin_queries', None) or ()):
                     if queries is not None:
                         action['twin_options'] = queries
