@@ -213,3 +213,43 @@ affected:
 
 w5 was restarted onto runtime v69-1109, which includes this fix, during round 0 collection. So w5 tests "no student
 OPSD term + loops penalised" together.
+
+## Independent review integrated (2026-11-09 ~16:00)
+
+Review: `RL_REGRESSION_INDEPENDENT_REVIEW_20261109.md`. Below is my validation of each item against the code and the
+w4 artifacts, and what has been done.
+
+**Corrections accepted (claims above that overreached):**
+- **Scalar loss is not gradient strength.** The outcome-vs-KL scalar loss ratio says nothing about gradient strength:
+  the centred surrogate is about 0 at matched policies while its gradient is the full score function. Measured
+  gradients put the outcome term at 35–60% of the KL term. So "not detectable in the class-mean Δlogp" is right, but
+  "absent from the update" overstated it.
+- **w5 is a joint intervention**, not a single-factor test. It changes `beta_s` 0, adds long-episode truncation, the
+  budget-prefix recovery and (now) the F1 normalisation fix.
+- **Retracted control: LR-zero.** An LR-zero "null pipeline" is not bit-identical: Kahan compensation is re-added,
+  and optimizer state, RNG and counters advance.
+- **Retracted control: random scatter.** The random-scatter control is one weak sensitivity probe, not a direction
+  test.
+- **Unmeasured noise.** "±1.7 binomial noise" on greedy dev16 is an assumption, not a measured repeat variance.
+- **Advantages stored after all.** Advantages are stored per row in `rl-native-objective.json`, which is bound by
+  hash in the data receipt.
+
+**Findings validated and acted on:**
+
+| ID | Finding | Status |
+|---|---|---|
+| F1 | Per-micro-batch action means weighted by graph count. Production RL uses `accumulate_batches 16`. Confirmed in `native_replay.py` and `native_state_sft.py`. | **Fixed** in 76317cbe8 (one action mean over the complete update via `planned_actions`). Test reproduces the reviewer's sign flip. Deployed to w5 (runtime v70-1109) before its first update. |
+| F2 | Singleton teacher gets zero outcome advantage. Confirmed: all 11 w4 round-1 teacher episodes had advantage 0. | Open. With `beta_s=0` the teacher term only trains the privileged view toward the student view. Needs ≥2 scored teacher siblings, or dropping teacher attempts. |
+| F3 | Classifier reads model-authored text: transport/budget/repetition regexes over the action ledger run before the completed-oracle-rejection branch, and `failed` and `blocked` statuses are treated differently. Confirmed in `eval/task_packet.py`. | Fix in progress (Sonnet agent), with w4 transition counts. |
+| F4 | Collection sealed complete with unfinished keys. | Fix and w4 check in progress (same agent). |
+| F5 | All-rejected or zero-signal updates still move optimizer state. | Open. Relevant to w5 because zero-advantage students carry no term at `beta_s 0`. Telemetry check pending. |
+| F6 | Float16 top-k receipts can make the head mass exceed 1, giving a wrong tail coefficient. | Open; measure frequency on real receipts. |
+| F7 | Engine-guard rejection happens after centering. | Open. No w4 round-1 rejections reported. |
+| F8/F9 | Eval identity omits TS, image and driver; a same-SHA repeat request is silently consumed. | Open. The repeat-control design must use a new attempt id. |
+| F10 | SGLang seed is not forwarded. | Open, low priority. |
+| F11 | `score.json` totals include teachers. | Accepted: the 57/40-of-128 and 45%-unscored figures must be recomputed by role. |
+| F12 | Truncation renormalizes to `T/K`; the cut search aborts on one invalid midpoint. | Open. Normalization is now the global action mean, so truncated episodes simply contribute fewer actions. The search fix is pending. |
+| F13 | Budget recovery misses resumed `journal_replay` frames. | Fix in progress (same agent). |
+
+**Running:** the end-to-end learner sanity test (advantage attachment, overfit and sign-flip, reference gradient,
+BF16 survival), now also asked to compare micro-batch partitions under the old and new code.
