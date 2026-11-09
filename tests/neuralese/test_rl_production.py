@@ -316,35 +316,36 @@ def test_a_resumed_round_collects_on_whatever_endpoints_attest_now(tmp_path,monk
     assert events[1]==('collect',['http://dgx','http://pop']) and events.collected[-1]['late_endpoints']==['http://pop']
 
 
-def test_python_actor_runtime_is_bound_and_mixed_replicas_rejected():
-    from copy import deepcopy
+def test_actor_code_identity_is_recorded_never_attested_but_the_policy_sha_is():
     policy = '1' * 64
     native = {'checkpoint_sha256': policy, 'tokenizer_fingerprint': '2' * 64,
               'embedding_weight_sha256': '3' * 64, 'architecture': 'lfm2'}
     runtime = {'schema': 'natlang.python-runtime/1', 'sha256': '4' * 64, 'files': 5}
+    code = {'schema': 'natlang.code-provenance/1', 'git_commit': 'a' * 40, 'dirty': False}
     receipt = {'schema': 'natlang.rl-policy-binding/2', 'checkpoint_sha256': policy,
-        'communication': 'native-state', 'native_identity': native, 'python_runtime': runtime}
-    expected = {'native_identity': native, 'native_participant': None,
-                'semantic_adapter_sha256': None, 'python_runtime': runtime}
-    # External fleets have no local command or repository environment. They
-    # remain bound by the actual receipts returned from every actor endpoint.
-    assert production.validate_actor_runtime_configuration({
-        'native_actor_python_runtime':runtime,'endpoints':['https://actor-fleet.example']}) is True
-    production.validate_actor_receipts({'a': receipt}, policy_id=policy, neuralese_server=True,
-                                       expected_native=expected)
-    changed = deepcopy(receipt)
-    changed['python_runtime']['sha256'] = '5' * 64
-    with pytest.raises(ValueError, match='requested Python runtime'):
-        production.validate_actor_receipts({'a': changed}, policy_id=policy, neuralese_server=True,
-                                           expected_native=expected)
-    for replacement in (None, changed['python_runtime']):
-        with pytest.raises(ValueError, match='replicas disagree on their Python runtime'):
-            production.validate_actor_receipts({'a': receipt, 'b': {**receipt, 'python_runtime': replacement}},
-                                               policy_id=policy, neuralese_server=True)
-    for invalid in ('not a receipt', {**runtime, 'files': True}, {**runtime, 'sha256': 'bad'}):
-        with pytest.raises(ValueError, match='Python runtime provenance'):
-            production.validate_actor_receipts({'a': {**receipt, 'python_runtime': invalid}},
-                                               policy_id=policy, neuralese_server=True)
+        'communication': 'native-state', 'native_identity': native, 'python_runtime': runtime, 'code': code}
+    expected = {'native_identity': native, 'native_participant': None, 'semantic_adapter_sha256': None}
+    production.validate_actor_receipts({'a': receipt}, policy_id=policy, neuralese_server=True, expected_native=expected)
+    # replicas on other code (a Pop checkout one commit behind the DGX), without any code record (an older actor) or
+    # with a different Python source inventory all attest: code is provenance, not identity
+    other = {**receipt, 'python_runtime': {**runtime, 'sha256': '5' * 64}, 'code': {**code, 'git_commit': 'b' * 40, 'dirty': True}}
+    for second in (other, {k: v for k, v in receipt.items() if k not in ('python_runtime', 'code')}):
+        got = production.validate_actor_receipts({'a': receipt, 'b': second}, policy_id=policy, neuralese_server=True,
+                                                 expected_native={**expected, 'python_runtime': runtime})
+        assert got['a']['code'] == code
+    # the policy checkpoint and the model identity are still attested exactly
+    with pytest.raises(ValueError, match='did not attest the requested immutable checkpoint'):
+        production.validate_actor_receipts({'a': {**receipt, 'checkpoint_sha256': '9' * 64}}, policy_id=policy,
+                                           neuralese_server=True, expected_native=expected)
+    with pytest.raises(ValueError, match='did not attest the requested immutable checkpoint'):
+        production.validate_actor_receipts({'a': receipt, 'b': {**receipt, 'checkpoint_sha256': '9' * 64}},
+                                           policy_id=policy, neuralese_server=True)
+    with pytest.raises(ValueError, match='replicas disagree on their exact policy identity'):
+        production.validate_actor_receipts({'a': receipt, 'b': {**receipt, 'native_identity': {**native, 'tokenizer_fingerprint': '8' * 64}}},
+                                           policy_id=policy, neuralese_server=True)
+    with pytest.raises(ValueError, match='requested native participant'):
+        production.validate_actor_receipts({'a': receipt}, policy_id=policy, neuralese_server=True,
+                                           expected_native={**expected, 'native_identity': {**native, 'embedding_weight_sha256': '7' * 64}})
 
 
 def test_python_runtime_reuses_resident_inventory_and_is_path_independent(tmp_path):
@@ -634,7 +635,7 @@ def test_collection_binding_binds_the_agent_context_budget_only_when_set(tmp_pat
     cases.write_text('{}\n')
     (tmp_path / 'ts-host' / 'dist').mkdir(parents=True)
     common = dict(cases=cases, policy_id='p', rows=1, offset=0, group=2, root_mode='student',
-                  runtime=tmp_path / 'ts-host', seed_base=0, neuralese_server=True, case_seconds=60,
+                  seed_base=0, neuralese_server=True, case_seconds=60,
                   max_model_requests=32, max_turns=48)
     assert 'context_tokens' not in production.collection_binding(**common)
     assert production.collection_binding(**common, context_tokens=32768)['context_tokens'] == 32768

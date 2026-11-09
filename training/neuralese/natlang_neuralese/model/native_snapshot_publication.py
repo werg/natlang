@@ -193,6 +193,7 @@ def prepare_pending_transport(root):
     """Bind a ready owner view to this actual Python runtime without a full-state decode."""
     import hashlib
     from ..common.runtime_inventory import python_runtime_binding
+    from ..common.code_provenance import code_provenance
     from .native_bundle import _actor_view_files,_file_binding,TRANSPORT_SCHEMA
     from .native_composite import _durable_immutable
     root=Path(root).resolve(strict=True)
@@ -212,7 +213,7 @@ def prepare_pending_transport(root):
         value={'schema':TRANSPORT_SCHEMA,'scope':'diagnostic-local-pin','source':{'sha256':source['sha256'],'bytes':source['bytes']},
             'recovery_receipt':None,'view_receipt':{'sha256':reference['sha256'],'bytes':reference['bytes']},
             'view':proof['view'],'model_config':proof['model_config'],'step':proof['step'],
-            'python_runtime':python_runtime_binding(),'training_resume':False,
+            'python_runtime':python_runtime_binding(),'code':code_provenance(),'training_resume':False,
             'verification':'source tensor equality against local immutable pin; no remote recovery claim'}
         raw=(json.dumps(value,sort_keys=True,indent=2)+'\n').encode()
         target=Path(reference['path']).parent/(hashlib.sha256(raw).hexdigest()+'.transport.json')

@@ -172,7 +172,10 @@ def main() -> None:
 
 
 def attest_sglang_source(python, fork, pythonpath=''):
-    """Bind the interpreter's actual package to the clean, pinned fork before launch."""
+    """Record the interpreter's actual SGLang fork commit (and dirty flag) for the actor attestation.
+
+    The declared commit in training/neuralese/sglang-fork.json is a recommendation, never a gate: a different or
+    modified fork checkout is recorded and warned about, and the actor launches (owner, 2026-11-09)."""
     import os
     import subprocess
     env = {**os.environ, 'PYTHONPATH': pythonpath}
@@ -183,17 +186,18 @@ def attest_sglang_source(python, fork, pythonpath=''):
     if package.name != '__init__.py' or package.parent.name != 'sglang':
         raise RuntimeError('SGLang interpreter did not resolve a source package')
     repository = package.parent.parent.parent
+
     def git(*arguments):
-        return subprocess.run(['git', '-C', str(repository), *arguments], check=True,
-                              text=True, capture_output=True).stdout.strip()
-    if Path(git('rev-parse', '--show-toplevel')).resolve() != repository.resolve():
-        raise RuntimeError('SGLang source is not a fork checkout')
-    actual = git('rev-parse', 'HEAD')
-    if actual != fork['commit']:
-        raise RuntimeError(f'SGLang source commit {actual} differs from pinned {fork["commit"]}')
-    if git('status', '--porcelain', '--untracked-files=all', '--', 'python/sglang'):
-        raise RuntimeError('SGLang package source has uncommitted or untracked changes')
-    return {'commit': actual, 'package': str(package), 'python': str(Path(python).resolve())}
+        done = subprocess.run(['git', '-C', str(repository), *arguments], text=True, capture_output=True)
+        return done.stdout.strip() if done.returncode == 0 else None
+    actual = git('rev-parse', 'HEAD') if git('rev-parse', '--show-toplevel') is not None else None
+    dirty = bool(git('status', '--porcelain', '--untracked-files=all', '--', 'python/sglang')) if actual else None
+    declared = fork.get('commit')
+    record = {'commit': actual, 'declared_commit': declared, 'matches_declared': actual == declared, 'dirty': dirty,
+              'package': str(package), 'python': str(Path(python).resolve())}
+    if actual != declared or dirty:
+        print(json.dumps({'event': 'sglang_fork_differs_from_declared', **record}), file=sys.stderr, flush=True)
+    return record
 
 
 def launch_sglang(engine, args, checkpoint):
@@ -272,7 +276,9 @@ def launch_sglang(engine, args, checkpoint):
             process.kill()
             raise RuntimeError('SGLang server did not become healthy within 30 min')
         time.sleep(5)
-    engine.bind_sglang(url, export_manifest=manifest, fork={key: fork[key] for key in ('repository', 'branch', 'commit')},
+    engine.bind_sglang(url, export_manifest=manifest,
+                       fork={**{key: fork[key] for key in ('repository', 'branch')}, 'commit': source['commit'],
+                             'declared_commit': source['declared_commit'], 'dirty': source['dirty']},
                        adapter_slots=args.sglang_adapter_slots, adapter_rank=args.sglang_adapter_rank,
                        projection=args.sglang_projection, overlap_schedule=args.sglang_overlap_schedule)
     return process

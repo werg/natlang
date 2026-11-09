@@ -148,8 +148,17 @@ def prepare_raw_policy(checkpoint, *, base, tokenizer_out, require_optimizer=Tru
         'history_reasoning': history_reasoning}
     history_path = tokenizer_out / 'natlang-history-reasoning.json'
     if history_path.exists():
-        if json.loads(history_path.read_text(encoding='utf-8')) != history_binding:
-            raise ValueError('immutable raw RL tokenizer history binding changed')
+        recorded = json.loads(history_path.read_text(encoding='utf-8'))
+        identity_fields = lambda value: ({key: value.get(key) for key in ('schema', 'checkpoint_sha256', 'tokenizer_fingerprint')},
+                                         {key: (value.get('history_reasoning') or {}).get(key) for key in ('policy', 'backbone')})
+        if identity_fields(recorded) != identity_fields(history_binding):
+            raise ValueError('immutable raw RL tokenizer history binding is bound to another checkpoint, tokenizer or policy')
+        if recorded != history_binding:
+            # Model and tokenizer identity match: the template probe/kwargs are rendered by the current code. The sidecar
+            # stays the round's immutable binding (its SHA-256 is referenced); the code's current rendering is recorded.
+            from ..common.code_provenance import code_provenance
+            write_json_durable(tokenizer_out / 'natlang-history-reasoning.current.json',
+                               {**history_binding, 'code': code_provenance()})
     else:
         write_json_durable(history_path, history_binding)
     return {'native_identity': identity, 'native_participant': None,

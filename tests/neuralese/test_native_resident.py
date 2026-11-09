@@ -137,17 +137,15 @@ def test_recipe_handoff_allows_only_extending_external_provenance(tmp_path,monke
         lineage_handoff(old,new,pkg,pkg,tmp_path/'unused.json',directory.parent,dry_run=True,started_stage_ids=['sft'])
 
 
-def test_startup_rejects_wrong_runtime_before_rewriting_resident_state(tmp_path):
+def test_startup_accepts_changed_code_without_rewriting_resident_state(tmp_path):
     _, directory, manager, _ = setup(tmp_path)
     initial = directory/'initial.json'
     original = initial.read_bytes()
-    path = directory.parent/'recipe-plan.json'
-    plan = json.loads(path.read_text())
-    plan['code']['train/native_state_sft.py'] = '0' * 64
-    write_json(path, plan)
-    with pytest.raises(ValueError, match='startup runtime differs'):
-        resident.ResidentAdoption(directory, stage_id='sft', recipe_binding=manager.recipe_binding,
-            train=manager.train, held=manager.held)
+    other = tmp_path/'newer-checkout-package'
+    other.mkdir()
+    (other/'changed.py').write_text('changed = True\n')
+    resident.ResidentAdoption(directory, stage_id='sft', recipe_binding=manager.recipe_binding,
+        train=manager.train, held=manager.held, package=other)   # the plan records the code it was created under; provenance
     assert initial.read_bytes() == original
     assert not (directory/'pending.json').exists()
 
@@ -840,8 +838,8 @@ def test_geometry_capacity_ignores_only_explicit_keep_rendering_metadata(tmp_pat
         wrong=copy.deepcopy(actual);wrong[field]=bad
         with pytest.raises(ValueError,match='differs'):
             resident.geometry_capacity(resident.binding(certificate),identity=wrong,code={'module':'same'})
-    with pytest.raises(ValueError,match='differs'):
-        resident.geometry_capacity(resident.binding(certificate),identity=actual,code={'module':'unreviewed'})
+    # the measured limits belong to the model/packing identity; the code that measured them is recorded provenance
+    assert resident.geometry_capacity(resident.binding(certificate),identity=actual,code={'module':'unreviewed'})==value['limits']
 
 
 def whole_delta_geometry(tmp_path,delta,manager):

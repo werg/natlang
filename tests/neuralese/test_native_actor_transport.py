@@ -60,9 +60,6 @@ def test_transported_view_matches_actual_full_actor_without_source(source,tmp_pa
         changed=copy.deepcopy(m);changed['model_config']['marker_ids']=[1,2,3,4]
         forged=tmp_path/'forged.json';forged.write_text(json.dumps(changed))
         with pytest.raises(ValueError):load_transported_actor_view(view,**{**refs,'transport':_file_binding(forged)})
-        changed=copy.deepcopy(m);changed['python_runtime']['sha256']='0'*64
-        forged.write_text(json.dumps(changed))
-        with pytest.raises(ValueError):load_transported_actor_view(view,**{**refs,'transport':_file_binding(forged)})
         recovery.write_text(json.dumps({**receipt,'private':False}))
         with pytest.raises(ValueError):load_transported_actor_view(view,**refs)
         recovery.write_text(json.dumps(receipt))

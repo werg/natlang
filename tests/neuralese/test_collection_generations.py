@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 
 from natlang_neuralese.rl import production
-from natlang_neuralese.rl.collection_generations import (Generations, IncompleteCollection, comparable_binding,
-                                                         code_changes, dispatch)
+from natlang_neuralese.common import code_provenance as provenance
+from natlang_neuralese.rl.collection_generations import Generations, IncompleteCollection, comparable_binding, dispatch
 from natlang_neuralese.common.jsonio import read_jsonl
 
 REPO = Path(__file__).resolve().parents[2]
@@ -120,20 +120,25 @@ def test_the_interrupted_entry_is_retried_not_counted_and_a_completed_round_disp
     assert h.ran == []   # completed: nothing dispatched, transport irrelevant
 
 
-def test_code_identity_may_change_on_resume_but_sampling_may_not(tmp_path, monkeypatch):
+def test_a_code_change_never_blocks_a_resume_and_each_start_records_its_commit(tmp_path, monkeypatch):
     h = Harness(tmp_path, monkeypatch, entries=2)
+    commits = iter(['c1' * 20, 'c2' * 20])
+    monkeypatch.setattr(provenance, 'code_provenance',
+                        lambda *a, **k: {'schema': provenance.SCHEMA, 'git_commit': next(commits), 'dirty': False})
     h.budget = 1
     with pytest.raises(IncompleteCollection):
         h.collect()
-    (h.runtime / 'dist/new.js').write_text('changed collector code')   # a successor runtime
+    (h.runtime / 'dist/new.js').write_text('changed collector code')   # main moved: the next start runs newer code
     h.budget = 99
     h.collect()
-    start = [row for row in read_jsonl(h.out / 'generations.jsonl') if row['event'] == 'start'][-1]
-    assert list(start['code_changes']) == ['runtime']
+    starts = [row for row in read_jsonl(h.out / 'generations.jsonl') if row['event'] == 'start']
+    assert [row['code']['git_commit'] for row in starts] == ['c1' * 20, 'c2' * 20]
+    assert starts[0]['code_changes'] == {'git_commit': [None, 'c1' * 20]}
+    assert starts[1]['code_changes'] == {'git_commit': ['c1' * 20, 'c2' * 20]}
+    assert json.loads((h.out / 'score.json').read_text())['code']['git_commit'] == 'c2' * 20
+    assert 'runtime' not in json.loads((h.out / 'collection-binding.json').read_text())
     (h.out / 'score.json').unlink()
-    with pytest.raises(ValueError, match='resume policy/cases/sampling/runtime changed: runtime'):
-        h.collect(allow_code_change=False)
-    with pytest.raises(ValueError, match='rows'):
+    with pytest.raises(ValueError, match='resume policy/cases/sampling changed'):   # sampling still may not change
         h.collect(rows=1)
 
 
@@ -163,13 +168,11 @@ def test_teacher_plan_is_persisted_and_reused_by_a_restart(tmp_path, monkeypatch
     assert queue == ['s7-task-000', 's7-task-001', 's7-task-000-t01']
 
 
-def test_comparable_binding_and_code_changes():
+def test_comparable_binding_ignores_transport_and_every_code_identity_field():
     a = {'rows': 1, 'endpoints': ['x'], 'remote_workers': {}, 'runtime': {'a.js': '1'}, 'collector_sha256': 'c',
          'expected_native_actor': {'k': 1, 'python_runtime': {'sha256': 'p'}}}
     b = {**a, 'endpoints': ['y'], 'runtime': {'a.js': '2'}, 'expected_native_actor': {'k': 1, 'python_runtime': {'sha256': 'q'}}}
-    assert comparable_binding(a, code=True) == comparable_binding(b, code=True) == {'rows': 1, 'expected_native_actor': {'k': 1}}
-    assert comparable_binding(a) != comparable_binding(b)
-    assert sorted(code_changes(a, b)) == ['actor_python_runtime', 'runtime']
+    assert comparable_binding(a) == comparable_binding(b) == {'rows': 1, 'expected_native_actor': {'k': 1}}
 
 
 def test_a_round_bound_by_an_older_controller_resumes_with_new_transport_and_code():
@@ -181,16 +184,19 @@ def test_a_round_bound_by_an_older_controller_resumes_with_new_transport_and_cod
     current = {k: v for k, v in recorded.items() if k not in ('endpoints', 'jolt_teacher_attempts', 'jolt_guidance')}
     current.update(runtime={'dist/a.js': '2'}, collector_sha256='new',
                    expected_native_actor={'native_identity': {'x': 1}, 'python_runtime': {'sha256': 'v58'}})
-    strict, changed, bonus, teachers = production.compare_recorded_binding(recorded, current, 1, 'crisp')
-    assert strict == [] and teachers == 1 and sorted(changed) == ['actor_python_runtime', 'collector_sha256', 'runtime']
-    strict, changed, _, _ = production.compare_recorded_binding(recorded, current, 1, 'crisp', allow_code_change=False)
-    assert 'collector_sha256' in strict and changed == {}
+    strict, bonus, teachers = production.compare_recorded_binding(recorded, current, 1, 'crisp')
+    assert strict == [] and teachers == 1
+    # a binding written by the new code carries no code identity at all and still resumes the old round
+    new_binding = {k: v for k, v in current.items() if k not in ('runtime', 'collector_sha256')}
+    new_binding['expected_native_actor'] = {'native_identity': {'x': 1}}
+    strict, *_ = production.compare_recorded_binding(recorded, new_binding, 1, 'crisp')
+    assert strict == []
     # sampling changes still refuse
     strict, *_ = production.compare_recorded_binding(recorded, {**current, 'rows': 32, 'seed_base': 5}, 1, 'crisp')
     assert strict == ['rows', 'seed_base']
     # a round bound before teacher attempts existed keeps its behaviour even when endpoints were recorded
     old = {k: v for k, v in recorded.items() if not k.startswith('jolt')}
-    strict, _, _, teachers = production.compare_recorded_binding(old, current, 1, 'crisp')
+    strict, _, teachers = production.compare_recorded_binding(old, current, 1, 'crisp')
     assert strict == [] and teachers == 0
 
 

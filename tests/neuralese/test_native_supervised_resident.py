@@ -32,13 +32,12 @@ def test_changed_launch_source_rejected_before_plan_creation(tmp_path, monkeypat
     assert not (directory.parent / 'recipe-plan.json').exists()
 
 
-def test_existing_authority_cannot_be_replaced_with_new_runtime(tmp_path, monkeypatch):
+def test_existing_authority_resumes_under_changed_code_and_keeps_its_plan(tmp_path, monkeypatch):
     f = fixture(tmp_path, monkeypatch)
     path = f.directory.parent / 'recipe-plan.json'
     old = path.read_bytes()
     package = tmp_path / 'changed-package'
     package.mkdir()
     (package / 'changed.py').write_text('changed = True\n')
-    with pytest.raises(ValueError, match='distinct drained authority directory'):
-        ensure_plan(f.config, package=package)
+    ensure_plan(f.config, package=package)   # code identity is provenance: the plan keeps its creation-time record
     assert path.read_bytes() == old

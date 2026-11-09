@@ -81,7 +81,7 @@ def commit_no_signal_round(state, *, report_path, rollouts_path, policy_id, poli
     state.update(round=state['round']+1,offset=next_offset,phase='collect',production_complete=False,
                  collection_attempt=0,group_stats=[])
     for key in ('active_update_round','update_mode','update_rollouts','update_stages',
-                'update_coefficient_policy','update_policy_loss','update_amendment_proof'):
+                'update_coefficient_policy','update_policy_loss','update_amendment_proof','update_code'):
         state.pop(key,None)
     return state
 
@@ -254,7 +254,8 @@ def complete_update_audit(state, *, checkpoint):
     """Move the active round marker to an audit record only at round commit."""
     from ..common.hashing import sha256_file_hex_cached
     active = {key: state[key] for key in ('active_update_round', 'update_mode', 'update_rollouts',
-        'update_stages', 'update_coefficient_policy', 'update_policy_loss', 'update_amendment_proof') if key in state}
+        'update_stages', 'update_coefficient_policy', 'update_policy_loss', 'update_amendment_proof',
+        'update_code') if key in state}
     if not active:
         return state
     from ..train.native_readiness import _bound
@@ -401,6 +402,7 @@ def complete_update_audit(state, *, checkpoint):
         'coefficient_policy': active.get('update_coefficient_policy'), 'checkpoint': checkpoint,
         **({'policy_loss': active['update_policy_loss']} if 'update_policy_loss' in active else {}),
         **({'amendment_proof': amendment} if amendment is not None else {}),
+        **({'code': active['update_code']} if active.get('update_code') else {}),
         'completion_report':report_binding,
         **({'operation_receipt':operation_receipt} if operation_receipt is not None else {})}
     history = state.setdefault('completed_update_history', [])
@@ -408,7 +410,7 @@ def complete_update_audit(state, *, checkpoint):
         history.append(record)
     state['last_completed_update'] = record
     for key in ('active_update_round', 'update_mode', 'update_rollouts', 'update_stages',
-            'update_coefficient_policy', 'update_policy_loss', 'update_amendment_proof'):
+            'update_coefficient_policy', 'update_policy_loss', 'update_amendment_proof', 'update_code'):
         state.pop(key, None)
     return state
 
@@ -618,23 +620,10 @@ def validate_actor_receipts(receipts, *, policy_id, neuralese_server, expected_n
         identities = [receipt['native_identity'] for receipt in receipts.values()]
         if any(identity != identities[0] for identity in identities[1:]):
             raise ValueError('native RL replicas disagree on their exact policy identity')
-        implementations = [receipt.get('python_runtime') for receipt in receipts.values()]
-        if any(value != implementations[0] for value in implementations[1:]):
-            raise ValueError('native RL replicas disagree on their Python runtime')
-        for value in implementations:
-            if value is not None and (not isinstance(value, dict) or value.get('schema') != 'natlang.python-runtime/1'
-                    or not isinstance(value.get('sha256'), str)
-                    or not re.fullmatch(r'[0-9a-f]{64}', value['sha256'])
-                    or type(value.get('files')) is not int or value['files'] < 1):
-                raise ValueError('native RL actor lacks valid Python runtime provenance')
     if expected_native is not None:
         if 'actor_export' in expected_native and any(
                 receipt.get('actor_export') != expected_native['actor_export'] for receipt in receipts.values()):
             raise ValueError('RL actor serves a different export than the requested exact policy export')
-        if expected_native.get('python_runtime') is not None and any(
-                receipt.get('python_runtime') != expected_native['python_runtime']
-                for receipt in receipts.values()):
-            raise ValueError('native RL actor differs from the requested Python runtime')
         if modes != {'native-state'} or any(receipt.get('native_identity') != expected_native['native_identity'] or
                 receipt.get('native_participant') != expected_native['native_participant']
                 or ('history_reasoning' in expected_native and
@@ -703,7 +692,10 @@ def _run_collector(command, log, control, *, shutdown_grace=30., custody_receipt
     finally:
         cleanup_session(owner, process, shutdown_grace, session_only=True)
         if sha256_file_hex(helper)!=helper_binding['sha256']:
-            raise RuntimeError('collector session-custody helper changed during owned execution')
+            # The checkout may advance while a worker runs (code identity is provenance, never a refusal): the cleanup
+            # above already used the helper this process imported.
+            print(json.dumps({'event': 'collector session-custody helper changed on disk during owned execution',
+                              'path': str(helper), 'recorded_sha256': helper_binding['sha256']}), flush=True)
 
 
 def bind_collection_prompt(entries, mode):
@@ -717,15 +709,15 @@ def bind_collection_prompt(entries, mode):
     return entries
 
 
-def collection_binding(*, cases, policy_id, rows, offset, group, root_mode, runtime, seed_base,
+def collection_binding(*, cases, policy_id, rows, offset, group, root_mode, seed_base,
                        neuralese_server, case_seconds, max_model_requests, max_turns, expected_native=None,
                        behavior_top_k=None, system_prompt=None, prompt_rendering=None, guidance_stage=None,
                        coefficient_policy=None, context_tokens=None, neuralese_use_bonus=None,
                        program_guidance=None, adapters=None):
-    """The exact provenance a collection binds (no side effects): cases, policy, sampling, runtime and actor.
-    Endpoints and worker counts are transport, not provenance (rl.collection_generations): each start records its own."""
+    """The exact provenance a collection binds (no side effects): cases, policy, sampling and actor identity.
+    Endpoints, worker counts and the code that runs (git commit) are not bound (rl.collection_generations): each start
+    records its own."""
     from ..common.hashing import sha256_file_hex, sha256_hex, canonical_json_sha256_hex
-    runtime = Path(runtime or root('repo') / 'ts-host')
     binding = {'schema': 'natlang.rl-collection-binding/1',
         'cases_sha256': sha256_file_hex(Path(cases)), 'policy_id': policy_id,
         'rows': rows, 'offset': offset, 'group': group, 'root_mode': root_mode,
@@ -736,9 +728,6 @@ def collection_binding(*, cases, policy_id, rows, offset, group, root_mode, runt
         **({'prompt_rendering':prompt_rendering} if prompt_rendering is not None else {}),
         **({'context_tokens': context_tokens} if context_tokens is not None else {}),
         **({'neuralese_use_bonus': neuralese_use_bonus} if neuralese_use_bonus is not None else {}),
-        'runtime': {str(p.relative_to(runtime)): sha256_file_hex(p)
-                    for p in sorted((runtime / 'dist').rglob('*.js'))},
-        'collector_sha256': sha256_file_hex(root('repo') / 'scripts/run_bonsai_queue.py'),
         **({'expected_native_actor': expected_native} if expected_native is not None else {}),
         **({'behavior_top_k': behavior_top_k} if behavior_top_k is not None else {}),
         **({'guided': True, 'system_prompt_sha256': sha256_hex(system_prompt.encode())}
@@ -785,16 +774,15 @@ def _legacy_collection_binding(recorded):
     return recorded
 
 
-def compare_recorded_binding(recorded, binding, teacher_attempts, teacher_plan, *, allow_code_change=True):
-    """(strict differences, accepted code changes, Neuralese bonus, effective teacher attempts) of resuming a collection
-    bound as ``recorded`` with the freshly computed ``binding``. Endpoints and worker counts are transport and never
-    differ; collector/actor code identity may change on resume (recorded per start) unless ``allow_code_change`` is off."""
-    from .collection_generations import comparable_binding, code_changes
-    old = comparable_binding(_legacy_collection_binding(recorded), code=allow_code_change)
-    new, bonus = resolve_neuralese_bonus(old, comparable_binding(binding, code=allow_code_change))
+def compare_recorded_binding(recorded, binding, teacher_attempts, teacher_plan):
+    """(strict differences, Neuralese bonus, effective teacher attempts) of resuming a collection bound as ``recorded``
+    with the freshly computed ``binding``. Endpoints, worker counts and code identity are not provenance of the binding
+    (each start records its commit) and never differ."""
+    from .collection_generations import comparable_binding
+    old = comparable_binding(_legacy_collection_binding(recorded))
+    new, bonus = resolve_neuralese_bonus(old, comparable_binding(binding))
     new, teacher_attempts = resolve_collection_binding(old, new, teacher_attempts, teacher_plan)
-    return (_binding_differences(old, new), code_changes(recorded, binding) if allow_code_change else {},
-            bonus, teacher_attempts)
+    return _binding_differences(old, new), bonus, teacher_attempts
 
 
 def guidance_collection_options(stage):
@@ -832,7 +820,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
             behavior_top_k=None, teacher_attempts=0, teacher_plan='nl',
             system_prompt=None, prompt_rendering=None, guidance_stage=None, context_tokens=None,
             neuralese_use_bonus=None, program_guidance=None, adapters=None, remote_workers=None,
-            allow_code_change=True, lost_block_exclusions=None, late_endpoints=()):
+            lost_block_exclusions=None, late_endpoints=()):
     """Bounded subprocess fanout; existing collector and exact task verifier. ``behavior_top_k`` also records the
     actors' top-k sampler log-probs at every sampled position (score-centered RL); None leaves collection unchanged.
     ``teacher_attempts`` JOLT+ teacher attempts per group (the crisp plan; ``teacher_plan='nl'`` lets
@@ -856,8 +844,8 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     actor, bound in full into the collection binding. The server attests the base checkpoint; each captured turn
     records the effective adapted identity and its adapter binding.
     A restart resumes the round (rl.collection_generations): ``endpoints``, ``workers`` and ``remote_workers`` are
-    transport and may differ from the previous start; so may the collector/actor code identity unless
-    ``allow_code_change`` is off. Attempted entries of every earlier start are never dispatched again.
+    transport and may differ from the previous start; so may the collector/actor code (each start records the git commit
+    of the controller and of every actor). Attempted entries of every earlier start are never dispatched again.
     ``late_endpoints`` (remote endpoints that did not attest the policy at round start, e.g. Pop while a dev16
     evaluation holds it) keep their worker slots: each slot waits until its actor attests the round's policy, which then
     joins the round's actor receipts (a ``join`` generation event). Every remote slot rechecks its actor before taking
@@ -883,7 +871,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     out = Path(out).resolve()
     out.mkdir(parents=True, exist_ok=True)
     binding = collection_binding(cases=cases, policy_id=policy_id, rows=rows, offset=offset,
-        group=group, root_mode=root_mode, runtime=runtime, seed_base=seed_base, neuralese_server=neuralese_server,
+        group=group, root_mode=root_mode, seed_base=seed_base, neuralese_server=neuralese_server,
         case_seconds=case_seconds, max_model_requests=max_model_requests, max_turns=max_turns,
         expected_native=expected_native, behavior_top_k=behavior_top_k, system_prompt=system_prompt,
         prompt_rendering=prompt_rendering, guidance_stage=guidance_stage, coefficient_policy=coefficient_policy,
@@ -902,7 +890,6 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     from .collection_generations import (Generations, IncompleteCollection, dispatch, persist_teacher_plan,
                                          load_teacher_plan, unfinished)
     generations = Generations(out)
-    changed_code = {}
     if recorded is None:
         binding, bonus = resolve_neuralese_bonus(None, binding)
         binding, teacher_attempts = resolve_collection_binding(None, binding, teacher_attempts, teacher_plan)
@@ -910,10 +897,9 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
             raise ValueError('completed RL collection has no provenance binding')
         write_json_durable(receipt, binding)
     else:
-        strict, changed_code, bonus, teacher_attempts = compare_recorded_binding(
-            recorded, binding, teacher_attempts, teacher_plan, allow_code_change=allow_code_change)
+        strict, bonus, teacher_attempts = compare_recorded_binding(recorded, binding, teacher_attempts, teacher_plan)
         if strict:
-            raise ValueError('RL collection resume policy/cases/sampling/runtime changed: ' + ', '.join(strict[:6]))
+            raise ValueError('RL collection resume policy/cases/sampling changed: ' + ', '.join(strict[:6]))
         binding = _legacy_collection_binding(recorded)   # the round's identity: custody is bound to its exact bytes
     if (out / 'score.json').exists():
         saved = json.loads((out / 'score.json').read_text())
@@ -952,9 +938,15 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         return validate_actor_receipts(receipts, policy_id=policy_id, neuralese_server=neuralese_server, expected_native=expected_native,expected_coefficient=coefficient_runtime)
     actors = actor_receipts()
     generation = generations.generation()
+    from ..common.code_provenance import code_provenance, code_changes
+    from .collection_generations import previous_code
+    code = code_provenance()
     generations.record('start', generation=generation, endpoints=[url.rstrip('/') for url in endpoints],
                        workers=workers, remote_workers=remote_workers, slots=[[url, weight] for url, weight in slots],
-                       actor_receipts=actors, code_changes=changed_code, allow_code_change=allow_code_change)
+                       actor_receipts=actors, code=code,
+                       actor_code={url: (receipt or {}).get('code') for url, receipt in actors.items()},
+                       code_changes=code_changes(previous_code(read_jsonl(generations.history))
+                                                 if generations.history.exists() else None, code))
     preparation = prepare(SimpleNamespace(cases=Path(cases), out=out, rows=rows, offset=offset,
         group=group, temperature=1., case_seconds=case_seconds,
         max_model_requests=max_model_requests, max_turns=max_turns,
@@ -1063,6 +1055,13 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     def run_phase(batch, name):
         def run_worker(index, tag, queue, journal):
             endpoint, _ = slots[index]
+            # Every episode starts a fresh collector process from the checkout as it is now. A rebuild of the
+            # checkout's TypeScript collector in progress (dist removed and rewritten) is waited out, not failed.
+            built = time.monotonic() + 900
+            while not (runtime / 'dist/teacher/cli.js').is_file() and time.monotonic() < built:
+                if control is not None and control.stop.requested:
+                    break
+                time.sleep(5)
             command = [sys.executable, str(root('repo') / 'scripts/run_bonsai_queue.py'), str(queue), str(journal),
                 '--runtime', str(runtime), '--server', endpoint, '--chat-completions-url', endpoint + '/v1/chat/completions',
                 '--model-id', 'natlang-rl', '--model-concurrency', '1', '--chat-request-config', str(config)]
@@ -1188,7 +1187,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     missing_keys = unfinished(entries + teachers['entries'], generations.attempted())
     report.update(**({'coefficient_policy':binding['coefficient_policy']} if coefficient_runtime is not None else {}),
                   collector_workers=results, preparation=preparation,
-                  actor_receipts=actors,
+                  actor_receipts=actors, code=code,
                   collection_keys={'expected': len(expected_keys), 'finished': len(expected_keys) - len(missing_keys),
                                    'unfinished': missing_keys},
                   collection_complete=not (control and control.stop.requested) and not missing_keys)
@@ -1626,11 +1625,6 @@ def prepare_round_collection(config, state, round_dir, selected_path, selection,
             raise ValueError('llama.cpp RL actor requires the raw native policy')
         expected_native, actor_values = prepare_llama_actor(config, state['checkpoint'], policy, expected_native)
         values.update(actor_values)
-    elif config.get('native_actor_python_runtime') is not None:
-        if expected_native is None:
-            raise ValueError('Python actor runtime binding requires an exact native policy')
-        validate_actor_runtime_configuration(config)
-        expected_native = {**expected_native, 'python_runtime': config['native_actor_python_runtime']}
     # The llama.cpp fork does not insert or record privileged guidance blocks (only the Python native server does),
     # so its teacher attempts would be unprivileged and refused by the learner. JOLT+ there keeps its outcome and
     # student self-teaching terms without teacher twins.
@@ -1639,7 +1633,6 @@ def prepare_round_collection(config, state, round_dir, selected_path, selection,
         and config.get('update_objective', 'policy') == 'policy'
         and config.get('actor_engine', 'native-python') == 'native-python' else 0)
     kwargs = dict(cases=selected_path, out=round_dir, endpoints=list(config['endpoints']), policy_id=policy,
-        allow_code_change=not config.get('strict_code_identity', False),
         rows=len(selection), offset=0, group=selection[0]['samples'], workers=config.get('workers', 4),
         root_mode=config.get('root_mode', 'student'), runtime=config.get('runtime'),
         seed_base=700000 + state['round'] * 1000000, neuralese_server=config.get('neuralese_server', True),
@@ -1754,14 +1747,13 @@ def resume_preflight(config_path, scratch):
     if continuation is not None:
         return {**report, 'ok': False, 'status': 'unchecked', 'reason': 'sealed collection continuation'}
     binding = collection_binding(**{key: kwargs[key] for key in ('cases', 'policy_id', 'rows',
-        'offset', 'group', 'root_mode', 'runtime', 'seed_base', 'neuralese_server', 'case_seconds',
+        'offset', 'group', 'root_mode', 'seed_base', 'neuralese_server', 'case_seconds',
         'max_model_requests', 'max_turns', 'behavior_top_k', 'prompt_rendering', 'guidance_stage',
         'coefficient_policy', 'context_tokens', 'neuralese_use_bonus') if key in kwargs}, expected_native=expected_native)
     recorded = json.loads(receipt.read_text())
-    differences, code_changed, _, _ = compare_recorded_binding(
-        recorded, binding, kwargs['teacher_attempts'], kwargs['teacher_plan'],
-        allow_code_change=kwargs.get('allow_code_change', True))
-    report['collection'] = {'ok': not differences, 'differences': differences, 'accepted_code_changes': code_changed}
+    differences, _, _ = compare_recorded_binding(recorded, binding, kwargs['teacher_attempts'], kwargs['teacher_plan'])
+    from ..common.code_provenance import code_provenance
+    report['collection'] = {'ok': not differences, 'differences': differences, 'code': code_provenance()}
     learner = {'ok': True, 'checked_episodes': 0}
     rollouts = round_dir / 'rollouts.jsonl'
     if policy_loss is not None and policy_loss['schema'] == 'jolt-plus/1' and rollouts.exists():
@@ -2093,6 +2085,11 @@ def run(config_path, *, rounds=None, stop=None):
                         from .native_supervised import prepare_seed_command
                         command=prepare_seed_command(config,stage_out,values,state,state_path,
                             parameters=config.get('seed_trainer_parameters',config.get('trainer_parameters',{})))
+                    # The learner is a fresh process per update: it runs the checkout as of now. Record that commit
+                    # (the last launch wins when a stop and resume relaunches it) for the completed-update record.
+                    from ..common.code_provenance import code_provenance
+                    state['update_code'] = code_provenance(fresh=True)
+                    write_json_durable(state_path, state)
                     run_command(command, values)
                 no_signal_path=stage_out/'zero-signal-report.json'
                 if no_signal_path.is_file():
@@ -2472,7 +2469,7 @@ def configure_native(args):
     if not parameters.get('task_eval') or type(cadence) is not int or cadence < 0:
         raise ValueError('native production must retain real task evaluation and its cadence')
     repo, python = str(root('repo')), sys.executable
-    actor_configuration = actor_runtime_configuration(getattr(args, 'actor_runtime', None) or repo)
+    actor_configuration = {'actor_environment': actor_runtime_configuration(getattr(args, 'actor_runtime', None) or repo)['actor_environment']}
     actor_repo = Path(actor_configuration['actor_environment']['NATLANG_REPO'])
     endpoint = 'http://127.0.0.1:' + str(args.port)
     history_policy = raw['history_reasoning']['policy']

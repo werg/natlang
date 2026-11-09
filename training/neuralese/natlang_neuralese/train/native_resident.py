@@ -189,8 +189,8 @@ def _contract(plan, proposed, stage_id):
     from .recipe import _data_continuation, _pending_source_continuation, _shared_foundation_append
     from .native_resident_ce import extension_policy
     old_inputs, new_inputs = physical(plan['stage_inputs']), physical(proposed['stage_inputs'])
-    if plan['code'] != proposed['code'] or plan.get('device') != proposed.get('device'):
-        raise ValueError('resident append cannot change runtime or device')
+    if plan.get('device') != proposed.get('device'):   # code identity is provenance (plan['code'] at creation), not a gate
+        raise ValueError('resident append cannot change device')
     if set(old_inputs) != set(new_inputs):
         raise ValueError('resident append cannot change stage membership')
     for sid in old_inputs:
@@ -357,9 +357,9 @@ def same_geometry_identity(previous, current):
 def geometry_capacity(value, *, identity, code):
     certificate = json.loads(bound(value).read_text())
     if (certificate.get('schema') != 'natlang.native-resident-geometry-qualification/1'
-            or certificate.get('passed') is not True or not same_geometry_identity(certificate.get('identity'), identity)
-            or certificate.get('runtime_code_sha256') != digest(code)):
-        raise ValueError('resident geometry qualification differs from actual model/runtime/packing')
+            or certificate.get('passed') is not True or not same_geometry_identity(certificate.get('identity'), identity)):
+        # ``runtime_code_sha256`` is recorded provenance: the limits are measured bounds of the model/packing identity.
+        raise ValueError('resident geometry qualification differs from actual model/packing')
     bound(certificate['evidence'])
     limits = certificate.get('limits') or {}
     if set(limits) != {'forward_tokens', 'kv_slots'} or any(type(v) is not int or v < 1 for v in limits.values()):
@@ -1493,8 +1493,6 @@ def prepare(directory, recipe_path, stage_id, *, tokenizer_fingerprint, role_ids
         for stage in proposed['recipe']['stages']}
     _contract(plan, proposed, stage_id)
     package = Path(runtime_package or Path(__file__).resolve().parents[1])
-    if code_inventory(package) != plan['code']:
-        raise ValueError('resident preparation runtime differs from the running recipe')
     inputs = {}
     for roles in proposed['stage_inputs'].values():
         for value in roles.values():
@@ -1600,8 +1598,6 @@ class ResidentAdoption:
         self.state = current(directory)
         self.plan = self.state['payload']['plan'] if self.state else json.loads(
             (self.directory.parent/'recipe-plan.json').read_text())
-        if self.plan.get('code') != code_inventory(self.package):
-            raise ValueError('resident startup runtime differs from its exact recipe plan')
         self.generation = self.state['generation'] if self.state else digest(self.plan)
         self.rejected = set()
         self.ce_policy_update = None
@@ -1654,8 +1650,6 @@ class ResidentAdoption:
                 raise ValueError('resident payload source differs from its recipe plan')
             if binding(payload['held']['path']) != {k: payload['plan']['stage_inputs'][self.stage_id]['held_native_graphs'][k] for k in ('path','sha256')}:
                 raise ValueError('resident held source differs from its recipe plan')
-            if code_inventory(self.package) != self.plan['code']:
-                raise ValueError('resident running runtime changed')
             if bound(payload['prior_held']) != self.held.path.resolve():
                 raise ValueError('resident predecessor differs from loaded held source')
             if bound(payload['prior_train']) != self.train.path.resolve():

@@ -271,6 +271,7 @@ TRANSPORT_SCOPES = ('independent-recovery', 'diagnostic-local-pin', 'rl-controll
 def prepare_actor_transport(checkpoint, out, recovery_receipt=None, *, scope='independent-recovery'):
     """Seal an inference view to a separately verified private full-state recovery."""
     from ..common.runtime_inventory import python_runtime_binding
+    from ..common.code_provenance import code_provenance
     from .native_composite import _durable_immutable
     import hashlib
     if scope not in TRANSPORT_SCOPES:
@@ -296,7 +297,7 @@ def prepare_actor_transport(checkpoint, out, recovery_receipt=None, *, scope='in
         'recovery_receipt':({'sha256':recovery['sha256'],'bytes':recovery['bytes']} if recovery else None),
         'view_receipt':{'sha256':view_ref['sha256'],'bytes':view_ref['bytes']},
         'view':view_proof['view'],'model_config':view_proof['model_config'],
-        'step':view_proof['step'],'python_runtime':python_runtime_binding(),
+        'step':view_proof['step'],'python_runtime':python_runtime_binding(),'code':code_provenance(),
         'training_resume':False,'verification':('source tensor equality and independent full-source readback'
             if recovery else 'source tensor equality against local immutable pin; no remote recovery claim')}
     raw=(json.dumps(value,sort_keys=True,indent=2)+'\n').encode()
@@ -307,7 +308,6 @@ def prepare_actor_transport(checkpoint, out, recovery_receipt=None, *, scope='in
 
 def load_transported_actor_view(view, *, transport, view_receipt, recovery_receipt, source_sha256, scope):
     """Verify an out-of-band trusted transport without needing the full source locally."""
-    from ..common.runtime_inventory import python_runtime_binding
     from ..train.checkpoint_policy import CheckpointPolicy
     from .native_model import CHECKPOINT_SCHEMA
     def bound(reference):
@@ -322,7 +322,7 @@ def load_transported_actor_view(view, *, transport, view_receipt, recovery_recei
     manifest=bound(transport);proof=bound(view_receipt);recovery=bound(recovery_receipt) if recovery_receipt else None
     source=manifest.get('source') or {}; actual=_file_binding(view)
     if (manifest.get('schema')!=TRANSPORT_SCHEMA or manifest.get('scope')!=scope or manifest.get('training_resume') is not False
-            or source.get('sha256')!=source_sha256 or manifest.get('python_runtime')!=python_runtime_binding()
+            or source.get('sha256')!=source_sha256
             or any(manifest.get('view',{}).get(k)!=actual.get(k) for k in ('sha256','bytes'))
             or any(manifest.get('view_receipt',{}).get(k)!=view_receipt.get(k) for k in ('sha256','bytes'))
             or (recovery is None and manifest.get('recovery_receipt') is not None)

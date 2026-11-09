@@ -133,5 +133,8 @@ def load_native_engine(checkpoint: str, *, base: str | None = None, device: str 
     if engine.native_actor_view is not None:
         engine.rl_policy_binding['actor_view'] = dict(engine.native_actor_view)
     from ..common.runtime_inventory import python_runtime_binding
+    from ..common.code_provenance import code_provenance
+    # Code identity is provenance, never an attestation requirement: the controller records both for each round.
     engine.rl_policy_binding['python_runtime'] = python_runtime_binding()
+    engine.rl_policy_binding['code'] = code_provenance()
     return engine

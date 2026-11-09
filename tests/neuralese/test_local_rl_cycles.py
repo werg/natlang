@@ -184,7 +184,9 @@ def test_reload_rejects_owner_runtime_and_pending_stage_replacement(tmp_path,mon
     plan_path.write_text(json.dumps(plan));config_path.write_text(json.dumps(config))
     monkeypatch.setattr(lc,'resolve_recipe_data',lambda p:json.loads(Path(p).read_text()))
     lc.reload_schedule(plan_path,plan,config,stages,cursor={'cycle':0,'stage_index':0})
-    for change in ({'out':str(tmp_path/'foreign')},{'native_actor_python_runtime':{'sha256':'other'}},
+    # a changed Python source inventory is code provenance, not ownership
+    lc.reload_schedule(plan_path,plan,{**config,'native_actor_python_runtime':{'sha256':'other'}})
+    for change in ({'out':str(tmp_path/'foreign')},
                    {'native_checkpoint_publication_owner_pointer':str(tmp_path/'foreign-owner.json')},
                    {'native_checkpoint_publication_runtime_root':str(tmp_path/'foreign-runtime')},
                    {'native_checkpoint_publication_role':'mellum'},

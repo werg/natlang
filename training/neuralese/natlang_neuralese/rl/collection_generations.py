@@ -1,9 +1,10 @@
 """A collection resumes across (re)starts that change its transport: endpoints, worker counts, even the controller code.
 
-The collection binding (``collection-binding.json``) pins what makes the rollouts the policy's own: cases, policy,
-sampling and, by default, the collector/actor code that produced them. It does not pin *where* they were sampled:
-endpoints and worker counts are transport, and each endpoint's policy identity is authenticated by ``actor_receipts``
-at every (re)start. Every start of ``collect`` is one *generation*: it appends its actual endpoints, slots, actor
+The collection binding (``collection-binding.json``) pins what makes the rollouts the policy's own: cases, policy and
+sampling. It does not pin *where* they were sampled (endpoints and worker counts are transport; each endpoint's policy
+identity is authenticated by ``actor_receipts`` at every (re)start) nor *which code* sampled them: production runs from
+the checkout, so each start records the git commit of the controller and of every actor (``code`` in its ``start``
+event, ``code_changes`` against the previous start) and never refuses on it. Every start of ``collect`` is one *generation*: it appends its actual endpoints, slots, actor
 receipts and code changes to ``generations.jsonl`` (append-only) and journals under new per-generation file names
 (``workers/journal-g2-0.jsonl``), so nothing a previous generation wrote is overwritten. Entries already attempted in
 ANY journal (every generation, student and teacher phase) are never dispatched again; the pending ones are split over
@@ -22,47 +23,25 @@ from threading import Lock
 from ..common.jsonio import read_jsonl, write_json_durable
 
 TRANSPORT_KEYS = ('endpoints', 'remote_workers')
-CODE_KEYS = ('runtime', 'collector_sha256')
+# Fields of bindings written before code identity became provenance: never compared (new bindings do not carry them).
+LEGACY_CODE_KEYS = ('runtime', 'collector_sha256')
 HISTORY = 'generations.jsonl'
 _JOURNAL = re.compile(r'journal-(?:g(?P<gen>\d+)-)?(?P<phase>teacher-)?(?P<index>\d+)\.jsonl$')
 
 
-def comparable_binding(binding, *, code=False):
-    """``binding`` without its transport (and, with ``code``, without the code identity that may change on resume)."""
-    drop = TRANSPORT_KEYS + (CODE_KEYS if code else ())
-    out = {key: value for key, value in binding.items() if key not in drop}
+def comparable_binding(binding):
+    """``binding`` without its transport and without any legacy code-identity field."""
+    out = {key: value for key, value in binding.items() if key not in TRANSPORT_KEYS + LEGACY_CODE_KEYS}
     actor = out.get('expected_native_actor')
-    if code and isinstance(actor, dict) and 'python_runtime' in actor:
+    if isinstance(actor, dict) and 'python_runtime' in actor:
         out['expected_native_actor'] = {key: value for key, value in actor.items() if key != 'python_runtime'}
     return out
 
 
-def code_changes(recorded, current):
-    """{field: [recorded, current]} of the code-identity fields that differ (digest of the large ``runtime`` map)."""
-    changes = {}
-    for key in CODE_KEYS:
-        if recorded.get(key) != current.get(key):
-            changes[key] = [_digest(recorded.get(key)), _digest(current.get(key))]
-    old, new = ((binding.get('expected_native_actor') or {}).get('python_runtime') for binding in (recorded, current))
-    if old != new:
-        changes['actor_python_runtime'] = [_digest(old), _digest(new)]
-    return changes
-
-
-def _digest(value):
-    if isinstance(value, dict):
-        from ..common.hashing import canonical_json_sha256_hex
-        return canonical_json_sha256_hex(value)
-    return value
-
-
-def resume_differences(recorded, current, *, allow_code_change=True):
-    """(differences, code_changes): the strict differences that forbid resuming ``recorded`` as ``current`` (transport
-    never counts; code identity only when ``allow_code_change`` is off), and the code-identity changes a resume accepts."""
-    from .production import _binding_differences
-    strict = _binding_differences(comparable_binding(recorded, code=allow_code_change),
-                                  comparable_binding(current, code=allow_code_change))
-    return strict, (code_changes(recorded, current) if allow_code_change else {})
+def previous_code(history):
+    """The ``code`` of the newest recorded start of ``history`` (rows of generations.jsonl), or None."""
+    starts = [row.get('code') for row in history if row.get('event') == 'start' and row.get('code')]
+    return starts[-1] if starts else None
 
 
 class Generations:

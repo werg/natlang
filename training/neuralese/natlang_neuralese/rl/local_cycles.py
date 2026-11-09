@@ -51,8 +51,7 @@ def publish_supervised(config, parent, checkpoint):
 def stage_failure_signature(stage, config):
     from ..common.hashing import canonical_json_sha256_hex
     return canonical_json_sha256_hex({'stage':stage,
-        'recipe':binding(config['production_recipe']),
-        'runtime':config.get('native_actor_python_runtime')})
+        'recipe':binding(config['production_recipe'])})
 
 
 def record_unstarted_stage_failure(cursor, stage, config, directory, parent, error, *, enabled):
@@ -101,8 +100,7 @@ def reload_schedule(plan_path, previous_plan, previous_config, previous_stages=(
             or any(publication.get(key)!=previous_publication.get(key)
                    for key in ('namespace','producer','dependency_producer'))
             or not set(previous_publication.get('readonly_input_roots',[])).issubset(
-                publication.get('readonly_input_roots',[]))
-            or config.get('native_actor_python_runtime')!=previous_config.get('native_actor_python_runtime')):
+                publication.get('readonly_input_roots',[]))):
         raise ValueError('live schedule changed optimizer/controller/runtime ownership; drain before rescheduling')
     recipe=resolve_recipe_data(config['production_recipe'])
     stages=[s for s in recipe['stages'] if s['kind'] in MANDATORY_STAGE_KINDS and s.get('admitted') is not False]

@@ -1,25 +1,31 @@
 #!/usr/bin/env python3
-"""Restart a live interleaved RL controller at any time: stop it cooperatively, optionally move it to a runtime frozen
-from current main, relaunch it under a fresh ledger unit and check that it resumed.
+"""Restart a live interleaved RL controller at any time: stop it cooperatively, relaunch it under a fresh ledger unit
+from the canonical checkout and check that it resumed.
 
-    python3 scripts/neuralese_data/restart_controller.py CONTROL_OUT [--runtime-from-main [--commit SHA] | --use-runtime vNN-MMDD]
-        [--grace SECONDS | --patient] [--no-preflight] [--dry-run | --freeze-only]
+    python3 scripts/neuralese_data/restart_controller.py CONTROL_OUT [--to-checkout [--at-round-boundary]]
+        [--grace SECONDS | --patient] [--no-preflight] [--dry-run]
 
-CONTROL_OUT is the controller's ``out`` directory (it holds config.json, state.json, controller.log).  Every phase
-resumes from its durable state (plans/neuralese/CONTROLLER_RESTART.md lists the cost per phase):
+CONTROL_OUT is the controller's ``out`` directory (it holds config.json, state.json, controller.log).  Production runs
+directly from the canonical checkout (owner, 2026-11-09): a running process keeps its code, every newly
+started worker, learner or actor gets current main, and every record names the git commit that produced it
+(rl/collection_generations, common/code_provenance).  Every phase resumes from its durable state
+(plans/neuralese/CONTROLLER_RESTART.md lists the cost per phase):
 
-1. optional freeze of a successor runtime from main (``freeze_native_runtime.py`` through the ledger; the live controller
-   keeps running meanwhile);
-2. cooperative stop: SIGTERM to the controller process only.  It stops its collector workers and actor, archives retained
+1. cooperative stop: SIGTERM to the controller process only.  It stops its collector workers and actor, archives retained
    partial artifacts and returns; a learner or SFT trainer finishes its current update and checkpoints.  After
    ``--grace`` seconds (default 600) the unit is stopped hard (``systemctl stop``: SIGTERM to the whole cgroup, SIGKILL
    after the unit's timeout); the trainer's rolling checkpoint then resumes at its last committed update (at most one
-   update is redone).  ``--patient`` waits for the clean boundary instead;
-3. with ``--runtime-from-main``: ``rebind-runtime.sh`` (config paths, actor python inventory, learner admission wrapper,
-   env.sh), then the controller ``preflight`` under the new runtime; a refusal rolls the rebind back and relaunches on the
-   old runtime;
-4. relaunch through ``memory_ledger.py run`` as ``<base>-rN`` with the recorded launch spec (``launch.json`` next to the
+   update is redone).  ``--patient`` waits for the clean boundary instead; ``--at-round-boundary`` first waits for the
+   controller to finish its current update and start the next round;
+2. ``--to-checkout`` (a controller still launched from a frozen runtime): rewrite its config, learner admission wrapper,
+   env.sh, launch.json and state to run from the checkout (``migrate_*`` below; ``--dry-run`` prints every change), then
+   the controller ``preflight`` under the checkout; a refusal restores the files and relaunches as before;
+3. relaunch through ``memory_ledger.py run`` as ``<base>-rN`` with the recorded launch spec (``launch.json`` next to the
    config, derived from the old unit the first time), and wait for the resumed controller to rewrite its state.
+
+LEGACY (delete once every controller runs from the checkout): ``--runtime-from-main [--commit SHA]``, ``--use-runtime
+vNN-MMDD`` and ``--freeze-only`` freeze a runtime from main and rebind to it (``freeze_native_runtime.py``,
+``rebind-runtime.sh``).
 """
 from __future__ import annotations
 
@@ -47,6 +53,10 @@ PYTHON = REPO / '.venv-neuralese/bin/python'
 NODE_BIN = Path.home() / '.local/share/natlang-dev/node-v24.0.1-linux-arm64/bin'
 GIB = 2 ** 30
 RUNTIME_RE = re.compile(r'runtime-native-corrected-mix-(v\d+-\d{4})')
+FROZEN_PATH_RE = re.compile(re.escape(str(DATA)) + r'/runtime-native-corrected-mix-v\d+-\d{4}')
+# Config values that keep the frozen-runtime paths they record: provenance of a branch and the dev-evaluation runtime
+# of the hash-bound trainer parameters (their identity is bound into the recipe), not the code that runs.
+MIGRATION_KEEPS = ('branch_origin', 'trainer_parameters', 'seed_trainer_parameters')
 
 
 def run(argv, **kwargs):
@@ -123,8 +133,8 @@ def derive_launch(unit):
 
 
 def ledger_command(spec, unit):
-    # The ledger workdir is the runtime the payload runs (AGENTS.md: frozen runtime launches use it as --workdir); a
-    # runtime switch rewrites only the payload, so the old unit's WorkingDirectory would otherwise be carried over.
+    # The ledger workdir is the code root the payload runs: the checkout, or (legacy) a frozen runtime; a runtime switch
+    # rewrites only the payload, so the old unit's WorkingDirectory would otherwise be carried over.
     found = RUNTIME_RE.findall(spec['payload'])
     workdir = str(DATA / f'runtime-native-corrected-mix-{found[0]}') if found else spec['workdir']
     argv = [sys.executable, LEDGER, 'run', '--unit', unit, '--budget-gb', str(spec['budget_gb']),
@@ -135,10 +145,123 @@ def ledger_command(spec, unit):
 
 
 def current_runtime(spec):
+    """The frozen runtime tag the launch payload runs from, or None when it runs from the checkout."""
     found = RUNTIME_RE.findall(spec['payload'])
-    if not found:
-        raise SystemExit('the launch payload names no runtime-native-corrected-mix-vNN-MMDD runtime')
-    return found[0]
+    return found[0] if found else None
+
+
+# ---- migration of a frozen-runtime controller to run from the checkout --------------------------------------------
+
+def checkout_environment():
+    return {'NATLANG_REPO': str(REPO), 'PYTHONPATH': f'{REPO}/training/neuralese:{REPO}'}
+
+
+def _retarget(value):
+    """``value`` with every frozen-runtime path replaced by the checkout (strings, lists and dicts)."""
+    if isinstance(value, str):
+        return FROZEN_PATH_RE.sub(str(REPO), value)
+    if isinstance(value, list):
+        return [_retarget(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _retarget(item) for key, item in value.items()}
+    return value
+
+
+def migrate_config(config):
+    """(new config, changes): config.json of a controller launched from a frozen runtime, rewritten to run from the
+    checkout. Code identity is provenance: the actor Python inventory and rendering-asset hashes are dropped (every actor
+    attests its git commit instead), the actor environment and the collector build name the checkout, and the Pop hook no
+    longer names a runtime to install. Branch provenance and the hash-bound dev-evaluation runtime stay as recorded."""
+    new = {key: (value if key in MIGRATION_KEEPS else _retarget(value)) for key, value in config.items()}
+    for key in ('native_actor_python_runtime', 'native_actor_assets'):
+        new.pop(key, None)
+    if new.get('actor_environment') is not None or new.get('actor_command'):
+        new['actor_environment'] = checkout_environment()
+    new['runtime'] = f'{REPO}/ts-host'
+    for hook in ('after_actor_ready', 'before_collect'):
+        command = new.get(hook)
+        if isinstance(command, list) and '--runtime' in command:
+            at = command.index('--runtime')
+            new[hook] = command[:at] + command[at + 2:]
+    changes = sorted(key for key in set(config) | set(new) if config.get(key, '<absent>') != new.get(key, '<absent>'))
+    return new, changes
+
+
+def migrate_launch(spec):
+    """launch.json with the payload and ledger workdir of the checkout."""
+    return {**spec, 'payload': _retarget(spec['payload']), 'workdir': str(REPO)}
+
+
+def migrate_text(text):
+    """A wrapper script or env.sh whose frozen-runtime paths now name the checkout."""
+    return FROZEN_PATH_RE.sub(str(REPO), text)
+
+
+def migration_files(out, config):
+    """[(path, kind)] of the files besides config.json and launch.json that name the frozen runtime: the learner
+    admission wrappers of the config's commands and the control directory's env.sh."""
+    found = []
+    for key in ('learner_command', 'seed_command'):
+        for part in config.get(key) or []:
+            if isinstance(part, str) and part.endswith('admit-learner.py') and Path(part).is_file() and (Path(part), 'wrapper') not in found:
+                found.append((Path(part), 'wrapper'))
+    env_sh = OPS / 'interleave-v49/env.sh'
+    if env_sh.is_file():
+        found.append((env_sh, 'env.sh'))
+    return found
+
+
+def migration_record(config, commit):
+    return {'schema': 'natlang.rl-code-checkout-transition/1', 'transition': 'run-from-checkout-20261109',
+            'from': {'runtime': config.get('actor_environment', {}).get('NATLANG_REPO') or config.get('runtime')},
+            'to': {'checkout': str(REPO), 'git_commit': commit}, 'at': time.time()}
+
+
+def plan_migration(out, spec):
+    """Everything ``--to-checkout`` would change, without writing: {file: {'changed': [...]}} and the new launch spec."""
+    config = read_json(Path(out) / 'config.json')
+    new_config, changes = migrate_config(config)
+    files = {str(Path(out) / 'config.json'): {'keys_changed': changes}}
+    for path, kind in migration_files(out, config):
+        text = path.read_text()
+        files[str(path)] = {'kind': kind, 'lines_changed': sum(a != b for a, b in zip(text.splitlines(), migrate_text(text).splitlines()))}
+    launch = migrate_launch(spec)
+    return {'files': files, 'actor_environment': new_config.get('actor_environment'), 'runtime': new_config.get('runtime'),
+            'dropped': [k for k in ('native_actor_python_runtime', 'native_actor_assets') if k in config],
+            'launch_payload': launch['payload'], 'launch_workdir': launch['workdir'],
+            'state': 'natlang.rl-code-checkout-transition/1 appended to state.json code_transitions'}, new_config, launch
+
+
+def apply_migration(out, spec, stamp):
+    """Write the migrated files (each keeping a ``.pre-checkout-<stamp>`` copy); returns the restore list."""
+    out = Path(out)
+    plan, new_config, launch = plan_migration(out, spec)
+    config = read_json(out / 'config.json')
+    restore = []
+
+    def backup(path):
+        copy = Path(str(path) + f'.pre-checkout-{stamp}')
+        copy.write_bytes(Path(path).read_bytes())
+        restore.append((Path(path), copy))
+    for path, kind in migration_files(out, config):
+        backup(path)
+        path.write_text(migrate_text(path.read_text()))
+    backup(out / 'config.json')
+    save_json(out / 'config.json', new_config)
+    state = read_json(out / 'state.json')
+    if state is not None:
+        backup(out / 'state.json')
+        from natlang_neuralese.common.code_provenance import code_provenance
+        state.setdefault('code_transitions', []).append(migration_record(config, code_provenance(REPO, fresh=True)['git_commit']))
+        save_json(out / 'state.json', state)
+    backup(out / 'launch.json') if (out / 'launch.json').is_file() else None
+    save_json(out / 'launch.json', launch)
+    return restore, launch
+
+
+def restore_files(restore):
+    for path, copy in restore:
+        os.replace(copy, path)
 
 
 def next_runtime_tag(current):
@@ -256,32 +379,73 @@ def wait_resumed(unit, out, launched_at, seconds):
     return False, 'state.json was not rewritten by the new controller in time'
 
 
+def wait_round_boundary(out, seconds, poll=3.):
+    """Wait until the controller has finished its current update/window and begins another round: ``state.round``
+    advances (or the controller sits in ``collect`` of a round that has no collection binding yet). A bounded wait: on
+    timeout the restart proceeds from wherever the controller is."""
+    state_path = Path(out) / 'state.json'
+    start = read_json(state_path) or {}
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        state = read_json(state_path) or {}
+        round_dir = Path(out) / f"round-{state.get('round', 0):06d}"
+        if state.get('round') != start.get('round') or (
+                state.get('phase') == 'collect' and not (round_dir / 'collection-binding.json').exists()):
+            print(f'round boundary: round {state.get("round")} phase {state.get("phase")!r}', flush=True)
+            return True
+        time.sleep(poll)
+    print('round boundary not reached in time; restarting from the current phase', flush=True)
+    return False
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('out', type=Path, help='controller out directory (config.json, state.json, controller.log)')
     p.add_argument('--unit', help='current controller unit (default: bf95-lowlr-<name>[-rN], the active one)')
-    p.add_argument('--runtime-from-main', action='store_true', help='freeze main into a successor runtime and rebind to it')
-    p.add_argument('--commit', help='commit to freeze (default HEAD of the canonical checkout)')
-    p.add_argument('--use-runtime', metavar='TAG', help='rebind to an already frozen runtime (e.g. v58-1107) instead of freezing')
+    p.add_argument('--to-checkout', action='store_true',
+                   help='move a controller launched from a frozen runtime to run from the checkout (config, admission '
+                        'wrapper, env.sh, launch.json, state record); --dry-run prints every change')
+    p.add_argument('--at-round-boundary', action='store_true',
+                   help='wait (up to --boundary-wait seconds) for the controller to finish its current update and begin the next round')
+    p.add_argument('--boundary-wait', type=float, default=10800.)
+    p.add_argument('--runtime-from-main', action='store_true', help='LEGACY: freeze main into a successor runtime and rebind to it')
+    p.add_argument('--commit', help='LEGACY: commit to freeze (default HEAD of the canonical checkout)')
+    p.add_argument('--use-runtime', metavar='TAG', help='LEGACY: rebind to an already frozen runtime (e.g. v58-1107)')
     p.add_argument('--grace', type=float, default=600., help='seconds of cooperative stop before the unit is stopped hard')
     p.add_argument('--patient', action='store_true', help='never escalate: wait for the clean update boundary')
     p.add_argument('--no-preflight', action='store_true')
     p.add_argument('--resume-seconds', type=float, default=300.)
     p.add_argument('--config-patch', type=Path, help='JSON object merged into config.json after the stop (top-level keys; null deletes)')
     p.add_argument('--dry-run', action='store_true', help='print the plan and the launch command; change nothing')
-    p.add_argument('--freeze-only', action='store_true', help='only freeze the successor runtime (nothing is stopped)')
+    p.add_argument('--freeze-only', action='store_true', help='LEGACY: only freeze the successor runtime (nothing is stopped)')
     a = p.parse_args(argv)
     out = a.out.resolve()
     unit = pick_unit(out, a.unit)
     spec = read_json(out / 'launch.json') or derive_launch(unit)
     spec['unit'] = unit
     old_tag = current_runtime(spec)
+    legacy = a.runtime_from_main or a.use_runtime or a.freeze_only
+    if legacy and old_tag is None:
+        raise SystemExit('this controller already runs from the checkout: a plain restart picks up the newest main; '
+                         'the frozen-runtime flags apply only to controllers still launched from a frozen runtime')
+    if a.to_checkout and legacy:
+        raise SystemExit('--to-checkout and the frozen-runtime flags are alternatives')
+    if a.to_checkout and old_tag is None:
+        raise SystemExit('this controller already runs from the checkout (its launch payload names no frozen runtime)')
     new_unit = next_unit(unit, spec.get('units', []))
-    plan = {'out': str(out), 'unit': unit, 'next_unit': new_unit, 'runtime': old_tag, 'budget_gb': spec['budget_gb'],
+    plan = {'out': str(out), 'unit': unit, 'next_unit': new_unit, 'runtime': old_tag or 'checkout', 'budget_gb': spec['budget_gb'],
             'priority': spec['priority'], 'fixed_claim': spec['fixed_claim']}
     if a.dry_run:
-        print(json.dumps({**plan, 'launch': ledger_command(spec, new_unit)[2:]}, indent=1))
+        report = {**plan, 'launch': ledger_command(spec, new_unit)[2:]}
+        if a.to_checkout:
+            migration, _, launch = plan_migration(out, spec)
+            report = {**plan, 'to': 'checkout', 'migration': migration, 'launch': ledger_command(launch, new_unit)[2:],
+                      'preflight': 'production preflight under the checkout after the stop (unless --no-preflight); '
+                                   'a refusal restores every file and relaunches the frozen runtime'}
+        print(json.dumps(report, indent=1))
         return 0
+    if old_tag is not None and not a.to_checkout and not legacy:
+        print(f'note: this controller still runs from frozen runtime {old_tag}; --to-checkout moves it to the checkout', flush=True)
     with open(out / 'restart.lock', 'w') as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -297,6 +461,8 @@ def main(argv=None):
             print(f'frozen runtime {new_tag}', flush=True)
             if a.freeze_only:
                 return 0
+        if a.at_round_boundary:
+            wait_round_boundary(out, a.boundary_wait)
         outcome = stop_cooperatively(unit, out, a.grace, a.patient) if unit_state(unit) != 'gone' else 'already stopped'
         if held(out / 'controller.lock'):
             raise SystemExit('controller.lock is still held after the stop: a process of the old controller survives; '
@@ -313,7 +479,20 @@ def main(argv=None):
             save_json(out / 'config.json', config)
             print(f'config patched: {sorted(patch)}', flush=True)
         rebound = False
-        if new_tag:
+        restore = []
+        if a.to_checkout:
+            restore, spec = apply_migration(out, spec, time.strftime('%Y%m%d-%H%M%S'))
+            print(f'migrated to run from the checkout {REPO}: {[str(path) for path, _ in restore]}', flush=True)
+            if not a.no_preflight:
+                ok, detail = preflight(new_unit, out, REPO)
+                print(f'preflight under the checkout: {"ok" if ok else "REFUSED"} {detail}', flush=True)
+                if not ok:
+                    restore_files(restore)
+                    spec = read_json(out / 'launch.json') or spec
+                    restore = []
+                    print('restored the frozen-runtime files; relaunching as before', flush=True)
+            rebound = bool(restore)
+        elif new_tag:
             done = run(['bash', REBIND, out, old_tag, new_tag])
             print(done.stdout + done.stderr, flush=True)
             if done.returncode:
@@ -336,8 +515,8 @@ def main(argv=None):
         if started.returncode:
             raise SystemExit('relaunch not admitted by the ledger: ' + (started.stderr or started.stdout)[-500:])
         ok, detail = wait_resumed(new_unit, out, launched_at, a.resume_seconds)
-        print(json.dumps({**plan, 'stop': outcome, 'runtime_after': new_tag or old_tag, 'rebound': rebound,
-                          'resumed': ok, 'detail': detail}, indent=1))
+        print(json.dumps({**plan, 'stop': outcome, 'runtime_after': 'checkout' if rebound and a.to_checkout else (new_tag or old_tag or 'checkout'),
+                          'rebound': rebound, 'resumed': ok, 'detail': detail}, indent=1))
         return 0 if ok else 1
 
 

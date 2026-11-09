@@ -22,8 +22,6 @@ def ensure_plan(config, *, package=None):
     state = resident.current(directory)
     if state:
         plan = state['payload']['plan']
-        if plan.get('code') != code:
-            raise ValueError('supervised resident plan needs a drained runtime handoff')
         if plan.get('recipe_sha256') != recipe_lineage(config):
             raise ValueError('supervised resident plan changed recipe lineage')
         resident.recover(directory)
@@ -48,7 +46,7 @@ def ensure_plan(config, *, package=None):
             raise ValueError('resident generation appeared during supervised plan initialization')
         if path.exists():
             old = json.loads(path.read_text())
-            for key in ('schema', 'recipe', 'recipe_sha256', 'code', 'stage_inputs'):
+            for key in ('schema', 'recipe', 'recipe_sha256', 'stage_inputs'):
                 if old.get(key) != plan[key]:
                     raise ValueError('supervised resident plan changed; use a distinct drained authority directory')
         else:

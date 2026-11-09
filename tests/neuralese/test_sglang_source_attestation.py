@@ -11,7 +11,7 @@ serve = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(serve)
 
 
-def test_attestation_binds_interpreter_checkout_and_rejects_dirty_source(tmp_path):
+def test_attestation_records_the_actual_fork_commit_and_warns_never_refuses(tmp_path, capsys):
     repo = tmp_path / 'fork'
     package = repo / 'python/sglang'
     package.mkdir(parents=True)
@@ -24,9 +24,12 @@ def test_attestation_binds_interpreter_checkout_and_rejects_dirty_source(tmp_pat
     python = tmp_path / 'python'
     python.write_text('#!/bin/sh\nprintf "%s\\n" ' + str(package / '__init__.py') + '\n')
     python.chmod(0o755)
-    assert serve.attest_sglang_source(str(python), {'commit': commit})['commit'] == commit
-    with pytest.raises(RuntimeError, match='differs from pinned'):
-        serve.attest_sglang_source(str(python), {'commit': '0' * 40})
+    record = serve.attest_sglang_source(str(python), {'commit': commit})
+    assert record['commit'] == commit and record['matches_declared'] is True and record['dirty'] is False
+    assert capsys.readouterr().err == ''
+    other = serve.attest_sglang_source(str(python), {'commit': '0' * 40})   # a different fork head still launches
+    assert other['commit'] == commit and other['declared_commit'] == '0' * 40 and other['matches_declared'] is False
+    assert 'sglang_fork_differs_from_declared' in capsys.readouterr().err
     (package / 'injected.py').write_text('')
-    with pytest.raises(RuntimeError, match='uncommitted or untracked'):
-        serve.attest_sglang_source(str(python), {'commit': commit})
+    dirty = serve.attest_sglang_source(str(python), {'commit': commit})
+    assert dirty['dirty'] is True and dirty['commit'] == commit
