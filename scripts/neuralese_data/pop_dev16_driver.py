@@ -89,7 +89,7 @@ def main(job_path):
     server_args += ['--base', '/base', '--device', 'cuda', '--host', host, '--port', str(port),
                     '--prefill-tokens', '2048', '--prefix-block', '2048', '--prefix-cache-gb', '.25', '--threads', '2',
                     '--store-dir', '/work/store', '--prompt-rendering', 'full']
-    bootstrap = ("import torch,runpy,sys;torch.cuda.set_per_process_memory_fraction(.90);sys.argv=" + repr(server_args)
+    bootstrap = ("import torch,runpy,sys;torch.cuda.set_per_process_memory_fraction(.96);sys.argv=" + repr(server_args)
                  + ";runpy.run_path('/repo/scripts/neuralese_data/serve_native_checkpoint.py',run_name='__main__')")
     lease = stage / f'{name}.consumer.json'
     lease.write_text(json.dumps({'role': 'rl-rollout-actor' if rl else 'protected-development-evaluation', 'checkpoint_sha256': job['source_sha256'],
@@ -106,6 +106,9 @@ def main(job_path):
            'TRANSFORMERS_OFFLINE': '1', 'HF_HOME': '/work/hf', 'HF_MODULES_CACHE': '/work/hf/modules',
            'TRITON_CACHE_DIR': '/work/triton', 'TORCHINDUCTOR_CACHE_DIR': '/work/inductor', 'CUDA_CACHE_PATH': '/work/cuda',
            'NATLANG_HASH_CACHE': '/work/hash-cache.jsonl', 'PYTHONUNBUFFERED': '1',
+           # The actor is the GPU's only compute user; at .90 with a fragmented caching allocator long episodes
+           # OOMed (w4-w5: 26 of 80 round-0 Pop episodes, 418 MiB reserved-unallocated, ~650 MiB physically free).
+           'PYTORCH_CUDA_ALLOC_CONF': 'expandable_segments:True',
            # The mounted checkout is the code that serves: its commit is recorded in the actor receipt (code_provenance).
            'NATLANG_CODE_COMMIT': (job.get('code') or {}).get('git_commit') or '',
            'NATLANG_CODE_DIRTY': '1' if (job.get('code') or {}).get('dirty') else '0'}
