@@ -87,8 +87,10 @@ def main(job_path):
     if rl:
         server_args += ['--actor-export-format', job['actor_export_format']]
     server_args += ['--base', '/base', '--device', 'cuda', '--host', host, '--port', str(port),
-                    '--prefill-tokens', '2048', '--prefix-block', '2048', '--prefix-cache-gb', '.25', '--threads', '2',
+                    '--prefill-tokens', '512', '--prefix-block', '512', '--prefix-cache-gb', '.25', '--threads', '2',
                     '--store-dir', '/work/store', '--prompt-rendering', 'full']
+    # 512-token chunks: each chunk attends over the whole context, and at 2048 long RL episodes still OOMed the 8 GB GPU
+    # after the .96 fraction (w5 round 0: 3 of ~20 Pop episodes, 7.16 GiB allocated by PyTorch).
     bootstrap = ("import torch,runpy,sys;torch.cuda.set_per_process_memory_fraction(.96);sys.argv=" + repr(server_args)
                  + ";runpy.run_path('/repo/scripts/neuralese_data/serve_native_checkpoint.py',run_name='__main__')")
     lease = stage / f'{name}.consumer.json'
