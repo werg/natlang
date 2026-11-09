@@ -20,6 +20,18 @@ Pop actor run from `/home/werg/natlang`; a running process keeps its code and ev
 Kept: actor policy SHA (`validate_actor_receipts`), native identity/tokenizer/embedding, prompt-rendering contract, schemas and
 versions of every artifact. Removed refusals: see the commit message of "Production RL: code identity is recorded provenance".
 
+## Order of changes (what is on main, what is held)
+
+* On main (commits "Production RL: code identity is recorded provenance..." and "RL controller restart in place..."): the
+  controller/collector/learner/actor code and `restart_controller.py --to-checkout / --in-place`. A controller frozen from this
+  main (tonight's old-style `--runtime-from-main`) already accepts every code change; the frozen-runtime tooling still works.
+* Held on the local branch `ckout-part-b` until w5 has moved (it would break the live w5's Pop actor hook, which runs the
+  checkout's `pop_rl_actor.py` against a frozen runtime): Pop runs the checkout (`pop_behavior_eval.sync_pop_checkout`,
+  `pop_rl_actor.py`, `pop_dev16_driver.py`, `pop_eval_prepare.py`), `promotion.py` pairs arms across code commits, and the deletion of
+  `freeze_native_runtime.py`, the `--runtime-from-main/--use-runtime/--freeze-only` flags, `assemble_protected_runtime_inputs` and
+  their tests. **`--to-checkout` needs Part B on main first** (its config drops the Pop hook's `--runtime`, which the old
+  `pop_rl_actor.py` requires).
+
 ## Moving w5 to run from the checkout
 
 `bf95-lowlr-w5` (unit `bf95-lowlr-w5-rN`, out `.../ops/bf95-lowlr-1105/w5`) still launches from a frozen runtime. After the
