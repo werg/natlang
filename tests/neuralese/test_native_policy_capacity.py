@@ -268,10 +268,14 @@ def test_lfm_continuations_adopt_sglang_actor_through_recorded_transition(tmp_pa
     # Idempotent; sealed selections, active updates, opt-outs and coefficient actors keep their actor.
     assert production.adopt_actor_engine_defaults(config,state,path)==adopted
     assert len(json.loads(path.read_text())['actor_engine_transitions'])==1
-    for kept,kwargs in (({},{'sealed_selection':True}),({'actor_engine_keep_native':True},{}),
-                        ({'coefficient_policy':'p.json'},{})):
+    for kept,kwargs in (({'actor_engine_keep_native':True},{}),({'coefficient_policy':'p.json'},{})):
         assert production.adopt_actor_engine_defaults({**config,**kept},state,path,**kwargs)['actor_command']==config['actor_command']
-    assert production.adopt_actor_engine_defaults(config,{'active_update_round':'r'},path)==config
+    fresh=tmp_path/'fresh.json'
+    assert production.adopt_actor_engine_defaults(config,{'round':3},fresh,sealed_selection=True)==config
+    assert production.adopt_actor_engine_defaults(config,{'active_update_round':'r'},fresh)==config
+    # Once recorded, a mid-round controller restart (sealed selection, active update) keeps the SGLang actor.
+    assert production.adopt_actor_engine_defaults(config,state,path,sealed_selection=True)==adopted
+    assert production.adopt_actor_engine_defaults(config,{**state,'active_update_round':'r'},path)==adopted
     assert production.adopt_actor_engine_defaults(adopted,state,path)==adopted
 
 

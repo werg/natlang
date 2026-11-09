@@ -2478,9 +2478,13 @@ def adopt_actor_engine_defaults(config, state, state_path, *, sealed_selection=F
     opts out; coefficient-policy actors stay native (SGLang serves ordinary checkpoints only).
     """
     command = config.get('actor_command') or []
+    # A sealed selection or active update keeps the actor its lineage recorded: once the transition is recorded, a
+    # controller restart mid-round relaunches SGLang too (w5 round 0 started on SGLang and fell back to the config's
+    # native actor at each mid-round restart).
+    recorded = any(item.get('transition') == SGLANG_ACTOR_TRANSITION for item in state.get('actor_engine_transitions') or ())
     if (not command or config.get('actor_engine_keep_native') is True or config.get('coefficient_policy')
             or config.get('actor_engine', 'native-python') != 'native-python' or config.get('model') != 'lfm'
-            or sealed_selection or state.get('active_update_round')):
+            or ((sealed_selection or state.get('active_update_round')) and not recorded)):
         return config
     engine = command[command.index('--engine') + 1] if '--engine' in command else 'native'
     if engine == 'sglang':
