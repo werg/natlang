@@ -255,4 +255,4 @@ def test_pop_work_is_removed_inside_a_root_container_scoped_to_the_eval_root(tmp
     assert '-v ' + module.POP_EVAL_ROOT + ':/r' in calls[0] and calls[0].endswith('-- /r/rl-actor-1-abc /r/raw-2-def/store')
     import pytest
     with pytest.raises(ValueError):
-        module.remove_pop_work(['/home/werg/natlang'])
+        module.remove_pop_work(['/elsewhere'])
