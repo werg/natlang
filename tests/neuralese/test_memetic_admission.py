@@ -486,18 +486,22 @@ def test_template_floor_never_raises_a_scale_and_can_be_opted_out(tmp_path, monk
 
 
 def test_window_capacity_bounds_each_family_and_unvisited_admitted_rows_count_against_it(tmp_path, monkeypatch):
-    """A window digests refresh_after_updates x accumulate_batches x batch_tokens forward tokens; the rollout family
-    takes at most its share of that, the rest stay deferred (never dropped), and rows admitted earlier that no update
-    visited yet are charged first."""
+    """A window digests refresh_after_updates x accumulate_batches packed batches; the rollout family takes at most its
+    share of them, the rest stay deferred (never dropped), and rows admitted earlier that no update visited yet are
+    charged first."""
     probe = tmp_path / 'probe.jsonl'
     probe.write_text(json.dumps(graph('rollout:probe', 5)) + '\n')
     tokens = NativeGraphSource(probe, FP, required_split='train').entries[0]['forward_tokens']
-    assert admission.window_capacity({'refresh_after_updates': 64, 'accumulate_batches': 1, 'batch_tokens': 7}) == 448
-    assert admission.window_capacity({'refresh_after_updates': 64}) is None
-    # Capacity 64 x 1 x 5 rows' worth; the rollout share .005 of it is 1.6 rows' worth of forward tokens.
+    geometry = {'refresh_after_updates': 64, 'accumulate_batches': 2, 'batch_tokens': tokens, 'batch_graphs': 8}
+    assert admission.window_capacity(geometry) == 128 and admission.window_capacity({'refresh_after_updates': 64}) is None
+    # A graph over the batch bound is a batch of its own; small graphs share one; no declared geometry counts one.
+    assert admission.row_batches(10 * tokens, geometry) == 1.0 and admission.row_batches(tokens // 2, geometry) == .5
+    assert admission.row_batches(1, geometry) == 1 / 8 and admission.row_batches(5, {}) == 1.0
+    # Capacity 64 x 1 batches; the rollout share .025 of it is 1.6 batches, and each probe row fills one.
     config, declared, state, out, train = lineage(
-        tmp_path, stage_parameters={'accumulate_batches': 1, 'batch_tokens': 5 * tokens}, distillation_max_share=1.,
-        distillation_window_shares={'rollout-distillation': .005})
+        tmp_path, stage_parameters={'accumulate_batches': 1, 'batch_tokens': tokens, 'batch_graphs': 8},
+        distillation_max_share=1., distillation_window_shares={'rollout-distillation': .025},
+        distillation_family_scales={'rollout-distillation': .2})
     admission.queue_package(out / 'memetic', [graph('rollout:a', 7), graph('rollout:b', 8), graph('rollout:c', 9)],
                             family=admission.ROLLOUT_FAMILY, tokenizer=FP, roles=[], protected=Guard(),
                             manifests=[tmp_path / 'r.json'], actors=[resident.sha(config['checkpoint'])],
@@ -507,16 +511,17 @@ def test_window_capacity_bounds_each_family_and_unvisited_admitted_rows_count_ag
     ledger = state['interleave']['memetic_distillation']['rows']
     assert [ledger[i]['disposition'] for i in ('rollout:a', 'rollout:b', 'rollout:c')] == [
         'admitted', 'deferred', 'deferred']
-    assert ledger['rollout:b']['reason'] == 'window capacity' and ledger['rollout:a']['forward_tokens'] == tokens
+    assert ledger['rollout:b']['reason'] == 'window capacity' and ledger['rollout:a']['batches'] == 1.0
+    assert ledger['rollout:a']['forward_tokens'] == tokens
     record = json.loads(Path(state['interleave']['memetic_distillation']['admissions'][0]['record']['path']).read_text())
-    assert record['share_cap']['window_capacity_forward_tokens'] == 64 * 5 * tokens
-    assert record['share_cap']['forward_tokens_by_family'] == {'rollout-distillation': tokens}
+    assert record['share_cap']['window_capacity_batches'] == 64
+    assert record['share_cap']['batches_by_family'] == {'rollout-distillation': 1.0}
     # The unvisited admitted row is charged to the next window; once visited it is not.
     frame = {'source_receipts': [{'sha256': 'x'}], 'exposure_counts': {}, 'required_visits': {'rollout:a': 1}}
     monkeypatch.setattr(admission, '_parent_sft_frame', lambda checkpoint, stage: frame)
-    assert admission._unvisited_tokens(ledger, 'ckpt', 'sft') == {'rollout-distillation': tokens}
+    assert admission._unvisited_batches(ledger, 'ckpt', 'sft') == {'rollout-distillation': 1.0}
     frame['exposure_counts'] = {'rollout:a': 1}
-    assert admission._unvisited_tokens(ledger, 'ckpt', 'sft') == {}
-    assert admission._unvisited_tokens({'x': {'disposition': 'deferred'}}, 'never read', 'sft') == {}
+    assert admission._unvisited_batches(ledger, 'ckpt', 'sft') == {}
+    assert admission._unvisited_batches({'x': {'disposition': 'deferred'}}, 'never read', 'sft') == {}
     with pytest.raises(ValueError, match='distillation_window_shares'):
         admission.validate_parameters({'distillation_window_shares': {'rollout-distillation': 1.5}})

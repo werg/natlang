@@ -31,12 +31,14 @@ first, return-weighted, closed whole graphs, sampled outputs only, train tasks o
 never repeated, and every row is visited once; `rollout_distillation_max_per_task` bounds one task). Each row records its own
 sampling policy, which must be a checkpoint of this lineage. Earlier rounds (scored before the hook, or queued by its one-per-task
 form) are topped up at every scored round (`backfill`; `scripts/neuralese_data/backfill_rollout_distillation.py CONTROL_OUT` does it
-now), one `rollout-distillation-all.json` record per round. The next mandatory SFT window appends the rows at training priority 2
+now), one `rollout-distillation-all.json` record per round; an episode lowers only from its round's collector bundle, which is pruned after
+the round's update (w5 rounds 0 and 1, 85 student successes, were lost that way), so the hook must run at scoring. The next mandatory SFT window appends the rows at training priority 2
 (prepared statics at 1, so the policy's own rows run first), each distilled family with its own declared CE scale
-(`distillation_family_scales`; `distillation_family_scale` is the default), under `distillation_max_share` (default 0.5 of the
-source's rows, summed scale) and a window capacity: a window digests `refresh_after_updates x accumulate_batches x batch_tokens`
-logical forward tokens, a family takes at most its `distillation_window_shares` of that (rollouts 0.4, statics 0.2, memetic 0.1),
-and admitted rows no update has visited yet are charged first, so a backlog never grows and no row is visited twice; deferral
+(rollouts 8, statics 4, memetic 1; `distillation_family_scales`, or one uniform `distillation_family_scale`), under `distillation_max_share` (default 0.5 of the
+source's rows, summed scale) and a window capacity: a window digests `refresh_after_updates x accumulate_batches` packed batches (128), a captured episode
+fills a batch alone and carries about as much scaled loss as an average batch of ordinary rows at scale 8, so a family takes at
+most its `distillation_window_shares` of the batches (rollouts 0.4, statics 0.2, memetic 0.1) and that is its share of the loss;
+admitted rows no update has visited yet are charged first, so a backlog never grows and no row is visited twice; deferral
 never drops. Default on, `rollout_distillation: false` opts out; continuations adopt it
 through the recorded transition `rollout-distillation-20261110`. Every append also floors the declared CE scale of the scripted-template
 families (`port-record-wrapper`, `native-communication-template`; `distillation_withdrawn_families`, `[]` opts out): the corrected mix

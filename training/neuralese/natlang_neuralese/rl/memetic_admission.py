@@ -57,22 +57,23 @@ ENCODING = 'native-row-objectives-v1'
 # successor source at one half, a ceiling that availability (not the cap) normally decides.
 DEFAULT_MAX_SHARE = 0.5
 DEFAULT_FAMILY_SCALE = 1.0
-# Declared CE scale and scheduling priority of each distilled family. Under token mass a row's loss is its own-output
-# token mass, and a whole successful episode carries thousands of sampled tokens against a few hundred in a focus
-# row, so a scale of 1 already gives the rollout family a large share of the window's loss (plans/neuralese/
-# SFT_TEMPLATE_EXCISION_20261110.md); statics fill what the policy's own rows leave (a lower priority is scheduled
-# after them, rank by rank).
-DEFAULT_FAMILY_SCALES = {}
+# Declared CE scale and scheduling priority of each distilled family. The policy's own episodes weigh like the genuine
+# natlang rows (the cap of 8: the same weight per sampled token), prepared statics like the other diverse families
+# (4); statics fill what the policy's own rows leave (a lower priority is scheduled after them, rank by rank).
+DEFAULT_FAMILY_SCALES = {ROLLOUT_FAMILY: 8.0, STATIC_FAMILY: 4.0}
 FAMILY_PRIORITY = {ROLLOUT_FAMILY: 2, STATIC_FAMILY: 1, FAMILY: 1}
 # Scripted-template families the 2026-11-03 recipe review found dominating the mixture. The corrected mix already
 # scales them to a 0.5% loss share each and cuts their quotas; every append window now also floors their declared
 # scale (a declared-scale refresh, the one family change a resident append admits; rows stay in the source with their
 # earned exposure, and a floor of ``WITHDRAWN_SCALE`` cannot be raised by a later window without an explicit setting).
 # Window capacity (owner, 2026-11-10: expert iteration should be a real, bounded share of a window, 30-50% of its loss).
-# A window digests ``refresh_after_updates x accumulate_batches x batch_tokens`` logical forward tokens, and one captured
-# successful episode is hundreds of thousands of them, so the rows of a family admitted to a window are bounded by that
-# family's share of the capacity; the rest stay deferred (never dropped) for later windows, and rows admitted earlier
-# that no update has visited yet count against the share, so a backlog never grows and no row is visited twice.
+# A window digests ``refresh_after_updates x accumulate_batches`` packed batches, and a captured successful episode is a
+# single graph of hundreds of thousands of forward tokens, so it fills a batch alone: measured on a real round
+# (plans/neuralese/SFT_TEMPLATE_EXCISION_20261110.md) one episode carries about as much scaled own-output loss as an
+# average batch of the window's ordinary rows at the family scale of 8, so a family's share of the batches is its
+# share of the loss. The rows of a family admitted to a window are bounded by that share of the batches; the rest stay
+# deferred (never dropped) for later windows, and rows admitted earlier that no update has visited yet are charged
+# first, so a backlog never grows and no row is visited twice.
 DEFAULT_WINDOW_SHARES = {ROLLOUT_FAMILY: 0.4, STATIC_FAMILY: 0.2, FAMILY: 0.1}
 WITHDRAWN_FAMILIES = ('port-record-wrapper', 'native-communication-template')
 WITHDRAWN_SCALE = 1e-3
@@ -100,9 +101,12 @@ def validate_parameters(parameters):
 
 
 def family_scales(parameters):
-    """{family: declared CE scale} of every distillation family under ``parameters``."""
-    base = parameters.get('distillation_family_scale', DEFAULT_FAMILY_SCALE)
-    return {family: float({**DEFAULT_FAMILY_SCALES, **(parameters.get('distillation_family_scales') or {})}.get(family, base))
+    """{family: declared CE scale} of every distillation family under ``parameters``: the per-family declaration, else
+    an explicit uniform ``distillation_family_scale``, else the family's default."""
+    explicit = parameters.get('distillation_family_scales') or {}
+    uniform = parameters.get('distillation_family_scale')
+    return {family: float(explicit.get(family, uniform if uniform is not None
+                                       else DEFAULT_FAMILY_SCALES.get(family, DEFAULT_FAMILY_SCALE)))
             for family in FAMILIES}
 
 
@@ -111,12 +115,22 @@ def window_shares(parameters):
 
 
 def window_capacity(stage_parameters):
-    """Logical forward tokens one SFT window digests, or None when the stage does not declare its geometry."""
+    """Packed batches one SFT window digests (``refresh_after_updates x accumulate_batches``), or None when the stage
+    does not declare its geometry."""
     try:
-        return (int(stage_parameters['refresh_after_updates']) * int(stage_parameters['accumulate_batches'])
-                * int(stage_parameters['batch_tokens']))
+        return int(stage_parameters['refresh_after_updates']) * int(stage_parameters['accumulate_batches'])
     except (KeyError, TypeError, ValueError):
         return None
+
+
+def row_batches(forward_tokens, stage_parameters):
+    """The share of one packed batch a row fills: its forward tokens against the batch's token bound, at least one
+    graph's share and at most the whole batch (a graph over the bound is a batch of its own)."""
+    try:
+        tokens, graphs = int(stage_parameters['batch_tokens']), int(stage_parameters['batch_graphs'])
+    except (KeyError, TypeError, ValueError):
+        return 1.0
+    return min(1.0, max(forward_tokens / tokens, 1 / graphs))
 
 
 def withdrawn_families(parameters):
@@ -321,11 +335,11 @@ def _quota_aware_basis(policy, parent, stage_id, parameters, candidate_sha256):
                       communication_min_visits=visits)
 
 
-def _unvisited_tokens(rows, checkpoint, stage_id):
-    """{family: forward tokens} of the admitted rows (with a recorded size) that no update has visited yet: a window's
+def _unvisited_batches(rows, checkpoint, stage_id):
+    """{family: packed batches} of the admitted rows (with a recorded size) that no update has visited yet: a window's
     own rows are scheduled before everything else, so these are what the next window must digest first."""
     sized = {key: value for key, value in rows.items() if value.get('disposition') == 'admitted'
-             and value.get('forward_tokens')}
+             and value.get('batches')}
     if not sized:
         return {}
     frame = _parent_sft_frame(checkpoint, stage_id)
@@ -333,7 +347,7 @@ def _unvisited_tokens(rows, checkpoint, stage_id):
     used = {}
     for key, value in sized.items():
         if counts.get(key, 0) < required.get(key, 1):
-            used[value['family']] = used.get(value['family'], 0) + value['forward_tokens']
+            used[value['family']] = used.get(value['family'], 0) + value['batches']
     return used
 
 
@@ -619,22 +633,22 @@ def _prepare_window(config, declared, state, state_path, directory, *, protected
         mass, count = sum(value.get('scale', fallback) for value in prior), len(prior)
         total = len(prior_ids)
         capacity, shares = window_capacity(base_parameters), window_shares(parameters)
-        used = _unvisited_tokens(ledger['rows'], state['checkpoint'], sft_id) if capacity is not None else {}
+        used = _unvisited_batches(ledger['rows'], state['checkpoint'], sft_id) if capacity is not None else {}
         for row in pending_rows:
             family = row_family[row['id']]
             scale = _row_scale(base_inputs, family, scales)
-            tokens = forward.get(row['id'], 0)
+            cost = row_batches(forward.get(row['id'], 0), base_parameters)
             if mass + scale > share * (total + count + 1) + 1e-9:
                 deferred.append((row, 'family share cap'))
-            elif capacity is not None and used.get(family, 0) and used[family] + tokens > shares[family] * capacity:
+            elif capacity is not None and used.get(family, 0) and used[family] + cost > shares[family] * capacity:
                 deferred.append((row, 'window capacity'))
             else:
                 admitted.append(row)
                 mass, count = mass + scale, count + 1
-                used[family] = used.get(family, 0) + tokens
+                used[family] = used.get(family, 0) + cost
         cap = {'max_share': share, 'family_scales': scales, 'predecessor_rows': total, 'prior_memetic_rows': len(prior),
                'admitted_rows': len(admitted), 'deferred_rows': len(deferred), 'scale_mass': mass,
-               'window_capacity_forward_tokens': capacity, 'window_shares': shares, 'forward_tokens_by_family': used,
+               'window_capacity_batches': capacity, 'window_shares': shares, 'batches_by_family': used,
                'withdrawn_families': withdrawn}
     else:
         cap = {'max_share': share}
@@ -670,7 +684,8 @@ def _prepare_window(config, declared, state, state_path, directory, *, protected
                 ledger['rows'][row['id']] = {'package': receipt_ref['sha256'], 'disposition': 'admitted',
                                              'window': window, 'leaf_sha256': leaf['sha256'],
                                              'scale': _row_scale(base_inputs, receipt['family'], scales),
-                                             'family': receipt['family'], 'forward_tokens': forward.get(row['id'], 0)}
+                                             'family': receipt['family'], 'forward_tokens': forward.get(row['id'], 0),
+                                             'batches': row_batches(forward.get(row['id'], 0), base_parameters)}
         statuses = [ledger['rows'].get(row['id'], {}).get('disposition') for row in receipt['rows']]
         status = 'partial' if 'deferred' in statuses else 'admitted' if 'admitted' in statuses else 'consumed-none-admitted'
         ledger['packages'][receipt_ref['sha256']] = {'path': receipt_ref['path'], 'status': status, 'window': window}
