@@ -841,7 +841,9 @@ class SglangEngine(Engine):
                 raise RequestError('neuralese-native-state-mode', str(error)) from error
         if receipt is not None or self._sglang_exact(block):
             count = len(block.token_ids)
-            seq.sglang_imports.append({'path': self._sglang_import_file(block_id, block), 'start': len(ids), 'count': count})
+            if count:   # an empty state imports nothing; a count-0 span made the scheduler raise and die (2026-11-10)
+                seq.sglang_imports.append({'path': self._sglang_import_file(block_id, block), 'start': len(ids),
+                                           'count': count})
             base = 2 * int(self.sglang_export['producer_embedding']['input_id_offset'])
             import hashlib
             for index in range(count):

@@ -1326,6 +1326,12 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
                     return raw
                 except Exception as error:
                     errors.append(str(error))
+            # The DGX actor's own store on disk (<round>/actor-store/blocks/<xx>/<id>.safetensors): its server died
+            # mid-round (SGLang scheduler crash, w5 round 1, 2026-11-10) but the blocks it wrote are intact.
+            local = out / 'actor-store' / 'blocks' / block_id[5:7] / f'{block_id}.safetensors'
+            if local.is_file():
+                origins[block_id] = 'local-actor-store'
+                return local.read_bytes()
             # Copies of earlier Pop actor stores of this policy (<controller out>/recovered-pop-stores/rl-actor-<step>-
             # <policy12>-<code>/<xx>/<id>.safetensors, the store's own byte format): an actor relaunched mid-round
             # starts with an empty store. save_bundle verifies the content ID of whatever bytes this returns.
