@@ -132,6 +132,20 @@ share), about 6% prepared statics, the rest the diverse focus.
 CPU continuation preflight of that command (45 GB ledger budget; a 10.5 GB budget is OOM-killed before the schedule is planned,
 as every earlier attempt was): see the final section.
 
-## 6. Deployment
+## 6. Trainer CPU continuation preflight and deployment
 
-See the commit log and the final section of this note.
+Preflight of the window-1 command (`--continuation-preflight-only --device cpu`, real 18.5 GB window-0 checkpoint, real
+optimizer/RNG, scratch `--out`; run outside the ledger under `systemd-run -p MemoryMax=56G` because the ledger queue was
+jammed by two stale requeued units behind the controller's fixed 100 GB claim; peak about 33-48 GB, a 10-14 GB budget is
+OOM-killed): **passed** (`continuation-preflight.json`, global step 110): 101,312 rows (100,996 + 316 appended), 5,986 focus
+rows pending (5,670 old + 316 new), the superseded focus recorded (`superseded` by the successor, 8,102 rows active),
+115,937 remaining graph visits, the monotone-window schedule planned. The first attempt failed on exactly the schedule problem of
+section 4 (1.08M > 1.05M tokens), which the successor focus and the per-episode cohorts removed.
+
+Deployment: code on main (`697fd1043`, `e3aa0684d`, `bc7edb977`, and the docs commit after them). The production controller is
+started from the checkout: the rollout hook (`rl/rollout_distillation.py`) and the admission (`rl/memetic_admission.py`) are
+imported by the running process at start/first use, so a controller restart in place picks up the newest code. The packages of rounds
+2 and 3 are queued by the hook at their scoring (their collector bundles exist then); window 1 admits them with the five staged
+static packages. Check after round 2 scores: `round-000002/rollout-distillation-all.json`, a `rollout-distillation` package in
+`memetic/distill/admission-queue.jsonl`; after window 1 starts: `sft-window-000001/memetic-admission/admission.json`
+(`share_cap`, `pending_focus`).

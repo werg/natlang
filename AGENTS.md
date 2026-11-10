@@ -39,7 +39,12 @@ source's rows, summed scale) and a window capacity: a window digests `refresh_af
 fills a batch alone and carries about as much scaled loss as an average batch of ordinary rows at scale 8, so a family takes at
 most its `distillation_window_shares` of the batches (rollouts 0.4, statics 0.2, memetic 0.1) and that is its share of the loss;
 admitted rows no update has visited yet are charged first, so a backlog never grows and no row is visited twice; deferral
-never drops. Default on, `rollout_distillation: false` opts out; continuations adopt it
+never drops. The trainer schedules every row of an active pending focus before anything else and appended rows only as the one-in-five
+frontier behind it, so the append writes a successor focus request that supersedes the active one (appended rows first, then the unconsumed
+superseded rows; `memetic_admission._successor_focus`, `native_resident_ce.extension_policy` admits the change) and each rollout episode
+is its own source leaf (cohorts are served least-served first, so a fresh single-episode cohort leads): simulated on w5's real schedule,
+37 of window 1's first 128 batches are episodes (about 29% of the loss). A CPU continuation preflight needs about 48 GB (10 GB is OOM-killed).
+Default on, `rollout_distillation: false` opts out; continuations adopt it
 through the recorded transition `rollout-distillation-20261110`. Every append also floors the declared CE scale of the scripted-template
 families (`port-record-wrapper`, `native-communication-template`; `distillation_withdrawn_families`, `[]` opts out): the corrected mix
 (2026-11-03) already withdrew duplicate rows, cut template quotas and scaled them to 0.5% of loss each; measured window 0 had no template
