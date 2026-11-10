@@ -194,6 +194,11 @@ def test_policy_capacity_prioritizes_real_same_actor_episode():
               'same':{'actions':[{}]},'empty':{'actions':[]}}
     expected={'entries':[{'id':'stale','index':0},{'id':'empty','index':1},{'id':'same','index':2}]}
     assert policy_parity_first_group(expected,obj)==(2,)
+    # Engine-sampled decisions are guarded, not probed: they cannot open the first-forward gate.
+    obj.rows['sglang']={'actions':[{'actor_export':'x'}],'decision_actions':[{'actor_export':'x'}]}
+    obj.rows['native']={'actions':[{}],'decision_actions':[{}]}
+    expected['entries']=[{'id':'sglang','index':3},*expected['entries'],{'id':'native','index':4}]
+    assert policy_parity_first_group(expected,obj)==(4,)
     obj._behavior_logprob_probe_done=True
     assert policy_parity_first_group(expected,obj) is None
 

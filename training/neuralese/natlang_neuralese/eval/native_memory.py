@@ -1127,11 +1127,13 @@ def policy_parity_first_group(expected, objective):
     """Select a real same-actor episode before any policy capacity backward."""
     parity=getattr(objective,'can_compare_behavior_actor',None)
     if parity is None or getattr(objective,'_behavior_logprob_probe_done',False):return None
+    from ..rl.native_replay import native_sampled_actions
+    # Same predicate as the objective's first-forward gate: only natively sampled decisions/tokens can be probed
+    # (engine-sampled ones are guarded instead), so an episode with only SGLang decisions cannot open the gate.
     entries=[entry for entry in expected['entries'] if parity(objective.rows[entry['id']])]
     selected=next((entry['index'] for entry in entries
-                   if objective.rows[entry['id']].get('decision_actions')),None)
+                   if native_sampled_actions(objective.rows[entry['id']].get('decision_actions'))),None)
     if selected is None:
-        from ..rl.native_replay import native_sampled_actions
         selected=next((entry['index'] for entry in entries
                        if native_sampled_actions(objective.rows[entry['id']].get('actions'))),None)
     return None if selected is None else (selected,)
