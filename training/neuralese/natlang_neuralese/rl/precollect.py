@@ -113,19 +113,23 @@ class Handle:
     """One background drainable pre-collection; ``finish`` drains it, waits for its in-flight episodes and never raises."""
 
     def __init__(self, directory, kwargs, collect, control, log):
-        self.directory, self.drain, self.error = Path(directory), threading.Event(), None
+        self.directory, self.drain, self.error, self.settle = Path(directory), threading.Event(), None, True
         self.thread = threading.Thread(target=self._run, args=(kwargs, collect, control, log), name='precollect', daemon=True)
         self.thread.start()
 
     def _run(self, kwargs, collect, control, log):
         try:
             collect(**kwargs, control=control, drain=self.drain)
-            _record_settled(self.directory)
+            if self.settle:
+                _record_settled(self.directory)
         except BaseException as error:   # best effort: a failed pre-collection costs only Pop's work, never the round
             self.error = repr(error)[:400]
             log(json.dumps({'event': 'pre-collection failed', 'directory': str(self.directory), 'error': self.error}))
 
-    def finish(self):
+    def finish(self, settle=True):
+        """``settle=False`` (the learner failed or was stopped): leave it unsettled, so the resumed update's ``begin``
+        reopens the same directory and Pop keeps collecting while the learner reruns."""
+        self.settle = settle
         self.drain.set()
         self.thread.join()
         return self.error

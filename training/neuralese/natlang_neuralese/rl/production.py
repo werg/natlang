@@ -2325,15 +2325,19 @@ def run(config_path, *, rounds=None, stop=None):
                     handle = None
                     if pre_ok and mode == 'grpo' and amended_groups is None and not report.get('reward_reclassification'):
                         handle = _begin_precollection(config, state, cases, selection, collect_kwargs, round_dir, control)
+                    learner_done = False
                     try:
                         run_command(command, values)
+                        learner_done = True
                     except BaseException:
                         if pre_ok and handle is None:
                             _release_remote_actor(config, values)
                         raise
                     finally:
                         if handle is not None:
-                            drained = handle.finish()   # no new entry; in-flight episodes finish; the blocks are bundled
+                            # No new entry; in-flight episodes finish; the blocks are bundled. A failed or stopped learner
+                            # leaves it unsettled: the resumed update reopens it instead of idling Pop for its rerun.
+                            drained = handle.finish(settle=learner_done)
                             print(json.dumps({'event': 'pre-collection drained', 'directory': str(handle.directory),
                                               'error': drained}), flush=True)
                             if drained is not None:   # it never ran (the remote actor did not serve the policy): free Pop

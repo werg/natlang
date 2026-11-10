@@ -193,6 +193,17 @@ def test_drain_takes_no_new_entry_lets_in_flight_ones_finish_and_the_round_impor
     assert report['pre_collected'] == {'episodes': 0, 'behavior_policy_id': POLICY, 'staleness_updates': 1}
 
 
+def test_a_drain_after_a_failed_learner_leaves_the_pre_collection_open_for_the_resumed_update(tmp_path):
+    def collect(**kwargs):
+        kwargs['drain'].wait()
+    for settle in (False, True):
+        directory = tmp_path / str(settle)
+        directory.mkdir()
+        handle = precollect.Handle(directory, {}, collect, None, print)
+        assert handle.finish(settle=settle) is None
+        assert (directory / precollect.RESULT).exists() is settle
+
+
 def _controller(tmp_path, monkeypatch, *, begin):
     """production.run for one JOLT+ round with fakes: collect, remote hooks, learner command and ``precollect.begin``."""
     from natlang_neuralese.rl import native_raw_policy
@@ -234,8 +245,8 @@ def _controller(tmp_path, monkeypatch, *, begin):
 def test_the_controller_starts_pre_collection_at_the_learner_and_drains_it_when_the_learner_ends(tmp_path, monkeypatch):
     class Handle:
         directory = tmp_path / 'pre'
-        def finish(self_):
-            seen['events'].append('drained')
+        def finish(self_, settle=True):
+            seen['events'].append('drained' if settle else 'drained-unsettled')
             return None
 
     def begin(seen):
@@ -250,7 +261,8 @@ def test_the_controller_starts_pre_collection_at_the_learner_and_drains_it_when_
         production.run(config, rounds=1)
     assert seen['kept'] == [True]                                    # Pop keeps serving policy N past the collection
     assert seen['begun'] and seen['begun'][0][0] == 1                 # round N+1's selection is sealed and started
-    assert seen['events'] == ['begun', 'drained']                     # drained when the learner ended (here: failed)
+    # drained when the learner ended; it failed here, so the pre-collection stays open for the resumed update
+    assert seen['events'] == ['begun', 'drained-unsettled']
     assert ['stop-pop'] not in seen['commands']                       # the hook is not run while Pop pre-collects
     assert (tmp_path / 'production/round-000001-selection.json').exists()
 
