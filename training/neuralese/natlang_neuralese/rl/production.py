@@ -2019,6 +2019,9 @@ def run(config_path, *, rounds=None, stop=None):
                 sealed_selection=(out / f"round-{state['round']:06d}-selection.json").exists())
             config = adopt_actor_engine_defaults(config, state, state_path,
                 sealed_selection=(out / f"round-{state['round']:06d}-selection.json").exists())
+            from .rollout_distillation import adopt_defaults as adopt_rollout_distillation
+            config = adopt_rollout_distillation(config, state, state_path, interleaved=interleaved is not None,
+                sealed_selection=(out / f"round-{state['round']:06d}-selection.json").exists())
             config = initial_capacity_collection(config,state)
             state_participant=state.get('native_participant')
             if state_participant is not None:
@@ -2216,6 +2219,10 @@ def run(config_path, *, rounds=None, stop=None):
                              reason='all rollout outcomes unscored; no learning signal')
                 write_json_durable(state_path, state)
                 raise RuntimeError('RL collector infrastructure failed; repair and retry retained round with fresh attempt')
+            # The policy's own verified successful student episodes queue as a distillation package for the next
+            # mandatory SFT window (rl/rollout_distillation.py); a failure is recorded and never stops the update.
+            from .rollout_distillation import after_scoring as distill_rollouts
+            distill_rollouts(config, state, round_dir, values, rows, policy)
             rft_stages = ['all']
             objective = config.get('update_objective', 'policy')
             if objective not in {'policy', 'self-distillation'}:

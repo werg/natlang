@@ -639,9 +639,7 @@ def package_distillation(out, *, tokenizer, roles, protected=None, log=print):
     improved program), indexed with the production tokenizer and role markers, protection-checked, with each row's
     exact binding. The window-boundary source correction adopts it as ``added`` rows (natlang.native-source-
     correction/1); nothing here claims exposure. Appends the package to ``distill/admission-queue.jsonl``."""
-    from ..data.native_sources import NativeGraphSource
     from ..common.custody import ProtectedWorlds
-    from ..common.jsonio import write_bytes_durable
     out = Path(out)
     queue_path = out / 'distill' / 'admission-queue.jsonl'
     queued = {Path(m).resolve() for item in (read_jsonl(queue_path) if queue_path.exists() else [])
@@ -667,31 +665,11 @@ def package_distillation(out, *, tokenizer, roles, protected=None, log=print):
             actors.add(episode.get('policy') or manifest['parent_sha256'])
     if not rows:
         return None
-    number = sum(1 for _ in read_jsonl(queue_path)) if queue_path.exists() else 0
-    target = out / 'distill' / f'package-{number:04d}'
-    target.mkdir(parents=True, exist_ok=False)
-    graphs = target / 'memetic-guidance-graphs.jsonl'
-    write_bytes_durable(graphs, ''.join(json.dumps(row, sort_keys=True) + '\n' for row in rows).encode())
-    indexed = NativeGraphSource(graphs, tokenizer, required_split='train', role_ids=roles)
-    if [entry['id'] for entry in indexed.entries] != [row['id'] for row in rows]:
-        raise ValueError('distillation package does not index as exactly its rows')
-    receipt = {'schema': PACKAGE_SCHEMA, 'source': {'kind': 'native-graphs', 'path': str(graphs),
-                                                    'sha256': hashlib.sha256(graphs.read_bytes()).hexdigest()},
-               'rows': [{'id': entry['id'], 'binding': entry['binding'], 'disposition': 'added',
-                         'communication': bool(entry.get('communication'))} for entry in indexed.entries],
-               'family': 'memetic-guidance', 'manifests': [str(m) for m in manifests],
-               'episode_actors': sorted(actors), 'tokenizer_fingerprint': tokenizer, 'role_ids': list(roles),
-               'protection_digest': guard.digest, 'problems': problems,
-               'ce_declaration': {'encoding': 'native-row-objectives-v1'},
-               'training_admission': False,
-               'scope': 'verified successful guided query runs of improved programs, actor = the parent that ran '
-                        'them; adoption is a recorded source correction at a window boundary'}
-    write_json_durable(target / 'receipt.json', receipt)
-    with open(queue_path, 'a') as handle:
-        handle.write(json.dumps({'package': str(target / 'receipt.json'), 'manifests': [str(m) for m in manifests],
-                                 'rows': len(rows)}) + '\n')
-    log(json.dumps({'event': 'memetic_distillation_package', 'package': str(target), 'rows': len(rows)}))
-    return receipt
+    from .memetic_admission import queue_package
+    return queue_package(out, rows, family='memetic-guidance', tokenizer=tokenizer, roles=roles, protected=guard,
+                         manifests=manifests, actors=actors, problems=problems, log=log,
+                         scope='verified successful guided query runs of improved programs, actor = the parent that ran '
+                               'them; adoption is a recorded source correction at a window boundary')
 
 
 def held_gains(rollouts, families):

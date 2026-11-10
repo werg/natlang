@@ -137,9 +137,12 @@ def window_due(declared, state):
         return False
     interleave = state['interleave']
     if interleave.get('sft_complete'):
-        # Newly queued memetic distillation packages reopen a completed joint SFT stage (rl/memetic_admission.py).
+        # Newly queued distillation packages (memetic guidance graphs, the policy's own successful RL episodes;
+        # rl/memetic_admission.py) reopen a completed joint SFT stage, at the declared window cadence so a package
+        # queued every round does not turn every round into an SFT window.
         from .memetic_admission import unseen_packages
-        return bool(unseen_packages(declared.get('controller_out'), state))
+        return (state.get('round', 0) - interleave['rl_rounds_at_last_window'] >= declared['parameters']['rl_rounds_per_window']
+                and bool(unseen_packages(declared.get('controller_out'), state)))
     if interleave.get('active_window') is not None or interleave.get('pending_initial_window'):
         return True
     return state.get('round', 0) - interleave['rl_rounds_at_last_window'] >= declared['parameters']['rl_rounds_per_window']

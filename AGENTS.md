@@ -7,6 +7,14 @@ runs, Pop collects round N+1's students from the policy-N actor (`round-N+1-pre`
 them as one-update-stale episodes (rollout `policy.checkpoint_sha256` N, learner `--rl-actors`, TIS plus engine guard). Never admit
 older policies: no pre-collection runs when an SFT window falls between the update and the next collection. Fallow #25 tracks deployment.
 
+## Rollout self-distillation feeds the SFT windows (engineering, 2026-11-10)
+
+`rl/rollout_distillation.py`: after each scored round, one verified successful student episode per task (Neuralese-using
+first, return-weighted, current-policy actor only, closed whole graphs, sampled outputs only) is queued as a
+`rollout-distillation` package in the memetic admission queue; the next mandatory SFT window appends it as a recorded source
+(shared 2% family share cap, deferral never drops). Default on, `rollout_distillation: false` opts out; continuations adopt
+through the recorded transition `rollout-distillation-20261110`. Fallow #17a tracks deployment.
+
 ## Corrected-mix regression: LR collapse and marker-weight spam (engineering, 2026-11-05)
 
 Dev16 task_success fell 12/16 (bf95) -> 10/16 (step 93) -> 0/16 (129) -> 2/16 (140) -> 1/16 (204). Two causes:

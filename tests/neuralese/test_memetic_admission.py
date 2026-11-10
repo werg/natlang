@@ -209,6 +209,8 @@ def test_share_cap_defers_rows_and_new_packages_reopen_a_completed_stage(tmp_pat
     seen = []
     window_harness(monkeypatch, seen)
     state['interleave']['sft_complete'] = True
+    assert not interleave.window_due(declared, state)  # the declared window cadence still applies
+    state['round'] = 2
     assert interleave.window_due(declared, state)  # an unseen package reopens the joint SFT stage
     assert interleave.run_sft_window(config, declared, state, out / 'state.json', None) == 'adopted'
     ledger = state['interleave']['memetic_distillation']

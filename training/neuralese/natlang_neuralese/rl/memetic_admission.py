@@ -18,6 +18,10 @@ joint SFT stage as an ordinary authenticated data continuation (the same form as
 - every row is rechecked against the complete current protection union at admission; overlapping rows are excluded
   explicitly; a package whose episode actors are not checkpoints of this controller's actual lineage is refused.
 
+Packages come from two producers through ``queue_package``: memetic guidance graphs (family ``memetic-guidance``) and
+the policy's own verified successful RL episodes (family ``rollout-distillation``, ``rl/rollout_distillation.py``). Each
+admitted family declares its own scale; the share cap bounds all of them together.
+
 The consumed ledger (``state['interleave']['memetic_distillation']``) is committed before the window config is
 written, so a package is appended exactly once and a retried boundary reuses its recorded admission. Actor provenance
 is student self-distillation: the actors are this lineage's own checkpoints, never a teacher.
@@ -36,6 +40,9 @@ from ..common.jsonio import write_json_durable
 SCHEMA = 'natlang.memetic-distillation-admission/1'
 PACKAGE_SCHEMA = 'natlang.memetic-distillation-package/1'
 FAMILY = 'memetic-guidance'
+# The other producer of packages: the policy's own verified successful RL episodes (rl/rollout_distillation.py).
+ROLLOUT_FAMILY = 'rollout-distillation'
+FAMILIES = (FAMILY, ROLLOUT_FAMILY)
 ENCODING = 'native-row-objectives-v1'
 # Conservative: the 2026-11-03 recipe review measured genuine natlang teaching at ~6% and multi-node Neuralese at ~2%
 # of quota-aware loss; one new self-distilled family must not dominate them.
@@ -57,16 +64,53 @@ def queue_path(controller_out):
     return Path(controller_out) / 'memetic' / 'distill' / 'admission-queue.jsonl'
 
 
+def queue_package(out, rows, *, family, tokenizer, roles, protected, manifests, actors, scope, problems=(),
+                  source_name='memetic-guidance-graphs.jsonl', extra=None, log=print):
+    """Write one immutable ``natlang.memetic-distillation-package/1`` of verified native-graph ``rows`` (the exact
+    sampled actor(s) ``actors``) under ``<out>/distill/package-NNNN`` and append it to ``<out>/distill/admission-
+    queue.jsonl``: the single producer-side form every distillation source uses (memetic guidance graphs and the
+    policy's own successful RL episodes). Returns the receipt."""
+    from ..data.native_sources import NativeGraphSource
+    from ..common.jsonio import write_bytes_durable
+    out = Path(out)
+    queue = out / 'distill' / 'admission-queue.jsonl'
+    number = len(_lines(queue))
+    target = out / 'distill' / f'package-{number:04d}'
+    target.mkdir(parents=True, exist_ok=False)
+    graphs = target / source_name
+    write_bytes_durable(graphs, ''.join(json.dumps(row, sort_keys=True) + '\n' for row in rows).encode())
+    indexed = NativeGraphSource(graphs, tokenizer, required_split='train', role_ids=roles)
+    if [entry['id'] for entry in indexed.entries] != [row['id'] for row in rows]:
+        raise ValueError('distillation package does not index as exactly its rows')
+    receipt = {'schema': PACKAGE_SCHEMA, 'source': {'kind': 'native-graphs', 'path': str(graphs),
+                                                    'sha256': sha256_file_hex_cached(graphs)},
+               'rows': [{'id': entry['id'], 'binding': entry['binding'], 'disposition': 'added',
+                         'communication': bool(entry.get('communication'))} for entry in indexed.entries],
+               'family': family, 'manifests': [str(m) for m in manifests],
+               'episode_actors': sorted(actors), 'tokenizer_fingerprint': tokenizer, 'role_ids': list(roles),
+               'protection_digest': protected.digest, 'problems': list(problems),
+               'ce_declaration': {'encoding': ENCODING}, 'training_admission': False, 'scope': scope,
+               **(extra or {})}
+    write_json_durable(target / 'receipt.json', receipt)
+    with open(queue, 'a') as handle:
+        handle.write(json.dumps({'package': str(target / 'receipt.json'), 'manifests': [str(m) for m in manifests],
+                                 'rows': len(rows), 'family': family}) + '\n')
+    log(json.dumps({'event': 'distillation_package', 'family': family, 'package': str(target), 'rows': len(rows)}))
+    return receipt
+
+
+def _lines(path):
+    path = Path(path)
+    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()] if path.is_file() else []
+
+
 def _ref(path):
     path = Path(path).resolve(strict=True)
     return {'path': str(path), 'sha256': sha256_file_hex_cached(path)}
 
 
 def _queued(controller_out):
-    path = queue_path(controller_out)
-    if not path.is_file():
-        return []
-    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    return _lines(queue_path(controller_out))
 
 
 def unseen_packages(controller_out, state):
@@ -120,8 +164,8 @@ def _raw_rows(path):
 def _check_receipt(receipt, receipt_path):
     if receipt.get('schema') != PACKAGE_SCHEMA:
         return 'package schema is not ' + PACKAGE_SCHEMA
-    if receipt.get('family') != FAMILY:
-        return 'package family is not ' + FAMILY
+    if receipt.get('family') not in FAMILIES:
+        return 'package family is not one of ' + ', '.join(FAMILIES)
     if receipt.get('training_admission') is not False:
         return 'package claims training admission'
     if (receipt.get('ce_declaration') or {}).get('encoding') != ENCODING:
@@ -150,7 +194,8 @@ def _geometry_identity(parameters):
 
 
 def _ce_update(policy_ref, successor, leaves, family_rows, out, *, family_scale):
-    """The successor CE policy: declare the new leaves; extend a logical-family map. Returns (binding, bound_scale)."""
+    """The successor CE policy: declare the new leaves; extend a logical-family map (each admitted family its own
+    declared scale). Returns (binding, bound_scale)."""
     from ..train.native_supervision import load_policy
     from ..train.own_output_supervision import identity, policy_objective
     policy = json.loads(Path(policy_ref['path']).read_text())
@@ -183,8 +228,8 @@ def _ce_update(policy_ref, successor, leaves, family_rows, out, *, family_scale)
         if balance.get('normalization') == 'declared/1':
             if family_scale > balance['max_scale']:
                 raise ValueError('distillation_family_scale exceeds the objective max_scale')
-            balance['scales'] = {**balance['scales'], FAMILY: float(family_scale)}
-            bound_scale = float(balance['scales'][FAMILY])
+            balance['scales'] = {**balance['scales'], **{row['family']: float(family_scale) for row in family_rows}}
+            bound_scale = float(family_scale)
         else:
             bound_scale = float(balance['max_scale'])  # bounded-mean-one may raise a small family up to its cap
     elif isinstance(balance, dict):
@@ -374,7 +419,8 @@ def prepare_window(config, declared, state, state_path, directory, *, protected=
             if [(e['id'], e['binding']) for e in indexed.entries] != [(row['id'], row['binding']) for row in mine]:
                 raise ValueError('admitted memetic leaf does not index as exactly its admitted rows')
             leaves.append(leaf)
-            family_rows.extend({'id': row['id'], 'binding': row['binding'], 'family': FAMILY} for row in mine)
+            family_rows.extend({'id': row['id'], 'binding': row['binding'], 'family': receipt['family']}
+                               for row in mine)
             for row in mine:
                 ledger['rows'][row['id']] = {'package': receipt_ref['sha256'], 'disposition': 'admitted',
                                              'window': window, 'leaf_sha256': leaf['sha256']}
