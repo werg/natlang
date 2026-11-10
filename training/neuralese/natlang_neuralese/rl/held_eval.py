@@ -424,8 +424,8 @@ def begin(config, *, out, policy_id, endpoint, round_number=None, log=print):
         if options is None or binding is None:
             return None
         directory = policy_directory(out, policy_id)
-        if (directory / 'result.json').exists() and 'error' not in json.loads((directory / 'result.json').read_text()):
-            return None
+        if (directory / 'result.json').exists() and json.loads((directory / 'result.json').read_text()).get('complete'):
+            return None   # a cut-short or failed run resumes from its journals (this policy's round is still running)
         from .detached_processes import load_record, record_process
         record = load_record(directory / 'driver.json')
         if record is not None and _alive(record):
