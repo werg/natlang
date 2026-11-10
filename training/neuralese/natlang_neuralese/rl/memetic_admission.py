@@ -216,7 +216,7 @@ def _geometry_identity(parameters):
     return json.loads(Path(reference['path']).read_text()).get('identity')
 
 
-def _ce_update(policy_ref, successor, leaves, family_rows, out, *, family_scale):
+def _ce_update(policy_ref, successor, leaves, family_rows, out, *, family_scale, base_inputs=None):
     """The successor CE policy: declare the new leaves; extend a logical-family map (each admitted family its own
     declared scale). Returns (binding, bound_scale)."""
     from ..train.native_supervision import load_policy
@@ -259,6 +259,13 @@ def _ce_update(policy_ref, successor, leaves, family_rows, out, *, family_scale)
         bound_scale = float(balance['max_scale'])
     if identity(policy_objective(policy))['sha256'] != previous:
         policy['objective_transition'] = {'from': previous}
+    if base_inputs is not None:
+        # A policy admitted by a static source correction carries first-row observations of the leaves that
+        # correction replaced; record their settlement so the append extends the current active leaf set.
+        from ..train.native_resident_ce import history_settlement
+        settlement = history_settlement({**base_inputs, 'ce_supervision_policy': policy_ref}, load_policy(policy_ref))
+        if settlement is not None:
+            policy['history_settlement'] = settlement
     path = Path(out) / 'ce-policy.json'
     write_json_durable(path, policy)
     binding = _ref(path)
@@ -506,7 +513,7 @@ def _prepare_window(config, declared, state, state_path, directory, *, protected
         ce = None
         if base_inputs.get('ce_supervision_policy'):
             ce, _ = _ce_update(base_inputs['ce_supervision_policy'], successor, leaves, family_rows, target,
-                                         family_scale=family_scale)
+                                         family_scale=family_scale, base_inputs=base_inputs)
         append, settled = _write_recipes(base_recipe, sft_id, successor, ce, target)
         _, append_inputs, _ = _stage(append, sft_id)
         from ..train.recipe import _ce_supervision_input_continuation, _data_continuation

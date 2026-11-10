@@ -102,6 +102,88 @@ def _validate_decision_factor_evidence(policy, prior_objective, candidate_object
             raise ValueError('decision factor does not match the exact audited producer target and frequency')
 
 
+HISTORY_SETTLEMENT_SCHEMA = 'natlang.resident-ce-history-settlement/1'
+
+
+def _historical_observations(policy):
+    """First-row observations whose leaf is no longer in the policy's active source contract."""
+    active = {(str(Path(item['path']).resolve()), item.get('sha256'))
+              for item in (policy.get('source_contract') or {}).get('active_sources', [])}
+    return [item for item in policy.get('first_row_observations') or []
+            if (str(Path(item['path']).resolve()), item.get('sha256')) not in active]
+
+
+def _observations_digest(observations):
+    return hashlib.sha256(json.dumps(observations, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+
+
+def _anchor_correction(old, policy):
+    """The recorded static source correction that admitted ``policy`` with the stage's current source, or None.
+
+    A static source correction (quality/family/quota revision) replaces the active leaves wholesale and is
+    authenticated by its own continuation, not by the per-leaf first-row chain this module checks on appends.
+    """
+    reference = old.get('source_correction')
+    train = old.get('native_graphs')
+    if not isinstance(reference, dict) or not isinstance(train, dict):
+        return None
+    from .native_source_correction import source_correction_dependencies
+    source_correction_dependencies({'path': reference['path'], 'sha256': reference['sha256']})
+    document = json.loads(Path(reference['path']).resolve(strict=True).read_bytes())
+    inventory = policy.get('inventory') or []
+    if (document.get('schema') != 'natlang.native-source-correction/1'
+            or document.get('current_source', {}).get('sha256') != train.get('sha256')
+            or [item.get('sha256') for item in inventory] != [train.get('sha256')]):
+        return None
+    return {'path': str(Path(reference['path']).resolve()), 'sha256': reference['sha256']}
+
+
+def history_settlement(old, prior_policy):
+    """Declaration that settles the historical first-row observations a static source correction left behind.
+
+    ``old`` is the stage's current resolved inputs and ``prior_policy`` its loaded CE policy. Returns the record
+    for the successor policy (None when nothing needs settling or the policy was not admitted by a correction of
+    its current source). The observations stay in the policy exactly; the record only authenticates them.
+    """
+    if prior_policy.get('history_settlement') is not None:
+        return copy.deepcopy(prior_policy['history_settlement'])
+    historical = _historical_observations(prior_policy)
+    anchor = _anchor_correction(old, prior_policy) if historical else None
+    if anchor is None:
+        return None
+    return {'schema': HISTORY_SETTLEMENT_SCHEMA, 'anchor_source_correction': anchor,
+            'anchor_source_sha256': old['native_graphs']['sha256'], 'policy_sha256': old['ce_supervision_policy']['sha256'],
+            'observations': len(historical), 'observations_sha256': _observations_digest(historical)}
+
+
+def _settled_history(old, prior, policy):
+    """Historical observations of ``prior`` that its recorded settlement authenticates (else an empty list).
+
+    The first settlement must be anchored to the static source correction that admitted ``prior``; later
+    appends must carry it unchanged. Either way the settled set is exactly the prior policy's own historical
+    observations, so nothing outside what that correction and its predecessors admitted is accepted.
+    """
+    before, after = prior.get('history_settlement'), policy.get('history_settlement')
+    if before is not None and after != before:
+        raise ValueError('resident CE history settlement was changed or removed')
+    if after is None:
+        return []
+    historical = _historical_observations(prior)
+    if (not isinstance(after, dict) or after.get('schema') != HISTORY_SETTLEMENT_SCHEMA
+            or after.get('observations') != len(historical)
+            or after.get('observations_sha256') != _observations_digest(historical)):
+        raise ValueError('resident CE history settlement does not match the prior historical observations')
+    if before is None:
+        anchor = _anchor_correction(old, prior)
+        if (anchor is None or after.get('anchor_source_correction') != anchor
+                or after.get('anchor_source_sha256') != old['native_graphs']['sha256']
+                or after.get('policy_sha256') != old['ce_supervision_policy']['sha256']
+                or (prior.get('quota_aware_basis') or {}).get('candidate_source_sha256')
+                    != old['native_graphs']['sha256']):
+            raise ValueError('resident CE history settlement lacks its exact source-correction anchor')
+    return historical
+
+
 def extension_policy(old, new, *, prior_train=None, candidate_train=None):
     """Load a complete, additive CE declaration without changing prior intent.
 
@@ -121,7 +203,7 @@ def extension_policy(old, new, *, prior_train=None, candidate_train=None):
     prior, policy = load_policy(before), load_policy(after)
     a, b = _public(prior), _public(policy)
     excluded = {'sources', 'source_contract', 'inventory', 'first_row_observations', 'prior_inventory_correction',
-                'decision_factor_evidence', 'source_correction', 'quota_aware_basis'}
+                'decision_factor_evidence', 'source_correction', 'quota_aware_basis', 'history_settlement'}
     source_correction = b.get('source_correction')
     prior_source_correction = a.get('source_correction')
     if prior_source_correction is not None and source_correction != prior_source_correction:
@@ -363,6 +445,11 @@ def extension_policy(old, new, *, prior_train=None, candidate_train=None):
             raise ValueError('resident CE prior inventory correction does not bind the actual quarantine transition')
     elif correction is not None and correction != a.get('prior_inventory_correction'):
         raise ValueError('resident CE prior inventory correction is not applicable')
+    settled = _settled_history(old, a, b)
+    if settled:
+        if any(item not in new_observations for item in settled):
+            raise ValueError('resident CE settled historical observation was removed')
+        historical_observations = [item for item in historical_observations if item not in settled]
     if historical_observations:
         _validate_historical_observations(historical_observations, old_observations, declared, old_active,
                                           correction_decl, correction, checked)

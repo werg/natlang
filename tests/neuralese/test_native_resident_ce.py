@@ -555,3 +555,52 @@ def test_historical_target_mask_and_quarantine_observations_keep_separate_custod
         _validate_historical_observations([target,historical],[target,historical],declared-{(target_new['path'],target_new['sha256'])},prior,declaration,correction,checked)
     with pytest.raises(ValueError,match='active replacement'):
         _validate_historical_observations([target,historical],[target,historical],declared,prior-{(quarantine_new['path'],quarantine_new['sha256'])},declaration,correction,checked)
+
+
+def test_history_settlement_lets_an_append_extend_a_statically_corrected_policy(tmp_path):
+    """After a static source correction replaced every active leaf, the policy still lists the first-row observations of
+    the replaced leaves. The append records a settlement anchored to that correction; nothing else is accepted."""
+    from natlang_neuralese.train import native_resident_ce as module
+    paths, old, new = fixture(tmp_path)
+    a=json.loads(paths['old_ce'].read_text());b=json.loads(paths['new_ce'].read_text())
+    stale_leaf=tmp_path/'replaced-leaf.jsonl';stale_leaf.write_text('{"replaced":true}\n')
+    observation={**resident.binding(stale_leaf),'reason':'existing trajectory supervision retained exactly'}
+    a['first_row_observations']=[observation];b['first_row_observations']=[observation]
+    a['inventory']=[resident.binding(paths['old_train'])];b['inventory']=[resident.binding(paths['train'])]
+    a['quota_aware_basis']={'candidate_source_sha256':resident.sha(paths['old_train'])}
+    b['quota_aware_basis']=copy.deepcopy(a['quota_aware_basis'])
+    write_json(paths['old_ce'],a)
+    rows=tmp_path/'correction-rows.jsonl';rows.write_text('')
+    proof=tmp_path/'correction.json';write_json(proof,{'schema':'natlang.native-source-correction/1',
+        'prior_source':{'path':str(tmp_path/'before.json'),'sha256':'1'*64},
+        'current_source':resident.binding(paths['old_train']),
+        'row_bindings_path':rows.name,'row_bindings_sha256':resident.sha(rows)})
+    old_inputs=old['stage_inputs']['sft']
+    old_inputs['ce_supervision_policy']={**resident.binding(paths['old_ce']),'binding':'ce'}
+    old_inputs['source_correction']=new['stage_inputs']['sft']['source_correction']={**resident.binding(proof),'binding':'proof'}
+    def candidate(doc,inputs=old_inputs):
+        write_json(paths['new_ce'],doc)
+        new['stage_inputs']['sft']['ce_supervision_policy']={**resident.binding(paths['new_ce']),'binding':'ce'}
+        return extension_policy(inputs,new['stage_inputs']['sft'])
+    with pytest.raises(ValueError,match='quarantine proof'):
+        candidate(b)  # no settlement: the replaced leaf has no authenticated custody
+    settlement=module.history_settlement(old_inputs,module.load_policy(old_inputs['ce_supervision_policy']))
+    assert settlement['anchor_source_correction']['sha256']==resident.sha(proof) and settlement['observations']==1
+    b['history_settlement']=settlement
+    assert candidate(b)['history_settlement']==settlement
+    for key,value in (('observations_sha256','0'*64),('observations',2),('policy_sha256','0'*64),
+                      ('anchor_source_sha256','0'*64),('schema','other')):
+        bad=copy.deepcopy(b);bad['history_settlement'][key]=value
+        with pytest.raises(ValueError):candidate(bad)
+    bad=copy.deepcopy(b);bad['history_settlement']['anchor_source_correction']['sha256']='0'*64
+    with pytest.raises(ValueError):candidate(bad)
+    bad=copy.deepcopy(b);bad['first_row_observations']=[]
+    with pytest.raises(ValueError,match='removed'):candidate(bad)
+    bad=copy.deepcopy(b);bad['first_row_observations'].append({**resident.binding(stale_leaf),'reason':'forged extra'})
+    with pytest.raises(ValueError,match='historical observation'):candidate(bad)
+    # A later append (no correction anchored to its source any more) must carry the settlement unchanged.
+    later=copy.deepcopy(a);later['history_settlement']=settlement
+    assert module.history_settlement(old_inputs,later)==settlement
+    assert module._settled_history({},later,copy.deepcopy(b))==[observation]
+    with pytest.raises(ValueError,match='changed or removed'):
+        module._settled_history({},later,{k:v for k,v in b.items() if k!='history_settlement'})
