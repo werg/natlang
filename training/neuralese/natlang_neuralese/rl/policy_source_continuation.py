@@ -90,7 +90,9 @@ def verify_objectives(old_path, new):
     current = {key:value for key,value in new.items() if key != 'rows'}
     if not old_keys or controls != current:
         changed = sorted(key for key in set(controls) | set(current) if controls.get(key) != current.get(key))
-        raise ValueError('policy objective continuation changed its policy, mode or global controls: ' + ', '.join(changed))
+        detail = {key: {'old': controls.get(key), 'new': current.get(key)} for key in changed}
+        raise ValueError('policy objective continuation changed its policy, mode or global controls: ' + ', '.join(changed)
+                         + ' ' + json.dumps(detail, sort_keys=True, default=str)[:4000])
     return old_keys
 
 
