@@ -37,6 +37,12 @@ def initial(config):
     ids={row['id'] for _,row in iter_jsonl_rows(Path(config['cases']))}
     retained={}
     for task,row in history.items():
+        if (isinstance(row,dict) and row.get('task_id')==task and type(row.get('scored')) is int and row['scored']==1
+                and 'mean' not in row):
+            # Single-scored groups carried no mean before 2026-11-10 (rollout_math.group_advantages): not an
+            # observation the selector can use; skipped, not refused (w5 SFT window 0).
+            print(json.dumps({'event':'task selector observation without a mean skipped','task_id':task}),flush=True)
+            continue
         if (not isinstance(row,dict) or row.get('task_id')!=task
                 or not re.fullmatch('[0-9a-f]{64}',str(row.get('observed_policy_id','')))
                 or type(row.get('scored')) is not int or row['scored']<=0
