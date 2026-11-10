@@ -23,9 +23,12 @@ def population():
     policy = identity['checkpoint_sha256']
 
     def row(task, sample, quality=1.0, **fields):
+        turns = copy.deepcopy(raw)
+        for index, turn in enumerate(turns):  # each sample's sampled outputs are its own
+            turn['target'] = {'content': f'{task}:{sample}:{index}'}
         value = {'task_id': task, 'sample': sample, 'split': 'train', 'group': task,
                  'reward': {'quality': quality},
-                 'policy': {'checkpoint_sha256': policy}, 'turns': copy.deepcopy(raw)}
+                 'policy': {'checkpoint_sha256': policy}, 'turns': turns}
         value.update(fields)
         return value
 
@@ -46,23 +49,43 @@ def lower(identity, roles, block):
     return prepare
 
 
-def test_selection_is_student_current_policy_one_per_task_neuralese_first():
+def test_selection_is_every_verified_student_success_of_the_current_policy_neuralese_first():
     rows, identity, _, _ = population()
     selected, skipped = distill.select(rows, identity['checkpoint_sha256'])
-    assert [(row['task_id'], row['sample']) for row in selected if row['task_id'] in 'ab'] == [('a', 1), ('b', 0)]
-    assert [row['task_id'] for row in selected] == ['a', 'b', 'h']
+    # Expert iteration: both successes of task a, Neuralese-using first and by return; h is plain.
+    assert [(row['task_id'], row['sample']) for row in selected] == [('a', 1), ('a', 0), ('b', 0), ('h', 0)]
     assert not {'c', 'd', 'e', 'f', 'g'} & {row['task_id'] for row in selected}
     assert skipped == {'teacher episode': 1, 'not a train task': 1, 'sampled by another policy': 1,
                        'memetic improvement episode': 1}
-    assert all(row['_neuralese_exchanges'] for row in selected if row['task_id'] in 'ab')
-    # The Neuralese-using success of a task beats an earlier plain one even with a smaller return.
+    assert [row['_neuralese_exchanges'] for row in selected] == [1, 1, 1, 0]
+    # A Neuralese-using success outranks a plain one of the same task even with a smaller return.
     plain = copy.deepcopy(rows[1])
     plain['sample'] = 7
     plain['reward'] = {'quality': 1.0, 'neuralese_bonus': 0.}
-    plain['turns'] = rows[8]['turns']
+    plain['turns'] = [{**turn, 'target': {'content': 'plain'}} for turn in rows[8]['turns']]
     plain['execution_graph'] = rows[8]['execution_graph']
     chosen, _ = distill.select([plain, rows[0]], identity['checkpoint_sha256'])
-    assert [(row['task_id'], row['sample']) for row in chosen] == [('a', 0)]
+    assert [(row['task_id'], row['sample']) for row in chosen] == [('a', 0), ('a', 7)]
+
+
+def test_exact_duplicates_and_already_queued_episodes_are_never_repeated_and_a_task_can_be_bounded():
+    rows, identity, _, _ = population()
+    policy = identity['checkpoint_sha256']
+    twin = copy.deepcopy(rows[2])  # task b, another sample with the same sampled outputs
+    twin['sample'] = 3
+    selected, skipped = distill.select([*rows, twin], policy)
+    assert [(row['task_id'], row['sample']) for row in selected if row['task_id'] == 'b'] == [('b', 0)]
+    assert skipped['duplicate sampled outputs'] == 1
+    chosen, skipped = distill.select(rows, policy, exclude={('a', 1)})
+    assert [(row['task_id'], row['sample']) for row in chosen][:2] == [('a', 0), ('b', 0)]
+    assert skipped['already queued'] == 1
+    bounded, skipped = distill.select(rows, policy, max_per_task=1)
+    assert [(row['task_id'], row['sample']) for row in bounded] == [('a', 1), ('b', 0), ('h', 0)]
+    assert skipped['over the per-task bound'] == 1
+    # Several policies may be allowed (an earlier round of the lineage); each row keeps its own sampling policy.
+    older = {**copy.deepcopy(rows[2]), 'task_id': 'z', 'policy': {'checkpoint_sha256': '8' * 64}}
+    pair, _ = distill.select([older, rows[2]], {policy, '8' * 64})
+    assert {row['task_id'] for row in pair} == {'b', 'z'}
 
 
 def test_round_package_holds_ranked_closed_whole_graphs_with_actor_provenance(tmp_path):
@@ -73,11 +96,12 @@ def test_round_package_holds_ranked_closed_whole_graphs_with_actor_provenance(tm
     round_dir.mkdir(parents=True)
     geometry = lambda tokenizer: (identity['tokenizer_fingerprint'], [roles.produce_open, roles.produce_close,
                                                                      roles.consume_open, roles.consume_close])
-    record = distill.package_round(config, state, round_dir, rows, policy_sha256=identity['checkpoint_sha256'],
+    record = distill.package_round(config, state, round_dir, rows, policies=identity['checkpoint_sha256'],
                                    binding={'rl_tokenizer': 'tok'}, bundle='', protected=Guard(),
                                    prepare=lower(identity, roles, block), geometry=geometry, log=lambda line: None)
-    # a (Neuralese-using, weighted by its return), b; h imports old external state and is skipped.
-    assert record['rows'] == 2 and record['selected_tasks'] == 3 and record['neuralese_using_rows'] == 2
+    # a's two successes (Neuralese-using, weighted by their return) and b; h imports old external state: skipped.
+    assert record['rows'] == 3 and record['selected_episodes'] == 4 and record['selected_tasks'] == 3
+    assert record['neuralese_using_rows'] == 3
     assert record['not_closed'] == [{'task_id': 'h', 'reason': 'imports old external actor state'}]
     [item] = [json.loads(line) for line in admission.queue_path(config['out']).read_text().splitlines()]
     assert item['manifests'] == [str(round_dir / distill.RECORD)] and item['family'] == 'rollout-distillation'
@@ -86,11 +110,13 @@ def test_round_package_holds_ranked_closed_whole_graphs_with_actor_provenance(tm
     assert receipt['episode_actors'] == [identity['checkpoint_sha256']] and receipt['round'] == 4
     source = Path(receipt['source']['path'])
     graphs = [json.loads(line) for line in source.read_text().splitlines()]
-    assert [row['rollout_distillation']['task_id'] for row in graphs] == ['a', 'b']
+    assert [(row['rollout_distillation']['task_id'], row['rollout_distillation']['sample']) for row in graphs] == [
+        ('a', 1), ('a', 0), ('b', 0)]
+    assert {row['rollout_distillation']['actor_checkpoint_sha256'] for row in graphs} == {identity['checkpoint_sha256']}
     assert all(row['id'].startswith('rollout:') and not row['external_states'] and row['split'] == 'train'
                for row in graphs)
     assert graphs[0]['rollout_distillation']['sampled_token_weight'] == pytest.approx(1.1)
-    assert graphs[1]['rollout_distillation']['sampled_token_weight'] == 1.
+    assert [row['rollout_distillation']['sampled_token_weight'] for row in graphs[1:]] == [1., 1.]
     weights = lambda row: sorted({w for node in row['nodes'] for w in node['target_weights']})
     assert weights(graphs[0]) == pytest.approx([0., 1.1]) and weights(graphs[1]) == [0., 1.]
     # Only sampled own tokens carry loss; the indexed source is the exact receipt.
@@ -98,7 +124,7 @@ def test_round_package_holds_ranked_closed_whole_graphs_with_actor_provenance(tm
                                 role_ids=receipt['role_ids'])
     assert [entry['id'] for entry in indexed.entries] == [row['id'] for row in graphs]
     # Idempotent: the same round is never queued twice.
-    again = distill.package_round(config, state, round_dir, rows, policy_sha256=identity['checkpoint_sha256'],
+    again = distill.package_round(config, state, round_dir, rows, policies=identity['checkpoint_sha256'],
                                   binding={'rl_tokenizer': 'tok'}, bundle='', protected=Guard(),
                                   prepare=lower(identity, roles, block), geometry=geometry, log=lambda line: None)
     assert again == record and len(admission.queue_path(config['out']).read_text().splitlines()) == 1
@@ -109,9 +135,9 @@ def test_protected_and_unsuccessful_rounds_queue_nothing(tmp_path):
     config = {'out': str(tmp_path)}
     round_dir = tmp_path / 'round'
     round_dir.mkdir()
-    none = distill.package_round(config, {'round': 1}, round_dir, [rows[3]], policy_sha256=identity['checkpoint_sha256'],
+    none = distill.package_round(config, {'round': 1}, round_dir, [rows[3]], policies=identity['checkpoint_sha256'],
                                  binding={}, bundle='', protected=Guard(), log=lambda line: None)
-    assert none['selected_tasks'] == 0 and none['package'] is None and not admission.queue_path(tmp_path).exists()
+    assert none['selected_episodes'] == 0 and none['package'] is None and not admission.queue_path(tmp_path).exists()
 
 
 def test_transition_is_recorded_once_and_a_round_in_flight_keeps_its_behaviour(tmp_path):
@@ -174,3 +200,66 @@ def test_window_boundary_admits_rollout_rows_next_to_memetic_rows_with_their_own
     assert not interleave.window_due(declared, state)
     state['round'] += 1
     assert interleave.window_due(declared, state)
+
+
+def test_earlier_rounds_are_topped_up_once_with_each_rows_own_sampling_policy(tmp_path, monkeypatch):
+    rows, identity, roles, block = population()
+    policy = identity['checkpoint_sha256']
+    out = tmp_path / 'controller'
+    config = {'out': str(out)}
+    kwargs = dict(binding={'rl_tokenizer': 'tok'}, protected=Guard(), prepare=lower(identity, roles, block),
+                  geometry=lambda tokenizer: (identity['tokenizer_fingerprint'],
+                                              [roles.produce_open, roles.produce_close, roles.consume_open,
+                                               roles.consume_close]), log=lambda line: None)
+    for number, subset in ((0, rows[:3]), (1, rows[:1]), (2, rows[:3])):
+        directory = out / f'round-{number:06d}'
+        directory.mkdir(parents=True)
+        subset = [{**row, 'round': number} for row in subset]
+        (directory / 'rollouts.jsonl').write_text(''.join(json.dumps(row) + '\n' for row in subset))
+        (directory / 'score.json').write_text(json.dumps({'collection_complete': True, 'block_bundle': ''}))
+    (out / 'round-000003').mkdir()  # a round without scored rollouts is left alone
+    monkeypatch.setattr(admission, 'lineage_checkpoints', lambda config, state: {policy})
+    monkeypatch.setattr(admission, 'lineage_checkpoint_files', lambda config, state: {policy: 'checkpoint.pt'})
+    # Round 2 was queued by the first form of the hook (one episode per task): that episode is not queued again.
+    legacy = {**graph_for_queue('rollout:legacy'), 'tokenizer_fingerprint': identity['tokenizer_fingerprint'],
+              'rollout_distillation': {'round': 2, 'task_id': 'a', 'sample': 1}}
+    admission.queue_package(out / 'memetic', [legacy], family=admission.ROLLOUT_FAMILY,
+                            tokenizer=identity['tokenizer_fingerprint'], roles=[], protected=Guard(),
+                            manifests=[out / 'round-000002' / distill.LEGACY_RECORD], actors=[policy], scope='test',
+                            extra={'round': 2}, log=lambda line: None)
+    state = {'round': 3, 'checkpoint': 'unused'}
+    done = distill.backfill(config, state, current_round=3, **kwargs)
+    assert [item['round'] for item in done] == [0, 1, 2]
+    assert [item['rows'] for item in done] == [3, 1, 2]  # round 2: a(1) was already queued; a(0), b remain
+    assert [item['skipped'].get('already queued', 0) for item in done] == [0, 0, 1]
+    queue = [json.loads(line) for line in admission.queue_path(out).read_text().splitlines()]
+    assert [item['family'] for item in queue] == ['rollout-distillation'] * 4
+    # Idempotent: nothing is queued twice, and the round in progress is never backfilled.
+    assert distill.backfill(config, state, current_round=3, **kwargs) == []
+    assert len(admission.queue_path(out).read_text().splitlines()) == 4
+    assert distill.backfill(config, state, current_round=0, **kwargs) == []
+    # A row sampled by a policy outside the lineage is skipped with its reason.
+    monkeypatch.setattr(admission, 'lineage_checkpoints', lambda config, state: {'7' * 64})
+    other = out / 'round-000004'
+    other.mkdir()
+    (other / 'rollouts.jsonl').write_text(json.dumps(rows[0]) + '\n')
+    (other / 'score.json').write_text(json.dumps({'collection_complete': True, 'block_bundle': ''}))
+    [skipped] = distill.backfill(config, state, current_round=5, **kwargs)
+    assert skipped['package'] is None and skipped['skipped'] == {'sampled by another policy': 1}
+
+
+def graph_for_queue(row_id):
+    from test_memetic_admission import graph as plain
+    return plain(row_id)
+
+
+def test_a_policy_whose_checkpoint_is_gone_is_recorded_not_lowered(tmp_path):
+    rows, identity, roles, block = population()
+    config = {'out': str(tmp_path)}
+    directory = tmp_path / 'round-000000'
+    directory.mkdir()
+    record = distill.package_round(config, {'round': 1}, directory, rows, policies=identity['checkpoint_sha256'],
+                                   binding={}, bundle='', protected=Guard(), checkpoints={},
+                                   prepare=lower(identity, roles, block), log=lambda line: None)
+    assert record['package'] is None and len(record['lowering_failed']) == 4
+    assert all('no longer on disk' in item['error'] for item in record['lowering_failed'])

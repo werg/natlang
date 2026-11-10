@@ -52,20 +52,75 @@ STATIC_FAMILY = 'prepared-source'
 FAMILIES = (FAMILY, ROLLOUT_FAMILY, STATIC_FAMILY)
 STATIC_PROVENANCE_KEYS = ('origin', 'verification', 'selection')
 ENCODING = 'native-row-objectives-v1'
-# Conservative: the 2026-11-03 recipe review measured genuine natlang teaching at ~6% and multi-node Neuralese at ~2%
-# of quota-aware loss; one new self-distilled family must not dominate them.
-DEFAULT_MAX_SHARE = 0.02
+# Expert iteration (owner, 2026-11-10): the policy's own verified successful episodes are the main on-policy teaching
+# signal, so the share cap no longer reserves them 2%: it bounds the distilled families' summed CE mass share of the
+# successor source at one half, a ceiling that availability (not the cap) normally decides.
+DEFAULT_MAX_SHARE = 0.5
 DEFAULT_FAMILY_SCALE = 1.0
+# Declared CE scale and scheduling priority of each distilled family. Under token mass a row's loss is its own-output
+# token mass, and a whole successful episode carries thousands of sampled tokens against a few hundred in a focus
+# row, so a scale of 1 already gives the rollout family a large share of the window's loss (plans/neuralese/
+# SFT_TEMPLATE_EXCISION_20261110.md); statics fill what the policy's own rows leave (a lower priority is scheduled
+# after them, rank by rank).
+DEFAULT_FAMILY_SCALES = {}
+FAMILY_PRIORITY = {ROLLOUT_FAMILY: 2, STATIC_FAMILY: 1, FAMILY: 1}
+# Scripted-template families the 2026-11-03 recipe review found dominating the mixture. The corrected mix already
+# scales them to a 0.5% loss share each and cuts their quotas; every append window now also floors their declared
+# scale (a declared-scale refresh, the one family change a resident append admits; rows stay in the source with their
+# earned exposure, and a floor of ``WITHDRAWN_SCALE`` cannot be raised by a later window without an explicit setting).
+# Window capacity (owner, 2026-11-10: expert iteration should be a real, bounded share of a window, 30-50% of its loss).
+# A window digests ``refresh_after_updates x accumulate_batches x batch_tokens`` logical forward tokens, and one captured
+# successful episode is hundreds of thousands of them, so the rows of a family admitted to a window are bounded by that
+# family's share of the capacity; the rest stay deferred (never dropped) for later windows, and rows admitted earlier
+# that no update has visited yet count against the share, so a backlog never grows and no row is visited twice.
+DEFAULT_WINDOW_SHARES = {ROLLOUT_FAMILY: 0.4, STATIC_FAMILY: 0.2, FAMILY: 0.1}
+WITHDRAWN_FAMILIES = ('port-record-wrapper', 'native-communication-template')
+WITHDRAWN_SCALE = 1e-3
 PROVENANCE = 'student-self-distillation'
 
 
 def validate_parameters(parameters):
     share = parameters.get('distillation_max_share', DEFAULT_MAX_SHARE)
-    if type(share) not in (int, float) or not 0 < share <= 0.25:
-        raise ValueError('interleaved RL distillation_max_share is in (0, 0.25]')
+    if type(share) not in (int, float) or not 0 < share <= 1:
+        raise ValueError('interleaved RL distillation_max_share is in (0, 1]')
     scale = parameters.get('distillation_family_scale', DEFAULT_FAMILY_SCALE)
     if type(scale) not in (int, float) or not math.isfinite(scale) or scale <= 0:
         raise ValueError('interleaved RL distillation_family_scale must be a positive finite number')
+    scales = parameters.get('distillation_family_scales', {})
+    if (not isinstance(scales, dict) or any(key not in FAMILIES for key in scales) or any(
+            type(value) not in (int, float) or not math.isfinite(value) or value <= 0 for value in scales.values())):
+        raise ValueError('interleaved RL distillation_family_scales maps a distillation family to a positive scale')
+    shares = parameters.get('distillation_window_shares', {})
+    if (not isinstance(shares, dict) or any(key not in FAMILIES for key in shares) or any(
+            type(value) not in (int, float) or not 0 < value <= 1 for value in shares.values())):
+        raise ValueError('interleaved RL distillation_window_shares maps a distillation family to a share in (0, 1]')
+    withdrawn = parameters.get('distillation_withdrawn_families', list(WITHDRAWN_FAMILIES))
+    if not isinstance(withdrawn, list) or any(not isinstance(item, str) or not item for item in withdrawn):
+        raise ValueError('interleaved RL distillation_withdrawn_families is a list of logical family names')
+
+
+def family_scales(parameters):
+    """{family: declared CE scale} of every distillation family under ``parameters``."""
+    base = parameters.get('distillation_family_scale', DEFAULT_FAMILY_SCALE)
+    return {family: float({**DEFAULT_FAMILY_SCALES, **(parameters.get('distillation_family_scales') or {})}.get(family, base))
+            for family in FAMILIES}
+
+
+def window_shares(parameters):
+    return {**DEFAULT_WINDOW_SHARES, **(parameters.get('distillation_window_shares') or {})}
+
+
+def window_capacity(stage_parameters):
+    """Logical forward tokens one SFT window digests, or None when the stage does not declare its geometry."""
+    try:
+        return (int(stage_parameters['refresh_after_updates']) * int(stage_parameters['accumulate_batches'])
+                * int(stage_parameters['batch_tokens']))
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def withdrawn_families(parameters):
+    return list(parameters.get('distillation_withdrawn_families', WITHDRAWN_FAMILIES))
 
 
 def queue_path(controller_out):
@@ -143,13 +198,34 @@ def unseen_packages(controller_out, state):
     return result
 
 
+def lineage_checkpoint_files(config, state):
+    """{SHA-256: path} of every checkpoint this controller actually held that is still on disk: its initial parent,
+    current head, every completed RL update and every interleaved SFT window parent/result."""
+    files = {}
+
+    def add(path, sha=None):
+        if path and Path(path).is_file():
+            files[sha or sha256_file_hex_cached(path)] = str(path)
+
+    add(config.get('checkpoint'))
+    add(state.get('checkpoint'))
+    interleave = state.get('interleave') or {}
+    for window in interleave.get('windows') or []:
+        for item in (window.get('parent') or {}, window.get('checkpoint') or {}):
+            add(item.get('path'), item.get('sha256'))
+    if interleave.get('active_window'):
+        item = interleave['active_window']['parent']
+        add(item.get('path'), item.get('sha256'))
+    for record in [*(state.get('completed_update_history') or []), state.get('last_completed_update') or {}]:
+        item = record.get('checkpoint') or {}
+        add(item.get('path'), item.get('sha256'))
+    return files
+
+
 def lineage_checkpoints(config, state):
     """SHA-256 of every checkpoint this controller actually held: its initial parent, current head, every completed
-    RL update and every interleaved SFT window parent/result."""
-    shas = set()
-    for path in (config.get('checkpoint'), state.get('checkpoint')):
-        if path and Path(path).is_file():
-            shas.add(sha256_file_hex_cached(path))
+    RL update and every interleaved SFT window parent/result (also those no longer on disk)."""
+    shas = set(lineage_checkpoint_files(config, state))
     interleave = state.get('interleave') or {}
     for window in interleave.get('windows') or []:
         shas.update(filter(None, ((window.get('parent') or {}).get('sha256'),
@@ -245,10 +321,27 @@ def _quota_aware_basis(policy, parent, stage_id, parameters, candidate_sha256):
                       communication_min_visits=visits)
 
 
-def _ce_update(policy_ref, successor, leaves, family_rows, out, *, family_scale, base_inputs=None, quota_parent=None):
+def _unvisited_tokens(rows, checkpoint, stage_id):
+    """{family: forward tokens} of the admitted rows (with a recorded size) that no update has visited yet: a window's
+    own rows are scheduled before everything else, so these are what the next window must digest first."""
+    sized = {key: value for key, value in rows.items() if value.get('disposition') == 'admitted'
+             and value.get('forward_tokens')}
+    if not sized:
+        return {}
+    frame = _parent_sft_frame(checkpoint, stage_id)
+    counts, required = frame.get('exposure_counts') or {}, frame.get('required_visits') or {}
+    used = {}
+    for key, value in sized.items():
+        if counts.get(key, 0) < required.get(key, 1):
+            used[value['family']] = used.get(value['family'], 0) + value['forward_tokens']
+    return used
+
+
+def _ce_update(policy_ref, successor, leaves, family_rows, out, *, scales, withdrawn=(), base_inputs=None, quota_parent=None):
     """The successor CE policy: declare the new leaves; extend a logical-family map (each admitted family its own
-    declared scale). ``quota_parent`` = (parent checkpoint, stage id, stage parameters) re-derives the quota-aware
-    basis for the appended source. Returns (binding, bound_scale)."""
+    declared scale ``scales[family]``) and floor the declared scale of every present ``withdrawn`` family to
+    ``WITHDRAWN_SCALE``. ``quota_parent`` = (parent checkpoint, stage id, stage parameters) re-derives the
+    quota-aware basis for the appended source. Returns (binding, bound_scale)."""
     from ..train.native_supervision import load_policy
     from ..train.own_output_supervision import identity, policy_objective
     policy = json.loads(Path(policy_ref['path']).read_text())
@@ -279,10 +372,13 @@ def _ce_update(policy_ref, successor, leaves, family_rows, out, *, family_scale,
         write_json_durable(map_path, new_map)
         balance['map'] = _ref(map_path)
         if balance.get('normalization') == 'declared/1':
-            if family_scale > balance['max_scale']:
-                raise ValueError('distillation_family_scale exceeds the objective max_scale')
-            balance['scales'] = {**balance['scales'], **{row['family']: float(family_scale) for row in family_rows}}
-            bound_scale = float(family_scale)
+            admitted = {row['family'] for row in family_rows}
+            if any(scales[family] > balance['max_scale'] for family in admitted):
+                raise ValueError('distillation family scale exceeds the objective max_scale')
+            floored = {family: min(balance['scales'][family], WITHDRAWN_SCALE)
+                       for family in withdrawn if family in balance['scales']}
+            balance['scales'] = {**balance['scales'], **floored, **{family: float(scales[family]) for family in admitted}}
+            bound_scale = max((float(scales[family]) for family in admitted), default=1.0)
         else:
             bound_scale = float(balance['max_scale'])  # bounded-mean-one may raise a small family up to its cap
     elif isinstance(balance, dict):
@@ -450,7 +546,7 @@ def _prepare_window(config, declared, state, state_path, directory, *, protected
     predecessor = {'path': base_inputs['native_graphs']['path'], 'sha256': base_inputs['native_graphs']['sha256']}
     ledger = copy.deepcopy(ledger) if ledger else {'schema': SCHEMA, 'recipe': None, 'packages': {}, 'rows': {},
                                                    'admissions': []}
-    decisions, chosen = [], []  # per package: (item, receipt, ref, [admitted rows])
+    decisions, chosen, forward = [], [], {}  # per package: (item, receipt, ref, [admitted rows]); row forward tokens
     for item in candidates:
         receipt_ref = _ref(item['package'])
         receipt = json.loads(Path(receipt_ref['path']).read_text())
@@ -476,6 +572,7 @@ def _prepare_window(config, declared, state, state_path, directory, *, protected
             log(json.dumps({'event': 'memetic_package_refused', 'package': receipt_ref['path'], 'reason': reason}))
             continue
         raw = _raw_rows(receipt['source']['path'])
+        forward.update({entry['id']: int(entry.get('forward_tokens') or 0) for entry in indexed.entries})
         candidates_rows = []
         for row in receipt['rows']:
             previous = rows_ledger.get(row['id'])
@@ -499,10 +596,15 @@ def _prepare_window(config, declared, state, state_path, directory, *, protected
             candidates_rows.append(row)
         chosen.append((item, receipt, receipt_ref, candidates_rows))
 
-    # Share cap over the successor: (prior + new) x bound <= share x (rows + new).
-    share = declared['parameters'].get('distillation_max_share', DEFAULT_MAX_SHARE)
-    family_scale = declared['parameters'].get('distillation_family_scale', DEFAULT_FAMILY_SCALE)
+    # Share cap over the successor: the summed CE scale of the distilled rows (prior + new) stays within ``share`` of
+    # the rows of the source it extends. Each family has its own declared scale; rows are taken in package order
+    # (the lineage's own rows before prepared static sources) until the next one would exceed the cap.
+    parameters = declared['parameters']
+    share = parameters.get('distillation_max_share', DEFAULT_MAX_SHARE)
+    scales = family_scales(parameters)
+    withdrawn = withdrawn_families(parameters)
     pending_rows = [row for _, _, _, rows in chosen for row in rows]
+    row_family = {row['id']: receipt['family'] for _, receipt, _, rows in chosen for row in rows}
     admitted, deferred = [], []
     if pending_rows:
         prior_ids = _prior_ids(base_inputs, predecessor, index, chosen[0][1])
@@ -512,28 +614,40 @@ def _prepare_window(config, declared, state, state_path, directory, *, protected
             ledger['rows'][row['id']] = {'package': package['sha256'], 'disposition': 'excluded',
                                          'reason': 'row id already in the joint SFT source', 'window': window}
         pending_rows = [row for row in pending_rows if row['id'] not in prior_ids]
-        prior_memetic = sum(1 for value in ledger['rows'].values() if value['disposition'] == 'admitted')
-        bound = _bound_scale(base_inputs, family_scale)
+        fallback = max(scales.values())
+        prior = [value for value in ledger['rows'].values() if value['disposition'] == 'admitted']
+        mass, count = sum(value.get('scale', fallback) for value in prior), len(prior)
         total = len(prior_ids)
-        if bound <= share:
-            budget = len(pending_rows)  # the family's mass share cannot exceed the cap at any row count
-        else:
-            budget = max(0, math.floor((share * total - prior_memetic * bound) / (bound - share) + 1e-9))
-        admitted, deferred = pending_rows[:budget], pending_rows[budget:]
-        cap = {'max_share': share, 'bound_scale': bound, 'predecessor_rows': total,
-               'prior_memetic_rows': prior_memetic, 'budget_rows': budget}
+        capacity, shares = window_capacity(base_parameters), window_shares(parameters)
+        used = _unvisited_tokens(ledger['rows'], state['checkpoint'], sft_id) if capacity is not None else {}
+        for row in pending_rows:
+            family = row_family[row['id']]
+            scale = _row_scale(base_inputs, family, scales)
+            tokens = forward.get(row['id'], 0)
+            if mass + scale > share * (total + count + 1) + 1e-9:
+                deferred.append((row, 'family share cap'))
+            elif capacity is not None and used.get(family, 0) and used[family] + tokens > shares[family] * capacity:
+                deferred.append((row, 'window capacity'))
+            else:
+                admitted.append(row)
+                mass, count = mass + scale, count + 1
+                used[family] = used.get(family, 0) + tokens
+        cap = {'max_share': share, 'family_scales': scales, 'predecessor_rows': total, 'prior_memetic_rows': len(prior),
+               'admitted_rows': len(admitted), 'deferred_rows': len(deferred), 'scale_mass': mass,
+               'window_capacity_forward_tokens': capacity, 'window_shares': shares, 'forward_tokens_by_family': used,
+               'withdrawn_families': withdrawn}
     else:
         cap = {'max_share': share}
     admitted_ids = {row['id'] for row in admitted}
-    for row in deferred:
+    for row, why in deferred:
         package = next(ref for _, _, ref, rows in chosen if row in rows)
         ledger['rows'][row['id']] = {'package': package['sha256'], 'disposition': 'deferred',
-                                     'reason': 'family share cap', 'window': window}
+                                     'reason': why, 'window': window}
 
     target = Path(directory) / 'memetic-admission'
     if target.exists():
         shutil.rmtree(target)  # an uncommitted earlier attempt: nothing references it
-    leaves, family_rows, package_records = [], [], []
+    leaves, leaf_families, family_rows, package_records = [], [], [], []
     for item, receipt, receipt_ref, rows in chosen:
         mine = [row for row in rows if row['id'] in admitted_ids]
         if mine:
@@ -549,11 +663,14 @@ def _prepare_window(config, declared, state, state_path, directory, *, protected
             if [(e['id'], e['binding']) for e in indexed.entries] != [(row['id'], row['binding']) for row in mine]:
                 raise ValueError('admitted memetic leaf does not index as exactly its admitted rows')
             leaves.append(leaf)
+            leaf_families.append(receipt['family'])
             family_rows.extend({'id': row['id'], 'binding': row['binding'], 'family': receipt['family']}
                                for row in mine)
             for row in mine:
                 ledger['rows'][row['id']] = {'package': receipt_ref['sha256'], 'disposition': 'admitted',
-                                             'window': window, 'leaf_sha256': leaf['sha256']}
+                                             'window': window, 'leaf_sha256': leaf['sha256'],
+                                             'scale': _row_scale(base_inputs, receipt['family'], scales),
+                                             'family': receipt['family'], 'forward_tokens': forward.get(row['id'], 0)}
         statuses = [ledger['rows'].get(row['id'], {}).get('disposition') for row in receipt['rows']]
         status = 'partial' if 'deferred' in statuses else 'admitted' if 'admitted' in statuses else 'consumed-none-admitted'
         ledger['packages'][receipt_ref['sha256']] = {'path': receipt_ref['path'], 'status': status, 'window': window}
@@ -576,12 +693,13 @@ def _prepare_window(config, declared, state, state_path, directory, *, protected
         successor_path = target / 'train-sources.json'
         write_json_durable(successor_path, {'schema': 'natlang.native-graph-sources/1', 'sources': [
             {'kind': 'native-graphs', 'path': predecessor['path'], 'sha256': predecessor['sha256']},
-            *({'kind': 'native-graphs', **leaf, 'training_priority': 1} for leaf in leaves)]})
+            *({'kind': 'native-graphs', **leaf, 'training_priority': FAMILY_PRIORITY[family]}
+              for leaf, family in zip(leaves, leaf_families, strict=True))]})
         successor = _ref(successor_path)
         ce = None
         if base_inputs.get('ce_supervision_policy'):
             ce, _ = _ce_update(base_inputs['ce_supervision_policy'], successor, leaves, family_rows, target,
-                                         family_scale=family_scale, base_inputs=base_inputs,
+                                         scales=scales, withdrawn=withdrawn, base_inputs=base_inputs,
                                          quota_parent=(state['checkpoint'], sft_id, base_parameters))
         capacity = _successor_capacity(base_parameters, successor, chosen[0][1], target, index)
         append, settled = _write_recipes(base_recipe, sft_id, successor, ce, target, parameters=capacity)
@@ -633,8 +751,8 @@ def _prior_ids(inputs, predecessor, index, receipt):
     return set(index(predecessor['path'], receipt['tokenizer_fingerprint'], receipt['role_ids']).bindings)
 
 
-def _bound_scale(inputs, family_scale):
-    """The largest CE scale a memetic row can receive under the current objective (1 without family balance)."""
+def _row_scale(inputs, family, scales):
+    """The CE scale a row of ``family`` receives under the current objective (1 without family balance)."""
     reference = inputs.get('ce_supervision_policy')
     if not reference:
         return 1.0
@@ -642,5 +760,5 @@ def _bound_scale(inputs, family_scale):
     if not isinstance(balance, dict):
         return 1.0
     if balance.get('key') == 'logical-family' and balance.get('normalization') == 'declared/1':
-        return float(family_scale)
+        return float(scales[family])
     return float(balance['max_scale'])

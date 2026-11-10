@@ -23,16 +23,29 @@ tree plus resolved `NATLANG_MODEL_FACING`): only one series is compared. `behavi
 first of its series (McNemar exact on matched scored task-samples, task-level sign test). Read that, not a dev16 delta, to judge an update.
 `held_eval: false` opts out; the held tasks never enter training, distillation or a window.
 
-## Rollout self-distillation feeds the SFT windows (engineering, 2026-11-10)
+## Expert iteration feeds the SFT windows (engineering, 2026-11-10)
 
-`rl/rollout_distillation.py`: after each scored round, one verified successful student episode per task (Neuralese-using
-first, return-weighted, current-policy actor only, closed whole graphs, sampled outputs only) is queued as a
-`rollout-distillation` package in the memetic admission queue; the next mandatory SFT window appends it as a recorded source
-(shared 2% family share cap, deferral never drops). Default on, `rollout_distillation: false` opts out; continuations adopt
-through the recorded transition `rollout-distillation-20261110`. A window append over a statically corrected CE policy (w5's
-corrected-mix history) records `history_settlement` in the successor CE policy (`native_resident_ce.history_settlement`): the policy's
-historical first-row observations stay exact and are authenticated by the static source correction that admitted it; later appends
-carry it unchanged. Fallow #17a tracks deployment.
+`rl/rollout_distillation.py`: after each scored round, EVERY verified successful student episode (not one per task) is lowered
+to a whole-graph native SFT row and queued as a `rollout-distillation` package in the memetic admission queue (Neuralese-using
+first, return-weighted, closed whole graphs, sampled outputs only, train tasks only; exact duplicate sampled outputs are dropped,
+never repeated, and every row is visited once; `rollout_distillation_max_per_task` bounds one task). Each row records its own
+sampling policy, which must be a checkpoint of this lineage. Earlier rounds (scored before the hook, or queued by its one-per-task
+form) are topped up at every scored round (`backfill`; `scripts/neuralese_data/backfill_rollout_distillation.py CONTROL_OUT` does it
+now), one `rollout-distillation-all.json` record per round. The next mandatory SFT window appends the rows at training priority 2
+(prepared statics at 1, so the policy's own rows run first), each distilled family with its own declared CE scale
+(`distillation_family_scales`; `distillation_family_scale` is the default), under `distillation_max_share` (default 0.5 of the
+source's rows, summed scale) and a window capacity: a window digests `refresh_after_updates x accumulate_batches x batch_tokens`
+logical forward tokens, a family takes at most its `distillation_window_shares` of that (rollouts 0.4, statics 0.2, memetic 0.1),
+and admitted rows no update has visited yet are charged first, so a backlog never grows and no row is visited twice; deferral
+never drops. Default on, `rollout_distillation: false` opts out; continuations adopt it
+through the recorded transition `rollout-distillation-20261110`. Every append also floors the declared CE scale of the scripted-template
+families (`port-record-wrapper`, `native-communication-template`; `distillation_withdrawn_families`, `[]` opts out): the corrected mix
+(2026-11-03) already withdrew duplicate rows, cut template quotas and scaled them to 0.5% of loss each; measured window 0 had no template
+graph at all (856/892 graphs were the diverse focus), see `plans/neuralese/SFT_TEMPLATE_EXCISION_20261110.md`. Physical removal of
+those rows needs a static source correction (resident CE appends are append-only); not done, not needed by the measurement.
+A window append over a statically corrected CE policy (w5's corrected-mix history) records `history_settlement` in the successor CE
+policy (`native_resident_ce.history_settlement`): the policy's historical first-row observations stay exact and are authenticated by
+the static source correction that admitted it; later appends carry it unchanged. Fallow #17a tracks deployment.
 Prepared static sources (verified native graphs without an actor) use the same queue as family `prepared-source`
 (`scripts/neuralese_data/queue_prepared_source.py`: one package per source with its origin, verification and selection;
 admitted after the lineage's own rows). A running controller refuses a package family its loaded code does not know, and

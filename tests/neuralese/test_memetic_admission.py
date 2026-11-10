@@ -49,7 +49,7 @@ def sft_frame(source):
             'required_visits': {ident: 2 for ident in ids}, 'exposure_counts': {ident: 1 for ident in ids}}
 
 
-def lineage(tmp_path, quota=False, geometry=False, **parameters):
+def lineage(tmp_path, quota=False, geometry=False, extra_scales=None, stage_parameters=None, **parameters):
     """A controller whose recipe has a declared-scale logical-family joint SFT stage and an interleaved RL stage.
     ``quota`` gives its CE policy the quota-aware basis of the checkpoint's saved frame; ``geometry`` gives the SFT stage
     a prepared packed-geometry sidecar of its source."""
@@ -71,7 +71,7 @@ def lineage(tmp_path, quota=False, geometry=False, **parameters):
                                context_weight=.05)]
     ce['objective'] = objective(mass='token', family_balance={
         'key': 'logical-family', 'max_scale': 8., 'normalization': 'declared/1',
-        'map': resident.binding(families), 'scales': {'ordinary': 1.}})
+        'map': resident.binding(families), 'scales': {'ordinary': 1., **(extra_scales or {})}})
     if quota:
         from natlang_neuralese.train.native_quota_aware_ce import make_basis
         ce['quota_aware_basis'] = make_basis(sft_frame(source), stage_id='sft', source_sha256=source.file_sha256,
@@ -96,7 +96,7 @@ def lineage(tmp_path, quota=False, geometry=False, **parameters):
               'input_bindings': {'train': resident.binding(train), 'held': resident.binding(paths['held']),
                                  'ce': resident.binding(ce_path), 'rl.tasks': resident.binding(cases)},
               'stages': [{'id': 'sft', 'kind': 'native_state_sft', 'requires': [],
-                          'parameters': {'refresh_after_updates': 64, 'epochs': 2.,
+                          'parameters': {'refresh_after_updates': 64, 'epochs': 2., **(stage_parameters or {}),
                                          **({'sft_packed_geometry': sidecar,
                                              'memory_qualification': {k: v for k, v in resident.binding(descriptor).items()
                                                                       if k != 'bytes'}} if sidecar else {})},
@@ -247,9 +247,11 @@ def test_share_cap_defers_rows_and_new_packages_reopen_a_completed_stage(tmp_pat
                                             'reason': 'family share cap'}
     assert list(ledger['packages'].values())[0]['status'] == 'partial'
     record = json.loads(Path(ledger['admissions'][0]['record']['path']).read_text())
-    assert record['share_cap']['budget_rows'] == 1 and record['share_cap']['bound_scale'] == .4
+    assert record['share_cap']['admitted_rows'] == 1 and record['share_cap']['deferred_rows'] == 1
+    assert record['share_cap']['family_scales']['memetic-guidance'] == .4
     with pytest.raises(ValueError, match='distillation_max_share'):
-        admission.validate_parameters({'distillation_max_share': .5})
+        admission.validate_parameters({'distillation_max_share': 1.5})
+    admission.validate_parameters({'distillation_max_share': .5})
 
 
 def test_no_package_leaves_the_boundary_unchanged(tmp_path, monkeypatch):
@@ -416,3 +418,105 @@ def test_append_extends_the_packed_geometry_sidecar_over_its_new_rows(tmp_path, 
         successor, descriptor, identity={}, runtime_code_sha256='x', request_path=tmp_path / 'req' / 'request.json'
     )['path']).read_text())
     assert request['source']['sha256'] == inputs['native_graphs']['sha256']
+
+
+def test_expert_iteration_rows_take_their_own_scale_and_run_first_and_template_families_are_floored(tmp_path, monkeypatch):
+    """Each distilled family declares its own scale and priority (the policy's own rows before prepared statics), and
+    every append floors the declared scale of the scripted-template families the recipe review found dominating."""
+    from natlang_neuralese.train.recipe import load_recipe, resolve_stage_inputs
+    config, declared, state, out, train = lineage(
+        tmp_path, extra_scales={'port-record-wrapper': .015, 'native-communication-template': .07},
+        distillation_max_share=1., distillation_family_scales={'rollout-distillation': 1.5, 'prepared-source': .5})
+    memetic = out / 'memetic'
+    admission.queue_package(memetic, [graph('static:a', 5)], family=admission.STATIC_FAMILY, tokenizer=FP, roles=[],
+                            protected=Guard(), manifests=[tmp_path / 's.json'], actors=[], scope='test',
+                            static_source=STATIC, log=lambda line: None)
+    admission.queue_package(memetic, [graph('rollout:a', 7), graph('rollout:b', 8)], family=admission.ROLLOUT_FAMILY,
+                            tokenizer=FP, roles=[], protected=Guard(), manifests=[tmp_path / 'r.json'],
+                            actors=[resident.sha(config['checkpoint'])], scope='test', log=lambda line: None)
+    seen = []
+    window_harness(monkeypatch, seen)
+    old_inputs = resolve_stage_inputs(load_recipe(config['production_recipe']),
+                                      load_recipe(config['production_recipe'])['stages'][0], {})
+    assert interleave.run_sft_window(config, declared, state, out / 'state.json', None) == 'adopted'
+    inputs = resolve_stage_inputs(load_recipe(seen[0][0]), seen[0][1], {})
+    successor = NativeGraphSource(inputs['native_graphs']['path'], FP, required_split='train')
+    # The policy's own episodes come first and at the higher priority, the static source after them.
+    assert [(e['id'], e['training_priority']) for e in successor.entries] == [
+        ('old', 0), ('rollout:a', 2), ('rollout:b', 2), ('static:a', 1)]
+    policy = json.loads(Path(inputs['ce_supervision_policy']['path']).read_text())
+    assert policy['objective']['family_balance']['scales'] == {
+        'ordinary': 1., 'rollout-distillation': 1.5, 'prepared-source': .5,
+        'port-record-wrapper': admission.WITHDRAWN_SCALE, 'native-communication-template': admission.WITHDRAWN_SCALE}
+    assert policy['objective_transition']['from'] == identity(policy_objective(
+        load_policy_for(old_inputs['ce_supervision_policy'])))['sha256']
+    record = json.loads(Path(state['interleave']['memetic_distillation']['admissions'][0]['record']['path']).read_text())
+    assert record['share_cap']['scale_mass'] == pytest.approx(1.5 + 1.5 + .5)
+    ledger = state['interleave']['memetic_distillation']['rows']
+    assert (ledger['rollout:a']['scale'], ledger['static:a']['scale']) == (1.5, .5)
+
+
+def load_policy_for(reference):
+    from natlang_neuralese.train.native_supervision import load_policy
+    return load_policy(reference)
+
+
+def test_template_floor_never_raises_a_scale_and_can_be_opted_out(tmp_path, monkeypatch):
+    from natlang_neuralese.train.recipe import load_recipe, resolve_stage_inputs
+    for withdrawn, expected in (([], {'ordinary': 1., 'port-record-wrapper': .015, 'memetic-guidance': .2}),
+                                (['port-record-wrapper'], {'ordinary': 1., 'port-record-wrapper': 1e-4,
+                                                           'memetic-guidance': .2})):
+        root = tmp_path / str(len(withdrawn))
+        root.mkdir()
+        config, declared, state, out, _ = lineage(
+            root, extra_scales={'port-record-wrapper': .015 if not withdrawn else 1e-4},
+            distillation_withdrawn_families=withdrawn, **UNCAPPED)
+        package(out, [graph('memetic:a', 6)], resident.sha(config['checkpoint']))
+        window_harness(monkeypatch, [])
+        seen = []
+        window_harness(monkeypatch, seen)
+        assert interleave.run_sft_window(config, declared, state, out / 'state.json', None) == 'adopted'
+        inputs = resolve_stage_inputs(load_recipe(seen[0][0]), seen[0][1], {})
+        balance = json.loads(Path(inputs['ce_supervision_policy']['path']).read_text())['objective']['family_balance']
+        assert balance['scales'] == expected
+    with pytest.raises(ValueError, match='distillation_withdrawn_families'):
+        admission.validate_parameters({'distillation_withdrawn_families': 'port-record-wrapper'})
+    with pytest.raises(ValueError, match='distillation_family_scales'):
+        admission.validate_parameters({'distillation_family_scales': {'ordinary': 1.}})
+
+
+def test_window_capacity_bounds_each_family_and_unvisited_admitted_rows_count_against_it(tmp_path, monkeypatch):
+    """A window digests refresh_after_updates x accumulate_batches x batch_tokens forward tokens; the rollout family
+    takes at most its share of that, the rest stay deferred (never dropped), and rows admitted earlier that no update
+    visited yet are charged first."""
+    probe = tmp_path / 'probe.jsonl'
+    probe.write_text(json.dumps(graph('rollout:probe', 5)) + '\n')
+    tokens = NativeGraphSource(probe, FP, required_split='train').entries[0]['forward_tokens']
+    assert admission.window_capacity({'refresh_after_updates': 64, 'accumulate_batches': 1, 'batch_tokens': 7}) == 448
+    assert admission.window_capacity({'refresh_after_updates': 64}) is None
+    # Capacity 64 x 1 x 5 rows' worth; the rollout share .005 of it is 1.6 rows' worth of forward tokens.
+    config, declared, state, out, train = lineage(
+        tmp_path, stage_parameters={'accumulate_batches': 1, 'batch_tokens': 5 * tokens}, distillation_max_share=1.,
+        distillation_window_shares={'rollout-distillation': .005})
+    admission.queue_package(out / 'memetic', [graph('rollout:a', 7), graph('rollout:b', 8), graph('rollout:c', 9)],
+                            family=admission.ROLLOUT_FAMILY, tokenizer=FP, roles=[], protected=Guard(),
+                            manifests=[tmp_path / 'r.json'], actors=[resident.sha(config['checkpoint'])],
+                            scope='test', log=lambda line: None)
+    window_harness(monkeypatch, [])
+    assert interleave.run_sft_window(config, declared, state, out / 'state.json', None) == 'adopted'
+    ledger = state['interleave']['memetic_distillation']['rows']
+    assert [ledger[i]['disposition'] for i in ('rollout:a', 'rollout:b', 'rollout:c')] == [
+        'admitted', 'deferred', 'deferred']
+    assert ledger['rollout:b']['reason'] == 'window capacity' and ledger['rollout:a']['forward_tokens'] == tokens
+    record = json.loads(Path(state['interleave']['memetic_distillation']['admissions'][0]['record']['path']).read_text())
+    assert record['share_cap']['window_capacity_forward_tokens'] == 64 * 5 * tokens
+    assert record['share_cap']['forward_tokens_by_family'] == {'rollout-distillation': tokens}
+    # The unvisited admitted row is charged to the next window; once visited it is not.
+    frame = {'source_receipts': [{'sha256': 'x'}], 'exposure_counts': {}, 'required_visits': {'rollout:a': 1}}
+    monkeypatch.setattr(admission, '_parent_sft_frame', lambda checkpoint, stage: frame)
+    assert admission._unvisited_tokens(ledger, 'ckpt', 'sft') == {'rollout-distillation': tokens}
+    frame['exposure_counts'] = {'rollout:a': 1}
+    assert admission._unvisited_tokens(ledger, 'ckpt', 'sft') == {}
+    assert admission._unvisited_tokens({'x': {'disposition': 'deferred'}}, 'never read', 'sft') == {}
+    with pytest.raises(ValueError, match='distillation_window_shares'):
+        admission.validate_parameters({'distillation_window_shares': {'rollout-distillation': 1.5}})
