@@ -872,7 +872,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
             system_prompt=None, prompt_rendering=None, guidance_stage=None, context_tokens=None,
             neuralese_use_bonus=None, program_guidance=None, adapters=None, remote_workers=None,
             lost_block_exclusions=None, late_endpoints=(), slot_poll_seconds=15., teacher_overlap=True,
-            teacher_plan_batch=None, drain=None, teacher_phase=True):
+            teacher_plan_batch=None, drain=None, teacher_phase=True, local_actor_ready=None):
     """Bounded subprocess fanout; existing collector and exact task verifier. ``behavior_top_k`` also records the
     actors' top-k sampler log-probs at every sampled position (score-centered RL); None leaves collection unchanged.
     ``teacher_attempts`` JOLT+ teacher attempts per group (the crisp plan; ``teacher_plan='nl'`` lets
@@ -909,7 +909,9 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     whole-round planner resumes through the old path.
     ``drain`` (a ``threading.Event``) ends the collection gracefully once set: no new entry is taken, in-flight episodes
     finish (a hard stop would kill them) and the report says which keys finished (rl.precollect).
-    ``teacher_phase=False`` collects the students only (JOLT+ student guidance stays; no teacher plan or entries)."""
+    ``teacher_phase=False`` collects the students only (JOLT+ student guidance stays; no teacher plan or entries).
+    ``local_actor_ready`` (rl.managed_actor.ManagedActor.ready) is asked before each entry of the managed endpoint: a dead
+    managed actor is relaunched and its slot waits for it, as a remote slot waits for its actor."""
     if prompt_rendering not in (None,'full'):
         raise ValueError('native on-policy collection requires the full prompt contract')
     if guidance_stage not in (None,'backbone','writer'):
@@ -1126,7 +1128,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
             return False   # the slot's detached worker is still running its episode
         url = slots[index][0]
         if url == endpoints[0].rstrip('/'):
-            return True
+            return local_actor_ready() if local_actor_ready is not None else True
         with join_lock:
             if time.monotonic() - attested_at.get(url, -1e9) < 10:
                 return True
@@ -1524,6 +1526,7 @@ def collect_with_actor(config, values, keep_remote_actor=False, **kwargs):
             raise ValueError('managed actor view must come from its exact selected full-source controls')
         command += ['--native-actor-view', view['path'], '--native-actor-view-sha256', view['sha256']]
     from .actor_client import NativeActorClient
+    from .managed_actor import ManagedActor
     with (Path(values['out']) / 'actor.log').open('a') as log:
         environment = config.get('actor_environment')
         if environment is not None:
@@ -1555,11 +1558,21 @@ def collect_with_actor(config, values, keep_remote_actor=False, **kwargs):
             else:
                 AdoptedProcess(previous).terminate()
                 AdoptedProcess(previous).wait(timeout=120)
-        if process is None:
-            process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
-                                       **({'env': environment} if environment is not None else {}))
-            record_process(pid_path, process.pid, policy_id=values['policy_id'], endpoint=kwargs['endpoints'][0],
+        def launch():
+            child = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
+                                     **({'env': environment} if environment is not None else {}))
+            record_process(pid_path, child.pid, policy_id=values['policy_id'], endpoint=kwargs['endpoints'][0],
                            command=command)
+            return child
+
+        def attests():
+            try:
+                info = json.loads(NativeActorClient(kwargs['endpoints'][0], timeout=2).get_bytes('/v1/neuralese/info'))
+            except (OSError, ValueError):
+                return False
+            return (info.get('rl_policy_binding') or {}).get('checkpoint_sha256') == values['policy_id']
+        # A dead actor is started again (same command, store and policy) while the collection runs.
+        process = ManagedActor(process or launch(), launch, attests, ready_seconds=ready_seconds)
         deadline=time.monotonic()+ready_seconds
         detaching = False
         try:
@@ -1597,7 +1610,7 @@ def collect_with_actor(config, values, keep_remote_actor=False, **kwargs):
                 specs = config.get('remote_workers')
                 kwargs = {**kwargs, 'endpoints': [managed_url, *remote], 'late_endpoints': [u for u in remote if u not in usable],
                           **({'remote_workers': {url: specs[url] for url in remote}} if specs else {})}
-            report = _collect_round(config, kwargs)
+            report = _collect_round(config, {**kwargs, 'local_actor_ready': process.ready})
             # A restart in place with unfinished collection leaves the actor (and the remote actors) running for the
             # relaunched controller; every other outcome ends the actor lease.
             detaching = restart_requested() and not report.get('collection_complete')

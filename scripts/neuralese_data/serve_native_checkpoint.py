@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -171,6 +172,50 @@ def main() -> None:
         engine.stop()
 
 
+ENGINE_DIED_EXIT = 70   # the SGLang engine exited under a live actor (2026-11-10: the wrapper kept answering /v1/models)
+
+
+def supervise_sglang(process):
+    """Tie the actor to its SGLang engine in both directions.
+
+    The server (and its scheduler/detokenizer children) ends with this actor, including on SIGTERM. When the engine
+    exits first (a scheduler crash takes the whole server down), this process must stop reporting healthy: it logs the
+    reason and exits ``ENGINE_DIED_EXIT`` so the controller sees a dead actor and relaunches it (rl.managed_actor)."""
+    import atexit
+    import os
+    import signal
+    import threading
+    import time
+    state = {'stopping': False, 'died': None}
+
+    def stop_sglang(*_):
+        state['stopping'] = True
+        if process.poll() is None:
+            os.killpg(process.pid, signal.SIGTERM)
+            try:
+                process.wait(timeout=60)
+            except subprocess.TimeoutExpired:
+                os.killpg(process.pid, signal.SIGKILL)
+
+    def terminate(signum, _frame):
+        state['stopping'] = True
+        sys.exit(ENGINE_DIED_EXIT if state['died'] is not None else 128 + signum)
+
+    def watch():
+        code = process.wait()
+        if state['stopping']:
+            return
+        state['died'] = code
+        print(json.dumps({'event': 'sglang_engine_exited', 'returncode': code, 'pid': process.pid,
+                          'action': f'actor exits {ENGINE_DIED_EXIT}'}), file=sys.stderr, flush=True)
+        os.kill(os.getpid(), signal.SIGTERM)   # the main thread unwinds (server_close, engine.stop) through terminate()
+        time.sleep(30)                         # an unwind that hangs must not leave an unhealthy actor answering
+        os._exit(ENGINE_DIED_EXIT)
+    atexit.register(stop_sglang)
+    signal.signal(signal.SIGTERM, terminate)
+    threading.Thread(target=watch, name='sglang-engine-watch', daemon=True).start()
+
+
 def attest_sglang_source(python, fork, pythonpath=''):
     """Record the interpreter's actual SGLang fork commit (and dirty flag) for the actor attestation.
 
@@ -203,7 +248,6 @@ def attest_sglang_source(python, fork, pythonpath=''):
 def launch_sglang(engine, args, checkpoint):
     """Export the checkpoint for SGLang (cached by SHA-256), start the fork's server and bind the front to it."""
     import os
-    import subprocess
     import time
     import urllib.request
     from natlang_neuralese.export.native_hf import export_loaded
@@ -248,19 +292,7 @@ def launch_sglang(engine, args, checkpoint):
                                              'NATLANG_ADAPTER_SLOTS': str(args.sglang_adapter_slots),
                                              'NATLANG_ADAPTER_RANK': str(args.sglang_adapter_rank)},
                                start_new_session=True)
-    # The SGLang server (and its scheduler/detokenizer children) ends with this actor, including on SIGTERM.
-    import atexit
-    import signal
-
-    def stop_sglang(*_):
-        if process.poll() is None:
-            os.killpg(process.pid, signal.SIGTERM)
-            try:
-                process.wait(timeout=60)
-            except subprocess.TimeoutExpired:
-                os.killpg(process.pid, signal.SIGKILL)
-    atexit.register(stop_sglang)
-    signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
+    supervise_sglang(process)
     url = f'http://127.0.0.1:{port}'
     deadline = time.time() + 1800
     while True:

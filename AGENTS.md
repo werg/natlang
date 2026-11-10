@@ -6,6 +6,10 @@ crisp plan) as soon as its students finish; the teachers join the shared work-st
 runs, Pop collects round N+1's students from the policy-N actor (`round-N+1-pre`; `precollect: false` opts out); the round imports
 them as one-update-stale episodes (rollout `policy.checkpoint_sha256` N, learner `--rl-actors`, TIS plus engine guard). Never admit
 older policies: no pre-collection runs when an SFT window falls between the update and the next collection. Fallow #25 tracks deployment.
+Actor liveness (2026-11-10): the SGLang wrapper exits 70 when its engine dies (`supervise_sglang`), and a collection asks the
+managed actor's `ready()` (`rl/managed_actor.py`) before each local entry: a dead actor is relaunched with the same command,
+store and policy while its slots wait. The fork validates natlang `custom_params` at request intake (invalid request aborted
+alone). Running processes keep their code; the next actor launch has both.
 
 ## Rollout self-distillation feeds the SFT windows (engineering, 2026-11-10)
 

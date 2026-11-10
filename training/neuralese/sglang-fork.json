@@ -2,7 +2,7 @@
   "description": "SGLang fork serving natlang's LFM3 RL actors (owner decision 2026-10-29: upstream-maintained Liquid LFM3 implementation, sgl-project/sglang PR #46858, for dependability). The PR branch (with the upstream main it contains) plus natlang commits: exact post-temperature sampled-token logprob and top-k returned compactly per token (custom_params.natlang_top_k); LFM3 producer spans (the export's producing embedding table, span state mapped in extend and decode) and the native-state export of a closed span (custom_params.natlang_capture) and native-state import through content-hashed placeholders (custom_params.natlang_import), and per-request native adapters in resident low-rank slots (custom_params.natlang_adapter; batches without an adapted request replay the base-only decode graph). The natlang serving front is serve/sglang_actor.py (scripts/neuralese_data/serve_native_checkpoint.py --engine sglang); the checkpoint is served through export/native_hf.py. NATLANG_FORK.md in the fork documents the base, our commits and the rebase procedure. A separate git checkout, not vendored.",
   "path": "../sglang-natlang",
   "branch": "natlang",
-  "commit": "6104c53e2c88aa5b79e0dd6a52c1cac3d3f89efa",
+  "commit": "70b1991e665f9bb5baec4684fad66d13a41ca999",
   "repository": "https://github.com/werg/sglang-natlang",
   "upstream": "https://github.com/sgl-project/sglang",
   "upstream_base": "17e94c4677d7beb58a89b104fd61b3768994e45e",
@@ -19,8 +19,8 @@
     "scripts/neuralese_data/check_sglang_decide_parity.py (decide/score against the native engine)"
   ],
   "previous_commit": {
-    "commit": "a06adeda40a68d7ce7621ae44141afa0ec4a643c",
-    "note": "Prior fork head (padded CUDA-graph decode rows no longer touch the last LFM3 conv state slot); it lacks custom_params.natlang_top_k_mass, so receipts fell back to the clamped float16 tail reconstruction."
+    "commit": "6104c53e2c88aa5b79e0dd6a52c1cac3d3f89efa",
+    "note": "Prior fork head (natlang_top_k_mass); it lacks request-intake validation of natlang custom_params, so an invalid natlang_import (count 0) killed the scheduler and the engine on 2026-11-10."
   },
   "dependency_pins": {
     "torch": "2.14.1",
