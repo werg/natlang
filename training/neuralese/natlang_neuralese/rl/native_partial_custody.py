@@ -137,8 +137,18 @@ def retain_partial_artifacts(entries, out, *, policy_id, binding, servers, resto
             per_path = {}
             roots, sources = _partial_roots(entries, per_path)
     if restore:
-        for server in servers:
-            restore_bundle(SimpleNamespace(store=_HttpStore(server, policy_id),
-                                           native_state_enabled=True, width=None),
-                           manifest_path, policy_id=policy_id)
+        from http.client import HTTPException
+        for index, server in enumerate(servers):
+            try:
+                restore_bundle(SimpleNamespace(store=_HttpStore(server, policy_id),
+                                               native_state_enabled=True, width=None),
+                               manifest_path, policy_id=policy_id)
+            except (OSError, HTTPException) as error:
+                # servers[0] is the managed local actor and must hold the archive. A remote actor that goes away during
+                # the restore (the Pop actor stopped for a dev16 evaluation) leaves the round instead of failing it.
+                if index == 0:
+                    raise
+                print(json.dumps({'event': 'remote RL actor left during retained artifact restore',
+                                  'server': getattr(server, 'base', str(server)),
+                                  'reason': f'{type(error).__name__}: {error}'}), flush=True)
     return manifest

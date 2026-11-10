@@ -377,3 +377,19 @@ def test_native_actor_client_put_bytes_sends_owner_and_returns_answer():
         server.shutdown()
     assert answer == {'id': 'nzs1_x'}
     assert seen == {'path': '/v1/neuralese/native-states/nzs1_x', 'owner': 'retained-policy:p', 'body': b'abc'}
+
+
+def test_remote_actor_leaving_during_restore_does_not_fail_the_local_restore(tmp_path):
+    actor, state, artifact, partial, entries, identity = fixture(tmp_path)
+    policy = identity['checkpoint_sha256']
+    retain_partial_artifacts(entries, tmp_path, policy_id=policy, binding={}, servers=[actor])
+    local, remote = Actor(), Actor()
+    def gone(*_a, **_k):
+        raise ConnectionResetError('remote actor stopped')
+    remote.put_bytes = gone
+    retain_partial_artifacts(entries, tmp_path, policy_id=policy, binding={}, servers=[local, remote], restore=True)
+    assert [x[0] for x in local.puts] == [state, artifact]
+    local.put_bytes = gone
+    with pytest.raises(ConnectionResetError):
+        retain_partial_artifacts(entries, tmp_path, policy_id=policy, binding={}, servers=[local, Actor()], restore=True)
+    for a in (actor, local, remote): a.store.close()
