@@ -967,7 +967,17 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
             return saved
     from .actor_client import NativeActorClient
     def actor_receipts():
-        infos = {url: json.loads(NativeActorClient(url).get_bytes('/v1/neuralese/info')) for url in live}
+        # A remote actor that went away (the Pop actor stopped for a dev16 evaluation) leaves the round; its episodes kept
+        # the custody they were collected under, and same_actor_policy compares only actors present at both points.
+        infos = {}
+        for url in live:
+            try:
+                infos[url] = json.loads(NativeActorClient(url).get_bytes('/v1/neuralese/info'))
+            except OSError as error:
+                if url.rstrip('/') == endpoints[0].rstrip('/'):
+                    raise
+                print(json.dumps({'event': 'remote RL actor unreachable; it leaves the round', 'endpoint': url,
+                                  'reason': f'{type(error).__name__}: {error}'}), flush=True)
         if prompt_rendering is not None:
             if any(info.get('prompt_rendering')!=prompt_rendering or not re.fullmatch(r'[0-9a-f]{64}',str(info.get('prompt_rendering_identity_sha256',''))) for info in infos.values()):
                 raise ValueError('RL actor did not attest the full prompt rendering contract')
@@ -1564,6 +1574,7 @@ def collect_with_actor(config, values, keep_remote_actor=False, **kwargs):
         process = ManagedActor(process or launch(), launch, attests, ready_seconds=ready_seconds)
         deadline=time.monotonic()+ready_seconds
         detaching = False
+        held_eval = None
         try:
             while True:
                 if time.monotonic()>=deadline:
@@ -1599,12 +1610,18 @@ def collect_with_actor(config, values, keep_remote_actor=False, **kwargs):
                 specs = config.get('remote_workers')
                 kwargs = {**kwargs, 'endpoints': [managed_url, *remote], 'late_endpoints': [u for u in remote if u not in usable],
                           **({'remote_workers': {url: specs[url] for url in remote}} if specs else {})}
+            # The held-out evaluation set is measured on this policy beside the collection (rl.held_eval; never blocks it).
+            from .held_eval import begin as begin_held_eval
+            held_eval = begin_held_eval(config, out=config.get('out'), policy_id=values['policy_id'], endpoint=kwargs['endpoints'][0])
             report = _collect_round(config, {**kwargs, 'local_actor_ready': process.ready})
             # A restart in place with unfinished collection leaves the actor (and the remote actors) running for the
             # relaunched controller; every other outcome ends the actor lease.
             detaching = restart_requested() and not report.get('collection_complete')
             return report
         finally:
+            if held_eval is not None:   # its collectors stop before the actor does (a cut-short run keeps its partial result)
+                held_eval.finish(detaching=detaching, immediate=sys.exc_info()[0] is not None
+                                 or (control is not None and control.stop.requested))
             if detaching:
                 print(json.dumps({'event': 'restart in place: the RL actor keeps running', 'pid': process.pid,
                                   'round': str(values['out'])}), flush=True)
@@ -1624,12 +1641,23 @@ def collect_with_actor(config, values, keep_remote_actor=False, **kwargs):
                     print(json.dumps({'event': 'after_collection hook failed', 'error': repr(error)[:500]}), flush=True)
 
 
-def select_tasks(cases, stats, budget, *, command=None, curriculum=None):
+def select_tasks(cases, stats, budget, *, command=None, curriculum=None, exclude_ids=None):
     """S7 selectTasks(groupStats,budget)->{row,samples}[], crisp/NL boundary.
 
     A command may execute the existing natlang runtime and return the same typed
     JSON. This mechanism validates identities/counts; policy wording is in S7.
+    ``exclude_ids`` (the held-out evaluation tasks, rl.held_eval) are never selected: the selector sees the pool without
+    them (its offset and breadth cursor follow the remaining rows) and the chosen rows map back to the full pool.
     """
+    if exclude_ids:
+        from bisect import bisect_left
+        eligible = [i for i, row in enumerate(cases) if row.get('id') not in exclude_ids]
+        if len(eligible) < len(cases):
+            if not eligible:
+                return []
+            sub_budget = {**budget, 'offset': bisect_left(eligible, budget['offset']) % len(eligible)}
+            chosen = select_tasks([cases[i] for i in eligible], stats, sub_budget, command=command, curriculum=curriculum)
+            return [{**item, 'row': eligible[item['row']]} for item in chosen]
     from .curriculum import task_descriptors, select, validate_breadth, validate_quota, policy_options
     tasks=task_descriptors(cases)
     if command:
@@ -1981,6 +2009,9 @@ def run(config_path, *, rounds=None, stop=None):
             from .rollout_distillation import adopt_defaults as adopt_rollout_distillation
             config = adopt_rollout_distillation(config, state, state_path, interleaved=interleaved is not None,
                 sealed_selection=(out / f"round-{state['round']:06d}-selection.json").exists())
+            from .held_eval import adopt_defaults as adopt_held_eval
+            config = adopt_held_eval(config, state, state_path, out=out,
+                sealed_selection=(out / f"round-{state['round']:06d}-selection.json").exists())
             config = initial_capacity_collection(config,state)
             state_participant=state.get('native_participant')
             if state_participant is not None:
@@ -2029,8 +2060,10 @@ def run(config_path, *, rounds=None, stop=None):
                     selection_offset=indices[0]
                 selection_budget={'rows': config.get('rows_per_round', 32), 'group': config.get('group', 4),
                                   'offset': selection_offset}
+                from .held_eval import exclusion as held_exclusion
                 selection = select_tasks(cases, [*state.get('task_curriculum_history', {}).values(), *state.get('group_stats', [])],
-                    selection_budget,command=config.get('select_tasks_command'),curriculum=config.get('task_curriculum'))
+                    selection_budget,command=config.get('select_tasks_command'),curriculum=config.get('task_curriculum'),
+                    exclude_ids=held_exclusion(config, cases, state['round']))
                 selected = [cases[item['row']] for item in selection]
                 if selection:
                     # The snapshot binds the policy and budget that chose it: an

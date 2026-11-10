@@ -272,3 +272,18 @@ def test_the_kept_remote_actor_is_stopped_when_no_pre_collection_starts(tmp_path
     with pytest.raises(Stop):
         production.run(config, rounds=1)
     assert seen['kept'] == [True] and seen['commands'][-1] == ['stop-pop']
+
+
+def test_precollection_selection_leaves_out_the_held_evaluation_tasks(tmp_path):
+    cases = [{'id': f'c{i}', 'split': 'train'} for i in range(8)]
+    (tmp_path / 'cases.jsonl').write_text(''.join(json.dumps(c) + '\n' for c in cases))
+    cfg = {'rows_per_round': 2, 'group': 4, 'cases': str(tmp_path / 'cases.jsonl'),
+           'held_eval_binding': {'manifest': str(tmp_path / 'manifest.json'), 'from_round': 0, 'sha256': ''}}
+    manifest = json.dumps({'schema': 'natlang.rl-held-eval-manifest/1', 'tasks': [{'id': 'c3'}, {'id': 'c4'}],
+                           'excluded_split_groups': []}).encode()
+    (tmp_path / 'manifest.json').write_bytes(manifest)
+    import hashlib
+    cfg['held_eval_binding']['sha256'] = hashlib.sha256(manifest).hexdigest()
+    this_round = [{'row': 1, 'samples': 4}, {'row': 2, 'samples': 4}]
+    number, chosen, selected = precollect.seal_next_selection(cfg, state(), cases, this_round, tmp_path, production.select_tasks)
+    assert number == 4 and [c['id'] for c in selected] == ['c5', 'c6']

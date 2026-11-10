@@ -12,6 +12,12 @@ flip the decision by chance). Over this lineage's dev16 results, in step order:
   STOP      latest <= 10/16, or latest has >= 2 looping cases, or the mean of the last two is >= 1.5 below the parent;
   WATCH     training loop rate rose on two consecutive rounds, or one checkpoint below the parent;
   CONTINUE  otherwise.
+Held-out evaluation set (rl.held_eval): the controller measures about 64 pinned pool tasks x 2 samples on every new policy,
+so a round's effect is read with far less noise than dev16. It is listed after the dev16 results, each policy paired with
+the previous one and with the first measured one of its series (matched scored (task, sample) episodes: successes, discordant
+pairs, McNemar exact p; and the exact sign test over tasks, the conservative one since a task's samples are not independent).
+Results of different series (collector runtime or NATLANG_MODEL_FACING changed) are never compared. It does not enter the
+verdict yet: the verdict rule above keeps its dev16/loop inputs until the held set has a few policies.
 Read-only; it decides nothing by itself.
 """
 import argparse
@@ -22,6 +28,7 @@ from pathlib import Path
 
 sys.path[:0] = [str(Path(__file__).resolve().parents[2] / 'training/neuralese')]
 from natlang_neuralese.common.paths import resolve  # noqa: E402
+from natlang_neuralese.rl import held_eval  # noqa: E402
 
 LOOP = ('budget_exhaustion', 'repetition')
 EVIDENCE = resolve('data_nvme', 'lfm3-rl-dgx-20261029', 'ops/pop-behavior-eval/evidence')
@@ -82,14 +89,41 @@ def decide(parent, results, rounds):
     return 'CONTINUE', f"latest {latest['success']}/16 vs parent {parent['success']}/16, {latest['loops']} looping"
 
 
+def pair_text(label, pair):
+    if pair is None:
+        return ''
+    return (f"  {label}: {pair['second_successes'] - pair['first_successes']:+d} of {pair['pairs']} pairs "
+            f"(+{pair['only_second']}/-{pair['only_first']}, McNemar p={pair['mcnemar_exact_p']}; "
+            f"tasks +{pair['tasks_up']}/-{pair['tasks_down']}, p={pair['task_sign_p']})")
+
+
+def held_lines(rows):
+    if not rows:
+        return []
+    lines = ['held-out set    policy       series       scored success loop_rate']
+    for r in rows:
+        rate = '-' if r['loop_rate'] is None else f"{r['loop_rate']:.2f}"
+        lines.append(f"held-out        {r['policy'][:12]} {r['series']:<12} {r['scored']:>6} {r['successes']:>7} {rate:>9}"
+                     + ('' if r['complete'] else f"  (partial: {r['ran']} ran)")
+                     + pair_text('vs previous', r['vs_previous']) + pair_text('vs first', r['vs_first']))
+    return lines
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument('out', type=Path, help='controller out directory (holds round-*/score.json)')
-    p.add_argument('--parent-label', required=True, help='dev16 evidence label prefix of the parent checkpoint')
+    p.add_argument('--parent-label', help='dev16 evidence label prefix of the parent checkpoint (omitted: rounds and held-out set only)')
     p.add_argument('--label-glob', action='append', default=[], help='evidence label globs of this lineage')
     p.add_argument('--json', action='store_true')
     a = p.parse_args(argv)
     rounds = round_rows(a.out)
+    if a.parent_label is None:
+        print('round           students success loop_rate unresolved spread_groups')
+        for r in rounds:
+            print(f"{r['round']:<15} {r['students']:>8} {r['success']:>7} {'-' if r['loop_rate'] is None else format(r['loop_rate'], '.2f'):>9}"
+                  f" {r['unresolved']:>10} {r['groups_with_spread']!s:>13}")
+        print('\n'.join(held_lines(held_eval.trend(a.out))))
+        return
     parent = dev16(a.parent_label)
     if parent is None:
         raise SystemExit(f'no dev16 evidence for parent {a.parent_label}')
@@ -97,7 +131,8 @@ def main(argv=None):
     results = sorted((r for r in map(dev16, labels) if r and r['complete']), key=lambda r: r['step'])
     verdict, reason = decide(parent, results, rounds)
     if a.json:
-        print(json.dumps({'rounds': rounds, 'parent': parent, 'dev16': results, 'verdict': verdict, 'reason': reason}))
+        print(json.dumps({'rounds': rounds, 'parent': parent, 'dev16': results, 'held_eval': held_eval.trend(a.out),
+                          'verdict': verdict, 'reason': reason}))
         return
     print('round           students success loop_rate unresolved spread_groups')
     for r in rounds:
@@ -107,6 +142,8 @@ def main(argv=None):
     print(f"parent dev16  step {parent['step']}: {parent['success']}/16, {parent['loops']} looping")
     for r in results:
         print(f"dev16         step {r['step']}: {r['success']}/16, {r['loops']} looping, {r['unresolved']} unresolved  ({r['label']})")
+    for line in held_lines(held_eval.trend(a.out)):
+        print(line)
     print(f'verdict: {verdict} ({reason})')
 
 

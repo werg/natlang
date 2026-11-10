@@ -11,6 +11,18 @@ managed actor's `ready()` (`rl/managed_actor.py`) before each local entry: a dea
 store and policy while its slots wait. The fork validates natlang `custom_params` at request intake (invalid request aborted
 alone). Running processes keep their code; the next actor launch has both.
 
+## Held-out evaluation set steers the lineage; dev16 cannot (engineering, 2026-11-10)
+
+`rl/held_eval.py`: about 64 pool tasks (family/level stratified, a third effect-state, pinned in `{out}/held-eval/manifest.json`
+with task ids, row digests and pool sha; never protected dev16 inputs) are excluded from RL selection and pre-collection with their
+`split_group` siblings (`select_tasks(exclude_ids=)`, from the first unsealed round, recorded transition `held-eval-exclusion-20261110`).
+`collect_with_actor` measures every new policy on its own DGX actor beside the round's collection: 2 samples per task, 16 detached
+collector workers, a cut-short run keeps its balanced partial result after `grace_seconds` (1200); failures are logged, never block the
+round. Results (`policy-*/result.json`: per-sample outcomes, loop and repeated-action rates, series) carry the comparison series (ts-host
+tree plus resolved `NATLANG_MODEL_FACING`): only one series is compared. `behavior_trend.py` pairs each policy with the previous and the
+first of its series (McNemar exact on matched scored task-samples, task-level sign test). Read that, not a dev16 delta, to judge an update.
+`held_eval: false` opts out; the held tasks never enter training, distillation or a window.
+
 ## Rollout self-distillation feeds the SFT windows (engineering, 2026-11-10)
 
 `rl/rollout_distillation.py`: after each scored round, one verified successful student episode per task (Neuralese-using

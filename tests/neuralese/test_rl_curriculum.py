@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from natlang_neuralese.rl import production
 from natlang_neuralese.rl.curriculum import DEFAULT_V1 as DEFAULT, DEFAULT as DEFAULT_V2
@@ -368,3 +370,122 @@ def test_v2_config_without_visit_decay_adopts_it_through_its_own_recorded_transi
     older={key:value for key,value in legacy.items() if key!='class_quota'}
     state={};production.adopt_task_curriculum_defaults({**config,'task_curriculum':older},state,path)
     assert state['task_curriculum_transitions'][0]['transition']==production.TASK_CURRICULUM_CLASS_QUOTA_TRANSITION
+
+
+# ---- the held-out evaluation set (rl.held_eval) -------------------------------------------------------------------------
+def held_pool(families=8, per=12):
+    rows=[]
+    for family in range(families):
+        for index in range(per):
+            rows.append({'id':f'f{family}-{index}','split':'train','family':f'fam{family}',
+                         'curriculum':{'split_group':f'g{family}-{index//2}',
+                                       'rl':{'level':index%4,'family':f'fam{family}','qualification':'qualified',
+                                             **({'mix_class':'effect_state'} if family%3==0 else {})}}})
+    return rows
+
+
+def write_pool(tmp_path,rows):
+    path=tmp_path/'pool.jsonl'
+    path.write_text(''.join(json.dumps(row)+'\n' for row in rows))
+    return path
+
+
+def test_held_manifest_is_stratified_deterministic_and_avoids_attempted_tasks(tmp_path):
+    from natlang_neuralese.rl import held_eval
+    pool=write_pool(tmp_path,held_pool())
+    avoid={'f0-0','f1-5'}
+    manifest,rows=held_eval.build_manifest(pool,avoid=avoid,tasks=12)
+    again,_=held_eval.build_manifest(pool,avoid=avoid,tasks=12)
+    assert manifest==again and len(rows)==12 and len({t['id'] for t in manifest['tasks']})==12
+    assert not {t['id'] for t in manifest['tasks']}&avoid
+    # A split-group sibling of an attempted task is not held out either (related worlds stay on one side).
+    assert not {t['id'] for t in manifest['tasks']}&{'f0-1','f1-4'}
+    assert manifest['effect_state']==4 and sorted(manifest['by_level'].values())==[3,3,3,3]
+    assert len({t['split_group'] for t in manifest['tasks']})==12 and manifest['families']>=6
+    with pytest.raises(ValueError,match='eligible held tasks'):
+        held_eval.build_manifest(pool,avoid=avoid,tasks=500)
+
+
+def test_held_tasks_and_their_group_siblings_are_never_selected_from_the_adopting_round(tmp_path):
+    from natlang_neuralese.rl import held_eval
+    rows=held_pool();pool=write_pool(tmp_path,rows)
+    state={'round':2,'attempted_task_ids':['f1-1']};state_path=tmp_path/'state.json'
+    config={'cases':str(pool),'held_eval':{'tasks':8}}
+    adopted=held_eval.adopt_defaults(config,state,state_path,out=tmp_path,sealed_selection=True)
+    [record]=state['held_eval_transitions']
+    assert record['transition']=='held-eval-exclusion-20261110' and record['from_round']==3
+    manifest=json.loads((tmp_path/'held-eval'/'manifest.json').read_text())
+    assert adopted['held_eval_binding']['sha256']==record['manifest_sha256'] and len(manifest['tasks'])==8
+    assert held_eval.adopt_defaults(config,state,state_path,out=tmp_path,sealed_selection=True)==adopted
+    assert len(state['held_eval_transitions'])==1
+    held={t['id'] for t in manifest['tasks']};groups=set(manifest['excluded_split_groups'])
+    assert held_eval.exclusion(adopted,rows,2)==frozenset()          # a sealed round keeps its selection
+    excluded=held_eval.exclusion(adopted,rows,3)
+    assert held<=excluded and all(r['curriculum']['split_group'] in groups for r in rows if r['id'] in excluded)
+    offset=0;seen=set()
+    for _ in range(40):
+        chosen=production.select_tasks(rows,[],{'rows':16,'group':8,'offset':offset},curriculum=DEFAULT_V2,exclude_ids=excluded)
+        ids={rows[item['row']]['id'] for item in chosen}
+        assert not ids&excluded and len(chosen)==16
+        seen|=ids;offset=(chosen[-1]['row']+1)%len(rows)
+    assert seen==({r['id'] for r in rows}-excluded)                  # breadth still reaches every remaining task
+    # An external selector sees the pool without the held rows and its answer maps back to the full pool.
+    from unittest import mock
+    sub=[r for r in rows if r['id'] not in excluded]
+    def fake(command,input,**kw):
+        request=json.loads(input);assert len(request['tasks'])==len(sub)
+        return mock.Mock(stdout=json.dumps([{'row':len(sub)-1,'samples':4}]))
+    with mock.patch.object(production.subprocess,'run',fake):
+        chosen=production.select_tasks(rows,[],{'rows':1,'group':4,'offset':0},command=['x'],exclude_ids=excluded)
+    assert rows[chosen[0]['row']]['id']==sub[-1]['id']
+    # Opt-out keeps the whole pool selectable and records nothing.
+    off=held_eval.adopt_defaults({**config,'held_eval':False},{},state_path,out=tmp_path)
+    assert 'held_eval_binding' not in off and held_eval.exclusion(off,rows,9)==frozenset()
+
+
+def held_result(policy,started,outcomes,key='s1'):
+    return {'schema':held_eval.RESULT_SCHEMA,'policy_id':policy,'started_at':started,'series':{'key':key},'complete':True,
+            'ran':len(outcomes),'scored':sum(o is not None for o in outcomes.values()),
+            'successes':sum(o==1.0 for o in outcomes.values()),'loop_rate':.1,'repeated_action_rate':.2,'outcome_counts':{},
+            'samples':[{'task_id':t,'sample':s,'reward':r,'ran':True} for (t,s),r in outcomes.items()]}
+
+
+from natlang_neuralese.rl import held_eval  # noqa: E402
+
+
+def test_held_paired_comparison_is_exact_on_matched_scored_samples():
+    tasks=[(f't{i}',s) for i in range(10) for s in (0,1)]
+    a={k:1.0 if i<6 else 0.0 for i,k in enumerate(tasks)}
+    b={k:1.0 if (i<6 or 10<=i<18) else 0.0 for i,k in enumerate(tasks)}
+    b[tasks[0]]=None                      # unscored in one arm: not a pair
+    result=held_eval.paired(held_result('a',1,a),held_result('b',2,b))
+    assert result['pairs']==19 and result['only_first']==0 and result['only_second']==8
+    assert result['mcnemar_exact_p']==round(2*0.5**8,4) and result['tasks_up']==4 and result['tasks_down']==0
+    assert held_eval.binomial_two_sided(0,0)==1.0 and held_eval.binomial_two_sided(5,5)==1.0
+
+
+def test_held_trend_pairs_with_previous_and_first_within_one_series(tmp_path):
+    tasks=[(f't{i}',s) for i in range(6) for s in (0,1)]
+    def write(policy,started,successes,key='s1'):
+        d=held_eval.policy_directory(tmp_path,policy);d.mkdir(parents=True)
+        (d/'result.json').write_text(json.dumps(held_result(policy,started,{k:1.0 if i<successes else 0.0 for i,k in enumerate(tasks)},key)))
+    write('a'*64,1,3);write('b'*64,2,5);write('c'*64,3,6);write('d'*64,4,4,key='s2')
+    first,second,third,other=held_eval.trend(tmp_path)
+    assert first['vs_previous'] is None and first['vs_first'] is None
+    assert second['vs_previous']['only_second']==2 and second['vs_first'] is None    # the first is also the previous
+    assert third['vs_previous']['only_second']==1 and third['vs_first']['only_second']==3
+    assert other['vs_previous'] is None and other['vs_first'] is None                # a new series starts its own baseline
+    (held_eval.policy_directory(tmp_path,'e'*64)).mkdir(parents=True)
+    (held_eval.policy_directory(tmp_path,'e'*64)/'result.json').write_text(json.dumps({'schema':held_eval.RESULT_SCHEMA,'error':'x'}))
+    assert len(held_eval.trend(tmp_path))==4                                         # a failed run is not a measurement
+
+
+def test_held_measurement_never_blocks_the_round(tmp_path):
+    logs=[]
+    # Opted out, unadopted, or an actor that cannot be reached: no handle, a logged reason, no exception.
+    assert held_eval.begin({'held_eval':False,'held_eval_binding':{}},out=tmp_path,policy_id='a'*64,endpoint='http://x',log=logs.append) is None
+    assert held_eval.begin({},out=tmp_path,policy_id='a'*64,endpoint='http://x',log=logs.append) is None
+    assert held_eval.begin({'held_eval_binding':{'manifest':'m','sha256':'0'}},out=tmp_path,policy_id='a'*64,
+                           endpoint='http://127.0.0.1:9',log=logs.append) is None
+    assert 'held eval did not start' in logs[-1]
+    assert held_eval.Handle(tmp_path,{'pid':2**22+5,'starttime':1},1).finish() is None

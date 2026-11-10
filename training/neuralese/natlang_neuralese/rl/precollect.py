@@ -70,8 +70,11 @@ def seal_next_selection(config, state, cases, selection, out, select_tasks):
         return (number, saved['selection'], saved['cases']) if saved.get('selection') else None
     budget = {'rows': config.get('rows_per_round', 32), 'group': config.get('group', 4),
               'offset': (selection[-1]['row'] + 1) % len(cases)}
+    from .held_eval import exclusion
+    held = exclusion(config, cases, number)   # the held-out evaluation tasks (rl.held_eval) are never pre-collected either
     chosen = select_tasks(cases, list(state.get('task_curriculum_history', {}).values()), budget,
-                          command=config.get('select_tasks_command'), curriculum=config.get('task_curriculum'))
+                          command=config.get('select_tasks_command'), curriculum=config.get('task_curriculum'),
+                          **({'exclude_ids': held} if held else {}))
     if not chosen:
         return None
     selected = [cases[item['row']] for item in chosen]
