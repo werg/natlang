@@ -114,6 +114,11 @@ def main(job_path):
            # The mounted checkout is the code that serves: its commit is recorded in the actor receipt (code_provenance).
            'NATLANG_CODE_COMMIT': (job.get('code') or {}).get('git_commit') or '',
            'NATLANG_CODE_DIRTY': '1' if (job.get('code') or {}).get('dirty') else '0'}
+    # A model-facing measurement (pop_behavior_eval.py request --model-facing) reaches the natlang runtime that executes
+    # the cases as NATLANG_MODEL_FACING; `default` leaves it unset (the adopted variants).
+    model_facing = job.get('model_facing')
+    if model_facing and model_facing != 'default':
+        env['NATLANG_MODEL_FACING'] = model_facing
     for key, value in env.items():
         cmd += ['-e', f'{key}={value}']
     cmd += [image, 'python', '-c', bootstrap]
@@ -128,7 +133,7 @@ def main(job_path):
             'image_id': subprocess.check_output(['docker', 'image', 'inspect', image, '--format', '{{.Id}}'], text=True).strip(),
             'task_spec_sha256': spec_sha, 'mode': job.get('mode', 'evaluation'), 'transport_sha256': (transport or {}).get('sha256'),
             'inference_view_sha256': job['view_sha256'], 'driver_sha256': digest(__file__),
-            'comparison': job.get('comparison'), 'execution_identity_sha256': job.get('execution_identity_sha256')},
+            'model_facing': model_facing, 'comparison': job.get('comparison'), 'execution_identity_sha256': job.get('execution_identity_sha256')},
             indent=2) + '\n')
         for _ in range(450):
             if subprocess.check_output(['docker', 'inspect', '-f', '{{.State.Running}}', name], text=True).strip() != 'true':

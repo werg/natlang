@@ -200,21 +200,26 @@ def checkpoint_global_step(progress, checkpoint):
     return progress.get('step')
 
 
-def request_duplicate(state, sha, runtime, attempt):
+def request_duplicate(state, sha, runtime, attempt, model_facing=None):
     """The candidate that already covers a request, or None. A request is a duplicate only of an entry for the same
-    checkpoint under the same checkout and the same explicit attempt label (none = none) that is not failed or
-    superseded: another checkout path or a new attempt label is a different measurement and must run."""
+    checkpoint under the same checkout, the same explicit attempt label (none = none) and the same model-facing
+    variant that is not failed or superseded: another checkout path, attempt label or variant is a different
+    measurement and must run."""
     for key, existing in state['candidates'].items():
         if (existing['sha256'] == sha and existing['status'] not in ('superseded', 'failed')
-                and existing.get('runtime') == runtime and existing.get('attempt') == attempt):
+                and existing.get('runtime') == runtime and existing.get('attempt') == attempt
+                and existing.get('model_facing') == model_facing):
             return {'key': key, 'status': existing['status'],
                     'why': f'checkpoint {sha[:12]} is already {existing["status"]} under this runtime and attempt'}
     return None
 
 
-def candidate_key(state, sha, runtime, attempt):
+def candidate_key(state, sha, runtime, attempt, model_facing=None):
     """State key of a requested candidate: the checkpoint SHA (as before) for its first entry, SHA#attempt or
-    SHA#runtime-name for a repeat. A failed/superseded entry under the chosen key is replaced, as before."""
+    SHA#runtime-name for a repeat; a model-facing measurement is always SHA#mf-VARIANT[#attempt] (its entry is never
+    the checkpoint's regular evaluation). A failed/superseded entry under the chosen key is replaced, as before."""
+    if model_facing:
+        return f'{sha}#mf-{attempt_tag(model_facing)}' + (f'#{attempt}' if attempt else '')
     existing = state['candidates'].get(sha)
     if existing is None or (existing['status'] in ('superseded', 'failed') and existing.get('runtime') == runtime
                             and existing.get('attempt') == attempt):
@@ -248,22 +253,24 @@ def discover(state):
         request.rename(done)
         sha = value.get('sha256') or digest(value['checkpoint'])
         attempt = attempt_tag(value.get('attempt'))
-        duplicate = request_duplicate(state, sha, value['runtime'], attempt)
+        model_facing = value.get('model_facing')
+        duplicate = request_duplicate(state, sha, value['runtime'], attempt, model_facing)
         if duplicate is not None:
             # Idempotent submission: the same checkpoint under the same runtime and attempt is already measured or
             # pending. Say so; an intentional repeat names a new --attempt label (or another runtime).
             log(event='request-duplicate', disposition=f'not queued: {duplicate["why"]}', sha256=sha,
                 checkpoint=value['checkpoint'], runtime=value['runtime'], attempt=attempt, existing=duplicate['key'][:80],
-                existing_status=duplicate['status'], request=str(done),
+                existing_status=duplicate['status'], request=str(done), model_facing=model_facing,
                 hint='pass --attempt LABEL for a fresh measurement of the same checkpoint')
             continue
-        key = candidate_key(state, sha, value['runtime'], attempt)
+        key = candidate_key(state, sha, value['runtime'], attempt, model_facing)
         state['candidates'][key] = {
             'sha256': sha, 'path': value['checkpoint'], 'runtime': value['runtime'], 'lineage': value.get('label'),
             'step': value.get('step'), 'trigger': 'request', 'discovered': time.time(), 'status': 'queued',
-            'ema': value.get('ema', True), 'request': str(done), **({'attempt': attempt} if attempt else {})}
+            'ema': value.get('ema', True) and not model_facing, 'request': str(done),
+            **({'attempt': attempt} if attempt else {}), **({'model_facing': model_facing} if model_facing else {})}
         log(event='requested', sha256=sha, checkpoint=value['checkpoint'], runtime=value['runtime'], attempt=attempt,
-            key=key[:80])
+            key=key[:80], model_facing=model_facing)
     save_state(state)
 
 
@@ -429,17 +436,20 @@ def sync_pop_checkout():
     return result
 
 
-def execution_identity(code):
+def execution_identity(code, model_facing=None):
     """The measurement environment of one evaluation: the driver script, the task spec/packet and the container image
     (name and resolved id). One value keys result labels and the parent-evaluation cache and is compared in promotion;
     the launch record is checked against it when results are collected. The code that ran (``code``: the Pop checkout's
     git commit and dirty flag, and the DGX checkout's) is recorded provenance, not part of the identity: promotion
-    pairs arms across code changes and shows both commits in its receipt."""
+    pairs arms across code changes and shows both commits in its receipt. A model-facing measurement (``request
+    --model-facing``) adds its variant to the fields: it is a different environment, never paired with or cached as a
+    regular evaluation."""
     from natlang_neuralese.common.hashing import canonical_json_sha256_hex
-    key = (digest(DRIVER), code['pop']['git_commit'])
+    key = (digest(DRIVER), code['pop']['git_commit'], model_facing)
     if key not in _IDENTITY_CACHE:
         fields = {'driver_sha256': key[0], 'image': IMAGE, 'image_id': pop_image_id(),
-                  'spec_sha256': SPEC_SHA256, 'packet_sha256': PACKET_SHA256}
+                  'spec_sha256': SPEC_SHA256, 'packet_sha256': PACKET_SHA256,
+                  **({'model_facing': model_facing} if model_facing else {})}
         _IDENTITY_CACHE[key] = {'schema': 'natlang.pop-eval-execution-identity/2', 'fields': fields,
                                 'identity_sha256': canonical_json_sha256_hex(fields), 'code': code}
     return _IDENTITY_CACHE[key]
@@ -451,6 +461,8 @@ def verify_launch(identity, launch):
     for name, actual in (('driver_sha256', launch.get('driver_sha256')), ('spec_sha256', launch.get('task_spec_sha256'))):
         if actual != fields[name]:
             problems.append(f'{name}: requested {fields[name]}, launched {actual}')
+    if launch.get('model_facing') != fields.get('model_facing'):
+        problems.append(f'model_facing: requested {fields.get("model_facing")}, launched {launch.get("model_facing")}')
     if launch.get('execution_identity_sha256') != identity['identity_sha256']:
         problems.append(f'execution_identity_sha256: requested {identity["identity_sha256"]}, '
                         f'launched {launch.get("execution_identity_sha256")}')
@@ -555,6 +567,15 @@ def pop_unit_state(unit):
     return dict(line.split('=', 1) for line in out.split('\n') if '=' in line)
 
 
+def model_facing_value(value):
+    """A NATLANG_MODEL_FACING setting (ts-host/src/runtime/model-facing.ts) as a normalized request value; ``default``
+    is the adopted variants (the variable unset on Pop), still recorded as a measurement of its own."""
+    names = [name.strip() for name in str(value).replace('+', ',').split(',') if name.strip()]
+    if not names:
+        raise argparse.ArgumentTypeError('empty model-facing setting')
+    return ','.join(names)
+
+
 def attempt_tag(value):
     """Filesystem- and unit-safe form of an explicit attempt label (None stays None)."""
     if value is None:
@@ -563,12 +584,14 @@ def attempt_tag(value):
     return re.sub(r'[^A-Za-z0-9_.-]+', '-', str(value)).strip('-')[:40] or 'attempt'
 
 
-def run_on_pop(arm, prep, runtime, comparison, attempt=1, identity=None, tag=None):
+def run_on_pop(arm, prep, runtime, comparison, attempt=1, identity=None, tag=None, model_facing=None):
     source = prep['source']['sha256']
     commit = identity['code']['pop']['git_commit'] or 'unknown'
     # The label (and so Pop's work directory and its reusable completed.json) is bound to the execution identity, the
     # Pop checkout commit and the request's explicit attempt label: other code, driver, image or attempt never reuses it.
-    label = (f'{arm}-{prep["step"]}-{source[:12]}-c{commit[:10]}-x{identity["identity_sha256"][:12]}'
+    # A model-facing measurement leads with its variant, so no regular label glob (behavior_trend, parent labels) matches it.
+    label = ((f'mf-{attempt_tag(model_facing)}-' if model_facing else '')
+             + f'{arm}-{prep["step"]}-{source[:12]}-c{commit[:10]}-x{identity["identity_sha256"][:12]}'
              + (f'-t{tag}' if tag else '') + (f'-a{attempt}' if attempt > 1 else ''))
     work = f'{POP_EVAL_ROOT}/{label}'
     name = f'popeval-{arm}-{source[:12]}'
@@ -579,6 +602,7 @@ def run_on_pop(arm, prep, runtime, comparison, attempt=1, identity=None, tag=Non
            'execution_identity_sha256': identity['identity_sha256'],
            'stage': f'{POP_TRANSPORT_ROOT}/{source}', 'view': prep['view']['path'], 'view_sha256': prep['view']['sha256'],
            'work': work, 'min_free_bytes': POP_MIN_FREE, 'comparison': comparison,
+           **({'model_facing': model_facing} if model_facing else {}),
            'transport': ({'name': Path(prep['transport']['path']).name, 'sha256': prep['transport']['sha256'],
                           'view_receipt_name': prep['view_receipt']['sha256'] + '.json',
                           'view_receipt_sha256': prep['view_receipt']['sha256'], 'scope': transport_json['scope']}
@@ -609,7 +633,7 @@ def run_on_pop(arm, prep, runtime, comparison, attempt=1, identity=None, tag=Non
         if fields.get('ExecMainStatus') not in ('0', None):
             tail = ssh(shlex.join(['journalctl', '--user', '-u', unit + '.service', '-n', '30', '--no-pager']), check=False)
             raise RuntimeError(f'Pop unit {unit} failed (exit {fields.get("ExecMainStatus")}): {tail[-1500:]}')
-    return collect(label, work, prep, identity)
+    return collect(label, work, prep, identity, model_facing)
 
 
 DETAIL = r'''
@@ -624,13 +648,13 @@ print(json.dumps(detail))
 '''
 
 
-def collect(label, work, prep, identity):
+def collect(label, work, prep, identity, model_facing=None):
     out = ROOT / 'evidence' / label
     out.mkdir(parents=True, exist_ok=True)
     for name in ('evaluation/completed.json', 'launch.json'):
         subprocess.run(['scp', '-q', f'{POP}:{work}/{name}', str(out / Path(name).name)], check=True, timeout=120)
     detail = pop_python(DETAIL, work, prep['step'])
-    write_json(out / 'detail.json', {**detail, 'scope': 'per-case outcome labels only; protected packet content stays '
+    write_json(out / 'detail.json', {**detail, **({'model_facing': model_facing} if model_facing else {}), 'scope': 'per-case outcome labels only; protected packet content stays '
                                                          'on Pop; evidence, never training data'})
     completed = read_json(out / 'completed.json')
     launch = read_json(out / 'launch.json') or {}
@@ -676,19 +700,19 @@ def wait_for_rl_actor():
         time.sleep(60)
 
 
-def evaluate(state, arm, checkpoint, sha, runtime, comparison, attempt=1, tag=None):
+def evaluate(state, arm, checkpoint, sha, runtime, comparison, attempt=1, tag=None, model_facing=None):
     wait_for_rl_actor()
     code = {'dgx': code_on_dgx(), 'pop': sync_pop_checkout()}
     kind = 'ema' if arm == 'ema' else 'raw'
     prep = prepare(kind, checkpoint, runtime, sha)
     if prep.get('absent'):
         return None
-    identity = execution_identity(code)
+    identity = execution_identity(code, model_facing)
     keep = {prep['source']['sha256']}
     make_pop_room(state, prep['view']['bytes'], keep)
     send(prep)
     wait_for_rl_actor()
-    return run_on_pop(arm, prep, runtime, comparison, attempt, identity, tag)
+    return run_on_pop(arm, prep, runtime, comparison, attempt, identity, tag, model_facing)
 
 
 # An evaluation whose summary is not eligible (a case ended unresolved or as an infrastructure error, e.g. a wall
@@ -697,13 +721,13 @@ def evaluate(state, arm, checkpoint, sha, runtime, comparison, attempt=1, tag=No
 MAX_EVAL_ATTEMPTS = 2
 
 
-def scored_evaluation(state, arm, checkpoint, sha, runtime, comparison, existing=None, tag=None):
+def scored_evaluation(state, arm, checkpoint, sha, runtime, comparison, existing=None, tag=None, model_facing=None):
     result = existing
     while result is None or (result['successes'] is None and result.get('attempt', 1) < MAX_EVAL_ATTEMPTS):
         attempt = result.get('attempt', 1) + 1 if result is not None else 1
         if result is not None:
             log(event='unscored evaluation rerun', arm=arm, sha256=sha, attempt=attempt, previous=result['label'])
-        result = evaluate(state, arm, checkpoint, sha, runtime, comparison, attempt, tag)
+        result = evaluate(state, arm, checkpoint, sha, runtime, comparison, attempt, tag, model_facing)
         if result is None:
             return None
         result['attempt'] = attempt
@@ -757,6 +781,18 @@ def process(state, candidate):
     save_state(state)
     parent = state['parent']
     tag = attempt_tag(candidate.get('attempt'))
+    model_facing = candidate.get('model_facing')
+    if model_facing:
+        # A model-facing measurement (request --model-facing) is a diagnostic of the harness, not of the checkpoint: its
+        # raw arm is recorded, and it never meets a behavioural parent, a comparison, a promotion or an EMA arm.
+        candidate['raw'] = scored_evaluation(state, 'raw', source, sha, runtime,
+            f'Model-facing measurement ({model_facing}) of {candidate.get("lineage")} step {candidate.get("step")} under '
+            f'runtime {Path(runtime).name}; diagnostic only, never paired or promoted.',
+            (candidate.get('raw') or {}).get('execution') and candidate['raw'], tag, model_facing)
+        candidate['status'] = 'done'
+        candidate['finished'] = time.time()
+        save_state(state)
+        return
     raw = scored_evaluation(state, 'raw', source, sha, runtime,
         f'Automated Pop dev16 evaluation of {candidate.get("lineage")} step {candidate.get("step")} under its own '
         f'runtime {Path(runtime).name}; paired against behavioural parent {parent["label"]}.',
@@ -853,6 +889,9 @@ def main(argv=None):
     request.add_argument('--label')
     request.add_argument('--attempt', help='explicit attempt label: a repeat measurement of an already evaluated '
                                            'checkpoint (same weights) runs fresh instead of being accepted as a duplicate')
+    request.add_argument('--model-facing', type=model_facing_value, help='diagnostic arm: run the evaluation with this '
+                         'NATLANG_MODEL_FACING (none | default | a,b variants | combined); labelled mf-*, never '
+                         'paired with a regular evaluation, promoted or counted by behavior_trend')
     request.add_argument('--step', type=int)
     request.add_argument('--no-ema', action='store_true')
     request.add_argument('--sha256', help='known SHA-256 of the checkpoint (otherwise hashed at discovery)')
@@ -862,6 +901,7 @@ def main(argv=None):
         value = {'checkpoint': str(Path(args.checkpoint).resolve(strict=True)), 'runtime': str(Path(args.runtime).resolve()),
                  'label': args.label, 'step': args.step, 'ema': not args.no_ema, 'requested': time.time(),
                  **({'attempt': args.attempt} if args.attempt else {}),
+                 **({'model_facing': args.model_facing} if args.model_facing else {}),
                  **({'sha256': args.sha256} if args.sha256 else {})}
         (ROOT / 'requests').mkdir(parents=True, exist_ok=True)
         write_json(ROOT / 'requests' / f'{int(time.time() * 1000)}.json', value)

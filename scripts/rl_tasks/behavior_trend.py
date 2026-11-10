@@ -50,9 +50,12 @@ def round_rows(out):
 def dev16(label):
     # The latest attempt of a label (a '-aN' suffix is a re-run of the same view).
     paths = sorted(glob.glob(str(EVIDENCE / f'{label}*' / 'detail.json')))
-    if not paths:
+    # A model-facing measurement (pop_behavior_eval.py request --model-facing) diagnoses the harness, not the checkpoint.
+    details = [(path, json.loads(Path(path).read_text())) for path in paths]
+    details = [(path, detail) for path, detail in details if not detail.get('model_facing')]
+    if not details:
         return None
-    detail = json.loads(Path(paths[-1]).read_text())
+    paths, detail = [details[-1][0]], details[-1][1]
     counts = detail.get('outcome_counts') or {}
     return {'label': Path(paths[-1]).parent.name, 'step': detail.get('step'),
             'success': counts.get('task_success', detail.get('task_successes')),

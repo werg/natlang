@@ -256,3 +256,29 @@ def test_pop_work_is_removed_inside_a_root_container_scoped_to_the_eval_root(tmp
     import pytest
     with pytest.raises(ValueError):
         module.remove_pop_work(['/elsewhere'])
+
+
+def test_model_facing_request_is_its_own_diagnostic_measurement(tmp_path, monkeypatch):
+    module, state, requests = _watcher(tmp_path, monkeypatch)
+    sha = 'a' * 64
+    state['candidates'][sha] = {'sha256': sha, 'status': 'done', 'runtime': '/rt', 'path': '/ck.pt'}
+    # The same checkpoint and runtime with a model-facing variant is never a duplicate of the regular evaluation, and is
+    # never keyed as the checkpoint's own entry (a later regular discovery of that SHA is not suppressed by it).
+    _request(requests, '1', sha, '/rt', model_facing='none')
+    _request(requests, '2', sha, '/rt', model_facing='default')
+    _request(requests, '3', sha, '/rt', model_facing='none')   # an idempotent repeat of request 1
+    module.discover(state)
+    assert sorted(state['candidates']) == sorted([sha, f'{sha}#mf-none', f'{sha}#mf-default'])
+    arm = state['candidates'][f'{sha}#mf-none']
+    assert arm['model_facing'] == 'none' and arm['status'] == 'queued' and arm['ema'] is False
+    assert module.model_facing_value('effect-receipt+read-file-binding') == 'effect-receipt,read-file-binding'
+    # The variant is part of the execution identity (so never paired with, or cached as, a regular evaluation) and is
+    # checked against the launch record.
+    monkeypatch.setattr(module, 'pop_image_id', lambda: 'sha256:' + '1' * 64)
+    regular = module.execution_identity(code())
+    none = module.execution_identity(code(), 'none')
+    assert none['identity_sha256'] != regular['identity_sha256'] != module.execution_identity(code(), 'default')['identity_sha256']
+    launch = {'driver_sha256': none['fields']['driver_sha256'], 'task_spec_sha256': module.SPEC_SHA256,
+              'image_id': 'sha256:' + '1' * 64, 'execution_identity_sha256': none['identity_sha256'], 'model_facing': 'none'}
+    assert module.verify_launch(none, launch) == []
+    assert any(p.startswith('model_facing') for p in module.verify_launch(none, {**launch, 'model_facing': None}))
