@@ -421,18 +421,18 @@ def skip_zero_signal_jolt(graphs, objective, earned=frozenset()):
     loss=objective['policy_loss']
     for ident in ids:
         row=rows[ident];info=row.get('jolt');advantage=row.get('advantage')
-        if not row.get('actions') and not row.get('decision_actions'):
-            # An update resumed from a checkpoint keeps the rows it already earned (a continuation may not remove one);
-            # the objective contributes a zero for such a batch (rl.native_replay).
-            if ident not in earned:
-                omitted.append(ident);no_actions.append(ident)
-            continue
         # A twin under a zero role coefficient (e.g. beta_s 0) carries no term either (review F5, 2026-11-09).
         silent_twin=isinstance(info,dict) and loss.get('beta_s' if info.get('role')=='student' else 'beta_t')==0
         if (isinstance(info,dict) and info.get('role') in ('student','teacher')
                 and (info.get('privileged') is None or silent_twin) and type(advantage) in (int,float)
                 and math.isfinite(advantage) and advantage==0):
-            omitted.append(ident)
+            omitted.append(ident);continue
+        if not row.get('actions') and not row.get('decision_actions'):
+            # Checked after the zero-advantage omission so that record stays as before. An update resumed from a
+            # checkpoint keeps the rows it already earned (a continuation may not remove one); the objective
+            # contributes a zero for such a batch (rl.native_replay).
+            if ident not in earned:
+                omitted.append(ident);no_actions.append(ident)
     if not omitted:return graphs,objective,None
     omitted_set=set(omitted);kept=[graph for graph in graphs if graph['id'] not in omitted_set]
     projected={**objective,'rows':{key:value for key,value in rows.items() if key not in omitted_set}}
