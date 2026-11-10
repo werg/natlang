@@ -231,3 +231,67 @@ def test_no_package_leaves_the_boundary_unchanged(tmp_path, monkeypatch):
     assert interleave.run_sft_window(config, declared, state, out / 'state.json', None) == 'adopted'
     assert seen == [(config['production_recipe'], declared['sft_stage'])]
     assert 'memetic_distillation' not in state['interleave']
+
+
+STATIC = {'origin': 'unit-test source', 'verification': 'unit-test verification receipt', 'selection': 'all rows'}
+
+
+def test_prepared_static_source_is_admitted_after_the_lineages_own_rows_without_an_actor(tmp_path, monkeypatch):
+    # The static package is queued first, but the share cap (budget 2 rows) goes to the lineage's own rows first.
+    config, declared, state, out, _ = lineage(tmp_path, distillation_max_share=.2, distillation_family_scale=.3)
+    memetic = out / 'memetic'
+    admission.queue_package(memetic, [graph('static:a', 5), graph('static:b', 6)], family=admission.STATIC_FAMILY,
+                            tokenizer=FP, roles=[], protected=Guard(), manifests=[tmp_path / 's.json'], actors=[],
+                            scope='test', static_source=STATIC, log=lambda line: None)
+    admission.queue_package(memetic, [graph('rollout:a', 7), graph('rollout:b', 8)], family=admission.ROLLOUT_FAMILY,
+                            tokenizer=FP, roles=[], protected=Guard(), manifests=[tmp_path / 'r.json'],
+                            actors=[resident.sha(config['checkpoint'])], scope='test', log=lambda line: None)
+    seen = []
+    window_harness(monkeypatch, seen)
+    assert interleave.run_sft_window(config, declared, state, out / 'state.json', None) == 'adopted'
+    ledger = state['interleave']['memetic_distillation']
+    assert [ledger['rows'][i]['disposition'] for i in ('rollout:a', 'rollout:b')] == ['admitted', 'admitted']
+    assert [ledger['rows'][i]['disposition'] for i in ('static:a', 'static:b')] == ['deferred', 'deferred']
+    record = json.loads(Path(ledger['admissions'][0]['record']['path']).read_text())
+    static = next(item for item in record['packages'] if item['family'] == admission.STATIC_FAMILY)
+    assert static['status'] == 'partial' and static['episode_actors'] == [] and static['source_provenance'] == STATIC
+    assert not record['refused']
+
+
+def test_prepared_static_source_rows_take_their_own_family_and_pass_the_protection_recheck(tmp_path, monkeypatch):
+    config, declared, state, out, _ = lineage(tmp_path, **UNCAPPED)
+    admission.queue_package(out / 'memetic', [graph('static:a', 5), graph('static:protected', 6)],
+                            family=admission.STATIC_FAMILY, tokenizer=FP, roles=[], protected=Guard(),
+                            manifests=[tmp_path / 's.json'], actors=[], scope='test', static_source=STATIC,
+                            log=lambda line: None)
+    seen = []
+    window_harness(monkeypatch, seen)
+    from natlang_neuralese.common import custody
+    monkeypatch.setattr(custody.ProtectedWorlds, 'load', classmethod(lambda cls: Guard({'static:protected'})))
+    assert interleave.run_sft_window(config, declared, state, out / 'state.json', None) == 'adopted'
+    ledger = state['interleave']['memetic_distillation']
+    assert ledger['rows']['static:a']['disposition'] == 'admitted'
+    assert ledger['rows']['static:protected']['disposition'] == 'excluded'
+    from natlang_neuralese.train.recipe import load_recipe, resolve_stage_inputs
+    recipe = load_recipe(seen[0][0])
+    inputs = resolve_stage_inputs(recipe, seen[0][1], {})
+    balance = json.loads(Path(inputs['ce_supervision_policy']['path']).read_text())['objective']['family_balance']
+    assert balance['scales'] == {'ordinary': 1., 'prepared-source': .2}
+
+
+def test_static_and_lineage_packages_validate_their_provenance(tmp_path):
+    out = tmp_path / 'memetic'
+    common = dict(tokenizer=FP, roles=[], protected=Guard(), manifests=[tmp_path / 'm.json'], scope='test',
+                  log=lambda line: None)
+    with pytest.raises(ValueError, match='names no actor'):
+        admission.queue_package(out, [graph('s:a')], family=admission.STATIC_FAMILY, actors=['a' * 64],
+                                static_source=STATIC, **common)
+    with pytest.raises(ValueError, match='names no actor'):
+        admission.queue_package(out, [graph('s:a')], family=admission.STATIC_FAMILY, actors=[],
+                                static_source={'origin': 'x'}, **common)
+    with pytest.raises(ValueError, match='names its actors'):
+        admission.queue_package(out, [graph('s:a')], family=admission.ROLLOUT_FAMILY, actors=[], **common)
+    with pytest.raises(ValueError, match='names its actors'):
+        admission.queue_package(out, [graph('s:a')], family=admission.ROLLOUT_FAMILY, actors=['a' * 64],
+                                static_source=STATIC, **common)
+    assert not (out / 'distill').exists()

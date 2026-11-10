@@ -18,6 +18,10 @@ first, return-weighted, current-policy actor only, closed whole graphs, sampled 
 `rollout-distillation` package in the memetic admission queue; the next mandatory SFT window appends it as a recorded source
 (shared 2% family share cap, deferral never drops). Default on, `rollout_distillation: false` opts out; continuations adopt
 through the recorded transition `rollout-distillation-20261110`. Fallow #17a tracks deployment.
+Prepared static sources (verified native graphs without an actor) use the same queue as family `prepared-source`
+(`scripts/neuralese_data/queue_prepared_source.py`: one package per source with its origin, verification and selection;
+admitted after the lineage's own rows). A running controller refuses a package family its loaded code does not know, and
+a refused package is never retried: append queue lines for a new family only after a `restart_controller.py --in-place`.
 
 ## Corrected-mix regression: LR collapse and marker-weight spam (engineering, 2026-11-05)
 

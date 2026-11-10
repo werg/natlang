@@ -18,9 +18,14 @@ joint SFT stage as an ordinary authenticated data continuation (the same form as
 - every row is rechecked against the complete current protection union at admission; overlapping rows are excluded
   explicitly; a package whose episode actors are not checkpoints of this controller's actual lineage is refused.
 
-Packages come from two producers through ``queue_package``: memetic guidance graphs (family ``memetic-guidance``) and
-the policy's own verified successful RL episodes (family ``rollout-distillation``, ``rl/rollout_distillation.py``). Each
-admitted family declares its own scale; the share cap bounds all of them together.
+Packages come from three producers through ``queue_package``: memetic guidance graphs (family ``memetic-guidance``),
+the policy's own verified successful RL episodes (family ``rollout-distillation``, ``rl/rollout_distillation.py``) and
+prepared static sources (family ``prepared-source``: verified native graphs that no rollout produced, queued by
+``scripts/neuralese_data/queue_prepared_source.py``). A static package has no episode actor; it instead records its
+origin, verification and row selection (``source_provenance``), and its rows pass the same protection recheck, share
+cap and deferral. Pending static packages are admitted after the lineage's own (self-distilled) packages, so a static
+source only fills the share the policy's own rows leave. Each admitted family declares its own scale; the share cap
+bounds all of them together.
 
 The consumed ledger (``state['interleave']['memetic_distillation']``) is committed before the window config is
 written, so a package is appended exactly once and a retried boundary reuses its recorded admission. Actor provenance
@@ -42,7 +47,10 @@ PACKAGE_SCHEMA = 'natlang.memetic-distillation-package/1'
 FAMILY = 'memetic-guidance'
 # The other producer of packages: the policy's own verified successful RL episodes (rl/rollout_distillation.py).
 ROLLOUT_FAMILY = 'rollout-distillation'
-FAMILIES = (FAMILY, ROLLOUT_FAMILY)
+# The third producer: prepared static sources (verified native graphs without an episode actor).
+STATIC_FAMILY = 'prepared-source'
+FAMILIES = (FAMILY, ROLLOUT_FAMILY, STATIC_FAMILY)
+STATIC_PROVENANCE_KEYS = ('origin', 'verification', 'selection')
 ENCODING = 'native-row-objectives-v1'
 # Conservative: the 2026-11-03 recipe review measured genuine natlang teaching at ~6% and multi-node Neuralese at ~2%
 # of quota-aware loss; one new self-distilled family must not dominate them.
@@ -65,12 +73,20 @@ def queue_path(controller_out):
 
 
 def queue_package(out, rows, *, family, tokenizer, roles, protected, manifests, actors, scope, problems=(),
-                  source_name='memetic-guidance-graphs.jsonl', extra=None, log=print):
+                  source_name='memetic-guidance-graphs.jsonl', extra=None, static_source=None, log=print):
     """Write one immutable ``natlang.memetic-distillation-package/1`` of verified native-graph ``rows`` (the exact
     sampled actor(s) ``actors``) under ``<out>/distill/package-NNNN`` and append it to ``<out>/distill/admission-
     queue.jsonl``: the single producer-side form every distillation source uses (memetic guidance graphs and the
-    policy's own successful RL episodes). Returns the receipt."""
+    policy's own successful RL episodes, prepared static sources). A ``prepared-source`` package names no actor and
+    carries ``static_source`` (origin, verification, selection, free-form details) instead. Returns the receipt."""
     from ..data.native_sources import NativeGraphSource
+    if family not in FAMILIES:
+        raise ValueError('distillation package family is not one of ' + ', '.join(FAMILIES))
+    if family == STATIC_FAMILY:
+        if actors or not isinstance(static_source, dict) or any(not static_source.get(key) for key in STATIC_PROVENANCE_KEYS):
+            raise ValueError('a prepared-source package names no actor and records ' + ', '.join(STATIC_PROVENANCE_KEYS))
+    elif static_source is not None or not actors:
+        raise ValueError('only a prepared-source package carries static provenance; every other package names its actors')
     from ..common.jsonio import write_bytes_durable
     out = Path(out)
     queue = out / 'distill' / 'admission-queue.jsonl'
@@ -90,6 +106,7 @@ def queue_package(out, rows, *, family, tokenizer, roles, protected, manifests, 
                'episode_actors': sorted(actors), 'tokenizer_fingerprint': tokenizer, 'role_ids': list(roles),
                'protection_digest': protected.digest, 'problems': list(problems),
                'ce_declaration': {'encoding': ENCODING}, 'training_admission': False, 'scope': scope,
+               **({'source_provenance': static_source} if static_source is not None else {}),
                **(extra or {})}
     write_json_durable(target / 'receipt.json', receipt)
     with open(queue, 'a') as handle:
@@ -179,7 +196,13 @@ def _check_receipt(receipt, receipt_path):
     if (not isinstance(rows, list) or not rows or any(row.get('disposition') != 'added' for row in rows)
             or len({row.get('id') for row in rows}) != len(rows)):
         return 'package rows are not unique added rows'
-    if not isinstance(receipt.get('episode_actors'), list) or not receipt['episode_actors']:
+    if receipt['family'] == STATIC_FAMILY:
+        provenance = receipt.get('source_provenance')
+        if receipt.get('episode_actors') != []:
+            return 'a prepared-source package names no episode actor'
+        if not isinstance(provenance, dict) or any(not provenance.get(key) for key in STATIC_PROVENANCE_KEYS):
+            return 'prepared-source package lacks its ' + ', '.join(STATIC_PROVENANCE_KEYS)
+    elif not isinstance(receipt.get('episode_actors'), list) or not receipt['episode_actors']:
         return 'package names no episode actor'
     return None
 
@@ -307,6 +330,9 @@ def prepare_window(config, declared, state, state_path, directory, *, protected=
     candidates = [item for item in queued if Path(item['package']).is_file()
                   and packages_ledger.get(sha256_file_hex_cached(item['package']), {}).get('status')
                   in (None, 'partial')]
+    # The lineage's own rows (self-distillation, memetic guidance) take the share cap first; prepared static sources
+    # fill what is left (stable within each group).
+    candidates.sort(key=lambda item: item.get('family') == STATIC_FAMILY)
     if not candidates:
         return base_path, base_stage, None
 
@@ -329,7 +355,7 @@ def prepare_window(config, declared, state, state_path, directory, *, protected=
                 receipt.get('tokenizer_fingerprint') != geometry.get('tokenizer')
                 or list(receipt.get('role_ids') or []) != list(geometry.get('roles') or [])):
             reason = 'package tokenizer/role ids differ from the joint SFT stage geometry'
-        if reason is None:
+        if reason is None and receipt['family'] != STATIC_FAMILY:
             foreign = sorted(set(receipt['episode_actors']) - ancestry)
             if foreign:
                 reason = 'episode actors are not checkpoints of this lineage: ' + ', '.join(foreign)
@@ -428,6 +454,7 @@ def prepare_window(config, declared, state, state_path, directory, *, protected=
         status = 'partial' if 'deferred' in statuses else 'admitted' if 'admitted' in statuses else 'consumed-none-admitted'
         ledger['packages'][receipt_ref['sha256']] = {'path': receipt_ref['path'], 'status': status, 'window': window}
         package_records.append({'package': receipt_ref, 'status': status, 'episode_actors': receipt['episode_actors'],
+                                'family': receipt['family'], 'source_provenance': receipt.get('source_provenance'),
                                 'package_protection_digest': receipt.get('protection_digest'),
                                 'admitted': [row['id'] for row in mine],
                                 'excluded': {row['id']: ledger['rows'][row['id']]['reason'] for row in receipt['rows']
