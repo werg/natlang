@@ -579,3 +579,28 @@ def test_zero_student_coefficient_builds_no_student_twin():
         assert row['jolt']['privileged'] is None and 'beta_s is 0' in row['jolt']['refusal']
         assert {n['name'] for n in graph['nodes']} == set(row['episode_turns'])
         assert all('twin_query' not in action for action in row['actions'])
+
+
+def test_student_episode_of_only_guidance_policy_turns_is_omitted_with_a_recorded_reason():
+    """w5 round 1 (2026-11-10): a budget-exhausted student whose kept turns were all the in-run guidance policy
+    (selectGuidanceFacts) had an empty ``actions`` row, which crashed the learner batch. It carries no loss term, so
+    admission omits that complete episode and records why; the other member of its group still trains."""
+    from natlang_neuralese.rl.native_stage import skip_zero_signal_jolt
+    model, roles, identity = load('lfm')
+    episode = episode_with_top_k(model, roles, identity)
+    rows = rollouts(episode.turns)
+    for turn in rows[1]['turns']:
+        turn['sampling']['guidance_policy'] = {'selection': 'model', 'writer': 'off'}
+        turn['sampling'].pop('privileged', None)  # a guidance-policy turn is sampled without guidance itself
+    declaration = {**DECLARATION, 'beta_s': 0.}
+    graphs, spec = prepare(rows, episode, roles, identity, declaration=declaration)
+    empty = [key for key, row in spec['rows'].items() if not row['actions'] and not row.get('decision_actions')]
+    assert len(spec['rows']) == 2 and len(empty) == 1
+    assert spec['rows'][empty[0]]['jolt']['policy_turns'] == sorted(spec['rows'][empty[0]]['episode_turns'])
+    kept, projected, receipt = skip_zero_signal_jolt(graphs, spec)
+    assert receipt['omitted_graph_ids'] == empty and [g['id'] for g in kept] == [g['id'] for g in graphs if g['id'] not in empty]
+    assert set(projected['rows']) == set(spec['rows']) - set(empty)
+    record, = receipt['omitted_without_sampled_actions']
+    assert record['graph_id'] == empty[0] and record['sample'] == 1 and record['policy_turns']
+    assert 'no sampled action' in receipt['reason'] and receipt['omitted_graph_visits'] == 0
+    assert all(row['actions'] for row in projected['rows'].values())

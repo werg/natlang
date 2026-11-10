@@ -403,17 +403,26 @@ def _completed_operation_replay(args, request):
 
 
 def skip_zero_signal_jolt(graphs, objective):
-    """Omit only complete episodes whose JOLT outcome and privileged terms are both zero (no twin, or beta 0)."""
+    """Omit only complete episodes that carry no loss term under JOLT+: a zero outcome advantage with no active twin
+    (no twin, or beta 0), or no sampled action at all.
+
+    The second case is a student episode whose every recorded turn is an in-run guidance-policy turn
+    (``selectGuidanceFacts``/``writeGuidance``): a student carries no loss on those (rl.jolt.add_privileged_twin), so
+    its row keeps a graph of forward tokens with an empty ``actions`` list. Typically the budget-exhaustion evidence
+    cut the episode at its first omitted record and kept only those turns (w5 round 1, 2026-11-10: 4 turns, 5,499
+    sampled tokens, 0 trainable). Each omission is recorded with its reason, never silent."""
     import math
     if (objective.get('mode')!='grpo' or (objective.get('policy_loss') or {}).get('schema')!='jolt-plus/1'):
         return graphs,objective,None
     rows=objective['rows'];ids=[graph['id'] for graph in graphs]
     if len(ids)!=len(set(ids)) or set(ids)!=set(rows):
         raise ValueError('JOLT graph/objective identity differs before zero-signal projection')
-    omitted=[]
+    omitted,no_actions=[],[]
     loss=objective['policy_loss']
     for ident in ids:
         row=rows[ident];info=row.get('jolt');advantage=row.get('advantage')
+        if not row.get('actions') and not row.get('decision_actions'):
+            omitted.append(ident);no_actions.append(ident);continue
         # A twin under a zero role coefficient (e.g. beta_s 0) carries no term either (review F5, 2026-11-09).
         silent_twin=isinstance(info,dict) and loss.get('beta_s' if info.get('role')=='student' else 'beta_t')==0
         if (isinstance(info,dict) and info.get('role') in ('student','teacher')
@@ -425,9 +434,13 @@ def skip_zero_signal_jolt(graphs, objective):
     projected={**objective,'rows':{key:value for key,value in rows.items() if key not in omitted_set}}
     disposition={'schema':'natlang.jolt-zero-signal-projection/1','omitted_graph_ids':omitted,
         'omitted_count':len(omitted),'active_count':len(kept),'omitted_graph_visits':0,
-        'reason':'zero centered outcome advantage and no privileged twin (or a zero role KL coefficient); no active decision KL or writer term',
+        'reason':'zero centered outcome advantage and no privileged twin (or a zero role KL coefficient), or no sampled action to train (every recorded turn is an in-run guidance-policy turn); no active decision KL or writer term',
         'normalization':'active episodes and their sampled actions only; explicit change from retaining zero-loss episodes',
-        'coverage':'original scored rollouts and complete execution graphs remain immutable evidence'}
+        'coverage':'original scored rollouts and complete execution graphs remain immutable evidence',
+        **({'omitted_without_sampled_actions':[{'graph_id':ident,'task_id':rows[ident].get('task_id'),
+            'sample':rows[ident].get('sample'),'advantage':rows[ident].get('advantage'),
+            'policy_turns':(rows[ident].get('jolt') or {}).get('policy_turns')} for ident in no_actions]}
+           if no_actions else {})}
     projected['zero_signal_projection']=disposition
     return kept,projected,disposition
 

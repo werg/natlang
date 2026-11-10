@@ -82,9 +82,10 @@ def test_captured_logprob_probe_reports_exact_deltas(tmp_path):
 def test_zero_signal_jolt_projection_preserves_active_and_privileged_graphs():
     from natlang_neuralese.rl.native_stage import skip_zero_signal_jolt
     graphs=[{'id':x} for x in ('zero','outcome','privileged')]
-    rows={'zero':{'advantage':0.,'jolt':{'role':'student','privileged':None}},
-          'outcome':{'advantage':1.,'jolt':{'role':'student','privileged':None}},
-          'privileged':{'advantage':0.,'jolt':{'role':'teacher','privileged':{'state':'x'}}}}
+    act=[{'turn':'t'}]
+    rows={'zero':{'actions':act,'advantage':0.,'jolt':{'role':'student','privileged':None}},
+          'outcome':{'actions':act,'advantage':1.,'jolt':{'role':'student','privileged':None}},
+          'privileged':{'actions':act,'advantage':0.,'jolt':{'role':'teacher','privileged':{'state':'x'}}}}
     objective={'mode':'grpo','policy_loss':{'schema':'jolt-plus/1'},'rows':rows}
     kept,projected,receipt=skip_zero_signal_jolt(graphs,objective)
     assert [x['id'] for x in kept]==['outcome','privileged']
@@ -338,8 +339,9 @@ def test_zero_signal_projection_omits_twins_whose_role_coefficient_is_zero():
     """Review F5 (2026-11-09): with beta_s 0 a zero-advantage student twin carries no loss term."""
     from natlang_neuralese.rl.native_stage import skip_zero_signal_jolt
     graphs=[{'id':x} for x in ('student','teacher')]
-    rows={'student':{'advantage':0.,'jolt':{'role':'student','privileged':{'state':'x'}}},
-          'teacher':{'advantage':0.,'jolt':{'role':'teacher','privileged':{'state':'y'}}}}
+    act=[{'turn':'t'}]
+    rows={'student':{'actions':act,'advantage':0.,'jolt':{'role':'student','privileged':{'state':'x'}}},
+          'teacher':{'actions':act,'advantage':0.,'jolt':{'role':'teacher','privileged':{'state':'y'}}}}
     objective={'mode':'grpo','policy_loss':{'schema':'jolt-plus/1','beta_s':0.,'beta_t':.5},'rows':rows}
     kept,_,receipt=skip_zero_signal_jolt(graphs,objective)
     assert [x['id'] for x in kept]==['teacher'] and receipt['omitted_graph_ids']==['student']
