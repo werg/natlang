@@ -87,8 +87,10 @@ def verify_objectives(old_path, new):
         if stream.peek(): raise ValueError('trailing policy objective data')
     finally:
         stream.file.close()
-    if not old_keys or controls != {key:value for key,value in new.items() if key != 'rows'}:
-        raise ValueError('policy objective continuation changed its policy, mode or global controls')
+    current = {key:value for key,value in new.items() if key != 'rows'}
+    if not old_keys or controls != current:
+        changed = sorted(key for key in set(controls) | set(current) if controls.get(key) != current.get(key))
+        raise ValueError('policy objective continuation changed its policy, mode or global controls: ' + ', '.join(changed))
     return old_keys
 
 
