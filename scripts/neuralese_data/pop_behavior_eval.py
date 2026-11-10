@@ -45,7 +45,7 @@ import shlex
 import subprocess
 import sys
 import time
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(REPO / 'training/neuralese'), str(REPO)]
@@ -463,7 +463,7 @@ def _pop_upload_json(value, remote_path):
 
 POP_STORAGE = r'''
 import json,os,shutil,subprocess,sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 root=Path(sys.argv[1]);keep=set(json.loads(sys.argv[2]));need=int(sys.argv[3]);dry=sys.argv[4]=='1'
 def free():s=os.statvfs(root);return s.f_bavail*s.f_frsize
 hint=root/'.natlang-actor-transfer.json'
@@ -483,6 +483,17 @@ if free()<need and not busy:
     shutil.rmtree(item) if item.is_dir() else item.unlink()
 print(json.dumps({'free':free(),'need':need,'removed':removed,'busy':bool(busy),'keep':sorted(keep)}))
 '''
+
+
+def remove_pop_work(paths):
+    """Delete Pop work-directory entries under POP_EVAL_ROOT. The containers write them as root, so a throwaway
+    container of the evaluation image removes them (Pop grants no sudo)."""
+    root = PurePosixPath(POP_EVAL_ROOT)
+    inside = [str(PurePosixPath('/r') / PurePosixPath(path).relative_to(root)) for path in paths]
+    if not inside:
+        return
+    ssh(shlex.join(['docker', 'run', '--rm', '--name', f'pop-prune-{os.getpid()}-{int(time.time())}',
+                    '--entrypoint', '/bin/rm', '-v', f'{POP_EVAL_ROOT}:/r', IMAGE, '-rf', '--', *inside]), timeout=1800)
 
 
 def make_pop_room(state, incoming_bytes, keep):
@@ -600,7 +611,7 @@ def run_on_pop(arm, prep, runtime, comparison, attempt=1, identity=None, tag=Non
 
 DETAIL = r'''
 import json,sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 work=Path(sys.argv[1]);step=int(sys.argv[2])
 score=json.loads((work/'evaluation/task-eval'/('step-%07d'%step)/'task-score.json').read_text())
 keep=('schema','step','packet_sha256','case_indices','task_successes','cases','outcome_counts','eligible','complete')
@@ -629,6 +640,9 @@ def collect(label, work, prep, identity):
         'served_code_commit': actual_code, 'collected_at': time.time(), **({'problems': problems} if problems else {})}
     if problems:
         log(event='collected execution differs from the requested identity', label=label, problems=problems)
+    # The evidence is on the DGX now: drop the run's caches and block store (1-3 GB each), keeping only the small
+    # evaluation record that marks it done.
+    remove_pop_work([f'{work}/{name}' for name in ('store', 'triton', 'inductor', 'cuda', 'hash-cache.jsonl', 'actor.log')])
     log(event='collected', label=label, successes=completed['summary']['task_successes'], cases=completed['summary']['cases'],
         execution=identity['identity_sha256'][:12], verified=not problems)
     return {'label': label, 'completed': str(out / 'completed.json'), 'detail': str(out / 'detail.json'),

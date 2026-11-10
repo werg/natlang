@@ -155,6 +155,10 @@ def start(args):
     # A restart under the same policy reuses this work dir (and its block store); the previous driver copy came from a
     # sealed read-only runtime file, so it is replaced rather than overwritten.
     pbe.ssh(shlex.join(['mkdir', '-p', work]) + ' && ' + shlex.join(['rm', '-f', f'{work}/driver.py']))
+    # Older policies' actor dirs (block store, caches; 1-3 GB each) are spent once their rounds bundled their blocks to
+    # the DGX. Keep this policy's and the newest earlier one (its pre-collection may still be bundling).
+    earlier = pbe.ssh(f'ls -dt {shlex.quote(pbe.POP_EVAL_ROOT)}/rl-actor-* 2>/dev/null || true', check=False).split()
+    pbe.remove_pop_work([path for path in earlier if path != work][1:])
     subprocess.run(['scp', '-q', str(REPO / 'scripts/neuralese_data/pop_dev16_driver.py'), f'{pbe.POP}:{work}/driver.py'],
                    check=True, timeout=120)
     pbe._pop_upload_json(job, f'{work}/job.json')

@@ -232,11 +232,27 @@ def test_collect_checks_the_launch_record_against_the_requested_identity(tmp_pat
         destination.write_text(json.dumps(served['launch'] if destination.name == 'launch.json' else completed))
     monkeypatch.setattr(module.subprocess, 'run', fake_run)
     monkeypatch.setattr(module, 'pop_python', lambda *a, **k: {'cases_detail': []})
+    pruned = []
+    monkeypatch.setattr(module, 'remove_pop_work', pruned.extend)
     prep = {'source': {'sha256': 'a' * 64}, 'step': 5}
     served['launch'] = good
     result = module.collect('good', '/work', prep, identity)
+    assert '/work/store' in pruned and not any('evaluation' in path for path in pruned)   # the done marker stays
     assert result['execution']['verified'] is True and result['execution']['launch']['container_id'] == 'k' * 64
     assert result['execution']['served_code_commit'] == 'a' * 40
     served['launch'] = {**good, 'driver_sha256': 'bad'}
     result = module.collect('bad', '/work', prep, identity)
     assert result['execution']['verified'] is False and 'driver_sha256' in result['execution']['problems'][0]
+
+
+def test_pop_work_is_removed_inside_a_root_container_scoped_to_the_eval_root(tmp_path, monkeypatch):
+    module, _, _ = _watcher(tmp_path, monkeypatch)
+    calls = []
+    monkeypatch.setattr(module, 'ssh', lambda command, **kw: calls.append(command))
+    module.remove_pop_work([])
+    assert calls == []
+    module.remove_pop_work([module.POP_EVAL_ROOT + '/rl-actor-1-abc', module.POP_EVAL_ROOT + '/raw-2-def/store'])
+    assert '-v ' + module.POP_EVAL_ROOT + ':/r' in calls[0] and calls[0].endswith('-- /r/rl-actor-1-abc /r/raw-2-def/store')
+    import pytest
+    with pytest.raises(ValueError):
+        module.remove_pop_work(['/home/werg/natlang'])
