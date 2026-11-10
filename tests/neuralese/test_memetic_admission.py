@@ -49,7 +49,7 @@ def sft_frame(source):
             'required_visits': {ident: 2 for ident in ids}, 'exposure_counts': {ident: 1 for ident in ids}}
 
 
-def lineage(tmp_path, quota=False, geometry=False, extra_scales=None, stage_parameters=None, **parameters):
+def lineage(tmp_path, quota=False, geometry=False, extra_scales=None, stage_parameters=None, focus=False, **parameters):
     """A controller whose recipe has a declared-scale logical-family joint SFT stage and an interleaved RL stage.
     ``quota`` gives its CE policy the quota-aware basis of the checkpoint's saved frame; ``geometry`` gives the SFT stage
     a prepared packed-geometry sidecar of its source."""
@@ -106,6 +106,16 @@ def lineage(tmp_path, quota=False, geometry=False, extra_scales=None, stage_para
                           'inputs': {'rl_task_source': 'rl.tasks'},
                           'parameters': {'sft_stage': 'sft', 'rl_rounds_per_window': 1, 'rows_per_round': 16,
                                          'group': 8, 'task_curriculum': CURRICULUM, **parameters}}]}
+    if focus:
+        evidence = tmp_path / 'evidence.json'
+        evidence.write_text('{}')
+        request = tmp_path / 'focus.json'
+        write_json(request, {'schema': 'natlang.native-pending-focus/1', 'rows': [
+            {'id': 'old', 'binding': source.entries[0]['binding'],
+             'source_sha256': hashlib.sha256(paths['old'].read_bytes()).hexdigest(), 'split': 'train',
+             'evidence': [{'path': str(evidence), 'sha256': hashlib.sha256(evidence.read_bytes()).hexdigest()}]}]})
+        recipe['input_bindings']['focus'] = {k: v for k, v in resident.binding(request).items() if k != 'bytes'}
+        recipe['stages'][0]['inputs']['pending_focus'] = 'focus'
     recipe_path = tmp_path / 'recipe.json'
     write_json(recipe_path, recipe)
     parent = tmp_path / 'parent.pt'
@@ -525,3 +535,58 @@ def test_window_capacity_bounds_each_family_and_unvisited_admitted_rows_count_ag
     assert admission._unvisited_batches({'x': {'disposition': 'deferred'}}, 'never read', 'sft') == {}
     with pytest.raises(ValueError, match='distillation_window_shares'):
         admission.validate_parameters({'distillation_window_shares': {'rollout-distillation': 1.5}})
+
+
+def test_an_active_pending_focus_is_superseded_by_one_that_lists_the_appended_rows_first(tmp_path, monkeypatch):
+    """The trainer schedules every row of an active focus before anything else, appended rows only as the frontier
+    behind it; the append supersedes the active request (declared by its SHA-256) with appended rows first, each
+    rollout episode its own source cohort."""
+    from natlang_neuralese.train import native_pending_focus
+    from natlang_neuralese.train.recipe import load_recipe, resolve_stage_inputs
+    config, declared, state, out, train = lineage(tmp_path, focus=True, distillation_max_share=1.,
+                                                  distillation_family_scales={'rollout-distillation': .2})
+    old = resolve_stage_inputs(load_recipe(config['production_recipe']),
+                               load_recipe(config['production_recipe'])['stages'][0], {})['pending_focus']
+    admission.queue_package(out / 'memetic', [graph('rollout:a', 7), graph('rollout:b', 8)],
+                            family=admission.ROLLOUT_FAMILY, tokenizer=FP, roles=[], protected=Guard(),
+                            manifests=[tmp_path / 'r.json'], actors=[resident.sha(config['checkpoint'])],
+                            scope='test', log=lambda line: None)
+    window_harness(monkeypatch, [])
+    state_of = {'state': 'active', 'request': {'sha256': old['sha256']}}
+    monkeypatch.setattr(admission, '_focus_state', lambda checkpoint: state_of)
+    seen = []
+    window_harness(monkeypatch, seen)
+    assert interleave.run_sft_window(config, declared, state, out / 'state.json', None) == 'adopted'
+    inputs = resolve_stage_inputs(load_recipe(seen[0][0]), seen[0][1], {})
+    document, _ = native_pending_focus.dependencies({'path': inputs['pending_focus']['path'],
+                                                     'sha256': inputs['pending_focus']['sha256']})
+    assert [row['id'] for row in document['rows']] == ['rollout:a', 'rollout:b', 'old']
+    assert document['supersedes']['request_sha256'] == old['sha256']
+    successor = NativeGraphSource(inputs['native_graphs']['path'], FP, required_split='train')
+    from natlang_neuralese.train.native_cohort_schedule import source_cohort_ids
+    cohorts = source_cohort_ids(successor)
+    assert len(set(cohorts)) == 3 and [row['source_sha256'] for row in document['rows']] == [cohorts[1], cohorts[2], cohorts[0]]
+    record = json.loads(Path(state['interleave']['memetic_distillation']['admissions'][0]['record']['path']).read_text())
+    assert record['pending_focus'] == {'supersedes': old['sha256'], 'added_rows': 2, 'retained_rows': 1}
+    # The settled recipe of later windows keeps the successor request.
+    later = load_recipe(state['interleave']['memetic_distillation']['recipe']['path'])
+    assert resolve_stage_inputs(later, later['stages'][0], {})['pending_focus']['sha256'] == inputs['pending_focus']['sha256']
+
+
+def test_a_finished_or_absent_focus_is_left_alone(tmp_path, monkeypatch):
+    from natlang_neuralese.train.recipe import load_recipe, resolve_stage_inputs
+    for focus, state_of in ((False, None), (True, {'state': 'complete', 'request': {'sha256': 'x'}}), (True, None)):
+        root = tmp_path / f'{focus}-{bool(state_of)}'
+        root.mkdir()
+        config, declared, state, out, _ = lineage(root, focus=focus, **UNCAPPED)
+        package(out, [graph('memetic:a', 6)], resident.sha(config['checkpoint']))
+        monkeypatch.setattr(admission, '_focus_state', lambda checkpoint, value=state_of: value)
+        seen = []
+        window_harness(monkeypatch, seen)
+        assert interleave.run_sft_window(config, declared, state, out / 'state.json', None) == 'adopted'
+        record = json.loads(Path(state['interleave']['memetic_distillation']['admissions'][0]['record']['path']).read_text())
+        assert 'skipped' in record['pending_focus']
+        before = resolve_stage_inputs(load_recipe(config['production_recipe']),
+                                      load_recipe(config['production_recipe'])['stages'][0], {}).get('pending_focus')
+        after = resolve_stage_inputs(load_recipe(seen[0][0]), seen[0][1], {}).get('pending_focus')
+        assert before == after

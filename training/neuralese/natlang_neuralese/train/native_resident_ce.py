@@ -197,7 +197,14 @@ def extension_policy(old, new, *, prior_train=None, candidate_train=None):
     same_source = old.get('native_graphs') == new.get('native_graphs')
     if not before or not after:
         raise ValueError('resident CE append requires both prior and successor policies')
-    from .recipe import _ce_supervision_input_continuation, native_graph_payload_dependencies
+    from .recipe import _ce_supervision_input_continuation, _pending_focus_continuation, native_graph_payload_dependencies
+    focus = 'pending_focus'
+    if old.get(focus) != new.get(focus):
+        # An append may supersede the active pending focus so that its rows lead the window (rl/memetic_admission.py);
+        # the request change is authenticated by its own continuation rules, the CE algebra by the rest.
+        if not _pending_focus_continuation(old, new):
+            raise ValueError('resident CE append changes its pending focus without a declared continuation')
+        old, new = ({key: value for key, value in side.items() if key != focus} for side in (old, new))
     if not _ce_supervision_input_continuation(old, new):
         raise ValueError('resident CE append is not a declared data continuation')
     prior, policy = load_policy(before), load_policy(after)

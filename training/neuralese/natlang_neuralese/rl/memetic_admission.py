@@ -34,6 +34,7 @@ is student self-distillation: the actors are this lineage's own checkpoints, nev
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import math
 import shutil
@@ -449,7 +450,44 @@ def _successor_capacity(parameters, successor, receipt, out, index):
     return result
 
 
-def _write_recipes(base_recipe, sft_id, successor, ce, out, parameters=None):
+def _focus_state(checkpoint):
+    """The newest pending-focus record of the checkpoint the window continues (None: it never had one)."""
+    from ..train.checkpoint_policy import CheckpointPolicy
+    history = (CheckpointPolicy.load(Path(checkpoint))['training'].get('options') or {}).get('pending_focus_history') or []
+    return history[-1] if history else None
+
+
+FOCUS_REASON = ('expert iteration: the policy\'s own verified rollouts and the prepared sources enter the one-time '
+                'promotion in front of the still-unconsumed rows of the superseded focus')
+
+
+def _successor_focus(base_inputs, checkpoint, family_rows, row_leaf, out):
+    """The pending-focus request of the append window and its record ((None, {'skipped': reason}) without one).
+
+    The trainer schedules every row of an active pending focus before anything else (``native_pending_focus.promote``:
+    a stable partition of the packed batches), and appended rows rank only as fresh-source frontier (one batch in five
+    behind the focus). While a focus is active the appended rows would therefore wait for all of it, several windows
+    here. The successor request supersedes the active one (the declaration the trainer verifies) and lists the
+    appended rows first, then every row of the superseded request (the consumed ones are no longer pending)."""
+    reference = base_inputs.get('pending_focus')
+    if not reference:
+        return None, {'skipped': 'the stage has no pending focus: fresh rows are scheduled by priority and the frontier'}
+    last = _focus_state(checkpoint)
+    from ..train.native_pending_focus import FINISHED, SCHEMA as FOCUS_SCHEMA
+    if last is None or last.get('state') in FINISHED or (last.get('request') or {}).get('sha256') != reference['sha256']:
+        return None, {'skipped': 'the stage\'s pending focus is not active: fresh rows are scheduled by priority and the frontier'}
+    old = json.loads(Path(reference['path']).read_text())
+    added = [{'id': row['id'], 'binding': row['binding'], 'source_sha256': row_leaf[row['id']][0], 'split': 'train',
+              'evidence': [{'path': row_leaf[row['id']][1]['path'], 'sha256': row_leaf[row['id']][1]['sha256']}]}
+             for row in family_rows]
+    document = {'schema': FOCUS_SCHEMA, 'rows': [*added, *old['rows']],
+                'supersedes': {'request_sha256': reference['sha256'], 'reason': FOCUS_REASON}}
+    path = Path(out) / 'pending-focus.json'
+    write_json_durable(path, document)
+    return _ref(path), {'supersedes': reference['sha256'], 'added_rows': len(added), 'retained_rows': len(old['rows'])}
+
+
+def _write_recipes(base_recipe, sft_id, successor, ce, out, parameters=None, focus=None):
     """(append recipe for the admitting window, settled recipe for later windows). The stage keeps its binding
     names, whose declared content changes (a shared train/foundation binding moves together); the append recipe binds
     the exact predecessor under a new name as ``continued_native_graphs``."""
@@ -462,6 +500,8 @@ def _write_recipes(base_recipe, sft_id, successor, ce, out, parameters=None):
     recipe['input_bindings'][train_name] = {'path': successor['path'], 'sha256': successor['sha256']}
     if ce is not None:
         recipe['input_bindings'][inputs['ce_supervision_policy']] = {'path': ce['path'], 'sha256': ce['sha256']}
+    if focus is not None:
+        recipe['input_bindings'][inputs['pending_focus']] = {'path': focus['path'], 'sha256': focus['sha256']}
     if parameters:
         stage.setdefault('parameters', {}).update(parameters)
     settled = copy.deepcopy(recipe)
@@ -661,31 +701,39 @@ def _prepare_window(config, declared, state, state_path, directory, *, protected
     target = Path(directory) / 'memetic-admission'
     if target.exists():
         shutil.rmtree(target)  # an uncommitted earlier attempt: nothing references it
-    leaves, leaf_families, family_rows, package_records = [], [], [], []
+    leaves, leaf_families, family_rows, package_records, row_leaf = [], [], [], [], {}
     for item, receipt, receipt_ref, rows in chosen:
         mine = [row for row in rows if row['id'] in admitted_ids]
         if mine:
             raw = _raw_rows(receipt['source']['path'])
-            if [row['id'] for row in mine] == list(raw):
-                leaf_path = Path(receipt['source']['path'])
-            else:
-                target.mkdir(parents=True, exist_ok=True)
-                leaf_path = target / f'admitted-{receipt_ref["sha256"][:16]}.jsonl'
-                leaf_path.write_text(''.join(raw[row['id']][0] for row in mine))
-            leaf = _ref(leaf_path)
-            indexed = index(leaf['path'], receipt['tokenizer_fingerprint'], receipt['role_ids'])
-            if [(e['id'], e['binding']) for e in indexed.entries] != [(row['id'], row['binding']) for row in mine]:
-                raise ValueError('admitted memetic leaf does not index as exactly its admitted rows')
-            leaves.append(leaf)
-            leaf_families.append(receipt['family'])
-            family_rows.extend({'id': row['id'], 'binding': row['binding'], 'family': receipt['family']}
-                               for row in mine)
-            for row in mine:
-                ledger['rows'][row['id']] = {'package': receipt_ref['sha256'], 'disposition': 'admitted',
-                                             'window': window, 'leaf_sha256': leaf['sha256'],
-                                             'scale': _row_scale(base_inputs, receipt['family'], scales),
-                                             'family': receipt['family'], 'forward_tokens': forward.get(row['id'], 0),
-                                             'batches': row_batches(forward.get(row['id'], 0), base_parameters)}
+            # The policy's own episodes are independent samples, each its own source cohort: the trainer serves cohorts
+            # least-served first (token fraction), so a fresh episode is scheduled at once instead of waiting behind the
+            # tokens its whole package would otherwise be charged.
+            pieces = [[row] for row in mine] if receipt['family'] == ROLLOUT_FAMILY else [mine]
+            for piece in pieces:
+                if [row['id'] for row in piece] == list(raw):
+                    leaf_path = Path(receipt['source']['path'])
+                else:
+                    target.mkdir(parents=True, exist_ok=True)
+                    tag = hashlib.sha256(''.join(row['id'] for row in piece).encode()).hexdigest()[:16]
+                    leaf_path = target / f'admitted-{receipt_ref["sha256"][:16]}-{tag}.jsonl'
+                    leaf_path.write_text(''.join(raw[row['id']][0] for row in piece))
+                leaf = _ref(leaf_path)
+                indexed = index(leaf['path'], receipt['tokenizer_fingerprint'], receipt['role_ids'])
+                if [(e['id'], e['binding']) for e in indexed.entries] != [(row['id'], row['binding']) for row in piece]:
+                    raise ValueError('admitted memetic leaf does not index as exactly its admitted rows')
+                leaves.append(leaf)
+                leaf_families.append(receipt['family'])
+                family_rows.extend({'id': row['id'], 'binding': row['binding'], 'family': receipt['family']}
+                                   for row in piece)
+                for row in piece:
+                    row_leaf[row['id']] = (leaf['sha256'], receipt_ref)
+                    ledger['rows'][row['id']] = {'package': receipt_ref['sha256'], 'disposition': 'admitted',
+                                                 'window': window, 'leaf_sha256': leaf['sha256'],
+                                                 'scale': _row_scale(base_inputs, receipt['family'], scales),
+                                                 'family': receipt['family'],
+                                                 'forward_tokens': forward.get(row['id'], 0),
+                                                 'batches': row_batches(forward.get(row['id'], 0), base_parameters)}
         statuses = [ledger['rows'].get(row['id'], {}).get('disposition') for row in receipt['rows']]
         status = 'partial' if 'deferred' in statuses else 'admitted' if 'admitted' in statuses else 'consumed-none-admitted'
         ledger['packages'][receipt_ref['sha256']] = {'path': receipt_ref['path'], 'status': status, 'window': window}
@@ -717,10 +765,12 @@ def _prepare_window(config, declared, state, state_path, directory, *, protected
                                          scales=scales, withdrawn=withdrawn, base_inputs=base_inputs,
                                          quota_parent=(state['checkpoint'], sft_id, base_parameters))
         capacity = _successor_capacity(base_parameters, successor, chosen[0][1], target, index)
-        append, settled = _write_recipes(base_recipe, sft_id, successor, ce, target, parameters=capacity)
+        focus, focus_record = _successor_focus(base_inputs, state['checkpoint'], family_rows, row_leaf, target)
+        append, settled = _write_recipes(base_recipe, sft_id, successor, ce, target, parameters=capacity, focus=focus)
         _, append_inputs, _ = _stage(append, sft_id)
-        from ..train.recipe import _ce_supervision_input_continuation, _data_continuation
-        if not (_ce_supervision_input_continuation(base_inputs, append_inputs) if ce is not None
+        from ..train.recipe import _ce_supervision_input_continuation, _data_continuation, _pending_focus_continuation
+        if not (_pending_focus_continuation(base_inputs, append_inputs) if focus is not None
+                else _ce_supervision_input_continuation(base_inputs, append_inputs) if ce is not None
                 else _data_continuation(base_inputs, append_inputs)):
             raise ValueError('memetic append is not a declared data continuation of the joint SFT stage')
         if ce is not None:
@@ -728,7 +778,7 @@ def _prepare_window(config, declared, state, state_path, directory, *, protected
             extension_policy(base_inputs, append_inputs)
         record.update(predecessor=predecessor, successor=successor, leaves=leaves, ce_policy=ce,
                       recipes={'append': _ref(append), 'settled': _ref(settled)},
-                      rows_added=len(family_rows), capacity=capacity)
+                      rows_added=len(family_rows), capacity=capacity, pending_focus=focus_record)
         recipe_path = str(append)
         ledger['recipe'] = _ref(settled)
     target.mkdir(parents=True, exist_ok=True)

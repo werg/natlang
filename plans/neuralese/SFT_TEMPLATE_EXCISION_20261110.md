@@ -96,20 +96,42 @@ works on rounds whose bundle exists: on the in-progress round 2 (bundle present,
 37 of 37 student successes (11 tasks, 6 Neuralese-using), 0 failed, 0 protected. Round 2 and later are therefore queued by
 the hook at scoring time, while their bundle exists.
 
-## 4. Window 1 rehearsal (scratch copy of w5, real queue plus the round-2 package; w5 state untouched)
+## 4. Why the appended rows needed the focus (found by the window-1 rehearsal)
 
-`interleave.run_sft_window` for window 1 on `/mnt/external/claude-scratch-ceadmit/w1sim`:
+The trainer schedules every row of an active pending focus before anything else (`native_pending_focus.promote`, a stable
+partition of the packed batches), and appended rows rank only as the fresh-source frontier, one batch in five *behind* the
+focus (`native_source_frontier.interleave_batches`: a batch holding a focus row stays in the priority lane). w5 has an active
+7,786-row focus with 5,620 rows unvisited (about 800 batches against 128 per window). Simulated on the real window-1 schedule
+(scratch copy of w5: real checkpoint frame, real queue plus the round-2 package), the first 128 batches of window 1 were 100%
+old focus rows: the previous admission (priority and CE scale only) would have placed no appended row in window 1, and
+the plan failed the trainer's monotone-window bound (`monotone source window exceeds its token buffer bound`, 1.08M > 1.05M
+tokens) in the CPU preflight. Two changes follow:
 
-- admitted 316 rows: 37 rollout-distillation (37.0 batches = 29% of the 128), 279 prepared-source rows (25.6 batches = the
-  20% share; 3,800 rows stay deferred for later windows), 0 refused, 0 excluded, no admission failure recorded;
-- scale mass 1,412 within the 0.5 row-mass cap; template families floored; trainer command built (`--continue-from` the
-  window-0 checkpoint, appended source, extended packed-geometry sidecar and capacity descriptor, quota-aware basis).
-- Expected share of window 1: appended rows 49% of the batches, the policy's own episodes 29% of batches and about 29% of
-  loss (more as rounds 2 and 3 add episodes, bounded by 40%); the remaining half is the diverse focus.
-- Trainer CPU continuation preflight of that command: see section 5.
+- the append writes a successor pending-focus request (`_successor_focus`): it declares `supersedes` the active request's
+  SHA-256 (the trainer verifies it against the checkpoint's focus history), lists the appended rows first and then every row of
+  the superseded request (consumed ones are no longer pending), and is bound in the append and settled recipes; a stage whose
+  focus is absent or finished is left alone (appended rows then lead through priority). `native_resident_ce.extension_policy`
+  admits an append that changes `pending_focus` when `_pending_focus_continuation` authenticates the change;
+- each rollout episode is its own source leaf (cohort). The trainer serves cohorts least-served first by token fraction
+  (`balance_urgent_batches`), so one cohort of 37 giant episodes was served about 6 batches while 70 cohorts of ordinary
+  rows were served first; single-episode cohorts are all unserved and priority 2, so they lead.
 
-## 5. Deployment
+Simulation of the first 128 batches of window 1 with both changes: 37 rollout batches (29%), 8 prepared-static batches
+(104 rows; the 20% static share is not reached because static cohorts are served fairly), 83 old-focus batches; no frontier
+rows, monotone-window plan passes.
 
-See the commit log: code on main (`697fd1043` and follow-ups); a controller started from the checkout runs it (the hook and
-the admission are loaded at controller start, so a controller that started earlier needs
-`restart_controller.py OUT --in-place` between rounds).
+## 5. Window 1 rehearsal (scratch copy of w5; w5 state untouched)
+
+`interleave.run_sft_window` for window 1 on `/mnt/external/claude-scratch-ceadmit/w1sim2` with the real queue plus the round-2
+package: admitted 316 rows (37 rollout-distillation, 279 prepared-source; 3,800 static rows stay deferred), 0 refused, 0
+excluded, no admission failure; template families floored; successor focus 316 added + 7,786 retained; trainer command built
+(`--continue-from` the window-0 checkpoint). Expected window 1: the policy's own episodes about 29% of the batches and about 28% of the
+loss (rollouts at scale 8 carry 152 mass units each against 160 per average batch), more as rounds 2 and 3 add episodes (up to the 40%
+share), about 6% prepared statics, the rest the diverse focus.
+
+CPU continuation preflight of that command (45 GB ledger budget; a 10.5 GB budget is OOM-killed before the schedule is planned,
+as every earlier attempt was): see the final section.
+
+## 6. Deployment
+
+See the commit log and the final section of this note.
