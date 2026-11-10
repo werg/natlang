@@ -1362,6 +1362,12 @@ class NativePolicyObjective:
                 # Every episode of this batch was rejected by the engine-mismatch guard: no update direction.
                 return hidden.float().sum() * 0., {'sampled_tokens': 0, 'sampled_decisions': 0, 'episodes': 0,
                     'objective': self.spec['mode'], 'engine_guard': engine_summary}
+            if not engine_records and all(not self.rows[example.id].get('actions') and not self.rows[example.id].get('decision_actions')
+                                          for example in context['examples']):
+                # Every row of this batch was admitted with no sampled action (w5 round 1, 2026-11-10: a decision
+                # episode whose four turns carried samples but no admitted action): no update direction, recorded.
+                return hidden.float().sum() * 0., {'sampled_tokens': 0, 'sampled_decisions': 0, 'episodes': 0,
+                    'objective': self.spec['mode'], 'empty_admitted_rows': [example.id for example in context['examples']]}
             raise ValueError('native objective batch has no actual sampled actions')
         from .jolt import summarize_jolt
         return torch.stack(losses).sum() / self.planned_actions(context['examples']), {'sampled_tokens': count - decision_count,
