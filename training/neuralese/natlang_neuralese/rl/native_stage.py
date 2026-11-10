@@ -75,10 +75,15 @@ def prepare(rollouts, *, checkpoint, tokenizer, bundle=None, mode='grpo', coeffi
     if actor_decl is not None:
         # Declared stale/quantized actors (rl.actors): the learner identity is theirs with its own checkpoint.
         from .actors import actor_declaration
+        from .actors import CHECKPOINT_BOUND
         learner_sha = sha256_file_hex_cached(checkpoint)
         known = set((actor_decl.get('actors') or {}) if isinstance(actor_decl, dict) else ())
-        policies = [{**policy, 'checkpoint_sha256': learner_sha} if policy.get('checkpoint_sha256') in known
-                    else policy for policy in policies]
+        current = [policy for policy in policies if policy.get('checkpoint_sha256') not in known]
+        # A stale actor's checkpoint-bound fields (checkpoint, trained embedding) are the learner's own: taken from the
+        # current-policy captures when the round has any, else only the checkpoint is known.
+        bound = ({key: current[0][key] for key in CHECKPOINT_BOUND if key in current[0]} if current
+                 else {'checkpoint_sha256': learner_sha})
+        policies = [{**policy, **bound} if policy.get('checkpoint_sha256') in known else policy for policy in policies]
     if not policies or any(policy != policies[0] for policy in policies):
         raise ValueError('native RL requires one exact captured actor identity')
     identity = policies[0]

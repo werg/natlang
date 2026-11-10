@@ -45,7 +45,7 @@ def stale_episode():
                  'turns': copy.deepcopy(raw_turns)} for sample, reward in enumerate((1, 0))]
     from test_rl_episode_graph import attach_execution_graph
     attach_execution_graph(episodes)
-    learner = {**actor, 'checkpoint_sha256': LEARNER}
+    learner = {**actor, 'checkpoint_sha256': LEARNER, 'embedding_weight_sha256': '4' * 64}   # an update trains the embedding
     return model, roles, actor, learner, block, episodes
 
 

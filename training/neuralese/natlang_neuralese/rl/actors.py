@@ -67,13 +67,18 @@ def validate_capture_export(capture, declaration):
         raise ValueError('quantized RL actor export requires its exact declaration')
 
 
+# Identity fields an update changes: the checkpoint and its trained embedding (the embedding adapter trains, so a
+# one-update-stale actor's embedding hash differs from the learner's; w5 round 1, 2026-11-10).
+CHECKPOINT_BOUND = ('checkpoint_sha256', 'embedding_weight_sha256')
+
+
 def declared_actor(policy, learner_identity, declaration):
-    """True when ``policy`` is a declared actor's identity: the learner's except its checkpoint."""
+    """True when ``policy`` is a declared actor's identity: the learner's except its checkpoint-bound fields."""
     if declaration is None or not isinstance(policy, dict) or set(policy) != set(learner_identity):
         return False
     sha = policy.get('checkpoint_sha256')
     return (sha in declaration['actors']
-            and all(policy[key] == learner_identity[key] for key in policy if key != 'checkpoint_sha256'))
+            and all(policy[key] == learner_identity[key] for key in policy if key not in CHECKPOINT_BOUND))
 
 
 def accepted_policy(policy, learner_identity, declaration):
