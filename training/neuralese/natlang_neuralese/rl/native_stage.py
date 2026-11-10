@@ -402,7 +402,7 @@ def _completed_operation_replay(args, request):
     return True
 
 
-def skip_zero_signal_jolt(graphs, objective):
+def skip_zero_signal_jolt(graphs, objective, earned=frozenset()):
     """Omit only complete episodes that carry no loss term under JOLT+: a zero outcome advantage with no active twin
     (no twin, or beta 0), or no sampled action at all.
 
@@ -422,7 +422,11 @@ def skip_zero_signal_jolt(graphs, objective):
     for ident in ids:
         row=rows[ident];info=row.get('jolt');advantage=row.get('advantage')
         if not row.get('actions') and not row.get('decision_actions'):
-            omitted.append(ident);no_actions.append(ident);continue
+            # An update resumed from a checkpoint keeps the rows it already earned (a continuation may not remove one);
+            # the objective contributes a zero for such a batch (rl.native_replay).
+            if ident not in earned:
+                omitted.append(ident);no_actions.append(ident)
+            continue
         # A twin under a zero role coefficient (e.g. beta_s 0) carries no term either (review F5, 2026-11-09).
         silent_twin=isinstance(info,dict) and loss.get('beta_s' if info.get('role')=='student' else 'beta_t')==0
         if (isinstance(info,dict) and info.get('role') in ('student','teacher')
@@ -457,7 +461,9 @@ def _admit_and_train(args,trainer,*,operation_request=None):
         policy_loss=args.rl_policy_loss, jolt_cases=args.jolt_cases, actors=args.rl_actors)
     if not graphs:
         raise ValueError('no useful native policy episodes: route flat failures to verified graph SFT seeding')
-    graphs,objective,zero_signal = skip_zero_signal_jolt(graphs,objective)
+    prior_objective = args.out/'rl-native-objective.json'
+    earned = frozenset(json.loads(prior_objective.read_text())['rows']) if prior_objective.is_file() else frozenset()
+    graphs,objective,zero_signal = skip_zero_signal_jolt(graphs,objective,earned)
     if not graphs and zero_signal is not None:
         args.out.mkdir(parents=True,exist_ok=True)
         write_json_durable(args.out/'zero-signal-report.json',{'schema':'natlang.native-rl-no-signal/1',
