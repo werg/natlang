@@ -9,7 +9,13 @@ from types import SimpleNamespace
 from .graph_replay import block_ids, restore_bundle, save_bundle, verified_bundle_bytes
 
 
-def _partial_roots(entries):
+class _Unavailable(RuntimeError):
+    def __init__(self, ident, message):
+        super().__init__(message)
+        self.ident = ident
+
+
+def _partial_roots(entries, per_path=None):
     roots, sources = set(), []
     for entry in entries:
         jobs = Path(entry['jobs']).resolve()
@@ -21,6 +27,8 @@ def _partial_roots(entries):
             if partial.get('version') != 'natlang.teacher_partial.native/1':
                 raise ValueError('retained partial has an unsupported collector schema')
             roots.update(block_ids(partial))
+            if per_path is not None:
+                per_path[path] = set(block_ids(partial))
             source = {'path': str(path), 'bytes': len(raw),
                       'sha256': hashlib.sha256(raw).hexdigest(), 'evidence': []}
             for evidence in partial.get('evidence_snapshots', []):
@@ -39,6 +47,8 @@ def _partial_roots(entries):
                         remaining -= len(line)
                         digest.update(line)
                         roots.update(block_ids(json.loads(line)))
+                        if per_path is not None:
+                            per_path[path].update(block_ids(json.loads(line)))
                 if digest.hexdigest() != evidence['sha256']:
                     raise ValueError('retained evidence prefix SHA changed')
                 source['evidence'].append(dict(evidence))
@@ -76,7 +86,8 @@ def retain_partial_artifacts(entries, out, *, policy_id, binding, servers, resto
     owns the jobs exclusively. Existing collector loadPartial verifies request and
     program provenance; this function adds the previously missing artifact custody.
     """
-    roots, sources = _partial_roots(entries)
+    per_path = {}
+    roots, sources = _partial_roots(entries, per_path)
     directory = Path(out) / 'retained-partial-blocks'
     manifest_path = directory / 'manifest.json'
     previous = None
@@ -97,10 +108,34 @@ def retain_partial_artifacts(entries, out, *, policy_id, binding, servers, resto
                 return server.get_bytes('/v1/neuralese/' + kind + '/' + ident)
             except Exception as error:
                 errors.append(str(error))
-        raise RuntimeError('retained artifact unavailable before collection: ' + ident + ': ' + '; '.join(errors))
+        raise _Unavailable(ident, 'retained artifact unavailable before collection: ' + ident + ': ' + '; '.join(errors))
 
-    manifest = save_bundle(roots, directory, policy_id=policy_id, fetch=fetch,
-        manifest_fields={'collection_binding': binding, 'retained_partial_sources': sources})
+    while True:
+        try:
+            manifest = save_bundle(roots, directory, policy_id=policy_id, fetch=fetch,
+                manifest_fields={'collection_binding': binding, 'retained_partial_sources': sources})
+            break
+        except _Unavailable as missing:
+            # A partial whose root block no actor and no archive holds (it lived only in a crashed actor's store) cannot
+            # resume: it is set aside and its entry samples afresh from the start (w5 round 2, 2026-11-10).
+            lost = [path for path, ids in per_path.items() if missing.ident in ids]
+            if not lost:
+                # The missing block is an ancestor: find the partials whose own closure needs it.
+                import tempfile
+                for path, ids in per_path.items():
+                    with tempfile.TemporaryDirectory() as scratch:
+                        try:
+                            save_bundle(sorted(ids), Path(scratch), policy_id=policy_id, fetch=fetch)
+                        except _Unavailable:
+                            lost.append(path)
+            if not lost:
+                raise
+            for path in lost:
+                path.rename(path.with_name(path.name + '.lost'))
+                print(json.dumps({'event': 'retained partial set aside: its block is unavailable on every actor',
+                                  'partial': str(path), 'block': missing.ident}), flush=True)
+            per_path = {}
+            roots, sources = _partial_roots(entries, per_path)
     if restore:
         for server in servers:
             restore_bundle(SimpleNamespace(store=_HttpStore(server, policy_id),

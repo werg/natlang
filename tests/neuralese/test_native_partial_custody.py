@@ -164,14 +164,16 @@ def test_actual_native_dependency_bundle_survives_actor_loss_before_replay(tmp_p
     fresh.store.close(); actor.store.close()
 
 
-def test_missing_recursive_ancestor_is_fatal_before_any_restore(tmp_path):
+@pytest.mark.parametrize('lost', ['ancestor', 'root'])
+def test_partial_whose_block_no_actor_holds_is_set_aside_before_any_restore(tmp_path, lost):
+    # The block lived only in a crashed actor's store: the partial cannot resume, so its entry samples afresh.
     actor, state, artifact, partial, entries, identity = fixture(tmp_path)
-    actor.missing.add(state)
-    with pytest.raises(RuntimeError, match='retained artifact unavailable'):
-        retain_partial_artifacts(entries, tmp_path, policy_id=identity['checkpoint_sha256'],
-                                 binding={}, servers=[actor], restore=True)
+    actor.missing.add(state if lost == 'ancestor' else artifact)
+    manifest = retain_partial_artifacts(entries, tmp_path, policy_id=identity['checkpoint_sha256'],
+                                        binding={}, servers=[actor], restore=True)
     assert actor.puts == []
-    assert not (tmp_path / 'retained-partial-blocks/manifest.json').exists()
+    assert manifest['blocks'] == {} or not manifest['blocks']
+    assert not partial.exists() and partial.with_name(partial.name + '.lost').exists()
     actor.store.close()
 
 
@@ -208,7 +210,7 @@ def test_custody_manifest_binding_is_in_the_single_atomic_publication(tmp_path, 
     actor.store.close()
 
 
-def test_real_collect_seam_cannot_launch_before_missing_partial_closure(tmp_path, monkeypatch):
+def test_real_collect_seam_sets_aside_unrecoverable_partial_before_launch(tmp_path, monkeypatch):
     from natlang_neuralese.rl import production
     actor, state, artifact, partial, entries, identity = fixture(tmp_path)
     actor.missing.add(state)
@@ -228,10 +230,11 @@ def test_real_collect_seam_cannot_launch_before_missing_partial_closure(tmp_path
     monkeypatch.setattr(production, 'prepare', prepare)
     launches = []
     monkeypatch.setattr(production.subprocess, 'run', lambda *a, **k: launches.append(a))
-    with pytest.raises(RuntimeError, match='retained artifact unavailable'):
+    with pytest.raises(Exception):
         production.collect(cases=cases, out=tmp_path, endpoints=['http://same-actor'],
             policy_id=identity['checkpoint_sha256'], rows=1, group=1, workers=1, runtime=runtime)
-    assert launches == []
+    # The unrecoverable partial is set aside before any worker could replay it.
+    assert not partial.exists()
     actor.store.close()
 
 
