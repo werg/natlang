@@ -282,7 +282,16 @@ def _write_recipes(base_recipe, sft_id, successor, ce, out):
     settled = copy.deepcopy(recipe)
     prior_name = 'memetic_predecessor_' + predecessor['sha256'][:12]
     recipe['input_bindings'][prior_name] = predecessor
+    # A stage that already continues an older source (a recorded source correction) now continues the exact
+    # predecessor of this append; the replaced binding and, in the settled recipe, the stale continuation go.
+    replaced = inputs.get('continued_native_graphs')
     inputs['continued_native_graphs'] = prior_name
+    if replaced is not None and replaced != prior_name:
+        settled_stage = next(item for item in settled['stages'] if item['id'] == sft_id)
+        settled_stage['inputs'].pop('continued_native_graphs', None)
+        for value in (recipe, settled):
+            if not any(replaced in item.get('inputs', {}).values() for item in value['stages']):
+                value['input_bindings'].pop(replaced, None)
     paths = {}
     for label, value in (('append', recipe), ('settled', settled)):
         path = Path(out) / f'recipe-{label}.json'
@@ -312,7 +321,27 @@ def effective_sft_stage(config, declared, state):
 
 def prepare_window(config, declared, state, state_path, directory, *, protected=None, index=_index, log=print):
     """The recipe for SFT window ``state['interleave']['sft_windows']`` (None: the controller's own) after admitting
-    every pending memetic package. Returns (recipe path or None, the SFT stage, admission record ref or None)."""
+    every pending memetic package. Returns (recipe path or None, the SFT stage, admission record ref or None).
+
+    A package whose append cannot be prepared (for example the trainer's resident CE extension rejects the lineage's
+    CE history) must not stop the controller at the window boundary: the failure is recorded in
+    ``interleave['memetic_distillation_failures']``, the window runs on the lineage's existing source, and the packages
+    stay pending (nothing was committed) for the next window."""
+    try:
+        return _prepare_window(config, declared, state, state_path, directory, protected=protected, index=index,
+                               log=log)
+    except Exception as error:  # noqa: BLE001 - recorded for supervision; the window proceeds without the append
+        interleave = state['interleave']
+        failure = {'window': interleave['sft_windows'], 'controller_round': state.get('round', 0),
+                   'error': f'{type(error).__name__}: {error}'[:1000]}
+        interleave.setdefault('memetic_distillation_failures', []).append(failure)
+        write_json_durable(state_path, state)
+        log(json.dumps({'event': 'memetic_admission_failed', **failure}))
+        base_path, base_stage = effective_sft_stage(config, declared, state)
+        return base_path, base_stage, None
+
+
+def _prepare_window(config, declared, state, state_path, directory, *, protected=None, index=_index, log=print):
     interleave = state['interleave']
     window = interleave['sft_windows']
     ledger = interleave.get('memetic_distillation')

@@ -295,3 +295,21 @@ def test_static_and_lineage_packages_validate_their_provenance(tmp_path):
         admission.queue_package(out, [graph('s:a')], family=admission.ROLLOUT_FAMILY, actors=['a' * 64],
                                 static_source=STATIC, **common)
     assert not (out / 'distill').exists()
+
+
+def test_an_append_that_cannot_be_prepared_is_recorded_and_the_window_runs_on_the_existing_source(tmp_path, monkeypatch):
+    config, declared, state, out, _ = lineage(tmp_path, **UNCAPPED)
+    package(out, [graph('memetic:a', 6)], resident.sha(config['checkpoint']))
+    seen = []
+    window_harness(monkeypatch, seen)
+
+    def refuse(*args, **kwargs):
+        raise ValueError('resident CE historical observation is not the authenticated target-mask replacement')
+
+    monkeypatch.setattr(admission, '_ce_update', refuse)
+    assert interleave.run_sft_window(config, declared, state, out / 'state.json', None) == 'adopted'
+    assert seen[0][0] == config['production_recipe'] and seen[0][1] == declared['sft_stage']
+    [failure] = state['interleave']['memetic_distillation_failures']
+    assert failure['window'] == 0 and 'target-mask replacement' in failure['error']
+    assert 'memetic_distillation' not in state['interleave']  # nothing committed: the package stays pending
+    assert admission.unseen_packages(config['out'], state)
