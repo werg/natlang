@@ -211,12 +211,14 @@ def test_earlier_rounds_are_topped_up_once_with_each_rows_own_sampling_policy(tm
                   geometry=lambda tokenizer: (identity['tokenizer_fingerprint'],
                                               [roles.produce_open, roles.produce_close, roles.consume_open,
                                                roles.consume_close]), log=lambda line: None)
+    bundle = tmp_path / 'manifest.json'
+    bundle.write_text('{}')
     for number, subset in ((0, rows[:3]), (1, rows[:1]), (2, rows[:3])):
         directory = out / f'round-{number:06d}'
         directory.mkdir(parents=True)
         subset = [{**row, 'round': number} for row in subset]
         (directory / 'rollouts.jsonl').write_text(''.join(json.dumps(row) + '\n' for row in subset))
-        (directory / 'score.json').write_text(json.dumps({'collection_complete': True, 'block_bundle': ''}))
+        (directory / 'score.json').write_text(json.dumps({'collection_complete': True, 'block_bundle': str(bundle)}))
     (out / 'round-000003').mkdir()  # a round without scored rollouts is left alone
     monkeypatch.setattr(admission, 'lineage_checkpoints', lambda config, state: {policy})
     monkeypatch.setattr(admission, 'lineage_checkpoint_files', lambda config, state: {policy: 'checkpoint.pt'})
@@ -243,9 +245,17 @@ def test_earlier_rounds_are_topped_up_once_with_each_rows_own_sampling_policy(tm
     other = out / 'round-000004'
     other.mkdir()
     (other / 'rollouts.jsonl').write_text(json.dumps(rows[0]) + '\n')
-    (other / 'score.json').write_text(json.dumps({'collection_complete': True, 'block_bundle': ''}))
+    (other / 'score.json').write_text(json.dumps({'collection_complete': True, 'block_bundle': str(bundle)}))
     [skipped] = distill.backfill(config, state, current_round=5, **kwargs)
     assert skipped['package'] is None and skipped['skipped'] == {'sampled by another policy': 1}
+    # A round whose collector bundle was pruned is recorded as lost without reading its rollouts, once.
+    lost = out / 'round-000005'
+    lost.mkdir()
+    (lost / 'rollouts.jsonl').write_text('not read\n')
+    (lost / 'score.json').write_text(json.dumps({'collection_complete': True, 'block_bundle': str(tmp_path / 'gone.json')}))
+    [record] = distill.backfill(config, state, current_round=6, **kwargs)
+    assert record['package'] is None and 'no longer on disk' in record['skipped']
+    assert distill.backfill(config, state, current_round=6, **kwargs) == []
 
 
 def graph_for_queue(row_id):

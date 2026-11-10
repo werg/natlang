@@ -356,10 +356,16 @@ def backfill(config, state, *, current_round, binding=None, log=print, protected
         score = json.loads(score_path.read_text())
         if not score.get('collection_complete'):
             continue
-        # The collector bundle of a round that trained is pruned: its episodes that import actor state (Neuralese) can no
-        # longer be replayed and are recorded as failed to lower; the others lower without it.
+        # The collector bundle of a round that trained is pruned, and an episode lowers only by replaying the actor states
+        # in it: such a round is recorded as lost (nothing is read or lowered) and never retried.
         bundle = score.get('block_bundle')
-        bundle = bundle if bundle and Path(bundle).is_file() else None
+        if not bundle or not Path(bundle).is_file():
+            record = {'schema': SCHEMA, 'round': number, 'package': None, 'rows': 0,
+                      'skipped': 'the round\'s collector bundle is no longer on disk; its episodes cannot be replayed'}
+            write_json_durable(directory / RECORD, record)
+            log(json.dumps({'event': 'rollout_distillation', **record}))
+            results.append(record)
+            continue
         results.append(package_round(config, state, directory, list(_student_successes(rollouts_path)),
                                      reader=_episode_reader(rollouts_path),
                                      policies=policies, binding=binding, bundle=bundle,
