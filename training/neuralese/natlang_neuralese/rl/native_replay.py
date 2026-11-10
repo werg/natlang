@@ -1366,8 +1366,12 @@ class NativePolicyObjective:
                                           for example in context['examples']):
                 # Every row of this batch was admitted with no sampled action (w5 round 1, 2026-11-10: a decision
                 # episode whose four turns carried samples but no admitted action): no update direction, recorded.
+                # Same detail fields as the engine-rejected batch: accumulated micro-batches must agree on fields.
+                import json
+                print(json.dumps({'kind': 'native_objective_empty_batch',
+                                  'graphs': [example.id for example in context['examples']]}), flush=True)
                 return hidden.float().sum() * 0., {'sampled_tokens': 0, 'sampled_decisions': 0, 'episodes': 0,
-                    'objective': self.spec['mode'], 'empty_admitted_rows': [example.id for example in context['examples']]}
+                    'objective': self.spec['mode']}
             raise ValueError('native objective batch has no actual sampled actions')
         from .jolt import summarize_jolt
         return torch.stack(losses).sum() / self.planned_actions(context['examples']), {'sampled_tokens': count - decision_count,
