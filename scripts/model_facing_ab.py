@@ -8,15 +8,26 @@ the collector (`ts-host/src/runtime/model-facing.ts`); every arm gets the same t
 so a partly finished run stays balanced), and the arms run concurrently so server load is shared.
 
   prepare  --packet P --rows 3,14,15 --samples 8 --arms baseline=none,combined=combined --out DIR
-  run      --out DIR --server http://127.0.0.1:8200 [--runtime RT] [--case-seconds N]
+  run      --out DIR --server http://127.0.0.1:8200 [--runtime RT]
   report   --out DIR
 
-Training-split packet rows only (prepare refuses any other split). The server is never started here.
+Variants of one arm are joined with `+` (`--arms base=effect-receipt+read-file-binding,other=effect-receipt+read-file-binding+<new-variant>`);
+the first arm is the reference the others are paired against. Training-split packet rows only (prepare refuses any other split).
+
+A policy actor of its own on Pop's idle GPU (`serve`, `guard`, `stop`): the Pop RL actor's machinery (the policy's prepared
+view, the evaluation image, `pop_dev16_driver.py` in rl-actor mode) under a container, unit, work directory and port of
+this measurement, without the production hooks' state or marker files. `guard` stops the container and the collectors as
+soon as an evaluation is pending or a Pop RL actor of the controller exists: the production use of Pop always wins.
+
+  serve    --checkpoint-sha256 SHA [--port 18541]      (writes DIR-independent state under the Pop evaluation root)
+  guard    --out DIR [--interval 30]                   (loop; run it beside `run`)
+  stop
 """
 from __future__ import annotations
 
 import argparse
 import hashlib
+import math
 import json
 import os
 import re
@@ -64,41 +75,44 @@ def run(args) -> None:
     config.write_text(json.dumps({'guidance': False}) + '\n')
     children = []
     for arm, variant in arms.items():
-        env = dict(os.environ, NATLANG_MODEL_FACING=variant)
+        env = dict(os.environ, NATLANG_MODEL_FACING=variant.replace('+', ','))
         log = (out / arm / 'queue.log').open('a')
         command = [sys.executable, str(ROOT / 'scripts' / 'run_bonsai_queue.py'), str(out / arm / 'queue.jsonl'),
                    str(out / arm / 'journal.jsonl'), '--runtime', str(args.runtime), '--server', args.server,
                    '--chat-completions-url', args.server.rstrip('/') + '/v1/chat/completions', '--model-id', args.model_id,
                    '--model-concurrency', '1', '--chat-request-config', str(config), '--neuralese-server']
         children.append(subprocess.Popen(command, cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT))
+    (out / 'pids.json').write_text(json.dumps([child.pid for child in children]) + '\n')
     print(json.dumps({'pids': [child.pid for child in children]}), flush=True)
     for child in children:
         child.wait()
 
 
 STUB_WORDS = re.compile(r'Decide whether item meets policy|Refunds are allowed within 30 days')
+INLINE_NL = re.compile(r'\bnl(?:\.with)?(?:<[^`(]*>)?(?:\([^`]*\))?`')
+NL_TEMPLATE = re.compile(r'\bnl(?:\.with)?(?:<[^`(]*>)?(?:\([^`]*\))?`(?:[^`\\]|\\.)*`(\s*\()?')
 ZERO_ARG_CHILD = re.compile(r'\bnl(?:\.with)?(?:<[^`(]*>)?(?:\([^`]*\))?`[^`]*`\(\s*\)')
 
 
 def behaviours(directory: Path) -> dict:
     """What each change targets, counted over the arm's actual actions (each action and tool result counted once)."""
-    counts = dict(episodes=0, turns=0, evals=0, repeated_eval_code=0, zero_arg_children=0, zero_arg_refusals=0,
-                  prompt_example_copies=0, receipts=0, footers=0, read_file_calls=0, example_in_system_prompt=0)
+    counts = dict(episodes=0, turns=0, evals=0, repeated_eval_code=0, zero_arg_children=0,
+                  prompt_example_copies=0, receipts=0, footers=0, read_file_calls=0,
+                  inline_nl_calls=0, nl_not_invoked=0, episodes_with_inline_nl=0, nl_child_quiesced=0)
     for results in sorted(directory.glob('row-*/sample-*/results.jsonl')):
         for row in read_jsonl(results):
             counts['episodes'] += 1
             codes = {}
+            nl_before = counts['inline_nl_calls']
             for turn in row.get('trajectory') or []:
                 if turn.get('phase') != 'action':
                     continue
                 counts['turns'] += 1
                 context = turn.get('context') or []
-                if context and context[0].get('role') == 'system' and 'Is draft clear to audience' in str(context[0].get('content')):
-                    counts['example_in_system_prompt'] += 1
                 last = context[-1] if context else {}
                 if last.get('role') == 'tool':  # the result of the previous action, seen once per turn
                     result = str(last.get('content'))
-                    counts['zero_arg_refusals'] += 'was given no arguments' in result
+                    counts['nl_child_quiesced'] += 'was itself created with these same instructions' in result
                     counts['receipts'] += 'Service calls completed by this eval' in result
                     counts['footers'] += '(in eval: const text = await folder.file(' in result
                 for name, args in (turn.get('model_response') or {}).get('calls') or []:
@@ -109,9 +123,12 @@ def behaviours(directory: Path) -> dict:
                     counts['evals'] += 1
                     counts['prompt_example_copies'] += len(STUB_WORDS.findall(code))
                     counts['zero_arg_children'] += len(ZERO_ARG_CHILD.findall(code))
+                    counts['inline_nl_calls'] += len(INLINE_NL.findall(code))
+                    counts['nl_not_invoked'] += sum(not match.group(1) for match in NL_TEMPLATE.finditer(code))
                     key = (turn.get('invocation_id'), code)
                     counts['repeated_eval_code'] += key in codes
                     codes[key] = True
+            counts['episodes_with_inline_nl'] += counts['inline_nl_calls'] > nl_before
     return counts
 
 
@@ -136,7 +153,8 @@ def report(args) -> None:
 
 
 def paired(out: Path, arms: list[str]) -> dict:
-    """Matched (task, sample) episodes finished in both arms: successes, discordant pairs, turns and tokens."""
+    """Each later arm against the first, over the matched (task, sample) episodes finished in both: successes,
+    discordant pairs, McNemar exact p, turns and tokens."""
     rows = {}
     for arm in arms:
         rewards = {(r['task_id'], r['sample']): r for r in map(json.loads, (out / arm / 'rewards.jsonl').read_text().splitlines())}
@@ -148,16 +166,144 @@ def paired(out: Path, arms: list[str]) -> dict:
         keys = {e['key']: (e['task_id'], e['sample']) for e in map(json.loads, (out / arm / 'queue.jsonl').read_text().splitlines())}
         rows[arm] = {keys[k]: (rewards[keys[k]]['outcome'] == 'task_success', f.get('saved_turns'), f.get('completion_tokens'),
                               f.get('elapsed_seconds')) for k, f in finishes.items()}
-    first, second = arms[0], arms[1]
-    common = sorted(set(rows[first]) & set(rows[second]))
-    only_first = sum(rows[first][k][0] and not rows[second][k][0] for k in common)
-    only_second = sum(rows[second][k][0] and not rows[first][k][0] for k in common)
-    mean = lambda arm, i: round(sum(rows[arm][k][i] for k in common) / max(len(common), 1), 1)
-    return {'pairs': len(common), f'{first}_successes': sum(rows[first][k][0] for k in common),
+    first, result = arms[0], {}
+    for second in arms[1:]:
+        common = sorted(set(rows[first]) & set(rows[second]))
+        only_first = sum(rows[first][k][0] and not rows[second][k][0] for k in common)
+        only_second = sum(rows[second][k][0] and not rows[first][k][0] for k in common)
+        discordant = only_first + only_second
+        p = min(1.0, 2 * sum(math.comb(discordant, i) for i in range(min(only_first, only_second) + 1)) / 2 ** discordant) if discordant else 1.0
+        mean = lambda arm, i: round(sum(rows[arm][k][i] or 0 for k in common) / max(len(common), 1), 1)
+        result[f'{first}_vs_{second}'] = {
+            'pairs': len(common), f'{first}_successes': sum(rows[first][k][0] for k in common),
             f'{second}_successes': sum(rows[second][k][0] for k in common),
-            f'only_{first}': only_first, f'only_{second}': only_second,
+            f'only_{first}': only_first, f'only_{second}': only_second, 'mcnemar_exact_p': round(p, 3),
             f'{first}_mean_turns': mean(first, 1), f'{second}_mean_turns': mean(second, 1),
             f'{first}_mean_tokens': mean(first, 2), f'{second}_mean_tokens': mean(second, 2)}
+    return result
+
+
+# ---- A policy actor of its own on Pop ----------------------------------------------------------------------------
+AB_PORT = 18541
+
+
+def _pop():
+    sys.path.insert(0, str(ROOT))
+    from scripts.neuralese_data import pop_behavior_eval as pbe
+    return pbe
+
+
+def _ab_state(pbe) -> Path:
+    return pbe.ROOT / 'model-facing-ab-actor.json'   # not a production hook file (rl-actor.json, rl-actor-waiter.json, rl-actor-active.json)
+
+
+def pop_busy(pbe, own: str | None = None) -> str | None:
+    """Why Pop belongs to production right now (a dev16 evaluation pending, a Pop RL actor started or deferred by the
+    controller, any other container), or None."""
+    state = pbe.read_json(pbe.ROOT / 'state.json') or {'candidates': {}, 'controllers': {}, 'parent': {'sha256': ''}}
+    if pbe.eval_pending(state):
+        return 'a dev16 evaluation is pending'
+    for marker in ('rl-actor-active.json', 'rl-actor-waiter.json', 'rl-actor.json'):
+        if (pbe.ROOT / marker).exists():
+            return f'the controller wrote {marker}'
+    names = pbe.ssh("docker ps --format '{{.Names}}'", check=True).split()
+    foreign = [name for name in names if name != own]
+    return f'Pop containers {foreign} are running' if foreign else None
+
+
+def serve(args) -> None:
+    import shlex
+    import time
+    pbe = _pop()
+    from scripts.neuralese_data import pop_rl_actor as pra
+    sha = args.checkpoint_sha256
+    if reason := pop_busy(pbe):
+        raise SystemExit('Pop is not free: ' + reason)
+    prep = pbe.read_json(pbe.ROOT / 'preparations' / f'rl-{sha}.json')
+    if not prep or not (Path(prep['transport']['path']).parent / prep['view']['path']).is_file():
+        raise SystemExit('no prepared Pop view of this policy; start the controller hook once or run pop_eval_prepare')
+    transport = json.loads(Path(prep['transport']['path']).read_text())
+    stage = f'{pbe.POP_TRANSPORT_ROOT}/{sha}'
+    have = pbe.ssh(shlex.join(['ls', stage]), check=False).split()
+    if prep['view']['path'] not in have:   # the view is not on Pop yet: room first, then the exact delta
+        pbe.make_pop_room(pbe.read_json(pbe.ROOT / 'state.json'), prep['view']['bytes'], {sha})
+        pbe.send(prep)
+    commit = pbe.ssh(shlex.join(['git', '-C', pbe.POP_REPO, 'rev-parse', 'HEAD'])).strip()
+    dirty = int(pbe.ssh(shlex.join(['git', '-C', pbe.POP_REPO, 'status', '--porcelain', '--untracked-files=no']) + ' | wc -l')) > 0
+    host = pra.pop_host_address()
+    endpoint = f'http://{host}:{args.port}'
+    name, work = f'popab-{sha[:12]}', f'{pbe.POP_EVAL_ROOT}/popab-{sha[:12]}'
+    job = {'mode': 'rl-actor', 'arm': 'rl', 'name': name, 'port': args.port, 'host': host, 'runtime': pbe.POP_REPO,
+           'code': {'git_commit': commit, 'dirty': dirty}, 'base': pbe.POP_BASE, 'image': pbe.IMAGE, 'step': prep['step'],
+           'source_sha256': sha, 'stage': stage, 'view': prep['view']['path'], 'view_sha256': prep['view']['sha256'],
+           'work': work, 'min_free_bytes': pbe.POP_MIN_FREE, 'actor_export_format': pra.EXPORT_FORMAT,
+           'memory': f'{pra.RL_MEMORY_GB}g',
+           'transport': {'name': Path(prep['transport']['path']).name, 'sha256': prep['transport']['sha256'],
+                         'view_receipt_name': prep['view_receipt']['sha256'] + '.json',
+                         'view_receipt_sha256': prep['view_receipt']['sha256'], 'scope': transport['scope']}}
+    pbe.ssh(shlex.join(['mkdir', '-p', work]) + ' && ' + shlex.join(['rm', '-f', f'{work}/driver.py']))
+    subprocess.run(['scp', '-q', str(ROOT / 'scripts/neuralese_data/pop_dev16_driver.py'), f'{pbe.POP}:{work}/driver.py'],
+                   check=True, timeout=120)
+    pbe._pop_upload_json(job, f'{work}/job.json')
+    unit = f'{name}-{int(time.time())}'
+    state = {'endpoint': endpoint, 'unit': unit, 'container': name, 'policy_id': sha, 'work': work, 'port': args.port}
+    _ab_state(pbe).write_text(json.dumps(state, indent=1) + '\n')
+    pbe.ssh(shlex.join(['/usr/bin/python3', pbe.POP_REPO + '/scripts/memory_ledger.py', 'run', '--unit', unit,
+                        '--budget-gb', str(pra.RL_MEMORY_GB), '--reserve-gb', str(pbe.POP_RESERVE_GB), '--class', 'experiment',
+                        '--no-resumable', '--container', name, '--workdir', work, '--', '/usr/bin/python3',
+                        f'{work}/driver.py', f'{work}/job.json']))
+    deadline = time.monotonic() + args.ready_seconds
+    while time.monotonic() < deadline:
+        if pbe.pop_unit_state(unit).get('ActiveState') in ('inactive', 'failed'):
+            tail = pbe.ssh(shlex.join(['journalctl', '--user', '-u', unit + '.service', '-n', '20', '--no-pager']), check=False)
+            raise SystemExit('Pop actor unit exited before readiness: ' + tail[-1200:])
+        if pra.attested(endpoint, sha):
+            print(json.dumps({**state, 'ready': True}), flush=True)
+            return
+        time.sleep(5)
+    raise SystemExit(f'Pop actor did not attest {sha[:12]} at {endpoint} within {args.ready_seconds} s')
+
+
+def stop(_args=None) -> None:
+    """Stop this measurement's actor and remove its work directory (root-owned files, so from a throwaway container)."""
+    import shlex
+    pbe = _pop()
+    path = _ab_state(pbe)
+    state = pbe.read_json(path)
+    if not state:
+        return
+    pbe.ssh(shlex.join(['systemctl', '--user', 'stop', state['unit'] + '.service']), check=False, timeout=120)
+    pbe.ssh(shlex.join(['docker', 'rm', '-f', state['container']]), check=False, timeout=60)
+    pbe.remove_pop_work([state['work']])
+    path.unlink(missing_ok=True)
+    print(json.dumps({'stopped': state['container'], 'removed': state['work']}), flush=True)
+
+
+def guard(args) -> None:
+    """Hand Pop back: stop the actor and the collectors as soon as production needs it."""
+    import signal
+    import time
+    pbe = _pop()
+    pids = json.loads((args.out / 'pids.json').read_text())
+    state = pbe.read_json(_ab_state(pbe))
+    while True:
+        alive = []
+        for pid in pids:
+            try:
+                os.kill(pid, 0)
+                alive.append(pid)
+            except OSError:
+                pass
+        reason = pop_busy(pbe, own=state['container'])
+        if reason or not alive:
+            if reason:
+                for pid in alive:
+                    os.kill(pid, signal.SIGTERM)
+                (args.out / 'guard-trip.json').write_text(json.dumps({'reason': reason, 'at': time.time()}) + '\n')
+            stop()
+            print(json.dumps({'guard': reason or 'collectors finished'}), flush=True)
+            return
+        time.sleep(args.interval)
 
 
 def main(argv=None) -> None:
@@ -181,8 +327,16 @@ def main(argv=None) -> None:
     r.add_argument('--model-id', default='natlang-rl')
     q = sub.add_parser('report')
     q.add_argument('--out', type=Path, required=True)
+    v = sub.add_parser('serve')
+    v.add_argument('--checkpoint-sha256', required=True)
+    v.add_argument('--port', type=int, default=AB_PORT)
+    v.add_argument('--ready-seconds', type=int, default=900)
+    g = sub.add_parser('guard')
+    g.add_argument('--out', type=Path, required=True)
+    g.add_argument('--interval', type=int, default=30)
+    sub.add_parser('stop')
     args = parser.parse_args(argv)
-    {'prepare': prepare, 'run': run, 'report': report}[args.command](args)
+    {'prepare': prepare, 'run': run, 'report': report, 'serve': serve, 'guard': guard, 'stop': stop}[args.command](args)
 
 
 if __name__ == '__main__':

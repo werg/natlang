@@ -1,5 +1,40 @@
 # Model-facing changes and their measurement
 
+### 2026-11-10 (later) — `nl-examples` and `zero-arg-nl` rejected and removed (fallow #17b)
+
+The first A/B had no inline-nl delegation, so these two were never exercised. Tasks chosen from the w5 training packets because their
+existing student rollouts contain inline `nl` (checked in `round-000000/row-*/sample-*/results.jsonl`): decision_evidence worlds (r0 row 10),
+audit-invoices catalogue-correction-desk (r0 row 11), folder-route-n3 banking77 (r0 row 7), bounded-decisions extract-chain (r1 row 14).
+Harness `scripts/model_facing_ab.py` gained `+`-joined variant arms, N-arm pairing with McNemar, inline-nl counters, and `serve`/`guard`/`stop`:
+the policy `dbb03644ccce...` (step 99) served on Pop's idle RTX 4060 from its prepared actor view in an own container (`popab-dbb03644ccce`,
+port 18541, own work dir, none of the controller hook files), with a guard that hands Pop back the moment a dev16 evaluation is pending or a
+`poprl-*` actor exists.
+
+**What the Pop run could do.** Pop decodes about 11-14 tokens/s per stream, about 41 tokens/s over 3 streams; an episode on these tasks is 10-50k
+completion tokens, so 48 episodes per arm (even 2 arms) is a day of Pop, not a time box. The planned 3 arms x 48 was cut to 2 arms (reference
+`effect-receipt+read-file-binding` vs the same plus both variants, 900 s case cap, sample-major so any prefix is paired) and the guard stopped it
+about 15 minutes in, when the w5 step-102 checkpoint queued its dev16 evaluation. Pop was released, the container removed and its work directory
+deleted. Result: **1 matched pair** (decision_evidence sample 0; 0/1 vs 0/1 task_success; 11 vs 14 turns; in the variant arm the system
+prompt carried the neutral example in 14 of 14 turns and the episode made one inline nl call with no refusal). That is a smoke run of the new
+serving path, not a measurement.
+
+**What decides it: existing rollouts of the same lineage (no variant active).** All 608 student episodes of the w2-w5 rounds (4,232 eval
+actions, same prompts; checkout `results.jsonl`): inline `nl` appears in 53 episodes (158 templates). *Zero-argument inline children
+(`nl\`...\`()`): 0.* "Created with these same instructions" refusals: 2 (w2), both different from the zero-argument shape. *Copies of the
+prompt's inline-nl example* (`Decide whether item meets policy`): 15 occurrences in 8 episodes, all in w2-w4 (3 + 9 + 3 in
+99 + 218 + 172 episodes, about 1.6% of episodes; 7 of the 8 episodes failed, on tasks where roughly half of all episodes fail), **0 in the
+current w5 lineage (119 episodes; 95% upper bound 2.5%)**, and 0 in the first A/B's 43 episodes on the live policy. In w5 the policy's
+inline-nl defect is different: 14 of 21 templates are never invoked (`const x = nl\`...\``, the function value is dropped; 85 of 158 over
+all rounds). **Decision: reject both.** `zero-arg-nl` has no instance to fix and would refuse a legitimate one-shot `nl\`...\`()`.
+`nl-examples` targets a failure that was about 1.6% of episodes on earlier checkpoints and is absent on the current one: a gain of at most
+that size cannot be demonstrated (it would take thousands of paired episodes, Pop gives 7 an hour), and the change would alter the system
+prompt of every trajectory (prompt pieces, actor prompt binding, replay, admitted trajectories). Reopen if the copy rate returns.
+The switches and their code are removed (git history is the archive); `MODEL_FACING_VARIANTS` is now the two adopted ones.
+The harness keeps the counters (`prompt_example_copies`, `zero_arg_children`, `nl_child_quiesced`, `inline_nl_calls`, `nl_not_invoked`): if a
+later policy shows the failure, reopen with a variant and measure it where it occurs. Finding for the supervisor: the live policy's real
+inline-nl defect is the uninvoked template (14 of 21), which would be taught by an error on a dropped `nl` function value if it recurs in
+training rollouts; not addressed here (no measured effect yet).
+
 ### 2026-11-10 — LFM3 harness-ergonomics combined measurement on the live policy (fallow #17b): effect receipt and `read_file` binding footer adopted
 
 Tool: `scripts/model_facing_ab.py` (new; reuses `rl.task_rollouts.build_queue`/`score`, the production collector
@@ -26,8 +61,7 @@ are neither shown to help nor to hurt.
 Decision: `effect-receipt` and `read-file-binding` are adopted (on by default, `NATLANG_MODEL_FACING=none` is the baseline arm). Existing
 admitted trajectories keep their recorded tool texts. `nl-examples` is not adopted: it changes the system prompt of every trajectory (prompt
 pieces, actor prompt binding, replay) for a failure this policy does not show here. `zero-arg-nl` is not adopted: no instance observed, and a
-legitimate one-shot `nl\`...\`()` would be refused. Both stay as measurement switches. Remaining measurement: tasks that exercise inline nl
-delegation (dev-packet workbench/reducer shapes, which are protected; or authored training tasks) with about 48 samples per arm.
+legitimate one-shot `nl\`...\`()` would be refused. Both were then measured on nl-using training tasks and rejected (entry above).
 
 Summary (per-task, behaviours, pairs): `/home/werg/data/dgxops/model-facing-ab-20261110-summary.json`.
 
