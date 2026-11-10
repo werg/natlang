@@ -39,7 +39,6 @@ def test_actor_uses_sglang_follows_the_engine_adoption_default():
     assert not actor_uses_sglang({**native, 'actor_engine_keep_native': True})
     assert not actor_uses_sglang({**native, 'coefficient_policy': '/p.json'})
     assert not actor_uses_sglang({**native, 'model': 'mellum'})
-    assert not actor_uses_sglang({**native, 'actor_engine': 'llama-cpp'})
     assert not actor_uses_sglang({**native, 'mandatory_sft_only': True})
 
 

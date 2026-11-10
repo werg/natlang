@@ -621,9 +621,6 @@ def validate_actor_receipts(receipts, *, policy_id, neuralese_server, expected_n
         if any(identity != identities[0] for identity in identities[1:]):
             raise ValueError('native RL replicas disagree on their exact policy identity')
     if expected_native is not None:
-        if 'actor_export' in expected_native and any(
-                receipt.get('actor_export') != expected_native['actor_export'] for receipt in receipts.values()):
-            raise ValueError('RL actor serves a different export than the requested exact policy export')
         if modes != {'native-state'} or any(receipt.get('native_identity') != expected_native['native_identity'] or
                 receipt.get('native_participant') != expected_native['native_participant']
                 or ('history_reasoning' in expected_native and
@@ -971,14 +968,6 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     from .actor_client import NativeActorClient
     def actor_receipts():
         infos = {url: json.loads(NativeActorClient(url).get_bytes('/v1/neuralese/info')) for url in live}
-        if prompt_rendering == 'full':
-            # llama.cpp applies its chat template to the messages exactly as recorded: the full contract by
-            # construction. The controller states that identity; the server has no Python renderer to attest.
-            from ..data.prompt_rendering import prompt_rendering_identity
-            for info in infos.values():
-                if info.get('server') == 'llama.cpp' and 'prompt_rendering' not in info:
-                    info.update(prompt_rendering='full',
-                                prompt_rendering_identity_sha256=prompt_rendering_identity('full')['identity_sha256'])
         if prompt_rendering is not None:
             if any(info.get('prompt_rendering')!=prompt_rendering or not re.fullmatch(r'[0-9a-f]{64}',str(info.get('prompt_rendering_identity_sha256',''))) for info in infos.values()):
                 raise ValueError('RL actor did not attest the full prompt rendering contract')
@@ -1689,44 +1678,6 @@ def trained_counts(directory, progress):
             for key in ('supervised_tokens', 'target_tokens')}
 
 
-def prepare_llama_actor(config, checkpoint, policy_id, raw):
-    """Exact BF16 GGUF export of the current policy checkpoint for a llama.cpp-fork actor (actor_engine llama-cpp).
-
-    The export carries the checkpoint's native identity, role markers, merged learned rows and producer adapter
-    (export.native_gguf); llama-server attests it in /v1/neuralese/info with its actor_export (kind, format, file
-    sha256) and process runtime. The learner recomputes every captured episode under the exact checkpoint, so the
-    residual BF16 kernel gap is a behaviour-policy difference covered by the loss's importance weights."""
-    from ..common.hashing import sha256_file_hex
-    directory = Path(config['out']) / 'actor-gguf' / policy_id
-    manifest_path = directory / 'manifest.json'
-    if not manifest_path.is_file():
-        command = [sys.executable, '-m', 'natlang_neuralese.export.native_gguf', str(checkpoint), str(directory),
-                   '--outtype', 'bf16', '--base', str(config['base'])]
-        if config.get('llama_cpp_converter'):
-            command += ['--llama-cpp', str(config['llama_cpp_converter'])]
-        environment = config.get('actor_environment')
-        import os
-        subprocess.run(command, check=True, **({'env': {**os.environ, **environment}} if environment else {}))
-    manifest = json.loads(manifest_path.read_text())
-    files = [item for item in manifest.get('files', []) if item.get('outtype') == 'bf16']
-    if (manifest.get('schema') != 'natlang.native-gguf/1' or manifest.get('checkpoint_sha256') != policy_id
-            or len(files) != 1 or files[0].get('native_identity') != raw['native_identity']):
-        raise ValueError('llama.cpp actor export does not carry the exact policy native identity')
-    serving = manifest.get('serving') or {}
-    history = raw.get('history_reasoning') or {}
-    if (serving.get('history_reasoning') != history.get('policy')
-            or serving.get('chat_template_kwargs') != (history.get('template_kwargs') or {})):
-        raise ValueError('llama.cpp actor export renders history reasoning differently from the policy')
-    gguf = directory / files[0]['file']
-    if sha256_file_hex(gguf) != files[0]['sha256']:
-        raise ValueError('llama.cpp actor export bytes differ from its manifest')
-    expected = {key: value for key, value in raw.items() if key not in ('history_reasoning', 'python_runtime')}
-    expected['actor_export'] = {'kind': 'exact', 'format': 'gguf-bf16', 'sha256': files[0]['sha256']}
-    values = {'actor_gguf': str(gguf), 'actor_chat_template': str(directory / serving['chat_template']),
-              'actor_chat_template_kwargs': json.dumps(serving.get('chat_template_kwargs') or {}, sort_keys=True)}
-    return expected, values
-
-
 def initial_controller_state(config):
     from .native_supervised import inherited_execution_admission
     admission=inherited_execution_admission(config)
@@ -1829,20 +1780,12 @@ def prepare_round_collection(config, state, round_dir, selected_path, selection,
             coefficient_cancel_stale_reason=config.get('coefficient_cancel_stale_reason'))
     if config.get('heads'):
         values['heads_sha256'] = sha256_file_hex(Path(config['heads']))
-    if config.get('actor_engine', 'native-python') not in ('native-python', 'llama-cpp'):
-        raise ValueError('RL actor_engine must be native-python or llama-cpp')
-    if config.get('actor_engine') == 'llama-cpp':
-        if expected_native is None:
-            raise ValueError('llama.cpp RL actor requires the raw native policy')
-        expected_native, actor_values = prepare_llama_actor(config, state['checkpoint'], policy, expected_native)
-        values.update(actor_values)
-    # The llama.cpp fork does not insert or record privileged guidance blocks (only the Python native server does),
-    # so its teacher attempts would be unprivileged and refused by the learner. JOLT+ there keeps its outcome and
-    # student self-teaching terms without teacher twins.
+    if config.get('actor_engine', 'native-python') != 'native-python':
+        raise ValueError('RL actor_engine must be native-python (the llama-cpp actor was removed; SGLang is selected by '
+                         'the actor_command --engine setting)')
     teacher_attempts = (config.get('jolt_teacher_attempts', 1)
         if policy_loss is not None and policy_loss['schema'] == 'jolt-plus/1'
-        and config.get('update_objective', 'policy') == 'policy'
-        and config.get('actor_engine', 'native-python') == 'native-python' else 0)
+        and config.get('update_objective', 'policy') == 'policy' else 0)
     kwargs = dict(cases=selected_path, out=round_dir, endpoints=list(config['endpoints']), policy_id=policy,
         rows=len(selection), offset=0, group=selection[0]['samples'], workers=config.get('workers', 4),
         root_mode=config.get('root_mode', 'student'), runtime=config.get('runtime'),
@@ -1933,9 +1876,6 @@ def resume_preflight(config_path, scratch):
     config = initial_capacity_collection(config, state)
     if state.get('native_participant') is not None:
         config = {**config, 'native_participant': state['native_participant']}
-    if config.get('actor_engine') == 'llama-cpp':
-        return {**report, 'ok': False, 'status': 'unchecked',
-                'reason': 'llama.cpp actor preparation exports weights; preflight does not run it'}
     snapshot = json.loads(selection_file.read_text())
     selection, selected = snapshot['selection'], snapshot['cases']
     selected_path = round_dir / 'selected-cases.jsonl'

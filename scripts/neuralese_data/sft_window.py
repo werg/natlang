@@ -552,8 +552,6 @@ def closure(config_path, *, max_file_bytes=4 * GIB, observed=None):
     for key in ('checkpoint_input_offload_directory',):
         if params.get(key):
             roots['scratch'] = Path(params[key])
-    if config.get('llama_cpp_converter'):
-        roots['llama-cpp'] = Path(config['llama_cpp_converter'])
     # A recorded runtime transition binds the prior runtime's closure receipt as evidence; that runtime ships as its own
     # archive (rl_cloud add-runtime), never as tens of thousands of individual closure files.
     prior = (((config.get('branch_origin') or {}).get('runtime_transition') or {}).get('from') or {}).get('path')

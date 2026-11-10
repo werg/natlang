@@ -474,63 +474,30 @@ def test_self_distillation_trains_own_successes_even_with_spread(tmp_path, monke
         assert state['phase'] == 'await_successful_episodes' and state['trained_rounds'] == 0
 
 
-def test_llama_actor_binds_exact_export_and_receipt(tmp_path):
-    from natlang_neuralese.common.hashing import sha256_file_hex
-    policy = 'a' * 64
-    identity = {'architecture': 'lfm3', 'checkpoint_sha256': policy, 'tokenizer_fingerprint': 'b' * 64,
-                'embedding_weight_sha256': 'c' * 64}
-    raw = {'native_identity': identity, 'native_participant': None, 'semantic_adapter_sha256': None,
-           'history_reasoning': {'policy': 'keep', 'template_kwargs': {'preserve_thinking': True}}}
-    directory = tmp_path / 'actor-gguf' / policy
-    directory.mkdir(parents=True)
-    (directory / 'model-bf16.gguf').write_bytes(b'gguf bytes')
-    gguf_sha = sha256_file_hex(directory / 'model-bf16.gguf')
-    manifest = {'schema': 'natlang.native-gguf/1', 'checkpoint_sha256': policy,
-                'serving': {'chat_template': 'chat-template.jinja', 'history_reasoning': 'keep',
-                            'chat_template_kwargs': {'preserve_thinking': True}},
-                'files': [{'outtype': 'bf16', 'file': 'model-bf16.gguf', 'sha256': gguf_sha, 'native_identity': identity}]}
-    (directory / 'manifest.json').write_text(json.dumps(manifest))
-    config = {'out': str(tmp_path), 'base': 'unused'}
-    expected, values = production.prepare_llama_actor(config, 'unused.pt', policy, raw)
-    assert expected['actor_export'] == {'kind': 'exact', 'format': 'gguf-bf16', 'sha256': gguf_sha}
-    assert 'history_reasoning' not in expected and values['actor_gguf'].endswith('model-bf16.gguf')
-    receipt = {'schema': 'natlang.rl-policy-binding/2', 'checkpoint_sha256': policy, 'communication': 'native-state',
-               'native_identity': identity, 'actor_export': dict(expected['actor_export'])}
-    production.validate_actor_receipts({'u': receipt}, policy_id=policy, neuralese_server=True, expected_native=expected)
-    with pytest.raises(ValueError, match='different export'):
-        production.validate_actor_receipts({'u': {**receipt, 'actor_export': {**receipt['actor_export'], 'sha256': 'd' * 64}}},
-            policy_id=policy, neuralese_server=True, expected_native=expected)
-    (directory / 'manifest.json').write_text(json.dumps({**manifest, 'serving': {**manifest['serving'], 'history_reasoning': 'drop'}}))
-    with pytest.raises(ValueError, match='history reasoning'):
-        production.prepare_llama_actor(config, 'unused.pt', policy, raw)
-    (directory / 'manifest.json').write_text(json.dumps({**manifest, 'files': [{**manifest['files'][0],
-        'native_identity': {**identity, 'embedding_weight_sha256': 'e' * 64}}]}))
-    with pytest.raises(ValueError, match='native identity'):
-        production.prepare_llama_actor(config, 'unused.pt', policy, raw)
-
-
-def test_llama_actor_collects_no_unprivileged_teacher_attempts(tmp_path, monkeypatch):
+def test_removed_llama_actor_engine_is_rejected_and_stale_converter_key_ignored(tmp_path, monkeypatch):
+    """actor_engine llama-cpp is gone; a lineage config still carrying llama_cpp_converter keeps starting."""
     from natlang_neuralese.rl import native_raw_policy
     from natlang_neuralese.rl.policy_math import default_policy_loss
     monkeypatch.setattr(native_raw_policy, 'prepare_raw_policy', lambda *a, **kw: {'tokenizer': 'bound',
         'native_identity': {}, 'native_participant': None, 'semantic_adapter_sha256': None})
-    monkeypatch.setattr(production, 'prepare_llama_actor', lambda config, checkpoint, policy, raw: (raw, {'actor_gguf': 'x'}))
     source = tmp_path / 'cases.jsonl'; source.write_text(json.dumps({'id': 't0', 'split': 'train'}) + '\n')
     checkpoint = tmp_path / 'parent.pt'; checkpoint.write_bytes(b'full state')
-    config = tmp_path / 'config.json'
-    config.write_text(json.dumps({'out': str(tmp_path / 'out'), 'checkpoint': str(checkpoint), 'cases': str(source),
+    declared = {'out': str(tmp_path / 'out'), 'checkpoint': str(checkpoint), 'cases': str(source),
         'endpoints': ['http://unused'], 'learner_command': ['learn', '--rl-policy-loss', '{rl_policy_loss}',
         '--jolt-cases', '{cases}'], 'after_update': ['publish'], 'native_state': True, 'base': 'unused',
-        'actor_engine': 'llama-cpp', 'policy_loss': default_policy_loss()}))
-    seen = {}
+        'llama_cpp_converter': '/gone', 'policy_loss': default_policy_loss()}
+    config = tmp_path / 'config.json'
     class Stop(Exception):
         pass
     def collect(**kwargs):
-        seen['teacher_attempts'] = kwargs.get('teacher_attempts'); raise Stop
+        raise Stop
     monkeypatch.setattr(production, 'collect', collect)
-    with pytest.raises(Stop):
+    config.write_text(json.dumps({**declared, 'actor_engine': 'llama-cpp'}))
+    with pytest.raises(ValueError, match='actor_engine must be native-python'):
         production.run(config, rounds=1)
-    assert seen['teacher_attempts'] == 0
+    config.write_text(json.dumps(declared))
+    with pytest.raises(Stop):   # the stale key alone changes nothing: the round reaches collection
+        production.run(config, rounds=1)
 
 
 def test_learner_parameters_bind_at_update_launch_not_round_start(tmp_path, monkeypatch):

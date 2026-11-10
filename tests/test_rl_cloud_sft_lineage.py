@@ -228,11 +228,11 @@ def test_sandbox_controls_drop_host_only_wrappers_and_relocate_resident_plan(tmp
     assert sandbox_command(learner) == ['py', '-m', 'natlang_neuralese.rl.native_stage', '--out', '{learner_out}']
     assert sandbox_command(['py', str(other), '--', 'x']) == ['py', str(other), '--', 'x']
     config = {'learner_command': learner, 'seed_command': ['py', str(wrapper), '--', 'py', '-m', 'sft'],
-              'llama_cpp_converter': '/dgx/llama', 'resident_data_directory': '/dgx/ops/resident-data',
+              'resident_data_directory': '/dgx/ops/resident-data',
               'trainer_parameters': {'resident_data_directory': '/dgx/ops/resident-data', 'seed': 1},
               'seed_trainer_parameters': {'resident_data_directory': '/dgx/ops/resident-data'}}
     result = sandbox_controls(config, tmp_path / 'w000000')
-    assert result['seed_command'] == ['py', '-m', 'sft'] and result['llama_cpp_converter'] is None
+    assert result['seed_command'] == ['py', '-m', 'sft']
     resident = str(tmp_path / 'w000000' / 'resident-data')
     assert result['resident_data_directory'] == resident
     assert result['trainer_parameters'] == {'resident_data_directory': resident, 'seed': 1}

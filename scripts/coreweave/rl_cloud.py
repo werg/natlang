@@ -395,7 +395,7 @@ def sandbox_command(command):
 
 def sandbox_controls(config, out):
     """The sandbox form of a controller config: host-only command prefixes dropped, the resident source plan beside
-    its own controller, and no DGX llama.cpp build (an aarch64 tree absent from the sandbox)."""
+    its own controller."""
     config = copy.deepcopy(config)
     for key in ('learner_command', 'seed_command', 'before_update', 'after_update'):
         if config.get(key):
@@ -403,8 +403,6 @@ def sandbox_controls(config, out):
     for key, value in list(config.items()):
         if isinstance(value, list) and value and any(isinstance(x, str) and x.endswith('/update_lock.sh') for x in value):
             raise ValueError(f'{key} still names the DGX update lock')
-    if 'llama_cpp_converter' in config:
-        config['llama_cpp_converter'] = None
     if config.get('resident_data_directory'):
         resident = str(Path(out) / 'resident-data')
         config['resident_data_directory'] = resident
