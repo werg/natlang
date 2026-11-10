@@ -41,8 +41,17 @@ class Guard:
 UNCAPPED = {'distillation_max_share': .25, 'distillation_family_scale': .2}
 
 
-def lineage(tmp_path, **parameters):
-    """A controller whose recipe has a declared-scale logical-family joint SFT stage and an interleaved RL stage."""
+def sft_frame(source):
+    """The saved SFT frame of a checkpoint that trained on ``source`` (partial credit on every row)."""
+    ids = [e['id'] for e in source.entries]
+    return {'source_receipts': [{'sha256': source.file_sha256}], 'source_row_order': ids,
+            'source_row_bindings': {e['id']: e['binding'] for e in source.entries},
+            'required_visits': {ident: 2 for ident in ids}, 'exposure_counts': {ident: 1 for ident in ids}}
+
+
+def lineage(tmp_path, quota=False, **parameters):
+    """A controller whose recipe has a declared-scale logical-family joint SFT stage and an interleaved RL stage.
+    ``quota`` gives its CE policy the quota-aware basis of the checkpoint's saved frame."""
     paths = {}
     for name, split in (('old', 'train'), ('held', 'test')):
         paths[name] = tmp_path / f'{name}.jsonl'
@@ -62,6 +71,11 @@ def lineage(tmp_path, **parameters):
     ce['objective'] = objective(mass='token', family_balance={
         'key': 'logical-family', 'max_scale': 8., 'normalization': 'declared/1',
         'map': resident.binding(families), 'scales': {'ordinary': 1.}})
+    if quota:
+        from natlang_neuralese.train.native_quota_aware_ce import make_basis
+        ce['quota_aware_basis'] = make_basis(sft_frame(source), stage_id='sft', source_sha256=source.file_sha256,
+                                             candidate_sha256=source.file_sha256, epochs=2.,
+                                             communication_min_visits=None)
     ce_path = tmp_path / 'ce.json'
     write_json(ce_path, ce)
     cases = tmp_path / 'cases.jsonl'
@@ -313,3 +327,42 @@ def test_an_append_that_cannot_be_prepared_is_recorded_and_the_window_runs_on_th
     assert failure['window'] == 0 and 'target-mask replacement' in failure['error']
     assert 'memetic_distillation' not in state['interleave']  # nothing committed: the package stays pending
     assert admission.unseen_packages(config['out'], state)
+
+
+def test_appended_policy_carries_the_quota_aware_basis_of_the_parent_frame_for_the_appended_source(tmp_path, monkeypatch):
+    """The trainer recomputes the basis from the parent's saved frame against the source it reads (a changed policy
+    binding is a transition); a copied basis still names the pre-append source and is refused."""
+    from natlang_neuralese.train.native_quota_aware_ce import validate_admission
+    from natlang_neuralese.train.recipe import load_recipe, resolve_stage_inputs
+    config, declared, state, out, train = lineage(tmp_path, quota=True, **UNCAPPED)
+    frame = sft_frame(NativeGraphSource(train, FP, required_split='train'))
+    asked = []
+    monkeypatch.setattr(admission, '_parent_sft_frame', lambda checkpoint, stage: asked.append((checkpoint, stage)) or frame)
+    package(out, [graph('memetic:a', 6), graph('memetic:b', 8)], resident.sha(config['checkpoint']))
+    seen = []
+    window_harness(monkeypatch, seen)
+    parent = state['checkpoint']
+    assert interleave.run_sft_window(config, declared, state, out / 'state.json', None) == 'adopted'
+    assert asked == [(parent, 'sft')]
+    recipe = load_recipe(config['production_recipe'])
+    old = resolve_stage_inputs(recipe, recipe['stages'][0], {})
+    new = resolve_stage_inputs(load_recipe(seen[0][0]), seen[0][1], {})
+    prior, policy = (json.loads(Path(item['ce_supervision_policy']['path']).read_text()) for item in (old, new))
+    candidate = new['native_graphs']['sha256']
+    assert candidate != old['native_graphs']['sha256']
+    assert policy['quota_aware_basis']['candidate_source_sha256'] == candidate
+    assert policy['quota_aware_basis']['parent_source_sha256'] == old['native_graphs']['sha256']
+    args = dict(stage_id='sft', epochs=2., communication_min_visits=None,
+                previous_options={'ce_supervision_policy_binding': old['ce_supervision_policy']},
+                policy_binding=new['ce_supervision_policy'])
+    record = validate_admission(policy, frame, candidate_sha256=candidate, **args)
+    assert record['basis'] == policy['quota_aware_basis']
+    # Genuine mismatches stay refused: the copied (pre-append) basis, and a frame whose credits moved.
+    with pytest.raises(ValueError, match='does not match requested source'):
+        validate_admission({**policy, 'quota_aware_basis': prior['quota_aware_basis']}, frame,
+                           candidate_sha256=candidate, **args)
+    with pytest.raises(ValueError, match='recensus'):
+        validate_admission(policy, {**frame, 'exposure_counts': {**frame['exposure_counts'], 'old': 2}},
+                           candidate_sha256=candidate, **args)
+    # A policy without a basis stays without one (no parent frame is read).
+    assert admission._quota_aware_basis({}, 'unread', 'sft', {}, candidate) is None

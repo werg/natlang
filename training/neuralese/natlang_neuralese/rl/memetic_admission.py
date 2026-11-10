@@ -216,9 +216,39 @@ def _geometry_identity(parameters):
     return json.loads(Path(reference['path']).read_text()).get('identity')
 
 
-def _ce_update(policy_ref, successor, leaves, family_rows, out, *, family_scale, base_inputs=None):
+def _parent_sft_frame(checkpoint, stage_id):
+    """The SFT frame of ``stage_id`` that the trainer restores from ``checkpoint`` (as ``--continue-from``)."""
+    from ..train.checkpoint_policy import CheckpointPolicy
+    from ..train.native_continuation import collect_sft_progress
+    training = CheckpointPolicy.load(Path(checkpoint))['training']
+    frame = collect_sft_progress(training, borrow_frames=True).get(stage_id)
+    if not isinstance(frame, dict) or not frame.get('source_receipts'):
+        raise ValueError('quota-aware CE basis needs the parent checkpoint\'s saved SFT frame')
+    return frame
+
+
+def _quota_aware_basis(policy, parent, stage_id, parameters, candidate_sha256):
+    """The successor policy's quota-aware basis, or None when the lineage uses none.
+
+    The trainer (``native_quota_aware_ce.validate_admission``) treats a changed policy binding as a transition and
+    recomputes the basis from the parent checkpoint's saved SFT frame against the source it reads. A copied basis
+    names the pre-append source (and a frame digest of an older checkpoint), so the append derives its own: the
+    parent source is the frame's current one, the candidate is the appended source.
+    """
+    from ..train.native_quota_aware_ce import make_basis
+    visits = parameters.get('communication_min_visits')
+    if policy.get('quota_aware_basis') is None and not (type(visits) is int and visits > 1):
+        return None
+    frame = _parent_sft_frame(parent, stage_id)
+    return make_basis(frame, stage_id=stage_id, source_sha256=frame['source_receipts'][0].get('sha256'),
+                      candidate_sha256=candidate_sha256, epochs=parameters.get('epochs'),
+                      communication_min_visits=visits)
+
+
+def _ce_update(policy_ref, successor, leaves, family_rows, out, *, family_scale, base_inputs=None, quota_parent=None):
     """The successor CE policy: declare the new leaves; extend a logical-family map (each admitted family its own
-    declared scale). Returns (binding, bound_scale)."""
+    declared scale). ``quota_parent`` = (parent checkpoint, stage id, stage parameters) re-derives the quota-aware
+    basis for the appended source. Returns (binding, bound_scale)."""
     from ..train.native_supervision import load_policy
     from ..train.own_output_supervision import identity, policy_objective
     policy = json.loads(Path(policy_ref['path']).read_text())
@@ -259,6 +289,10 @@ def _ce_update(policy_ref, successor, leaves, family_rows, out, *, family_scale,
         bound_scale = float(balance['max_scale'])
     if identity(policy_objective(policy))['sha256'] != previous:
         policy['objective_transition'] = {'from': previous}
+    if quota_parent is not None:
+        basis = _quota_aware_basis(policy, *quota_parent, successor['sha256'])
+        if basis is not None:
+            policy['quota_aware_basis'] = basis
     if base_inputs is not None:
         # A policy admitted by a static source correction carries first-row observations of the leaves that
         # correction replaced; record their settlement so the append extends the current active leaf set.
@@ -513,7 +547,8 @@ def _prepare_window(config, declared, state, state_path, directory, *, protected
         ce = None
         if base_inputs.get('ce_supervision_policy'):
             ce, _ = _ce_update(base_inputs['ce_supervision_policy'], successor, leaves, family_rows, target,
-                                         family_scale=family_scale, base_inputs=base_inputs)
+                                         family_scale=family_scale, base_inputs=base_inputs,
+                                         quota_parent=(state['checkpoint'], sft_id, base_parameters))
         append, settled = _write_recipes(base_recipe, sft_id, successor, ce, target)
         _, append_inputs, _ = _stage(append, sft_id)
         from ..train.recipe import _ce_supervision_input_continuation, _data_continuation
