@@ -237,7 +237,10 @@ def discover(state):
             f'{state_path.parent.parent.parent.name}/{state_path.parent.parent.name}/{state_path.parent.name}',
             'step': checkpoint_global_step(progress, progress['checkpoint']), 'trigger': 'window-boundary',
             'discovered': time.time(), 'status': 'queued' if runtime else 'blocked',
-            **({} if runtime else {'reason': 'lineage config names no code checkout'}), 'ema': True}
+            **({} if runtime else {'reason': 'lineage config names no code checkout'}),
+            # Controller checkpoints are RL updates a round apart: their EMA is mostly the previous weights, and its arm
+            # held Pop's RL actor for about an hour per round (2026-11-10). Explicit requests still evaluate EMA.
+            'ema': False}
         log(event='discovered', sha256=sha, lineage=state_path.parent.name)
     for request in sorted((ROOT / 'requests').glob('*.json')):
         value = read_json(request)
