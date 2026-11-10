@@ -438,7 +438,11 @@ def skip_zero_signal_jolt(graphs, objective, earned=frozenset()):
     projected={**objective,'rows':{key:value for key,value in rows.items() if key not in omitted_set}}
     disposition={'schema':'natlang.jolt-zero-signal-projection/1','omitted_graph_ids':omitted,
         'omitted_count':len(omitted),'active_count':len(kept),'omitted_graph_visits':0,
-        'reason':'zero centered outcome advantage and no privileged twin (or a zero role KL coefficient), or no sampled action to train (every recorded turn is an in-run guidance-policy turn); no active decision KL or writer term',
+        # The reason text is a global objective control (a resumed update must reproduce it): the no-action clause
+        # appears only when such a row was omitted.
+        'reason':('zero centered outcome advantage and no privileged twin (or a zero role KL coefficient)'
+                  +(', or no sampled action to train (every recorded turn is an in-run guidance-policy turn)' if no_actions else '')
+                  +'; no active decision KL or writer term'),
         'normalization':'active episodes and their sampled actions only; explicit change from retaining zero-loss episodes',
         'coverage':'original scored rollouts and complete execution graphs remain immutable evidence',
         **({'omitted_without_sampled_actions':[{'graph_id':ident,'task_id':rows[ident].get('task_id'),
