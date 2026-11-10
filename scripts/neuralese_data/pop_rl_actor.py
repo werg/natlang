@@ -107,6 +107,14 @@ def start(args):
         stop_unit(previous)
     if args.defer_to_eval and eval_pending():
         if not args.after_eval:
+            # One waiter per policy: a controller restarted in place re-runs this hook, and two waiters released together
+            # raced, the loser's failed start stopping the winner's actor (w5 round 1, 2026-11-10).
+            waiter = pbe.read_json(WAITER)
+            if waiter and subprocess.run(['systemctl', '--user', 'is-active', '--quiet', waiter['unit']]).returncode == 0:
+                if waiter['policy_id'] == args.policy_id:
+                    log(event='Pop RL actor already deferred', unit=waiter['unit'])
+                    return {'deferred': waiter['unit']}
+                subprocess.run(['systemctl', '--user', 'stop', waiter['unit']], check=False, timeout=60)
             # The round starts on the DGX now; a waiter starts this actor once the evaluation releases Pop, and the
             # controller's slots for it join the round when it attests the policy (rl.production late_endpoints).
             unit = f'pop-rl-actor-late-{int(time.time())}'
@@ -122,6 +130,10 @@ def start(args):
         while eval_pending():
             time.sleep(30)
         log(event='dev16 evaluation released Pop; starting the deferred RL actor')
+        current = pbe.read_json(STATE)
+        if current and current['policy_id'] == args.policy_id and attested(current['endpoint'], args.policy_id):
+            log(event='Pop RL actor already serves the policy', endpoint=current['endpoint'])
+            return current
     host = args.bind_host or pop_host_address()
     endpoint = f'http://{host}:{args.port}'
     pbe.ssh('true', timeout=30)
