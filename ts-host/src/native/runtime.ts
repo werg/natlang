@@ -38,6 +38,7 @@ import { undeclaredServiceType } from './introspection.js';
 import { NATIVE_TOOL_SCHEMA } from './tool-surface.js';
 import { returnErrorText, returnValueRejection, type ReturnErrorText } from './return-errors.js';
 import { STAGED_RESULT_NOTICE } from './staged-result.js';
+import { modelFacing } from '../runtime/model-facing.js';
 import { TOOL_MARKUP } from './tool-markup.js';
 import type { Platform } from '../runtime/platform.js';
 import ts from 'typescript';
@@ -1966,7 +1967,10 @@ export class NativeSession {
     else value = folder.diffSync(path);
     const text = name === 'diff_files' ? fileDiffPreview(value as ReturnType<Folder['diffSync']>) :
       name === 'list_files' ? fileListingText(value as EntryStat[]) : typeof value === 'string' ? value : JSON.stringify(value, null, 1);
-    return { kind: 'ok', text: this.show(text), value: value as Value };
+    // Variant read-file-binding: say how the file is bound in eval, so its text is read from the file, not retyped.
+    const binding = name === 'read_file' && modelFacing('read-file-binding') ?
+      `\n(in eval: const text = await folder.file(${JSON.stringify(path)}).readText())` : '';
+    return { kind: 'ok', text: this.show(text) + binding, value: value as Value };
   }
 
   private inferScopeType(value: unknown): string { return inferValueType(value); }
@@ -2425,7 +2429,18 @@ export class NativeSession {
       const status = functionResult !== undefined ?
         stagedMessage(functionResult, this.runtime.displayLiveId, this.runtime.untrusted) : notResult;
       const stored = changed.map(([name, , value]) => `local ${name} = ${oneLine(value, name, this.runtime.displayLiveId, this.runtime.untrusted)}`);
-      const storedStatus = (stored.length ? `\nStored ${stored.join('; ')}.` : '') +
+      // Variant effect-receipt: a successful eval lists the service calls it completed, as a failed one does, so a model
+      // does not rerun an effectful eval that already succeeded.
+      const performed = new Map<string, number>();
+      if (modelFacing('effect-receipt'))
+        for (const event of this.runtime.trace.events.slice(traceMark))
+          if (event.kind === 'effect' && event.phase === 'completed') {
+            const name = String(event.capability ?? 'service call');
+            performed.set(name, (performed.get(name) ?? 0) + 1);
+          }
+      const effectStatus = performed.size ?
+        `\nService calls completed by this eval (not undone; do not repeat a write): ${[...performed].map(([name, count]) => count > 1 ? `${name} x${count}` : name).join(', ')}.` : '';
+      const storedStatus = effectStatus + (stored.length ? `\nStored ${stored.join('; ')}.` : '') +
         ((compiled.transientHelpers?.length ?? 0) ? `\n${compiled.transientHelpers!.map(helper =>
           `${helper.name} is available only in this eval because ${helper.reason}; use it here or move its dependencies into persistent scope.`).join('\n')}` : '');
       // A local without a value cannot be kept, so say so here rather than let a later eval fail on its name.

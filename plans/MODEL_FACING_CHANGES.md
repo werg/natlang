@@ -1,5 +1,46 @@
 # Model-facing changes and their measurement
 
+### 2026-11-10 — LFM3 harness-ergonomics combined measurement on the live policy (fallow #17b): effect receipt and `read_file` binding footer adopted
+
+Tool: `scripts/model_facing_ab.py` (new; reuses `rl.task_rollouts.build_queue`/`score`, the production collector
+`scripts/run_bonsai_queue.py` and the production classifier; arms differ only in the `NATLANG_MODEL_FACING` environment variable of the
+collector, `ts-host/src/runtime/model-facing.ts`). Executor: the live production policy `dbb03644ccce...` served by the w5 round-1 SGLang
+actor on :8200, 2 concurrent requests, temperature 1.0, full prompt, 32768 context, 1800 s case cap. Tasks (training split only, round-0
+packet rows): article-parts-reducer-easy-2part, drive-2moves, feature-each, apiary-book-ledger, catalogue-correction-desk; same seeds in both
+arms, sample-major order. Variants (code, default off until adopted): `effect-receipt` (a successful eval lists the service calls it
+completed, "do not repeat a write"), `read-file-binding` (a `read_file` result ends with
+`(in eval: const text = await folder.file("<path>").readText())`), `nl-examples` (system-prompt inline-nl example replaced by a neutral one),
+`zero-arg-nl` (an inline nl call with no arguments and no named variable is refused with a one-sentence error).
+
+Result, combined variant (all four) vs baseline, matched (task, sample) episodes that ran to completion in both arms: **19 pairs**
+(not the planned 48 per arm; see below). Task success 12/19 baseline vs 15/19 combined (discordant pairs 3 vs 6, McNemar exact p about 0.5:
+neutral, a +16 point estimate, normal-approximation 95% interval about -14 to +46 points). Mean turns 11.3 vs 14.8 and completion
+tokens 7.6k vs 10.3k per episode (one 55-turn combined episode drives most of it; medians 11 vs 12 turns, 6.7k vs 7.1k tokens). Per task (baseline/combined, completed
+episodes): reducer 3/5 vs 2/4, drive 4/5 vs 4/4, feature-each 3/5 vs 4/4, apiary 4/5 vs 4/4, catalogue 1/4 vs 1/3. Target behaviours over all
+completed episodes (24 baseline, 19 combined): evals whose code repeats an earlier eval of the same call 5 of 87 vs 1 of 81 (effect receipt
+fired 26 times, footer 25 times); evals that read a file through `folder.file(path).readText()` 0 vs 12 (one episode: the footer's form is
+copied, nothing else moved). **No instance of the failures `nl-examples` and `zero-arg-nl` target occurred in either arm** (zero prompt-example
+copies, zero zero-argument inline children, zero refusals in 43 episodes; the trained policy rarely uses inline `nl` on these tasks), so those two
+are neither shown to help nor to hurt.
+
+Decision: `effect-receipt` and `read-file-binding` are adopted (on by default, `NATLANG_MODEL_FACING=none` is the baseline arm). Existing
+admitted trajectories keep their recorded tool texts. `nl-examples` is not adopted: it changes the system prompt of every trajectory (prompt
+pieces, actor prompt binding, replay) for a failure this policy does not show here. `zero-arg-nl` is not adopted: no instance observed, and a
+legitimate one-shot `nl\`...\`()` would be refused. Both stay as measurement switches. Remaining measurement: tasks that exercise inline nl
+delegation (dev-packet workbench/reducer shapes, which are protected; or authored training tasks) with about 48 samples per arm.
+
+Summary (per-task, behaviours, pairs): `/home/werg/data/dgxops/model-facing-ab-20261110-summary.json`.
+
+Why only 19 pairs: at 09:16:34 the SGLang scheduler of the production actor died (`ValueError: natlang_import needs a list of path, start >= 0,
+count > 0` raised in `sampling_batch_info.natlang_imports_of`, called from `prepare_for_extend`), after which every request of both arms failed
+with "Connection refused" (13 episodes per arm, recorded `incomplete` and excluded). The crash is a production actor defect reported to the
+supervisor (a malformed native-import request kills the whole engine; its origin is not established).
+
+Other debts in the #17b row: typed text-reader revisions 11/12 (Qwen teacher system header) are removed: the code is no longer in the
+tree (no teacher serves it), nothing to measure. JOLT+ privileged wording and the in-run guidance writer need the controller-bound teacher
+stage, so they were not run standalone; the production signal that exists is round 0 teacher (privileged) attempts 9/16 vs the 128 student
+attempts on the same 16 tasks 67/128 (56% vs 52%, no measurable lift; 16 attempts cannot tell). Those two debts stay open.
+
 ### 2026-11-04 — Truncated reply in a text-typed call: "your next reply is the result" (debt: live measurement)
 
 `ts-host/src/native/agent.ts`: when a reply is cut off before any tool call in a call whose result is text
@@ -1718,32 +1759,6 @@ were preserved. The existing publisher runtime-epoch mechanism authenticates
 both old and new batches. Actual execution on batch2 remains a separate next
 observation; no historical held trace is cleared by this measurement.
 Evidence: `/home/werg/data/dgxops/flint-writer-runtime-live48-and-adoption-root-20261022.json`.
-
-
-## 2026-10-23: typed text-reader system header, revision11 (not yet adopted)
-
-The text-emulation adapter created two system messages for a normal typed read,
-causing the Qwen teacher to reject the request before inference. Revision11
-prepends the same directive inside the existing system header, preserving its
-content and metadata. No-system requests receive one initial header. Historical
-revision10 source artifacts stay unchanged. Exact failing/live-source evidence
-is under DGX dgxops/qwen36-guided-child-review-20261023; the real typed library
-read test reproduces the two-header failure. Run48 live self-hosted teacher
-reads and record results before deployment; this is outstanding measurement
-debt until that actual evidence exists. See
-[decomposition](neuralese/teacher/TEXT_READER_SYSTEM_HEADER_DECOMPOSITION_20261023.md).
-
-
-## 2026-10-23: typed string read retains full value, revision12
-
-Revision11 completed48 real self-hosted Qwen3.6 typed library reads:43 exact
-values, all48 HTTP requests accepted, and five string values with embedded JSON
-lost their `Case N:` prefix. Revision12 keeps the single-header repair and
-explicitly tells the teacher to preserve the entire string, including prefixes,
-whitespace and embedded JSON. Run the same48 cases against the real teacher
-before adoption. The revision11 evidence is bound by SHA256
-`2ec8e1d08acf5053cc3755dec540e327af469a2f77b8801c676b4008f7cfb16f`
-at `/work/generation/qwen36-35b-teacher-20261022/typed-reader-single-header48-20261023-v2/result.json`.
 
 
 ## 2026-10-25: one hundred design-brief native programs (source candidates)

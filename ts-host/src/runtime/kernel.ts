@@ -29,6 +29,7 @@ import type { DefinitionIdentity } from '../calls/types.js';
 import { loadSkills, memorySkillSource } from '../skills/registry.js';
 import { weightBindingFor, untunedStack, type ResolvedWeightStack } from '../adaptation/weights/binding.js';
 import { nativeStateSentinel } from '../native/neuralese.js';
+import { modelFacing } from './model-facing.js';
 import { readSkillDocument, renderScopeDeclarations, renderSkillListing, scopeBindings } from '../skills/disclosure.js';
 
 export type { CaptureCell };
@@ -480,6 +481,12 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   if (question && !fileRoot && (frame.adHocQuestions ?? []).includes(question))
     throw new NatlangCallError(definition.name, 'quiesced',
       'this call was itself created with these same instructions and inputs; make the judgment here from its inputs and return it instead of delegating it again', '', []);
+  // Variant zero-arg-nl: an inline call with no arguments and no captured name has nothing to judge (LFM3 children asked
+  // the question again with nothing in hand).
+  if (adHoc && options.manifest?.inline && !fileRoot && modelFacing('zero-arg-nl') && positional.length === 0 &&
+      !Object.keys(options.captures ?? {}).length && !definition.params.length)
+    throw new NatlangCallError(definition.name, 'quiesced',
+      'this nl call was given no arguments and its instructions name no variable in scope, so it has nothing to work on; pass the value to judge as an argument (nl`...`(value)) or name a variable of the scope in the instructions', '', []);
   const adHocQuestions = fileRoot ? [] : question ? [...(frame.adHocQuestions ?? []), question] : frame.adHocQuestions;
   // Definitions from separate programs may share the same relative source ID.
   // Ownership scopes recursion without changing persisted component identities.

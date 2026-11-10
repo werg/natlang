@@ -104,7 +104,10 @@ every admitted trajectory with services. Reverted.
 
 ### Task-level results
 
-COMBINED_RESULTS_PLACEHOLDER
+The dev-packet run was never recorded. The combined variant was measured on the live production policy on training tasks instead
+(2026-11-10, `plans/MODEL_FACING_CHANGES.md`): the same-instruction refusal and the `read_code`/binding texts are on main; the success effect receipt
+and the `read_file` binding footer (changes 3 and 5 below) are now adopted; changes 1 (system-prompt `nl` examples) and 2 (zero-argument
+children) are implemented as measurement switches and not adopted.
 
 ## Changes worth making that were not made
 
