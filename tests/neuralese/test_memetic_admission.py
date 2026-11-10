@@ -49,9 +49,10 @@ def sft_frame(source):
             'required_visits': {ident: 2 for ident in ids}, 'exposure_counts': {ident: 1 for ident in ids}}
 
 
-def lineage(tmp_path, quota=False, **parameters):
+def lineage(tmp_path, quota=False, geometry=False, **parameters):
     """A controller whose recipe has a declared-scale logical-family joint SFT stage and an interleaved RL stage.
-    ``quota`` gives its CE policy the quota-aware basis of the checkpoint's saved frame."""
+    ``quota`` gives its CE policy the quota-aware basis of the checkpoint's saved frame; ``geometry`` gives the SFT stage
+    a prepared packed-geometry sidecar of its source."""
     paths = {}
     for name, split in (('old', 'train'), ('held', 'test')):
         paths[name] = tmp_path / f'{name}.jsonl'
@@ -80,12 +81,25 @@ def lineage(tmp_path, quota=False, **parameters):
     write_json(ce_path, ce)
     cases = tmp_path / 'cases.jsonl'
     cases.write_text(json.dumps({'id': 'task-0', 'split': 'train'}) + '\n')
+    sidecar = None
+    if geometry:
+        from natlang_neuralese.train.native_packed_capacity import geometry_for_source
+        _, sidecar, _ = geometry_for_source(NativeGraphSource(train, FP, required_split='train', role_ids=[]),
+                                            tmp_path / 'geometry', allow_build=True)
+        sidecar = {key: value for key, value in sidecar.items() if key != 'bytes'}
+        descriptor = tmp_path / 'capacity-descriptor.json'
+        write_json(descriptor, {'schema': 'natlang.native-sft-capacity-cases/1',
+                                'source': {k: v for k, v in resident.binding(train).items() if k != 'bytes'},
+                                'geometry': sidecar})
     recipe = {'schema': 'natlang.neuralese-training-recipe/1', 'id': 'memetic-admission',
               'identity_qualification': 'native_state_runtime_qualified',
               'input_bindings': {'train': resident.binding(train), 'held': resident.binding(paths['held']),
                                  'ce': resident.binding(ce_path), 'rl.tasks': resident.binding(cases)},
               'stages': [{'id': 'sft', 'kind': 'native_state_sft', 'requires': [],
-                          'parameters': {'refresh_after_updates': 64, 'epochs': 2.},
+                          'parameters': {'refresh_after_updates': 64, 'epochs': 2.,
+                                         **({'sft_packed_geometry': sidecar,
+                                             'memory_qualification': {k: v for k, v in resident.binding(descriptor).items()
+                                                                      if k != 'bytes'}} if sidecar else {})},
                           'inputs': {'native_graphs': 'train', 'foundation_native_graphs': 'train',
                                      'held_native_graphs': 'held', 'ce_supervision_policy': 'ce'}},
                          {'id': 'interleaved_rl', 'kind': 'native_interleaved_rl', 'requires': ['sft'],
@@ -366,3 +380,39 @@ def test_appended_policy_carries_the_quota_aware_basis_of_the_parent_frame_for_t
                            candidate_sha256=candidate, **args)
     # A policy without a basis stays without one (no parent frame is read).
     assert admission._quota_aware_basis({}, 'unread', 'sft', {}, candidate) is None
+
+
+def test_append_extends_the_packed_geometry_sidecar_over_its_new_rows(tmp_path, monkeypatch):
+    """The trainer's packed-capacity gate reuses only an exact prepared prefix; the append binds the extended sidecar
+    in its recipe and in the settled recipe of later windows."""
+    from natlang_neuralese.train.native_packed_capacity import geometry_for_source
+    from natlang_neuralese.train.recipe import load_recipe, resolve_stage_inputs, effective_stage_parameters
+    config, declared, state, out, train = lineage(tmp_path, geometry=True, **UNCAPPED)
+    prior = effective_stage_parameters(load_recipe(config['production_recipe'])['stages'][0], [],
+                                       load_recipe(config['production_recipe']))['sft_packed_geometry']
+    package(out, [graph('memetic:a', 6), graph('memetic:b', 8)], resident.sha(config['checkpoint']))
+    seen = []
+    window_harness(monkeypatch, seen)
+    assert interleave.run_sft_window(config, declared, state, out / 'state.json', None) == 'adopted'
+    recipe_path, stage = seen[0]
+    inputs = resolve_stage_inputs(load_recipe(recipe_path), stage, {})
+    bound = stage['parameters']['sft_packed_geometry']
+    assert bound['sha256'] != prior['sha256']
+    sidecar = json.loads(Path(bound['path']).read_text())
+    assert len(sidecar['kv_slots']) == 3 and sidecar['source']['sha256'] == inputs['native_graphs']['sha256']
+    # Exactly the geometry the trainer rebuilds for the successor from it: no further source is parsed.
+    successor = NativeGraphSource(inputs['native_graphs']['path'], FP, required_split='train', role_ids=[])
+    kv, _, scan = geometry_for_source(successor, tmp_path / 'check', prior=bound)
+    assert len(kv) == 3
+    settled = load_recipe(state['interleave']['memetic_distillation']['recipe']['path'])
+    assert settled['stages'][0]['parameters']['sft_packed_geometry'] == bound
+    # The capacity descriptor follows: the trainer's memory qualification accepts only one bound to the restored
+    # source and its sidecar, and selects its cases from the extended geometry.
+    from natlang_neuralese.eval.native_memory import _materialize_sft_capacity_request
+    descriptor = json.loads(Path(stage['parameters']['memory_qualification']['path']).read_text())
+    assert descriptor['source']['sha256'] == inputs['native_graphs']['sha256'] and descriptor['geometry'] == bound
+    assert settled['stages'][0]['parameters']['memory_qualification'] == stage['parameters']['memory_qualification']
+    request = json.loads(Path(_materialize_sft_capacity_request(
+        successor, descriptor, identity={}, runtime_code_sha256='x', request_path=tmp_path / 'req' / 'request.json'
+    )['path']).read_text())
+    assert request['source']['sha256'] == inputs['native_graphs']['sha256']

@@ -307,7 +307,39 @@ def _ce_update(policy_ref, successor, leaves, family_rows, out, *, family_scale,
     return binding, bound_scale
 
 
-def _write_recipes(base_recipe, sft_id, successor, ce, out):
+def _successor_capacity(parameters, successor, receipt, out, index):
+    """Stage parameters that follow the appended source: its packed-geometry sidecar and capacity descriptor.
+
+    The trainer's packed-capacity gate (``native_packed_capacity.geometry_for_source``) reuses only an authenticated
+    exact prefix of a prepared sidecar and refuses to build the rest itself ('packed capacity needs an independently
+    prepared source geometry sidecar'), and its memory qualification requires a source-bound descriptor of the actual
+    restored source (``native_memory._materialize_sft_capacity_request``). An append therefore extends the stage's
+    sidecar over its new rows (only those are parsed) and rebinds the descriptor to the successor and that sidecar.
+    Empty when the stage declares neither."""
+    def declared(name):
+        value = parameters.get(name)
+        return json.loads(value) if isinstance(value, str) else value
+    geometry, descriptor = declared('sft_packed_geometry'), declared('memory_qualification')
+    result = {}
+    if isinstance(geometry, dict):
+        from ..train.native_packed_capacity import geometry_for_source
+        source = index(successor['path'], receipt['tokenizer_fingerprint'], receipt['role_ids'])
+        _, binding, _ = geometry_for_source(source, Path(out) / 'source-geometry', prior=geometry, allow_build=True)
+        result['sft_packed_geometry'] = geometry = {key: value for key, value in binding.items() if key != 'bytes'}
+    if descriptor is not None:
+        old = json.loads(Path(descriptor['path']).read_text()) if isinstance(descriptor, dict) else None
+        if not isinstance(old, dict) or old.get('schema') != 'natlang.native-sft-capacity-cases/1':
+            raise ValueError('the stage memory qualification is not a source-bound capacity descriptor; '
+                             'the append cannot rebind it to the appended source')
+        if not isinstance(geometry, dict):
+            raise ValueError('a source-bound capacity descriptor needs the stage packed-geometry sidecar')
+        path = Path(out) / 'capacity-descriptor.json'
+        write_json_durable(path, {'schema': old['schema'], 'source': dict(successor), 'geometry': geometry})
+        result['memory_qualification'] = _ref(path)
+    return result
+
+
+def _write_recipes(base_recipe, sft_id, successor, ce, out, parameters=None):
     """(append recipe for the admitting window, settled recipe for later windows). The stage keeps its binding
     names, whose declared content changes (a shared train/foundation binding moves together); the append recipe binds
     the exact predecessor under a new name as ``continued_native_graphs``."""
@@ -320,6 +352,8 @@ def _write_recipes(base_recipe, sft_id, successor, ce, out):
     recipe['input_bindings'][train_name] = {'path': successor['path'], 'sha256': successor['sha256']}
     if ce is not None:
         recipe['input_bindings'][inputs['ce_supervision_policy']] = {'path': ce['path'], 'sha256': ce['sha256']}
+    if parameters:
+        stage.setdefault('parameters', {}).update(parameters)
     settled = copy.deepcopy(recipe)
     prior_name = 'memetic_predecessor_' + predecessor['sha256'][:12]
     recipe['input_bindings'][prior_name] = predecessor
@@ -549,7 +583,8 @@ def _prepare_window(config, declared, state, state_path, directory, *, protected
             ce, _ = _ce_update(base_inputs['ce_supervision_policy'], successor, leaves, family_rows, target,
                                          family_scale=family_scale, base_inputs=base_inputs,
                                          quota_parent=(state['checkpoint'], sft_id, base_parameters))
-        append, settled = _write_recipes(base_recipe, sft_id, successor, ce, target)
+        capacity = _successor_capacity(base_parameters, successor, chosen[0][1], target, index)
+        append, settled = _write_recipes(base_recipe, sft_id, successor, ce, target, parameters=capacity)
         _, append_inputs, _ = _stage(append, sft_id)
         from ..train.recipe import _ce_supervision_input_continuation, _data_continuation
         if not (_ce_supervision_input_continuation(base_inputs, append_inputs) if ce is not None
@@ -560,7 +595,7 @@ def _prepare_window(config, declared, state, state_path, directory, *, protected
             extension_policy(base_inputs, append_inputs)
         record.update(predecessor=predecessor, successor=successor, leaves=leaves, ce_policy=ce,
                       recipes={'append': _ref(append), 'settled': _ref(settled)},
-                      rows_added=len(family_rows))
+                      rows_added=len(family_rows), capacity=capacity)
         recipe_path = str(append)
         ledger['recipe'] = _ref(settled)
     target.mkdir(parents=True, exist_ok=True)
