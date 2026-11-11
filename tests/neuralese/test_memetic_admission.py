@@ -49,24 +49,33 @@ def sft_frame(source):
             'required_visits': {ident: 2 for ident in ids}, 'exposure_counts': {ident: 1 for ident in ids}}
 
 
-def lineage(tmp_path, quota=False, geometry=False, extra_scales=None, stage_parameters=None, focus=False, **parameters):
+def lineage(tmp_path, quota=False, geometry=False, extra_scales=None, stage_parameters=None, focus=False, leaves=None,
+            **parameters):
     """A controller whose recipe has a declared-scale logical-family joint SFT stage and an interleaved RL stage.
     ``quota`` gives its CE policy the quota-aware basis of the checkpoint's saved frame; ``geometry`` gives the SFT stage
-    a prepared packed-geometry sidecar of its source."""
+    a prepared packed-geometry sidecar of its source; ``leaves`` = [[(row id, family), ...], ...] the source's leaf files
+    (default: one leaf holding the row ``old``); ``focus`` True: a pending focus on the first row, an int: on that many."""
     paths = {}
-    for name, split in (('old', 'train'), ('held', 'test')):
-        paths[name] = tmp_path / f'{name}.jsonl'
-        paths[name].write_text(json.dumps(graph(name, split=split)) + '\n')
+    leaf_rows = leaves or [[('old', 'ordinary')]]
+    leaf_paths = []
+    for number, rows in enumerate(leaf_rows):
+        leaf_paths.append(tmp_path / ('old.jsonl' if number == 0 else f'leaf{number}.jsonl'))
+        leaf_paths[-1].write_text(''.join(json.dumps(graph(name)) + '\n' for name, _ in rows))
+    paths['old'] = leaf_paths[0]
+    paths['held'] = tmp_path / 'held.jsonl'
+    paths['held'].write_text(json.dumps(graph('held', split='test')) + '\n')
     train = tmp_path / 'train.json'
     write_json(train, {'schema': 'natlang.native-graph-sources/1',
-                       'sources': [{'kind': 'native-graphs', **resident.binding(paths['old'])}]})
+                       'sources': [{'kind': 'native-graphs', **resident.binding(path)} for path in leaf_paths]})
     source = NativeGraphSource(train, FP, required_split='train')
     families = tmp_path / 'families.json'
+    family_of = {name: family for rows in leaf_rows for name, family in rows}
     write_json(families, {'schema': 'natlang.logical-family-map/1', 'source_sha256': source.file_sha256,
-                          'rows': [{'id': e['id'], 'binding': e['binding'], 'family': 'ordinary'}
+                          'rows': [{'id': e['id'], 'binding': e['binding'], 'family': family_of[e['id']]}
                                    for e in source.entries]})
-    ce = complete_source_contract(declared(digest=resident.sha(paths['old'])), [resident.binding(paths['old'])],
+    ce = complete_source_contract(declared(digest=resident.sha(paths['old'])), [resident.binding(p) for p in leaf_paths],
                                   context_weight=.05, inventory=[resident.binding(train)])
+    ce['inventory'] = [resident.binding(train)]  # a production policy declares its exact train input at top level too
     ce['held_sources'] = [dict(sha256=resident.sha(paths['held']), encoding='native-row-objectives-v1',
                                context_weight=.05)]
     ce['objective'] = objective(mass='token', family_balance={
@@ -111,9 +120,10 @@ def lineage(tmp_path, quota=False, geometry=False, extra_scales=None, stage_para
         evidence.write_text('{}')
         request = tmp_path / 'focus.json'
         write_json(request, {'schema': 'natlang.native-pending-focus/1', 'rows': [
-            {'id': 'old', 'binding': source.entries[0]['binding'],
+            {'id': entry['id'], 'binding': entry['binding'],
              'source_sha256': hashlib.sha256(paths['old'].read_bytes()).hexdigest(), 'split': 'train',
-             'evidence': [{'path': str(evidence), 'sha256': hashlib.sha256(evidence.read_bytes()).hexdigest()}]}]})
+             'evidence': [{'path': str(evidence), 'sha256': hashlib.sha256(evidence.read_bytes()).hexdigest()}]}
+            for entry in source.entries[:1 if focus is True else focus]]})
         recipe['input_bindings']['focus'] = {k: v for k, v in resident.binding(request).items() if k != 'bytes'}
         recipe['stages'][0]['inputs']['pending_focus'] = 'focus'
     recipe_path = tmp_path / 'recipe.json'

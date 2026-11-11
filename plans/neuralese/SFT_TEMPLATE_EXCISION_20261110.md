@@ -172,29 +172,46 @@ template edges to 13,639): both families are mostly useful data, not scripts.
 The correction (`natlang.native-source-correction/1`, `deferred` rows keep visit debt and credit in the pending ledger) is built
 for the source a window's parent checkpoint trains: filtered leaves (new files), family map minus the withdrawn rows, CE policy
 (`objective_transition`, source-bound quota basis, `history_settlement` over every historical first-row observation), packed-geometry
-sidecar, capacity descriptor, successor pending focus (new leaf SHA-256s), append and settled recipes. The trainer applies one source change per
-continuation, so the cut-over window takes no packages: `commit-admission` writes the committed-admission ledger entry that
-`prepare_window` reuses for that window (`state.interleave.memetic_distillation.admissions[-1].window == window`) and sets
-`memetic_distillation.recipe` to the settled recipe; queued packages are appended by the next window on top (checked: `extension_policy`
-admits a window-1 package set appended over the excised source and its CE policy).
+sidecar, capacity descriptor, successor pending focus (new leaf SHA-256s), append and settled recipes.
 
-### Cut-over at a window boundary (w5: the window after window 1; controller is not touched by the package)
+### The queue path (2026-11-11: replaces the manual stop/build/preflight/commit/restart cut-over)
 
-The package in `ops/template-excision-1111/package` is built on the window-0 boundary (source `corrected-mix-diverse-1103`, 100,996 rows)
-and proves the tool; window 1 appends rollout rows to that source, so the cut-over package is rebuilt on what the parent checkpoint of the
-cut-over window trains (the leaf filters are small: minutes):
+Producer (checkpoint independent): `prepare_template_excision.py audit --controller-out OUT --out DIR --queue OUT` writes
+`withdrawal-plan.json` (`natlang.source-withdrawal-plan/1`: `withdraw` {row id: family, criterion, binding}, `visit_cap` {row id:
+`required_visits`}, reason, evidence, the audit's counts and decoded samples) and appends it to `OUT/memetic/distill/withdrawal-queue.jsonl`;
+any plan is queued with `queue_source_withdrawal.py --controller-out OUT PLAN [--dry-run]`. The queue is a file of its own, not the package
+queue: a controller whose code does not know it never reads it (an entry waits for the first boundary of a controller running
+`rl/source_withdrawal.py`; no `restart_controller.py --in-place` ordering, unlike a new package family).
 
-1. Wait until the controller is between RL rounds with the window due next (`state.interleave.active_window` absent, `sft_windows == 2`);
-   stop the controller unit (stopping it also frees its fixed 100 GB ledger claim, so step 3 is admitted by the ledger).
-2. `prepare_template_excision.py audit --controller-out OUT --out ops/template-excision-<date>/package`, then `build ... --plan <that>/withdrawal-plan.json`
-   (defaults: the effective recipe `state.interleave.memetic_distillation.recipe` and `state.checkpoint`, the parent the window continues).
-3. `preflight --controller-out OUT --out <package>` under the ledger (`--budget-gb 48`, about 25 min on the CPU).
-4. `commit-admission --state OUT/state.json --patch <package>/commit-admission.json --window 2` (dry run, then `--write`). This is the whole state change:
-   `state.interleave.memetic_distillation.admissions += {window 2, recipe: recipe-append.json, record: admission.json}` and
-   `memetic_distillation.recipe = recipe-settled.json`; `config.json` is untouched (windows derive their sources from the recipe).
-5. Restart the controller in place. Window 2 runs on the excised source (`prepare_window` reuses the committed admission, no packages that window);
-   the trainer records `source_correction_history`, the superseded focus and the quota revision in the checkpoint; window 3 appends the queued packages on top.
-   The recorded transition is that admission entry plus the checkpoint's `source_correction_history` (proof SHA-256 in `source_correction_binding`).
+Consumer: `memetic_admission.prepare_window` at every interleaved SFT window boundary resolves the pending plans against the parent
+checkpoint's saved frame (`source_withdrawal.resolve`), then, in one source change with the queued packages:
+
+1. a plan row of an earned frame (saved credit >= quota) is never withdrawn (skipped, counted `earned_kept`); a row no longer active or with a
+   different binding is skipped; a row whose family differs from the CE family map refuses the whole plan (`refused`, never retried); a visit cap
+   lowers a saved quota only where it is higher (the trainer needs at least one deferred row per correction, so caps ride on a withdrawing plan);
+   a plan with nothing left is `empty` (consumed, recorded);
+2. every affected leaf is filtered (`withdraw_native_graph_targets.filter_source`: other bytes and order preserved, index projected; a leaf whose
+   rows all go leaves the manifest; originals untouched) into `sft-window-N/memetic-admission/`, the manifest tree rewritten (`withdrawn-sources.json`),
+   its packed-geometry sidecar written;
+3. the admitted packages are appended after that filtered manifest (`train-sources.json` = filtered manifest + leaves, priorities as before);
+4. one proof `natlang.native-source-correction/1` over the final source: `deferred` rows (withdrawn, visit debt and credit kept in the pending ledger),
+   `added` rows (the appended ones, fresh quotas; `apply_source_correction` supports both in one proof), the `quota_revision` ledger;
+5. the CE policy (one pass from the parent's: replaced leaf declarations, family map minus withdrawn plus appended rows, declared scales, objective
+   transition from the parent's identity, quota-aware basis for the final source, `history_settlement` anchored on this proof), the packed
+   geometry (filtered prefix extended over the appended rows), the successor pending focus (appended rows first, withdrawn rows dropped, others on
+   their new leaf SHA-256s), the append/settled recipes (`source_correction` bound; the continuation is validated with
+   `_source_correction_continuation`, the trainer's own `validate_admission` for the basis); committed with the ledger (`memetic_distillation.
+   withdrawals[plan sha] = applied|empty|refused`) before the window config is written, so a retried boundary reuses it.
+
+Failure: anything that may succeed later (index cache missing, a build check) raises inside `prepare_window`, which records it in
+`interleave.memetic_distillation_failures` (`with_withdrawal: true`), then retries the boundary without the withdrawal, so the packages are still
+appended; if that fails too the window runs on the existing source. The plan stays pending (nothing committed) and is retried at the next boundary.
+The trainer applies the one source correction at the window's continuation (`source_correction_history`, superseded focus and quota revision land in the
+checkpoint); the settled recipe carries it for later windows, which append on top of it as before.
+
+Dry run on a scratch copy (live controller untouched): `prepare_template_excision.py rehearse --controller-out OUT --out SCRATCH [--plan PLAN]`
+runs exactly the boundary's preparation on copies of config, state and queues; `preflight --controller-out OUT --out SCRATCH` is the trainer's CPU
+continuation preflight of that window (about 48 GB; the controller's 100 GB ledger claim does not leave room: see below).
 
 Preflight of the window-0 package (`--continuation-preflight-only --device cpu`, real 18.5 GB window-0 checkpoint, global step 110, scratch
 `--out`): **passed** (`ops/template-excision-1111/package/preflight/learner/continuation-preflight.json`): 100,986 rows (10 deferred, 13,638 quota
@@ -204,7 +221,7 @@ The ledger cannot admit a 48 GB job while the controller holds its fixed 100 GB 
 (`ops/template-excision-1111/guarded_preflight.py`: starts at 75 GB MemAvailable, MemoryMax 52G, OOMScoreAdjust 1000, own floor). A first attempt, adopted
 into the ledger, was stopped by the ledger guard when the window-1 learner peaked; the second ran to the end. Stopping the controller first removes the problem.
 
-A package is valid for exactly the checkpoint it was built against: the CE policy's quota-aware basis binds the parent frame digest (saved quotas and
-credits), and a preflight of the window-1 package against the window-1 learner slot after another update was refused by the trainer
-(`quota-aware CE parent quotas or exposure changed; recensus before training`). Build with the controller stopped, on the head checkpoint
-the window will continue (the default), then preflight and commit without a checkpoint change in between.
+A built correction is valid for exactly the checkpoint it was built against: the CE policy's quota-aware basis binds the parent frame digest (saved
+quotas and credits), and a preflight of the window-1 package against the window-1 learner slot after another update was refused by the trainer
+(`quota-aware CE parent quotas or exposure changed; recensus before training`). That is why the queue holds a checkpoint-independent plan and the
+boundary builds the correction against `state['checkpoint']`, the exact parent its window continues (the same rule as the package appends).

@@ -60,14 +60,21 @@ Default on, `rollout_distillation: false` opts out; continuations adopt it
 through the recorded transition `rollout-distillation-20261110`. Every append also floors the declared CE scale of the scripted-template
 families (`port-record-wrapper`, `native-communication-template`; `distillation_withdrawn_families`, `[]` opts out): the corrected mix
 (2026-11-03) already withdrew duplicate rows, cut template quotas and scaled them to 0.5% of loss each; measured window 0 had no template
-graph at all (856/892 graphs were the diverse focus), see `plans/neuralese/SFT_TEMPLATE_EXCISION_20261110.md`. Physical withdrawal needs a static source
-correction (resident CE appends are append-only): `scripts/neuralese_data/prepare_template_excision.py` audits both families row by row
-(owner 2026-11-11: withdraw only what is useless, originals untouched) and builds it for the source a window's parent checkpoint trains;
-the audit found them mostly useful (wrapper: 18,930 distinct tasks, 9 near-duplicates withdrawn; template edges: input-specific producers,
-1 repeat withdrawn, kept edges capped at one visit instead of two). Cut-over at a window boundary: `plans/neuralese/SFT_TEMPLATE_EXCISION_20261110.md` §7.
+graph at all (856/892 graphs were the diverse focus), see `plans/neuralese/SFT_TEMPLATE_EXCISION_20261110.md`. Physical withdrawal is a queued
+operation (`rl/source_withdrawal.py`): a checkpoint-independent plan `natlang.source-withdrawal-plan/1` (row ids with family, criterion and
+optional binding; optional visit caps; reason; evidence) appended with `scripts/neuralese_data/queue_source_withdrawal.py --controller-out OUT PLAN`
+(or `prepare_template_excision.py audit --queue OUT`, which audits both template families row by row: owner 2026-11-11, withdraw only what is
+useless, originals untouched; found wrapper 18,930 distinct tasks / 9 near-duplicates withdrawn, template edges input-specific / 1 repeat withdrawn,
+kept edges capped at one visit instead of two) to `memetic/distill/withdrawal-queue.jsonl`, a file of its own that a controller without the code never
+reads. At its next SFT window boundary `prepare_window` builds the static source correction against that window's actual parent checkpoint (filtered
+leaves, family map, CE policy with `objective_transition`, source-bound quota basis and `history_settlement`, packed geometry, superseding focus,
+recipes) and appends the queued packages on top in the same proof-bound change (`deferred` rows for the withdrawn, `added` rows for the appended).
+An earned row is never withdrawn (skipped and counted); a plan about another family map or malformed is `refused` once; a failing build is recorded
+in `interleave.memetic_distillation_failures`, the window appends the packages without it and the plan stays pending. No stop/build/preflight/commit/
+restart; `prepare_template_excision.py rehearse|preflight` dry-run the boundary on a scratch copy. Details: SFT_TEMPLATE_EXCISION §7.
 A window append over a statically corrected CE policy (w5's corrected-mix history) records `history_settlement` in the successor CE
 policy (`native_resident_ce.history_settlement`): the policy's historical first-row observations stay exact and are authenticated by
-the static source correction that admitted it; later appends carry it unchanged. Fallow #17a tracks deployment.
+the static source correction that admitted it; later appends carry it unchanged.
 Prepared static sources (verified native graphs without an actor) use the same queue as family `prepared-source`
 (`scripts/neuralese_data/queue_prepared_source.py`: one package per source with its origin, verification and selection;
 admitted after the lineage's own rows). A running controller refuses a package family its loaded code does not know, and

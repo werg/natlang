@@ -27,6 +27,10 @@ cap and deferral. Pending static packages are admitted after the lineage's own (
 source only fills the share the policy's own rows leave. Each admitted family declares its own scale; the share cap
 bounds all of them together.
 
+Queued source withdrawals (``rl/source_withdrawal.py``, ``memetic/distill/withdrawal-queue.jsonl``) are applied by the same
+boundary: the live source is filtered for the plan's rows and the admitted packages are appended on top, in one proof-bound
+source correction (deferred + added rows) instead of an append; a failing withdrawal never holds the packages back.
+
 The consumed ledger (``state['interleave']['memetic_distillation']``) is committed before the window config is
 written, so a package is appended exactly once and a retried boundary reuses its recorded admission. Actor provenance
 is student self-distillation: the actors are this lineage's own checkpoints, never a teacher.
@@ -42,6 +46,7 @@ from pathlib import Path
 
 from ..common.hashing import sha256_file_hex_cached
 from ..common.jsonio import write_json_durable
+from . import source_withdrawal
 
 SCHEMA = 'natlang.memetic-distillation-admission/1'
 PACKAGE_SCHEMA = 'natlang.memetic-distillation-package/1'
@@ -352,15 +357,21 @@ def _unvisited_batches(rows, checkpoint, stage_id):
     return used
 
 
-def _ce_update(policy_ref, successor, leaves, family_rows, out, *, scales, withdrawn=(), base_inputs=None, quota_parent=None):
+def _ce_update(policy_ref, successor, leaves, family_rows, out, *, scales, withdrawn=(), base_inputs=None, quota_parent=None,
+               withdrawal=None, added=()):
     """The successor CE policy: declare the new leaves; extend a logical-family map (each admitted family its own
     declared scale ``scales[family]``) and floor the declared scale of every present ``withdrawn`` family to
     ``WITHDRAWN_SCALE``. ``quota_parent`` = (parent checkpoint, stage id, stage parameters) re-derives the
-    quota-aware basis for the appended source. Returns (binding, bound_scale)."""
+    quota-aware basis for the appended source. ``withdrawal`` (``source_withdrawal.Withdrawal``) makes the same policy
+    follow the filtered source: leaf declarations replaced, the withdrawn rows out of the family map, the correction
+    proof sealed over the final source (``added`` = its appended rows) and the historical first-row observations of the
+    replaced leaves settled against it. Returns (binding, bound_scale)."""
     from ..train.native_supervision import load_policy
     from ..train.own_output_supervision import identity, policy_objective
     policy = json.loads(Path(policy_ref['path']).read_text())
     previous = identity(policy_objective(load_policy(policy_ref)))['sha256']
+    if withdrawal is not None:
+        withdrawal.adjust_policy(policy)
     declared = {item['sha256'] for item in policy['sources']}
     contract = policy.get('source_contract')
     weight = (contract or {}).get('default_raw_context_weight', 0.0)
@@ -381,11 +392,14 @@ def _ce_update(policy_ref, successor, leaves, family_rows, out, *, scales, withd
     bound_scale = 1.0
     if isinstance(balance, dict) and balance.get('key') == 'logical-family':
         old_map = json.loads(Path(balance['map']['path']).read_text())
+        kept_rows = [row for row in old_map['rows'] if withdrawal is None or row['id'] not in withdrawal.withdrawn]
         new_map = {'schema': 'natlang.logical-family-map/1', 'source_sha256': successor['sha256'],
-                   'rows': [*old_map['rows'], *family_rows]}
+                   'rows': [*kept_rows, *family_rows]}
         map_path = Path(out) / 'families.json'
         write_json_durable(map_path, new_map)
         balance['map'] = _ref(map_path)
+        if withdrawal is not None:
+            withdrawal.seal(successor, added, balance['map'], Path(out))
         if balance.get('normalization') == 'declared/1':
             admitted = {row['family'] for row in family_rows}
             if any(scales[family] > balance['max_scale'] for family in admitted):
@@ -404,7 +418,17 @@ def _ce_update(policy_ref, successor, leaves, family_rows, out, *, scales, withd
         basis = _quota_aware_basis(policy, *quota_parent, successor['sha256'])
         if basis is not None:
             policy['quota_aware_basis'] = basis
-    if base_inputs is not None:
+    if withdrawal is not None:
+        from ..train.native_resident_ce import HISTORY_SETTLEMENT_SCHEMA, _historical_observations, _observations_digest
+        historical = _historical_observations(policy)
+        if historical:
+            policy['history_settlement'] = {
+                'schema': HISTORY_SETTLEMENT_SCHEMA, 'anchor_source_correction': withdrawal.proof,
+                'anchor_source_sha256': successor['sha256'], 'policy_sha256': policy_ref['sha256'],
+                'observations': len(historical), 'observations_sha256': _observations_digest(historical)}
+        else:
+            policy.pop('history_settlement', None)
+    elif base_inputs is not None:
         # A policy admitted by a static source correction carries first-row observations of the leaves that
         # correction replaced; record their settlement so the append extends the current active leaf set.
         from ..train.native_resident_ce import history_settlement
@@ -461,14 +485,15 @@ FOCUS_REASON = ('expert iteration: the policy\'s own verified rollouts and the p
                 'promotion in front of the still-unconsumed rows of the superseded focus')
 
 
-def _successor_focus(base_inputs, checkpoint, family_rows, row_leaf, out):
+def _successor_focus(base_inputs, checkpoint, family_rows, row_leaf, out, withdrawal=None):
     """The pending-focus request of the append window and its record ((None, {'skipped': reason}) without one).
 
     The trainer schedules every row of an active pending focus before anything else (``native_pending_focus.promote``:
     a stable partition of the packed batches), and appended rows rank only as fresh-source frontier (one batch in five
     behind the focus). While a focus is active the appended rows would therefore wait for all of it, several windows
     here. The successor request supersedes the active one (the declaration the trainer verifies) and lists the
-    appended rows first, then every row of the superseded request (the consumed ones are no longer pending)."""
+    appended rows first, then every row of the superseded request (the consumed ones are no longer pending). A withdrawal
+    in the same change drops its withdrawn rows from the request and moves the others to their filtered leaves."""
     reference = base_inputs.get('pending_focus')
     if not reference:
         return None, {'skipped': 'the stage has no pending focus: fresh rows are scheduled by priority and the frontier'}
@@ -480,17 +505,31 @@ def _successor_focus(base_inputs, checkpoint, family_rows, row_leaf, out):
     added = [{'id': row['id'], 'binding': row['binding'], 'source_sha256': row_leaf[row['id']][0], 'split': 'train',
               'evidence': [{'path': row_leaf[row['id']][1]['path'], 'sha256': row_leaf[row['id']][1]['sha256']}]}
              for row in family_rows]
-    document = {'schema': FOCUS_SCHEMA, 'rows': [*added, *old['rows']],
-                'supersedes': {'request_sha256': reference['sha256'], 'reason': FOCUS_REASON}}
+    retained = old['rows']
+    if withdrawal is not None:
+        retained = []
+        for row in old['rows']:
+            if row['id'] in withdrawal.withdrawn:
+                continue
+            if row['id'] not in withdrawal.leaf_of:
+                raise ValueError('pending focus names a row that is neither active nor withdrawn: ' + row['id'])
+            retained.append({**row, 'source_sha256': withdrawal.new_leaf_sha(row['id'])})
+    reason = FOCUS_REASON
+    if withdrawal is not None:
+        reason = withdrawal.reason + (': ' + FOCUS_REASON if added else ': the same request on the filtered leaves')
+    document = {'schema': FOCUS_SCHEMA, 'rows': [*added, *retained],
+                'supersedes': {'request_sha256': reference['sha256'], 'reason': reason}}
     path = Path(out) / 'pending-focus.json'
     write_json_durable(path, document)
-    return _ref(path), {'supersedes': reference['sha256'], 'added_rows': len(added), 'retained_rows': len(old['rows'])}
+    return _ref(path), {'supersedes': reference['sha256'], 'added_rows': len(added), 'retained_rows': len(retained),
+                        **({'withdrawn_rows_dropped': len(old['rows']) - len(retained)} if withdrawal is not None else {})}
 
 
-def _write_recipes(base_recipe, sft_id, successor, ce, out, parameters=None, focus=None):
+def _write_recipes(base_recipe, sft_id, successor, ce, out, parameters=None, focus=None, source_correction=None):
     """(append recipe for the admitting window, settled recipe for later windows). The stage keeps its binding
     names, whose declared content changes (a shared train/foundation binding moves together); the append recipe binds
-    the exact predecessor under a new name as ``continued_native_graphs``."""
+    the exact predecessor under a new name as ``continued_native_graphs``. ``source_correction`` (the proof of a
+    withdrawal in the same change) is bound as the stage's ``source_correction`` input in both recipes."""
     from ..train.recipe import load_recipe, resolve_recipe_data
     recipe = copy.deepcopy(resolve_recipe_data(base_recipe))
     stage = next(item for item in recipe['stages'] if item['id'] == sft_id)
@@ -504,6 +543,10 @@ def _write_recipes(base_recipe, sft_id, successor, ce, out, parameters=None, foc
         recipe['input_bindings'][inputs['pending_focus']] = {'path': focus['path'], 'sha256': focus['sha256']}
     if parameters:
         stage.setdefault('parameters', {}).update(parameters)
+    if source_correction is not None:
+        name = inputs.get('source_correction') or 'source_withdrawal_correction'
+        recipe['input_bindings'][name] = dict(source_correction)
+        inputs['source_correction'] = name
     settled = copy.deepcopy(recipe)
     prior_name = 'memetic_predecessor_' + predecessor['sha256'][:12]
     recipe['input_bindings'][prior_name] = predecessor
@@ -546,27 +589,36 @@ def effective_sft_stage(config, declared, state):
 
 def prepare_window(config, declared, state, state_path, directory, *, protected=None, index=_index, log=print):
     """The recipe for SFT window ``state['interleave']['sft_windows']`` (None: the controller's own) after admitting
-    every pending memetic package. Returns (recipe path or None, the SFT stage, admission record ref or None).
+    every pending memetic package and applying every queued source withdrawal (``rl/source_withdrawal.py``: one
+    proof-bound source change, the packages appended on top of the filtered source). Returns (recipe path or None,
+    the SFT stage, admission record ref or None).
 
-    A package whose append cannot be prepared (for example the trainer's resident CE extension rejects the lineage's
-    CE history) must not stop the controller at the window boundary: the failure is recorded in
-    ``interleave['memetic_distillation_failures']``, the window runs on the lineage's existing source, and the packages
-    stay pending (nothing was committed) for the next window."""
-    try:
-        return _prepare_window(config, declared, state, state_path, directory, protected=protected, index=index,
-                               log=log)
-    except Exception as error:  # noqa: BLE001 - recorded for supervision; the window proceeds without the append
-        interleave = state['interleave']
-        failure = {'window': interleave['sft_windows'], 'controller_round': state.get('round', 0),
-                   'error': f'{type(error).__name__}: {error}'[:1000]}
-        interleave.setdefault('memetic_distillation_failures', []).append(failure)
-        write_json_durable(state_path, state)
-        log(json.dumps({'event': 'memetic_admission_failed', **failure}))
-        base_path, base_stage = effective_sft_stage(config, declared, state)
-        return base_path, base_stage, None
+    A change that cannot be prepared (for example the trainer's resident CE extension rejects the lineage's CE history)
+    must not stop the controller at the window boundary: the failure is recorded in
+    ``interleave['memetic_distillation_failures']`` and nothing was committed, so the entries stay pending for the next
+    window. A failing withdrawal never holds the packages back: the window then appends them without it. If that fails too,
+    the window runs on the lineage's existing source."""
+    withdrawals = bool(source_withdrawal.pending_plans(
+        config.get('out'), (state['interleave'].get('memetic_distillation') or {})))
+    attempts = [True, False] if withdrawals else [False]
+    for use_withdrawals in attempts:
+        try:
+            return _prepare_window(config, declared, state, state_path, directory, protected=protected, index=index,
+                                   log=log, withdrawals=use_withdrawals)
+        except Exception as error:  # noqa: BLE001 - recorded for supervision; the window proceeds without the change
+            interleave = state['interleave']
+            failure = {'window': interleave['sft_windows'], 'controller_round': state.get('round', 0),
+                       'error': f'{type(error).__name__}: {error}'[:1000],
+                       **({'with_withdrawal': True} if use_withdrawals else {})}
+            interleave.setdefault('memetic_distillation_failures', []).append(failure)
+            write_json_durable(state_path, state)
+            log(json.dumps({'event': 'memetic_admission_failed', **failure}))
+    base_path, base_stage = effective_sft_stage(config, declared, state)
+    return base_path, base_stage, None
 
 
-def _prepare_window(config, declared, state, state_path, directory, *, protected=None, index=_index, log=print):
+def _prepare_window(config, declared, state, state_path, directory, *, protected=None, index=_index, log=print,
+                    withdrawals=True):
     interleave = state['interleave']
     window = interleave['sft_windows']
     ledger = interleave.get('memetic_distillation')
@@ -587,7 +639,8 @@ def _prepare_window(config, declared, state, state_path, directory, *, protected
     # The lineage's own rows (self-distillation, memetic guidance) take the share cap first; prepared static sources
     # fill what is left (stable within each group).
     candidates.sort(key=lambda item: item.get('family') == STATIC_FAMILY)
-    if not candidates:
+    plans = source_withdrawal.pending_plans(controller_out, ledger) if withdrawals else []
+    if not candidates and not plans:
         return base_path, base_stage, None
 
     from ..common.custody import ProtectedWorlds
@@ -600,6 +653,24 @@ def _prepare_window(config, declared, state, state_path, directory, *, protected
     predecessor = {'path': base_inputs['native_graphs']['path'], 'sha256': base_inputs['native_graphs']['sha256']}
     ledger = copy.deepcopy(ledger) if ledger else {'schema': SCHEMA, 'recipe': None, 'packages': {}, 'rows': {},
                                                    'admissions': []}
+    target = Path(directory) / 'memetic-admission'
+    if target.exists():
+        shutil.rmtree(target)  # an uncommitted earlier attempt: nothing references it
+    withdrawal = None
+    if plans:
+        withdrawal, outcomes = source_withdrawal.prepare(
+            plans, checkpoint=state['checkpoint'], stage_id=sft_id, base_inputs=base_inputs,
+            base_parameters=base_parameters, geometry=geometry, out=target, index=index, log=log)
+        for sha, outcome in outcomes.items():
+            ledger.setdefault('withdrawals', {})[sha] = {**outcome, 'window': window}
+        if withdrawal is None and not candidates:
+            # nothing to append and nothing withdrawable: only the plans' settlement (refused / empty) is recorded
+            ledger.setdefault('decisions', []).append({'window': window, 'withdrawals': sorted(outcomes)})
+            interleave['memetic_distillation'] = ledger
+            write_json_durable(state_path, state)
+            log(json.dumps({'event': 'source_withdrawal_settled', 'window': window, 'plans': sorted(outcomes)}))
+            return base_path, base_stage, None
+    tokenizer_source = {'tokenizer_fingerprint': geometry['tokenizer'], 'role_ids': geometry['roles']} if geometry else None
     decisions, chosen, forward = [], [], {}  # per package: (item, receipt, ref, [admitted rows]); row forward tokens
     for item in candidates:
         receipt_ref = _ref(item['package'])
@@ -671,7 +742,7 @@ def _prepare_window(config, declared, state, state_path, directory, *, protected
         fallback = max(scales.values())
         prior = [value for value in ledger['rows'].values() if value['disposition'] == 'admitted']
         mass, count = sum(value.get('scale', fallback) for value in prior), len(prior)
-        total = len(prior_ids)
+        total = len(prior_ids) - (len(withdrawal.withdrawn) if withdrawal is not None else 0)
         capacity, shares = window_capacity(base_parameters), window_shares(parameters)
         used = _unvisited_batches(ledger['rows'], state['checkpoint'], sft_id) if capacity is not None else {}
         for row in pending_rows:
@@ -698,9 +769,6 @@ def _prepare_window(config, declared, state, state_path, directory, *, protected
         ledger['rows'][row['id']] = {'package': package['sha256'], 'disposition': 'deferred',
                                      'reason': why, 'window': window}
 
-    target = Path(directory) / 'memetic-admission'
-    if target.exists():
-        shutil.rmtree(target)  # an uncommitted earlier attempt: nothing references it
     leaves, leaf_families, family_rows, package_records, row_leaf = [], [], [], [], {}
     for item, receipt, receipt_ref, rows in chosen:
         mine = [row for row in rows if row['id'] in admitted_ids]
@@ -751,34 +819,62 @@ def _prepare_window(config, declared, state, state_path, directory, *, protected
               'actor_provenance': {'kind': PROVENANCE, 'lineage_checkpoints': sorted(ancestry), 'teacher': None},
               'exposure': 'none claimed; added rows earn exposure only through SGD in the window'}
     recipe_path = None
-    if leaves:
+    if leaves or withdrawal is not None:
         target.mkdir(parents=True, exist_ok=True)
-        successor_path = target / 'train-sources.json'
-        write_json_durable(successor_path, {'schema': 'natlang.native-graph-sources/1', 'sources': [
-            {'kind': 'native-graphs', 'path': predecessor['path'], 'sha256': predecessor['sha256']},
-            *({'kind': 'native-graphs', **leaf, 'training_priority': FAMILY_PRIORITY[family]}
-              for leaf, family in zip(leaves, leaf_families, strict=True))]})
-        successor = _ref(successor_path)
+        # the manifest the appended leaves follow: the live source, or its filtered form when rows are withdrawn
+        prior = withdrawal.manifest if withdrawal is not None else predecessor
+        if leaves:
+            successor_path = target / 'train-sources.json'
+            write_json_durable(successor_path, {'schema': 'natlang.native-graph-sources/1', 'sources': [
+                {'kind': 'native-graphs', 'path': prior['path'], 'sha256': prior['sha256']},
+                *({'kind': 'native-graphs', **leaf, 'training_priority': FAMILY_PRIORITY[family]}
+                  for leaf, family in zip(leaves, leaf_families, strict=True))]})
+            successor = _ref(successor_path)
+        else:
+            successor = dict(prior)
+        added = [{'id': row['id'], 'binding': row['binding'], 'leaf_sha256': row_leaf[row['id']][0]}
+                 for row in family_rows]
         ce = None
         if base_inputs.get('ce_supervision_policy'):
             ce, _ = _ce_update(base_inputs['ce_supervision_policy'], successor, leaves, family_rows, target,
-                                         scales=scales, withdrawn=withdrawn, base_inputs=base_inputs,
-                                         quota_parent=(state['checkpoint'], sft_id, base_parameters))
-        capacity = _successor_capacity(base_parameters, successor, chosen[0][1], target, index)
-        focus, focus_record = _successor_focus(base_inputs, state['checkpoint'], family_rows, row_leaf, target)
-        append, settled = _write_recipes(base_recipe, sft_id, successor, ce, target, parameters=capacity, focus=focus)
+                               scales=scales, withdrawn=withdrawn, base_inputs=base_inputs,
+                               quota_parent=(state['checkpoint'], sft_id, base_parameters),
+                               withdrawal=withdrawal, added=added)
+        receipt = chosen[0][1] if chosen else tokenizer_source
+        # a withdrawal's packed-geometry sidecar covers exactly the retained rows: the appended rows extend that prefix
+        capacity_parameters = ({**base_parameters, 'sft_packed_geometry': withdrawal.geometry}
+                               if withdrawal is not None else base_parameters)
+        capacity = _successor_capacity(capacity_parameters, successor, receipt, target, index)
+        focus, focus_record = _successor_focus(base_inputs, state['checkpoint'], family_rows, row_leaf, target,
+                                               withdrawal=withdrawal)
+        append, settled = _write_recipes(base_recipe, sft_id, successor, ce, target, parameters=capacity, focus=focus,
+                                         source_correction=withdrawal.proof if withdrawal is not None else None)
         _, append_inputs, _ = _stage(append, sft_id)
-        from ..train.recipe import _ce_supervision_input_continuation, _data_continuation, _pending_focus_continuation
-        if not (_pending_focus_continuation(base_inputs, append_inputs) if focus is not None
-                else _ce_supervision_input_continuation(base_inputs, append_inputs) if ce is not None
-                else _data_continuation(base_inputs, append_inputs)):
-            raise ValueError('memetic append is not a declared data continuation of the joint SFT stage')
-        if ce is not None:
-            from ..train.native_resident_ce import extension_policy
-            extension_policy(base_inputs, append_inputs)
+        from ..train.recipe import (_ce_supervision_input_continuation, _data_continuation, _pending_focus_continuation,
+                                    _source_correction_continuation)
+        if withdrawal is not None:
+            # The trainer applies the change as one proof-bound source correction (deferred rows, added rows).
+            before = {k: v for k, v in base_inputs.items() if k not in ('pending_focus', 'source_correction',
+                                                                         'continued_native_graphs')}
+            after = {k: v for k, v in append_inputs.items() if k != 'pending_focus'}
+            if not _source_correction_continuation({**before, 'native_graphs': base_inputs['native_graphs']}, after):
+                raise ValueError('the source withdrawal is not an admitted source-correction continuation of the stage')
+            if focus is not None and not _pending_focus_continuation(
+                    {**base_inputs, 'pending_focus': base_inputs['pending_focus']}, append_inputs):
+                raise ValueError('the successor pending focus is not a declared continuation of the withdrawal')
+            _validate_quota_basis(ce, sft_id, base_parameters, successor, withdrawal.frame)
+        else:
+            if not (_pending_focus_continuation(base_inputs, append_inputs) if focus is not None
+                    else _ce_supervision_input_continuation(base_inputs, append_inputs) if ce is not None
+                    else _data_continuation(base_inputs, append_inputs)):
+                raise ValueError('memetic append is not a declared data continuation of the joint SFT stage')
+            if ce is not None:
+                from ..train.native_resident_ce import extension_policy
+                extension_policy(base_inputs, append_inputs)
         record.update(predecessor=predecessor, successor=successor, leaves=leaves, ce_policy=ce,
                       recipes={'append': _ref(append), 'settled': _ref(settled)},
-                      rows_added=len(family_rows), capacity=capacity, pending_focus=focus_record)
+                      rows_added=len(family_rows), capacity=capacity, pending_focus=focus_record,
+                      **({'withdrawal': withdrawal.record()} if withdrawal is not None else {}))
         recipe_path = str(append)
         ledger['recipe'] = _ref(settled)
     target.mkdir(parents=True, exist_ok=True)
@@ -797,6 +893,19 @@ def _prepare_window(config, declared, state, state_path, directory, *, protected
     if recipe_path is None:
         return base_path, base_stage, record_ref
     return recipe_path, _stage(recipe_path, sft_id)[0], record_ref
+
+
+def _validate_quota_basis(ce, stage_id, parameters, successor, frame):
+    """The trainer's own admission check of a source-bound quota-aware basis, against the parent frame (a correction
+    that changes the source must carry a basis for exactly the successor)."""
+    policy = json.loads(Path(ce['path']).read_text())
+    if policy.get('quota_aware_basis') is None:
+        return
+    from ..train.native_quota_aware_ce import validate_admission
+    visits = parameters.get('communication_min_visits')
+    validate_admission(policy, frame, stage_id=stage_id, candidate_sha256=successor['sha256'],
+                       epochs=parameters.get('epochs'), communication_min_visits=visits,
+                       previous_options=frame.get('options') or {}, policy_binding=ce)
 
 
 def _prior_ids(inputs, predecessor, index, receipt):
