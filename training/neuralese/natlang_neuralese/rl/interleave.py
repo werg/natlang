@@ -64,6 +64,10 @@ def validate_stage_parameters(parameters):
         raise ValueError('interleaved RL neuralese_use_bonus must be in [0, 1]')
 
 
+# Interleaved-stage parameters a controller config may override live, without rewriting the recipe the SFT learner binds.
+LIVE_PARAMETERS = ('rl_rounds_per_window', 'distillation_window_shares')
+
+
 def declared_stage(config):
     """The recipe's interleaved stage, its resolved task source and the SFT stage it alternates with."""
     from ..train.recipe import load_recipe, resolve_stage_inputs, effective_stage_parameters, recipe_identity_sha256
@@ -76,9 +80,11 @@ def declared_stage(config):
     if stage is None or stage['kind'] != 'native_interleaved_rl':
         raise ValueError('interleaved_rl_stage does not name a native_interleaved_rl recipe stage')
     parameters = effective_stage_parameters(stage, [], recipe)
-    if config.get('rl_rounds_per_window') is not None:
-        # The controller may retune the RL/SFT cadence live; the stage binding records the change (bind_stage).
-        parameters = {**parameters, 'rl_rounds_per_window': config['rl_rounds_per_window']}
+    live = {key: config[key] for key in LIVE_PARAMETERS if config.get(key) is not None}
+    if live:
+        # The controller may retune these live (RL/SFT cadence, distillation shares of a window); the stage binding
+        # records each change (bind_stage).
+        parameters = {**parameters, **live}
         validate_stage_parameters(parameters)
     if parameters['sft_stage'] != config.get('production_stage'):
         raise ValueError('interleaved RL alternates with a different SFT stage than the controller obligation')
@@ -118,8 +124,7 @@ def bind_stage(config, state, state_path):
         raise ValueError('controller interleave state belongs to another declared stage')
     binding = {'recipe_sha256': declared['recipe_sha256'], 'stage_sha256': declared['stage_sha256'],
                'task_source': {'path': declared['task_source']['path'], 'sha256': declared['task_source']['sha256']},
-               **({'rl_rounds_per_window': declared['parameters']['rl_rounds_per_window']}
-                  if config.get('rl_rounds_per_window') is not None else {}),
+               **{key: declared['parameters'][key] for key in LIVE_PARAMETERS if config.get(key) is not None},
                'round': state.get('round', 0)}
     bindings = interleave['stage_bindings']
     if not bindings or {k: v for k, v in bindings[-1].items() if k != 'round'} != {

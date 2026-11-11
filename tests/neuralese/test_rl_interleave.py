@@ -71,6 +71,12 @@ def test_declared_stage_owns_the_controller_task_source_and_budget(tmp_path):
     assert state['interleave']['stage_bindings'][-1]['rl_rounds_per_window'] == 1
     with pytest.raises(ValueError, match='positive integer'):
         interleave.bind_stage({**config, 'rl_rounds_per_window': 0}, state, tmp_path / 'state.json')
+    _, shared = interleave.bind_stage({**config, 'distillation_window_shares': {'prepared-source': 0.35}}, state,
+                                      tmp_path / 'state.json')
+    assert shared['parameters']['distillation_window_shares'] == {'prepared-source': 0.35}
+    assert state['interleave']['stage_bindings'][-1]['distillation_window_shares'] == {'prepared-source': 0.35}
+    with pytest.raises(ValueError, match='distillation_window_shares'):
+        interleave.bind_stage({**config, 'distillation_window_shares': {'prepared-source': 2}}, state, tmp_path / 'state.json')
     state['round'] = 7
     assert interleave.window_due(declared, state)
     with pytest.raises(ValueError, match='different SFT stage'):
