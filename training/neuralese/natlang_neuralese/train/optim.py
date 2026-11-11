@@ -36,6 +36,13 @@ def muon_eligible(name: str, parameter: torch.Tensor, vocab_size: int, embedding
             and "learned_scale" not in name and not name.endswith("_blocks") and ".mlp.gate." not in name)
 
 
+def momentum_reset_needed(prior_stage: str | None, stage: str, *, keep: bool = False) -> bool:
+    """Whether resuming an optimizer under ``stage`` zeroes its first moments: entering a policy (RL) objective from
+    first moments last fed by anything else (``other``: cross-entropy, preference, or a checkpoint without the record).
+    A policy round continuing a policy round keeps its own momentum; ``keep`` is the opt-out."""
+    return stage == 'policy' and (prior_stage or 'other') != 'policy' and not keep
+
+
 class PortMuonAdamW(torch.optim.Optimizer):
     def __init__(self, named_parameters, *, lr: float, vocab_size: int, embedding_ids=(), momentum: float = 0.95,
                  ns_steps: int = 5, latent=(), latent_optimizer: str = "lionsr", latent_options=None,
@@ -155,6 +162,27 @@ class PortMuonAdamW(torch.optim.Optimizer):
         if self.latent is not None:
             with region("optim/latent"):
                 self.latent.step()
+
+    @torch.no_grad()
+    def reset_momentum(self) -> dict:
+        """Zero every first-moment buffer (Muon/MuonSR ``momentum``, AdamW ``exp_avg``) and nothing else.
+
+        Second moments, step counts and Kahan compensation (a weight residual, not gradient memory) stay. Muon
+        orthogonalizes ``g + beta*m``, so its step has full size whatever the gradient's scale: a buffer left by an
+        objective whose gradients are orders of magnitude larger (SFT cross-entropy beside the RL policy loss) wins
+        the whole direction of the next stage's updates (w5 RL rounds: momentum cosine 1.000 across 16 RL steps)."""
+        buffers = tensors = 0
+        for child in (self.muon, self.auxiliary, self.latent):
+            if child is None:
+                continue
+            for state in child.state.values():
+                for key in ("momentum", "momentum_buffer", "exp_avg"):
+                    value = state.get(key)
+                    if torch.is_tensor(value):
+                        buffers += 1
+                        tensors += value.numel()
+                        value.zero_()
+        return {"buffers": buffers, "elements": tensors}
 
     def state_dict(self):
         state = {"format": FORMAT, "schema": self.schema, "muon": self.muon.state_dict() if self.muon else None,

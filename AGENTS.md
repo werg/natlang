@@ -11,6 +11,24 @@ managed actor's `ready()` (`rl/managed_actor.py`) before each local entry: a dea
 store and policy while its slots wait. The fork validates natlang `custom_params` at request intake (invalid request aborted
 alone). Running processes keep their code; the next actor launch has both.
 
+## RL rounds followed the carried SFT momentum, not the RL gradient (engineering, 2026-11-11)
+
+w5's held-out success fell every update (110 52/126 -> 118 47 -> 126 44 -> 134 39) while RL on its own tasks never raised their success.
+Cause measured on the checkpoints: Muon orthogonalizes `g + beta*m`, so its step has full size whatever the gradient's scale, and the RL
+policy gradient (per-episode norm 0.3-0.7 on 20 backbone matrices) is about 1/1000 of the momentum buffer SFT leaves (norm 536 on the same
+tensors). Across 16 RL steps (rounds 2-3) the buffer's direction did not change (cosine 110/118/126 = 1.000, norm decaying exactly 0.95^k), every
+RL round's weight delta correlates with that buffer (-0.06, -0.10) as strongly as an SFT window's own (-0.04..-0.05; round 2's delta still
+correlates -0.05 with the buffer from three stages earlier), consecutive round deltas are orthogonal (cosine 0.01), advantage-split
+log-prob changes are identical (w4 direction test), and the interface rows (AdamW) kept moving 1-2% per round with zero RL gradient (update
+decays 0.9^k: SFT `exp_avg`). So a round was 7-9 full-size steps along the last SFT window's momentum with the RL gradient a few percent of the
+direction: no RL learning, extra unsupervised SFT drift (4x LR made it 4x longer steps). A 5-episode probe also puts the per-episode outcome
+gradients at cosine 0.01 (about 8% of a 16-episode update's energy is signal, 40% at 130 episodes).
+`optim.momentum_reset_needed` / `PortMuonAdamW.reset_momentum`: a policy-objective resume whose optimizer's first moments were last fed by
+anything else (SFT, a checkpoint without the record) zeroes Muon `momentum` and AdamW `exp_avg` (second moments, steps, Kahan compensation,
+weights, RNG, exposure stay), recorded in `optimizer_momentum_history` (`natlang.optimizer-momentum-reset/1`); a policy round continuing a policy
+round keeps its own momentum; `--keep-optimizer-momentum` opts out. Still open and tuned by held-eval trend, not by this change: the RL batch is 16
+episodes per update (7-9 noisy full-size Muon steps per round), and backbone LR 4x (config.json.pre-lr4x).
+
 ## RL learner wall time: host copies, not capacity, dominated (engineering, 2026-11-11)
 
 Round 3's learner took 152 min: 113 training, 13 between updates, 11 policy capacity (three whole-graph backwards, each as long as a real

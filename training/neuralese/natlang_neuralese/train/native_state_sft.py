@@ -1605,6 +1605,11 @@ def build_parser():
         help='BF16 MuonSR matrix writes: kahan (default 2026-10-29) rounds to nearest and carries the residual in a '
              'BF16 compensation buffer; stochastic rounding random-walked the LFM3 weights at fine-tuning rates. A '
              'continuation records the change in muon_rounding_history')
+    parser.add_argument('--keep-optimizer-momentum', action='store_true',
+        help='opt out of the momentum reset a policy (RL) update performs when it resumes an optimizer whose last '
+             'objective was not a policy objective (SFT cross-entropy gradients are orders of magnitude larger than '
+             'the RL policy gradient, and Muon normalizes its step, so the carried momentum would steer the whole RL '
+             'round). The reset is recorded in optimizer_momentum_history')
     parser.add_argument('--accumulate-batches', type=int, default=DEFAULT_ACCUMULATE_BATCHES,
         help='packed micro-batches per optimizer update; their gradients accumulate before one MuonSR/AdamW step '
              '(default 16, about 64 graphs at 32k tokens per micro-batch; 1 restores one step per batch). A '
@@ -3181,6 +3186,15 @@ def _main(argv=None, *, requested_refresh):
     model.to(args.device)
     model.train()
     _phase('model_on_device')
+    # The kind of objective that last fed the first moments (momentum, exp_avg): checkpoints from before this record
+    # were all written by cross-entropy or earlier RL; only a recorded policy stage continues a policy objective.
+    from ..rl.native_replay import NativePolicyObjective as _PolicyObjective
+    from .optim import momentum_reset_needed
+    momentum_stage = 'policy' if isinstance(objective, _PolicyObjective) else 'other'
+    prior_momentum_stage = saved_options.get('optimizer_momentum_stage') or 'other'
+    momentum_history = list(saved_options.get('optimizer_momentum_history') or [])
+    checkpoint_options['optimizer_momentum_stage'] = momentum_stage
+    checkpoint_options['optimizer_momentum_history'] = momentum_history
     optimizer, named = make_native_optimizer(model, lr=args.learning_rate, learned_row_lr=args.learned_row_learning_rate, interface_row_lr=args.interface_row_learning_rate,
                                               weight_decay=args.weight_decay, latent_ns=args.latent_ns, muon_rounding=args.muon_rounding)
     task_eval = None
@@ -3217,6 +3231,15 @@ def _main(argv=None, *, requested_refresh):
         if promoted_names:load_options['allow_promoted_names'] = promoted_names
         optimizer.load_state_dict(resume['optimizer'], **load_options)
         _phase('optimizer_restored')
+        # Muon's step is orthogonalized, so its size ignores the gradient's scale: SFT momentum (gradients ~100-1000x the
+        # RL policy gradient) would decide the direction of a whole RL round (w5 rounds 2-3: momentum cosine 1.000
+        # across 16 RL steps, update-momentum cosine as high as an SFT window's). Entering a policy objective from any
+        # other last objective starts its first moments at zero; second moments, steps and compensation carry over.
+        if momentum_reset_needed(prior_momentum_stage, momentum_stage, keep=args.keep_optimizer_momentum):
+            cleared = optimizer.reset_momentum()
+            momentum_history.append({'schema': 'natlang.optimizer-momentum-reset/1', 'from_stage': prior_momentum_stage,
+                'to_stage': momentum_stage, 'at_global_step': int((resume or {}).get('global_step', (resume or {}).get('step', 0)) or 0),
+                'cleared': cleared, 'kept': 'second moments, step counts, compensation, weights, RNG, exposure'})
         if rounding_changed and optimizer.latent is not None:
             cleared=0
             for state in optimizer.latent.state.values():
