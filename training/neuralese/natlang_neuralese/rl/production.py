@@ -2120,6 +2120,10 @@ def run(config_path, *, rounds=None, stop=None):
             pre_ok, pre_reason = precollect.eligible(config, state, interleaved, policy_loss)
             if config.get('before_collect'):
                 run_command(config['before_collect'], values)
+            if state.get('phase') != 'collect':
+                # a resume after a stop (requested_stop) collects again; say so (Pop's eval hold reads it)
+                state['phase'] = 'collect'
+                write_json_durable(state_path, state)
             try:
                 report = collect_with_actor(config, values, keep_remote_actor=pre_ok, **collect_kwargs)
             except InterruptedError:
