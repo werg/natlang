@@ -374,8 +374,9 @@ def backfill(config, state, *, current_round, binding=None, log=print, protected
     return results
 
 
-def after_scoring(config, state, round_dir, values, rollouts, policy_sha256, log=print):
-    """The production hook: never raises into the round. Earlier rounds are topped up first (``backfill``)."""
+def after_scoring(config, state, round_dir, values, policy_sha256, log=print):
+    """The production hook: never raises into the round. Earlier rounds are topped up first (``backfill``). The round's
+    successes are read slim from ``values['rollouts']`` (a round's file holds gigabytes; w5 round 2 held 5.1 GB)."""
     if not due(config, state):
         return None
     try:
@@ -394,8 +395,9 @@ def after_scoring(config, state, round_dir, values, rollouts, policy_sha256, log
         log(json.dumps({'event': 'rollout_distillation_backfill_failed', 'round': state.get('round'),
                         'error': f'{type(error).__name__}: {error}'[:500]}))
     try:
-        return package_round(config, state, round_dir, rollouts, policies=policy_sha256, binding=binding,
-                             bundle=values.get('block_bundle'), log=log)
+        path = Path(values['rollouts'])
+        return package_round(config, state, round_dir, list(_student_successes(path)), reader=_episode_reader(path),
+                             policies=policy_sha256, binding=binding, bundle=values.get('block_bundle'), log=log)
     except Exception as error:  # noqa: BLE001
         log(json.dumps({'event': 'rollout_distillation_failed', 'round': state.get('round'),
                         'error': f'{type(error).__name__}: {error}'[:500]}))

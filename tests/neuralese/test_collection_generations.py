@@ -181,7 +181,10 @@ def test_teachers_are_planned_while_students_still_run_and_the_budget_carries(tm
     assert h.plans[0]['carry'] == 0 and h.finished_at_plan[0] < 4   # planned before the last student finished
     covered = [g for p in h.plans for g in p['groups']]
     assert sorted(covered) == [0, 1, 2, 3]                          # every group planned exactly once
-    assert h.plans[1]['carry'] == len(h.plans[0]['groups']) - 1 if len(h.plans) > 1 else True
+    carry = 0   # each batch carries its unspent budget (one attempt per group, one teacher planned for group 0)
+    for p in h.plans:
+        assert p['carry'] == carry
+        carry += len(p['groups']) - (0 in p['groups'])
     assert sorted(finishes(h.out)) == sorted([f's7-task-{i:03d}' for i in range(4)] + ['s7-task-000-t00'])
     saved = json.loads((h.out / 'teacher-plan.json').read_text())
     assert saved['schema'] == 'natlang.rl-teacher-plan/2' and len(saved['student_keys']) == 4

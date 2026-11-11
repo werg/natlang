@@ -2178,7 +2178,10 @@ def run(config_path, *, rounds=None, stop=None):
                 state['coefficient_policy']=report['coefficient_policy']['path']
                 values.update(coefficient_policy=state['coefficient_policy'],
                               coefficient_policy_sha256=report['coefficient_policy']['sha256'])
-            rows = list(read_jsonl(Path(values['rollouts'])))
+            # Only what the round's bookkeeping reads stays resident: a round's rollouts file holds gigabytes of
+            # sampling probabilities, and the learner's CUDA limit is the unit's claim minus the cgroup's host bytes.
+            rows = [{'task_id': r.get('task_id'), 'turns': bool(r.get('turns')), 'reward': r.get('reward')}
+                    for r in read_jsonl(Path(values['rollouts']))]
             collected = set(state.get('collected_task_ids', [])) | {r['task_id'] for r in rows if r.get('turns')}
             attempted = set(state.get('attempted_task_ids', [])) | {r['id'] for r in selected}
             state.update(collected_task_ids=sorted(collected), attempted_task_ids=sorted(attempted), available_tasks=len(cases),
@@ -2213,8 +2216,18 @@ def run(config_path, *, rounds=None, stop=None):
                 raise RuntimeError('RL collector infrastructure failed; repair and retry retained round with fresh attempt')
             # The policy's own verified successful student episodes queue as a distillation package for the next
             # mandatory SFT window (rl/rollout_distillation.py); a failure is recorded and never stops the update.
+            # It runs in a forked child: lowering episodes grew the controller by about 8 GB (w5 round 2), memory the
+            # interpreter keeps, and the learner's CUDA limit is the unit's claim minus the cgroup's host bytes.
             from .rollout_distillation import after_scoring as distill_rollouts
-            distill_rollouts(config, state, round_dir, values, rows, policy)
+            import multiprocessing
+            child = multiprocessing.get_context('fork').Process(
+                target=distill_rollouts, args=(config, state, round_dir, values, policy))
+            sys.stdout.flush()
+            child.start()
+            child.join()
+            if child.exitcode:
+                print(json.dumps({'event': 'rollout_distillation_failed', 'round': state.get('round'),
+                                  'error': f'distillation child exited {child.exitcode}'}), flush=True)
             rft_stages = ['all']
             objective = config.get('update_objective', 'policy')
             if objective not in {'policy', 'self-distillation'}:

@@ -159,9 +159,9 @@ def test_hook_failure_is_recorded_not_raised(tmp_path):
     logged = []
     config = {'out': str(tmp_path), 'rollout_distillation_from_round': 0}
     state = {'round': 1, 'checkpoint': str(tmp_path / 'missing.pt')}
-    assert distill.after_scoring(config, state, tmp_path, {}, [], 'x' * 64, log=logged.append) is None
+    assert distill.after_scoring(config, state, tmp_path, {}, 'x' * 64, log=logged.append) is None
     assert 'rollout_distillation_failed' in logged[0]
-    assert distill.after_scoring({'out': str(tmp_path)}, state, tmp_path, {}, [], 'x' * 64, log=logged.append) is None
+    assert distill.after_scoring({'out': str(tmp_path)}, state, tmp_path, {}, 'x' * 64, log=logged.append) is None
     assert len(logged) == 1
 
 
