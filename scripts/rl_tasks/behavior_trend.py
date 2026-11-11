@@ -16,8 +16,11 @@ Held-out evaluation set (rl.held_eval): the controller measures about 64 pinned 
 so a round's effect is read with far less noise than dev16. It is listed after the dev16 results, each policy paired with
 the previous one and with the first measured one of its series (matched scored (task, sample) episodes: successes, discordant
 pairs, McNemar exact p; and the exact sign test over tasks, the conservative one since a task's samples are not independent).
-Results of different series (collector runtime or NATLANG_MODEL_FACING changed) are never compared. It does not enter the
-verdict yet: the verdict rule above keeps its dev16/loop inputs until the held set has a few policies.
+Results of different series (collector runtime or NATLANG_MODEL_FACING changed) are never compared. It enters the verdict
+first (2026-11-11: step 134 fell 52 -> 39 of ~126 against the first policy, McNemar p=0.0066, while dev16 had no result):
+  STOP      the latest policy lost to the previous or the first of its series with McNemar p < 0.05;
+  WATCH     the same at p < 0.10;
+then the dev16/loop rule above.
 Read-only; it decides nothing by itself.
 """
 import argparse
@@ -70,10 +73,32 @@ def dev16(label):
             'complete': detail.get('complete')}
 
 
-def decide(parent, results, rounds):
+def held_verdict(rows):
+    if not rows:
+        return None
+    latest = rows[-1]
+    for name in ('vs_first', 'vs_previous'):
+        pair = latest.get(name)
+        if pair is None or pair['second_successes'] >= pair['first_successes']:
+            continue
+        text = (f"held-out {latest['policy'][:12]} {pair['second_successes'] - pair['first_successes']:+d} of {pair['pairs']} "
+                f"pairs {name.replace('_', ' ')} (McNemar p={pair['mcnemar_exact_p']})")
+        if pair['mcnemar_exact_p'] < 0.05:
+            return 'STOP', text
+        if pair['mcnemar_exact_p'] < 0.10:
+            return 'WATCH', text
+    return None
+
+
+def decide(parent, results, rounds, held=()):
+    held = held_verdict(list(held))
+    if held is not None and held[0] == 'STOP':
+        return held
     rates = [r['loop_rate'] for r in rounds if r['loop_rate'] is not None and r['complete']]
     rising = len(rates) >= 3 and rates[-1] > rates[-2] > rates[-3]
     if not results:
+        if held is not None:
+            return held
         return 'WATCH' if rising else 'CONTINUE', 'no dev16 result of this lineage yet'
     latest = results[-1]
     if latest['success'] <= 10:
@@ -82,6 +107,8 @@ def decide(parent, results, rounds):
         return 'STOP', f"latest dev16 has {latest['loops']} looping cases"
     if len(results) >= 2 and (results[-1]['success'] + results[-2]['success']) / 2 <= parent['success'] - 1.5:
         return 'STOP', 'mean of last two dev16 results is >= 1.5 below the parent'
+    if held is not None:
+        return held
     if rising:
         return 'WATCH', 'training loop rate rose on two consecutive rounds'
     if latest['success'] < parent['success']:
@@ -129,7 +156,7 @@ def main(argv=None):
         raise SystemExit(f'no dev16 evidence for parent {a.parent_label}')
     labels = sorted({Path(d).name.split('-py')[0] for g in a.label_glob for d in glob.glob(str(EVIDENCE / g))})
     results = sorted((r for r in map(dev16, labels) if r and r['complete']), key=lambda r: r['step'])
-    verdict, reason = decide(parent, results, rounds)
+    verdict, reason = decide(parent, results, rounds, held_eval.trend(a.out))
     if a.json:
         print(json.dumps({'rounds': rounds, 'parent': parent, 'dev16': results, 'held_eval': held_eval.trend(a.out),
                           'verdict': verdict, 'reason': reason}))
