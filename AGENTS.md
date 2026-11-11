@@ -60,8 +60,11 @@ Default on, `rollout_distillation: false` opts out; continuations adopt it
 through the recorded transition `rollout-distillation-20261110`. Every append also floors the declared CE scale of the scripted-template
 families (`port-record-wrapper`, `native-communication-template`; `distillation_withdrawn_families`, `[]` opts out): the corrected mix
 (2026-11-03) already withdrew duplicate rows, cut template quotas and scaled them to 0.5% of loss each; measured window 0 had no template
-graph at all (856/892 graphs were the diverse focus), see `plans/neuralese/SFT_TEMPLATE_EXCISION_20261110.md`. Physical removal of
-those rows needs a static source correction (resident CE appends are append-only); not done, not needed by the measurement.
+graph at all (856/892 graphs were the diverse focus), see `plans/neuralese/SFT_TEMPLATE_EXCISION_20261110.md`. Physical withdrawal needs a static source
+correction (resident CE appends are append-only): `scripts/neuralese_data/prepare_template_excision.py` audits both families row by row
+(owner 2026-11-11: withdraw only what is useless, originals untouched) and builds it for the source a window's parent checkpoint trains;
+the audit found them mostly useful (wrapper: 18,930 distinct tasks, 9 near-duplicates withdrawn; template edges: input-specific producers,
+1 repeat withdrawn, kept edges capped at one visit instead of two). Cut-over at a window boundary: `plans/neuralese/SFT_TEMPLATE_EXCISION_20261110.md` §7.
 A window append over a statically corrected CE policy (w5's corrected-mix history) records `history_settlement` in the successor CE
 policy (`native_resident_ce.history_settlement`): the policy's historical first-row observations stay exact and are authenticated by
 the static source correction that admitted it; later appends carry it unchanged. Fallow #17a tracks deployment.

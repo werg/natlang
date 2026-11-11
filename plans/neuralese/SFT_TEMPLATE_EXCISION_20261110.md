@@ -149,3 +149,57 @@ imported by the running process at start/first use, so a controller restart in p
 static packages. Check after round 2 scores: `round-000002/rollout-distillation-all.json`, a `rollout-distillation` package in
 `memetic/distill/admission-queue.jsonl`; after window 1 starts: `sft-window-000001/memetic-admission/admission.json`
 (`share_cap`, `pending_focus`).
+
+## 7. Physical withdrawal: audit and static source correction (2026-11-11, owner clarification)
+
+Owner order: "excise" withdraws rows from the training schedule through a new corrected source; no existing data file is
+touched (originals, `corrected-mix-diverse-1103`, CE policies stay as they are); withdraw only what is truly useless, never a family
+blindly. Tool: `scripts/neuralese_data/prepare_template_excision.py` (`audit`, `build`, `preflight`, `commit-admission`); package of the
+w5 window-0 boundary in `ops/template-excision-1111/package` (`withdrawal-plan.json` has the criteria, counts and decoded samples).
+
+Audit of the 32,569 remaining rows (the 2026-11-03 corrected mix had already cut 105,245 wrapper rows to 18,930 and 122,700
+template edges to 13,639): both families are mostly useful data, not scripts.
+
+- `port-record-wrapper` (18,930): 18,930 distinct teacher programs, one row per task already (the review's rule); real tasks
+  (competition maths, tool calls, web research). Only repeats of a kept row go: exact Jaccard >= 0.9 of the masked-target 4-gram sets
+  (4 clusters): **9 withdrawn**, 18,921 kept (89 of them earned). Its quota is one visit per row, so there is nothing to cap.
+- `native-communication-template` (13,639 edges): producers are input-specific (13,075 distinct producer replies; payload shared by
+  8+ edges had been withdrawn in 1103), but the edges of one fan-in (1-4 per consumer answer, 4,851 answers) each re-train the same
+  consumer answer, twice (quota 2). Keep every edge (genuine producer-to-consumer Neuralese state), withdraw an edge repeating a
+  kept edge's producer reply into the same consumer answer (**1**), and cap the kept edges at **one visit** (`quota_revision`,
+  13,638 rows; earned credit retained): remaining template visits 27,265 -> 13,627.
+
+The correction (`natlang.native-source-correction/1`, `deferred` rows keep visit debt and credit in the pending ledger) is built
+for the source a window's parent checkpoint trains: filtered leaves (new files), family map minus the withdrawn rows, CE policy
+(`objective_transition`, source-bound quota basis, `history_settlement` over every historical first-row observation), packed-geometry
+sidecar, capacity descriptor, successor pending focus (new leaf SHA-256s), append and settled recipes. The trainer applies one source change per
+continuation, so the cut-over window takes no packages: `commit-admission` writes the committed-admission ledger entry that
+`prepare_window` reuses for that window (`state.interleave.memetic_distillation.admissions[-1].window == window`) and sets
+`memetic_distillation.recipe` to the settled recipe; queued packages are appended by the next window on top (checked: `extension_policy`
+admits a window-1 package set appended over the excised source and its CE policy).
+
+### Cut-over at a window boundary (w5: the window after window 1; controller is not touched by the package)
+
+The package in `ops/template-excision-1111/package` is built on the window-0 boundary (source `corrected-mix-diverse-1103`, 100,996 rows)
+and proves the tool; window 1 appends rollout rows to that source, so the cut-over package is rebuilt on what the parent checkpoint of the
+cut-over window trains (the leaf filters are small: minutes):
+
+1. Wait until the controller is between RL rounds with the window due next (`state.interleave.active_window` absent, `sft_windows == 2`);
+   stop the controller unit (stopping it also frees its fixed 100 GB ledger claim, so step 3 is admitted by the ledger).
+2. `prepare_template_excision.py audit --controller-out OUT --out ops/template-excision-<date>/package`, then `build ... --plan <that>/withdrawal-plan.json`
+   (defaults: the effective recipe `state.interleave.memetic_distillation.recipe` and `state.checkpoint`, the parent the window continues).
+3. `preflight --controller-out OUT --out <package>` under the ledger (`--budget-gb 48`, about 25 min on the CPU).
+4. `commit-admission --state OUT/state.json --patch <package>/commit-admission.json --window 2` (dry run, then `--write`). This is the whole state change:
+   `state.interleave.memetic_distillation.admissions += {window 2, recipe: recipe-append.json, record: admission.json}` and
+   `memetic_distillation.recipe = recipe-settled.json`; `config.json` is untouched (windows derive their sources from the recipe).
+5. Restart the controller in place. Window 2 runs on the excised source (`prepare_window` reuses the committed admission, no packages that window);
+   the trainer records `source_correction_history`, the superseded focus and the quota revision in the checkpoint; window 3 appends the queued packages on top.
+   The recorded transition is that admission entry plus the checkpoint's `source_correction_history` (proof SHA-256 in `source_correction_binding`).
+
+Preflight of the window-0 package (`--continuation-preflight-only --device cpu`, real 18.5 GB window-0 checkpoint, global step 110, scratch
+`--out`): **passed** (`ops/template-excision-1111/package/preflight/learner/continuation-preflight.json`): 100,986 rows (10 deferred, 13,638 quota
+revisions, `required_visits_removed` 13,638), the fifth recorded source correction, the pending focus superseded by the same request on the new
+leaf SHA-256s (5,670 rows pending), 101,972 remaining graph visits (115,620 + the 316 window-1 rows before), monotone-window schedule planned.
+The ledger cannot admit a 48 GB job while the controller holds its fixed 100 GB claim, so it ran outside admission
+(`ops/template-excision-1111/guarded_preflight.py`: starts at 75 GB MemAvailable, MemoryMax 52G, OOMScoreAdjust 1000, own floor). A first attempt, adopted
+into the ledger, was stopped by the ledger guard when the window-1 learner peaked; the second ran to the end. Stopping the controller first removes the problem.
