@@ -489,3 +489,16 @@ def test_held_measurement_never_blocks_the_round(tmp_path):
                            endpoint='http://127.0.0.1:9',log=logs.append) is None
     assert 'held eval did not start' in logs[-1]
     assert held_eval.Handle(tmp_path,{'pid':2**22+5,'starttime':1},1).finish() is None
+
+
+def test_static_rows_related_to_a_held_task_are_recognised_with_or_without_the_source_prefix(tmp_path):
+    from natlang_neuralese.rl import held_eval
+    assert held_eval.static_relation(tmp_path) is None   # a controller without held tasks relates nothing
+    directory = held_eval.directory_of(tmp_path)
+    directory.mkdir()
+    (directory / 'manifest.json').write_text(json.dumps({'excluded_split_groups': ['grp-a']}))
+    (directory / 'cases.jsonl').write_text(json.dumps({'id': 't1', 'source_groups': ['2wiki-q:Q7'],
+                                                       'curriculum': {'split_group': 'grp-a'}}) + '\n')
+    related = held_eval.static_relation(tmp_path)
+    assert related({'source_groups': ['grp-a']}) and related({'source_groups': ['2wiki:Q7']})
+    assert not related({'source_groups': ['2wiki:Q8', 'other']}) and not related({})

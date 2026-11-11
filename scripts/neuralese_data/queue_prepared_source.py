@@ -8,7 +8,8 @@ current protection union per row, admits rows under the shared family share cap 
 defers (never drops) the rest. This tool only prepares the package; it changes no recipe, config or controller state.
 
 Rows kept: train split, LFM3 tokenizer/role geometry of the live SFT stage, listed in ``--ids`` when given, not already
-in the current joint SFT source (``--exclude-ids-from`` a logical-family map), and not related to any protected world.
+in the current joint SFT source (``--exclude-ids-from`` a logical-family map), not related to any protected world, and
+not related to a held-out evaluation task of the controller (``rl.held_eval.static_relation``).
 The package records the source file hash, the verification receipt it relies on, the selection description (and the
 hash of the ids list) and the per-reason counts; ``--dry-run`` prints them without writing.
 
@@ -38,7 +39,7 @@ def family_map_ids(path):
     return {row['id'] for row in json.loads(Path(path).read_text())['rows']}
 
 
-def select(path, *, geometry, ids=None, exclude=frozenset(), protected=None, limit=None):
+def select(path, *, geometry, ids=None, exclude=frozenset(), protected=None, held=None, limit=None):
     """(rows in file order, {reason: count}) of the source rows that can be queued."""
     wanted = None if ids is None else set(ids)
     rows, skipped, seen = [], collections.Counter(), set()
@@ -59,6 +60,8 @@ def select(path, *, geometry, ids=None, exclude=frozenset(), protected=None, lim
                 skipped['already in the joint SFT source'] += 1
             elif protected is not None and protected.related(row):
                 skipped['related to a protected world'] += 1
+            elif held is not None and held(row):
+                skipped['related to a held-out evaluation task'] += 1
             else:
                 seen.add(row['id'])
                 rows.append(row)
@@ -84,13 +87,14 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     from natlang_neuralese.common.custody import ProtectedWorlds
+    from natlang_neuralese.rl.held_eval import static_relation
     from natlang_neuralese.rl.memetic_admission import STATIC_FAMILY, queue_package
     geometry = json.loads(args.geometry.read_text())['identity']
     protected = ProtectedWorlds.load()
     rows, skipped = select(
         args.source, geometry=geometry, ids=None if args.ids is None else read_ids(args.ids),
         exclude=family_map_ids(args.exclude_ids_from) if args.exclude_ids_from else frozenset(),
-        protected=protected, limit=args.limit)
+        protected=protected, held=static_relation(args.controller_out), limit=args.limit)
     summary = {'source': str(args.source.resolve()), 'rows': len(rows), 'skipped': skipped}
     if not rows or args.dry_run:
         print(json.dumps({**summary, 'queued': False}))

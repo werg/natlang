@@ -230,6 +230,26 @@ def exclusion(config, cases, round_number):
     return frozenset(row['id'] for row in cases if row.get('id') in held or _split_group(row) in groups)
 
 
+def static_relation(out):
+    """A predicate over prepared SFT rows (``source_groups``): True for a row related to a held task of the controller
+    ``out`` (its pinned manifest's split groups and its cases' source groups, also matched without the source prefix, so
+    ``2wiki-q:X`` meets ``2wiki:X``). None when the controller holds no tasks out. Static sources queued into the
+    lineage's SFT windows use it: held tasks never enter training."""
+    directory = directory_of(out)
+    if not (directory / 'manifest.json').exists():
+        return None
+    groups = set(json.loads((directory / 'manifest.json').read_text())['excluded_split_groups'])
+    for row in read_jsonl(directory / 'cases.jsonl'):
+        groups.update(row.get('source_groups') or ())
+        groups.add(_split_group(row))
+    bare = {group.split(':', 1)[1] for group in groups if isinstance(group, str) and ':' in group}
+
+    def related(row):
+        mine = [group for group in row.get('source_groups') or () if isinstance(group, str)]
+        return any(group in groups or (':' in group and group.split(':', 1)[1] in bare) for group in mine)
+    return related
+
+
 # ---- series identity --------------------------------------------------------------------------------------------------
 def model_facing(config=None):
     """The variants the collector resolves: a pinned option, the environment's, else the runtime's adopted default."""
