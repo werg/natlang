@@ -484,14 +484,40 @@ def begin(config, *, out, policy_id, endpoint, round_number=None, log=print):
 
 
 # ---- comparison -------------------------------------------------------------------------------------------------------
-def results(out):
-    """The valid held-eval results of a controller directory, oldest first."""
+def lineage(out):
+    """({policy sha: position}, {rolled-back policy shas}) of the controller's current lineage, or ({}, set()) without a state.
+    A policy's position is where the controller committed it: the policy round 0 collected from first, each RL update's result
+    after its round, each SFT window's result after the update that preceded it. Policies a rewind dropped
+    (``state['rewind_history'][*]['rolled_back_policies']``) and the lineage no longer holds are the rolled-back ones."""
+    path = Path(out) / 'state.json'
+    if not path.is_file():
+        return {}, set()
+    state = json.loads(path.read_text())
+    positions = {}
+    for item in state.get('task_curriculum_spread_yield') or []:
+        if item.get('round') == 0 and item.get('policy_id'):
+            positions[item['policy_id']] = (-1, 0)
+    for record in state.get('completed_update_history') or []:
+        positions[record['checkpoint']['sha256']] = (record['round'], 0)
+    for window in (state.get('interleave') or {}).get('windows') or []:
+        positions[window['checkpoint']['sha256']] = (window['controller_round'] - 1, 1)
+    dropped = {sha for record in state.get('rewind_history') or [] for sha in record.get('rolled_back_policies') or []}
+    return positions, dropped - set(positions)
+
+
+def results(out, rolled_back=False):
+    """The valid held-eval results of a controller directory in lineage order (the controller's commit order; a result of a
+    policy the state does not hold follows, by start time). ``rolled_back``: only the results of policies a rewind dropped."""
     found = []
     for path in directory_of(out).glob('policy-*/result.json'):
         result = json.loads(path.read_text())
         if result.get('schema') == RESULT_SCHEMA and 'error' not in result:
             found.append(result)
-    return sorted(found, key=lambda r: r['started_at'])
+    positions, dropped = lineage(out)
+    if rolled_back:
+        return sorted((r for r in found if r['policy_id'] in dropped), key=lambda r: r['started_at'])
+    found = [r for r in found if r['policy_id'] not in dropped]
+    return sorted(found, key=lambda r: (positions.get(r['policy_id'], (float('inf'), 0)), r['started_at']))
 
 
 def binomial_two_sided(a, b):
@@ -525,8 +551,9 @@ def paired(first, second):
 
 
 def trend(out):
-    """Per measured policy: its numbers, the paired comparison with the previous result of its series and with the first
-    of its series (None for the first one or when the series changed)."""
+    """Per measured policy of the current lineage, in lineage order: its numbers, the paired comparison with the previous result
+    of its series and with the first of its series (None for the first one or when the series changed). Rolled-back policies
+    are not here (``rolled_back``)."""
     rows, firsts, previous = [], {}, {}
     for result in results(out):
         key = result['series']['key']
@@ -541,6 +568,13 @@ def trend(out):
         previous[key] = result
         rows.append(row)
     return rows
+
+
+def rolled_back(out):
+    """The measured policies a rewind dropped, with their numbers and never a pairing (they are not part of the lineage)."""
+    return [{'policy': r['policy_id'], 'round': r.get('round'), 'series': r['series']['key'], 'complete': r['complete'],
+             'ran': r['ran'], 'scored': r['scored'], 'successes': r['successes'], 'loop_rate': r['loop_rate']}
+            for r in results(out, rolled_back=True)]
 
 
 def main(argv=None):

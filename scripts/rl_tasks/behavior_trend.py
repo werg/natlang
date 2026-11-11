@@ -124,8 +124,8 @@ def pair_text(label, pair):
             f"tasks +{pair['tasks_up']}/-{pair['tasks_down']}, p={pair['task_sign_p']})")
 
 
-def held_lines(rows):
-    if not rows:
+def held_lines(rows, dropped=()):
+    if not rows and not dropped:
         return []
     lines = ['held-out set    policy       series       scored success loop_rate']
     for r in rows:
@@ -133,6 +133,9 @@ def held_lines(rows):
         lines.append(f"held-out        {r['policy'][:12]} {r['series']:<12} {r['scored']:>6} {r['successes']:>7} {rate:>9}"
                      + ('' if r['complete'] else f"  (partial: {r['ran']} ran)")
                      + pair_text('vs previous', r['vs_previous']) + pair_text('vs first', r['vs_first']))
+    for r in dropped:
+        rate = '-' if r['loop_rate'] is None else f"{r['loop_rate']:.2f}"
+        lines.append(f"held-out        {r['policy'][:12]} {r['series']:<12} {r['scored']:>6} {r['successes']:>7} {rate:>9}  (rolled back: not compared)")
     return lines
 
 
@@ -149,7 +152,7 @@ def main(argv=None):
         for r in rounds:
             print(f"{r['round']:<15} {r['students']:>8} {r['success']:>7} {'-' if r['loop_rate'] is None else format(r['loop_rate'], '.2f'):>9}"
                   f" {r['unresolved']:>10} {r['groups_with_spread']!s:>13}")
-        print('\n'.join(held_lines(held_eval.trend(a.out))))
+        print('\n'.join(held_lines(held_eval.trend(a.out), held_eval.rolled_back(a.out))))
         return
     parent = dev16(a.parent_label)
     if parent is None:
@@ -160,7 +163,7 @@ def main(argv=None):
     results = sorted((r for r in map(dev16, labels) if r and (r['complete'] or r['unresolved'] <= 1)), key=lambda r: r['step'])
     verdict, reason = decide(parent, results, rounds, held_eval.trend(a.out))
     if a.json:
-        print(json.dumps({'rounds': rounds, 'parent': parent, 'dev16': results, 'held_eval': held_eval.trend(a.out),
+        print(json.dumps({'rounds': rounds, 'parent': parent, 'dev16': results, 'held_eval': held_eval.trend(a.out), 'held_eval_rolled_back': held_eval.rolled_back(a.out),
                           'verdict': verdict, 'reason': reason}))
         return
     print('round           students success loop_rate unresolved spread_groups')
@@ -172,7 +175,7 @@ def main(argv=None):
     for r in results:
         print(f"dev16         step {r['step']}: {r['success']}/16, {r['loops']} looping, {r['unresolved']} unresolved"
               f"{' (counted as failure)' if r['unresolved'] and not r['complete'] else ''}  ({r['label']})")
-    for line in held_lines(held_eval.trend(a.out)):
+    for line in held_lines(held_eval.trend(a.out), held_eval.rolled_back(a.out)):
         print(line)
     print(f'verdict: {verdict} ({reason})')
 

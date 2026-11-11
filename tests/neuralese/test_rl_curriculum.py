@@ -480,6 +480,25 @@ def test_held_trend_pairs_with_previous_and_first_within_one_series(tmp_path):
     assert len(held_eval.trend(tmp_path))==4                                         # a failed run is not a measurement
 
 
+def test_held_trend_follows_the_lineage_after_a_rewind(tmp_path):
+    tasks=[(f't{i}',s) for i in range(6) for s in (0,1)]
+    def write(policy,started,successes):
+        d=held_eval.policy_directory(tmp_path,policy);d.mkdir(parents=True)
+        (d/'result.json').write_text(json.dumps(held_result(policy,started,{k:1.0 if i<successes else 0.0 for i,k in enumerate(tasks)})))
+    a,b,c,d,e='a'*64,'b'*64,'c'*64,'d'*64,'e'*64     # a collected round 0; b,c = updates 0,1; d = window 0 (after round 1); e = rolled back
+    write(d,1,5);write(b,2,3);write(e,3,2);write(c,4,6)             # measured out of lineage order; e was measured after d
+    assert [r['policy'] for r in held_eval.trend(tmp_path)]==[d,b,e,c]                       # no state: by start time
+    (tmp_path/'state.json').write_text(json.dumps({
+        'task_curriculum_spread_yield':[{'round':0,'policy_id':a}],
+        'completed_update_history':[{'round':0,'checkpoint':{'sha256':b}},{'round':1,'checkpoint':{'sha256':c}}],
+        'interleave':{'windows':[{'controller_round':2,'checkpoint':{'sha256':d}}]},
+        'rewind_history':[{'rolled_back_policies':[e,'f'*64]}]}))
+    rows=held_eval.trend(tmp_path)
+    assert [r['policy'] for r in rows]==[b,c,d]                                              # lineage order, e is not in it
+    assert rows[1]['vs_previous']['only_second']==3 and rows[2]['vs_previous']['only_first']==1 and rows[2]['vs_first']['only_second']==2
+    assert [r['policy'] for r in held_eval.rolled_back(tmp_path)]==[e] and 'vs_previous' not in held_eval.rolled_back(tmp_path)[0]
+
+
 def test_held_measurement_never_blocks_the_round(tmp_path):
     logs=[]
     # Opted out, unadopted, or an actor that cannot be reached: no handle, a logged reason, no exception.
