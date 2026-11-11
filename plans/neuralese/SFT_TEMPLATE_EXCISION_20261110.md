@@ -203,3 +203,8 @@ leaf SHA-256s (5,670 rows pending), 101,972 remaining graph visits (115,620 + th
 The ledger cannot admit a 48 GB job while the controller holds its fixed 100 GB claim, so it ran outside admission
 (`ops/template-excision-1111/guarded_preflight.py`: starts at 75 GB MemAvailable, MemoryMax 52G, OOMScoreAdjust 1000, own floor). A first attempt, adopted
 into the ledger, was stopped by the ledger guard when the window-1 learner peaked; the second ran to the end. Stopping the controller first removes the problem.
+
+A package is valid for exactly the checkpoint it was built against: the CE policy's quota-aware basis binds the parent frame digest (saved quotas and
+credits), and a preflight of the window-1 package against the window-1 learner slot after another update was refused by the trainer
+(`quota-aware CE parent quotas or exposure changed; recensus before training`). Build with the controller stopped, on the head checkpoint
+the window will continue (the default), then preflight and commit without a checkpoint change in between.
