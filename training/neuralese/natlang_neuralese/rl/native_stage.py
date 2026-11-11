@@ -436,6 +436,9 @@ def skip_zero_signal_jolt(graphs, objective, earned=frozenset()):
     if not omitted:return graphs,objective,None
     omitted_set=set(omitted);kept=[graph for graph in graphs if graph['id'] not in omitted_set]
     projected={**objective,'rows':{key:value for key,value in rows.items() if key not in omitted_set}}
+    if 'actors' in projected and not any('actor_checkpoint_sha256' in row for row in projected['rows'].values()):
+        # Every stale-actor episode was omitted: the objective declares only actors its rows use (w5 round 3).
+        del projected['actors']
     disposition={'schema':'natlang.jolt-zero-signal-projection/1','omitted_graph_ids':omitted,
         'omitted_count':len(omitted),'active_count':len(kept),'omitted_graph_visits':0,
         # The reason text is a global objective control (a resumed update must reproduce it): the no-action clause

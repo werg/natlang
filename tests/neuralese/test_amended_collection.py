@@ -94,6 +94,13 @@ def test_zero_signal_jolt_projection_preserves_active_and_privileged_graphs():
     assert 'active episodes' in receipt['normalization']
     empty,_,all_zero=skip_zero_signal_jolt(graphs[:1],{**objective,'rows':{'zero':rows['zero']}})
     assert not empty and all_zero['omitted_graph_visits']==0
+    # A stale actor whose every episode was omitted is no longer declared (w5 round 3, 2026-11-11).
+    stale={**rows,'zero':{**rows['zero'],'actor_checkpoint_sha256':'a'*64}}
+    _,projected,_=skip_zero_signal_jolt(graphs,{**objective,'rows':stale,'actors':{'actors':{'a'*64:{}}}})
+    assert 'actors' not in projected
+    _,kept_actor,_=skip_zero_signal_jolt(graphs,{**objective,'rows':{**stale,'outcome':{**rows['outcome'],'actor_checkpoint_sha256':'a'*64}},
+                                                 'actors':{'actors':{'a'*64:{}}}})
+    assert 'actors' in kept_actor
 
 
 def test_no_signal_round_advances_collection_without_training_credit(tmp_path):
