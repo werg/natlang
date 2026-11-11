@@ -155,7 +155,9 @@ def main(argv=None):
     if parent is None:
         raise SystemExit(f'no dev16 evidence for parent {a.parent_label}')
     labels = sorted({Path(d).name.split('-py')[0] for g in a.label_glob for d in glob.glob(str(EVIDENCE / g))})
-    results = sorted((r for r in map(dev16, labels) if r and r['complete']), key=lambda r: r['step'])
+    # one wall-timed-out case (unresolved) counts as a failure: a deterministic rerun repeats it, so the evaluation would
+    # otherwise never score (step 134, 2026-11-11: two identical runs, 8 successes, the same case at the 1200 s wall)
+    results = sorted((r for r in map(dev16, labels) if r and (r['complete'] or r['unresolved'] <= 1)), key=lambda r: r['step'])
     verdict, reason = decide(parent, results, rounds, held_eval.trend(a.out))
     if a.json:
         print(json.dumps({'rounds': rounds, 'parent': parent, 'dev16': results, 'held_eval': held_eval.trend(a.out),
@@ -168,7 +170,8 @@ def main(argv=None):
               + ('' if r['complete'] else '  (incomplete)'))
     print(f"parent dev16  step {parent['step']}: {parent['success']}/16, {parent['loops']} looping")
     for r in results:
-        print(f"dev16         step {r['step']}: {r['success']}/16, {r['loops']} looping, {r['unresolved']} unresolved  ({r['label']})")
+        print(f"dev16         step {r['step']}: {r['success']}/16, {r['loops']} looping, {r['unresolved']} unresolved"
+              f"{' (counted as failure)' if r['unresolved'] and not r['complete'] else ''}  ({r['label']})")
     for line in held_lines(held_eval.trend(a.out)):
         print(line)
     print(f'verdict: {verdict} ({reason})')
