@@ -1,5 +1,24 @@
 # Model-facing changes and their measurement
 
+### 2026-11-11 — dev16 A/B of the adopted variants on step 99: the variants did not cause the step-102/110 dev16 failures
+
+Question: were folder_criteria_reducer (invalid_action / budget_exhaustion), iterate_schedule_repair (semantic_mismatch / repetition) and
+workbench_tickets ("unresolved") failing on steps 102 and 110 because commit 1656e64ea adopted `effect-receipt` and `read-file-binding`
+at 10:12 on 2026-11-10 (steps 67 and 99 were evaluated before it)? Same weights, same protected dev16 packet, same Pop container image and
+driver; only `NATLANG_MODEL_FACING` differs (`pop_behavior_eval.py request --model-facing`, recorded in launch.json and the identity, labels
+`mf-*`, never paired or promoted). Step 99 (dbb03644ccce):
+
+| arm | dev16 | folder_criteria_reducer | iterate_schedule_repair | workbench_tickets | other failures |
+|---|---|---|---|---|---|
+| before the change (commit 456cf4049, regular eval) | 11/16 | success | success | semantic_mismatch | edit_stream, logic_proof_verifier, relational_multihop_qualifier, live_inventory |
+| `none` (this A/B, Pop checkout 778bcc94d) | 11/16 | success | success | semantic_mismatch | same four |
+| default (adopted variants, Pop checkout 7af638d53) | 12/16 | success | success | semantic_mismatch | edit_stream, logic_proof_verifier, live_inventory |
+
+Decision: the variants are not the cause. Step 99 passes folder_criteria_reducer and iterate_schedule_repair under the adopted texts, and
+the two arms differ only in relational_multihop_qualifier (a single-sample case; the pre-change run failed it too). `ADOPTED` stays as it
+is. The step-102/110 regressions on those cases follow the weights; step 110 with `none` was not run (the controller held Pop again). Single
+samples per case: 11 vs 12 is within the dev16 noise.
+
 ### 2026-11-10 (later) — `nl-examples` and `zero-arg-nl` rejected and removed (fallow #17b)
 
 The first A/B had no inline-nl delegation, so these two were never exercised. Tasks chosen from the w5 training packets because their
