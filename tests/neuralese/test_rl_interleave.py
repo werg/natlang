@@ -63,6 +63,14 @@ def test_declared_stage_owns_the_controller_task_source_and_budget(tmp_path):
     interleave.bind_stage(config, state, tmp_path / 'state.json')
     assert len(state['interleave']['stage_bindings']) == 1
     assert not interleave.window_due(declared, state)
+    state['round'] = 6
+    assert not interleave.window_due(declared, state)
+    # The controller retunes the cadence live (one SFT window per RL round); the change is a recorded binding.
+    _, every_round = interleave.bind_stage({**config, 'rl_rounds_per_window': 1}, state, tmp_path / 'state.json')
+    assert interleave.window_due(every_round, state) and every_round['parameters']['rl_rounds_per_window'] == 1
+    assert state['interleave']['stage_bindings'][-1]['rl_rounds_per_window'] == 1
+    with pytest.raises(ValueError, match='positive integer'):
+        interleave.bind_stage({**config, 'rl_rounds_per_window': 0}, state, tmp_path / 'state.json')
     state['round'] = 7
     assert interleave.window_due(declared, state)
     with pytest.raises(ValueError, match='different SFT stage'):
