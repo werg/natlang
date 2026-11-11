@@ -18,7 +18,8 @@ Cause measured on the checkpoints: Muon orthogonalizes `g + beta*m`, so its step
 policy gradient (per-episode norm 0.3-0.7 on 20 backbone matrices) is about 1/1000 of the momentum buffer SFT leaves (norm 536 on the same
 tensors). Across 16 RL steps (rounds 2-3) the buffer's direction did not change (cosine 110/118/126 = 1.000, norm decaying exactly 0.95^k), every
 RL round's weight delta correlates with that buffer (-0.06, -0.10) as strongly as an SFT window's own (-0.04..-0.05; round 2's delta still
-correlates -0.05 with the buffer from three stages earlier), consecutive round deltas are orthogonal (cosine 0.01), advantage-split
+correlates -0.05 with the buffer from three stages earlier) and with its Newton-Schulz direction (round 2 -0.20, round 3 -0.36 against the buffer
+two stages old, SFT windows -0.14/-0.16, row-shuffled control 0.000), consecutive round deltas are orthogonal (cosine 0.01), advantage-split
 log-prob changes are identical (w4 direction test), and the interface rows (AdamW) kept moving 1-2% per round with zero RL gradient (update
 decays 0.9^k: SFT `exp_avg`). So a round was 7-9 full-size steps along the last SFT window's momentum with the RL gradient a few percent of the
 direction: no RL learning, extra unsupervised SFT drift (4x LR made it 4x longer steps). A 5-episode probe also puts the per-episode outcome
