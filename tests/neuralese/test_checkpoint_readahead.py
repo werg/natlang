@@ -82,3 +82,21 @@ def test_advisory_failure_is_not_a_checkpoint_failure(tmp_path,monkeypatch):
     monkeypatch.setattr(mechanism,'mapped_regions',unsupported)
     assert mechanism.advise_checkpoint(path)==0
     assert torch.equal(CheckpointPolicy.load(path)['tensor'],torch.ones(2))
+
+
+def test_prefetch_reads_a_large_checkpoint_once_in_the_background_and_skips_small_ones(tmp_path,monkeypatch):
+    small=tmp_path/'small.pt';torch.save({'tensor':torch.zeros(16)},small)
+    assert mechanism.prefetch_checkpoint(small) is None
+    big=tmp_path/'big.pt';torch.save({'tensor':torch.arange(1024,dtype=torch.float32)},big)
+    monkeypatch.setattr(mechanism,'PREFETCH_MIN_BYTES',1)
+    monkeypatch.setattr(mechanism,'PREFETCH_CHUNK_BYTES',512)
+    before=big.read_bytes()
+    thread=mechanism.prefetch_checkpoint(big)
+    assert thread is not None and thread.daemon
+    thread.join(timeout=30)
+    assert not thread.is_alive() and big.read_bytes()==before
+    monkeypatch.setenv(mechanism.PREFETCH_SETTING,'off')
+    assert mechanism.prefetch_checkpoint(big) is None
+    monkeypatch.setenv(mechanism.PREFETCH_SETTING,'bogus')
+    assert mechanism.prefetch_checkpoint(big) is None  # an unreadable setting only loses the speedup
+    assert mechanism.prefetch_checkpoint(tmp_path/'missing.pt') is None

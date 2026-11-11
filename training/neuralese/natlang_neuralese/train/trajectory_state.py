@@ -224,6 +224,34 @@ class _CheckpointDigestWriter:
         return self.stream.flush()
 
 
+@contextmanager
+def pinned_device_to_host_save():
+    """torch.save stages each device storage through pinned memory instead of fresh pageable memory.
+
+    The default ``storage.cpu()`` copy ran at 0.05-0.1 GB/s on the GB10 (see ``host_copy``): the final 18 GB
+    learner checkpoint took 2 min 43 s. Pinned staging measured 1.4 GB/s, one storage at a time (no second full
+    copy). The pinned host allocator caches its blocks; they are released after the write so the learner does not
+    keep them while it trains.
+    """
+    try:
+        from torch.utils.serialization import config
+        previous = config.save.use_pinned_memory_for_d2h
+    except (ImportError, AttributeError):
+        yield
+        return
+    config.save.use_pinned_memory_for_d2h = True
+    try:
+        yield
+    finally:
+        config.save.use_pinned_memory_for_d2h = previous
+        empty = getattr(torch._C, '_host_emptyCache', None)
+        if empty is not None:
+            try:
+                empty()
+            except RuntimeError:
+                pass
+
+
 def _atomic_checkpoint(path, state, *, write_bound_bytes=None, reservation=None):
     path = Path(path)
     pending = reservation.pending if reservation is not None else path.with_suffix('.pending')
@@ -237,7 +265,8 @@ def _atomic_checkpoint(path, state, *, write_bound_bytes=None, reservation=None)
                 os.posix_fallocate(stream.fileno(), 0, write_bound_bytes)
             writer = _CheckpointDigestWriter(stream, sync_window_bytes=CHECKPOINT_SYNC_WINDOW_BYTES,
                                              write_bound_bytes=write_bound_bytes)
-            torch.save(state, writer)
+            with pinned_device_to_host_save():
+                torch.save(state, writer)
             if write_bound_bytes is not None:
                 stream.truncate(writer.bytes)
             stream.flush()
@@ -280,6 +309,24 @@ def _atomic_checkpoint(path, state, *, write_bound_bytes=None, reservation=None)
         raise
 
 
+def host_copy(source):
+    """Detached CPU copy of one tensor, fast for device memory on unified-memory machines.
+
+    A device-to-host copy into freshly allocated pageable memory faults every page through the driver: measured on
+    the GB10 at 0.05-0.1 GB/s (an 18 GB learner state took 110-280 s per checkpoint snapshot, 2026-11-11). The same
+    copy into memory the CPU has already touched runs at 1-13 GB/s. Device sources therefore land in a destination
+    the CPU first-touches. The bytes are identical to ``source.to('cpu', copy=True)``.
+    """
+    if source.device.type == 'cpu' or source.numel() == 0:
+        return source.detach().to(device='cpu', copy=True)
+    if not source.is_contiguous():
+        return source.detach().to(device='cpu', copy=True)
+    destination = torch.empty(source.shape, dtype=source.dtype, device='cpu')
+    destination.zero_()
+    destination.copy_(source.detach())
+    return destination
+
+
 def immutable_cpu_snapshot(value, *, _tensor_storage_memo=None):
     """Copy a checkpoint tree into detached CPU tensors and immutable metadata values.
 
@@ -300,7 +347,7 @@ def immutable_cpu_snapshot(value, *, _tensor_storage_memo=None):
         if base is None:
             byte_view = torch.empty(0, dtype=torch.uint8, device=value.device).set_(
                 storage, 0, (storage.nbytes(),), (1,))
-            base = byte_view.detach().to(device='cpu', copy=True)
+            base = host_copy(byte_view)
             _tensor_storage_memo[key] = base
         return torch.empty(0, dtype=value.dtype, device='cpu').set_(
             base.untyped_storage(), value.storage_offset(), tuple(value.size()), tuple(value.stride()))

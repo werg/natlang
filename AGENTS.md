@@ -11,6 +11,18 @@ managed actor's `ready()` (`rl/managed_actor.py`) before each local entry: a dea
 store and policy while its slots wait. The fork validates natlang `custom_params` at request intake (invalid request aborted
 alone). Running processes keep their code; the next actor launch has both.
 
+## RL learner wall time: host copies, not capacity, dominated (engineering, 2026-11-11)
+
+Round 3's learner took 152 min: 113 training, 13 between updates, 11 policy capacity (three whole-graph backwards, each as long as a real
+microbatch), 7 trainer init, 5 objective preparation, 3 final save. On the GB10 a device-to-host copy into freshly allocated pageable memory runs at
+0.05-0.1 GB/s (page-faulted through the driver; 13 GB/s into memory the CPU already touched), so every 18 GB checkpoint snapshot blocked training
+110-130 s and the synchronous final write took 163 s; a cold mmap restore faults at 0.1 GB/s against 1.2 GB/s sequential. `host_copy` prefaults the
+destination, `pinned_device_to_host_save` stages `torch.save` through pinned memory (byte-identical, 11x), `prefetch_checkpoint` warms the parent while
+the base model loads (`NATLANG_CHECKPOINT_PREFETCH=off` opts out). Policy capacity runs only groups no other group of the round covers by
+`_one_group_dominates` (the SFT oversize rule); the pre-SGD parity group always runs. Memory peaks of identical geometry differed by 15 GB between
+rounds (57.8 vs 42.4 GB), so a prior round's proof is NOT reused by token/KV coverage. `native_phase` lines carry `process_seconds`; `rl_stage_phase`
+lines time the preparation: read the next learner's timeline before cutting further.
+
 ## Held-out evaluation set steers the lineage; dev16 cannot (engineering, 2026-11-10)
 
 `rl/held_eval.py`: about 64 pool tasks (family/level stratified, a third effect-state, pinned in `{out}/held-eval/manifest.json`

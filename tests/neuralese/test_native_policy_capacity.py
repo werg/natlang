@@ -65,6 +65,11 @@ def test_policy_max_backward_restores_optimizer_rng_all_parameters_and_reuses_pr
         proof=json.loads(Path(ref['path']).read_text())
         assert proof['passed']and proof['optimizer_updates']==proof['earned_exposure']==0
         assert proof['capacity']['production_packing'] is True
+        # Only groups no other measured group covers run a backward; every other group names its cover.
+        measured_cases=proof['measured_case_indices']
+        assert len(proof['capacity']['cases'])==len(measured_cases)>=1
+        assert all(case in proof['case_indices'] for case in measured_cases)
+        assert {tuple(item['case_indices']) for item in proof['dominated_case_indices']}|{tuple(case) for case in measured_cases}=={tuple(case) for case in proof['case_indices']}
         assert proof['capacity']['cotangent_mode']==('plain' if getattr(args,'cotangent_accumulator_backend',None)=='plain' else 'vjp')
         assert any(len(row['example_ids'])==2 for row in proof['capacity']['cases'])
         assert any(any(name.startswith('backbone.')for name in row['gradients'])for row in proof['capacity']['cases'])

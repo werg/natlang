@@ -398,3 +398,36 @@ def test_qat_latents_get_their_own_adamw_groups():
     assert len(groups) == 1 and groups[0]['lr'] == 5e-5 and len(groups[0]['params']) == 1
     assert not any(q is dense for g in optimizer.muon.param_groups for q in g['params'])
     assert any(q is other for g in optimizer.muon.param_groups for q in g['params'])
+
+
+def test_pinned_device_to_host_save_sets_and_restores_the_torch_save_staging_flag(tmp_path):
+    from torch.utils.serialization import config
+    from natlang_neuralese.train.trajectory_state import pinned_device_to_host_save
+    before = config.save.use_pinned_memory_for_d2h
+    with pinned_device_to_host_save():
+        assert config.save.use_pinned_memory_for_d2h is True
+    assert config.save.use_pinned_memory_for_d2h is before
+    with pytest.raises(RuntimeError):
+        with pinned_device_to_host_save():
+            raise RuntimeError('write failed')
+    assert config.save.use_pinned_memory_for_d2h is before
+    # The checkpoint writer routes through it and stays byte-compatible for host tensors.
+    atomic_checkpoint(tmp_path / 'state.pt', {'step': 3, 'weight': torch.arange(4.)})
+    saved = torch.load(tmp_path / 'state.pt', map_location='cpu', weights_only=False)
+    assert saved['step'] == 3 and saved['weight'].tolist() == [0., 1., 2., 3.]
+
+
+def test_host_copy_is_a_detached_exact_copy_for_host_and_noncontiguous_tensors():
+    from natlang_neuralese.train.trajectory_state import host_copy
+    source = torch.arange(12, dtype=torch.float32).view(3, 4)
+    for value in (source, source.t(), source[:, 1:3], torch.empty(0)):
+        copy = host_copy(value)
+        assert torch.equal(copy, value.detach()) and copy.device.type == 'cpu'
+        assert copy.untyped_storage().data_ptr() != value.untyped_storage().data_ptr() or value.numel() == 0
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason='needs a device tensor')
+def test_host_copy_of_device_tensor_matches_the_default_copy():
+    from natlang_neuralese.train.trajectory_state import host_copy
+    value = torch.randn(1 << 16, device='cuda', dtype=torch.bfloat16)
+    assert torch.equal(host_copy(value), value.cpu())

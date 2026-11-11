@@ -56,3 +56,48 @@ def advise_checkpoint(path):
                    if advise(address, length, mmap.MADV_SEQUENTIAL) == 0)
     except (OSError, AttributeError, ValueError):
         return 0
+
+
+PREFETCH_SETTING = 'NATLANG_CHECKPOINT_PREFETCH'
+PREFETCH_MIN_BYTES = 1 << 30
+PREFETCH_CHUNK_BYTES = 16 << 20
+
+
+def prefetch_enabled():
+    value = os.environ.get(PREFETCH_SETTING, 'sequential')
+    if value not in ('off', 'sequential'):
+        raise ValueError(f'{PREFETCH_SETTING} must be off or sequential')
+    return value == 'sequential'
+
+
+def prefetch_checkpoint(path):
+    """Warm the page cache of a checkpoint the learner is about to restore, with one sequential read.
+
+    The restore maps the file and copies each tensor to the device in turn. On a cold cache that is a stream of
+    small page faults: 0.1 GB/s measured on the GB10 (18 GB, three minutes), against 1.2 GB/s for a sequential read
+    and 19 GB/s warm. A daemon thread reads the file front to back in large chunks while the base model loads, so
+    the restore finds its pages resident. It never writes, never changes the file, and a failure only loses the
+    speedup. Returns the thread, or None when disabled or the file is small.
+    """
+    import threading
+    try:
+        if not prefetch_enabled():
+            return None
+        path = Path(path).resolve(strict=True)
+        if path.stat().st_size < PREFETCH_MIN_BYTES:
+            return None
+    except (OSError, ValueError):
+        return None
+
+    def read():
+        try:
+            buffer = bytearray(PREFETCH_CHUNK_BYTES)
+            with open(path, 'rb', buffering=0) as stream:
+                while stream.readinto(buffer):
+                    pass
+        except OSError:
+            pass
+
+    thread = threading.Thread(target=read, name='checkpoint-prefetch', daemon=True)
+    thread.start()
+    return thread

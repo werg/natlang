@@ -1139,6 +1139,11 @@ def policy_parity_first_group(expected, objective):
     return None if selected is None else (selected,)
 
 
+def _one_group_dominates_shape(measured,candidate):
+    from ..train.native_packed_capacity import _one_group_dominates
+    return _one_group_dominates(measured,candidate)
+
+
 def qualify_policy_objective(model,optimizer,train,objective,args,config,*,backend,checkpoint_sha256,
                              pending_batches,prior_proof=None):
     """The actual loaded learner runs its policy loss read-only before SGD."""
@@ -1203,12 +1208,26 @@ def qualify_policy_objective(model,optimizer,train,objective,args,config,*,backe
                 **({'authenticated_resume_checkpoint_sha256':checkpoint_sha256}
                    if prior_proof is not None and previous['parent_checkpoint_sha256']!=checkpoint_sha256 else {})}
     examples=[list(train.iter_indices(list(indices)))for indices in groups]
+    # A group whose every coupled shape (tokens, KV slots, per-invocation dimensions) one other measured group
+    # covers adds no allocation the live backward of that group has not already exercised; the same rule gates
+    # newly larger groups in SFT updates (native_packed_capacity._one_group_dominates). The pre-SGD parity group
+    # always runs: it is the numerical gate, not only a memory case. Round 3 (2026-11-11) ran three such backwards,
+    # 11 minutes, for groups of one episode each.
+    from ..train.native_packed_capacity import _oversize_shape,_nondominated_group_indices
+    shapes=_oversize_shape(examples)
+    selected,_=_nondominated_group_indices(shapes)
+    if parity_group is not None and 0 not in selected:selected=[0,*selected]
+    measured=[examples[i]for i in sorted(selected)]
+    covered_by=[{'group':i,'case_indices':list(groups[i]),'measured':j}for i in range(len(groups))if i not in selected
+        for j in [min((k for k in selected if _one_group_dominates_shape(shapes[k],shapes[i])),
+                      key=lambda k:shapes[k]['forward_tokens']+shapes[k]['kv_slots'])]]
     result={'schema':'natlang.native-policy-capacity-proof/1',**scope,
         'parent_checkpoint_sha256':checkpoint_sha256,'passed':False,'optimizer_updates':0,
         'earned_exposure':0,'packing_limits':limits,'case_indices':[list(group)for group in groups],
+        'measured_case_indices':[list(groups[i])for i in sorted(selected)],'dominated_case_indices':covered_by,
         'scope':'actual admitted whole policy examples and pending production packed-batch maxima; no task-quality claim'}
     try:
-        result['capacity']=qualify_capacity(model,optimizer,examples,backend=backend,
+        result['capacity']=qualify_capacity(model,optimizer,measured,backend=backend,
             checkpoint_layers=args.checkpoint_layers,chunk_tokens=args.chunk_tokens,
             checkpoint_sha256=checkpoint_sha256,source_binding=expected['source'],objective=objective,
             retained_gradients=getattr(args,'accumulate_batches',1)>1,production_packing=True,

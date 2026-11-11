@@ -459,13 +459,20 @@ def skip_zero_signal_jolt(graphs, objective, earned=frozenset()):
 def _admit_and_train(args,trainer,*,operation_request=None):
     from ..common.jsonio import iter_jsonl_rows
     from ..common.hashing import canonical_json_sha256_hex
+    import time
+    started=time.monotonic()
+    def phase(name):
+        # Wall-clock timeline of the stage's preparation (rollouts -> graphs -> objective -> capacity request).
+        print(json.dumps({'kind':'rl_stage_phase','phase':name,'stage_seconds':round(time.monotonic()-started,1)}),flush=True)
     rows = [row for path in args.rollouts for _, row in iter_jsonl_rows(path)]
+    phase('rollouts_read')
     graphs, objective = prepare(rows, checkpoint=args.continue_from, tokenizer=args.rl_tokenizer,
         bundle=args.rl_block_bundle, mode=args.rl_mode,coefficient_policy=args.coefficient_policy,
         expected_history_reasoning_policy=args.history_reasoning_policy,
         expected_history_binding_sha256=args.history_reasoning_binding_sha256,
         expected_history_binding_path=args.history_reasoning_binding_path,
         policy_loss=args.rl_policy_loss, jolt_cases=args.jolt_cases, actors=args.rl_actors)
+    phase('objective_prepared')
     if not graphs:
         raise ValueError('no useful native policy episodes: route flat failures to verified graph SFT seeding')
     prior_objective = args.out/'rl-native-objective.json'
@@ -509,6 +516,7 @@ def _admit_and_train(args,trainer,*,operation_request=None):
         write_bytes_durable(graph_path, ''.join(json.dumps(row) + '\n' for row in graphs).encode())
         write_json_durable(objective_path, objective)
         transition_path=None
+    phase('graphs_and_objective_written')
     episode_order=order_receipt(graphs,objective)
     write_json_durable(args.out/'rl-episode-order.json',episode_order)
     write_json_durable(args.out/'rl-data-receipt.json', {
@@ -546,6 +554,7 @@ def _admit_and_train(args,trainer,*,operation_request=None):
     request_path=args.out/'rl-policy-capacity-request.json'
     request=policy_capacity_request(source,policy_objective)
     write_json_durable(request_path,request)
+    phase('capacity_request_written')
     from ..train.native_resident import binding
     trainer += ['--policy-capacity-request',json.dumps(binding(request_path),sort_keys=True)]
     from ..train.native_state_sft import main as train
@@ -561,7 +570,9 @@ def _admit_and_train(args,trainer,*,operation_request=None):
     # unified memory is also GPU memory, for the whole update.
     del rows, graphs, objective, policy_objective, source, request
     _release_host_memory()
+    phase('trainer_start')
     result=_invoke_raw_trainer(args, trainer, trainer_args, train)
+    phase('trainer_returned')
     if result==0 and operation_request is not None and args.coefficient_policy is None:
         from ..train.native_resident import binding
         report_path=args.out/'report.json';receipt_path=args.out/'native-training-receipt.json'

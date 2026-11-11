@@ -28,6 +28,14 @@ from ..model.native_model import (CHECKPOINT_SCHEMA, load_native_checkpoint, loa
                                   native_identity)
 from .checkpoint_policy import CheckpointPolicy
 from .gradient_accumulation import GRADIENT_ACCUMULATION_DTYPE, Float32GradientAccumulation
+
+_PHASE_CLOCK = time.monotonic()
+
+
+def _phase(phase, **fields):
+    """One ``native_phase`` line with the seconds since this process started (wall-clock phase timeline of an update)."""
+    print(json.dumps({'kind': 'native_phase', 'phase': phase, **fields,
+                      'process_seconds': round(time.monotonic() - _PHASE_CLOCK, 1)}), flush=True)
 from .loop import capture_training_rng_state, restore_training_rng_state
 from .native_source_streams import scheduling_rank, stream_pending_batches
 from .native_continuation import (collect_sft_progress, restore_sft_progress, progress_obligations,
@@ -2081,6 +2089,8 @@ def _main(argv=None, *, requested_refresh):
     parent_continuation = False
     shared_resume = None
     if args.continue_from and not policy.slot.exists():
+        from .checkpoint_readahead import prefetch_checkpoint
+        prefetch_checkpoint(args.continue_from)  # sequential read warms the cache while the base model loads
         model, tokenizer, roles, config, parent_state = load_native_checkpoint(args.continue_from, base=args.base,
                                                                           device=args.device, participant=args.native_participant)
         shared_resume = parent_state.get('shared_training')
@@ -2094,6 +2104,8 @@ def _main(argv=None, *, requested_refresh):
         if parent_continuation:
             parent_state = None
     elif policy.slot.exists():
+        from .checkpoint_readahead import prefetch_checkpoint
+        prefetch_checkpoint(policy.slot)
         model, tokenizer, roles, config, state = load_native_checkpoint(policy.slot, base=args.base,
                                                                          device=args.device)
         if state.get('schema') != CHECKPOINT_SCHEMA:
@@ -3168,6 +3180,7 @@ def _main(argv=None, *, requested_refresh):
     model.checkpoint_direct_token_limit = args.checkpoint_direct_token_limit
     model.to(args.device)
     model.train()
+    _phase('model_on_device')
     optimizer, named = make_native_optimizer(model, lr=args.learning_rate, learned_row_lr=args.learned_row_learning_rate, interface_row_lr=args.interface_row_learning_rate,
                                               weight_decay=args.weight_decay, latent_ns=args.latent_ns, muon_rounding=args.muon_rounding)
     task_eval = None
@@ -3203,6 +3216,7 @@ def _main(argv=None, *, requested_refresh):
         if added_names:load_options['allow_added_names'] = added_names
         if promoted_names:load_options['allow_promoted_names'] = promoted_names
         optimizer.load_state_dict(resume['optimizer'], **load_options)
+        _phase('optimizer_restored')
         if rounding_changed and optimizer.latent is not None:
             cleared=0
             for state in optimizer.latent.state.values():
@@ -3808,12 +3822,12 @@ def _main(argv=None, *, requested_refresh):
         if packed is not None: checkpoint_options['sft_packed_capacity'] = packed
     cold_packed_geometry = None
     if objective is not None and not mandatory_objective:
-        print(json.dumps({'kind':'native_phase','phase':'policy_capacity_start','global_step':global_step}),flush=True)
+        _phase('policy_capacity_start', global_step=global_step)
         from ..eval.native_memory import qualify_policy_objective
         checkpoint_options['policy_capacity']=qualify_policy_objective(model,optimizer,train,objective,args,config,
             backend=backend,checkpoint_sha256=sha256_file_hex_cached(args.continue_from if parent_continuation else policy.slot),
             pending_batches=pending_batches,prior_proof=prior_policy_capacity)
-    print(json.dumps({'kind':'native_phase','phase':'capacity_complete','global_step':global_step}),flush=True)
+    _phase('capacity_complete', global_step=global_step)
     target_rows = sum(required_visits.values())
     total_end = step + accumulated_updates(len(pending_batches), args.accumulate_batches)
     batches_left = len(pending_batches)
@@ -4302,6 +4316,7 @@ def _main(argv=None, *, requested_refresh):
                 model.port.activation_checkpoint.file_store.release_arena()
             # Reserve the exact future checkpoint inode before any optimizer
             # work; after each commit this reacquires blocks before proceeding.
+            _reserve_started = time.monotonic()
             reserved = _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
                 global_step=global_step, epoch=epoch, cursor=cursor, source_receipts=source_receipts,
                 source_hash=source_hash, source_row_bindings=source_row_bindings,
@@ -4313,6 +4328,7 @@ def _main(argv=None, *, requested_refresh):
                 reserve_stop_requested=lambda: (policy.signaled or requested_refresh.requested)
                     and last_saved_step==step and not metadata_dirty and not policy.async_pending
                     and (policy.last_committed_step==global_step or step==resumed_step))
+            _phase('reserved_next_checkpoint', global_step=global_step, seconds=round(time.monotonic() - _reserve_started, 1))
             if reserved is False or policy.signaled or requested_refresh.requested:
                 refresh_boundary = refresh_boundary or requested_refresh.requested
                 break
@@ -4320,9 +4336,9 @@ def _main(argv=None, *, requested_refresh):
             fetch_rng = capture_training_rng_state(args.device)
             previous_cursor = cursor
             try:
-                print(json.dumps({'kind':'native_phase','phase':'fetch_start','global_step':global_step}),flush=True)
+                _phase('fetch_start', global_step=global_step)
                 fetched = [next(schedule) for _ in range(min(args.accumulate_batches, batches_left))]
-                print(json.dumps({'kind':'native_phase','phase':'fetch_complete','global_step':global_step,'micro_batches':len(fetched)}),flush=True)
+                _phase('fetch_complete', global_step=global_step, micro_batches=len(fetched))
             except Exception as error:
                 # The previous update and its exposure are complete. The next
                 # batch has not reached native_training_update and earns nothing.
@@ -4523,7 +4539,7 @@ def _main(argv=None, *, requested_refresh):
                     'received_signals':[*policy.stop.received,*requested_refresh.received]}),flush=True)
                 break
             exception_boundary_safe = False
-            print(json.dumps({'kind':'native_phase','phase':'update_start','global_step':global_step}),flush=True)
+            _phase('update_start', global_step=global_step)
             try:
                 if logit_probe is not None:
                     from ..model.attention_probe import probing
@@ -4824,6 +4840,7 @@ def _main(argv=None, *, requested_refresh):
                     refresh_boundary = refresh_boundary or requested_refresh.requested
                     break
             if due_checkpoint and not due_task:
+                _save_started = time.monotonic()
                 _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
                       global_step=global_step, epoch=epoch, cursor=cursor, source_receipts=source_receipts,
                       source_hash=source_hash, source_row_bindings=source_row_bindings,
@@ -4840,6 +4857,8 @@ def _main(argv=None, *, requested_refresh):
                                   and args.refresh_at_checkpoint and due_checkpoint))))
                 last_saved_step = step
                 metadata_dirty = False
+                _phase('checkpoint_saved', global_step=global_step, seconds=round(time.monotonic() - _save_started, 1),
+                       background=bool(policy.async_pending))
             if diloco is not None:
                 # A recovery fence pauses only at a completed update. Other workers keep heartbeating while
                 # their independently committed checkpoints and the coordinator are pinned as one cohort.
@@ -5033,6 +5052,7 @@ def _main(argv=None, *, requested_refresh):
         if not policy.signaled and not requested_refresh.requested and not refresh_boundary and not metrics.get('held'):
             metrics['held'], metrics['held_coverage'] = held_evaluation(step == total_end and not policy_operation)
             metrics.update(ema_side_metrics)
+        _save_started = time.monotonic()
         _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
               global_step=global_step, epoch=epoch, cursor=cursor, source_receipts=source_receipts,
               source_hash=source_hash, source_row_bindings=source_row_bindings,
@@ -5041,6 +5061,7 @@ def _main(argv=None, *, requested_refresh):
               architecture=config['architecture'], options={**checkpoint_options, '_source_row_order': source_order},
               fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
         last_saved_step = step
+        _phase('final_checkpoint_saved', global_step=global_step, seconds=round(time.monotonic() - _save_started, 1))
     completed = all(exposure_counts[key] >= visits for key, visits in required_visits.items())
     if completed and not policy_operation and not policy.signaled and not requested_refresh.requested and _full_held_requested(args) and (metrics.get('held', {}).get('scope') != 'full'
             or metrics.get('held', {}).get('source_sha256') != held.file_sha256):
