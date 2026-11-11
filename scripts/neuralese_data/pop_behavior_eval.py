@@ -690,10 +690,24 @@ def rl_actor_active():
     return bool(marker) and time.time() - marker['started'] < RL_ACTOR_MAX_SECONDS
 
 
+# RL controllers whose collection may claim Pop (a list of controller out directories). An evaluation does not start
+# while one of them is collecting: its Pop actor would otherwise wait behind the evaluation and the round would run
+# without Pop's slots (w5 round 3, 2026-11-11). Evaluations run during the learner and SFT windows instead.
+RL_CONTROLLERS = ROOT / 'rl-controllers.json'
+
+
+def rl_collecting():
+    for out in read_json(RL_CONTROLLERS) or ():
+        state = read_json(Path(out) / 'state.json') or {}
+        if state.get('phase') == 'collect':
+            return True
+    return False
+
+
 def wait_for_rl_actor():
-    """Rollouts have priority over evaluations: wait until no RL actor holds Pop."""
+    """Rollouts have priority over evaluations: wait until no RL actor holds Pop and no controller is collecting."""
     announced = False
-    while rl_actor_active():
+    while rl_actor_active() or rl_collecting():
         if not announced:
             log(event='waiting for the Pop RL actor to stop', marker=read_json(RL_ACTOR_MARKER))
             announced = True

@@ -94,6 +94,17 @@ def test_rl_actor_marker_holds_evaluations_and_pending_eval_is_read_only(tmp_pat
     assert slept == [60]
     (root / 'rl-actor-active.json').write_text(json.dumps({'started': time.time() - module.RL_ACTOR_MAX_SECONDS - 1}))
     assert module.rl_actor_active() is False
+    # A registered controller that is collecting holds evaluations too, so its Pop actor is not starved.
+    controller = tmp_path / 'w5'
+    controller.mkdir()
+    (controller / 'state.json').write_text(json.dumps({'phase': 'collect'}))
+    (root / 'rl-controllers.json').write_text(json.dumps([str(controller)]))
+    assert module.rl_collecting() is True
+    slept.clear()
+    monkeypatch.setattr(module.time, 'sleep', lambda s: (slept.append(s),
+                        (controller / 'state.json').write_text(json.dumps({'phase': 'updating'}))))
+    module.wait_for_rl_actor()
+    assert slept == [60] and module.rl_collecting() is False
     state = {'candidates': {}, 'controllers': {}, 'parent': {'sha256': 'p' * 64}}
     assert module.eval_pending(state) is False
     state['candidates']['x'] = {'status': 'running'}
