@@ -123,8 +123,6 @@ class Handle:
     def _run(self, kwargs, collect, control, log):
         try:
             collect(**kwargs, control=control, drain=self.drain)
-            if self.settle:
-                _record_settled(self.directory)
         except BaseException as error:   # best effort: a failed pre-collection costs only Pop's work, never the round
             self.error = repr(error)[:400]
             log(json.dumps({'event': 'pre-collection failed', 'directory': str(self.directory), 'error': self.error}))
@@ -135,6 +133,10 @@ class Handle:
         self.settle = settle
         self.drain.set()
         self.thread.join()
+        # Settled only here, once the learner's outcome is known: a controller stop also ends ``collect`` normally,
+        # and the thread settling on its own then closed w5's round-3 pre-collection at 8 of 128 (2026-11-11).
+        if settle and self.error is None:
+            _record_settled(self.directory)
         return self.error
 
 

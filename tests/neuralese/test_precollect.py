@@ -204,6 +204,13 @@ def test_a_drain_after_a_failed_learner_leaves_the_pre_collection_open_for_the_r
         assert (directory / precollect.RESULT).exists() is settle
 
 
+def test_a_stop_that_ends_the_collection_before_the_failed_learner_drains_does_not_settle_it(tmp_path):
+    handle = precollect.Handle(tmp_path, {}, lambda **kwargs: None, None, print)   # the controller stop ends collect first
+    handle.thread.join()
+    assert not (tmp_path / precollect.RESULT).exists()
+    assert handle.finish(settle=False) is None and not (tmp_path / precollect.RESULT).exists()
+
+
 def _controller(tmp_path, monkeypatch, *, begin):
     """production.run for one JOLT+ round with fakes: collect, remote hooks, learner command and ``precollect.begin``."""
     from natlang_neuralese.rl import native_raw_policy
