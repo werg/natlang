@@ -2296,6 +2296,9 @@ def run(config_path, *, rounds=None, stop=None):
             state['update_learner_parameters'] = {key: config.get(key) for key in LEARNER_SIDE_KEYS}
             write_json_durable(state_path, state)
             write_json_durable(round_dir / 'learner-parameters.json', state['update_learner_parameters'])
+            # The learner's training worlds (JOLT+ --jolt-cases) are the cases this round actually collected.
+            if (round_dir / 'selected-cases.jsonl').is_file():
+                values['cases'] = str(round_dir / 'selected-cases.jsonl')
             base_learner_out = Path(values['learner_out'])
             pending = False
             no_signal = False

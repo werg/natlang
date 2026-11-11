@@ -1625,6 +1625,13 @@ def group_episode_advantages(members, *, jolt, mode, baseline=None):
             for advantage, bonus, cost_term, report_term in zip(advantages, bonuses, cost_terms, report_terms)]
 
 
+def _empty_text_writes(turns):
+    """Text-writer nodes whose standalone source sampled no payload token between its markers."""
+    return [write['node'] for turn in turns for write in turn.get('text_result_writes', [])
+            if (write['source_capture'].get('payload_stop'), write['source_capture'].get('payload_start')) != (None, None)
+            and write['source_capture'].get('payload_stop') == write['source_capture'].get('payload_start')]
+
+
 def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=None, mode='grpo', behavior_policy=None,
                       min_quality=1., policy_loss=None, privileged=None, actors=None, engine_guard=None):
     """Admit whole training episodes and retain real graph/action provenance. Rewards are graded qualities in
@@ -1676,7 +1683,7 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
                 raise ValueError('JOLT+ episode role must be student or teacher')
             key = (*key, role)
         grouped.setdefault(key, []).append(rollout)
-    graphs, objective_rows = [], {}
+    graphs, objective_rows, excluded = [], {}, []
     adapter_binding, binding_seen = None, False
     student_means = {key[:2]: sum(row['reward']['quality'] for row in members) / len(members)
                      for key, members in grouped.items() if jolt is not None and key[2] == 'student'}
@@ -1701,6 +1708,12 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
             if behavior_policy is not None and invocation_actors is None:
                 raise ValueError('native invocation behavior descriptor omits an admitted source episode')
             turns = whole_episode_turns(rollout)
+            if empty := _empty_text_writes(turns):
+                # A sampled open marker followed at once by its close has no state to replay; the episode stays in
+                # its group's baseline and contributes no gradient.
+                excluded.append({'graph_id': episode_key, 'task_id': rollout['task_id'], 'sample': rollout.get('sample'),
+                                 'reason': 'empty sampled Neuralese text-writer state', 'nodes': empty})
+                continue
             replay = compile_replay(turns, identity=identity, roles=roles, fetch_block=fetch_block,
                                     invocation_actors=invocation_actors,actors=actors)
             from .episode_graph import rollout_turn_names
@@ -1789,5 +1802,6 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
            if behavior_policy is not None else {'policy':dict(identity)}),
         **({'adapter_binding': adapter_binding} if adapter_binding else {}),
         **({'actors': actors} if stale else {}),
+        **({'excluded_episodes': excluded} if excluded else {}),
         **({'actor_engine_guard': engine_guard_declaration(engine_guard)} if engine_sampled else {}),
         'block_bundle': str(block_bundle) if block_bundle else None}

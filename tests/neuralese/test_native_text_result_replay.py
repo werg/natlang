@@ -87,6 +87,13 @@ def test_text_result_writer_replay_preserves_policy_and_consumer_gradient(tmp_pa
     graphs,spec=prepare_objective(episodes,identity=engine.native_identity,roles=roles,fetch_block=fetch)
     assert len(graphs)==2 and len(graphs[0]['nodes'])==3
     assert next(iter(spec['rows'].values()))['text_result_writes'][0]['source_turn']=='producer#turn1'
+    # An episode whose writer sampled an empty state keeps its group baseline and contributes no gradient.
+    empty=copy.deepcopy(episodes[0]); empty['sample']=2
+    capture=next(e for e in empty['execution_graph'] if e['node']=='w')['source_capture']
+    capture['payload_stop']=capture['payload_start']
+    skipped,skip_spec=prepare_objective([*episodes,empty],identity=engine.native_identity,roles=roles,fetch_block=fetch)
+    assert len(skipped)==2 and [(e['sample'],e['nodes']) for e in skip_spec['excluded_episodes']]==[(2,['w'])]
+    assert 'excluded_episodes' not in spec
     path=tmp_path/'objective.json'; path.write_text(json.dumps(spec))
     objective=NativePolicyObjective(path)
     example=parse_graph(graphs[0],tokenizer_fingerprint=engine.native_identity['tokenizer_fingerprint'])

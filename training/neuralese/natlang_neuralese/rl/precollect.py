@@ -56,6 +56,11 @@ def eligible(config, state, interleaved, policy_loss):
         after = {**state, 'round': state['round'] + 1}
         if window_due(interleaved, after):
             return False, 'an SFT window runs between this update and the next collection (staleness would exceed one update)'
+        memetic = interleaved.get('memetic')
+        if memetic is not None and (after['round'] + 1) % memetic['parameters'].get('memetic_every', 4) == 0:
+            # rl.memetic_stage.bind_round replaces a due round's task source: an ordinary pre-collected selection
+            # would run its tasks while the round (and its learner) is bound to the memetic programs.
+            return False, 'the next round is a memetic round'
     return True, 'eligible'
 
 

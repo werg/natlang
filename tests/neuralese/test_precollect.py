@@ -38,6 +38,16 @@ def test_eligibility_bounds_staleness_to_one_update():
     assert not precollect.eligible(config(memetic_round=1), state(), None, LOSS)[0]
 
 
+def test_no_pre_collection_runs_for_a_round_that_is_bound_to_the_memetic_programs():
+    # w5 round 3 (2026-11-11): pre-collected ordinary tasks ran in a memetic round whose learner had the memetic cases.
+    def declared(every):
+        return {'parameters': {'rl_rounds_per_window': 2}, 'memetic': {'parameters': {'memetic_every': every}}}
+    early = state(round=2, interleave={'rl_rounds_at_last_window': 2, 'sft_windows': 1})
+    ok, reason = precollect.eligible(config(), early, declared(4), LOSS)   # round 3 is due: (3 + 1) % 4 == 0
+    assert not ok and 'memetic' in reason
+    assert precollect.eligible(config(), early, declared(5), LOSS)[0]
+
+
 def test_next_selection_is_sealed_as_the_next_iteration_would_choose_it(tmp_path):
     cases = [{'id': f'c{i}', 'split': 'train'} for i in range(6)]
     cases_path = tmp_path / 'cases.jsonl'
