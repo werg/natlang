@@ -269,6 +269,9 @@ def launch_sglang(engine, args, checkpoint):
                              checkpoint=checkpoint, checkpoint_sha256=args.checkpoint_sha256, out_dir=export_dir)
     port = args.sglang_port or args.port + 1000
     context = min(args.sglang_context, engine.context)
+    # The front sizes each reply to the room left in the backend's context; with the trained maximum it asked for
+    # 8192 tokens after a 24.6k prompt and SGLang refused the request (w5 round 2: 2 episodes lost, 5 held-eval).
+    engine.context = context
     total = args.sglang_max_total_tokens or 4 * context
     if total < context:
         raise ValueError('--sglang-max-total-tokens must hold one full-context sequence')

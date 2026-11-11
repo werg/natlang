@@ -587,6 +587,19 @@ def test_neuralese_bonus_only_for_correct_episodes_with_a_real_producer_consumer
     assert report["groups"][0]["route"] == "grpo"  # curriculum routes stay on the task outcome
 
 
+def test_a_run_without_rl_capture_measures_neuralese_use_from_its_graph_and_never_pays_a_bonus(tmp_path):
+    def uncaptured(result):
+        for step in result["trajectory"]:
+            step["model_response"].pop("rl_sampling")
+        return result
+    report, rows = _score_results(tmp_path, [uncaptured(_neuralese_result(accepted=True)),
+                                             uncaptured(_neuralese_result(accepted=True, external_writer=True)),
+                                             _neuralese_result(accepted=True)])
+    assert "neuralese_bonus" not in rows[0]["reward"] and rows[2]["reward"]["neuralese_bonus"] == .1
+    assert report["neuralese"]["episodes_using_neuralese"] == 2   # the held-out evaluation case and the captured one
+    assert report["neuralese"]["bonus_episodes"] == 1             # an outside writer is never an exchange
+
+
 def test_neuralese_bonus_opt_out_and_teacher_attempts_get_none(tmp_path):
     report, rows = _score_results(tmp_path / "off", [_neuralese_result(accepted=True)] * 2, neuralese_bonus=0)
     assert all(row["reward"]["quality"] == 1.0 and "neuralese_bonus" not in row["reward"]

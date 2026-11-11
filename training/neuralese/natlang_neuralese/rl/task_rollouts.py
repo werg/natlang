@@ -42,17 +42,24 @@ def neuralese_use_bonus(value: Any) -> float:
     return float(value)
 
 
-def neuralese_exchanges(rollout: dict[str, Any]) -> int:
+def neuralese_exchanges(rollout: dict[str, Any], *, captured: bool = True) -> int:
     """Count the episode's real between-call Neuralese edges from its captured graph, never from text or markers.
 
     An edge is a ``block_read`` whose one exact input is an in-episode ``block_write`` of the same state, made by a
     model turn of a different invocation. ``validate_rollout_graph`` first binds every graph write/read to the
     turns' actual captured state exports (``sampling.writes``) and native-state imports (``sampling.prompt``), so a
     read with no captured import, or an import of an external/older state, is not an exchange. An episode whose
-    graph or capture does not validate counts zero."""
-    from .episode_graph import validate_rollout_graph
+    graph or capture does not validate counts zero. ``captured=False`` (a run that requested no RL sampling capture,
+    such as the held-out evaluation) counts the same edges over the runtime's execution graph after its model-turn
+    coverage check: a measurement, never a reward (the capture-bound check refused every such episode, so held
+    evaluations reported zero use while their relay/typed episodes passed state)."""
+    from .episode_graph import rollout_turn_names, validate_model_turn_coverage, validate_rollout_graph
     try:
-        _, nodes = validate_rollout_graph(rollout)
+        if captured:
+            _, nodes = validate_rollout_graph(rollout)
+        else:
+            nodes = validate_model_turn_coverage(rollout_turn_names(rollout.get('turns') or []),
+                                                 rollout.get('execution_graph') or [])
     except (TypeError, ValueError, KeyError, AttributeError):
         return 0
     def invocation(turn: Any) -> Any:
@@ -665,12 +672,15 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0,
         turns = budget_prefix["turns"] if budget_prefix else rollout_turns(result)
         execution_graph = budget_prefix["execution_graph"] if budget_prefix else \
             copy.deepcopy(((result or {}).get("outcome") or {}).get("execution_graph") or [])
-        exchanges = neuralese_exchanges({"turns": turns, "execution_graph": execution_graph}) if turns else 0
+        # A run without RL sampling capture (held-out evaluation) is measured over its execution graph alone.
+        captured = any('sampling' in turn for turn in turns)
+        exchanges = neuralese_exchanges({"turns": turns, "execution_graph": execution_graph},
+                                        captured=captured) if turns else 0
         efficiency = execution_efficiency({'turns': turns}, efficiency_weight)
         student = entry.get("jolt_role", "student") == "student"
         # Privileged JOLT+ teacher attempts import harness-placed guidance; only the student policy's own
-        # between-call state passing is rewarded.
-        episode_bonus = bonus if student and reward == 1.0 and exchanges > 0 and bonus > 0 else 0.
+        # between-call state passing is rewarded, and only when its capture binds the graph.
+        episode_bonus = bonus if captured and student and reward == 1.0 and exchanges > 0 and bonus > 0 else 0.
         if emit is not None:
             training_reward = reward
             if result is None and reward is not None and budget_prefix is None:
