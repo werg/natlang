@@ -36,9 +36,9 @@ export type ScopeCompileDiagnostic = ScopeSourceSpan & {
 export type ScopeCompileOptions = {
   /** Lambda parameters exposed as ordinary mutable lexical bindings. */
   inputBindings?: readonly string[];
-  /** The current values of text, number and boolean inputs: a declaration that re-binds an input to a literal of its
-   * exact value (`const ticket = "…the ticket…"`) is removed as a repair, like `const ticket = ticket`. */
-  inputValues?: Readonly<Record<string, string | number | boolean>>;
+  /** The current values of text, number and boolean inputs and captures: a declaration that re-binds one to a literal
+   * of its exact value (`const ticket = "…the ticket…"`) is removed as a repair, like `const ticket = ticket`. */
+  boundValues?: Readonly<Record<string, string | number | boolean>>;
   /** Existing persistent locals copied into the transaction before execution. */
   localBindings?: readonly ScopeExistingBinding[];
   /** Checked async callables generated over the runtime's host dispatcher. */
@@ -655,14 +655,16 @@ function compileScopeSnippetUnhinted(source: string, options: ScopeCompileOption
             ...location });
           continue;
         }
-        // An input written out again as a literal of its exact value changes nothing; dropping it keeps the eval going.
-        if (ts.isIdentifier(declaration.name) && declaration.initializer && options.inputValues &&
-            Object.hasOwn(options.inputValues, declaration.name.text) && options.inputBindings?.includes(declaration.name.text) &&
-            literalValue(declaration.initializer) === options.inputValues[declaration.name.text]) {
+        // An input or capture written out again as a literal of its exact value changes nothing; dropping it keeps the
+        // eval going.
+        const bound = ts.isIdentifier(declaration.name) ? declaration.name.text : '';
+        const role = options.inputBindings?.includes(bound) ? 'input' : captureNames.includes(bound) ? 'captured value' : undefined;
+        if (role && declaration.initializer && options.boundValues && Object.hasOwn(options.boundValues, bound) &&
+            literalValue(declaration.initializer) === options.boundValues[bound]) {
           const location = span(statement);
           redundantAliases.push(location);
           repairs.push({ code: 'invalid-binding',
-            message: `Removed a declaration of input ${JSON.stringify(declaration.name.text)}: it already holds that value.`, ...location });
+            message: `Removed a declaration of ${role} ${JSON.stringify(bound)}: it already holds that value.`, ...location });
           continue;
         }
       }

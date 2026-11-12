@@ -306,6 +306,7 @@ both. On the 6 cases both finished: 3.50 -> 1.83 turns/call, 1,956 -> 869 genera
 invalid-binding rejections 7 -> 0, self-calls 4 -> 1; each case equal or better. Remaining in B: a reflexive first
 self-call, a re-declaration of a captured (not input) variable inside a nested nl child, and `nl<T>(\`...\`)(item)`,
 which leaked an internal TypeError (fixed in f26ca612d: it now applies the function the instructions make).
+The repair now covers captured variables too (`boundValues`), same rule, same unmeasured-in-isolation status.
 12 cases, not ~48: adopted on the size of the effect; the self-call and invalid-binding counts are the measure.
 **Measurement debt:** the thinking-budget variants (unlimited, 256, 0) on the full suite, before choosing a default
 thinking budget (stopped twice by host memory pressure from other jobs).
