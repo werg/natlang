@@ -31,6 +31,12 @@ TS_HOST = ROOT / 'ts-host'
 
 
 @pytest.fixture(autouse=True)
+def own_collector_process(monkeypatch):
+    # These tests fake the collector child process; the shared node server is covered by its own test.
+    monkeypatch.setenv('NATLANG_COLLECTOR_SHARED', '0')
+
+
+@pytest.fixture(autouse=True)
 def no_live_server_queries(monkeypatch):
     monkeypatch.setattr(queue_module, 'local_decode_progress', lambda *args: None)
     original = queue_module.urllib.request.urlopen
@@ -822,3 +828,22 @@ def test_saved_authored_actions_are_not_counted_as_model_replies(tmp_path):
     metrics = queue_module.partial_metrics(entry)
     assert metrics['saved_turns'] == 4
     assert metrics['fresh_model_replies'] == 2 and metrics['completion_tokens'] == 10
+
+
+def test_shared_collector_runs_invocations_in_one_node_process(tmp_path, monkeypatch):
+    cli = TS_HOST / 'dist/teacher/cli.js'
+    if not queue_module.SharedChild.supported(cli):
+        pytest.skip('ts-host dist is not built with the server mode')
+    import tempfile, shutil
+    short = tempfile.mkdtemp(dir='/tmp', prefix='nlsc')
+    monkeypatch.setattr(queue_module.SharedChild, 'ROOT', short)
+    monkeypatch.setenv('INVOCATION_ID', 'test-shared-collector')
+    log = io.StringIO()
+    first = queue_module.SharedChild(['node', '--x', str(cli), '--capabilities', 'json'], log, 2)
+    second = queue_module.SharedChild(['node', '--x', str(cli), '--capabilities', 'json'], log, 2)
+    assert first.wait(60) == 0 and second.wait(60) == 0
+    assert first.server_pid == second.server_pid
+    failing = queue_module.SharedChild(['node', '--x', str(cli), '--no-such-run'], log, 2)
+    assert failing.wait(60) == 1
+    os.kill(first.server_pid, 15)
+    shutil.rmtree(short, ignore_errors=True)

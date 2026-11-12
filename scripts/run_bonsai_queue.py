@@ -661,13 +661,23 @@ class SharedChild:
     variants, started on demand (``cli.js --serve``) and exit when idle. ``terminate``/``kill`` close the connection,
     which aborts that invocation only. Same interface as the ``subprocess.Popen`` it replaces in ``run_queue``."""
 
+    ROOT = '/tmp'
+
+    @staticmethod
+    def supported(cli):
+        """Whether the runtime's collector has the server mode (pinned older ts-host trees do not)."""
+        try:
+            return "'--serve'" in Path(cli).read_text()
+        except OSError:
+            return False
+
     def __init__(self, command, log, capacity):
         import socket as socket_module
         import fcntl
         self.returncode, self._buffer, self._accepted = None, b'', False
         key = hashlib.sha256('\0'.join([str(Path(command[2]).resolve()), os.environ.get('INVOCATION_ID', str(os.getppid())),
                                           os.environ.get('NATLANG_MODEL_FACING', '')]).encode()).hexdigest()[:16]
-        root = Path(tempfile.gettempdir()) / f'natlang-collector-{os.getuid()}' / key
+        root = Path(SharedChild.ROOT) / f'natlang-collector-{os.getuid()}' / key   # short: unix socket paths < 108 bytes
         root.mkdir(parents=True, exist_ok=True)
         request = (json.dumps({'argv': command[3:]}) + '\n').encode()
         for index in range(256):
@@ -688,6 +698,8 @@ class SharedChild:
                         deadline = time.time() + 60
                         while not path.exists() and time.time() < deadline:
                             time.sleep(0.2)
+                        if not path.exists():
+                            raise RuntimeError(f'shared collector did not start ({root / f"s{index:03d}.log"})')
                     continue
                 connection.sendall(request)
                 line = self._line(connection, 60)
@@ -980,10 +992,15 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
             child_env = os.environ.copy()
             if journal_spool_root is not None:
                 child_env['NATLANG_TEACHER_JOURNAL_SPOOL_ROOT'] = str(journal_spool_root)
-            shared = int(os.environ.get('NATLANG_COLLECTOR_SHARED') or 0)
-            if shared > 0 and journal_spool_root is None:
-                child = SharedChild(command, log, shared)
-            else:
+            shared = int(os.environ.get('NATLANG_COLLECTOR_SHARED', '8') or 0)   # 0 opts out
+            child = None
+            if shared > 0 and journal_spool_root is None and SharedChild.supported(command[2]):
+                try:
+                    child = SharedChild(command, log, shared)
+                except RuntimeError as error:   # no server came up: this invocation gets its own process
+                    log.write(json.dumps({'event': 'shared_collector_unavailable', 'error': str(error)}) + '\n')
+                    log.flush()
+            if child is None:
                 child = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, env=child_env)
             try:
                 for tick in range(math.ceil(case_seconds / repetition_poll_seconds)):

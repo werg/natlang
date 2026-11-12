@@ -64,7 +64,7 @@ ran 16-38 slots, 30 running sequences, pool 93% full with queued requests, 8-14 
   launch, so other jobs neither shrink the pool nor get grabbed). Ledger budget = `--sglang-kv-gb` + 14 GB.
   Do not pass `--sglang-mem-fraction` (SGLang reserves (1 - fraction) of free memory: 0.25 left a few GB of KV).
 - Collector slots >= 64 per DGX actor; measure with `held_eval measure`. A slot costs ~250 MB of host memory in its own
-  node + python processes; `NATLANG_COLLECTOR_SHARED=8` runs up to 8 episodes per node process (`cli.js --serve`).
+  node + python processes; episodes share node processes, 8 each, by default (`cli.js --serve`; `NATLANG_COLLECTOR_SHARED=0` opts out).
   Details and numbers: `plans/neuralese/ACTOR_THROUGHPUT_20261112.md`.
 
 ## HF-path fine-tuning speed: elementwise and dense sliding attention, not matmul (engineering, 2026-11-12)
