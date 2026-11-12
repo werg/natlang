@@ -104,11 +104,20 @@ def main():
                 queue.write_text(json.dumps({**entry, 'rl_endpoint': url}, sort_keys=True) + '\n')
                 if run_entry(url, key, queue, journal) or attempt >= args.attempts or stop.is_set():
                     break
+            trim(entry)
             with lock:
                 stats['done'] += 1
                 if stats['done'] % 8 == 0:
                     print(json.dumps({'done': stats['done'], 'of': len(todo),
                                       'minutes': round((time.time() - stats['started']) / 60, 1)}), flush=True)
+
+    def trim(entry):
+        # A finished episode's output (results.jsonl) is a byte copy of jobs/*.result.json: keep one (disk: about 6 MB each)
+        output = Path(entry['output'])
+        if finished(entry['key']) and output.is_file():
+            for copy in output.parent.glob('jobs/*.result.json'):
+                if copy.stat().st_size == output.stat().st_size and copy.read_bytes() == output.read_bytes():
+                    copy.unlink()
 
     def run_entry(url, key, queue, journal):
         command = [sys.executable, str(REPO / 'scripts/run_bonsai_queue.py'), str(queue), str(journal), '--runtime',
