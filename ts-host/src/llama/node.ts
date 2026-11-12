@@ -1,6 +1,6 @@
 /** The Node binding of the host (llama/host.ts): child_process, the platform's natlang directories, global fetch and a stream for output. */
 import { spawn, spawnSync } from 'node:child_process';
-import { closeSync, mkdirSync, openSync, writeFileSync } from 'node:fs';
+import { closeSync, mkdirSync, openSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { homedir, platform } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -70,6 +70,8 @@ export function nodeLlamaHost(environment: NodeJS.ProcessEnv = process.env, log:
       const child = spawn(process.execPath, [fileURLToPath(new URL('./supervisor.js', import.meta.url)), specPath],
         { detached: true, stdio: ['ignore', output, output], env: environment });
       closeSync(output);
+      // The supervisor deletes its spec once read; one that died before reading it (a missing supervisor.js) leaves it.
+      child.once('exit', () => rmSync(specPath, { force: true }));
       child.unref();
       return child.pid ?? 0;
     } };
