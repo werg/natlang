@@ -9,7 +9,7 @@
  * NATLANG_PROFILE or NATLANG_CONFIG_HOME choose the model) with the profile's sampling. Results pair by (case, sample)
  * across variants. The output keeps every outcome, its turns and its tokens.
  */
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
@@ -36,11 +36,16 @@ async function measure(variant, samples, out, jobs) {
   const configured = await natlangRuntime({});
   // The variant's settings over the profile's: the model config the runtime was built with is the one calls use.
   Object.assign(configured.runtime.options.model, VARIANTS[variant]);
-  const results = [];
+  // Each finished call is appended to OUT.jsonl as it completes, so a stopped run resumes where it was.
+  mkdirSync(dirname(out), { recursive: true });
+  const partial = `${out}.jsonl`;
+  const results = existsSync(partial) ? readFileSync(partial, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line)) : [];
+  const done = new Set(results.map(row => `${row.case}/${row.sample}`));
   const started = Date.now();
   try {
     const work = [];
-    for (let sample = 0; sample < samples; sample++) for (const [index, item] of suite.cases.entries()) work.push({ sample, index, item });
+    for (let sample = 0; sample < samples; sample++) for (const [index, item] of suite.cases.entries())
+      if (!done.has(`${index}/${sample}`)) work.push({ sample, index, item });
     // --jobs calls at a time (the server's slots); each call's own trace gives its turns and tokens.
     const runOne = async ({ sample, index, item }) => {
       const fn = loadVirtualNatlang({ [item.function]: suite.functions[item.function] }, item.function);
@@ -62,12 +67,13 @@ async function measure(variant, samples, out, jobs) {
         cached_tokens: requests.reduce((sum, event) => sum + (event.cached_tokens ?? 0), 0),
         completion_tokens: requests.reduce((sum, event) => sum + (event.completion_tokens ?? 0), 0) };
       results.push(row);
+      appendFileSync(partial, JSON.stringify(row) + '\n');
       process.stderr.write(`${variant} s${sample} #${index} ${item.function} ${row.correct ? 'ok' : 'WRONG'} ${row.seconds.toFixed(1)}s ` +
         `${row.turns}t ${row.prompt_tokens}p ${row.completion_tokens}c ${row.error ? row.error.slice(0, 120) : JSON.stringify(row.value)}\n`);
     };
     await Promise.all(Array.from({ length: jobs }, async () => { while (work.length) await runOne(work.shift()); }));
   } finally { await configured.close(); }
-  mkdirSync(dirname(out), { recursive: true });
+  results.sort((a, b) => a.sample - b.sample || a.case - b.case);
   const correct = results.filter(row => row.correct).length;
   writeFileSync(out, JSON.stringify({ variant, settings: VARIANTS[variant], model: configured.selection.choice.model,
     profile: configured.selection.name, samples, seconds: (Date.now() - started) / 1000, correct, total: results.length, results }, null, 2) + '\n');
