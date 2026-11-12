@@ -2,7 +2,7 @@
 /**
  * Live measurement of the leaf-call surfaces (benchmarks/leaf-calls/README.md).
  *
- *   node benchmarks/leaf-calls/measure.mjs --variant tools|direct|decision --samples 2 --out results/tools.json
+ *   node benchmarks/leaf-calls/measure.mjs --variant tools|direct|decision --samples 2 --jobs 4 --out results/tools.json
  *   node benchmarks/leaf-calls/measure.mjs --compare results/tools.json results/direct.json
  *
  * A variant is a set of runtime model settings on the configured runtime `natlang run` uses (its selected profile,
@@ -26,31 +26,35 @@ const args = process.argv.slice(2);
 const flag = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : fallback; };
 
 if (args[0] === '--compare') compare(args[1], args[2]);
-else await measure(flag('--variant'), Number(flag('--samples', '2')), flag('--out'));
+else await measure(flag('--variant'), Number(flag('--samples', '2')), flag('--out'), Number(flag('--jobs', '1')));
 
-async function measure(variant, samples, out) {
+async function measure(variant, samples, out, jobs) {
   if (!VARIANTS[variant] || !out) throw new Error('usage: measure.mjs --variant tools|direct|decision --samples N --out FILE');
   const { natlangRuntime, loadVirtualNatlang } = await import(join(dist, 'index.js'));
   const { callableMeta } = await import(join(dist, 'runtime', 'callable.js'));
   const suite = JSON.parse(readFileSync(join(here, 'suite.json'), 'utf8'));
-  const events = new Map();
-  const configured = await natlangRuntime({ runtime: { trace: trace => events.set(trace.callId, trace.events) } });
+  const configured = await natlangRuntime({});
   // The variant's settings over the profile's: the model config the runtime was built with is the one calls use.
   Object.assign(configured.runtime.options.model, VARIANTS[variant]);
   const results = [];
   const started = Date.now();
   try {
-    for (let sample = 0; sample < samples; sample++) for (const [index, item] of suite.cases.entries()) {
+    const work = [];
+    for (let sample = 0; sample < samples; sample++) for (const [index, item] of suite.cases.entries()) work.push({ sample, index, item });
+    // --jobs calls at a time (the server's slots); each call's own trace gives its turns and tokens.
+    const runOne = async ({ sample, index, item }) => {
       const fn = loadVirtualNatlang({ [item.function]: suite.functions[item.function] }, item.function);
       const params = callableMeta(fn).definition.params;
       const began = Date.now();
-      let value, error, callId;
+      let value, error, mine = [];
+      // The task's own trace sink: the root call's events (its turns, tokens and any readout).
+      const own = trace => { if (trace.parentCallId === null) mine = trace.events; };
       try {
-        value = await configured.runtime.run(() => fn(...params.map(param => item.inputs[param.name])));
+        value = await configured.runtime.run(() => fn(...params.map(param => item.inputs[param.name])), { trace: own });
       } catch (failure) { error = failure instanceof Error ? failure.message : String(failure); }
-      callId = [...events.keys()].at(-1);
-      const requests = (events.get(callId) ?? []).filter(event => event.kind === 'model_request' && event.phase === 'end');
-      const readout = (events.get(callId) ?? []).some(event => event.kind === 'decision_readout' && event.phase === 'scored');
+      const trace = mine;
+      const requests = trace.filter(event => event.kind === 'model_request' && event.phase === 'end');
+      const readout = trace.some(event => event.kind === 'decision_readout' && event.phase === 'scored');
       const row = { case: index, sample, function: item.function, expected: item.expected, value: value ?? null, error: error ?? null,
         correct: error === undefined && isDeepStrictEqual(value, item.expected), seconds: (Date.now() - began) / 1000,
         turns: requests.length, readout: readout ? 'decision' : null,
@@ -60,7 +64,8 @@ async function measure(variant, samples, out) {
       results.push(row);
       process.stderr.write(`${variant} s${sample} #${index} ${item.function} ${row.correct ? 'ok' : 'WRONG'} ${row.seconds.toFixed(1)}s ` +
         `${row.turns}t ${row.prompt_tokens}p ${row.completion_tokens}c ${row.error ? row.error.slice(0, 120) : JSON.stringify(row.value)}\n`);
-    }
+    };
+    await Promise.all(Array.from({ length: jobs }, async () => { while (work.length) await runOne(work.shift()); }));
   } finally { await configured.close(); }
   mkdirSync(dirname(out), { recursive: true });
   const correct = results.filter(row => row.correct).length;
