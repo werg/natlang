@@ -2065,7 +2065,9 @@ rewrites of earlier history came from the tool block changing (only `compact_his
   are unchanged).
 - Served context 131072 (`serve_native_checkpoint --sglang-context`; LFM3-1.7B has 262,144 positions); GRPO and exp1
   collection call budgets 131072 (`--context-tokens`), and the collector's budget follows the actor's reported window
-  (`/v1/neuralese/info` context) when it is smaller. held_eval keeps 32768 for the pinned held-v2 series.
+  (`/v1/neuralese/info` context) when it is smaller. held_eval measures at 131072 too (the held-v2 series starts at 131k:
+  `ops/held-v2/engine.json` pins `harness.context_tokens` and `--sglang-context 131072`; measure refuses an actor serving
+  less; `compare` refuses results of different budgets; results without the field count as 32768).
 - Unmeasured on the executor (decided); GRPO's next run pins it. Tests: `ts-host/test/agent-reply-calls.test.mjs`.
 - The other rewrites of earlier history: 7 of 15 changed `<think>` texts were the same text re-tokenized (the chained
   append-only splice, 936cc7443, keeps them); 7 were context-limit compaction (rare at 131k); 1 was the chat driver's

@@ -426,6 +426,9 @@ def test_held_standalone_comparison_counts_timeouts_apart_and_bounds_the_change(
     assert held_eval.compare(served(first,'fp8_e4m3'),served(second,'fp8_e4m3'))['engine']['kv_cache_dtype']=='fp8_e4m3'
     with pytest.raises(ValueError,match='different engine'):
         held_eval.compare(served(first,'auto'),served(second,'fp8_e4m3'))
+    with pytest.raises(ValueError,match='different context budgets'):
+        held_eval.compare({**first,'context_tokens':131072},second)
+    assert held_eval.compare({**first,'context_tokens':131072},{**second,'context_tokens':131072})['paired']
 
 
 def test_held_trend_pairs_with_previous_and_first_within_one_series(tmp_path):
