@@ -2553,12 +2553,10 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
                             if item.get('render_tag') is not None]
             render_messages, render_tools = messages, record.get("tools") or []
             if serving_entry is not None and not native_xml:
-                from .serving_prompt import entry_for, program_header_messages, serving_messages
+                from .serving_prompt import entry_for, serving_messages
                 render_messages, render_tools, serving_report = serving_messages(
-                    render_messages, render_tools, target=target, entry=entry_for(rid, serving_entry))
-                if prompt_rendering == "program-header" and serving_report["mode"] != "recorded":
-                    render_messages = program_header_messages(render_messages)
-                    serving_report = {**serving_report, "mode": "program-header"}
+                    render_messages, render_tools, target=target, entry=entry_for(rid, serving_entry),
+                    rendering=prompt_rendering)
                 serving_reports[rid] = serving_report
             render_mode = 'full' if native_xml else prompt_rendering
             if retain_prompt_tools and not native_xml:

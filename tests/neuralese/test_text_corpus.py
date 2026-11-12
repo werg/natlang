@@ -1320,9 +1320,9 @@ def test_configured_function_definition_context_uses_exact_read_receipt_without_
 
 
 def test_program_header_rendering_keeps_only_program_specific_system_paragraphs():
-    from natlang_neuralese.data.prompt_rendering import apply_prompt_rendering, default_pieces, render_system_prompt
+    from natlang_neuralese.data.prompt_rendering import apply_prompt_rendering, prompt_pieces, render_system_prompt
 
-    pieces = {p['id']: p['text'] for p in default_pieces() if not p.get('historical')}
+    pieces = {p['id']: p['text'] for p in prompt_pieces()}
     notice = pieces['depth-limit-notice']
     system = pieces['interpreter'] + '\n\n' + notice + '\n\nA program-specific addendum stays.'
     tools = [{"type": "function", "function": {"name": "eval"}}]
@@ -1338,7 +1338,7 @@ def test_program_header_rendering_keeps_only_program_specific_system_paragraphs(
     assert "prompt_rendering" not in receipt_full and receipt_ph["prompt_rendering"] == "program-header"
     assert pieces['interpreter'][:200] in rows_full[0]["text"]
     # Generic runtime prose goes; the program declaration and unmatched program text stay verbatim (renderSystemPrompt).
-    header = render_system_prompt(system, "program-header", default_pieces())
+    header = render_system_prompt(system, "program-header")
     assert notice in header and header.endswith("A program-specific addendum stays.")
     assert "Use eval for exact computation" not in header
     assert rows_ph[0]["text"] == "<|system|>" + header + "<|end|><|user|>Question<|end|><|assistant|>Answer<|end|>"

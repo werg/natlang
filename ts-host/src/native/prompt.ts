@@ -144,6 +144,9 @@ For a tree edit, deep-copy the input, change only the requested leaf at its exis
 For exact numerical answers, identify the requested operands and their units in the source, compute with eval, and check the order of a ratio or difference against the question.
 Before returning, check that each value answers the requested predicate and matches its declared type; for booleans, verify whether true or false expresses your conclusion.
 `;
+/** The system prompt of every tool-loop call: natlang run, eval probes and training collection send this same text,
+ * so the model runs on the prompt it is trained and evaluated with. */
+export const SYSTEM_PROMPT = `${TOOLS_PROMPT}${GENERATION_GUIDANCE}`;
 /** GENERATION_GUIDANCE at the depth limit (promptAtNlDepthLimit). */
 export const GENERATION_GUIDANCE_AT_NL_DEPTH_LIMIT = `
 

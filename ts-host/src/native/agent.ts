@@ -11,7 +11,7 @@ import { undeclaredServiceType } from './introspection.js';
 import type { DecisionScorer, ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
 import { deriveSeed } from './trace.js';
 import { AUTOMATIC_NOTE, COMPACTION_NOTICE, LEAF_SYSTEM_PROMPT, directoryReducerPrompt, scopedFileToolNames, FUNCTION_TOOLS_PROMPT, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN,
-  LAST_TURN_NOTICE, NL_DEPTH_LIMIT_NOTICE, TOOLS_PROMPT, type FileToolSurface } from './prompt.js';
+  LAST_TURN_NOTICE, NL_DEPTH_LIMIT_NOTICE, SYSTEM_PROMPT, type FileToolSurface } from './prompt.js';
 import { canGenerateNl, runInFrame } from '../runtime/context.js';
 import { adoptImportedNativeArtifacts } from './nz-file.js';
 import { FileHandle, FolderHandle, fileListingText, type Folder } from './scoped-fs.js';
@@ -111,6 +111,23 @@ export const BUILT_INS_LINE = 'Eval also has the built-ins nl, iterateOn, transc
 export const INLINE_BUILT_INS_LINE = BUILT_INS_LINE;
 export const NL_DEPTH_LIMIT_BUILT_INS_LINE = 'Eval has iterateOn, transcript and decide; read_code shows how to use each. ' +
   'This is the fifth ad hoc layer: make further judgments here or call an existing named function from a file.';
+/**
+ * What one call's opening message adds after its scope: the program's guidance, then the function-tools, folder and
+ * nesting-limit paragraphs that apply to this call. The system prompt and tool list are the same for every call, so
+ * every call's opening shares one cached prefix; this is the part that differs. The runtime and the rebuild of recorded
+ * calls for training (native/serving-request.ts) both compose it here.
+ */
+export function callNotes(call: { guidance?: string; ownCode: boolean; allowAdHoc: boolean; rendering?: PromptRendering;
+  folder?: { fileTools?: FileToolSurface; writable: boolean; withheld?: readonly string[] } }): string {
+  const runtime = [call.ownCode ? FUNCTION_TOOLS_PROMPT : '',
+    call.folder ? directoryReducerPrompt(call.folder.fileTools, call.allowAdHoc, call.folder.writable, call.folder.withheld) : '',
+    call.allowAdHoc ? '' : NL_DEPTH_LIMIT_NOTICE].map(text => text.trim()).filter(Boolean).join('\n\n');
+  return [call.guidance?.trim() ?? '', renderSystemPrompt(runtime, call.rendering)].filter(Boolean).join('\n\n');
+}
+
+/** A call's opening message with its notes (callNotes) as the last paragraph. */
+export const withCallNotes = (opening: string, notes: string): string => notes ? `${opening}\n\n${notes}` : opening;
+
 export const OPENING_THOUGHT = "I'll start by reading this call's arguments into the eval scope.";
 export const FOLDER_THOUGHT = "Next I'll list the files in this call's folder.";
 export const DIFF_CODE_DESCRIPTION = 'Show the changes made to functions of the program\'s codebase in this call.';
@@ -493,8 +510,11 @@ export class NativeToolAgent {
        * else the program-wide one (guidance/program.ts guidanceForCall). */
       programGuidance?: ProgramGuidance; authoredTextGuidance?: AuthoredTextGuidance;
       maxFailureRepairs?: number;
-      /** The readout's system prompt (default DECISION_SYSTEM_PROMPT; the kernel adds iteration addenda). */
+      /** The readout's system prompt (default DECISION_SYSTEM_PROMPT). */
       decisionSystemPrompt?: () => string;
+      /** Text for this call only (an iteration predicate's prompt, a retry's guidance): part of the call's notes in its
+       * opening message (callNotes), so the system prompt stays the same for every call. */
+      callAddendum?: string;
       /** Which finite-typed calls answer by decision readout (native/decision.ts); default `declared`. */
       decisionReadout?: 'declared' | 'finite-returns';
       /** `direct`: a leaf call (see `leafOpening`) answers from LEAF_SYSTEM_PROMPT and an opening that shows its arguments,
@@ -1115,9 +1135,11 @@ export class NativeToolAgent {
           description: 'What you are doing, what you have found and ruled out, and what is left.' } }, ['note']),
       tool('return_result', RETURN_RESULT_DESCRIPTION,
         { status: { type: 'string', enum: ['success', 'blocked', 'failed'] },
-          // The declared result type is in the call's opening message (its signature), not here: one tool list serves every
-          // call, so their openings share one cached prefix. The runtime checks the value against the declared type.
-          value: { description: 'For success, provide a value of the result type declared in this call\'s signature, or omit it only to return the exact complete result already staged.' },
+          // The declared result type, as before: it also types how LFM3's XML calls write and read the value (a string
+          // result is raw text, other types JSON). This last tool line is the only part of the tool list that differs
+          // between calls, right before the call's own opening, so openings still share everything above it.
+          value: { ...(session.lam.type.kind === 'lambda' ? schemaOf(session.lam.type.returns, session.env) : {}),
+            description: 'For success, provide a value of the declared return type, or omit it only to return the exact complete result already staged.' },
           reason: { type: 'string', description: 'For "blocked": what information is missing. For "failed": what you could not complete and why. Quote relevant observed tool errors; do not invent missing information or claim a recoverable error proves impossibility.' } }, ['status']),
     ];
     if (this.options.fallbacks?.length) tools.splice(1, 0, tool('escalate',
@@ -1223,9 +1245,9 @@ export class NativeToolAgent {
       ...(context.length ? ['', 'Values from the calling code:', ...context] : [])].join('\n');
   }
 
-  /** The call's opening message: its signature, instructions and `notes` (guidance and the paragraphs that apply to this
-   * call only), then the names eval can use. */
-  private scopeOpening(session: NativeSession, notes = ''): string {
+  /** The call's opening message: its signature and instructions, then the names eval can use (the call's notes follow,
+   * withCallNotes). */
+  private scopeOpening(session: NativeSession): string {
     const lam = session.lam;
     if (lam.type.kind !== 'lambda') return 'Scope:';
     const { signature, scopeTypes, program } = this.callHeading(session);
@@ -1236,7 +1258,6 @@ export class NativeToolAgent {
       ...Object.keys(lam.codebase), ...Object.keys(session.availableServices())];
     return [`You are inside this call: ${signature}`, ...scopeTypes, '', 'Instructions:', program,
       ...(lam.handoff ? ['', lam.handoff] : []),
-      ...(notes ? ['', notes] : []),
       ...(writable.length ? ['', `Assignments to ${writable.join(', ')} are written back to the caller and can change what sibling calls see. ` +
         'For a judgment, read these values without changing them; use new local variables for calculations. ' +
         'Write them only when the instructions require an update.'] : []),
@@ -1577,29 +1598,27 @@ export class NativeToolAgent {
     let budget = this.options.contextTokens === undefined ? await defaultContextBudget(this.driver) : this.options.contextTokens;
     session.pages.budget = shownCharsFor(budget);
     // The program's guidance, in the call's opening message (which the decision readout reuses too).
-    const guidance = renderAuthoredTextGuidance(this.options.authoredTextGuidance) +
-      await this.runtimeProgramGuidance(guidanceForCall(this.options.programGuidance, session.lam.functionName));
+    const guidance = [renderAuthoredTextGuidance(this.options.authoredTextGuidance) +
+      await this.runtimeProgramGuidance(guidanceForCall(this.options.programGuidance, session.lam.functionName)),
+      this.options.callAddendum ?? ''].map(text => text.trim()).filter(Boolean).join('\n\n');
     // A leaf call's opening (set below, once the views are known); undefined runs the full interpreter surface.
     let leaf: string | undefined;
     // One system prompt for every call, so every call's opening shares one cached prefix. What differs between calls
     // (guidance, the function-tools and folder paragraphs, the nesting-limit notice) is in the call's opening message.
     const systemPrompt = () => leaf !== undefined ? LEAF_SYSTEM_PROMPT :
-      typeof this.options.systemPrompt === 'function' ? this.options.systemPrompt() : this.options.systemPrompt ?? TOOLS_PROMPT;
-    const allowAdHoc = canGenerateNl(session.runtime.frame);
-    const callNotes = [guidance.trim(),
-      renderSystemPrompt([Object.keys(session.lam.codebase).length ? FUNCTION_TOOLS_PROMPT : '',
-        session.lam.projectTransaction ? directoryReducerPrompt(this.options.fileTools, allowAdHoc,
-          session.lam.projectTransaction.folder.access !== 'read', session.lam.withheldTools) : '',
-        allowAdHoc ? '' : NL_DEPTH_LIMIT_NOTICE].map(text => text.trim()).filter(Boolean).join('\n\n'), this.options.promptRendering)]
-      .filter(Boolean).join('\n\n');
+      typeof this.options.systemPrompt === 'function' ? this.options.systemPrompt() : this.options.systemPrompt ?? SYSTEM_PROMPT;
+    const notes = callNotes({ guidance, ownCode: Object.keys(session.lam.codebase).length > 0,
+      folder: session.lam.projectTransaction ? { fileTools: this.options.fileTools,
+        writable: session.lam.projectTransaction.folder.access !== 'read', withheld: session.lam.withheldTools } : undefined,
+      allowAdHoc: canGenerateNl(session.runtime.frame), rendering: this.options.promptRendering });
     const views = await this.views(session);
     leaf = this.options.leafCalls === 'direct' ? this.leafOpening(session, views) : undefined;
     if (leaf !== undefined) session.runtime.trace.emit('leaf_call', { call_id: session.runtime.currentCallId ?? null });
     const openingMessages = (): Record<string, unknown>[] => {
       if (leaf !== undefined) return [{ role: 'system', content: systemPrompt() },
-        { role: 'user', content: leaf + (callNotes ? `\n\n${callNotes}` : '') }];
+        { role: 'user', content: withCallNotes(leaf, notes) }];
       const reading = this.scopeReading(session, views);
-      const scopeOpening = this.scopeOpening(session, callNotes);
+      const scopeOpening = withCallNotes(this.scopeOpening(session), notes);
       if (session.lam.skills?.listing) for (const skill of session.lam.skills.inventory ?? [])
         session.runtime.trace.emit('skill_use', { phase: 'offered', skill_name: skill.name,
           skill_revision: skill.revision, invocation_id: session.runtime.options.runId,

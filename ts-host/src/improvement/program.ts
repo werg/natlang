@@ -1,5 +1,5 @@
 import {NATLANG_COMPILE_VERSION} from '../compiler/intrinsics.js';
-import {TOOLS_PROMPT} from '../native/prompt.js';
+import {SYSTEM_PROMPT} from '../native/prompt.js';
 import { OperationJournal } from './operations.js';
 import { fingerprint } from '../adaptation/identity.js';
 import { Folder, FolderSnapshot } from '../native/scoped-fs.js';
@@ -53,7 +53,7 @@ export async function improveProgram(options: ImproveProgramOptions) {
   const lifecycle = (loadVirtualCallables(authored) as { improveStep?: { lifecycle?: { step?: (...args: unknown[]) => Promise<ImprovementState> } } }).improveStep?.lifecycle;
   if (typeof lifecycle?.step !== 'function') throw new TypeError('the authored program-improver has no improveStep/lifecycle.ts step');
   const journal = options.directory ? new OperationJournal(options.directory) : undefined;
-  const identity = fingerprint({ runtime:6,compiler:NATLANG_COMPILE_VERSION,evaluation:SOURCE_EVALUATION_VERSION,authored, opening:{prompt:TOOLS_PROMPT,tools:"native-default",contextTokens:16384,limits:{maxTurns:16,maxTokens:24000,turnTokens:2048,maxFailureRepairs:4,maxRequests:options.budget.maxModelCalls}}, seed: options.seed ?? 0, source: options.folder.snapshot().digest, contract: options.contract, cases: options.cases, policy: options.policy, transformation:options.transformation??null, executor: options.executorId, executorTimeoutMs:options.executorTimeoutMs??120000, excludeModelWaitFromTimeout:options.excludeModelWaitFromTimeout??false, metadataOnlySkillFiles:options.metadataOnlySkillFiles??null, execution:options.executeCase?.identity ?? null, scoring:options.scoring?.identity??null, evaluationLevel:options.evaluationLevel??1, budget: options.budget });
+  const identity = fingerprint({ runtime:6,compiler:NATLANG_COMPILE_VERSION,evaluation:SOURCE_EVALUATION_VERSION,authored, opening:{prompt:SYSTEM_PROMPT,tools:"native-default",contextTokens:16384,limits:{maxTurns:16,maxTokens:24000,turnTokens:2048,maxFailureRepairs:4,maxRequests:options.budget.maxModelCalls}}, seed: options.seed ?? 0, source: options.folder.snapshot().digest, contract: options.contract, cases: options.cases, policy: options.policy, transformation:options.transformation??null, executor: options.executorId, executorTimeoutMs:options.executorTimeoutMs??120000, excludeModelWaitFromTimeout:options.excludeModelWaitFromTimeout??false, metadataOnlySkillFiles:options.metadataOnlySkillFiles??null, execution:options.executeCase?.identity ?? null, scoring:options.scoring?.identity??null, evaluationLevel:options.evaluationLevel??1, budget: options.budget });
   const savedIdentity = journal?.read<string>('run-identity')?.value;
   if (savedIdentity && savedIdentity !== identity) throw new Error('resume requires the same frozen source, cases, policy, executor and allocation');
   journal?.record('run-identity', identity);

@@ -3,7 +3,6 @@
  * `iterateOn` step or judge) comes through `invokeDefinition`: it builds one lambda node, runs it
  * with the interpreter in the caller's task, and returns the checked value or throws `NatlangCallError`.
  */
-import { DECISION_SYSTEM_PROMPT } from '../native/decision.js';
 import { authoredTextGuidance, guidanceForCall, programGuidanceProgram } from '../guidance/program.js';
 import { hexDigest } from '../native/hash.js';
 import { NativeToolAgent } from '../native/agent.js';
@@ -697,7 +696,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     actor: { id: primaryActorId!,
       revision: model.revision ?? null },
     fallbacks: remainingFallbacks, modelBudget: task.modelBudget,
-    systemPrompt: () => task.systemPrompt() + (addendum ? `\n\n${addendum}` : ''),
+    systemPrompt: () => task.systemPrompt(), callAddendum: addendum,
     neuralese: budgetedNeuralese,
     programGuidance: selectedNativeGuidance,
     authoredTextGuidance: selectedAuthoredGuidance,
@@ -709,7 +708,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     ...(task.live ? { onDelta: liveDeltas(task.live, { taskId: task.id, callId, parentCallId: frame.parentCallId ?? null,
       definitionId: definition.id, name: definition.name }) } : {}),
     ...(signature?.refinedReturns ? { refinement: { checker: task.refinementChecker(), ...task.refinementJudges(model, frame) } } : {}),
-    decisionSystemPrompt: () => DECISION_SYSTEM_PROMPT + (addendum ? `\n\n${addendum}` : '') }) : undefined;
+  }) : undefined;
   runtime = new NativeRuntime({ environment, hooks: kernelHooks,
     agent: task.runtime.options.agent ?? (agent ? session => agent.run(session) : undefined),
     maxActions: limits.maxActions, maxToolCalls: limits.maxToolCalls,

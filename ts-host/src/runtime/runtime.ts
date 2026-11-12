@@ -9,7 +9,7 @@ import type { ProgramGuidance, ProgramGuidanceInput } from '../guidance/program.
 import { declarationNamespace } from '../native/external.js';
 import type { EvalEnvironment } from '../native/evaluator.js';
 import type { DecisionScorer, ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
-import { TOOLS_PROMPT } from '../native/prompt.js';
+import { SYSTEM_PROMPT } from '../native/prompt.js';
 import { NatlangContextError, SlotContextStore, currentFrame, runInFrame, useContextStore, type DecisionReadout, type Frame } from './context.js';
 import type { Platform } from './platform.js';
 import type { IterationStatisticsStore, ProgressJudgeFunction } from './iterate.js';
@@ -452,7 +452,7 @@ export class NatlangTask {
   }
   systemPrompt(): string {
     const extra = this.runtime.options.systemPrompt;
-    return TOOLS_PROMPT + (this.appPromptSnapshot ?? (typeof extra === 'function' ? extra() : extra ?? ''));
+    return SYSTEM_PROMPT + (this.appPromptSnapshot ?? (typeof extra === 'function' ? extra() : extra ?? ''));
   }
   cancel(reason: unknown = new Error('natlang task cancelled')): void { this.abort.abort(reason); }
   get isClosed(): boolean { return this.closed; }

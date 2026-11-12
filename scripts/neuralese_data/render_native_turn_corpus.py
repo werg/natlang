@@ -865,8 +865,8 @@ def _serving_binding(serving_entry):
     """The serving prompt rebuild of the full and whole-trajectory views (``--serving-entry``), or None."""
     if serving_entry is None:
         return None
-    from natlang_neuralese.data.serving_prompt import ENTRY_SHARES, load_surface, surface_identity
-    return {'entry': serving_entry, 'surface': surface_identity(load_surface()),
+    from natlang_neuralese.data.serving_prompt import ENTRY_SHARES, serving_identity
+    return {'entry': serving_entry, 'ts_host': serving_identity(),
             **({'entry_shares': [list(item) for item in ENTRY_SHARES]} if serving_entry == 'mix' else {})}
 
 

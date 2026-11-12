@@ -15,7 +15,7 @@ import { pairedChanges, evaluationSummary } from '../evaluation/report.js';
 import { summarize } from '../evaluation/metrics.js';
 import { runAuthoredSearch } from './authored-engine.js';
 import { checkPolicySettings } from './policies.js';
-import {TOOLS_PROMPT} from '../native/prompt.js';
+import {SYSTEM_PROMPT} from '../native/prompt.js';
 import { AUTHORED_IMPROVER } from '../improvement/authored-source.js';
 import { RunStore } from './run-store.js';
 import { ENGINE_VERSION, readCheckpoint, saveCheckpoint } from './checkpoint.js';
@@ -47,7 +47,7 @@ async function search(prepared: PreparedSuite, options: OptimizationOptions, res
   const strategy = options.strategy ?? 'gepa', seed = options.seed ?? 0;
   const limits = options.budget ?? prepared.suite.budget;
   validateBudget(limits);
-  const settings = { strategy, seed, limits, authored: fingerprint(AUTHORED_IMPROVER), opening:fingerprint({prompt:TOOLS_PROMPT,tools:"native-default",contextTokens:16384}), minibatchSize: options.minibatchSize ?? 4, maxPopulation: options.maxPopulation ?? 16,
+  const settings = { strategy, seed, limits, authored: fingerprint(AUTHORED_IMPROVER), opening:fingerprint({prompt:SYSTEM_PROMPT,tools:"native-default",contextTokens:16384}), minibatchSize: options.minibatchSize ?? 4, maxPopulation: options.maxPopulation ?? 16,
     maxHistory: options.maxHistory ?? 1000,
     maxRepairs: options.maxRepairs ?? 1, policies: checkPolicySettings(options.policies), dependencies: options.dependencies ?? {}, finalTest: options.finalTest ?? true,
     reflectionIdentity: options.reflectionIdentity ?? null, judgeIdentity: options.judgeIdentity ?? null,

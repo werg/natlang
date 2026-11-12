@@ -30,7 +30,7 @@ NAME="render-$(basename "$OUT")-$(printf %s "$OUT" | sha1sum | cut -c1-10)"
 docker rm -f "$NAME" >/dev/null 2>&1 || true
 ERRLOG=$(mktemp "${TMPDIR:-/tmp}/render-stderr.XXXXXX")
 trap 'rm -f "$ERRLOG"' EXIT
-# --serving-entry derives return schemas with ts-host (scripts/return-schemas.mjs over NATLANG_TS_DIST, default
+# --serving-entry rebuilds requests with ts-host (scripts/serving-request.mjs over NATLANG_TS_DIST, default
 # ts-host/dist, under the read-only repo mount) through the same mounted Node.
 # The image has no Node; candidate-selection admission runs scripts/verify_candidate_selection_packet.mjs (needs a
 # built ts-host/dist), so the host's Node binary is mounted in.

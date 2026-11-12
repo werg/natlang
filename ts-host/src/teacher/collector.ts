@@ -29,7 +29,7 @@ import type { GuidanceRun } from '../native/training-guidance.js';
 import { programGuidanceIdentity, type ProgramGuidance } from '../guidance/program.js';
 import { trainingGuidance } from '../runtime/node-guidance-writer.js';
 import type { PromptRendering } from '../native/system-prompts.js';
-import { GENERATION_GUIDANCE, TOOLS_PROMPT } from '../native/prompt.js';
+import { SYSTEM_PROMPT } from '../native/prompt.js';
 import { NodeNativeRuntime } from '../node-runtime.js';
 import { Folder } from '../native/scoped-fs.js';
 import { dump, MISSING } from '../native/values.js';
@@ -1951,4 +1951,5 @@ export async function defaultToolSurfaceHash(root = fileURLToPath(new URL('../..
   return sha256(Buffer.concat(chunks.flatMap((chunk, index) => index ? [Buffer.from([0]), chunk] : [chunk])));
 }
 
-export const defaultSystemPrompt = `${TOOLS_PROMPT}${GENERATION_GUIDANCE}`;
+/** The system prompt every tool-loop call sends (SYSTEM_PROMPT; natlang run sends the same). */
+export const defaultSystemPrompt = SYSTEM_PROMPT;

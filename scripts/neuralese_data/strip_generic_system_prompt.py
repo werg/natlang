@@ -38,7 +38,7 @@ TURN_END = '<|im_end|>'
 TOOL_SECTION_MARKERS = ('List of tools: ', '# Tools\n')
 # The scope table is shared with the renderer's prompt_rendering argument (one implementation per concept).
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training' / 'neuralese'))
-from natlang_neuralese.data.prompt_rendering import default_pieces, render_system_prompt  # noqa: E402
+from natlang_neuralese.data.prompt_rendering import render_system_prompt  # noqa: E402
 PROGRAM_SPECIFIC_HEADS = ()  # superseded by the shared piece table (training/prompt-pieces/pieces.json)
 
 
@@ -76,7 +76,7 @@ def program_header(content: str):
     # Mellum2.1's (Qwen-style) template writes the system message, then '\n\n', then '# Tools': the same rule.
     if tools.startswith('# Tools\n') and prose.endswith('\n\n'):
         prose = prose[:-2]
-    header = render_system_prompt(prose, 'program-header', default_pieces())
+    header = render_system_prompt(prose, 'program-header')
     return ([header] if header else []), len(prose), len(tools)
 
 

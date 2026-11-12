@@ -2091,8 +2091,21 @@ call-specific moved into the call's opening user message, after its signature an
   paragraph, now it stays and the opening says nl is unavailable at this layer, as `read_code nl` and the eval error do).
 - `read_code`, `edit_code`, `diff_code` are offered on every call; `edit_code` on a call without code of its own answers
   `no-own-code` with the reason.
-- `return_result.value` has no per-call JSON schema; its description points at the signature's declared result type.
-  The runtime checks the value against the declared type as before. No server enforced value schemas (llama.cpp's
-  lfm2 tool grammar accepts "banana" for an enum; checked 2026-11-12), so guided decoding is unchanged.
+- `return_result.value` keeps its per-call schema of the declared result type (it was briefly removed in d17a253fc and
+  restored: on our server and in ts-host's LFM3 XML call parser the schema types how the value is written and read,
+  e.g. a string result as raw text; llama.cpp's grammar does not enforce it). It is the last tool line, directly before
+  the call's own opening, so calls share everything above it (llama.cpp: the saved base without that line).
 - The forced compaction/last-turn template is `optional`: a Neuralese server without templates samples freely.
-Tests: `adaptation-runtime`, `native-program-guidance`, `decision-readout`, `builtin-programs` fixture.
+- The notes are the opening's last paragraph (`callNotes`/`withCallNotes` in agent.ts), as in the leaf opening.
+- Per-call system addenda (an iterateOn stopping predicate's prompt, a retry's guidance; kernel.ts) are call notes in
+  the opening too (`callAddendum`), for the tool loop and the decision readout alike.
+- One system prompt for running and training: `SYSTEM_PROMPT` (TOOLS_PROMPT + GENERATION_GUIDANCE, prompt.ts) is the
+  NativeToolAgent default and the collector's `defaultSystemPrompt`. natlang run sent TOOLS_PROMPT alone, so users ran
+  the model on a prompt it was not trained or evaluated with.
+- Training rows rebuilt from earlier recordings use this same code: `ts-host/src/teacher/serving-request.ts`, reached
+  from Python through `scripts/serving-request.mjs` (`data/ts_host.py`; `serving_prompt.py` and
+  `prompt_rendering.render_system_prompt` are clients of it). The Python ports of the composition and of
+  renderSystemPrompt, the exported serving surface and the parity checks are removed. Live RL/SFT rows (exp0, exp1,
+  GRPO) were already the actor's exact prompt ids.
+Tests: `adaptation-runtime`, `native-program-guidance`, `decision-readout`, `serving-request` (rebuild == live agent
+request), `builtin-programs` fixture.

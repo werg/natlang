@@ -1,4 +1,4 @@
-import {TOOLS_PROMPT} from '../native/prompt.js';
+import {SYSTEM_PROMPT} from '../native/prompt.js';
 import { OperationJournal } from './operations.js';
 import { NATLANG_COMPILE_VERSION } from '../compiler/intrinsics.js';
 import { validateSourceEdit, exportedSignature } from './source-policy.js';
@@ -64,7 +64,7 @@ export class SourceEvaluator implements ProgramEvaluator {
     // Compile-only checks need no cases. Evaluation itself still requires a nonempty named split.
     if(cases.length)validateCases(cases.map(row => ({ ...row, input: row.args })));
     this.cases = structuredClone(cases);
-    this.suiteVersion = fingerprint({ api:SOURCE_EVALUATION_VERSION,cases, contract, executor: options.executorId, execution:options.executeCase?.identity ?? null, scoring:options.scoring?.identity??null, evaluationLevel:options.evaluationLevel??1, compiler: NATLANG_COMPILE_VERSION, opening:{prompt:TOOLS_PROMPT,tools:"native-default",contextTokens:16384}, policy: { network: false, codeEdits: 'deny', maxEpisodes: 30, maxActions: 100, timeoutMs: options.timeoutMs ?? 120000, excludeModelWaitFromTimeout: options.excludeModelWaitFromTimeout ?? false } });
+    this.suiteVersion = fingerprint({ api:SOURCE_EVALUATION_VERSION,cases, contract, executor: options.executorId, execution:options.executeCase?.identity ?? null, scoring:options.scoring?.identity??null, evaluationLevel:options.evaluationLevel??1, compiler: NATLANG_COMPILE_VERSION, opening:{prompt:SYSTEM_PROMPT,tools:"native-default",contextTokens:16384}, policy: { network: false, codeEdits: 'deny', maxEpisodes: 30, maxActions: 100, timeoutMs: options.timeoutMs ?? 120000, excludeModelWaitFromTimeout: options.excludeModelWaitFromTimeout ?? false } });
   }
   async check(folder: FolderSnapshot): Promise<CheckReport> {
     const found = this.checks.get(folder.digest); if (found) return found;
