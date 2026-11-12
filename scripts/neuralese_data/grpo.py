@@ -411,6 +411,24 @@ class StateSaver:
 
 
 # ---- learner ---------------------------------------------------------------------------------------------------------
+def write_pruned_checkpoint(state, native_rows, special, path, source_sha256, trained):
+    """``exp0_sft.write_checkpoint``'s pruned native checkpoint from a host snapshot, without holding the source backbone:
+    the trained backbone (BF16), the source's native embedding rows at the interface ids, the source's interface."""
+    import torch
+    backbone = {name: trained[name].contiguous() for name in native_rows['names']}
+    embedding = backbone['model.embed_tokens.weight']
+    embedding[torch.tensor(special)] = native_rows['embedding_rows'].to(embedding.dtype)
+    if native_rows['tied_head']:
+        backbone['lm_head.weight'] = embedding
+    out = {k: state[k] for k in ('schema', 'model_config', 'interface_state')}
+    out.update(backbone_state=backbone, step=int(state['step']), inference_only=True, optimizer_pruned=True,
+               optimizer_pruned_keys=['training'],
+               inference_source={'schema': 'natlang.native-inference-source/1', 'training_checkpoint_sha256': source_sha256,
+                                 'training_checkpoint_bytes': 0, 'step': int(state['step'])})
+    torch.save(out, path)
+    return None
+
+
 def group_advantages(rewards):
     mean = sum(rewards) / len(rewards)
     std = math.sqrt(sum((r - mean) ** 2 for r in rewards) / len(rewards))
@@ -523,9 +541,14 @@ def train(args):
         actor_thread.start()
     # Loaded on the host, then the checkpoint's page cache is dropped before the GPU copy: on the GB10 a CUDA allocation
     # only gets MemFree, and the 9.5 GB checkpoint's cache made the move to the GPU fail under contention (smoke 2026-11-12).
-    model, state, special = exp0_sft.load_model(args.checkpoint, args.base, device='cpu')
-    state = {k: state[k] for k in ('schema', 'model_config', 'interface_state', 'step', 'backbone_state')}
-    state['backbone_state'] = {k: v.to(torch.bfloat16) for k, v in state['backbone_state'].items()}
+    # BF16 on the host (the native backbone is BF16, so the FP32 masters made from it are the same values); the source
+    # checkpoint is reduced to what a pruned checkpoint needs (the native rows the merged embedding overwrote).
+    model, state, special = exp0_sft.load_model(args.checkpoint, args.base, device='cpu', dtype=torch.bfloat16)
+    original = state['backbone_state']
+    native_rows = {'embedding_rows': original['model.embed_tokens.weight'][torch.tensor(special)].clone(),
+                   'tied_head': 'lm_head.weight' in original, 'names': [n for n in original if n != 'lm_head.weight']}
+    state = {k: state[k] for k in ('schema', 'model_config', 'interface_state', 'step')}
+    del original
     import gc
     gc.collect()
     for path in (args.checkpoint,):
@@ -608,7 +631,9 @@ def train(args):
         sync.wait()
         if not sync.last.get('ok'):
             raise RuntimeError(f'actor weight update failed: {sync.last}')
-    log_line(log, {'event': 'learner ready', 'init_s': round(time.time() - t0, 1)})
+    log_line(log, {'event': 'learner ready', 'init_s': round(time.time() - t0, 1), 'meminfo_gb': meminfo(),
+                   'cuda_allocated_gb': round(torch.cuda.memory_allocated() / 2**30, 1),
+                   'cuda_reserved_gb': round(torch.cuda.memory_reserved() / 2**30, 1)})
     slots = [threading.Thread(target=collector.slot, daemon=True) for _ in range(args.slots)]
     for thread in slots:
         thread.start()
@@ -623,7 +648,7 @@ def train(args):
         directory = work / 'checkpoints' / f'step-{step_number:05d}'
         directory.mkdir(parents=True, exist_ok=True)
         path = directory / 'checkpoint.pt'
-        changed = exp0_sft.write_checkpoint(None, state, special, path, source_sha, step_number, trained=sync.backbone())
+        changed = write_pruned_checkpoint(state, native_rows, special, path, source_sha, sync.backbone())
         from natlang_neuralese.common.hashing import sha256_file_hex
         sha = sha256_file_hex(path)
         (directory / 'sha256.txt').write_text(sha + '\n')
