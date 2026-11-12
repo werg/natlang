@@ -283,6 +283,7 @@ def train(args):
     print(json.dumps({'episodes': len(episodes), 'sequences': len(chains), 'sequence_tokens': int(sum(len(c['ids']) for c in chains)),
                       'loss_tokens': int(loss_tokens), 'epochs': args.epochs}), flush=True)
     model, state, special = load_model(args.checkpoint, args.base)
+    state = {k: v for k, v in state.items() if k != 'training'}   # the source's optimizer state (5.5 GB host): never used
     # FP32 master weights live in the optimizer; the model computes in BF16 (as the actor does) and its BF16 gradients
     # accumulate into FP32 buffers
     masters = {name: p.detach().clone().float() for name, p in model.named_parameters()}
