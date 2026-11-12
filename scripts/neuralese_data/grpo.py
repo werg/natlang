@@ -81,6 +81,18 @@ def drop_cache(paths):
             os.close(fd)
 
 
+def actor_generated(url):
+    """The actor front's generated-token counter (``/metrics`` natlang_sglang_generated_tokens_total), None if unreadable."""
+    try:
+        with urllib.request.urlopen(url + '/metrics', timeout=10) as response:
+            for line in response.read().decode().splitlines():
+                if line.startswith('natlang_sglang_generated_tokens_total '):
+                    return int(float(line.split()[1]))
+    except Exception:
+        return None
+    return None
+
+
 def log_line(handle, record):
     text = json.dumps(record)
     print(text, flush=True)
@@ -909,6 +921,9 @@ def train(args):
             raise RuntimeError(f'restoring the start policy on the actor failed: {sync.last}')
     last_held = time.time()
 
+    # actor tokens/s while the learner computes (learner-phase slots) and while it waits (all slots), cumulative
+    phase_totals = collections.Counter()
+    phase_mark = {'time': time.time(), 'tokens': actor_generated(args.actor)}
     while not stop.is_set() and (not args.max_steps or step < args.max_steps):
         phase = collections.OrderedDict()
         t = time.time()
@@ -959,6 +974,10 @@ def train(args):
         # learner
         torch.cuda.reset_peak_memory_stats()
         collector.active_slots = args.learner_phase_slots
+        learn_started, learn_tokens0 = time.time(), actor_generated(args.actor)
+        if phase_mark['tokens'] is not None and learn_tokens0 is not None:
+            phase_totals['collect_s'] += learn_started - phase_mark['time']
+            phase_totals['collect_tokens'] += learn_tokens0 - phase_mark['tokens']
         sums = collections.Counter()
         rho_pre_max, rho_post_max, forward_tokens = 0., 0., 0
         rng = random.Random(args.seed + step)
@@ -1033,6 +1052,11 @@ def train(args):
             record['probe_learner_nll'] = round(probe_learner_nll(), 5)
         step += 1
         collector.active_slots = args.slots
+        learn_ended, learn_tokens1 = time.time(), actor_generated(args.actor)
+        if learn_tokens0 is not None and learn_tokens1 is not None:
+            phase_totals['learn_s'] += learn_ended - learn_started
+            phase_totals['learn_tokens'] += learn_tokens1 - learn_tokens0
+        phase_mark.update(time=learn_ended, tokens=learn_tokens1)
         # weight sync and checkpoints (background)
         t = time.time()
         sync.snapshot()                   # waits for the previous publish
@@ -1064,6 +1088,9 @@ def train(args):
             actor_generated_tokens=collector.generated, actor_episodes=collector.episodes,
             actor_generated_tokens_per_s=round(collector.generated / max(1., elapsed)),
             phase_s={k: round(v, 1) for k, v in phase.items()}, previous_sync=sync.last,
+            actor_tokens_per_s_learn_phase=round(phase_totals['learn_tokens'] / phase_totals['learn_s']) if phase_totals['learn_s'] else None,
+            actor_tokens_per_s_collect_phase=round(phase_totals['collect_tokens'] / phase_totals['collect_s']) if phase_totals['collect_s'] else None,
+            learner_phase_slots=args.learner_phase_slots,
             previous_state_save=saver.last, cuda_peak_gb=round(torch.cuda.max_memory_allocated() / 2**30, 1),
             outstanding_groups=collector.outstanding, elapsed_s=round(elapsed))
         log_line(log, record)
@@ -1071,6 +1098,7 @@ def train(args):
             sync.wait()                   # the actor now serves (and attests) this step's checkpoint
             held(step, args.held_samples)
             last_held = time.time()
+            phase_mark.update(time=time.time(), tokens=actor_generated(args.actor))   # the measurement is neither phase
     sync.wait()
     saver.wait()
     collector.stop.set()
@@ -1098,7 +1126,7 @@ def main():
     t.add_argument('--group', type=int, default=8)
     t.add_argument('--slots', type=int, default=96, help='concurrent episodes on the actor (its default runs 128 sequences)')
     t.add_argument('--min-groups', type=int, default=12)
-    t.add_argument('--learner-phase-slots', type=int, default=24,
+    t.add_argument('--learner-phase-slots', type=int, default=8,
                    help='collector slots that take new episodes while the learner computes (actor decode and the learner '
                         'share the GB10; in-flight episodes always finish)')
     t.add_argument('--max-groups', type=int, default=24,
