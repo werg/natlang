@@ -40,8 +40,8 @@ so w5 is retired (data kept, never resumed) and the base is the start policy.
 ## GRPO loop: plain GRPO from the base, overlapped (engineering, 2026-11-12)
 
 `scripts/neuralese_data/grpo.py train` is the review's "Hour 24-48" GRPO (a few hundred lines; no controller, custody or
-transitions). One ledger unit holds the learner; its training actor is the ledger unit `<prefix>-actor` (`held_eval.serve`,
-SGLang vendor projection, the actor defaults). Collection never stops: `--slots` work-stealing episodes over an endless
+transitions). One ledger unit holds the learner and, as a child process, its training actor (held-v2's pinned engine:
+SGLang vendor projection, FP8 KV; a separately admitted actor unit deadlocked behind the learner's claim). Collection never stops: `--slots` work-stealing episodes over an endless
 shuffled stream of task groups (8 samples; pools: the w5 pool plus the verified bgkit KR rows, fallow K1; held-v2 excluded
 with its split groups and every row sharing a source group; `WORK/pool.json` records the pool shas). The learner trains on
 whatever groups finished since its last step (16-128; stragglers join a later step, groups more than 2 versions stale are
@@ -55,6 +55,11 @@ background threads. Episodes run the run's pinned copy of ts-host (`WORK/pin-<co
 (`runs.jsonl`); restart (`--resume`) to adopt newer code. Every 4 h `held_eval measure` (held-v2, 2 samples) runs on the
 newest checkpoint and `held_eval compare` pairs it with step 0 (`WORK/held/step-N/`). `train.jsonl` logs per step: reward
 mean, spread fraction, KL, rho (mean, pre/post-cap max, capped fraction, |log rho|), learner and actor tokens/s, phase seconds.
+Memory (smoke 2026-11-12): on the GB10 the unit's MemoryMax (= ledger budget) also bounds its CUDA allocations, so the
+budget must cover GPU + host: learner CUDA 19.3 GB before AdamW state, 32 GB peak at step 1, about 36 GB with the FP32 moments
+(FP32 masters + moments + FP32 gradients alone are 27 GB), host about 5 GB plus the collector node processes (in the same
+cgroup, 0.3-0.7 GB per slot), plus the child actor (kv-gb + 24). Episodes run as their own collector processes
+(`NATLANG_COLLECTOR_SHARED=0`: the shared server crashed with EPIPE and left every episode unresolved).
 
 ## Held-v2: the experiments' held-out set (engineering, 2026-11-12)
 
