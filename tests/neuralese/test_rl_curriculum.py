@@ -484,6 +484,21 @@ def test_held_paired_comparison_is_exact_on_matched_scored_samples():
     assert held_eval.binomial_two_sided(0,0)==1.0 and held_eval.binomial_two_sided(5,5)==1.0
 
 
+def test_held_standalone_comparison_counts_timeouts_apart_and_bounds_the_change():
+    tasks=[(f't{i}',s) for i in range(10) for s in (0,1)]
+    a={k:1.0 if i<6 else 0.0 for i,k in enumerate(tasks)}
+    b={k:1.0 if (i<6 or 10<=i<18) else 0.0 for i,k in enumerate(tasks)}
+    b[tasks[0]]=None
+    first,second=held_result('a',1,a),held_result('b',2,b)
+    second['samples'][0]['timed_out']=True
+    report=held_eval.compare(first,second)
+    assert report['pairs_lost_to_timeout']==1 and report['second']['timeouts']==1 and report['first']['timeouts']==0
+    assert report['paired']['pairs']==19 and report['success_rate_delta']==round(8/19,4)
+    low,high=report['delta_ci95_task_bootstrap']
+    assert 0<low<=report['success_rate_delta']<=high and report['loop_rate_delta']==0
+    assert held_eval.compare(first,first)['success_rate_delta']==0
+
+
 def test_held_trend_pairs_with_previous_and_first_within_one_series(tmp_path):
     tasks=[(f't{i}',s) for i in range(6) for s in (0,1)]
     def write(policy,started,successes,key='s1'):

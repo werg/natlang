@@ -312,7 +312,8 @@ def _entries(spec):
     task_rollouts.prepare(SimpleNamespace(
         cases=Path(spec['cases']), out=directory, rows=spec['tasks'], offset=0, group=spec['samples'], temperature=1.,
         case_seconds=spec['case_seconds'], max_model_requests=spec['max_model_requests'], max_turns=spec['max_turns'],
-        seed_base=SEED_BASE, root_mode='student', match_seeds_from=None, policy_checkpoint_sha256=spec['policy_id']))
+        seed_base=spec.get('seed_base', SEED_BASE), root_mode='student', match_seeds_from=None,
+        policy_checkpoint_sha256=spec['policy_id']))
     entries = list(read_jsonl(directory / 'queue.jsonl'))
     for entry in entries:
         entry.update(prompt_rendering='full', context_tokens=spec['context_tokens'])
@@ -320,9 +321,70 @@ def _entries(spec):
     return entries
 
 
+def _finished(journal):
+    return journal.exists() and any(row.get('event') == 'finish' for row in read_jsonl(journal))
+
+
+def collect(directory, entries, endpoints, *, repo, runtime, env, stop, log=None):
+    """Work-stealing slots (``endpoints``: [(url, slots)]) over the sealed ``entries``, one ``run_bonsai_queue`` process per
+    episode under ``directory/workers`` (a slow episode never holds a shard of others back). Entries with a finished journal
+    are skipped (resume). Returns once every entry ran or ``stop`` is set (its running episodes are terminated)."""
+    directory, repo = Path(directory), Path(repo)
+    work = directory / 'workers'
+    work.mkdir(exist_ok=True)
+    todo = [entry for entry in entries if not _finished(work / f"{entry['key']}.journal.jsonl")]
+    lock, cursor, children, done = threading.Lock(), [0], set(), [0]
+    started = time.time()
+
+    def slot(url):
+        while not stop.is_set():
+            with lock:
+                if cursor[0] >= len(todo):
+                    return
+                entry = todo[cursor[0]]
+                cursor[0] += 1
+            key = entry['key']
+            queue, journal = work / f'{key}.queue.jsonl', work / f'{key}.journal.jsonl'
+            journal.unlink(missing_ok=True)   # an unfinished attempt restarts whole
+            queue.write_text(json.dumps(entry, sort_keys=True) + '\n')
+            command = [sys.executable, str(repo / 'scripts/run_bonsai_queue.py'), str(queue), str(journal),
+                       '--runtime', str(runtime), '--server', url, '--chat-completions-url', url + '/v1/chat/completions',
+                       '--model-id', 'natlang-rl', '--model-concurrency', '1', '--chat-request-config',
+                       str(directory / 'sampling-config.json'), '--neuralese-server']
+            with lock:
+                if stop.is_set():
+                    return
+                with (work / f'{key}.log').open('a') as handle:
+                    child = subprocess.Popen(command, cwd=repo, env=env, stdout=handle, stderr=subprocess.STDOUT)
+                children.add(child)
+            child.wait()
+            with lock:
+                children.discard(child)
+                done[0] += 1
+                if log and done[0] % 16 == 0:
+                    log(json.dumps({'held_eval_progress': done[0], 'of': len(todo),
+                                    'minutes': round((time.time() - started) / 60, 1)}))
+
+    def watch():
+        stop.wait()
+        with lock:
+            for child in list(children):
+                if child.poll() is None:
+                    child.terminate()
+
+    threading.Thread(target=watch, daemon=True).start()
+    threads = [threading.Thread(target=slot, args=(url.rstrip('/'),), daemon=True)
+               for url, slots in endpoints for _ in range(max(1, min(slots, len(todo))))]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        while thread.is_alive():
+            thread.join(5)
+
+
 def run(directory):
-    """The detached driver: shard the sealed queue over ``workers`` collector processes (``run_bonsai_queue``), score what
-    finished and write ``result.json``. SIGTERM stops the collectors and still writes the (partial) result."""
+    """The detached driver: work-stealing collection of the sealed queue (``workers`` slots), score what finished and write
+    ``result.json``. SIGTERM stops the collectors and still writes the (partial) result."""
     directory = Path(directory)
     spec = json.loads((directory / 'run.json').read_text())
     started = time.time()
@@ -333,75 +395,52 @@ def run(directory):
     entries = list(read_jsonl(queue))
     (directory / 'sampling-config.json').write_text(json.dumps({'guidance': False}) + '\n')
     stop = threading.Event()
-    children, lock = [], threading.Lock()
-
-    def terminate(*_):
-        stop.set()
-        with lock:
-            for child in children:
-                if child.poll() is None:
-                    child.terminate()
-
-    signal.signal(signal.SIGTERM, terminate)
-    signal.signal(signal.SIGINT, terminate)
-    workers = max(1, min(spec['workers'], len(entries)))
-    root = Path(spec['repo'])
+    signal.signal(signal.SIGTERM, lambda *_: stop.set())
+    signal.signal(signal.SIGINT, lambda *_: stop.set())
+    endpoints = spec.get('endpoints') or [[spec['endpoint'], spec['workers']]]
     env = {**os.environ, 'NATLANG_MODEL_FACING': spec['series']['model_facing']}
-
-    def shard(index):
-        shard_dir = directory / f'shard-{index:02d}'
-        shard_dir.mkdir(exist_ok=True)
-        mine = entries[index::workers]
-        (shard_dir / 'queue.jsonl').write_text(''.join(json.dumps(entry, sort_keys=True) + '\n' for entry in mine))
-        endpoint = spec['endpoint'].rstrip('/')
-        command = [sys.executable, str(root / 'scripts/run_bonsai_queue.py'), str(shard_dir / 'queue.jsonl'),
-                   str(shard_dir / 'journal.jsonl'), '--runtime', spec['runtime'], '--server', endpoint,
-                   '--chat-completions-url', endpoint + '/v1/chat/completions', '--model-id', 'natlang-rl',
-                   '--model-concurrency', '1', '--chat-request-config', str(directory / 'sampling-config.json'),
-                   '--neuralese-server']
-        with lock:
-            if stop.is_set():
-                return
-            with (shard_dir / 'collector.log').open('a') as log:
-                child = subprocess.Popen(command, cwd=root, env=env, stdout=log, stderr=subprocess.STDOUT)
-            children.append(child)
-        child.wait()
-
-    threads = [threading.Thread(target=shard, args=(index,)) for index in range(workers)]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
+    collect(directory, entries, endpoints, repo=spec['repo'], runtime=spec['runtime'], env=env, stop=stop,
+            log=lambda line: print(line, flush=True))
     try:
         result = finalize(directory, spec, started, complete=not stop.is_set())
     except BaseException as error:   # never leave a run without a verdict
         write_json_durable(directory / 'result.json', {'schema': RESULT_SCHEMA, 'policy_id': spec['policy_id'],
                            'error': repr(error)[:500], 'series': spec['series']})
         raise
-    print(json.dumps({'held_eval': spec['policy_id'][:16], 'successes': result['successes'], 'scored': result['scored']}),
-          flush=True)
+    print(json.dumps({'held_eval': spec['policy_id'][:16], 'successes': result['successes'], 'scored': result['scored'],
+                      'timeouts': result['timeouts'], 'elapsed_seconds': result['elapsed_seconds']}), flush=True)
+    return result
+
+
+def _timed_out(finish):
+    return bool(finish) and (finish.get('status') == 'timeout' or finish.get('resource_limit_reason') == 'case_wall_budget')
 
 
 def finalize(directory, spec, started, *, complete):
+    """Score the finished episodes into ``result.json``. A wall-clock timeout (``case_wall_budget``: load-dependent, not
+    the policy's) is unscored and counted apart (``timeouts``), never as a failure; ``success_rate`` is over the scored."""
     from . import task_rollouts
     directory = Path(directory)
     journal = directory / 'journal.jsonl'
     with journal.open('w') as merged:
-        for path in sorted(directory.glob('shard-*/journal.jsonl')):
+        for path in sorted([*directory.glob('shard-*/journal.jsonl'), *directory.glob('workers/*.journal.jsonl')]):
             merged.write(path.read_text())
     report = task_rollouts.score(directory)
     rewards = list(read_jsonl(directory / 'rewards.jsonl'))
     queue = {entry['key']: entry for entry in read_jsonl(directory / 'sealed-queue.jsonl')}
-    finished = {row['key'] for row in read_jsonl(journal) if row.get('event') == 'finish'}
+    finishes = {row['key']: row for row in read_jsonl(journal) if row.get('event') == 'finish'}
     by_position = {(entry['group'], entry['sample']): key for key, entry in queue.items()}
     packet = list(read_jsonl(directory / 'packet.jsonl'))
     samples = []
     for row in rewards:
         key = by_position[(row['group'], row['sample'])]
+        finish = finishes.get(key)
         efficiency = row.get('execution_efficiency') or {}
         samples.append({'task_id': row['task_id'], 'family': row.get('family'), 'level': _level(packet[row['group']]),
                         'sample': row['sample'], 'outcome': row['outcome'], 'reward': row['reward'],
-                        'ran': key in finished, 'finish_status': row.get('finish_status'),
+                        'ran': key in finishes, 'finish_status': row.get('finish_status'), 'timed_out': _timed_out(finish),
+                        'elapsed_seconds': (finish or {}).get('elapsed_seconds'),
+                        'completion_tokens': (finish or {}).get('completion_tokens'),
                         'model_calls': efficiency.get('model_calls'), 'repeated_actions': efficiency.get('repeated_actions'),
                         'neuralese_exchanges': row.get('neuralese_exchanges', 0)})
     ran = [s for s in samples if s['ran']]
@@ -410,15 +449,24 @@ def finalize(directory, spec, started, *, complete):
     for s in ran:
         counts[s['outcome']] = counts.get(s['outcome'], 0) + 1
     calls = sum(s['model_calls'] or 0 for s in scored)
+    successes = sum(s['reward'] == 1.0 for s in scored)
+    timeouts = sum(s['timed_out'] for s in ran)
+    tokens = sum(s['completion_tokens'] or 0 for s in ran)
+    elapsed = round(time.time() - started, 1)
     result = {'schema': RESULT_SCHEMA, 'policy_id': spec['policy_id'], 'round': spec.get('round'),
               'manifest_sha256': spec['manifest_sha256'], 'series': spec['series'], 'code': spec['code'],
               'endpoint': spec['endpoint'], 'actor': spec.get('actor'), 'tasks': spec['tasks'], 'samples_per_task': spec['samples'],
-              'started_at': started, 'finished_at': time.time(), 'elapsed_seconds': round(time.time() - started, 1),
+              'seed_base': spec.get('seed_base', SEED_BASE), 'case_seconds': spec.get('case_seconds'),
+              'started_at': started, 'finished_at': time.time(), 'elapsed_seconds': elapsed,
               'complete': bool(complete and len(ran) == len(samples)), 'ran': len(ran), 'scored': len(scored),
-              'successes': sum(s['reward'] == 1.0 for s in scored), 'outcome_counts': counts,
+              'successes': successes, 'success_rate': round(successes / len(scored), 4) if scored else None,
+              'timeouts': timeouts, 'timeout_rate': round(timeouts / len(ran), 4) if ran else None,
+              'unscored_other': len(ran) - len(scored) - sum(s['timed_out'] and s['reward'] is None for s in ran),
+              'outcome_counts': counts,
               'loop_rate': (sum(counts.get(k, 0) for k in LOOP) / len(ran)) if ran else None,
               'repeated_action_rate': (sum(s['repeated_actions'] or 0 for s in scored) / calls) if calls else None,
               'neuralese_use_rate': (sum(s['neuralese_exchanges'] > 0 for s in scored) / len(scored)) if scored else None,
+              'completion_tokens': tokens, 'tokens_per_second': round(tokens / elapsed, 1) if elapsed else None,
               'score': {'groups_with_spread': report.get('groups_with_spread')}, 'samples': samples}
     write_json_durable(directory / 'result.json', result)
     return result
@@ -576,6 +624,55 @@ def paired(first, second):
             'tasks_up': up, 'tasks_down': down, 'task_sign_p': round(binomial_two_sided(up, down), 4)}
 
 
+def compare(first, second, *, resamples=2000):
+    """The standalone comparison of two result.json files (``second`` against ``first``): the paired test (McNemar on
+    matched scored samples, task-level sign test), the task-clustered bootstrap 95% interval of the success-rate change
+    over the matched samples, each side's timeouts and loop rate, and whether the two ran under one code commit and series.
+    Pairs lost to a timeout on either side are counted, never scored."""
+    import random
+
+    def timed_out(sample):
+        return bool(sample.get('timed_out') or sample.get('finish_status') == 'timeout')
+
+    def table(result):
+        return {(s['task_id'], s['sample']): s for s in result['samples'] if s['ran']}
+    a, b = table(first), table(second)
+    common = set(a) & set(b)
+    scored = [k for k in common if a[k]['reward'] is not None and b[k]['reward'] is not None]
+    by_task = {}
+    for task, sample in scored:
+        by_task.setdefault(task, []).append((a[(task, sample)]['reward'] == 1.0, b[(task, sample)]['reward'] == 1.0))
+    tasks = sorted(by_task)
+    rng = random.Random(0)
+    deltas = []
+    for _ in range(resamples if tasks else 0):
+        pick = [by_task[rng.choice(tasks)] for _ in tasks]
+        n = sum(len(v) for v in pick)
+        deltas.append(sum(y - x for v in pick for x, y in v) / n)
+    deltas.sort()
+
+    def side(result):
+        return {'policy': result['policy_id'], 'code': (result.get('code') or {}).get('git_commit'),
+                'series': result['series']['key'], 'seed_base': result.get('seed_base', SEED_BASE), 'ran': result['ran'],
+                'scored': result['scored'], 'successes': result['successes'],
+                'success_rate': round(result['successes'] / result['scored'], 4) if result['scored'] else None,
+                'timeouts': sum(timed_out(s) for s in result['samples'] if s['ran']),
+                'loop_rate': result['loop_rate'], 'repeated_action_rate': result.get('repeated_action_rate'),
+                'elapsed_seconds': result.get('elapsed_seconds'), 'complete': result.get('complete')}
+    n = sum(len(v) for v in by_task.values())
+    return {'first': side(first), 'second': side(second), 'same_code': side(first)['code'] == side(second)['code'],
+            'same_series': side(first)['series'] == side(second)['series'],
+            'same_manifest': first.get('manifest_sha256') == second.get('manifest_sha256'),
+            'matched_pairs': len(common), 'pairs_lost_to_timeout': sum(
+                1 for k in common if timed_out(a[k]) or timed_out(b[k])),
+            'paired': paired(first, second),
+            'success_rate_delta': round(sum(y - x for v in by_task.values() for x, y in v) / n, 4) if n else None,
+            'delta_ci95_task_bootstrap': [round(deltas[int(.025 * len(deltas))], 4),
+                                          round(deltas[int(.975 * len(deltas)) - 1], 4)] if deltas else None,
+            'loop_rate_delta': (round(second['loop_rate'] - first['loop_rate'], 4)
+                                if first['loop_rate'] is not None and second['loop_rate'] is not None else None)}
+
+
 def trend(out):
     """Per measured policy of the current lineage, in lineage order: its numbers, the paired comparison with the previous result
     of its series and with the first of its series (None for the first one or when the series changed). Rolled-back policies
@@ -603,6 +700,95 @@ def rolled_back(out):
             for r in results(out, rolled_back=True)]
 
 
+# ---- standalone measurement (experiments) ----------------------------------------------------------------------------
+BASE_SNAPSHOT = '/home/werg/.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd'
+ACTOR_ARGS = ('--engine', 'sglang', '--sglang-projection', 'vendor', '--sglang-max-running', '64',
+              '--sglang-max-total-tokens', '262144', '--sglang-mem-fraction', '0.2')
+
+
+def _free_port():
+    import socket
+    for port in range(8400, 8900, 2):   # the SGLang server takes port + 1000
+        with socket.socket() as a, socket.socket() as b:
+            try:
+                a.bind(('127.0.0.1', port))
+                b.bind(('127.0.0.1', port + 1000))
+                return port
+            except OSError:
+                continue
+    raise RuntimeError('no free actor port')
+
+
+def serve(checkpoint, sha256, store, *, unit, budget_gb, extra=(), base=BASE_SNAPSHOT, wait_seconds=3600, log=print):
+    """Serve ``checkpoint`` as a ledger unit (SGLang, vendor projection) and wait until it attests ``sha256``; returns
+    the endpoint URL. The unit is stopped with ``systemctl --user stop UNIT``."""
+    from .actor_client import NativeActorClient
+    from ..common.code_provenance import repository_root
+    repo = repository_root()
+    port = _free_port()
+    store = Path(store)
+    store.mkdir(parents=True, exist_ok=True)
+    python = repo / '.venv-neuralese/bin/python'
+    command = ['/usr/bin/python3', str(repo / 'scripts/memory_ledger.py'), 'run', '--unit', unit, '--budget-gb', str(budget_gb),
+               '--class', 'experiment', '--priority', 'medium', '--no-resumable', '--wait', '1800', '--workdir', str(repo), '--',
+               'env', f'NATLANG_REPO={repo}', f'PYTHONPATH={repo}/training/neuralese:{repo}', 'HF_HUB_OFFLINE=1',
+               'OMP_NUM_THREADS=1', 'MKL_NUM_THREADS=1', str(python), str(repo / 'scripts/neuralese_data/serve_native_checkpoint.py'),
+               '--store-dir', str(store), '--checkpoint', str(checkpoint), '--checkpoint-sha256', sha256, '--base', str(base),
+               '--port', str(port), '--prompt-rendering', 'full', *ACTOR_ARGS, '--hf-export-dir', str(store / 'sglang-hf'), *extra]
+    subprocess.run(command, check=True)
+    url = f'http://127.0.0.1:{port}'
+    log(json.dumps({'event': 'held eval actor launched', 'unit': unit, 'endpoint': url}))
+    deadline = time.monotonic() + wait_seconds
+    while time.monotonic() < deadline:
+        try:
+            info = json.loads(NativeActorClient(url, timeout=10).get_bytes('/v1/neuralese/info'))
+            if (info.get('rl_policy_binding') or {}).get('checkpoint_sha256') == sha256:
+                return url
+        except Exception:
+            pass
+        state = subprocess.run(['systemctl', '--user', 'is-active', unit], capture_output=True, text=True).stdout.strip()
+        if state in ('failed', 'inactive'):
+            raise RuntimeError(f'actor unit {unit} is {state}')
+        time.sleep(10)
+    raise TimeoutError(f'actor {unit} did not attest {sha256[:12]}')
+
+
+def measure(out, manifest, endpoints, policy_id, *, samples=4, seed_base=SEED_BASE, case_seconds=3600,
+            max_model_requests=64, max_turns=128, context_tokens=32768, label=None, log=print):
+    """Measure the policy served at ``endpoints`` ([(url, slots)]) on every task of ``manifest`` x ``samples`` into
+    ``out/result.json`` (resumable: an existing ``run.json`` must name the same manifest, policy and sampling)."""
+    from .actor_client import NativeActorClient
+    from ..common.code_provenance import code_provenance, repository_root
+    out, manifest = Path(out), Path(manifest)
+    for url, _ in endpoints:
+        info = json.loads(NativeActorClient(url, timeout=10).get_bytes('/v1/neuralese/info'))
+        binding = info.get('rl_policy_binding') or {}
+        if binding.get('checkpoint_sha256') != policy_id:
+            raise ValueError(f'{url} serves {str(binding.get("checkpoint_sha256"))[:12]}, not {policy_id[:12]}')
+    pinned = json.loads(manifest.read_text())
+    repo = repository_root()
+    spec = {'policy_id': policy_id, 'label': label, 'endpoint': endpoints[0][0], 'endpoints': [list(e) for e in endpoints],
+            'dir': str(out.resolve()), 'manifest': str(manifest.resolve()),
+            'cases': str(manifest.resolve().parent / pinned['cases']['path']), 'manifest_sha256': _sha256(manifest),
+            'tasks': len(pinned['tasks']), 'samples': samples, 'seed_base': seed_base, 'workers': sum(n for _, n in endpoints),
+            'case_seconds': case_seconds, 'max_model_requests': max_model_requests, 'max_turns': max_turns,
+            'context_tokens': context_tokens, 'runtime': str(repo / 'ts-host'), 'repo': str(repo),
+            'series': series(), 'code': code_provenance(), 'actor': {'info': info.get('rl_policy_binding')}}
+    if spec['code'].get('dirty') or spec['series']['ts_host_dirty']:
+        log(json.dumps({'event': 'held eval warning', 'warning': 'the checkout is dirty; the result records it'}))
+    out.mkdir(parents=True, exist_ok=True)
+    if (out / 'run.json').exists():
+        previous = json.loads((out / 'run.json').read_text())
+        for key in ('policy_id', 'manifest_sha256', 'samples', 'seed_base', 'case_seconds', 'max_model_requests', 'max_turns'):
+            if previous[key] != spec[key]:
+                raise ValueError(f'{out} holds a run with another {key}: {previous[key]!r}')
+        spec = {**previous, 'endpoint': spec['endpoint'], 'endpoints': spec['endpoints'], 'workers': spec['workers'],
+                'resumed_code': spec['code']}
+    (out / 'run.json').write_text(json.dumps(spec, indent=1) + '\n')
+    (out / 'result.json').unlink(missing_ok=True)
+    return run(out)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest='command', required=True)
@@ -624,6 +810,29 @@ def main(argv=None):
     p.add_argument('--avoid-from', type=Path, action='append', default=[],
                    help='controller directories whose state and round-*-selection.json tasks to avoid')
     p.add_argument('--dry-run', action='store_true')
+    m = sub.add_parser('measure', help='standalone: N samples per held task of a served actor or a checkpoint -> result.json')
+    m.add_argument('--manifest', type=Path, required=True, help='e.g. ops/held-v2/manifest.json')
+    m.add_argument('--out', type=Path, required=True, help='run directory (resumable)')
+    m.add_argument('--endpoint', action='append', default=[], help='served actor URL[=SLOTS] (repeatable)')
+    m.add_argument('--checkpoint', type=Path, help='serve this checkpoint as a ledger unit instead (stopped afterwards)')
+    m.add_argument('--checkpoint-sha256', help='its sha256 (default: hashed)')
+    m.add_argument('--policy-id', help='with --endpoint: the sha256 the actor must serve (default: what it attests)')
+    m.add_argument('--samples', type=int, default=4)
+    m.add_argument('--workers', type=int, default=64, help='concurrent episodes per endpoint without =SLOTS')
+    m.add_argument('--seed-base', type=int, default=SEED_BASE)
+    m.add_argument('--case-seconds', type=int, default=3600)
+    m.add_argument('--max-model-requests', type=int, default=64)
+    m.add_argument('--max-turns', type=int, default=128)
+    m.add_argument('--context-tokens', type=int, default=32768)
+    m.add_argument('--label')
+    m.add_argument('--actor-unit', help='ledger unit name of the actor (default heldv2-actor-<sha8>)')
+    m.add_argument('--actor-budget-gb', type=int, default=40)
+    m.add_argument('--actor-arg', action='append', default=[], help='extra serve_native_checkpoint.py argument (repeatable)')
+    m.add_argument('--keep-actor', action='store_true')
+    c = sub.add_parser('compare', help='paired comparison of two result.json files (second against first)')
+    c.add_argument('first', type=Path)
+    c.add_argument('second', type=Path)
+    c.add_argument('--out', type=Path)
     s = sub.add_parser('start', help='measure the policy an actor serves, now (the controller hook does this at each round)')
     s.add_argument('--out', type=Path, required=True)
     s.add_argument('--endpoint', required=True)
@@ -642,6 +851,36 @@ def main(argv=None):
                 print(task['family'], task['level'], task.get('mix_class', '-'), task['id'])
             return
         print(write_manifest(directory_of(args.out), manifest, rows))
+    elif args.command == 'compare':
+        report = compare(json.loads(args.first.read_text()), json.loads(args.second.read_text()))
+        text = json.dumps(report, indent=1)
+        if args.out:
+            args.out.write_text(text + '\n')
+        print(text)
+    elif args.command == 'measure':
+        endpoints = [(item.rsplit('=', 1)[0].rstrip('/'), int(item.rsplit('=', 1)[1])) if re.search(r'=\d+$', item)
+                     else (item.rstrip('/'), args.workers) for item in args.endpoint]
+        unit = None
+        if args.checkpoint:
+            sha = args.checkpoint_sha256 or _sha256(args.checkpoint)
+            unit = args.actor_unit or f'heldv2-actor-{sha[:8]}'
+            url = serve(args.checkpoint, sha, args.out / 'actor', unit=unit, budget_gb=args.actor_budget_gb,
+                        extra=args.actor_arg)
+            endpoints.append((url, args.workers))
+            policy = sha
+        else:
+            from .actor_client import NativeActorClient
+            policy = args.policy_id or (json.loads(NativeActorClient(endpoints[0][0], timeout=10).get_bytes(
+                '/v1/neuralese/info')).get('rl_policy_binding') or {}).get('checkpoint_sha256')
+        if not endpoints or not policy:
+            raise SystemExit('give --endpoint or --checkpoint')
+        try:
+            measure(args.out, args.manifest, endpoints, policy, samples=args.samples, seed_base=args.seed_base,
+                    case_seconds=args.case_seconds, max_model_requests=args.max_model_requests, max_turns=args.max_turns,
+                    context_tokens=args.context_tokens, label=args.label)
+        finally:
+            if unit and not args.keep_actor:
+                subprocess.run(['systemctl', '--user', 'stop', unit])
     elif args.command == 'pin':
         avoid = set()
         for path in args.avoid_ids:
