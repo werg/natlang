@@ -406,6 +406,26 @@ def test_held_manifest_is_stratified_deterministic_and_avoids_attempted_tasks(tm
         held_eval.build_manifest(pool,avoid=avoid,tasks=500)
 
 
+def test_a_larger_held_set_keeps_the_smaller_one_and_exposes_its_exclusion_ids(tmp_path):
+    from natlang_neuralese.rl import held_eval
+    pool=write_pool(tmp_path,held_pool())
+    small,rows=held_eval.build_manifest(pool,avoid={'f0-0'},tasks=8)
+    kept={t['id'] for t in small['tasks']}
+    groups={t['split_group'] for t in small['tasks']}
+    other=next(row for row in held_pool() if row['curriculum']['split_group'] not in groups)
+    sibling=next(row['id'] for row in held_pool() if row['curriculum']['split_group']==other['curriculum']['split_group']
+                 and row['id']!=other['id'])
+    big,big_rows=held_eval.build_manifest(pool,avoid={other['id']},tasks=24,include=kept)
+    ids={t['id'] for t in big['tasks']}
+    assert kept<=ids and len(ids)==24 and not {other['id'],sibling}&ids and big['effect_state']==8
+    held_eval.write_manifest(tmp_path/'held',big,big_rows)
+    excluded=held_eval.exclusion_ids(tmp_path/'held'/'manifest.json')
+    siblings={row['id'] for row in held_pool() if row['curriculum']['split_group'] in set(big['excluded_split_groups'])}
+    assert excluded==siblings and ids<=excluded and len(excluded)==48
+    with pytest.raises(ValueError,match='also to be avoided'):
+        held_eval.build_manifest(pool,avoid=kept,tasks=24,include=kept)
+
+
 def test_held_tasks_and_their_group_siblings_are_never_selected_from_the_adopting_round(tmp_path):
     from natlang_neuralese.rl import held_eval
     rows=held_pool();pool=write_pool(tmp_path,rows)

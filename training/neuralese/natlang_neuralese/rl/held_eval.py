@@ -71,8 +71,8 @@ def _sha256(path):
     return digest.hexdigest()
 
 
-def _hash(*parts):
-    return hashlib.sha256('\x00'.join(str(p) for p in (SEED, *parts)).encode()).hexdigest()
+def _hash(*parts, seed=SEED):
+    return hashlib.sha256('\x00'.join(str(p) for p in (seed, *parts)).encode()).hexdigest()
 
 
 def _split_group(row):
@@ -93,11 +93,15 @@ def avoid_ids(state, directories=()):
     return ids
 
 
-def build_manifest(cases_path, *, avoid, tasks=DEFAULT_TASKS):
+def build_manifest(cases_path, *, avoid, tasks=DEFAULT_TASKS, include=(), seed=SEED):
     """(manifest, held rows): ``tasks`` pool rows, family- and level-stratified, of which a third carry the effect-state class.
-    Deterministic in the pool and ``avoid``. Rows whose split group holds an avoided task are not candidates."""
+    Deterministic in the pool and ``avoid``. Rows whose split group holds an avoided task are not candidates. ``include``:
+    task ids held already (an earlier, smaller manifest) that the new one keeps; the rest is chosen around them."""
     from .curriculum import metadata
     cases = list(read_jsonl(cases_path))
+    include = set(include)
+    if include & set(avoid):
+        raise ValueError('an included held task is also to be avoided: ' + ', '.join(sorted(include & set(avoid))[:5]))
     avoid_groups = {_split_group(row) for row in cases if row.get('id') in avoid}
     groups = {}
     for row in cases:
@@ -109,16 +113,22 @@ def build_manifest(cases_path, *, avoid, tasks=DEFAULT_TASKS):
                 and groups[_split_group(row)] <= MAX_GROUP_ROWS):
             candidates.append({'row': index, 'id': row['id'], 'group': _split_group(row), **meta})
     levels = sorted({c['level'] for c in candidates})
-    effect = round(tasks * EFFECT_STATE_SHARE)
-    chosen, used_groups, family_count = [], set(), {}
+    chosen = [c for c in candidates if c['id'] in include]
+    if len(chosen) != len(include):
+        raise ValueError(f'{len(include) - len(chosen)} included held tasks are not eligible pool rows')
+    used_groups = {c['group'] for c in chosen}
+    family_count = {}
+    for c in chosen:
+        family_count[c['family']] = family_count.get(c['family'], 0) + 1
+    effect = max(0, round(tasks * EFFECT_STATE_SHARE) - sum(1 for c in chosen if c.get('mix_class') == 'effect_state'))
 
     def take(pool, quota):
         by_family = {}
         for c in pool:
             by_family.setdefault(c['family'], []).append(c)
-        order = sorted(by_family, key=lambda f: _hash('family', f))
+        order = sorted(by_family, key=lambda f: _hash('family', f, seed=seed))
         picked = []
-        for cap in (1, 2, 3):   # a second and third task of a family only when the families are exhausted
+        for cap in range(1, len(pool) + 2):   # a family's next task only when every family has as many
             for family in order:
                 if len(picked) >= quota:
                     break
@@ -129,8 +139,8 @@ def build_manifest(cases_path, *, avoid, tasks=DEFAULT_TASKS):
                 options = [c for c in by_family[family] if c['group'] not in used_groups]
                 if not options:
                     continue
-                target = min({c['level'] for c in options}, key=lambda lv: (have[lv], _hash('level', family, lv)))
-                pick = min((c for c in options if c['level'] == target), key=lambda c: _hash('row', c['id']))
+                target = min({c['level'] for c in options}, key=lambda lv: (have[lv], _hash('level', family, lv, seed=seed)))
+                pick = min((c for c in options if c['level'] == target), key=lambda c: _hash('row', c['id'], seed=seed))
                 picked.append(pick)
                 used_groups.add(pick['group'])
                 family_count[family] = family_count.get(family, 0) + 1
@@ -138,14 +148,15 @@ def build_manifest(cases_path, *, avoid, tasks=DEFAULT_TASKS):
                 break
         return picked
 
-    chosen += take([c for c in candidates if c.get('mix_class') == 'effect_state'], effect)
-    chosen += take([c for c in candidates if c.get('mix_class') != 'effect_state'], tasks - len(chosen))
+    chosen += take([c for c in candidates if c.get('mix_class') == 'effect_state' and c['id'] not in include], effect)
+    chosen += take([c for c in candidates if c.get('mix_class') != 'effect_state' and c['id'] not in include],
+                   tasks - len(chosen))
     if len(chosen) < tasks:
         raise ValueError(f'the pool has only {len(chosen)} eligible held tasks (wanted {tasks})')
     chosen.sort(key=lambda c: c['row'])
     rows = [cases[c['row']] for c in chosen]
     manifest = {
-        'schema': MANIFEST_SCHEMA, 'seed': SEED, 'tasks': [
+        'schema': MANIFEST_SCHEMA, 'seed': seed, 'included': len(include), 'tasks': [
             {'id': c['id'], 'pool_row': c['row'], 'family': c['family'], 'level': c['level'],
              **({'mix_class': c['mix_class']} if c.get('mix_class') else {}), 'split_group': c['group'],
              'row_sha256': hashlib.sha256(json.dumps(cases[c['row']], sort_keys=True).encode()).hexdigest()}
@@ -220,14 +231,29 @@ def adopt_defaults(config, state, state_path, *, out, sealed_selection=False):
                                             'from_round': record['from_round']}}
 
 
+def exclusion_ids(manifest, cases=None):
+    """Ids of pool rows training must never take: the held tasks of ``manifest`` (a path or the loaded manifest) and every
+    row sharing a held ``split_group``. ``cases``: the pool rows (or a path); by default the manifest's pool, whose sha256
+    must match the pinned one. Experiments call this to exclude a held set (e.g. ``ops/held-v2/manifest.json``)."""
+    if not isinstance(manifest, dict):
+        manifest = json.loads(Path(manifest).read_text())
+    if cases is None:
+        pool = manifest['pool']
+        if _sha256(pool['path']) != pool['sha256']:
+            raise ValueError('the pool changed since the held manifest was pinned: ' + pool['path'])
+        cases = pool['path']
+    if isinstance(cases, (str, Path)):
+        cases = read_jsonl(cases)
+    held, groups = {t['id'] for t in manifest['tasks']}, set(manifest['excluded_split_groups'])
+    return frozenset(row['id'] for row in cases if row.get('id') in held or _split_group(row) in groups)
+
+
 def exclusion(config, cases, round_number):
     """Ids of pool rows RL selection must not take in ``round_number``: the held tasks and their split-group siblings."""
     binding = config.get('held_eval_binding')
     if not binding or settings(config) is None or round_number < binding['from_round']:
         return frozenset()
-    manifest = load_manifest(binding['manifest'], binding['sha256'])
-    held, groups = {t['id'] for t in manifest['tasks']}, set(manifest['excluded_split_groups'])
-    return frozenset(row['id'] for row in cases if row.get('id') in held or _split_group(row) in groups)
+    return exclusion_ids(load_manifest(binding['manifest'], binding['sha256']), cases)
 
 
 def static_relation(out):
@@ -587,6 +613,17 @@ def main(argv=None):
     b.add_argument('--tasks', type=int, default=DEFAULT_TASKS)
     b.add_argument('--avoid-from', type=Path, action='append', default=[], help='directories with round-*-selection.json of other lineages')
     b.add_argument('--dry-run', action='store_true')
+    p = sub.add_parser('pin', help='build and pin a standalone held manifest (e.g. ops/held-v2) with its exclusion-ids.json')
+    p.add_argument('--cases', type=Path, required=True, help='the task pool (cases.jsonl)')
+    p.add_argument('--dir', type=Path, required=True, help='directory for manifest.json, cases.jsonl, exclusion-ids.json')
+    p.add_argument('--tasks', type=int, required=True)
+    p.add_argument('--seed', default=SEED)
+    p.add_argument('--include-manifest', type=Path, help='an earlier held manifest whose tasks the new one keeps')
+    p.add_argument('--avoid-ids', type=Path, action='append', default=[],
+                   help='JSON list of task ids (with their split groups) the held set must not contain (e.g. a training selection)')
+    p.add_argument('--avoid-from', type=Path, action='append', default=[],
+                   help='controller directories whose state and round-*-selection.json tasks to avoid')
+    p.add_argument('--dry-run', action='store_true')
     s = sub.add_parser('start', help='measure the policy an actor serves, now (the controller hook does this at each round)')
     s.add_argument('--out', type=Path, required=True)
     s.add_argument('--endpoint', required=True)
@@ -605,6 +642,25 @@ def main(argv=None):
                 print(task['family'], task['level'], task.get('mix_class', '-'), task['id'])
             return
         print(write_manifest(directory_of(args.out), manifest, rows))
+    elif args.command == 'pin':
+        avoid = set()
+        for path in args.avoid_ids:
+            avoid |= set(json.loads(path.read_text()))
+        for directory in args.avoid_from:
+            state = json.loads((directory / 'state.json').read_text()) if (directory / 'state.json').exists() else {}
+            avoid |= avoid_ids(state, [directory])
+        include = [t['id'] for t in json.loads(args.include_manifest.read_text())['tasks']] if args.include_manifest else ()
+        manifest, rows = build_manifest(args.cases, avoid=avoid, tasks=args.tasks, include=include, seed=args.seed)
+        if args.include_manifest:
+            manifest['included_manifest'] = {'path': str(args.include_manifest), 'sha256': _sha256(args.include_manifest)}
+        summary = {k: v for k, v in manifest.items() if k not in ('tasks', 'excluded_split_groups')}
+        if args.dry_run:
+            print(json.dumps(summary, indent=1))
+            return
+        sha = write_manifest(args.dir, manifest, rows)
+        ids = sorted(exclusion_ids(args.dir / 'manifest.json'))
+        (args.dir / 'exclusion-ids.json').write_text(json.dumps(ids, indent=0) + '\n')
+        print(json.dumps({'manifest_sha256': sha, 'exclusion_ids': len(ids), **summary}, indent=1))
     else:
         config = json.loads((args.out / 'config.json').read_text())
         state = json.loads((args.out / 'state.json').read_text())   # read only: the controller owns its state

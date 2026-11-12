@@ -23,6 +23,14 @@ Neuralese use is rare), frugal eval and dev16 gating. Sequence: Experiment 0 (SF
 paired eval. Heartbeats check the pinned experiment; they do not re-plan. Agents adopt plans like this themselves:
 waiting for the owner's OK on a technical course change is a defect (owner, 2026-11-12).
 
+## Held-v2: the experiments' held-out set (engineering, 2026-11-12)
+
+`/home/werg/data/lfm3-rl-dgx-20261029/ops/held-v2/manifest.json` (sha dfe0a915): 256 pool tasks (the w5 pool b3fef4c7), 91
+families, levels 63/64/64/65, 85 effect-state, keeping w5's 64 held tasks; disjoint from Experiment 1's selection, Experiment
+0's training tasks, w1-w5 attempts and their `split_group` siblings. Training code excludes it with
+`held_eval.exclusion_ids(manifest)` (held ids plus siblings, 1,170 ids; also `held-v2/exclusion-ids.json`). Never train on
+these ids. Built by `python -m natlang_neuralese.rl.held_eval pin` (`--include-manifest`, `--avoid-ids`, `--avoid-from`).
+
 ## RL round scheduling: per-group teachers and Pop pre-collection (engineering, 2026-11-10)
 
 `rl/teacher_feed.py`: each group is scored and its JOLT+ teachers planned (batch of `jolt_teacher_plan_batch` groups, 1 for the
