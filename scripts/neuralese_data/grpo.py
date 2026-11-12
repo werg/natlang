@@ -59,7 +59,9 @@ sys.path[:0] = [str(REPO / 'training/neuralese'), str(REPO), str(HERE)]
 from natlang_neuralese.common.paths import resolve_str  # noqa: E402
 
 BASE = str(Path.home() / '.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd')
-POOL = resolve_str('data_hdd', 'natlang-rl-composed-20261103', 'memetic-program-source-20261105', 'cases.jsonl')
+POOLS = [resolve_str('data_hdd', 'natlang-rl-composed-20261103', 'memetic-program-source-20261105', 'cases.jsonl'),
+         # fallow K1: bgkit KR reader families, 4,734 rows verified by reference/negative/alias replay (verification.json)
+         resolve_str('data_hdd', 'natlang-rl-bgkit-kr-20261103', 'natlang-rl-bgkit-kr-20261103', 'cases.jsonl')]
 HELD = resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'held-v2', 'manifest.json')
 
 
@@ -414,18 +416,37 @@ def group_advantages(rewards):
     return [(r - mean) / (std + 1e-6) for r in rewards]
 
 
-def load_tasks(args):
+def load_tasks(args, work=None):
+    """The shuffled train tasks of the pools (first occurrence of an id wins) minus the held set: its tasks, every row of
+    a held ``split_group`` (``held_eval.exclusion_ids``) and every row sharing a ``source_groups`` entry with those.
+    Writes ``WORK/pool.json`` (pool sha256s, counts, sha256 of the eligible ids)."""
+    import hashlib
+    from natlang_neuralese.common.hashing import sha256_file_hex_cached
     from natlang_neuralese.common.jsonio import read_jsonl
     from natlang_neuralese.rl.held_eval import exclusion_ids
-    rows = list(read_jsonl(args.pool))
+    rows, seen = [], set()
+    for path in args.pool:
+        for row in read_jsonl(path):
+            if row['id'] not in seen:
+                seen.add(row['id'])
+                rows.append(row)
     excluded = set(exclusion_ids(args.held_manifest, rows))
     for extra in args.exclude_manifest:
         excluded |= exclusion_ids(extra, rows)
+    held_groups = {g for r in rows if r['id'] in excluded for g in r.get('source_groups') or ()}
+    excluded |= {r['id'] for r in rows if held_groups.intersection(r.get('source_groups') or ())}
     if args.task_ids:
         wanted = set(json.loads(Path(args.task_ids).read_text()))
         rows = [r for r in rows if r['id'] in wanted]
     eligible = [r for r in rows if r['id'] not in excluded and r.get('split', 'train') == 'train']
     random.Random(args.seed).shuffle(eligible)
+    if work is not None:
+        record = {'pools': [{'path': str(p), 'sha256': sha256_file_hex_cached(Path(p))} for p in args.pool],
+                  'held_manifest': args.held_manifest, 'held_manifest_sha256': sha256_file_hex_cached(Path(args.held_manifest)),
+                  'union_rows': len(seen), 'excluded_ids': len(excluded), 'eligible': len(eligible),
+                  'eligible_ids_sha256': hashlib.sha256('\n'.join(sorted(r['id'] for r in eligible)).encode()).hexdigest(),
+                  'families': len({r.get('family') for r in eligible})}
+        (Path(work) / 'pool.json').write_text(json.dumps(record, indent=1) + '\n')
     return eligible, len(excluded)
 
 
@@ -437,7 +458,7 @@ def train(args):
     work = Path(args.work)
     work.mkdir(parents=True, exist_ok=True)
     log = open(work / 'train.jsonl', 'a')
-    tasks, excluded = load_tasks(args)
+    tasks, excluded = load_tasks(args, work)
     source_sha = args.checkpoint_sha256 or sha256_file_hex_cached(Path(args.checkpoint))
     code = git_pin()
     runtime = pin_runtime(work, code['git_commit']) if args.pin_runtime else REPO / 'ts-host'
@@ -748,7 +769,7 @@ def main():
     t.add_argument('--actor-arg', action='append', default=[], help='extra serve_native_checkpoint.py argument')
     t.add_argument('--sglang', help='its SGLang server (default: actor port + 1000)')
     t.add_argument('--actor-export', help="the actor's HF export dir (layout and frozen tables; default WORK/actor/sglang-hf)")
-    t.add_argument('--pool', default=POOL)
+    t.add_argument('--pool', action='append', help='task pool cases.jsonl (repeatable; default: POOLS)')
     t.add_argument('--held-manifest', default=HELD)
     t.add_argument('--exclude-manifest', action='append', default=[], help='more held manifests to exclude')
     t.add_argument('--task-ids', help='JSON list: train only on these pool ids (smoke)')
@@ -786,6 +807,7 @@ def main():
     t.add_argument('--unit-prefix', default='grpo')
     args = parser.parse_args()
     if args.command == 'train':
+        args.pool = args.pool or POOLS
         args.max_outstanding = args.max_outstanding or args.max_groups + -(-args.slots // args.group)
         train(args)
 
