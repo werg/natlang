@@ -33,6 +33,17 @@ elements have half a BF16 ulp below 1e-6, 16.5% below 1e-5, 88% below 1e-4. An A
 so one step changes about 2% of the served weights, and the policy only moves once about 10-100 aligned steps have
 accumulated. Not lost (the masters keep it), but delayed and quantised; check 4 measures it directly.
 
-## Check 2-5
+## Check 4: GRPO with a trivially learnable reward (setup)
 
-Pending GPU windows (an FP32-master AdamW fine-tune needs about 32-40 GB; the DGX is GRPO's from 18:00).
+Runs in GRPO's envelope right after its 3-step smoke (`ops/sanity-1112/check4.sh`, unit sanity-c4a, own child actor).
+`grpo.py --synthetic-reward short-calls` replaces the task outcome with minus the mean sampled tokens per model call / 1000
+(every group has spread). The task outcome is still logged as `task_reward_mean`.
+`--probe-turns` logs the NLL of 4 fixed exp0 chains on the learner every step and on the actor after every sync.
+Every step logs `bf16_changed_step_fraction` and `bf16_changed_vs_start_fraction`.
+Plan: 8 steps at LR 1e-6. If neither the reward nor the probe has moved, resume at 1e-5.
+Pass: `mean_sampled_per_call` falls and the reward rises within a few steps, the actor probe NLL tracks the learner probe
+NLL across syncs, KL and rho stay sane.
+
+## Checks 2, 3, 5
+
+Pending GPU windows (an FP32-master AdamW fine-tune peaked at 39-54 GB in ft2's run; the DGX is GRPO's from 18:00).
