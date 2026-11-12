@@ -81,12 +81,30 @@ def git_pin():
     return code_provenance()
 
 
+def pin_runtime(work, commit):
+    """The run's own copy of the collector runtime (ts-host with its built dist), so episodes keep one harness while main
+    moves; every other top-level entry of the checkout is linked (dist resolves ../applications etc. there). The learner
+    and the collector's Python are pinned by being this one long-lived process."""
+    pin = Path(work) / f'pin-{commit[:12]}'
+    if not (pin / 'ts-host' / 'dist' / 'teacher' / 'cli.js').is_file():
+        partial = Path(work) / f'pin-{commit[:12]}.partial'
+        shutil.rmtree(partial, ignore_errors=True)
+        partial.mkdir(parents=True)
+        subprocess.run(['cp', '-a', str(REPO / 'ts-host'), str(partial / 'ts-host')], check=True)
+        for entry in REPO.iterdir():
+            if entry.name not in ('ts-host', '.git'):
+                (partial / entry.name).symlink_to(entry)
+        shutil.rmtree(pin, ignore_errors=True)
+        os.replace(partial, pin)
+    return pin / 'ts-host'
+
+
 # ---- rollouts --------------------------------------------------------------------------------------------------------
 class Collector:
     """Work-stealing slots over an endless stream of task groups; finished groups are scored and queued for the learner."""
 
-    def __init__(self, args, tasks, work, policy_sha, first_group=0, cursor=0):
-        self.args, self.tasks, self.work, self.policy_sha = args, tasks, work, policy_sha
+    def __init__(self, args, tasks, work, policy_sha, runtime, first_group=0, cursor=0):
+        self.args, self.tasks, self.work, self.policy_sha, self.runtime = args, tasks, work, policy_sha, runtime
         self.lock = threading.Lock()
         self.pending = collections.deque()          # entries not yet taken by a slot
         self.groups = {}                            # group -> {'dir', 'size', 'done', 'versions', 'task_id'}
@@ -148,7 +166,7 @@ class Collector:
             queue_file.write_text(json.dumps(entry, sort_keys=True) + '\n')
             started = self.version
             command = [sys.executable, str(REPO / 'scripts/run_bonsai_queue.py'), str(queue_file), str(journal),
-                       '--runtime', str(REPO / 'ts-host'), '--server', self.args.actor,
+                       '--runtime', str(self.runtime), '--server', self.args.actor,
                        '--chat-completions-url', self.args.actor + '/v1/chat/completions', '--model-id', 'natlang-rl',
                        '--model-concurrency', '1', '--chat-request-config', str(sampling), '--neuralese-server']
             with (workers / f'{key}.log').open('a') as handle:
@@ -419,7 +437,10 @@ def train(args):
     log = open(work / 'train.jsonl', 'a')
     tasks, excluded = load_tasks(args)
     source_sha = args.checkpoint_sha256 or sha256_file_hex_cached(Path(args.checkpoint))
-    run = {'started': time.time(), 'code': git_pin(), 'argv': sys.argv, 'checkpoint': args.checkpoint,
+    code = git_pin()
+    runtime = pin_runtime(work, code['git_commit']) if args.pin_runtime else REPO / 'ts-host'
+    from natlang_neuralese.rl.held_eval import series
+    run = {'started': time.time(), 'code': code, 'runtime': str(runtime), 'series': series(), 'argv': sys.argv, 'checkpoint': args.checkpoint,
            'checkpoint_sha256': source_sha, 'pool': args.pool, 'held_manifest': args.held_manifest,
            'excluded_ids': excluded, 'eligible_tasks': len(tasks), 'args': vars(args)}
     with (work / 'runs.jsonl').open('a') as handle:
@@ -499,7 +520,7 @@ def train(args):
     sglang_url = args.sglang or args.actor.rsplit(':', 1)[0] + ':' + str(int(args.actor.rsplit(':', 1)[1]) + 1000)
     sync = WeightSync(model, args.actor_export, sglang_url, work)
     saver = StateSaver()
-    collector = Collector(args, tasks, work, source_sha, first_group=first_group, cursor=cursor)
+    collector = Collector(args, tasks, work, source_sha, runtime, first_group=first_group, cursor=cursor)
     collector.version = step
     (work / 'sampling-config.json').write_text(json.dumps({'guidance': False, 'x_natlang_rl_capture': True}) + '\n')
     versions_live = {'actor': step}
@@ -752,6 +773,8 @@ def main():
     t.add_argument('--state-dir', default='/mnt/external/natlang-grpo-v1')
     t.add_argument('--resume', action='store_true')
     t.add_argument('--keep-rollouts', action='store_true')
+    t.add_argument('--no-pin-runtime', dest='pin_runtime', action='store_false',
+                   help="episodes run the checkout's live ts-host instead of the run's pinned copy")
     t.add_argument('--held-every-hours', type=float, default=4.)
     t.add_argument('--skip-base-held', action='store_true')
     t.add_argument('--held-samples', type=int, default=2)
