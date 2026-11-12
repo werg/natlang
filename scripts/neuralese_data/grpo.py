@@ -122,6 +122,9 @@ class Collector:
         self.env = {**os.environ}
         from natlang_neuralese.rl.held_eval import series
         self.env['NATLANG_MODEL_FACING'] = series()['model_facing']
+        # Own collector process per episode: the shared node server mode (NATLANG_COLLECTOR_SHARED) crashed with EPIPE in
+        # the first GRPO smoke (2026-11-12), leaving every episode unresolved.
+        self.env.setdefault('NATLANG_COLLECTOR_SHARED', '0')
 
     def _new_group(self):
         from natlang_neuralese.rl import task_rollouts
