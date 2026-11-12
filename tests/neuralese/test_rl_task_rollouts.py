@@ -707,3 +707,22 @@ def test_expand_captures_rebuilds_prompt_deltas_and_sample_columns():
     assert expand_captures([first, compact]) == [first, second]
     with pytest.raises(ValueError, match="prompt delta"):
         expand_captures([compact])
+
+
+def test_lowering_puts_a_forced_call_opening_into_the_prompt():
+    import sys, collections
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts/neuralese_data'))
+    from lower_rollout_turns import episode_turns
+    def turn(inputs, samples, **extra):
+        return {'invocation_id': 'a', 'sampling': {'policy': {'checkpoint_sha256': 'p'}, 'prompt': [
+            {'kind': 'tokens', 'token_ids': [1, 2], 'producing': [False, False]}],
+            'samples': [{'index': i, 'token_id': t, 'logp': -0.5, 'input_role': 'ordinary'} for i, t in enumerate(samples)],
+            'generated_inputs': inputs, **extra}}
+    forced = turn([{'token_id': 7, 'sample_index': None}, {'token_id': 8, 'sample_index': None},
+                   {'token_id': 9, 'sample_index': 0}], [9, 10], constrained={'tool': 'compact_history'})
+    middle = turn([{'token_id': 9, 'sample_index': 0}, {'token_id': 7, 'sample_index': None}], [9, 10])
+    stats = collections.Counter()
+    rows = episode_turns({'turns': [forced, middle]}, stats)
+    assert len(rows) == 1 and rows[0]['prompt'].tolist() == [1, 2, 7, 8] and rows[0]['sample'].tolist() == [9, 10]
+    assert stats['forced_prefix_calls'] == 1 and stats['skip_forced_after_sample'] == 1

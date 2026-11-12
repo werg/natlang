@@ -2062,10 +2062,14 @@ rewrites of earlier history came from the tool block changing (only `compact_his
 - `ts-host/src/native/agent.ts`: every sampled call of a reply stays in the history. After a failed eval or effect, read-only
   calls (`read_file`, `list_files`, `search_files`, `diff_files`, `read_code`, `diff_code`, `read_page`) still run; every
   other later call is answered "Not run: an earlier call in this reply failed; call it again if you still need it."
-- Every turn offers every tool. On a call's last turn any call but `return_result` is answered "This is the last turn of
-  this call: call return_result now."; near the context limit any call but `compact_history` is answered "The
-  conversation is near its context limit: call compact_history now." (`tool_choice: required` and the compaction notice
-  are unchanged).
+- Every turn offers every tool (the tool block never changes). Superseded the same evening (owner): no rejection errors;
+  the turn that must compact or return gets its notice at the END of the prompt (the existing compaction notice on the
+  latest message; the last-turn notice on the last tool result) and, on a Neuralese server, the reply is forced to open
+  that call: a template cut at its first free argument (`compact_history` at `note`, `return_result` at `status`).
+  The server feeds the forced opening (recorded as `generated_inputs` without a sample index) and marks the capture
+  `constrained: {tool, argument, value}`; every sampled token after it is drawn from the model's unconstrained
+  distribution, so its logprob is the actor's own (TIS unchanged). `lower_rollout_turns.episode_turns` puts a forced
+  opening into the prompt (context, no loss) and skips calls with forced tokens after a sample (`tool_choice: required` unchanged).
 - Served context 131072 (`serve_native_checkpoint --sglang-context`; LFM3-1.7B has 262,144 positions); GRPO and exp1
   collection call budgets 131072 (`--context-tokens`), and the collector's budget follows the actor's reported window
   (`/v1/neuralese/info` context) when it is smaller. held_eval measures at 131072 too (the held-v2 series starts at 131k:

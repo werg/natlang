@@ -1612,6 +1612,10 @@ class Engine:
                 "generated_inputs": seq.native_rl_inputs, "writes": seq.native_rl_writes,
                 "finish_reason": seq.finish_reason,
                 "sample_range_convention": "half-open",
+                # A forced call (template): its opening up to the free argument is fed, not sampled (`generated_inputs`
+                # with no sample index); the samples after it are the model's own, from its unconstrained distribution.
+                **({'constrained': {'tool': seq.request.template.get('call'), 'argument': seq.request.template.get('argument', 'value'),
+                                    'value': seq.request.template.get('value')}} if seq.request.template else {}),
                 **({'behavior_top_k': behavior_top_k_declaration(seq.request.rl_top_k)}
                    if seq.request.rl_top_k is not None and seq.request.temperature > 0 and not seq.native_forced_replay else {}),
                 "sampling_law": {"temperature": seq.request.temperature, "seed": seq.native_sampling_seed,

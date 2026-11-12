@@ -26,15 +26,18 @@ test('calls after a failed call of the same reply stay in the history, each answ
   assert.doesNotMatch(String(answers[2].content), /^Not run/, 'a read-only call still runs');
 });
 
-test('with a fixed tool list the last turn still offers every tool and rejects any call but return_result', async () => {
-  const offered = [], answers = [];
-  const runtime = createNatlangRuntime({ seed: { mode: 'backend' }, model: { maxTurns: 2, driver: async request => {
-    offered.push(request.tools.map(tool => tool.function.name));
-    const last = request.messages.at(-1);
-    if (last.role === 'tool' && last.tool_call_id !== 'scope_0') answers.push(String(last.content));
-    return offered.length === 1 ? { calls: [['eval', { code: '1 + 1' }]] } : { calls: [['eval', { code: '2 + 2' }]] };
-  } } });
+test('the last turn offers every tool and, on a Neuralese driver, forces return_result by template', async () => {
+  const requests = [];
+  const driver = Object.assign(async request => {
+    requests.push(request);
+    return requests.length === 1 ? { calls: [['eval', { code: '1 + 1' }]] } : { calls: [['return_result', { status: 'success', value: 'hi' }]] };
+  }, { neuralese: true });
+  const runtime = createNatlangRuntime({ seed: { mode: 'backend' }, model: { maxTurns: 2, driver } });
   const fn = loadVirtualNatlang({ 'root.nl': '---\nargs: { name: string }\nreturns: string\n---\nGreet name.\n' }, 'root.nl');
   try { await runtime.run(() => fn('Ada')); } catch {}
-  assert.ok(offered.length >= 2 && offered.every(names => names.join() === offered[0].join()), JSON.stringify(offered));
+  const names = requests.map(request => request.tools.map(tool => tool.function.name).join());
+  assert.ok(requests.length >= 2 && names.every(list => list === names[0]), JSON.stringify(names));
+  assert.equal(requests[0].template, undefined);
+  assert.deepEqual(requests.at(-1).template, { call: 'return_result', arguments: {}, argument: 'status', value: 'decode' });
+  assert.match(String(requests.at(-1).messages.at(-1).content), /last turn/);
 });

@@ -1765,12 +1765,14 @@ export class NativeToolAgent {
         Math.min(budget - reply, Math.max(budget * 0.75, compactedAt + budget * 0.25));
       const availableTools = lastTurn ? only('return_result') : nearLimit ? only('compact_history') : allTools;
       // Every turn offers every tool: the tool block is early in the prompt, so changing it would rewrite everything
-      // after it (two full re-prefills per compaction). The turn's restriction is enforced by rejecting other calls in
-      // one sentence (decided 2026-11-12, MODEL_FACING_CHANGES.md).
+      // after it (two full re-prefills per compaction). The turn that must compact or return says so at the end of the
+      // prompt (the notices) and, on a Neuralese server, the reply is forced to open that call (a template cut at its
+      // first free argument; the server records the forced opening as fed tokens, not samples). Decided 2026-11-12,
+      // MODEL_FACING_CHANGES.md.
       const offered = allTools;
-      const restriction = availableTools === allTools ? undefined : lastTurn ?
-        { allowed: 'return_result', text: 'This is the last turn of this call: call return_result now.' } :
-        { allowed: 'compact_history', text: 'The conversation is near its context limit: call compact_history now.' };
+      const forcedCall: ModelTurnRequest['template'] = availableTools === allTools || !supportsNeuralese(currentDriver) ? undefined :
+        lastTurn ? { call: 'return_result', arguments: {}, argument: 'status', value: 'decode' } :
+        { call: 'compact_history', arguments: {}, argument: 'note', value: 'decode' };
       // A large opening can require compaction before the first tool result. Explain the restricted tool surface on
       // whichever message is latest: before automatic shortening (so the estimate counts it) and again after it,
       // since shortening can make its own note the latest message.
@@ -1862,7 +1864,7 @@ export class NativeToolAgent {
           } } : {}) } : undefined;
         const turnRequest: ModelTurnRequest = { ...(callId ? { invocation_id: callId } : {}), ...(adapters.length ? { adapters } : {}),
           ...(session.executionOccurrence() ? { native_execution_occurrence: session.executionOccurrence() } : {}),
-          ...(template ? { template } : {}),
+          ...(template ?? forcedCall ? { template: template ?? forcedCall } : {}),
           ...(currentGuidance && supportsGuidance(currentDriver) ? { guidance: currentGuidance } : {}),
           ...(!fallbackIndex && guidanceRequest ? { privileged_context: guidanceRequest } : {}),
           ...(!fallbackIndex && guidancePolicy ? { guidance_policy: guidancePolicy } : {}),
@@ -2130,11 +2132,6 @@ export class NativeToolAgent {
       let stoppedAt: number | undefined;
       for (const [index, [name, args]] of calls.entries()) {
         if (timedOut()) return 'episode wall-clock budget exhausted';
-        if (restriction && name !== restriction.allowed) {
-          results.push({ kind: 'rejected', text: restriction.text });
-          stoppedAt ??= index;
-          continue;
-        }
         if (stoppedAt !== undefined) {
           if (READ_ONLY_TOOLS.has(name)) results.push(await session.applyAsync(name, args,
             typeof raw[index]!.id === 'string' ? raw[index]!.id as string : undefined));

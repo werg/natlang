@@ -39,7 +39,20 @@ def episode_turns(row, stats):
         if any(item['input_role'] != 'ordinary' for item in sampling['samples']):
             stats['skip_non_ordinary_sample'] += 1
             continue
+        # A forced call (`constrained`, template readout): the tokens fed before the first sample are context, not
+        # samples; they extend the prompt. Forced tokens after a sample (a write's suffix) are not lowered.
+        inputs = sampling.get('generated_inputs') or []
+        lead = 0
+        while lead < len(inputs) and inputs[lead].get('sample_index') is None:
+            lead += 1
+        if any(item.get('sample_index') is None for item in inputs[lead:]):
+            stats['skip_forced_after_sample'] += 1
+            continue
+        if lead:
+            stats['forced_prefix_calls'] += 1
         prompt = np.fromiter((i for segment in segments for i in segment['token_ids']), dtype=np.int32)
+        if lead:
+            prompt = np.concatenate([prompt, np.array([item['token_id'] for item in inputs[:lead]], dtype=np.int32)])
         sample = np.array([item['token_id'] for item in sampling['samples']], dtype=np.int32)
         logp = np.array([item['logp'] for item in sampling['samples']], dtype=np.float32)
         rows.append({'invocation': turn['invocation_id'], 'index': index, 'prompt': prompt, 'sample': sample, 'logp': logp,
