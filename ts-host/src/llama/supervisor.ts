@@ -5,7 +5,7 @@
  * exits, or on SIGTERM/SIGINT. A start failure is written to `<key>.failed` for the waiting starter.
  */
 import { spawn } from 'node:child_process';
-import { openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, openSync, readFileSync, rmdirSync, rmSync, writeFileSync } from 'node:fs';
 import { liveLeases, readSharedServerAt, sharedPaths, writeSharedServer, type SupervisedServer } from './shared.js';
 
 const specPath = process.argv[2];
@@ -15,7 +15,7 @@ rmSync(specPath, { force: true });
 const paths = sharedPaths(spec.directory, spec.key);
 const log = openSync(paths.log, 'w');
 const child = spawn(spec.command, [...spec.args], { stdio: ['ignore', log, log] });
-let ready = false, stopping = false;
+let ready = false, stopping = false, failedStart = false;
 
 const withdraw = () => { if (readSharedServerAt(paths.record)?.pid === process.pid) rmSync(paths.record, { force: true }); };
 const stop = (why: string) => {
@@ -29,6 +29,12 @@ const stop = (why: string) => {
 };
 child.once('exit', code => {
   withdraw();
+  // A clean stop leaves nothing behind; a failed start keeps its log for the waiting starter and the user.
+  // A newer start of the same server may already hold the lock, a record or a lease: only what is unused goes.
+  if (stopping && ready && !failedStart && !existsSync(paths.lock) && !existsSync(paths.record)) {
+    try { rmdirSync(paths.leases); } catch { /* holds a newer lease, or is gone */ }
+    for (const path of [paths.log, paths.log.replace(/\.log$/, '.supervisor.log')]) rmSync(path, { force: true });
+  }
   if (!ready) {
     let output = '';
     try { output = readFileSync(paths.log, 'utf8').slice(-4000); } catch { /* no log */ }
@@ -53,7 +59,7 @@ async function main() {
     if (Date.now() > deadline) {
       writeFileSync(paths.failed, `managed model server did not become ready within the startup timeout (see ${paths.log})\n`);
       rmSync(paths.lock, { force: true });
-      ready = true; // the exit handler must not overwrite the failure
+      ready = true; failedStart = true; // the exit handler must not overwrite the failure, and keeps the log
       stop('startup timeout');
       return;
     }

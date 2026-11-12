@@ -22,7 +22,9 @@ export type SharedServer = { schema: 'natlang.shared-model-server/2'; key: strin
   /** The server saves and restores warm prompt openings (it was started with their --slot-save-path). */
   warm: boolean;
   /** Stop after this many idle seconds without a lease. */
-  idleSeconds: number };
+  idleSeconds: number;
+  /** The tuned adapter artifact IDs and native state IDs it loaded, in load order (adapter index order). */
+  adapters: string[]; states: string[] };
 
 /** What the supervisor runs and publishes (the record without its pids and start time). */
 export type SupervisedServer = { command: string; args: readonly string[]; endpoint: string; directory: string; key: string;

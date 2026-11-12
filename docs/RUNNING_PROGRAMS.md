@@ -158,8 +158,10 @@ are idle. Each run holds a lease while it uses the server; the supervisor stops 
 `NATLANG_SHARED_SERVER_IDLE_S` seconds (default 300) with no lease and idle slots. The slot count is the first run's
 unless the profile fixes it (`local.parallel`). The records are under the state directory (`model-servers/`, with each
 server's log). The dashboard's **Loaded models** lists the servers and how many processes use each; **Keep loaded**
-holds a lease from the dashboard, and **Stop now** stops a server. A run with tuned LoRA adapters or native states
-starts a private server, and `NATLANG_SHARED_SERVER=off` gives a run its own server that stops with it. Sharing never
+holds a lease from the dashboard, and **Stop now** stops a server. Runs with tuned LoRA adapters or native states
+(a release's exports, loaded at server start) share a server with runs of the same adapters and states, compared by
+artifact ID and file; such a server stops at most 30 s after its last run, since the next release brings new ones.
+`NATLANG_SHARED_SERVER=off` gives a run its own server that stops with it. Sharing never
 changes what a run computes, only its wall time, since runs on one server share its slots.
 
 ## llama.cpp

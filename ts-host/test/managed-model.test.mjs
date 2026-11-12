@@ -121,7 +121,7 @@ process.on('SIGTERM', () => server.close(() => process.exit(0)));
 `);
     chmodSync(executable, 0o755);
     return { log, environment: { ...process.env, NATLANG_LLAMA_SERVER: executable, NATLANG_MODEL_PATH: model, NATLANG_TEMPLATE: template,
-      NATLANG_MODEL_START_TIMEOUT_MS: '5000' } };
+      NATLANG_MODEL_START_TIMEOUT_MS: '5000', NATLANG_SHARED_SERVER: 'off' } };
   };
   const fork = fake(true);
   const session = createManagedModelSession({}, fork.environment, process.stderr, { nativeStates: () => [{ id: state, path: '/release/exports/state.gguf' }] });
@@ -145,6 +145,7 @@ test('managed sessions share one server per model: started once, kept while leas
   writeFileSync(model, 'fixture weights'); writeFileSync(template, 'fixture');
   writeFileSync(executable, `#!${process.execPath}
 if (process.argv.includes('--version')) { console.log('version: 0.8.0 (build 12069, commit a0c92ce36)'); process.exit(0); }
+if (process.argv.includes('--help')) { console.log('--lora-per-sequence --native-state'); process.exit(0); }
 if (process.env.FAKE_FAIL) { console.error('cannot load the model file'); process.exit(3); }
 const args = process.argv.slice(2), port = Number(args[args.indexOf('--port') + 1]);
 require('node:fs').appendFileSync(${JSON.stringify(starts)}, 'started\\n');
@@ -181,6 +182,21 @@ process.on('SIGTERM', () => s.close(() => process.exit(0)));
   await second.close(); await third.close();
   // Unused for the idle time: the supervisor stops it and withdraws its record.
   await until(() => listSharedServers(environment).length === 0, 'the unused server to stop');
+  // Runs with the same tuned adapters share a server and agree on the adapter order; other adapters are another server.
+  const adapterA = join(root, 'a.gguf'), adapterB = join(root, 'b.gguf');
+  writeFileSync(adapterA, 'adapter a'); writeFileSync(adapterB, 'adapter b');
+  const both = [{ id: 'b'.repeat(8), path: adapterB }, { id: 'a'.repeat(8), path: adapterA }];
+  const tunedOne = createManagedModelSession({}, environment, quiet, { loraAdapters: () => both });
+  const tunedTwo = createManagedModelSession({}, environment, quiet, { loraAdapters: () => [...both].reverse() });
+  const tunedOther = createManagedModelSession({}, environment, quiet, { loraAdapters: () => [both[1]] });
+  const [t1, t2, t3] = await Promise.all([tunedOne.prepare(), tunedTwo.prepare(), tunedOther.prepare()]);
+  assert.equal(t1.endpoint, t2.endpoint); assert.notEqual(t1.endpoint, t3.endpoint);
+  const tunedServer = listSharedServers(environment).find(server => server.endpoint === t1.endpoint);
+  assert.deepEqual(tunedServer.adapters, ['a'.repeat(8), 'b'.repeat(8)]);
+  assert.equal(tunedServer.idleSeconds, 1);
+  assert.equal(readFileSync(starts, 'utf8').trim().split('\n').length, 3);
+  await Promise.all([tunedOne.close(), tunedTwo.close(), tunedOther.close()]);
+  await until(() => listSharedServers(environment).length === 0, 'the tuned servers to stop');
   // Another model file is another server; a private session (NATLANG_SHARED_SERVER=off) starts its own.
   const priv = createManagedModelSession({}, { ...environment, NATLANG_SHARED_SERVER: 'off' }, quiet);
   assert.equal((await priv.prepare()).shared, undefined);
