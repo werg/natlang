@@ -340,13 +340,16 @@ class WeightSync:
             os.replace(partial, self.weights_dir / 'model.safetensors')
             timing['export_write_s'] = round(time.time() - started, 2)
             t = time.time()
-            try:
+            if self.sglang_url is None:   # --no-actor-sync (a smoke against a shared actor): nothing to update
+                answer, ok = 'no actor sync', True
+            else:
+              try:
                 post(self.sglang_url + '/pause_generation', {'mode': 'retract'})
                 answer = post(self.sglang_url + '/update_weights_from_disk',
                               {'model_path': str(self.weights_dir), 'flush_cache': True, 'weight_version': str(version)})
                 post(self.sglang_url + '/continue_generation', {})
                 ok = json.loads(answer).get('success', False)
-            except Exception as error:
+              except Exception as error:
                 answer, ok = repr(error)[:400], False
                 try:
                     post(self.sglang_url + '/continue_generation', {})
@@ -574,7 +577,7 @@ def train(args):
         args.actor_export = args.actor_export or str(work / 'actor' / 'sglang-hf')
     log_line(log, {'event': 'actor ready', 'actor': args.actor, 'init_s': round(time.time() - t0, 1)})
     sglang_url = args.sglang or args.actor.rsplit(':', 1)[0] + ':' + str(int(args.actor.rsplit(':', 1)[1]) + 1000)
-    sync = WeightSync(model, args.actor_export, sglang_url, work)
+    sync = WeightSync(model, args.actor_export, None if args.no_actor_sync else sglang_url, work)
     saver = StateSaver()
     collector = Collector(args, tasks, work, source_sha, runtime, first_group=first_group, cursor=cursor)
     collector.version = step
@@ -831,6 +834,8 @@ def main():
     t.add_argument('--state-dir', default=resolve_str('data_hdd', 'natlang-grpo-v1'))
     t.add_argument('--resume', action='store_true')
     t.add_argument('--keep-rollouts', action='store_true')
+    t.add_argument('--no-actor-sync', action='store_true',
+                   help='never update the actor (smoke against a shared actor of the start policy; versions advance nominally)')
     t.add_argument('--no-pin-runtime', dest='pin_runtime', action='store_false',
                    help="episodes run the checkout's live ts-host instead of the run's pinned copy")
     t.add_argument('--held-every-hours', type=float, default=4.)
