@@ -56,9 +56,11 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 sys.path[:0] = [str(REPO / 'training/neuralese'), str(REPO), str(HERE)]
 
-BASE = '/home/werg/.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd'
-POOL = '/mnt/external/natlang-rl-composed-20261103/memetic-program-source-20261105/cases.jsonl'
-HELD = '/home/werg/data/lfm3-rl-dgx-20261029/ops/held-v2/manifest.json'
+from natlang_neuralese.common.paths import resolve_str  # noqa: E402
+
+BASE = str(Path.home() / '.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd')
+POOL = resolve_str('data_hdd', 'natlang-rl-composed-20261103', 'memetic-program-source-20261105', 'cases.jsonl')
+HELD = resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'held-v2', 'manifest.json')
 
 
 def log_line(handle, record):
@@ -772,7 +774,7 @@ def main():
     t.add_argument('--max-steps', type=int, default=0)
     t.add_argument('--save-every', type=int, default=2)
     t.add_argument('--state-every', type=int, default=4)
-    t.add_argument('--state-dir', default='/mnt/external/natlang-grpo-v1')
+    t.add_argument('--state-dir', default=resolve_str('data_hdd', 'natlang-grpo-v1'))
     t.add_argument('--resume', action='store_true')
     t.add_argument('--keep-rollouts', action='store_true')
     t.add_argument('--no-pin-runtime', dest='pin_runtime', action='store_false',
