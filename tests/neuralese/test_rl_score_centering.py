@@ -6,8 +6,7 @@ import pytest
 import torch
 
 from natlang_neuralese.common.sampling import decode_top_k, encode_top_k
-from natlang_neuralese.rl.policy_math import (importance_weight, policy_loss_declaration,
-                                              score_centered_surrogate, score_centered_token_loss)
+from natlang_neuralese.rl.policy_math import (importance_weight, score_centered_surrogate, score_centered_token_loss)
 
 
 def f(ratio, mode):
@@ -197,104 +196,6 @@ def parameter_gradients(model, loss):
     grads = torch.autograd.grad(loss, parameters, allow_unused=True)
     return torch.cat([(g if g is not None else torch.zeros_like(p)).flatten().double()
                       for g, p in zip(grads, parameters)])
-
-
-@pytest.mark.parametrize('mode', ['none', 'tis'])
-def test_engine_capture_to_trainer_matches_reference_under_sampler_mismatch(tmp_path, monkeypatch, mode):
-    from test_native_serving_adapters import engine_fixture
-    from natlang_neuralese.train.native_graph_loss import packed_graph_loss
-    engine = engine_fixture(tmp_path, 'lfm')
-    k = 8
-    episodes = collect(engine, monkeypatch, top_k=k)
-    capture = episodes[0]['turns'][0]['sampling']
-    assert capture['behavior_top_k'] == {'schema': 'natlang.behavior-top-k/1', 'k': k,
-        'distribution': 'post-processing-normalized', 'ids': 'int32-le-base64', 'logps': 'float16-le-base64'}
-    sampled = [sample for sample in capture['samples'] if not sample.get('forced')]
-    assert sampled and all('top_k' in sample for sample in sampled)
-    for sample in sampled:
-        ids, logps = decode_top_k(sample['top_k'])
-        assert len(ids) == k
-        if sample['token_id'] in ids.tolist():
-            assert abs(float(logps[ids.tolist().index(sample['token_id'])]) - sample['logp']) < 1e-2
-    loss_declaration = {'schema': 'score-centered/1', 'k': k, 'importance': mode}
-    spec, objective, examples = admit(engine, tmp_path, episodes, loss_declaration, 'centered')
-    assert spec['policy_loss'] == policy_loss_declaration(loss_declaration)
-    assert objective.binding()['policy_loss'] == spec['policy_loss']
-    model = engine.shared_model
-    for parameter in model.parameters():  # the serving engine holds frozen weights; the learner trains them
-        parameter.requires_grad_(True)
-    total, mismatch = 0, []
-    for example in examples:
-        if not getattr(objective, '_behavior_logprob_probe_done', False):
-            # This fixture deliberately changes sampler logits while claiming
-            # the same actor. Production admission must reject that mismatch.
-            with pytest.raises(ValueError, match='captured policy logprob parity failed'):
-                packed_graph_loss(model, [example], objective=objective)
-            # The remainder tests the off-policy loss formula in isolation;
-            # no production admission or actor qualification is implied.
-            objective._behavior_logprob_probe_done = True
-        loss, details = packed_graph_loss(model, [example], objective=objective)
-        assert details['policy_loss'] == 'score-centered/1' and torch.isfinite(loss)
-        centering = details['score_centering']
-        assert centering['positions'] == details['sampled_tokens']
-        actual = parameter_gradients(model, loss)
-        assert torch.isfinite(actual).all() and actual.abs().sum() > 0
-
-        class Reference(type(objective)):
-            def __call__(self, model, result, context):
-                row = self.rows[context['examples'][0].id]
-                hidden = result['h_final'][0]
-                actions = row['actions']
-                queries = torch.tensor([a['query'] for a in actions])
-                temperature = actions[0]['temperature']
-                log_probs = torch.log_softmax(model.logits(hidden[queries]).double() / temperature, -1)
-                labels = torch.tensor([a['token_id'] for a in actions])
-                behavior = torch.tensor([a['behavior_logp'] for a in actions])
-                from natlang_neuralese.rl.native_replay import behavior_top_k_tensors
-                ids, logq, tail = behavior_top_k_tensors(actions, k, 'cpu')
-                mismatch.append(float((log_probs.detach().gather(1, labels[:, None]).squeeze(1) - behavior).abs().max()))
-                value = literal_surrogate(log_probs, labels, behavior, ids, logq, mode, 1e-6, tail)
-                return (-row['advantage'] * value).sum() / len(actions), {}
-        reference = Reference(objective.path)
-        reference.bind_actor(engine)
-        expected_loss, _ = packed_graph_loss(model, [example], objective=reference)
-        expected = parameter_gradients(model, expected_loss)
-        torch.testing.assert_close(actual, expected, rtol=2e-3, atol=1e-6)
-        total += details['sampled_tokens']
-    assert total == sum(len(row['actions']) for row in spec['rows'].values())
-    assert max(mismatch) > 1e-2, 'the fixture really trains against a mismatched sampler'
-
-
-def test_score_centered_requires_top_k_and_grpo_without_it_stays_unchanged(tmp_path, monkeypatch):
-    from test_native_serving_adapters import engine_fixture
-    engine = engine_fixture(tmp_path, 'lfm')
-    episodes = collect(engine, monkeypatch, top_k=None)
-    capture = episodes[0]['turns'][0]['sampling']
-    assert 'behavior_top_k' not in capture and all('top_k' not in sample for sample in capture['samples'])
-    with pytest.raises(ValueError, match='x_natlang_rl_top_k'):
-        admit(engine, tmp_path, copy.deepcopy(episodes), {'schema': 'score-centered/1', 'k': 8}, 'missing')
-    spec, objective, examples = admit(engine, tmp_path, episodes, None, 'grpo')
-    assert 'policy_loss' not in spec and 'policy_loss' not in objective.binding()
-    assert all('behavior_top_k' not in action for row in spec['rows'].values() for action in row['actions'])
-    from natlang_neuralese.train.native_graph_loss import packed_graph_loss
-    with pytest.raises(ValueError, match='captured policy logprob parity failed'):
-        packed_graph_loss(engine.shared_model, examples, objective=objective)
-    objective._behavior_logprob_probe_done = True  # isolate the GRPO loss after testing the rejection
-    loss, details = packed_graph_loss(engine.shared_model, examples, objective=objective)
-    assert 'score_centering' not in details and torch.isfinite(loss)
-
-
-def test_loss_k_larger_than_captured_k_is_refused(tmp_path, monkeypatch):
-    from test_native_serving_adapters import engine_fixture
-    engine = engine_fixture(tmp_path, 'lfm')
-    episodes = collect(engine, monkeypatch, top_k=4)
-    with pytest.raises(ValueError, match='k >='):
-        admit(engine, tmp_path, episodes, {'schema': 'score-centered/1', 'k': 8}, 'short')
-    tampered = copy.deepcopy(episodes)
-    sample = next(s for s in tampered[0]['turns'][0]['sampling']['samples'] if not s.get('forced'))
-    del sample['top_k']
-    with pytest.raises(ValueError, match='every sampled position'):
-        admit(engine, tmp_path, tampered, {'schema': 'score-centered/1', 'k': 4}, 'tampered')
 
 
 def test_whole_producer_consumer_graph_scores_every_sampled_turn_with_top_k(tmp_path):

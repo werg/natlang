@@ -70,7 +70,6 @@ def test_changed_helpers_contain_no_workstation_specific_executable_or_storage_p
 
     for name in (
         'build_historical_luna_full_episode_graphs.py',
-        'build_luna_exact_native_conversion.py',
         'historical_provider_source.py',
     ):
         source = (ROOT / 'scripts' / 'neuralese_data' / name).read_text()

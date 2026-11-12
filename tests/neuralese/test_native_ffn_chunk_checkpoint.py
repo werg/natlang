@@ -3,7 +3,7 @@ from contextlib import nullcontext
 import pytest
 import torch
 from torch import nn
-from test_native_inline_qat import base, graph, loss_of, model_with_points
+from test_native_inline_qat import base, graph, loss_of, model_with_points  # noqa: F401 (fixture)
 
 
 @pytest.mark.parametrize('device', ['cpu', pytest.param('cuda', marks=pytest.mark.skipif(
@@ -97,20 +97,6 @@ def test_chunk_checkpoint_reduces_cuda_saved_activation_peak(monkeypatch):
     assert bounded[2] < eager[2]*.75
 
 
-def test_nested_chunk_checkpoints_keep_actor_bindings_and_producer_gradients(tmp_path, monkeypatch):
-    import test_native_invocation_actors as actors
-    from natlang_neuralese.model import lfm2_port
-    original=actors.engine_fixture
-    def engine(*args, **kwargs):
-        result=original(*args,**kwargs)
-        result.shared_model.port.ffn_chunk_tokens=2
-        return result
-    monkeypatch.setattr(lfm2_port,'FFN_CHECKPOINT_MIN_TOKENS',0)
-    monkeypatch.setattr(actors,'engine_fixture',engine)
-    actors.test_layer_major_distinct_actor_graph_matches_cached_and_source_adjoints(
-        tmp_path,monkeypatch,'lfm',True,4)
-
-
 def test_nested_chunk_checkpoint_preserves_stochastic_state(monkeypatch):
     from natlang_neuralese.model import lfm2_port
     from torch.utils.checkpoint import checkpoint
@@ -128,19 +114,3 @@ def test_nested_chunk_checkpoint_preserves_stochastic_state(monkeypatch):
     actual,expected=run(True),run(False)
     assert torch.equal(actual[0],expected[0]) and torch.equal(actual[2],expected[2])
     for a,b in zip(actual[1],expected[1]):assert torch.equal(a,b)
-
-
-def test_nested_chunk_checkpoint_preserves_cross_actor_second_derivative(tmp_path, monkeypatch):
-    import test_native_higher_order as higher
-    import test_native_serving_adapters as adapters
-    from natlang_neuralese.model import lfm2_port
-    original=adapters.engine_fixture
-    def engine(*args, **kwargs):
-        result=original(*args,**kwargs)
-        result.shared_model.port.ffn_chunk_tokens=2
-        result.shared_model.port.checkpoint_layers=True
-        result.shared_model.port.checkpoint_layer_group_size=4
-        return result
-    monkeypatch.setattr(lfm2_port,'FFN_CHECKPOINT_MIN_TOKENS',0)
-    monkeypatch.setattr(adapters,'engine_fixture',engine)
-    higher.test_actual_distinct_producer_consumer_actors_have_cross_actor_second_derivative(tmp_path,'lfm')

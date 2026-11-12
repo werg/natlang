@@ -1,24 +1,10 @@
 """Original occurrence VJPs while fixed native projections reuse primal rows."""
 import copy
-from contextlib import nullcontext
 import pytest
-import torch
-from test_shared_state import tiny
 from test_native_communication_prefix import episodes
-from natlang_neuralese.model.shared_state import SharedStateModel
 from natlang_neuralese.model.native_gradient_partitions import primal_row_reuse
 from natlang_neuralese.train.native_graph_loss import pack_native_graphs
 from natlang_neuralese.train.native_prefix_packing import communication_primal_rows
-
-
-def test_update_diagnostic_reports_exact_mismatches_and_bf16_adjacency():
-    from diagnose_primal_update_equivalence import differences
-    a=torch.tensor([1.,2.],dtype=torch.bfloat16)
-    b=torch.tensor([1.,2.],dtype=torch.bfloat16)
-    b[1]=torch.nextafter(b[1],torch.tensor(float('inf'),dtype=b.dtype))
-    result=differences({'weight':a},{'weight':b})
-    assert len(result)==1 and result[0]['count']==result[0]['adjacent']==1
-    assert differences({'weight':a},{'weight':a.clone()})==[]
 
 
 def test_primal_binding_is_exact_plan_scoped_and_validates_representatives():

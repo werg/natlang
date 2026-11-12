@@ -4,7 +4,7 @@ Each example retains its loss rows, normalization and exposure. Communication
 aliases stop before adaptation/imports; producing suffixes and actual edges stay
 complete. External-state graphs retain their prior path. Policy objectives that
 declare support read every action through the returned original-token row maps
-(train/native_state_sft.packed_graph_loss).
+(train/native_graph_loss.packed_graph_loss).
 """
 from ..model.native_graph_plan import Invocation, ImportSpan, compile_graph
 

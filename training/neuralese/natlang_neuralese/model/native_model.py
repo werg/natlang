@@ -76,8 +76,8 @@ def configure_native_precision():
     if bf16_mode not in ('fp32-accumulate', 'reduced'):
         raise ValueError('NATLANG_BF16_REDUCTION must be fp32-accumulate or reduced')
     torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction = (bf16_mode == 'reduced')
-    # Projection arithmetic of plain training updates (model/native_weight_carrier.py). The SFT learner defaults it
-    # to vendor on discrete GPUs (train/native_state_sft.resolve_training_projection_arithmetic); `invariant` is the
+    # Projection arithmetic of plain training updates (model/native_weight_carrier.py). The retired native SFT learner
+    # defaulted it to vendor on discrete GPUs; `invariant` is the
     # explicit historical-replay option. Recorded only when vendor, so invariant processes keep their exact
     # historical identities.
     from .native_weight_carrier import set_training_projection_arithmetic

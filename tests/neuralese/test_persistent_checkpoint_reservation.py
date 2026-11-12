@@ -142,26 +142,6 @@ def test_reuse_after_crash_after_rename(tmp_path):
     successor.close()
 
 
-def test_policy_reserves_before_update_and_replenishes(tmp_path, monkeypatch):
-    from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
-    monkeypatch.setenv('NATLANG_CHECKPOINT_TRANSFER_HEADROOM_FACTOR', '0')
-    monkeypatch.setenv('NATLANG_CHECKPOINT_MIN_FREE_BYTES', '0')
-    parameter = torch.nn.Parameter(torch.ones(4))
-    optimizer = torch.optim.AdamW([parameter])
-    policy = CheckpointPolicy(tmp_path)
-    state = {'step': 0, 'model': parameter, 'optimizer': optimizer.state_dict()}
-    policy.reserve_next(state, optimizer)
-    first_inode = policy._persistent_reservation.pending.stat().st_ino
-    parameter.grad = torch.ones_like(parameter)
-    optimizer.step()
-    state = {'step': 1, 'model': parameter, 'optimizer': optimizer.state_dict()}
-    policy.save(state)
-    assert policy.slot.stat().st_ino == first_inode
-    policy.reserve_next(state, optimizer)
-    assert policy._persistent_reservation.pending.stat().st_ino != first_inode
-    policy._persistent_reservation.close()
-
-
 def test_unreserved_writer_cannot_replace_owned_target(tmp_path):
     path = tmp_path / 'checkpoint.pt'
     owner = reservation(path).acquire(20 * 1024 * 1024)

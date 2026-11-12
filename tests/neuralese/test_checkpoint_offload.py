@@ -198,45 +198,6 @@ def test_a_failing_offload_never_fails_training_and_is_retried_at_the_next_write
     assert worker.close()
 
 
-def test_policy_writes_are_offloaded_and_a_best_shares_the_mirror_by_a_hard_link(layout, monkeypatch):
-    out, mirror_dir = layout
-    monkeypatch.setenv('NATLANG_CHECKPOINT_PRUNE_OPTIMIZER', '0')  # unpruned bests share the slot's mirror
-    worker = co.CheckpointOffloader(co.OffloadSettings.from_env(), copier=co.local_copy)
-    monkeypatch.setattr(co, '_OFFLOADER', worker)
-    policy = cp.CheckpointPolicy(out)
-    assert json.loads((out / 'checkpoint-policy.json').read_text())['offload']['mirror'] == str(mirror_dir)
-    policy.save({'step': 1, 'w': torch.ones(3)}, metric=1.0)
-    assert worker.wait(30)
-    slot, best = out / 'checkpoint.pt', out / 'best-checkpoint.pt'
-    assert not slot.is_symlink() and best.is_symlink()
-    assert (mirror_dir / 'best-checkpoint.pt').stat().st_ino == (mirror_dir / 'checkpoint.pt').stat().st_ino
-    policy.save({'step': 2, 'w': torch.zeros(3)}, metric=2.0)  # worse: the best keeps its step-1 mirror
-    assert worker.wait(30)
-    assert torch.load(best)['step'] == 1 and torch.load(mirror_dir / 'checkpoint.pt')['step'] == 2
-    assert json.loads((out / 'checkpoint-policy.json').read_text())['best_metric'] == 1.0
-    policy.close()
-
-
-def test_resume_reads_the_mirror_when_the_nvme_slot_is_missing_or_truncated(layout, monkeypatch):
-    out, mirror_dir = layout
-    monkeypatch.setattr(co, '_OFFLOADER', co.CheckpointOffloader(co.OffloadSettings.from_env(),
-                                                                 copier=co.local_copy))
-    cp.CheckpointPolicy(out).save({'step': 5, 'w': torch.arange(4.)})
-    assert co._OFFLOADER.wait(30)
-    slot = out / 'checkpoint.pt'
-    with open(slot, 'r+b') as stream:  # a cut-off write
-        stream.truncate(slot.stat().st_size // 2)
-    policy = cp.CheckpointPolicy(out)
-    assert policy.recovered['local'] == 'truncated' and slot.is_symlink()
-    assert cp.CheckpointPolicy.load(policy.slot)['step'] == 5
-    slot.unlink()
-    assert cp.CheckpointPolicy(out).recovered['local'] == 'missing'
-    assert cp.CheckpointPolicy.load(slot)['step'] == 5
-    fresh = layout[0].parent / 'never-mirrored'
-    assert cp.CheckpointPolicy(fresh).recovered is None  # a run without a mirror record starts fresh
-    assert co.close_offloader()
-
-
 def test_stale_partials_are_cleaned_and_another_copiers_partial_is_left_alone(layout):
     out, mirror_dir = layout
     mirror_dir.mkdir(parents=True)
@@ -259,19 +220,6 @@ def test_no_mirror_on_the_source_filesystem_or_outside_the_runs(layout, monkeypa
     assert 'source filesystem' in co.mirror_unavailable(layout[0] / 'checkpoint.pt', settings)
     monkeypatch.setattr(co, '_mount_of', lambda path: None)
     assert 'no mounted filesystem' in co.mirror_unavailable(layout[0] / 'checkpoint.pt', settings)
-
-
-def test_disconnected_optional_mirror_does_not_block_primary_checkpoint_policy(layout, monkeypatch):
-    def disconnected(_):
-        raise OSError(5, 'Input/output error')
-    monkeypatch.setattr(co, '_mount_of', disconnected)
-    record = co.policy_record(layout[0])
-    assert record['mirror'] is None
-    assert 'mirror filesystem inaccessible' in record['unavailable']
-    policy = cp.CheckpointPolicy(layout[0], every_steps=1)
-    policy.save({'earned': torch.tensor([1.0])})
-    assert policy.slot.is_file()
-    assert torch.equal(cp.CheckpointPolicy.load(policy.slot)['earned'], torch.tensor([1.0]))
 
 
 def test_owned_copier_runs_without_a_detached_process(layout):
@@ -320,62 +268,6 @@ def test_a_pruned_copy_that_reads_back_different_is_refused(layout, monkeypatch)
     with pytest.raises(RuntimeError, match='differs at state.step'):
         co.offload_one(best, 'archive', co.OffloadSettings.from_env(), copier=co.local_copy, prune=True)
     assert best.is_file() and not best.is_symlink() and not list(mirror_dir.glob('*.part'))
-
-
-def test_policy_bests_are_weights_only_while_the_slot_keeps_its_optimizer(layout, monkeypatch):
-    out, mirror_dir = layout
-    worker = co.CheckpointOffloader(co.OffloadSettings.from_env(), copier=co.local_copy)
-    monkeypatch.setattr(co, '_OFFLOADER', worker)
-    policy = cp.CheckpointPolicy(out)
-    policy.save(full_state(1), metric=1.0)
-    assert worker.wait(30)
-    best = cp.CheckpointPolicy.load(out / 'best-checkpoint.pt')
-    assert best['optimizer_pruned'] and best['step'] == 1 and 'optimizer' not in best
-    assert 'optimizer' in cp.CheckpointPolicy.load(out / 'checkpoint.pt')
-    assert 'optimizer' in torch.load(mirror_dir / 'checkpoint.pt')
-    policy.close()
-
-
-def test_policy_close_returns_while_independent_owner_holds_pinned_copy(layout, monkeypatch):
-    import threading
-    out, mirror_dir = layout
-    started, release, closed = threading.Event(), threading.Event(), threading.Event()
-    real_copy = co.local_copy
-
-    def blocked_copy(path, dest, prune=False):
-        started.set()
-        assert release.wait(5)
-        return real_copy(path, dest, prune)
-
-    worker = co.CheckpointOffloader(co.OffloadSettings.from_env(), copier=blocked_copy)
-    monkeypatch.setattr(co, '_OFFLOADER', worker)
-    policy = cp.CheckpointPolicy(out)
-    policy.save(full_state(9))
-    job_file = next((worker.root / 'pending').glob('*.json'))
-    job = json.loads(job_file.read_text())
-
-    def independent_owner():
-        assert co._process_queue_once(worker.root, settings=worker.settings, copier=worker.copier)
-
-    owner = threading.Thread(target=independent_owner, name='test-ledger-owner')
-    owner.start()
-    assert started.wait(5) and Path(job['pin']).is_file()
-
-    def close_policy():
-        policy.close()
-        closed.set()
-
-    closer = threading.Thread(target=close_policy)
-    closer.start()
-    assert closed.wait(.1)
-    assert Path(job['pin']).is_file() and job_file.exists()
-    release.set()
-    owner.join(5)
-    closer.join(5)
-    assert closed.is_set() and not owner.is_alive() and not job_file.exists()
-    slot, mirror = out / 'checkpoint.pt', mirror_dir / 'checkpoint.pt'
-    assert slot.is_file() and mirror.is_file() and sha(slot) == sha(mirror)
-    assert co.read_record(mirror)['sha256'] == sha(slot)
 
 
 def test_owner_retries_durable_job_after_copy_failure_without_another_checkpoint(layout):
