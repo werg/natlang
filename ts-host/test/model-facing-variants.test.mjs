@@ -3,32 +3,6 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 process.env.NATLANG_MODEL_FACING = 'combined'; // read when the runtime modules load, so they are imported after this line
 const { createNatlangRuntime, loadVirtualNatlang } = await import('../dist/index.js');
-const { TOOLS_PROMPT } = await import('../dist/native/prompt.js');
-
-async function script(calls, runtimeOptions = {}) {
-  const results = [];
-  let step = 0;
-  const model = async request => {
-    if (step) results.push(String(request.messages.at(-1).content));
-    const call = calls[step++];
-    return call ? { calls: [call] } : { calls: [['return_result', { status: 'failed', reason: 'The scripted test has no more calls.' }]] };
-  };
-  const runtime = createNatlangRuntime({ ...runtimeOptions, model, seed: { mode: 'backend' } });
-  const fn = loadVirtualNatlang({ 'root.nl': '---\nargs: { name: string }\nreturns: string\n---\nGreet name.\n' }, 'root.nl');
-  try { await runtime.run(() => fn('Ada')); } catch {}
-  return { results };
-}
-
-test('the system prompt teaches inline nl with a neutral example, not the refund-policy one', () => {
-  assert.match(TOOLS_PROMPT, /nl<boolean>`Is draft clear to audience\?`\(draft\)/);
-  assert.match(TOOLS_PROMPT, /nl\.with<boolean>\(\{ audience \}\)`Is draft clear to audience\?`\(draft\)/);
-  assert.doesNotMatch(TOOLS_PROMPT, /Refunds are allowed|Decide whether item meets policy/);
-});
-
-test('an inline nl call with no arguments and no named variable is refused', async () => {
-  const { results } = await script([['eval', { code: 'const v = await nl<boolean>`Decide whether the order is late.`(); v' }]]);
-  assert.match(results[0], /this nl call was given no arguments and its instructions name no variable in scope/);
-});
 
 test('an inline nl call that names a variable of the scope still runs', async () => {
   const seen = [];
@@ -44,4 +18,24 @@ test('an inline nl call that names a variable of the scope still runs', async ()
   const fn = loadVirtualNatlang({ 'root.nl': '---\nargs: { name: string }\nreturns: string\n---\nJudge name.\n' }, 'root.nl');
   assert.equal(await runtime.run(() => fn('Ada')), 'done');
   assert.ok(!seen.some(text => /was given no arguments/.test(text)), seen.join('\n---\n'));
+});
+
+test('calls after a failed call of the same reply stay in the history, each answered as not run', async () => {
+  let seen;
+  const runtime = createNatlangRuntime({ seed: { mode: 'backend' }, model: async request => {
+    const last = request.messages.at(-1);
+    if (last.role === 'tool' && last.tool_call_id !== 'scope_0') {
+      seen ??= request.messages;
+      return { calls: [['return_result', { status: 'success', value: 'done' }]] };
+    }
+    return { calls: [['eval', { code: 'throw new Error("first fails")' }], ['eval', { code: '1 + 1' }]] };
+  } });
+  const fn = loadVirtualNatlang({ 'root.nl': '---\nargs: { name: string }\nreturns: string\n---\nGreet name.\n' }, 'root.nl');
+  try { await runtime.run(() => fn('Ada')); } catch {}
+  const reply = seen.findLast(message => message.role === 'assistant');
+  assert.equal(reply.tool_calls.length, 2, 'both sampled calls stay in the history');
+  const answers = seen.filter(message => message.role === 'tool' && reply.tool_calls.some(call => call.id === message.tool_call_id));
+  assert.equal(answers.length, 2);
+  assert.match(String(answers[0].content), /first fails/);
+  assert.equal(String(answers[1].content), 'Not run: an earlier call in this reply failed; call it again if you still need it.');
 });

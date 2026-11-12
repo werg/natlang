@@ -53,6 +53,10 @@ import { hexDigest } from './hash.js';
 import { activeSystemPrompts, softenMessages, renderPromptMessages, type PromptRendering } from './system-prompts.js';
 import type { ModelBudget } from './model-budget.js';
 import { modelFacing } from '../runtime/model-facing.js';
+/** The answer to a call of a reply that did not run because an earlier call of the same reply failed. */
+const UNRUN_CALL = 'Not run: an earlier call in this reply failed; call it again if you still need it.';
+/** Calls that only read the folder or code: a failed call earlier in the same reply cannot change what they return. */
+const READ_ONLY_TOOLS = new Set(['read_file', 'list_files', 'search_files', 'diff_files', 'read_code', 'diff_code', 'read_page']);
 /** Variant reply-text-with-calls: the prose a reply carried before its tool calls stays in the transcript (it was
  * dropped, so the next prompt differed from what the model wrote and the actor's prefix cache re-prefilled). */
 const replyText = (response: { text?: string }): string => modelFacing('reply-text-with-calls') ? response.text ?? '' : '';
@@ -2113,8 +2117,20 @@ export class NativeToolAgent {
       session.turn = turns;
       session.turnReasoning = response.reasoning;
       const previousFailureSerial = session.failureSerial;
+      // After a failed call the rest of the reply does not run (a later action may depend on it). With
+      // `unrun-calls-kept` the history keeps every sampled call and answers each unrun one in one sentence; with
+      // `unrun-reads-run` read-only file calls after the failure still run (they cannot depend on it).
+      const keepUnrun = modelFacing('unrun-calls-kept') || modelFacing('unrun-reads-run');
+      const runReads = modelFacing('unrun-reads-run');
+      let stoppedAt: number | undefined;
       for (const [index, [name, args]] of calls.entries()) {
         if (timedOut()) return 'episode wall-clock budget exhausted';
+        if (stoppedAt !== undefined) {
+          if (runReads && READ_ONLY_TOOLS.has(name)) results.push(await session.applyAsync(name, args,
+            typeof raw[index]!.id === 'string' ? raw[index]!.id as string : undefined));
+          else results.push({ kind: 'rejected', text: UNRUN_CALL });
+          continue;
+        }
         let appliedArgs = args;
         if (name === 'return_result' && this.options.refinement && (appliedArgs.status ?? 'success') === 'success') {
           const failures = await this.refinementGate(session, appliedArgs);
@@ -2131,7 +2147,10 @@ export class NativeToolAgent {
         if (['blocked', 'budget', 'completed'].includes(result.kind)) break;
         // A later action may depend on this one's result. In particular, never
         // finish an older staged answer after the computation in this batch failed.
-        if (['error', 'rejected', 'refused'].includes(result.kind) || session.failureSerial > previousFailureSerial) break;
+        if (['error', 'rejected', 'refused'].includes(result.kind) || session.failureSerial > previousFailureSerial) {
+          if (!keepUnrun) break;
+          stoppedAt = index;
+        }
       }
       messages.push({ role: 'assistant', content: replyText(response), tool_calls: raw.slice(0, results.length), ...thought(response.reasoning) });
       // Near the end of the turn budget the model is told how many turns are left, so a task that cannot be finished
