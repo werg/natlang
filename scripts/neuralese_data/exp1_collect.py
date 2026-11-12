@@ -47,6 +47,7 @@ def main():
     ap.add_argument('--context-tokens', type=int, default=32768)
     ap.add_argument('--seed-base', type=int, default=SEED_BASE)
     ap.add_argument('--attempts', type=int, default=3, help='tries per episode after an infrastructure failure')
+    ap.add_argument('--stagger', type=float, default=1.0, help='seconds between slot starts (a simultaneous start of 100+ collector processes peaks in memory)')
     ap.add_argument('--finalize-only', action='store_true')
     args = ap.parse_args()
     out = args.out.resolve()
@@ -87,7 +88,8 @@ def main():
     stats = {'done': 0, 'started': time.time()}
     env = {**os.environ, 'NATLANG_MODEL_FACING': spec['series']['model_facing']}
 
-    def slot(url):
+    def slot(url, delay):
+        time.sleep(delay)
         while not stop.is_set():
             with lock:
                 if cursor[0] >= len(todo):
@@ -117,7 +119,8 @@ def main():
             subprocess.run(command, cwd=REPO, env=env, stdout=log, stderr=subprocess.STDOUT)
         return finished(key)
 
-    threads = [threading.Thread(target=slot, args=(url,), daemon=True) for url, n in endpoints for _ in range(n)]
+    slots = [url for url, n in endpoints for _ in range(n)]
+    threads = [threading.Thread(target=slot, args=(url, index * args.stagger), daemon=True) for index, url in enumerate(slots)]
     for t in threads:
         t.start()
     try:
