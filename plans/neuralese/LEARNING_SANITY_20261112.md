@@ -119,6 +119,21 @@ Training stays consistent: each call's exact prompt is used. But the model condi
 history that differs from its own outputs, and learner chaining breaks there. Cause not traced: the history is presumably
 re-encoded from streamed or normalized text. Owner: harness.
 
-## Checks 3, 5
+## Check 3: artificial SFT goal (marker phrase): PASS
+
+Data: 200 calls from 88 tasks of Experiment 1's base successes (guidance off). Each sampled reply gets
+"Zebra protocol engaged. " prepended (right after the prompt's `<think>`). Built by `sanity-1112/marker_chains.py`.
+Training: from the base, 2 epochs, 11 steps at LR 2e-5; loss 0.83 -> 0.57.
+Eval: held-v2 engine, `exp1_collect` on 24 tasks x 2 samples (16 tasks not in the marker set), at most 6 model calls each.
+Measured with `sanity-1112/marker_rate.py`: does the policy turn's reasoning start with the marker?
+
+- Base, same measure: 0/54 turns.
+- Fine-tuned: 53/54 turns (98%); 11/11 episodes open with it. By task: 24/24 on tasks not in the marker set, 29/30 on trained
+  tasks.
+- Stopped at 11 finished episodes to free the GPU; the verdict was already clear.
+
+So a supervised behaviour learned in `exp0_sft` reaches real harness episodes, and it generalises to unseen tasks.
+
+## Check 5
 
 Pending GPU windows (an FP32-master AdamW fine-tune peaked at 39-54 GB in ft2's run; the DGX is GRPO's from 18:00).
