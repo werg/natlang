@@ -155,7 +155,7 @@ class SglangEngine(Engine):
             self.native_reloads = getattr(self, 'native_reloads', 0) + 1
 
     def bind_sglang(self, url, *, export_manifest, fork, workers=512, adapter_slots=0, adapter_rank=32,
-                    projection='native', overlap_schedule=False):
+                    projection='native', overlap_schedule=False, kv_cache_dtype='auto'):
         self.sglang_url, self.sglang_workers = url.rstrip('/'), workers
         # Native adapters on SGLang (fork NatlangAdapters): `adapter_slots` resident stacks of summed rank
         # <= `adapter_rank` per module; the front assigns slots and never reassigns one while a request uses it.
@@ -195,14 +195,16 @@ class SglangEngine(Engine):
         # per episode and corrects it with the loss's importance weights (rl.native_replay DEFAULT_ENGINE_GUARD).
         if projection not in ('native', 'vendor'):
             raise ValueError('SGLang projection policy must be native or vendor')
-        self.sglang_actor_export = {'kind': 'exact', 'format': f"sglang-hf-{export_manifest['dtype']}-{projection}-projection",
+        # A quantized KV cache is part of the actor law (format suffix); BF16 KV keeps the historical format string.
+        kv = '' if kv_cache_dtype in ('auto', None, export_manifest['dtype']) else f'-kv-{kv_cache_dtype}'
+        self.sglang_actor_export = {'kind': 'exact', 'format': f"sglang-hf-{export_manifest['dtype']}-{projection}-projection{kv}",
                                     'sha256': export_manifest['weights_sha256']}
         binding = getattr(self, 'rl_policy_binding', None)
         if binding is not None:
             binding['serving_engine'] = {'engine': 'sglang', 'fork': dict(fork),
                 'hf_export_weights_sha256': export_manifest['weights_sha256'], 'dtype': export_manifest['dtype'],
                 'bf16_reduction': os.environ.get('NATLANG_BF16_REDUCTION', 'fp32-accumulate'), 'projection': projection,
-                'overlap_schedule': bool(overlap_schedule),
+                'overlap_schedule': bool(overlap_schedule), 'kv_cache_dtype': kv_cache_dtype,
                 'banned_token_ids': list(self.sglang_banned)}
             binding['actor_export'] = dict(self.sglang_actor_export)
         return self

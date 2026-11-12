@@ -48,11 +48,23 @@ def main() -> None:
     parser.add_argument('--sglang-python', help="the fork's Python (default: training/neuralese/sglang-fork.json python)")
     parser.add_argument('--sglang-port', type=int, help='port of the SGLang server (default: --port + 1000)')
     # SGLang's pools are sized from need: requests x context, radix-shared; the memory fraction is only a ceiling.
-    parser.add_argument('--sglang-max-running', type=int, default=32, help='concurrent sequences on SGLang')
+    # Collection throughput (2026-11-12, plans/neuralese/ACTOR_THROUGHPUT_20261112.md): decode on the GB10 is bound by
+    # memory bandwidth, weights once per step plus every running sequence's KV (RL prompts average 11.5k tokens), so the
+    # actor serves as many concurrent sequences as the collector offers, with a KV pool big enough that the radix cache
+    # keeps every live episode's history (an evicted history is prefilled again on the next call).
+    parser.add_argument('--sglang-max-running', type=int, default=128, help='concurrent sequences on SGLang')
     parser.add_argument('--sglang-context', type=int, default=32768, help='longest prompt + reply in tokens')
     parser.add_argument('--sglang-max-total-tokens', type=int,
-                        help='KV pool tokens shared by all sequences (default: 4 x --sglang-context; prompts share prefixes)')
-    parser.add_argument('--sglang-mem-fraction', type=float, default=0.3, help='ceiling, not the allocation')
+                        help='KV pool tokens shared by all sequences (default: 4096 x --sglang-max-running, at least '
+                             '2 x --sglang-context; prompts share prefixes)')
+    # SGLang keeps (1 - fraction) of the memory free at its start as headroom and sizes the KV pool from the rest, capped
+    # by --sglang-max-total-tokens: on the shared GB10 a low fraction silently shrank the pool to what other jobs left
+    # (0.4 with 82 GB free gave 332k of 524k tokens), so the fraction is high and the token count is the real size.
+    parser.add_argument('--sglang-mem-fraction', type=float, default=0.9,
+                        help='ceiling, not the allocation (the KV pool is --sglang-max-total-tokens)')
+    parser.add_argument('--sglang-kv-cache-dtype', default='auto', choices=('fp8_e4m3', 'auto'),
+                        help='KV cache dtype (auto: the model dtype, BF16). FP8 halves the bytes every decode step reads '
+                             'per context token; the learner recomputes logprobs and corrects the gap with TIS')
     parser.add_argument('--sglang-adapter-slots', type=int, default=4,
                         help='resident native adapter stacks on SGLang (0 opts out: adapted turns run on the native '
                              'engine); batches without an adapted request replay the base-only decode graph')
@@ -250,21 +262,26 @@ def launch_sglang(engine, args, checkpoint, release=None):
     # The front sizes each reply to the room left in the backend's context; with the trained maximum it asked for
     # 8192 tokens after a 24.6k prompt and SGLang refused the request (w5 round 2: 2 episodes lost, 5 held-eval).
     engine.context = context
-    total = args.sglang_max_total_tokens or 4 * context
+    total = args.sglang_max_total_tokens or max(4096 * args.sglang_max_running, 2 * context)
     if total < context:
         raise ValueError('--sglang-max-total-tokens must hold one full-context sequence')
     command = [python, '-m', 'sglang.launch_server', '--model-path', str(export_dir), '--host', '127.0.0.1',
                '--port', str(port), '--dtype', 'bfloat16', '--mem-fraction-static', str(args.sglang_mem_fraction),
                '--context-length', str(context), '--max-total-tokens', str(total),
                '--max-running-requests', str(args.sglang_max_running),
+               '--kv-cache-dtype', args.sglang_kv_cache_dtype,
                '--max-mamba-cache-size', str(8 * args.sglang_max_running),
                '--cuda-graph-max-bs-decode', str(args.sglang_max_running),
                '--incremental-streaming-output', '--stream-interval', '8',
                '--skip-tokenizer-init', '--trust-remote-code',
                *([] if args.sglang_overlap_schedule else ['--disable-overlap-schedule']), *args.sglang_arg]
     print(json.dumps({'event': 'sglang_launch', 'command': command, 'export': manifest, 'source': source}), flush=True)
-    # FlashInfer JIT-compiles kernels: the fork venv's ninja and the CUDA toolkit's nvcc on PATH.
+    # FlashInfer and SGLang JIT-compile kernels: the fork venv's ninja and a CUDA toolkit's nvcc on PATH. Without a system
+    # toolkit (Pop: /usr/bin/nvcc is CUDA 11.5, which rejects -std=c++20) the venv's own nvidia/cu13 wheel toolkit serves.
     cuda = os.environ.get('CUDA_HOME', '/usr/local/cuda')
+    if not (Path(cuda) / 'bin/nvcc').exists():
+        wheel = sorted(Path(python).parent.parent.glob('lib/python3*/site-packages/nvidia/cu1*/bin/nvcc'))
+        cuda = str(wheel[-1].parent.parent) if wheel else cuda
     path = os.pathsep.join([str(Path(python).parent), cuda + '/bin', os.environ.get('PATH', '')])
     # NATLANG_SGLANG_PYTHONPATH: a fork worktree under test instead of the pinned checkout's editable install.
     process = subprocess.Popen(command, env={**os.environ, 'PYTHONPATH': backend_pythonpath,
@@ -293,7 +310,8 @@ def launch_sglang(engine, args, checkpoint, release=None):
                        fork={**{key: fork[key] for key in ('repository', 'branch')}, 'commit': source['commit'],
                              'declared_commit': source['declared_commit'], 'dirty': source['dirty']},
                        adapter_slots=args.sglang_adapter_slots, adapter_rank=args.sglang_adapter_rank,
-                       projection=args.sglang_projection, overlap_schedule=args.sglang_overlap_schedule)
+                       projection=args.sglang_projection, overlap_schedule=args.sglang_overlap_schedule,
+                       kv_cache_dtype=args.sglang_kv_cache_dtype)
     return process
 
 
