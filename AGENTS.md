@@ -58,8 +58,8 @@ mean, spread fraction, KL, rho (mean, pre/post-cap max, capped fraction, |log rh
 Memory (smoke 2026-11-12): on the GB10 the unit's MemoryMax (= ledger budget) also bounds its CUDA allocations, so the
 budget must cover GPU + host: learner CUDA 19.3 GB before AdamW state, 32 GB peak at step 1, about 36 GB with the FP32 moments
 (FP32 masters + moments + FP32 gradients alone are 27 GB), host about 5 GB plus the collector node processes (in the same
-cgroup, 0.3-0.7 GB per slot), plus the child actor (kv-gb + 24). Episodes run as their own collector processes
-(`NATLANG_COLLECTOR_SHARED=0`: the shared server crashed with EPIPE and left every episode unresolved).
+cgroup, 0.3-0.7 GB per slot; shared collectors save about 0.25 GB a slot), plus the child actor (kv-gb + 24). The actor's
+weight file lives on /dev/shm and checkpoints/state on /mnt/external: the shared NVMe wrote at 60-230 MB/s under load.
 
 ## Held-v2: the experiments' held-out set (engineering, 2026-11-12)
 

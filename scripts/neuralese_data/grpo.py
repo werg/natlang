@@ -65,6 +65,21 @@ POOLS = [resolve_str('data_hdd', 'natlang-rl-composed-20261103', 'memetic-progra
 HELD = resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'held-v2', 'manifest.json')
 
 
+def drop_cache(paths):
+    """Drop the page cache of files read once. It is charged to this unit's cgroup, and on the GB10 a CUDA allocation or
+    context creation near the cgroup's limit fails (CUDA_ERROR_OUT_OF_MEMORY) instead of reclaiming it: every GRPO smoke
+    OOM of 2026-11-12 happened right after reading the 9.5 GB checkpoint."""
+    for path in paths:
+        try:
+            fd = os.open(path, os.O_RDONLY)
+        except OSError:
+            continue
+        try:
+            os.posix_fadvise(fd, 0, 0, os.POSIX_FADV_DONTNEED)
+        finally:
+            os.close(fd)
+
+
 def log_line(handle, record):
     text = json.dumps(record)
     print(text, flush=True)
@@ -122,9 +137,6 @@ class Collector:
         self.env = {**os.environ}
         from natlang_neuralese.rl.held_eval import series
         self.env['NATLANG_MODEL_FACING'] = series()['model_facing']
-        # Own collector process per episode: the shared node server mode (NATLANG_COLLECTOR_SHARED) crashed with EPIPE in
-        # the first GRPO smoke (2026-11-12), leaving every episode unresolved.
-        self.env.setdefault('NATLANG_COLLECTOR_SHARED', '0')
 
     def _new_group(self):
         from natlang_neuralese.rl import task_rollouts
@@ -275,11 +287,11 @@ class WeightSync:
     """The actor's HF export in one pinned host buffer: snapshot (GPU -> pinned, the only synchronous part), then in a
     background thread write it, load it into SGLang in place, and optionally write a native checkpoint."""
 
-    def __init__(self, model, export_dir, sglang_url, work_dir):
+    def __init__(self, model, export_dir, sglang_url, weights_dir):
         import torch
         from safetensors import safe_open
         self.export_dir, self.sglang_url = Path(export_dir), sglang_url
-        self.weights_dir = Path(work_dir) / 'actor-weights'
+        self.weights_dir = Path(weights_dir)
         self.weights_dir.mkdir(parents=True, exist_ok=True)
         for path in self.export_dir.iterdir():
             if path.is_file() and path.name != 'model.safetensors':
@@ -554,10 +566,7 @@ def train(args):
     del original
     import gc
     gc.collect()
-    for path in (args.checkpoint,):
-        fd = os.open(path, os.O_RDONLY)
-        os.posix_fadvise(fd, 0, 0, os.POSIX_FADV_DONTNEED)
-        os.close(fd)
+    drop_cache([args.checkpoint, *Path(args.base).glob('*.safetensors')])
     def meminfo():
         fields = dict(line.split(':', 1) for line in open('/proc/meminfo'))
         return {k: round(int(fields[k].split()[0]) / 2**20, 1) for k in ('MemFree', 'MemAvailable', 'Cached')}
@@ -626,7 +635,12 @@ def train(args):
         args.actor_export = args.actor_export or str(work / 'actor' / 'sglang-hf')
     log_line(log, {'event': 'actor ready', 'actor': args.actor, 'init_s': round(time.time() - t0, 1)})
     sglang_url = args.sglang or args.actor.rsplit(':', 1)[0] + ':' + str(int(args.actor.rsplit(':', 1)[1]) + 1000)
-    sync = WeightSync(model, args.actor_export, None if args.no_actor_sync else sglang_url, work)
+    # The actor's weights live on tmpfs: the shared NVMe wrote at 60-230 MB/s under other jobs' load (2026-11-12 bench),
+    # which put 20-60 s of file write in front of every actor update.
+    weights_dir = Path('/dev/shm') / f'natlang-{args.unit_prefix}-actor-weights'
+    sync = WeightSync(model, args.actor_export, None if args.no_actor_sync else sglang_url, weights_dir)
+    atexit.register(shutil.rmtree, weights_dir, True)
+    drop_cache([Path(args.actor_export) / 'model.safetensors'])
     saver = StateSaver()
     collector = Collector(args, tasks, work, source_sha, runtime, first_group=first_group, cursor=cursor)
     collector.version = step
@@ -650,14 +664,15 @@ def train(args):
     for thread in slots:
         thread.start()
 
-    checkpoints = sorted((work / 'checkpoints').glob('step-*'))
+    checkpoint_root = Path(args.checkpoint_dir or Path(args.state_dir) / 'checkpoints')   # off the busy NVMe by default
+    checkpoints = sorted(checkpoint_root.glob('step-*'))
     held_steps = set(json.loads((work / 'held-steps.json').read_text())) if (work / 'held-steps.json').exists() else set()
     last_held = time.time() if step else 0.
     stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
 
     def write_native(step_number):
-        directory = work / 'checkpoints' / f'step-{step_number:05d}'
+        directory = checkpoint_root / f'step-{step_number:05d}'
         directory.mkdir(parents=True, exist_ok=True)
         path = directory / 'checkpoint.pt'
         changed = write_pruned_checkpoint(state, native_rows, special, path, source_sha, sync.backbone())
@@ -684,7 +699,7 @@ def train(args):
         script = (f'{python} measure --manifest {args.held_manifest} --checkpoint {checkpoint} --checkpoint-sha256 {sha} '
                   f'--out {out} --samples {args.held_samples} --workers {args.held_workers} --label grpo-step-{step_number} '
                   f'--actor-unit {args.unit_prefix}-heldactor-{step_number}')
-        base = work / 'held' / 'step-00000' / 'result.json'
+        base = Path(args.held_baseline) if args.held_baseline else work / 'held' / 'step-00000' / 'result.json'
         if step_number:
             script += f' && {python} compare {base} {out}/result.json --out {out}/compare-vs-step0.json'
         command = ['/usr/bin/python3', str(REPO / 'scripts/memory_ledger.py'), 'run', '--unit', f'{args.unit_prefix}-held-{step_number}',
@@ -695,7 +710,8 @@ def train(args):
         log_line(log, {'event': 'held eval queued', 'step': step_number, 'returncode': result.returncode,
                        'output': (result.stdout + result.stderr)[-400:]})
 
-    if args.held_every_hours > 0 and not (work / 'held' / 'step-00000').exists() and not args.skip_base_held:
+    if args.held_every_hours > 0 and not (work / 'held' / 'step-00000').exists() and not args.skip_base_held \
+            and not args.held_baseline:
         start_held(0, None)
 
     while not stop.is_set() and (not args.max_steps or step < args.max_steps):
@@ -832,7 +848,7 @@ def train(args):
         if save_native and args.held_every_hours > 0 and time.time() - last_held > args.held_every_hours * 3600:
             sync.wait()
             last_held = time.time()
-            start_held(step, work / 'checkpoints' / f'step-{step:05d}')
+            start_held(step, checkpoint_root / f'step-{step:05d}')
     sync.wait()
     saver.wait()
     collector.stop.set()
@@ -880,6 +896,7 @@ def main():
     t.add_argument('--save-every', type=int, default=2)
     t.add_argument('--state-every', type=int, default=4)
     t.add_argument('--state-dir', default=resolve_str('data_hdd', 'natlang-grpo-v1'))
+    t.add_argument('--checkpoint-dir', help='pruned native checkpoints (default STATE_DIR/checkpoints)')
     t.add_argument('--resume', action='store_true')
     t.add_argument('--keep-rollouts', action='store_true')
     t.add_argument('--no-actor-sync', action='store_true',
@@ -888,6 +905,8 @@ def main():
                    help="episodes run the checkout's live ts-host instead of the run's pinned copy")
     t.add_argument('--held-every-hours', type=float, default=4.)
     t.add_argument('--skip-base-held', action='store_true')
+    t.add_argument('--held-baseline', help="a start-policy held result.json to compare with (e.g. held-v2's base run) instead "
+                   'of measuring step 0 (compare refuses another engine or series)')
     t.add_argument('--held-samples', type=int, default=2)
     t.add_argument('--held-workers', type=int, default=48)
     t.add_argument('--unit-prefix', default='grpo')
