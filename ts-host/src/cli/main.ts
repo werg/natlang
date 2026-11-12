@@ -69,6 +69,7 @@ Usage:
   natlang ask INSTRUCTION...                 Ask over stdin, local files, or the folder.
   natlang apps [DIRECTORY]                   Find runnable applications (natlang.json).
   natlang skills [install]                   Show or install the natlang skills for Claude Code and Codex.
+  natlang tune [PROGRAM]                     Tune a program's weights on its examples (natlang help tune).
   natlang inspect SOURCE                     Explain how a source resolves without running it.
   natlang packages                           List installed distribution packages.
   natlang package pack|verify|install ...    Pack, verify, or install a distribution archive.
@@ -94,6 +95,25 @@ The program is answer.nl (a natural-language function), natlang.json (its run ta
 whose input argument defaults to the sample text), examples.json (saved tests), a
 README and AGENTS.md for coding agents. cd into it and run natlang run, or
 natlang call answer.nl "text"; natlang dev reruns after edits; natlang test checks examples.json.`;
+  if (topic === 'skills') return `Agent skills for writing natlang programs:
+  natlang skills [list] [--json]              Where the natlang-authoring and natlang-integration skills are.
+  natlang skills install [--claude] [--codex] [--dir DIR] [--json]
+
+install copies both skill folders, replacing earlier copies, into ~/.claude/skills
+(--claude), ~/.codex/skills (--codex) or DIR; without a choice, into each of those
+agents that is set up on this machine. Restart or refresh the agent afterwards.`;
+  if (topic === 'tune') return `Tune a program's weights on its own examples (docs/TUNING.md):
+  natlang tune [PROGRAM]                      Collect or reuse data, train, export, validate and activate a release.
+  natlang tune [PROGRAM] --incremental|--full  Rebuild what changed, or refit every node.
+  natlang tune [PROGRAM] --watch              Rebuild in the background on edits.
+  natlang tune [PROGRAM] --report [--json]    The latest report, status and active release.
+  natlang tune [PROGRAM] --rollback           Reactivate the previous release.
+  natlang tune [PROGRAM] --evaluate development|confirmation|protected [--release DIGEST] [--with-teacher]
+  natlang tune [PROGRAM] --rounds|--distill|--placement|--calibrate
+  natlang tune --families PROGRAM...           Cross-program family fits.
+
+PROGRAM defaults to the current directory. Tuning needs a native student profile
+(natlang setup --native SOURCE); natlang doctor reports whether one is configured.`;
   if (topic === 'dev') return `Run and rerun after source or input changes:
   natlang dev [SOURCE] [RUN_OPTIONS] [-- APPLICATION_ARGS...]
 
@@ -150,6 +170,7 @@ NATLANG_WARM_PREFIXES=off turns this off.`;
   if (topic === 'call') return `Call a named natural-language function:
   natlang call NAME|FILE.nl [ARGUMENT...] [--json] [--trace DIR]
   natlang call NAME|FILE.nl [--inputs FILE] [--lines|--jsonl] [--trace DIR]
+  model selection on either form: [--profile NAME] [--provider ID] [--model ID] [--yes]
 
 NAME resolves in the current application's natlang.d context. ARGUMENTs fill the
 parameters in order: text parameters as written, other types as JSON, for example
@@ -1079,7 +1100,7 @@ async function modelsCommand(parsed: Parsed, provider?: string): Promise<number>
 export async function main(argv = process.argv.slice(2)): Promise<number> {
   if (argv[0] === 'improve') return (await import('./improvement.js')).improvementCommand(argv.slice(1));
   if (['adapt', 'eval', 'optimize'].includes(argv[0] ?? '')) return (await import('./adaptation.js')).adaptationCommand(argv);
-  if (argv[0] === 'tune') return (await import('./tune.js')).tuneCommand(argv.slice(1));
+  if (argv[0] === 'tune' && !argv.includes('--help') && !argv.includes('-h')) return (await import('./tune.js')).tuneCommand(argv.slice(1));
   if (argv[0] === 'traces') return (await import('./calls.js')).tracesCommand(argv.slice(1));
   if (argv[0] === 'compilations') return (await import('./calls.js')).compilationsCommand(argv.slice(1));
   if (argv[0] === 'specialize') return main((await import('./calls.js')).specializeArguments(argv.slice(1)));
