@@ -809,7 +809,7 @@ def main():
     t.add_argument('--group', type=int, default=8)
     t.add_argument('--slots', type=int, default=96, help='concurrent episodes on the actor (its default runs 128 sequences)')
     t.add_argument('--min-groups', type=int, default=16)
-    t.add_argument('--max-groups', type=int, default=128)
+    t.add_argument('--max-groups', type=int, default=48, help='a w5-like episode costs ~90k learner tokens: 48 groups is ~1-2 h of learner')
     t.add_argument('--max-outstanding', type=int, default=0, help='groups in flight or waiting (default max-groups + slots/group)')
     t.add_argument('--max-staleness', type=int, default=2)
     t.add_argument('--case-seconds', type=int, default=1800)
