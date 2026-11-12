@@ -774,7 +774,7 @@ def main():
     t.add_argument('--exclude-manifest', action='append', default=[], help='more held manifests to exclude')
     t.add_argument('--task-ids', help='JSON list: train only on these pool ids (smoke)')
     t.add_argument('--group', type=int, default=8)
-    t.add_argument('--slots', type=int, default=48)
+    t.add_argument('--slots', type=int, default=96, help='concurrent episodes on the actor (its default runs 128 sequences)')
     t.add_argument('--min-groups', type=int, default=16)
     t.add_argument('--max-groups', type=int, default=128)
     t.add_argument('--max-outstanding', type=int, default=0, help='groups in flight or waiting (default max-groups + slots/group)')
