@@ -336,8 +336,23 @@ def collect(directory, entries, endpoints, *, repo, runtime, env, stop, log=None
     lock, cursor, children, done = threading.Lock(), [0], set(), [0]
     started = time.time()
 
+    def serving(url):
+        from .actor_client import NativeActorClient
+        for _ in range(6):
+            try:
+                NativeActorClient(url, timeout=10).get_bytes('/v1/neuralese/info')
+                return True
+            except Exception:
+                time.sleep(10)
+        return False
+
     def slot(url):
         while not stop.is_set():
+            if not serving(url):   # a lost actor would turn the rest of the queue into infrastructure failures
+                if log:
+                    log(json.dumps({'event': 'held eval actor lost', 'endpoint': url}))
+                stop.set()
+                return
             with lock:
                 if cursor[0] >= len(todo):
                     return
@@ -702,8 +717,8 @@ def rolled_back(out):
 
 # ---- standalone measurement (experiments) ----------------------------------------------------------------------------
 BASE_SNAPSHOT = Path.home() / '.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd'
-ACTOR_ARGS = ('--engine', 'sglang', '--sglang-projection', 'vendor', '--sglang-max-running', '64',
-              '--sglang-max-total-tokens', '262144', '--sglang-mem-fraction', '0.2')
+# The actor's throughput settings are serve_native_checkpoint.py's defaults (concurrency, KV pool, FP8 KV).
+ACTOR_ARGS = ('--engine', 'sglang', '--sglang-projection', 'vendor')
 
 
 def _free_port():
