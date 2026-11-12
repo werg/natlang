@@ -50,6 +50,9 @@ def main():
     ap.add_argument('--attempts', type=int, default=3, help='tries per episode after an infrastructure failure')
     ap.add_argument('--stagger', type=float, default=1.0, help='seconds between slot starts (a simultaneous start of 100+ collector processes peaks in memory)')
     ap.add_argument('--finalize-only', action='store_true')
+    ap.add_argument('--finalize', action='store_true', help='score and emit rollouts.jsonl at the end (holds every episode in memory: 6+ GB '
+                    'for 1,000 episodes; use exp1_score_shards.py instead)')
+    ap.add_argument('--backoff', type=float, default=30., help='seconds to wait after an infrastructure failure before the next attempt')
     args = ap.parse_args()
     out = args.out.resolve()
     endpoints = [(item.rsplit('=', 1)[0].rstrip('/'), int(item.rsplit('=', 1)[1])) for item in args.endpoint]
@@ -105,6 +108,7 @@ def main():
                 queue.write_text(json.dumps({**entry, 'rl_endpoint': url}, sort_keys=True) + '\n')
                 if run_entry(url, key, queue, journal) or attempt >= args.attempts or stop.is_set():
                     break
+                time.sleep(args.backoff)   # an actor that is down fails every episode at once: do not burn the attempts
             trim(entry)
             with lock:
                 stats['done'] += 1
@@ -154,6 +158,11 @@ def main():
             time.sleep(5)
     except KeyboardInterrupt:
         stop.set()
+    unfinished = sum(1 for e in entries if not finished(e['key']))
+    print(json.dumps({'unfinished': unfinished, 'of': len(entries)}), flush=True)
+    if not args.finalize and not args.finalize_only:
+        # a unit with Restart=on-failure relaunches and takes the unfinished episodes again (finished ones are skipped)
+        raise SystemExit(3 if unfinished and not stop.is_set() else 0)
     with (out / 'journal.jsonl').open('w') as merged:
         for entry in entries:
             for path in journals(entry['key']):
