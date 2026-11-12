@@ -532,6 +532,10 @@ def train(args):
         fd = os.open(path, os.O_RDONLY)
         os.posix_fadvise(fd, 0, 0, os.POSIX_FADV_DONTNEED)
         os.close(fd)
+    def meminfo():
+        fields = dict(line.split(':', 1) for line in open('/proc/meminfo'))
+        return {k: round(int(fields[k].split()[0]) / 2**20, 1) for k in ('MemFree', 'MemAvailable', 'Cached')}
+    log_line(log, {'event': 'host model loaded', 'meminfo_gb': meminfo(), 'load_s': round(time.time() - t0, 1)})
     model.to('cuda')
     masters = {name: p.detach().clone().float() for name, p in model.named_parameters()}
     model.to(torch.bfloat16)
