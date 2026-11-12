@@ -521,20 +521,30 @@ def train(args):
     if not args.actor:
         actor_thread = threading.Thread(target=launch_actor, daemon=True)
         actor_thread.start()
-    model, state, special = exp0_sft.load_model(args.checkpoint, args.base)
+    # Loaded on the host, then the checkpoint's page cache is dropped before the GPU copy: on the GB10 a CUDA allocation
+    # only gets MemFree, and the 9.5 GB checkpoint's cache made the move to the GPU fail under contention (smoke 2026-11-12).
+    model, state, special = exp0_sft.load_model(args.checkpoint, args.base, device='cpu')
     state = {k: state[k] for k in ('schema', 'model_config', 'interface_state', 'step', 'backbone_state')}
     state['backbone_state'] = {k: v.to(torch.bfloat16) for k, v in state['backbone_state'].items()}
+    import gc
+    gc.collect()
+    for path in (args.checkpoint,):
+        fd = os.open(path, os.O_RDONLY)
+        os.posix_fadvise(fd, 0, 0, os.POSIX_FADV_DONTNEED)
+        os.close(fd)
+    model.to('cuda')
     masters = {name: p.detach().clone().float() for name, p in model.named_parameters()}
     model.to(torch.bfloat16)
-    model.gradient_checkpointing_enable()
-    model.config.use_cache = False
-    model.train()
     reference = None
-    if args.kl_beta > 0:
-        reference, _, _ = exp0_sft.load_model(args.checkpoint, args.base, dtype=torch.bfloat16)
+    if args.kl_beta > 0:          # the start policy, BF16, frozen (a copy: no second checkpoint load)
+        import copy
+        reference = copy.deepcopy(model)
         reference.eval()
         reference.requires_grad_(False)
         lfm3_fast_train.prepare(reference)
+    model.gradient_checkpointing_enable()
+    model.config.use_cache = False
+    model.train()
     lfm3_fast_train.prepare(model)
     forward = lfm3_fast_train.hidden
     live = dict(model.named_parameters())
