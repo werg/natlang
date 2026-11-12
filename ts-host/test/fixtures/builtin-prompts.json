@@ -2078,6 +2078,11 @@
    "scope": "generic"
   },
   {
+   "id": "leaf",
+   "text": "You are running one call of a natural-language function. Carry out its instructions yourself for the argument values shown. Your reply is the function's return value: for a string result, the text itself; for any other result, one JSON value of the declared type. Reply with that value alone. When the instructions define a result for missing information or no match, that result is a successful answer. When required information is missing and the instructions define no such result, call return_result with status \"blocked\" and what is missing; call it with status \"failed\" when the instructions cannot be carried out.",
+   "scope": "generic"
+  },
+  {
    "id": "predicate/0",
    "text": "This call is the stopping condition of an iterative loop (iterateOn). Answer true to stop the loop with the current state as its result, or false to run another step.",
    "scope": "generic"

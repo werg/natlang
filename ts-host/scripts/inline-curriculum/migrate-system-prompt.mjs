@@ -29,15 +29,34 @@ const REPO = join(dirname(fileURLToPath(import.meta.url)), '../../..');
 const FILE = 'ts-host/src/native/prompt.ts';
 const EMULATION_FILE = 'ts-host/src/model/text-neuralese-emulation.ts';
 
+/**
+ * One revision of a source file as a module. Its relative imports resolve to the same revision's files, imported the
+ * same way, so a revision that took a text from a sibling module (1656e64ea: runtime/model-facing.ts) still loads.
+ */
+async function importRevision(commit, file, seen = new Map()) {
+  if (seen.has(file)) return seen.get(file);
+  const source = execFileSync('git', ['show', `${commit}:${file}`], { cwd: REPO, encoding: 'utf8', maxBuffer: 1 << 26 });
+  let js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const specifiers = [...new Set([...js.matchAll(/\bfrom\s+['"](\.{1,2}\/[^'"]+)\.js['"]/g)].map(match => match[1]))];
+  for (const specifier of specifiers) {
+    const target = join(dirname(file), `${specifier}.ts`).split('\\').join('/');
+    const url = await importRevision(commit, target, seen).then(() => seen.get(`${target}#url`));
+    js = js.split(`'${specifier}.js'`).join(`'${url}'`).split(`"${specifier}.js"`).join(`"${url}"`);
+  }
+  const url = `data:text/javascript;base64,${Buffer.from(js).toString('base64')}`;
+  seen.set(`${file}#url`, url);
+  const loaded = import(url);
+  seen.set(file, loaded);
+  return loaded;
+}
+
 /** Every version of each prompt part in the history of native/prompt.ts, longest first. */
 export async function promptHistory() {
   const parts = { TOOLS_PROMPT: new Set(), APPROACH_PROMPT: new Set(), FUNCTION_TOOLS_PROMPT: new Set(),
     DIRECTORY_REDUCER_PROMPT: new Set() };
   const revisions = execFileSync('git', ['log', '--format=%H', '--', FILE], { cwd: REPO, encoding: 'utf8' }).split('\n').filter(Boolean);
   for (const revision of revisions) {
-    const source = execFileSync('git', ['show', `${revision}:${FILE}`], { cwd: REPO, encoding: 'utf8', maxBuffer: 1 << 26 });
-    const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-    const module = await import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`);
+    const module = await importRevision(revision, FILE);
     // A row migrated to the read_code tool names (migrate-code-tools.mjs) has each version in that form too.
     for (const [name, versions] of Object.entries(parts)) if (typeof module[name] === 'string')
       versions.add(module[name]).add(JSON.parse(renameCodeTools(JSON.stringify(module[name]))));
@@ -74,9 +93,7 @@ export async function historicalPromptPieces() {
     }
   };
   for (const commit of revisions) {
-    const source = execFileSync('git', ['show', `${commit}:${FILE}`], { cwd: REPO, encoding: 'utf8', maxBuffer: 1 << 26 });
-    const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-    const module = await import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`);
+    const module = await importRevision(commit, FILE);
     add(commit, 'interpreter', module.TOOLS_PROMPT);
     add(commit, 'interpreter/depth-limit', module.TOOLS_PROMPT_AT_NL_DEPTH_LIMIT);
     add(commit, 'depth-limit-notice', module.NL_DEPTH_LIMIT_NOTICE);
