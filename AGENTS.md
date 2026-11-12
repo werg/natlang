@@ -79,8 +79,9 @@ Measured (2026-11-12, GPU shared with two SGLang eval actors at 94-96% util, so 
 fwd+bwd all layers recomputed 1370 +- 39 (ed2ac83c0) -> 1471 +- 26 (new layers) -> 1496 +- 8 tok/s (+ fused CE), GPU s/chain 9.04 -> 8.36 -> 7.90;
 packing on 20 SFT v2 chains 1739 +- 29 -> 1773 +- 20 (4k rows) -> 1803 +- 22 (8k); no-grad logprob pass 2982 +- 366 (stock HF) -> 7330 +- 1270.
 Agreement: new vs ed2ac83c0 gradient cosine 0.998 / rel-L2 0.063, loss within 6e-4; per-token logprob vs stock BF16 max 0.61 / mean 0.0195 (the BF16 floor),
-packed rows the same (0.69 / 0.0194). Against FP32 (6 chains of 5.5-7k tokens, `--fp32-reference` semantics): fast cosine 0.9978 / rel-L2 0.066,
-stock 0.9973 / 0.075, loss max |diff| 0.0021 vs 0.0032: the fast path is at least as close to FP32 as stock HF. Tried and dropped: selective recompute
+packed rows the same (0.69 / 0.0194). Against FP32 (`--fp32-reference` semantics, final code, 6 chains of 5-5.5k tokens): fast cosine 0.9963 / rel-L2
+0.089, stock 0.9964 / 0.086, fast vs stock 0.9978 / 0.067, loss max |diff| vs FP32 0.013 / 0.009 (another 6 chains: 0.9978 / 0.066 vs 0.9973 / 0.075):
+the fast path is as far from FP32 as stock HF, i.e. BF16 noise. Tried and dropped: selective recompute
 of the SwiGLU product (saved activations -18%, but 1949 +- 55 vs 1987 +- 38 tok/s at equal budget).
 GPU kernel time equals wall time per chain (no launch gaps), so CUDA graphs buy nothing at these lengths; the old per-instance layer compile already fused
 (3 shared graphs, no breaks), so the gain is the sliding attention (mem-efficient masked kernel + GQA copies, about 0.47 GPU s/chain) and the CE (0.45).
