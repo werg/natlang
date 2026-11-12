@@ -691,8 +691,10 @@ def train(args):
         step += 1
         # weight sync and checkpoints (background)
         t = time.time()
-        sync.snapshot()
+        sync.snapshot()                   # waits for the previous publish
         phase['snapshot'] = time.time() - t
+        if sync.last and not sync.last.get('ok'):
+            raise RuntimeError(f'actor weight update failed: {sync.last}')
         save_native = step % args.save_every == 0 or (args.max_steps and step == args.max_steps)
         sync.publish(step, on_published, also=(lambda s=step: write_native(s)) if save_native else None)
         if args.state_every and step % args.state_every == 0:
