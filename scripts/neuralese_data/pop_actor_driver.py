@@ -165,12 +165,21 @@ def serve_sglang(job, checkpoint, transport, stage, work):
                '--host', host, '--port', str(port), '--threads', '2', '--store-dir', str(work / 'store'),
                '--prompt-rendering', 'full', '--engine', 'sglang', '--sglang-projection', 'vendor',
                '--sglang-port', str(sglang.get('port', port + 1000)),
-               '--sglang-mem-fraction', str(sglang.get('mem_fraction', 0.88)),
+               '--sglang-mem-fraction', str(sglang.get('mem_fraction', 0.8)),
                '--sglang-max-running', str(sglang.get('max_running', 16)),
                '--sglang-max-total-tokens', str(sglang.get('max_total_tokens', 131072)),
                '--sglang-adapter-slots', '0', '--hf-export-dir', str(work / 'sglang-hf' / job['source_sha256'][:16]),
                *sglang.get('extra', [])]
+    # FlashInfer JIT-compiles kernels with nvcc: Pop has no system CUDA toolkit, the venv's nvidia-cuda-nvcc wheel is it.
     cuda = '/usr/local/cuda'
+    if not Path(cuda, 'bin', 'nvcc').exists():
+        cuda = str(next(Path(python).parent.parent.glob('lib/python3*/site-packages/nvidia/cu13')))
+        # JIT kernels link `-L$CUDA_HOME/lib64 -lcudart`; the wheel ships lib/libcudart.so.13 only, and the linker then
+        # found Ubuntu's CUDA 11 libcudart: a second runtime whose launches fail with "invalid resource handle".
+        if not Path(cuda, 'lib64').exists():
+            Path(cuda, 'lib64').symlink_to('lib')
+        if not Path(cuda, 'lib', 'libcudart.so').exists():
+            Path(cuda, 'lib', 'libcudart.so').symlink_to('libcudart.so.13')
     env = {**os.environ, 'PYTHONPATH': f'{runtime}/training/neuralese:{runtime}', 'PYTHONDONTWRITEBYTECODE': '1',
            'NATLANG_REPO': str(runtime), 'NATLANG_BF16_REDUCTION': 'fp32-accumulate', 'HF_HUB_OFFLINE': '1',
            'TRANSFORMERS_OFFLINE': '1', 'HF_HOME': str(work / 'hf'), 'TRITON_CACHE_DIR': str(work / 'triton'),

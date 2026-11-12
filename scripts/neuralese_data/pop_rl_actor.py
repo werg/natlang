@@ -52,6 +52,7 @@ RL_PORT = 18531
 STATE = ROOT / 'rl-actor.json'
 EXPORT_FORMAT = 'native-pop-rtx4060-bf16'
 SGLANG_EXPORT_FORMAT = 'sglang-pop-rtx4060-bf16-vendor-projection'
+SGLANG_MEMORY_GB = 11   # 8 GiB was OOM-killed at CUDA-graph capture (2026-11-12): front + view on CPU + server
 RL_MEMORY_GB = 8   # container cap and ledger claim; 4 GiB was OOM-killed after 4 h at 3 workers (anon 4.2 GiB, 2026-11-09)
 
 
@@ -355,8 +356,10 @@ def start(args):
     unit = f'{name}-{int(time.time())}'
     # The SGLang actor runs on Pop's host (the fork's venv); the native one in its container.
     container = [] if args.engine == 'sglang' else ['--container', name]
+    # The SGLang front holds the CPU-loaded view until the server is up, beside the server's own processes.
+    budget = SGLANG_MEMORY_GB if args.engine == 'sglang' else RL_MEMORY_GB
     ssh(shlex.join(['/usr/bin/python3', POP_REPO + '/scripts/memory_ledger.py', 'run', '--unit', unit,
-                        '--budget-gb', str(RL_MEMORY_GB), '--reserve-gb', str(POP_RESERVE_GB),
+                        '--budget-gb', str(budget), '--reserve-gb', str(POP_RESERVE_GB),
                         '--class', 'experiment', '--no-resumable', *container, '--workdir', work, '--',
                         '/usr/bin/python3', f'{work}/driver.py', f'{work}/job.json']))
     result = {'endpoint': endpoint, 'unit': unit, 'container': name, 'policy_id': source, 'work': work, 'runtime': runtime,

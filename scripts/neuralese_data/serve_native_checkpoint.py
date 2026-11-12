@@ -117,11 +117,12 @@ def main() -> None:
     from natlang_neuralese.serve import configure_native_prefix_cache
     configure_native_prefix_cache(engine, args.prefix_cache_gb, args.prefix_block)
     if args.engine == 'sglang':
-        launch_sglang(engine, args, checkpoint)
-        # The native model is loaded again only when a turn SGLang cannot serve arrives (serve/sglang_actor.py).
-        engine.release_native({'checkpoint': str(checkpoint), 'base': str(args.base) if args.base else None,
-                               'device': args.device, 'participant': args.native_participant,
-                               **{key: view_options[key] for key in ('actor_view', 'transported_actor') if key in view_options}})
+        # The native model is loaded again only when a turn SGLang cannot serve arrives (serve/sglang_actor.py); it is
+        # released once exported, before the server starts (Pop's 14 GB host held both and was OOM-killed).
+        launch_sglang(engine, args, checkpoint, release={
+            'checkpoint': str(checkpoint), 'base': str(args.base) if args.base else None, 'device': args.device,
+            'participant': args.native_participant,
+            **{key: view_options[key] for key in ('actor_view', 'transported_actor') if key in view_options}})
     if args.store_dir is not None:
         from natlang_neuralese.serve.store import TensorStore
         engine.store = TensorStore(args.store_dir)
@@ -219,7 +220,7 @@ def attest_sglang_source(python, fork, pythonpath=''):
     return record
 
 
-def launch_sglang(engine, args, checkpoint):
+def launch_sglang(engine, args, checkpoint, release=None):
     """Export the checkpoint for SGLang (cached by SHA-256), start the fork's server and bind the front to it."""
     import os
     import time
@@ -242,6 +243,8 @@ def launch_sglang(engine, args, checkpoint):
     export_dir = args.hf_export_dir or ((args.store_dir or checkpoint.parent) / 'sglang-hf' / engine.checkpoint_sha256[:16])
     manifest = export_loaded(engine.shared_model, engine.tokenizer, engine.role_tokens, engine.model_config,
                              checkpoint=checkpoint, checkpoint_sha256=engine.checkpoint_sha256, out_dir=export_dir)
+    if release is not None:
+        engine.release_native(release)
     port = args.sglang_port or args.port + 1000
     context = min(args.sglang_context, engine.context)
     # The front sizes each reply to the room left in the backend's context; with the trained maximum it asked for
