@@ -37,12 +37,15 @@ What made the old setup slow:
 ## Changes
 
 - `serve_native_checkpoint.py` defaults (what `held_eval.serve`, `grpo.py` and every actor launch get):
-  `--sglang-max-running 128`, KV pool `8192 x max-running` tokens (1M), `--sglang-kv-cache-dtype fp8_e4m3`,
-  `--sglang-swa-ratio 0.25` (the sliding layers' pool; their window is 256), `--sglang-mem-fraction 0.9` (SGLang reserves (1 - fraction) of the memory free at its start, so a low fraction shrank the pool on the shared GB10; the token count is the size).
-  The actor export format records the KV dtype (`...-projection-kv-fp8_e4m3`).
-- `held_eval.ACTOR_ARGS` no longer overrides those defaults with the slow ones.
+  `--sglang-max-running 128`; `--sglang-kv-gb 12` fixes the KV pool in GB (tokens = GB / KV bytes per token from the
+  export config: 532k BF16, 1.07M FP8) and derives SGLang's `mem-fraction-static` from the memory free at launch
+  (SGLang keeps (1 - fraction) of the free memory as headroom: a fixed low fraction shrank the pool when other jobs
+  held memory, a high one let the first actor take everything behind the ledger). Ledger budget = kv GB + 14.
+  `--sglang-kv-cache-dtype fp8_e4m3` is available (recorded in the actor format `...-projection-kv-fp8_e4m3`).
+- `held_eval.ACTOR_ARGS` no longer overrides those defaults with the slow ones; held_eval/grpo actor budgets 26 GB.
 - JIT toolkit: without a system CUDA toolkit (Pop's `/usr/bin/nvcc` is 11.5 and rejects `-std=c++20`) the actor uses
-  the fork venv's `nvidia/cu13` wheel toolkit.
+  the fork venv's `nvidia/cu13` wheel toolkit. Pop's fork copy is now a git checkout at the fork commit (provenance).
+- Harness variant `reply-text-with-calls` (off until measured): keeps a reply's prose before tool calls.
 
 ## Measurements
 

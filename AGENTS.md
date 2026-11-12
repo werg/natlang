@@ -50,6 +50,19 @@ compare with `held_eval compare A/result.json B/result.json` (McNemar on matched
 loop rate). A wall-clock timeout is unscored and reported as `timeouts`, never a failure; compare only results with one code
 commit and series (`same_code`, `same_series`). Baselines and the A/A noise floor: `ops/held-v2/runs/`.
 
+## RL actor on the DGX: one engine, many slots, absolute KV size (engineering, 2026-11-12)
+
+Collection decode on the GB10 is memory-bandwidth bound: each step reads the weights (~3.5 GB) plus every running
+sequence's full-attention KV (12 KB per context token BF16, 6 KB FP8; RL prompts average 11.5k tokens). Exp0/w5 actors
+ran 16-38 slots, 30 running sequences, pool 93% full with queued requests, 8-14 tok/s per stream. Rules:
+- Run ONE SGLang engine per GPU and give it all slots (exp1/held/GRPO share it): two engines time-slice the GB10 and
+  every kernel waits for the other's slice. Serve with `serve_native_checkpoint.py --engine sglang` defaults:
+  128 running, `--sglang-kv-gb 12` (pool in GB; tokens and SGLang's mem fraction are derived from the memory free at
+  launch, so other jobs neither shrink the pool nor get grabbed). Ledger budget = `--sglang-kv-gb` + 14 GB.
+  Do not pass `--sglang-mem-fraction` (SGLang reserves (1 - fraction) of free memory: 0.25 left a few GB of KV).
+- Collector slots >= 64 per DGX actor; measure with `held_eval measure`. Details and numbers:
+  `plans/neuralese/ACTOR_THROUGHPUT_20261112.md`.
+
 ## HF-path fine-tuning speed: elementwise and dense sliding attention, not matmul (engineering, 2026-11-12)
 
 `exp0_sft.py train` ran 1.8-1.9k fwd+bwd tokens/s on an idle GB10 (11k-token chains; the logged 900 tok/s run shared the GPU). Profile of one chain: matmuls

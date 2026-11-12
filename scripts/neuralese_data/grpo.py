@@ -765,7 +765,7 @@ def main():
     t.add_argument('--base', default=BASE)
     t.add_argument('--actor', help='natlang front of an SGLang actor serving --checkpoint (default: launch the ledger unit '
                    '<unit-prefix>-actor with held_eval.serve)')
-    t.add_argument('--actor-budget-gb', type=int, default=34)
+    t.add_argument('--actor-budget-gb', type=int, default=26, help='ledger claim: the actor --sglang-kv-gb (12) + 14')
     t.add_argument('--actor-arg', action='append', default=[], help='extra serve_native_checkpoint.py argument')
     t.add_argument('--sglang', help='its SGLang server (default: actor port + 1000)')
     t.add_argument('--actor-export', help="the actor's HF export dir (layout and frozen tables; default WORK/actor/sglang-hf)")

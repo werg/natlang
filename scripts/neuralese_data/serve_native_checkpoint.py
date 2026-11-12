@@ -54,14 +54,20 @@ def main() -> None:
     # keeps every live episode's history (an evicted history is prefilled again on the next call).
     parser.add_argument('--sglang-max-running', type=int, default=128, help='concurrent sequences on SGLang')
     parser.add_argument('--sglang-context', type=int, default=32768, help='longest prompt + reply in tokens')
+    # Absolute sizing (shared GB10): SGLang keeps (1 - fraction) of the memory free at its start as headroom and sizes the
+    # KV pool from the rest, so a fixed fraction either shrank the pool when other jobs held memory (0.4 with 82 GB free
+    # gave 332k of 524k tokens) or, high, let the first actor take everything behind the ledger's back. --sglang-kv-gb
+    # fixes the pool in GB (tokens from the export's KV bytes per token) and derives the fraction from the memory free
+    # at launch, so the actor holds about weights + KV + ~6 GB on the GPU. Ledger budget: --sglang-kv-gb + 14
+    # (weights ~4, CUDA graphs/activations ~6, front and server processes ~4).
+    parser.add_argument('--sglang-kv-gb', type=float, default=12.0,
+                        help='KV pool size in GB (default 12: ~530k BF16 or ~1.07M FP8 tokens of LFM3-1.7B); '
+                             'ledger budget = this + 14')
     parser.add_argument('--sglang-max-total-tokens', type=int,
-                        help='KV pool tokens shared by all sequences (default: 4096 x --sglang-max-running, at least '
-                             '2 x --sglang-context; prompts share prefixes)')
-    # SGLang keeps (1 - fraction) of the memory free at its start as headroom and sizes the KV pool from the rest, capped
-    # by --sglang-max-total-tokens: on the shared GB10 a low fraction silently shrank the pool to what other jobs left
-    # (0.4 with 82 GB free gave 332k of 524k tokens), so the fraction is high and the token count is the real size.
-    parser.add_argument('--sglang-mem-fraction', type=float, default=0.9,
-                        help='ceiling, not the allocation (the KV pool is --sglang-max-total-tokens)')
+                        help='KV pool tokens instead of --sglang-kv-gb')
+    parser.add_argument('--sglang-mem-fraction', type=float,
+                        help='explicit SGLang mem-fraction-static (default: derived from --sglang-kv-gb and the free '
+                             'memory at launch)')
     parser.add_argument('--sglang-kv-cache-dtype', default='auto', choices=('fp8_e4m3', 'auto'),
                         help='KV cache dtype (auto: the model dtype, BF16). FP8 halves the bytes every decode step reads '
                              'per context token; the learner recomputes logprobs and corrects the gap with TIS')
@@ -232,6 +238,38 @@ def attest_sglang_source(python, fork, pythonpath=''):
     return record
 
 
+def sglang_pool(export_dir, args, context):
+    """(KV pool tokens, mem-fraction-static): the pool from --sglang-max-total-tokens or --sglang-kv-gb (the export's
+    attention layers x KV heads x head dim x K and V x dtype bytes per token), the fraction so that SGLang's static
+    allocation (weights + pool + ~6 GB graphs/activations) fits the memory free now, whatever other jobs hold."""
+    config = json.loads((Path(export_dir) / 'config.json').read_text())
+    layers = sum(1 for kind in config.get('layer_types', []) if 'attention' in kind) or config['num_hidden_layers']
+    head_dim = config.get('head_dim') or config['hidden_size'] // config['num_attention_heads']
+    per_token = layers * config['num_key_value_heads'] * head_dim * 2 * (1 if args.sglang_kv_cache_dtype.startswith('fp8') else 2)
+    total = args.sglang_max_total_tokens or int(args.sglang_kv_gb * 1e9 // per_token)
+    if total < context:
+        raise ValueError('the KV pool must hold one full-context sequence')
+    if args.sglang_mem_fraction is not None:
+        return total, args.sglang_mem_fraction
+    weights = sum(f.stat().st_size for f in Path(export_dir).glob('*.safetensors'))
+    need = weights + total * per_token + 6e9
+    try:
+        import torch
+        free = torch.cuda.mem_get_info()[0] if torch.cuda.is_available() else None
+    except Exception:
+        free = None
+    if not free:
+        return total, 0.9
+    fraction = need / free
+    if fraction > 0.95:
+        raise RuntimeError(f'SGLang needs {need / 1e9:.1f} GB (KV {total * per_token / 1e9:.1f} GB) but only '
+                           f'{free / 1e9:.1f} GB is free; lower --sglang-kv-gb')
+    print(json.dumps({'event': 'sglang_pool', 'tokens': total, 'kv_bytes_per_token': per_token,
+                      'kv_gb': round(total * per_token / 1e9, 2), 'free_gb': round(free / 1e9, 1),
+                      'mem_fraction_static': round(fraction, 4)}), flush=True)
+    return total, fraction
+
+
 def launch_sglang(engine, args, checkpoint, release=None):
     """Export the checkpoint for SGLang (cached by SHA-256), start the fork's server and bind the front to it."""
     import os
@@ -262,11 +300,9 @@ def launch_sglang(engine, args, checkpoint, release=None):
     # The front sizes each reply to the room left in the backend's context; with the trained maximum it asked for
     # 8192 tokens after a 24.6k prompt and SGLang refused the request (w5 round 2: 2 episodes lost, 5 held-eval).
     engine.context = context
-    total = args.sglang_max_total_tokens or max(4096 * args.sglang_max_running, 2 * context)
-    if total < context:
-        raise ValueError('--sglang-max-total-tokens must hold one full-context sequence')
+    total, fraction = sglang_pool(export_dir, args, context)
     command = [python, '-m', 'sglang.launch_server', '--model-path', str(export_dir), '--host', '127.0.0.1',
-               '--port', str(port), '--dtype', 'bfloat16', '--mem-fraction-static', str(args.sglang_mem_fraction),
+               '--port', str(port), '--dtype', 'bfloat16', '--mem-fraction-static', f'{fraction:.4f}',
                '--context-length', str(context), '--max-total-tokens', str(total),
                '--max-running-requests', str(args.sglang_max_running),
                '--kv-cache-dtype', args.sglang_kv_cache_dtype,
