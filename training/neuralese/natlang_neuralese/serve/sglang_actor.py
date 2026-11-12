@@ -247,8 +247,39 @@ class SglangEngine(Engine):
                 metrics[key] = metrics.get(key, 0.0) + time.monotonic() - started
 
     def native_write_text(self, text, *, value_type=None, adapters=None):
-        return self._measure_native_endpoint('write_text', lambda: super(SglangEngine, self).native_write_text(
-            text, value_type=value_type, adapters=adapters))
+        if adapters or not self.sglang_url:
+            return self._measure_native_endpoint('write_text', lambda: super(SglangEngine, self).native_write_text(
+                text, value_type=value_type, adapters=adapters))
+        return self._measure_native_endpoint('write_text_sglang', lambda: self._sglang_write_text(text, value_type))
+
+    def _sglang_write_text(self, text, value_type):
+        """`_native_write_text_impl` on SGLang: the text forced through the producer span ([produce_open] text
+        [produce_close], positions from 0) and its state exported by one capture request, so a write never reloads the
+        native model into the front (~14 GB per actor on the GB10, 2026-11-12)."""
+        if not getattr(self, 'native_state_enabled', False):
+            raise RequestError('neuralese-native-state-unavailable', 'native text writes require shared-state serving')
+        if not isinstance(text, str):
+            raise RequestError('neuralese-native-state-text', 'native text writes require text')
+        from .chat import escape_specials
+        nonce = hashlib.sha256((text + str(time.time_ns())).encode()).hexdigest()
+        ids = self._template_tokens(escape_specials(text, self.specials, nonce), nonce)
+        if len(ids) + 2 >= self.context:
+            raise RequestError('context-length', 'forced native text and producer markers exceed this model context')
+        opened = [int(self.role_tokens.produce_open)] + [int(token) for token in ids]
+        chunk = self._sglang_capture(opened, 1, len(opened))
+        block, record = self._native_store_capture(ids, [chunk], text=text)
+        meta = record.meta()
+        if value_type is not None:
+            meta['type'] = value_type
+        with self._sglang_lock:
+            self.sglang_state_writes += 1
+        return {'id': record.id, 'native_state': meta,
+                'source_capture': {'policy': self._native_block_identity(block), 'segments': [
+                    {'kind': 'tokens', 'token_ids': [self.role_tokens.produce_open], 'producing': [False]},
+                    {'kind': 'tokens', 'token_ids': ids, 'producing': [True] * len(ids)},
+                    {'kind': 'tokens', 'token_ids': [self.role_tokens.produce_close], 'producing': [False]}],
+                    'payload_start': 1, 'payload_stop': len(ids) + 1, 'adapter_binding': block.adapter_binding},
+                'source_text_sha256': hashlib.sha256(text.encode('utf-8')).hexdigest()}
 
     def native_init_body(self, messages, tools, placeholder, text, **kwargs):
         return self._measure_native_endpoint('init_body', lambda: super(SglangEngine, self).native_init_body(
