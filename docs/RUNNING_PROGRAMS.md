@@ -52,8 +52,8 @@ natlang dev
 A new program is `answer.nl`, `natlang.json` (its `main` target is `answer.nl` itself; the `input` argument's default
 is the sample), `examples.json`, a README and an `AGENTS.md` for coding agents. Edit `answer.nl` or the sample while `dev` runs; it stops the previous run
 before starting a replacement and ignores generated files. Ctrl+C stops both
-the watcher and its current run. Use **Keep the model loaded** on the dashboard
-to reuse one local server across runs.
+the watcher and its current run. Successive runs reuse the loaded local model
+(see "One loaded model for every run").
 
 `natlang check` checks the source without a model. `natlang test` runs real
 calls for the `{ function, inputs, expected }` cases in `examples.json` and
@@ -150,11 +150,17 @@ turns it off; states are not used while tuned LoRA adapters or native states are
 ## One loaded model for every run
 
 The managed server sizes its slots from the model's measured context memory (LFM3 1.7B: about 12.5 KiB per token, so
-the default 4 GiB budget holds 8 slots of 32,768 tokens). The dashboard's **Keep the model loaded** starts one server
-and publishes it in the state directory (`model-server.json`); every natlang command on the machine whose model file and
-llama.cpp build match uses it instead of starting its own, whether it was started from the dashboard or a terminal: no
-load time, the server's warm slots, and one copy of the model in memory. Runs warm openings on it only while all its
-slots are idle. `NATLANG_SHARED_SERVER=off` makes a command start its own server.
+the default 4 GiB budget holds 8 slots of 32,768 tokens). Every natlang process on the machine shares one server per
+model file, llama.cpp build, chat template and configured server settings: the first run that needs it starts it under a
+small detached supervisor, later runs (dev reruns, `natlang test`, other terminals, evals, the dashboard) use it with
+no load time, its warm slots and one copy of the model in memory, and runs warm openings on it only while all its slots
+are idle. Each run holds a lease while it uses the server; the supervisor stops the server after
+`NATLANG_SHARED_SERVER_IDLE_S` seconds (default 300) with no lease and idle slots. The slot count is the first run's
+unless the profile fixes it (`local.parallel`). The records are under the state directory (`model-servers/`, with each
+server's log). The dashboard's **Loaded models** lists the servers and how many processes use each; **Keep loaded**
+holds a lease from the dashboard, and **Stop now** stops a server. A run with tuned LoRA adapters or native states
+starts a private server, and `NATLANG_SHARED_SERVER=off` gives a run its own server that stops with it. Sharing never
+changes what a run computes, only its wall time, since runs on one server share its slots.
 
 ## llama.cpp
 

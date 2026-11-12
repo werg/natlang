@@ -39,7 +39,7 @@ server.listen(port, '127.0.0.1');
 process.on('SIGTERM', () => { fs.appendFileSync(${JSON.stringify(marker)}, 'stopped\\n'); server.close(() => process.exit(0)); });
 `);
   chmodSync(executable, 0o755);
-  const environment = { ...process.env, NATLANG_LLAMA_SERVER: executable,
+  const environment = { ...process.env, NATLANG_LLAMA_SERVER: executable, NATLANG_SHARED_SERVER: 'off',
     NATLANG_MODEL_PATH: model, NATLANG_TEMPLATE: template, NATLANG_MODEL_START_TIMEOUT_MS: '5000' };
   const session = createManagedModelSession({}, environment);
   assert.equal(existsSync(marker), false);
@@ -76,7 +76,7 @@ server.listen(port, '127.0.0.1');
 process.on('SIGTERM', () => server.close(() => process.exit(0)));
 `);
   chmodSync(executable, 0o755);
-  const environment = { ...process.env, PATH: '', NATLANG_RUNTIME_HOME: join(root, 'runtime'),
+  const environment = { ...process.env, PATH: '', NATLANG_RUNTIME_HOME: join(root, 'runtime'), NATLANG_SHARED_SERVER: 'off',
     NATLANG_MODEL_PATH: model, NATLANG_TEMPLATE: template, NATLANG_MODEL_START_TIMEOUT_MS: '5000' };
   let requests = 0;
   const session = createManagedModelSession({}, environment, process.stderr, { ensureRuntime: async discovery => {
@@ -138,46 +138,57 @@ process.on('SIGTERM', () => server.close(() => process.exit(0)));
   await refused.close();
 });
 
-test('a managed session uses a server another process keeps loaded for the same model file and build', async () => {
-  const { spawn } = await import('node:child_process');
-  const { createHash } = await import('node:crypto');
-  const { publishSharedServer } = await import('../dist/model/shared-server.js');
+test('managed sessions share one server per model: started once, kept while leased, stopped when unused', async () => {
+  const { listSharedServers } = await import('../dist/model/shared-server.js');
   const root = mkdtempSync(join(tmpdir(), 'natlang-shared-model-'));
-  const executable = join(root, 'fake-llama-server'), model = join(root, 'model.gguf'), started = join(root, 'started');
-  writeFileSync(model, 'fixture weights');
+  const executable = join(root, 'fake-llama-server'), model = join(root, 'model.gguf'), template = join(root, 'template.jinja'), starts = join(root, 'starts');
+  writeFileSync(model, 'fixture weights'); writeFileSync(template, 'fixture');
   writeFileSync(executable, `#!${process.execPath}
 if (process.argv.includes('--version')) { console.log('version: 0.8.0 (build 12069, commit a0c92ce36)'); process.exit(0); }
-require('node:fs').writeFileSync(${JSON.stringify(started)}, 'spawned');
+if (process.env.FAKE_FAIL) { console.error('cannot load the model file'); process.exit(3); }
+const args = process.argv.slice(2), port = Number(args[args.indexOf('--port') + 1]);
+require('node:fs').appendFileSync(${JSON.stringify(starts)}, 'started\\n');
+const s = require('node:http').createServer((q, r) => { r.setHeader('content-type', 'application/json');
+  if (q.url === '/health') return r.end('{"status":"ok"}');
+  if (q.url === '/slots') return r.end('[{"is_processing":false}]');
+  let b = ''; q.on('data', c => b += c); q.on('end', () => r.end(JSON.stringify({ choices: [{ message: { content: 'shared', tool_calls: [] } }] }))); });
+s.listen(port, '127.0.0.1');
+process.on('SIGTERM', () => s.close(() => process.exit(0)));
 `);
   chmodSync(executable, 0o755);
-  const kept = spawn(process.execPath, ['-e', `const s = require('node:http').createServer((q, r) => { r.setHeader('content-type', 'application/json');
-    if (q.url === '/health') return r.end('{"status":"ok"}');
-    let b = ''; q.on('data', c => b += c); q.on('end', () => r.end(JSON.stringify({ choices: [{ message: { content: 'shared', tool_calls: [] } }] }))); });
-    s.listen(0, '127.0.0.1', () => console.log(s.address().port));`], { stdio: ['ignore', 'pipe', 'inherit'] });
-  try {
-    const port = await new Promise(resolve => kept.stdout.once('data', data => resolve(Number(String(data).trim()))));
-    const environment = { ...process.env, NATLANG_LLAMA_SERVER: executable, NATLANG_MODEL_PATH: model, NATLANG_STATE_HOME: join(root, 'state'),
-      NATLANG_CACHE_HOME: join(root, 'cache'), NATLANG_MODEL_START_TIMEOUT_MS: '3000' };
-    publishSharedServer({ pid: kept.pid, endpoint: `http://127.0.0.1:${port}`, modelSha256: createHash('sha256').update('fixture weights').digest('hex'),
-      runtimeBuild: 12069, runtime: 'b12069ga0c92ce', slots: 3, contextPerSlot: 8192, model: 'fixture', profile: 'default', startedAt: new Date().toISOString(), warm: false }, environment);
-    // a binary of the same build number from another commit (every fork build reports build 1) does not match
-    const { findSharedServer } = await import('../dist/model/shared-server.js');
-    const sha = createHash('sha256').update('fixture weights').digest('hex');
-    assert.equal(await findSharedServer(sha, 'b12069g0000000', environment), undefined);
-    assert.equal((await findSharedServer(sha, 'b12069ga0c92ce', environment))?.endpoint, `http://127.0.0.1:${port}`);
-    const session = createManagedModelSession({}, environment, { write: () => true });
-    const result = await session.turn({ messages: [], tools: [], temperature: 0, seed: 1, max_tokens: 4 });
-    assert.equal(result.text, 'shared');
-    assert.equal(existsSync(started), false, 'no server of its own was started');
-    assert.equal(session.status().shared, true); assert.equal(session.slotPlan().slots, 3);
-    await session.close();
-    // another model file is not served by it
-    writeFileSync(model, 'other weights');
-    const other = createManagedModelSession({}, { ...environment, NATLANG_SHARED_SERVER: 'off' }, { write: () => true });
-    await assert.rejects(other.turn({ messages: [], tools: [], temperature: 0, seed: 1, max_tokens: 4 }), /exited during startup|did not become ready/);
-    assert.equal(existsSync(started), true);
-    await other.close();
-  } finally { kept.kill(); }
+  const environment = { ...process.env, NATLANG_LLAMA_SERVER: executable, NATLANG_MODEL_PATH: model, NATLANG_TEMPLATE: template,
+    NATLANG_STATE_HOME: join(root, 'state'), NATLANG_CACHE_HOME: join(root, 'cache'), NATLANG_MODEL_START_TIMEOUT_MS: '5000',
+    NATLANG_SHARED_SERVER_IDLE_S: '1', NATLANG_WARM_PREFIXES: 'off' };
+  const quiet = { write: () => true };
+  const until = async (condition, what) => {
+    for (let waited = 0; waited < 15000; waited += 100) { if (condition()) return; await new Promise(resolve => setTimeout(resolve, 100)); }
+    assert.fail(`timed out waiting for ${what}`);
+  };
+  const first = createManagedModelSession({}, environment, quiet), second = createManagedModelSession({}, environment, quiet);
+  const [a, b] = await Promise.all([first.prepare(), second.prepare()]);
+  assert.equal(a.endpoint, b.endpoint);
+  assert.equal(a.shared, true); assert.equal(b.shared, true);
+  assert.deepEqual(readFileSync(starts, 'utf8').trim().split('\n'), ['started'], 'one server for both sessions');
+  assert.equal((await first.turn({ messages: [], tools: [], temperature: 0, seed: 1, max_tokens: 4 })).text, 'shared');
+  const [record] = listSharedServers(environment);
+  assert.equal(record.endpoint, a.endpoint);
+  // The server outlives the session that started it while another holds a lease, and a later session reuses it.
+  await first.close();
+  await new Promise(resolve => setTimeout(resolve, 2500));
+  const third = createManagedModelSession({}, environment, quiet);
+  assert.equal((await third.prepare()).endpoint, a.endpoint);
+  assert.equal(readFileSync(starts, 'utf8').trim().split('\n').length, 1);
+  await second.close(); await third.close();
+  // Unused for the idle time: the supervisor stops it and withdraws its record.
+  await until(() => listSharedServers(environment).length === 0, 'the unused server to stop');
+  // Another model file is another server; a private session (NATLANG_SHARED_SERVER=off) starts its own.
+  const priv = createManagedModelSession({}, { ...environment, NATLANG_SHARED_SERVER: 'off' }, quiet);
+  assert.equal((await priv.prepare()).shared, undefined);
+  await priv.close();
+  // A start that fails reports the server's output to the session that waited for it.
+  const failing = createManagedModelSession({}, { ...environment, FAKE_FAIL: '1' }, quiet);
+  await assert.rejects(failing.prepare(), /exited during startup[\s\S]*cannot load the model file/);
+  await failing.close();
 });
 
 test('a profile request refines the stock model request field by field', async () => {

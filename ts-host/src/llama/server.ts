@@ -1,6 +1,7 @@
 /**
  * One managed llama.cpp server: find or install its runtime, resolve its model and chat template, size its slots, start
- * it (or use a server another natlang process keeps loaded, or one the host supervises itself), keep the warm prompt
+ * it (shared by every natlang process that needs the same model and settings, llama/shared.ts; privately with tuned
+ * adapters or native states; or one the host supervises itself), keep the warm prompt
  * openings (llama/warm.ts) saved and restored in its slots, and stop it. Mechanism only; what to ask the model, how
  * requests are queued and how replies are scored belong to the caller, which reads `start()`'s endpoint.
  *
@@ -12,13 +13,14 @@
  */
 import { DEFAULT_LOCAL_MODEL, type LocalModelRelease } from '../model-catalog.js';
 import { basename } from 'node:path';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import type { ModelTurnRequest } from '../contracts.js';
 import type { WarmPrefix } from '../package/warm.js';
 import type { LlamaHost, LlamaProcess } from './host.js';
 import { describeLlamaRuntime, type LlamaRuntimeDiscovery, type LlamaServerInspection } from './runtime.js';
 import { ensureModel, localModelPrerequisites, localSlotPlan, managedModelSha256, runtimeLabel, templatePath, warmTag } from './models.js';
-import { findSharedServer } from './shared.js';
+import { acquireSharedServer, sharedIdleSeconds, sharedServerKey, sharedServersDirectory, sharingEnabled, type SupervisedServer } from './shared.js';
+import { createHash } from 'node:crypto';
 import type { LocalServerSettings, SlotPlan } from './slots.js';
 import { openingOf, pruneWarmStates, warmOpening } from './warm.js';
 
@@ -47,7 +49,8 @@ export type LlamaServerOptions = {
   ensureRuntime?: (discovery: LlamaRuntimeDiscovery) => Promise<LlamaServerInspection | null>;
   /** Sent with the package's own requests to the server (health, slots, warm states). */
   headers?: Record<string, string>;
-  /** A server another natlang process keeps loaded for exactly this model file and build may be used (default true). */
+  /** Without adapters or native states, use (or start) the server shared by natlang processes on this machine
+   * (llama/shared.ts; default true, NATLANG_SHARED_SERVER=off turns it off). */
   useSharedServer?: boolean;
   launch?: LlamaLauncher;
   attach?: LlamaAttachment;
@@ -158,6 +161,7 @@ export function createLlamaServer(host: LlamaHost, options: LlamaServerOptions =
   const { environment, log } = host;
   const release = options.release ?? DEFAULT_LOCAL_MODEL, headers = options.headers;
   let prerequisites = localModelPrerequisites(host, release);
+  let lease: (() => void) | null = null;
   let launched: LlamaLaunched | null = null, endpoint: string | null = null, starting: Promise<string> | null = null;
   const stopping = new AbortController();
   let closed = false, plan: SlotPlan | null = null;
@@ -217,18 +221,59 @@ export function createLlamaServer(host: LlamaHost, options: LlamaServerOptions =
       if (explicit) throw new Error(`NATLANG_LLAMA_SERVER is incompatible: ${describeLlamaRuntime(prerequisites.runtime)}`);
       throw new Error(`managed model server is unavailable: ${describeLlamaRuntime(prerequisites.runtime)}; run natlang setup --yes to install it, or select a hosted model with --provider ID`);
     }
-    // A server another natlang process keeps loaded for exactly this model file and build (llama/shared.ts).
-    const adapterless = !(options.loraAdapters?.() ?? []).length && !(options.nativeStates?.() ?? []).length;
-    const shared = adapterless && options.useSharedServer !== false ?
-      await findSharedServer(host, await managedModelSha256(host, release), runtimeLabel(prerequisites.runtime.selected)) : undefined;
-    if (shared) {
-      plan = { budgetSource: 'configured-parallel', slots: shared.slots, contextPerSlot: shared.contextPerSlot,
-        totalContext: shared.slots * shared.contextPerSlot, source: 'configured', budgetBytes: null, modelBytes: 0, kvBytesPerToken: 0,
-        formula: `shared model server (pid ${shared.pid})` };
-      contended = true; sharedServer = true;
-      warming = environment.NATLANG_WARM_PREFIXES !== 'off' && !!shared.warm;
-      log.write(`natlang: using the ${shared.model} model kept loaded at ${shared.endpoint} (${shared.slots} slots)\n`);
-      return shared.endpoint;
+    const adapters = options.loraAdapters?.() ?? [], states = options.nativeStates?.() ?? [];
+    const executable = prerequisites.executable;
+    // The llama-server command for a model file, port and slot plan; warm openings are saved and restored under
+    // --slot-save-path (llama/warm.ts), not with adapters or states, whose KV differs.
+    const command = (modelPath: string, port: number, slotPlan: SlotPlan, warm: boolean) => {
+      const template = templatePath(host, release);
+      return ['-m', modelPath, '--host', '127.0.0.1', '--port', String(port), '--parallel', String(slotPlan.slots),
+        '-c', String(slotPlan.totalContext), '-ngl', String(options.local?.gpuLayers ?? 99), '--cache-ram', String(options.local?.cacheRamMiB ?? 256),
+        '--no-webui', '--jinja', ...(template ? ['--chat-template-file', template] : []),
+        // The stock file's sliding-window layers need the full cache for a warm opening or earlier prompt to be reused.
+        ...(release.fullSlidingWindowCache && !environment.NATLANG_MODEL_PATH ? ['--swa-full'] : []), ...(options.local?.args ?? []),
+        ...(warm ? ['--slot-save-path', host.directories.warmPrefixes] : [])];
+    };
+    const warmAllowed = environment.NATLANG_WARM_PREFIXES !== 'off' && !adapters.length && !states.length;
+    // Without adapters or native states, the server is shared by every natlang process that needs the same model file,
+    // build and settings (llama/shared.ts): the running one, or one this process starts for all of them.
+    // A host with its own launcher supervises its own servers.
+    if (!adapters.length && !states.length && !options.launch && options.useSharedServer !== false && sharingEnabled(environment)) {
+      const sha = await managedModelSha256(host, release), label = runtimeLabel(prerequisites.runtime.selected);
+      const template = templatePath(host, release);
+      const local = options.local ?? {};
+      const key = sharedServerKey({ model: sha, runtime: label, template: template ? createHash('sha256').update(readFileSync(template)).digest('hex') : null,
+        swaFull: !!release.fullSlidingWindowCache && !environment.NATLANG_MODEL_PATH, gpuLayers: local.gpuLayers ?? null, cacheRamMiB: local.cacheRamMiB ?? null,
+        args: local.args ?? [], parallel: local.parallel ?? null, contextTokens: local.contextTokens ?? null, memoryBudgetMiB: local.memoryBudgetMiB ?? null,
+        kvBytesPerToken: local.kvBytesPerToken ?? null, budgetEnv: environment.NATLANG_MODEL_MEMORY_BUDGET_MIB ?? null,
+        warm: warmAllowed ? host.directories.warmPrefixes : null });
+      const startTimeoutMs = Number(environment.NATLANG_MODEL_START_TIMEOUT_MS ?? 120000);
+      const spec = async (): Promise<SupervisedServer> => {
+        const modelPath = await ensureModel(host, release), port = await host.processes.freePort();
+        const slotPlan = localSlotPlan(host, options.local, modelPath, release);
+        if (warmAllowed) mkdirSync(host.directories.warmPrefixes, { recursive: true });
+        log.write(`natlang: starting managed model ${basename(modelPath)} with ${slotPlan.slots} slot${slotPlan.slots === 1 ? '' : 's'} (${slotPlan.contextPerSlot} tokens each), shared by natlang runs on this machine\n`);
+        return { command: executable, args: command(modelPath, port, slotPlan, warmAllowed), endpoint: `http://127.0.0.1:${port}`,
+          directory: sharedServersDirectory(host), key, startTimeoutMs,
+          record: { endpoint: `http://127.0.0.1:${port}`, modelSha256: sha, runtimeBuild: prerequisites.runtime.selected?.build ?? null, runtime: label,
+            slots: slotPlan.slots, contextPerSlot: slotPlan.contextPerSlot, model: basename(modelPath), warm: warmAllowed,
+            idleSeconds: sharedIdleSeconds(environment) } };
+      };
+      const startedAt = Date.now();
+      const leased = await acquireSharedServer(host, key, spec, { signal: stopping.signal });
+      if (leased) {
+        if (closed) { leased.release(); throw new Error('model session is closed'); }
+        lease = leased.release;
+        const shared = leased.server;
+        plan = { budgetSource: 'configured-parallel', slots: shared.slots, contextPerSlot: shared.contextPerSlot,
+          totalContext: shared.slots * shared.contextPerSlot, source: 'configured', budgetBytes: null, modelBytes: 0, kvBytesPerToken: 0,
+          formula: `shared model server (pid ${shared.serverPid})` };
+        contended = true; sharedServer = true; modelSha256 = sha; runtime = label;
+        warming = warmAllowed && shared.warm;
+        log.write(leased.started ? `natlang: model ready in ${((Date.now() - startedAt) / 1000).toFixed(1)} s at ${shared.endpoint}; it stops after ${shared.idleSeconds} s unused\n` :
+          `natlang: using the ${shared.model} model already loaded at ${shared.endpoint} (${shared.slots} slots)\n`);
+        return shared.endpoint;
+      }
     }
     const modelPath = await ensureModel(host, release);
     if (closed) throw new Error('model session is closed');
@@ -236,35 +281,26 @@ export function createLlamaServer(host: LlamaHost, options: LlamaServerOptions =
     const base = `http://127.0.0.1:${port}`;
     // `-c` is shared among the slots, so it is the per-slot context times the slot count.
     plan = localSlotPlan(host, options.local, modelPath, release);
-    const template = templatePath(host, release);
-    const args = ['-m', modelPath, '--host', '127.0.0.1', '--port', String(port), '--parallel', String(plan.slots),
-      '-c', String(plan.totalContext), '-ngl',
-      String(options.local?.gpuLayers ?? 99), '--cache-ram', String(options.local?.cacheRamMiB ?? 256), '--no-webui',
-      '--jinja', ...(template ? ['--chat-template-file', template] : []),
-      // The stock file's sliding-window layers need the full cache for a warm opening or earlier prompt to be reused.
-      ...(release.fullSlidingWindowCache && !environment.NATLANG_MODEL_PATH ? ['--swa-full'] : []), ...(options.local?.args ?? [])];
+    warming = warmAllowed;
+    if (warming) mkdirSync(host.directories.warmPrefixes, { recursive: true });
+    const args = command(modelPath, port, plan, warming);
     loraIndex.clear();
-    const adapters = options.loraAdapters?.() ?? [];
     if (adapters.length) {
       // Loaded off; each request sets its own stack's scales. A server with per-sequence scales (the llama.cpp
       // fork) also batches requests whose stacks differ; others serialize them.
-      args.push('--lora-init-without-apply', ...(supportsPerSequenceLora(host, prerequisites.executable) ? ['--lora-per-sequence'] : []));
+      args.push('--lora-init-without-apply', ...(supportsPerSequenceLora(host, executable) ? ['--lora-per-sequence'] : []));
       for (const adapter of adapters) { loraIndex.set(adapter.id, loraIndex.size); args.push('--lora', adapter.path); }
     }
-    // Warm prompt openings (llama/warm.ts) are saved and restored here; not with adapters, whose KV differs.
-    warming = environment.NATLANG_WARM_PREFIXES !== 'off' && !adapters.length && !(options.nativeStates?.() ?? []).length;
-    if (warming) { mkdirSync(host.directories.warmPrefixes, { recursive: true }); args.push('--slot-save-path', host.directories.warmPrefixes); }
     nativeStatesLoaded.clear();
-    const states = options.nativeStates?.() ?? [];
     if (states.length) {
-      if (!supportsNativeStates(host, prerequisites.executable))
-        throw new Error(`weights-unavailable: ${prerequisites.executable} cannot import native state spans (tuned soft states need the llama.cpp fork's --native-state)`);
+      if (!supportsNativeStates(host, executable))
+        throw new Error(`weights-unavailable: ${executable} cannot import native state spans (tuned soft states need the llama.cpp fork's --native-state)`);
       for (const state of states) { nativeStatesLoaded.add(state.id); args.push('--native-state', state.path); }
     }
     log.write(`natlang: starting managed model ${basename(modelPath)} with ${plan.slots} slot${plan.slots === 1 ? '' : 's'} (${plan.contextPerSlot} tokens each; ${plan.budgetSource === 'configured-parallel' ? 'local.parallel' : `${plan.budgetSource === 'default' ? 'default' : plan.budgetSource} KV budget ${Math.round((plan.budgetBytes ?? 0) / 2 ** 20)} MiB`})\n`);
     stopping.signal.throwIfAborted();
     const startedAt = Date.now();
-    launched = await (options.launch ?? spawnLauncher(host))({ command: prerequisites.executable, args, port, endpoint: base }, stopping.signal);
+    launched = await (options.launch ?? spawnLauncher(host))({ command: executable, args, port, endpoint: base }, stopping.signal);
     log.write(`natlang: model ready in ${((Date.now() - startedAt) / 1000).toFixed(1)} s\n`);
     return base;
   };
@@ -298,6 +334,7 @@ export function createLlamaServer(host: LlamaHost, options: LlamaServerOptions =
       stopping.abort();
       if (starting) await starting.catch(() => undefined);
       await launched?.stop();
+      lease?.(); lease = null;
       launched = null; endpoint = null;
     },
   };

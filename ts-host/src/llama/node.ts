@@ -1,5 +1,6 @@
 /** The Node binding of the host (llama/host.ts): child_process, the platform's natlang directories, global fetch and a stream for output. */
 import { spawn, spawnSync } from 'node:child_process';
+import { closeSync, mkdirSync, openSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { homedir, platform } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -59,5 +60,17 @@ export function nodeLlamaDirectories(environment: NodeJS.ProcessEnv = process.en
 
 /** The host the natlang CLI passes: Node processes and directories, global `fetch`, and `log` (default stderr) for notices. */
 export function nodeLlamaHost(environment: NodeJS.ProcessEnv = process.env, log: LlamaLog = process.stderr): LlamaHost {
-  return { environment, directories: nodeLlamaDirectories(environment), processes: nodeLlamaProcesses, fetch: (input, init) => fetch(input, init), log };
+  return { environment, directories: nodeLlamaDirectories(environment), processes: nodeLlamaProcesses, fetch: (input, init) => fetch(input, init), log,
+    supervise(server) {
+      // Detached into its own session, so it outlives this process and its terminal; its output goes to the server log.
+      mkdirSync(server.directory, { recursive: true });
+      const specPath = join(server.directory, `${server.key}.spec.${process.pid}.json`);
+      writeFileSync(specPath, JSON.stringify(server));
+      const output = openSync(join(server.directory, `${server.key}.supervisor.log`), 'a');
+      const child = spawn(process.execPath, [fileURLToPath(new URL('./supervisor.js', import.meta.url)), specPath],
+        { detached: true, stdio: ['ignore', output, output], env: environment });
+      closeSync(output);
+      child.unref();
+      return child.pid ?? 0;
+    } };
 }

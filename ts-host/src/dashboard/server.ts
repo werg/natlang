@@ -20,9 +20,9 @@ import { currentRelease } from '../adaptation/weights/release.js';
 import { loadModelConfiguration, resolveModelChoice, type ModelProfile } from '../model/config.js';
 import { recommendedProviderModel } from '../model/provider-recommendations.js';
 import { DEFAULT_LOCAL_MODEL, STOCK_MODELS, stockModel, type LocalModelRelease } from '../model-catalog.js';
-import { createResolvedModelSession, ensureStockModel, managedModelSha256, profileEnvironment, stockModelDownload, stockModelPath, localModelPrerequisites, supportsNativeStates, warmTag,
+import { createResolvedModelSession, ensureStockModel, profileEnvironment, stockModelDownload, stockModelPath, localModelPrerequisites, supportsNativeStates,
   type ManagedModelSession } from '../model/local-server.js';
-import { publishSharedServer, readSharedServer, withdrawSharedServer } from '../model/shared-server.js';
+import { listSharedServers, sharedServerLeases, stopSharedServer } from '../model/shared-server.js';
 import { discoverLlamaRuntime, LLAMA_RUNTIME_RELEASE } from '../model/llama-runtime.js';
 import { LLAMA_FORK_SOURCE } from '../llama-fork-source.js';
 import { discoverLocalApplications } from '../package/discover.js';
@@ -125,17 +125,17 @@ export async function startDashboard(options: DashboardOptions): Promise<{ url: 
   }).sort((a, b) => b.usedAt.localeCompare(a.usedAt)) : []);
   route('DELETE', '/api/warm', () => { rmSync(warmDirectory, { recursive: true, force: true }); return { ok: true }; });
 
-  // The model the dashboard keeps loaded for every natlang process on this machine (model/shared-server.ts).
+  // Shared model servers (llama/shared.ts): every managed-local run uses one per model and stops it when unused.
+  // "Keep loaded" holds a lease from the dashboard, so the server stays loaded while the dashboard runs.
   let kept: { session: ManagedModelSession; profile: string; log: string[] } | undefined;
   const keptStatus = () => {
-    const published = readSharedServer(environment);
-    return kept ? { running: true, profile: kept.profile, ...(published?.pid === process.pid ? { server: published } : {}), log: kept.log.slice(-20) } :
-      { running: false, ...(published ? { other: published } : {}) };
+    const keptEndpoint = kept?.session.status().endpoint;
+    return { servers: listSharedServers(environment).map(server => ({ ...server, users: sharedServerLeases(server, environment),
+      kept: !!kept && server.endpoint === keptEndpoint })), ...(kept ? { kept: { profile: kept.profile, log: kept.log.slice(-20) } } : {}) };
   };
   const stopKept = async () => {
     if (!kept) return;
     const { session } = kept; kept = undefined;
-    withdrawSharedServer(process.pid, environment);
     await session.close();
   };
   route('GET', '/api/model-server', keptStatus);
@@ -148,28 +148,21 @@ export async function startDashboard(options: DashboardOptions): Promise<{ url: 
     const session = createResolvedModelSession(selection.choice, environment, { write: (text: string) => { log.push(...String(text).trim().split('\n')); return true; } } as unknown as NodeJS.WritableStream);
     kept = { session, profile: selection.name, log };
     try {
-      await session.prepare();
-      const status = session.status(), plan = session.slotPlan();
-      if (!status.endpoint || !plan) throw new Error('the model server did not start');
-      const sha = await managedModelSha256(profileEnvironment(selection.choice, environment), selection.choice.release);
-      publishSharedServer({ pid: process.pid, endpoint: status.endpoint, modelSha256: sha, runtimeBuild: status.runtimeBuild ?? null,
-        runtime: status.runtime ?? null, slots: plan.slots, contextPerSlot: plan.contextPerSlot, model: status.model, profile: selection.name, startedAt: new Date().toISOString(),
-        warm: environment.NATLANG_WARM_PREFIXES !== 'off' }, environment);
-      // Start every slot from the openings earlier runs saved for this model file, build and slot layout, most recent first.
-      const tag = `-${warmTag(sha, status.runtime ?? 'bx', plan)}.slot`;
-      const saved = existsSync(warmDirectory) ? readdirSync(warmDirectory).filter(name => name.endsWith(tag))
-        .sort((a, b) => statSync(join(warmDirectory, b)).mtimeMs - statSync(join(warmDirectory, a)).mtimeMs) : [];
-      let restored = 0;
-      for (let slot = 0; slot < plan.slots && saved.length; slot++) {
-        const response = await fetch(`${status.endpoint}/slots/${slot}?action=restore`, { method: 'POST', headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ filename: saved[slot % saved.length] }) }).catch(() => undefined);
-        if (response?.ok) restored++;
-      }
-      log.push(`kept loaded at ${status.endpoint} with ${plan.slots} slots; ${restored} slot${restored === 1 ? '' : 's'} start from a saved prompt opening`);
+      const status = await session.prepare();
+      if (!status.shared) throw new Error('this profile\'s server cannot be shared (NATLANG_SHARED_SERVER=off, or tuned adapters or native states)');
       return keptStatus();
     } catch (error) { await stopKept(); throw new HttpError(500, `${(error as Error).message}\n${log.slice(-6).join('\n')}`); }
   });
   route('DELETE', '/api/model-server', async () => { await stopKept(); return keptStatus(); });
+  // Stop a shared server now, whoever uses it (its runs fail their next model call).
+  route('POST', '/api/model-server/stop', async (_request, _params, _query, body) => {
+    const key = (body as { key?: string } | undefined)?.key;
+    const server = listSharedServers(environment).find(candidate => candidate.key === key);
+    if (!server) throw new HttpError(404, `no shared model server ${key}`);
+    if (kept?.session.status().endpoint === server.endpoint) await stopKept();
+    stopSharedServer(server);
+    return keptStatus();
+  });
 
   // Model configuration.
   route('GET', '/api/config', async () => {
