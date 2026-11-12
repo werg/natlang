@@ -543,6 +543,8 @@ def main():
     p.add_argument('--replan-step', type=int, default=20)
     p.add_argument('--reserve-minutes', type=float, default=25.)
     args = parser.parse_args()
+    from natlang_neuralese.common.cuda_context import ensure_context
+    ensure_context()   # GB10: a context can fail to create under host-memory fragmentation; retried
     {'parity': parity, 'train': train, 'bench': bench}[args.command](args)
 
 

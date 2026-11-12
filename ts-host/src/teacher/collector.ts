@@ -1,4 +1,4 @@
-import { trajectoryTurn } from '../runtime/trajectory.js';
+import { compactCaptures, trajectoryTurn } from '../runtime/trajectory.js';
 import { checkRequiredActions } from './required-actions.js';
 import { checkRequiredServiceReceipt } from './service-receipt.js';
 import { checkReportCompleteness, type ReportCompletenessSpec } from './report-completeness.js';
@@ -520,7 +520,8 @@ export async function collectBatch(records: IndexedRecord[], config: CollectorCo
       while (true) try {
         const row = await runner(item, expected, signal);
         if (!resultMatches(row, item.record, expected)) throw new Error('job returned mismatched provenance');
-        await writeAtomic(join(config.jobs, `${jobKey(item)}.result.json`), JSON.stringify(row) + '\n');
+        await writeAtomic(join(config.jobs, `${jobKey(item)}.result.json`),
+          JSON.stringify({ ...row, trajectory: compactCaptures(row.trajectory) }) + '\n');
         durableCompleted++;
         await caseEvent(item, 'case_finish', { status: 'result', accepted: row.outcome?.accepted ?? null });
         if (!config.finalExportOnly) scheduleMerge();

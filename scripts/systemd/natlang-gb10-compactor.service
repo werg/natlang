@@ -1,0 +1,16 @@
+[Unit]
+Description=Keep large free memory blocks on the GB10 so CUDA contexts can be created (scripts/gb10_compactor.py)
+
+[Service]
+Type=simple
+WorkingDirectory=%h/natlang
+ExecStart=/usr/bin/python3 %h/natlang/scripts/gb10_compactor.py --min-mb 512 --gb 2 --interval 15
+Restart=always
+RestartSec=10
+OOMScoreAdjust=0
+# The 2 GB it faults is released at once; THP faults are charged here.
+MemoryMax=3G
+MemorySwapMax=0
+
+[Install]
+WantedBy=default.target

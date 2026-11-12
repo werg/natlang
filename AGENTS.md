@@ -40,21 +40,37 @@ so w5 is retired (data kept, never resumed) and the base is the start policy.
 ## GRPO loop: plain GRPO from the base, overlapped (engineering, 2026-11-12)
 
 `scripts/neuralese_data/grpo.py train` is the review's "Hour 24-48" GRPO (a few hundred lines; no controller, custody or
-transitions). One ledger unit holds the learner; its training actor is the ledger unit `<prefix>-actor` (`held_eval.serve`,
-SGLang vendor projection, the actor defaults). Collection never stops: `--slots` work-stealing episodes over an endless
+transitions). One ledger unit holds the learner and, as a child process, its training actor (held-v2's pinned engine:
+SGLang vendor projection, FP8 KV; a separately admitted actor unit deadlocked behind the learner's claim). Collection never stops: `--slots` work-stealing episodes over an endless
 shuffled stream of task groups (8 samples; pools: the w5 pool plus the verified bgkit KR rows, fallow K1; held-v2 excluded
 with its split groups and every row sharing a source group; `WORK/pool.json` records the pool shas). The learner trains on
 whatever groups finished since its last step (16-128; stragglers join a later step, groups more than 2 versions stale are
-dropped). Reward = task outcome only. Per-call sequences with the actor's exact prompt and sampled ids
+dropped). Tasks (EPISODE_COST_20261112): 85% from tasks whose measured base pass rate is in [0.1, 0.9] (exp1-rft
+`base-pass-rates.json`, re-read every 10 min), 15% unmeasured pool tasks; `ext_codebase-{py,natlang}_codebase_*` excluded
+(repos missing on the DGX). Episode budget 40 model calls (a budget stop scores 0; the collector has no generated-token
+budget yet), wall clock 3600 s as a safety net only (unscored). Reward = task outcome only. Per-call sequences with the actor's exact prompt and sampled ids
 (`lower_rollout_turns.episode_turns`, chained as in `exp0_sft.chains_of`); loss on sampled tokens
 `-min(rho, 2) * A * logp + 0.02 * k3(start || policy)`, `A` group-normalized; FP32-master AdamW, LR 1e-6, BF16 compute
 (`exp0_sft.load_model`, `lfm3_fast_train`). Weight sync each step: BF16 weights -> pinned buffer -> actor's HF safetensors ->
 SGLang `pause_generation(retract)` / `update_weights_from_disk` / `continue_generation` in a background thread; a pruned
 native checkpoint every 2 steps and the FP32 state (masters + moments, `/mnt/external/natlang-grpo-v1`) every 4, also in
 background threads. Episodes run the run's pinned copy of ts-host (`WORK/pin-<commit>`), the run records its commit
-(`runs.jsonl`); restart (`--resume`) to adopt newer code. Every 4 h `held_eval measure` (held-v2, 2 samples) runs on the
-newest checkpoint and `held_eval compare` pairs it with step 0 (`WORK/held/step-N/`). `train.jsonl` logs per step: reward
+(`runs.jsonl`); restart (`--resume`) to adopt newer code. Held evals run on the training actor itself (it serves the
+current policy with the held-v2 engine pin): new collection pauses, `held_eval measure` (held-v2; 4 samples for the start
+policy before the first step, then 2 samples every 4 h on that step's checkpoint) and `held_eval compare` with step 0
+(`WORK/held/step-N/`); `--held-extra CKPT,...` measures other native checkpoints the same way after step 0 (loaded into the
+actor in place, `held/extra-<sha12>/` with a compare against step 0, 2 samples by default), then restores the start policy. Step sizing (smoke): ~27k forward tokens per episode (chaining already merges 282 of 329
+consecutive calls; 38 diverge inside the sampled reply, 9 in the prompt), learner 600-800 tok/s while sharing the GPU with
+decode at `--activation-gb 4`; defaults now 12-24 groups per step, `--activation-gb 12`, 24 collector slots during the
+learner phase (`--learner-phase-slots`). The KL
+reference runs the policy's own training graph (a no_grad pass compiles other kernels: KL 5e-4 at identical weights). After each in-place update the front attests what it serves (`POST /v1/neuralese/rebind-policy`:
+the step's checkpoint sha, else the served weights' sha; the native engine keeps the start checkpoint). `train.jsonl` logs per step: reward
 mean, spread fraction, KL, rho (mean, pre/post-cap max, capped fraction, |log rho|), learner and actor tokens/s, phase seconds.
+Memory (smoke 2026-11-12): on the GB10 the unit's MemoryMax (= ledger budget) also bounds its CUDA allocations, so the
+budget must cover GPU + host: learner CUDA 19.3 GB before AdamW state, 32 GB peak at step 1, about 36 GB with the FP32 moments
+(FP32 masters + moments + FP32 gradients alone are 27 GB), host about 5 GB plus the collector node processes (in the same
+cgroup, 0.3-0.7 GB per slot; shared collectors save about 0.25 GB a slot), plus the child actor (kv-gb + 24). The actor's
+weight file lives on /dev/shm and checkpoints/state on /mnt/external: the shared NVMe wrote at 60-230 MB/s under load.
 
 ## Held-v2: the experiments' held-out set (engineering, 2026-11-12)
 
@@ -74,6 +90,16 @@ pair results with different attested engines (`serving_engine`, export format). 
 shared actor, 1 sample on 56 matched tasks): 10 discordant pairs (18%), split 8:2, delta -10.7 pts, task-bootstrap CI
 [-21, 0], p=0.11: one-sample differences under ~8 pts at 128 pairs are noise; read held-v2 at 4 samples (~3 pts at 1,024
 pairs). Episodes take ~15 min at the shared actor's load and ~250 MB host memory each (budget the ledger unit for slots).
+
+## GB10 CUDA contexts fail under memory fragmentation (engineering, 2026-11-12)
+
+`CUDA_ERROR_OUT_OF_MEMORY` from `cuDevicePrimaryCtxRetain` with tens of GB free (kernel: `NVRM ... NV_ERR_NO_MEMORY ...
+kgrctxAllocMainCtxBuffer`) is fragmentation: a context's buffers need physically contiguous pages, and the Normal zone had
+almost no free order >= 8 blocks (`/proc/buddyinfo`). Measured: context creation failed whenever order-8 blocks were ~3,
+succeeded at 12+, and 30/30 with the compactor running. `natlang-gb10-compactor` (persistent user service,
+`scripts/systemd/`) faults THP-advised memory whenever under 512 MB is free in such blocks (direct compaction, no root);
+keep it running. `common/cuda_context.py`: `ensure_context()` (serve_native_checkpoint, grpo, exp0_sft) and
+`start_sglang` retry a context failure 3x after a compaction nudge and 20 s. Root fix (owner): `vm.compaction_proactiveness`.
 
 ## RL actor on the DGX: one engine, many slots, absolute KV size (engineering, 2026-11-12)
 

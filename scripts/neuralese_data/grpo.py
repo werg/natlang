@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import hashlib
 import json
 import math
 import os
@@ -63,6 +64,21 @@ POOLS = [resolve_str('data_hdd', 'natlang-rl-composed-20261103', 'memetic-progra
          # fallow K1: bgkit KR reader families, 4,734 rows verified by reference/negative/alias replay (verification.json)
          resolve_str('data_hdd', 'natlang-rl-bgkit-kr-20261103', 'natlang-rl-bgkit-kr-20261103', 'cases.jsonl')]
 HELD = resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'held-v2', 'manifest.json')
+
+
+def drop_cache(paths):
+    """Drop the page cache of files read once. It is charged to this unit's cgroup, and on the GB10 a CUDA allocation or
+    context creation near the cgroup's limit fails (CUDA_ERROR_OUT_OF_MEMORY) instead of reclaiming it: every GRPO smoke
+    OOM of 2026-11-12 happened right after reading the 9.5 GB checkpoint."""
+    for path in paths:
+        try:
+            fd = os.open(path, os.O_RDONLY)
+        except OSError:
+            continue
+        try:
+            os.posix_fadvise(fd, 0, 0, os.POSIX_FADV_DONTNEED)
+        finally:
+            os.close(fd)
 
 
 def log_line(handle, record):
@@ -116,7 +132,12 @@ class Collector:
         self.outstanding = 0                        # groups created and not yet handed to the learner
         self.next_group, self.cursor = first_group, cursor
         self.version = 0                            # the policy version the actor serves now
+        self.by_id = {row['id']: row for row in tasks}
+        self.learnable_ids, self.learnable_order, self.measured, self.rates_read = [], [], set(), 0.
+        self.rng = random.Random(args.seed + first_group)
         self.stop = threading.Event()
+        self.paused = threading.Event()             # set during a held measurement on the training actor
+        self.active_slots = args.slots
         self.generated = 0                          # sampled tokens of finished episodes (throughput)
         self.episodes = 0
         self.env = {**os.environ}
@@ -126,8 +147,7 @@ class Collector:
     def _new_group(self):
         from natlang_neuralese.rl import task_rollouts
         from natlang_neuralese.common.jsonio import read_jsonl
-        row = self.tasks[self.cursor % len(self.tasks)]
-        self.cursor += 1
+        row = self._pick()
         group = self.next_group
         self.next_group += 1
         directory = self.work / 'groups' / f'g{group:06d}'
@@ -148,15 +168,54 @@ class Collector:
         self.outstanding += 1
         self.pending.extend((group, entry) for entry in entries)
 
+    def _learnable(self):
+        """Pool rows whose measured base pass rate (``--pass-rates``, re-read every 10 min: it grows while Experiment 1
+        collects) lies in ``--pass-band`` with at least ``--pass-min-scored`` scored samples, shuffled."""
+        a = self.args
+        if not a.pass_rates or time.time() - self.rates_read < 600:
+            return
+        self.rates_read = time.time()
+        try:
+            rates = json.loads(Path(a.pass_rates).read_text())
+        except (OSError, ValueError):
+            return
+        low, high = a.pass_band
+        ids = sorted(k for k, v in rates.items() if k in self.by_id and v.get('scored', 0) >= a.pass_min_scored
+                     and low <= v['successes'] / v['scored'] <= high)
+        self.measured = set(rates)
+        if set(ids) != set(self.learnable_ids):
+            self.learnable_ids = ids
+            self.learnable_order = []
+            print(json.dumps({'event': 'learnable tasks', 'count': len(ids), 'measured': len(rates)}), flush=True)
+
+    def _pick(self):
+        """A learnable task (``1 - explore`` of groups, cycling a reshuffled list), else the next unmeasured pool task."""
+        self._learnable()
+        if self.learnable_ids and self.rng.random() >= self.args.explore:
+            if not self.learnable_order:
+                self.learnable_order = list(self.learnable_ids)
+                self.rng.shuffle(self.learnable_order)
+            return self.by_id[self.learnable_order.pop()]
+        while True:
+            row = self.tasks[self.cursor % len(self.tasks)]
+            self.cursor += 1
+            if row['id'] not in self.measured or self.cursor > 2 * len(self.tasks):
+                return row
+
     def _take(self):
+        if self.paused.is_set():
+            return None
         with self.lock:
             if not self.pending and self.outstanding < self.args.max_outstanding:
                 self._new_group()
             return self.pending.popleft() if self.pending else None
 
-    def slot(self):
+    def slot(self, index=0):
         sampling = self.work / 'sampling-config.json'
         while not self.stop.is_set():
+            if index >= self.active_slots:   # fewer slots while the learner computes (they share the GPU)
+                time.sleep(2)
+                continue
             item = self._take()
             if item is None:
                 time.sleep(2)
@@ -272,11 +331,12 @@ class WeightSync:
     """The actor's HF export in one pinned host buffer: snapshot (GPU -> pinned, the only synchronous part), then in a
     background thread write it, load it into SGLang in place, and optionally write a native checkpoint."""
 
-    def __init__(self, model, export_dir, sglang_url, work_dir):
+    def __init__(self, model, export_dir, sglang_url, weights_dir, front_url=None):
         import torch
         from safetensors import safe_open
         self.export_dir, self.sglang_url = Path(export_dir), sglang_url
-        self.weights_dir = Path(work_dir) / 'actor-weights'
+        self.weights_dir = Path(weights_dir)
+        self.front_url = front_url
         self.weights_dir.mkdir(parents=True, exist_ok=True)
         for path in self.export_dir.iterdir():
             if path.is_file() and path.name != 'model.safetensors':
@@ -325,11 +385,34 @@ class WeightSync:
             self.thread.join()
             self.thread = None
 
+    def load_native(self, path, special):
+        """Put another native checkpoint's backbone in the pinned buffer (its interface rows merged into the embedding
+        as ``exp0_sft.load_model`` does); the actor's other tables (producer embedding) stay. Refuses another interface."""
+        import torch
+        from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
+        self.wait()
+        state = CheckpointPolicy.load(Path(path))
+        backbone = state['backbone_state']
+        embedding = backbone['model.embed_tokens.weight'].clone()
+        interface, config = state['interface_state'], state['model_config']
+        rows = [(config['marker_ids'], interface['input_rows'])]
+        if config.get('token_override_ids'):
+            rows.append((config['token_override_ids'], interface['extra_input_rows']))
+        for ids, values in rows:
+            embedding[torch.tensor(list(ids))] = values.to(embedding.dtype)
+        merged = self.views['model.embed_tokens.weight'][torch.tensor(special)]
+        if not torch.equal(embedding[torch.tensor(special)].to(merged.dtype), merged):
+            raise ValueError(f'{path} has other interface rows than the served policy')
+        for name, view in self.views.items():
+            source = embedding if name == 'model.embed_tokens.weight' else backbone[name]
+            view.copy_(source.to(view.dtype))
+        del state
+
     def backbone(self):
         """{name: host bf16 tensor} of the snapshot in native backbone naming (copies, safe to keep)."""
         return {name: view.clone() for name, view in self.views.items()}
 
-    def publish(self, version, on_done, also=None):
+    def publish(self, version, on_done, also=None, policy=None):
         def run():
             timing = {}
             started = time.time()
@@ -356,10 +439,25 @@ class WeightSync:
                 except Exception:
                     pass
             timing['actor_update_s'] = round(time.time() - t, 2)
+            extra = {}
             if also is not None:
                 t = time.time()
-                timing.update(also() or {})
+                extra = also() or {}
+                timing.update(extra)
                 timing['checkpoint_s'] = round(time.time() - t, 2)
+            if ok and self.front_url is not None:
+                # the actor front attests what it now serves: the step's native checkpoint when one was written, else the
+                # served weights' digest (held_eval measure and the rollout captures read this binding)
+                t = time.time()
+                weights = hashlib.sha256(memoryview(self.buffer.numpy())).hexdigest()
+                policy_id = policy or extra.get('checkpoint_sha256') or weights
+                try:
+                    post(self.front_url + '/v1/neuralese/rebind-policy',
+                         {'policy_id': policy_id, 'weights_sha256': weights, 'version': version})
+                    timing['policy_id'] = policy_id
+                except Exception as error:
+                    ok, answer = False, f'rebind failed: {error!r}'[:400]
+                timing['rebind_s'] = round(time.time() - t, 2)
             self.last = {'version': version, 'ok': ok, 'answer': None if ok else answer, **timing}
             on_done(version, ok)
         self.thread = threading.Thread(target=run, daemon=True)
@@ -437,6 +535,40 @@ def group_advantages(rewards):
     return [(r - mean) / (std + 1e-6) for r in rewards]
 
 
+def synthetic_reward(spec, episode):
+    """Learning sanity check 4 (plans/neuralese/LEARNING_SANITY_20261112.md): a trivially learnable reward replacing the task
+    outcome. ``short-calls:N``: 1 if the episode's model calls sample fewer than N tokens on average, else 0;
+    ``short-calls``: minus the mean sampled tokens per call / 1000 (every group has spread)."""
+    kind, _, value = spec.partition(':')
+    if kind == 'short-calls':
+        lengths = [len(row['sample']) for row in episode['rows']]
+        if not value:
+            return -sum(lengths) / len(lengths) / 1000 if lengths else -10.
+        return float(bool(lengths) and sum(lengths) / len(lengths) < float(value))
+    raise ValueError(f'unknown synthetic reward {spec!r}')
+
+
+def probe_chains(args):
+    """Fixed probe sequences (``--probe-turns``): their sampled tokens are scored on the learner after every step and on
+    the actor after every weight sync, so an update that does not reach the served weights shows."""
+    from sanity_logprob_paths import sample_chains
+    return sample_chains(SimpleNamespace(turns=args.probe_turns, max_tokens=args.probe_max_tokens, seed=0,
+                                         chains=args.probe_chains))
+
+
+def probe_actor_nll(sglang_url, chains):
+    from sanity_logprob_paths import targets_of
+    total, count = 0., 0
+    for chain in chains:
+        positions, _ = targets_of(chain)
+        answer = json.loads(post(sglang_url + '/generate', {'input_ids': [int(i) for i in chain['ids']],
+            'return_logprob': True, 'logprob_start_len': 0, 'sampling_params': {'temperature': 0.0, 'max_new_tokens': 1}}))
+        items = answer['meta_info']['input_token_logprobs']
+        total -= sum(items[p + 1][0] for p in positions)
+        count += len(positions)
+    return total / max(1, count)
+
+
 def load_tasks(args, work=None):
     """The shuffled train tasks of the pools (first occurrence of an id wins) minus the held set: its tasks, every row of
     a held ``split_group`` (``held_eval.exclusion_ids``) and every row sharing a ``source_groups`` entry with those.
@@ -459,14 +591,22 @@ def load_tasks(args, work=None):
     if args.task_ids:
         wanted = set(json.loads(Path(args.task_ids).read_text()))
         rows = [r for r in rows if r['id'] in wanted]
-    eligible = [r for r in rows if r['id'] not in excluded and r.get('split', 'train') == 'train']
+    import re
+    broken = re.compile(args.exclude_family_regex) if args.exclude_family_regex else None
+    eligible = [r for r in rows if r['id'] not in excluded and r.get('split', 'train') == 'train'
+                and not (broken and broken.search(str(r.get('family') or '')))]
     random.Random(args.seed).shuffle(eligible)
     if work is not None:
         record = {'pools': [{'path': str(p), 'sha256': sha256_file_hex_cached(Path(p))} for p in args.pool],
                   'held_manifest': args.held_manifest, 'held_manifest_sha256': sha256_file_hex_cached(Path(args.held_manifest)),
                   'union_rows': len(seen), 'excluded_ids': len(excluded), 'eligible': len(eligible),
                   'eligible_ids_sha256': hashlib.sha256('\n'.join(sorted(r['id'] for r in eligible)).encode()).hexdigest(),
-                  'families': len({r.get('family') for r in eligible})}
+                  'families': len({r.get('family') for r in eligible}),
+                  'excluded_family_regex': args.exclude_family_regex,
+                  'selection': {'pass_rates': args.pass_rates, 'band': args.pass_band, 'min_scored': args.pass_min_scored,
+                                'explore': args.explore},
+                  'episode_budget': {'max_model_requests': args.max_model_requests, 'case_seconds': args.case_seconds,
+                                     'generated_tokens': None}}
         (Path(work) / 'pool.json').write_text(json.dumps(record, indent=1) + '\n')
     return eligible, len(excluded)
 
@@ -551,10 +691,7 @@ def train(args):
     del original
     import gc
     gc.collect()
-    for path in (args.checkpoint,):
-        fd = os.open(path, os.O_RDONLY)
-        os.posix_fadvise(fd, 0, 0, os.POSIX_FADV_DONTNEED)
-        os.close(fd)
+    drop_cache([args.checkpoint, *Path(args.base).glob('*.safetensors')])
     def meminfo():
         fields = dict(line.split(':', 1) for line in open('/proc/meminfo'))
         return {k: round(int(fields[k].split()[0]) / 2**20, 1) for k in ('MemFree', 'MemAvailable', 'Cached')}
@@ -565,9 +702,13 @@ def train(args):
     reference = None
     if args.kl_beta > 0:          # the start policy, BF16, frozen (a copy: no second checkpoint load)
         import copy
+        # The reference runs exactly the policy's training graph (train mode, parameters requiring grad, the same partial
+        # checkpointing; its outputs are detached and never backpropagated): a no_grad pass compiles other kernels, whose
+        # BF16 rounding alone put KL at 5e-4 (|dlogp| ~0.03) with identical weights (smoke 2026-11-12).
         reference = copy.deepcopy(model)
-        reference.eval()
-        reference.requires_grad_(False)
+        reference.gradient_checkpointing_enable()
+        reference.config.use_cache = False
+        reference.train()
         lfm3_fast_train.prepare(reference)
     model.gradient_checkpointing_enable()
     model.config.use_cache = False
@@ -578,6 +719,15 @@ def train(args):
     parameters = [masters[name] for name in live]
     for master in parameters:
         master.grad = torch.zeros_like(master)
+    # Each BF16 gradient is added into its FP32 master gradient as soon as autograd finishes it, then freed: a full set of
+    # BF16 gradients never exists at once.
+    def into_master(master):
+        def hook(param):
+            master.grad.add_(param.grad)
+            param.grad = None
+        return hook
+    for name, p in model.named_parameters():
+        p.register_post_accumulate_grad_hook(into_master(masters[name]))
     optimizer = torch.optim.AdamW([{'params': [p for p in parameters if p.ndim >= 2], 'weight_decay': args.weight_decay},
                                    {'params': [p for p in parameters if p.ndim < 2], 'weight_decay': 0.}],
                                   lr=args.lr, betas=(0.9, 0.99), eps=1e-8, fused=True)
@@ -614,17 +764,48 @@ def train(args):
         args.actor_export = args.actor_export or str(work / 'actor' / 'sglang-hf')
     log_line(log, {'event': 'actor ready', 'actor': args.actor, 'init_s': round(time.time() - t0, 1)})
     sglang_url = args.sglang or args.actor.rsplit(':', 1)[0] + ':' + str(int(args.actor.rsplit(':', 1)[1]) + 1000)
-    sync = WeightSync(model, args.actor_export, None if args.no_actor_sync else sglang_url, work)
+    # The actor's weights live on tmpfs: the shared NVMe wrote at 60-230 MB/s under other jobs' load (2026-11-12 bench),
+    # which put 20-60 s of file write in front of every actor update.
+    weights_dir = Path('/dev/shm') / f'natlang-{args.unit_prefix}-actor-weights'
+    sync = WeightSync(model, args.actor_export, None if args.no_actor_sync else sglang_url, weights_dir,
+                      front_url=None if args.no_actor_sync else args.actor)
+    atexit.register(shutil.rmtree, weights_dir, True)
+    drop_cache([Path(args.actor_export) / 'model.safetensors'])
     saver = StateSaver()
     collector = Collector(args, tasks, work, source_sha, runtime, first_group=first_group, cursor=cursor)
     collector.version = step
     (work / 'sampling-config.json').write_text(json.dumps({'guidance': False, 'x_natlang_rl_capture': True, 'x_natlang_rl_top_k': 0}) + '\n')
     versions_live = {'actor': step}
+    probes = probe_chains(args) if args.probe_turns else []
+
+    def probe_learner_nll():
+        from sanity_logprob_paths import targets_of
+        total, count = 0., 0
+        for chain in probes:
+            positions, targets = targets_of(chain)
+            ids = torch.from_numpy(chain['ids'].astype(np.int64)).cuda()
+            logp = lfm3_fast_train.token_logprobs(model, ids, torch.from_numpy(positions).cuda(),
+                                                  torch.from_numpy(targets.astype(np.int64)).cuda())
+            total -= logp.sum().item()
+            count += len(positions)
+        return total / max(1, count)
+
+    def log_probe(version, where):
+        try:
+            log_line(log, {'event': 'probe', 'version': version, 'where': where, 'probe_tokens': sum(n for c in probes for _, n, _ in c['segs']),
+                'nll': round(probe_actor_nll(sglang_url, probes) if where == 'actor' else probe_learner_nll(), 5)})
+        except Exception as error:
+            log_line(log, {'event': 'probe failed', 'version': version, 'where': where, 'error': repr(error)[:300]})
 
     def on_published(version, ok):
         if ok:
             collector.version = version
             versions_live['actor'] = version
+            if probes and not args.no_actor_sync:
+                log_probe(version, 'actor')
+    if probes:
+        log_probe(step, 'learner')
+        log_probe(step, 'actor')
     if step:   # a resumed run first serves its own weights
         sync.snapshot()
         sync.publish(step, on_published)
@@ -634,18 +815,21 @@ def train(args):
     log_line(log, {'event': 'learner ready', 'init_s': round(time.time() - t0, 1), 'meminfo_gb': meminfo(),
                    'cuda_allocated_gb': round(torch.cuda.memory_allocated() / 2**30, 1),
                    'cuda_reserved_gb': round(torch.cuda.memory_reserved() / 2**30, 1)})
-    slots = [threading.Thread(target=collector.slot, daemon=True) for _ in range(args.slots)]
+    if args.held_every_hours > 0 and not (work / 'held' / 'step-00000' / 'result.json').exists() \
+            and not args.skip_base_held and not args.held_baseline:
+        collector.paused.set()            # the start policy's held measurement goes first (held() resumes collection)
+    slots = [threading.Thread(target=collector.slot, args=(index,), daemon=True) for index in range(args.slots)]
     for thread in slots:
         thread.start()
 
-    checkpoints = sorted((work / 'checkpoints').glob('step-*'))
+    checkpoint_root = Path(args.checkpoint_dir or Path(args.state_dir) / 'checkpoints')   # off the busy NVMe by default
+    checkpoints = sorted(checkpoint_root.glob('step-*'))
     held_steps = set(json.loads((work / 'held-steps.json').read_text())) if (work / 'held-steps.json').exists() else set()
-    last_held = time.time() if step else 0.
     stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
 
     def write_native(step_number):
-        directory = work / 'checkpoints' / f'step-{step_number:05d}'
+        directory = checkpoint_root / f'step-{step_number:05d}'
         directory.mkdir(parents=True, exist_ok=True)
         path = directory / 'checkpoint.pt'
         changed = write_pruned_checkpoint(state, native_rows, special, path, source_sha, sync.backbone())
@@ -661,30 +845,69 @@ def train(args):
         checkpoints[:] = [c for c in checkpoints if c.exists()]
         return {'checkpoint': str(path), 'checkpoint_sha256': sha}
 
-    def start_held(step_number, checkpoint_dir):
-        """``held_eval measure`` of a checkpoint (its own actor unit) in a ledger unit, then ``compare`` against step 0."""
-        held_steps.add(step_number)
-        (work / 'held-steps.json').write_text(json.dumps(sorted(held_steps)) + '\n')
-        out = work / 'held' / f'step-{step_number:05d}'
-        sha = (checkpoint_dir / 'sha256.txt').read_text().strip() if checkpoint_dir else source_sha
-        checkpoint = str(checkpoint_dir / 'checkpoint.pt') if checkpoint_dir else args.checkpoint
-        python = f'{sys.executable} -m natlang_neuralese.rl.held_eval'
-        script = (f'{python} measure --manifest {args.held_manifest} --checkpoint {checkpoint} --checkpoint-sha256 {sha} '
-                  f'--out {out} --samples {args.held_samples} --workers {args.held_workers} --label grpo-step-{step_number} '
-                  f'--actor-unit {args.unit_prefix}-heldactor-{step_number}')
-        base = work / 'held' / 'step-00000' / 'result.json'
-        if step_number:
-            script += f' && {python} compare {base} {out}/result.json --out {out}/compare-vs-step0.json'
-        command = ['/usr/bin/python3', str(REPO / 'scripts/memory_ledger.py'), 'run', '--unit', f'{args.unit_prefix}-held-{step_number}',
-                   '--budget-gb', '12', '--priority', 'medium', '--wait', '86400', '--detach', '--workdir', str(REPO), '--',
-                   '/usr/bin/env', f'PYTHONPATH={REPO}/training/neuralese:{REPO}', f'NATLANG_REPO={REPO}', 'HF_HUB_OFFLINE=1',
-                   'OMP_NUM_THREADS=1', 'MKL_NUM_THREADS=1', 'sh', '-c', script]
-        result = subprocess.run(command, capture_output=True, text=True)
-        log_line(log, {'event': 'held eval queued', 'step': step_number, 'returncode': result.returncode,
-                       'output': (result.stdout + result.stderr)[-400:]})
+    def held(step_number, samples, name=None, policy=None):
+        """``held_eval measure`` on the training actor itself (it serves the current policy with the held-v2 engine pin):
+        new collection pauses, the actor's weights stay fixed until the measurement ends, then ``compare`` with step 0."""
+        if name is None:
+            held_steps.add(step_number)
+            (work / 'held-steps.json').write_text(json.dumps(sorted(held_steps)) + '\n')
+        out = work / 'held' / (name or f'step-{step_number:05d}')
+        policy = policy or (sync.last or {}).get('policy_id') or source_sha
+        collector.paused.set()
+        started = time.time()
+        python = [sys.executable, '-m', 'natlang_neuralese.rl.held_eval']
+        try:
+            with (work / 'held.log').open('a') as handle:
+                code = subprocess.run([*python, 'measure', '--manifest', args.held_manifest, '--endpoint',
+                                       f'{args.actor}={args.held_workers}', '--policy-id', policy, '--samples', str(samples),
+                                       '--out', str(out), '--label', f'grpo-{name or f"step-{step_number}"}'],
+                                      cwd=REPO, stdout=handle, stderr=subprocess.STDOUT).returncode
+                base = Path(args.held_baseline) if args.held_baseline else work / 'held' / 'step-00000' / 'result.json'
+                if (step_number or name) and code == 0 and base.exists():
+                    subprocess.run([*python, 'compare', str(base), str(out / 'result.json'), '--out',
+                                    str(out / 'compare-vs-step0.json')], cwd=REPO, stdout=handle, stderr=subprocess.STDOUT)
+        finally:
+            collector.paused.clear()
+        summary = {}
+        if (out / 'result.json').exists():
+            result = json.loads((out / 'result.json').read_text())
+            summary = {k: result.get(k) for k in ('ran', 'scored', 'successes', 'loop_rate', 'complete')}
+        if (out / 'compare-vs-step0.json').exists():
+            summary['compare'] = json.loads((out / 'compare-vs-step0.json').read_text())
+        log_line(log, {'event': 'held eval', 'step': step_number, 'arm': name, 'policy': policy, 'returncode': code,
+                       'seconds': round(time.time() - started), **summary})
 
-    if args.held_every_hours > 0 and not (work / 'held' / 'step-00000').exists() and not args.skip_base_held:
-        start_held(0, None)
+    if args.held_every_hours > 0 and not (work / 'held' / 'step-00000' / 'result.json').exists() \
+            and not args.skip_base_held and not args.held_baseline:
+        held(0, args.held_samples_start)
+    if args.held_extra and step == 0:
+        # Other policies measured on this actor in place (one engine, one code pin), each against step 0; then the start
+        # policy is loaded back before training.
+        collector.paused.set()
+        try:
+            for path in args.held_extra.split(','):
+                from natlang_neuralese.common.hashing import sha256_file_hex_cached
+                sha = sha256_file_hex_cached(Path(path))
+                name = f'extra-{sha[:12]}'
+                if (work / 'held' / name / 'result.json').exists():
+                    continue
+                sync.load_native(path, special)
+                sync.publish(0, on_published, policy=sha)
+                sync.wait()
+                if not sync.last.get('ok'):
+                    raise RuntimeError(f'loading {path} into the actor failed: {sync.last}')
+                (work / 'held').mkdir(exist_ok=True)
+                (work / 'held' / f'{name}.source').write_text(path + '\n')
+                held(0, args.held_samples_extra, name=name, policy=sha)
+                collector.paused.set()
+        finally:
+            sync.snapshot()                   # the learner's own (start) weights back on the actor
+            sync.publish(0, on_published, policy=source_sha)
+            sync.wait()
+            collector.paused.clear()
+        if not sync.last.get('ok'):
+            raise RuntimeError(f'restoring the start policy on the actor failed: {sync.last}')
+    last_held = time.time()
 
     while not stop.is_set() and (not args.max_steps or step < args.max_steps):
         phase = collections.OrderedDict()
@@ -693,12 +916,16 @@ def train(args):
         phase['wait_groups'] = time.time() - t
         t = time.time()
         stats = collections.Counter()
-        chains, rewards, spread, dropped_stale, staleness = [], [], 0, 0, []
+        chains, rewards, spread, dropped_stale, staleness, task_rewards = [], [], 0, 0, [], []
         for group in groups:
             task_id, episodes, versions = load_group(collector, group, stats)
             prune_group(collector, group, keep=args.keep_rollouts)
             if not episodes:
                 continue
+            if args.synthetic_reward:
+                task_rewards += [e['reward'] for e in episodes]
+                for episode in episodes:
+                    episode['reward'] = synthetic_reward(args.synthetic_reward, episode)
             stale = step - min(versions) if versions else 0
             rewards += [e['reward'] for e in episodes]
             if stale > args.max_staleness:
@@ -720,12 +947,18 @@ def train(args):
                   'staleness': dict(collections.Counter(staleness)), 'episodes': len(rewards),
                   'reward_mean': round(sum(rewards) / max(1, len(rewards)), 4), 'sequences': len(chains),
                   'loss_tokens': loss_tokens, 'lowering': dict(stats), 'actor_version': versions_live['actor']}
+        if args.synthetic_reward:
+            record.update(synthetic_reward=args.synthetic_reward,
+                          task_reward_mean=round(sum(task_rewards) / max(1, len(task_rewards)), 4),
+                          mean_sampled_per_call=round(sum(len(r['sample']) for c in chains for _, _, r in c['segs'])
+                                                      / max(1, sum(len(c['segs']) for c in chains)), 1))
         if not chains:
             log_line(log, {**record, 'event': 'no learning signal in these groups',
                            'phase_s': {k: round(v, 1) for k, v in phase.items()}})
             continue
         # learner
         torch.cuda.reset_peak_memory_stats()
+        collector.active_slots = args.learner_phase_slots
         sums = collections.Counter()
         rho_pre_max, rho_post_max, forward_tokens = 0., 0., 0
         rng = random.Random(args.seed + step)
@@ -736,8 +969,11 @@ def train(args):
             t = time.time()
             ref = None
             if reference is not None:
-                with torch.no_grad():
-                    ref = -exp0_sft.token_nll(reference, forward(reference, ids), positions, targets)
+                exp0_sft.set_checkpointing(reference, len(ids), args.activation_gb)
+                with torch.enable_grad():
+                    ref = -exp0_sft.token_nll(reference, forward(reference, ids), positions, targets).detach()
+                for p in reference.parameters():
+                    p.grad = None
                 torch.cuda.synchronize()
                 phase['reference_forward'] = phase.get('reference_forward', 0.) + time.time() - t
                 t = time.time()
@@ -754,10 +990,8 @@ def train(args):
                 kl = d.exp() - d - 1
                 loss_terms = loss_terms + args.kl_beta * kl
                 sums['kl'] += kl.detach().sum().item()
+                sums['ref_abs_dlogp'] += d.detach().abs().sum().item()
             (loss_terms.sum() / loss_tokens).backward()
-            torch._foreach_add_([masters[name].grad for name in live], [p.grad for p in live.values()])
-            for p in live.values():
-                p.grad = None
             sums['rho'] += rho.sum().item()
             sums['rho_capped'] += (rho > args.rho_cap).sum().item()
             sums['abs_log_rho'] += log_rho.abs().sum().item()
@@ -780,20 +1014,33 @@ def train(args):
         optimizer.step()
         for p in parameters:
             p.grad.zero_()
+        changed_step = changed_start = 0
         with torch.no_grad():
             embedding_master[special_index] = saved_rows
+            reference_params = dict(reference.named_parameters()) if reference is not None else {}
             for name, p in live.items():
-                p.copy_(masters[name])
+                new = masters[name].to(torch.bfloat16)
+                changed_step += int((new != p).sum())
+                if name in reference_params:
+                    changed_start += int((new != reference_params[name]).sum())
+                p.copy_(new)
         torch.cuda.synchronize()
         phase['optimizer'] = time.time() - t
+        elements = sum(p.numel() for p in live.values())
+        record.update(bf16_changed_step_fraction=round(changed_step / elements, 6),
+                      bf16_changed_vs_start_fraction=round(changed_start / elements, 6) if reference is not None else None)
+        if probes:
+            record['probe_learner_nll'] = round(probe_learner_nll(), 5)
         step += 1
+        collector.active_slots = args.slots
         # weight sync and checkpoints (background)
         t = time.time()
         sync.snapshot()                   # waits for the previous publish
         phase['snapshot'] = time.time() - t
         if sync.last and not sync.last.get('ok'):
             raise RuntimeError(f'actor weight update failed: {sync.last}')
-        save_native = step % args.save_every == 0 or (args.max_steps and step == args.max_steps)
+        held_due = args.held_every_hours > 0 and time.time() - last_held > args.held_every_hours * 3600
+        save_native = step % args.save_every == 0 or (args.max_steps and step == args.max_steps) or held_due
         sync.publish(step, on_published, also=(lambda s=step: write_native(s)) if save_native else None)
         if args.state_every and step % args.state_every == 0:
             tensors = {}
@@ -809,7 +1056,7 @@ def train(args):
         elapsed = time.time() - run['started']
         record.update(
             loss_tokens=loss_tokens, forward_tokens=forward_tokens, lr=lr, grad_norm=round(grad_norm, 4),
-            kl_mean=round(sums['kl'] / loss_tokens, 6), mean_logp=round(sums['logp'] / loss_tokens, 4),
+            kl_mean=round(sums['kl'] / loss_tokens, 7), ref_abs_dlogp_mean=round(sums['ref_abs_dlogp'] / loss_tokens, 6), mean_logp=round(sums['logp'] / loss_tokens, 4),
             rho_mean=round(sums['rho'] / loss_tokens, 4), rho_pre_cap_max=round(rho_pre_max, 3),
             rho_post_cap_max=round(rho_post_max, 3), rho_capped_fraction=round(sums['rho_capped'] / loss_tokens, 5),
             abs_log_rho_mean=round(sums['abs_log_rho'] / loss_tokens, 5),
@@ -821,9 +1068,9 @@ def train(args):
             outstanding_groups=collector.outstanding, elapsed_s=round(elapsed))
         log_line(log, record)
         if save_native and args.held_every_hours > 0 and time.time() - last_held > args.held_every_hours * 3600:
-            sync.wait()
+            sync.wait()                   # the actor now serves (and attests) this step's checkpoint
+            held(step, args.held_samples)
             last_held = time.time()
-            start_held(step, work / 'checkpoints' / f'step-{step:05d}')
     sync.wait()
     saver.wait()
     collector.stop.set()
@@ -850,12 +1097,24 @@ def main():
     t.add_argument('--task-ids', help='JSON list: train only on these pool ids (smoke)')
     t.add_argument('--group', type=int, default=8)
     t.add_argument('--slots', type=int, default=96, help='concurrent episodes on the actor (its default runs 128 sequences)')
-    t.add_argument('--min-groups', type=int, default=16)
-    t.add_argument('--max-groups', type=int, default=48, help='a w5-like episode costs ~90k learner tokens: 48 groups is ~1-2 h of learner')
+    t.add_argument('--min-groups', type=int, default=12)
+    t.add_argument('--learner-phase-slots', type=int, default=24,
+                   help='collector slots that take new episodes while the learner computes (actor decode and the learner '
+                        'share the GB10; in-flight episodes always finish)')
+    t.add_argument('--max-groups', type=int, default=24,
+                   help='groups per step at most: about 27k forward tokens per episode (smoke), so 24 groups is ~30-45 min of learner')
     t.add_argument('--max-outstanding', type=int, default=0, help='groups in flight or waiting (default max-groups + slots/group)')
     t.add_argument('--max-staleness', type=int, default=2)
-    t.add_argument('--case-seconds', type=int, default=1800)
-    t.add_argument('--max-model-requests', type=int, default=64)
+    t.add_argument('--case-seconds', type=int, default=3600, help='wall-clock safety net only (a wall stop is unscored)')
+    t.add_argument('--max-model-requests', type=int, default=40,
+                   help='episode budget in model calls; a budget stop scores as a failure (EPISODE_COST_20261112)')
+    t.add_argument('--pass-rates', default=resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'exp1-rft', 'base-pass-rates.json'),
+                   help='measured base pass rates per task (re-read every 10 min); empty: plain shuffled pool')
+    t.add_argument('--pass-band', type=float, nargs=2, default=(0.1, 0.9))
+    t.add_argument('--pass-min-scored', type=int, default=2)
+    t.add_argument('--explore', type=float, default=0.15, help='share of groups from unmeasured pool tasks')
+    t.add_argument('--exclude-family-regex', default=r'^ext_codebase-(py|natlang)_codebase_',
+                   help='families never selected (default: codebase families whose repos are missing on the DGX)')
     t.add_argument('--max-turns', type=int, default=128)
     t.add_argument('--context-tokens', type=int, default=32768)
     t.add_argument('--seed', type=int, default=20261112)
@@ -866,11 +1125,12 @@ def main():
     t.add_argument('--clip', type=float, default=1.0)
     t.add_argument('--kl-beta', type=float, default=0.02)
     t.add_argument('--rho-cap', type=float, default=2.0)
-    t.add_argument('--activation-gb', type=float, default=14.)
+    t.add_argument('--activation-gb', type=float, default=12., help='saved activations per sequence; layers beyond are recomputed')
     t.add_argument('--max-steps', type=int, default=0)
     t.add_argument('--save-every', type=int, default=2)
     t.add_argument('--state-every', type=int, default=4)
     t.add_argument('--state-dir', default=resolve_str('data_hdd', 'natlang-grpo-v1'))
+    t.add_argument('--checkpoint-dir', help='pruned native checkpoints (default STATE_DIR/checkpoints)')
     t.add_argument('--resume', action='store_true')
     t.add_argument('--keep-rollouts', action='store_true')
     t.add_argument('--no-actor-sync', action='store_true',
@@ -879,11 +1139,26 @@ def main():
                    help="episodes run the checkout's live ts-host instead of the run's pinned copy")
     t.add_argument('--held-every-hours', type=float, default=4.)
     t.add_argument('--skip-base-held', action='store_true')
-    t.add_argument('--held-samples', type=int, default=2)
-    t.add_argument('--held-workers', type=int, default=48)
+    t.add_argument('--held-baseline', help="a start-policy held result.json to compare with (e.g. held-v2's base run) instead "
+                   'of measuring step 0 (compare refuses another engine or series)')
+    t.add_argument('--held-samples', type=int, default=2, help='samples per held task at the periodic measurements')
+    t.add_argument('--held-samples-start', type=int, default=4, help='samples per held task for the start policy (step 0)')
+    t.add_argument('--held-extra', help='comma-separated native checkpoints measured on the actor in place after step 0, '
+                   'each compared with step 0, before training starts')
+    t.add_argument('--held-samples-extra', type=int, default=2)
+    t.add_argument('--held-workers', type=int, default=96, help='collector slots of a held measurement on the training actor')
     t.add_argument('--unit-prefix', default='grpo')
+    t.add_argument('--synthetic-reward', help='sanity check: replace the task outcome by a trivially learnable reward '
+                   '(short-calls:N = mean sampled tokens per model call under N; short-calls = minus that mean / 1000); the task '
+                   'outcome is logged beside it')
+    t.add_argument('--probe-turns', help='turns pickle (lower_rollout_turns) of fixed probe chains: their NLL is logged on the '
+                   'learner every step and on the actor after every weight sync')
+    t.add_argument('--probe-chains', type=int, default=4)
+    t.add_argument('--probe-max-tokens', type=int, default=8000)
     args = parser.parse_args()
     if args.command == 'train':
+        from natlang_neuralese.common.cuda_context import ensure_context
+        ensure_context()   # GB10: a context can fail to create under host-memory fragmentation; retried
         args.pool = args.pool or POOLS
         args.max_outstanding = args.max_outstanding or args.max_groups + -(-args.slots // args.group)
         train(args)

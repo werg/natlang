@@ -696,9 +696,10 @@ class SharedChild:
 
     @staticmethod
     def supported(cli):
-        """Whether the runtime's collector has the server mode (pinned older ts-host trees do not)."""
+        """Whether the runtime's collector has the server mode at protocol /2 (pinned older trees have none, or /1, whose
+        server died with EPIPE when a peer left and leaked capacity to probes)."""
         try:
-            return "'--serve'" in Path(cli).read_text()
+            return 'natlang-collector-serve/2' in Path(cli).read_text()
         except OSError:
             return False
 

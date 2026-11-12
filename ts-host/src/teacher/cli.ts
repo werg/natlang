@@ -237,6 +237,9 @@ async function main(argv: string[] = process.argv.slice(2), stop?: AbortSignal):
  * bundle and the TypeScript library cost ~150 MB per process; an episode's own heap is tens of MB, so sharing the
  * process is what lets a collection run 128+ slots in ~16 GB. Closing the connection aborts that invocation (the
  * supervisor's terminate). The server exits after `idle` seconds without an invocation. */
+/** run_bonsai_queue uses a runtime's shared server only at this protocol (/1 died with EPIPE when a peer left). */
+const SERVE_PROTOCOL = 'natlang-collector-serve/2';
+
 async function serve(argv: string[]): Promise<void> {
   const { flags } = argumentsOf(argv);
   const socket = resolve(flags.get('--serve')!), capacity = integer(flags, '--capacity', 8);
@@ -246,18 +249,26 @@ async function serve(argv: string[]): Promise<void> {
   let active = 0, idle: NodeJS.Timeout | undefined;
   const arm = () => { if (idle) clearTimeout(idle); if (!active) idle = setTimeout(() => { server.close(); rmSync(socket, { force: true }); process.exit(0); }, idleMs); };
   const server = createServer(connection => {
-    if (active >= capacity) { connection.end(JSON.stringify({ busy: true }) + '\n'); return; }
-    active++; arm();
-    let buffer = '', started = false;
+    // A peer can go away at any point (a probe, a supervisor that timed out or was killed): a write to it then fails
+    // with EPIPE, which must end that connection only, never the process serving the other invocations.
+    connection.on('error', () => {});
+    let buffer = '', started = false, done = false;
     const stop = new AbortController();
-    const finish = (value: object) => { active--; arm(); if (!connection.destroyed) connection.end(JSON.stringify(value) + '\n'); };
     connection.on('close', () => stop.abort());
-    connection.on('error', () => stop.abort());
     connection.on('data', chunk => {
+      if (started) return;
       buffer += chunk.toString('utf8');
       const end = buffer.indexOf('\n');
-      if (started || end < 0) return;
+      if (end < 0) return;
       started = true;
+      // Capacity is taken by a request, not by a connection: a connection that closes without one holds nothing.
+      if (active >= capacity) { connection.end(JSON.stringify({ busy: true }) + '\n'); return; }
+      active++; arm();
+      const finish = (value: object) => {
+        if (done) return;
+        done = true; active--; arm();
+        if (!connection.destroyed) connection.end(JSON.stringify(value) + '\n');
+      };
       let request: { argv?: unknown };
       try { request = JSON.parse(buffer.slice(0, end)) as { argv?: unknown }; }
       catch (error) { finish({ exit: 1, error: String(error) }); return; }
@@ -269,7 +280,7 @@ async function serve(argv: string[]): Promise<void> {
     });
   });
   rmSync(socket, { force: true });
-  server.listen(socket, () => { process.stdout.write(JSON.stringify({ event: 'collector_server', socket, capacity, pid: process.pid }) + '\n'); arm(); });
+  server.listen(socket, () => { process.stdout.write(JSON.stringify({ event: 'collector_server', protocol: SERVE_PROTOCOL, socket, capacity, pid: process.pid }) + '\n'); arm(); });
 }
 
 // Evals run model-written code in this process; a promise it leaves running can reject after its eval has ended.

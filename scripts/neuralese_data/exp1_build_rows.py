@@ -30,10 +30,11 @@ def group_of(row):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument('--rollouts', type=Path, required=True)
+    ap.add_argument('--rollouts', type=Path, required=True, action='append')
     ap.add_argument('--cases', type=Path, required=True)
     ap.add_argument('--out-dir', type=Path, required=True)
     ap.add_argument('--val-fraction', type=float, default=0.1)
+    ap.add_argument('--tokenizer', type=Path, help='tokenizer dir: decode every kept episode and drop those with a privileged-guidance call')
     ap.add_argument('--keep-repeated', action='store_true', help='keep successes with repeated actions (report only)')
     args = ap.parse_args()
     groups = {}
@@ -41,7 +42,8 @@ def main():
         row = json.loads(line)
         groups[row['id']] = group_of(row)
     stats, episodes, seen = collections.Counter(), [], set()
-    with args.rollouts.open('rb') as handle:
+    for rollouts_path in args.rollouts:
+      with rollouts_path.open('rb') as handle:
         for line in handle:
             row = json.loads(line)
             stats['rollouts'] += 1
@@ -71,6 +73,23 @@ def main():
             stats['calls_total'] += len(row['turns'])
             episodes.append({'round': 'exp1', 'task_id': row['task_id'], 'sample': row['sample'], 'family': row['family'],
                              'group': groups[row['task_id']], 'rows': rows})
+    if args.tokenizer:
+        # the held-out collection runs with guidance off: no selectGuidanceFacts call and no privileged answer in any prompt
+        from tokenizers import Tokenizer
+        tokenizer = Tokenizer.from_file(str(args.tokenizer / 'tokenizer.json'))
+        needles = ('selectGuidanceFacts', 'verified reference solution', 'verified result', 'A verified reference')
+        clean = []
+        for episode in episodes:
+            text = ' '.join(tokenizer.decode([int(i) for i in chain['ids']], skip_special_tokens=False) for chain in chains_of([episode]))
+            hits = [n for n in needles if n in text]
+            for needle in hits:
+                stats[f'privileged_hit:{needle}'] += 1
+            if hits:
+                stats['episodes_dropped_privileged'] += 1
+            else:
+                clean.append(episode)
+        stats['privileged_check_episodes'] = len(episodes)
+        episodes = clean
     held = {g for g in {e['group'] for e in episodes}
             if int(hashlib.sha256(('exp1-val|' + g).encode()).hexdigest(), 16) % 1000 < args.val_fraction * 1000}
     train = [e for e in episodes if e['group'] not in held]

@@ -209,6 +209,25 @@ class SglangEngine(Engine):
             binding['actor_export'] = dict(self.sglang_actor_export)
         return self
 
+    def rebind_in_place(self, policy_id, weights_sha256, version=None):
+        """Attest the policy a trainer loaded into the SGLang server in place (``update_weights_from_disk``; grpo.py): the
+        policy id, the export weights it serves and the update's version. The native engine (adapters, text writes) and
+        native-state identities keep the start checkpoint; the binding says so."""
+        import re
+        if not all(re.fullmatch(r'[0-9a-f]{64}', str(value)) for value in (policy_id, weights_sha256)):
+            raise ValueError('policy_id and weights_sha256 must be SHA-256 digests')
+        with self._sglang_lock:
+            self.sglang_actor_export = {**self.sglang_actor_export, 'sha256': weights_sha256}
+            binding = self.rl_policy_binding
+            binding.setdefault('start_checkpoint_sha256', binding.get('checkpoint_sha256'))
+            binding['checkpoint_sha256'] = policy_id
+            binding['serving_engine']['hf_export_weights_sha256'] = weights_sha256
+            if 'actor_export' in binding:
+                binding['actor_export'] = dict(self.sglang_actor_export)
+            binding['in_place_update'] = {'version': version, 'policy_id': policy_id, 'weights_sha256': weights_sha256,
+                                          'native_engine': 'start checkpoint (not updated in place)'}
+        return dict(binding['in_place_update'])
+
     def progress_metrics(self):
         return {**super().progress_metrics(), 'natlang_sglang_requests_total': self.sglang_requests,
                 'natlang_sglang_generated_tokens_total': self.sglang_tokens,
