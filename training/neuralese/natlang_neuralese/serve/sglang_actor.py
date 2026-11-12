@@ -183,6 +183,10 @@ class SglangEngine(Engine):
             raise ValueError('HF export was made from another checkpoint')
         self.sglang_export = export_manifest
         self.sglang_requests = self.sglang_tokens = self.native_fallbacks = self.sglang_state_writes = 0
+        # Token-in/token-out prompts (serve/append_only.py): NATLANG_APPEND_ONLY_PROMPTS=0 opts out.
+        from .append_only import TokenHistory
+        self.sglang_history = (TokenHistory(self.tokenizer) if os.environ.get('NATLANG_APPEND_ONLY_PROMPTS', '1') != '0'
+                               else None)
         self.native_fallback_reasons = {}
         self.native_endpoint_metrics = {}
         self._sglang_lock = threading.Lock()
@@ -208,6 +212,8 @@ class SglangEngine(Engine):
                 'natlang_sglang_generated_tokens_total': self.sglang_tokens,
                 'natlang_native_fallback_requests_total': self.native_fallbacks,
                 'natlang_sglang_native_state_writes_total': self.sglang_state_writes,
+                **{f'natlang_sglang_{key}_total': value for key, value in
+                   (self.sglang_history.stats.items() if getattr(self, 'sglang_history', None) else ())},
                 'natlang_native_model_resident': int(self.__dict__.get('_native_model') is not None),
                 **getattr(self, 'native_endpoint_metrics', {}),
                 **self.native_fallback_reasons}
@@ -388,6 +394,7 @@ class SglangEngine(Engine):
             return future
         if self._routes_native(request, plan):
             return super().submit(request)
+        plan = self._append_only(request, plan)
         sequence = Sequence(request, future, prompt_plan=plan)
 
         def run():
@@ -403,7 +410,21 @@ class SglangEngine(Engine):
         plan = self._prompt_plan(request.messages, request.tools)
         if self._routes_native(request, plan):
             return super().generate(request)
-        return self._sglang_run(Sequence(request, Future(), prompt_plan=plan))
+        return self._sglang_run(Sequence(request, Future(), prompt_plan=self._append_only(request, plan)))
+
+    @staticmethod
+    def _plain(request):
+        return (request.privileged_context is None and request.forced_message is None and request.guidance is None
+                and not getattr(request, 'native_recording', None))
+
+    def _append_only(self, request, plan):
+        """A plain token prompt with this actor's own earlier output kept as the ids it sampled (serve/append_only.py)."""
+        history = getattr(self, 'sglang_history', None)
+        if history is None or not self._plain(request) or not plan or any(kind != 'tokens' for kind, _ in plan):
+            return plan
+        ids = [token for _, value in plan for token in value]
+        spliced = history.splice(ids)
+        return plan if spliced is ids else [('tokens', spliced)]
 
     def _sglang_seed_honored(self):
         """Whether the SGLang backend applies a request's `sampling_seed`: its sampler seeds the draw only under
@@ -579,6 +600,10 @@ class SglangEngine(Engine):
             self._sglang_emit(seq, state, final=True)
         seq.finish_reason = state['finish']
         seq.phase = 'done'
+        history = getattr(self, 'sglang_history', None)
+        if (history is not None and self._plain(request) and not seq.sglang_imports and state['finish'] != 'error'
+                and seq.guide is None):
+            history.store(state['prompt'], state['fed'] + ([state['terminal']] if 'terminal' in state else []))
         return self._native_response(seq)
 
     def _sglang_sample(self, seq, body, k, sampling, state):
@@ -711,7 +736,7 @@ class SglangEngine(Engine):
         if terminal:
             if seq.native_capture_open:
                 raise RequestError('neuralese-native-state-open', 'generation stopped inside a produce span')
-            state['finish'], state['done'] = 'stop', True
+            state['finish'], state['done'], state['terminal'] = 'stop', True, token
             return
         if token == marker.produce_close and not seq.native_capture_open:
             raise RequestError('neuralese-native-state-close', 'generation emitted a produce end marker without an open span')
