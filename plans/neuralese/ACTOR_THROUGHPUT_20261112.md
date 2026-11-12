@@ -88,5 +88,9 @@ ids plus their per-token `producing` flags are 11%.
   (what `lower_rollout_turns.episode_turns` and the learner use), not the top-k (about 4x smaller; the actor also skips
   the top-k sort and the FP64 tail sum). The JOLT score-centered loss still needs the server default.
 - run_bonsai_queue removes `*.tmp-<pid>-<uuid>` atomic-write leftovers of dead writers before each case.
-- Open: prompt ids are stored whole per call (92% repeat the previous call); a per-call delta needs the lowering to
-  rebuild prompts, not done.
+- The collector writes each call's capture compactly (`trajectory.ts` `compactCaptures`): a prompt that repeats an
+  earlier call's prefix is `{kind: 'tokens_delta', turn, keep, token_ids, producing_at}` (83% of prompt tokens are such a
+  prefix), and ordinary samples are columns (`samples_columns`: token ids, logps, start position, terminal positions,
+  generated-input count) instead of a dict per token. `task_rollouts.expand_captures` rebuilds the exact capture when
+  results are read (round trip exact on 10 real exp1 episodes; `rollout_turns` identical). Largest exp1 episode: 130 MB
+  with top-k, 33 MB without, 7.5 MB lean.

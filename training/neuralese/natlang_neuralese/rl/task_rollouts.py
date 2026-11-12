@@ -125,12 +125,58 @@ def reward_of(outcome: str, finish: dict[str, Any] | None = None) -> float | Non
     return 1.0 if outcome == "task_success" else 0.0
 
 
+def expand_captures(trajectory: list[Any]) -> list[Any]:
+    """The trajectory with every compact RL capture (`trajectory.ts` `compactCaptures`) rebuilt exactly as the actor
+    returned it: a `tokens_delta` prompt is the first `keep` tokens and `producing` flags of turn `turn`'s (expanded)
+    prompt, then `token_ids`, producing exactly at `producing_at`; `samples_columns` are the ordinary `samples` and their
+    first `generated_inputs` tokens. Other steps are returned as they are."""
+    out, full = [], {}
+    for index, step in enumerate(trajectory):
+        sampling = ((step or {}).get("model_response") or {}).get("rl_sampling") if isinstance(step, dict) else None
+        if not isinstance(sampling, dict):
+            out.append(step)
+            continue
+        expanded = sampling
+        columns = sampling.get("samples_columns")
+        if columns is not None:
+            ids, logps, start, terminal = (columns["token_id"], columns["logp"], columns["query_own_start"],
+                                           set(columns["terminal_at"]))
+            if len(ids) != len(logps) or not 0 <= columns["generated_inputs"] <= len(ids):
+                raise ValueError(f"trajectory turn {index}: malformed samples_columns")
+            expanded = {key: value for key, value in sampling.items() if key != "samples_columns"}
+            expanded["samples"] = [{"index": i, "token_id": token, "logp": logp, "input_role": "ordinary",
+                                    "terminal": i in terminal, "query_own_position": start + i}
+                                   for i, (token, logp) in enumerate(zip(ids, logps))]
+            expanded["generated_inputs"] = [{"sample_index": i, "token_id": ids[i], "input_role": "ordinary"}
+                                            for i in range(columns["generated_inputs"])]
+        prompt = expanded.get("prompt")
+        if isinstance(prompt, list) and len(prompt) == 1 and isinstance(prompt[0], dict):
+            segment = prompt[0]
+            if segment.get("kind") == "tokens_delta":
+                base = full.get(segment["turn"])
+                if base is None or segment["turn"] >= index or len(base["token_ids"]) < segment["keep"]:
+                    raise ValueError(f"trajectory turn {index}: prompt delta refers to turn {segment['turn']}, "
+                                     "which has no earlier captured token prompt")
+                rest = [False] * len(segment["token_ids"])
+                for position in segment["producing_at"]:
+                    rest[position] = True
+                segment = {"kind": "tokens", "token_ids": base["token_ids"][:segment["keep"]] + list(segment["token_ids"]),
+                           "producing": base["producing"][:segment["keep"]] + rest}
+                expanded = {**expanded, "prompt": [segment]}
+            if segment.get("kind") == "tokens" and isinstance(segment.get("token_ids"), list):
+                full[index] = segment
+        if expanded is not sampling:
+            step = {**step, "model_response": {**step["model_response"], "rl_sampling": expanded}}
+        out.append(step)
+    return out
+
+
 def rollout_turns(result: dict[str, Any] | None) -> list[dict[str, Any]]:
     """The policy's own model turns of a collector result as `natlang.rollout/1` turns ({messages, tools, target}),
     replayable as `logLikelihood` terms. Host-authored actions (`action_provenance`, e.g. the authored root eval) are
     not policy samples and are skipped."""
     turns = []
-    for step in (result or {}).get("trajectory") or []:
+    for step in expand_captures((result or {}).get("trajectory") or []):
         assistant = step.get("assistant")
         if step.get("phase") != "action" or not isinstance(assistant, dict) or assistant.get("action_provenance") \
                 or step.get("action_provenance") or not isinstance(step.get("context"), list):

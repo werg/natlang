@@ -685,3 +685,25 @@ def test_rollout_turns_keep_collector_completion_token_counter():
     result = {'trajectory': [{'phase': 'action', 'context': [], 'assistant': {'content': '', 'calls': []},
                              'model_response': {'raw_calls': [], 'completion_tokens': 17}}]}
     assert rollout_turns(result)[0]['usage'] == {'completion_tokens': 17}
+
+
+def test_expand_captures_rebuilds_prompt_deltas_and_sample_columns():
+    from natlang_neuralese.rl.task_rollouts import expand_captures
+    system = list(range(100))
+    def call(ids, sampled, producing=None):
+        return {"phase": "action", "invocation_id": "a", "model_response": {"rl_sampling": {
+            "schema": "s", "prompt": [{"kind": "tokens", "token_ids": ids, "producing": producing or [False] * len(ids)}],
+            "samples": [{"index": i, "token_id": t, "logp": -0.5 * i, "input_role": "ordinary",
+                         "terminal": i == len(sampled) - 1, "query_own_position": len(ids) + i} for i, t in enumerate(sampled)],
+            "generated_inputs": [{"sample_index": i, "token_id": t, "input_role": "ordinary"}
+                                 for i, t in enumerate(sampled[:-1])]}}}
+    first = call(system + [500], [7, 8, 9])
+    second = call(system + [500, 7, 8, 9, 600], [10, 11], producing=[False] * 104 + [True])
+    compact = {"phase": "action", "invocation_id": "a", "model_response": {"rl_sampling": {
+        "schema": "s", "prompt": [{"kind": "tokens_delta", "turn": 0, "keep": 101, "token_ids": [7, 8, 9, 600],
+                                   "producing_at": [3]}],
+        "samples_columns": {"token_id": [10, 11], "logp": [-0.0, -0.5], "query_own_start": 105, "terminal_at": [1],
+                            "generated_inputs": 1}}}}
+    assert expand_captures([first, compact]) == [first, second]
+    with pytest.raises(ValueError, match="prompt delta"):
+        expand_captures([compact])
