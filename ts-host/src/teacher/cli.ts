@@ -41,12 +41,12 @@ const integer = (flags: Map<string, string>, name: string, fallback: number): nu
   return value;
 };
 
-async function main(): Promise<void> {
-  const { positionals, flags } = argumentsOf(process.argv.slice(2));
+async function main(argv: string[] = process.argv.slice(2), stop?: AbortSignal): Promise<number> {
+  const { positionals, flags } = argumentsOf(argv);
   if (flags.has('--capabilities')) {
     if (flags.get('--capabilities') !== 'json') throw new Error('--capabilities must be json');
     process.stdout.write(JSON.stringify(await teacherCollectorCapabilities()) + '\n');
-    return;
+    return 0;
   }
   if (flags.has('--help')) {
     process.stdout.write('usage: teacher-collector IR JOBS OUT --model-id ID --root-seed N [options]\n\n' +
@@ -75,8 +75,9 @@ async function main(): Promise<void> {
       '         --case-events-file PATH  (append-only per-case lease and terminal journal)\n' +
       '         --journal-spool-root PATH  (bounded local crash-recoverable journal; publish verified files to JOBS_DIR)\n' +
       '         --final-export-only  (write merged output at final flush; per-case result files remain live)\n' +
-      '         --kv-tokens N  (the server\'s shared KV buffer; requests wait to fit, default 53248, 0 = off)\n');
-    return;
+      '         --kv-tokens N  (the server\'s shared KV buffer; requests wait to fit, default 53248, 0 = off)\n' +
+      '       teacher-collector --serve SOCKET [--capacity N]  one process runs up to N invocations sent over SOCKET\n');
+    return 0;
   }
   if (positionals.length !== 3 || !flags.get('--model-id') || !flags.get('--root-seed'))
     throw new Error('usage: collect-teacher-batch IR JOBS OUT --model-id ID --root-seed N [--limit 10 --workers 6]');
@@ -191,7 +192,8 @@ async function main(): Promise<void> {
   config.sourceSha256 = sha256(source);
   const records = await loadRecords(ir, integer(flags, '--start', 0), flags.has('--all') ? 0 : integer(flags, '--limit', 10), source.toString('utf8'));
   const controller = new AbortController();
-  for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => controller.abort());
+  if (stop) stop.addEventListener('abort', () => controller.abort(), { once: true });
+  else for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => controller.abort());
   const admissionController = new AbortController();
   const drainFile = flags.has('--drain-file') ? resolve(flags.get('--drain-file')!) : undefined;
   let drainPoll: NodeJS.Timeout | undefined;
@@ -227,7 +229,47 @@ async function main(): Promise<void> {
       scope: 'rows in merged output (includes completed/reused rows); exact collector sender invocations and ChatTransport calls; provider SDK entries are turn starts, not physical network counts',
       ...requestTotals.totals } }) + '\n');
   process.stdout.write(`final: ${result.completed}/${records.length} complete -> ${output}\n`);
-  if (result.missing.length) process.exitCode = 2;
+  return result.missing.length ? 2 : 0;
+}
+
+/** Shared collector process (scripts/run_bonsai_queue.py, NATLANG_COLLECTOR_SHARED): one node process serves up to
+ * `capacity` concurrent invocations, each a JSON line {argv} on its own connection, answered by {exit}. Node, the
+ * bundle and the TypeScript library cost ~150 MB per process; an episode's own heap is tens of MB, so sharing the
+ * process is what lets a collection run 128+ slots in ~16 GB. Closing the connection aborts that invocation (the
+ * supervisor's terminate). The server exits after `idle` seconds without an invocation. */
+async function serve(argv: string[]): Promise<void> {
+  const { flags } = argumentsOf(argv);
+  const socket = resolve(flags.get('--serve')!), capacity = integer(flags, '--capacity', 8);
+  const idleMs = integer(flags, '--idle-seconds', 120) * 1000;
+  const { createServer } = await import('node:net');
+  const { rmSync } = await import('node:fs');
+  let active = 0, idle: NodeJS.Timeout | undefined;
+  const arm = () => { if (idle) clearTimeout(idle); if (!active) idle = setTimeout(() => { server.close(); rmSync(socket, { force: true }); process.exit(0); }, idleMs); };
+  const server = createServer(connection => {
+    if (active >= capacity) { connection.end(JSON.stringify({ busy: true }) + '\n'); return; }
+    active++; arm();
+    let buffer = '', started = false;
+    const stop = new AbortController();
+    const finish = (value: object) => { active--; arm(); if (!connection.destroyed) connection.end(JSON.stringify(value) + '\n'); };
+    connection.on('close', () => stop.abort());
+    connection.on('error', () => stop.abort());
+    connection.on('data', chunk => {
+      buffer += chunk.toString('utf8');
+      const end = buffer.indexOf('\n');
+      if (started || end < 0) return;
+      started = true;
+      let request: { argv?: unknown };
+      try { request = JSON.parse(buffer.slice(0, end)) as { argv?: unknown }; }
+      catch (error) { finish({ exit: 1, error: String(error) }); return; }
+      if (!Array.isArray(request.argv) || !request.argv.every(item => typeof item === 'string')) {
+        finish({ exit: 1, error: 'argv must be a list of strings' }); return; }
+      connection.write(JSON.stringify({ accepted: true, pid: process.pid }) + '\n');
+      main(request.argv as string[], stop.signal).then(code => finish({ exit: code }),
+        error => { process.stderr.write(`${error instanceof Error ? error.stack : String(error)}\n`); finish({ exit: 1, error: String(error) }); });
+    });
+  });
+  rmSync(socket, { force: true });
+  server.listen(socket, () => { process.stdout.write(JSON.stringify({ event: 'collector_server', socket, capacity, pid: process.pid }) + '\n'); arm(); });
 }
 
 // Evals run model-written code in this process; a promise it leaves running can reject after its eval has ended.
@@ -235,4 +277,7 @@ async function main(): Promise<void> {
 process.on('unhandledRejection', error => {
   process.stderr.write(`ignored a rejection left over from an eval: ${error instanceof Error ? error.message : String(error)}\n`);
 });
-main().catch(error => { process.stderr.write(`${error instanceof Error ? error.stack : String(error)}\n`); process.exitCode = 1; });
+if (process.argv[2] === '--serve') serve(process.argv.slice(2)).catch(error => {
+  process.stderr.write(`${error instanceof Error ? error.stack : String(error)}\n`); process.exitCode = 1; });
+else main().then(code => { process.exitCode = code; },
+  error => { process.stderr.write(`${error instanceof Error ? error.stack : String(error)}\n`); process.exitCode = 1; });

@@ -653,6 +653,111 @@ def failure_cooldown(streak):
     return min(300, 30 * 2 ** min(max(0, streak - 1), 20) * (0.5 + random.random()))
 
 
+class SharedChild:
+    """A collector invocation served by a shared node process instead of its own (NATLANG_COLLECTOR_SHARED=N: up to N
+    invocations per process; 2026-11-12, plans/neuralese/ACTOR_THROUGHPUT_20261112.md). A node process with the bundle
+    and the TypeScript library costs ~150 MB before any episode, an episode itself tens of MB, so a collection of 128
+    slots held ~36 GB in its own processes. Servers are per supervising unit (INVOCATION_ID), runtime and model-facing
+    variants, started on demand (``cli.js --serve``) and exit when idle. ``terminate``/``kill`` close the connection,
+    which aborts that invocation only. Same interface as the ``subprocess.Popen`` it replaces in ``run_queue``."""
+
+    def __init__(self, command, log, capacity):
+        import socket as socket_module
+        import fcntl
+        self.returncode, self._buffer, self._accepted = None, b'', False
+        key = hashlib.sha256('\0'.join([str(Path(command[2]).resolve()), os.environ.get('INVOCATION_ID', str(os.getppid())),
+                                          os.environ.get('NATLANG_MODEL_FACING', '')]).encode()).hexdigest()[:16]
+        root = Path(tempfile.gettempdir()) / f'natlang-collector-{os.getuid()}' / key
+        root.mkdir(parents=True, exist_ok=True)
+        request = (json.dumps({'argv': command[3:]}) + '\n').encode()
+        for index in range(256):
+            path = root / f's{index:03d}.sock'
+            for attempt in range(2):
+                connection = self._connect(socket_module, path)
+                if connection is None:
+                    if attempt:
+                        break
+                    with (root / f's{index:03d}.lock').open('a') as lock:
+                        fcntl.flock(lock, fcntl.LOCK_EX)
+                        if self._connect(socket_module, path, probe=True):
+                            continue
+                        with (root / f's{index:03d}.log').open('a') as server_log:
+                            subprocess.Popen(['node', '--max-old-space-size=8192', command[2], '--serve', str(path),
+                                              '--capacity', str(capacity)], stdout=server_log, stderr=subprocess.STDOUT,
+                                             stdin=subprocess.DEVNULL, start_new_session=True)
+                        deadline = time.time() + 60
+                        while not path.exists() and time.time() < deadline:
+                            time.sleep(0.2)
+                    continue
+                connection.sendall(request)
+                line = self._line(connection, 60)
+                reply = json.loads(line) if line else {}
+                if reply.get('accepted'):
+                    self.connection, self.server_pid = connection, reply.get('pid')
+                    log.write(json.dumps({'event': 'shared_collector', 'socket': str(path), 'pid': self.server_pid}) + '\n')
+                    log.flush()
+                    return
+                connection.close()
+                break   # busy: the next socket
+        raise RuntimeError('no shared collector process accepted the invocation')
+
+    @staticmethod
+    def _connect(socket_module, path, probe=False):
+        if not path.exists():
+            return None
+        connection = socket_module.socket(socket_module.AF_UNIX, socket_module.SOCK_STREAM)
+        try:
+            connection.connect(str(path))
+        except OSError:
+            connection.close()
+            return None
+        if probe:
+            connection.close()
+            return True
+        return connection
+
+    def _line(self, connection, timeout):
+        connection.settimeout(timeout)
+        while b'\n' not in self._buffer:
+            try:
+                chunk = connection.recv(65536)
+            except TimeoutError:
+                raise
+            except OSError:
+                chunk = b''
+            if not chunk:
+                line, self._buffer = self._buffer, b''
+                return line.decode() if line else ''
+            self._buffer += chunk
+        line, self._buffer = self._buffer.split(b'\n', 1)
+        return line.decode()
+
+    def wait(self, timeout=None):
+        if self.returncode is not None:
+            return self.returncode
+        try:
+            line = self._line(self.connection, timeout)
+        except TimeoutError:
+            raise subprocess.TimeoutExpired('shared collector', timeout)
+        reply = json.loads(line) if line else {}
+        self.returncode = int(reply['exit']) if 'exit' in reply else 1   # a server that died answers nothing
+        self.connection.close()
+        return self.returncode
+
+    def poll(self):
+        try:
+            return self.wait(0.001)
+        except subprocess.TimeoutExpired:
+            return None
+
+    def terminate(self):
+        if self.returncode is None:
+            self.connection.close()
+            self.returncode = -signal.SIGTERM
+
+    kill = terminate
+
+
 def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-27B',
               provider=None, model_concurrency=None, execution_plans=False, reasoning_effort='low', min_free_mib=0,
               no_observation_seconds=0, max_batch_cases=5, provider_request_config=None,
@@ -875,7 +980,11 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
             child_env = os.environ.copy()
             if journal_spool_root is not None:
                 child_env['NATLANG_TEACHER_JOURNAL_SPOOL_ROOT'] = str(journal_spool_root)
-            child = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, env=child_env)
+            shared = int(os.environ.get('NATLANG_COLLECTOR_SHARED') or 0)
+            if shared > 0 and journal_spool_root is None:
+                child = SharedChild(command, log, shared)
+            else:
+                child = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, env=child_env)
             try:
                 for tick in range(math.ceil(case_seconds / repetition_poll_seconds)):
                     remaining = case_seconds - (time.monotonic() - start)

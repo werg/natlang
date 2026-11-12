@@ -49,4 +49,29 @@ What made the old setup slow:
 
 ## Measurements
 
-(filled in below as measured)
+End to end, real collectors and harness, base policy 5ff07638, training tasks (generated tokens per wall second from
+the actors' counters; the GPU is shared with the GRPO learner in both new rows):
+
+| setup | DGX actor | Pop actor | aggregate | per-episode stream |
+|---|---|---|---|---|
+| w5 round 4 (16 DGX + 4 Pop slots, BF16, 32 running, 131k KV) | | native | 269-311 tok/s | 22.9 tok/s, 776 s/episode |
+| exp0 eval (2 BF16 actors x 38 slots, time-sliced) | 2 x ~165-230 | - | ~465 tok/s | 8.5-9.5 tok/s, 867-1223 s |
+| exp1 + held-v2 A/A, BF16, 96 running, 393k KV (11:00, 9 min) | 915 | 285 (SGLang, 8 slots) | ~1,200 tok/s | 35.6 tok/s |
+| same, FP8 KV, 16 GB = 1.42M tokens, 128 running (11:43, 13 min) | 1,086 | 191 | ~1,280 tok/s | 38.1 tok/s (early finishers) |
+
+Scheduler view: BF16 at 90 running sat at 90% KV usage with 38-42 requests queued and 43% of prompt tokens prefilled again
+after radix evictions (422k new vs 560k cached in 3 min); FP8 at 110 running: 66% usage, no queue, 12% new (371k vs
+2.82M cached), decode 1,440 tok/s. With the pool no longer binding, the limits are the number of slots the collectors can
+afford (host memory, below) and the GRPO learner sharing the GPU.
+
+## Collector host memory (2026-11-12)
+
+Per slot: a `run_bonsai_queue.py` supervisor (~39 MB) plus a node harness process (`teacher/cli.js`): ~135-160 MB at
+start (node, the bundle, an 18 MB TypeScript library source string and its code), 180-300 MB during an episode (median
+224 MB, p90 357, max 617 over 112 live processes); the episode's own live heap is tens of MB (heap snapshot: 57 MB live
+of which 18 MB is the TypeScript source). V8 flags (`--max-semi-space-size=1`, a 384 MB old space) did not move the
+peak. 112 slots held 28 GB in node + 4.3 GB in supervisors.
+`NATLANG_COLLECTOR_SHARED=N` (run_bonsai_queue): invocations run in shared node processes (`cli.js --serve SOCKET
+--capacity N`, started on demand per supervising unit/runtime/model-facing variants, exit when idle); closing the
+connection aborts that invocation only. Live test: 4 episodes in one process ~300-360 MB vs ~800 MB in four.
+
