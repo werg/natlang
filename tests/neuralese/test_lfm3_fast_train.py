@@ -72,3 +72,25 @@ def test_linear_nll_matches_cross_entropy():
     (actual * upstream).sum().backward()
     torch.testing.assert_close(h.grad, gh)
     torch.testing.assert_close(weight.grad, gw)
+
+
+def test_exp0_packed_rows_give_per_chain_nll():
+    import numpy as np
+    import exp0_sft
+    _, fast = _pair()
+    rng = np.random.default_rng(0)
+    chains = []
+    for n in (6, 3, 9, 4):
+        ids = rng.integers(0, 60, n)
+        chains.append({'ids': ids, 'segs': [(n - 2, 2, {'sample': ids[n - 2:]})]})
+    rows = exp0_sft.packed_rows(chains, 13)
+    assert [len(r) for r in rows] == [2, 2]
+    assert [len(r) for r in exp0_sft.packed_rows(chains, 0)] == [1, 1, 1, 1]
+    expected = torch.cat([lfm3_fast_train.linear_nll(lfm3_fast_train.hidden(fast, ids)[pos], fast.lm_head.weight, tgt)
+                          for ids, pos, tgt in (exp0_sft.chain_tensors(c, 'cpu') for c in chains)])
+    actual = []
+    for row in rows:
+        ids, pos, tgt, weights, lengths = exp0_sft.row_tensors(row, 'cpu')
+        actual.append(lfm3_fast_train.linear_nll(lfm3_fast_train.hidden(fast, ids, lengths)[pos], fast.lm_head.weight, tgt))
+        assert torch.equal(weights, torch.ones(len(tgt)))
+    torch.testing.assert_close(torch.cat(actual), expected, rtol=1e-5, atol=1e-6)

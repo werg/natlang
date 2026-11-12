@@ -118,7 +118,7 @@ def hidden(model, ids):
     return model.model(input_ids=ids[None], use_cache=False).last_hidden_state[0]
 
 
-ACTIVATION_BYTES_PER_TOKEN_LAYER = 96e3   # measured about 80 KB of saved activations per token per layer with the fast layers
+ACTIVATION_BYTES_PER_TOKEN_LAYER = 88e3   # measured 84.8 KB of saved activations per token per layer with lfm3_fast_train (2026-11-12)
 
 
 def set_checkpointing(model, tokens, activation_gb):
@@ -167,6 +167,33 @@ def chain_weights(chain, device):
     return torch.from_numpy(weights.astype(np.float32)).to(device)
 
 
+def packed_rows(chains, max_tokens):
+    """Greedy, order-preserving packing of ``chains`` into rows of at most ``max_tokens`` tokens (a longer chain is a row
+    alone; ``max_tokens`` 0: one chain per row). Returns lists of chains."""
+    rows, row, size = [], [], 0
+    for chain in chains:
+        n = len(chain['ids'])
+        if row and (not max_tokens or size + n > max_tokens):
+            rows.append(row)
+            row, size = [], 0
+        row.append(chain)
+        size += n
+    if row:
+        rows.append(row)
+    return rows
+
+
+def row_tensors(row, device):
+    """(ids, positions, targets, weights, lengths) of chains packed back to back (`lfm3_fast_train.hidden` lengths)."""
+    parts = [chain_tensors(chain, device) for chain in row]
+    offsets = np.cumsum([0] + [len(chain['ids']) for chain in row[:-1]])
+    ids = torch.cat([p[0] for p in parts])
+    positions = torch.cat([p[1] + int(o) for p, o in zip(parts, offsets)])
+    targets = torch.cat([p[2] for p in parts])
+    weights = torch.cat([chain_weights(chain, device) for chain in row])
+    return ids, positions, targets, weights, [len(chain['ids']) for chain in row]
+
+
 def chain_mass(chain):
     return float(sum(row['weight'].sum() if 'weight' in row else length for _, length, row in chain['segs']))
 
@@ -176,14 +203,14 @@ def load_chains(path):
         return pickle.load(handle)['chains']
 
 
-def validation_loss(model, forward, chains):
-    """Weighted mean NLL over prebuilt validation chains (no gradient)."""
+def validation_loss(model, forward, chains, pack_tokens=0):
+    """Weighted mean NLL over prebuilt validation chains (no gradient; packed rows on the fast path)."""
     total, mass = 0., 0.
     with torch.no_grad():
-        for chain in chains:
-            ids, positions, targets = chain_tensors(chain, 'cuda')
-            weights = chain_weights(chain, 'cuda')
-            nll = token_nll(model, forward(model, ids), positions, targets)
+        for row in packed_rows(chains, pack_tokens):
+            ids, positions, targets, weights, lengths = row_tensors(row, 'cuda')
+            h = forward(model, ids, lengths) if len(row) > 1 else forward(model, ids)
+            nll = token_nll(model, h, positions, targets)
             total += (nll * weights).sum().item()
             mass += weights.sum().item()
     return total / max(mass, 1e-9)
@@ -267,6 +294,7 @@ def train(args):
     if not args.stock_model:
         lfm3_fast_train.prepare(model)
         forward = lfm3_fast_train.hidden
+    pack_tokens = 0 if args.stock_model else args.pack_tokens
     special_index = torch.tensor(special, device='cuda')
     live = {name: p for name, p in model.named_parameters()}
     parameters = [masters[name] for name in live]
@@ -302,7 +330,7 @@ def train(args):
     log = open(Path(args.out_dir) / 'train.jsonl', 'a')
     if val_sets:
         model.eval()
-        record = {'step': 0, **{f'val_loss:{name}': validation_loss(model, forward, c) for name, c in val_sets.items()}}
+        record = {'step': 0, **{f'val_loss:{name}': validation_loss(model, forward, c, pack_tokens) for name, c in val_sets.items()}}
         model.train()
         print(json.dumps(record), flush=True)
         log.write(json.dumps(record) + '\n')
@@ -324,15 +352,14 @@ def train(args):
         denominator = sum(chain_mass(chains[i]) for i in group)
         total_nll, correct = 0., 0
         step_started = time.time()
-        for i in group:
-            chain = chains[i]
+        for row in packed_rows([chains[i] for i in group], pack_tokens):
             t = time.time()
-            ids, positions, targets = chain_tensors(chain, 'cuda')
+            ids, positions, targets, weights, lengths = row_tensors(row, 'cuda')
             if not args.stock_model:
                 set_checkpointing(model, len(ids), args.activation_gb)
-            h = forward(model, ids)
+            h = forward(model, ids, lengths) if len(row) > 1 else forward(model, ids)
             t = mark('forward', t)
-            nll = token_nll(model, h, positions, targets) * chain_weights(chain, 'cuda')
+            nll = token_nll(model, h, positions, targets) * weights
             (nll.sum() / denominator).backward()
             t = mark('loss_backward', t)
             torch._foreach_add_([masters[name].grad for name in live], [p.grad for p in live.values()])
@@ -359,7 +386,7 @@ def train(args):
                   'cuda_peak_gb': round(torch.cuda.max_memory_allocated() / 2**30, 1)}
         if val_sets and ((step + 1) % args.val_every == 0 or step + 1 == len(steps)):
             model.eval()
-            record.update({f'val_loss:{name}': validation_loss(model, forward, c) for name, c in val_sets.items()})
+            record.update({f'val_loss:{name}': validation_loss(model, forward, c, pack_tokens) for name, c in val_sets.items()})
             model.train()
         if args.hours and step + 1 == args.replan_step and step + 1 < len(steps):
             # fit the schedule to the wall-clock budget from the measured rate (compile included: conservative)
@@ -469,6 +496,7 @@ def main():
     p = sub.choices['train']
     p.add_argument('--stock-model', action='store_true', help='the unpatched HF layers with full checkpointing (about 3x slower)')
     p.add_argument('--activation-gb', type=float, default=20., help='saved-activation budget per sequence; layers beyond it are recomputed')
+    p.add_argument('--pack-tokens', type=int, default=16384, help='pack a step\'s chains back to back into rows of at most this many tokens (documents stay separate; 0: one chain per forward)')
     p.add_argument('--max-steps', type=int, default=0, help='stop after this many optimizer steps without writing a checkpoint')
     p.add_argument('--out-dir', required=True)
     p.add_argument('--epochs', type=int, default=3)
