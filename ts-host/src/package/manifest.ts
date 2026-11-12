@@ -3,7 +3,8 @@ import { parseTargetArguments, type TargetArgument } from '../runtime/target-arg
 
 export const PACKAGE_SCHEMA = 'natlang.package/v2' as const;
 
-/** A launchable application target: a TypeScript entry module and the function it exports. */
+/** A launchable application target: a TypeScript entry module and the function it exports, or a `.nl` function whose
+ * parameters are the target's arguments (declared `arguments` override them, for example to give defaults). */
 export type NatlangTarget = {
   entry: string;
   /** Relative path to a portable adaptation artifact included in this package. */

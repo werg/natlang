@@ -57,7 +57,7 @@ natlang dashboard --root examples --open
 ```
 
 For a new program, run `natlang init my-program`, enter that directory, then
-`natlang dev`. Edit `answer.nl` and `sample.json`; source and input changes rerun
+`natlang dev`. Edit `answer.nl` (or the sample input, the default in `natlang.json`); source and input changes rerun
 the program, while generated build files do not. `natlang test` runs the saved
 input/expected-output examples in `examples.json`. These tests contact the
 selected model; `natlang check` does not.
@@ -99,6 +99,7 @@ Call one named natural-language function, or ask an instruction over the
 current directory and its nearest `natlang.d/`:
 
 ```bash
+natlang call path/to/function.nl "first argument" '{"as":"json"}' --trace traces/
 natlang call path/to/function.nl --inputs inputs.json --trace traces/
 natlang ask summarize the functions in natlang.d and when to call them
 ```

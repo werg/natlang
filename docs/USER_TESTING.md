@@ -12,6 +12,13 @@ instead. Output shows the label; Live execution shows the active lambdas.
 Expand a lambda and one of its steps to see how it arrived at the result.
 Try triage next to process the bundled support tickets.
 
+Choose the model before the session and keep it for every participant in a round. A hosted model (a Pi provider
+or an OpenAI-compatible endpoint, configured on the Models page) tests the language, CLI and dashboard without
+model latency dominating the session. The managed local model is a separate track: on a CPU-only machine its
+first call can take minutes (a 1.9 GB download, then a prompt of several thousand tokens to prefill), so time
+it on the participant's hardware and report it apart from the authoring tasks. Rehearse each round on a clean
+machine or container first; a developer machine hides installation problems.
+
 For a usability session, ask a developer unfamiliar with natlang to think aloud.
 Avoid giving commands unless they get stuck, and record each intervention. Use
 a separate empty workspace for their own programs so examples stay unchanged.
@@ -29,6 +36,19 @@ Give these tasks in order:
    tests reveal the behavior change. Ask what passing tests establish.
 5. Recover from a missing input file or an unavailable model endpoint. Record
    whether they locate the cause and next action without assistance.
+
+## Coding-agent sessions
+
+Many participants will build with a coding agent rather than by hand. Run the same five tasks with the
+participant directing Claude Code or Codex in an empty workspace, after `natlang skills install`. The agent
+works without a terminal of its own, so every step must succeed non-interactively: `natlang init`, the
+`AGENTS.md` it writes (`CLAUDE.md` imports it), `natlang check --json`, `natlang call answer.nl "..." --json`,
+`natlang test --json`, `natlang traces show`, and the missing-model error that names `natlang setup --yes` or
+a hosted model. Record, in addition to the table below: the agent's first command, every command it got wrong
+and the error text it saw, whether it read AGENTS.md or the skill, whether it asked before the model download,
+model calls it made before `natlang check` passed, and whether it used traces or guessed when a test failed.
+An agent that retries a failing command unchanged or edits generated `*.d.nl.ts` files marks a gap in the
+errors or the guide; fix the message, not the agent's prompt.
 
 At the end, ask which model ran, what source checking guarantees, what the model
 can access, and how they would inspect an incorrect result. These questions

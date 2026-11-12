@@ -33,6 +33,8 @@ For evaluation suites, instruction optimization, or trainable program guidance, 
 5. Keep exact work exact: helpers in callable folders are ordinary TypeScript under a finite-iteration policy; application code outside them is unrestricted.
 6. Run `natlang check` (types, `nl` signatures, callable-folder policy), then exercise the real source through the runtime. Distinguish checks, scripted wiring, live-model runs, and semantic evaluation.
 
+The command-line loop, all non-interactive: `natlang check --json` (no model), `natlang call fn.nl ARG... --json` (one real call; arguments in parameter order, text as written, other types as JSON), `natlang test --json` (every `examples.json` case with expected and received values; exit 1 on a failure), then `natlang traces list` / `natlang traces show CALL_ID` to see the steps behind a wrong result. A missing local model is an error naming `natlang setup --yes` (a download of about 1.9 GB: ask the user first) or a hosted model (`--provider ID`, `NATLANG_SERVER=URL NATLANG_MODEL=ID`). `natlang init DIR` creates a program whose `main` target is its `.nl` function.
+
 ## Design independent applications for a diverse corpus
 
 Start each application from its own users, decisions, persistent domain records, events, and failure modes. Choose its public operations and typed intermediate structures before designing helper functions. A shared request envelope, a fixed number of stages, or identical prepare/decide/construct/audit children across unrelated programs creates repeated architecture even when domain nouns change. Do not use one generator or common semantic scaffold to stand in for those individual designs.

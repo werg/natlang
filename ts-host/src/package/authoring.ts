@@ -14,39 +14,85 @@ export function createProgram(directory: string, options: { instruction?: string
   const input = options.input ?? sampleInput;
   const returns = options.returns?.trim() || (options.instruction ? 'string' : '"billing" | "technical" | "other"');
   const instruction = options.instruction?.trim() || starterInstruction;
+  // One function, its manifest and its tests: the package's main target is answer.nl itself, so there is no entry
+  // module, tsconfig or input file to learn before the first edit. AGENTS.md (and CLAUDE.md, which imports it) tells a
+  // coding agent the non-interactive loop.
   const files: Record<string, string> = {
     'answer.nl': `---\ndescription: Answer using the program instructions.\nargs:\n  input: string\nreturns: ${JSON.stringify(returns)}\n---\n${instruction}\n`,
-    'sample.json': JSON.stringify({ input }, null, 2) + '\n',
-    'main.ts': `import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import type { TargetContext } from '@natlang/node';
-import answer from './answer.nl';
-
-export async function main(context: TargetContext): Promise<number> {
-  const sample = JSON.parse(readFileSync(join(context.package?.root ?? context.workspace, 'sample.json'), 'utf8'));
-  const input = (context.arguments.input as string | undefined) ?? sample.input;
-  const result = await context.runtime.run(() => answer(input));
-  context.io.output.write(JSON.stringify(result, null, 2) + '\\n');
-  return 0;
-}
-`,
     'natlang.json': JSON.stringify({ schema: 'natlang.package/v2', name, version: '0.1.0', description: 'My first natlang program.',
       ...(options.profile ? { model: { profile: options.profile } } : {}),
-      include: ['answer.nl', 'main.ts', 'sample.json', 'examples.json', 'package.json', 'tsconfig.json', 'README.md'],
-      targets: { main: { entry: 'main.ts', description: 'Run with sample input, or supply your own text.',
-        arguments: [{ name: 'input', type: 'string', description: 'Text to process; leave blank to use sample.json.' }] } },
+      include: ['answer.nl', 'examples.json', 'README.md'],
+      targets: { main: { entry: 'answer.nl', description: 'Run answer.nl on the sample input, or supply your own text.',
+        arguments: [{ name: 'input', type: 'string', description: 'Text to process; leave blank for the sample.', default: input }] } },
       warmup: [{ name: 'sample input', function: 'answer.nl', inputs: { input } }] }, null, 2) + '\n',
-    'package.json': JSON.stringify({ name, private: true, type: 'module' }, null, 2) + '\n',
-    'tsconfig.json': JSON.stringify({ compilerOptions: { target: 'ES2023', module: 'NodeNext', moduleResolution: 'NodeNext', strict: true,
-      skipLibCheck: true, rootDir: '.', types: ['node'] }, include: ['*.ts'] }, null, 2) + '\n',
     'examples.json': JSON.stringify(options.instruction ? [] : [{ name: 'duplicate charge', function: 'answer.nl', inputs: { input }, expected: 'billing' }], null, 2) + '\n',
     '.gitignore': '.natlang/\nnode_modules/\n*.d.nl.ts\n',
-    'README.md': `# ${name}\n\nRun these commands from this directory:\n\n\x60\x60\x60sh\nnatlang run\nnatlang run . -- "My own input"\nnatlang dev\nnatlang check\nnatlang test\nnatlang dashboard --open\n\x60\x60\x60\n\nEdit **answer.nl** to change the instructions, **sample.json** to change the default input, and **examples.json** to save input/expected-output tests. The dashboard can also save tests from the function form. Model tests execute real calls on your selected model.\n\nThe arguments and return type in answer.nl are the function's contract. Imports and call sites are checked before execution; the model's behavior still needs examples and tests. Instructions can use the declared input and callable helpers in the companion answer/ folder. Add typed services when the model needs outside capabilities.\n\nThe first run prepares your selected model. Local setup may download a model; you can instead configure an API provider in the dashboard's Models page. Runs reuse saved prompt openings automatically. Use a model profile to choose another backend.\n\nWhen a run fails, the dashboard shows its error and links calls to source and traces.\n`,
+    'README.md': programReadme(name),
+    'AGENTS.md': AGENT_GUIDE,
+    'CLAUDE.md': '@AGENTS.md\n',
   };
   mkdirSync(root, { recursive: true });
   for (const [name, content] of Object.entries(files)) writeFileSync(join(root, name), content, { flag: 'wx' });
   return root;
 }
+
+const fence = '\x60\x60\x60';
+const programReadme = (name: string) => `# ${name}
+
+${fence}sh
+natlang run                          # answer.nl on the sample input
+natlang run . -- "My own input"      # or: natlang call answer.nl "My own input"
+natlang dev                          # rerun after every edit; Ctrl+C stops
+natlang test                         # check the saved examples
+natlang dashboard --open             # results, traces and model settings in the browser
+${fence}
+
+**answer.nl** is a natural-language function: a typed signature (\`args\`, \`returns\`) and instructions that a model
+carries out. Edit the instructions to change its behavior. **examples.json** saves inputs with their expected results, and
+\`natlang test\` runs them on the real model. The sample input is the \`input\` argument's default in **natlang.json**.
+
+\`natlang check\` checks the source without calling a model. The first run prepares the selected model: the local one is a
+one-time download (about 1.9 GB), or choose a hosted model on the dashboard's Models page.
+`;
+
+/** The coding-agent guide every new program carries (AGENTS.md; CLAUDE.md imports it). */
+export const AGENT_GUIDE = `# Working on this natlang program
+
+natlang is TypeScript with natural-language functions. \`answer.nl\` is one: YAML front matter declares its typed
+signature (\`args\`, \`returns\`), and the body is instructions that a model executes. The signature is checked like
+TypeScript; the instructions' behavior is checked by running examples on the model.
+
+## Files
+
+- \`answer.nl\`: the function. Edit the instructions to change behavior, \`args\`/\`returns\` to change the contract.
+- \`examples.json\`: saved cases, \`[{ name, function: "answer.nl", inputs: { input: ... }, expected }]\`, compared exactly.
+- \`natlang.json\`: the package. \`targets.main\` runs \`answer.nl\`; its \`input\` argument's default is the sample.
+- Generated (do not edit): \`*.d.nl.ts\` and \`.natlang/\`.
+
+## The loop
+
+1. \`natlang check --json\`: types, signatures and call sites, without a model. Fix every diagnostic before calling it.
+2. \`natlang call answer.nl "some input" --json\`: one real call; arguments fill parameters in order.
+3. \`natlang test --json\`: every example in examples.json; exits 1 if any fails, with expected and received values.
+4. \`natlang traces list\` and \`natlang traces show CALL_ID\`: each step the model took, to see why a result is wrong.
+
+Model calls take seconds on a hosted model and can take minutes on a local CPU, so check first and call deliberately.
+When you change behavior, add or update an example and run \`natlang test\`.
+
+## The model
+
+If a command reports that the local runtime is not installed, ask the user before running \`natlang setup --yes\` (a
+one-time download of about 1.9 GB), or use a hosted model: \`--provider ID\` (\`natlang models\` lists them) or
+\`NATLANG_SERVER=URL NATLANG_MODEL=ID\` for an OpenAI-compatible endpoint. \`natlang doctor --json\` reports the setup.
+
+## Writing natlang
+
+- Exact work (arithmetic, parsing, sorting, I/O) belongs in TypeScript; judgment belongs in instructions.
+- Put constraints in types: a string-literal union or a record in \`returns\` beats a sentence asking for a format.
+- Helpers the function may call go in its companion folder, \`answer/\` (\`answer/lookup.ts\`, \`answer/summarize.nl\`).
+- Number the steps of a multi-step instruction and name the data each step uses; the executing model may be small.
+- Language reference and patterns: the natlang-authoring skill (\`natlang skills install\` adds it to Claude Code or Codex).
+`;
 
 export function readExamples(root: string): SavedExample[] {
   const path = join(root, 'examples.json');

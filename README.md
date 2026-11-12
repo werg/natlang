@@ -46,14 +46,20 @@ Create your own program:
 ```sh
 natlang init my-program
 cd my-program
-natlang run                            # uses sample.json
+natlang run                            # answer.nl on the sample input
+natlang call answer.nl "Your text"     # one call with your own input
 natlang dev                            # reruns after source or input edits; Ctrl+C stops
 natlang test                           # compares saved examples with real model results
 ```
 
-Edit `answer.nl` to change instructions, `sample.json` to change input, and
-`examples.json` to save expected results. `natlang check` checks source without
-contacting a model. The dashboard can create programs, edit function source,
+A new program is one function (`answer.nl`), its manifest (`natlang.json`, whose
+`main` target runs `answer.nl` with the sample as the default input), saved tests
+(`examples.json`) and an `AGENTS.md` for coding agents. Edit `answer.nl` to change
+instructions and `examples.json` to save expected results. `natlang check` checks source without
+contacting a model. With a coding agent, run `natlang skills install` once to add the
+natlang skills to Claude Code or Codex; every command an agent needs is
+non-interactive (`natlang check --json`, `natlang call ... --json`,
+`natlang test --json`, `natlang setup --yes`). The dashboard can create programs, edit function source,
 save tests, and turn a Playground experiment into a program. See the
 [user-testing guide](docs/USER_TESTING.md) for a short walkthrough.
 
