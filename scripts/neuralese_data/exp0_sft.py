@@ -14,6 +14,11 @@ chain is one sequence whose sampled segments are all supervised: equal to per-ca
     exp0_sft.py parity --turns T.pkl --checkpoint C --base B           # HF forward vs the actor's recorded logprobs
     exp0_sft.py train  --turns T.pkl --checkpoint C --base B --out-dir D
     exp0_sft.py bench  --turns T.pkl --checkpoint C --base B           # stock vs fast fwd+bwd on fixed chains: loss, grads, tok/s
+    exp0_sft.py train  --chains S.pkl [--val-chains V.pkl] ...          # prebuilt sequences (SFT v2: lower_sft_sources.py select)
+
+A prebuilt chain's segments may carry per-token loss weights (`row['weight']`, e.g. the own-output objective's reasoning
+share); the step loss is then the weighted mean over its targets. Each `--val-chains` set reports its weighted loss every
+`--val-every` steps and at the end (the run's held-out training curve).
 
 Speed (GB10, 11k-token sequences): the stock HF modelling code runs at about 1.9k fwd+bwd tokens/s because half of the GPU
 time is unfused elementwise work and a fifth dense sliding-window attention; `lfm3_fast_train` (banded sliding attention,
@@ -132,7 +137,10 @@ def _nll(weight, h, target):
 
 
 def token_nll(model, h, positions, targets, chunk=2048):
-    """NLL (fp32) of ``targets`` predicted from hidden rows ``positions`` (logits only for those rows, chunk-checkpointed)."""
+    """NLL (fp32) of ``targets`` predicted from hidden rows ``positions`` (logits only for those rows, chunk-checkpointed;
+    a `lfm3_fast_train.prepare`d model uses its fused linear NLL: the same rounding, logits recomputed once, never stored)."""
+    if getattr(model, '_lfm3_fast', None) is not None:
+        return lfm3_fast_train.linear_nll(h[positions], model.lm_head.weight, targets)
     out = []
     weight = model.lm_head.weight
     for start in range(0, len(positions), chunk):
@@ -150,6 +158,35 @@ def chain_tensors(chain, device):
     positions = np.concatenate([np.arange(start - 1, start + length - 1) for start, length, _ in chain['segs']])
     targets = np.concatenate([row['sample'] for _, _, row in chain['segs']])
     return ids, torch.from_numpy(positions).to(device), torch.from_numpy(targets.astype(np.int64)).to(device)
+
+
+def chain_weights(chain, device):
+    """Per-target loss weights (ones unless the segments declare them)."""
+    weights = np.concatenate([row['weight'] if 'weight' in row else np.ones(length, np.float32)
+                              for _, length, row in chain['segs']])
+    return torch.from_numpy(weights.astype(np.float32)).to(device)
+
+
+def chain_mass(chain):
+    return float(sum(row['weight'].sum() if 'weight' in row else length for _, length, row in chain['segs']))
+
+
+def load_chains(path):
+    with open(path, 'rb') as handle:
+        return pickle.load(handle)['chains']
+
+
+def validation_loss(model, forward, chains):
+    """Weighted mean NLL over prebuilt validation chains (no gradient)."""
+    total, mass = 0., 0.
+    with torch.no_grad():
+        for chain in chains:
+            ids, positions, targets = chain_tensors(chain, 'cuda')
+            weights = chain_weights(chain, 'cuda')
+            nll = token_nll(model, forward(model, ids), positions, targets)
+            total += (nll * weights).sum().item()
+            mass += weights.sum().item()
+    return total / max(mass, 1e-9)
 
 
 def parity(args):
@@ -174,15 +211,17 @@ def parity(args):
                       'frac_over_0.5': (d.abs() > 0.5).float().mean().item()}))
 
 
-def write_checkpoint(model, state, special, out_path, source_sha256, step):
-    """A pruned (inference-only) native checkpoint: the trained backbone in the source's bf16 layout, the source's interface."""
+def write_checkpoint(model, state, special, out_path, source_sha256, step, trained=None):
+    """A pruned (inference-only) native checkpoint: the trained backbone in the source's bf16 layout, the source's interface.
+    ``trained``: the backbone already on the host ({name: bf16 tensor}, e.g. a pinned snapshot); else read from ``model``."""
     backbone = {}
     original = state['backbone_state']
     for name, value in original.items():
         if name == 'lm_head.weight':
             continue
         backbone[name] = value
-    trained = {k: v.detach().to('cpu', torch.bfloat16) for k, v in model.state_dict().items() if k != 'lm_head.weight'}
+    if trained is None:
+        trained = {k: v.detach().to('cpu', torch.bfloat16) for k, v in model.state_dict().items() if k != 'lm_head.weight'}
     changed = 0
     for name in list(backbone):
         new = trained[name]
@@ -203,15 +242,16 @@ def write_checkpoint(model, state, special, out_path, source_sha256, step):
 
 
 def train(args):
-    episodes = pickle.load(open(args.turns, 'rb'))['episodes']
+    episodes = [] if args.chains else pickle.load(open(args.turns, 'rb'))['episodes']
     if args.max_per_task:
         # compute-bound (GB10: about 1k tokens/s of fwd+bwd at 10k context): the shortest verified episodes of each task
         by_task = collections.defaultdict(list)
         for episode in episodes:
             by_task[episode['task_id']].append((sum(len(c['ids']) for c in chains_of([episode])), episode['round'], episode['sample'], episode))
         episodes = [item[-1] for task in sorted(by_task) for item in sorted(by_task[task], key=lambda x: x[:3])[:args.max_per_task]]
-    chains = chains_of(episodes)
+    chains = load_chains(args.chains) if args.chains else chains_of(episodes)
     loss_tokens = sum(length for c in chains for _, length, _ in c['segs'])
+    val_sets = {Path(path).stem: load_chains(path) for path in args.val_chains}
     print(json.dumps({'episodes': len(episodes), 'sequences': len(chains), 'sequence_tokens': int(sum(len(c['ids']) for c in chains)),
                       'loss_tokens': int(loss_tokens), 'epochs': args.epochs}), flush=True)
     model, state, special = load_model(args.checkpoint, args.base)
@@ -259,6 +299,12 @@ def train(args):
         steps = steps[:args.max_steps]
     print(json.dumps({'optimizer_steps': total, 'lr': args.lr, 'batch_loss_tokens': args.batch_loss_tokens}), flush=True)
     log = open(Path(args.out_dir) / 'train.jsonl', 'a')
+    if val_sets:
+        model.eval()
+        record = {'step': 0, **{f'val_loss:{name}': validation_loss(model, forward, c) for name, c in val_sets.items()}}
+        model.train()
+        print(json.dumps(record), flush=True)
+        log.write(json.dumps(record) + '\n')
     started = time.time()
     forward_tokens = 0
     phase = collections.Counter()
@@ -274,7 +320,7 @@ def train(args):
         scale = min(1., (step + 1) / args.warmup) * (args.min_lr_fraction + (1 - args.min_lr_fraction) * 0.5 * (1 + math.cos(math.pi * fraction)))
         for g in optimizer.param_groups:
             g['lr'] = args.lr * scale
-        denominator = sum(length for i in group for _, length, _ in chains[i]['segs'])
+        denominator = sum(chain_mass(chains[i]) for i in group)
         total_nll, correct = 0., 0
         step_started = time.time()
         for i in group:
@@ -285,7 +331,7 @@ def train(args):
                 set_checkpointing(model, len(ids), args.activation_gb)
             h = forward(model, ids)
             t = mark('forward', t)
-            nll = token_nll(model, h, positions, targets)
+            nll = token_nll(model, h, positions, targets) * chain_weights(chain, 'cuda')
             (nll.sum() / denominator).backward()
             t = mark('loss_backward', t)
             torch._foreach_add_([masters[name].grad for name in live], [p.grad for p in live.values()])
@@ -299,13 +345,10 @@ def train(args):
         embedding_master.grad[special_index] = 0
         norm = torch.nn.utils.clip_grad_norm_(parameters, args.clip).item()
         optimizer.step()
-        optimizer.zero_grad(set_to_none=False)
-        for p in parameters:
-            p.grad.zero_()
+        optimizer.zero_grad(set_to_none=False)       # zeroes the FP32 accumulators in place (foreach)
         with torch.no_grad():
             embedding_master[special_index] = saved_rows
-            for name, p in live.items():
-                p.copy_(masters[name])
+            torch._foreach_copy_(list(live.values()), [masters[name] for name in live])
         mark('optimizer', t)
         record = {'step': step + 1, 'of': total, 'loss': total_nll / denominator, 'lr': args.lr * scale, 'grad_norm': norm,
                   'sequences': len(group), 'loss_tokens': denominator, 'elapsed_s': round(time.time() - started, 1),
@@ -313,6 +356,10 @@ def train(args):
                   'step_seconds': round(time.time() - step_started, 1),
                   'phase_seconds': {k: round(v, 1) for k, v in phase.items()},
                   'cuda_peak_gb': round(torch.cuda.max_memory_allocated() / 2**30, 1)}
+        if val_sets and ((step + 1) % args.val_every == 0 or step + 1 == len(steps)):
+            model.eval()
+            record.update({f'val_loss:{name}': validation_loss(model, forward, c) for name, c in val_sets.items()})
+            model.train()
         print(json.dumps(record), flush=True)
         log.write(json.dumps(record) + '\n')
         log.flush()
@@ -394,7 +441,7 @@ def main():
     sub = parser.add_subparsers(dest='command', required=True)
     for name in ('parity', 'train', 'bench'):
         p = sub.add_parser(name)
-        p.add_argument('--turns', required=True)
+        p.add_argument('--turns', required=name != 'train')
         p.add_argument('--checkpoint', required=True)
         p.add_argument('--base', required=True)
     p = sub.choices['parity']
@@ -422,6 +469,10 @@ def main():
     p.add_argument('--batch-loss-tokens', type=int, default=30000)
     p.add_argument('--seed', type=int, default=20261111)
     p.add_argument('--max-per-task', type=int, default=0)
+    p.add_argument('--chains', help='prebuilt sequences pickle ({"chains": [...]}) instead of --turns')
+    p.add_argument('--val-chains', action='append', default=[],
+                   help='prebuilt validation sequences (repeatable, named by file stem): weighted NLL every --val-every steps')
+    p.add_argument('--val-every', type=int, default=50)
     args = parser.parse_args()
     {'parity': parity, 'train': train, 'bench': bench}[args.command](args)
 
