@@ -51,6 +51,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('rounds', nargs='+', type=Path)
     parser.add_argument('--out', type=Path, required=True)
+    parser.add_argument('--role', default='student', help="episode role to lower ('teacher': JOLT+ privileged attempts)")
     args = parser.parse_args()
     stats, episodes, seen = collections.Counter(), [], set()
     for directory in args.rounds:
@@ -60,7 +61,7 @@ def main():
                     continue
                 row = json.loads(line)
                 reward = row.get('reward') or {}
-                if reward.get('quality') != 1 or row.get('jolt_role', 'student') != 'student':
+                if reward.get('quality') != 1 or row.get('jolt_role', 'student') != args.role:
                     continue
                 if row.get('split') != 'train' or row.get('unscored') or not row.get('turns'):
                     stats['skip_episode_not_train_or_unscored'] += 1
