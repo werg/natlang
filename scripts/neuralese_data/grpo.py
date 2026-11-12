@@ -1147,7 +1147,7 @@ def main():
     t.add_argument('--context-tokens', type=int, default=32768)
     t.add_argument('--seed', type=int, default=20261112)
     t.add_argument('--seed-base', type=int, default=30_000_000)
-    t.add_argument('--lr', type=float, default=1e-6)
+    t.add_argument('--lr', type=float, default=3e-6, help='check 4 (LEARNING_SANITY): 1e-6 barely moves BF16 weights, 1e-5 reaches KL 0.59 in 10 steps')
     t.add_argument('--warmup', type=int, default=2)
     t.add_argument('--weight-decay', type=float, default=0.)
     t.add_argument('--clip', type=float, default=1.0)
