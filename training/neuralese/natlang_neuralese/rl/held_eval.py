@@ -701,7 +701,7 @@ def rolled_back(out):
 
 
 # ---- standalone measurement (experiments) ----------------------------------------------------------------------------
-BASE_SNAPSHOT = '/home/werg/.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd'
+BASE_SNAPSHOT = Path.home() / '.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd'
 ACTOR_ARGS = ('--engine', 'sglang', '--sglang-projection', 'vendor', '--sglang-max-running', '64',
               '--sglang-max-total-tokens', '262144', '--sglang-mem-fraction', '0.2')
 
