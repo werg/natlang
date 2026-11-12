@@ -508,6 +508,40 @@ def group_advantages(rewards):
     return [(r - mean) / (std + 1e-6) for r in rewards]
 
 
+def synthetic_reward(spec, episode):
+    """Learning sanity check 4 (plans/neuralese/LEARNING_SANITY_20261112.md): a trivially learnable reward replacing the task
+    outcome. ``short-calls:N``: 1 if the episode's model calls sample fewer than N tokens on average, else 0;
+    ``short-calls``: minus the mean sampled tokens per call / 1000 (every group has spread)."""
+    kind, _, value = spec.partition(':')
+    if kind == 'short-calls':
+        lengths = [len(row['sample']) for row in episode['rows']]
+        if not value:
+            return -sum(lengths) / len(lengths) / 1000 if lengths else -10.
+        return float(bool(lengths) and sum(lengths) / len(lengths) < float(value))
+    raise ValueError(f'unknown synthetic reward {spec!r}')
+
+
+def probe_chains(args):
+    """Fixed probe sequences (``--probe-turns``): their sampled tokens are scored on the learner after every step and on
+    the actor after every weight sync, so an update that does not reach the served weights shows."""
+    from sanity_logprob_paths import sample_chains
+    return sample_chains(SimpleNamespace(turns=args.probe_turns, max_tokens=args.probe_max_tokens, seed=0,
+                                         chains=args.probe_chains))
+
+
+def probe_actor_nll(sglang_url, chains):
+    from sanity_logprob_paths import targets_of
+    total, count = 0., 0
+    for chain in chains:
+        positions, _ = targets_of(chain)
+        answer = json.loads(post(sglang_url + '/generate', {'input_ids': [int(i) for i in chain['ids']],
+            'return_logprob': True, 'logprob_start_len': 0, 'sampling_params': {'temperature': 0.0, 'max_new_tokens': 1}}))
+        items = answer['meta_info']['input_token_logprobs']
+        total -= sum(items[p + 1][0] for p in positions)
+        count += len(positions)
+    return total / max(1, count)
+
+
 def load_tasks(args, work=None):
     """The shuffled train tasks of the pools (first occurrence of an id wins) minus the held set: its tasks, every row of
     a held ``split_group`` (``held_eval.exclusion_ids``) and every row sharing a ``source_groups`` entry with those.
@@ -711,11 +745,36 @@ def train(args):
     collector.version = step
     (work / 'sampling-config.json').write_text(json.dumps({'guidance': False, 'x_natlang_rl_capture': True, 'x_natlang_rl_top_k': 0}) + '\n')
     versions_live = {'actor': step}
+    probes = probe_chains(args) if args.probe_turns else []
+
+    def probe_learner_nll():
+        from sanity_logprob_paths import targets_of
+        total, count = 0., 0
+        for chain in probes:
+            positions, targets = targets_of(chain)
+            ids = torch.from_numpy(chain['ids'].astype(np.int64)).cuda()
+            logp = lfm3_fast_train.token_logprobs(model, ids, torch.from_numpy(positions).cuda(),
+                                                  torch.from_numpy(targets.astype(np.int64)).cuda())
+            total -= logp.sum().item()
+            count += len(positions)
+        return total / max(1, count)
+
+    def log_probe(version, where):
+        try:
+            log_line(log, {'event': 'probe', 'version': version, 'where': where, 'probe_tokens': sum(n for c in probes for _, n, _ in c['segs']),
+                'nll': round(probe_actor_nll(sglang_url, probes) if where == 'actor' else probe_learner_nll(), 5)})
+        except Exception as error:
+            log_line(log, {'event': 'probe failed', 'version': version, 'where': where, 'error': repr(error)[:300]})
 
     def on_published(version, ok):
         if ok:
             collector.version = version
             versions_live['actor'] = version
+            if probes and not args.no_actor_sync:
+                log_probe(version, 'actor')
+    if probes:
+        log_probe(step, 'learner')
+        log_probe(step, 'actor')
     if step:   # a resumed run first serves its own weights
         sync.snapshot()
         sync.publish(step, on_published)
@@ -798,12 +857,16 @@ def train(args):
         phase['wait_groups'] = time.time() - t
         t = time.time()
         stats = collections.Counter()
-        chains, rewards, spread, dropped_stale, staleness = [], [], 0, 0, []
+        chains, rewards, spread, dropped_stale, staleness, task_rewards = [], [], 0, 0, [], []
         for group in groups:
             task_id, episodes, versions = load_group(collector, group, stats)
             prune_group(collector, group, keep=args.keep_rollouts)
             if not episodes:
                 continue
+            if args.synthetic_reward:
+                task_rewards += [e['reward'] for e in episodes]
+                for episode in episodes:
+                    episode['reward'] = synthetic_reward(args.synthetic_reward, episode)
             stale = step - min(versions) if versions else 0
             rewards += [e['reward'] for e in episodes]
             if stale > args.max_staleness:
@@ -825,6 +888,11 @@ def train(args):
                   'staleness': dict(collections.Counter(staleness)), 'episodes': len(rewards),
                   'reward_mean': round(sum(rewards) / max(1, len(rewards)), 4), 'sequences': len(chains),
                   'loss_tokens': loss_tokens, 'lowering': dict(stats), 'actor_version': versions_live['actor']}
+        if args.synthetic_reward:
+            record.update(synthetic_reward=args.synthetic_reward,
+                          task_reward_mean=round(sum(task_rewards) / max(1, len(task_rewards)), 4),
+                          mean_sampled_per_call=round(sum(len(r['sample']) for c in chains for _, _, r in c['segs'])
+                                                      / max(1, sum(len(c['segs']) for c in chains)), 1))
         if not chains:
             log_line(log, {**record, 'event': 'no learning signal in these groups',
                            'phase_s': {k: round(v, 1) for k, v in phase.items()}})
@@ -882,12 +950,23 @@ def train(args):
         optimizer.step()
         for p in parameters:
             p.grad.zero_()
+        changed_step = changed_start = 0
         with torch.no_grad():
             embedding_master[special_index] = saved_rows
+            reference_params = dict(reference.named_parameters()) if reference is not None else {}
             for name, p in live.items():
-                p.copy_(masters[name])
+                new = masters[name].to(torch.bfloat16)
+                changed_step += int((new != p).sum())
+                if name in reference_params:
+                    changed_start += int((new != reference_params[name]).sum())
+                p.copy_(new)
         torch.cuda.synchronize()
         phase['optimizer'] = time.time() - t
+        elements = sum(p.numel() for p in live.values())
+        record.update(bf16_changed_step_fraction=round(changed_step / elements, 6),
+                      bf16_changed_vs_start_fraction=round(changed_start / elements, 6) if reference is not None else None)
+        if probes:
+            record['probe_learner_nll'] = round(probe_learner_nll(), 5)
         step += 1
         # weight sync and checkpoints (background)
         t = time.time()
@@ -997,6 +1076,13 @@ def main():
     t.add_argument('--held-samples-start', type=int, default=4, help='samples per held task for the start policy (step 0)')
     t.add_argument('--held-workers', type=int, default=96, help='collector slots of a held measurement on the training actor')
     t.add_argument('--unit-prefix', default='grpo')
+    t.add_argument('--synthetic-reward', help='sanity check: replace the task outcome by a trivially learnable reward '
+                   '(short-calls:N = mean sampled tokens per model call under N; short-calls = minus that mean / 1000); the task '
+                   'outcome is logged beside it')
+    t.add_argument('--probe-turns', help='turns pickle (lower_rollout_turns) of fixed probe chains: their NLL is logged on the '
+                   'learner every step and on the actor after every weight sync')
+    t.add_argument('--probe-chains', type=int, default=4)
+    t.add_argument('--probe-max-tokens', type=int, default=8000)
     args = parser.parse_args()
     if args.command == 'train':
         from natlang_neuralese.common.cuda_context import ensure_context
