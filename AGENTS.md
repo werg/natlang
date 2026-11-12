@@ -59,7 +59,10 @@ background threads. Episodes run the run's pinned copy of ts-host (`WORK/pin-<co
 current policy with the held-v2 engine pin): new collection pauses, `held_eval measure` (held-v2; 4 samples for the start
 policy before the first step, then 2 samples every 4 h on that step's checkpoint) and `held_eval compare` with step 0
 (`WORK/held/step-N/`); `--held-extra CKPT,...` measures other native checkpoints the same way after step 0 (loaded into the
-actor in place, `held/extra-<sha12>/` with a compare against step 0, 2 samples by default), then restores the start policy. The KL
+actor in place, `held/extra-<sha12>/` with a compare against step 0, 2 samples by default), then restores the start policy. Step sizing (smoke): ~27k forward tokens per episode (chaining already merges 282 of 329
+consecutive calls; 38 diverge inside the sampled reply, 9 in the prompt), learner 600-800 tok/s while sharing the GPU with
+decode at `--activation-gb 4`; defaults now 12-24 groups per step, `--activation-gb 12`, 24 collector slots during the
+learner phase (`--learner-phase-slots`). The KL
 reference runs the policy's own training graph (a no_grad pass compiles other kernels: KL 5e-4 at identical weights). After each in-place update the front attests what it serves (`POST /v1/neuralese/rebind-policy`:
 the step's checkpoint sha, else the served weights' sha; the native engine keeps the start checkpoint). `train.jsonl` logs per step: reward
 mean, spread fraction, KL, rho (mean, pre/post-cap max, capped fraction, |log rho|), learner and actor tokens/s, phase seconds.

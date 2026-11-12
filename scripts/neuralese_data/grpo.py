@@ -137,6 +137,7 @@ class Collector:
         self.rng = random.Random(args.seed + first_group)
         self.stop = threading.Event()
         self.paused = threading.Event()             # set during a held measurement on the training actor
+        self.active_slots = args.slots
         self.generated = 0                          # sampled tokens of finished episodes (throughput)
         self.episodes = 0
         self.env = {**os.environ}
@@ -209,9 +210,12 @@ class Collector:
                 self._new_group()
             return self.pending.popleft() if self.pending else None
 
-    def slot(self):
+    def slot(self, index=0):
         sampling = self.work / 'sampling-config.json'
         while not self.stop.is_set():
+            if index >= self.active_slots:   # fewer slots while the learner computes (they share the GPU)
+                time.sleep(2)
+                continue
             item = self._take()
             if item is None:
                 time.sleep(2)
@@ -814,7 +818,7 @@ def train(args):
     if args.held_every_hours > 0 and not (work / 'held' / 'step-00000' / 'result.json').exists() \
             and not args.skip_base_held and not args.held_baseline:
         collector.paused.set()            # the start policy's held measurement goes first (held() resumes collection)
-    slots = [threading.Thread(target=collector.slot, daemon=True) for _ in range(args.slots)]
+    slots = [threading.Thread(target=collector.slot, args=(index,), daemon=True) for index in range(args.slots)]
     for thread in slots:
         thread.start()
 
@@ -954,6 +958,7 @@ def train(args):
             continue
         # learner
         torch.cuda.reset_peak_memory_stats()
+        collector.active_slots = args.learner_phase_slots
         sums = collections.Counter()
         rho_pre_max, rho_post_max, forward_tokens = 0., 0., 0
         rng = random.Random(args.seed + step)
@@ -1027,6 +1032,7 @@ def train(args):
         if probes:
             record['probe_learner_nll'] = round(probe_learner_nll(), 5)
         step += 1
+        collector.active_slots = args.slots
         # weight sync and checkpoints (background)
         t = time.time()
         sync.snapshot()                   # waits for the previous publish
@@ -1091,8 +1097,12 @@ def main():
     t.add_argument('--task-ids', help='JSON list: train only on these pool ids (smoke)')
     t.add_argument('--group', type=int, default=8)
     t.add_argument('--slots', type=int, default=96, help='concurrent episodes on the actor (its default runs 128 sequences)')
-    t.add_argument('--min-groups', type=int, default=16)
-    t.add_argument('--max-groups', type=int, default=48, help='a w5-like episode costs ~90k learner tokens: 48 groups is ~1-2 h of learner')
+    t.add_argument('--min-groups', type=int, default=12)
+    t.add_argument('--learner-phase-slots', type=int, default=24,
+                   help='collector slots that take new episodes while the learner computes (actor decode and the learner '
+                        'share the GB10; in-flight episodes always finish)')
+    t.add_argument('--max-groups', type=int, default=24,
+                   help='groups per step at most: about 27k forward tokens per episode (smoke), so 24 groups is ~30-45 min of learner')
     t.add_argument('--max-outstanding', type=int, default=0, help='groups in flight or waiting (default max-groups + slots/group)')
     t.add_argument('--max-staleness', type=int, default=2)
     t.add_argument('--case-seconds', type=int, default=3600, help='wall-clock safety net only (a wall stop is unscored)')
@@ -1115,7 +1125,7 @@ def main():
     t.add_argument('--clip', type=float, default=1.0)
     t.add_argument('--kl-beta', type=float, default=0.02)
     t.add_argument('--rho-cap', type=float, default=2.0)
-    t.add_argument('--activation-gb', type=float, default=14.)
+    t.add_argument('--activation-gb', type=float, default=12., help='saved activations per sequence; layers beyond are recomputed')
     t.add_argument('--max-steps', type=int, default=0)
     t.add_argument('--save-every', type=int, default=2)
     t.add_argument('--state-every', type=int, default=4)
