@@ -28,6 +28,6 @@ Make the application concrete and executable. Explain which judgments natlang ma
 
 ## Deliverable evidence
 
-Report implementation, checks, fixture tests, live-model results, semantic review, and deployment separately. For teacher data, preserve provenance and independent semantic judgment; structural checks alone do not admit a sample. A discovered infrastructure defect is useful output: describe the failing contract and fix it in the shared layer.
+Report implementation, checks, fixture tests, live-model results, semantic review, and deployment separately. A discovered infrastructure defect is useful output: describe the failing contract and fix it in the shared layer.
 
 Anchors: `ts-host/test/{runtime,project,browser,terminal-application}.test.mjs`, `ts-host/scripts/{studio-smoke,playground-smoke,browser-pilot}.mjs`, and each application's tests under `ts-host/test/`.

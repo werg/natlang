@@ -7,6 +7,12 @@ hill-climber. Search runs in Node; compatible artifacts can be consumed in Node 
 a browser. In a checkout, `docs/ADAPTATION.md` has additional API and deployment detail,
 and `examples/adaptation/` contains complete suites and recorded live evidence.
 
+Use adaptation when the callable contracts and decomposition are sound and the task is
+to improve instructions or program guidance against explicit scenarios. Fix missing
+capabilities, types, capture names or helper structure in source first: adaptation
+changes static instruction text, not those contracts. Ordinary authoring needs no
+optimization run.
+
 ## Choose the editable boundary
 
 Named `.nl` instructions and authored inline `nl` static template segments are

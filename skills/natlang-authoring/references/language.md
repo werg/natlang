@@ -97,6 +97,17 @@ Use ordinary TypeScript types in signatures; the supported set (records, arrays,
 
 The model carries out the instructions for one call: it answers directly when the work takes only reading and judgment, and otherwise uses a persistent TypeScript eval scope where parameters, captures, callable items and services are bindings, then finishes with `return_result` (`success`, `blocked`, or `failed`). The tools, cut-offs, transcript search and conversation compaction are specified in [Model surface](../../../spec/SPEC.md#model-surface), [Eval](../../../spec/SPEC.md#eval), [Cut-offs](../../../spec/SPEC.md#cut-offs) and [Conversation length](../../../spec/SPEC.md#conversation-length). Directory reducers additionally get file tools ([directory reducers](../../../spec/ext/directory-reducers.md)). Write instructions so the next meaningful action is apparent from them and the typed scope.
 
+Rules that shape what instructions can ask for:
+
+- A function declared `returns: string` returns its plain final reply when nothing is staged; no tool call is needed. If the runtime says "This call returns text: your next reply ... is returned as the result", the next reply is the answer, short, without continuing cut-off reasoning.
+- A call with formal parameters exposes them by their declared names, plus `inputs` and `read_inputs()` when not shadowed. A zero-argument call has no caller-input object: add a parameter when the function needs caller data.
+- `eval` code is TypeScript only. Python-shaped code or prose in it fails with a one-sentence fix naming the line: the scope's names, `nl` and the services are already bound, so use them directly with `const`/`let`, braces and `true`/`false`/`null`. A JavaScript `import` of a project package is valid; importing a name already in scope is an `invalid-binding` error.
+- Await the natural-language calls you start. A call that fails stops the calls it started; calls still running when an eval ends (or its `timeout_ms` passes) are stopped. Service calls already made stay made.
+- A checked inline callable used as a callback keeps its declared parameters: `array.map(judge)` passes only what `judge` declares, so declare an index parameter if the judgment needs it.
+- An `as const` assertion in eval types a literal or tuple result without a declared type; other named types must be declared in the call's scope.
+- Input listings show at least 4,096 characters per value, and a tool output up to an eighth of the call's context budget (at least 2,000 characters). Longer output is cut off with a `read_page(id, n)` note; the eval variable always holds the whole value, so code can `slice` it.
+- A binding named `nl` in your own code hides the built-in; rename it. Ambient `declare` typings of `nl` are fine.
+
 An eval that finishes without a value reports `undefined` (as a JavaScript REPL does), after any `console:` output; `null` appears only for a value that is null. In the folder tools, `bash` and `python3` share the folder as `/workspace` (the working directory; `python3` starts in the shell's current directory), `/dev/null` and `/dev/zero` exist (`2>/dev/null` works and writes nothing), and `/tmp` is scratch that is not part of the folder's changes; python output without a final newline is still reported.
 
 ## Iteration

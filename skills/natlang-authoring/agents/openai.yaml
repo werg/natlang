@@ -1,4 +1,4 @@
 interface:
   display_name: "Natlang Authoring"
-  short_description: "Author and adapt typed natlang programs"
-  default_prompt: "Use $natlang-authoring to implement and validate this natlang codebase."
+  short_description: "Write, check, test and debug natlang programs"
+  default_prompt: "Use $natlang-authoring to write and test this natlang program."
