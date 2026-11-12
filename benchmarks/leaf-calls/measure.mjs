@@ -5,6 +5,8 @@
  *   node benchmarks/leaf-calls/measure.mjs --variant tools|direct|decision --samples 2 --jobs 4 --out results/tools.json
  *   node benchmarks/leaf-calls/measure.mjs --compare results/tools.json results/direct.json
  *
+ * --label NAME names the run (default: the variant), for comparing profiles (NATLANG_PROFILE) under one variant.
+ *
  * A variant is a set of runtime model settings on the configured runtime `natlang run` uses (its selected profile,
  * NATLANG_PROFILE or NATLANG_CONFIG_HOME choose the model) with the profile's sampling. Results pair by (case, sample)
  * across variants. The output keeps every outcome, its turns and its tokens.
@@ -26,9 +28,9 @@ const args = process.argv.slice(2);
 const flag = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : fallback; };
 
 if (args[0] === '--compare') compare(args[1], args[2]);
-else await measure(flag('--variant'), Number(flag('--samples', '2')), flag('--out'), Number(flag('--jobs', '1')));
+else await measure(flag('--variant'), Number(flag('--samples', '2')), flag('--out'), Number(flag('--jobs', '1')), flag('--label'));
 
-async function measure(variant, samples, out, jobs) {
+async function measure(variant, samples, out, jobs, label = variant) {
   if (!VARIANTS[variant] || !out) throw new Error('usage: measure.mjs --variant tools|direct|decision --samples N --out FILE');
   const { natlangRuntime, loadVirtualNatlang } = await import(join(dist, 'index.js'));
   const { callableMeta } = await import(join(dist, 'runtime', 'callable.js'));
@@ -65,19 +67,21 @@ async function measure(variant, samples, out, jobs) {
         turns: requests.length, readout: readout ? 'decision' : null,
         prompt_tokens: requests.reduce((sum, event) => sum + (event.prompt_tokens ?? 0), 0),
         cached_tokens: requests.reduce((sum, event) => sum + (event.cached_tokens ?? 0), 0),
-        completion_tokens: requests.reduce((sum, event) => sum + (event.completion_tokens ?? 0), 0) };
+        completion_tokens: requests.reduce((sum, event) => sum + (event.completion_tokens ?? 0), 0),
+        reasoning_chars: trace.filter(event => event.kind === 'proposal').reduce((sum, event) => sum + (event.reasoning?.length ?? 0), 0),
+        reasoning: trace.filter(event => event.kind === 'proposal' && event.reasoning).map(event => event.reasoning.slice(0, 400)) };
       results.push(row);
       appendFileSync(partial, JSON.stringify(row) + '\n');
-      process.stderr.write(`${variant} s${sample} #${index} ${item.function} ${row.correct ? 'ok' : 'WRONG'} ${row.seconds.toFixed(1)}s ` +
+      process.stderr.write(`${label} s${sample} #${index} ${item.function} ${row.correct ? 'ok' : 'WRONG'} ${row.seconds.toFixed(1)}s ` +
         `${row.turns}t ${row.prompt_tokens}p ${row.completion_tokens}c ${row.error ? row.error.slice(0, 120) : JSON.stringify(row.value)}\n`);
     };
     await Promise.all(Array.from({ length: jobs }, async () => { while (work.length) await runOne(work.shift()); }));
   } finally { await configured.close(); }
   results.sort((a, b) => a.sample - b.sample || a.case - b.case);
   const correct = results.filter(row => row.correct).length;
-  writeFileSync(out, JSON.stringify({ variant, settings: VARIANTS[variant], model: configured.selection.choice.model,
+  writeFileSync(out, JSON.stringify({ variant: label, settings: VARIANTS[variant], model: configured.selection.choice.model,
     profile: configured.selection.name, samples, seconds: (Date.now() - started) / 1000, correct, total: results.length, results }, null, 2) + '\n');
-  process.stderr.write(`${variant}: ${correct}/${results.length} correct in ${((Date.now() - started) / 1000).toFixed(0)} s\n`);
+  process.stderr.write(`${label}: ${correct}/${results.length} correct in ${((Date.now() - started) / 1000).toFixed(0)} s\n`);
 }
 
 /** McNemar exact (two-sided binomial on discordant pairs) plus per-variant cost. */
@@ -97,7 +101,8 @@ function compare(a, b) {
   const cost = run => {
     const rows = run.results, mean = field => rows.reduce((sum, row) => sum + row[field], 0) / rows.length;
     return { correct: `${run.correct}/${run.total}`, mean_seconds: +mean('seconds').toFixed(2), mean_turns: +mean('turns').toFixed(2),
-      mean_prompt_tokens: Math.round(mean('prompt_tokens')), mean_completion_tokens: Math.round(mean('completion_tokens')) };
+      mean_prompt_tokens: Math.round(mean('prompt_tokens')), mean_completion_tokens: Math.round(mean('completion_tokens')),
+      mean_reasoning_chars: Math.round(mean('reasoning_chars') || 0) };
   };
   console.log(JSON.stringify({ [left.variant]: cost(left), [right.variant]: cost(right),
     pairs: both + neither + n, both, neither, [`only_${left.variant}`]: onlyLeft, [`only_${right.variant}`]: onlyRight, mcnemar_p: +p.toFixed(4) }, null, 2));
