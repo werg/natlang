@@ -41,6 +41,7 @@ def main():
     ap.add_argument('--policy-id', required=True)
     ap.add_argument('--endpoint', action='append', required=True, help='URL=SLOTS')
     ap.add_argument('--samples', type=int, default=8)
+    ap.add_argument('--temperature', type=float, default=1.0, help='sampling temperature (0: greedy; sanity checks)')
     ap.add_argument('--case-seconds', type=int, default=3600)
     ap.add_argument('--max-model-requests', type=int, default=64)
     ap.add_argument('--max-turns', type=int, default=128)
@@ -57,7 +58,7 @@ def main():
     if not (out / 'queue.jsonl').exists():
         rows = sum(1 for _ in read_jsonl(args.cases))
         task_rollouts.prepare(SimpleNamespace(
-            cases=args.cases, out=out, rows=rows, offset=0, group=args.samples, temperature=1.,
+            cases=args.cases, out=out, rows=rows, offset=0, group=args.samples, temperature=args.temperature,
             case_seconds=args.case_seconds, max_model_requests=args.max_model_requests, max_turns=args.max_turns,
             seed_base=args.seed_base, root_mode='student', match_seeds_from=None, policy_checkpoint_sha256=args.policy_id))
         entries = list(read_jsonl(out / 'queue.jsonl'))
@@ -128,6 +129,22 @@ def main():
             subprocess.run(command, cwd=REPO, env=env, stdout=log, stderr=subprocess.STDOUT)
         return finished(key)
 
+    def memory_log():
+        # attribution of the unit's memory: this driver vs the per-slot children (run_bonsai_queue, node), MB
+        def rss(pid):
+            try:
+                with open(f'/proc/{pid}/statm') as handle:
+                    return int(handle.read().split()[1]) * os.sysconf('SC_PAGE_SIZE') / 1e6
+            except OSError:
+                return 0.
+        while not stop.is_set():
+            time.sleep(60)
+            children = subprocess.run(['pgrep', '-P', str(os.getpid())], capture_output=True, text=True).stdout.split()
+            grand = subprocess.run(['pgrep', '-P', ','.join(children)], capture_output=True, text=True).stdout.split() if children else []
+            print(json.dumps({'memory_mb': {'driver': round(rss(os.getpid())), 'children': round(sum(rss(p) for p in children)),
+                                            'grandchildren': round(sum(rss(p) for p in grand)), 'slots_running': len(children)}}), flush=True)
+
+    threading.Thread(target=memory_log, daemon=True).start()
     slots = [url for url, n in endpoints for _ in range(n)]
     threads = [threading.Thread(target=slot, args=(url, index * args.stagger), daemon=True) for index, url in enumerate(slots)]
     for t in threads:
