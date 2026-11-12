@@ -427,6 +427,20 @@ def train(args):
     log_line(log, {'event': 'start', 'code': run['code'], 'eligible_tasks': len(tasks), 'excluded_ids': excluded})
 
     t0 = time.time()
+    actor_ready = {}
+    def launch_actor():
+        # The training actor: a ledger unit serving the start checkpoint (held_eval.serve; reused when it already runs, as
+        # after a restart: the front still attests the start checkpoint, a resumed run pushes its own weights first).
+        from natlang_neuralese.rl.held_eval import serve
+        try:
+            actor_ready['url'] = serve(args.checkpoint, source_sha, work / 'actor', unit=f'{args.unit_prefix}-actor',
+                                       budget_gb=args.actor_budget_gb, extra=args.actor_arg, base=args.base)
+        except BaseException as error:
+            actor_ready['error'] = error
+    actor_thread = None
+    if not args.actor:
+        actor_thread = threading.Thread(target=launch_actor, daemon=True)
+        actor_thread.start()
     model, state, special = exp0_sft.load_model(args.checkpoint, args.base)
     state = {k: state[k] for k in ('schema', 'model_config', 'interface_state', 'step', 'backbone_state')}
     state['backbone_state'] = {k: v.to(torch.bfloat16) for k, v in state['backbone_state'].items()}
@@ -475,6 +489,13 @@ def train(args):
                 p.copy_(masters[name])
         log_line(log, {'event': 'resumed', 'step': step, 'cursor': cursor, 'next_group': first_group})
 
+    if actor_thread is not None:
+        actor_thread.join()
+        if 'error' in actor_ready:
+            raise actor_ready['error']
+        args.actor = actor_ready['url']
+        args.actor_export = args.actor_export or str(work / 'actor' / 'sglang-hf')
+    log_line(log, {'event': 'actor ready', 'actor': args.actor, 'init_s': round(time.time() - t0, 1)})
     sglang_url = args.sglang or args.actor.rsplit(':', 1)[0] + ':' + str(int(args.actor.rsplit(':', 1)[1]) + 1000)
     sync = WeightSync(model, args.actor_export, sglang_url, work)
     saver = StateSaver()
@@ -696,9 +717,12 @@ def main():
     t.add_argument('--checkpoint', required=True, help='start policy (native checkpoint); also the KL reference')
     t.add_argument('--checkpoint-sha256')
     t.add_argument('--base', default=BASE)
-    t.add_argument('--actor', required=True, help='natlang front of the SGLang actor serving --checkpoint')
+    t.add_argument('--actor', help='natlang front of an SGLang actor serving --checkpoint (default: launch the ledger unit '
+                   '<unit-prefix>-actor with held_eval.serve)')
+    t.add_argument('--actor-budget-gb', type=int, default=34)
+    t.add_argument('--actor-arg', action='append', default=[], help='extra serve_native_checkpoint.py argument')
     t.add_argument('--sglang', help='its SGLang server (default: actor port + 1000)')
-    t.add_argument('--actor-export', required=True, help="the actor's HF export dir (layout and frozen tables)")
+    t.add_argument('--actor-export', help="the actor's HF export dir (layout and frozen tables; default WORK/actor/sglang-hf)")
     t.add_argument('--pool', default=POOL)
     t.add_argument('--held-manifest', default=HELD)
     t.add_argument('--exclude-manifest', action='append', default=[], help='more held manifests to exclude')
