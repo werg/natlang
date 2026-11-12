@@ -438,17 +438,6 @@ def test_held_trend_pairs_with_previous_and_first_within_one_series(tmp_path):
     assert len(held_eval.trend(tmp_path))==4                                         # a failed run is not a measurement
 
 
-def test_held_measurement_never_blocks_the_round(tmp_path):
-    logs=[]
-    # Opted out, unadopted, or an actor that cannot be reached: no handle, a logged reason, no exception.
-    assert held_eval.begin({'held_eval':False,'held_eval_binding':{}},out=tmp_path,policy_id='a'*64,endpoint='http://x',log=logs.append) is None
-    assert held_eval.begin({},out=tmp_path,policy_id='a'*64,endpoint='http://x',log=logs.append) is None
-    assert held_eval.begin({'held_eval_binding':{'manifest':'m','sha256':'0'}},out=tmp_path,policy_id='a'*64,
-                           endpoint='http://127.0.0.1:9',log=logs.append) is None
-    assert 'held eval did not start' in logs[-1]
-    assert held_eval.Handle(tmp_path,{'pid':2**22+5,'starttime':1},1).finish() is None
-
-
 def test_held_tasks_and_their_group_siblings_are_never_selected(tmp_path):
     rows=held_pool();pool=write_pool(tmp_path,rows)
     manifest,held_rows=held_eval.build_manifest(pool,avoid={'f1-1'},tasks=8)

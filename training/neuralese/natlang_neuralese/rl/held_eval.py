@@ -7,8 +7,8 @@ and training code never selects them or their ``split_group`` siblings (``exclus
 and writes ``result.json``; ``compare``/``paired`` pair two results on matched (task, sample) episodes (McNemar exact).
 
 - ``manifest.json`` + ``cases.jsonl``: task ids and row digests, the pool's digest, and the excluded split groups.
-- ``begin``/``Handle.finish`` and ``run``: a detached driver process measures one policy; failures and a cut-short run are
-  recorded, and a partial run is still a balanced one (sample-major order) and pairs on what it finished.
+- ``run`` measures one policy directory; failures and a cut-short run are recorded, and a partial run is still a balanced
+  one (sample-major order) and pairs on what it finished.
 - A comparison series is the collector runtime (ts-host tree) plus the resolved ``NATLANG_MODEL_FACING`` variants, recorded
   in every result: only results of one series are compared, a change of either starts a new series with its own baseline.
 """
@@ -424,87 +424,6 @@ def _level(task):
     return (((task.get('curriculum') or {}).get('rl')) or {}).get('level')
 
 
-def _alive(record):
-    from .detached_processes import alive
-    return alive(record)
-
-
-class Handle:
-    """The detached measurement of one policy (started here or adopted after a controller restart)."""
-
-    def __init__(self, directory, record, grace):
-        self.directory, self.record, self.grace = Path(directory), record, grace
-
-    def finish(self, detaching=False, immediate=False):
-        """Give an unfinished measurement ``grace`` seconds (none when the collection failed or a stop was requested), then
-        stop it (it still writes its partial result); with ``detaching`` (restart in place) leave it running for the
-        relaunched controller. Never raises."""
-        try:
-            if detaching or not _alive(self.record):
-                return
-            deadline = time.monotonic() + (0 if immediate else self.grace)
-            while _alive(self.record) and time.monotonic() < deadline:
-                time.sleep(2)
-            if _alive(self.record):
-                os.kill(self.record['pid'], signal.SIGTERM)
-                end = time.monotonic() + 300
-                while _alive(self.record) and time.monotonic() < end:
-                    time.sleep(2)
-                print(json.dumps({'event': 'held eval cut short', 'directory': str(self.directory),
-                                  'grace_seconds': self.grace}), flush=True)
-        except BaseException as error:
-            print(json.dumps({'event': 'held eval finish failed', 'error': repr(error)[:300]}), flush=True)
-
-
-def begin(config, *, out, policy_id, endpoint, round_number=None, log=print):
-    """Start the measurement of ``policy_id`` served at ``endpoint`` (None when opted out, unadopted, already measured, or
-    failed to start: the failure is logged and the round goes on). A measurement left running by a restarted controller is
-    adopted."""
-    try:
-        options = settings(config)
-        binding = config.get('held_eval_binding')
-        if options is None or binding is None:
-            return None
-        directory = policy_directory(out, policy_id)
-        if (directory / 'result.json').exists() and json.loads((directory / 'result.json').read_text()).get('complete'):
-            return None   # a cut-short or failed run resumes from its journals (this policy's round is still running)
-        from .detached_processes import load_record, record_process
-        record = load_record(directory / 'driver.json')
-        if record is not None and _alive(record):
-            return Handle(directory, record, options['grace_seconds'])
-        from .actor_client import NativeActorClient
-        info = json.loads(NativeActorClient(endpoint, timeout=5).get_bytes('/v1/neuralese/info'))
-        actor = info.get('rl_policy_binding') or {}
-        if actor.get('checkpoint_sha256') != policy_id:
-            raise ValueError('the actor does not serve the policy to measure')
-        manifest = load_manifest(binding['manifest'], binding['sha256'])
-        from ..common.code_provenance import code_provenance, repository_root
-        repo = repository_root()
-        directory.mkdir(parents=True, exist_ok=True)
-        spec = {'policy_id': policy_id, 'round': round_number, 'endpoint': endpoint, 'dir': str(directory),
-                'cases': str(Path(binding['manifest']).parent / manifest['cases']['path']),
-                'manifest_sha256': binding['sha256'], 'tasks': len(manifest['tasks']), 'samples': options['samples'],
-                'workers': options['workers'], 'case_seconds': config.get('case_seconds', 600),
-                'max_model_requests': config.get('max_model_requests', 128), 'max_turns': config.get('max_turns', 160),
-                'context_tokens': config.get('context_tokens') or 32768,
-                'runtime': str(config.get('runtime') or repo / 'ts-host'), 'repo': str(repo),
-                'series': series(config), 'code': code_provenance(),
-                'actor': {'export': actor.get('actor_export'), 'code': actor.get('code')}}
-        (directory / 'run.json').write_text(json.dumps(spec, indent=1) + '\n')
-        (directory / 'result.json').unlink(missing_ok=True)
-        with (directory / 'driver.log').open('a') as handle:
-            process = subprocess.Popen([sys.executable, '-m', 'natlang_neuralese.rl.held_eval', 'run', '--dir', str(directory)],
-                                       stdout=handle, stderr=subprocess.STDOUT, start_new_session=True,
-                                       cwd=str(repo), env=os.environ.copy())
-        record = record_process(directory / 'driver.json', process.pid, policy_id=policy_id, endpoint=endpoint)
-        log(json.dumps({'event': 'held eval started', 'policy': policy_id[:16], 'tasks': spec['tasks'],
-                        'samples': spec['samples'], 'workers': spec['workers'], 'series': spec['series']['key']}))
-        return Handle(directory, record, options['grace_seconds'])
-    except BaseException as error:   # a measurement never blocks the round
-        log(json.dumps({'event': 'held eval did not start', 'error': repr(error)[:400]}))
-        return None
-
-
 # ---- comparison -------------------------------------------------------------------------------------------------------
 def results(out):
     """The valid held-eval results of a directory, by start time."""
@@ -723,13 +642,8 @@ def measure(out, manifest, endpoints, policy_id, *, samples=4, seed_base=SEED_BA
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest='command', required=True)
-    r = sub.add_parser('run', help='the detached driver of one policy directory (written by begin)')
+    r = sub.add_parser('run', help='measure the run.json of one policy directory (resumable)')
     r.add_argument('--dir', type=Path, required=True)
-    b = sub.add_parser('build', help='build and pin the manifest of a controller directory')
-    b.add_argument('--out', type=Path, required=True)
-    b.add_argument('--tasks', type=int, default=DEFAULT_TASKS)
-    b.add_argument('--avoid-from', type=Path, action='append', default=[], help='directories with round-*-selection.json of other lineages')
-    b.add_argument('--dry-run', action='store_true')
     p = sub.add_parser('pin', help='build and pin a standalone held manifest (e.g. ops/held-v2) with its exclusion-ids.json')
     p.add_argument('--cases', type=Path, required=True, help='the task pool (cases.jsonl)')
     p.add_argument('--dir', type=Path, required=True, help='directory for manifest.json, cases.jsonl, exclusion-ids.json')
@@ -771,24 +685,9 @@ def main(argv=None):
     c.add_argument('first', type=Path)
     c.add_argument('second', type=Path)
     c.add_argument('--out', type=Path)
-    s = sub.add_parser('start', help='measure the policy an actor serves, now (the controller hook does this at each round)')
-    s.add_argument('--out', type=Path, required=True)
-    s.add_argument('--endpoint', required=True)
-    s.add_argument('--policy-id', required=True)
-    s.add_argument('--wait', action='store_true', help='stay until the driver exits')
     args = parser.parse_args(argv)
     if args.command == 'run':
         run(args.dir)
-    elif args.command == 'build':
-        config = json.loads((args.out / 'config.json').read_text())
-        state = json.loads((args.out / 'state.json').read_text())
-        manifest, rows = build_manifest(config['cases'], avoid=avoid_ids(state, [args.out, *args.avoid_from]), tasks=args.tasks)
-        if args.dry_run:
-            print(json.dumps({k: v for k, v in manifest.items() if k not in ('tasks', 'excluded_split_groups')}, indent=1))
-            for task in manifest['tasks']:
-                print(task['family'], task['level'], task.get('mix_class', '-'), task['id'])
-            return
-        print(write_manifest(directory_of(args.out), manifest, rows))
     elif args.command == 'compare':
         report = compare(json.loads(args.first.read_text()), json.loads(args.second.read_text()))
         text = json.dumps(report, indent=1)
@@ -842,18 +741,6 @@ def main(argv=None):
         ids = sorted(exclusion_ids(args.dir / 'manifest.json'))
         (args.dir / 'exclusion-ids.json').write_text(json.dumps(ids, indent=0) + '\n')
         print(json.dumps({'manifest_sha256': sha, 'exclusion_ids': len(ids), **summary}, indent=1))
-    else:
-        config = json.loads((args.out / 'config.json').read_text())
-        state = json.loads((args.out / 'state.json').read_text())   # read only: the controller owns its state
-        manifest = Path(settings(config).get('manifest') or directory_of(args.out) / 'manifest.json')
-        config = {**config, 'held_eval_binding': {'manifest': str(manifest), 'sha256': _sha256(manifest), 'from_round': 0}}
-        handle = begin(config, out=args.out, policy_id=args.policy_id, endpoint=args.endpoint, round_number=state.get('round'))
-        if handle is None:
-            raise SystemExit('nothing started')
-        if args.wait:
-            while _alive(handle.record):
-                time.sleep(5)
-
 
 if __name__ == '__main__':
     main()
