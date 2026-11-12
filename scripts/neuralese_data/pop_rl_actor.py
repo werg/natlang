@@ -51,6 +51,7 @@ POP_MIN_FREE = 8 * 2**30 + 512 * 2**20       # scratch floor on Pop
 RL_PORT = 18531
 STATE = ROOT / 'rl-actor.json'
 EXPORT_FORMAT = 'native-pop-rtx4060-bf16'
+SGLANG_EXPORT_FORMAT = 'sglang-pop-rtx4060-bf16-vendor-projection'
 RL_MEMORY_GB = 8   # container cap and ledger claim; 4 GiB was OOM-killed after 4 h at 3 workers (anon 4.2 GiB, 2026-11-09)
 
 
@@ -336,7 +337,8 @@ def start(args):
            'code': code['pop'], 'base': POP_BASE, 'image': IMAGE, 'step': prep['step'],
            'source_sha256': source, 'stage': f'{POP_TRANSPORT_ROOT}/{source}', 'view': prep['view']['path'],
            'view_sha256': prep['view']['sha256'], 'work': work, 'min_free_bytes': POP_MIN_FREE,
-           'actor_export_format': EXPORT_FORMAT, 'memory': f'{RL_MEMORY_GB}g',
+           'actor_export_format': SGLANG_EXPORT_FORMAT if args.engine == 'sglang' else EXPORT_FORMAT,
+           'memory': f'{RL_MEMORY_GB}g', 'engine': args.engine,
            'transport': {'name': Path(prep['transport']['path']).name, 'sha256': prep['transport']['sha256'],
                          'view_receipt_name': prep['view_receipt']['sha256'] + '.json',
                          'view_receipt_sha256': prep['view_receipt']['sha256'], 'scope': transport_json['scope']}}
@@ -351,11 +353,14 @@ def start(args):
                    check=True, timeout=120)
     _pop_upload_json(job, f'{work}/job.json')
     unit = f'{name}-{int(time.time())}'
+    # The SGLang actor runs on Pop's host (the fork's venv); the native one in its container.
+    container = [] if args.engine == 'sglang' else ['--container', name]
     ssh(shlex.join(['/usr/bin/python3', POP_REPO + '/scripts/memory_ledger.py', 'run', '--unit', unit,
                         '--budget-gb', str(RL_MEMORY_GB), '--reserve-gb', str(POP_RESERVE_GB),
-                        '--class', 'experiment', '--no-resumable', '--container', name, '--workdir', work, '--',
+                        '--class', 'experiment', '--no-resumable', *container, '--workdir', work, '--',
                         '/usr/bin/python3', f'{work}/driver.py', f'{work}/job.json']))
     result = {'endpoint': endpoint, 'unit': unit, 'container': name, 'policy_id': source, 'work': work, 'runtime': runtime,
+              'engine': args.engine,
               'prepared_seconds': round(time.time() - started, 1)}
     write_json(STATE, result)
     try:
@@ -400,7 +405,10 @@ def main(argv=None):
     s.add_argument('--policy-id', required=True)
     s.add_argument('--port', type=int, default=RL_PORT)
     s.add_argument('--bind-host')
-    s.add_argument('--ready-seconds', type=int, default=600)
+    s.add_argument('--ready-seconds', type=int, default=900)
+    s.add_argument('--engine', choices=('sglang', 'native'), default='native',
+                   help="Pop's serving engine: the SGLang fork (host venv, see pop_actor_driver.serve_sglang) or the "
+                        'native engine in its container')
     s.add_argument('--prepare-wait', type=int, default=900, help='ledger admission bound of the DGX view preparation')
     commands.add_parser('stop')
     commands.add_parser('status')

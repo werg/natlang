@@ -53,6 +53,8 @@ def main(job_path):
         raise RuntimeError('Pop GPU already has a compute consumer: ' + gpu)
     if subprocess.check_output(['docker', 'ps', '-q'], text=True).strip():
         raise RuntimeError('another container is running on Pop')
+    if job.get('engine') == 'sglang':
+        return serve_sglang(job, checkpoint, transport, stage, work)
     name, port, image = job['name'], job['port'], job['image']
     server_args = ['serve_native_checkpoint.py', '--checkpoint', '/checkpoint.pt', '--checkpoint-sha256', job['view_sha256']]
     if transport:
@@ -133,6 +135,90 @@ def main(job_path):
         if inspect.returncode == 0 and inspect.stdout.strip() == 'false':
             lease.unlink(missing_ok=True)
             subprocess.run(['docker', 'rm', name], check=True)
+
+
+def transport_args(job, transport, stage, checkpoint):
+    args = ['--checkpoint', str(checkpoint), '--checkpoint-sha256', job['view_sha256']]
+    if transport:
+        args += ['--transport-receipt', str(stage / transport['name']), '--transport-receipt-sha256', transport['sha256'],
+                 '--transport-view-receipt', str(stage / transport['view_receipt_name']),
+                 '--transport-view-receipt-sha256', transport['view_receipt_sha256'],
+                 '--transport-scope', transport['scope'], '--training-source-sha256', job['source_sha256']]
+    return args
+
+
+def serve_sglang(job, checkpoint, transport, stage, work):
+    """The DGX actor's own serving path on Pop's GPU: serve_native_checkpoint.py --engine sglang, run on the host (no
+    container) from the fork's venv (~/.local/share/natlang/sglang-natlang-venv, the path training/neuralese/
+    sglang-fork.json names), which also runs the front. The front loads the view on the CPU only to export the
+    SGLang weights (cached by SHA under the work dir) and releases it; the 8 GB GPU holds SGLang alone."""
+    runtime, host, port = Path(job['runtime']), job.get('host', '127.0.0.1'), job['port']
+    fork = json.loads((runtime / 'training/neuralese/sglang-fork.json').read_text())
+    python = os.path.expanduser(fork['python'])
+    sglang = job.get('sglang') or {}
+    command = [python, str(runtime / 'scripts/neuralese_data/serve_native_checkpoint.py'),
+               *transport_args(job, transport, stage, checkpoint),
+               '--actor-export-format', job['actor_export_format'], '--base', job['base'], '--device', 'cpu',
+               '--host', host, '--port', str(port), '--threads', '2', '--store-dir', str(work / 'store'),
+               '--prompt-rendering', 'full', '--engine', 'sglang', '--sglang-projection', 'vendor',
+               '--sglang-port', str(sglang.get('port', port + 1000)),
+               '--sglang-mem-fraction', str(sglang.get('mem_fraction', 0.88)),
+               '--sglang-max-running', str(sglang.get('max_running', 16)),
+               '--sglang-max-total-tokens', str(sglang.get('max_total_tokens', 131072)),
+               '--sglang-adapter-slots', '0', '--hf-export-dir', str(work / 'sglang-hf' / job['source_sha256'][:16]),
+               *sglang.get('extra', [])]
+    cuda = '/usr/local/cuda'
+    env = {**os.environ, 'PYTHONPATH': f'{runtime}/training/neuralese:{runtime}', 'PYTHONDONTWRITEBYTECODE': '1',
+           'NATLANG_REPO': str(runtime), 'NATLANG_BF16_REDUCTION': 'fp32-accumulate', 'HF_HUB_OFFLINE': '1',
+           'TRANSFORMERS_OFFLINE': '1', 'HF_HOME': str(work / 'hf'), 'TRITON_CACHE_DIR': str(work / 'triton'),
+           'FLASHINFER_WORKSPACE_BASE': str(work / 'flashinfer'), 'NATLANG_HASH_CACHE': str(work / 'hash-cache.jsonl'),
+           'PYTHONUNBUFFERED': '1', 'CUDA_HOME': cuda, 'PATH': f'{Path(python).parent}:{cuda}/bin:' + os.environ.get('PATH', ''),
+           'NATLANG_CODE_COMMIT': (job.get('code') or {}).get('git_commit') or '',
+           'NATLANG_CODE_DIRTY': '1' if (job.get('code') or {}).get('dirty') else '0'}
+    lease = stage / f"{job['name']}.consumer.json"
+    lease.write_text(json.dumps({'role': 'rl-rollout-actor', 'checkpoint_sha256': job['source_sha256'],
+                                 'consumer': job['name'], 'started': time.time(), 'engine': 'sglang',
+                                 'release': 'after the actor process exits; no training admission'}) + '\n')
+    log = (work / 'actor.log').open('ab')
+    process = subprocess.Popen(command, cwd=str(work), env=env, stdout=log, stderr=subprocess.STDOUT,
+                               start_new_session=True)
+    (work / 'launch.json').write_text(json.dumps({
+        'pid': process.pid, 'engine': 'sglang', 'command': command, 'step': job['step'],
+        'checkpoint_sha256': job['source_sha256'], 'arm': job['arm'], 'code_commit': (job.get('code') or {}).get('git_commit'),
+        'mode': job.get('mode', 'rl-actor'), 'transport_sha256': (transport or {}).get('sha256'),
+        'inference_view_sha256': job['view_sha256'], 'driver_sha256': digest(__file__)}, indent=2) + '\n')
+
+    def stop(*_):
+        if process.poll() is None:
+            os.killpg(process.pid, signal.SIGTERM)
+            try:
+                process.wait(timeout=90)
+            except subprocess.TimeoutExpired:
+                os.killpg(process.pid, signal.SIGKILL)
+        lease.unlink(missing_ok=True)
+        sys.exit(0)
+    signal.signal(signal.SIGTERM, stop)
+    try:
+        while True:
+            if process.poll() is not None:
+                raise RuntimeError(f'actor exited with {process.returncode} before readiness')
+            try:
+                with urllib.request.urlopen(f'http://{host}:{port}/v1/neuralese/info', timeout=2) as f:
+                    info = json.load(f)
+                if info['native_state']['checkpoint_sha256'] != job['source_sha256'] or info['prompt_rendering'] != 'full':
+                    raise RuntimeError('actor serves another identity: ' + info['native_state']['checkpoint_sha256'])
+                (work / 'actor-info.json').write_text(json.dumps(info, indent=2) + '\n')
+                break
+            except RuntimeError:
+                raise
+            except Exception:
+                time.sleep(3)
+        print(json.dumps({'step': job['step'], 'arm': job['arm'], 'state': 'actor ready', 'engine': 'sglang'}), flush=True)
+        (work / 'actor-ready.json').write_text(json.dumps({'pid': process.pid, 'host': host, 'port': port, 'engine': 'sglang',
+                                                           'source_sha256': job['source_sha256'], 'at': time.time()}) + '\n')
+        process.wait()
+    finally:
+        stop()
 
 
 if __name__ == '__main__':

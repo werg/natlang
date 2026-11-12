@@ -16,6 +16,7 @@ sent, so learners see exactly what the actor saw.
 from __future__ import annotations
 
 import threading
+import time
 from array import array
 from collections import OrderedDict
 
@@ -77,10 +78,11 @@ class TokenHistory:
     def __init__(self, tokenizer, max_entries=32768):
         self.table = token_bytes_table(tokenizer)
         self.max_entries = max_entries
-        self.entries = OrderedDict()      # (length, hash) -> array('i') of generated ids
+        self.entries = OrderedDict()      # (length, hash) -> (array('i') of generated ids, time it was stored)
         self.lengths = {}                 # prompt length -> entry count
         self.lock = threading.Lock()
-        self.stats = {'append_only_lookups': 0, 'append_only_spliced': 0, 'append_only_tokens_kept': 0}
+        self.stats = {'append_only_lookups': 0, 'append_only_spliced': 0, 'append_only_tokens_kept': 0,
+                      'append_only_continuations': 0, 'append_only_gap_seconds': 0.}
 
     @property
     def enabled(self):
@@ -90,7 +92,7 @@ class TokenHistory:
         if not self.enabled or not len(generated):
             return
         key = (len(prompt), _prefix_hashes(prompt)[-1])
-        value = array('i', (int(t) for t in generated))
+        value = (array('i', (int(t) for t in generated)), time.monotonic())
         with self.lock:
             if self.entries.pop(key, None) is None:
                 self.lengths[key[0]] = self.lengths.get(key[0], 0) + 1
@@ -112,8 +114,12 @@ class TokenHistory:
             for length in sorted((n for n in self.lengths if n < len(ids)), reverse=True):
                 key = (length, hashes[length])
                 if key in self.entries:
-                    old, start = self.entries[key], length
+                    (old, stored), start = self.entries[key], length
                     self.entries.move_to_end(key)
+                    # A continuation of a stored reply: the time between the reply and this request is the client's
+                    # (harness, tool execution, queueing) share of the episode.
+                    self.stats['append_only_continuations'] += 1
+                    self.stats['append_only_gap_seconds'] += time.monotonic() - stored
                     break
         if old is None:
             return ids
