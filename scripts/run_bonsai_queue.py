@@ -11,6 +11,7 @@ import os
 import subprocess
 import signal
 import time
+import re
 import math
 import random
 import shutil
@@ -653,6 +654,36 @@ def failure_cooldown(streak):
     return min(300, 30 * 2 ** min(max(0, streak - 1), 20) * (0.5 + random.random()))
 
 
+TMP_OWNER = re.compile(r'\.tmp-(\d+)-[0-9a-f-]{36}$')
+
+
+def sweep_orphan_temporaries(*directories):
+    """Remove `<file>.tmp-<pid>-<uuid>` atomic-write leftovers whose writer process is gone (a killed collector)."""
+    removed = 0
+    for directory in directories:
+        try:
+            names = os.listdir(directory)
+        except OSError:
+            continue
+        for name in names:
+            match = TMP_OWNER.search(name)
+            if match is None:
+                continue
+            try:
+                os.kill(int(match.group(1)), 0)
+                continue
+            except ProcessLookupError:
+                pass
+            except PermissionError:
+                continue
+            try:
+                os.unlink(os.path.join(directory, name))
+                removed += 1
+            except OSError:
+                pass
+    return removed
+
+
 class SharedChild:
     """A collector invocation served by a shared node process instead of its own (NATLANG_COLLECTOR_SHARED=N: up to N
     invocations per process; 2026-11-12, plans/neuralese/ACTOR_THROUGHPUT_20261112.md). A node process with the bundle
@@ -866,6 +897,8 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                 'disposition':'active case finished; no next request; remove drain file to resume exact remaining keys'}, durable=True)
             return 75
         entry_jobs = resolve_entry_jobs(entry, runtime)
+        sweep_orphan_temporaries(*(str(Path(path).parent) if name == 'output' else path
+                                   for name, path in (('output', entry.get('output')), ('jobs', entry.get('jobs'))) if path))
         if min_free_mib:
             free_mib = shutil.disk_usage(journal.parent).free // (1024 * 1024)
             if free_mib < min_free_mib:

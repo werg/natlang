@@ -581,7 +581,7 @@ def train(args):
     saver = StateSaver()
     collector = Collector(args, tasks, work, source_sha, runtime, first_group=first_group, cursor=cursor)
     collector.version = step
-    (work / 'sampling-config.json').write_text(json.dumps({'guidance': False, 'x_natlang_rl_capture': True}) + '\n')
+    (work / 'sampling-config.json').write_text(json.dumps({'guidance': False, 'x_natlang_rl_capture': True, 'x_natlang_rl_top_k': 0}) + '\n')
     versions_live = {'actor': step}
 
     def on_published(version, ok):

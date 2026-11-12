@@ -66,7 +66,7 @@ def main():
         entries.sort(key=lambda e: (e['sample'], e['index']))   # sample-major: a cut-short run stays balanced
         (out / 'queue.jsonl').write_text(''.join(json.dumps(e, sort_keys=True) + '\n' for e in entries))
     entries = list(read_jsonl(out / 'queue.jsonl'))
-    (out / 'sampling-config.json').write_text(json.dumps({'guidance': False, 'x_natlang_rl_capture': True}) + '\n')
+    (out / 'sampling-config.json').write_text(json.dumps({'guidance': False, 'x_natlang_rl_capture': True, 'x_natlang_rl_top_k': 0}) + '\n')
     spec = {'series': series(), 'endpoints': endpoints, 'policy_id': args.policy_id, 'samples': args.samples,
             'started': time.time()}
     (out / 'collect-run.json').write_text(json.dumps(spec, indent=1) + '\n')

@@ -847,3 +847,13 @@ def test_shared_collector_runs_invocations_in_one_node_process(tmp_path, monkeyp
     assert failing.wait(60) == 1
     os.kill(first.server_pid, 15)
     shutil.rmtree(short, ignore_errors=True)
+
+
+def test_orphan_temporaries_of_dead_writers_are_swept(tmp_path):
+    dead = subprocess.Popen(['true']); dead.wait()
+    orphan = tmp_path / f'results.jsonl.tmp-{dead.pid}-01234567-89ab-cdef-0123-456789abcdef'
+    live = tmp_path / f'results.jsonl.tmp-{os.getpid()}-01234567-89ab-cdef-0123-456789abcdef'
+    for path in (orphan, live, tmp_path / 'results.jsonl'):
+        path.write_text('x')
+    assert queue_module.sweep_orphan_temporaries(str(tmp_path), str(tmp_path / 'missing')) == 1
+    assert not orphan.exists() and live.exists() and (tmp_path / 'results.jsonl').exists()

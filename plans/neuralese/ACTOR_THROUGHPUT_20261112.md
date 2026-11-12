@@ -75,3 +75,18 @@ peak. 112 slots held 28 GB in node + 4.3 GB in supervisors.
 --capacity N`, started on demand per supervising unit/runtime/model-facing variants, exit when idle); closing the
 connection aborts that invocation only. Live test: 4 episodes in one process ~300-360 MB vs ~800 MB in four.
 
+
+## Collector disk (2026-11-12)
+
+What fills it (exp1 collect, 209 finished episodes, 8.8 GB): each finished episode's `jobs/*.result.json` (average 20 MB,
+up to 39 MB) and the same rows again in the merged `results.jsonl` (run_bonsai_queue's accounting compares the two, so
+both exist until the consumer prunes). Evidence and partial snapshots are transient (removed when the job completes;
+118 in flight held 0.2 GB). Inside a result 77% is the sampler's top-k receipt (`rl_sampling.samples[].top_k`, 128 ids +
+logps per generated token, the server default `DEFAULT_BEHAVIOR_TOP_K` for the score-centered JOLT loss); prompt token
+ids plus their per-token `producing` flags are 11%.
+- GRPO and exp1 collection request `x_natlang_rl_top_k: 0`: the capture keeps prompt ids, sampled ids and their logps
+  (what `lower_rollout_turns.episode_turns` and the learner use), not the top-k (about 4x smaller; the actor also skips
+  the top-k sort and the FP64 tail sum). The JOLT score-centered loss still needs the server default.
+- run_bonsai_queue removes `*.tmp-<pid>-<uuid>` atomic-write leftovers of dead writers before each case.
+- Open: prompt ids are stored whole per call (92% repeat the previous call); a per-call delta needs the lowering to
+  rebuild prompts, not done.
