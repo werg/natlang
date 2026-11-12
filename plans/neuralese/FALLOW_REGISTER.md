@@ -1,11 +1,13 @@
 # Fallow register: built capabilities not live in production
 
 Living register required by AGENTS.md "Built capabilities must not lie fallow"
-(owner, 2026-11-03). Review it every supervision cycle. A row leaves this table
-only when the live job actually runs the capability (deployment counts, not
-commits), or when a deliberate exclusion is recorded with its reason. A blocker
-with no active work for 48 hours must be resolved, replaced by a standard-practice
-mechanism, or excluded explicitly.
+(owner, 2026-11-03). Review it between experiments. A row leaves this table when an
+experiment has measured the capability and it is in use, or when a deliberate
+exclusion is recorded with its reason. A blocker with no active work for 48 hours
+must be resolved, replaced by a standard-practice mechanism, or excluded explicitly.
+Since 2026-11-12 (AGENTS.md "How we train now") a capability enters training only as
+a controlled addition with its own paired held measurement, one at a time; rows below
+that describe the retired w5 lineage are historical.
 
 **First audit:** 2026-11-03 ~12:30 CET, read-only (fallow audit). Evidence comes from:
 
@@ -19,13 +21,11 @@ mechanism, or excluded explicitly.
 `W` = `/home/werg/data/lfm3-rl-dgx-20261029`, `T` = `training/neuralese/natlang_neuralese`,
 `NSS` = `T/train/native_state_sft.py`.
 
-## Production state (2026-11-09 evening)
+## Production state (2026-11-12)
 
-The w5 controller (`ops/bf95-lowlr-1105/w5`) runs interleaved JOLT+ RL from step 92 with `beta_s 0` after the w4
-regression diagnosis (`RL_REGRESSION_DIAGNOSIS_20261109.md`). It runs from the checkout, not a frozen runtime, so
-fixes on main reach it at the next episode or update. Pop is the second rollout actor and the dev16 evaluator. Cloud
-is gone. The hourly heartbeat clears this register: each entry is either integrated into the live run or removed with
-a reason.
+w5 is retired; the untouched base is the start policy. Training runs as bounded controlled experiments on one pinned
+commit each (Experiment 0 SFT on own successes, Experiment 1 RFT, then plain GRPO), judged by paired held-out eval on
+held-v2. Monitoring checks the pinned experiments and machine health; it does not re-plan.
 
 ## Register
 

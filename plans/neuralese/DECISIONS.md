@@ -1882,3 +1882,15 @@ for a potential improvement. The supervising agent judges whether the issue
 necessitates a redo or continued training, preserves useful exact state, and
 records the evidence. Comprehensive production training remains the objective;
 it does not require running a defective or inferior configuration unchanged.
+
+### 2026-11-12 — standing rules follow the approach review (owner)
+
+Owner 2026-11-12: adopt `APPROACH_REVIEW_20261111.md` and delete the rules it countermands. Fine-tuning keeps FP32
+master weights with BF16 compute (this supersedes the 2026-10-28 "no full precision" entry above). Training changes are
+decided by bounded controlled experiments: one pinned commit per collect -> train -> eval cycle, one change, a paired
+held-out comparison; improvements enter at the next experiment, never mid-measurement (this supersedes "improvements
+ship on by default", "cut over immediately" and the YOLO/no-experiments first-run decisions). The learner trains
+per-call (prompt, completion) sequences weighted by the episode reward; whole-graph Neuralese gradients, JOLT+, the
+Neuralese bonus, memetic programs, expert-iteration shares, pre-collection, interleaved SFT windows and QAT return
+only as measured controlled additions. Evaluation gets real compute (dev16 is a smoke test at most); heartbeats check
+the pinned experiments and do not re-plan; the training stack uses standard tooling. Rules: AGENTS.md "How we train now".
