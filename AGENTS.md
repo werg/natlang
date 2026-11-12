@@ -30,6 +30,11 @@ families, levels 63/64/64/65, 85 effect-state, keeping w5's 64 held tasks; disjo
 0's training tasks, w1-w5 attempts and their `split_group` siblings. Training code excludes it with
 `held_eval.exclusion_ids(manifest)` (held ids plus siblings, 1,170 ids; also `held-v2/exclusion-ids.json`). Never train on
 these ids. Built by `python -m natlang_neuralese.rl.held_eval pin` (`--include-manifest`, `--avoid-ids`, `--avoid-from`).
+Measure with `held_eval measure --manifest M --out DIR (--endpoint URL[=SLOTS] | --checkpoint CKPT) [--samples 4]`
+(work-stealing episodes, resumable, sample-major so a cut run stays balanced; `serve` launches/reuses a ledger SGLang actor) and
+compare with `held_eval compare A/result.json B/result.json` (McNemar on matched samples, task sign test, task-bootstrap CI,
+loop rate). A wall-clock timeout is unscored and reported as `timeouts`, never a failure; compare only results with one code
+commit and series (`same_code`, `same_series`). Baselines and the A/A noise floor: `ops/held-v2/runs/`.
 
 ## RL round scheduling: per-group teachers and Pop pre-collection (engineering, 2026-11-10)
 
