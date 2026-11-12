@@ -596,7 +596,9 @@ def reader_has_payload(record, write_name, body, expected_sha):
 
 def exact_span(row, tokenizer, body, *, side):
     text, ids = row['text'], row['token_ids']
-    boundary = row['supervised_suffix_start']
+    boundary = row.get('supervised_suffix_start')
+    if type(boundary) is not int or not 0 <= boundary <= len(ids):
+        raise ValueError('row has no exact supervised target boundary')
     prefix = tokenizer.decode(ids[:boundary], skip_special_tokens=False)
     if not text.startswith(prefix):
         raise ValueError('rendered text does not preserve its exact target boundary')
@@ -606,16 +608,8 @@ def exact_span(row, tokenizer, body, *, side):
         offset = text.find(body, offset, scope_stop)
         if offset < 0: break
         starts.append(offset); offset += 1
-    if side == 'writer':
-        # A whole-turn target may repeat a literal marker wrapper in its
-        # prompt/context.  The producer is the occurrence in the supervised
-        # target, not an identical spelling in the context prefix.
-        boundary = row.get('supervised_suffix_start')
-        if type(boundary) is not int or not 0 <= boundary <= len(offset_rows):
-            raise ValueError('producer row has no exact supervised target boundary')
-        target_char_start = (offset_rows[boundary][0] if boundary < len(offset_rows)
-                             else (offset_rows[-1][1] if offset_rows else 0))
-        starts = [start for start in starts if start >= target_char_start]
+    # A whole-turn target may repeat a literal marker wrapper in its prompt/context. The producer is the occurrence in
+    # the supervised target, so the writer search starts at the decoded target boundary (scope_start above).
     if len(starts) != 1:
         raise ValueError(f'payload has {len(starts)} visible occurrences in the authenticated {side} region')
     start, stop = starts[0], starts[0] + len(body)

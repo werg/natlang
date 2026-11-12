@@ -142,62 +142,6 @@ def test_top_k_receipt_roundtrip_is_compact_and_validated():
 
 # ---- end to end: real engine capture under a mismatched sampler, real trainer objective ----
 
-def quantized_sampler(engine, monkeypatch, *, seed=5):
-    """The sampler draws from deliberately perturbed logits (coarse rounding plus noise), modelling a quantized
-    actor; the trainer later scores the exact unperturbed model."""
-    real = engine._native_token
-    generator = torch.Generator().manual_seed(seed)
-    def token(seq):
-        noise = torch.randn(seq.logits.shape, generator=generator).to(seq.logits.device, seq.logits.dtype)
-        seq.logits = (seq.logits * 4).round() / 4 + .3 * noise
-        return real(seq)
-    monkeypatch.setattr(engine, '_native_token', token)
-
-
-def collect(engine, monkeypatch, *, top_k):
-    from natlang_neuralese.serve.engine import GenerationRequest
-    quantized_sampler(engine, monkeypatch)
-    messages = [{'role': 'user', 'content': 't4 t5 t6'}]
-    episodes = []
-    engine.start()
-    try:
-        for sample in range(2):
-            reply = engine.generate(GenerationRequest(messages=messages, temperature=.9, seed=61 + sample,
-                                                      max_tokens=6, rl_capture=True, rl_top_k=top_k))
-            capture = reply['x_natlang_rl_capture']
-            episodes.append({'task_id': 'score-centered-train', 'split': 'train', 'sample': sample, 'group': 'g',
-                'reward': {'quality': 1 - sample}, 'policy': {'checkpoint_sha256': engine.checkpoint_sha256},
-                'turns': [{'messages': messages, 'target': reply['choices'][0]['message'], 'invocation_id': 'actor',
-                           'sampling': capture, 'replay': {'raw_calls_retained': True}}]})
-    finally:
-        engine.stop()
-    from test_rl_episode_graph import attach_execution_graph
-    attach_execution_graph(episodes)
-    return episodes
-
-
-def admit(engine, tmp_path, episodes, policy_loss, name):
-    from natlang_neuralese.rl.native_stage import prepare
-    from natlang_neuralese.rl.native_replay import NativePolicyObjective
-    from natlang_neuralese.data.native_graph import parse_graph
-    engine.tokenizer.save_pretrained(tmp_path / 'rl-tokenizer')
-    rows, spec = prepare(episodes, checkpoint=engine.native_checkpoint, tokenizer=tmp_path / 'rl-tokenizer',
-                         policy_loss=policy_loss)
-    path = tmp_path / (name + '.json')
-    path.write_text(json.dumps(spec))
-    objective = NativePolicyObjective(path)
-    objective.bind_actor(engine)
-    examples = [parse_graph(row, tokenizer_fingerprint=engine.native_identity['tokenizer_fingerprint']) for row in rows]
-    return spec, objective, examples
-
-
-def parameter_gradients(model, loss):
-    parameters = [p for p in model.parameters() if p.requires_grad]
-    grads = torch.autograd.grad(loss, parameters, allow_unused=True)
-    return torch.cat([(g if g is not None else torch.zeros_like(p)).flatten().double()
-                      for g, p in zip(grads, parameters)])
-
-
 def test_whole_producer_consumer_graph_scores_every_sampled_turn_with_top_k(tmp_path):
     """A producer/consumer episode: every sampled action of both turns carries top-k and enters the loss,
     with gradients through the real producer -> consumer KV dependency."""

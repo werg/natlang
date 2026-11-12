@@ -1,4 +1,4 @@
-"""Learned Neuralese operators (model/learned_operators.py) and the shared use ablation (eval/neuralese_ablation.py)."""
+"""Learned Neuralese operators (model/learned_operators.py)."""
 
 import pytest
 import torch
@@ -150,45 +150,6 @@ def test_rows_save_and_load_round_trip(tmp_path):
     loaded = load_rows(tmp_path / 'rows.pt')
     assert torch.equal(loaded.rows('extract'), rows.rows('extract'))
     assert loaded.bindings == rows.bindings
-
-
-def test_ablation_externalized_own_state_matches_actual_and_conditions_differ():
-    from natlang_neuralese.eval import neuralese_ablation as ablation
-    from natlang_neuralese.model.shared_state import capture_block
-    model = tiny_model()
-    bindings = small_bindings()
-    rows = OperatorRows(bindings, model.port.embedding_weight.shape[1])
-    rows.reset_to_text(model.port.embedding_weight)
-    with torch.no_grad():
-        for name in OPERATORS:
-            rows.rows(name).add_(0.3 * torch.randn_like(rows.rows(name)))
-    raw = [graph_row(index) for index in range(4)]
-    examples = [parse_graph(row, tokenizer_fingerprint=FINGERPRINT) for row in raw]
-    spans = {example.id: resolve_spans(row, example.plan, rows.bindings) for row, example in zip(raw, examples)}
-    # Importing a row's own captured state as external state reproduces the internal-import graph.
-    example = examples[0]
-    identity = ablation._identity(model)
-    with torch.no_grad():
-        embeddings = operator_embeddings(model, rows, example.plan, spans[example.id])
-        result = model(example.plan, embeddings=embeddings)
-        edge = example.plan.invocations[1].imports[0]
-        block = capture_block(result, 'producer', edge.start, edge.stop, text='', **identity)
-        weights = ablation.consumer_weights(example)
-        own, _ = ablation._score(model, example, example.plan, weights, embeddings, None, None, 128)
-        plan, external = ablation.externalized(example, {ablation.internal_edges(example.plan)[0][1:]: block})
-        again, _ = ablation._score(model, example, plan, weights, embeddings, external,
-                                   {name: identity for name in external}, 128)
-    assert again['nll_sum'] == pytest.approx(own['nll_sum'], rel=1e-5, abs=1e-6)
-    report = ablation.ablate(model, examples, rows=rows, operator_spans=spans, seed=1)
-    assert report['rows'] == 4 and set(report['aggregate']) == {'actual', 'shuffled', 'zeroed'}
-    assert report['aggregate']['actual']['tokens'] == 4 * 3
-    assert report['aggregate']['actual']['nll'] == pytest.approx(
-        sum(row['actual']['nll_sum'] for row in report['per_row']) / report['aggregate']['actual']['weight'])
-    assert all(row['donor'] != row['id'] for row in report['per_row'])
-    assert report['use_nll_delta']['zeroed-minus-actual'] != 0
-    # Consumers that do not import anything are not scored.
-    assert ablation.consumer_weights(example)[:len(example.plan.invocations[0].token_ids)] == (
-        (0.,) * len(example.plan.invocations[0].token_ids))
 
 
 def test_serving_generation_steps_match_the_training_graph_capture():

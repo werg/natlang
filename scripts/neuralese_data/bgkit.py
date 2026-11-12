@@ -59,7 +59,7 @@ SLOT_QA_STORES = {
 }
 OVERVIEW_STORES = {"file_overview": "file_overview", "repo_overview_v1": "repo_overview"}
 TOOL_DIGEST_STORES = {"tool_digest_v2": "run1", "tool_digest_ext_v3": "ext_synth"}
-# Earlier digest stores, converted only for learned-operator cases (operator_cases_tool_digest.py); not in ALL_STORES.
+# Earlier digest stores (generator labels for explicitly requested reads); not in ALL_STORES.
 TOOL_DIGEST_EXTRA_STORES = {"tool_digest": "run0", "tool_digest_v1": "run1", "tool_digest_ext_v1": "ext_synth_v1",
                             "tool_digest_ext_v2": "ext_synth_v2"}
 TOOL_DIGEST_GENERATORS = {**TOOL_DIGEST_STORES, **TOOL_DIGEST_EXTRA_STORES}

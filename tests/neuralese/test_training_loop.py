@@ -11,14 +11,6 @@ from natlang_neuralese.train.loop import (
     commit_optimizer_step, restore_training_rng_state)
 
 
-class Clock:
-    def __init__(self):
-        self.now = 0.0
-
-    def __call__(self):
-        return self.now
-
-
 def old_inline_loop(start, total, stop_at=None, qualify_at=None):
     """Representative prior inline loop: stop requests land after an update; qualification ends at its boundary."""
     stop, step, ran = [False], start, []

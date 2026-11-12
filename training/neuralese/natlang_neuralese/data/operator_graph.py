@@ -12,10 +12,9 @@ One `natlang.port-record/1` case for one learned operator (model/learned_operato
   state is imported between ``consume_open``/``consume_close``; the target reply is the only supervised span.
 * a text-cut sibling: the same consumer reading the runtime's current text cut of each source (ts-host
   native/cutoff.ts ``cutText`` at its 2,000-character floor) instead of the state. It is the baseline the operator
-  must beat (eval/neuralese_ablation.py ``--text-cut``).
+  must beat.
 
-Only gold/checked targets are supervised; admission and the protection union are the caller's
-(scripts/neuralese_data/build_operator_graphs.py). Nothing is truncated: a case over the token cap is rejected.
+Only gold/checked targets are supervised; admission and the protection union are the caller's. Nothing is truncated: a case over the token cap is rejected.
 """
 from __future__ import annotations
 

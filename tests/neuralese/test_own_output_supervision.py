@@ -32,10 +32,6 @@ def turn(role, body, *, reasoning=None):
     return ids + list(body) + [END]
 
 
-def categories_of(weights_categories, code):
-    return [i for i, c in enumerate(weights_categories[1]) if c == code]
-
-
 R = ROLE_CODES.index('assistant_reasoning')
 A = ROLE_CODES.index('assistant_reply')
 U = ROLE_CODES.index('user')
