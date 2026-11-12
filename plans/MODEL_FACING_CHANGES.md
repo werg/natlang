@@ -2051,3 +2051,28 @@ actor, 24 training tasks x 2 samples per arm (`ops/actor-perf-1112/ab-reply-text
 reply-text 0, McNemar p 0.5), task bootstrap delta CI [-0.23, 0.0]; loop rate 0 in both, repeated actions 0.7% vs 0%;
 16 and 15 samples per arm were lost to preemptions/OOM kills of the collector units. Not worse on loops but worse on
 success: not adopted; the variant stays off (opt-in name kept for a re-measure on a trained policy).
+
+## 2026-11-12: decided (owner, first principles, not A/B): every sampled call stays in the history; fixed tool list; 131k context
+
+Exp1 base captures (120-150 episodes): 45 of 278 multi-call replies (16%) lost their later calls (the calls after the
+first failed one never ran and vanished from the history, typically 6 `read_file` after a missing file); 85 of 118
+rewrites of earlier history came from the tool block changing (only `compact_history` near the context limit, only
+`return_result` on the last turn; the block is ~5k tokens into the prompt, so each switch re-prefilled everything after it);
+17 more from context-limit compaction.
+- `ts-host/src/native/agent.ts`: every sampled call of a reply stays in the history. After a failed eval or effect, read-only
+  calls (`read_file`, `list_files`, `search_files`, `diff_files`, `read_code`, `diff_code`, `read_page`) still run; every
+  other later call is answered "Not run: an earlier call in this reply failed; call it again if you still need it."
+- Every turn offers every tool. On a call's last turn any call but `return_result` is answered "This is the last turn of
+  this call: call return_result now."; near the context limit any call but `compact_history` is answered "The
+  conversation is near its context limit: call compact_history now." (`tool_choice: required` and the compaction notice
+  are unchanged).
+- Served context 131072 (`serve_native_checkpoint --sglang-context`; LFM3-1.7B has 262,144 positions); GRPO and exp1
+  collection call budgets 131072 (`--context-tokens`), and the collector's budget follows the actor's reported window
+  (`/v1/neuralese/info` context) when it is smaller. held_eval measures at 131072 too (the held-v2 series starts at 131k:
+  `ops/held-v2/engine.json` pins `harness.context_tokens` and `--sglang-context 131072`; measure refuses an actor serving
+  less; `compare` refuses results of different budgets; results without the field count as 32768).
+- Unmeasured on the executor (decided); GRPO's next run pins it. Tests: `ts-host/test/agent-reply-calls.test.mjs`.
+- The other rewrites of earlier history: 7 of 15 changed `<think>` texts were the same text re-tokenized (the chained
+  append-only splice, 936cc7443, keeps them); 7 were context-limit compaction (rare at 131k); 1 was the chat driver's
+  malformed-call retry (`model/chat-completion.ts`), whose malformed reply and repair note are shown for one retry and then
+  dropped (intended: only the tail after the previous prompt is re-prefilled).

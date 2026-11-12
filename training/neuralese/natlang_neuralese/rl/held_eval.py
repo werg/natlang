@@ -405,6 +405,7 @@ def finalize(directory, spec, started, *, complete):
               'manifest_sha256': spec['manifest_sha256'], 'series': spec['series'], 'code': spec['code'],
               'endpoint': spec['endpoint'], 'actor': spec.get('actor'), 'engine': spec.get('engine'), 'tasks': spec['tasks'], 'samples_per_task': spec['samples'],
               'seed_base': spec.get('seed_base', SEED_BASE), 'case_seconds': spec.get('case_seconds'),
+              'context_tokens': spec.get('context_tokens', LEGACY_CONTEXT_TOKENS),
               'started_at': started, 'finished_at': time.time(), 'elapsed_seconds': elapsed,
               'complete': bool(complete and len(ran) == len(samples)), 'ran': len(ran), 'scored': len(scored),
               'successes': successes, 'success_rate': round(successes / len(scored), 4) if scored else None,
@@ -465,12 +466,20 @@ def paired(first, second):
             'tasks_up': up, 'tasks_down': down, 'task_sign_p': round(binomial_two_sided(up, down), 4)}
 
 
+# The call budget of a held measurement (the harness compacts near it); results measured before it was recorded ran at 32768.
+CONTEXT_TOKENS = 131072
+LEGACY_CONTEXT_TOKENS = 32768
+
+
 def compare(first, second, *, resamples=2000):
     """The standalone comparison of two result.json files (``second`` against ``first``): the paired test (McNemar on
     matched scored samples, task-level sign test), the task-clustered bootstrap 95% interval of the success-rate change
     over the matched samples, each side's timeouts and loop rate, and whether the two ran under one code commit and series.
     Pairs lost to a timeout on either side are counted, never scored."""
     import random
+    budgets = [result.get('context_tokens', LEGACY_CONTEXT_TOKENS) for result in (first, second)]
+    if budgets[0] != budgets[1]:
+        raise ValueError(f'results measured with different context budgets are not paired: {budgets[0]} vs {budgets[1]}')
     engines = result_engine(first), result_engine(second)
     if None not in engines and engines[0] != engines[1]:
         raise ValueError('results served by different engine settings are not paired: '
@@ -545,7 +554,7 @@ BASE_SNAPSHOT = Path.home() / '.cache/huggingface/hub/models--LiquidAI--LFM3-1.7
 # The held-v2 eval engine (coordinator decision 2026-11-12, pinned in ops/held-v2/engine.json): one SGLang engine per
 # checkpoint, FP8 KV. Every measured policy is served with exactly these settings; ``compare`` refuses other pairings.
 ACTOR_ARGS = ('--engine', 'sglang', '--sglang-projection', 'vendor', '--sglang-kv-cache-dtype', 'fp8_e4m3',
-              '--sglang-kv-gb', '16', '--sglang-max-running', '128')
+              '--sglang-kv-gb', '16', '--sglang-max-running', '128', '--sglang-context', '131072')
 ACTOR_BUDGET_GB = 40   # --sglang-kv-gb + 24 (measured 2026-11-12: SGLang 23 GB at 16 GB KV, front 14 GB once a write_text reloads the native model)
 ENGINE_FIELDS = ('engine', 'dtype', 'projection', 'kv_cache_dtype', 'overlap_schedule', 'bf16_reduction')
 
@@ -635,7 +644,7 @@ def serve(checkpoint, sha256, store, *, unit, budget_gb, extra=(), base=BASE_SNA
 
 
 def measure(out, manifest, endpoints, policy_id, *, samples=4, seed_base=SEED_BASE, case_seconds=3600,
-            max_model_requests=64, max_turns=128, context_tokens=32768, label=None, allow_other_engine=False, log=print):
+            max_model_requests=64, max_turns=128, context_tokens=CONTEXT_TOKENS, label=None, allow_other_engine=False, log=print):
     """Measure the policy served at ``endpoints`` ([(url, slots)]) on every task of ``manifest`` x ``samples`` into
     ``out/result.json`` (resumable: an existing ``run.json`` must name the same manifest, policy and sampling)."""
     from .actor_client import NativeActorClient
@@ -662,12 +671,21 @@ def measure(out, manifest, endpoints, policy_id, *, samples=4, seed_base=SEED_BA
         wrong = {k: attested.get(k) for k, v in pin['expect'].items() if attested.get(k) != v}
         if wrong:
             raise ValueError(f'the actor does not serve the pinned eval engine ({Path(manifest).parent / "engine.json"}): {wrong}')
+        harness = pin.get('harness') or {}
+        if harness.get('context_tokens') not in (None, context_tokens):
+            raise ValueError(f'the pinned harness budget is {harness["context_tokens"]} tokens, not {context_tokens}')
+    served = info.get('context')
+    if isinstance(served, int) and served < context_tokens and not allow_other_engine:
+        raise ValueError(f'the actor serves {served} tokens per request, less than the call budget {context_tokens}; '
+                         'relaunch it with --sglang-context >= the budget')
     if spec['code'].get('dirty') or spec['series']['ts_host_dirty']:
         log(json.dumps({'event': 'held eval warning', 'warning': 'the checkout is dirty; the result records it'}))
     out.mkdir(parents=True, exist_ok=True)
     if (out / 'run.json').exists():
         previous = json.loads((out / 'run.json').read_text())
-        for key in ('policy_id', 'manifest_sha256', 'samples', 'seed_base', 'case_seconds', 'max_model_requests', 'max_turns'):
+        previous.setdefault('context_tokens', LEGACY_CONTEXT_TOKENS)
+        for key in ('policy_id', 'manifest_sha256', 'samples', 'seed_base', 'case_seconds', 'max_model_requests', 'max_turns',
+                    'context_tokens'):
             if previous[key] != spec[key]:
                 raise ValueError(f'{out} holds a run with another {key}: {previous[key]!r}')
         spec = {**previous, 'endpoint': spec['endpoint'], 'endpoints': spec['endpoints'], 'workers': spec['workers'],
@@ -706,7 +724,8 @@ def main(argv=None):
     m.add_argument('--case-seconds', type=int, default=3600)
     m.add_argument('--max-model-requests', type=int, default=64)
     m.add_argument('--max-turns', type=int, default=128)
-    m.add_argument('--context-tokens', type=int, default=32768)
+    m.add_argument('--context-tokens', type=int, default=CONTEXT_TOKENS,
+                   help='call budget (the pinned engine.json harness may require one; compare refuses other pairings)')
     m.add_argument('--label')
     m.add_argument('--actor-unit', help='ledger unit name of the actor (default heldv2-actor-<sha8>)')
     m.add_argument('--actor-budget-gb', type=int, default=ACTOR_BUDGET_GB, help='ledger claim: --sglang-kv-gb + 24')

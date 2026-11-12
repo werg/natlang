@@ -53,7 +53,7 @@ def main() -> None:
     # actor serves as many concurrent sequences as the collector offers, with a KV pool big enough that the radix cache
     # keeps every live episode's history (an evicted history is prefilled again on the next call).
     parser.add_argument('--sglang-max-running', type=int, default=128, help='concurrent sequences on SGLang')
-    parser.add_argument('--sglang-context', type=int, default=32768, help='longest prompt + reply in tokens')
+    parser.add_argument('--sglang-context', type=int, default=131072, help='longest prompt + reply in tokens (the model has 262144 positions; 131072 makes compaction rare)')
     # Absolute sizing (shared GB10): SGLang keeps (1 - fraction) of the memory free at its start as headroom and sizes the
     # KV pool from the rest, so a fixed fraction either shrank the pool when other jobs held memory (0.4 with 82 GB free
     # gave 332k of 524k tokens) or, high, let the first actor take everything behind the ledger's back. --sglang-kv-gb

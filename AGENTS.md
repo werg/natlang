@@ -514,6 +514,11 @@ afterwards. The rules below are consequences of this one.
   or a crisp helper, and why. Spell algorithms out as numbered steps over named
   data for small models. Write DECOMPOSITION.md first, then implement and merge;
   owner review happens afterwards (queue: `plans/OWNER_REVIEW.md`).
+- **Decide model-facing changes on first principles** (owner, 2026-11-12). Bug fixes and
+  structural changes to what the model sees (lost or erased actions, history that differs from
+  what was sampled, needless prompt rewrites, limits below the model's capacity) are fixed
+  directly, never gated on an A/B. Record each in `plans/MODEL_FACING_CHANGES.md`; held-out
+  evaluation of the next checkpoint shows any regression.
 - **Teach in errors, not prompts.** Never spell out a wrong form in a prompt; it
   primes the model to produce it. Handle wrong forms in the runtime and teach the
   fix in a one-sentence error. Prefer making standard JS idioms work over new

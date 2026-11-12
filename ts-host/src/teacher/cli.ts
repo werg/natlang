@@ -188,6 +188,17 @@ async function main(argv: string[] = process.argv.slice(2), stop?: AbortSignal):
         'serve with a larger context per slot or lower --context-tokens');
     if (served === undefined) process.stderr.write('note: the server does not report its context size; not checked against --context-tokens\n');
   }
+  // A Neuralese actor reports its window in /v1/neuralese/info: the call's budget follows it (never above
+  // --context-tokens), so a harness default larger than an older actor's window compacts at the actor's size instead of
+  // sending requests the actor rejects.
+  if (config.endpoint && config.chatCompletionsUrl && flags.has('--neuralese-server')) {
+    const served = await fetch(new URL('/v1/neuralese/info', config.endpoint)).then(response => response.ok ? response.json() : undefined,
+      () => undefined).then(info => (info as { context?: unknown } | undefined)?.context);
+    if (typeof served === 'number' && served > 0 && served < config.contextTokens) {
+      process.stderr.write(`note: the actor serves ${served} tokens per request; the call budget follows it (--context-tokens ${config.contextTokens})\n`);
+      config.contextTokens = served;
+    }
+  }
   const source = await readFile(ir);
   config.sourceSha256 = sha256(source);
   const records = await loadRecords(ir, integer(flags, '--start', 0), flags.has('--all') ? 0 : integer(flags, '--limit', 10), source.toString('utf8'));

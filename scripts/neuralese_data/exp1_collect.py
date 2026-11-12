@@ -45,7 +45,7 @@ def main():
     ap.add_argument('--case-seconds', type=int, default=3600)
     ap.add_argument('--max-model-requests', type=int, default=64)
     ap.add_argument('--max-turns', type=int, default=128)
-    ap.add_argument('--context-tokens', type=int, default=32768)
+    ap.add_argument('--context-tokens', type=int, default=131072, help="call budget; follows the actor's served window when smaller")
     ap.add_argument('--seed-base', type=int, default=SEED_BASE)
     ap.add_argument('--attempts', type=int, default=3, help='tries per episode after an infrastructure failure')
     ap.add_argument('--stagger', type=float, default=1.0, help='seconds between slot starts (a simultaneous start of 100+ collector processes peaks in memory)')

@@ -1764,12 +1764,12 @@ export class NativeToolAgent {
       const nearLimit = budget !== null && compactable && compactedTurn !== turns && estimate(allTools) >
         Math.min(budget - reply, Math.max(budget * 0.75, compactedAt + budget * 0.25));
       const availableTools = lastTurn ? only('return_result') : nearLimit ? only('compact_history') : allTools;
-      // `fixed-tool-list`: the request always offers every tool (the tool block is early in the prompt, so changing it
-      // rewrites everything after it); the restriction of this turn is enforced by rejecting other calls in a sentence.
-      const fixedTools = modelFacing('fixed-tool-list');
-      const offered = fixedTools ? allTools : availableTools;
-      const restriction = availableTools === allTools || !fixedTools ? undefined : lastTurn ?
-        { allowed: 'return_result', text: 'This is your last turn in this call: call return_result now.' } :
+      // Every turn offers every tool: the tool block is early in the prompt, so changing it would rewrite everything
+      // after it (two full re-prefills per compaction). The turn's restriction is enforced by rejecting other calls in
+      // one sentence (decided 2026-11-12, MODEL_FACING_CHANGES.md).
+      const offered = allTools;
+      const restriction = availableTools === allTools ? undefined : lastTurn ?
+        { allowed: 'return_result', text: 'This is the last turn of this call: call return_result now.' } :
         { allowed: 'compact_history', text: 'The conversation is near its context limit: call compact_history now.' };
       // A large opening can require compaction before the first tool result. Explain the restricted tool surface on
       // whichever message is latest: before automatic shortening (so the estimate counts it) and again after it,
@@ -2124,22 +2124,19 @@ export class NativeToolAgent {
       session.turn = turns;
       session.turnReasoning = response.reasoning;
       const previousFailureSerial = session.failureSerial;
-      // After a failed call the rest of the reply does not run (a later action may depend on it). With
-      // `unrun-calls-kept` the history keeps every sampled call and answers each unrun one in one sentence; with
-      // `unrun-reads-run` read-only file calls after the failure still run (they cannot depend on it).
-      const keepUnrun = modelFacing('unrun-calls-kept') || modelFacing('unrun-reads-run');
-      const runReads = modelFacing('unrun-reads-run');
+      // After a failed eval or effect the rest of the reply does not run (a later action may depend on it), but every
+      // sampled call stays in the history: read-only calls still run (a failure before them cannot change what they
+      // read), the others are answered in one sentence as not run (decided 2026-11-12, MODEL_FACING_CHANGES.md).
       let stoppedAt: number | undefined;
       for (const [index, [name, args]] of calls.entries()) {
         if (timedOut()) return 'episode wall-clock budget exhausted';
-        if (stoppedAt === undefined && restriction && name !== restriction.allowed) {
+        if (restriction && name !== restriction.allowed) {
           results.push({ kind: 'rejected', text: restriction.text });
-          if (!keepUnrun) break;
-          stoppedAt = index;
+          stoppedAt ??= index;
           continue;
         }
         if (stoppedAt !== undefined) {
-          if (runReads && READ_ONLY_TOOLS.has(name)) results.push(await session.applyAsync(name, args,
+          if (READ_ONLY_TOOLS.has(name)) results.push(await session.applyAsync(name, args,
             typeof raw[index]!.id === 'string' ? raw[index]!.id as string : undefined));
           else results.push({ kind: 'rejected', text: UNRUN_CALL });
           continue;
@@ -2160,10 +2157,8 @@ export class NativeToolAgent {
         if (['blocked', 'budget', 'completed'].includes(result.kind)) break;
         // A later action may depend on this one's result. In particular, never
         // finish an older staged answer after the computation in this batch failed.
-        if (['error', 'rejected', 'refused'].includes(result.kind) || session.failureSerial > previousFailureSerial) {
-          if (!keepUnrun) break;
-          stoppedAt = index;
-        }
+        if (['error', 'rejected', 'refused'].includes(result.kind) || session.failureSerial > previousFailureSerial)
+          stoppedAt ??= index;
       }
       messages.push({ role: 'assistant', content: replyText(response), tool_calls: raw.slice(0, results.length), ...thought(response.reasoning) });
       // Near the end of the turn budget the model is told how many turns are left, so a task that cannot be finished
