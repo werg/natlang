@@ -81,3 +81,17 @@ def test_longest_stored_prefix_wins_and_the_lru_is_bounded():
     h.store([B], [A])
     h.store([A], [B])
     assert len(h.entries) == 2 and h.splice([C, A, END, C, ABC, END]) == [C, A, END, C, ABC, END]
+
+
+def test_splices_chain_across_an_episode():
+    """Call 2's prompt re-tokenizes call 1's (spliced) prompt the plain way: it is still found, and the whole history
+    keeps the sampled ids."""
+    h = history()
+    h.store([C], [A, B, C, END])                       # call 0: sampled "abc" as three tokens
+    call1 = h.splice([C, ABC, END, SPACE_A])           # call 1 renders it as one token
+    assert call1 == [C, A, B, C, END, SPACE_A]
+    h.store(call1, [A, B, C, END])                     # call 1 samples "abc" again
+    rendered = [C, ABC, END, SPACE_A, ABC, END, C]     # call 2: the plain tokenization of the same text
+    call2 = h.splice(rendered)
+    assert call2 == [C, A, B, C, END, SPACE_A, A, B, C, END, C]
+    assert text(h, call2) == text(h, rendered)

@@ -78,8 +78,14 @@ class TokenHistory:
     def __init__(self, tokenizer, max_entries=32768):
         self.table = token_bytes_table(tokenizer)
         self.max_entries = max_entries
-        self.entries = OrderedDict()      # (length, hash) -> (array('i') of generated ids, time it was stored)
+        # (length, hash) -> (array('i') of generated ids, time it was stored, the ids actually sent for this prompt
+        # when they differ from these (a spliced prompt, stored also under its re-tokenized key), else None)
+        self.entries = OrderedDict()
         self.lengths = {}                 # prompt length -> entry count
+        # A spliced prompt's key -> the key of the ids it was spliced from: the next call re-tokenizes the same text the
+        # same way, so its prefix matches the re-tokenized ids, never the spliced ones (without this a splice applied
+        # only to the first continuation of an episode).
+        self.spliced_from = OrderedDict()
         self.lock = threading.Lock()
         self.stats = {'append_only_lookups': 0, 'append_only_spliced': 0, 'append_only_tokens_kept': 0,
                       'append_only_continuations': 0, 'append_only_gap_seconds': 0.}
@@ -88,15 +94,21 @@ class TokenHistory:
     def enabled(self):
         return self.table is not None
 
+    def _put(self, key, value):
+        if self.entries.pop(key, None) is None:
+            self.lengths[key[0]] = self.lengths.get(key[0], 0) + 1
+        self.entries[key] = value
+
     def store(self, prompt, generated):
         if not self.enabled or not len(generated):
             return
         key = (len(prompt), _prefix_hashes(prompt)[-1])
-        value = (array('i', (int(t) for t in generated)), time.monotonic())
+        generated, now = array('i', (int(t) for t in generated)), time.monotonic()
         with self.lock:
-            if self.entries.pop(key, None) is None:
-                self.lengths[key[0]] = self.lengths.get(key[0], 0) + 1
-            self.entries[key] = value
+            self._put(key, (generated, now, None))
+            raw = self.spliced_from.pop(key, None)
+            if raw is not None:
+                self._put(raw, (generated, now, array('i', (int(t) for t in prompt))))
             while len(self.entries) > self.max_entries:
                 (length, _), _ = self.entries.popitem(last=False)
                 self.lengths[length] -= 1
@@ -114,7 +126,7 @@ class TokenHistory:
             for length in sorted((n for n in self.lengths if n < len(ids)), reverse=True):
                 key = (length, hashes[length])
                 if key in self.entries:
-                    (old, stored), start = self.entries[key], length
+                    (old, stored, sent), start = self.entries[key], length
                     self.entries.move_to_end(key)
                     # A continuation of a stored reply: the time between the reply and this request is the client's
                     # (harness, tool execution, queueing) share of the episode.
@@ -128,8 +140,9 @@ class TokenHistory:
         j = 0
         while j < len(old) and j < len(new) and old[j] == new[j]:
             j += 1
+        base = list(sent) if sent is not None else list(ids[:start])
         if j == len(old):
-            return ids          # already append-only
+            return ids if sent is None else self._accept(ids, base + list(ids[start:]), j)   # already append-only
         table = self.table
         a_bytes, b_bytes = b''.join(table[t] for t in old[j:]), b''.join(table[t] for t in new[j:])
         common, limit = 0, min(len(a_bytes), len(b_bytes))
@@ -151,11 +164,18 @@ class TokenHistory:
             if offset in b_bounds:
                 best_i, best_m = i, b_bounds[offset]
         if best_i == 0:
+            return ids if sent is None else self._accept(ids, base + list(ids[start:]), j)
+        return self._accept(ids, base + list(new[:j]) + list(old[j:j + best_i]) + list(new[j + best_m:]), j + best_i)
+
+    def _accept(self, ids, result, kept):
+        """`result` when it is the same text as `ids` (never change the text), recorded so its continuation is found."""
+        table = self.table
+        if result == list(ids) or b''.join(table[t] for t in result) != b''.join(table[t] for t in ids):
             return ids
-        result = list(ids[:start + j]) + list(old[j:j + best_i]) + list(new[j + best_m:])
-        if b''.join(table[t] for t in result[start:]) != b''.join(table[t] for t in ids[start:]):
-            return ids          # never change the text
         with self.lock:
             self.stats['append_only_spliced'] += 1
-            self.stats['append_only_tokens_kept'] += j + best_i
+            self.stats['append_only_tokens_kept'] += kept
+            self.spliced_from[(len(result), _prefix_hashes(result)[-1])] = (len(ids), _prefix_hashes(ids)[-1])
+            while len(self.spliced_from) > self.max_entries:
+                self.spliced_from.popitem(last=False)
         return result
