@@ -346,6 +346,12 @@ def train(args):
     started = time.time()
     forward_tokens = 0
     phase = collections.Counter()
+    best = None
+    if args.keep_best_val:
+        if not val_sets or f'val_loss:{args.keep_best_val}' not in record:
+            raise SystemExit(f'--keep-best-val {args.keep_best_val}: no such --val-chains set')
+        best = {'loss': record[f'val_loss:{args.keep_best_val}'], 'step': 0,   # step 0: the unchanged source
+                'masters': {name: master.detach().cpu().clone() for name, master in masters.items()}}
 
     def mark(name, since):
         torch.cuda.synchronize()
@@ -397,6 +403,13 @@ def train(args):
             model.eval()
             record.update({f'val_loss:{name}': validation_loss(model, forward, c, pack_tokens) for name, c in val_sets.items()})
             model.train()
+            if args.keep_best_val:
+                # the checkpoint written is the FP32 master state at the lowest validation NLL of the named set
+                current = record[f'val_loss:{args.keep_best_val}']
+                if best is None or current < best['loss']:
+                    best = {'loss': current, 'step': step + 1,
+                            'masters': {name: master.detach().cpu().clone() for name, master in masters.items()}}
+                record['best_val'] = {'loss': best['loss'], 'step': best['step']}
         if args.hours and step + 1 == args.replan_step and step + 1 < len(steps):
             # fit the schedule to the wall-clock budget from the measured rate (compile included: conservative)
             rate = forward_tokens / (time.time() - started)
@@ -415,6 +428,9 @@ def train(args):
     out_path = Path(args.out_dir) / 'checkpoint.pt'
     from natlang_neuralese.common.hashing import sha256_file_hex_cached
     source_sha = sha256_file_hex_cached(Path(args.checkpoint))
+    if best is not None:
+        masters = best['masters']
+        print(json.dumps({'kept_best_val': {'loss': best['loss'], 'step': best['step']}}), flush=True)
     with torch.no_grad():
         for name, p in live.items():
             p.copy_(masters[name])   # rounded once, nearest, from the FP32 master
@@ -521,6 +537,7 @@ def main():
     p.add_argument('--val-chains', action='append', default=[],
                    help='prebuilt validation sequences (repeatable, named by file stem): weighted NLL every --val-every steps')
     p.add_argument('--val-every', type=int, default=50)
+    p.add_argument('--keep-best-val', help='name (file stem) of a --val-chains set: write the checkpoint of the step with its lowest NLL (step 0 counts)')
     p.add_argument('--hours', type=float, default=0., help='wall-clock budget: at --replan-step the schedule (cosine '
                    'included) is cut to the steps that fit at the measured rate, keeping --reserve-minutes for eval and save')
     p.add_argument('--replan-step', type=int, default=20)
