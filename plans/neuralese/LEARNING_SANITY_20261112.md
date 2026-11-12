@@ -33,6 +33,21 @@ elements have half a BF16 ulp below 1e-6, 16.5% below 1e-5, 88% below 1e-4. An A
 so one step changes about 2% of the served weights, and the policy only moves once about 10-100 aligned steps have
 accumulated. Not lost (the masters keep it), but delayed and quantised; check 4 measures it directly.
 
+## Finding: Experiment 0's training data was half guidance-authoring calls
+
+Decoding every invocation's prompt in `exp0-positive-control/turns.pkl` (the 148 w5 successes ft2 trained on):
+319 of 551 invocations are `selectGuidanceFacts(consumer, facts: GuidanceFact[], budgetTokens)` calls.
+They hold 1.17M of the 2.19M sampled target tokens (54%), and every episode has them.
+Their facts carry the privileged answer ("The verified result of this program is no.", "A verified reference solution:
+1. return_result {...}").
+Their samples are long `<think>` passages that probe with `read_code` (rejected: no-such-function) and with
+`eval console.log(JSON.stringify(facts.slice(...)))`.
+These are w5's memetic/JOLT+ guidance calls. They never occur in the eval harness (sampling config `guidance: false`).
+So more than half of exp0's SFT signal was off-distribution and favoured probing loops. That fits flat training-task
+success, a slightly lower held score and loop rate 0.03 -> 0.11.
+GRPO and Experiment 1 collect with `guidance: false`.
+Checks 2/3 use Experiment 1's base successes (guidance off): `sanity-1112/c2/exp1-success.pkl`, 136 episodes, 1,465 calls.
+
 ## Check 4: GRPO with a trivially learnable reward (setup)
 
 Runs in GRPO's envelope right after its 3-step smoke (`ops/sanity-1112/check4.sh`, unit sanity-c4a, own child actor).
