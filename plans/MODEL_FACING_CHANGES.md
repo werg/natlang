@@ -2038,3 +2038,13 @@ references (the only readers are `natlang skills install`, `ts-host/test/onboard
 types its observations `Untrusted<string>` instead of a guard sentence, as `references/refinements.md` teaches). The executing model's
 prompts, tool text and error text are unchanged, so there is nothing to measure on the executor. The skills are
 model-facing for the coding agents that load them; their effect on those agents is not measured.
+
+## 2026-11-12: `reply-text-with-calls` measured, not adopted
+
+Variant (`NATLANG_MODEL_FACING=...,reply-text-with-calls`, `ts-host/src/native/agent.ts`): a reply's prose before its tool
+calls stays in the next call's context instead of being dropped. Measured on the base policy 5ff07638 on the shared FP8
+actor, 24 training tasks x 2 samples per arm (`ops/actor-perf-1112/ab-reply-text/{base,reply}`, `compare.json`): base
+17/28 scored (60.7%), reply-text 13/29 (44.8%); on the 20 matched pairs base 12, reply-text 10 (only base 2, only
+reply-text 0, McNemar p 0.5), task bootstrap delta CI [-0.23, 0.0]; loop rate 0 in both, repeated actions 0.7% vs 0%;
+16 and 15 samples per arm were lost to preemptions/OOM kills of the collector units. Not worse on loops but worse on
+success: not adopted; the variant stays off (opt-in name kept for a re-measure on a trained policy).
