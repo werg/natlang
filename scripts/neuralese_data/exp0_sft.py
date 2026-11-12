@@ -13,6 +13,12 @@ chain is one sequence whose sampled segments are all supervised: equal to per-ca
 
     exp0_sft.py parity --turns T.pkl --checkpoint C --base B           # HF forward vs the actor's recorded logprobs
     exp0_sft.py train  --turns T.pkl --checkpoint C --base B --out-dir D
+    exp0_sft.py bench  --turns T.pkl --checkpoint C --base B           # stock vs fast fwd+bwd on fixed chains: loss, grads, tok/s
+
+Speed (GB10, 11k-token sequences): the stock HF modelling code runs at about 1.9k fwd+bwd tokens/s because half of the GPU
+time is unfused elementwise work and a fifth dense sliding-window attention; `lfm3_fast_train` (banded sliding attention,
+compiled layers, shifted-add conv) plus partial activation checkpointing sized to `--activation-gb` runs about 3x faster
+with the same BF16 arithmetic (`--stock-model` opts out).
 """
 from __future__ import annotations
 
@@ -32,6 +38,8 @@ import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint as torch_checkpoint
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training/neuralese'))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lfm3_fast_train
 
 MAX_LEN = 32000
 
@@ -103,6 +111,19 @@ def load_model(checkpoint, base, device='cuda', dtype=torch.float32):
 
 def hidden(model, ids):
     return model.model(input_ids=ids[None], use_cache=False).last_hidden_state[0]
+
+
+ACTIVATION_BYTES_PER_TOKEN_LAYER = 96e3   # measured about 80 KB of saved activations per token per layer with the fast layers
+
+
+def set_checkpointing(model, tokens, activation_gb):
+    """Recompute (gradient-checkpoint) only as many layers as keep the saved activations of a ``tokens`` sequence under
+    ``activation_gb``: a checkpointed layer costs one extra forward (a third of its compute), an unchecked one its activations."""
+    layers = model.model.layers
+    free = int(min(len(layers), activation_gb * 2**30 // (ACTIVATION_BYTES_PER_TOKEN_LAYER * tokens)))
+    for index, layer in enumerate(layers):
+        layer.gradient_checkpointing = index >= free
+    return len(layers) - free
 
 
 def _nll(weight, h, target):
@@ -201,6 +222,10 @@ def train(args):
     model.gradient_checkpointing_enable()
     model.config.use_cache = False
     model.train()
+    forward = hidden
+    if not args.stock_model:
+        lfm3_fast_train.prepare(model)
+        forward = lfm3_fast_train.hidden
     special_index = torch.tensor(special, device='cuda')
     live = {name: p for name, p in model.named_parameters()}
     parameters = [masters[name] for name in live]
@@ -230,10 +255,20 @@ def train(args):
     if group and tokens >= args.batch_loss_tokens // 2:
         steps.append(group)
     total = len(steps)
+    if args.max_steps:
+        steps = steps[:args.max_steps]
     print(json.dumps({'optimizer_steps': total, 'lr': args.lr, 'batch_loss_tokens': args.batch_loss_tokens}), flush=True)
     log = open(Path(args.out_dir) / 'train.jsonl', 'a')
     started = time.time()
     forward_tokens = 0
+    phase = collections.Counter()
+
+    def mark(name, since):
+        torch.cuda.synchronize()
+        now = time.time()
+        phase[name] += now - since
+        return now
+
     for step, group in enumerate(steps):
         fraction = step / max(1, total - 1)
         scale = min(1., (step + 1) / args.warmup) * (args.min_lr_fraction + (1 - args.min_lr_fraction) * 0.5 * (1 + math.cos(math.pi * fraction)))
@@ -241,18 +276,26 @@ def train(args):
             g['lr'] = args.lr * scale
         denominator = sum(length for i in group for _, length, _ in chains[i]['segs'])
         total_nll, correct = 0., 0
+        step_started = time.time()
         for i in group:
             chain = chains[i]
+            t = time.time()
             ids, positions, targets = chain_tensors(chain, 'cuda')
-            h = hidden(model, ids)
+            if not args.stock_model:
+                set_checkpointing(model, len(ids), args.activation_gb)
+            h = forward(model, ids)
+            t = mark('forward', t)
             nll = token_nll(model, h, positions, targets)
             (nll.sum() / denominator).backward()
-            for name, p in live.items():
-                masters[name].grad.add_(p.grad.float())
+            t = mark('loss_backward', t)
+            torch._foreach_add_([masters[name].grad for name in live], [p.grad for p in live.values()])
+            for p in live.values():
                 p.grad = None
             total_nll += nll.sum().item()
             forward_tokens += len(ids)
             del h, nll
+            t = mark('accumulate', t)
+        t = time.time()
         embedding_master.grad[special_index] = 0
         norm = torch.nn.utils.clip_grad_norm_(parameters, args.clip).item()
         optimizer.step()
@@ -263,12 +306,18 @@ def train(args):
             embedding_master[special_index] = saved_rows
             for name, p in live.items():
                 p.copy_(masters[name])
+        mark('optimizer', t)
         record = {'step': step + 1, 'of': total, 'loss': total_nll / denominator, 'lr': args.lr * scale, 'grad_norm': norm,
                   'sequences': len(group), 'loss_tokens': denominator, 'elapsed_s': round(time.time() - started, 1),
-                  'forward_tokens_per_s': round(forward_tokens / (time.time() - started)), 'cuda_peak_gb': round(torch.cuda.max_memory_allocated() / 2**30, 1)}
+                  'forward_tokens_per_s': round(forward_tokens / (time.time() - started)),
+                  'step_seconds': round(time.time() - step_started, 1),
+                  'phase_seconds': {k: round(v, 1) for k, v in phase.items()},
+                  'cuda_peak_gb': round(torch.cuda.max_memory_allocated() / 2**30, 1)}
         print(json.dumps(record), flush=True)
         log.write(json.dumps(record) + '\n')
         log.flush()
+    if args.max_steps:
+        return
     out_path = Path(args.out_dir) / 'checkpoint.pt'
     from natlang_neuralese.common.hashing import sha256_file_hex_cached
     source_sha = sha256_file_hex_cached(Path(args.checkpoint))
@@ -279,10 +328,71 @@ def train(args):
     print(json.dumps({'checkpoint': str(out_path), 'changed_elements': changed}), flush=True)
 
 
+def bench(args):
+    """Stock vs fast forward+backward (BF16, the training dtype) on the same fixed chains: per-chain loss, global gradient
+    agreement and tokens/s. The stock pass runs first; the model is then patched in place."""
+    episodes = pickle.load(open(args.turns, 'rb'))['episodes']
+    chains = [c for c in chains_of(episodes) if args.min_tokens <= len(c['ids']) <= args.max_tokens][:args.chains]
+    model, _, _ = load_model(args.checkpoint, args.base)
+    model.gradient_checkpointing_enable()
+    model.config.use_cache = False
+    model.train()
+    params = [p for p in model.parameters()]
+
+    def run(forward, label, before=None):
+        grads = [torch.zeros_like(p, dtype=torch.float32) for p in params]
+        losses, seconds, tokens = [], 0., 0
+        for repeat in range(args.repeats + 1):          # the first pass compiles and warms up
+            if repeat == 1:
+                seconds, tokens = 0., 0
+            for chain in chains:
+                ids, positions, targets = chain_tensors(chain, 'cuda')
+                if before is not None:
+                    before(len(ids))
+                torch.cuda.synchronize()
+                started = time.time()
+                nll = token_nll(model, forward(model, ids), positions, targets)
+                (nll.sum() / len(targets)).backward()
+                torch.cuda.synchronize()
+                seconds += time.time() - started
+                tokens += len(ids)
+                if repeat == 0:
+                    losses.append(nll.mean().item())
+                    torch._foreach_add_(grads, [p.grad for p in params])
+                for p in params:
+                    p.grad = None
+        print(json.dumps({'impl': label, 'chain_tokens': [len(c['ids']) for c in chains], 'loss': [round(x, 5) for x in losses],
+                          'fwd_bwd_tokens_per_s': round(tokens / seconds), 'cuda_peak_gb': round(torch.cuda.max_memory_allocated() / 2**30, 1)}), flush=True)
+        return losses, grads
+
+    reference = None
+    if args.fp32_reference:          # the BF16 noise floor: the same chains with FP32 compute (no autocast, no TF32)
+        args.repeats, repeats = 0, args.repeats
+        _, reference = run(hidden, 'fp32-reference')
+        args.repeats = repeats
+    model.to(torch.bfloat16)
+    stock_losses, stock_grads = run(hidden, 'stock')
+    lfm3_fast_train.prepare(model)
+    fast_losses, fast_grads = run(lfm3_fast_train.hidden, 'fast', before=lambda n: set_checkpointing(model, n, args.activation_gb))
+    def agreement(x, y):
+        dot = sum((a * b).sum().item() for a, b in zip(x, y))
+        na = math.sqrt(sum((a * a).sum().item() for a in x))
+        nb = math.sqrt(sum((b * b).sum().item() for b in y))
+        diff = math.sqrt(sum(((a - b) ** 2).sum().item() for a, b in zip(x, y)))
+        return {'cosine': dot / (na * nb), 'rel_l2': diff / na, 'norm_a': na, 'norm_b': nb}
+
+    if reference is not None:
+        print(json.dumps({'stock_vs_fp32': agreement(reference, stock_grads), 'fast_vs_fp32': agreement(reference, fast_grads)}), flush=True)
+    print(json.dumps({'stock_vs_fast': agreement(stock_grads, fast_grads)}), flush=True)
+    print(json.dumps({'loss_abs_diff_max': max(abs(a - b) for a, b in zip(stock_losses, fast_losses)),
+                      'loss_mean_stock': float(np.mean(stock_losses)), 'loss_mean_fast': float(np.mean(fast_losses)),
+                      }), flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='command', required=True)
-    for name in ('parity', 'train'):
+    for name in ('parity', 'train', 'bench'):
         p = sub.add_parser(name)
         p.add_argument('--turns', required=True)
         p.add_argument('--checkpoint', required=True)
@@ -291,7 +401,17 @@ def main():
     p.add_argument('--samples', type=int, default=6)
     p.add_argument('--max-tokens', type=int, default=14000)
     p.add_argument('--bf16-params', action='store_true')
+    p = sub.choices['bench']
+    p.add_argument('--chains', type=int, default=6)
+    p.add_argument('--repeats', type=int, default=2)
+    p.add_argument('--min-tokens', type=int, default=9000)
+    p.add_argument('--max-tokens', type=int, default=12500)
+    p.add_argument('--activation-gb', type=float, default=20.)
+    p.add_argument('--fp32-reference', action='store_true')
     p = sub.choices['train']
+    p.add_argument('--stock-model', action='store_true', help='the unpatched HF layers with full checkpointing (about 3x slower)')
+    p.add_argument('--activation-gb', type=float, default=20., help='saved-activation budget per sequence; layers beyond it are recomputed')
+    p.add_argument('--max-steps', type=int, default=0, help='stop after this many optimizer steps without writing a checkpoint')
     p.add_argument('--out-dir', required=True)
     p.add_argument('--epochs', type=int, default=3)
     p.add_argument('--lr', type=float, default=1e-5)
@@ -303,7 +423,7 @@ def main():
     p.add_argument('--seed', type=int, default=20261111)
     p.add_argument('--max-per-task', type=int, default=0)
     args = parser.parse_args()
-    {'parity': parity, 'train': train}[args.command](args)
+    {'parity': parity, 'train': train, 'bench': bench}[args.command](args)
 
 
 if __name__ == '__main__':

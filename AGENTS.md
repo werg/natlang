@@ -1,3 +1,16 @@
+## HF-path fine-tuning speed: elementwise and dense sliding attention, not matmul (engineering, 2026-11-12)
+
+`exp0_sft.py train` ran 1.8-1.9k fwd+bwd tokens/s on an idle GB10 (11k-token chains; the logged 900 tok/s run shared the GPU). Profile of one chain: matmuls
+(nvjet) 1.4 of 5.1 GPU s, already about 90 TFLOPs; unfused elementwise (fp32 RMSNorm, RoPE, gates, SwiGLU, bf16<->fp32 casts, depthwise width-7 conv) about 2.5 s;
+sliding-window layers as a dense masked 11k x 11k memory-efficient kernel 0.9 s (window is 256); FP32-master accumulate + AdamW + copy-back 2% of a step. The
+`causal_conv1d`/Triton conv kernels are inference-only (`not torch.is_grad_enabled()`), so training ran the cuDNN depthwise conv. `scripts/neuralese_data/lfm3_fast_train.py`
+(instance patches; the vendored sources are hash-pinned): banded 256-token-block sliding attention (exact), causal flash for full layers, `torch.compile(dynamic=True)` per
+decoder layer, conv as seven fp32 shifted adds; `exp0_sft.set_checkpointing` recomputes only the layers beyond `--activation-gb` (20; peak 52.7 GB, ledger budget 64+).
+Result 3.0-3.6x (bench 5.3k tok/s, loop 4.4k tok/s including compile, steady steps 36 s against 94-129 s); `exp0_sft.py bench --fp32-reference` is the check: fast vs FP32 gradients
+cosine 0.987 / rel-L2 0.16, stock vs FP32 0.983 / 0.18, per-chain loss within 1e-3, 4-step training losses equal to 3e-4. `--stock-model` opts out. The native learner
+(`model/hf_port.py`) already uses FlexAttention for the window; its norms/RoPE/gates/conv are still eager HF ops, so the same fusion applies there, but its 2.6-3k tok/s
+is dominated by the 16x forward inflation and the 2x privileged twin (APPROACH_REVIEW section 1.2).
+
 ## RL round scheduling: per-group teachers and Pop pre-collection (engineering, 2026-11-10)
 
 `rl/teacher_feed.py`: each group is scored and its JOLT+ teachers planned (batch of `jolt_teacher_plan_batch` groups, 1 for the
