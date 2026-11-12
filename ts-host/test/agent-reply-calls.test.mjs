@@ -38,6 +38,6 @@ test('the last turn offers every tool and, on a Neuralese driver, forces return_
   const names = requests.map(request => request.tools.map(tool => tool.function.name).join());
   assert.ok(requests.length >= 2 && names.every(list => list === names[0]), JSON.stringify(names));
   assert.equal(requests[0].template, undefined);
-  assert.deepEqual(requests.at(-1).template, { call: 'return_result', arguments: {}, argument: 'status', value: 'decode' });
+  assert.deepEqual(requests.at(-1).template, { call: 'return_result', arguments: {}, argument: 'status', value: 'decode', optional: true });
   assert.match(String(requests.at(-1).messages.at(-1).content), /last turn/);
 });

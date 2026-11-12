@@ -77,9 +77,10 @@ test('program guidance follows generated descendants through the depth limit and
     opening.includes('Three stage') ? 'return await nl<string>`Four stage.`()' :
     opening.includes('Four stage') ? 'return await nl<string>`Five stage.`()' : 'return "ok"');
   const runtime = host.createNatlangRuntime({ program, executorIdentity: identity, adaptation: binding, trace: trace => traces.push(trace),
-    model: request => { systems.push(String(request.messages[0].content)); return scripted.driver(request); } });
+    // Guidance and the nesting-limit notice are in each call's opening message (the system prompt is the same for all).
+    model: request => { systems.push(String(request.messages[1].content)); return scripted.driver(request); } });
   assert.equal(await runtime.run(() => app.require('main.ts').default('input')), 'ok');
-  assert.ok(systems.every(system => system.endsWith(guidance + '\n</natlang_program_guidance>\n')));
+  assert.ok(systems.every(system => system.includes(guidance + '\n</natlang_program_guidance>')));
   assert.ok(systems.some(system => system.includes('fifth and final layer')));
   assert.ok(traces.every(trace => trace.adaptation.guidanceApplied));
   systems.length = 0;
@@ -113,8 +114,8 @@ test('authored guidance uses the native writer when the consumer identity is res
           dtype: 'f32', native_state };
       } } } });
   assert.equal(await runtime.run(() => app.require('main.ts').default('input')), 'ok');
-  assert.ok(requests[0].messages[0].content.some(part => part.type === 'native_state' && part.id === stateId));
-  assert.ok(!requests[0].messages[0].content.some(part => part.type === 'text' && part.text.includes(guidance)));
+  assert.ok(requests[0].messages[1].content.some(part => part.type === 'native_state' && part.id === stateId));
+  assert.ok(!requests[0].messages[1].content.some(part => part.type === 'text' && part.text.includes(guidance)));
 });
 
 test('authored inline templates preserve slots, live captures, original expression evaluation and escaping', async () => {
@@ -375,7 +376,7 @@ test('program guidance includes only explicitly imported program owners', async 
   const binding = host.bindAdaptation(overlay(program, { [descriptor.key]: { kind: 'program.guidance', text: 'Application guidance.' } }), program, identity);
   const systems = [], scripted = scriptedModel(() => 'return value');
   const runtime = host.createNatlangRuntime({ program, executorIdentity: identity, adaptation: binding,
-    model: request => { systems.push(String(request.messages[0].content)); return scripted.driver(request); } });
+    model: request => { systems.push(String(request.messages[1].content)); return scripted.driver(request); } });
   for (const [app, guided] of [[application, true], [included, true], [excluded, false]]) {
     systems.length = 0;
     assert.equal(await runtime.run(() => app.require('main.ts').default('ok')), 'ok');

@@ -40,7 +40,7 @@ test('native program guidance is stored for the exact student and appears in the
   const result = await runtime.run(lambda({ type: '() => string', instructions: 'Return a string.' }));
   assert.equal(result.value, 'done');
   assert.deepEqual(writes, ['Use the approved procedure.']);
-  const system = requests[0].messages[0].content;
+  const system = requests[0].messages[1].content;
   assert.ok(Array.isArray(system));
   assert.ok(system.some(part => part.type === 'native_state' && part.id === id));
   assert.ok(!system.some(part => part.type === 'text' && part.text.includes('Use the approved procedure.')));
@@ -59,8 +59,8 @@ test('an exact stored memetic binding reaches the prompt by its native state ID'
   const runtime = interpreter({ agent: currentSession => agent.run(currentSession) });
   const result = await runtime.run(lambda({ type: '() => string', instructions: 'Return a string.' }));
   assert.equal(result.value, 'done');
-  assert.ok(request.messages[0].content.some(part => part.type === 'native_state' && part.id === id));
-  assert.ok(!request.messages[0].content.some(part => part.type === 'text' && part.text.includes(text)));
+  assert.ok(request.messages[1].content.some(part => part.type === 'native_state' && part.id === id));
+  assert.ok(!request.messages[1].content.some(part => part.type === 'text' && part.text.includes(text)));
 });
 
 test('native program guidance fails closed when the writer uses a stale checkpoint', async () => {
@@ -98,8 +98,8 @@ test('a binding from an older checkpoint is re-encoded for the current student',
   const result = await runtime.run(lambda({ type: '() => string', instructions: 'Return a string.' }));
   assert.equal(result.value, 'done');
   assert.equal(writes, 1);
-  assert.ok(request.messages[0].content.some(part => part.type === 'native_state' && part.id === currentId));
-  assert.ok(!request.messages[0].content.some(part => part.type === 'native_state' && part.id === oldId));
+  assert.ok(request.messages[1].content.some(part => part.type === 'native_state' && part.id === currentId));
+  assert.ok(!request.messages[1].content.some(part => part.type === 'native_state' && part.id === oldId));
 });
 
 test('concurrent calls share one persisted re-encoded guidance state per program and student', async () => {
@@ -159,7 +159,7 @@ test('explicit text-only authored guidance is inserted into the composed system 
     authoredTextGuidance('Use the approved procedure.', 'fixture-program') });
   const runtime = interpreter({ agent: currentSession => agent.run(currentSession) });
   await runtime.run(lambda({ type: '() => string', instructions: 'Return a string.' }));
-  const prompt = requests[0].messages[0].content;
+  const prompt = requests[0].messages[1].content;
   assert.equal(prompt.split('<natlang_program_guidance>').length - 1, 1);
   assert.equal(prompt.split('Use the approved procedure.').length - 1, 1);
 });
@@ -193,9 +193,10 @@ test('each call of a run imports its own function\'s guidance, else the program-
   } };
   const seen = {};
   const driver = async request => {
-    const opening = String(request.messages[1].content);
+    const content = request.messages[1].content;
+    const opening = Array.isArray(content) ? content.map(part => part.text ?? '').join('') : String(content);
     const call = /^You are inside this call: (\w+)\(/.exec(opening)?.[1];
-    const states = request.messages[0].content.filter(part => part.type === 'native_state').map(part => part.id);
+    const states = request.messages[1].content.filter(part => part.type === 'native_state').map(part => part.id);
     (seen[call] ??= []).push(...states);
     if (call !== 'main') return { calls: [['return_result', { status: 'success', value: call }]] };
     if (request.messages.some(message => message.role === 'tool' && !String(message.tool_call_id).startsWith('scope_')))

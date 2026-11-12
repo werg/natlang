@@ -11,7 +11,7 @@ import { undeclaredServiceType } from './introspection.js';
 import type { DecisionScorer, ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
 import { deriveSeed } from './trace.js';
 import { AUTOMATIC_NOTE, COMPACTION_NOTICE, LEAF_SYSTEM_PROMPT, directoryReducerPrompt, scopedFileToolNames, FUNCTION_TOOLS_PROMPT, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN,
-  LAST_TURN_NOTICE, TOOLS_PROMPT, promptAtNlDepthLimit, type FileToolSurface } from './prompt.js';
+  LAST_TURN_NOTICE, NL_DEPTH_LIMIT_NOTICE, TOOLS_PROMPT, type FileToolSurface } from './prompt.js';
 import { canGenerateNl, runInFrame } from '../runtime/context.js';
 import { adoptImportedNativeArtifacts } from './nz-file.js';
 import { FileHandle, FolderHandle, fileListingText, type Folder } from './scoped-fs.js';
@@ -50,7 +50,7 @@ import { DECISION_SYSTEM_PROMPT, decisionPrompt, decisionScorer, finiteValues, s
 import type { NeuraleseBlockMeta } from './neuralese-store.js';
 import {activeRecorder, activeNativeAdapters, activeNativeStates} from './model-recording.js';
 import { hexDigest } from './hash.js';
-import { activeSystemPrompts, softenMessages, renderPromptMessages, type PromptRendering } from './system-prompts.js';
+import { activeSystemPrompts, softenMessages, renderPromptMessages, renderSystemPrompt, type PromptRendering } from './system-prompts.js';
 import type { ModelBudget } from './model-budget.js';
 import { modelFacing } from '../runtime/model-facing.js';
 /** The answer to a call of a reply that did not run because an earlier call of the same reply failed. */
@@ -1115,21 +1115,19 @@ export class NativeToolAgent {
           description: 'What you are doing, what you have found and ruled out, and what is left.' } }, ['note']),
       tool('return_result', RETURN_RESULT_DESCRIPTION,
         { status: { type: 'string', enum: ['success', 'blocked', 'failed'] },
-          value: { ...(session.lam.type.kind === 'lambda' ? schemaOf(session.lam.type.returns, session.env) : {}),
-            description: 'For success, provide a value of the declared return type, or omit it only to return the exact complete result already staged.' },
+          // The declared result type is in the call's opening message (its signature), not here: one tool list serves every
+          // call, so their openings share one cached prefix. The runtime checks the value against the declared type.
+          value: { description: 'For success, provide a value of the result type declared in this call\'s signature, or omit it only to return the exact complete result already staged.' },
           reason: { type: 'string', description: 'For "blocked": what information is missing. For "failed": what you could not complete and why. Quote relevant observed tool errors; do not invent missing information or claim a recoverable error proves impossibility.' } }, ['status']),
     ];
     if (this.options.fallbacks?.length) tools.splice(1, 0, tool('escalate',
       'Hand this executing call to the next configured model when you cannot reliably finish. State the evidence and work already done; the next model continues in this same scope and must not repeat completed effects.',
       { reason: { type: 'string' }, evidence: { type: 'string' }, attempted_work: { type: 'string' },
         remaining_subproblem: { type: 'string' } }, ['reason', 'evidence', 'attempted_work', 'remaining_subproblem']));
-    const ownCode = Object.keys(session.lam.codebase).length > 0;
-    // Built-in documentation is always there to read, so read_code is always offered; editing needs code of the program's own.
-    const readCode = tool('read_code', canGenerateNl(session.runtime.frame) ? READ_CODE_DESCRIPTION :
-      READ_CODE_DESCRIPTION.replace('(nl, iterateOn, transcript, decide)', '(iterateOn, transcript, decide)'), { name: { type: 'string' } }, ['name']);
-    if (!ownCode) tools.splice(2, 0, readCode);
-    if (ownCode) tools.splice(2, 0,
-      readCode,
+    // One code-tool set for every call (an edit without code of the call's own is refused with the reason), so the tool
+    // list, like the system prompt, is the same for every call and their openings share one cached prefix.
+    tools.splice(2, 0,
+      tool('read_code', READ_CODE_DESCRIPTION, { name: { type: 'string' } }, ['name']),
       tool('edit_code', EDIT_CODE_DESCRIPTION,
         { name: { type: 'string' }, find: { type: 'string' }, replace_with: { type: 'string' }, fuzzy: { type: 'boolean' } },
         ['name', 'find', 'replace_with']),
@@ -1225,7 +1223,9 @@ export class NativeToolAgent {
       ...(context.length ? ['', 'Values from the calling code:', ...context] : [])].join('\n');
   }
 
-  private scopeOpening(session: NativeSession): string {
+  /** The call's opening message: its signature, instructions and `notes` (guidance and the paragraphs that apply to this
+   * call only), then the names eval can use. */
+  private scopeOpening(session: NativeSession, notes = ''): string {
     const lam = session.lam;
     if (lam.type.kind !== 'lambda') return 'Scope:';
     const { signature, scopeTypes, program } = this.callHeading(session);
@@ -1236,6 +1236,7 @@ export class NativeToolAgent {
       ...Object.keys(lam.codebase), ...Object.keys(session.availableServices())];
     return [`You are inside this call: ${signature}`, ...scopeTypes, '', 'Instructions:', program,
       ...(lam.handoff ? ['', lam.handoff] : []),
+      ...(notes ? ['', notes] : []),
       ...(writable.length ? ['', `Assignments to ${writable.join(', ')} are written back to the caller and can change what sibling calls see. ` +
         'For a judgment, read these values without changing them; use new local variables for calculations. ' +
         'Write them only when the instructions require an update.'] : []),
@@ -1433,7 +1434,7 @@ export class NativeToolAgent {
    * Answer a finite-typed call by scoring each allowed value as the reply to its opening (native/decision.ts).
    * Returns false when the readout does not apply, so the tool loop runs; a string is a failure, as from run.
    */
-  private async decisionReadout(session: NativeSession, opening: Record<string, unknown>[], guidance: string): Promise<false | string | void> {
+  private async decisionReadout(session: NativeSession, opening: Record<string, unknown>[]): Promise<false | string | void> {
     const lam = session.lam;
     const wanted = lam.readout === 'decision' || this.options.decisionReadout === 'finite-returns';
     if (!wanted || lam.type.kind !== 'lambda' || lam.subtype !== 'function' || lam.projectTransaction) return false;
@@ -1446,9 +1447,9 @@ export class NativeToolAgent {
       return false;
     }
     const replies = values.map(value => JSON.stringify(value));
-    // The readout offers no tools, so its system turn is the short decision prompt and the program's guidance; the
-    // tool manual of the opening's system turn stays out (it is most of the opening's tokens).
-    const system = (this.options.decisionSystemPrompt?.() ?? DECISION_SYSTEM_PROMPT) + guidance;
+    // The readout offers no tools, so its system turn is the short decision prompt; the tool manual of the opening's
+    // system turn stays out (it is most of the opening's tokens). The program's guidance is in the opening message.
+    const system = this.options.decisionSystemPrompt?.() ?? DECISION_SYSTEM_PROMPT;
     const messages = [{ role: 'system', content: system }, ...opening.slice(1), { role: 'user', content: decisionPrompt(replies) }];
     const encoded = encodeMessages(this.softened(renderPromptMessages(messages, this.options.promptRendering)));
     const training = this.options.trainingGuidance;
@@ -1575,33 +1576,30 @@ export class NativeToolAgent {
     // The context budget sizes compaction and, from the start (the opening's reads included), the tool-output page.
     let budget = this.options.contextTokens === undefined ? await defaultContextBudget(this.driver) : this.options.contextTokens;
     session.pages.budget = shownCharsFor(budget);
-    // Fixed for the whole call, so the server can reuse its prompt cache across turns.
-    let adaptedSystem: string | undefined;
-    // The program's guidance, which every prompt of the call carries: the tool loop's system prompt and the decision readout's.
+    // The program's guidance, in the call's opening message (which the decision readout reuses too).
     const guidance = renderAuthoredTextGuidance(this.options.authoredTextGuidance) +
       await this.runtimeProgramGuidance(guidanceForCall(this.options.programGuidance, session.lam.functionName));
     // A leaf call's opening (set below, once the views are known); undefined runs the full interpreter surface.
     let leaf: string | undefined;
-    const systemPrompt = () => {
-      if (leaf !== undefined) return LEAF_SYSTEM_PROMPT + guidance;
-      if (adaptedSystem !== undefined) return adaptedSystem;
-      const base = typeof this.options.systemPrompt === 'function' ? this.options.systemPrompt() : this.options.systemPrompt ?? TOOLS_PROMPT;
-      const allowAdHoc = canGenerateNl(session.runtime.frame);
-      const composed = (allowAdHoc ? base : promptAtNlDepthLimit(base)) +
-      (Object.keys(session.lam.codebase).length ? FUNCTION_TOOLS_PROMPT : '') +
-      (session.lam.projectTransaction ? directoryReducerPrompt(this.options.fileTools, allowAdHoc,
-        session.lam.projectTransaction.folder.access !== 'read', session.lam.withheldTools) : '') +
-      guidance;
-      if (this.options.programGuidance !== undefined || this.options.authoredTextGuidance !== undefined) adaptedSystem = composed;
-      return composed;
-    };
+    // One system prompt for every call, so every call's opening shares one cached prefix. What differs between calls
+    // (guidance, the function-tools and folder paragraphs, the nesting-limit notice) is in the call's opening message.
+    const systemPrompt = () => leaf !== undefined ? LEAF_SYSTEM_PROMPT :
+      typeof this.options.systemPrompt === 'function' ? this.options.systemPrompt() : this.options.systemPrompt ?? TOOLS_PROMPT;
+    const allowAdHoc = canGenerateNl(session.runtime.frame);
+    const callNotes = [guidance.trim(),
+      renderSystemPrompt([Object.keys(session.lam.codebase).length ? FUNCTION_TOOLS_PROMPT : '',
+        session.lam.projectTransaction ? directoryReducerPrompt(this.options.fileTools, allowAdHoc,
+          session.lam.projectTransaction.folder.access !== 'read', session.lam.withheldTools) : '',
+        allowAdHoc ? '' : NL_DEPTH_LIMIT_NOTICE].map(text => text.trim()).filter(Boolean).join('\n\n'), this.options.promptRendering)]
+      .filter(Boolean).join('\n\n');
     const views = await this.views(session);
     leaf = this.options.leafCalls === 'direct' ? this.leafOpening(session, views) : undefined;
     if (leaf !== undefined) session.runtime.trace.emit('leaf_call', { call_id: session.runtime.currentCallId ?? null });
     const openingMessages = (): Record<string, unknown>[] => {
-      if (leaf !== undefined) return [{ role: 'system', content: systemPrompt() }, { role: 'user', content: leaf }];
+      if (leaf !== undefined) return [{ role: 'system', content: systemPrompt() },
+        { role: 'user', content: leaf + (callNotes ? `\n\n${callNotes}` : '') }];
       const reading = this.scopeReading(session, views);
-      const scopeOpening = this.scopeOpening(session);
+      const scopeOpening = this.scopeOpening(session, callNotes);
       if (session.lam.skills?.listing) for (const skill of session.lam.skills.inventory ?? [])
         session.runtime.trace.emit('skill_use', { phase: 'offered', skill_name: skill.name,
           skill_revision: skill.revision, invocation_id: session.runtime.options.runId,
@@ -1632,7 +1630,7 @@ export class NativeToolAgent {
     let guidanceRequest: Record<string, unknown> | undefined, guidanceReady = false;
     // A decision scorer has no reply-token reservation contract or handoff tool. Use the ordinary loop when either is needed.
     const decided = (this.options.fallbacks?.length || this.options.modelBudget?.maxRequests !== undefined ||
-      this.options.modelBudget?.maxTokens !== undefined) ? false : await this.decisionReadout(session, messages, guidance);
+      this.options.modelBudget?.maxTokens !== undefined) ? false : await this.decisionReadout(session, messages);
     if (decided !== false) return decided;
     const openingLength = messages.length;
     // Prompt tokens per character of request, calibrated from the server's reported prompt size.
@@ -1771,8 +1769,8 @@ export class NativeToolAgent {
       // MODEL_FACING_CHANGES.md.
       const offered = allTools;
       const forcedCall: ModelTurnRequest['template'] = availableTools === allTools || !supportsNeuralese(currentDriver) ? undefined :
-        lastTurn ? { call: 'return_result', arguments: {}, argument: 'status', value: 'decode' } :
-        { call: 'compact_history', arguments: {}, argument: 'note', value: 'decode' };
+        lastTurn ? { call: 'return_result', arguments: {}, argument: 'status', value: 'decode', optional: true } :
+        { call: 'compact_history', arguments: {}, argument: 'note', value: 'decode', optional: true };
       // A large opening can require compaction before the first tool result. Explain the restricted tool surface on
       // whichever message is latest: before automatic shortening (so the estimate counts it) and again after it,
       // since shortening can make its own note the latest message.

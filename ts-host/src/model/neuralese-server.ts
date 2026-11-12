@@ -524,6 +524,11 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     if(Array.isArray(capabilities?.capabilities)&&capabilities.capabilities.includes('native.protocol-recovery'))body={...body,x_natlang_native_protocol_recovery:true};
     if (body.guidance && capabilities && !serves(capabilities, 'guidance'))
       throw Object.assign(new Error('neuralese-guidance-unavailable: this model server does not implement the requested guidance; use a server with guidance support'), { code: 'neuralese-guidance-unavailable' });
+    if (body.neuralese_template && (body.neuralese_template as { optional?: true }).optional) {
+      const { optional: _optional, ...template } = body.neuralese_template as Record<string, unknown>;
+      body = { ...body };
+      if (capabilities && !serves(capabilities, 'template')) delete body.neuralese_template; else body.neuralese_template = template;
+    }
     if (body.neuralese_template && capabilities) {
       const template = body.neuralese_template as Record<string, unknown>;
       const required = ['template', ...(template.value_type ? ['template.value-type'] : []),

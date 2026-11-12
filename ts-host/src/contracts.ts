@@ -19,7 +19,9 @@ export type ModelTurnRequest = { invocation_id?: string; messages: unknown[]; to
     /** Keys addressing the value inside nested arguments, starting at `argument`. */
     argument_path?: (string | number)[];
     /** Native value syntax in the model prefix; opaque placeholders remain strings on the wire. */
-    value_type?: 'string' | 'unknown' };
+    value_type?: 'string' | 'unknown';
+    /** A nudge, not a readout: a server without templates samples the reply freely instead of refusing the request. */
+    optional?: true };
   /** Guided generation (natlang's servers only): see the agent's `guidance` option. */
   guidance?: boolean | Record<string, unknown>;
   /**

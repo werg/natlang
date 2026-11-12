@@ -52,6 +52,8 @@ test('without a budget nothing is compacted, and a parameter named transcript ke
 });
 
 const toolNames = request => request.tools.map(tool => tool.function.name);
+// Every turn offers every tool; the compaction turn requires a call and says why at the end of the prompt.
+const compacting = request => request.tool_choice === 'required' && /near its context limit/.test(String(request.messages.at(-1).content));
 // The managed local default window. The opening (system prompt and task) takes about 3,400 tokens, so a 4,096 window
 // would leave no room for a turn's reply (a quarter of the window) and nothing for compaction to work with.
 const CONTEXT = 8192;
@@ -64,20 +66,20 @@ test('near the budget the model is asked to compact: only compact_history is off
   const driver = request => {
     requests.push(structuredClone(request));
     turn++;
-    if (toolNames(request).length === 1 && toolNames(request)[0] === 'compact_history')
+    if (compacting(request))
       return { calls: [['compact_history', { note: `Counting; reached ${turn}; stop at 16. Note ${++notes}.` }]], prompt_tokens: promptOf(request) };
     return turn < 16 ? { calls: [['eval', { code: `console.log('y'.repeat(2000)); ${turn}` }]], prompt_tokens: promptOf(request) } :
       { calls: [['return_result', { status: 'success', value: turn }]], prompt_tokens: promptOf(request) };
   };
   await new NativeToolAgent(driver, { contextTokens: CONTEXT, maxTurns: 30 }).run(session);
   assert.equal(session.completed, true);
-  const forced = requests.filter(request => toolNames(request).join() === 'compact_history');
+  const forced = requests.filter(request => compacting(request));
   assert.ok(forced.length >= 2, 'the model was asked to compact, more than once in a long call');
   assert.ok(forced.every(request => request.tool_choice === 'required'), 'the compaction turn requires the tool call');
   assert.ok(forced.every(request => /near its context limit/.test(request.messages.at(-1).content)), 'the compaction turn says why');
 
-  assert.ok(requests.filter(request => toolNames(request).length > 1).every(request => request.tool_choice === undefined));
-  const kinds = requests.map(request => toolNames(request).join() === 'compact_history');
+  assert.ok(requests.filter(request => !compacting(request)).every(request => request.tool_choice === undefined));
+  const kinds = requests.map(request => compacting(request));
   assert.equal(kinds.some((forcedTurn, index) => forcedTurn && kinds[index + 1]), false, 'compaction never repeats back to back');
   const last = requests.at(-1);
   const pinned = last.messages.filter(message => message.role === 'user' && /^Your note from compacting/.test(message.content));
@@ -107,7 +109,7 @@ test('the model may compact on its own, a note over the limit is rejected, and a
   let calls = 0;
   const texting = request => {
     calls++;
-    if (toolNames(request).join() === 'compact_history') return { text: 'I would rather not.', prompt_tokens: promptOf(request) };
+    if (compacting(request)) return { text: 'I would rather not.', prompt_tokens: promptOf(request) };
     return calls < 10 ? { calls: [['eval', { code: `console.log('y'.repeat(2000)); ${calls}` }]], prompt_tokens: promptOf(request) } :
       { calls: [['return_result', { status: 'success', value: 'hello' }]], prompt_tokens: promptOf(request) };
   };
@@ -169,7 +171,7 @@ test('a request the server refuses as too long teaches the agent its true size, 
     sizes.push(size); turn++;
     // The server's reported size is half the truth, so the agent's own estimate runs low until it is corrected.
     const reported = Math.round(size / 2);
-    if (toolNames(request).join() === 'compact_history')
+    if (compacting(request))
       return { calls: [['compact_history', { note: `Counting; reached ${turn}.` }]], prompt_tokens: reported };
     return turn < 14 ? { calls: [['eval', { code: `console.log('y'.repeat(2000)); ${turn}` }]], prompt_tokens: reported } :
       { calls: [['return_result', { status: 'success', value: turn }]], prompt_tokens: reported };
@@ -223,7 +225,7 @@ test('a turn is limited to a quarter of the window, and long reasoning leaves th
   const driver = request => {
     requests.push(structuredClone(request)); turn++;
     const long = 'Thinking hard. '.repeat(400);
-    if (request.tools.map(tool => tool.function.name).join() === 'compact_history')
+    if (compacting(request))
       return { calls: [['compact_history', { note: `Counting; reached ${turn}.` }]], prompt_tokens: promptOf(request) };
     return turn < 12 ? { reasoning: long, calls: [['eval', { code: `${turn}` }]], prompt_tokens: promptOf(request) } :
       { calls: [['return_result', { status: 'success', value: turn }]], prompt_tokens: promptOf(request) };
@@ -239,9 +241,10 @@ test('a turn is limited to a quarter of the window, and long reasoning leaves th
 test('an opening larger than the budget does not make every turn a compaction request', async () => {
   const { session } = open({ type: '() => number', instructions: 'Count up.' });
   const offered = [];
-  let turn = 0;
+  let turn = 0, compactTurns = 0;
   const driver = request => {
     offered.push(request.tools.map(tool => tool.function?.name ?? tool.name));
+    if (compacting(request)) compactTurns++;
     turn++;
     if (turn < 4) return { calls: [['eval', { code: `${turn}` }]], prompt_tokens: 100 };
     return { calls: [['return_result', { status: 'success', value: turn }]], prompt_tokens: 100 };
@@ -250,6 +253,6 @@ test('an opening larger than the budget does not make every turn a compaction re
   await new NativeToolAgent(driver, { contextTokens: 4096, maxTurns: 10 }).run(session);
   assert.equal(session.lam.return, 4);
   assert.ok(offered[0].includes('eval'), 'the first turn offers the ordinary tools: there is nothing to compact yet');
-  assert.ok(offered.filter(tools => tools.length === 1 && tools[0] === 'compact_history').length <= 1,
+  assert.ok(compactTurns <= 1,
     'compaction is asked for at most once while it cannot remove anything');
 });

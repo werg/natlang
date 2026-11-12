@@ -1856,6 +1856,10 @@ export class NativeSession {
         `a function of this program; ${requested} belongs to an imported package, which can be read but not changed` }]);
       return { kind: 'ok', text: this.show(packaged), value: packaged };
     }
+    // edit_code is offered to every call (one tool list for all calls, so their openings share one cached prefix); a call
+    // without code of its own has nothing to edit.
+    if (!found && name === 'edit_code' && !Object.keys(this.lam.codebase).length) throw new Reject([{ path: requested, code: 'no-own-code',
+      expected: 'a function in this call\'s callable folder; this function has none, so there is no code of its own to edit' }]);
     if (!found) {
       const toolDocumentation = name === 'read_code' ? this.toolDocumentation(requested) : undefined;
       if (toolDocumentation !== undefined) return { kind: 'ok', text: toolDocumentation, value: toolDocumentation };

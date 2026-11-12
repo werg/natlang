@@ -16,7 +16,7 @@ test('a directory reducer offers the file tools of its surface, and its prompt n
   assert.match(delegate.parameters.properties.returns.description, /Natlang result type expression/);
   assert.match(delegate.parameters.properties.returns.description, /boolean, string, number/);
   assert.match(delegate.parameters.properties.returns.description, /not a prose description/);
-  assert.deepEqual(names().filter(name => !['eval', 'read_page', 'read_code', 'compact_history', 'return_result'].includes(name)),
+  assert.deepEqual(names().filter(name => !['eval', 'read_page', 'read_code', 'edit_code', 'diff_code', 'compact_history', 'return_result'].includes(name)),
     ['list_files', 'search_files', 'read_file', 'write_file', 'edit_file', 'diff_files', 'bash', 'python', 'delegate', 'editor']);
   assert.deepEqual(names('editor').filter(name => ['editor', 'bash', 'read_file', 'list_files'].includes(name)), ['editor', 'bash']);
   assert.deepEqual(names('files').filter(name => ['editor', 'bash', 'read_file'].includes(name)), ['read_file']);

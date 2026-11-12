@@ -51,7 +51,7 @@ test('directory guidance names real scoped file handles and computed writes fini
  const folder=Folder.fromFiles({'keep.txt':'Preserve this.'});
  const target=loadVirtualNatlang({'save.nl':'---\nkind: directory-reducer\nargs: {}\nreturns: string\n---\nWrite report.json with count two and return done.'},'save.nl');
  const runtime=createNatlangRuntime({model:{driver:async request=>{
-  const prompt=String(request.messages[0].content);
+  const prompt=String(request.messages[1].content);
   assert.doesNotMatch(prompt,/The fs helper provides/);
   assert.match(prompt,/folder\.file\("report\.json"\)\.writeText/);
   return {calls:[['eval',{code:'const report={count:2}; await folder.file("report.json").writeText(JSON.stringify(report)); return "done";',finish:true}]]};

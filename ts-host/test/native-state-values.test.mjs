@@ -467,7 +467,7 @@ for (const format of ['native_state']) {
     const driver = Object.assign(async request => {
       turns++;
       const prompt_tokens = Math.round((JSON.stringify(request.messages).length + JSON.stringify(request.tools).length) / 4);
-      if (request.tools.map(tool => tool.function.name).join() === 'compact_history') {
+      if (request.template?.call === 'compact_history') {
         compactions++;
         return { text: neuraleseSentinel(note.id), prompt_tokens,
           raw_response: { choices: [{ message: { role: 'assistant', content: [{ type: format, id: note.id }] } }] } };
@@ -476,7 +476,7 @@ for (const format of ['native_state']) {
         { calls: [['return_result', { status: 'success', value: [{ type: format, id: answer.id }] }]], prompt_tokens };
     }, { neuralese: true });
     await new NativeToolAgent(driver, { contextTokens: 4096, maxTurns: 30, neuralese }).run(invocation);
-    assert.ok(compactions > 0, 'the actual agent entered its compaction-only turn');
+    assert.ok(compactions > 0, 'the actual agent entered its compaction turn');
     assert.equal(invocation.lam.return.$neuralese.id, answer.id);
   });
 }

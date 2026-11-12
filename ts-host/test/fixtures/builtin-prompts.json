@@ -107,6 +107,49 @@
     {
      "type": "function",
      "function": {
+      "name": "edit_code",
+      "description": "Edit a function in the program's codebase: replace one exact or uniquely fuzzy span of its source. The function is validated before the edit becomes live.",
+      "parameters": {
+       "type": "object",
+       "properties": {
+        "name": {
+         "type": "string"
+        },
+        "find": {
+         "type": "string"
+        },
+        "replace_with": {
+         "type": "string"
+        },
+        "fuzzy": {
+         "type": "boolean"
+        }
+       },
+       "required": [
+        "name",
+        "find",
+        "replace_with"
+       ],
+       "additionalProperties": false
+      }
+     }
+    },
+    {
+     "type": "function",
+     "function": {
+      "name": "diff_code",
+      "description": "Show the changes made to functions of the program's codebase in this call.",
+      "parameters": {
+       "type": "object",
+       "properties": {},
+       "required": [],
+       "additionalProperties": false
+      }
+     }
+    },
+    {
+     "type": "function",
+     "function": {
       "name": "compact_history",
       "description": "Shorten this conversation. Older tool outputs and eval code are replaced by references; the full history stays searchable in your eval scope as transcript. Your note is kept right after the instructions (a newer note replaces it) and is what you continue from: write it so that you can go on from the note alone, with the facts and values you will need, what you have ruled out, and what is left. Long details that are only occasionally needed can stay in transcript.",
       "parameters": {
@@ -142,24 +185,7 @@
          ]
         },
         "value": {
-         "type": "object",
-         "properties": {
-          "verdict": {
-           "enum": [
-            "continue",
-            "divergent"
-           ]
-          },
-          "reason": {
-           "type": "string"
-          }
-         },
-         "required": [
-          "verdict",
-          "reason"
-         ],
-         "additionalProperties": false,
-         "description": "For success, provide a value of the declared return type, or omit it only to return the exact complete result already staged."
+         "description": "For success, provide a value of the result type declared in this call's signature, or omit it only to return the exact complete result already staged."
         },
         "reason": {
          "type": "string",
@@ -287,6 +313,49 @@
      {
       "type": "function",
       "function": {
+       "name": "edit_code",
+       "description": "Edit a function in the program's codebase: replace one exact or uniquely fuzzy span of its source. The function is validated before the edit becomes live.",
+       "parameters": {
+        "type": "object",
+        "properties": {
+         "name": {
+          "type": "string"
+         },
+         "find": {
+          "type": "string"
+         },
+         "replace_with": {
+          "type": "string"
+         },
+         "fuzzy": {
+          "type": "boolean"
+         }
+        },
+        "required": [
+         "name",
+         "find",
+         "replace_with"
+        ],
+        "additionalProperties": false
+       }
+      }
+     },
+     {
+      "type": "function",
+      "function": {
+       "name": "diff_code",
+       "description": "Show the changes made to functions of the program's codebase in this call.",
+       "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+       }
+      }
+     },
+     {
+      "type": "function",
+      "function": {
        "name": "compact_history",
        "description": "Shorten this conversation. Older tool outputs and eval code are replaced by references; the full history stays searchable in your eval scope as transcript. Your note is kept right after the instructions (a newer note replaces it) and is what you continue from: write it so that you can go on from the note alone, with the facts and values you will need, what you have ruled out, and what is left. Long details that are only occasionally needed can stay in transcript.",
        "parameters": {
@@ -322,8 +391,7 @@
           ]
          },
          "value": {
-          "type": "boolean",
-          "description": "For success, provide a value of the declared return type, or omit it only to return the exact complete result already staged."
+          "description": "For success, provide a value of the result type declared in this call's signature, or omit it only to return the exact complete result already staged."
          },
          "reason": {
           "type": "string",
@@ -448,6 +516,49 @@
      {
       "type": "function",
       "function": {
+       "name": "edit_code",
+       "description": "Edit a function in the program's codebase: replace one exact or uniquely fuzzy span of its source. The function is validated before the edit becomes live.",
+       "parameters": {
+        "type": "object",
+        "properties": {
+         "name": {
+          "type": "string"
+         },
+         "find": {
+          "type": "string"
+         },
+         "replace_with": {
+          "type": "string"
+         },
+         "fuzzy": {
+          "type": "boolean"
+         }
+        },
+        "required": [
+         "name",
+         "find",
+         "replace_with"
+        ],
+        "additionalProperties": false
+       }
+      }
+     },
+     {
+      "type": "function",
+      "function": {
+       "name": "diff_code",
+       "description": "Show the changes made to functions of the program's codebase in this call.",
+       "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+       }
+      }
+     },
+     {
+      "type": "function",
+      "function": {
        "name": "compact_history",
        "description": "Shorten this conversation. Older tool outputs and eval code are replaced by references; the full history stays searchable in your eval scope as transcript. Your note is kept right after the instructions (a newer note replaces it) and is what you continue from: write it so that you can go on from the note alone, with the facts and values you will need, what you have ruled out, and what is left. Long details that are only occasionally needed can stay in transcript.",
        "parameters": {
@@ -483,8 +594,7 @@
           ]
          },
          "value": {
-          "type": "boolean",
-          "description": "For success, provide a value of the declared return type, or omit it only to return the exact complete result already staged."
+          "description": "For success, provide a value of the result type declared in this call's signature, or omit it only to return the exact complete result already staged."
          },
          "reason": {
           "type": "string",
@@ -609,6 +719,49 @@
      {
       "type": "function",
       "function": {
+       "name": "edit_code",
+       "description": "Edit a function in the program's codebase: replace one exact or uniquely fuzzy span of its source. The function is validated before the edit becomes live.",
+       "parameters": {
+        "type": "object",
+        "properties": {
+         "name": {
+          "type": "string"
+         },
+         "find": {
+          "type": "string"
+         },
+         "replace_with": {
+          "type": "string"
+         },
+         "fuzzy": {
+          "type": "boolean"
+         }
+        },
+        "required": [
+         "name",
+         "find",
+         "replace_with"
+        ],
+        "additionalProperties": false
+       }
+      }
+     },
+     {
+      "type": "function",
+      "function": {
+       "name": "diff_code",
+       "description": "Show the changes made to functions of the program's codebase in this call.",
+       "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+       }
+      }
+     },
+     {
+      "type": "function",
+      "function": {
        "name": "compact_history",
        "description": "Shorten this conversation. Older tool outputs and eval code are replaced by references; the full history stays searchable in your eval scope as transcript. Your note is kept right after the instructions (a newer note replaces it) and is what you continue from: write it so that you can go on from the note alone, with the facts and values you will need, what you have ruled out, and what is left. Long details that are only occasionally needed can stay in transcript.",
        "parameters": {
@@ -644,8 +797,7 @@
           ]
          },
          "value": {
-          "type": "boolean",
-          "description": "For success, provide a value of the declared return type, or omit it only to return the exact complete result already staged."
+          "description": "For success, provide a value of the result type declared in this call's signature, or omit it only to return the exact complete result already staged."
          },
          "reason": {
           "type": "string",
@@ -770,6 +922,49 @@
      {
       "type": "function",
       "function": {
+       "name": "edit_code",
+       "description": "Edit a function in the program's codebase: replace one exact or uniquely fuzzy span of its source. The function is validated before the edit becomes live.",
+       "parameters": {
+        "type": "object",
+        "properties": {
+         "name": {
+          "type": "string"
+         },
+         "find": {
+          "type": "string"
+         },
+         "replace_with": {
+          "type": "string"
+         },
+         "fuzzy": {
+          "type": "boolean"
+         }
+        },
+        "required": [
+         "name",
+         "find",
+         "replace_with"
+        ],
+        "additionalProperties": false
+       }
+      }
+     },
+     {
+      "type": "function",
+      "function": {
+       "name": "diff_code",
+       "description": "Show the changes made to functions of the program's codebase in this call.",
+       "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+       }
+      }
+     },
+     {
+      "type": "function",
+      "function": {
        "name": "compact_history",
        "description": "Shorten this conversation. Older tool outputs and eval code are replaced by references; the full history stays searchable in your eval scope as transcript. Your note is kept right after the instructions (a newer note replaces it) and is what you continue from: write it so that you can go on from the note alone, with the facts and values you will need, what you have ruled out, and what is left. Long details that are only occasionally needed can stay in transcript.",
        "parameters": {
@@ -805,8 +1000,7 @@
           ]
          },
          "value": {
-          "type": "boolean",
-          "description": "For success, provide a value of the declared return type, or omit it only to return the exact complete result already staged."
+          "description": "For success, provide a value of the result type declared in this call's signature, or omit it only to return the exact complete result already staged."
          },
          "reason": {
           "type": "string",
@@ -931,6 +1125,49 @@
      {
       "type": "function",
       "function": {
+       "name": "edit_code",
+       "description": "Edit a function in the program's codebase: replace one exact or uniquely fuzzy span of its source. The function is validated before the edit becomes live.",
+       "parameters": {
+        "type": "object",
+        "properties": {
+         "name": {
+          "type": "string"
+         },
+         "find": {
+          "type": "string"
+         },
+         "replace_with": {
+          "type": "string"
+         },
+         "fuzzy": {
+          "type": "boolean"
+         }
+        },
+        "required": [
+         "name",
+         "find",
+         "replace_with"
+        ],
+        "additionalProperties": false
+       }
+      }
+     },
+     {
+      "type": "function",
+      "function": {
+       "name": "diff_code",
+       "description": "Show the changes made to functions of the program's codebase in this call.",
+       "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+       }
+      }
+     },
+     {
+      "type": "function",
+      "function": {
        "name": "compact_history",
        "description": "Shorten this conversation. Older tool outputs and eval code are replaced by references; the full history stays searchable in your eval scope as transcript. Your note is kept right after the instructions (a newer note replaces it) and is what you continue from: write it so that you can go on from the note alone, with the facts and values you will need, what you have ruled out, and what is left. Long details that are only occasionally needed can stay in transcript.",
        "parameters": {
@@ -966,8 +1203,7 @@
           ]
          },
          "value": {
-          "type": "boolean",
-          "description": "For success, provide a value of the declared return type, or omit it only to return the exact complete result already staged."
+          "description": "For success, provide a value of the result type declared in this call's signature, or omit it only to return the exact complete result already staged."
          },
          "reason": {
           "type": "string",
@@ -1092,6 +1328,49 @@
      {
       "type": "function",
       "function": {
+       "name": "edit_code",
+       "description": "Edit a function in the program's codebase: replace one exact or uniquely fuzzy span of its source. The function is validated before the edit becomes live.",
+       "parameters": {
+        "type": "object",
+        "properties": {
+         "name": {
+          "type": "string"
+         },
+         "find": {
+          "type": "string"
+         },
+         "replace_with": {
+          "type": "string"
+         },
+         "fuzzy": {
+          "type": "boolean"
+         }
+        },
+        "required": [
+         "name",
+         "find",
+         "replace_with"
+        ],
+        "additionalProperties": false
+       }
+      }
+     },
+     {
+      "type": "function",
+      "function": {
+       "name": "diff_code",
+       "description": "Show the changes made to functions of the program's codebase in this call.",
+       "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+       }
+      }
+     },
+     {
+      "type": "function",
+      "function": {
        "name": "compact_history",
        "description": "Shorten this conversation. Older tool outputs and eval code are replaced by references; the full history stays searchable in your eval scope as transcript. Your note is kept right after the instructions (a newer note replaces it) and is what you continue from: write it so that you can go on from the note alone, with the facts and values you will need, what you have ruled out, and what is left. Long details that are only occasionally needed can stay in transcript.",
        "parameters": {
@@ -1127,8 +1406,7 @@
           ]
          },
          "value": {
-          "type": "boolean",
-          "description": "For success, provide a value of the declared return type, or omit it only to return the exact complete result already staged."
+          "description": "For success, provide a value of the result type declared in this call's signature, or omit it only to return the exact complete result already staged."
          },
          "reason": {
           "type": "string",
@@ -1257,6 +1535,49 @@
     {
      "type": "function",
      "function": {
+      "name": "edit_code",
+      "description": "Edit a function in the program's codebase: replace one exact or uniquely fuzzy span of its source. The function is validated before the edit becomes live.",
+      "parameters": {
+       "type": "object",
+       "properties": {
+        "name": {
+         "type": "string"
+        },
+        "find": {
+         "type": "string"
+        },
+        "replace_with": {
+         "type": "string"
+        },
+        "fuzzy": {
+         "type": "boolean"
+        }
+       },
+       "required": [
+        "name",
+        "find",
+        "replace_with"
+       ],
+       "additionalProperties": false
+      }
+     }
+    },
+    {
+     "type": "function",
+     "function": {
+      "name": "diff_code",
+      "description": "Show the changes made to functions of the program's codebase in this call.",
+      "parameters": {
+       "type": "object",
+       "properties": {},
+       "required": [],
+       "additionalProperties": false
+      }
+     }
+    },
+    {
+     "type": "function",
+     "function": {
       "name": "compact_history",
       "description": "Shorten this conversation. Older tool outputs and eval code are replaced by references; the full history stays searchable in your eval scope as transcript. Your note is kept right after the instructions (a newer note replaces it) and is what you continue from: write it so that you can go on from the note alone, with the facts and values you will need, what you have ruled out, and what is left. Long details that are only occasionally needed can stay in transcript.",
       "parameters": {
@@ -1292,12 +1613,7 @@
          ]
         },
         "value": {
-         "enum": [
-          "first",
-          "second",
-          "equal"
-         ],
-         "description": "For success, provide a value of the declared return type, or omit it only to return the exact complete result already staged."
+         "description": "For success, provide a value of the result type declared in this call's signature, or omit it only to return the exact complete result already staged."
         },
         "reason": {
          "type": "string",
@@ -1422,6 +1738,49 @@
     {
      "type": "function",
      "function": {
+      "name": "edit_code",
+      "description": "Edit a function in the program's codebase: replace one exact or uniquely fuzzy span of its source. The function is validated before the edit becomes live.",
+      "parameters": {
+       "type": "object",
+       "properties": {
+        "name": {
+         "type": "string"
+        },
+        "find": {
+         "type": "string"
+        },
+        "replace_with": {
+         "type": "string"
+        },
+        "fuzzy": {
+         "type": "boolean"
+        }
+       },
+       "required": [
+        "name",
+        "find",
+        "replace_with"
+       ],
+       "additionalProperties": false
+      }
+     }
+    },
+    {
+     "type": "function",
+     "function": {
+      "name": "diff_code",
+      "description": "Show the changes made to functions of the program's codebase in this call.",
+      "parameters": {
+       "type": "object",
+       "properties": {},
+       "required": [],
+       "additionalProperties": false
+      }
+     }
+    },
+    {
+     "type": "function",
+     "function": {
       "name": "compact_history",
       "description": "Shorten this conversation. Older tool outputs and eval code are replaced by references; the full history stays searchable in your eval scope as transcript. Your note is kept right after the instructions (a newer note replaces it) and is what you continue from: write it so that you can go on from the note alone, with the facts and values you will need, what you have ruled out, and what is left. Long details that are only occasionally needed can stay in transcript.",
       "parameters": {
@@ -1457,12 +1816,7 @@
          ]
         },
         "value": {
-         "enum": [
-          "first",
-          "second",
-          "equal"
-         ],
-         "description": "For success, provide a value of the declared return type, or omit it only to return the exact complete result already staged."
+         "description": "For success, provide a value of the result type declared in this call's signature, or omit it only to return the exact complete result already staged."
         },
         "reason": {
          "type": "string",
@@ -1587,6 +1941,49 @@
     {
      "type": "function",
      "function": {
+      "name": "edit_code",
+      "description": "Edit a function in the program's codebase: replace one exact or uniquely fuzzy span of its source. The function is validated before the edit becomes live.",
+      "parameters": {
+       "type": "object",
+       "properties": {
+        "name": {
+         "type": "string"
+        },
+        "find": {
+         "type": "string"
+        },
+        "replace_with": {
+         "type": "string"
+        },
+        "fuzzy": {
+         "type": "boolean"
+        }
+       },
+       "required": [
+        "name",
+        "find",
+        "replace_with"
+       ],
+       "additionalProperties": false
+      }
+     }
+    },
+    {
+     "type": "function",
+     "function": {
+      "name": "diff_code",
+      "description": "Show the changes made to functions of the program's codebase in this call.",
+      "parameters": {
+       "type": "object",
+       "properties": {},
+       "required": [],
+       "additionalProperties": false
+      }
+     }
+    },
+    {
+     "type": "function",
+     "function": {
       "name": "compact_history",
       "description": "Shorten this conversation. Older tool outputs and eval code are replaced by references; the full history stays searchable in your eval scope as transcript. Your note is kept right after the instructions (a newer note replaces it) and is what you continue from: write it so that you can go on from the note alone, with the facts and values you will need, what you have ruled out, and what is left. Long details that are only occasionally needed can stay in transcript.",
       "parameters": {
@@ -1622,12 +2019,7 @@
          ]
         },
         "value": {
-         "enum": [
-          "first",
-          "second",
-          "equal"
-         ],
-         "description": "For success, provide a value of the declared return type, or omit it only to return the exact complete result already staged."
+         "description": "For success, provide a value of the result type declared in this call's signature, or omit it only to return the exact complete result already staged."
         },
         "reason": {
          "type": "string",
@@ -1752,6 +2144,49 @@
     {
      "type": "function",
      "function": {
+      "name": "edit_code",
+      "description": "Edit a function in the program's codebase: replace one exact or uniquely fuzzy span of its source. The function is validated before the edit becomes live.",
+      "parameters": {
+       "type": "object",
+       "properties": {
+        "name": {
+         "type": "string"
+        },
+        "find": {
+         "type": "string"
+        },
+        "replace_with": {
+         "type": "string"
+        },
+        "fuzzy": {
+         "type": "boolean"
+        }
+       },
+       "required": [
+        "name",
+        "find",
+        "replace_with"
+       ],
+       "additionalProperties": false
+      }
+     }
+    },
+    {
+     "type": "function",
+     "function": {
+      "name": "diff_code",
+      "description": "Show the changes made to functions of the program's codebase in this call.",
+      "parameters": {
+       "type": "object",
+       "properties": {},
+       "required": [],
+       "additionalProperties": false
+      }
+     }
+    },
+    {
+     "type": "function",
+     "function": {
       "name": "compact_history",
       "description": "Shorten this conversation. Older tool outputs and eval code are replaced by references; the full history stays searchable in your eval scope as transcript. Your note is kept right after the instructions (a newer note replaces it) and is what you continue from: write it so that you can go on from the note alone, with the facts and values you will need, what you have ruled out, and what is left. Long details that are only occasionally needed can stay in transcript.",
       "parameters": {
@@ -1787,12 +2222,7 @@
          ]
         },
         "value": {
-         "enum": [
-          "first",
-          "second",
-          "equal"
-         ],
-         "description": "For success, provide a value of the declared return type, or omit it only to return the exact complete result already staged."
+         "description": "For success, provide a value of the result type declared in this call's signature, or omit it only to return the exact complete result already staged."
         },
         "reason": {
          "type": "string",
@@ -1921,6 +2351,49 @@
     {
      "type": "function",
      "function": {
+      "name": "edit_code",
+      "description": "Edit a function in the program's codebase: replace one exact or uniquely fuzzy span of its source. The function is validated before the edit becomes live.",
+      "parameters": {
+       "type": "object",
+       "properties": {
+        "name": {
+         "type": "string"
+        },
+        "find": {
+         "type": "string"
+        },
+        "replace_with": {
+         "type": "string"
+        },
+        "fuzzy": {
+         "type": "boolean"
+        }
+       },
+       "required": [
+        "name",
+        "find",
+        "replace_with"
+       ],
+       "additionalProperties": false
+      }
+     }
+    },
+    {
+     "type": "function",
+     "function": {
+      "name": "diff_code",
+      "description": "Show the changes made to functions of the program's codebase in this call.",
+      "parameters": {
+       "type": "object",
+       "properties": {},
+       "required": [],
+       "additionalProperties": false
+      }
+     }
+    },
+    {
+     "type": "function",
+     "function": {
       "name": "compact_history",
       "description": "Shorten this conversation. Older tool outputs and eval code are replaced by references; the full history stays searchable in your eval scope as transcript. Your note is kept right after the instructions (a newer note replaces it) and is what you continue from: write it so that you can go on from the note alone, with the facts and values you will need, what you have ruled out, and what is left. Long details that are only occasionally needed can stay in transcript.",
       "parameters": {
@@ -1956,8 +2429,7 @@
          ]
         },
         "value": {
-         "type": "string",
-         "description": "For success, provide a value of the declared return type, or omit it only to return the exact complete result already staged."
+         "description": "For success, provide a value of the result type declared in this call's signature, or omit it only to return the exact complete result already staged."
         },
         "reason": {
          "type": "string",

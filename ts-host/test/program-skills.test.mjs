@@ -11,7 +11,7 @@ test('direct Program IR collection discovers and discloses companion skills',asy
   {calls:[['read_code',{name:'skills.exact-computation'}]]},
   {calls:[['eval',{code:'2 + 2',finish:true}]]},
  ][i++]??{calls:[['return_result',{status:'success',value:4}]]};},{systemPrompt:TOOLS_PROMPT,contextTokens:8192,maxTurns:4,rootSeed:42,runId:'skill-collection-test'});
- assert.equal(run.outcome.accepted,true);
+ assert.equal(run.outcome.accepted,true,JSON.stringify(run.outcome));
  assert.match(JSON.stringify(requests[0].messages),/exact-computation/);
  assert.match(requests[1].messages.at(-1).content,/Calculate from the bound inputs/);
 });
@@ -46,8 +46,8 @@ test('repeated skill reads retain instructions and give an application reminder'
   {calls:[['read_code',{name:'skills.exact-computation'}]]},
   {calls:[['read_code',{name:'skills.exact-computation'}]]},
   {calls:[['eval',{code:'2 + 2',finish:true}]]},
- ][i++]??{calls:[['return_result',{status:'failed',reason:'Unexpected turn.'}]]};},{systemPrompt:TOOLS_PROMPT,contextTokens:8192,maxTurns:4,rootSeed:42,runId:'repeat-skill-test'});
- assert.equal(run.outcome.accepted,true);
+ ][i++]??{calls:[['return_result',{status:'failed',reason:'Unexpected turn.'}]]};},{systemPrompt:TOOLS_PROMPT,contextTokens:12288,maxTurns:4,rootSeed:42,runId:'repeat-skill-test'});
+ assert.equal(run.outcome.accepted,true,JSON.stringify(run.outcome));
  assert.doesNotMatch(requests[1].messages.at(-1).content,/unchanged since/);
  assert.match(requests[2].messages.at(-1).content,/unchanged since your earlier read/);
  assert.match(requests[2].messages.at(-1).content,/Calculate using the bound inputs/);

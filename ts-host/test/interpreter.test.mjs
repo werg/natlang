@@ -1454,10 +1454,9 @@ test('five ad hoc layers are allowed, and the sixth is refused with matching pro
   assert.equal(called.kind, 'ok', called.text);
   assert.equal(called.value, 7);
   assert.deepEqual(depths, [1, 2, 3, 4, 5]);
-  assert.match(prompts[0].messages[0].content, /fifth and final layer/);
-  assert.doesNotMatch(prompts[0].messages[0].content, /nl`|nl<|creates one inline/);
+  // The system prompt and tools are the same at every depth (one cached opening); the call's opening carries the limit.
+  assert.match(prompts[0].messages[1].content, /fifth and final layer/);
   assert.doesNotMatch(prompts[0].messages[1].content, /built-ins nl/);
-  assert.doesNotMatch(JSON.stringify(prompts[0].tools), /\(nl, iterateOn/);
 });
 
 test('a named function from a file starts a fresh five-layer ad hoc budget', async () => {

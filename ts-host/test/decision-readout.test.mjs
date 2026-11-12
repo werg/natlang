@@ -162,7 +162,7 @@ test('a driver\'s scoreMany batches the readouts of concurrent calls', async () 
   assert.deepEqual(batches, [3]);
 });
 
-test('the readout offers no tools: its system turn is the decision prompt and the program guidance, not the tool manual', async () => {
+test('the readout offers no tools: its system turn is the decision prompt, not the tool manual; guidance is in the opening', async () => {
   const { NativeToolAgent } = await import('../dist/native/agent.js');
   const { authoredTextGuidance } = await import('../dist/adaptation/index.js');
   const { DECISION_SYSTEM_PROMPT } = await import('../dist/native/decision.js');
@@ -176,7 +176,8 @@ test('the readout offers no tools: its system turn is the decision prompt and th
   await runtime.run(lambda({ type: '() => "yes" | "no"', instructions: 'Decide.' }));
   const [system, ...rest] = requests[0].messages;
   assert.equal(system.role, 'system');
-  assert.equal(system.content, DECISION_SYSTEM_PROMPT + '\n\n<natlang_program_guidance>\nUse the approved procedure.\n</natlang_program_guidance>\n');
+  assert.equal(system.content, DECISION_SYSTEM_PROMPT);
+  assert.match(String(rest[0].content), /<natlang_program_guidance>\nUse the approved procedure\.\n<\/natlang_program_guidance>/, 'the opening message carries the guidance');
   assert.doesNotMatch(system.content, /return_result|eval|read_code/, 'the tool manual stays out of a prompt that offers no tools');
   assert.match(String(rest.at(-1).content), /exactly one of these JSON values/);
 });
