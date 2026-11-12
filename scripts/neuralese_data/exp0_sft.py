@@ -121,6 +121,12 @@ def hidden(model, ids):
 ACTIVATION_BYTES_PER_TOKEN_LAYER = 88e3   # measured 84.8 KB of saved activations per token per layer with lfm3_fast_train (2026-11-12)
 
 
+def resident_tokens(model, activation_gb):
+    """The longest sequence whose saved activations fit ``activation_gb`` with no layer recomputed (the default packed
+    row: packing past it trades per-forward overhead for recompute)."""
+    return int(activation_gb * 2**30 // (ACTIVATION_BYTES_PER_TOKEN_LAYER * len(model.model.layers)))
+
+
 def set_checkpointing(model, tokens, activation_gb):
     """Recompute (gradient-checkpoint) only as many layers as keep the saved activations of a ``tokens`` sequence under
     ``activation_gb``: a checkpointed layer costs one extra forward (a third of its compute), an unchecked one its activations."""
@@ -295,7 +301,8 @@ def train(args):
     if not args.stock_model:
         lfm3_fast_train.prepare(model)
         forward = lfm3_fast_train.hidden
-    pack_tokens = 0 if args.stock_model else args.pack_tokens
+    pack_tokens = 0 if args.stock_model else args.pack_tokens if args.pack_tokens >= 0 else \
+        resident_tokens(model, args.activation_gb)
     special_index = torch.tensor(special, device='cuda')
     live = {name: p for name, p in model.named_parameters()}
     parameters = [masters[name] for name in live]
@@ -497,7 +504,7 @@ def main():
     p = sub.choices['train']
     p.add_argument('--stock-model', action='store_true', help='the unpatched HF layers with full checkpointing (about 3x slower)')
     p.add_argument('--activation-gb', type=float, default=20., help='saved-activation budget per sequence; layers beyond it are recomputed')
-    p.add_argument('--pack-tokens', type=int, default=16384, help='pack a step\'s chains back to back into rows of at most this many tokens (documents stay separate; 0: one chain per forward)')
+    p.add_argument('--pack-tokens', type=int, default=-1, help='pack a step\'s chains back to back into rows of at most this many tokens (documents stay separate); default: the longest row --activation-gb holds without recompute (about 10k at 20 GB); 0: one chain per forward')
     p.add_argument('--max-steps', type=int, default=0, help='stop after this many optimizer steps without writing a checkpoint')
     p.add_argument('--out-dir', required=True)
     p.add_argument('--epochs', type=int, default=3)

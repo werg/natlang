@@ -8,9 +8,9 @@ linear cross-entropy and a no-grad log-prob pass.
     logp = token_logprobs(model, ids, positions, targets, lengths=...)   # no grad (GRPO old-policy / reference pass)
 
 The HF decoder layer is replaced by two functions over explicit tensors, one per layer kind (conv, attention), each
-`torch.compile`d once with a dynamic sequence length and shared by every layer of its kind (compiling the HF
-`forward` per instance compiled one code object 24 times: past dynamo's recompile limit the later layers ran eager).
-Inside them the norms, RoPE, gates, SwiGLU and the width-7 conv fuse into a few Triton kernels; the matmuls stay cuBLAS.
+`torch.compile`d (fullgraph, dynamic sequence length) and shared by every layer of its kind, with no HF mask/cache
+plumbing in the traced region. Inside them the norms, RoPE, gates, SwiGLU and the width-7 conv fuse into a few Triton
+kernels; the matmuls stay cuBLAS.
 Attention is the varlen flash kernel (`torch.nn.attention.varlen`): causal for full-attention layers and a 255-left /
 0-right window for sliding layers (HF's `sliding_window` 256 keys including the query), so it is exact, needs no mask,
 and packed documents are separate sequences (`cu_seqlens`). The conv reads only taps inside the token's document.
