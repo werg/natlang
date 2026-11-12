@@ -68,8 +68,6 @@ def main() -> None:
     parser.add_argument('--sglang-arg', action='append', default=[], help='extra sglang.launch_server argument')
     parser.add_argument('--hf-export-dir', type=Path, help='HF export cache (default: <store-dir or checkpoint dir>/sglang-hf/<sha>)')
     args = parser.parse_args()
-    if args.engine == 'sglang' and args.transport_receipt:
-        parser.error('the SGLang actor serves ordinary checkpoints only (no transport view)')
     if bool(args.native_actor_view) != bool(args.native_actor_view_sha256):
         parser.error('native actor view requires its exact receipt SHA-256')
     transport_values=(args.transport_receipt,args.transport_receipt_sha256,args.transport_view_receipt,
@@ -123,7 +121,7 @@ def main() -> None:
         # The native model is loaded again only when a turn SGLang cannot serve arrives (serve/sglang_actor.py).
         engine.release_native({'checkpoint': str(checkpoint), 'base': str(args.base) if args.base else None,
                                'device': args.device, 'participant': args.native_participant,
-                               **({'actor_view': view_options['actor_view']} if 'actor_view' in view_options else {})})
+                               **{key: view_options[key] for key in ('actor_view', 'transported_actor') if key in view_options}})
     if args.store_dir is not None:
         from natlang_neuralese.serve.store import TensorStore
         engine.store = TensorStore(args.store_dir)
@@ -240,9 +238,10 @@ def launch_sglang(engine, args, checkpoint):
     backend_pythonpath = os.pathsep.join(filter(None, [str(root / 'training/neuralese'),
         os.environ.get('NATLANG_SGLANG_PYTHONPATH', '')]))
     source = attest_sglang_source(python, fork, backend_pythonpath)
-    export_dir = args.hf_export_dir or ((args.store_dir or checkpoint.parent) / 'sglang-hf' / args.checkpoint_sha256[:16])
+    # A transported model-only view (Pop) exports under the training checkpoint's identity, which the front attests.
+    export_dir = args.hf_export_dir or ((args.store_dir or checkpoint.parent) / 'sglang-hf' / engine.checkpoint_sha256[:16])
     manifest = export_loaded(engine.shared_model, engine.tokenizer, engine.role_tokens, engine.model_config,
-                             checkpoint=checkpoint, checkpoint_sha256=args.checkpoint_sha256, out_dir=export_dir)
+                             checkpoint=checkpoint, checkpoint_sha256=engine.checkpoint_sha256, out_dir=export_dir)
     port = args.sglang_port or args.port + 1000
     context = min(args.sglang_context, engine.context)
     # The front sizes each reply to the room left in the backend's context; with the trained maximum it asked for

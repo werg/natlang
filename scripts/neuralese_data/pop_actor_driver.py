@@ -153,6 +153,9 @@ def serve_sglang(job, checkpoint, transport, stage, work):
     sglang-fork.json names), which also runs the front. The front loads the view on the CPU only to export the
     SGLang weights (cached by SHA under the work dir) and releases it; the 8 GB GPU holds SGLang alone."""
     runtime, host, port = Path(job['runtime']), job.get('host', '127.0.0.1'), job['port']
+    # The container actor writes its store and caches as root; the host process keeps its own under work/host.
+    work = work / 'host'
+    work.mkdir(exist_ok=True)
     fork = json.loads((runtime / 'training/neuralese/sglang-fork.json').read_text())
     python = os.path.expanduser(fork['python'])
     sglang = job.get('sglang') or {}
