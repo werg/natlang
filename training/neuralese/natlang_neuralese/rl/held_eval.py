@@ -553,7 +553,7 @@ def _free_port():
 
 
 def serve(checkpoint, sha256, store, *, unit, budget_gb, extra=(), base=BASE_SNAPSHOT, wait_seconds=3600,
-          admission_seconds=14400, log=print):
+          admission_seconds=14400, priority='medium', log=print):
     """Serve ``checkpoint`` as a ledger unit (SGLang, vendor projection) and wait until it attests ``sha256``; returns
     the endpoint URL (``store/endpoint``). An active ``unit`` that already serves it is reused. The unit is stopped with
     ``systemctl --user stop UNIT``."""
@@ -578,7 +578,7 @@ def serve(checkpoint, sha256, store, *, unit, budget_gb, extra=(), base=BASE_SNA
     port = _free_port()
     python = repo / '.venv-neuralese/bin/python'
     command = ['/usr/bin/python3', str(repo / 'scripts/memory_ledger.py'), 'run', '--unit', unit, '--budget-gb', str(budget_gb),
-               '--class', 'experiment', '--priority', 'medium', '--no-resumable', '--wait', str(admission_seconds),
+               '--class', 'experiment', '--priority', priority, '--no-resumable', '--wait', str(admission_seconds),
                '--workdir', str(repo), '--',
                'env', f'NATLANG_REPO={repo}', f'PYTHONPATH={repo}/training/neuralese:{repo}', 'HF_HUB_OFFLINE=1',
                'OMP_NUM_THREADS=1', 'MKL_NUM_THREADS=1', str(python), str(repo / 'scripts/neuralese_data/serve_native_checkpoint.py'),
@@ -681,6 +681,7 @@ def main(argv=None):
     v.add_argument('--unit', required=True)
     v.add_argument('--budget-gb', type=int, default=40)
     v.add_argument('--actor-arg', action='append', default=[])
+    v.add_argument('--priority', default='medium', choices=('low', 'medium', 'high'))
     c = sub.add_parser('compare', help='paired comparison of two result.json files (second against first)')
     c.add_argument('first', type=Path)
     c.add_argument('second', type=Path)
@@ -697,6 +698,7 @@ def main(argv=None):
     elif args.command == 'serve':
         sha = args.checkpoint_sha256 or _sha256(args.checkpoint)
         print(serve(args.checkpoint, sha, args.store, unit=args.unit, budget_gb=args.budget_gb, extra=args.actor_arg,
+                    priority=args.priority,
                     log=lambda line: print(line, file=sys.stderr, flush=True)))
     elif args.command == 'measure':
         endpoints = [(item.rsplit('=', 1)[0].rstrip('/'), int(item.rsplit('=', 1)[1])) if re.search(r'=\d+$', item)
