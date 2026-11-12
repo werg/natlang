@@ -16,7 +16,7 @@ The existing typed function contract decides whether a completion is an ordinary
 - Extend `decodeTurnValue` in `ts-host/src/native/neuralese.ts` to accept an optional authenticated native-state text resolver and use the existing type environment to choose state-reference preservation versus text materialization.
 - Pass the call's existing `NeuraleseStore.getNativeState` resolver from `NativeAgent.decodeNeuralese` only for the inferred assistant result; do not reinterpret explicit tool arguments or explicit `return_result` values.
 - Add tests at the actual `NativeToolAgent` boundary for ordinary string/number/object results, `unknown`, Neuralese lists/records, a genuine textual producer span, and mixed text/state order. A missing or unavailable native artifact remains an error.
-- Update authoring/integration recovery guidance only for the concrete completion conversion semantics. Prompt text and model-visible wording remain unchanged; measure the new behavior on the next authorized teacher window and record measurement debt until then.
+- Update authoring/integration recovery guidance only for the concrete completion conversion semantics. Prompt text and model-visible wording remain unchanged.
 
 ## Shared-state writer binding
 

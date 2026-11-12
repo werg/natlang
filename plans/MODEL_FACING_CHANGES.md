@@ -1,5 +1,8 @@
 # Model-facing changes and their measurement
 
+A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
+is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
+
 ### 2026-11-11 — dev16 A/B of the adopted variants on step 99: the variants did not cause the step-102/110 dev16 failures
 
 Question: were folder_criteria_reducer (invalid_action / budget_exhaustion), iterate_schedule_repair (semantic_mismatch / repetition) and
