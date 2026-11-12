@@ -39,3 +39,16 @@ test('calls after a failed call of the same reply stay in the history, each answ
   assert.match(String(answers[0].content), /first fails/);
   assert.equal(String(answers[1].content), 'Not run: an earlier call in this reply failed; call it again if you still need it.');
 });
+
+test('with a fixed tool list the last turn still offers every tool and rejects any call but return_result', async () => {
+  const offered = [], answers = [];
+  const runtime = createNatlangRuntime({ seed: { mode: 'backend' }, model: { maxTurns: 2, driver: async request => {
+    offered.push(request.tools.map(tool => tool.function.name));
+    const last = request.messages.at(-1);
+    if (last.role === 'tool' && last.tool_call_id !== 'scope_0') answers.push(String(last.content));
+    return offered.length === 1 ? { calls: [['eval', { code: '1 + 1' }]] } : { calls: [['eval', { code: '2 + 2' }]] };
+  } } });
+  const fn = loadVirtualNatlang({ 'root.nl': '---\nargs: { name: string }\nreturns: string\n---\nGreet name.\n' }, 'root.nl');
+  try { await runtime.run(() => fn('Ada')); } catch {}
+  assert.ok(offered.length >= 2 && offered.every(names => names.join() === offered[0].join()), JSON.stringify(offered));
+});

@@ -1764,6 +1764,13 @@ export class NativeToolAgent {
       const nearLimit = budget !== null && compactable && compactedTurn !== turns && estimate(allTools) >
         Math.min(budget - reply, Math.max(budget * 0.75, compactedAt + budget * 0.25));
       const availableTools = lastTurn ? only('return_result') : nearLimit ? only('compact_history') : allTools;
+      // `fixed-tool-list`: the request always offers every tool (the tool block is early in the prompt, so changing it
+      // rewrites everything after it); the restriction of this turn is enforced by rejecting other calls in a sentence.
+      const fixedTools = modelFacing('fixed-tool-list');
+      const offered = fixedTools ? allTools : availableTools;
+      const restriction = availableTools === allTools || !fixedTools ? undefined : lastTurn ?
+        { allowed: 'return_result', text: 'This is your last turn in this call: call return_result now.' } :
+        { allowed: 'compact_history', text: 'The conversation is near its context limit: call compact_history now.' };
       // A large opening can require compaction before the first tool result. Explain the restricted tool surface on
       // whichever message is latest: before automatic shortening (so the estimate counts it) and again after it,
       // since shortening can make its own note the latest message.
@@ -1774,13 +1781,13 @@ export class NativeToolAgent {
           messages[messages.length - 1] = { ...latest, content: latest.content + COMPACTION_NOTICE };
       };
       explainCompaction();
-      if (budget !== null && estimate(availableTools) > budget - reply) {
+      if (budget !== null && estimate(offered) > budget - reply) {
         // A request never exceeds the budget: if the model has not compacted, the conversation is shortened for it,
         // with a note saying where the earlier turns are.
         const removed = pinNote(null) + collapseHistory(messages, protectedLength);
         // Keep the latest action and observation. Its reasoning is already in transcript and
         // can itself make that otherwise irreducible exchange exceed the context window.
-        if (estimate(availableTools) > budget - reply) {
+        if (estimate(offered) > budget - reply) {
           for (let index = protectedLength; index < messages.length; index++) {
             const message = messages[index]!;
             if (message.role === 'assistant' && 'reasoning_content' in message) {
@@ -1792,9 +1799,9 @@ export class NativeToolAgent {
         compactedAt = estimate(allTools);
         explainCompaction();
         session.runtime.trace.emit('compaction', { call_id: session.runtime.currentCallId ?? null, turn: turns + 1,
-          elided: removed, note: null, estimated_tokens: Math.round(estimate(availableTools)) });
+          elided: removed, note: null, estimated_tokens: Math.round(estimate(offered)) });
       }
-      const sentChars = requestChars(availableTools);
+      const sentChars = requestChars(offered);
       const callId = session.runtime.currentCallId ?? null;
       // The consumer's guidance is written on its first model turn, from that turn's request text, before it is sent.
       if (guidanceConsumer && callId && !guidanceReady) {
@@ -1805,7 +1812,7 @@ export class NativeToolAgent {
       const started = performance.now();
       session.runtime.trace.emit('model_request', { call_id: callId, phase: 'start', turn: turns + 1,
         actor: currentActor,
-        tool_schema_bytes: new TextEncoder().encode(JSON.stringify(currentRendering === 'program-header' ? [] : availableTools)).length,
+        tool_schema_bytes: new TextEncoder().encode(JSON.stringify(currentRendering === 'program-header' ? [] : offered)).length,
         messages: messages.length });
       let response: ModelTurn;
       let templatedWriteAttempt = false;
@@ -1859,15 +1866,15 @@ export class NativeToolAgent {
           ...(currentGuidance && supportsGuidance(currentDriver) ? { guidance: currentGuidance } : {}),
           ...(!fallbackIndex && guidanceRequest ? { privileged_context: guidanceRequest } : {}),
           ...(!fallbackIndex && guidancePolicy ? { guidance_policy: guidancePolicy } : {}),
-          messages: encoded.messages, tools: currentRendering === 'program-header' ? [] : availableTools,
-          ...(currentRendering === 'program-header' ? { response_tools: availableTools } : {}),
+          messages: encoded.messages, tools: currentRendering === 'program-header' ? [] : offered,
+          ...(currentRendering === 'program-header' ? { response_tools: offered } : {}),
           // A turn that offers one tool it must use (the compaction turn, the last turn) requires a tool call.
           ...(availableTools !== allTools && currentRendering !== 'program-header' ? { tool_choice: 'required' as const } : {}),
           ...(currentTemperature === undefined ? {} : { temperature: currentTemperature }),
           seed: session.runtime.seedPolicy.mode === 'backend' ? null :
             deriveSeed(session.runtime.seedPolicy.root!, runSeedKey(session.runtime.options), session.lam.attempts, 'model-turn', turns),
           max_tokens: statedWindow === null ? limit :
-            Math.max(1, Math.min(limit ?? statedWindow, statedWindow - Math.ceil(estimate(availableTools)) - REPLY_MARGIN)) };
+            Math.max(1, Math.min(limit ?? statedWindow, statedWindow - Math.ceil(estimate(offered)) - REPLY_MARGIN)) };
         // Drivers read the invocation's tuned stack from the current frame when called; browsers keep no frame
         // across the awaits above, so the call starts inside its own frame on every platform.
         reservation = await this.options.modelBudget?.reserve(turnRequest.max_tokens ?? null, session.runtime.signal);
@@ -1929,7 +1936,7 @@ export class NativeToolAgent {
       const recordedNative = response.raw_response?.x_natlang_native_recorded_turn;
       if (turnNode && typeof recordedTurn === 'string' && recordedTurn !== recordedNative) recorder?.linkTurn?.(recordedTurn, turnNode);
       if (recorder && !supportsNeuralese(currentDriver)) recorder.record({ messages: structuredClone(graphMessages) as unknown[],
-        tools: structuredClone(availableTools), actor: { ...currentActor },
+        tools: structuredClone(offered), actor: { ...currentActor },
         ...(this.options.actor ? { initial_actor: { ...this.options.actor } } : {}), ...(turnNode ? { graph_turn: turnNode } : {}),
         reply: { role: 'assistant', content: response.text ?? null,
           ...(response.raw_calls ? { tool_calls: structuredClone(response.raw_calls) } : response.calls?.length ? {
@@ -2125,6 +2132,12 @@ export class NativeToolAgent {
       let stoppedAt: number | undefined;
       for (const [index, [name, args]] of calls.entries()) {
         if (timedOut()) return 'episode wall-clock budget exhausted';
+        if (stoppedAt === undefined && restriction && name !== restriction.allowed) {
+          results.push({ kind: 'rejected', text: restriction.text });
+          if (!keepUnrun) break;
+          stoppedAt = index;
+          continue;
+        }
         if (stoppedAt !== undefined) {
           if (runReads && READ_ONLY_TOOLS.has(name)) results.push(await session.applyAsync(name, args,
             typeof raw[index]!.id === 'string' ? raw[index]!.id as string : undefined));
