@@ -80,6 +80,16 @@ shared actor, 1 sample on 56 matched tasks): 10 discordant pairs (18%), split 8:
 [-21, 0], p=0.11: one-sample differences under ~8 pts at 128 pairs are noise; read held-v2 at 4 samples (~3 pts at 1,024
 pairs). Episodes take ~15 min at the shared actor's load and ~250 MB host memory each (budget the ledger unit for slots).
 
+## GB10 CUDA contexts fail under memory fragmentation (engineering, 2026-11-12)
+
+`CUDA_ERROR_OUT_OF_MEMORY` from `cuDevicePrimaryCtxRetain` with tens of GB free (kernel: `NVRM ... NV_ERR_NO_MEMORY ...
+kgrctxAllocMainCtxBuffer`) is fragmentation: a context's buffers need physically contiguous pages, and the Normal zone had
+almost no free order >= 8 blocks (`/proc/buddyinfo`). Measured: context creation failed whenever order-8 blocks were ~3,
+succeeded at 12+, and 30/30 with the compactor running. `natlang-gb10-compactor` (persistent user service,
+`scripts/systemd/`) faults THP-advised memory whenever under 512 MB is free in such blocks (direct compaction, no root);
+keep it running. `common/cuda_context.py`: `ensure_context()` (serve_native_checkpoint, grpo, exp0_sft) and
+`start_sglang` retry a context failure 3x after a compaction nudge and 20 s. Root fix (owner): `vm.compaction_proactiveness`.
+
 ## RL actor on the DGX: one engine, many slots, absolute KV size (engineering, 2026-11-12)
 
 Collection decode on the GB10 is memory-bandwidth bound: each step reads the weights (~3.5 GB) plus every running

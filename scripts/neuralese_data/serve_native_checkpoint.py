@@ -91,6 +91,8 @@ def main() -> None:
     parser.add_argument('--sglang-arg', action='append', default=[], help='extra sglang.launch_server argument')
     parser.add_argument('--hf-export-dir', type=Path, help='HF export cache (default: <store-dir or checkpoint dir>/sglang-hf/<sha>)')
     args = parser.parse_args()
+    from natlang_neuralese.common.cuda_context import ensure_context
+    ensure_context(args.device)   # GB10: a context can fail to create under host-memory fragmentation; retried
     if bool(args.native_actor_view) != bool(args.native_actor_view_sha256):
         parser.error('native actor view requires its exact receipt SHA-256')
     transport_values=(args.transport_receipt,args.transport_receipt_sha256,args.transport_view_receipt,
@@ -171,6 +173,67 @@ def main() -> None:
 
 
 ENGINE_DIED_EXIT = 70   # the SGLang engine exited under a live actor (2026-11-10: the wrapper kept answering /v1/models)
+
+
+def start_sglang(command, env, url, wait_seconds=None):
+    """Start the SGLang server and wait until it is healthy.
+
+    A CUDA context can fail to create on the GB10 when free host memory is fragmented (common/cuda_context.py): the
+    engine then exits before it is healthy with cuDevicePrimaryCtxRetain / NV_ERR_NO_MEMORY in its output, and it is
+    started again after a compaction nudge and a wait, up to RETRIES times. Any other early exit fails the launch."""
+    import os
+    import signal
+    import threading
+    import time
+    from natlang_neuralese.common.cuda_context import RETRIES, WAIT_SECONDS, compact, context_failure
+    wait_seconds = WAIT_SECONDS if wait_seconds is None else wait_seconds
+    for attempt in range(RETRIES + 1):
+        process = subprocess.Popen(command, env=env, start_new_session=True, stdout=subprocess.PIPE,
+                                   stderr=subprocess.STDOUT)
+        seen = {'context_failure': False}
+
+        def relay(stream=process.stdout, seen=seen):
+            for line in iter(stream.readline, b''):
+                sys.stdout.buffer.write(line)
+                sys.stdout.buffer.flush()
+                if not seen['context_failure'] and context_failure(line.decode('utf-8', 'replace')):
+                    seen['context_failure'] = True
+        reader = threading.Thread(target=relay, name='sglang-output', daemon=True)
+        reader.start()
+        try:
+            healthy = wait_sglang_healthy(process, url)
+        except BaseException:
+            if process.poll() is None:
+                os.killpg(process.pid, signal.SIGKILL)
+            raise
+        if healthy:
+            return process
+        reader.join(10)
+        if not seen['context_failure'] or attempt == RETRIES:
+            raise RuntimeError(f'SGLang server exited with {process.returncode} before becoming healthy')
+        print(json.dumps({'event': 'sglang_cuda_context_retry', 'attempt': attempt + 1, 'of': RETRIES,
+                          'compact': compact(), 'wait_seconds': wait_seconds}), flush=True)
+        time.sleep(wait_seconds)
+
+
+def wait_sglang_healthy(process, url, seconds=1800):
+    """True once SGLang answers /health_generate; False if it exits first."""
+    import time
+    import urllib.request
+    deadline = time.time() + seconds
+    while True:
+        if process.poll() is not None:
+            return False
+        try:
+            with urllib.request.urlopen(url + '/health_generate', timeout=60) as response:
+                if response.status == 200:
+                    return True
+        except Exception:
+            pass
+        if time.time() > deadline:
+            process.kill()
+            raise RuntimeError(f'SGLang server did not become healthy within {seconds // 60} min')
+        time.sleep(5)
 
 
 def supervise_sglang(process):
@@ -278,8 +341,6 @@ def sglang_pool(export_dir, args, context):
 def launch_sglang(engine, args, checkpoint, release=None):
     """Export the checkpoint for SGLang (cached by SHA-256), start the fork's server and bind the front to it."""
     import os
-    import time
-    import urllib.request
     from natlang_neuralese.export.native_hf import export_loaded
     root = Path(__file__).resolve().parents[2]
     fork = json.loads((root / 'training/neuralese/sglang-fork.json').read_text())
@@ -326,28 +387,12 @@ def launch_sglang(engine, args, checkpoint, release=None):
         cuda = str(wheel[-1].parent.parent) if wheel else cuda
     path = os.pathsep.join([str(Path(python).parent), cuda + '/bin', os.environ.get('PATH', '')])
     # NATLANG_SGLANG_PYTHONPATH: a fork worktree under test instead of the pinned checkout's editable install.
-    process = subprocess.Popen(command, env={**os.environ, 'PYTHONPATH': backend_pythonpath,
-                                             'PATH': path, 'CUDA_HOME': cuda,
-                                             'NATLANG_SGLANG_PROJECTION': args.sglang_projection,
-                                             'NATLANG_ADAPTER_SLOTS': str(args.sglang_adapter_slots),
-                                             'NATLANG_ADAPTER_RANK': str(args.sglang_adapter_rank)},
-                               start_new_session=True)
-    supervise_sglang(process)
+    env = {**os.environ, 'PYTHONPATH': backend_pythonpath, 'PATH': path, 'CUDA_HOME': cuda,
+           'NATLANG_SGLANG_PROJECTION': args.sglang_projection, 'NATLANG_ADAPTER_SLOTS': str(args.sglang_adapter_slots),
+           'NATLANG_ADAPTER_RANK': str(args.sglang_adapter_rank)}
     url = f'http://127.0.0.1:{port}'
-    deadline = time.time() + 1800
-    while True:
-        if process.poll() is not None:
-            raise RuntimeError(f'SGLang server exited with {process.returncode} before becoming healthy')
-        try:
-            with urllib.request.urlopen(url + '/health_generate', timeout=60) as response:
-                if response.status == 200:
-                    break
-        except Exception:
-            pass
-        if time.time() > deadline:
-            process.kill()
-            raise RuntimeError('SGLang server did not become healthy within 30 min')
-        time.sleep(5)
+    process = start_sglang(command, env, url)
+    supervise_sglang(process)
     engine.bind_sglang(url, export_manifest=manifest,
                        fork={**{key: fork[key] for key in ('repository', 'branch')}, 'commit': source['commit'],
                              'declared_commit': source['declared_commit'], 'dirty': source['dirty']},

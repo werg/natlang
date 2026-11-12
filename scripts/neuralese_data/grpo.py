@@ -912,6 +912,8 @@ def main():
     t.add_argument('--unit-prefix', default='grpo')
     args = parser.parse_args()
     if args.command == 'train':
+        from natlang_neuralese.common.cuda_context import ensure_context
+        ensure_context()   # GB10: a context can fail to create under host-memory fragmentation; retried
         args.pool = args.pool or POOLS
         args.max_outstanding = args.max_outstanding or args.max_groups + -(-args.slots // args.group)
         train(args)
