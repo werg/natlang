@@ -165,55 +165,6 @@ def test_checkpointed_layers_match_plain_outputs_and_gradients():
             torch.testing.assert_close(a, b)
 
 
-def test_serving_batch_step_matches_independent_rows():
-    from natlang_neuralese.serve.batch import BATCHED_STACKS, step_rows
-    assert 'lfm3' in BATCHED_STACKS
-    port = tiny_lfm3(markers=False)
-    generator = torch.Generator().manual_seed(6)
-    caches = []
-    with torch.no_grad():
-        for length in (3, 9, 6):  # rows cross the sliding window (4) at different steps
-            caches.append(port.forward_ids(torch.randint(3, 60, (1, length), generator=generator))['cache'])
-        reference = [copy.copy(cache) for cache in caches]
-        for _ in range(3):
-            h = port.embed(torch.randint(3, 60, (3, 1), generator=generator))
-            out, caches = step_rows(port, h, caches, range(port.num_layers))
-            for row in range(3):
-                single, reference[row] = port.run_layers(h[row:row + 1], range(port.num_layers), reference[row])
-                torch.testing.assert_close(out[row:row + 1], single, atol=2e-6, rtol=2e-5)
-
-
-def test_training_plumbing_declares_lfm3_forms():
-    from natlang_neuralese.model.shared_state import SharedStateModel
-    from natlang_neuralese.train.adapters import lora_target_names
-    from natlang_neuralese.train.fp8_backend import _eligible_paths
-    from natlang_neuralese.train.memory_estimator import backbone_memory_layout
-    from natlang_neuralese.train.native_state_sft import native_trainable_parameters
-    from natlang_neuralese.train.optim import latent_split, muon_eligible
-    port = tiny_lfm3(markers=False)
-    names = lora_target_names(port, [0, 1])
-    assert 'model.layers.1.self_attn.o_proj' in names and 'model.layers.1.self_attn.gate_proj' in names
-    assert 'model.layers.0.conv.out_proj' in names and not any('out_proj' in n and 'self_attn' in n for n in names)
-    paths = _eligible_paths(port.hf)
-    assert 'model.layers.1.self_attn.o_proj' in paths and 'model.layers.1.self_attn.gate_proj' not in paths
-    half = copy.deepcopy(port)
-    half.hf.to(torch.bfloat16)
-    layout = backbone_memory_layout(half, checkpointed=False)
-    # operator/ffn/post-operator/post-ffn norms on each layer, plus q/k norms over all heads on attention layers.
-    assert layout['fp32_norm_saved_bytes_per_token'] == 4 * (6 * 4 * 32 + 3 * (32 + 16))
-    model = SharedStateModel(port, (58, 59, 60, 61), rank=4)
-    latent, ordinary = latent_split(native_trainable_parameters(model), 'muonsr')
-    latent_names = {name for name, _ in latent}
-    ordinary_names = {name for name, _ in ordinary}
-    # The real per-class routing (gate_proj [16, 2048] on Muon) is checked on the LFM3-1.7B inventory in
-    # test_lfm3_real_parity.py; this twin's 4-head gate is narrower than MUON_MIN_SIDE.
-    assert 'backbone.model.layers.1.self_attn.o_proj.weight' in latent_names
-    assert 'backbone.model.layers.0.conv.conv.weight' in ordinary_names
-    assert {'interface.input_rows', 'interface.adapter.up.weight'} <= ordinary_names
-    gate = dict(port.hf.named_parameters())['model.layers.1.self_attn.gate_proj.weight']
-    assert muon_eligible('backbone.model.layers.1.self_attn.gate_proj.weight', gate, 64, set())
-
-
 def test_native_precision_profiles_cover_every_lfm3_norm():
     from natlang_neuralese.model.native_parameter_precision import PROFILE, configure_norm_precision, norm_parameters
     from natlang_neuralese.model.shared_execution import configure_shared_execution, validate_shared_execution
@@ -315,38 +266,6 @@ def test_lfm3_checkpoint_weights_only_reads_cast_across_dtypes(tmp_path):
         torch.testing.assert_close(actual, expected, atol=0.1, rtol=0.05)
 
 
-def test_native_optimizer_updates_every_lfm3_layer_form_from_an_import_graph():
-    from natlang_neuralese.data.native_graph import SCHEMA, parse_graph
-    from natlang_neuralese.model.shared_state import SharedStateModel
-    from natlang_neuralese.train.native_state_sft import make_native_optimizer, packed_graph_loss
-
-    torch.manual_seed(42)
-    port = tiny_lfm3(markers=False)
-    model = SharedStateModel(port, (58, 59, 60, 61), rank=4)
-    optimizer, _ = make_native_optimizer(model, lr=1e-3, weight_decay=0., in_backward=False)
-    raw = {'schema': SCHEMA, 'id': 'lfm3-optimizer', 'split': 'train', 'source_groups': ['lfm3-optimizer-contract'],
-           'tokenizer_fingerprint': '1' * 64,
-           'nodes': [{'name': 'producer', 'token_ids': [4, 5, 6, 7, 8, 9], 'producing': [[1, 5]],
-                      'target_weights': [0.] * 6},
-                     {'name': 'consumer', 'token_ids': [10, 11, 12, 13, 14, 15, 16, 17],
-                      'target_weights': [0., 1., 0., 1., 1., 1., 1., 1.],
-                      'imports': [{'at': 2, 'source': 'producer', 'start': 1, 'stop': 5}]}]}
-    example = parse_graph(raw, tokenizer_fingerprint='1' * 64)
-    parameters = dict(port.hf.named_parameters())
-    targets = {name: parameters[name] for name in (
-        'model.layers.0.conv.conv.weight', 'model.layers.1.self_attn.gate_proj.weight',
-        'model.layers.3.self_attn.o_proj.weight', 'model.layers.3.post_operator_norm.weight',
-        'model.layers.5.post_ffn_norm.weight')}
-    before = {name: value.detach().clone() for name, value in targets.items()}
-    loss, _ = packed_graph_loss(model, [example], checkpoint_layers=False)
-    loss.backward()
-    for name, value in targets.items():
-        assert value.grad is not None and value.grad.abs().sum() > 0, name
-    optimizer.step()
-    for name, value in targets.items():
-        assert not torch.equal(before[name], value), name
-
-
 def test_adamwsr_matches_adamw_in_fp32_and_keeps_small_bf16_updates_in_expectation():
     from natlang_neuralese.train.optim import AdamWSR
     torch.manual_seed(0)
@@ -378,61 +297,6 @@ def test_adamwsr_matches_adamw_in_fp32_and_keeps_small_bf16_updates_in_expectati
     assert expected == pytest.approx(-0.01, rel=1e-3)
     assert actual == pytest.approx(expected, rel=0.05)
     assert stochastic.dtype == torch.bfloat16 and optimizers[1].state[stochastic]['exp_avg'].dtype == torch.bfloat16
-
-
-def test_all_bf16_native_optimizer_moves_small_sparse_row_updates_with_compensated_rounding(tmp_path):
-    from natlang_neuralese.data.native_graph import SCHEMA, parse_graph
-    from natlang_neuralese.model.native_model import load_native_model
-    from natlang_neuralese.train.native_state_sft import (make_native_optimizer, packed_graph_loss,
-                                                          sparse_row_updates)
-    from natlang_neuralese.train.optim import AdamWKahan
-    from tokenizers import Tokenizer, models, pre_tokenizers
-    from transformers import PreTrainedTokenizerFast
-    tiny_lfm3_hf().save_pretrained(tmp_path, safe_serialization=True)
-    tokenizer = Tokenizer(models.WordLevel({'[UNK]': 0, 'sample': 1, '<think>': 2, '</think>': 3}, unk_token='[UNK]'))
-    tokenizer.pre_tokenizer = pre_tokenizers.Whitespace()
-    hf_tokenizer = PreTrainedTokenizerFast(tokenizer_object=tokenizer, unk_token='[UNK]')
-    hf_tokenizer.chat_template = LFM3_TINY_TEMPLATE
-    hf_tokenizer.save_pretrained(tmp_path)
-    raw = {'schema': SCHEMA, 'id': 'lfm3-bf16-rows', 'split': 'train', 'source_groups': ['lfm3-bf16-rows'],
-           'tokenizer_fingerprint': '1' * 64,
-           'nodes': [{'name': 'producer', 'token_ids': [4, 9, 10, 11, 5, 12], 'producing': [[0, 5]],
-                      'target_weights': [0., 1., 1., 1., 1., 1.]},
-                     {'name': 'consumer', 'token_ids': [6, 13, 14, 7, 15, 16, 17, 18],
-                      'target_weights': [0., 0., 1., 1., 1., 1., 1., 1.],
-                      'imports': [{'at': 1, 'source': 'producer', 'start': 1, 'stop': 4}]}]}
-    example = parse_graph(raw, tokenizer_fingerprint='1' * 64)
-    changes = {}
-    for rounding in ('kahan', 'nearest'):
-        torch.manual_seed(5)
-        model, _, _, _ = load_native_model(tmp_path, rank=4, dtype=torch.bfloat16)
-        # Per-step updates (~lr) well below the role rows' BF16 spacing.
-        optimizer, _ = make_native_optimizer(model, lr=2e-5, weight_decay=0., in_backward=False,
-                                             learned_row_lr=2e-5)
-        assert isinstance(optimizer.auxiliary, AdamWKahan) and optimizer.auxiliary_rounding == 'kahan'
-        assert {entry['dtype'] for entry in optimizer.schema} == {'torch.bfloat16'}
-        assert optimizer.state_dict()['adamw_rounding'] == 'kahan'
-        if rounding == 'nearest':  # the same routing with round-to-nearest writes, for contrast
-            optimizer.auxiliary = torch.optim.AdamW(optimizer.auxiliary.param_groups, lr=2e-5, weight_decay=0.)
-        with torch.no_grad():  # rows of magnitude 0.5-1 (BF16 spacing >= 2**-9): every step is far below it
-            sign = torch.randint(0, 2, model.input_rows.shape, generator=torch.Generator().manual_seed(1)) * 2 - 1
-            model.input_rows.copy_(sign * (0.5 + 0.4 * torch.rand(model.input_rows.shape)))
-        start = model.input_rows.detach().clone()
-        for _ in range(40):
-            before = {'input_rows': model.input_rows.detach().clone()}
-            loss, _ = packed_graph_loss(model, [example], checkpoint_layers=False)
-            loss.backward()
-            optimizer.auxiliary.step()
-            telemetry = sparse_row_updates(model, before)
-            optimizer.zero_grad(set_to_none=True)
-        effective = model.input_rows.detach().float()
-        if rounding == 'kahan':  # sub-ULP steps accumulate exactly in the compensation until they cross a spacing
-            effective = effective + optimizer.auxiliary.state[model.input_rows]['compensation']
-        changes[rounding] = float((effective - start.float()).abs().sum())
-        rows = telemetry['input_rows']
-        assert rows['dtype'] == 'torch.bfloat16' and all(row['gradient_present'] for row in rows['rows'])
-    assert changes['nearest'] == 0
-    assert changes['kahan'] > 0
 
 
 @pytest.mark.parametrize('chunks', [((0, 5), *((i, i + 1) for i in range(5, 17))),

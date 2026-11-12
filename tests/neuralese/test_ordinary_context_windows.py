@@ -1,6 +1,5 @@
 import copy
 import math
-from pathlib import Path
 import pytest
 from test_own_output_supervision import objective,turn,USER,ASSISTANT,FP
 from natlang_neuralese.data.ordinary_context_windows import window_ordinary_row,verify_ordinary_windows
@@ -72,66 +71,3 @@ def test_small_rows_and_invalid_limits_are_explicit():
     assert unchanged==original and proof is None
     for limit,overlap in [(262145,2),(8,0),(8,8),(True,1)]:
         with pytest.raises(ValueError):window_ordinary_row(original,objective(),max_tokens=limit,overlap=overlap)
-
-
-def test_static_candidate_correction_preserves_row_and_rechecks_current_protection(tmp_path,monkeypatch):
-    import json
-    from types import SimpleNamespace
-    from natlang_neuralese.common.hashing import canonical_json_sha256_hex,sha256_file_hex
-    from natlang_neuralese.common.jsonio import open_jsonl_text
-    from scripts.neuralese_data.build_native_graph_text_corpus import GraphWriter
-    from scripts.neuralese_data import transform_acquired_ordinary_context as tool
-    def write(name,value):
-        path=tmp_path/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text(json.dumps(value))
-        return {'path':str(path),'sha256':sha256_file_hex(path),'bytes':path.stat().st_size}
-    original=row();candidate_path=tmp_path/'candidate/native-graphs.jsonl.zst'
-    writer=GraphWriter(candidate_path);writer.write(original);source=writer.finish()
-    previous_source=write('previous-source.json',{'source':'actual'})
-    family=write('families.json',{'schema':'natlang.logical-family-map/1','source_sha256':previous_source['sha256'],
-        'rows':[{'id':'prior:distinct','binding':'a'*64,'family':'general-agent'}]})
-    previous=write('previous.json',{'source':previous_source,'family_map':family})
-    policy=write('policy.json',{'objective':objective(mass='token')})
-    screen=write('screen.json',{'output':{**source,'tokenizer_fingerprint':FP,
-        'graph_ids_sha256':canonical_json_sha256_hex([original['id']])}})
-    from natlang_neuralese.train.own_output_supervision import CATEGORIES
-    weights,categories=graph_weights(original,objective(mass='token'))
-    signal={'id':original['id'],'graph_sha256':canonical_json_sha256_hex(original),
-        'source_store':'fixture','eligible':True,
-        'forward_tokens':len(weights),'raw_positive_tokens':sum(w>0 for w in original['nodes'][0]['target_weights']),
-        'effective_positive_tokens':sum(w>0 for w in weights),
-        'category_mass':{name:sum(w for w,c in zip(weights,categories) if c==i) for i,name in enumerate(CATEGORIES)}}
-    signals_path=tmp_path/'signals.jsonl';signals_path.write_text(json.dumps(signal)+'\n')
-    signals={'path':str(signals_path),'sha256':sha256_file_hex(signals_path),'bytes':signals_path.stat().st_size}
-    from scripts.neuralese_data import audit_acquired_learning_signal as audited_census
-    audit_path=Path(audited_census.__file__).resolve()
-    audit_ref={'path':str(audit_path),'sha256':sha256_file_hex(audit_path),'bytes':audit_path.stat().st_size}
-    census=write('census.json',{'schema':'natlang.acquired-effective-learning-census/1','rows':1,
-        'training_admission':False,'screen':screen,'row_signals':signals,'ce_policy':policy,
-        'builder':audit_ref,
-        'objective_sha256':canonical_json_sha256_hex(objective(mass='token'))})
-    candidate=write('candidate.json',{'schema':'natlang.acquired-streaming-source-successor/1',
-        'training_admission':False,'appended_graphs':source,'new_rows':1,'source_screen':screen,
-        'predecessor':previous,'predecessor_rows':1,'ce_policy':policy,'effective_loss_census':census,'row_signals':signals})
-    checkpoint={'path':str(tmp_path/'checkpoint.pt'),'sha256':'f'*64}
-    snapshot=write('snapshot.json',{'schema':'natlang.rolling-sft-parent-custody-snapshot/1',
-        'checkpoint':checkpoint,'optimizer_present':True,'rng_present':True,
-        'sft_frames':{'full':{'source_row_bindings':{},'pending_source_rows':{},'exposure_counts':{}}}})
-    publication={'checkpoint':checkpoint,'rolling_endpoint_custody_proof':{'successor':snapshot}}
-    import natlang_neuralese.rl.native_direct_sft_recovery as recovery
-    monkeypatch.setattr(recovery,'_authenticated_refresh_publication',lambda ref:{'publication':publication})
-    publication_ref={'path':str(tmp_path/'publication.json'),'sha256':'e'*64}
-    worlds=SimpleNamespace(identities=frozenset(),digest='d'*64)
-    monkeypatch.setattr(tool.ProtectedWorlds,'load',lambda:worlds)
-    monkeypatch.setattr(tool,'world_identities',lambda *a,**k:set())
-    monkeypatch.setattr(tool.shutil,'disk_usage',lambda p:SimpleNamespace(free=100*1024**3))
-    receipt=tool.transform(candidate,tmp_path/'out',parent_publication=publication_ref,max_tokens=17,overlap=3,representation='ordinary-windows')
-    assert receipt['corrected_rows']==1 and receipt['input_rows']==receipt['output']['rows']==1
-    assert receipt['protected_worlds_digest']==worlds.digest and receipt['row_ids_preserved'] is True
-    with open_jsonl_text(receipt['output']['path']) as stream: bounded=json.loads(next(stream))
-    assert verify_ordinary_windows(original,bounded,objective(mass='token'))
-    monkeypatch.setattr(tool,'world_identities',lambda *a,**k:{('id','protected')})
-    worlds.identities=frozenset({('id','protected')})
-    with pytest.raises(ValueError,match='protected-world'):
-        tool.transform(candidate,tmp_path/'blocked',parent_publication=publication_ref,max_tokens=17,overlap=3,representation='ordinary-windows')
-    assert not (tmp_path/'blocked').exists()
-

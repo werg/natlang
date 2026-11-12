@@ -58,33 +58,6 @@ def test_auto_hdd_root_on_nonrotating_device_is_not_staged(tmp_path, monkeypatch
     assert hdd_guard.on_hdd(tmp_path / 'run')
 
 
-def test_stage_input_args_pass_staged_path(hdd, tmp_path):
-    from natlang_neuralese.train import recipe
-    source = hdd / 'graphs.jsonl'
-    source.write_text('t')
-    digest = hashlib.sha256(b't').hexdigest()
-    kind = 'native_state_sft'
-    assert 'native_graphs' in hdd_guard.STAGED_ROLES
-    assert 'text_data' not in hdd_guard.STAGED_ROLES
-    args = recipe.stage_input_args({'native_graphs': {'path': str(source), 'sha256': digest}}, kind, target='local')
-    assert args == ['--native-graphs', str(tmp_path / 'staged' / digest / 'graphs.jsonl')]
-
-
-def test_native_checkpoint_is_read_in_place_while_graph_corpus_is_staged(hdd, tmp_path):
-    """The native checkpoint is loaded once in place; graph corpora are staged for repeated reads."""
-    from natlang_neuralese.train import recipe
-    state = hdd / 'checkpoint.pt'
-    state.write_bytes(b'state')
-    graphs = hdd / 'graphs.jsonl'
-    graphs.write_text('g')
-    assert hdd_guard.input_path('continue_from', state) == str(state)
-    assert not (tmp_path / 'staged').exists()
-    assert all(r['read_from_hdd'] for r in hdd_guard.RECORDS) and len(hdd_guard.RECORDS) == 1
-    staged = recipe._staged_inputs({'continue_from': {'path': str(state)}, 'native_graphs': {'path': str(graphs)}})
-    assert staged['continue_from']['path'] == str(state)
-    assert staged['native_graphs']['path'].startswith(str(tmp_path / 'staged'))
-
-
 def test_the_staged_cache_is_bounded_least_recently_used_first(hdd, tmp_path, monkeypatch):
     import os
     import time
@@ -105,43 +78,6 @@ def test_the_staged_cache_is_bounded_least_recently_used_first(hdd, tmp_path, mo
 def _json_hash(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
-
-def test_native_source_manifest_staging_keeps_relative_transitive_leaves_for_real_reader(hdd, tmp_path, monkeypatch):
-    import json
-    from natlang_neuralese.data.native_sources import NativeGraphSource
-    from natlang_neuralese.train.recipe import _staged_inputs
-
-    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE', str(tmp_path / 'row-index'))
-    rows = hdd / 'trees' / 'rows'
-    manifests = hdd / 'trees' / 'manifests'
-    rows.mkdir(parents=True)
-    manifests.mkdir(parents=True)
-    leaf = rows / 'train.jsonl'
-    leaf.write_text(json.dumps({'schema': 'natlang.neuralese-native-graph/1', 'id': 'train-row',
-        'split': 'train', 'source_groups': ['world-a'], 'tokenizer_fingerprint': 'tok',
-        'nodes': [{'name': 'text', 'token_ids': [1, 2], 'target_weights': [0., 1.]}]}) + '\n')
-    child = manifests / 'child.json'
-    child.write_text(json.dumps({'schema': 'natlang.native-graph-sources/1', 'sources': [
-        {'kind': 'native-graphs', 'path': '../rows/train.jsonl', 'sha256': _json_hash(leaf)}]}))
-    root = manifests / 'root.json'
-    root.write_text(json.dumps({'schema': 'natlang.native-graph-sources/1', 'sources': [
-        {'kind': 'native-graphs', 'path': 'child.json', 'sha256': _json_hash(child)}]}))
-    dependencies = [{'path': str(path), 'sha256': _json_hash(path)} for path in (child, leaf)]
-    staged = hdd_guard.stage_input(root, _json_hash(root))
-    staged_root = Path(staged)
-    assert staged_root.read_bytes() == root.read_bytes()
-    assert (staged_root.parent / 'child.json').read_bytes() == child.read_bytes()
-    assert (staged_root.parent.parent / 'rows' / 'train.jsonl').read_bytes() == leaf.read_bytes()
-    leaf.write_text(leaf.read_text().replace('train-row', 'tampered-row'))
-    with pytest.raises(ValueError, match='manifest dependency .*SHA-256'):
-        _staged_inputs({'native_graphs': {'path': str(root), 'sha256': _json_hash(root),
-            'dependencies': dependencies}})
-    import shutil
-    shutil.rmtree(hdd)
-    source = NativeGraphSource(staged_root, 'tok', required_split='train')
-    assert [entry['id'] for entry in source.entries] == ['train-row']
-    assert any(item['source'] == str(leaf) and item['staged'].endswith('/rows/train.jsonl')
-               for item in hdd_guard.RECORDS[-1]['dependencies'])
 
 def test_native_source_reader_routes_absolute_references_to_exact_staged_leaves(hdd, tmp_path):
     import json
@@ -224,36 +160,6 @@ def test_rollouts_role_staging_preserves_exact_rows_for_native_rollout_reader(hd
     assert list(iter_jsonl_rows(staged))[0][1] == row
 
 
-def test_pending_native_source_reader_follows_staged_absolute_cohort_and_evidence(hdd, tmp_path):
-    import json
-    from natlang_neuralese.train.native_pending_sources import declaration, load_pending_sources
-    from natlang_neuralese.common.hashing import sha256_file_hex_cached
-    from test_native_state_sft import graph
-
-    rows = hdd / 'pending-rows.jsonl'
-    value = dict(graph('pending-row'), tokenizer_fingerprint='tokenizer-sha')
-    rows.write_text(json.dumps(value) + '\n')
-    graph_manifest = hdd / 'pending-graphs.json'
-    graph_manifest.write_text(json.dumps({'schema': 'natlang.native-graph-sources/1', 'sources': [
-        {'kind': 'native-graphs', 'path': str(rows), 'sha256': _json_hash(rows)}]}))
-    full_cohort = hdd / 'full-cohort.json'
-    full_cohort.write_text(graph_manifest.read_text())
-    evidence = hdd / 'evidence.json'
-    evidence.write_text('{"verified":true}')
-    pending = hdd / 'pending.json'
-    pending.write_text(json.dumps(declaration(full_cohort, graph_manifest,
-        tokenizer_fingerprint='tokenizer-sha', role_ids=(58, 59, 60, 61),
-        evidence=[{'path': str(evidence), 'sha256': sha256_file_hex_cached(evidence)}])))
-
-    staged = hdd_guard.input_path('pending_native_sources', pending, _json_hash(pending))
-    import shutil
-    shutil.rmtree(hdd)
-    loaded = load_pending_sources(staged, tokenizer_fingerprint='tokenizer-sha')
-    assert set(loaded['rows']) == {'pending-row'}
-    assert str(rows) not in {item['path'] for item in loaded['dependencies']}
-    assert all(str(item['path']).startswith(str(tmp_path / 'staged')) for item in loaded['dependencies'])
-
-
 def staged_guard_root(staged):
     """Locate the directory carrying hdd_guard's per-closure absolute path map."""
     for parent in Path(staged).resolve().parents:
@@ -314,19 +220,3 @@ def test_directory_rl_bundle_staging_preserves_real_bundle_reader_and_repairs_ta
     assert restored.get_native_tensor_artifact(ident).artifact.tensors['layer.weight'].tolist() == [1., 2.]
     with pytest.raises(ValueError, match='directory input .*declared SHA-256'):
         hdd_guard.input_path('rl_block_bundle', bundle, '0' * 64)
-
-
-def test_portable_stage_argv_keeps_logical_inputs_and_local_uses_staging(monkeypatch):
-    from natlang_neuralese.train import recipe
-    source = {'path': '/logical/train-sources.json', 'sha256': 'a' * 64}
-    resolved = {'native_graphs': source, 'foundation_native_graphs': source}
-    monkeypatch.setattr(recipe, '_staged_inputs', lambda values: {
-        key: {**value, 'path': '/private/staged/tree/train-sources.json'}
-        for key, value in values.items()})
-    portable = recipe.stage_input_args(resolved, 'native_state_sft')
-    assert portable == ['--native-graphs', source['path'], '--foundation-native-graphs', source['path']]
-    local = recipe.stage_input_args(resolved, 'native_state_sft', target='local')
-    assert local == ['--native-graphs', '/private/staged/tree/train-sources.json',
-                     '--foundation-native-graphs', '/private/staged/tree/train-sources.json']
-    with pytest.raises(ValueError, match='local or portable'):
-        recipe.stage_input_args(resolved, 'native_state_sft', target='unknown')

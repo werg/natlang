@@ -9,7 +9,7 @@ from natlang_neuralese.data.native_graph import SCHEMA, parse_graph
 from natlang_neuralese.model.shared_state import SharedStateModel, native_step, splice_block, \
     capture_invocation_span, compile_graph, Invocation
 from natlang_neuralese.train.decision_supervision import decision_terms
-from natlang_neuralese.train.native_state_sft import packed_graph_loss
+from natlang_neuralese.train.native_graph_loss import packed_graph_loss
 
 FINGERPRINT = '1' * 64
 PRODUCER = [2, 3, 4, 5, 6]
@@ -47,23 +47,6 @@ def decision_row(*, label=2, stop_gradient=False, extra_nodes=(), producer=True)
             'tokenizer_fingerprint': FINGERPRINT, 'nodes': nodes + list(extra_nodes),
             'decisions': [{'name': 'd', 'options': [f'd:option:{i}' for i in range(len(OPTIONS))],
                            'prompt_tokens': len(PROMPT), 'label': label, 'label_source': 'exact-oracle'}]}
-
-
-def test_decision_labels_bind_content_and_source_row_identity():
-    from natlang_neuralese.data.native_sources import _row_bindings
-    from natlang_neuralese.data.native_graph_schema import indexed_graph_metadata
-    from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import graph_content_sha256
-    first = decision_row(label=0)
-    second = decision_row(label=1)
-    assert first['nodes'] == second['nodes']
-    assert graph_content_sha256(first) != graph_content_sha256(second)
-    parsed_first = parse_graph(first, tokenizer_fingerprint=FINGERPRINT)
-    parsed_second = parse_graph(second, tokenizer_fingerprint=FINGERPRINT)
-    assert _row_bindings([parsed_first]) != _row_bindings([parsed_second])
-    assert _row_bindings([indexed_graph_metadata(first, tokenizer_fingerprint=FINGERPRINT)]) == _row_bindings([parsed_first])
-    changed = copy.deepcopy(first)
-    changed['external_states'] = {'z': {'id': 'nzs1_' + 'a' * 52, 'token_count': 2}}
-    assert graph_content_sha256(first) != graph_content_sha256(changed)
 
 
 def test_ordinary_row_keeps_historical_binding():
@@ -429,12 +412,3 @@ def test_behavior_probe_checks_every_decision_option_before_sgd(monkeypatch):
     with pytest.raises(ValueError,match='decision_action=1'):
         behavior_logprob_probe(None,torch.zeros(3,4),[],graph_id='g',policy={},limit=None,atol=1e-4,
                                decision_actions=decisions,decision_physical_rows=[2,1])
-
-
-def test_capacity_parity_selects_real_decision_episode_before_token_only_episode():
-    from natlang_neuralese.eval.native_memory import policy_parity_first_group
-    from types import SimpleNamespace
-    objective=SimpleNamespace(rows={'tokens':{'actions':[{}]},'decision':{'decision_actions':[{}]}},
-        can_compare_behavior_actor=lambda row:True)
-    request={'entries':[{'id':'tokens','index':0},{'id':'decision','index':1}]}
-    assert policy_parity_first_group(request,objective)==(1,)

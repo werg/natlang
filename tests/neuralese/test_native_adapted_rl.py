@@ -306,7 +306,7 @@ def test_adapted_policy_bundle_restart_gradient_service_and_optimizer(tmp_path,m
         actual_grad=second_gradient.tensors[name].to(expected_grad)
         if os.environ.get('NATLANG_ADAPTER_STATE_DIAGNOSTIC_OUT'):
             from natlang_neuralese.rl.native_replay import NativePolicyObjective,action_logps
-            from natlang_neuralese.train.native_state_sft import packed_graph_loss
+            from natlang_neuralese.train.native_graph_loss import packed_graph_loss
             from natlang_neuralese.data.native_graph import parse_graph
             objective=NativePolicyObjective(spec_path)
             class Traced:

@@ -316,30 +316,6 @@ def test_swe_rejects_nontranscript_tables_as_rows_without_file_buffer(tmp_path,m
         assert isinstance(value, Reject)
         observed += 1
     assert observed == count
-def test_standalone_preference_record_retains_both_histories_once_and_hash_binds_pair(monkeypatch):
-    from scripts.neuralese_data import acquired_agents
-    from scripts.neuralese_data.acquired_preferences import miroverse_preference_records
-    from scripts.neuralese_data.acquired_granted import _digest
-    prompt=[{'role':'system','content':'Original rules'}, {'role':'user','content':'Exact task'},
-            {'role':'assistant','content':'Exact shared earlier answer'}, {'role':'user','content':'Original continuation'}]
-    row={'chosen':prompt+[{'role':'assistant','content':'Preferred'}],
-         'rejected':prompt+[{'role':'assistant','content':'Other'}]}
-    receipt={**RECEIPT,'files':[{'path':'dpo/file.json','bytes':999,'sha256':'a'*64}]}
-    monkeypatch.setattr(acquired_agents,'acquired_rows',lambda ref,limit=None:iter([(receipt,'dpo/file.json:7',row)]))
-    _,record=next(miroverse_preference_records())
-    assert record['schema']=='natlang.offline-native-preference/1'
-    assert record['common_message_count']==4 and record['required_objective']=='native-offline-pairwise'
-    assert record['source']['pair_sha256']==_digest(row) and record['source']['source_row']==7
-    assert record['source']['source_file']==receipt['files'][0]
-    for name in ('chosen','rejected'):
-        alternative=record['alternatives'][name]
-        assert alternative['messages']==row[name]
-        assert 'original_messages' not in alternative['lineage']['notes']['granted_source']
-        assert 'original_pair' not in alternative['lineage']['notes']['source_preference']
-    assert not record['training_admission'] and not record['native_on_policy']
-
-
-
 def test_midtool_exact_missing_tools_value_preserves_original_messages_and_rejects_other_corruption():
     from scripts.neuralese_data.acquired_granted import midtool_native_extra
     original=[{'role':'system','content':'Exact original tool instructions'},

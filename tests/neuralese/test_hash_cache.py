@@ -163,33 +163,6 @@ def test_cache_rotation_truncation_and_rewrite_invalidate_old_entries(tmp_path,c
     assert hashing._cached_file_digest(cache,'other')=='b'
 
 
-def test_verified_hardlink_aliases_keep_all_bridge_paths_with_one_payload_read(tmp_path, monkeypatch):
-    from natlang_neuralese.rl import native_bridge
-    cache = tmp_path / 'hashes.jsonl'
-    monkeypatch.setenv('NATLANG_HASH_CACHE', str(cache))
-    out = tmp_path / 'out'; out.mkdir()
-    checkpoint = out / 'checkpoint.pt'; checkpoint.write_bytes(b'exact checkpoint')
-    best = out / 'best-checkpoint.pt'; os.link(checkpoint, best)
-    original_open = open; reads = []
-    def count_open(path, *args, **kwargs):
-        if Path(path) in (checkpoint, best) and args and args[0] == 'rb':
-            reads.append(str(path))
-        return original_open(path, *args, **kwargs)
-    monkeypatch.setattr(hashing, 'open', count_open, raising=False)
-    first = native_bridge.binding(checkpoint)
-    records = native_bridge.inventory(out)
-    assert reads == [str(checkpoint)]
-    assert {x['path'] for x in records} == {str(checkpoint), str(best)}
-    assert all(x['sha256'] == first['sha256'] and x['bytes'] == first['bytes'] for x in records)
-    # Same-size shared-inode mutation with restored mtime must invalidate both.
-    status = checkpoint.stat(); best.write_bytes(b'other checkpoint')
-    os.utime(best, ns=(status.st_atime_ns, status.st_mtime_ns))
-    changed = native_bridge.inventory(out)
-    assert len(reads) == 2
-    assert all(x['sha256'] == hashlib.sha256(b'other checkpoint').hexdigest() for x in changed)
-    assert all(x['sha256'] != first['sha256'] for x in changed)
-
-
 def test_old_verified_path_entry_promotes_to_physical_alias_identity(tmp_path, monkeypatch):
     from natlang_neuralese.common.checkpoint_digest import verified_checkpoint_digest
     data = tmp_path / 'checkpoint.pt'; data.write_bytes(b'exact')
@@ -205,14 +178,3 @@ def test_old_verified_path_entry_promotes_to_physical_alias_identity(tmp_path, m
     monkeypatch.setattr(hashing, 'open', no_payload, raising=False)
     assert verified_checkpoint_digest(data) == digest
     assert verified_checkpoint_digest(alias) == digest
-
-
-def test_legacy_path_cache_never_authenticates_an_alias(tmp_path, monkeypatch):
-    data = tmp_path / 'checkpoint.pt'; data.write_bytes(b'exact')
-    alias = tmp_path / 'best.pt'; os.link(data, alias)
-    cache = tmp_path / 'hashes.jsonl'; monkeypatch.setenv('NATLANG_HASH_CACHE', str(cache))
-    s = data.stat(); old_key = f'{data}|{s.st_size}|{s.st_mtime_ns}'
-    cache.write_text(json.dumps(dict(key=old_key, sha256='f'*64))+'\n')
-    from natlang_neuralese.rl import native_bridge
-    assert native_bridge.binding(data)['sha256'] == hashlib.sha256(b'exact').hexdigest()
-    assert native_bridge.binding(alias)['sha256'] == hashlib.sha256(b'exact').hexdigest()

@@ -94,41 +94,6 @@ def test_device_backend_fails_closed_for_non_cuda_targets(tmp_path):
                                 directory=tmp_path)
 
 
-def test_device_backend_recipe_contract_is_explicit_and_transition_needs_fresh_capacity(tmp_path):
-    from natlang_neuralese.train.native_state_sft import build_parser
-    from natlang_neuralese.train.recipe import (
-        native_stage_parameter_handoffs, stage_parameter_args, validate_stage_parameters)
-
-    parser = build_parser()
-    assert parser.get_default('cotangent_accumulator_backend') is None
-    assert stage_parameter_args({'cotangent_accumulator_backend': None}) == []
-    assert stage_parameter_args({'cotangent_accumulator_backend': 'device_fp32'}) == [
-        '--cotangent-accumulator-backend', 'device_fp32']
-    validate_stage_parameters('native_state_sft', {'cotangent_accumulator_backend': 'device_fp32'})
-    with pytest.raises(ValueError, match='cotangent_accumulator_backend'):
-        validate_stage_parameters('native_state_sft', {'cotangent_accumulator_backend': 'automatic'})
-    old = {'stages': [{'id': 'ce', 'kind': 'native_state_sft', 'parameters': {}}]}
-    unsafe = {'stages': [{'id': 'ce', 'kind': 'native_state_sft', 'parameters': {
-        'cotangent_accumulator_backend': 'device_fp32'}}]}
-    with pytest.raises(ValueError, match='fresh exact-parent memory qualification'):
-        native_stage_parameter_handoffs(old, unsafe, out=tmp_path)
-    safe = {'stages': [{'id': 'ce', 'kind': 'native_state_sft', 'parameters': {
-        'cotangent_accumulator_backend': 'device_fp32',
-        'memory_qualification': {'path': 'new.json', 'sha256': 'a' * 64}}}]}
-    native_stage_parameter_handoffs(old, safe, out=tmp_path)
-
-
-def test_legacy_resume_identity_defaults_backend_without_mutating_saved_identity():
-    from natlang_neuralese.train.native_state_sft import _resume_identity_for_comparison
-
-    saved = {'schema': 'native-training-identity/1', 'seed': 7}
-    previous = _resume_identity_for_comparison(saved)
-    assert previous == {**saved, 'cotangent_accumulator_backend': 'cpu_file'}
-    assert saved == {'schema': 'native-training-identity/1', 'seed': 7}
-    assert _resume_identity_for_comparison({**saved, 'cotangent_accumulator_backend': 'device_fp32'})[
-        'cotangent_accumulator_backend'] == 'device_fp32'
-
-
 @pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA device backend needs a CUDA device')
 def test_device_backend_keeps_explicit_higher_order_reference_arithmetic(tmp_path):
     from natlang_neuralese.common.native_higher_order import reference_arithmetic
@@ -147,50 +112,3 @@ def test_device_backend_keeps_explicit_higher_order_reference_arithmetic(tmp_pat
     # Reference arithmetic deliberately uses its differentiable FP32 cast node;
     # it must not allocate or consume the first-order device accumulator.
     assert scope.allocation_report()['allocated_accumulator_bytes'] == 0
-
-
-@pytest.mark.parametrize('family', ['lfm'])
-@pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA device backend needs a CUDA device')
-def test_native_shared_graph_update_selects_backend_from_checkpoint_option(family):
-    from test_shared_state import tiny
-    from natlang_neuralese.data.native_graph import SCHEMA, parse_graph
-    from natlang_neuralese.model.shared_state import SharedStateModel
-    from natlang_neuralese.train.native_state_sft import make_native_optimizer, native_training_update
-
-    torch.manual_seed(112)
-    device = torch.device('cuda')
-    first = SharedStateModel(tiny(family).to(dtype=torch.bfloat16), (60, 61, 62, 63), rank=4).to(device)
-    if family == 'mellum':
-        first.port.hf.natlang_precision = 'bf16'
-    initial = {name: value.detach().clone() for name, value in first.state_dict().items()}
-    example = parse_graph({'schema': SCHEMA, 'id': f'backend-{family}', 'split': 'train',
-        'source_groups': [f'backend-{family}-train'], 'tokenizer_fingerprint': 'tiny',
-        'nodes': [{'name': 'answer', 'token_ids': [4, 5, 6, 7, 8, 9],
-                   'target_weights': [0, 0, 1, 1, 1, 1]}]}, tokenizer_fingerprint='tiny')
-    outcomes = []
-    import copy
-    rng = torch.cuda.get_rng_state().clone()
-    for backend in ('cpu_file', 'device_fp32'):
-        model = SharedStateModel(tiny(family).to(dtype=torch.bfloat16), (60, 61, 62, 63), rank=4).to(device)
-        if family == 'mellum':
-            model.port.hf.natlang_precision = 'bf16'
-        model.load_state_dict(initial)
-        model.native_cotangent_accumulator_backend = backend
-        optimizer, _ = make_native_optimizer(model, lr=1e-4, weight_decay=0.)
-        torch.cuda.set_rng_state(rng)
-        loss, _ = native_training_update(model, optimizer, [example], checkpoint_layers=False,
-                                         chunk_tokens=8)
-        outcomes.append({'loss': loss.detach().clone(),
-                         'state': {name: value.detach().clone() for name, value in model.state_dict().items()},
-                         'rng': torch.cuda.get_rng_state().clone(),
-                         'optimizer': copy.deepcopy(optimizer.state_dict())})
-    assert torch.equal(outcomes[0]['loss'], outcomes[1]['loss'])
-    assert torch.equal(outcomes[0]['rng'], outcomes[1]['rng'])
-    from torch.utils._pytree import tree_flatten
-    left, structure = tree_flatten(outcomes[0]['optimizer'])
-    right, other_structure = tree_flatten(outcomes[1]['optimizer'])
-    assert structure == other_structure
-    for a, b in zip(left, right):
-        assert torch.equal(a,b) if torch.is_tensor(a) else a == b
-    for name in outcomes[0]['state']:
-        assert torch.equal(outcomes[0]['state'][name], outcomes[1]['state'][name]), name

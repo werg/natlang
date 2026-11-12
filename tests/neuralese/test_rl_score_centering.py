@@ -129,21 +129,6 @@ def test_importance_weights_and_masked_entries_and_loss_sign():
     assert torch.isfinite(surrogate).all()
 
 
-def test_policy_loss_declaration_is_canonical_and_strict():
-    assert policy_loss_declaration(None) is None
-    assert policy_loss_declaration({'schema': 'score-centered/1'}) == {
-        'schema': 'score-centered/1', 'k': 128, 'importance': 'tis', 'eps': 1e-6}
-    assert policy_loss_declaration('{"schema":"score-centered/1","k":32,"importance":"tis"}')['k'] == 32
-    for bad in ({'schema': 'grpo'}, {'schema': 'score-centered/1', 'k': 0},
-                {'schema': 'score-centered/1', 'importance': 'is'}, {'schema': 'score-centered/1', 'clip': 1}):
-        with pytest.raises(ValueError):
-            policy_loss_declaration(bad)
-    from natlang_neuralese.train.recipe import validate_stage_parameters
-    with pytest.raises(ValueError):
-        validate_stage_parameters('native_state_rl', {'rl_policy_loss': {'schema': 'score-centered/1', 'k': -1}})
-    validate_stage_parameters('native_state_rl', {'rl_policy_loss': {'schema': 'score-centered/1', 'k': 64}})
-
-
 def test_top_k_receipt_roundtrip_is_compact_and_validated():
     log_probs = torch.log_softmax(torch.randn(100), -1)
     receipt = encode_top_k(log_probs, 32)
@@ -154,21 +139,6 @@ def test_top_k_receipt_roundtrip_is_compact_and_validated():
     assert len(receipt['ids']) + len(receipt['logps']) == 4 * ((32 * 4 + 2) // 3) + 4 * ((32 * 2 + 2) // 3)
     with pytest.raises(ValueError):
         decode_top_k({'ids': receipt['ids'], 'logps': encode_top_k(log_probs, 16)['logps']})
-
-
-def test_production_policy_loss_binding_requires_its_learner_argument():
-    from natlang_neuralese.rl.production import bind_policy_loss
-    loss = policy_loss_declaration({'schema': 'score-centered/1', 'k': 32})
-    values = {}
-    assert bind_policy_loss({'learner_command': ['x']}, values) is None and values == {}
-    with pytest.raises(ValueError, match='--rl-policy-loss'):
-        bind_policy_loss({'policy_loss': loss, 'learner_command': ['x']}, {})
-    with pytest.raises(ValueError, match='canonical'):
-        bind_policy_loss({'policy_loss': {'schema': 'score-centered/1'},
-                          'learner_command': ['--rl-policy-loss', '{rl_policy_loss}']}, {})
-    assert bind_policy_loss({'policy_loss': loss, 'learner_command': ['--rl-policy-loss', '{rl_policy_loss}']},
-                            values) == loss
-    assert json.loads(values['rl_policy_loss']) == loss
 
 
 # ---- end to end: real engine capture under a mismatched sampler, real trainer objective ----
@@ -232,7 +202,7 @@ def parameter_gradients(model, loss):
 @pytest.mark.parametrize('mode', ['none', 'tis'])
 def test_engine_capture_to_trainer_matches_reference_under_sampler_mismatch(tmp_path, monkeypatch, mode):
     from test_native_serving_adapters import engine_fixture
-    from natlang_neuralese.train.native_state_sft import packed_graph_loss
+    from natlang_neuralese.train.native_graph_loss import packed_graph_loss
     engine = engine_fixture(tmp_path, 'lfm')
     k = 8
     episodes = collect(engine, monkeypatch, top_k=k)
@@ -306,7 +276,7 @@ def test_score_centered_requires_top_k_and_grpo_without_it_stays_unchanged(tmp_p
     spec, objective, examples = admit(engine, tmp_path, episodes, None, 'grpo')
     assert 'policy_loss' not in spec and 'policy_loss' not in objective.binding()
     assert all('behavior_top_k' not in action for row in spec['rows'].values() for action in row['actions'])
-    from natlang_neuralese.train.native_state_sft import packed_graph_loss
+    from natlang_neuralese.train.native_graph_loss import packed_graph_loss
     with pytest.raises(ValueError, match='captured policy logprob parity failed'):
         packed_graph_loss(engine.shared_model, examples, objective=objective)
     objective._behavior_logprob_probe_done = True  # isolate the GRPO loss after testing the rejection
@@ -389,28 +359,6 @@ def test_whole_producer_consumer_graph_scores_every_sampled_turn_with_top_k(tmp_
     path.write_text(json.dumps(dict(spec, mode='rft')))
     with pytest.raises(ValueError, match='inapplicable policy loss'):
         NativePolicyObjective(path)
-
-
-def test_continuations_adopt_tis_through_a_recorded_transition(tmp_path):
-    from natlang_neuralese.rl.production import TIS_DEFAULT_TRANSITION, adopt_policy_loss_defaults
-    old = {'schema': 'jolt-plus/1', 'beta_s': 1.0, 'beta_t': 0.5,
-           'outcome': {'schema': 'score-centered/1', 'k': 128, 'importance': 'none', 'eps': 1e-6}}
-    state_path = tmp_path / 'state.json'
-    in_flight = {'round': 3, 'active_update_round': 'r3', 'update_policy_loss': old}
-    assert adopt_policy_loss_defaults({'policy_loss': old}, in_flight, state_path)['policy_loss'] == old
-    state = {'round': 4}
-    adopted = adopt_policy_loss_defaults({'policy_loss': old}, state, state_path)['policy_loss']
-    assert adopted['outcome']['importance'] == 'tis' and adopted['beta_t'] == 0.5
-    adopt_policy_loss_defaults({'policy_loss': old}, state, state_path)  # recorded once
-    assert state['policy_loss_transitions'] == [{'schema': 'natlang.rl-policy-loss-transition/1',
-        'transition': TIS_DEFAULT_TRANSITION, 'from': old, 'to': adopted, 'round': 4}]
-    assert json.loads(state_path.read_text()) == state
-    plain = {'schema': 'score-centered/1', 'k': 128, 'importance': 'none', 'eps': 1e-6}
-    assert adopt_policy_loss_defaults({'policy_loss': plain}, {}, state_path)['policy_loss']['importance'] == 'tis'
-    kept = {'policy_loss': plain, 'policy_loss_keep_importance_none': True}
-    assert adopt_policy_loss_defaults(kept, {}, state_path) is kept
-    clipped = {'policy_loss': {'schema': 'clipped-ratio/1'}}
-    assert adopt_policy_loss_defaults(clipped, {}, state_path) is clipped
 
 
 def _review_counterexample():

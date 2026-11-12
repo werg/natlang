@@ -107,33 +107,6 @@ def test_native_store_refuses_legacy_flat_rows_from_a_persisted_store(tmp_path):
     store.close()
 
 
-def test_value_harness_fetches_native_state_bytes_from_native_store():
-    from natlang_neuralese.rl.value_harness import native_artifact_bytes
-    from natlang_neuralese.serve.store import decode_native_state
-
-    block = _state(7)
-    store = TensorStore()
-    record = store.put_native_state(block)
-    raw = native_artifact_bytes(SimpleNamespace(store=store), record.id)
-    restored, actual_id = decode_native_state(raw)
-    assert actual_id == record.id
-    assert torch.equal(restored.embeddings, block.embeddings)
-    with pytest.raises(ValueError, match="omitted native state"):
-        native_artifact_bytes(SimpleNamespace(store=store), "nzs1_" + "a" * 52)
-    store.close()
-
-
-def test_value_harness_emits_native_role_markers_for_writer_spans():
-    from natlang_neuralese.rl.value_harness import _forced_native_reply_tokens
-
-    fixture = SimpleNamespace(role_tokens=SimpleNamespace(produce_open=91, produce_close=92),
-                              stop_ids=[99],
-                              _template_tokens=lambda text: [ord(character) for character in text],
-                              _tokens=lambda text: [ord(character) for character in text])
-    tokens = _forced_native_reply_tokens(fixture, [('text', 'before'), ('native-state', 'note'), ('text', 'after')])
-    assert tokens == [*map(ord, 'before'), 91, *map(ord, 'note'), 92, *map(ord, 'after'), 99]
-
-
 def test_rl_archive_id_scanner_rejects_flat_projected_references():
     from natlang_neuralese.rl.graph_replay import block_ids
 

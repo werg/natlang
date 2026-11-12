@@ -35,37 +35,12 @@ def test_stop_flag_schema_legacy_identity_and_transitive_logical_aliases():
 
 def test_packing_preserves_explicit_constants():
     from natlang_neuralese.data.native_graph_schema import NativeGraphExample
-    from natlang_neuralese.train.native_state_sft import pack_native_graphs
+    from natlang_neuralese.train.native_graph_loss import pack_native_graphs
     plan=stopped_plan()
     example=NativeGraphExample('stop','train',('stop',),'fixture',plan,(0.,)*plan.token_count)
     packed,*_=pack_native_graphs([example,example])
     assert sum(packed.slot_stops)==2*sum(plan.slot_stops)
     assert sum(edge.stop_gradient for node in packed.invocations for edge in node.imports)==2
-
-
-def test_existing_row_and_source_hash_bytes_unchanged_without_explicit_stop():
-    import hashlib,json
-    from natlang_neuralese.data.native_graph_schema import NativeGraphExample
-    from natlang_neuralese.data.native_sources import _row_bindings
-    from natlang_neuralese.train.native_state_sft import _source_hash
-    plan=stopped_plan(False)
-    example=NativeGraphExample('legacy','train',('protected-source',),'fixture',plan,(0.,)*plan.token_count)
-    # Frozen pre-stop serialization contract: notably logical=False WAS present,
-    # while stop_gradient did not exist. Verify exact bytes, not approximate IDs.
-    nodes=[{'name':node.name,'token_ids':node.token_ids,
-        'imports':[{'at':edge.at,'source':edge.source,'start':edge.start,'stop':edge.stop,
-                    'logical':edge.logical} for edge in node.imports],
-        'producing':node.producing,'logical_producing':node.logical_producing} for node in plan.invocations]
-    old={'id':example.id,'groups':example.source_groups,'split':example.split,
-         'tokenizer':example.tokenizer_fingerprint,'targets':example.target_weights,'nodes':nodes}
-    encoded=json.dumps(old,sort_keys=True,separators=(',',':')).encode()
-    assert _source_hash([example])==hashlib.sha256(len(encoded).to_bytes(8,'big')+encoded).hexdigest()
-    old.update(external_names=(),external_sizes=(),external_states={})
-    assert _row_bindings([example])[example.id]==hashlib.sha256(json.dumps(old,sort_keys=True,separators=(',',':')).encode()).hexdigest()
-    flagged=NativeGraphExample(example.id,example.split,example.source_groups,
-        example.tokenizer_fingerprint,stopped_plan(),example.target_weights)
-    assert _source_hash([flagged])!=_source_hash([example])
-    assert _row_bindings([flagged])!=_row_bindings([example])
 
 
 @pytest.mark.parametrize('family',['lfm'])

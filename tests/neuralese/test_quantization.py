@@ -157,27 +157,6 @@ def test_classify_names_the_module_groups_of_both_lines():
     assert q.classify('model.norm', nn.LayerNorm(2)) is None
 
 
-def test_install_routes_selected_weights_through_the_active_point_and_keeps_latents():
-    torch.manual_seed(3)
-    model = Tiny()
-    before = {n: p.detach().clone() for n, p in model.named_parameters()}
-    run = q.Quantization(component())
-    installed = run.install(model, layer_count=2)
-    assert installed == {'attention': 2, 'mlp': 2}  # conv/embeddings/heads not selected by any point
-    w1 = model.model.layers[0].feed_forward.w1
-    assert torch.equal(w1.weight, before['model.layers.0.feed_forward.w1.weight'])  # BF16 outside any point
-    with run.context('q4', 1.0):
-        assert torch.equal(w1.weight, q4_0(before['model.layers.0.feed_forward.w1.weight']))
-        assert torch.equal(model.model.layers[0].conv.in_proj.weight, before['model.layers.0.conv.in_proj.weight'])
-    with run.context('tern', 1.0):
-        assert torch.equal(model.model.layers[0].self_attn.q_proj.weight,
-                           before['model.layers.0.self_attn.q_proj.weight'])  # tern selects mlp only
-    # The latent is the same trainable parameter, saved and restored under its plain name.
-    from natlang_neuralese.train.backbone_policy import plain_named_tensors
-    plain = plain_named_tensors(model)
-    assert plain['model.layers.0.feed_forward.w1.weight'] is w1.parametrizations.weight.original
-
-
 def test_layer_selection_quantizes_only_the_chosen_layers(tmp_path):
     probe = tmp_path / 'probe.json'
     probe.write_text(json.dumps({'layers': {'0': 5.0, '1': 0.1}}))

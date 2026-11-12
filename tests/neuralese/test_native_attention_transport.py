@@ -42,29 +42,3 @@ def test_attention_mode_survives_real_three_step_service_updates_and_relocation(
     bad=manifests[-1].with_name('bad-attention.json');bad.write_text(json.dumps(value))
     with pytest.raises(ValueError,match='model configuration'):
         restore(str(bad),base=str(tmp_path/'relocated-base'))
-
-
-def test_async_restoration_checks_saved_attention_mode(tmp_path,monkeypatch):
-    import torch
-    from test_native_async_eval import fixture
-    from natlang_neuralese.model.native_precision import set_native_attention_precision
-    from natlang_neuralese.model.native_model import CHECKPOINT_SCHEMA,model_state
-    from natlang_neuralese.eval.native_async import seal_request,file_binding
-    from natlang_neuralese.eval import task_cadence
-    from natlang_neuralese import serve
-    base,model,checkpoint,spec,_=fixture(tmp_path)
-    config=torch.load(checkpoint,weights_only=False)['model_config']
-    set_native_attention_precision(model,'tf32x3');config['native_attention_precision']='tf32x3'
-    torch.save({'schema':CHECKPOINT_SCHEMA,'step':7,'model_config':config,**model_state(model)},checkpoint)
-    sealed=seal_request(checkpoint,identity=file_binding(checkpoint),step=7,spec=spec,
-        out=tmp_path/'eval',base=base,queue=tmp_path/'queue',device='cpu')
-    directory=Path(sealed['request']);request=json.loads((directory/'request.json').read_text())
-    request['dir']=str(directory)
-    engine=task_cadence.restore_engine(request)
-    try:
-        assert engine.model_config['native_attention_precision']=='tf32x3'
-        engine.model_config['native_attention_precision']='ieee'
-        monkeypatch.setattr(serve,'load_native_engine',lambda *args,**kwargs:engine)
-        with pytest.raises(ValueError,match='model contract changed: native_attention_precision'):
-            task_cadence.restore_engine(request)
-    finally:engine.stop()

@@ -52,20 +52,6 @@ def test_attention_mode_preserves_legacy_identity_and_restores_explicit_checkpoi
         load_native_checkpoint(path)
 
 
-@pytest.mark.parametrize('kind',['native_state_sft','native_offline_preference','native_state_rl'])
-def test_recipe_declares_and_validates_attention_arithmetic(kind,tmp_path):
-    from natlang_neuralese.train.recipe import HANDLERS, validate_stage_parameters,native_stage_parameter_handoffs
-    assert 'native_attention_precision' in HANDLERS[kind]['parameters']
-    validate_stage_parameters(kind,{'native_attention_precision':'tf32x3'})
-    validate_stage_parameters(kind,{'native_attention_precision':'tf32'})
-    with pytest.raises(ValueError,match='attention precision'):
-        validate_stage_parameters(kind,{'native_attention_precision':'bf16'})
-    before={'stages':[{'id':'native','kind':kind,'parameters':{'native_attention_precision':'ieee'}}]}
-    after=copy.deepcopy(before);after['stages'][0]['parameters']['native_attention_precision']='tf32x3'
-    changes,_,_=native_stage_parameter_handoffs(before,after,tmp_path)
-    assert changes['native']['native_attention_precision']==['ieee','tf32x3']
-
-
 @pytest.mark.skipif(not torch.cuda.is_available(),reason='actual native CUDA attention')
 @pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('dtype',[torch.float32,torch.bfloat16])
@@ -121,24 +107,6 @@ def test_real_both_port_graph_cached_adjoints_and_incremental_serving(family,dty
         torch.testing.assert_close(torch.cat(chunks,dim=1),expected,atol=5e-6,rtol=2e-5)
 
 
-def test_attention_transition_rejects_without_tolerances_and_restores_failed_rng(monkeypatch):
-    from natlang_neuralese.train.native_state_sft import qualify_precision_transition
-    from natlang_neuralese.eval import native_attention_transition
-    kwargs=dict(previous_precision='ieee',previous_attention_precision='ieee',
-        checkpoint_sha256='a'*64,device='cpu')
-    config={'native_linear_precision':'ieee','native_attention_precision':'tf32x3'}
-    with pytest.raises(ValueError,match='declared forward and gradient tolerances'):
-        qualify_precision_transition(None,None,None,config,forward_atol=None,gradient_atol=None,**kwargs)
-    rng=torch.get_rng_state().clone()
-    def failed(*args,**kwargs):
-        torch.rand(19)
-        return {'passed':False,'candidate_cached_reference':{'passed':False}}
-    monkeypatch.setattr(native_attention_transition,'qualify_attention_transition',failed)
-    with pytest.raises(ValueError,match='unchanged cached-reference'):
-        qualify_precision_transition(None,None,None,config,forward_atol=1e-4,gradient_atol=1e-5,optimizer=object(),**kwargs)
-    assert torch.equal(torch.get_rng_state(),rng)
-
-
 @pytest.mark.skipif(not torch.cuda.is_available(),reason='actual FP32 tensor-core attention')
 @pytest.mark.parametrize('width,amplitude',[(64,1.),(128,3.)])
 def test_actual_fp32_kernel_and_all_adjoints_match_fp64_oracle_and_cached_layout(monkeypatch,width,amplitude):
@@ -183,60 +151,6 @@ def test_actual_fp32_kernel_and_all_adjoints_match_fp64_oracle_and_cached_layout
         assert torch.equal(a,c)
         assert float((a.double()-b).norm()/b.norm())<3e-6
 
-
-@pytest.mark.skipif(not torch.cuda.is_available(),reason='real CUDA optimizer continuation')
-def test_actual_attention_transition_keeps_optimizer_rng_and_completed_exposure(tmp_path,monkeypatch):
-    import json
-    from test_native_model import tiny_source
-    from test_native_state_sft import graph
-    from test_native_optimizer_updates import equal_tree
-    from natlang_neuralese.model.native_model import load_native_model
-    from natlang_neuralese.train import native_state_sft as trainer
-    base=tmp_path/'base';tiny_source(base)
-    _,_,_,config=load_native_model(base,dtype=torch.float32,rank=4)
-    paths={}
-    for split in ('train','test'):
-        paths[split]=tmp_path/(split+'.jsonl')
-        paths[split].write_text(json.dumps({**graph(split),'split':split,
-            'tokenizer_fingerprint':config['tokenizer_fingerprint']})+'\n')
-    out=tmp_path/'run'
-    argv=['--base',str(base),'--dtype','float32','--rank','4','--device','cuda',
-        '--native-graphs',str(paths['train']),'--held-native-graphs',str(paths['test']),
-        '--epochs','3','--eval-every','100','--out',str(out),
-        '--forward-atol','1e-4','--gradient-atol','1e-5']
-    def stop(policy,step,**kwargs):policy.stop.requested=True;return False
-    monkeypatch.setattr(trainer.CheckpointPolicy,'due',stop)
-    assert trainer.main(argv)==0
-    before=torch.load(out/'checkpoint.pt',weights_only=False,map_location='cpu')
-    loads=[];rngs=[]
-    make,restore=trainer.make_native_optimizer,trainer.restore_training_rng_state
-    def observed_make(*args,**kwargs):
-        optimizer,named=make(*args,**kwargs)
-        original=optimizer.load_state_dict
-        def observed_load(state,**options):
-            loads.append(copy.deepcopy(state));return original(state,**options)
-        optimizer.load_state_dict=observed_load
-        return optimizer,named
-    def observed_rng(state,*args):
-        rngs.append(copy.deepcopy(state));return restore(state,*args)
-    monkeypatch.setattr(trainer,'make_native_optimizer',observed_make)
-    monkeypatch.setattr(trainer,'restore_training_rng_state',observed_rng)
-    assert trainer.main(argv+['--native-attention-precision','tf32x3'])==0
-    after=torch.load(out/'checkpoint.pt',weights_only=False,map_location='cpu')
-    assert len(loads)==1
-    equal_tree(loads[0],before['training']['optimizer'])
-    assert len(rngs)==2
-    equal_tree(rngs[0],before['training']['rng']);equal_tree(rngs[1],rngs[0])
-    assert before['training']['exposure_counts']=={'train':1}
-    assert after['training']['exposure_counts']=={'train':2}
-    assert after['training']['global_step']==2
-    assert after['model_config']['native_attention_precision']=='tf32x3'
-    assert after['interface_state']['native_attention_precision']=='tf32x3'
-    event=after['training']['options']['native_attention_precision_history'][-1]
-    assert event['from']=='ieee' and event['to']=='tf32x3' and event['at_global_step']==1
-    assert event['reference_check']['passed']
-    assert any(not torch.equal(value,after['backbone_state'][name])
-               for name,value in before['backbone_state'].items())
 
 # Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
 pytestmark = pytest.mark.usefixtures('per_batch_native_updates')

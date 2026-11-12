@@ -87,48 +87,6 @@ def test_in_backward_spike_clip_leaves_normal_updates_and_clips_latents_after_th
     assert math.isclose(float(armed.norm()), float(torch.stack([g.norm() for g in big]).norm()), rel_tol=1e-5)
 
 
-def test_isolated_sequence_and_batched_step_join_the_layer_staging_so_each_latent_steps_once():
-    """Formerly 'a latent received a second gradient': these passes ran their layers outside the tape."""
-    from natlang_neuralese.model.layer_staging import LayerStaging
-    from natlang_neuralese.model.lfm2_port import PortCache
-    from natlang_neuralese.serve.batch import step_rows
-    from test_isolated_sequence import tiny_lfm
-    import copy
-
-    def losses(backbone):
-        torch.manual_seed(3)
-        prefix, fixed, replacements = (torch.randn(1, n, 32) for n in (3, 4, 4))
-        cache = PortCache.empty(backbone.num_layers)
-        _, cache = backbone.run_layers(prefix, range(backbone.num_layers), cache)
-        out = backbone.isolated_sequence(fixed, replacements, cache, cutoff=2)
-        stepped, _ = step_rows(backbone, torch.randn(2, 1, 32), [PortCache.empty(backbone.num_layers)] * 2,
-                               range(backbone.num_layers))
-        return out['final'].square().mean() + out['history_shallow'].tanh().sum() * .1 + stepped.square().mean()
-
-    backbone = tiny_lfm()
-    reference = copy.deepcopy(backbone)
-    named = [(n, q) for n, q in backbone.hf.named_parameters() if n.startswith('model.layers.') and q.ndim >= 2]
-    for _, q in named:
-        q.requires_grad_(True)
-    for n, q in reference.hf.named_parameters():
-        q.requires_grad_(n.startswith('model.layers.') and q.ndim >= 2)
-    losses(reference).backward()
-    expected = {n: q.grad.clone() for n, q in reference.hf.named_parameters() if q.grad is not None}
-    optimizer = MuonSR([{'params': [q], 'lr': 0.0, 'name': n} for n, q in named if min(q.shape[-2:]) > 1], lr=0.0)
-    optimizer.step_in_backward(gated=True)
-    seen = {}
-    original = optimizer._update
-    optimizer._update = lambda p, group: (seen.__setitem__(group['name'], p.grad.detach().clone()), original(p, group))
-    with LayerStaging() as tape:
-        total = losses(backbone)
-        with optimizer.in_backward():
-            total.backward()
-            tape.backward()
-    assert seen and set(seen) <= set(expected)
-    for name, grad in seen.items():
-        torch.testing.assert_close(grad, expected[name], rtol=1e-4, atol=1e-6, msg=name)
-
-
 def test_latent_split_keeps_routers_vectors_and_narrow_matrices_out_of_muonsr():
     named = [('backbone.layers.0.self_attn.q_proj.weight', torch.zeros(32, 32)),
              ('backbone.layers.0.mlp.gate.weight', torch.zeros(8, 32)),
@@ -200,5 +158,3 @@ def test_the_named_restore_also_refuses_a_lionsr_latent_state_under_muonsr():
         restore_optimizer_state(muon, lion.state_dict(), named, saved_names=optimizer_param_names(lion, named))
     assert restore_optimizer_state(muon, lion.state_dict(), named, saved_names=optimizer_param_names(lion, named),
                                    fresh=True)['mode'] == 'fresh'
-
-

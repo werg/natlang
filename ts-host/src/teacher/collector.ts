@@ -1711,7 +1711,7 @@ export async function executeProgram(record: ProgramRecord, driver:(request: Mod
   const serviceAliases = (record.semantics as { service_aliases?: Record<string, ServiceAliasSpec> }).service_aliases;
   if (serviceAliases) bindServiceAliases(externalModules, serviceAliases, services, declarations);
   const worldSpec = (record.semantics as { world?: WorldSpec }).world;
-  const world = worldSpec ? await WorldBridge.open(worldSpec, options.runId) : undefined;
+  const world = worldSpec ? await WorldBridge.open(worldSpec) : undefined;
   if (world) { services[world.serviceName] = world.service(); declarations[world.serviceName] = world.declarationFor(worldSpec!.kind); }
   if (options.neuraleseService) {
     if (Object.hasOwn(services, 'neuralese')) throw new Error('text Neuralese emulation owns the neuralese service name');

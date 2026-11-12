@@ -12,8 +12,8 @@ import pytest
 import torch
 
 from natlang_neuralese.common.sampling import behavior_top_k_declaration, encode_top_k
-from natlang_neuralese.rl.jolt import DEFAULT_JOLT, jolt_declaration, privileged_source, root_calls
-from natlang_neuralese.rl.policy_math import default_policy_loss, policy_loss_declaration
+from natlang_neuralese.rl.jolt import privileged_source, root_calls
+from natlang_neuralese.rl.policy_math import policy_loss_declaration
 from natlang_neuralese.common.custody import ProtectedWorlds
 from test_jolt_privileged_context import (CONSUMERS, TEMPERATURE, WRITERS, custody, insertion_blocks, load,
                                           protected_case, rendering, run_episode, train_case)
@@ -79,22 +79,6 @@ def forward(model, graph, identity):
     example = parse_graph(graph, tokenizer_fingerprint=identity['tokenizer_fingerprint'])
     context = {'examples': [example], 'row_offsets': {example.id: {'physical_start': 0, 'external_names': {}}}}
     return example, context, model(example.plan, retain_states=False)
-
-
-def test_declarations_default_to_jolt_plus_and_keep_explicit_opt_outs():
-    assert default_policy_loss() == jolt_declaration(DEFAULT_JOLT)
-    assert default_policy_loss()['outcome']['schema'] == 'score-centered/1'
-    assert policy_loss_declaration({'schema': 'clipped-ratio/1'}) == {'schema': 'clipped-ratio/1'}
-    assert policy_loss_declaration({'schema': 'jolt-plus/1', 'beta_s': 2})['beta_s'] == 2.
-    for bad in ({'schema': 'jolt-plus/1', 'beta_t': -1}, {'schema': 'jolt-plus/1', 'gamma': 1},
-                {'schema': 'jolt-plus/1', 'outcome': {'schema': 'clipped-ratio/1'}},
-                {'schema': 'clipped-ratio/1', 'clip_low': .1}):
-        with pytest.raises(ValueError):
-            policy_loss_declaration(bad)
-    from natlang_neuralese.rl.production import bind_policy_loss
-    with pytest.raises(ValueError, match='jolt-cases'):
-        bind_policy_loss({'policy_loss': default_policy_loss(), 'learner_command': ['{rl_policy_loss}']}, {})
-
 
 
 @pytest.mark.parametrize('family,mode', [('lfm', 'write-only'), ('lfm', 'text-twin')])
@@ -549,25 +533,6 @@ def test_episode_guidance_check_accepts_student_text_twin_and_rejects_imported_g
     assert check_episode_guidance({'jolt_role': 'teacher'}, imported) == 'teacher'
 
 
-def test_backbone_student_and_teacher_use_verified_text_guidance(tmp_path):
-    from natlang_neuralese.rl.production import guidance_collection_options
-    from natlang_neuralese.rl.jolt import student_guidance,teacher_entries
-    from natlang_neuralese.rl.task_rollouts import build_queue
-    case=train_case();cases=tmp_path/'cases.jsonl';cases.write_text(json.dumps(case)+'\n')
-    config=tmp_path/'controls.json';config.write_text(json.dumps({'x_natlang_rl_capture':True}))
-    entries=build_queue(cases,1,2,tmp_path,temperature=1.,case_seconds=60,max_model_requests=16,max_turns=16,seed_base=1)
-    options=guidance_collection_options('backbone')
-    student_guidance(entries,ids=[case['id']],cases=cases,config=config,out=tmp_path,custody=custody(),**options)
-    for item in entries:
-        g=json.loads(open(item['chat_request_config']).read())['x_natlang_guidance']
-        assert g['role']=='student' and g['writer']=='off' and g['selection']=='crisp'
-    rows=[{'task_id':case['id'],'group':0,'sample':i,'reward':{'quality':0.}} for i in range(2)]
-    teachers=teacher_entries(entries,rows,cases=cases,config=config,out=tmp_path,attempts=1,seed_base=1,custody=custody(),**options)
-    g=json.loads(open(teachers['entries'][0]['chat_request_config']).read())['x_natlang_guidance']
-    assert g['role']=='teacher' and g['writer']=='off' and g['selection']=='crisp'
-    assert guidance_collection_options(None)=={}, 'general guidance keeps its native-writer default'
-
-
 def test_zero_student_coefficient_builds_no_student_twin():
     """With beta_s 0 a student twin carries no term; building it doubled the episode's forward tokens (2026-11-09)."""
     model, roles, identity = load('lfm')
@@ -579,28 +544,3 @@ def test_zero_student_coefficient_builds_no_student_twin():
         assert row['jolt']['privileged'] is None and 'beta_s is 0' in row['jolt']['refusal']
         assert {n['name'] for n in graph['nodes']} == set(row['episode_turns'])
         assert all('twin_query' not in action for action in row['actions'])
-
-
-def test_student_episode_of_only_guidance_policy_turns_is_omitted_with_a_recorded_reason():
-    """w5 round 1 (2026-11-10): a budget-exhausted student whose kept turns were all the in-run guidance policy
-    (selectGuidanceFacts) had an empty ``actions`` row, which crashed the learner batch. It carries no loss term, so
-    admission omits that complete episode and records why; the other member of its group still trains."""
-    from natlang_neuralese.rl.native_stage import skip_zero_signal_jolt
-    model, roles, identity = load('lfm')
-    episode = episode_with_top_k(model, roles, identity)
-    rows = rollouts(episode.turns)
-    for turn in rows[1]['turns']:
-        turn['sampling']['guidance_policy'] = {'selection': 'model', 'writer': 'off'}
-        turn['sampling'].pop('privileged', None)  # a guidance-policy turn is sampled without guidance itself
-    declaration = {**DECLARATION, 'beta_s': 0.}
-    graphs, spec = prepare(rows, episode, roles, identity, declaration=declaration)
-    empty = [key for key, row in spec['rows'].items() if not row['actions'] and not row.get('decision_actions')]
-    assert len(spec['rows']) == 2 and len(empty) == 1
-    assert spec['rows'][empty[0]]['jolt']['policy_turns'] == sorted(spec['rows'][empty[0]]['episode_turns'])
-    kept, projected, receipt = skip_zero_signal_jolt(graphs, spec)
-    assert receipt['omitted_graph_ids'] == empty and [g['id'] for g in kept] == [g['id'] for g in graphs if g['id'] not in empty]
-    assert set(projected['rows']) == set(spec['rows']) - set(empty)
-    record, = receipt['omitted_without_sampled_actions']
-    assert record['graph_id'] == empty[0] and record['sample'] == 1 and record['policy_turns']
-    assert 'no sampled action' in receipt['reason'] and receipt['omitted_graph_visits'] == 0
-    assert all(row['actions'] for row in projected['rows'].values())

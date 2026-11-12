@@ -5,7 +5,7 @@ import torch
 from torch import nn
 
 from natlang_neuralese.model.hf_port import QwenPortBackbone
-from natlang_neuralese.model.lfm2_port import ControlTokens, DeltaState, PortCache
+from natlang_neuralese.model.lfm2_port import ControlTokens, PortCache
 from natlang_neuralese.model.native_graph_plan import ImportSpan, Invocation, compile_graph
 from natlang_neuralese.model.native_model import SharedStateModel
 from natlang_neuralese.model.shared_state import forward_graph, forward_reference, native_step, splice_block
@@ -376,7 +376,7 @@ def test_qwen35_generic_sft_and_rl_objectives_train_importing_graph(tmp_path):
     import json
     from natlang_neuralese.data.native_graph import SCHEMA, parse_graph
     from natlang_neuralese.rl.native_replay import NativePolicyObjective, graph_identity
-    from natlang_neuralese.train.native_state_sft import packed_graph_loss
+    from natlang_neuralese.train.native_graph_loss import packed_graph_loss
 
     torch.manual_seed(41)
     raw = {'schema': SCHEMA, 'id': 'qwen35-sft-rl', 'split': 'train',
@@ -416,92 +416,6 @@ def test_qwen35_generic_sft_and_rl_objectives_train_importing_graph(tmp_path):
     assert rl_port.embedding_weight.grad[[4, 5, 6]].abs().sum() > 0
 
 
-def test_qwen35_native_optimizer_updates_nested_text_layer_from_import_graph():
-    from natlang_neuralese.data.native_graph import SCHEMA, parse_graph
-    from natlang_neuralese.train.native_state_sft import make_native_optimizer, packed_graph_loss
-
-    torch.manual_seed(42)
-    port = tiny_port()
-    model = SharedStateModel(port, (60, 61, 62, 63), rank=4)
-    optimizer, named = make_native_optimizer(model, lr=1e-3, weight_decay=0., in_backward=False)
-    names = {name for name, _ in named}
-    assert names and any(name.startswith('backbone.model.language_model.layers.') for name in names)
-    assert not any('.visual.' in name for name in names)
-    assert any(name.endswith('layers.1.linear_attn.in_proj_qkv.weight') for name in names)
-    assert all(not parameter.requires_grad for name, parameter in port.hf.named_parameters()
-               if name.startswith('model.visual.'))
-
-    raw = {'schema': SCHEMA, 'id': 'qwen35-real-optimizer', 'split': 'train',
-        'source_groups': ['qwen35-optimizer-contract'], 'tokenizer_fingerprint': '1' * 64,
-        'nodes': [
-            {'name': 'producer', 'token_ids': [4, 5, 6], 'producing': [[0, 3]],
-             'target_weights': [0., 0., 0.]},
-            {'name': 'consumer', 'token_ids': [8, 9, 10, 11], 'target_weights': [0., 1., 0., 1.],
-             'imports': [{'at': 2, 'source': 'producer', 'start': 0, 'stop': 3}]}]}
-    example = parse_graph(raw, tokenizer_fingerprint='1' * 64)
-    target = port.layers[1].linear_attn.in_proj_qkv.weight
-    before = target.detach().clone()
-    loss, _ = packed_graph_loss(model, [example], checkpoint_layers=False)
-    loss.backward()
-    assert target.grad is not None and torch.isfinite(target.grad).all() and target.grad.abs().sum() > 0
-    optimizer.step()
-    assert not torch.equal(before, target)
-
-
-def test_qwen35_default_optimizer_updates_delta_controls_at_training_learning_rate():
-    from natlang_neuralese.data.native_graph import SCHEMA, parse_graph
-    from natlang_neuralese.model.native_model import model_state, restore_model_state
-    from natlang_neuralese.model.native_parameter_precision import (
-        QWEN35_DELTA_PROFILE, configure_norm_precision)
-    from natlang_neuralese.train.native_state_sft import make_native_optimizer, packed_graph_loss
-
-    torch.manual_seed(43)
-    port = tiny_port()
-    port.hf.to(dtype=torch.bfloat16)
-    model = SharedStateModel(port, (60, 61, 62, 63), rank=4)
-    configure_norm_precision(model, QWEN35_DELTA_PROFILE)
-    optimizer, _ = make_native_optimizer(model, lr=3e-6, weight_decay=.1, in_backward=False)
-    delta = port.layers[1].linear_attn
-    controls = (delta.A_log, delta.dt_bias)
-    before = tuple(parameter.detach().clone() for parameter in controls)
-    assert all(parameter.dtype == torch.float32 for parameter in controls)
-
-    raw = {'schema': SCHEMA, 'id': 'qwen35-delta-controls-lr', 'split': 'train',
-        'source_groups': ['qwen35-delta-control-update'], 'tokenizer_fingerprint': '1' * 64,
-        'nodes': [
-            {'name': 'producer', 'token_ids': [4, 5, 6], 'producing': [[0, 3]],
-             'target_weights': [0., 0., 0.]},
-            {'name': 'consumer', 'token_ids': [8, 9, 10, 11], 'target_weights': [0., 1., 0., 1.],
-             'imports': [{'at': 2, 'source': 'producer', 'start': 0, 'stop': 3}]}]}
-    example = parse_graph(raw, tokenizer_fingerprint='1' * 64)
-    loss, _ = packed_graph_loss(model, [example], checkpoint_layers=False)
-    loss.backward()
-    assert all(parameter.grad is not None and torch.isfinite(parameter.grad).all()
-               for parameter in controls)
-    optimizer.step()
-    updates = tuple({'changed': not torch.equal(parameter, old),
-        'gradient': parameter.grad.detach().float().tolist(),
-        'delta': (parameter.detach().float() - old.float()).tolist()}
-        for parameter, old in zip(controls, before))
-    assert all(item['changed'] for item in updates), updates
-
-    saved = model_state(model)
-    saved_optimizer = optimizer.state_dict()
-    restored_port = tiny_port()
-    restored_port.hf.to(dtype=torch.bfloat16)
-    restored = SharedStateModel(restored_port, (60, 61, 62, 63), rank=4)
-    configure_norm_precision(restored, QWEN35_DELTA_PROFILE)
-    restore_model_state(restored, saved)
-    restored_optimizer, _ = make_native_optimizer(restored, lr=3e-6, weight_decay=.1, in_backward=False)
-    restored_optimizer.load_state_dict(saved_optimizer)
-    restored_controls = (restored_port.layers[1].linear_attn.A_log,
-                         restored_port.layers[1].linear_attn.dt_bias)
-    assert all(torch.equal(parameter, old) for parameter, old in zip(restored_controls, controls))
-    assert all(torch.equal(restored_optimizer.auxiliary.state[parameter]['exp_avg'],
-                           optimizer.auxiliary.state[source]['exp_avg'])
-               for parameter, source in zip(restored_controls, controls))
-
-
 def test_qwen35_raw_policy_precision_inventory_rejects_bf16_delta_controls():
     from types import SimpleNamespace
     import pytest
@@ -523,92 +437,6 @@ def test_qwen35_raw_policy_precision_inventory_rejects_bf16_delta_controls():
         bad_state, QWEN35_DELTA_PROFILE)
     with pytest.raises(ValueError, match='storage'):
         validate_norm_precision(proxy, config)
-
-
-def test_qwen35_lora_injection_covers_nested_hybrid_layers():
-    from natlang_neuralese.train.adapters import (
-        adapter_layer_indices, adapter_layers, inject_lora, lora_state, lora_target_names, restore_lora_checkpoint,
-    )
-
-    port = tiny_port()
-    targets = lora_target_names(port, [0, 1])
-    assert 'model.language_model.layers.0.self_attn.q_proj' in targets
-    assert 'model.language_model.layers.0.self_attn.o_proj' in targets
-    assert 'model.language_model.layers.0.self_attn.out_proj' not in targets
-    assert 'model.language_model.layers.1.linear_attn.in_proj_qkv' in targets
-    assert 'model.language_model.layers.1.mlp.gate_proj' in targets
-    inject_lora(port, [0, 1], rank=2, alpha=4)
-    assert adapter_layers(port) == [0, 1]
-    saved = lora_state(port)
-    assert any('model.language_model.layers.1.linear_attn.in_proj_qkv.lora_A' in name for name in saved)
-    assert not any('.visual.' in name for name in saved)
-    assert adapter_layer_indices(saved) == [0, 1]
-
-    checkpoint = {'lora': saved, 'lora_layers': [0, 1], 'lora_rank': 2}
-    restored_port = tiny_port()
-    receipt = restore_lora_checkpoint(restored_port, checkpoint, alpha=4)
-    assert receipt == {'layers': [0, 1], 'rank': 2, 'tensor_count': len(saved)}
-    for name, value in saved.items():
-        assert torch.equal(lora_state(restored_port)[name], value)
-
-    # The native port calls the same HF modules, so adapted projections must be
-    # visible on its real forward path and expose a gradient to the adapter.
-    restored_port.hf.zero_grad(set_to_none=True)
-    output = restored_port.forward_ids(torch.tensor([[4, 5, 6]]), logits=False)['h_final']
-    output.square().mean().backward()
-    exposed = [parameter for name, parameter in restored_port.hf.named_parameters()
-               if '.lora_' in name and parameter.requires_grad]
-    assert exposed and any(parameter.grad is not None and parameter.grad.abs().sum() > 0
-                           for parameter in exposed)
-
-
-def test_qwen35_batched_prefill_incremental_cache_and_ragged_padding():
-    from natlang_neuralese.serve.batch import split_rows
-
-    torch.manual_seed(43)
-    port = tiny_port()
-    ids = torch.tensor([[4, 5, 6], [8, 9, 10]])
-    batched_prefill = port.forward_ids(ids, logits=False)
-    output, batch_cache = batched_prefill['h_final'], batched_prefill['cache']
-    for row in range(2):
-        single = port.forward_ids(ids[row:row + 1], logits=False)
-        torch.testing.assert_close(output[row:row + 1], single['h_final'], atol=3e-6, rtol=3e-6)
-        for actual, expected in zip(batch_cache.states, single['cache'].states):
-            if isinstance(actual, DeltaState):
-                torch.testing.assert_close(actual.conv[row:row + 1], expected.conv)
-                torch.testing.assert_close(actual.recurrent[row:row + 1], expected.recurrent)
-            else:
-                torch.testing.assert_close(actual.k[row:row + 1], expected.k)
-                torch.testing.assert_close(actual.v[row:row + 1], expected.v)
-
-    selected = batch_cache.select([1, 0])
-    assert selected.states[1].recurrent.shape[0] == 2
-    repeated = batch_cache.select([0]).repeat_interleave(2)
-    torch.testing.assert_close(repeated.states[1].recurrent[0], repeated.states[1].recurrent[1])
-    next_ids = torch.tensor([[7], [11]])
-    next_batched = port.forward_ids(next_ids, cache=batch_cache, logits=False)
-    for row in range(2):
-        prior = port.forward_ids(ids[row:row + 1], logits=False)['cache']
-        expected = port.forward_ids(next_ids[row:row + 1], cache=prior, logits=False)
-        torch.testing.assert_close(next_batched['h_final'][row:row + 1], expected['h_final'],
-                                   atol=3e-6, rtol=3e-6)
-
-    padded_ids = torch.tensor([[0, 4, 5], [8, 9, 10]])
-    pad = torch.tensor([1, 0])
-    padded = port.forward_ids(padded_ids, left_pad=pad, logits=False)
-    split = split_rows(padded['cache'], pad)
-    for row, real_ids in enumerate((torch.tensor([[4, 5]]), torch.tensor([[8, 9, 10]]))):
-        expected = port.forward_ids(real_ids, logits=False)
-        real_start = int(pad[row])
-        torch.testing.assert_close(padded['h_final'][row:row + 1, real_start:], expected['h_final'],
-                                   atol=3e-6, rtol=3e-6)
-        for actual, target in zip(split[row].states, expected['cache'].states):
-            if isinstance(actual, DeltaState):
-                torch.testing.assert_close(actual.conv, target.conv)
-                torch.testing.assert_close(actual.recurrent, target.recurrent)
-            else:
-                torch.testing.assert_close(actual.k, target.k)
-                torch.testing.assert_close(actual.v, target.v)
 
 
 def test_qwen35_kernel_one_convolution_tail_and_incremental_decode():

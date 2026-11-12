@@ -44,12 +44,6 @@ def test_no_fake_file_hash(tmp_path):
     assert len(v['policy_sha256']) == 64
 
 
-def test_actual_protection_module_has_resolved_identity():
-    from pathlib import Path
-    source = Path(__file__).resolve().parents[1] / 'scripts/neuralese_data/build_verified_teacher_trajectory_graphs.py'
-    assert len(raw_protection_policy(source)['policy_sha256']) == 64
-
-
 def test_module_alias_mutation_cannot_change_value_under_same_identity(tmp_path):
     base = '''CFG = {}
 def file_rows(path): return CFG

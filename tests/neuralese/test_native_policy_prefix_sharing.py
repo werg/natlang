@@ -16,7 +16,7 @@ from natlang_neuralese.common.sampling import behavior_top_k_declaration, encode
 from natlang_neuralese.data.native_graph import parse_graph
 from natlang_neuralese.model.native_graph_plan import Invocation, compile_graph
 from natlang_neuralese.model.shared_state import SharedStateModel
-from natlang_neuralese.train.native_state_sft import packed_graph_loss
+from natlang_neuralese.train.native_graph_loss import packed_graph_loss
 from test_shared_state import tiny
 
 K = 8

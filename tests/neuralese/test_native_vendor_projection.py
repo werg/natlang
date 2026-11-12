@@ -79,20 +79,6 @@ def test_precision_binding_records_vendor_only(projection, monkeypatch):
         configure_native_precision()
 
 
-@pytest.mark.parametrize('facts,expected', [
-    ({'name': 'NVIDIA H100 80GB HBM3', 'capability': [9, 0], 'memory_gb': 79.6, 'integrated': False}, 'vendor'),
-    ({'name': 'NVIDIA GB10', 'capability': [12, 1], 'memory_gb': None, 'integrated': True}, 'invariant'),
-    (None, 'invariant')])
-def test_learner_default_is_vendor_on_discrete_gpus_and_declared_wins(facts, expected, monkeypatch):
-    from natlang_neuralese.train import hardware_profile, native_state_sft
-    monkeypatch.setenv('NATLANG_PROJECTION_ARITHMETIC', 'invariant')  # record for restoration, then remove
-    monkeypatch.delenv('NATLANG_PROJECTION_ARITHMETIC')
-    monkeypatch.setattr(hardware_profile, 'detect', lambda **kwargs: facts)
-    assert native_state_sft.resolve_training_projection_arithmetic()['mode'] == expected
-    monkeypatch.setenv('NATLANG_PROJECTION_ARITHMETIC', 'invariant')
-    assert native_state_sft.resolve_training_projection_arithmetic() == {'mode': 'invariant', 'source': 'declared'}
-
-
 def test_vendor_self_check_passes_on_device_and_rejects_wrong_rounding(monkeypatch):
     if not torch.cuda.is_available():
         pytest.skip('CUDA unavailable')

@@ -539,17 +539,6 @@ def test_guidance_reads_xml_calls(tokenizer):
     assert Guide(Settings(call_format='xml', require_call=True)).check('plan</think><tool') is None
 
 
-def test_generation_checks_lfm3_convention():
-    from natlang_neuralese.eval.generation_checks import check
-    probe = {'output_convention': 'lfm3', 'enable_thinking': True, 'kind': 'tool', 'tools': EVAL_TOOLS,
-             'expected_tool': 'eval', 'check_argument_types': True}
-    good = 'r</think><tool_call>\n<function=eval>\n<parameter=code>\nreturn 1;\n</parameter>\n</function>\n</tool_call>'
-    result = check(probe, good, [1, 2], 2)
-    assert result['think'] and result['tool']
-    assert not check(probe, good.replace('<function=eval>', '<function=evil>'), [1, 2], 2)['tool']
-    assert not check({**probe, 'enable_thinking': False}, good, [1, 2], 2)['think']
-
-
 def test_scan_partial_and_malformed_calls():
     text = 'x<tool_call>\n<function=eval>\n<parameter=code>\nopen value'
     (call,) = scan_xml_calls(text)

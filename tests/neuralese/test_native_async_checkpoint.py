@@ -1,17 +1,14 @@
 import copy
 import errno
 import json
-import os
 import random
 import threading
 import time
-from pathlib import Path
 
 import pytest
 import torch
 
 from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
-from natlang_neuralese.train.trajectory_state import immutable_cpu_snapshot
 
 
 @pytest.fixture(autouse=True)
@@ -40,64 +37,6 @@ def _assert_tree_equal(actual, expected):
         for left,right in zip(actual,expected):_assert_tree_equal(left,right)
     else:
         assert actual==expected
-
-
-@pytest.mark.parametrize('family',['lfm'])
-def test_native_optimizer_update_proceeds_while_exact_full_snapshot_is_written(tmp_path,monkeypatch,family):
-    from test_shared_state import tiny
-    from natlang_neuralese.data.native_graph import SCHEMA,parse_graph
-    from natlang_neuralese.model.shared_state import SharedStateModel
-    from natlang_neuralese.train.native_state_sft import make_native_optimizer,native_training_update
-    from natlang_neuralese.train import trajectory_state
-
-    torch.manual_seed(1907)
-    port=tiny(family)
-    if family=='mellum':port.hf.natlang_precision='bf16'
-    model=SharedStateModel(port,(60,61,62,63),rank=4)
-    model.train()
-    optimizer,_=make_native_optimizer(model,lr=1e-4,weight_decay=0.)
-    example=parse_graph({'schema':SCHEMA,'id':'async-'+family,'split':'train','source_groups':['fixture'],
-        'tokenizer_fingerprint':'fixture','nodes':[{'name':'answer','token_ids':[4,5,6,7,8],
-        'target_weights':[0,1,1,1,1]}]},tokenizer_fingerprint='fixture')
-    native_training_update(model,optimizer,[example],checkpoint_layers=False,chunk_tokens=8)
-    original_exposure={'async-'+family:1}
-    state=_full_state(model,optimizer,1,original_exposure)
-    state['training']['options']={'nested':{'values':[17]}}
-    parameter=next(model.parameters()).detach()
-    state['alias_probe']=parameter
-    state['alias_probe_view']=parameter.reshape(-1)[::2]
-    expected=immutable_cpu_snapshot(state)
-    entered,release=threading.Event(),threading.Event()
-    real_write=trajectory_state.atomic_checkpoint
-    def held_write(path,value):
-        entered.set()
-        if not release.wait(10):raise TimeoutError('checkpoint test did not release writer')
-        return real_write(path,value)
-    monkeypatch.setattr(trajectory_state,'atomic_checkpoint',held_write)
-    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda **_: 1<<50)
-    policy=CheckpointPolicy(tmp_path,async_checkpoint=True)
-    event=policy.save(state,async_allowed=True,async_optimizer=optimizer)
-    assert event['async_pending'] and entered.wait(5)
-    state['training']['exposure_counts']['async-'+family]=99
-    state['training']['options']['nested']['values'][0]=99
-    before={name:value.detach().clone() for name,value in model.named_parameters()}
-    native_training_update(model,optimizer,[example],checkpoint_layers=False,chunk_tokens=8)
-    assert any(not torch.equal(before[name],value) for name,value in model.named_parameters())
-    original_exposure['async-'+family]=2
-    release.set()
-    policy.drain_async()
-    saved=torch.load(policy.slot,map_location='cpu',weights_only=False)
-    assert saved['step']==1
-    assert saved['training']['exposure_counts']=={'async-'+family:1}
-    assert saved['training']['options']['async_checkpoint_admission']['mode']=='background'
-    assert saved['training']['options']['nested']['values']==[17]
-    _assert_tree_equal(saved['training']['rng'],expected['training']['rng'])
-    for name,value in expected['model'].items():
-        assert torch.equal(saved['model'][name],value),name
-    assert (saved['alias_probe'].untyped_storage().data_ptr()
-            == saved['alias_probe_view'].untyped_storage().data_ptr())
-    _assert_tree_equal(saved['training']['optimizer'],expected['training']['optimizer'])
-    assert event['async_pending'] is False and event['committed'] is True
 
 
 def test_insufficient_memory_falls_back_to_synchronous_full_save(tmp_path,monkeypatch):
@@ -149,127 +88,6 @@ def test_async_admission_preserves_previous_slot_when_atomic_disk_headroom_is_sh
     assert refused.value.errno==errno.ENOSPC
     assert torch.load(policy.slot,weights_only=False)['step']==1
     assert not policy.async_pending
-
-
-def test_recipe_declares_async_checkpoint_as_operational_native_sft_control():
-    from natlang_neuralese.train.recipe import HANDLERS,OPERATIONAL_STAGE_PARAMETERS
-    assert 'async_checkpoint' in HANDLERS['native_state_sft']['parameters']
-    assert 'async_checkpoint' in OPERATIONAL_STAGE_PARAMETERS
-
-
-@pytest.mark.parametrize('explicit_refresh_updates', [None, 3])
-def test_native_trainer_drains_on_update_and_schedule_close_errors_without_saving_partial_update(tmp_path,monkeypatch,explicit_refresh_updates):
-    import json
-    from test_native_serve import _tiny_source
-    from natlang_neuralese.model.native_model import load_native_model
-    from natlang_neuralese.train import native_state_sft as trainer
-    from natlang_neuralese.train import trajectory_state
-
-    base=tmp_path/'base'
-    _tiny_source(base)
-    _,_,_,config=load_native_model(base,dtype=torch.float32,rank=4)
-    paths={}
-    for split in ('train','test'):
-        row={'schema':'natlang.neuralese-native-graph/1','id':split,'split':split,
-            'source_groups':[split],'tokenizer_fingerprint':config['tokenizer_fingerprint'],
-            'nodes':[{'name':'answer','token_ids':[1,2,3], 'target_weights':[0,1,1]}]}
-        paths[split]=tmp_path/f'{split}.jsonl'
-        paths[split].write_text(json.dumps(row)+'\n')
-    entered,release=threading.Event(),threading.Event()
-    writes=[]
-    real_write=trajectory_state.atomic_checkpoint
-    def held_write(path,state,**kwargs):
-        if Path(path).name=='.actor-view-snapshot.pt':
-            # Post-commit actor-view publication stages its own file from the
-            # committed save; it is not a training-checkpoint serialization.
-            return real_write(path,state,**kwargs)
-        writes.append(state['step'])
-        entered.set()
-        if not release.wait(10):raise TimeoutError('trainer exit test did not release async writer')
-        return real_write(path,state,**kwargs)
-    monkeypatch.setattr(trajectory_state,'atomic_checkpoint',held_write)
-    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda **_: 1<<50)
-    original_update=trainer.native_training_update
-    update_calls=[]
-    def fail_inside_second_update(*args,**kwargs):
-        update_calls.append(True)
-        if len(update_calls)==1:
-            return original_update(*args,**kwargs)
-        assert entered.wait(5)
-        release.set()
-        raise RuntimeError('deliberate partial optimizer-update failure')
-    monkeypatch.setattr(trainer,'native_training_update',fail_inside_second_update)
-    from natlang_neuralese.train import native_diversity
-    original_schedule=native_diversity.stream_windows
-    class CloseFailure:
-        def __init__(self,*args,**kwargs):self.iterator=original_schedule(*args,**kwargs)
-        def __iter__(self):return self
-        def __next__(self):return next(self.iterator)
-        def close(self):
-            self.iterator.close()
-            raise OSError('deliberate schedule close failure')
-    monkeypatch.setattr(native_diversity,'stream_windows',lambda *args,**kwargs:CloseFailure(*args,**kwargs))
-    drains=[]
-    original_drain=trainer.CheckpointPolicy.drain_async
-    def observed_drain(policy):
-        drains.append(True)
-        return original_drain(policy)
-    monkeypatch.setattr(trainer.CheckpointPolicy,'drain_async',observed_drain)
-    argv=['--base',str(base),'--dtype','float32','--rank','4','--device','cpu',
-        '--native-graphs',str(paths['train']),'--held-native-graphs',str(paths['test']),
-        '--epochs','3','--batch-tokens','16','--eval-every','1','--checkpoint-every','1','--task-eval-every','0',
-        '--async-checkpoint','--out',str(tmp_path/'run')]
-    if explicit_refresh_updates is not None:
-        argv += ['--refresh-at-checkpoint', '--refresh-after-updates', str(explicit_refresh_updates)]
-    with pytest.raises(RuntimeError,match='deliberate partial optimizer-update failure') as failure:
-        trainer.main(argv)
-    assert entered.is_set() and release.is_set() and drains
-    assert writes==[1]  # no recovery serialization of possibly-partial second update
-    assert any('schedule.close() also failed' in note for note in failure.value.__notes__)
-    assert any('potentially partial optimizer state was not checkpointed' in note
-               for note in failure.value.__notes__)
-    saved=torch.load(tmp_path/'run'/'checkpoint.pt',map_location='cpu',weights_only=False)
-    assert saved['step']==saved['training']['global_step']==1
-    assert saved['training']['exposure_counts']=={'train':1}
-
-
-def test_native_trainer_generic_safe_exception_still_saves_completed_update(tmp_path,monkeypatch):
-    import json
-    from test_native_serve import _tiny_source
-    from natlang_neuralese.model.native_model import load_native_model
-    from natlang_neuralese.train import native_state_sft as trainer
-
-    base=tmp_path/'base'
-    _tiny_source(base)
-    _,_,_,config=load_native_model(base,dtype=torch.float32,rank=4)
-    paths={}
-    for split in ('train','test'):
-        row={'schema':'natlang.neuralese-native-graph/1','id':split,'split':split,
-            'source_groups':[split],'tokenizer_fingerprint':config['tokenizer_fingerprint'],
-            'nodes':[{'name':'answer','token_ids':[1,2,3], 'target_weights':[0,1,1]}]}
-        paths[split]=tmp_path/f'{split}.jsonl'
-        paths[split].write_text(json.dumps(row)+'\n')
-
-    original_write=trainer.write_json
-    failure=OSError('unexpected progress telemetry failure')
-    writes=[]
-    def fail_progress(path,value):
-        if path.name=='progress.json':
-            writes.append(path)
-            raise failure
-        return original_write(path,value)
-    monkeypatch.setattr(trainer,'write_json',fail_progress)
-    out=tmp_path/'run'
-    argv=['--base',str(base),'--dtype','float32','--rank','4','--device','cpu',
-        '--native-graphs',str(paths['train']),'--held-native-graphs',str(paths['test']),
-        '--epochs','3','--eval-every','1','--checkpoint-every','3','--task-eval-every','0',
-        '--async-checkpoint','--out',str(out)]
-    with pytest.raises(OSError,match='unexpected progress telemetry failure') as caught:
-        trainer.main(argv)
-    assert caught.value is failure and len(writes)==1
-    saved=torch.load(out/'checkpoint.pt',map_location='cpu',weights_only=False)
-    assert saved['step']==saved['training']['global_step']==1
-    assert saved['training']['exposure_counts']=={'train':1}
 
 
 def test_failed_async_write_recovers_latest_state_before_returning(tmp_path,monkeypatch):
@@ -513,65 +331,3 @@ def test_low_disk_spare_falls_back_to_current_reserved_checkpoint(tmp_path,monke
     assert policy.slot.stat().st_ino==old_inode and torch.load(policy.slot,weights_only=False)['step']==1
     assert not policy.slot.with_name(policy.slot.name+'.alternate.reserved-pending').exists()
     policy.close()
-
-
-def test_scratch_reservation_drains_real_overlapping_checkpoint_to_free_space(tmp_path,monkeypatch):
-    from types import SimpleNamespace
-    from natlang_neuralese.train import trajectory_state, checkpoint_safety
-    from natlang_neuralese.train.native_state_sft import _reserve_checkpoint_scratch
-    from natlang_neuralese.common.checkpoint_file_storage import CheckpointFileStore
-    monkeypatch.setenv('NATLANG_CHECKPOINT_TRANSFER_HEADROOM_FACTOR','0')
-    monkeypatch.setenv('NATLANG_CHECKPOINT_MIN_FREE_BYTES','0')
-    entered,release=threading.Event(),threading.Event()
-    original=trajectory_state.atomic_checkpoint
-    def delayed(path,state,**kwargs):
-        entered.set();assert release.wait(10)
-        return original(path,state,**kwargs)
-    monkeypatch.setattr(trajectory_state,'atomic_checkpoint',delayed)
-    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda **_: 1<<50)
-    optimizer=torch.optim.AdamW([torch.nn.Parameter(torch.ones(2))])
-    state={'step':1,'training':{'optimizer':optimizer.state_dict(),'rng':{},'exposure_counts':{'row':1},'options':{}}}
-    policy=CheckpointPolicy(tmp_path,async_checkpoint=True)
-    with policy.slot.open('wb') as stream:
-        os.posix_fallocate(stream.fileno(),0,8*1024*1024)
-    old_inode=policy.slot.stat().st_ino
-    policy.reserve_next(state,optimizer)
-    event=policy.save(state,async_allowed=True,async_optimizer=optimizer)
-    assert event['async_pending'] and entered.wait(5)
-    store=CheckpointFileStore(tmp_path/'scratch',pin_memory=False)
-    # The old committed inode physically occupies 8 MiB until the delayed
-    # writer atomically replaces it. Model precisely that available-space edge.
-    def disk_usage(_):
-        return SimpleNamespace(free=(4 if policy.slot.stat().st_ino==old_inode else 12)*1024*1024)
-    monkeypatch.setattr(checkpoint_safety.shutil,'disk_usage',disk_usage)
-    drain=policy.drain_async
-    calls=[]
-    def release_and_drain():
-        calls.append(True);release.set();drain()
-    monkeypatch.setattr(policy,'drain_async',release_and_drain)
-    try:
-        assert _reserve_checkpoint_scratch(store,6*1024*1024,policy)==6*1024*1024
-        assert calls==[True] and policy.slot.stat().st_ino!=old_inode
-        assert store.snapshot()['arena_bytes']==6*1024*1024
-        assert torch.load(policy.slot,weights_only=False)['step']==1
-    finally:
-        release.set();store.release_arena();policy.close()
-
-
-def test_scratch_fallback_propagates_writer_failure_and_does_not_retry_other_errors():
-    from types import SimpleNamespace
-    from natlang_neuralese.train.native_state_sft import _reserve_checkpoint_scratch
-    from natlang_neuralese.train.checkpoint_safety import CheckpointSpaceUnavailable
-    attempts=[]
-    def full(_):attempts.append(1);raise CheckpointSpaceUnavailable('full')
-    def failed_writer():raise RuntimeError('writer failed')
-    with pytest.raises(RuntimeError,match='writer failed'):
-        _reserve_checkpoint_scratch(SimpleNamespace(reserve_arena=full),4,
-            SimpleNamespace(async_pending=True,drain_async=failed_writer))
-    assert attempts==[1]
-    with pytest.raises(CheckpointSpaceUnavailable):
-        _reserve_checkpoint_scratch(SimpleNamespace(reserve_arena=full),4,
-            SimpleNamespace(async_pending=False,drain_async=lambda:pytest.fail('unexpected drain')))
-    with pytest.raises(OSError,match='io'):
-        _reserve_checkpoint_scratch(SimpleNamespace(reserve_arena=lambda _:(_ for _ in ()).throw(OSError(errno.EIO,'io'))),4,
-            SimpleNamespace(async_pending=True,drain_async=lambda:pytest.fail('unexpected drain')))

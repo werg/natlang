@@ -351,7 +351,7 @@ def test_held_rows_get_objective_and_category_measurements_only():
 @pytest.mark.parametrize('family', ['lfm'])
 def test_trainer_loss_matches_objective_reference_with_category_telemetry_and_skips_empty_graphs(family):
     from natlang_neuralese.model.shared_state import SharedStateModel
-    from natlang_neuralese.train.native_state_sft import packed_graph_loss
+    from natlang_neuralese.train.native_graph_loss import packed_graph_loss
     from natlang_neuralese.train.native_supervision import apply_policy
     from test_shared_state import tiny
     model = SharedStateModel(tiny(family), marker_ids=(58, 59, 60, 61), rank=4)
@@ -487,19 +487,6 @@ def test_own_outputs_are_the_default_objective_and_continuations_adopt_them_with
     assert weighted.loss_scale == pytest.approx(1. / own.DEFAULT_TOKEN_REFERENCE)
 
 
-def test_ce_policy_builder_defaults_to_own_outputs_and_opts_out_explicitly(tmp_path):
-    from scripts.neuralese_data.build_native_ce_supervision_policy import main
-    prior = tmp_path / 'prior.json'
-    prior.write_text(json.dumps({'schema': 'natlang.native-ce-supervision-policy/1',
-                                 'sources': [{'sha256': 'a' * 64, 'encoding': 'ordinary-suffix-raw-v1',
-                                              'context_weight': .05}]}))
-    with pytest.raises(ValueError, match='objective-tokenizer'):
-        main(['--prior-policy', str(prior), '--objective-reasoning-share', '0.2', '--out', str(tmp_path / 'x.json')])
-    with pytest.raises(ValueError, match='contradict'):
-        main(['--prior-policy', str(prior), '--objective', 'declared-row-weights', '--objective-reasoning-share', '0.2',
-              '--out', str(tmp_path / 'y.json')])
-
-
 def test_token_mass_weights_follow_reply_tokens_and_keep_the_reasoning_share():
     ids = (turn(USER, [40] * 30) + turn(ASSISTANT, [41] * 3, reasoning=[42] * 50) + turn(TOOL, [43] * 20)
            + turn(ASSISTANT, [44] * 40))
@@ -537,7 +524,7 @@ def test_invocation_mass_keeps_its_identity_and_token_mass_is_a_declared_change(
 @pytest.mark.parametrize('family', ['lfm'])
 def test_trainer_token_mass_loss_is_the_scaled_sum_of_weighted_ce(family):
     from natlang_neuralese.model.shared_state import SharedStateModel
-    from natlang_neuralese.train.native_state_sft import packed_graph_loss
+    from natlang_neuralese.train.native_graph_loss import packed_graph_loss
     from natlang_neuralese.train.native_supervision import apply_policy
     from test_shared_state import tiny
     model = SharedStateModel(tiny(family), marker_ids=(58, 59, 60, 61), rank=4)

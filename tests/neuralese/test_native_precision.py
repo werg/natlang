@@ -85,41 +85,6 @@ def test_precision_checkpoint_exact_restore_and_identity(tmp_path):
     assert before != native_identity(model, strict_config, checkpoint_sha256='1'*64)
 
 
-def test_real_optimizer_continuation_records_base_relocation_and_keeps_stage_credits(tmp_path):
-    import hashlib
-    import json
-    import shutil
-    from test_native_model import tiny_source
-    from test_native_state_sft import graph
-    from natlang_neuralese.model.native_model import load_native_model
-    from natlang_neuralese.train import native_state_sft as trainer
-    base = tmp_path/'base'; tiny_source(base)
-    _, _, _, config = load_native_model(base, dtype=torch.float32, rank=4)
-    train, held = tmp_path/'train.jsonl', tmp_path/'held.jsonl'
-    train.write_text(json.dumps({**graph('train'), 'tokenizer_fingerprint': config['tokenizer_fingerprint']})+'\n')
-    held.write_text(json.dumps({**graph('held'), 'split': 'test', 'tokenizer_fingerprint': config['tokenizer_fingerprint']})+'\n')
-    argv = ['--base',str(base),'--dtype','float32','--rank','4','--device','cpu',
-        '--native-graphs',str(train),'--held-native-graphs',str(held),'--epochs','1',
-        '--eval-every','10','--checkpoint-every','0','--checkpoint-seconds','0',
-        '--out',str(tmp_path/'before'),'--stage-id','before']
-    assert trainer.main(argv) == 0
-    parent = tmp_path/'before/checkpoint.pt'
-    parent_hash = hashlib.sha256(parent.read_bytes()).hexdigest()
-    old = torch.load(parent, weights_only=False)['training']
-    moved = tmp_path/'moved'; shutil.copytree(base, moved)
-    continued = argv.copy()
-    continued[continued.index('--base')+1] = str(moved)
-    continued[continued.index('--out')+1] = str(tmp_path/'after')
-    continued[continued.index('--stage-id')+1] = 'after'
-    assert trainer.main(continued+['--continue-from',str(parent),'--objective-continuation']) == 0
-    new = torch.load(tmp_path/'after/checkpoint.pt', weights_only=False)['training']
-    assert new['global_step'] == old['global_step']+1
-    assert_state_equal(new['sft_progress']['before'], old['sft_progress']['before'])
-    assert new['sft_progress']['after']['exposure_counts'] == {'train': 1}
-    assert new['options']['base_relocation_history'][-1]['input_bytes'] == 'identical'
-    assert hashlib.sha256(parent.read_bytes()).hexdigest() == parent_hash
-
-
 @pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA native arithmetic')
 @pytest.mark.parametrize('mode', ['ieee', 'tf32', 'bf16', 'bf16x6'])
 def test_fixed_linear_modes_preserve_row_batching_and_master_gradient(mode):
@@ -209,94 +174,6 @@ def test_both_ports_flat_cached_consumer_gradients_under_selected_math(family, m
     torch.testing.assert_close(flat['h_final'], cached['h_final'], atol=5e-6, rtol=2e-5)
     torch.testing.assert_close(ga, gb, atol=3e-6, rtol=3e-4)
     assert torch.isfinite(ga).all() and ga.norm() > 0
-
-
-@pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA native arithmetic transition')
-def test_real_training_precision_transition_restores_optimizer_rng_and_row_credits(tmp_path, monkeypatch):
-    import json
-    from test_native_model import tiny_source
-    from test_native_state_sft import graph
-    from natlang_neuralese.model.native_model import load_native_model
-    from natlang_neuralese.train import native_state_sft as trainer
-    base = tmp_path/'base'; tiny_source(base)
-    _, _, _, config = load_native_model(base, dtype=torch.float32, rank=4)
-    files = {}
-    for split in ('train', 'test'):
-        files[split] = tmp_path/(split+'.jsonl')
-        files[split].write_text(json.dumps({**graph(split), 'split':split,
-            'tokenizer_fingerprint':config['tokenizer_fingerprint']})+'\n')
-    out = tmp_path/'run'
-    argv = ['--base',str(base),'--dtype','float32','--rank','4','--device','cuda',
-        '--native-graphs',str(files['train']),'--held-native-graphs',str(files['test']),
-        '--epochs','3','--eval-every','100','--out',str(out),
-        '--forward-atol','1e-4','--gradient-atol','1e-5']
-    def stop(policy, step, **kwargs): policy.stop.requested=True; return False
-    monkeypatch.setattr(trainer.CheckpointPolicy, 'due', stop)
-    assert trainer.main(argv) == 0
-    before = torch.load(out/'checkpoint.pt', weights_only=False)
-    # Saved diagnostic modes must not evade production argparse choices through
-    # an omitted option. Restoration is real, but no update may execute.
-    for diagnostic_mode in ('tf32x3',):
-        diagnostic = copy.deepcopy(before)
-        diagnostic['model_config']['native_linear_precision'] = diagnostic_mode
-        diagnostic['interface_state']['native_linear_precision'] = diagnostic_mode
-        diagnostic['training']['identity']['config']['native_linear_precision'] = diagnostic_mode
-        torch.save(diagnostic, out/'checkpoint.pt')
-        with pytest.raises(ValueError, match='explicitly transition'):
-            trainer.main(argv)
-    optimizer_loads, optimizer_load_options, rng_restores = [], [], []
-    actual_make, actual_restore = trainer.make_native_optimizer, trainer.restore_training_rng_state
-    def make(*args, **kwargs):
-        optimizer, named = actual_make(*args, **kwargs)
-        actual_load = optimizer.load_state_dict
-        def load(state, **load_options):
-            optimizer_loads.append(copy.deepcopy(state))
-            optimizer_load_options.append(copy.deepcopy(load_options))
-            return actual_load(state, **load_options)
-        optimizer.load_state_dict = load
-        return optimizer, named
-    def restore(state, *args): rng_restores.append(copy.deepcopy(state)); return actual_restore(state, *args)
-    monkeypatch.setattr(trainer, 'make_native_optimizer', make)
-    monkeypatch.setattr(trainer, 'restore_training_rng_state', restore)
-    assert trainer.main(argv+['--native-linear-precision','bf16x6']) == 0
-    after = torch.load(out/'checkpoint.pt', weights_only=False)
-    assert len(optimizer_loads) == 1 and len(rng_restores) == 2
-    def equal(left, right):
-        if torch.is_tensor(left): assert torch.equal(left.cpu(), right.cpu())
-        elif isinstance(left, dict):
-            assert left.keys() == right.keys()
-            for key in left: equal(left[key], right[key])
-        elif isinstance(left, (list, tuple)):
-            assert len(left) == len(right)
-            for a,b in zip(left,right): equal(a,b)
-        else: assert left == right
-    equal(optimizer_loads[0], before['training']['optimizer'])
-    assert optimizer_load_options == [{'native_optimizer_migration': None}]
-    equal(rng_restores[0], before['training']['rng'])
-    equal(rng_restores[1], rng_restores[0])
-    assert after['training']['options']['native_precision_transition']['reference_check']['runtime_reference']['passed']
-    assert before['training']['exposure_counts'] == {'train':1}
-    assert after['training']['exposure_counts'] == {'train':2}
-    assert after['training']['global_step'] == 2
-    assert after['model_config']['dtype'] == 'torch.float32'
-    assert after['model_config']['base_inventory_sha256'] == before['model_config']['base_inventory_sha256']
-    assert after['model_config']['native_linear_precision'] == 'bf16x6'
-    assert after['training']['options']['native_precision_transition']['from'] == 'tf32x3'
-
-
-def test_failed_destination_transition_restores_rng_before_rejecting(monkeypatch):
-    from natlang_neuralese.eval import native_state
-    from natlang_neuralese.train.native_state_sft import qualify_precision_transition
-    before = torch.random.get_rng_state().clone()
-    def failed(*args, **kwargs):
-        torch.rand(17)
-        return {'passed': False, 'forward_max_abs': .01}
-    monkeypatch.setattr(native_state, 'qualify_existing', failed)
-    with pytest.raises(ValueError, match='unchanged cached-reference'):
-        qualify_precision_transition(None, None, None, {'native_linear_precision': 'bf16x6'},
-            previous_precision='ieee', checkpoint_sha256='a'*64,
-            forward_atol=1e-4, gradient_atol=1e-5, device='cpu')
-    assert torch.equal(before, torch.random.get_rng_state())
 
 
 def test_production_stock_arithmetic_uses_tf32_tensor_cores(monkeypatch):

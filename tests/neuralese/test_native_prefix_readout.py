@@ -6,7 +6,7 @@ import torch
 
 from natlang_neuralese.model.shared_state import SharedStateModel
 from natlang_neuralese.train.native_prefix_packing import pack_causal_prefixes
-from natlang_neuralese.train.native_state_sft import packed_graph_loss
+from natlang_neuralese.train.native_graph_loss import packed_graph_loss
 from test_native_prefix_packing import examples
 from test_shared_state import tiny
 
@@ -61,43 +61,3 @@ def test_readout_reuse_remains_disabled_without_actual_shared_physical_rows():
     model = SharedStateModel(tiny('lfm'), (58, 59, 60, 61), rank=4)
     _, details = packed_graph_loss(model, examples(), share_causal_prefixes=False, collect_accuracy=False)
     assert details[0]['readout_forward_rows'] == details[0]['readout_original_rows']
-
-
-@pytest.mark.parametrize('family', ['lfm'])
-@pytest.mark.parametrize('dtype', [torch.float32, torch.bfloat16])
-def test_cuda_production_precision_preserves_each_derivative_and_bf16_rounding(family, dtype):
-    if not torch.cuda.is_available():
-        pytest.skip('CUDA unavailable')
-    from natlang_neuralese.model.native_parameter_precision import configure_norm_precision
-    from natlang_neuralese.model.native_precision import set_native_linear_precision
-    from natlang_neuralese.model.native_weight_carrier import ParameterCotangentScope
-    from natlang_neuralese.train.backbone_policy import configure_backbone_training
-    model = SharedStateModel(tiny(family).to(device='cuda', dtype=dtype),
-        (58,59,60,61), rank=4, native_norm_execution='stable-v1')
-    if family == 'mellum':
-        model.port.hf.natlang_precision = 'bf16'
-    configure_norm_precision(model, 'fp32-norms-v1')
-    set_native_linear_precision(model, 'bf16x6')
-    configure_backbone_training(model.port, 'latent')
-    with torch.no_grad():
-        model.adapter.up.weight.normal_(std=.1)
-    reference = copy.deepcopy(model)
-    outputs = []
-    for owner, accuracy in [(reference,True), (model,False)]:
-        with ParameterCotangentScope.for_model(owner, mode='vjp') as scope:
-            loss, details = packed_graph_loss(owner, examples(), share_causal_prefixes=True,
-                checkpoint_layers=True, chunk_tokens=3, collect_accuracy=accuracy)
-            loss.backward()
-            scope.finish()
-        outputs.append((loss.detach(), details))
-    tolerance = dict(atol=0, rtol=0) if dtype == torch.bfloat16 else dict(atol=3e-6, rtol=2e-4)
-    torch.testing.assert_close(outputs[0][0], outputs[1][0], atol=0 if dtype == torch.bfloat16 else 1e-6,
-                               rtol=0 if dtype == torch.bfloat16 else 1e-6)
-    if dtype == torch.bfloat16:
-        assert outputs[1][1][0]['readout_forward_rows'] == outputs[1][1][0]['readout_original_rows']
-    else:
-        assert outputs[1][1][0]['readout_forward_rows'] < outputs[1][1][0]['readout_original_rows']
-    for (name,parameter), (other_name, other) in zip(model.named_parameters(), reference.named_parameters()):
-        assert name == other_name and (parameter.grad is None) == (other.grad is None), name
-        if parameter.grad is not None:
-            torch.testing.assert_close(parameter.grad, other.grad, **tolerance, msg=name)

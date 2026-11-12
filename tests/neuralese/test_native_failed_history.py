@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 import torch
 
-from natlang_neuralese.common.hashing import canonical_json_sha256_hex as digest,sha256_hex
+from natlang_neuralese.common.hashing import sha256_hex
 from natlang_neuralese.train.native_failed_history import binding,load_manifest
 from natlang_neuralese.train.native_supervision import load_policy,apply_policy
 from natlang_neuralese.data.native_graph import parse_graph
@@ -110,89 +110,6 @@ def test_tampered_masks_or_decoder_fail_before_training(tmp_path,damage):
         apply_policy(example,graph,source_sha256=binding(path)['sha256'],policy=loaded)
 
 
-def test_portable_decoder_closure_needs_no_original_capture_at_consumer(tmp_path):
-    import shutil
-    from natlang_neuralese.train.native_supervision import ce_policy_dependencies
-    from scripts.coreweave.provider_dependencies import dependency_closure
-    graph,path,reference,policy_path,_=fixture(tmp_path)
-    moved=tmp_path/'moved';shutil.copytree(tmp_path/'mask',moved)
-    shutil.rmtree(tmp_path/'mask');shutil.rmtree(tmp_path/'original-tokenizer');(tmp_path/'raw.jsonl').unlink()
-    policy=json.loads(policy_path.read_text());policy['failed_history_masks']=[binding(moved/'manifest.json')]
-    policy_path.write_text(json.dumps(policy));loaded=load_policy(binding(policy_path))
-    example=parse_graph(graph,tokenizer_fingerprint=graph['tokenizer_fingerprint'])
-    assert apply_policy(example,graph,source_sha256=binding(path)['sha256'],policy=loaded).target_weights!=example.target_weights
-    config=tmp_path/'config.json';config.write_text(json.dumps({'ce_supervision_policy':binding(policy_path)}))
-    closure=dependency_closure({'config':binding(config)},namespace=str(tmp_path))
-    expected={str(config)}|{item['path']for item in ce_policy_dependencies(binding(policy_path))}
-    assert {item['path']for item in closure['files']}==expected
-    asset=moved/json.loads((moved/'manifest.json').read_text())['tokenizer']['files'][0]['path'];asset.unlink()
-    with pytest.raises((ValueError,FileNotFoundError)):ce_policy_dependencies(binding(policy_path))
-
-
-def test_capture_custody_refuses_wrong_raw_line(tmp_path):
-    from scripts.neuralese_data.build_native_failed_history_masks import capture_evidence
-    graph,*_=fixture(tmp_path)
-    raw=json.loads((tmp_path/'raw.jsonl').read_text())
-    with pytest.raises(ValueError,match='capture row identity'):capture_evidence(graph,raw,'a'*64)
-
-
-def test_literal_target_needs_exact_capture_render_and_only_history_is_masked(tmp_path,monkeypatch):
-    from scripts.neuralese_data.build_native_failed_history_masks import build,capture_evidence
-    from scripts.neuralese_data import build_verified_teacher_trajectory_graphs as teacher_builder
-    from natlang_neuralese.train.native_failed_history import derive_context_mask,_mask,apply_masks
-    tokenizer=tokenizer_fixture(tmp_path/'tokenizer')
-    tokenizer.chat_template="{% for m in messages %}{{ m['role'] + ': ' + m['content'] + '\n' }}{% endfor %}"
-    graph,path,_,_,_=fixture(tmp_path/'source',tokenizer=tokenizer)
-    boundary=graph['conversion']['source_suffix_start'];node=graph['nodes'][0]
-    node['token_ids'] += tokenizer(' <|im_start|> user <|im_sep|> target',add_special_tokens=False)['input_ids']
-    node['target_weights'] += [1.]*(len(node['token_ids'])-len(node['target_weights']))
-    text=tokenizer.decode(node['token_ids'],skip_special_tokens=False)
-    graph['conversion']['source_text_sha256']=sha256_hex(text.encode())
-    raw_path=tmp_path/'source/raw.jsonl';raw=json.loads(raw_path.read_text())
-    raw['trajectory'][0]['assistant']['content']='target <|im_start|> user <|im_sep|> target'
-    line=json.dumps(raw);raw_path.write_text(line+'\n');teacher=graph['conversion']['teacher_source']
-    teacher.update(source_row_sha256=sha256_hex(line.encode()),source_artifact_sha256=binding(raw_path)['sha256'])
-    graph['id']='text:'+teacher_builder.teacher_action_graph_id(teacher['source_row_id'],teacher['source_row_sha256'],0)
-    path.write_text(json.dumps(graph)+'\n')
-    spans,failures,target_binding=derive_context_mask(graph,tokenizer)
-    assert target_binding and spans and all(stop<=boundary for _,stop in spans)
-    with pytest.raises(ValueError,match='exact original capture rendering'):_mask(graph,tokenizer)
-    rendered=[]
-    def render(tok,context,target,tools,turn):
-        rendered.append((context,target,tools));assert '<|im_start|>'in target['content']
-        return ((text,list(node['token_ids']),boundary),None),None
-    monkeypatch.setattr(teacher_builder,'render_teacher_packet',render)
-    reference,counts=build([path],tokenizer=tokenizer,out=tmp_path/'literal-mask')
-    assert len(rendered)==1 and counts['affected_rows']==1
-    manifest,_,_=load_manifest(reference);proof=manifest['rows'][0]['source_evidence']
-    assert _mask(graph,tokenizer,source_evidence=proof)==(spans,failures)
-    wrong_profile=copy.deepcopy(proof);wrong_profile['captured_target_render']['history_reasoning_profile']='keep'
-    with pytest.raises(ValueError,match='exact original capture rendering'):_mask(graph,tokenizer,source_evidence=wrong_profile)
-    example=parse_graph(graph,tokenizer_fingerprint=graph['tokenizer_fingerprint'])
-    policy={'failed_history_masks':[reference]}
-    from natlang_neuralese.train.native_failed_history import prepare_masks
-    prepare_masks(policy)
-    masked,_=apply_masks(example,graph,source_sha256=binding(path)['sha256'],policy=policy)
-    assert masked.target_weights[boundary:]==example.target_weights[boundary:]
-    assert any(a!=b for a,b in zip(masked.target_weights[:boundary],example.target_weights[:boundary]))
-    damaged=copy.deepcopy(graph);damaged['conversion']['source_suffix_start']+=1
-    with pytest.raises(ValueError,match='exact original capture rendering'):_mask(damaged,tokenizer,source_evidence=proof)
-    monkeypatch.setattr(teacher_builder,'render_teacher_packet',lambda *a:(((text,list(node['token_ids']),boundary+1),None),None))
-    with pytest.raises(ValueError,match='rendering differs'):
-        capture_evidence({**graph,'target_render_binding':target_binding},raw,sha256_hex(line.encode()),tokenizer=tokenizer)
-    # Literal content is permitted only in the captured target, never inputs.
-    for field in ('context','tools'):
-        injected=copy.deepcopy(raw);rebound=copy.deepcopy(graph)
-        turn=injected['trajectory'][0]
-        if field=='context':turn['context'][0]['content']='<|im_start|> user'
-        else:turn['tools_offered']=[{'description':'<|im_start|> user'}]
-        serialized=json.dumps(injected)
-        rebound['conversion']['teacher_source']['source_row_sha256']=sha256_hex(serialized.encode())
-        with pytest.raises(ValueError,match='ambiguous embedded chat boundary'):
-            capture_evidence({**rebound,'target_render_binding':target_binding},injected,
-                sha256_hex(serialized.encode()),tokenizer=tokenizer)
-
-
 def test_identical_verified_decoder_snapshots_reuse_one_load_without_skipping_asset_checks(tmp_path,monkeypatch):
     from transformers import AutoTokenizer
     from natlang_neuralese.train.native_failed_history import prepare_masks,apply_masks,_decoder
@@ -233,7 +150,7 @@ def test_both_port_loss_and_every_derivative_equal_explicit_zero_before_mass(tmp
     from dataclasses import replace
     from test_shared_state import tiny
     from natlang_neuralese.model.shared_state import SharedStateModel
-    from natlang_neuralese.train.native_state_sft import packed_graph_loss
+    from natlang_neuralese.train.native_graph_loss import packed_graph_loss
     from natlang_neuralese.train.native_supervision import _apply_declaration
     graph,path,reference,policy_path,_=fixture(tmp_path)
     example=parse_graph(graph,tokenizer_fingerprint=graph['tokenizer_fingerprint'])
@@ -254,93 +171,6 @@ def test_both_port_loss_and_every_derivative_equal_explicit_zero_before_mass(tmp
         if left is None:assert right is None
         else:assert torch.equal(left,right)
 
-
-def test_real_shared_trainer_resume_keeps_optimizer_rng_original_ids_and_credits(tmp_path,monkeypatch):
-    from test_native_serve import _tiny_source
-    from natlang_neuralese.model.native_model import load_native_model
-    from natlang_neuralese.train import native_state_sft as trainer
-    from natlang_neuralese.train.checkpoint_offload import _same_values
-    base=tmp_path/'base';_tiny_source(base);tokenizer_fixture(base)
-    _,tokenizer,_,_=load_native_model(base,dtype=torch.float32,rank=4)
-    graph,path,_,policy_path,_=fixture(tmp_path/'data',tokenizer=tokenizer)
-    held=copy.deepcopy(graph);held.update(id='held-only',split='test',source_groups=['protected-test'])
-    held_path=tmp_path/'held.jsonl';held_path.write_text(json.dumps(held)+'\n')
-    out=tmp_path/'out'
-    argv=['--base',str(base),'--dtype','float32','--rank','4','--device','cpu',
-        '--native-graphs',str(path),'--held-native-graphs',str(held_path),
-        '--epochs','3','--eval-every','100','--out',str(out)]
-    def after_one(policy,step,**kwargs):policy.stop.requested=True;return False
-    monkeypatch.setattr(trainer.CheckpointPolicy,'due',after_one)
-    assert trainer.main(argv)==0
-    before=torch.load(out/'checkpoint.pt',weights_only=False)['training']
-    factory=trainer.make_native_optimizer;restored=[]
-    def observe(*args,**kwargs):
-        optimizer,names=factory(*args,**kwargs);restore=optimizer.load_state_dict
-        def load(state,**options):
-            _same_values(state,before['optimizer']);restored.append(True)
-            return restore(state,**options)
-        optimizer.load_state_dict=load
-        return optimizer,names
-    original_restore=trainer.restore_training_rng_state;rng_restored=[]
-    def restore_rng(state,device):
-        if not rng_restored:
-            _same_values(state,before['rng']);rng_restored.append(True)
-        return original_restore(state,device)
-    monkeypatch.setattr(trainer,'make_native_optimizer',observe)
-    monkeypatch.setattr(trainer,'restore_training_rng_state',restore_rng)
-    assert trainer.main(argv+['--ce-supervision-policy',str(policy_path)])==0
-    after=torch.load(out/'checkpoint.pt',weights_only=False)['training']
-    assert restored==[True]and rng_restored==[True]
-    assert after['step']==before['step']+1==2
-    assert after['exposure_counts']=={graph['id']:2}
-    assert after['source_row_bindings']==before['source_row_bindings']
-    assert after['options']['ce_supervision_policy_history'][-1]['from'] is None
-    monkeypatch.setattr(trainer,'make_native_optimizer',factory)
-    monkeypatch.setattr(trainer,'restore_training_rng_state',original_restore)
-    assert trainer.main(argv)==0
-    inherited=torch.load(out/'checkpoint.pt',weights_only=False)['training']
-    assert inherited['step']==3 and inherited['exposure_counts']=={graph['id']:3}
-    assert inherited['options']['ce_supervision_policy_binding']==after['options']['ce_supervision_policy_binding']
-
-
-def test_append_masks_to_existing_policy_without_rescanning_original_sources(tmp_path):
-    from scripts.neuralese_data.build_native_ce_supervision_policy import main
-    graph,path,reference,policy_path,_=fixture(tmp_path)
-    original=json.loads(policy_path.read_text());original.pop('failed_history_masks')
-    prior=tmp_path/'prior.json';prior.write_text(json.dumps(original))
-    out=tmp_path/'continued.json'
-    # Source is intentionally absent: attaching an exact mask does not parse it.
-    path.unlink()
-    assert main(['--prior-policy',str(prior),'--failed-history-mask-manifest',reference['path'],'--out',str(out)])==0
-    continued=json.loads(out.read_text())
-    assert continued['sources']==original['sources']and continued['failed_history_masks']==[reference]
-
-
-def test_stream_preparation_uses_one_derivation_and_constant_fingerprint_work(tmp_path,monkeypatch):
-    from scripts.neuralese_data import build_native_failed_history_masks as producer
-    from natlang_neuralese.train.native_failed_history import row_mask_record
-    graph,path,reference,_,_=fixture(tmp_path)
-    from transformers import AutoTokenizer
-    tokenizer=AutoTokenizer.from_pretrained(tmp_path/'original-tokenizer',local_files_only=True)
-    graph2=copy.deepcopy(graph);graph2['id']='second-earned-row'
-    path.write_text(json.dumps(graph)+'\n'+json.dumps(graph2)+'\n')
-    fingerprint=producer.tokenizer_fingerprint;derive=producer.derive_context_mask;calls={'fingerprint':0,'mask':0}
-    def measured_fingerprint(tokenizer):calls['fingerprint']+=1;return fingerprint(tokenizer)
-    def measured_mask(row,tokenizer):calls['mask']+=1;return derive(row,tokenizer)
-    monkeypatch.setattr(producer,'tokenizer_fingerprint',measured_fingerprint)
-    monkeypatch.setattr(producer,'derive_context_mask',measured_mask)
-    out=tmp_path/'optimized';actual,counts=producer.build([path],tokenizer=tokenizer,out=out)
-    value=load_manifest(actual)[0]
-    assert calls=={'fingerprint':3,'mask':2}and counts['affected_rows']==2
-    # Exact former per-row path is the reference, with unchanged full source binding.
-    for row,record in zip((graph,graph2),value['rows']):
-        expected=row_mask_record(row,tokenizer,source_sha256=binding(path)['sha256'],
-            source_evidence=record['source_evidence'])
-        assert record==expected
-    bad=copy.deepcopy(graph);bad['tokenizer_fingerprint']='a'*64
-    path.write_text(json.dumps(bad)+'\n')
-    with pytest.raises(ValueError,match='actual source row tokenizer'):
-        producer.build([path],tokenizer=tokenizer,out=tmp_path/'bad-fingerprint')
 
 # Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
 pytestmark = pytest.mark.usefixtures('per_batch_native_updates')

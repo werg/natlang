@@ -500,60 +500,6 @@ def test_shared_expert_actor_groups_keep_frame_and_invocation_order(monkeypatch,
 
 
 @pytest.mark.parametrize('family', ['lfm'])
-@pytest.mark.parametrize('device', ['cpu', 'cuda'])
-@pytest.mark.parametrize('checkpointed', [False, True])
-@pytest.mark.parametrize('ffn_chunk', [0, 2])
-@pytest.mark.parametrize('group_size', [1, 4])
-def test_branched_graph_complete_bf16_derivatives_against_cached_execution(
-        family, device, checkpointed, ffn_chunk, group_size):
-    if device == 'cuda' and not torch.cuda.is_available():
-        pytest.skip('CUDA unavailable')
-    from test_shared_state import tiny, graph
-    from natlang_neuralese.model.shared_state import SharedStateModel
-    from natlang_neuralese.train.native_state_sft import make_native_optimizer
-    from natlang_neuralese.eval.native_gradients import compare_complete_gradients
-    import torch.nn.functional as F
-
-    model = SharedStateModel(tiny(family), (58, 59, 60, 61), rank=4).to(device)
-    model.port.hf.to(dtype=torch.bfloat16)
-    if family == 'mellum':
-        model.port.hf.natlang_precision = 'bf16'
-    for parameter in model.port.parameters():
-        parameter.requires_grad_(True)
-    model.port.checkpoint_layers = checkpointed
-    model.port.checkpoint_layer_group_size = group_size
-    model.port.ffn_chunk_tokens = ffn_chunk
-    with torch.no_grad():
-        model.adapter.up.weight.normal_(std=.03)
-    _, named = make_native_optimizer(model, lr=3e-6, in_backward=False)
-    plan = graph()
-    ids = plan.tensor([t for node in plan.invocations for t in node.token_ids], device)
-    labels = ids.roll(-1)
-    initial = model.embed(ids[None]).detach()
-    outputs = []
-    def make(reference):
-        x = initial.clone().requires_grad_()
-        scope = ParameterCotangentScope.for_model(model, mode='vjp')
-        scope.__enter__()
-        try:
-            out = model(plan, embeddings=x, reference=reference, retain_states=False)
-            outputs.append(out['h_final'].detach())
-            loss = F.cross_entropy(model.logits(out['h_final'])[0].float(), labels)
-        except BaseException:
-            scope.close()
-            raise
-        return loss, x, scope
-    flat, x, scope = make(False)
-    report = compare_complete_gradients(flat, None, named, x, None,
-        cached_factory=lambda: make(True), flat_cotangent_scope=scope,
-        atol=1e-5, rtol=1e-4)
-    failures = {name: row for name, row in report['comparisons'].items() if not row['passed']}
-    assert report['passed'], failures
-    torch.testing.assert_close(outputs[0], outputs[1], atol=1e-4, rtol=1e-4)
-    assert all(parameter.grad is None for _, parameter in named)
-
-
-@pytest.mark.parametrize('family', ['lfm'])
 def test_graph_still_visits_each_physical_row_once_per_layer(monkeypatch, family):
     from test_shared_state import tiny, graph
     from natlang_neuralese.model import shared_state

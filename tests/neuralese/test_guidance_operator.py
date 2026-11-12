@@ -1,7 +1,5 @@
 """The guidance learned operator, seed schedule /2 and guidance cases (fallow register C6)."""
-import dataclasses
 import glob
-import json
 import re
 import sys
 from pathlib import Path
@@ -150,41 +148,3 @@ def test_cases_from_rollout_links_the_text_writer_and_requires_a_checked_outcome
     blank = _rollout(ops.OPERATORS['guidance'].prompt, facts, writer_reply='')
     cases, _ = cases_from_rollout(blank, facts, outcome={'success': True, 'evidence': {'x': 1}}, split_groups=['w'])
     assert cases[0]['guidance'] is None
-
-
-@pytest.mark.skipif(not LFM3, reason='LFM3 tokenizer not cached')
-def test_guidance_case_renders_the_real_site_operator_spans_and_engine_import():
-    from scripts.neuralese_data.build_operator_graphs import make_renderer
-    from natlang_neuralese.data.guidance_cases import cases_from_rollout
-    from natlang_neuralese.data.native_graph_schema import parse_graph
-    from natlang_neuralese.rl.privileged_context import Fact
-    renderer = make_renderer(32768)
-    prompt = ops.OPERATORS['guidance'].prompt
-    facts = [Fact('f1', 'expected_result', 'The total is 41.'), Fact('f2', 'reference_solution', 'Sum amounts.')]
-    rollout = _rollout(prompt, facts, writer_reply='1. Return 41.\n2. Sum amounts.')
-    case = cases_from_rollout(rollout, facts, outcome={'success': True, 'evidence': {'oracle': 'exact'}},
-                              split_groups=['world:1'])[0][0]
-    graph, baseline = renderer.render(case, 'guidance', corpus_id='unit', source_row_sha256='0' * 64, source_ref={})
-    example = parse_graph(graph, tokenizer_fingerprint=renderer.fingerprint)
-    spans = ops.resolve_spans(graph, example.plan, renderer.bindings)
-    assert [span.kind for span in spans] == ['prompt', 'seed']
-    producer, consumer = graph['nodes']
-    # The site with the prompt placeholder tokenizes exactly as the plain recorded call (exact in-call positions).
-    plain, _ = renderer._render(case['writer']['messages'], None, {}, generation=True)
-    assert producer['token_ids'][:len(plain)] == plain
-    start, stop = producer['producing'][0]
-    assert producer['token_ids'][start - 1] == renderer.role_ids[0] and producer['token_ids'][stop] == renderer.role_ids[1]
-    assert [i for i, w in enumerate(producer['target_weights']) if w] == list(range(start, stop + 1))
-    assert renderer.tokenizer.decode(producer['token_ids'][start:stop]) == '1. Return 41.\n2. Sum amounts.'
-    edge = consumer['imports'][0]
-    assert consumer['token_ids'][edge['at'] - 1] == renderer.role_ids[2] and consumer['token_ids'][edge['at']] == renderer.role_ids[3]
-    rendering = renderer.privileged_rendering()
-    turn, offset = rendering.state_turn()
-    insert = edge['at'] - offset
-    assert consumer['token_ids'][insert:insert + len(turn)] == turn
-    assert rendering.insertion_point(consumer['token_ids'][:insert] + consumer['token_ids'][insert + len(turn):])[0] == insert
-    assert graph['operator_conversion']['seeds'][0]['provenance'] == 'checked'
-    assert 'The total is 41.' in renderer.tokenizer.decode(baseline['nodes'][0]['token_ids'])
-    mechanical = {**case, 'guidance': None}
-    graph, _ = renderer.render(mechanical, 'guidance', corpus_id='unit', source_row_sha256='1' * 64, source_ref={})
-    assert graph['operator_conversion']['seeds'][0]['provenance'] == 'mechanical:guidance-facts'

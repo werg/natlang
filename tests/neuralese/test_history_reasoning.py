@@ -105,17 +105,6 @@ def test_native_serving_engine_uses_backbone_policy_when_checkpoint_has_no_overr
     assert 'EARLIER-THOUGHT' not in rendered and 'LATEST-THOUGHT' in rendered
 
 
-def test_native_training_recipe_and_cli_bind_only_explicit_keep_profile():
-    from natlang_neuralese.train.native_state_sft import build_parser
-    from natlang_neuralese.train.recipe import validate_stage_parameters
-    args=build_parser().parse_args(['--native-graphs','train','--held-native-graphs','held',
-        '--out','out','--history-reasoning-policy','keep'])
-    assert args.history_reasoning_policy=='keep'
-    validate_stage_parameters('native_state_sft',{'history_reasoning_policy':'keep'})
-    with pytest.raises(ValueError,match='keep profile only'):
-        validate_stage_parameters('native_state_sft',{'history_reasoning_policy':'last_turn_only'})
-
-
 def test_template_contradicting_its_declaration_fails_loudly():
     with pytest.raises(ValueError, match='not as its declared'):
         bind_history_reasoning(Template('no switch'), model_type='mellum')

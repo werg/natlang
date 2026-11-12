@@ -52,20 +52,6 @@ def test_actual_scope_counters_and_rng_state_restore_on_every_exit(monkeypatch, 
     assert backend.has_executed and not backend.active
 
 
-def test_backend_guard_rejects_disabled_configuration_before_source_or_model_loading(tmp_path):
-    from natlang_neuralese.train.native_state_sft import main
-    with pytest.raises(ValueError, match='enabled backend and declared tolerances'):
-        main(['--native-graphs', str(tmp_path/'missing'), '--held-native-graphs', str(tmp_path/'missing-held'),
-              '--out', str(tmp_path/'out'), '--qualify-training-backend'])
-    assert not (tmp_path/'out').exists()
-
-
-def test_recipe_exposes_backend_qualification_as_an_operational_check():
-    from natlang_neuralese.train.recipe import HANDLERS, OPERATIONAL_STAGE_PARAMETERS
-    assert 'qualify_training_backend' in HANDLERS['native_state_sft']['parameters']
-    assert 'qualify_training_backend' in OPERATIONAL_STAGE_PARAMETERS
-
-
 def test_complete_backend_failure_remains_structured_and_restores_owned_state(monkeypatch):
     backend=Backend();rng=torch.get_rng_state().clone()
     def failed(*args,**kwargs):

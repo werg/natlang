@@ -17,24 +17,6 @@ def test_append_frontier_promotes_only_first_visit_and_resumes():
     assert pending(history,{'old':'o','new-a':'a'}, {'new-a':1},[{'rows':[{'id':'new-b','binding':'b'}]}])==set()
 
 
-def test_explicit_focus_first_visits_then_interleaves_remaining_communication():
-    from natlang_neuralese.train.native_diversity import cohort_head_merge, sustained_communication_interleave
-    entries=[{'id':f'old-{i}','forward_tokens':1,'communication':False} for i in range(10)]
-    entries += [{'id':'new-ordinary','forward_tokens':1,'communication':False},
-                {'id':'new-comm','forward_tokens':1,'communication':True}]
-    bindings={row['id']:str(i) for i,row in enumerate(entries)}
-    history=extend([],['new-ordinary','new-comm'],bindings,source_sha256='source',global_step=58)
-    visits=[(0,[i],False) for i in range(12)] + [(i,[11],False) for i in range(1,7)]
-    focused=pending(history,bindings,{})
-    batches=promote(visits,entries,focused)
-    batches=cohort_head_merge(entries,batches,list(range(len(entries))),focus_ids=focused,batch_graphs=1)
-    batches=sustained_communication_interleave(entries,batches,focus_ids=focused)
-    assert {entries[b[1][0]]['id'] for b in batches[:2]}==focused
-    assert sorted((v,tuple(indices)) for v,indices,_ in batches)==sorted((v,tuple(indices)) for v,indices,_ in visits)
-    assert any(not entries[b[1][0]]['communication'] for b in batches[2:7])
-    assert pending(history,bindings,{'new-ordinary':1,'new-comm':1})==set()
-
-
 def test_fresh_frontier_interleave_preserves_whole_batches_and_resume_phase():
     entries=[{'id':f'old-{i}'} for i in range(12)]
     entries += [{'id':f'fresh-{i}'} for i in range(4)]

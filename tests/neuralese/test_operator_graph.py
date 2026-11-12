@@ -1,6 +1,5 @@
 """Learned-operator cases render to native graphs plus text-cut siblings (data/operator_graph.py)."""
 import glob
-import json
 import sys
 from pathlib import Path
 

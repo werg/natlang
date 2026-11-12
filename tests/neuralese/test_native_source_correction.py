@@ -459,38 +459,6 @@ def test_source_correction_requires_every_new_row_in_the_proof_ledger(tmp_path):
             current_order=['edge', 'unreviewed'], current_communication_ids=['edge'])
 
 
-def test_source_correction_does_not_rebind_a_frame_from_another_source(tmp_path):
-    from natlang_neuralese.train.native_continuation import raw_communication_rows
-
-    prior = _receipt('/old/train.json', 'old', ['edge'], ['sha-edge'])
-    current = _receipt('/new/train.json', 'new', ['edge'], ['sha-edge-new'])
-    proof = _write_proof(tmp_path, prior, current, [
-        _row('edge', {'h': 'old'}, {'h': 'new'}, 'sha-edge', 'sha-edge-new', 'corrected')])
-    unrelated = _receipt('/unrelated/train.json', 'unrelated', ['edge'], ['sha-other'])
-    old_frame = {'source_receipts': [prior], 'source_row_bindings': {'edge': {'h': 'old'}},
-        'source_row_order': ['edge'], 'exposure_counts': {'edge': 1}, 'required_visits': {'edge': 1},
-        'options': {'epochs': 1, '_communication_ids': ['edge']}}
-    unrelated_frame = {**old_frame, 'source_receipts': [unrelated],
-        'options': {'stage_id':'native_dpo','objective':{'beta':0.3},'marker':{'keep':True}},
-        'metrics': {'held':{'loss':8.75},'task_eval':{'successes':2},'marker':'untouched'}}
-    unrelated_before = copy.deepcopy(unrelated_frame)
-    training = {'source_receipts': [prior], 'source_row_bindings': {'edge': {'h': 'old'}},
-        'source_row_order': ['edge'], 'exposure_counts': {'edge': 1}, 'required_visits': {'edge': 1},
-        'options': {'epochs': 1, '_communication_ids': ['edge']},
-        'sft_progress': {'native_full_sft': old_frame, 'other-source-stage': unrelated_frame}}
-
-    result, _ = apply_source_correction(training, proof, model_id='lfm2:inventory',
-        stage_id='native_full_sft', current_source_receipt=current,
-        current_bindings={'edge': {'h': 'new'}}, current_order=['edge'],
-        current_communication_ids=['edge'])
-
-    untouched = result['sft_progress']['other-source-stage']
-    assert untouched == unrelated_before
-    active_rows = raw_communication_rows(result['sft_progress'])
-    assert set(active_rows) == {'edge'}
-    assert active_rows['edge']['binding'] == {'h': 'new'}
-
-
 def test_source_correction_rejects_replacement_that_is_no_longer_a_communication_graph(tmp_path):
     prior = _receipt('/old/train.json', 'old', ['edge'], ['sha-edge'])
     current = _receipt('/new/train.json', 'new', ['edge'], ['sha-edge-new'])
@@ -806,63 +774,6 @@ def test_source_correction_uses_fractional_epoch_schedule_for_fresh_rows(tmp_pat
     # 1.5 epochs over three ordered rows gives two visits to the first two,
     # one to the final row; the communication row also has its one-visit floor.
     assert result['required_visits'] == {'ordinary': 1, 'edge': 2, 'added': 1}
-
-
-def test_active_recipe_stage_accepts_only_exact_source_correction_handoff(tmp_path):
-    from natlang_neuralese.train.recipe import _source_correction_continuation
-    prior = _receipt('/inputs/old.json', 'old-manifest', ['edge'], ['old-leaf'])
-    current = _receipt('/inputs/new.json', 'new-manifest', ['edge'], ['new-leaf'])
-    proof = _write_proof(tmp_path, prior, current, [
-        _row('edge', {'h': 'old'}, {'h': 'new'}, 'old-leaf', 'new-leaf', 'corrected')])
-    old = {'native_graphs': {'path': prior['path'], 'sha256': prior['sha256'], 'binding': 'native_graphs'},
-        'held_native_graphs': {'path': '/inputs/held.json', 'sha256': 'held', 'binding': 'held_native_graphs'}}
-    new = {'native_graphs': {'path': current['path'], 'sha256': current['sha256'], 'binding': 'native_graphs'},
-        'continued_native_graphs': {'path': prior['path'], 'sha256': prior['sha256'], 'binding': 'continued_native_graphs'},
-        'held_native_graphs': old['held_native_graphs'],
-        'source_correction': {'path': str(proof), 'sha256': _sha(proof), 'binding': 'source_correction'}}
-    assert _source_correction_continuation(old, new)
-    # Train and foundation that share one input must move together.
-    shared_old = {**old, 'foundation_native_graphs':old['native_graphs']}
-    shared_new = {**new, 'foundation_native_graphs':new['native_graphs']}
-    assert _source_correction_continuation(shared_old, shared_new)
-    assert not _source_correction_continuation(shared_old, {**shared_new,
-        'foundation_native_graphs':old['native_graphs']})
-    assert not _source_correction_continuation(shared_old, {**shared_new,
-        'continued_native_graphs':{'path':'/inputs/stale.json','sha256':'stale','binding':'prior'}})
-    altered = dict(new, held_native_graphs={'path': '/inputs/other-held.json',
-        'sha256': 'changed', 'binding': 'held_native_graphs'})
-    assert not _source_correction_continuation(old, altered)
-
-
-@pytest.mark.parametrize('relative_ledger', [False, True])
-def test_live_recipe_correction_accepts_proved_held_repair_and_portable_ledgers(tmp_path, relative_ledger):
-    from natlang_neuralese.train.recipe import _source_correction_continuation
-    prior = _receipt('/inputs/old.json', 'old-manifest', ['edge'], ['old-leaf'])
-    current = _receipt('/inputs/new.json', 'new-manifest', ['edge'], ['new-leaf'])
-    old_held = _receipt('/inputs/held.json', 'old-held', ['held'], ['old-held-leaf'])
-    new_held = _receipt('/inputs/held-repaired.json', 'new-held', ['held'], ['new-held-leaf'])
-    proof = _write_proof(tmp_path, prior, current,
-        [_row('edge', {'h':'old'}, {'h':'new'}, 'old-leaf', 'new-leaf', 'corrected')],
-        protected_held={'prior':old_held, 'current':new_held,
-            'rows':[_row('held', {'h':'old'}, {'h':'new'}, 'old-held-leaf', 'new-held-leaf', 'corrected')]})
-    document = json.loads(proof.read_text())
-    if relative_ledger:
-        document['row_bindings_path'] = Path(document['row_bindings_path']).name
-        document['protected_held_correction']['row_bindings_path'] = Path(document['protected_held_correction']['row_bindings_path']).name
-        proof.write_text(json.dumps(document))
-    def ref(source, label):
-        return {'path':source['path'], 'sha256':source['sha256'], 'binding':label}
-    old = {'native_graphs':ref(prior,'train'), 'held_native_graphs':ref(old_held,'held')}
-    new = {'native_graphs':ref(current,'new-train'), 'continued_native_graphs':ref(prior,'prior-train'),
-           'held_native_graphs':ref(new_held,'new-held'), 'continued_held_native_graphs':ref(old_held,'prior-held'),
-           'source_correction':{'path':str(proof),'sha256':_sha(proof),'binding':'correction'}}
-    assert _source_correction_continuation(old,new)
-    bad = copy.deepcopy(new);bad['held_native_graphs']['sha256']='unproved'
-    assert not _source_correction_continuation(old,bad)
-    bad = copy.deepcopy(new);bad['continued_held_native_graphs']['path']='/inputs/unrelated.json'
-    assert not _source_correction_continuation(old,bad)
-    bad = copy.deepcopy(new);bad['unrelated_input']={'path':'/smuggled','sha256':'bad','binding':'other'}
-    assert not _source_correction_continuation(old,bad)
 
 
 def _write_ledger(tmp_path, name, rows):

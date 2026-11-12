@@ -1,5 +1,5 @@
 /**
- * Model-facing text variants (plans/MODEL_FACING_CHANGES.md, scripts/model_facing_ab.py).
+ * Model-facing text variants (plans/MODEL_FACING_CHANGES.md).
  * Adopted variants are on by default; a new variant stays off until a live measurement shows its target behaviour moving.
  * NATLANG_MODEL_FACING overrides for a measurement arm: a comma list of variant names, `combined` (all variants) or
  * `none` (the texts as they were before any variant).

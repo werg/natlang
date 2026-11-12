@@ -28,23 +28,3 @@ def test_parallel_rejects_duplicate_and_invalid_graphs(tmp_path):
     path.write_text('\n'.join(json.dumps(graph('same', 11)) for _ in range(2)) + '\n')
     with pytest.raises(ValueError, match='duplicate'):
         list(parallel_rows(path, 'f' * 64, [], workers=2))
-
-
-def test_parallel_preparation_seals_the_exact_standard_index_and_geometry(tmp_path, monkeypatch):
-    from scripts.neuralese_data.build_acquired_streaming_successor import bind, prepare_parallel_leaf, read
-    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE', str(tmp_path / 'index'))
-    path = tmp_path / 'graphs.jsonl'
-    path.write_text(''.join(json.dumps(graph(f'row-{n}', 10 + n)) + '\n' for n in range(5)))
-    reference = {**bind(path), 'rows': 5}
-    observed, proof_ref = prepare_parallel_leaf(path, reference, 'f' * 64, [1, 2, 3, 4], {'prior'}, tmp_path, workers=2)
-    proof = read(proof_ref['path'])
-    assert proof['decision_readouts'] == 0 and proof['rows'] == 5
-    # This must be the regular production NativeGraphSource cache, not a new
-    # simplified parser or an alternate row-binding dialect.
-    source = NativeGraphSource(path, 'f' * 64, required_split='train', role_ids=[1, 2, 3, 4])
-    assert [observed[(entry['id'], entry['binding'])] for entry in source.entries] == [10, 11, 12, 13, 14]
-    assert source.file_sha256 == reference['sha256']
-    broken = graph('bad', 11); broken['nodes'][0]['target_weights'][0] = 1
-    path.write_text(json.dumps(broken) + '\n')
-    with pytest.raises(ValueError, match='first own token'):
-        list(parallel_rows(path, 'f' * 64, [], workers=2))

@@ -34,36 +34,6 @@ def test_external_chain_assignment_preserves_exact_disjoint_resume_frontier(tmp_
         _workload_exclusions(path, source)
 
 
-def test_pair_source_corpus_repair_rebinds_all_witnesses_without_changing_model_graphs():
-    import copy
-    import pytest
-    from types import SimpleNamespace
-    from test_native_state_sft import authenticated_pair
-    from scripts.neuralese_data.build_native_semantic_pairs_e2e import rebind_pair_source_corpus
-    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
-    from natlang_neuralese.data.native_pair_schema import parse_pair
-    row=authenticated_pair('actual-source-edge');row['conversion']={'source_corpus':'wrong-rest-default'}
-    for view in row['models'].values():
-        view['graph']['source_pairing']['communication_sha256']=row['communication_sha256']
-    original=copy.deepcopy(row)
-    repaired=rebind_pair_source_corpus(row,'neuralese-e2e-cloud-big2-protected-20261015-v1')
-    assert row==original and repaired['id']==original['id']
-    assert repaired['communication']['source_binding']['corpus_id']==repaired['conversion']['source_corpus']
-    assert repaired['communication_sha256']==canonical_json_sha256_hex(repaired['communication'])
-    assert repaired['communication_sha256']!=original['communication_sha256']
-    for name,view in repaired['models'].items():
-        assert view['graph']['nodes']==original['models'][name]['graph']['nodes']
-        assert view['export']==original['models'][name]['export']
-        assert view['witness']['communication_sha256']==repaired['communication_sha256']
-        assert view['graph']['source_pairing']['communication_sha256']==repaired['communication_sha256']
-    participants={name:SimpleNamespace(config={'tokenizer_fingerprint':view['graph']['tokenizer_fingerprint']})
-                  for name,view in row['models'].items()}
-    assert set(parse_pair(repaired,participants,required_split='train'))==set(participants)
-    bad=copy.deepcopy(row);next(iter(bad['models'].values()))['witness']['communication_sha256']='changed'
-    with pytest.raises(ValueError,match='original model witness changed'):
-        rebind_pair_source_corpus(bad,'correct')
-
-
 def test_e2e_conversion_requires_explicit_source_corpus_before_opening_inputs(monkeypatch,capsys):
     import pytest
     from scripts.neuralese_data.build_native_semantic_pairs_e2e import main
@@ -486,7 +456,6 @@ def test_attested_span_uses_exact_payload_hash_and_removes_only_witnessed_wrappe
 def test_e2e_pair_occurrence_binds_structural_write_and_exact_read_not_text_search():
     import importlib.util
     from pathlib import Path
-    import pytest
 
     script = Path(__file__).parents[2] / 'scripts/neuralese_data/build_native_semantic_pairs_e2e.py'
     spec = importlib.util.spec_from_file_location('e2e_pair_builder', script)
@@ -1518,63 +1487,6 @@ def test_reviewed_child_masks_all_prior_assistant_targets_preserving_context_and
     source['supervised_suffix_start'] = 2
     with pytest.raises(ValueError, match='entirely the exact assistant'):
         text_row_graph(source, **options, mask_assistant_history=True)
-
-
-@pytest.mark.parametrize('parent_kind', ['partial', 'guided'])
-def test_partial_parent_final_verifier_rebuilds_mask_and_keeps_parent_debt(monkeypatch, parent_kind):
-    import copy
-    import pytest
-    from scripts.coreweave.teacher_tranche_admission import verify_teacher_model_actions
-    from scripts.neuralese_data import build_verified_teacher_trajectory_graphs as converter
-    from natlang_neuralese.data import text_corpus
-    tokenizer = ChatRoleAsciiTokenizer()
-    prefix = ('<|im_start|>user<|im_sep|>source<|im_end|>'
-              '<|im_start|>assistant<|im_sep|>wrong prior decision<|im_end|>'
-              '<|im_start|>tool<|im_sep|>feedback<|im_end|><|im_start|>assistant<|im_sep|>')
-    text = prefix + 'positive<|im_end|>'
-    ids = tokenizer(text)['input_ids']; boundary = len(tokenizer(prefix)['input_ids'])
-    monkeypatch.setattr(text_corpus, 'tokenizer_fingerprint', lambda _: 'b'*64)
-    monkeypatch.setattr(converter, 'render_teacher_packet', lambda *a: (((text, ids, boundary), None), None))
-    raw = {'row': {'task': {'program_ir': {'source_groups':['train']}}, 'trajectory': [
-        {'assistant':{'content':'positive'},'model_response':{'raw_calls':[]},'context':[],'tools_offered':[]} ]}}
-    decision = {'approved':True, 'parent_quality_hold':'quality_pending_partial_files',
-                'parent_task_qualified':False,'materialized_decision_id':'row:decision:0000'}
-    if parent_kind == 'guided':
-        raw['row']['collection_guidance'] = {'training_admission': False}
-        decision = {'approved': True, 'guided_parent_review': True, 'parent_trace_qualified': False,
-                    'materialized_decision_id': 'row:decision:0000'}
-    graph = text_row_graph(dict(id=converter.teacher_action_graph_id('row','a'*64,0),split='train',
-        source_groups=['train'],tokenizer_sha256='c'*64,text=text,token_ids=ids,
-        supervised_suffix_start=boundary), source_tokenizer_fingerprint='c'*64,tokenizer=tokenizer,
-        expanded_tokenizer_fingerprint='b'*64,mask_assistant_history=True,
-        assistant_history_guard=converter.reviewed_teacher_context_guard(raw['row']['trajectory'][0], [],
-            {'role':'assistant','content':'positive','tool_calls':[]}, []))
-    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
-    decision['assistant_history_input_sha256'] = canonical_json_sha256_hex(graph['conversion']['assistant_history_target_mask']['input_guard'])
-    graph['conversion']['teacher_source'] = dict(source_row_id='row',teacher_turn_index=0,
-        source_row_sha256='a'*64,source_artifact_sha256='d'*64,source_groups=['train'],decision_admission=decision)
-    receipt = {'tokenizer': {'source_fingerprint':'c'*64,'expanded_fingerprint':'b'*64},
-               'outputs':{'train':{'rows':1}},'turns':1,'deduplication':{'emitted_rows':1,'omitted_rows':0,'omissions':[]},'action_omissions':[]}
-    options = dict(raw_rows=raw,raw_row_shas={'row':'a'*64},source_sha256='d'*64,
-                   decision_keys={('row',0):decision},hold_ids=set(),partial_tokenizer=tokenizer)
-    proof = verify_teacher_model_actions([graph],receipt,**options)
-    assert proof['partition']['materialized_source_rows'] == 0
-    if parent_kind == 'partial':
-        assert proof['partition']['partial_source_rows'] == ['row']
-        assert proof['partition']['partial_parent_tasks_qualified'] is False
-    else:
-        assert proof['partition']['guided_source_rows'] == ['row']
-        assert proof['partition']['guided_parent_traces_admitted'] is False
-        assert proof['partition']['authored_static_root_actions'] == 0
-    for mutation in ('weight','boundary','context','maskproof','approval','tokenizer'):
-        bad = copy.deepcopy(graph); changed = dict(options)
-        if mutation == 'weight':bad['nodes'][0]['target_weights'][20] = .05
-        elif mutation == 'boundary':bad['conversion']['source_suffix_start'] -= 1
-        elif mutation == 'context':bad['nodes'][0]['token_ids'][3] += 1
-        elif mutation == 'maskproof':bad['conversion']['assistant_history_target_mask']['masked_tokens'] += 1
-        elif mutation == 'approval':bad['conversion']['teacher_source']['decision_admission']['approved'] = False
-        elif mutation == 'tokenizer':changed['partial_tokenizer'] = None
-        with pytest.raises(ValueError):verify_teacher_model_actions([bad],receipt,**changed)
 
 
 @pytest.mark.parametrize('location', ['assistant', 'tool', 'target', 'arguments', 'capture', 'tool_schema_key'])

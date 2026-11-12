@@ -5,7 +5,7 @@ import pytest
 import torch
 from natlang_neuralese.model.shared_state import Invocation, ImportSpan, compile_graph, SharedStateModel
 from natlang_neuralese.train.native_prefix_packing import pack_causal_prefixes
-from natlang_neuralese.train.native_state_sft import packed_graph_loss, pack_native_graphs
+from natlang_neuralese.train.native_graph_loss import packed_graph_loss, pack_native_graphs
 from test_shared_state import tiny
 
 
@@ -133,63 +133,6 @@ def test_raw_cache_export_never_activates_adapter_or_accepts_external_or_neurale
                       external_sizes={'external':3})
 
 
-@pytest.mark.parametrize('family',['lfm'])
-def test_two_actual_muon_updates_and_optimizer_histories_match_disjoint_reference(family):
-    from natlang_neuralese.train.native_state_sft import make_native_optimizer,native_training_update
-    model=SharedStateModel(tiny(family),(58,59,60,61),rank=4)
-    if family=='mellum':model.port.hf.natlang_precision='bf16'
-    reference=copy.deepcopy(model)
-    model.share_causal_prefixes=True
-    optimizer,_=make_native_optimizer(model,lr=1e-5,in_backward=True)
-    reference_optimizer,_=make_native_optimizer(reference,lr=1e-5,in_backward=True)
-    gradients = {'shared':{},'reference':{}}
-    # Prefix sharing changes the autograd traversal, not the stochastic rounding
-    # distribution. Match each named matrix's draw to isolate its actual update.
-    def controlled(function,parameter,group,owner,label):
-        import hashlib
-        seed=int.from_bytes(hashlib.sha256((str(step)+group['name']).encode()).digest()[:8],'little')
-        with torch.random.fork_rng(devices=[]):
-            torch.manual_seed(seed)
-            old=owner.state[parameter].get('momentum',torch.zeros_like(parameter,dtype=torch.bfloat16))
-            exact_m=old.float()*group['momentum']+parameter.grad.float()
-            gradients[label][group['name']]=parameter.grad.detach().float().clone()
-            result=function(parameter,group)
-            # Explicitly explain every stored BF16 momentum bit with its exact
-            # FP32 input. Near a cast midpoint, tiny valid accumulation changes
-            # can change a BF16 bit; do not hide that behind wider tolerances.
-            torch.testing.assert_close(owner.state[parameter]['momentum'],exact_m.to(torch.bfloat16),atol=0,rtol=0)
-            return result
-    actual_update=optimizer.latent._muon_update
-    expected_update=reference_optimizer.latent._muon_update
-    optimizer.latent._muon_update=lambda parameter,group:controlled(actual_update,parameter,group,optimizer.latent,'shared')
-    reference_optimizer.latent._muon_update=lambda parameter,group:controlled(expected_update,parameter,group,reference_optimizer.latent,'reference')
-    def compare(left,right,path='state'):
-        if isinstance(left,torch.Tensor):
-            if path.endswith('/momentum') and left.dtype==torch.bfloat16:
-                # The exact per-matrix recurrence/cast oracle above and strict
-                # raw-gradient comparison below qualify these states. A prior
-                # rounding-bit difference propagates through the next exact
-                # recurrence; unrelated cross-state tolerances cannot test it.
-                return
-            torch.testing.assert_close(left,right,atol=3e-6,rtol=3e-4,msg=path)
-        elif isinstance(left,dict):
-            assert left.keys()==right.keys(),path
-            for key in left:compare(left[key],right[key],path+'/'+str(key))
-        elif isinstance(left,(tuple,list)):
-            assert len(left)==len(right),path
-            for index,(a,b) in enumerate(zip(left,right)):compare(a,b,path+'/'+str(index))
-        else:assert left==right,path
-    for step in range(2):
-        rng=torch.get_rng_state()
-        expected,_=native_training_update(reference,reference_optimizer,examples(),chunk_tokens=2)
-        torch.set_rng_state(rng)
-        actual,_=native_training_update(model,optimizer,examples(),chunk_tokens=2)
-        torch.testing.assert_close(actual,expected,atol=1e-6,rtol=1e-6)
-        compare(model.state_dict(),reference.state_dict(),'weights')
-        compare(gradients['shared'],gradients['reference'],'raw_gradients')
-        compare(optimizer.state_dict(),reference_optimizer.state_dict(),'optimizer')
-
-
 def test_original_rl_graph_identity_does_not_gain_default_cache_field():
     from dataclasses import asdict
     from natlang_neuralese.model.native_graph_plan import invocation_dict
@@ -197,39 +140,3 @@ def test_original_rl_graph_identity_does_not_gain_default_cache_field():
     old=asdict(node);old.pop('cache_prefix')
     assert invocation_dict(node)==old
     assert invocation_dict(Invocation('cached',(2,3),cache_prefix=True))['cache_prefix'] is True
-
-
-def test_actual_trainer_cache_switch_retains_saved_exposures_and_optimizer_on_resume(tmp_path):
-    import json
-    from test_native_model import tiny_source
-    from natlang_neuralese.model.native_model import load_native_model
-    from natlang_neuralese.data.native_graph import SCHEMA
-    from natlang_neuralese.train.native_state_sft import main
-    base=tmp_path/'base';tiny_source(base)
-    _,_,_,config=load_native_model(base,dtype=torch.float32,rank=4)
-    def row(name,tokens,split):
-        return {'schema':SCHEMA,'id':name,'split':split,'source_groups':[name],
-            'tokenizer_fingerprint':config['tokenizer_fingerprint'],'nodes':[
-                {'name':'answer','token_ids':tokens,'target_weights':[0,1,1]}]}
-    train=tmp_path/'train.jsonl';held=tmp_path/'held.jsonl';out=tmp_path/'run'
-    train.write_text(''.join(json.dumps(row(name,tokens,'train'))+'\n'
-                            for name,tokens in [('a',[1,2,3]),('b',[1,2,4])]))
-    held.write_text(json.dumps(row('held',[5,6,7],'test'))+'\n')
-    argv=['--base',str(base),'--native-graphs',str(train),'--held-native-graphs',str(held),
-        '--out',str(out),'--dtype','float32','--device','cpu','--rank','4',
-        '--batch-graphs','2','--epochs','1','--share-causal-prefixes','--checkpoint-every','1','--eval-every','1',
-        '--forward-atol','1e-4','--gradient-atol','1e-5','--chunk-tokens','2']
-    assert main(argv)==0
-    saved=torch.load(out/'checkpoint.pt',weights_only=False)
-    assert saved['training']['options']['share_causal_prefixes'] is True
-    assert saved['training']['exposure_counts']=={'a':1,'b':1}
-    progress=[json.loads(line) for line in (out/'train.jsonl').read_text().splitlines()]
-    assert progress[-1]['physical_forward_tokens']==4
-    assert progress[-1]['reused_prefix_tokens']==2
-    argv[argv.index('--epochs')+1]='2'
-    argv[argv.index('--share-causal-prefixes')]='--no-share-causal-prefixes'
-    assert main(argv)==0
-    continued=torch.load(out/'checkpoint.pt',weights_only=False)
-    assert continued['training']['exposure_counts']=={'a':2,'b':2}
-    assert continued['training']['step']==saved['training']['step']+1
-    assert continued['training']['options']['share_causal_prefixes'] is False

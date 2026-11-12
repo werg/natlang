@@ -4,7 +4,6 @@ Covers: plain parameter names after installation; λ = 0 equals the unquantized 
 both the plain path and the BF16 cotangent-carrier path of a real update; gradients reach the latents through the
 straight-through route; the trainer's calibration window and pass choice; calibration state round-trip.
 """
-import copy
 import sys
 from pathlib import Path
 
@@ -91,124 +90,9 @@ def test_inline_precision_rejects_unknown_forward_even_with_native_flags(base):
 
 
 def loss_of(model, example):
-    from natlang_neuralese.train.native_state_sft import packed_graph_loss
+    from natlang_neuralese.train.native_graph_loss import packed_graph_loss
     with torch.no_grad():
         return float(packed_graph_loss(model, [example], checkpoint_layers=False)[0])
-
-
-@pytest.mark.parametrize('profile',['source-v1','ffn-stable-v1'])
-@pytest.mark.parametrize('device',['cpu','cuda'])
-def test_inline_points_are_exact_at_zero_and_quantize_above(base,profile,device):
-    if device=='cuda' and not torch.cuda.is_available():pytest.skip('actual CUDA required')
-    from natlang_neuralese.train.native_state_sft import _quantization_pass
-    from natlang_neuralese.train.quantization import Quantization
-    example = graph()
-    model, quantization = model_with_points(base,profile=profile,device=device)
-    plain = loss_of(model, example)
-    with quantization.context('fp8', 0.0):
-        assert loss_of(model, example) == plain
-    with quantization.context('fp8', 1.0):
-        fp8 = loss_of(model, example)
-    assert fp8 != plain
-    with pytest.raises(RuntimeError, match='not calibrated'):
-        with quantization.context('nvfp4', 1.0):
-            loss_of(model, example)
-    # Trainer pass choice: the calibration window opens at update 0 and commits after 2 batches.
-    forward = lambda batch: loss_of(model, batch[0])  # noqa: E731
-    passes = [_quantization_pass(quantization, global_step=step, batch=[example], forward=forward, cursor=step)
-              for step in range(3)]
-    assert quantization.calibration['step'] == 1 and quantization.calibration['batches'] == 2
-    assert passes[0] == ('bf16', 0.0, 1.0)  # progress 0: no point ramped in yet
-    amax = quantization.input_amax()
-    assert len(amax) == 18 and all(value > 0 for value in amax.values())
-    with quantization.context('nvfp4', 1.0):
-        assert loss_of(model, example) != plain
-    # Calibration state round-trip into a freshly installed component.
-    fresh_model, fresh = model_with_points(base,profile=profile,device=device)
-    fresh.load_state_dict(copy.deepcopy(quantization.state_dict()))
-    assert fresh.input_amax() == amax and fresh.calibration == quantization.calibration
-    assert isinstance(fresh, Quantization) and not fresh.calibration_due(3)
-    if profile=='ffn-stable-v1':
-        from natlang_neuralese.model.shared_execution import configure_shared_execution,validate_shared_execution
-        validate_shared_execution(model,{'native_shared_execution':profile})
-        configure_shared_execution(model,'source-v1')
-        with quantization.context('fp8',1.0):assert loss_of(model,example)==fp8
-        configure_shared_execution(model,profile)
-        validate_shared_execution(model,{'native_shared_execution':profile})
-
-
-def test_resume_inside_calibration_window_continues_it_exactly(base):
-    """A checkpoint taken inside an open NVFP4 calibration window carries it (start, batches, running maxima): the
-    resumed component commits at the same update with the same ranges as an uninterrupted run, and the window's
-    quantized training passes never enter the ranges."""
-    from natlang_neuralese.data.native_graph import SCHEMA, parse_graph
-    from natlang_neuralese.train.native_state_sft import _quantization_pass
-    first = graph()
-    other = parse_graph({'schema': SCHEMA, 'id': 'second', 'split': 'train', 'source_groups': ['lfm3-qat'],
-                         'tokenizer_fingerprint': '1' * 64,
-                         'nodes': [{'name': 'only', 'token_ids': [9 + (i * 7) % 20 for i in range(26)],
-                                    'target_weights': [0.] + [1.] * 25}]}, tokenizer_fingerprint='1' * 64)
-    model, quantization = model_with_points(base)
-    forward = lambda batch: loss_of(model, batch[0])  # noqa: E731
-    _quantization_pass(quantization, global_step=0, batch=[first], forward=forward, cursor=0)
-    saved = copy.deepcopy(quantization.state_dict())
-    assert saved['window']['start'] == 0 and saved['window']['batches'] == 1 and saved['step'] is None
-    with quantization.context('fp8', 1.0):  # a training pass inside the window observes nothing
-        loss_of(model, other)
-    _quantization_pass(quantization, global_step=1, batch=[other], forward=forward, cursor=1)
-    resumed_model, resumed = model_with_points(base)
-    resumed.load_state_dict(saved)
-    resumed_forward = lambda batch: loss_of(resumed_model, batch[0])  # noqa: E731
-    _quantization_pass(resumed, global_step=1, batch=[other], forward=resumed_forward, cursor=1)
-    assert resumed.calibration == quantization.calibration == {
-        'step': 1, 'batches': 2, 'source': {'start_global_step': 0, 'cursor': 1}}
-    assert resumed.input_amax() == quantization.input_amax()
-    assert 'window' not in resumed.state_dict()
-
-
-@pytest.mark.parametrize('backend', ['plain', 'cpu_file'])
-@pytest.mark.parametrize('profile',['source-v1','ffn-stable-v1'])
-def test_quantized_update_routes_straight_through_gradients_to_bf16_latents(base, backend,profile):
-    from natlang_neuralese.train.native_state_sft import make_native_optimizer, native_training_update
-    example = graph()
-    deltas = {}
-    for point, mix in (('bf16', 0.0), ('fp8', 0.0), ('fp8', 1.0)):
-        model, quantization = model_with_points(base,profile=profile)
-        model.native_cotangent_accumulator_backend = backend
-        optimizer, _ = make_native_optimizer(model, lr=1e-2, weight_decay=0., learned_row_lr=1e-2)
-        weights = {name: parameter for name, parameter in model.named_parameters()
-                   if name.endswith(('feed_forward.w1.weight', 'self_attn.q_proj.weight'))}
-        assert weights and all(parameter.dtype == torch.bfloat16 for parameter in weights.values())
-        before = {name: value.detach().float().clone() for name, value in weights.items()}
-        torch.manual_seed(11)
-        loss, _ = native_training_update(model, optimizer, [example], checkpoint_layers=True,
-                                         precision=(quantization, point, mix, 1.0))
-        deltas[(point, mix)] = (float(loss.detach()), {name: weights[name].detach().float() - before[name] for name in weights})
-        assert all(delta.abs().sum() > 0 for delta in deltas[(point, mix)][1].values())
-    # λ = 0 is the unquantized update bit for bit; the quantized forward changes the loss and the update.
-    assert deltas[('fp8', 0.0)][0] == deltas[('bf16', 0.0)][0]
-    assert all(torch.equal(deltas[('fp8', 0.0)][1][n], deltas[('bf16', 0.0)][1][n]) for n in deltas[('bf16', 0.0)][1])
-    assert deltas[('fp8', 1.0)][0] != deltas[('bf16', 0.0)][0]
-    assert any(not torch.equal(deltas[('fp8', 1.0)][1][n], deltas[('bf16', 0.0)][1][n]) for n in deltas[('bf16', 0.0)][1])
-
-
-@pytest.mark.parametrize('point',['fp8','nvfp4'])
-def test_canonical_cuda_quantized_whole_graph_updates_actual_latents(base,point,monkeypatch):
-    if not torch.cuda.is_available():pytest.skip('actual CUDA required')
-    from natlang_neuralese.train.native_state_sft import make_native_optimizer,native_training_update
-    from natlang_neuralese.model import nvfp4_gemm
-    def vendor_operand(*args,**kwargs):
-        raise AssertionError('canonical actor arithmetic cannot acquire a training-only vendor GEMM')
-    monkeypatch.setattr(nvfp4_gemm,'weight_operand',vendor_operand)
-    model,quantization=model_with_points(base,profile='ffn-stable-v1',device='cuda')
-    model.native_cotangent_accumulator_backend='plain';example=graph()
-    if point=='nvfp4':quantization.calibrate(lambda batch:loss_of(model,batch[0]),[[example]],0)
-    optimizer,_=make_native_optimizer(model,lr=1e-2,weight_decay=0.,learned_row_lr=1e-2)
-    parameter=next(p for n,p in model.named_parameters() if n.endswith('feed_forward.w1.weight'))
-    before=parameter.detach().clone()
-    loss,_=native_training_update(model,optimizer,[example],checkpoint_layers=True,
-        precision=(quantization,point,1.0,1.0))
-    assert torch.isfinite(loss) and not torch.equal(parameter.detach(),before)
 
 
 def test_native_component_declaration_forms():
@@ -222,37 +106,6 @@ def test_native_component_declaration_forms():
         parse_native_component({**declared, 'loss': {'mode': 'sum'}})
     with pytest.raises(ValueError, match='bind'):
         parse_native_component(lfm3_points())
-
-
-def test_lfm3_default_component_is_adopted_recorded_and_continued(base):
-    """Omitted --quantization: an LFM3 SFT run adopts the recipe's FP8/NVFP4 component over its remaining planned
-    updates (recorded at that update); a resume continues the recorded declaration; `off` opts out explicitly."""
-    from types import SimpleNamespace
-    from natlang_neuralese.model.native_model import load_native_model
-    from natlang_neuralese.train.native_state_sft import _setup_quantization
-    args = SimpleNamespace(quantization=None, fp8_training='off')
-    bind = {'stage': 'joint_sft', 'start': 40, 'end': 140}
-    model, _, _, _ = load_native_model(base, rank=4, dtype=torch.bfloat16)
-    options = {}
-    quantization = _setup_quantization(args, model, None, options, saved_options={}, default_bind=bind)
-    declaration = options['quantization']
-    assert quantization is not None and declaration['bind'] == bind
-    assert [p['name'] for p in declaration['spec']['points']] == ['fp8', 'nvfp4']
-    assert options['quantization_history'][0] == {'event': 'default-adopted', 'at_global_step': 40,
-                                                  'weights_optimizer_rng_exposure': 'preserved'}
-    assert options['quantization_history'][1]['sha256'] == declaration['sha256']
-    assert quantization.progress(90) == 0.5
-    resumed, resumed_options = load_native_model(base, rank=4, dtype=torch.bfloat16)[0], {}
-    _setup_quantization(args, resumed, quantization.state_dict(), resumed_options,
-                        saved_options={'quantization': declaration, 'quantization_history': options['quantization_history']},
-                        default_bind={'stage': 'joint_sft', 'start': 90, 'end': 200})
-    assert resumed_options['quantization']['bind'] == bind  # the recorded ramp continues
-    assert resumed_options['quantization_history'] == options['quantization_history']
-    off = {}
-    assert _setup_quantization(SimpleNamespace(quantization='off', fp8_training='off'),
-                               load_native_model(base, rank=4, dtype=torch.bfloat16)[0], None, off,
-                               saved_options={}, default_bind=bind) is None
-    assert off['quantization'] is None
 
 
 @pytest.mark.gpu_heavy
@@ -290,105 +143,3 @@ def test_in_training_deploy_weights_equal_liquid_exports():
                     deployed = X._dequantize(fmt, exported, prefix + leaf)
                     assert torch.equal(trained, deployed.to(torch.bfloat16)), (layer, fmt, leaf)
                     assert torch.equal(trained, quantized_value(weight, fmt, options).to(torch.bfloat16))
-
-
-def test_diloco_qat_transition_preserves_progress_calibration_and_resume(base):
-    from natlang_neuralese.train.native_state_sft import _quantization_shard_transition, default_lfm3_quantization
-    from natlang_neuralese.train.quantization import Quantization, stage_component
-    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
-    spec, bind = default_lfm3_quantization({'stage':'native_full_sft','start':0,'end':1000})
-    previous={'spec':spec,'bind':bind,'sha256':canonical_json_sha256_hex({'spec':spec,'bind':bind})}
-    saved={'quantization':previous,'quantization_history':[]}
-    result=_quantization_shard_transition(saved,global_step=50,pending_updates=238,stage='native_full_sft',worker=0)
-    newer=result['quantization']; old_q=Quantization(stage_component(spec,bind['stage'],start=0,end=1000))
-    new_q=Quantization(stage_component(newer['spec'],bind['stage'],start=50,end=288))
-    assert old_q.progress(50)==new_q.progress(50)==0.05
-    assert new_q.progress(288)==1.0 and old_q.mixes(50)==new_q.mixes(50)
-    assert result['quantization_history'][-1]['previous_sha256']==previous['sha256']
-    assert result['quantization_history'][-1]['calibration_optimizer_rng_exposure']=='preserved'
-    assert saved['quantization']==previous
-    from types import SimpleNamespace
-    from natlang_neuralese.model.native_model import load_native_model
-    from natlang_neuralese.train.native_state_sft import _setup_quantization
-    args=SimpleNamespace(quantization=None, fp8_training='off')
-    parent=load_native_model(base,rank=4,dtype=torch.bfloat16)[0];parent_options={}
-    parent_q=_setup_quantization(args,parent,None,parent_options,default_bind=bind)
-    parent_q.begin_calibration(50)
-    calibration=parent_q.state_dict()
-    rebound=_quantization_shard_transition(parent_options,global_step=50,pending_updates=238,
-                                            stage='native_full_sft',worker=0)
-    learner=load_native_model(base,rank=4,dtype=torch.bfloat16)[0];options={}
-    learner_q=_setup_quantization(args,learner,calibration,options,saved_options=rebound)
-    assert learner_q.state_dict()==calibration and learner_q.progress(50)==parent_q.progress(50)
-    resumed=load_native_model(base,rank=4,dtype=torch.bfloat16)[0];resume_options={}
-    resume_q=_setup_quantization(args,resumed,learner_q.state_dict(),resume_options,saved_options=options)
-    assert resume_q.state_dict()==calibration and resume_options['quantization']==options['quantization']
-    with pytest.raises(ValueError,match='stage differs'):
-        _quantization_shard_transition(saved,global_step=50,pending_updates=238,stage='wrong',worker=0)
-
-
-def test_diloco_export_retains_each_workers_qat_declaration_and_calibration():
-    from natlang_neuralese.train.native_diloco import _retire_learner_calibration
-    training={'quantization':{'old':'merged'}}
-    learners=[{'diloco':{'worker':i},'quantization':{'amax':i},
-               'options':{'quantization':{'bind':{'end':100+i}},
-                          'quantization_history':[{'event':'transition','worker':i}]}}
-              for i in range(4)]
-    result=_retire_learner_calibration(training,learners)
-    assert 'quantization' not in training
-    for i in range(4):
-        assert result['learners'][str(i)]=={'amax':i}
-        assert result['learner_declarations'][str(i)]=={
-            'declaration':{'bind':{'end':100+i}},'history':[{'event':'transition','worker':i}]}
-
-
-def test_policy_round_keeps_inline_qat_state_but_uses_unquantized_actor_law(base):
-    from natlang_neuralese.model.native_model import load_native_model
-    from natlang_neuralese.train.native_state_sft import training_precision_pass,policy_qat_update,packed_graph_loss
-    torch.manual_seed(5);actor,_,_,_=load_native_model(base,rank=4,dtype=torch.bfloat16)
-    learner,qat=model_with_points(base);example=graph()
-    actor_loss=packed_graph_loss(actor,[example],checkpoint_layers=False)[0]
-    options={'quantization':{'sha256':'a'*64},'quantization_history':[]}
-    before=copy.deepcopy(qat.state_dict())
-    assert training_precision_pass(qat,policy_operation=True,checkpoint_options=options,global_step=5,
-        batch=[example],cursor=1,forward=lambda rows:loss_of(learner,rows[0])) is None
-    learner_loss=packed_graph_loss(learner,[example],checkpoint_layers=False)[0]
-    assert torch.equal(actor_loss,learner_loss)
-    a=torch.autograd.grad(actor_loss,actor.adapter.down.weight)[0]
-    b=torch.autograd.grad(learner_loss,learner.adapter.down.weight)[0]
-    assert torch.equal(a,b) and qat.state_dict()==before
-    policy_qat_update(options,qat,6)
-    assert options['policy_qat_refresh_required']['policy_precision']=='bf16'
-
-
-@pytest.mark.skipif(not torch.cuda.is_available(), reason='the real NVFP4 GEMM needs a Blackwell GPU')
-def test_nvfp4_pass_at_full_ramp_trains_through_the_real_fp4_gemm(base, monkeypatch):
-    """Plain training at NVFP4 λ = 1 on Blackwell runs every FFN linear through the FP4 GEMM (model/nvfp4_gemm.py),
-    a real update with finite loss and changed latents; NATLANG_NVFP4_GEMM=0 keeps fake quant."""
-    from natlang_neuralese.model import nvfp4_gemm
-    from natlang_neuralese.model.native_model import load_native_model
-    from natlang_neuralese.train.native_state_sft import make_native_optimizer, native_training_update
-    from natlang_neuralese.train.quantization import Quantization, parse_native_component, stage_component
-    if not nvfp4_gemm.supported('cuda'):
-        pytest.skip('no block-scaled FP4 GEMM on this GPU')
-    calls = []
-    original = nvfp4_gemm.nvfp4_linear
-    monkeypatch.setattr(nvfp4_gemm, 'nvfp4_linear', lambda *a, **k: calls.append(1) or original(*a, **k))
-    example = graph()
-    for enabled in ('1', '0'):
-        monkeypatch.setenv('NATLANG_NVFP4_GEMM', enabled)
-        calls.clear()
-        torch.manual_seed(5)
-        model, _, _, _ = load_native_model(base, rank=4, dtype=torch.bfloat16, device='cuda')
-        model.native_cotangent_accumulator_backend = 'plain'
-        spec, bind = parse_native_component({**lfm3_points(), 'bind': {'stage': 'joint_sft', 'start': 0, 'end': 10}})
-        quantization = Quantization(stage_component(spec, bind['stage'], start=bind['start'], end=bind['end']))
-        quantization.install(model, inline=True)
-        quantization.calibrate(lambda batch: loss_of(model, batch[0]), [[example]], 0)
-        optimizer, _ = make_native_optimizer(model, lr=1e-2, weight_decay=0., learned_row_lr=1e-2)
-        w1 = next(p for n, p in model.named_parameters() if n.endswith('feed_forward.w1.weight'))
-        before = w1.detach().clone()
-        loss, _ = native_training_update(model, optimizer, [example], checkpoint_layers=True,
-                                         precision=(quantization, 'nvfp4', 1.0, 1.0))
-        assert torch.isfinite(loss) and not torch.equal(w1.detach(), before)
-        assert bool(calls) == (enabled == '1')

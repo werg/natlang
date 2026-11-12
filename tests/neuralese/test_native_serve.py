@@ -97,8 +97,7 @@ def test_native_checkpoint_chat_produces_captures_and_consumes_exact_stored_stat
         assert info['serving_config']['schema'] == 'natlang.native-prefill-config/1'
         assert info['serving_config']['full_prompt_preserved'] is True
         assert info['serving_config_identity_sha256'] == info['serving_config']['identity_sha256']
-        from natlang_neuralese.rl.production import validate_actor_receipts
-        validate_actor_receipts({endpoint: binding}, policy_id=engine.checkpoint_sha256, neuralese_server=True)
+        assert binding['checkpoint_sha256'] == engine.checkpoint_sha256
         native_token=engine._native_token
         produced = iter([(roles.produce_open, -.1), (5, -.2), (roles.produce_close, -.3), (2, -.4)])
         monkeypatch.setattr(engine, '_native_token', lambda _seq: next(produced))

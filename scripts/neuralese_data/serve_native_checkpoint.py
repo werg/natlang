@@ -154,7 +154,7 @@ def supervise_sglang(process):
 
     The server (and its scheduler/detokenizer children) ends with this actor, including on SIGTERM. When the engine
     exits first (a scheduler crash takes the whole server down), this process must stop reporting healthy: it logs the
-    reason and exits ``ENGINE_DIED_EXIT`` so the controller sees a dead actor and relaunches it (rl.managed_actor)."""
+    reason and exits ``ENGINE_DIED_EXIT`` so a supervisor sees a dead actor."""
     import atexit
     import os
     import signal

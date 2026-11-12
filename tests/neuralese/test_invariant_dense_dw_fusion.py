@@ -256,66 +256,6 @@ def test_ordered_dense_dwd_fusion_preserves_mixed_invocation_dtype_laws(backend,
     assert torch.equal(run(True), run(False))
 
 
-@pytest.mark.parametrize('family', ['lfm'])
-def test_ordered_dense_dwd_fusion_matches_shared_graph_training_update(family, monkeypatch):
-    """Exercise the production VJP scope inside the real shared-graph trainer."""
-    if not torch.cuda.is_available():
-        pytest.skip('CUDA unavailable')
-    from test_shared_state import tiny, graph
-    from natlang_neuralese.data.native_graph_schema import NativeGraphExample
-    from natlang_neuralese.model.shared_state import SharedStateModel
-    from natlang_neuralese.train.native_state_sft import make_native_optimizer, native_training_update
-
-    torch.manual_seed(8403)
-    cpu_model = SharedStateModel(tiny(family), (60, 61, 62, 63), rank=4)
-    cpu_model.port.hf.to(dtype=torch.bfloat16)
-    if family == 'mellum':
-        cpu_model.port.hf.natlang_precision = 'bf16'
-    cpu_model.port.checkpoint_layers = True
-    cpu_model.port.ffn_chunk_tokens = 2
-    initial_state = {name: value.detach().clone() for name, value in cpu_model.state_dict().items()}
-    parameters = list(cpu_model.parameters())
-    print('dense-dW CUDA preflight', {
-        'family': family,
-        'cpu_parameters': sum(parameter.numel() for parameter in parameters),
-        'largest_parameter_numel': max(parameter.numel() for parameter in parameters),
-        'largest_parameter_shape': max(parameters, key=lambda value: value.numel()).shape,
-        'cuda_mem_info_bytes': torch.cuda.mem_get_info(),
-        'cuda_allocated_bytes': torch.cuda.memory_allocated(),
-        'cuda_reserved_bytes': torch.cuda.memory_reserved(),
-        'cuda_fraction': torch.cuda.get_per_process_memory_fraction(),
-    }, flush=True)
-    model = cpu_model.to('cuda')
-    actual_optimizer, _ = make_native_optimizer(model, lr=1e-4, weight_decay=0.)
-    plan = graph()
-    weights = [1.0] * plan.token_count
-    for offset in plan.offsets:
-        weights[offset] = 0.0
-    example = NativeGraphExample('ordered-dw-shared-graph', 'train', ('fixture',), 'fixture-tokenizer',
-                                 plan, tuple(weights), {})
-    cpu_rng = torch.get_rng_state()
-    cuda_rng = torch.cuda.get_rng_state_all()
-    actual_loss, _ = native_training_update(
-        model, actual_optimizer, [example], checkpoint_layers=True, chunk_tokens=8)
-    actual_state = {name: value.detach().cpu().clone() for name, value in model.state_dict().items()}
-
-    model.load_state_dict(initial_state)
-    expected_optimizer, _ = make_native_optimizer(model, lr=1e-4, weight_decay=0.)
-    original = ParameterCotangentScope.defer_dense_linear_rows
-    monkeypatch.setattr(ParameterCotangentScope, 'defer_dense_linear_rows', lambda *_args: False)
-    torch.set_rng_state(cpu_rng)
-    torch.cuda.set_rng_state_all(cuda_rng)
-    try:
-        expected_loss, _ = native_training_update(
-            model, expected_optimizer, [example], checkpoint_layers=True, chunk_tokens=8)
-    finally:
-        monkeypatch.setattr(ParameterCotangentScope, 'defer_dense_linear_rows', original)
-    expected_state = {name: value.detach().cpu() for name, value in model.state_dict().items()}
-    assert torch.equal(actual_loss, expected_loss)
-    for name, value in actual_state.items():
-        assert torch.equal(value, expected_state[name]), name
-
-
 @pytest.mark.parametrize('backend', ['cpu_file', 'device_fp32'])
 def test_ordered_dense_dwd_fusion_preserves_partition_reduction_order(backend, tmp_path):
     if not torch.cuda.is_available():
@@ -387,5 +327,3 @@ def test_ordered_dense_dwd_fusion_reuses_checkpoint_captured_scope_and_partition
     expected = run(False)
     assert torch.equal(actual[0], expected[0])
     assert all(torch.equal(left, right) for left, right in zip(actual[1], expected[1]))
-
-
