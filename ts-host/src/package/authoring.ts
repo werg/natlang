@@ -7,6 +7,10 @@ export type SavedExample = { name?: string; function: string; inputs: Record<str
 export const sampleInput = 'I was charged twice for my subscription.';
 const starterInstruction = 'Classify input as billing (charges, invoices or payments), technical (errors or bugs), or other. Return only the matching label.';
 
+/** A program's `answer.nl`: the starter's own unless the caller supplies instructions and a result type. */
+export const answerSource = (instruction = starterInstruction, returns = '"billing" | "technical" | "other"') =>
+  `---\ndescription: Answer using the program instructions.\nargs:\n  input: string\nreturns: ${JSON.stringify(returns)}\n---\n${instruction}\n`;
+
 export function createProgram(directory: string, options: { instruction?: string; input?: string; returns?: string; profile?: string } = {}): string {
   const root = resolve(directory);
   if (existsSync(root) && (!statSync(root).isDirectory() || readdirSync(root).length)) throw new Error(`${root} is not empty. Choose a new directory; existing files are never overwritten.`);
@@ -18,7 +22,7 @@ export function createProgram(directory: string, options: { instruction?: string
   // module, tsconfig or input file to learn before the first edit. AGENTS.md (and CLAUDE.md, which imports it) tells a
   // coding agent the non-interactive loop.
   const files: Record<string, string> = {
-    'answer.nl': `---\ndescription: Answer using the program instructions.\nargs:\n  input: string\nreturns: ${JSON.stringify(returns)}\n---\n${instruction}\n`,
+    'answer.nl': answerSource(instruction, returns),
     'natlang.json': JSON.stringify({ schema: 'natlang.package/v2', name, version: '0.1.0', description: 'My first natlang program.',
       ...(options.profile ? { model: { profile: options.profile } } : {}),
       include: ['answer.nl', 'examples.json', 'README.md'],

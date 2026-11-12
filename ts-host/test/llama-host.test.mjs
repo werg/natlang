@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createLlamaServer, ensureStockModel, localSlotPlan, localModelPrerequisites, managedModelSha256, discoverLlamaRuntime,
   stockModelPath, nodeLlamaHost } from '../dist/llama/index.js';
+import { baseOf } from '../dist/llama/warm.js';
 import { openAICompatibleModelTurn } from '../dist/model/openai-compatible.js';
 
 // A host that touches nothing of the machine: its processes, network and log are the test's own.
@@ -115,6 +116,7 @@ test('an attached server is planned and warmed through the host\'s fetch, with i
       const { messages } = JSON.parse(init.body);
       return new Response(JSON.stringify({ prompt: `<|im_start|>system\n${messages[0].content}<|im_end|>\n<|im_start|>user\n${messages[1].content}<|im_end|>\n` }));
     }
+    if (path === '/tokenize') return new Response(JSON.stringify({ tokens: [...JSON.parse(init.body).content].map(c => c.charCodeAt(0)) }));
     if (path === '/completion') return new Response(JSON.stringify({ timings: { prompt_n: 321 } }));
     if (path.startsWith('/slots/0?action=save')) {
       writeFileSync(join(host.directories.warmPrefixes, JSON.parse(init.body).filename), 'slot state'); return new Response('{}');
@@ -133,14 +135,14 @@ test('an attached server is planned and warmed through the host\'s fetch, with i
   assert.equal(endpoint, 'http://127.0.0.1:9000');
   release();
   const paths = posts.map(post => `${post.method} ${post.path}`);
-  assert.deepEqual(paths, ['GET /slots', 'POST /apply-template', 'POST /apply-template', 'POST /slots/0?action=erase',
+  assert.deepEqual(paths, ['GET /slots', 'POST /apply-template', 'POST /apply-template', 'POST /tokenize', 'POST /slots/0?action=erase',
     'POST /completion', 'POST /slots/0?action=save', 'POST /slots/1?action=restore']);
   assert.ok(posts.every(post => post.authorization === 'Bearer secret'), 'every request to the server carries the host\'s credentials');
   const warmed = server.status().warm;
-  assert.equal(warmed.length, 1); assert.equal(warmed[0].tokens, 321); assert.equal(warmed[0].restoredSlots, 2); assert.equal(warmed[0].created, true);
+  assert.equal(warmed.length, 1); assert.equal(warmed[0].prefilled, 321); assert.equal(warmed[0].restoredSlots, 2); assert.equal(warmed[0].created, true);
   assert.match(warmed[0].file, new RegExp(`-${sha.slice(0, 12)}-b12069ga0c92ce-p2x8192\\.slot$`), 'keyed by the model, the build and the slot layout');
   assert.ok(readdirSync(host.directories.warmPrefixes).some(name => name.endsWith('.slot')));
-  assert.match(log.join(''), /prefilled the 321-token prompt opening/);
+  assert.match(log.join(''), new RegExp(`prefilled the ${warmed[0].tokens}-token prompt opening`));
   // a second server over the same states restores instead of prefilling
   const again = createLlamaServer(host, { headers: { authorization: 'Bearer secret' },
     attach: { endpoint: 'http://127.0.0.1:9000', slots: 2, contextPerSlot: 8192, modelSha256: sha, runtime: 'b12069ga0c92ce', warm: true } });
@@ -169,6 +171,50 @@ test('an attached server is planned and warmed through the host\'s fetch, with i
   } }, { attach: { endpoint: 'http://127.0.0.1:9000', slots: 1, contextPerSlot: 8192, modelSha256: sha, runtime: null, warm: true } });
   (await slow.admit(request)).release();
   await server.close(); await again.close(); await busy.close(); await unreadable.close(); await slow.close();
+});
+
+test('openings that differ only in their last tool share a saved base: a new one prefills only its rest', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'natlang-llama-base-'));
+  const posts = [], saved = new Map();
+  let cache = [];
+  const { host, log } = fixtureHost(root, { fetch: async (url, init) => {
+    const path = String(url).replace('http://127.0.0.1:9000', ''), body = init?.body ? JSON.parse(init.body) : undefined;
+    posts.push({ path, body });
+    if (path === '/slots') return new Response('[{"is_processing":false}]');
+    // The LFM3 template: the tools, one JSON line each, follow the system prompt inside the system turn.
+    if (path === '/apply-template') return new Response(JSON.stringify({ prompt: `<|im_start|>system\n${body.messages[0].content}\n\n<tools>\n` +
+      body.tools.map(tool => JSON.stringify(tool.function)).join('\n') + `\n</tools><|im_end|>\n<|im_start|>user\n${body.messages[1].content}<|im_end|>\n` }));
+    if (path === '/tokenize') return new Response(JSON.stringify({ tokens: [...body.content].map(c => c.charCodeAt(0)) }));
+    // Slot 0's KV as llama.cpp keeps it: a completion processes only what follows the cached common prefix.
+    if (path === '/completion') {
+      let same = 0; while (same < cache.length && same < body.prompt.length && cache[same] === body.prompt[same]) same++;
+      cache = body.prompt; return new Response(JSON.stringify({ timings: { prompt_n: body.prompt.length - same } }));
+    }
+    if (path === '/slots/0?action=erase') { cache = []; return new Response('{}'); }
+    if (path === '/slots/0?action=restore') { cache = saved.get(body.filename) ?? []; return new Response('{}'); }
+    if (path.includes('action=save')) { saved.set(body.filename, cache); writeFileSync(join(host.directories.warmPrefixes, body.filename), 'slot state'); return new Response('{}'); }
+    return new Response('{}');
+  } });
+  mkdirSync(host.directories.warmPrefixes, { recursive: true });
+  const attach = { endpoint: 'http://127.0.0.1:9000', slots: 1, contextPerSlot: 8192, modelSha256: 'a'.repeat(64), runtime: 'b12069ga0c92ce', warm: true };
+  const tool = (name, extra = {}) => ({ type: 'function', function: { name, description: `The ${name} tool. `.repeat(20), ...extra } });
+  const opening = returns => ({ messages: [{ role: 'system', content: 'You run one call. '.repeat(40) }, { role: 'user', content: 'hi' }],
+    tools: [tool('eval'), tool('read_page'), tool('return_result', { parameters: { value: { enum: returns } } })] });
+  const first = createLlamaServer(host, { attach });
+  (await first.admit(opening(['billing', 'other']))).release();
+  const base = first.status().warm[0].base;
+  assert.match(base, /\.base\.slot$/, 'the first opening saves the shared base');
+  const baseFill = posts.find(post => post.path === '/completion').body.prompt.length;
+  posts.length = 0;
+  const second = createLlamaServer(host, { attach });
+  (await second.admit(opening(['yes', 'no']))).release();
+  const state = second.status().warm[0];
+  assert.equal(state.base, base, 'a different return type builds on the same base');
+  assert.ok(posts.some(post => post.path === '/slots/0?action=restore' && post.body.filename === base), 'the base is restored, not prefilled');
+  assert.equal(posts.filter(post => post.path === '/completion').length, 1);
+  assert.ok(state.prefilled > 0 && state.prefilled <= state.tokens - baseFill + 2, `only the rest is prefilled (${state.prefilled} of ${state.tokens})`);
+  assert.match(log.join(''), /new tokens on its saved shared base/);
+  assert.equal(baseOf('<|im_start|>system\nx<|im_end|>\n'), undefined, 'no tools, no base');
 });
 
 test('decision scoring runs against a server the host supervises: the package\'s endpoint feeds the endpoint driver\'s scorer', async () => {

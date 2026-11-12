@@ -191,7 +191,7 @@ export function createLlamaServer(host: LlamaHost, options: LlamaServerOptions =
           warmTag(sha, runtime ?? runtimeLabel(prerequisites.runtime.selected), plan!), plan?.slots ?? 1);
         if (state) {
           warmed.push(state);
-          log.write(state.created ? `natlang: prefilled the ${state.tokens}-token prompt opening once for this model; later calls and runs restore it\n` :
+          log.write(state.created ? `natlang: prefilled the ${state.tokens}-token prompt opening once for this model${state.base && state.prefilled !== undefined ? ` (${state.prefilled} new tokens on its saved shared base)` : ''}; later calls and runs restore it\n` :
             `natlang: restored the warm ${state.tokens}-token prompt opening into ${state.restoredSlots} slot${state.restoredSlots === 1 ? '' : 's'}\n`);
           pruneWarmStates(host.directories.warmPrefixes);
         }

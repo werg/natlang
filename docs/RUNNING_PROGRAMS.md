@@ -144,8 +144,15 @@ cache (`warm-prefixes/`, keyed by the exact opening, model file, llama.cpp build
 restores only into a server with the same slots; the 24 most recent are kept), and
 restores it into every slot before the first call that sends it. Later calls in a warm slot keep reusing it, and later
 runs start warm. The warm build fills this cache ahead of time and lists the openings in the lock. Measured on four CPU
-cores with Q4_K_M, a first call reused 2,923 of its 3,439 opening tokens after a 0.07 s restore. `NATLANG_WARM_PREFIXES=off`
-turns it off; states are not used while tuned LoRA adapters or native states are loaded.
+cores with Q4_K_M, a first call reused 2,923 of its 3,439 opening tokens after a 0.07 s restore.
+
+Openings mostly differ in their last tool, `return_result`, whose value schema is the function's return type. A new
+opening is therefore built on a shared base, the opening without its last tool line, saved once (`*.base.slot`) and
+restored for every opening with the same system prompt and other tools: a function with a new return type prefills
+about 300 tokens instead of 4,500 (3 s instead of 120 s on a loaded 16-core CPU). `natlang setup` prepares the base
+and the opening of a new program's `answer.nl` while it sets up the model, so the first `natlang run` after
+`natlang init` starts warm. `NATLANG_WARM_PREFIXES=off` turns warming off; states are not used while tuned LoRA
+adapters or native states are loaded.
 
 ## One loaded model for every run
 

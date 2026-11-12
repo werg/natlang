@@ -6,7 +6,7 @@ import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createInterface } from 'node:readline/promises';
 import { isDeepStrictEqual } from 'node:util';
-import { createProgram, readExamples } from '../package/authoring.js';
+import { answerSource, createProgram, readExamples, sampleInput } from '../package/authoring.js';
 import { createPackageArchive, NatlangPackageStore, readPackageArchive,
   writePackageArchive, defaultNatlangStateDirectory } from '../package/index.js';
 import { compareVersions, defaultNatlangConfigDirectory, satisfiesVersion } from '../package/store.js';
@@ -32,7 +32,9 @@ import { executeNatlangAsk, executeNatlangCall } from '../native/natlang-command
 import { inferValueType } from '../native/runtime.js';
 import { formatDiagnostics } from '../compiler/project.js';
 import { buildProject } from '../compiler/node-project.js';
-import { type NatlangRuntime } from '../runtime/runtime.js';
+import { type ModelDriver, type NatlangRuntime } from '../runtime/runtime.js';
+import { createNatlangRuntime, loadVirtualNatlang } from '../runtime/node.js';
+import type { ModelTurnRequest } from '../contracts.js';
 import { fileTraceSink, applicationContextRecords, loadCallables, loadNatlang } from '../runtime/node-files.js';
 import { callableMeta } from '../runtime/callable.js';
 import { analyzeFusion, prepareFusion } from '../fusion/prepare.js';
@@ -41,7 +43,7 @@ import { parseFusionSettings, type FusionSettings } from '../fusion/settings.js'
 import { parseAdaptation } from '../adaptation/schema.js';
 import { currentRelease } from '../adaptation/weights/release.js';
 import { invokeDefinition } from '../runtime/kernel.js';
-import { natlangRuntime, selectModel } from '../configured-runtime.js';
+import { natlangRuntime, runtimeModel, selectModel } from '../configured-runtime.js';
 import { resolveFrame } from '../runtime/runtime.js';
 import '../runtime/node.js';
 
@@ -398,6 +400,28 @@ function outputRuntime(discovery: LlamaRuntimeDiscovery, json: boolean): void {
     return;
   }
   output(`llama.cpp runtime unavailable\n${describeLlamaRuntime(discovery)}`, false);
+}
+
+/**
+ * Prefill, once per model and llama.cpp build, the prompt opening that a new program's `answer.nl` sends, and with it the
+ * shared base every function with the same system prompt builds on (llama/warm.ts): the first `natlang run` then starts
+ * warm, and a new function's first call prefills about 300 tokens instead of the whole opening. The opening is
+ * rendered by the runtime itself (a driver that captures the first request); no model call is made.
+ */
+async function prewarmStarter(choice: Extract<LoadedModelConfiguration['choice'], { kind: 'managed-local' }>): Promise<void> {
+  if (process.env.NATLANG_WARM_PREFIXES === 'off') return;
+  let opening: ModelTurnRequest | undefined;
+  const capture = Object.assign(async (request: ModelTurnRequest) => { opening = request; throw new Error('opening captured'); },
+    { model: choice.model }) as unknown as ModelDriver;
+  const { model } = await runtimeModel(choice, capture);
+  const answer = loadVirtualNatlang({ 'answer.nl': answerSource() }, 'answer.nl');
+  await createNatlangRuntime({ model: model!, seed: { mode: 'backend' } }).run(() => answer(sampleInput)).catch(() => undefined);
+  if (!opening) return;
+  process.stderr.write('natlang: preparing the prompt cache so first runs start warm (once per model; minutes on a CPU)\n');
+  const session = createResolvedModelSession(choice, process.env, process.stderr);
+  try { await session.warm?.(opening); }
+  catch (error) { process.stderr.write(`natlang: prompt cache not prepared: ${(error as Error).message.split('\n')[0]}; the first run prepares it\n`); }
+  finally { await session.close(); }
 }
 
 const selectionOptions = (parsed: Parsed) => ({ profile: option(parsed, '--profile'), provider: option(parsed, '--provider'),
@@ -1240,6 +1264,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       const { choice } = action === 'ensure' ? modelSelection(parsed) : { choice: undefined };
       const release = choice?.kind === 'managed-local' && !process.env.NATLANG_MODEL_PATH ? choice.release : undefined;
       const modelPath = release ? await ensureStockModel(release) : undefined;
+      if (choice?.kind === 'managed-local') await prewarmStarter(choice);
       if (json) output({ ...runtimeReport(), ...(release ? { model: release.id, modelPath } : {}) }, true);
       else { outputRuntime(discoverLlamaRuntime(), false); if (release) output(`model: ${release.label} (${modelPath})`, false); }
       return 0;

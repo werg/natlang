@@ -10,6 +10,12 @@
  * run of `natlang build --warm` fills that cache ahead of time and records which openings its program sends
  * (package/warm.ts).
  *
+ * Openings differ mostly in their last tool: return_result, whose value schema is the function's return type, comes
+ * last in the tool list, which the LFM3 template renders after the system prompt. So a new opening is warmed in two
+ * levels: its base (the rendered opening without its last tool line, shared by every opening with the same system
+ * prompt and other tools) is restored when saved, or prefilled and saved once; then only the rest, about 300
+ * tokens of the `return_result` line, is prefilled (measured on a CPU: 3 s instead of 120 s for a new return type).
+ *
  * Mechanism only; nothing here decides policy. A state is keyed by the exact opening text, model file and build.
  */
 import { createHash } from 'node:crypto';
@@ -43,6 +49,15 @@ export function sharedPrefix(first: string, second: string): string {
   return common.slice(0, cut);
 }
 
+/** The rendered opening up to its last tool line (the shared base of openings that differ only there), if it has two
+ * or more tools in a `<tools>` block. */
+export function baseOf(prefix: string): string | undefined {
+  const open = prefix.indexOf('<tools>\n'), close = prefix.lastIndexOf('\n</tools>');
+  if (open < 0 || close < open) return undefined;
+  const lastLine = prefix.lastIndexOf('\n', close - 1);
+  return lastLine > open + '<tools>'.length ? prefix.slice(0, lastLine + 1) : undefined;
+}
+
 async function post(host: LlamaHost, endpoint: string, headers: Record<string, string> | undefined, path: string, body: unknown): Promise<Record<string, unknown>> {
   const response = await host.fetch(endpoint + path, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body) });
   const text = await response.text();
@@ -58,17 +73,45 @@ export async function warmOpening(host: LlamaHost, server: { endpoint: string; h
   opening: Opening, tag: string, slots: number): Promise<WarmPrefix | undefined> {
   const { endpoint, headers } = server;
   const file = `${opening.key.slice(0, 16)}-${tag}.slot`, path = join(directory, file), meta = `${path}.json`;
-  let created = false, info: { chars: number; tokens: number } | undefined;
+  let created = false, info: { chars: number; tokens: number; prefilled?: number } | undefined;
+  // Token IDs as the server's chat path makes them (the template carries its own BOS), so a base is an exact prefix.
+  const tokenize = async (content: string) => (await post(host, endpoint, headers, '/tokenize',
+    { content, add_special: false, parse_special: true })).tokens as number[];
   try { if (existsSync(path)) info = JSON.parse(readFileSync(meta, 'utf8')) as { chars: number; tokens: number }; } catch { info = undefined; }
-  let first = 0;
+  /** Put the opening's base into slot 0: restore its saved state, or prefill and save it. The base file's name, or undefined
+   * when the opening has none; a failed restore leaves the slot empty and the opening is prefilled whole. */
+  async function restoreOrSaveBase(text: string | undefined, tokens: number[]): Promise<string | undefined> {
+    if (!text) return undefined;
+    const own = await tokenize(text);
+    let shared = 0;
+    while (shared < own.length && shared < tokens.length && own[shared] === tokens[shared]) shared++;
+    // The last token of the cut text may merge differently inside the whole opening: the base stops before it.
+    const prefixTokens = tokens.slice(0, Math.max(0, shared - 1));
+    if (prefixTokens.length < 256 || prefixTokens.length >= tokens.length) return undefined;
+    const name = `${createHash('sha256').update(JSON.stringify(prefixTokens)).digest('hex').slice(0, 16)}-${tag}.base.slot`;
+    if (existsSync(join(directory, name))) {
+      try {
+        await post(host, endpoint, headers, '/slots/0?action=restore', { filename: name });
+        const now = new Date(); try { utimesSync(join(directory, name), now, now); } catch { /* recency is only for pruning */ }
+        return name;
+      } catch { await post(host, endpoint, headers, '/slots/0?action=erase', {}).catch(() => undefined); return undefined; }
+    }
+    await post(host, endpoint, headers, '/completion', { prompt: prefixTokens, n_predict: 0, cache_prompt: true, id_slot: 0 });
+    await post(host, endpoint, headers, '/slots/0?action=save', { filename: name });
+    return name;
+  }
+  let first = 0, base: string | undefined;
   if (!info) {
     const render = async (content: string) => String((await post(host, endpoint, headers, '/apply-template',
       { messages: [opening.system, { role: 'user', content }], ...(opening.tools.length ? { tools: opening.tools } : {}) })).prompt ?? '');
     const prefix = sharedPrefix(await render('⁣A'), await render('⁣B'));
     if (prefix.length < 256) return undefined;
+    const tokens = await tokenize(prefix);
     await post(host, endpoint, headers, '/slots/0?action=erase', {}).catch(() => undefined);
-    const completion = await post(host, endpoint, headers, '/completion', { prompt: prefix, n_predict: 0, cache_prompt: true, id_slot: 0 });
-    info = { chars: prefix.length, tokens: Number((completion.timings as Record<string, unknown> | undefined)?.prompt_n ?? completion.tokens_evaluated ?? 0) };
+    base = await restoreOrSaveBase(baseOf(prefix), tokens);
+    const completion = await post(host, endpoint, headers, '/completion', { prompt: tokens, n_predict: 0, cache_prompt: true, id_slot: 0 });
+    info = { chars: prefix.length, tokens: tokens.length,
+      prefilled: Number((completion.timings as Record<string, unknown> | undefined)?.prompt_n ?? tokens.length) };
     await post(host, endpoint, headers, '/slots/0?action=save', { filename: file });
     writeFileSync(meta, JSON.stringify(info));
     created = true; first = 1;
@@ -77,7 +120,9 @@ export async function warmOpening(host: LlamaHost, server: { endpoint: string; h
   for (let slot = first; slot < slots; slot++) {
     try { await post(host, endpoint, headers, `/slots/${slot}?action=restore`, { filename: file }); restored++; } catch { break; }
   }
-  return { sha256: opening.key, chars: info.chars, tokens: info.tokens, bytes: statSync(path).size, file, restoredSlots: restored, created };
+  return { sha256: opening.key, chars: info.chars, tokens: info.tokens, bytes: statSync(path).size, file, restoredSlots: restored, created,
+    ...(created && info.prefilled !== undefined ? { prefilled: info.prefilled } : {}), ...(base ? { base } : {}) };
+
 }
 
 /** Keep the `keep` most recently used warm states of the directory. */
