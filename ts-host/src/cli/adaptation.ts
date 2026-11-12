@@ -72,7 +72,7 @@ export async function adaptationCommand(argv: string[]): Promise<number> {
     if (flags.has('--dry-run') || flags.has('--preflight')) {
       const models = [executorConfig, ...(prepared.suite.models?.reflection ? [loadModelConfiguration(prepared.suite.models.reflection)] : []),
         ...(prepared.suite.models?.judge ? [loadModelConfiguration(prepared.suite.models.judge)] : [])];
-      if (models.some(model => model.choice.kind === 'managed-local') && !localModelPrerequisites().available) throw new Error('managed model is unavailable; run natlang --setup');
+      if (models.some(model => model.choice.kind === 'managed-local') && !localModelPrerequisites().available) throw new Error('managed model is unavailable; run natlang setup --yes');
       const fixtures = await preflightEvaluation(prepared);
       output({ ok: true, suite: prepared.suite.id, suiteHash: prepared.suiteHash, fixtures,
         components: prepared.components, cases: prepared.cases.map(testCase => ({ id: testCase.id, split: testCase.split })), executorIdentity }); return 0;

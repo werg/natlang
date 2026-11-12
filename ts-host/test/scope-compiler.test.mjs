@@ -247,7 +247,7 @@ test('scope compiler removes a redundant injected self-alias and records the rep
 
 test('scope compiler removes an input written out again as a literal of its exact value, and only that', async () => {
   const ticket = 'The checkout page shows a 500 error for everyone';
-  const options = { inputBindings: ['ticket', 'limit'], inputValues: { ticket, limit: -3 } };
+  const options = { inputBindings: ['ticket', 'limit'], boundValues: { ticket, limit: -3 } };
   const compiled = compileScopeSnippet(`const ticket = ${JSON.stringify(ticket)};\nconst limit = -3;\nticket.length + limit`, options);
   assert.equal(compiled.ok, true, JSON.stringify(compiled.diagnostics));
   assert.deepEqual(compiled.repairs.map(repair => repair.message), ['Removed a declaration of input "ticket": it already holds that value.',
@@ -257,6 +257,13 @@ test('scope compiler removes an input written out again as a literal of its exac
   const changed = compileScopeSnippet('const ticket = "test data";\nticket', options);
   assert.equal(changed.ok, false);
   assert.match(changed.diagnostics[0].message, /ticket is this call's input and already holds the caller's value/);
+  // A captured variable of the enclosing code written out again with its value is removed the same way.
+  const captured = { captureBindings: [{ name: 'note', mutable: false }], boundValues: { note: 'urgent' } };
+  const recapture = compileScopeSnippet('const note = "urgent";\n1', captured);
+  assert.equal(recapture.ok, true, JSON.stringify(recapture.diagnostics));
+  assert.deepEqual(recapture.repairs.map(repair => repair.message), ['Removed a declaration of captured value "note": it already holds that value.']);
+  assert.match(compileScopeSnippet('const note = "calm";\n1', captured).diagnostics[0].message,
+    /^note is already a variable of the enclosing code, captured by this call/);
 });
 
 test('scope compiler transactionally captures existing locals and rejects immutable writes', async () => {

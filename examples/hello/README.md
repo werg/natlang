@@ -1,20 +1,16 @@
 # hello
 
-Run these commands from this directory:
-
 ```sh
-natlang run
-natlang run . -- "My own input"
-natlang dev
-natlang check
-natlang test
-natlang dashboard --open
+natlang run                          # answer.nl on the sample input
+natlang run . -- "My own input"      # or: natlang call answer.nl "My own input"
+natlang dev                          # rerun after every edit; Ctrl+C stops
+natlang test                         # check the saved examples
+natlang dashboard --open             # results, traces and model settings in the browser
 ```
 
-Edit **answer.nl** to change the instructions, **sample.json** to change the default input, and **examples.json** to save input/expected-output tests. The dashboard can also save tests from the function form. Model tests execute real calls on your selected model.
+**answer.nl** is a natural-language function: a typed signature (`args`, `returns`) and instructions that a model
+carries out. Edit the instructions to change its behavior. **examples.json** saves inputs with their expected results, and
+`natlang test` runs them on the real model. The sample input is the `input` argument's default in **natlang.json**.
 
-The arguments and return type in answer.nl are the function's contract. Imports and call sites are checked before execution; the model's behavior still needs examples and tests. Instructions can use the declared input and callable helpers in the companion answer/ folder. Add typed services when the model needs outside capabilities.
-
-The first run prepares your selected model. Local setup may download a model; you can instead configure an API provider in the dashboard's Models page. Runs reuse saved prompt openings automatically. Use a model profile to choose another backend.
-
-When a run fails, the dashboard shows its error and links calls to source and traces.
+`natlang check` checks the source without calling a model. The first run prepares the selected model: the local one is a
+one-time download (about 1.9 GB), or choose a hosted model on the dashboard's Models page.

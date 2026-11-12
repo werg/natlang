@@ -44,11 +44,13 @@ To create your own:
 ```sh
 natlang init my-program
 cd my-program
-natlang run
+natlang run                          # answer.nl on the sample input
+natlang call answer.nl "Your text"   # one call with your own input
 natlang dev
 ```
 
-Edit `answer.nl` or `sample.json` while `dev` runs; it stops the previous run
+A new program is `answer.nl`, `natlang.json` (its `main` target is `answer.nl` itself; the `input` argument's default
+is the sample), `examples.json`, a README and an `AGENTS.md` for coding agents. Edit `answer.nl` or the sample while `dev` runs; it stops the previous run
 before starting a replacement and ignores generated files. Ctrl+C stops both
 the watcher and its current run. Use **Keep the model loaded** on the dashboard
 to reuse one local server across runs.
@@ -101,6 +103,7 @@ is how the model was evaluated, so a budget trades some accuracy for speed.
 
 ```sh
 natlang run examples/triage                       # an application (natlang.json target)
+natlang call examples/triage/classify.nl "My printer is on fire" "technical, billing or other"   # arguments in parameter order
 natlang call examples/triage/classify.nl --inputs inputs.json
 natlang ask "Summarize the input in one sentence." < notes.txt
 ```

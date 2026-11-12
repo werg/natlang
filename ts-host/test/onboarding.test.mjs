@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawn } from 'node:child_process';
@@ -35,20 +35,35 @@ test('a newly scaffolded program checks, runs, and checks saved expected results
     NATLANG_CALL_STORE: 'off', NATLANG_HASH_CACHE: join(root, 'hashes.jsonl'), NATLANG_CONFIG_HOME: root, NATLANG_STATE_HOME: join(root, 'state') };
   try {
     const init = await run(['init', program], root, env); assert.equal(init.code, 0, init.err);
+    assert.deepEqual(readdirSync(program).sort(), ['.gitignore', 'AGENTS.md', 'CLAUDE.md', 'README.md', 'answer.nl', 'examples.json', 'natlang.json'],
+      'a new program is its function, manifest, tests and guides; no entry module or input file');
+    assert.equal(readFileSync(join(program, 'CLAUDE.md'), 'utf8'), '@AGENTS.md\n');
     const original = readFileSync(join(program, 'answer.nl'), 'utf8');
     assert.notEqual((await run(['init', program], root, env)).code, 0);
     assert.equal(readFileSync(join(program, 'answer.nl'), 'utf8'), original, 'init never overwrites a project');
     const checked = await run(['check'], program, env); assert.equal(checked.code, 0, checked.err);
     assert.equal(requests, 0, 'creation and checking never contact the model');
     const result = await run(['run'], program, env); assert.equal(result.code, 0, result.err); assert.equal(JSON.parse(result.out), 'billing');
+    const own = await run(['run', '.', '--', 'The app crashes on upload'], program, env); assert.equal(own.code, 0, own.err);
+    assert.equal(JSON.parse(own.out), 'billing');
+    const positional = await run(['call', 'answer.nl', 'I was charged twice'], program, env);
+    assert.equal(positional.code, 0, positional.err); assert.equal(positional.out, 'billing\n', 'call takes its input as an argument');
+    const asJson = await run(['call', 'answer.nl', 'I was charged twice', '--json'], program, env); assert.equal(asJson.out, '"billing"\n');
+    const tooMany = await run(['call', 'answer.nl', 'one', 'two'], program, env); assert.notEqual(tooMany.code, 0);
+    assert.match(tooMany.err, /usage: natlang call answer\.nl/);
     const manifestPath = join(program, 'natlang.json'), manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
     manifest.model = { endpoint: env.NATLANG_SERVER, model: 'fixture' }; writeFileSync(manifestPath, JSON.stringify(manifest));
     const noOverrides = { ...env }; delete noOverrides.NATLANG_SERVER; delete noOverrides.NATLANG_MODEL;
-    const called = await run(['call', join(program, 'answer.nl'), '--inputs', join(program, 'sample.json')], root, noOverrides);
+    writeFileSync(join(root, 'inputs.json'), JSON.stringify({ input: 'I was charged twice' }));
+    const called = await run(['call', join(program, 'answer.nl'), '--inputs', join(root, 'inputs.json')], root, noOverrides);
     assert.equal(called.code, 0, called.err); assert.equal(called.out.trim(), 'billing', 'calling a file from another directory respects its program model');
     const passed = await run(['test'], program, env); assert.equal(passed.code, 0, passed.err); assert.match(passed.out, /1\/1 passed/);
     answer = 'other';
     const failed = await run(['test'], program, env); assert.equal(failed.code, 1); assert.match(failed.out, /expected: "billing"/); assert.match(failed.out, /received: "other"/);
+    const report = await run(['test', '--json'], program, env); assert.equal(report.code, 1);
+    const parsedReport = JSON.parse(report.out);
+    assert.equal(parsedReport.ok, false); assert.equal(parsedReport.failed, 1);
+    assert.deepEqual([parsedReport.results[0].expected, parsedReport.results[0].received], ['billing', 'other']);
     const healthy = await run(['doctor', '--json'], root, env); assert.equal(healthy.code, 0, healthy.err);
     assert.equal(JSON.parse(healthy.out).inferenceTested, false);
     const unreachable = await run(['doctor', '--json'], root, { ...env, NATLANG_SERVER: 'http://127.0.0.1:1' });
@@ -67,7 +82,7 @@ test('Playground instructions and typed return values survive scaffold serializa
   try {
     const program = createProgram(join(root, 'from-playground'), { instruction: 'Summarize input.\nKeep it short.', input: 'hello', returns: '{ summary: string }', profile: 'chosen-profile' });
     assert.match(readFileSync(join(program, 'answer.nl'), 'utf8'), /returns: "\{ summary: string \}"/);
-    assert.deepEqual(JSON.parse(readFileSync(join(program, 'sample.json'), 'utf8')), { input: 'hello' });
+    assert.equal(JSON.parse(readFileSync(join(program, 'natlang.json'), 'utf8')).targets.main.arguments[0].default, 'hello');
     assert.deepEqual(readExamples(program), []);
     const manifest = JSON.parse(readFileSync(join(program, 'natlang.json'), 'utf8'));
     assert.equal(manifest.model.profile, 'chosen-profile');
@@ -99,8 +114,21 @@ test('dashboard creation and edits preserve existing files, reject stale writes,
     assert.equal((await api('GET', '/api/programs/source?path=outside/anything.nl')).status, 400);
     const custom = await api('POST', '/api/programs', { name: 'custom', instruction: 'Summarize input.', input: 'example', returns: '{ summary: string }' });
     assert.equal(custom.status, 200);
-    assert.equal(JSON.parse(readFileSync(join(root, 'custom', 'sample.json'), 'utf8')).input, 'example');
+    assert.equal(JSON.parse(readFileSync(join(root, 'custom', 'natlang.json'), 'utf8')).targets.main.arguments[0].default, 'example');
   } finally { await dashboard.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test('skills install copies the agent skills whole into a chosen folder', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'natlang-skills-'));
+  try {
+    const installed = await run(['skills', 'install', '--dir', join(root, 'skills'), '--json'], root, process.env);
+    assert.equal(installed.code, 0, installed.err);
+    assert.equal(JSON.parse(installed.out).installed.length, 2);
+    assert.ok(existsSync(join(root, 'skills', 'natlang-authoring', 'SKILL.md')));
+    writeFileSync(join(root, 'skills', 'natlang-authoring', 'stale.md'), 'old');
+    assert.equal((await run(['skills', 'install', '--dir', join(root, 'skills')], root, process.env)).code, 0);
+    assert.ok(!existsSync(join(root, 'skills', 'natlang-authoring', 'stale.md')), 'a reinstall replaces the folder');
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 test('dev reruns input changes and stops cleanly without reacting to build output', { timeout: 30000 }, async () => {

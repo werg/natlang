@@ -2157,9 +2157,9 @@ export class NativeSession {
     const currentTypes = evalTypeDeclarations(code);
     const persistentTypeNames = [...new Set([...Object.keys(visibleTypes), ...Object.keys(currentTypes)])];
     const hooks = this.runtime.hooks;
-    const inputValues = Object.fromEntries(inputNames.map(name => [name, this.lam.args[name]])
+    const boundValues = Object.fromEntries([...Object.entries(captureRead), ...inputNames.map(name => [name, this.lam.args[name]])]
       .filter((entry): entry is [string, string | number | boolean] => ['string', 'number', 'boolean'].includes(typeof entry[1])));
-    const compiled = compileScopeSnippet(code, { inputBindings: inputNames, inputValues, localBindings, helperBindings: callableNames,
+    const compiled = compileScopeSnippet(code, { inputBindings: inputNames, boundValues, localBindings, helperBindings: callableNames,
       persistentHelpers: savedHelpers, persistentHelperNames: savedHelperNames, persistentTypeNames,
       opaqueBindings: opaqueNames,
       captureBindings: Object.values(captureCells).map(cell => ({ name: cell.name, mutable: cell.mutable })),

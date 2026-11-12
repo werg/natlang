@@ -2,7 +2,8 @@ import ts from 'typescript';
 
 /**
  * `nl` called like a function on its instructions, nl(`...`) or nl<T>(`...`), is the one-shot call it reads as:
- * nl`...`(), a new natural-language call with the interpolated values, whose result is the answer. Rewritten in
+ * nl`...`(), a new natural-language call with the interpolated values, whose result is the answer. Called at once on
+ * arguments, nl<T>(`...`)(item) is the function those instructions make, applied to them: nl<T>`...`(item). Rewritten in
  * place with the same length, so positions in diagnostics still point into the code as written. Instructions that
  * are not a literal (a string built at run time) stay as they are, and are reported.
  */
@@ -30,7 +31,10 @@ export function nlCallEdits(file: ts.SourceFile, accept: (callee: ts.Identifier)
       else if (ts.isStringLiteral(argument) && !/[`\\]|\$\{/.test(argument.text)) template = `\`${argument.text}\``;
       const open = node.arguments.pos - 1;  // the "(" before the argument
       if (template !== undefined && template.length === argument.getText(file).length && source[open] === '(') {
-        edits.push({ start: open, end: node.getEnd(), text: `${template}()` });
+        // Applied at once to arguments, nl<T>(`...`)(item) makes the function and calls it on them: nl<T>`...`(item).
+        const applied = ts.isCallExpression(node.parent) && node.parent.expression === node;
+        edits.push({ start: open, end: node.getEnd(), text: applied ? `${template}  ` : `${template}()` });
+        if (applied) for (const outer of node.parent.arguments) visit(outer);
         return;
       }
     }

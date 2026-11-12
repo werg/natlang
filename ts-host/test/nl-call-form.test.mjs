@@ -34,6 +34,13 @@ test('the rewrite keeps positions, and instructions built at run time are report
   assert.match(output, /nl is a template tag, not a function taking a string/);
 });
 
+test('nl called on its instructions and then on arguments makes the function and applies it', async () => {
+  const written = 'const v = await nl<boolean>(`Is item big?`)(item), w = nl("Is x big?")(x, y);';
+  assert.equal(desugarNlCalls(written).length, written.length);
+  assert.equal(desugarNlCalls(written), 'const v = await nl<boolean>`Is item big?`  (item), w = nl`Is x big?`  (x, y);');
+  assert.match(await run('const answer: number = await nl<number>(`Add one to x.`)(n);\nanswer', 3), /^3\b/);
+});
+
 test('an nl result nothing types runs open, shaped by the fields the code reads', async () => {
   assert.match(await run('const r = await nl`Read the amount in n.`(n);\nr.amount + 1', { amount: 2 }), /^3\b/);
   assert.match(await run('const r = await nl`Say something about n.`(n);\nr', 'anything at all'), /anything at all/);

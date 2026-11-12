@@ -5,22 +5,19 @@
   "description": "My first natlang program.",
   "include": [
     "answer.nl",
-    "main.ts",
-    "sample.json",
     "examples.json",
-    "package.json",
-    "tsconfig.json",
     "README.md"
   ],
   "targets": {
     "main": {
-      "entry": "main.ts",
-      "description": "Run with sample input, or supply your own text.",
+      "entry": "answer.nl",
+      "description": "Run answer.nl on the sample input, or supply your own text.",
       "arguments": [
         {
           "name": "input",
           "type": "string",
-          "description": "Text to process; leave blank to use sample.json."
+          "description": "Text to process; leave blank for the sample.",
+          "default": "I was charged twice for my subscription."
         }
       ]
     }

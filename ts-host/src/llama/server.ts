@@ -215,7 +215,7 @@ export function createLlamaServer(host: LlamaHost, options: LlamaServerOptions =
     if (!prerequisites.executable) {
       const explicit = prerequisites.runtime.candidates.find(candidate => candidate.source === 'explicit');
       if (explicit) throw new Error(`NATLANG_LLAMA_SERVER is incompatible: ${describeLlamaRuntime(prerequisites.runtime)}`);
-      throw new Error(`managed model server is unavailable: ${describeLlamaRuntime(prerequisites.runtime)}; run natlang --setup or natlang --runtime install`);
+      throw new Error(`managed model server is unavailable: ${describeLlamaRuntime(prerequisites.runtime)}; run natlang setup --yes to install it, or select a hosted model with --provider ID`);
     }
     // A server another natlang process keeps loaded for exactly this model file and build (llama/shared.ts).
     const adapterless = !(options.loraAdapters?.() ?? []).length && !(options.nativeStates?.() ?? []).length;

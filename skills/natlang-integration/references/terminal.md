@@ -28,7 +28,7 @@ export default async function main(context: TargetContext): Promise<number> {
 
 ## Packages and `natlang run`
 
-A `natlang.json` (`natlang.package/v2`) names the package, its included files, and targets: `{ entry, export?, description, authority, commands, arguments? }`. The entry module's function (default `main`) receives a `TargetContext`: `args`, `arguments`, `io`, `workspace`, `stateDirectory`, `traceDirectory`, `model`, a configured `runtime`, and package identity.
+A `natlang.json` (`natlang.package/v2`) names the package, its included files, and targets: `{ entry, export?, description, authority, commands, arguments? }`. An entry may be a `.nl` function: `natlang run` calls it with the target's arguments (by default its own parameters; declare `arguments` to give defaults) and prints the result as JSON. A TypeScript entry module's function (default `main`) receives a `TargetContext`: `args`, `arguments`, `io`, `workspace`, `stateDirectory`, `traceDirectory`, `model`, a configured `runtime`, and package identity.
 
 Declare a target's command-line `arguments` in order, each `{ name, type, description?, required?, default?, path? }` with a natlang `type` (the `.nl` signature grammar; `types.ts` aliases are in scope). `natlang run` checks the words after `--` against them before building and passes the values by name in `context.arguments`, with defaults applied and absent optional ones left out: read `context.arguments.tickets as Ticket[]` instead of parsing `context.args`. Words fill the arguments in order or name one (`--rubric "…"`, `--count=3`); a text type is written as is, any other type as JSON; an empty word skips an optional argument; `natlang inspect` prints the target's signature and usage. `path: "file" | "folder"` (type `string`) must exist in the workspace and arrives absolute. The dashboard builds the target's run form from the same declaration. Errors and their fixes:
 - `count: expected number, got "x"`: write the value of the declared type; JSON for non-text types (`3`, `'["a","b"]'`).
@@ -44,6 +44,6 @@ natlang package install app.nlpkg && natlang run @scope/app
 natlang setup && natlang doctor                             # managed local model runtime
 ```
 
-The launcher builds the package against its own runtime, so the application and launcher share one runtime instance. `natlang call FILE.nl --inputs FILE` calls one named function; `natlang ask` answers an instruction over the working directory and the nearest `natlang.d/`.
+The launcher builds the package against its own runtime, so the application and launcher share one runtime instance. `natlang call FILE.nl ARG...` calls one named function, its arguments read like a target's (in parameter order, text as written, other types as JSON; `--inputs FILE` takes a JSON object instead, `--json` prints the result as JSON); `natlang test --json` reports each `examples.json` case with expected and received values; `natlang ask` answers an instruction over the working directory and the nearest `natlang.d/`.
 
 Anchors: `applications/{evidence,logs,notebook,terminal}/`, `ts-host/src/terminal/`, `ts-host/src/package/`, `ts-host/src/cli/main.ts`, `NATIVE_PACKAGES.md`.
