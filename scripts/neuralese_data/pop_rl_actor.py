@@ -409,7 +409,7 @@ def main(argv=None):
     s.add_argument('--port', type=int, default=RL_PORT)
     s.add_argument('--bind-host')
     s.add_argument('--ready-seconds', type=int, default=900)
-    s.add_argument('--engine', choices=('sglang', 'native'), default='native',
+    s.add_argument('--engine', choices=('sglang', 'native'), default='sglang',
                    help="Pop's serving engine: the SGLang fork (host venv, see pop_actor_driver.serve_sglang) or the "
                         'native engine in its container')
     s.add_argument('--prepare-wait', type=int, default=900, help='ledger admission bound of the DGX view preparation')

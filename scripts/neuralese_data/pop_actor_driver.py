@@ -166,7 +166,7 @@ def serve_sglang(job, checkpoint, transport, stage, work):
                '--prompt-rendering', 'full', '--engine', 'sglang', '--sglang-projection', 'vendor',
                '--sglang-port', str(sglang.get('port', port + 1000)),
                '--sglang-mem-fraction', str(sglang.get('mem_fraction', 0.8)),
-               '--sglang-max-running', str(sglang.get('max_running', 16)),
+               '--sglang-max-running', str(sglang.get('max_running', 10)),
                '--sglang-max-total-tokens', str(sglang.get('max_total_tokens', 131072)),
                '--sglang-adapter-slots', '0', '--hf-export-dir', str(work / 'sglang-hf' / job['source_sha256'][:16]),
                *sglang.get('extra', [])]
