@@ -178,9 +178,11 @@ def sample(args):
 
 
 MAX_LEN = 32000
-DEFAULT_SHARES = {'natlang': .16, 'natlang-inline': .16, 'natlang-chains': .14, 'native-communication': .05,
-                  'native-communication-rest27': .10, 'agent-sessions': .10, 'coding-sessions': .03, 'coding-swe': .07,
-                  'acquired-d13': .07, 'web-research': .08}
+# The natlang teaching families (natlang executions in the natlang harness format). The other families of the joint-SFT
+# source are foreign harness formats (gpt-oss browser traces, openhands/pi coding agents, upstream team sessions): broad
+# mixing, not natlang teaching (owner: breadth comes from natlang domains), so they get no share unless --share gives one.
+DEFAULT_SHARES = {'natlang': .22, 'natlang-inline': .22, 'natlang-chains': .18, 'native-communication': .08,
+                  'native-communication-rest27': .18, 'coding-sessions': .12}
 SHINGLE = 10
 
 

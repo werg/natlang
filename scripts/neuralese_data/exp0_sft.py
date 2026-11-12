@@ -242,6 +242,7 @@ def write_checkpoint(model, state, special, out_path, source_sha256, step, train
 
 
 def train(args):
+    run_started = time.time()
     episodes = [] if args.chains else pickle.load(open(args.turns, 'rb'))['episodes']
     if args.max_per_task:
         # compute-bound (GB10: about 1k tokens/s of fwd+bwd at 10k context): the shortest verified episodes of each task
@@ -360,6 +361,16 @@ def train(args):
             model.eval()
             record.update({f'val_loss:{name}': validation_loss(model, forward, c) for name, c in val_sets.items()})
             model.train()
+        if args.hours and step + 1 == args.replan_step and step + 1 < len(steps):
+            # fit the schedule to the wall-clock budget from the measured rate (compile included: conservative)
+            rate = forward_tokens / (time.time() - started)
+            left = args.hours * 3600 - (time.time() - run_started) - args.reserve_minutes * 60
+            mean = np.mean([sum(len(chains[i]['ids']) for i in g) for g in steps[step + 1:]])
+            fit = step + 1 + max(0, int(left * rate / mean))
+            if fit < len(steps):
+                del steps[fit:]
+                total = fit
+            record['replanned_steps'] = total
         print(json.dumps(record), flush=True)
         log.write(json.dumps(record) + '\n')
         log.flush()
@@ -473,6 +484,10 @@ def main():
     p.add_argument('--val-chains', action='append', default=[],
                    help='prebuilt validation sequences (repeatable, named by file stem): weighted NLL every --val-every steps')
     p.add_argument('--val-every', type=int, default=50)
+    p.add_argument('--hours', type=float, default=0., help='wall-clock budget: at --replan-step the schedule (cosine '
+                   'included) is cut to the steps that fit at the measured rate, keeping --reserve-minutes for eval and save')
+    p.add_argument('--replan-step', type=int, default=20)
+    p.add_argument('--reserve-minutes', type=float, default=25.)
     args = parser.parse_args()
     {'parity': parity, 'train': train, 'bench': bench}[args.command](args)
 
