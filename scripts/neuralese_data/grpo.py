@@ -472,15 +472,48 @@ def train(args):
 
     t0 = time.time()
     actor_ready = {}
+    actor_process = []
+
     def launch_actor():
-        # The training actor: a ledger unit serving the start checkpoint (held_eval.serve; reused when it already runs, as
-        # after a restart: the front still attests the start checkpoint, a resumed run pushes its own weights first).
-        from natlang_neuralese.rl.held_eval import serve
+        # The training actor is a child of this unit (one ledger claim covers learner and actor, so neither waits on the
+        # other's admission), served with the pinned held-v2 eval engine (held-v2/engine.json serve_args): training and
+        # held measurements sample with the same arithmetic.
         try:
-            actor_ready['url'] = serve(args.checkpoint, source_sha, work / 'actor', unit=f'{args.unit_prefix}-actor',
-                                       budget_gb=args.actor_budget_gb, extra=args.actor_arg, base=args.base)
+            engine = json.loads((Path(args.held_manifest).parent / 'engine.json').read_text())['serve_args']
+            store = work / 'actor'
+            store.mkdir(parents=True, exist_ok=True)
+            url = f'http://127.0.0.1:{args.actor_port}'
+            command = [sys.executable, str(HERE / 'serve_native_checkpoint.py'), '--store-dir', str(store),
+                       '--checkpoint', args.checkpoint, '--checkpoint-sha256', source_sha, '--base', args.base,
+                       '--port', str(args.actor_port), '--prompt-rendering', 'full', *engine,
+                       '--hf-export-dir', str(store / 'sglang-hf'), *args.actor_arg]
+            with (work / 'actor.log').open('a') as handle:
+                process = subprocess.Popen(command, cwd=REPO, stdout=handle, stderr=subprocess.STDOUT,
+                                           start_new_session=True)
+            actor_process.append(process)
+            deadline = time.time() + 3600
+            while time.time() < deadline:
+                if process.poll() is not None:
+                    raise RuntimeError(f'actor exited with {process.returncode} (see {work}/actor.log)')
+                try:
+                    with urllib.request.urlopen(url + '/v1/neuralese/info', timeout=10) as response:
+                        info = json.loads(response.read())
+                    if (info.get('rl_policy_binding') or {}).get('checkpoint_sha256') == source_sha:
+                        actor_ready['url'] = url
+                        return
+                except OSError:
+                    pass
+                time.sleep(10)
+            raise TimeoutError('actor did not come up in an hour')
         except BaseException as error:
             actor_ready['error'] = error
+
+    def stop_actor(*_):
+        for process in actor_process:
+            if process.poll() is None:
+                os.killpg(process.pid, signal.SIGTERM)
+    import atexit
+    atexit.register(stop_actor)
     actor_thread = None
     if not args.actor:
         actor_thread = threading.Thread(target=launch_actor, daemon=True)
@@ -763,9 +796,9 @@ def main():
     t.add_argument('--checkpoint', required=True, help='start policy (native checkpoint); also the KL reference')
     t.add_argument('--checkpoint-sha256')
     t.add_argument('--base', default=BASE)
-    t.add_argument('--actor', help='natlang front of an SGLang actor serving --checkpoint (default: launch the ledger unit '
-                   '<unit-prefix>-actor with held_eval.serve)')
-    t.add_argument('--actor-budget-gb', type=int, default=26, help='ledger claim: the actor --sglang-kv-gb (12) + 14')
+    t.add_argument('--actor', help='natlang front of an SGLang actor serving --checkpoint (default: a child actor of this '
+                   'process with the held-v2 engine arguments)')
+    t.add_argument('--actor-port', type=int, default=8460, help='port of the child actor (its SGLang server: +1000)')
     t.add_argument('--actor-arg', action='append', default=[], help='extra serve_native_checkpoint.py argument')
     t.add_argument('--sglang', help='its SGLang server (default: actor port + 1000)')
     t.add_argument('--actor-export', help="the actor's HF export dir (layout and frozen tables; default WORK/actor/sglang-hf)")
