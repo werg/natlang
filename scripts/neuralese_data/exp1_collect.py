@@ -46,6 +46,7 @@ def main():
     ap.add_argument('--max-turns', type=int, default=128)
     ap.add_argument('--context-tokens', type=int, default=32768)
     ap.add_argument('--seed-base', type=int, default=SEED_BASE)
+    ap.add_argument('--attempts', type=int, default=3, help='tries per episode after an infrastructure failure')
     ap.add_argument('--finalize-only', action='store_true')
     args = ap.parse_args()
     out = args.out.resolve()
@@ -71,9 +72,14 @@ def main():
     work = out / 'workers'
     work.mkdir(exist_ok=True)
 
+    def journals(key):
+        return sorted(work.glob(f'{key}.a*.journal.jsonl'))
+
     def finished(key):
-        path = work / f'{key}.journal.jsonl'
-        return path.exists() and any(row.get('event') == 'finish' for row in read_jsonl(path))
+        # An infrastructure failure (status 'incomplete': an actor OOM, a dropped connection) is retried from the
+        # episode's durable partial; every other finish (complete, a resource limit) is the episode's outcome.
+        done = [row for path in journals(key) for row in read_jsonl(path) if row.get('event') == 'finish']
+        return bool(done) and done[-1].get('status') != 'incomplete'
 
     todo = [e for e in entries if not finished(e['key'])] if not args.finalize_only else []
     lock, cursor = threading.Lock(), [0]
@@ -89,19 +95,27 @@ def main():
                 entry = todo[cursor[0]]
                 cursor[0] += 1
             key = entry['key']
-            queue, journal = work / f'{key}.queue.jsonl', work / f'{key}.journal.jsonl'
-            queue.write_text(json.dumps({**entry, 'rl_endpoint': url}, sort_keys=True) + '\n')
-            command = [sys.executable, str(REPO / 'scripts/run_bonsai_queue.py'), str(queue), str(journal), '--runtime',
-                       str(REPO / 'ts-host'), '--server', url, '--chat-completions-url', url + '/v1/chat/completions',
-                       '--model-id', 'natlang-rl', '--model-concurrency', '1', '--chat-request-config',
-                       str(out / 'sampling-config.json'), '--neuralese-server']
-            with (work / f'{key}.log').open('a') as log:
-                subprocess.run(command, cwd=REPO, env=env, stdout=log, stderr=subprocess.STDOUT)
+            attempt = 0
+            while True:
+                attempt += 1
+                queue, journal = work / f'{key}.queue.jsonl', work / f'{key}.a{attempt}.journal.jsonl'
+                queue.write_text(json.dumps({**entry, 'rl_endpoint': url}, sort_keys=True) + '\n')
+                if run_entry(url, key, queue, journal) or attempt >= args.attempts or stop.is_set():
+                    break
             with lock:
                 stats['done'] += 1
                 if stats['done'] % 8 == 0:
                     print(json.dumps({'done': stats['done'], 'of': len(todo),
                                       'minutes': round((time.time() - stats['started']) / 60, 1)}), flush=True)
+
+    def run_entry(url, key, queue, journal):
+        command = [sys.executable, str(REPO / 'scripts/run_bonsai_queue.py'), str(queue), str(journal), '--runtime',
+                   str(REPO / 'ts-host'), '--server', url, '--chat-completions-url', url + '/v1/chat/completions',
+                   '--model-id', 'natlang-rl', '--model-concurrency', '1', '--chat-request-config',
+                   str(out / 'sampling-config.json'), '--neuralese-server']
+        with (work / f'{key}.log').open('a') as log:
+            subprocess.run(command, cwd=REPO, env=env, stdout=log, stderr=subprocess.STDOUT)
+        return finished(key)
 
     threads = [threading.Thread(target=slot, args=(url,), daemon=True) for url, n in endpoints for _ in range(n)]
     for t in threads:
@@ -113,8 +127,7 @@ def main():
         stop.set()
     with (out / 'journal.jsonl').open('w') as merged:
         for entry in entries:
-            path = work / f"{entry['key']}.journal.jsonl"
-            if path.exists():
+            for path in journals(entry['key']):
                 merged.write(path.read_text())
     report = task_rollouts.score(out, out / 'rollouts.jsonl')
     print(json.dumps({k: report[k] for k in ('rollouts', 'scored', 'successes', 'outcome_counts')}))
