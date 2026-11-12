@@ -719,24 +719,41 @@ def _free_port():
     raise RuntimeError('no free actor port')
 
 
-def serve(checkpoint, sha256, store, *, unit, budget_gb, extra=(), base=BASE_SNAPSHOT, wait_seconds=3600, log=print):
+def serve(checkpoint, sha256, store, *, unit, budget_gb, extra=(), base=BASE_SNAPSHOT, wait_seconds=3600,
+          admission_seconds=14400, log=print):
     """Serve ``checkpoint`` as a ledger unit (SGLang, vendor projection) and wait until it attests ``sha256``; returns
-    the endpoint URL. The unit is stopped with ``systemctl --user stop UNIT``."""
+    the endpoint URL (``store/endpoint``). An active ``unit`` that already serves it is reused. The unit is stopped with
+    ``systemctl --user stop UNIT``."""
     from .actor_client import NativeActorClient
     from ..common.code_provenance import repository_root
     repo = repository_root()
-    port = _free_port()
     store = Path(store)
     store.mkdir(parents=True, exist_ok=True)
+    active = subprocess.run(['systemctl', '--user', 'is-active', unit], capture_output=True, text=True).stdout.strip()
+    if active in ('active', 'activating') and (store / 'endpoint').exists():
+        url = (store / 'endpoint').read_text().strip()
+        deadline = time.monotonic() + wait_seconds
+        while time.monotonic() < deadline:
+            try:
+                info = json.loads(NativeActorClient(url, timeout=10).get_bytes('/v1/neuralese/info'))
+                if (info.get('rl_policy_binding') or {}).get('checkpoint_sha256') == sha256:
+                    return url
+            except Exception:
+                pass
+            time.sleep(10)
+        raise TimeoutError(f'the running actor {unit} does not attest {sha256[:12]}')
+    port = _free_port()
     python = repo / '.venv-neuralese/bin/python'
     command = ['/usr/bin/python3', str(repo / 'scripts/memory_ledger.py'), 'run', '--unit', unit, '--budget-gb', str(budget_gb),
-               '--class', 'experiment', '--priority', 'medium', '--no-resumable', '--wait', '1800', '--workdir', str(repo), '--',
+               '--class', 'experiment', '--priority', 'medium', '--no-resumable', '--wait', str(admission_seconds),
+               '--workdir', str(repo), '--',
                'env', f'NATLANG_REPO={repo}', f'PYTHONPATH={repo}/training/neuralese:{repo}', 'HF_HUB_OFFLINE=1',
                'OMP_NUM_THREADS=1', 'MKL_NUM_THREADS=1', str(python), str(repo / 'scripts/neuralese_data/serve_native_checkpoint.py'),
                '--store-dir', str(store), '--checkpoint', str(checkpoint), '--checkpoint-sha256', sha256, '--base', str(base),
                '--port', str(port), '--prompt-rendering', 'full', *ACTOR_ARGS, '--hf-export-dir', str(store / 'sglang-hf'), *extra]
-    subprocess.run(command, check=True)
     url = f'http://127.0.0.1:{port}'
+    (store / 'endpoint').write_text(url + '\n')
+    subprocess.run(command, check=True)
     log(json.dumps({'event': 'held eval actor launched', 'unit': unit, 'endpoint': url}))
     deadline = time.monotonic() + wait_seconds
     while time.monotonic() < deadline:
@@ -829,6 +846,13 @@ def main(argv=None):
     m.add_argument('--actor-budget-gb', type=int, default=40)
     m.add_argument('--actor-arg', action='append', default=[], help='extra serve_native_checkpoint.py argument (repeatable)')
     m.add_argument('--keep-actor', action='store_true')
+    v = sub.add_parser('serve', help='serve a checkpoint as a ledger actor unit (or reuse it) and print its URL')
+    v.add_argument('--checkpoint', type=Path, required=True)
+    v.add_argument('--checkpoint-sha256')
+    v.add_argument('--store', type=Path, required=True)
+    v.add_argument('--unit', required=True)
+    v.add_argument('--budget-gb', type=int, default=40)
+    v.add_argument('--actor-arg', action='append', default=[])
     c = sub.add_parser('compare', help='paired comparison of two result.json files (second against first)')
     c.add_argument('first', type=Path)
     c.add_argument('second', type=Path)
@@ -857,6 +881,10 @@ def main(argv=None):
         if args.out:
             args.out.write_text(text + '\n')
         print(text)
+    elif args.command == 'serve':
+        sha = args.checkpoint_sha256 or _sha256(args.checkpoint)
+        print(serve(args.checkpoint, sha, args.store, unit=args.unit, budget_gb=args.budget_gb, extra=args.actor_arg,
+                    log=lambda line: print(line, file=sys.stderr, flush=True)))
     elif args.command == 'measure':
         endpoints = [(item.rsplit('=', 1)[0].rstrip('/'), int(item.rsplit('=', 1)[1])) if re.search(r'=\d+$', item)
                      else (item.rstrip('/'), args.workers) for item in args.endpoint]
