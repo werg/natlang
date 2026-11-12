@@ -45,7 +45,10 @@ SGLang vendor projection, FP8 KV; a separately admitted actor unit deadlocked be
 shuffled stream of task groups (8 samples; pools: the w5 pool plus the verified bgkit KR rows, fallow K1; held-v2 excluded
 with its split groups and every row sharing a source group; `WORK/pool.json` records the pool shas). The learner trains on
 whatever groups finished since its last step (16-128; stragglers join a later step, groups more than 2 versions stale are
-dropped). Reward = task outcome only. Per-call sequences with the actor's exact prompt and sampled ids
+dropped). Tasks (EPISODE_COST_20261112): 85% from tasks whose measured base pass rate is in [0.1, 0.9] (exp1-rft
+`base-pass-rates.json`, re-read every 10 min), 15% unmeasured pool tasks; `ext_codebase-{py,natlang}_codebase_*` excluded
+(repos missing on the DGX). Episode budget 40 model calls (a budget stop scores 0; the collector has no generated-token
+budget yet), wall clock 3600 s as a safety net only (unscored). Reward = task outcome only. Per-call sequences with the actor's exact prompt and sampled ids
 (`lower_rollout_turns.episode_turns`, chained as in `exp0_sft.chains_of`); loss on sampled tokens
 `-min(rho, 2) * A * logp + 0.02 * k3(start || policy)`, `A` group-normalized; FP32-master AdamW, LR 1e-6, BF16 compute
 (`exp0_sft.load_model`, `lfm3_fast_train`). Weight sync each step: BF16 weights -> pinned buffer -> actor's HF safetensors ->

@@ -131,6 +131,9 @@ class Collector:
         self.outstanding = 0                        # groups created and not yet handed to the learner
         self.next_group, self.cursor = first_group, cursor
         self.version = 0                            # the policy version the actor serves now
+        self.by_id = {row['id']: row for row in tasks}
+        self.learnable_ids, self.learnable_order, self.measured, self.rates_read = [], [], set(), 0.
+        self.rng = random.Random(args.seed + first_group)
         self.stop = threading.Event()
         self.generated = 0                          # sampled tokens of finished episodes (throughput)
         self.episodes = 0
@@ -141,8 +144,7 @@ class Collector:
     def _new_group(self):
         from natlang_neuralese.rl import task_rollouts
         from natlang_neuralese.common.jsonio import read_jsonl
-        row = self.tasks[self.cursor % len(self.tasks)]
-        self.cursor += 1
+        row = self._pick()
         group = self.next_group
         self.next_group += 1
         directory = self.work / 'groups' / f'g{group:06d}'
@@ -162,6 +164,40 @@ class Collector:
                               'created': time.time()}
         self.outstanding += 1
         self.pending.extend((group, entry) for entry in entries)
+
+    def _learnable(self):
+        """Pool rows whose measured base pass rate (``--pass-rates``, re-read every 10 min: it grows while Experiment 1
+        collects) lies in ``--pass-band`` with at least ``--pass-min-scored`` scored samples, shuffled."""
+        a = self.args
+        if not a.pass_rates or time.time() - self.rates_read < 600:
+            return
+        self.rates_read = time.time()
+        try:
+            rates = json.loads(Path(a.pass_rates).read_text())
+        except (OSError, ValueError):
+            return
+        low, high = a.pass_band
+        ids = sorted(k for k, v in rates.items() if k in self.by_id and v.get('scored', 0) >= a.pass_min_scored
+                     and low <= v['successes'] / v['scored'] <= high)
+        self.measured = set(rates)
+        if set(ids) != set(self.learnable_ids):
+            self.learnable_ids = ids
+            self.learnable_order = []
+            print(json.dumps({'event': 'learnable tasks', 'count': len(ids), 'measured': len(rates)}), flush=True)
+
+    def _pick(self):
+        """A learnable task (``1 - explore`` of groups, cycling a reshuffled list), else the next unmeasured pool task."""
+        self._learnable()
+        if self.learnable_ids and self.rng.random() >= self.args.explore:
+            if not self.learnable_order:
+                self.learnable_order = list(self.learnable_ids)
+                self.rng.shuffle(self.learnable_order)
+            return self.by_id[self.learnable_order.pop()]
+        while True:
+            row = self.tasks[self.cursor % len(self.tasks)]
+            self.cursor += 1
+            if row['id'] not in self.measured or self.cursor > 2 * len(self.tasks):
+                return row
 
     def _take(self):
         with self.lock:
@@ -474,14 +510,22 @@ def load_tasks(args, work=None):
     if args.task_ids:
         wanted = set(json.loads(Path(args.task_ids).read_text()))
         rows = [r for r in rows if r['id'] in wanted]
-    eligible = [r for r in rows if r['id'] not in excluded and r.get('split', 'train') == 'train']
+    import re
+    broken = re.compile(args.exclude_family_regex) if args.exclude_family_regex else None
+    eligible = [r for r in rows if r['id'] not in excluded and r.get('split', 'train') == 'train'
+                and not (broken and broken.search(str(r.get('family') or '')))]
     random.Random(args.seed).shuffle(eligible)
     if work is not None:
         record = {'pools': [{'path': str(p), 'sha256': sha256_file_hex_cached(Path(p))} for p in args.pool],
                   'held_manifest': args.held_manifest, 'held_manifest_sha256': sha256_file_hex_cached(Path(args.held_manifest)),
                   'union_rows': len(seen), 'excluded_ids': len(excluded), 'eligible': len(eligible),
                   'eligible_ids_sha256': hashlib.sha256('\n'.join(sorted(r['id'] for r in eligible)).encode()).hexdigest(),
-                  'families': len({r.get('family') for r in eligible})}
+                  'families': len({r.get('family') for r in eligible}),
+                  'excluded_family_regex': args.exclude_family_regex,
+                  'selection': {'pass_rates': args.pass_rates, 'band': args.pass_band, 'min_scored': args.pass_min_scored,
+                                'explore': args.explore},
+                  'episode_budget': {'max_model_requests': args.max_model_requests, 'case_seconds': args.case_seconds,
+                                     'generated_tokens': None}}
         (Path(work) / 'pool.json').write_text(json.dumps(record, indent=1) + '\n')
     return eligible, len(excluded)
 
@@ -879,8 +923,16 @@ def main():
     t.add_argument('--max-groups', type=int, default=48, help='a w5-like episode costs ~90k learner tokens: 48 groups is ~1-2 h of learner')
     t.add_argument('--max-outstanding', type=int, default=0, help='groups in flight or waiting (default max-groups + slots/group)')
     t.add_argument('--max-staleness', type=int, default=2)
-    t.add_argument('--case-seconds', type=int, default=1800)
-    t.add_argument('--max-model-requests', type=int, default=64)
+    t.add_argument('--case-seconds', type=int, default=3600, help='wall-clock safety net only (a wall stop is unscored)')
+    t.add_argument('--max-model-requests', type=int, default=40,
+                   help='episode budget in model calls; a budget stop scores as a failure (EPISODE_COST_20261112)')
+    t.add_argument('--pass-rates', default=resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'exp1-rft', 'base-pass-rates.json'),
+                   help='measured base pass rates per task (re-read every 10 min); empty: plain shuffled pool')
+    t.add_argument('--pass-band', type=float, nargs=2, default=(0.1, 0.9))
+    t.add_argument('--pass-min-scored', type=int, default=2)
+    t.add_argument('--explore', type=float, default=0.15, help='share of groups from unmeasured pool tasks')
+    t.add_argument('--exclude-family-regex', default=r'^ext_codebase-(py|natlang)_codebase_',
+                   help='families never selected (default: codebase families whose repos are missing on the DGX)')
     t.add_argument('--max-turns', type=int, default=128)
     t.add_argument('--context-tokens', type=int, default=32768)
     t.add_argument('--seed', type=int, default=20261112)
