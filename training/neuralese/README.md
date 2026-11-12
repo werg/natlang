@@ -1,21 +1,23 @@
 # natlang_neuralese: shared native training, serving and tuning
 
 The shared PyTorch package behind the native Neuralese lines: shared positional KV and hybrid-state spans with
-distinct producer/consumer markers (`model/shared_state.py`), the shared native SFT trainer and recipe loader
-(`train/native_state_sft.py`, `train/recipe.py`), whole-graph RL with JOLT+ (`rl/`), serving (`serve/`), the
-tuning system and learned optimizer (`tune/`), and quantized export (`export/`). The current line is LFM3
-(`plans/neuralese/LFM3_RECIPE_20261028.md`); recipes live in `recipes/` and use `extends`/`overrides`.
+distinct producer/consumer markers (`model/shared_state.py`), native checkpoints and their loader
+(`train/checkpoint_policy.py`), the RL collector, scorer, task selection and held-out evaluation (`rl/`), serving
+with the SGLang actor and the native gradient endpoints (`serve/`, `train/native_graph_loss.py`), the tuning system
+(`tune/`), and quantized export (`export/`). Fine-tuning runs through the HF path
+(`scripts/neuralese_data/exp0_sft.py`); the BF16 native SFT trainer and the w5 RL controller were removed on
+2026-11-12 (git history keeps them).
 
 | Path | Contents |
 | --- | --- |
 | `model/` | Backbone ports, native shared-state execution, native checkpoints and parameter precision |
 | `data/` | Native graph schema, conversion and rendering, trajectory text and source readers |
-| `train/` | Recipe loader, native SFT/preference trainers, optimizers (Muon/AdamW, stochastic rounding), QAT, EMA, DiLoCo |
-| `rl/` | Whole-graph RL rounds, JOLT+ privileged self-teaching, score-centered objective, memetic programs |
+| `train/` | Checkpoint loading/offload, native graph loss, optimizers, QAT, own-output supervision |
+| `rl/` | Task rollouts and scoring, task selection, held-out evaluation, whole-graph replay objective |
 | `serve/` | Native engine, HTTP server, guided generation |
 | `tune/` | Program tunes, native soft states, LoRA mixtures/bases, learned optimizer |
-| `eval/` | Task packets and cadence, native state/gradient/memory checks, throughput |
-| `common/` | Shared hashing, JSON I/O, checkpoint storage, line backbones |
+| `eval/` | Task packets, ablation and FFN dispatch probes |
+| `common/` | Shared hashing, JSON I/O, paths, line backbones |
 
 ## Environment
 
@@ -36,6 +38,4 @@ On the GB10 (sm_121, aarch64) torch's flash and cuDNN SDPA backends work with `e
 
 ```sh
 .venv-neuralese/bin/python -m pytest -q tests/neuralese
-cd training/neuralese
-../../.venv-neuralese/bin/python -m natlang_neuralese.train.recipe --help
 ```

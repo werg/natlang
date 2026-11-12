@@ -10,7 +10,7 @@ from natlang_neuralese.model.native_adapters import create_adapter, target_param
 from natlang_neuralese.rl.native_replay import compile_replay, action_logps
 
 
-def exercise_carrier(tmp_path,monkeypatch,family,target,*,recipe=None,lfm_bf16=False,duplicate=False):
+def exercise_carrier(tmp_path,monkeypatch,family,target,*,lfm_bf16=False,duplicate=False):
     torch.manual_seed(1701)
     engine=engine_fixture(tmp_path,family,service_template=True)
     if lfm_bf16:
@@ -18,10 +18,6 @@ def exercise_carrier(tmp_path,monkeypatch,family,target,*,recipe=None,lfm_bf16=F
         path,device=engine.native_checkpoint,engine.device
         engine.store.close()
         engine=load_native_engine(path,device=device,dtype=torch.bfloat16)
-    backend=None
-    if recipe is not None:
-        from natlang_neuralese.train.fp8_backend import make_backend
-        backend=make_backend('triton-experts',engine.shared_model.port.hf,device=engine.device,recipe=recipe)
     available=target_parameters(engine.shared_model)
     name=next(name for name in available if name.endswith(target))
     adapter=create_adapter(engine,{'kind':'xs','rank':2,'parameter_names':[name]})
@@ -30,9 +26,7 @@ def exercise_carrier(tmp_path,monkeypatch,family,target,*,recipe=None,lfm_bf16=F
     entries=[{'id':adapter.id,'scale':.75}]
     if duplicate:entries.extend([{'id':adapter.id,'scale':-.2},{'id':adapter.id,'scale':.1}])
     identity=effective_identity(engine,resolve_adapters(engine,entries))
-    from contextlib import nullcontext
-    with backend.autocast() if backend else nullcontext():
-        _,turns=capture_actor(engine,entries,monkeypatch)
+    _,turns=capture_actor(engine,entries,monkeypatch)
     engine.shared_model.port.checkpoint_layers=True
     replay=compile_replay(turns,identity=identity,roles=engine.role_tokens,
         fetch_block=lambda ident:engine.store.get_native_state(ident).block)
@@ -47,12 +41,8 @@ def exercise_carrier(tmp_path,monkeypatch,family,target,*,recipe=None,lfm_bf16=F
         gradient=torch.autograd.grad(-logps[reader].mean(),coefficient)[0]
         return result['h_final'].detach(),logits.detach(),logps.detach(),gradient.detach()
     def run(reference,precision):
-        before=backend.row_counts['calls'] if backend else 0
-        with backend.autocast() if backend else nullcontext():
-            result=run_native(engine,lambda:execute(reference),entries,leaves={adapter.id:{name:coefficient}},
-                gradient_precision=precision)
-        if backend:assert backend.row_counts['calls']>before
-        return result
+        return run_native(engine,lambda:execute(reference),entries,leaves={adapter.id:{name:coefficient}},
+                          gradient_precision=precision)
     baseline=run(False,'storage')
     actual=run(False,'fp32')
     expected=run(True,'fp32')

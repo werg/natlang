@@ -38,47 +38,6 @@ def test_static_graph_rejects_forgery(mutation):
     else:bad['source_groups']=['different']
     with pytest.raises(ValueError):verify_graphification(original,bad,obj)
 
-def test_earned_static_correction_authenticates_bindings_and_preserves_zero_exposure(tmp_path):
-    import json,hashlib
-    from test_native_source_correction import _receipt,_write_proof,_row
-    from natlang_neuralese.data.native_graph_schema import indexed_graph_metadata
-    from natlang_neuralese.data.native_sources import _row_bindings
-    from natlang_neuralese.train.native_source_correction import apply_source_correction
-    original=row();child,_=graphify(original,objective(mass='token'),max_tokens=32,consumer_context=6,state_tokens=2)
-    old=_row_bindings([indexed_graph_metadata(original,tokenizer_fingerprint=FP)])[original['id']]
-    new=_row_bindings([indexed_graph_metadata(child,tokenizer_fingerprint=FP)])[child['id']]
-    prior=_receipt('/old/source','old',[original['id']],['old-leaf'])
-    current=_receipt('/new/source','new',[original['id']],['new-leaf'])
-    frame={'source_receipts':[prior,{'path':'/held','sha256':'held'}],'source_row_bindings':{original['id']:old},
-        'source_row_order':[original['id']],'exposure_counts':{original['id']:0},'required_visits':{original['id']:1},
-        'options':{'stage_id':'native_full_sft','epochs':1,'_communication_ids':[],
-                   'communication_quota_policy':{'stage_id':'native_full_sft','visits':7},
-                   'supervision_objective':__import__('natlang_neuralese.train.own_output_supervision',fromlist=['identity']).identity(objective(mass='token'))}}
-    frame['sft_progress']={'native_full_sft':copy.deepcopy(frame)}
-    proof_path=_write_proof(tmp_path,prior,current,[_row(original['id'],old,new,'old-leaf','new-leaf','corrected',old_communication=False)])
-    pairs=tmp_path/'pairs.jsonl';pairs.write_text(json.dumps({'parent':original,'child':child})+'\n')
-    policy=tmp_path/'policy.json';policy.write_text(json.dumps({'objective':objective(mass='token')}))
-    ref=lambda path:{'path':str(path),'sha256':hashlib.sha256(path.read_bytes()).hexdigest(),'bytes':path.stat().st_size}
-    proof=json.loads(proof_path.read_text());proof['static_native_context_correction']={
-        'schema':'natlang.static-native-context-source-correction/1','graph_pairs':ref(pairs),'ce_policy':ref(policy),'rows':1}
-    proof_path.write_text(json.dumps(proof))
-    args=dict(model_id='lfm2:inventory',stage_id='native_full_sft',current_source_receipt=current,
-        current_bindings={original['id']:new},current_order=[original['id']],current_communication_ids=[original['id']])
-    result,_=apply_source_correction(frame,proof_path,**args)
-    assert result['exposure_counts'][original['id']]==0
-    assert result['required_visits'][original['id']]==7
-    assert result['options']['_objective_required_visits'][original['id']]==7
-    carried=result['sft_progress']['native_full_sft']
-    assert carried['required_visits'][original['id']]==7
-    assert carried['options']['_objective_required_visits'][original['id']]==7
-    assert result['options']['source_correction_history'][-1]['static_native_context_rows']==[original['id']]
-    changed=copy.deepcopy(frame);changed['exposure_counts'][original['id']]=1
-    with pytest.raises(ValueError,match='exact changed communication row'):apply_source_correction(changed,proof_path,**args)
-    changed=copy.deepcopy(frame);changed['options']['supervision_objective']['sha256']='0'*64
-    with pytest.raises(ValueError,match='earned supervision policy'):apply_source_correction(changed,proof_path,**args)
-    pairs.write_text('{}\n')
-    with pytest.raises(ValueError,match='artifact changed'):apply_source_correction(frame,proof_path,**args)
-
 class WordTokenizer:
     """Deterministic text/token map: every token id decodes to a word, and words encode into small in-vocab ids."""
     def decode(self,ids,skip_special_tokens=False):
