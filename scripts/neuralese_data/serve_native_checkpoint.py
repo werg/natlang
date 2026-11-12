@@ -58,11 +58,11 @@ def main() -> None:
     # KV pool from the rest, so a fixed fraction either shrank the pool when other jobs held memory (0.4 with 82 GB free
     # gave 332k of 524k tokens) or, high, let the first actor take everything behind the ledger's back. --sglang-kv-gb
     # fixes the pool in GB (tokens from the export's KV bytes per token) and derives the fraction from the memory free
-    # at launch, so the actor holds about weights + KV + ~6 GB on the GPU. Ledger budget: --sglang-kv-gb + 14
-    # (weights ~4, CUDA graphs/activations ~6, front and server processes ~4).
+    # at launch, so SGLang holds about weights + KV + ~6 GB. Ledger budget: --sglang-kv-gb + 24 (measured: SGLang 23 GB at
+    # 16 GB KV; the front ~14 GB once a native endpoint such as write_text reloads the native model, as episodes do).
     parser.add_argument('--sglang-kv-gb', type=float, default=12.0,
                         help='KV pool size in GB (default 12: ~530k BF16 or ~1.07M FP8 tokens of LFM3-1.7B); '
-                             'ledger budget = this + 14')
+                             'ledger budget = this + 24')
     parser.add_argument('--sglang-max-total-tokens', type=int,
                         help='KV pool tokens instead of --sglang-kv-gb')
     parser.add_argument('--sglang-mem-fraction', type=float,

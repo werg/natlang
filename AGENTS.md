@@ -61,7 +61,7 @@ ran 16-38 slots, 30 running sequences, pool 93% full with queued requests, 8-14 
 - Run ONE SGLang engine per GPU and give it all slots (exp1/held/GRPO share it): two engines time-slice the GB10 and
   every kernel waits for the other's slice. Serve with `serve_native_checkpoint.py --engine sglang` defaults:
   128 running, `--sglang-kv-gb 12` (pool in GB; tokens and SGLang's mem fraction are derived from the memory free at
-  launch, so other jobs neither shrink the pool nor get grabbed). Ledger budget = `--sglang-kv-gb` + 14 GB.
+  launch, so other jobs neither shrink the pool nor get grabbed). Ledger budget = `--sglang-kv-gb` + 24 GB (the front reloads the native model for write_text).
   Do not pass `--sglang-mem-fraction` (SGLang reserves (1 - fraction) of free memory: 0.25 left a few GB of KV).
 - Collector slots >= 64 per DGX actor; measure with `held_eval measure`. A slot costs ~250 MB of host memory in its own
   node + python processes; episodes share node processes, 8 each, by default (`cli.js --serve`; `NATLANG_COLLECTOR_SHARED=0` opts out).

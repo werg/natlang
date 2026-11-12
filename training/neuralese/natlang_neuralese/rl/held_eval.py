@@ -546,7 +546,7 @@ BASE_SNAPSHOT = Path.home() / '.cache/huggingface/hub/models--LiquidAI--LFM3-1.7
 # checkpoint, FP8 KV. Every measured policy is served with exactly these settings; ``compare`` refuses other pairings.
 ACTOR_ARGS = ('--engine', 'sglang', '--sglang-projection', 'vendor', '--sglang-kv-cache-dtype', 'fp8_e4m3',
               '--sglang-kv-gb', '16', '--sglang-max-running', '128')
-ACTOR_BUDGET_GB = 30   # --sglang-kv-gb + 14
+ACTOR_BUDGET_GB = 40   # --sglang-kv-gb + 24 (measured 2026-11-12: SGLang 23 GB at 16 GB KV, front 14 GB once a write_text reloads the native model)
 ENGINE_FIELDS = ('engine', 'dtype', 'projection', 'kv_cache_dtype', 'overlap_schedule', 'bf16_reduction')
 
 
@@ -709,7 +709,7 @@ def main(argv=None):
     m.add_argument('--context-tokens', type=int, default=32768)
     m.add_argument('--label')
     m.add_argument('--actor-unit', help='ledger unit name of the actor (default heldv2-actor-<sha8>)')
-    m.add_argument('--actor-budget-gb', type=int, default=ACTOR_BUDGET_GB, help='ledger claim: --sglang-kv-gb + 14')
+    m.add_argument('--actor-budget-gb', type=int, default=ACTOR_BUDGET_GB, help='ledger claim: --sglang-kv-gb + 24')
     m.add_argument('--allow-other-engine', action='store_true', help='measure an actor that is not the pinned eval engine')
     m.add_argument('--actor-arg', action='append', default=[], help='extra serve_native_checkpoint.py argument (repeatable)')
     m.add_argument('--keep-actor', action='store_true')
@@ -718,7 +718,7 @@ def main(argv=None):
     v.add_argument('--checkpoint-sha256')
     v.add_argument('--store', type=Path, required=True)
     v.add_argument('--unit', required=True)
-    v.add_argument('--budget-gb', type=int, default=ACTOR_BUDGET_GB, help='ledger claim: --sglang-kv-gb + 14')
+    v.add_argument('--budget-gb', type=int, default=ACTOR_BUDGET_GB, help='ledger claim: --sglang-kv-gb + 24')
     v.add_argument('--actor-arg', action='append', default=[])
     v.add_argument('--priority', default='medium', choices=('low', 'medium', 'high'))
     c = sub.add_parser('compare', help='paired comparison of two result.json files (second against first)')
