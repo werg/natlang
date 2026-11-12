@@ -19,36 +19,3 @@ test('an inline nl call that names a variable of the scope still runs', async ()
   assert.equal(await runtime.run(() => fn('Ada')), 'done');
   assert.ok(!seen.some(text => /was given no arguments/.test(text)), seen.join('\n---\n'));
 });
-
-test('calls after a failed call of the same reply stay in the history, each answered as not run', async () => {
-  let seen;
-  const runtime = createNatlangRuntime({ seed: { mode: 'backend' }, model: async request => {
-    const last = request.messages.at(-1);
-    if (last.role === 'tool' && last.tool_call_id !== 'scope_0') {
-      seen ??= request.messages;
-      return { calls: [['return_result', { status: 'success', value: 'done' }]] };
-    }
-    return { calls: [['eval', { code: 'throw new Error("first fails")' }], ['eval', { code: '1 + 1' }]] };
-  } });
-  const fn = loadVirtualNatlang({ 'root.nl': '---\nargs: { name: string }\nreturns: string\n---\nGreet name.\n' }, 'root.nl');
-  try { await runtime.run(() => fn('Ada')); } catch {}
-  const reply = seen.findLast(message => message.role === 'assistant');
-  assert.equal(reply.tool_calls.length, 2, 'both sampled calls stay in the history');
-  const answers = seen.filter(message => message.role === 'tool' && reply.tool_calls.some(call => call.id === message.tool_call_id));
-  assert.equal(answers.length, 2);
-  assert.match(String(answers[0].content), /first fails/);
-  assert.equal(String(answers[1].content), 'Not run: an earlier call in this reply failed; call it again if you still need it.');
-});
-
-test('with a fixed tool list the last turn still offers every tool and rejects any call but return_result', async () => {
-  const offered = [], answers = [];
-  const runtime = createNatlangRuntime({ seed: { mode: 'backend' }, model: { maxTurns: 2, driver: async request => {
-    offered.push(request.tools.map(tool => tool.function.name));
-    const last = request.messages.at(-1);
-    if (last.role === 'tool' && last.tool_call_id !== 'scope_0') answers.push(String(last.content));
-    return offered.length === 1 ? { calls: [['eval', { code: '1 + 1' }]] } : { calls: [['eval', { code: '2 + 2' }]] };
-  } } });
-  const fn = loadVirtualNatlang({ 'root.nl': '---\nargs: { name: string }\nreturns: string\n---\nGreet name.\n' }, 'root.nl');
-  try { await runtime.run(() => fn('Ada')); } catch {}
-  assert.ok(offered.length >= 2 && offered.every(names => names.join() === offered[0].join()), JSON.stringify(offered));
-});

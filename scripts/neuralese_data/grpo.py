@@ -1144,7 +1144,7 @@ def main():
     t.add_argument('--exclude-family-regex', default=r'^ext_codebase-(py|natlang)_codebase_',
                    help='families never selected (default: codebase families whose repos are missing on the DGX)')
     t.add_argument('--max-turns', type=int, default=128)
-    t.add_argument('--context-tokens', type=int, default=32768)
+    t.add_argument('--context-tokens', type=int, default=131072, help="call budget; follows the actor's served window when smaller")
     t.add_argument('--seed', type=int, default=20261112)
     t.add_argument('--seed-base', type=int, default=30_000_000)
     t.add_argument('--lr', type=float, default=3e-6, help='check 4 (LEARNING_SANITY): 1e-6 barely moves BF16 weights, 1e-5 reaches KL 0.59 in 10 steps')
