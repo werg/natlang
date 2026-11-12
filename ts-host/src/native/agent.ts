@@ -52,6 +52,10 @@ import {activeRecorder, activeNativeAdapters, activeNativeStates} from './model-
 import { hexDigest } from './hash.js';
 import { activeSystemPrompts, softenMessages, renderPromptMessages, type PromptRendering } from './system-prompts.js';
 import type { ModelBudget } from './model-budget.js';
+import { modelFacing } from '../runtime/model-facing.js';
+/** Variant reply-text-with-calls: the prose a reply carried before its tool calls stays in the transcript (it was
+ * dropped, so the next prompt differed from what the model wrote and the actor's prefix cache re-prefilled). */
+const replyText = (response: { text?: string }): string => modelFacing('reply-text-with-calls') ? response.text ?? '' : '';
 
 /** The code tools, as offered. Kept here so data collected under earlier wording can be migrated to it exactly. */
 export const READ_CODE_DESCRIPTION = 'Inspect a named item this call can use but does not show: source of a function in the program\'s codebase; ' +
@@ -1997,7 +2001,7 @@ export class NativeToolAgent {
             'Handoff accepted. Continue this same invocation from its existing scope and transcript. Do not repeat completed effects.' };
         }, String(raw[0]!.id));
         const failure = action.kind === 'ok' ? undefined : action.text;
-        messages.push({ role: 'assistant', content: '', tool_calls: raw.slice(0, 1), ...thought(response.reasoning) },
+        messages.push({ role: 'assistant', content: replyText(response), tool_calls: raw.slice(0, 1), ...thought(response.reasoning) },
           { role: 'tool', tool_call_id: String(raw[0]!.id), content: action.text });
         if (action.kind === 'budget') return action.text;
         if (failure?.startsWith('escalation unavailable:') || failure?.startsWith('graph model ')) return failure;
@@ -2024,7 +2028,7 @@ export class NativeToolAgent {
           return failure ? { kind: 'blocked', text: failure } : { kind: 'ok', text:
             'Inability report handed to the next configured actor. Continue from the existing scope and transcript.' };
         }, String(raw[0]!.id));
-        messages.push({ role: 'assistant', content: '', tool_calls: raw.slice(0, 1), ...thought(response.reasoning) },
+        messages.push({ role: 'assistant', content: replyText(response), tool_calls: raw.slice(0, 1), ...thought(response.reasoning) },
           { role: 'tool', tool_call_id: String(raw[0]!.id), content: action.text });
         if (action.kind !== 'ok') return action.text;
         repeatedFailure = ''; repeatedFailures = 0;
@@ -2055,7 +2059,7 @@ export class NativeToolAgent {
         // finish an older staged answer after the computation in this batch failed.
         if (['error', 'rejected', 'refused'].includes(result.kind) || session.failureSerial > previousFailureSerial) break;
       }
-      messages.push({ role: 'assistant', content: '', tool_calls: raw.slice(0, results.length), ...thought(response.reasoning) });
+      messages.push({ role: 'assistant', content: replyText(response), tool_calls: raw.slice(0, results.length), ...thought(response.reasoning) });
       // Near the end of the turn budget the model is told how many turns are left, so a task that cannot be finished
       // ends with an honest blocked or failed rather than by running out.
       const left = maxTurns === undefined ? Infinity : maxTurns - turns;
