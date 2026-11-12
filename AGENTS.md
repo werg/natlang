@@ -58,7 +58,9 @@ background threads. Episodes run the run's pinned copy of ts-host (`WORK/pin-<co
 (`runs.jsonl`); restart (`--resume`) to adopt newer code. Held evals run on the training actor itself (it serves the
 current policy with the held-v2 engine pin): new collection pauses, `held_eval measure` (held-v2; 4 samples for the start
 policy before the first step, then 2 samples every 4 h on that step's checkpoint) and `held_eval compare` with step 0
-(`WORK/held/step-N/`). After each in-place update the front attests what it serves (`POST /v1/neuralese/rebind-policy`:
+(`WORK/held/step-N/`); `--held-extra CKPT,...` measures other native checkpoints the same way after step 0 (loaded into the
+actor in place, `held/extra-<sha12>/` with a compare against step 0, 2 samples by default), then restores the start policy. The KL
+reference runs the policy's own training graph (a no_grad pass compiles other kernels: KL 5e-4 at identical weights). After each in-place update the front attests what it serves (`POST /v1/neuralese/rebind-policy`:
 the step's checkpoint sha, else the served weights' sha; the native engine keeps the start checkpoint). `train.jsonl` logs per step: reward
 mean, spread fraction, KL, rho (mean, pre/post-cap max, capped fraction, |log rho|), learner and actor tokens/s, phase seconds.
 Memory (smoke 2026-11-12): on the GB10 the unit's MemoryMax (= ledger budget) also bounds its CUDA allocations, so the

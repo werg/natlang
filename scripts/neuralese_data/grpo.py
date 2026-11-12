@@ -381,11 +381,34 @@ class WeightSync:
             self.thread.join()
             self.thread = None
 
+    def load_native(self, path, special):
+        """Put another native checkpoint's backbone in the pinned buffer (its interface rows merged into the embedding
+        as ``exp0_sft.load_model`` does); the actor's other tables (producer embedding) stay. Refuses another interface."""
+        import torch
+        from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
+        self.wait()
+        state = CheckpointPolicy.load(Path(path))
+        backbone = state['backbone_state']
+        embedding = backbone['model.embed_tokens.weight'].clone()
+        interface, config = state['interface_state'], state['model_config']
+        rows = [(config['marker_ids'], interface['input_rows'])]
+        if config.get('token_override_ids'):
+            rows.append((config['token_override_ids'], interface['extra_input_rows']))
+        for ids, values in rows:
+            embedding[torch.tensor(list(ids))] = values.to(embedding.dtype)
+        merged = self.views['model.embed_tokens.weight'][torch.tensor(special)]
+        if not torch.equal(embedding[torch.tensor(special)].to(merged.dtype), merged):
+            raise ValueError(f'{path} has other interface rows than the served policy')
+        for name, view in self.views.items():
+            source = embedding if name == 'model.embed_tokens.weight' else backbone[name]
+            view.copy_(source.to(view.dtype))
+        del state
+
     def backbone(self):
         """{name: host bf16 tensor} of the snapshot in native backbone naming (copies, safe to keep)."""
         return {name: view.clone() for name, view in self.views.items()}
 
-    def publish(self, version, on_done, also=None):
+    def publish(self, version, on_done, also=None, policy=None):
         def run():
             timing = {}
             started = time.time()
@@ -423,11 +446,11 @@ class WeightSync:
                 # served weights' digest (held_eval measure and the rollout captures read this binding)
                 t = time.time()
                 weights = hashlib.sha256(memoryview(self.buffer.numpy())).hexdigest()
-                policy = extra.get('checkpoint_sha256') or weights
+                policy_id = policy or extra.get('checkpoint_sha256') or weights
                 try:
                     post(self.front_url + '/v1/neuralese/rebind-policy',
-                         {'policy_id': policy, 'weights_sha256': weights, 'version': version})
-                    timing['policy_id'] = policy
+                         {'policy_id': policy_id, 'weights_sha256': weights, 'version': version})
+                    timing['policy_id'] = policy_id
                 except Exception as error:
                     ok, answer = False, f'rebind failed: {error!r}'[:400]
                 timing['rebind_s'] = round(time.time() - t, 2)
@@ -675,9 +698,13 @@ def train(args):
     reference = None
     if args.kl_beta > 0:          # the start policy, BF16, frozen (a copy: no second checkpoint load)
         import copy
+        # The reference runs exactly the policy's training graph (train mode, parameters requiring grad, the same partial
+        # checkpointing; its outputs are detached and never backpropagated): a no_grad pass compiles other kernels, whose
+        # BF16 rounding alone put KL at 5e-4 (|dlogp| ~0.03) with identical weights (smoke 2026-11-12).
         reference = copy.deepcopy(model)
-        reference.eval()
-        reference.requires_grad_(False)
+        reference.gradient_checkpointing_enable()
+        reference.config.use_cache = False
+        reference.train()
         lfm3_fast_train.prepare(reference)
     model.gradient_checkpointing_enable()
     model.config.use_cache = False
@@ -814,13 +841,14 @@ def train(args):
         checkpoints[:] = [c for c in checkpoints if c.exists()]
         return {'checkpoint': str(path), 'checkpoint_sha256': sha}
 
-    def held(step_number, samples):
+    def held(step_number, samples, name=None, policy=None):
         """``held_eval measure`` on the training actor itself (it serves the current policy with the held-v2 engine pin):
         new collection pauses, the actor's weights stay fixed until the measurement ends, then ``compare`` with step 0."""
-        held_steps.add(step_number)
-        (work / 'held-steps.json').write_text(json.dumps(sorted(held_steps)) + '\n')
-        out = work / 'held' / f'step-{step_number:05d}'
-        policy = (sync.last or {}).get('policy_id') or source_sha
+        if name is None:
+            held_steps.add(step_number)
+            (work / 'held-steps.json').write_text(json.dumps(sorted(held_steps)) + '\n')
+        out = work / 'held' / (name or f'step-{step_number:05d}')
+        policy = policy or (sync.last or {}).get('policy_id') or source_sha
         collector.paused.set()
         started = time.time()
         python = [sys.executable, '-m', 'natlang_neuralese.rl.held_eval']
@@ -828,10 +856,10 @@ def train(args):
             with (work / 'held.log').open('a') as handle:
                 code = subprocess.run([*python, 'measure', '--manifest', args.held_manifest, '--endpoint',
                                        f'{args.actor}={args.held_workers}', '--policy-id', policy, '--samples', str(samples),
-                                       '--out', str(out), '--label', f'grpo-step-{step_number}'],
+                                       '--out', str(out), '--label', f'grpo-{name or f"step-{step_number}"}'],
                                       cwd=REPO, stdout=handle, stderr=subprocess.STDOUT).returncode
                 base = Path(args.held_baseline) if args.held_baseline else work / 'held' / 'step-00000' / 'result.json'
-                if step_number and code == 0 and base.exists():
+                if (step_number or name) and code == 0 and base.exists():
                     subprocess.run([*python, 'compare', str(base), str(out / 'result.json'), '--out',
                                     str(out / 'compare-vs-step0.json')], cwd=REPO, stdout=handle, stderr=subprocess.STDOUT)
         finally:
@@ -842,12 +870,39 @@ def train(args):
             summary = {k: result.get(k) for k in ('ran', 'scored', 'successes', 'loop_rate', 'complete')}
         if (out / 'compare-vs-step0.json').exists():
             summary['compare'] = json.loads((out / 'compare-vs-step0.json').read_text())
-        log_line(log, {'event': 'held eval', 'step': step_number, 'policy': policy, 'returncode': code,
+        log_line(log, {'event': 'held eval', 'step': step_number, 'arm': name, 'policy': policy, 'returncode': code,
                        'seconds': round(time.time() - started), **summary})
 
     if args.held_every_hours > 0 and not (work / 'held' / 'step-00000' / 'result.json').exists() \
             and not args.skip_base_held and not args.held_baseline:
         held(0, args.held_samples_start)
+    if args.held_extra and step == 0:
+        # Other policies measured on this actor in place (one engine, one code pin), each against step 0; then the start
+        # policy is loaded back before training.
+        collector.paused.set()
+        try:
+            for path in args.held_extra.split(','):
+                from natlang_neuralese.common.hashing import sha256_file_hex_cached
+                sha = sha256_file_hex_cached(Path(path))
+                name = f'extra-{sha[:12]}'
+                if (work / 'held' / name / 'result.json').exists():
+                    continue
+                sync.load_native(path, special)
+                sync.publish(0, on_published, policy=sha)
+                sync.wait()
+                if not sync.last.get('ok'):
+                    raise RuntimeError(f'loading {path} into the actor failed: {sync.last}')
+                (work / 'held').mkdir(exist_ok=True)
+                (work / 'held' / f'{name}.source').write_text(path + '\n')
+                held(0, args.held_samples_extra, name=name, policy=sha)
+                collector.paused.set()
+        finally:
+            sync.snapshot()                   # the learner's own (start) weights back on the actor
+            sync.publish(0, on_published, policy=source_sha)
+            sync.wait()
+            collector.paused.clear()
+        if not sync.last.get('ok'):
+            raise RuntimeError(f'restoring the start policy on the actor failed: {sync.last}')
     last_held = time.time()
 
     while not stop.is_set() and (not args.max_steps or step < args.max_steps):
@@ -909,8 +964,11 @@ def train(args):
             t = time.time()
             ref = None
             if reference is not None:
-                with torch.no_grad():
-                    ref = -exp0_sft.token_nll(reference, forward(reference, ids), positions, targets)
+                exp0_sft.set_checkpointing(reference, len(ids), args.activation_gb)
+                with torch.enable_grad():
+                    ref = -exp0_sft.token_nll(reference, forward(reference, ids), positions, targets).detach()
+                for p in reference.parameters():
+                    p.grad = None
                 torch.cuda.synchronize()
                 phase['reference_forward'] = phase.get('reference_forward', 0.) + time.time() - t
                 t = time.time()
@@ -927,6 +985,7 @@ def train(args):
                 kl = d.exp() - d - 1
                 loss_terms = loss_terms + args.kl_beta * kl
                 sums['kl'] += kl.detach().sum().item()
+                sums['ref_abs_dlogp'] += d.detach().abs().sum().item()
             (loss_terms.sum() / loss_tokens).backward()
             sums['rho'] += rho.sum().item()
             sums['rho_capped'] += (rho > args.rho_cap).sum().item()
@@ -991,7 +1050,7 @@ def train(args):
         elapsed = time.time() - run['started']
         record.update(
             loss_tokens=loss_tokens, forward_tokens=forward_tokens, lr=lr, grad_norm=round(grad_norm, 4),
-            kl_mean=round(sums['kl'] / loss_tokens, 6), mean_logp=round(sums['logp'] / loss_tokens, 4),
+            kl_mean=round(sums['kl'] / loss_tokens, 7), ref_abs_dlogp_mean=round(sums['ref_abs_dlogp'] / loss_tokens, 6), mean_logp=round(sums['logp'] / loss_tokens, 4),
             rho_mean=round(sums['rho'] / loss_tokens, 4), rho_pre_cap_max=round(rho_pre_max, 3),
             rho_post_cap_max=round(rho_post_max, 3), rho_capped_fraction=round(sums['rho_capped'] / loss_tokens, 5),
             abs_log_rho_mean=round(sums['abs_log_rho'] / loss_tokens, 5),
@@ -1074,6 +1133,9 @@ def main():
                    'of measuring step 0 (compare refuses another engine or series)')
     t.add_argument('--held-samples', type=int, default=2, help='samples per held task at the periodic measurements')
     t.add_argument('--held-samples-start', type=int, default=4, help='samples per held task for the start policy (step 0)')
+    t.add_argument('--held-extra', help='comma-separated native checkpoints measured on the actor in place after step 0, '
+                   'each compared with step 0, before training starts')
+    t.add_argument('--held-samples-extra', type=int, default=2)
     t.add_argument('--held-workers', type=int, default=96, help='collector slots of a held measurement on the training actor')
     t.add_argument('--unit-prefix', default='grpo')
     t.add_argument('--synthetic-reward', help='sanity check: replace the task outcome by a trivially learnable reward '
