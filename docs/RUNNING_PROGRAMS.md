@@ -144,8 +144,15 @@ cache (`warm-prefixes/`, keyed by the exact opening, model file, llama.cpp build
 restores only into a server with the same slots; the 24 most recent are kept), and
 restores it into every slot before the first call that sends it. Later calls in a warm slot keep reusing it, and later
 runs start warm. The warm build fills this cache ahead of time and lists the openings in the lock. Measured on four CPU
-cores with Q4_K_M, a first call reused 2,923 of its 3,439 opening tokens after a 0.07 s restore. `NATLANG_WARM_PREFIXES=off`
-turns it off; states are not used while tuned LoRA adapters or native states are loaded.
+cores with Q4_K_M, a first call reused 2,923 of its 3,439 opening tokens after a 0.07 s restore.
+
+Openings mostly differ in their last tool, `return_result`, whose value schema is the function's return type. A new
+opening is therefore built on a shared base, the opening without its last tool line, saved once (`*.base.slot`) and
+restored for every opening with the same system prompt and other tools: a function with a new return type prefills
+about 300 tokens instead of 4,500 (3 s instead of 120 s on a loaded 16-core CPU). `natlang setup` prepares the base
+and the opening of a new program's `answer.nl` while it sets up the model, so the first `natlang run` after
+`natlang init` starts warm. `NATLANG_WARM_PREFIXES=off` turns warming off; states are not used while tuned LoRA
+adapters or native states are loaded.
 
 ## One loaded model for every run
 
@@ -158,8 +165,10 @@ are idle. Each run holds a lease while it uses the server; the supervisor stops 
 `NATLANG_SHARED_SERVER_IDLE_S` seconds (default 300) with no lease and idle slots. The slot count is the first run's
 unless the profile fixes it (`local.parallel`). The records are under the state directory (`model-servers/`, with each
 server's log). The dashboard's **Loaded models** lists the servers and how many processes use each; **Keep loaded**
-holds a lease from the dashboard, and **Stop now** stops a server. A run with tuned LoRA adapters or native states
-starts a private server, and `NATLANG_SHARED_SERVER=off` gives a run its own server that stops with it. Sharing never
+holds a lease from the dashboard, and **Stop now** stops a server. Runs with tuned LoRA adapters or native states
+(a release's exports, loaded at server start) share a server with runs of the same adapters and states, compared by
+artifact ID and file; such a server stops at most 30 s after its last run, since the next release brings new ones.
+`NATLANG_SHARED_SERVER=off` gives a run its own server that stops with it. Sharing never
 changes what a run computes, only its wall time, since runs on one server share its slots.
 
 ## llama.cpp

@@ -11,7 +11,11 @@ import { dirname, join } from 'node:path';
 
 export const BUILD_LOCK_SCHEMA = 'natlang.build-lock/1';
 
-export type WarmPrefix = { sha256: string; chars: number; tokens: number; bytes: number; file: string; restoredSlots: number; created: boolean };
+export type WarmPrefix = { sha256: string; chars: number; tokens: number; bytes: number; file: string; restoredSlots: number; created: boolean;
+  /** Tokens actually prefilled when the state was created (fewer than `tokens` when a saved base was restored first). */
+  prefilled?: number;
+  /** The shared base state (llama/warm.ts) this opening was built on. */
+  base?: string };
 export type WarmCaseResult = { name: string; function: string; outcome: string; detail?: string; wall_ms: number;
   calls: number; tokens_in: number; tokens_out: number; call_id: string | null };
 export type BuildLock = {

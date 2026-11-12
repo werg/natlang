@@ -103,9 +103,10 @@ export const TARGETS = {
   llama: { directory: 'llama', entries: { 'natlang-llama': 'src/llama/index.ts' }, platform: 'node' },
   // The evaluation runner starts `./worker-entry.js` beside its own file (evaluation/worker.ts).
   dashboard: { directory: 'dashboard', assets: true },
+  // `supervisor`: the first run that needs the shared model server starts `./supervisor.js` beside the bundle (llama/node.ts).
   // `splitting`: a suite's compiled program imports the runtime from `natlang-eval.js` while the worker starts the runtime
   // from `worker-entry.js`; they must be one module instance (the task context lives in it), so the two entries share chunks, written beside them (the bundle finds its model templates by its own path).
-  eval: { directory: 'eval', entries: { 'natlang-eval': 'src/entry/evaluation.ts', 'worker-entry': 'src/evaluation/worker-entry.ts' }, platform: 'node', splitting: true },
+  eval: { directory: 'eval', entries: { 'natlang-eval': 'src/entry/evaluation.ts', 'worker-entry': 'src/evaluation/worker-entry.ts', supervisor: 'src/llama/supervisor.ts' }, platform: 'node', splitting: true },
 };
 
 /** The `.d.ts` files `entry` reaches through relative imports, as paths under `declarations`. */

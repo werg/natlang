@@ -52,6 +52,9 @@ export type ManagedModelSession = { prepare(): Promise<ManagedModelStatus>;
   decide(request: DecisionRequest, signal?: AbortSignal): Promise<DecisionScores>;
   /** The model's context window as its server reports it (undefined when it does not say). */
   contextWindow(): Promise<number | undefined>;
+  /** Managed llama.cpp only: start the server and warm the prompt opening this request would send (llama/warm.ts),
+   * without generating. `natlang setup` uses it so the first runs start warm. */
+  warm?(request: ModelTurnRequest): Promise<WarmPrefix[]>;
   status(): ManagedModelStatus; close(): Promise<void>;
   /** The session's model scheduler (undefined for Pi provider backends): queue, batch records and occupancy. */
   scheduler: Scheduler | undefined;
@@ -201,6 +204,11 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
       try { return await (turnOptions?.onDelta ? driver(options)(request, signal, { onDelta: turnOptions.onDelta }) : driver(options)(request, signal)); }
       finally { admitted?.release(); }
     },
+    ...(llama ? { async warm(request: ModelTurnRequest) {
+      await start();
+      (await llama.admit(request)).release();
+      return llama.status().warm;
+    } } : {}),
     async decide(request, signal) {
       signal?.throwIfAborted();
       if (choice.kind === 'pi-provider') throw new Error('decision-unsupported: Pi provider backends cannot score replies');

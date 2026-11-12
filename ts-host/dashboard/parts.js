@@ -31,7 +31,8 @@ export async function keptModelPanel(ctx) {
       state.kept ? h('div', { class: 'row' }, pill('kept loaded', 'ok'), h('button', { onclick: release }, 'Stop keeping')) :
         h('div', { class: 'row' }, choose, h('button', { class: 'primary', onclick: keep }, 'Keep loaded'))),
     h('div', { class: 'small muted' }, 'Runs, calls and terminal commands share one llama.cpp server per model: no load time per run, warm slots, one copy of the model in memory. A server stops after a few idle minutes with no run using it, unless it is kept loaded here.'),
-    servers.length ? servers.map(server => h('div', { class: 'stack' }, kv([['Model', server.model],
+    servers.length ? servers.map(server => h('div', { class: 'stack' }, kv([['Model', server.model + (server.adapters?.length || server.states?.length ?
+      ` + ${server.adapters.length} tuned adapter${server.adapters.length === 1 ? '' : 's'}, ${server.states.length} native state${server.states.length === 1 ? '' : 's'}` : '')],
       ['Server', `${server.endpoint} · ${server.slots} slots of ${tokens(server.contextPerSlot)} tokens`],
       ['In use by', `${server.users} natlang process${server.users === 1 ? '' : 'es'}${server.kept ? ' (kept loaded here)' : ''}`],
       ['Since', ago(server.startedAt)], ['Stops', `after ${server.idleSeconds} s unused`]]),
