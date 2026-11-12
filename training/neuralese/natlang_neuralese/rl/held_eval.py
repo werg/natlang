@@ -1,25 +1,16 @@
-"""A fixed held-out task set measured on every new policy (owner request 2026-11-10: dev16 cannot resolve our updates).
+"""A fixed held-out task set measured on a served policy (owner request 2026-11-10: dev16 cannot resolve our updates).
 
-dev16 is 16 single-sample cases (about +-1.7 cases of noise). The RL controller instead pins about 64 tasks of its own task
-pool, stratified over the pool's families and levels, excludes them (and their ``split_group`` siblings) from RL selection
-for good, and runs them on the DGX actor of every newly updated policy: 2 samples per task, the production sampling, a
-few hours of shared slots at most. The held tasks never enter a round, a learner update or a distillation package, so
-their success is an unbiased read of the policy; ``scripts/rl_tasks/behavior_trend.py`` pairs each policy with the previous
-one and with the first measured one on the matched (task, sample) episodes.
+dev16 is 16 single-sample cases (about +-1.7 cases of noise). A held set pins pool tasks stratified over the pool's
+families and levels (``build_manifest``; ``pin`` writes a standalone one such as ops/held-v2 with its ``exclusion-ids.json``),
+and training code never selects them or their ``split_group`` siblings (``exclusion_ids``, ``curriculum.select_tasks``
+``exclude_ids``). ``measure`` runs N samples per held task against a served actor (``serve`` launches one for a checkpoint)
+and writes ``result.json``; ``compare``/``paired`` pair two results on matched (task, sample) episodes (McNemar exact).
 
-- ``manifest.json`` + ``cases.jsonl`` (``{out}/held-eval/``): task ids and row digests, the pool's digest, and the excluded
-  split groups. Built once from the pool and the lineage's already attempted tasks (``build_manifest``); its sha256 is
-  recorded in the controller state by the transition ``held-eval-exclusion-20261110`` (``adopt_defaults``). The selector
-  applies it from the first round whose selection is not yet sealed (``exclusion``, ``rl.production.select_tasks``).
-- ``begin``/``Handle.finish``: ``collect_with_actor`` starts the measurement of the round's policy beside the round's
-  collection, against the same actor, and gives an unfinished measurement ``grace_seconds`` once the collection is done.
-  The measurement is a detached driver process (``run``): failures and a cut-short run are recorded and never stop or delay the round
-  beyond the grace; a partial run is still a balanced one (sample-major order) and pairs on what it finished.
+- ``manifest.json`` + ``cases.jsonl``: task ids and row digests, the pool's digest, and the excluded split groups.
+- ``begin``/``Handle.finish`` and ``run``: a detached driver process measures one policy; failures and a cut-short run are
+  recorded, and a partial run is still a balanced one (sample-major order) and pairs on what it finished.
 - A comparison series is the collector runtime (ts-host tree) plus the resolved ``NATLANG_MODEL_FACING`` variants, recorded
   in every result: only results of one series are compared, a change of either starts a new series with its own baseline.
-
-``held_eval: false`` opts out (selection exclusion and measurement); ``held_eval`` may also be an object with ``tasks``,
-``samples``, ``workers``, ``grace_seconds``, ``model_facing`` (pinned variants) and ``manifest`` (path) options.
 """
 from __future__ import annotations
 
@@ -40,7 +31,6 @@ from ..common.jsonio import read_jsonl, write_json_durable
 
 MANIFEST_SCHEMA = 'natlang.rl-held-eval-manifest/1'
 RESULT_SCHEMA = 'natlang.rl-held-eval-result/1'
-TRANSITION = 'held-eval-exclusion-20261110'
 DEFAULT_TASKS, DEFAULT_SAMPLES, DEFAULT_WORKERS, DEFAULT_GRACE = 64, 2, 16, 1200
 EFFECT_STATE_SHARE = 1 / 3   # the selector's class_quota is .34: the held mixture mirrors what training practises
 MAX_GROUP_ROWS = 24          # a held task whose split group is larger would shrink the training pool by that much
@@ -202,35 +192,6 @@ def load_manifest(path, sha256):
 
 
 # ---- selector exclusion and its transition ------------------------------------------------------------------------------
-def adopt_defaults(config, state, state_path, *, out, sealed_selection=False):
-    """Controllers adopt the held set through a recorded transition. The manifest is built from the pool and the lineage's
-    attempted tasks on the first adoption and pinned (its sha256 recorded); the exclusion applies from the first round whose
-    selection is not sealed yet. ``held_eval: false`` opts out. Returns the config with ``held_eval_binding`` set."""
-    options = settings(config)
-    if options is None or config.get('coefficient_policy'):
-        return config
-    transitions = state.setdefault('held_eval_transitions', [])
-    record = next((item for item in transitions if item.get('transition') == TRANSITION), None)
-    if record is None:
-        directory = Path(options.get('manifest') or directory_of(out) / 'manifest.json').parent
-        if not (directory / 'manifest.json').exists():
-            try:
-                manifest, rows = build_manifest(config['cases'], avoid=avoid_ids(state, [out]), tasks=options['tasks'])
-            except ValueError as error:   # a pool too small to hold tasks out keeps training on all of it; retried at a restart
-                print(json.dumps({'event': 'held eval not adopted', 'reason': str(error)[:200]}), flush=True)
-                return config
-            write_manifest(directory, manifest, rows)
-        number = state.get('round', 0)
-        sealed_next = (Path(out) / f'round-{number + 1:06d}-selection.json').exists()
-        record = {'schema': 'natlang.rl-held-eval-transition/1', 'transition': TRANSITION, 'recorded_at_round': number,
-                  'from_round': number + (1 if sealed_selection or state.get('active_update_round') else 0) + int(sealed_next),
-                  'manifest': str(directory / 'manifest.json'), 'manifest_sha256': _sha256(directory / 'manifest.json')}
-        transitions.append(record)
-        write_json_durable(state_path, state)
-    return {**config, 'held_eval_binding': {'manifest': record['manifest'], 'sha256': record['manifest_sha256'],
-                                            'from_round': record['from_round']}}
-
-
 def exclusion_ids(manifest, cases=None):
     """Ids of pool rows training must never take: the held tasks of ``manifest`` (a path or the loaded manifest) and every
     row sharing a held ``split_group``. ``cases``: the pool rows (or a path); by default the manifest's pool, whose sha256
@@ -246,34 +207,6 @@ def exclusion_ids(manifest, cases=None):
         cases = read_jsonl(cases)
     held, groups = {t['id'] for t in manifest['tasks']}, set(manifest['excluded_split_groups'])
     return frozenset(row['id'] for row in cases if row.get('id') in held or _split_group(row) in groups)
-
-
-def exclusion(config, cases, round_number):
-    """Ids of pool rows RL selection must not take in ``round_number``: the held tasks and their split-group siblings."""
-    binding = config.get('held_eval_binding')
-    if not binding or settings(config) is None or round_number < binding['from_round']:
-        return frozenset()
-    return exclusion_ids(load_manifest(binding['manifest'], binding['sha256']), cases)
-
-
-def static_relation(out):
-    """A predicate over prepared SFT rows (``source_groups``): True for a row related to a held task of the controller
-    ``out`` (its pinned manifest's split groups and its cases' source groups, also matched without the source prefix, so
-    ``2wiki-q:X`` meets ``2wiki:X``). None when the controller holds no tasks out. Static sources queued into the
-    lineage's SFT windows use it: held tasks never enter training."""
-    directory = directory_of(out)
-    if not (directory / 'manifest.json').exists():
-        return None
-    groups = set(json.loads((directory / 'manifest.json').read_text())['excluded_split_groups'])
-    for row in read_jsonl(directory / 'cases.jsonl'):
-        groups.update(row.get('source_groups') or ())
-        groups.add(_split_group(row))
-    bare = {group.split(':', 1)[1] for group in groups if isinstance(group, str) and ':' in group}
-
-    def related(row):
-        mine = [group for group in row.get('source_groups') or () if isinstance(group, str)]
-        return any(group in groups or (':' in group and group.split(':', 1)[1] in bare) for group in mine)
-    return related
 
 
 # ---- series identity --------------------------------------------------------------------------------------------------
@@ -573,40 +506,14 @@ def begin(config, *, out, policy_id, endpoint, round_number=None, log=print):
 
 
 # ---- comparison -------------------------------------------------------------------------------------------------------
-def lineage(out):
-    """({policy sha: position}, {rolled-back policy shas}) of the controller's current lineage, or ({}, set()) without a state.
-    A policy's position is where the controller committed it: the policy round 0 collected from first, each RL update's result
-    after its round, each SFT window's result after the update that preceded it. Policies a rewind dropped
-    (``state['rewind_history'][*]['rolled_back_policies']``) and the lineage no longer holds are the rolled-back ones."""
-    path = Path(out) / 'state.json'
-    if not path.is_file():
-        return {}, set()
-    state = json.loads(path.read_text())
-    positions = {}
-    for item in state.get('task_curriculum_spread_yield') or []:
-        if item.get('round') == 0 and item.get('policy_id'):
-            positions[item['policy_id']] = (-1, 0)
-    for record in state.get('completed_update_history') or []:
-        positions[record['checkpoint']['sha256']] = (record['round'], 0)
-    for window in (state.get('interleave') or {}).get('windows') or []:
-        positions[window['checkpoint']['sha256']] = (window['controller_round'] - 1, 1)
-    dropped = {sha for record in state.get('rewind_history') or [] for sha in record.get('rolled_back_policies') or []}
-    return positions, dropped - set(positions)
-
-
-def results(out, rolled_back=False):
-    """The valid held-eval results of a controller directory in lineage order (the controller's commit order; a result of a
-    policy the state does not hold follows, by start time). ``rolled_back``: only the results of policies a rewind dropped."""
+def results(out):
+    """The valid held-eval results of a directory, by start time."""
     found = []
     for path in directory_of(out).glob('policy-*/result.json'):
         result = json.loads(path.read_text())
         if result.get('schema') == RESULT_SCHEMA and 'error' not in result:
             found.append(result)
-    positions, dropped = lineage(out)
-    if rolled_back:
-        return sorted((r for r in found if r['policy_id'] in dropped), key=lambda r: r['started_at'])
-    found = [r for r in found if r['policy_id'] not in dropped]
-    return sorted(found, key=lambda r: (positions.get(r['policy_id'], (float('inf'), 0)), r['started_at']))
+    return sorted(found, key=lambda r: r['started_at'])
 
 
 def binomial_two_sided(a, b):
@@ -689,9 +596,8 @@ def compare(first, second, *, resamples=2000):
 
 
 def trend(out):
-    """Per measured policy of the current lineage, in lineage order: its numbers, the paired comparison with the previous result
-    of its series and with the first of its series (None for the first one or when the series changed). Rolled-back policies
-    are not here (``rolled_back``)."""
+    """Per measured policy, by start time: its numbers, the paired comparison with the previous result of its series and with
+    the first of its series (None for the first one or when the series changed)."""
     rows, firsts, previous = [], {}, {}
     for result in results(out):
         key = result['series']['key']
@@ -706,13 +612,6 @@ def trend(out):
         previous[key] = result
         rows.append(row)
     return rows
-
-
-def rolled_back(out):
-    """The measured policies a rewind dropped, with their numbers and never a pairing (they are not part of the lineage)."""
-    return [{'policy': r['policy_id'], 'round': r.get('round'), 'series': r['series']['key'], 'complete': r['complete'],
-             'ran': r['ran'], 'scored': r['scored'], 'successes': r['successes'], 'loop_rate': r['loop_rate']}
-            for r in results(out, rolled_back=True)]
 
 
 # ---- standalone measurement (experiments) ----------------------------------------------------------------------------

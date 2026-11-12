@@ -386,43 +386,6 @@ def test_a_larger_held_set_keeps_the_smaller_one_and_exposes_its_exclusion_ids(t
         held_eval.build_manifest(pool,avoid=kept,tasks=24,include=kept)
 
 
-def test_held_tasks_and_their_group_siblings_are_never_selected_from_the_adopting_round(tmp_path):
-    from natlang_neuralese.rl import held_eval
-    rows=held_pool();pool=write_pool(tmp_path,rows)
-    state={'round':2,'attempted_task_ids':['f1-1']};state_path=tmp_path/'state.json'
-    config={'cases':str(pool),'held_eval':{'tasks':8}}
-    adopted=held_eval.adopt_defaults(config,state,state_path,out=tmp_path,sealed_selection=True)
-    [record]=state['held_eval_transitions']
-    assert record['transition']=='held-eval-exclusion-20261110' and record['from_round']==3
-    manifest=json.loads((tmp_path/'held-eval'/'manifest.json').read_text())
-    assert adopted['held_eval_binding']['sha256']==record['manifest_sha256'] and len(manifest['tasks'])==8
-    assert held_eval.adopt_defaults(config,state,state_path,out=tmp_path,sealed_selection=True)==adopted
-    assert len(state['held_eval_transitions'])==1
-    held={t['id'] for t in manifest['tasks']};groups=set(manifest['excluded_split_groups'])
-    assert held_eval.exclusion(adopted,rows,2)==frozenset()          # a sealed round keeps its selection
-    excluded=held_eval.exclusion(adopted,rows,3)
-    assert held<=excluded and all(r['curriculum']['split_group'] in groups for r in rows if r['id'] in excluded)
-    offset=0;seen=set()
-    for _ in range(40):
-        chosen=curriculum.select_tasks(rows,[],{'rows':16,'group':8,'offset':offset},curriculum=DEFAULT_V2,exclude_ids=excluded)
-        ids={rows[item['row']]['id'] for item in chosen}
-        assert not ids&excluded and len(chosen)==16
-        seen|=ids;offset=(chosen[-1]['row']+1)%len(rows)
-    assert seen==({r['id'] for r in rows}-excluded)                  # breadth still reaches every remaining task
-    # An external selector sees the pool without the held rows and its answer maps back to the full pool.
-    from unittest import mock
-    sub=[r for r in rows if r['id'] not in excluded]
-    def fake(command,input,**kw):
-        request=json.loads(input);assert len(request['tasks'])==len(sub)
-        return mock.Mock(stdout=json.dumps([{'row':len(sub)-1,'samples':4}]))
-    with mock.patch.object(curriculum.subprocess,'run',fake):
-        chosen=curriculum.select_tasks(rows,[],{'rows':1,'group':4,'offset':0},command=['x'],exclude_ids=excluded)
-    assert rows[chosen[0]['row']]['id']==sub[-1]['id']
-    # Opt-out keeps the whole pool selectable and records nothing.
-    off=held_eval.adopt_defaults({**config,'held_eval':False},{},state_path,out=tmp_path)
-    assert 'held_eval_binding' not in off and held_eval.exclusion(off,rows,9)==frozenset()
-
-
 def held_result(policy,started,outcomes,key='s1'):
     return {'schema':held_eval.RESULT_SCHEMA,'policy_id':policy,'started_at':started,'series':{'key':key},'complete':True,
             'ran':len(outcomes),'scored':sum(o is not None for o in outcomes.values()),
@@ -475,25 +438,6 @@ def test_held_trend_pairs_with_previous_and_first_within_one_series(tmp_path):
     assert len(held_eval.trend(tmp_path))==4                                         # a failed run is not a measurement
 
 
-def test_held_trend_follows_the_lineage_after_a_rewind(tmp_path):
-    tasks=[(f't{i}',s) for i in range(6) for s in (0,1)]
-    def write(policy,started,successes):
-        d=held_eval.policy_directory(tmp_path,policy);d.mkdir(parents=True)
-        (d/'result.json').write_text(json.dumps(held_result(policy,started,{k:1.0 if i<successes else 0.0 for i,k in enumerate(tasks)})))
-    a,b,c,d,e='a'*64,'b'*64,'c'*64,'d'*64,'e'*64     # a collected round 0; b,c = updates 0,1; d = window 0 (after round 1); e = rolled back
-    write(d,1,5);write(b,2,3);write(e,3,2);write(c,4,6)             # measured out of lineage order; e was measured after d
-    assert [r['policy'] for r in held_eval.trend(tmp_path)]==[d,b,e,c]                       # no state: by start time
-    (tmp_path/'state.json').write_text(json.dumps({
-        'task_curriculum_spread_yield':[{'round':0,'policy_id':a}],
-        'completed_update_history':[{'round':0,'checkpoint':{'sha256':b}},{'round':1,'checkpoint':{'sha256':c}}],
-        'interleave':{'windows':[{'controller_round':2,'checkpoint':{'sha256':d}}]},
-        'rewind_history':[{'rolled_back_policies':[e,'f'*64]}]}))
-    rows=held_eval.trend(tmp_path)
-    assert [r['policy'] for r in rows]==[b,c,d]                                              # lineage order, e is not in it
-    assert rows[1]['vs_previous']['only_second']==3 and rows[2]['vs_previous']['only_first']==1 and rows[2]['vs_first']['only_second']==2
-    assert [r['policy'] for r in held_eval.rolled_back(tmp_path)]==[e] and 'vs_previous' not in held_eval.rolled_back(tmp_path)[0]
-
-
 def test_held_measurement_never_blocks_the_round(tmp_path):
     logs=[]
     # Opted out, unadopted, or an actor that cannot be reached: no handle, a logged reason, no exception.
@@ -505,14 +449,25 @@ def test_held_measurement_never_blocks_the_round(tmp_path):
     assert held_eval.Handle(tmp_path,{'pid':2**22+5,'starttime':1},1).finish() is None
 
 
-def test_static_rows_related_to_a_held_task_are_recognised_with_or_without_the_source_prefix(tmp_path):
-    from natlang_neuralese.rl import held_eval
-    assert held_eval.static_relation(tmp_path) is None   # a controller without held tasks relates nothing
-    directory = held_eval.directory_of(tmp_path)
-    directory.mkdir()
-    (directory / 'manifest.json').write_text(json.dumps({'excluded_split_groups': ['grp-a']}))
-    (directory / 'cases.jsonl').write_text(json.dumps({'id': 't1', 'source_groups': ['2wiki-q:Q7'],
-                                                       'curriculum': {'split_group': 'grp-a'}}) + '\n')
-    related = held_eval.static_relation(tmp_path)
-    assert related({'source_groups': ['grp-a']}) and related({'source_groups': ['2wiki:Q7']})
-    assert not related({'source_groups': ['2wiki:Q8', 'other']}) and not related({})
+def test_held_tasks_and_their_group_siblings_are_never_selected(tmp_path):
+    rows=held_pool();pool=write_pool(tmp_path,rows)
+    manifest,held_rows=held_eval.build_manifest(pool,avoid={'f1-1'},tasks=8)
+    held_eval.write_manifest(tmp_path/'held',manifest,held_rows)
+    excluded=held_eval.exclusion_ids(tmp_path/'held'/'manifest.json')
+    assert {t['id'] for t in manifest['tasks']}<=excluded
+    offset=0;seen=set()
+    for _ in range(40):
+        chosen=curriculum.select_tasks(rows,[],{'rows':16,'group':8,'offset':offset},curriculum=DEFAULT_V2,exclude_ids=excluded)
+        ids={rows[item['row']]['id'] for item in chosen}
+        assert not ids&excluded and len(chosen)==16
+        seen|=ids;offset=(chosen[-1]['row']+1)%len(rows)
+    assert seen==({r['id'] for r in rows}-excluded)                  # breadth still reaches every remaining task
+    # An external selector sees the pool without the held rows and its answer maps back to the full pool.
+    from unittest import mock
+    sub=[r for r in rows if r['id'] not in excluded]
+    def fake(command,input,**kw):
+        request=json.loads(input);assert len(request['tasks'])==len(sub)
+        return mock.Mock(stdout=json.dumps([{'row':len(sub)-1,'samples':4}]))
+    with mock.patch.object(curriculum.subprocess,'run',fake):
+        chosen=curriculum.select_tasks(rows,[],{'rows':1,'group':4,'offset':0},command=['x'],exclude_ids=excluded)
+    assert rows[chosen[0]['row']]['id']==sub[-1]['id']
