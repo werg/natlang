@@ -93,6 +93,32 @@ Phase a's step 5 was not kept: b resumed from the step-4 state. The step 5 above
 - **Export sanity.** The run's SGLang export equals the base weights bit for bit (all learner tensors; only the producer table
   is extra), so in-place sync writes into the right layout.
 
-## Checks 2, 3, 5
+## Check 2: overfit one episode end to end: PASS
+
+Data: 1 successful base episode of `ext:decisions:inbox-n4:inbox-sms-spam-train-109:078c21fd` from Experiment 1's collection
+(guidance off; 12 calls, 6,874 target tokens; base pass rate 2/5).
+Training: `exp0_sft.py train` from the base, 50 epochs, LR 2e-5, `--batch-loss-tokens 3000` (61 steps). NLL 0.96 -> 7.9e-5.
+Eval: served with the held-v2 engine (SGLang vendor, FP8 KV), `exp1_collect.py` on that task.
+`exp1_collect --temperature` was added for the near-greedy runs; `build_queue` refuses T=0.
+
+- T=1: 8/8 task successes. Each episode has 7-12 of its 11-12 calls token-identical to the trained episode.
+- T=1e-3: 2/2 successes, 12/12 calls identical.
+- So the training format and the harness format agree: loss mask, chat template, tool-call parsing, the sampled reply's token
+  boundary. Files: `sanity-1112/c2/` (sft23.sh, eval-t1, eval-greedy).
+
+### Finding: the harness history does not replay the sampled tokens (16% of call pairs)
+
+In Experiment 1's base successes, 201 of 1,281 consecutive call pairs of one invocation have a next prompt that does not extend
+`prompt + sampled ids`. Breakdown:
+- 86: the same text re-tokenized non-canonically, e.g. the sampled ` invoke` (19390) comes back as ` inv` + `oke` (1072, 4247).
+  It also happened in the overfit episodes: identical sample, split tokens in the next prompt.
+- 67: assistant text between `</think>` and `<tool_call>` dropped, or a second tool call of one reply dropped.
+- 48: a difference inside the earlier prompt (history rewritten).
+
+Training stays consistent: each call's exact prompt is used. But the model conditions on token splits it never produces and on a
+history that differs from its own outputs, and learner chaining breaks there. Cause not traced: the history is presumably
+re-encoded from streamed or normalized text. Owner: harness.
+
+## Checks 3, 5
 
 Pending GPU windows (an FP32-master AdamW fine-tune peaked at 39-54 GB in ft2's run; the DGX is GRPO's from 18:00).
