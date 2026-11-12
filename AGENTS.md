@@ -37,6 +37,25 @@ so w5 is retired (data kept, never resumed) and the base is the start policy.
 - Agents adopt plans like this one themselves: waiting for the owner's OK on a technical course change is a defect
   (owner, 2026-11-12).
 
+## GRPO loop: plain GRPO from the base, overlapped (engineering, 2026-11-12)
+
+`scripts/neuralese_data/grpo.py train` is the review's "Hour 24-48" GRPO (a few hundred lines; no controller, custody or
+transitions). One ledger unit holds the learner; its training actor is the ledger unit `<prefix>-actor` (`held_eval.serve`,
+SGLang vendor projection, the actor defaults). Collection never stops: `--slots` work-stealing episodes over an endless
+shuffled stream of task groups (8 samples; pools: the w5 pool plus the verified bgkit KR rows, fallow K1; held-v2 excluded
+with its split groups and every row sharing a source group; `WORK/pool.json` records the pool shas). The learner trains on
+whatever groups finished since its last step (16-128; stragglers join a later step, groups more than 2 versions stale are
+dropped). Reward = task outcome only. Per-call sequences with the actor's exact prompt and sampled ids
+(`lower_rollout_turns.episode_turns`, chained as in `exp0_sft.chains_of`); loss on sampled tokens
+`-min(rho, 2) * A * logp + 0.02 * k3(start || policy)`, `A` group-normalized; FP32-master AdamW, LR 1e-6, BF16 compute
+(`exp0_sft.load_model`, `lfm3_fast_train`). Weight sync each step: BF16 weights -> pinned buffer -> actor's HF safetensors ->
+SGLang `pause_generation(retract)` / `update_weights_from_disk` / `continue_generation` in a background thread; a pruned
+native checkpoint every 2 steps and the FP32 state (masters + moments, `/mnt/external/natlang-grpo-v1`) every 4, also in
+background threads. Episodes run the run's pinned copy of ts-host (`WORK/pin-<commit>`), the run records its commit
+(`runs.jsonl`); restart (`--resume`) to adopt newer code. Every 4 h `held_eval measure` (held-v2, 2 samples) runs on the
+newest checkpoint and `held_eval compare` pairs it with step 0 (`WORK/held/step-N/`). `train.jsonl` logs per step: reward
+mean, spread fraction, KL, rho (mean, pre/post-cap max, capped fraction, |log rho|), learner and actor tokens/s, phase seconds.
+
 ## Held-v2: the experiments' held-out set (engineering, 2026-11-12)
 
 `/home/werg/data/lfm3-rl-dgx-20261029/ops/held-v2/manifest.json` (sha dfe0a915): 256 pool tasks (the w5 pool b3fef4c7), 91
@@ -51,7 +70,10 @@ loop rate). A wall-clock timeout is unscored and reported as `timeouts`, never a
 commit and series (`same_code`, `same_series`). Baselines and the A/A noise floor: `ops/held-v2/runs/`. The eval engine is
 pinned in `held-v2/engine.json` (SGLang, vendor projection, FP8 KV, `--sglang-kv-gb 16`, 128 running; one engine per
 checkpoint): `measure` refuses another actor (`--allow-other-engine`), `serve` launches exactly it, and `compare` refuses to
-pair results with different attested engines (`serving_engine`, export format).
+pair results with different attested engines (`serving_engine`, export format). Interim A/A (base twice, independent seeds,
+shared actor, 1 sample on 56 matched tasks): 10 discordant pairs (18%), split 8:2, delta -10.7 pts, task-bootstrap CI
+[-21, 0], p=0.11: one-sample differences under ~8 pts at 128 pairs are noise; read held-v2 at 4 samples (~3 pts at 1,024
+pairs). Episodes take ~15 min at the shared actor's load and ~250 MB host memory each (budget the ledger unit for slots).
 
 ## RL actor on the DGX: one engine, many slots, absolute KV size (engineering, 2026-11-12)
 
