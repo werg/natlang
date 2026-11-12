@@ -246,8 +246,16 @@ async function serve(argv: string[]): Promise<void> {
   const idleMs = integer(flags, '--idle-seconds', 120) * 1000;
   const { createServer } = await import('node:net');
   const { rmSync } = await import('node:fs');
-  let active = 0, idle: NodeJS.Timeout | undefined;
-  const arm = () => { if (idle) clearTimeout(idle); if (!active) idle = setTimeout(() => { server.close(); rmSync(socket, { force: true }); process.exit(0); }, idleMs); };
+  // Backstop against retention across invocations: after --recycle-after invocations the server stops listening (a new
+  // one takes the socket path) and exits once its running invocations finish.
+  const recycleAfter = integer(flags, '--recycle-after', 64);
+  let active = 0, served = 0, admitted = 0, listening = true, idle: NodeJS.Timeout | undefined;
+  const release = () => { if (listening) { listening = false; server.close(); rmSync(socket, { force: true }); } };
+  const arm = () => {
+    if (idle) clearTimeout(idle);
+    if (!active && !listening) { idle = setTimeout(() => process.exit(0), 1000); return; }   // replies flush first
+    if (!active) idle = setTimeout(() => { release(); process.exit(0); }, idleMs);
+  };
   const server = createServer(connection => {
     // A peer can go away at any point (a probe, a supervisor that timed out or was killed): a write to it then fails
     // with EPIPE, which must end that connection only, never the process serving the other invocations.
@@ -262,12 +270,18 @@ async function serve(argv: string[]): Promise<void> {
       if (end < 0) return;
       started = true;
       // Capacity is taken by a request, not by a connection: a connection that closes without one holds nothing.
-      if (active >= capacity) { connection.end(JSON.stringify({ busy: true }) + '\n'); return; }
-      active++; arm();
+      if (active >= capacity || !listening) { connection.end(JSON.stringify({ busy: true }) + '\n'); return; }
+      active++; admitted++; arm();
+      if (admitted >= recycleAfter) release();
       const finish = (value: object) => {
         if (done) return;
-        done = true; active--; arm();
+        done = true; active--; served++; arm();
         if (!connection.destroyed) connection.end(JSON.stringify(value) + '\n');
+        // Retention is visible here: the heap after a collection, per finished invocation.
+        (globalThis as { gc?: () => void }).gc?.();
+        const memory = process.memoryUsage();
+        process.stdout.write(JSON.stringify({ event: 'invocation_end', served, active, heap_used_mb: Math.round(memory.heapUsed / 2**20),
+          rss_mb: Math.round(memory.rss / 2**20), external_mb: Math.round(memory.external / 2**20) }) + '\n');
       };
       let request: { argv?: unknown };
       try { request = JSON.parse(buffer.slice(0, end)) as { argv?: unknown }; }

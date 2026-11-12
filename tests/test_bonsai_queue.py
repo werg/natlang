@@ -1,6 +1,7 @@
 import json
 import hashlib
 import io
+import time
 import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -857,3 +858,83 @@ def test_orphan_temporaries_of_dead_writers_are_swept(tmp_path):
         path.write_text('x')
     assert queue_module.sweep_orphan_temporaries(str(tmp_path), str(tmp_path / 'missing')) == 1
     assert not orphan.exists() and live.exists() and (tmp_path / 'results.jsonl').exists()
+
+
+def test_shared_collector_heap_stays_bounded_and_recycles(tmp_path, monkeypatch):
+    """Many invocations through shared servers against a chat model that never finishes a case: the heap after a
+    collection stays flat (no per-invocation retention), and a server stops admitting after --recycle-after (64)."""
+    import http.server, tempfile, threading, shutil
+    cli = TS_HOST / 'dist/teacher/cli.js'
+    if not queue_module.SharedChild.supported(cli) or 'recycle-after' not in cli.read_text():
+        pytest.skip('ts-host dist is not built with the recycling server mode')
+    requests = []
+
+    class Chat(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def do_GET(self):
+            self.send_response(404)
+            self.end_headers()
+
+        def do_POST(self):
+            self.rfile.read(int(self.headers['content-length'] or 0))
+            requests.append(1)
+            data = json.dumps({'id': 'x', 'object': 'chat.completion', 'created': 0, 'model': 'fake',
+                               'choices': [{'index': 0, 'finish_reason': 'stop', 'message': {
+                                   'role': 'assistant', 'content': 'Looking at the inputs first. ' * 50}}],
+                               'usage': {'prompt_tokens': 1000, 'completion_tokens': 50}}).encode()
+            self.send_response(200)
+            self.send_header('content-type', 'application/json')
+            self.send_header('content-length', str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Chat)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    url = f'http://127.0.0.1:{server.server_address[1]}'
+    short = tempfile.mkdtemp(dir='/tmp', prefix='nlsh')
+    monkeypatch.setattr(queue_module.SharedChild, 'ROOT', short)
+    monkeypatch.setenv('INVOCATION_ID', 'test-shared-collector-heap')
+    source = tmp_path / 'source.ir.jsonl'
+    root = 'solve.nl'   # a natural-language root: every invocation calls the model
+    source.write_text(''.join(json.dumps({
+        'version': 'natlang.program/2', 'id': f'nl-case-{index}', 'kind': 'lambda_source',
+        'source_layout': {'root': root, 'subfunctions': {}},
+        'semantics': {'root': root, 'files': {root: '---\nargs:\n  problem: "string"\nreturns: "number"\n---\n'
+                                                     'Work out the answer and return it as a plain number.\n'},
+                      'inputs': {'problem': f'What is {index} plus {index}?'}, 'expected': 2 * index,
+                      'oracle': 'normalized'}}) + '\n' for index in range(4)))
+    total, capacity, log = 72, 4, io.StringIO()
+
+    def command(index):
+        jobs = tmp_path / f'jobs-{index}'
+        jobs.mkdir()
+        return ['node', '--x', str(cli), str(source), str(jobs), str(tmp_path / f'out-{index}.jsonl'), '--start',
+                str(index % 4), '--limit', '1', '--model-id', 'fake', '--root-seed', str(index), '--workers', '1',
+                '--max-turns', '20', '--model-concurrency', '1', '--max-model-requests', '2', '--transport-retries', '0',
+                '--temperature', '1.0', '--server', url, '--context-tokens', '32768', '--kv-tokens', '0',
+                '--chat-completions-url', url + '/v1/chat/completions']
+    try:
+        running, started = [], 0
+        while started < total or running:
+            while started < total and len(running) < capacity:
+                running.append(queue_module.SharedChild(command(started), log, capacity))
+                started += 1
+            running = [child for child in running if child.poll() is None]
+            time.sleep(0.05)
+        ends = {}
+        for path in Path(short).glob('*/*/s*.log'):
+            for line in path.read_text().splitlines():
+                if '"invocation_end"' in line:
+                    event = json.loads(line)
+                    ends.setdefault(path.name, []).append(event)
+        assert requests, 'the invocations reached the model'
+        assert sum(len(events) for events in ends.values()) == total
+        pids = {json.loads(line)['pid'] for line in log.getvalue().splitlines() if '"shared_collector"' in line}
+        assert len(pids) >= 2, 'a server stops admitting after 64 invocations and a new one serves the rest'
+        heaps = [event['heap_used_mb'] for events in ends.values() for event in events[8:]]
+        first = [event['heap_used_mb'] for events in ends.values() for event in events[4:8]]
+        assert max(heaps) <= max(first) + 32, (first, heaps)
+    finally:
+        server.shutdown()
+        shutil.rmtree(short, ignore_errors=True)

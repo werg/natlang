@@ -724,7 +724,7 @@ class SharedChild:
                         if self._connect(socket_module, path, probe=True):
                             continue
                         with (root / f's{index:03d}.log').open('a') as server_log:
-                            subprocess.Popen(['node', '--max-old-space-size=8192', command[2], '--serve', str(path),
+                            subprocess.Popen(['node', '--max-old-space-size=4096', '--expose-gc', '--heapsnapshot-signal=SIGUSR2', command[2], '--serve', str(path),
                                               '--capacity', str(capacity)], stdout=server_log, stderr=subprocess.STDOUT,
                                              stdin=subprocess.DEVNULL, start_new_session=True)
                         deadline = time.time() + 60
