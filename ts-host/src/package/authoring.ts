@@ -52,7 +52,7 @@ carries out. Edit the instructions to change its behavior. **examples.json** sav
 \`natlang test\` runs them on the real model. The sample input is the \`input\` argument's default in **natlang.json**.
 
 \`natlang check\` checks the source without calling a model. The first run prepares the selected model: the local one is a
-one-time download (about 1.9 GB), or choose a hosted model on the dashboard's Models page.
+one-time download (about 1.8 GB), or choose a hosted model on the dashboard's Models page.
 `;
 
 /** The coding-agent guide every new program carries (AGENTS.md; CLAUDE.md imports it). */
@@ -82,7 +82,7 @@ When you change behavior, add or update an example and run \`natlang test\`.
 ## The model
 
 If a command reports that the local runtime is not installed, ask the user before running \`natlang setup --yes\` (a
-one-time download of about 1.9 GB), or use a hosted model: \`--provider ID\` (\`natlang models\` lists them) or
+one-time download of about 1.8 GB), or use a hosted model: \`--provider ID\` (\`natlang models\` lists them) or
 \`NATLANG_SERVER=URL NATLANG_MODEL=ID\` for an OpenAI-compatible endpoint. \`natlang doctor --json\` reports the setup.
 
 ## Writing natlang

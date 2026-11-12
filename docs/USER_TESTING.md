@@ -15,7 +15,7 @@ Try triage next to process the bundled support tickets.
 Choose the model before the session and keep it for every participant in a round. A hosted model (a Pi provider
 or an OpenAI-compatible endpoint, configured on the Models page) tests the language, CLI and dashboard without
 model latency dominating the session. The managed local model is a separate track: on a CPU-only machine its
-first call can take minutes (a 1.9 GB download, then a prompt of several thousand tokens to prefill), so time
+first call can take minutes (a 1.8 GB download, then a prompt of several thousand tokens to prefill), so time
 it on the participant's hardware and report it apart from the authoring tasks. Rehearse each round on a clean
 machine or container first; a developer machine hides installation problems.
 

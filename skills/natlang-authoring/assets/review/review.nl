@@ -1,7 +1,7 @@
 ---
 description: Assess each observation and retain its reason alongside exact counts.
 args:
-  observations: string[]
+  observations: Untrusted<string>[]
   criterion: string
 returns: Report
 ---

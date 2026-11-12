@@ -2026,3 +2026,15 @@ on `read_code` of the consumer program's names (`assign`, `desk`, `finish`, `int
 `no-such-function`, until the wall-clock limit. 20 further runs got no first response within 15 minutes because the
 actor was saturated by the concurrent memetic e2e; those are unresolved, not writer outcomes. Unmeasured: re-run
 about 48 writer samples on an idle actor.
+
+## 2026-11-12: skills split into a user guide and internal notes (no executor-facing change)
+
+`skills/natlang-authoring/SKILL.md` (671 lines) and `skills/natlang-integration/SKILL.md` (695 lines) were rewritten as
+short guides for outside coding agents; the semantic-training-application notes moved verbatim to
+`docs/SEMANTIC_APPLICATION_NOTES.md` and the native learning/capture notes to `docs/NATIVE_RUNTIME_NOTES.md`.
+Checked before the move: no collector, teacher, RL task-authoring or tuning pipeline reads either skill or its
+references (the only readers are `natlang skills install`, `ts-host/test/onboarding.test.mjs` and
+`ts-host/test/distributed-skills.test.mjs`, which runs the `assets/review/` example with a scripted model; that example now
+types its observations `Untrusted<string>` instead of a guard sentence, as `references/refinements.md` teaches). The executing model's
+prompts, tool text and error text are unchanged, so there is nothing to measure on the executor. The skills are
+model-facing for the coding agents that load them; their effect on those agents is not measured.

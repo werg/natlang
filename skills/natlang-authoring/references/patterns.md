@@ -19,7 +19,7 @@ For a semantic directory reducer, make the item boundary a type: `{path, text}` 
 
 ## Instructions a small interpreter can follow
 
-What a large model infers, a small interpreter needs said. These held across thousands of teacher runs:
+What a large model infers, a small interpreter needs said. These held across thousands of recorded runs:
 
 - **State the step a loop repeats.** An instruction that names `iterateOn` but not the step gets stepped by hand, one eval per move, until the turns run out, even with a hint. Say what the state is, what one step does, and when to stop: "Repeat one control step as often as it takes: heater on below 20.5 °C, vent on above 21.5 °C, then take a reading." The loop an instruction describes is the loop the model writes.
 - **Say where the data is and how to reach it.** Name the helper and its paging (`facts.page(n)`, `facts.pages()`), and give helpers doc comments (page size, units, what a null means): the opening shows them. A model that does not see how to reach the data answers without it.
@@ -76,10 +76,6 @@ To port a real system (a compiler, a database, an agent harness), keep its archi
 
 ## Judgments in synchronous code
 
-For a directory reducer whose sources have meaningful subfolders, a typed batch may be a better unit of `iterateOn` than one file. Pass `{folderPath,records:{path,text}[]}` to a named natural-language stage and return one finding with a distinct `sourcePath` for each record. The stage may formulate a scoped typed `nl` literal to interpret relations among the records; the root reduces the remaining folder frontier and later reconciles cross-folder findings. Keep the original source IDs in every finding and check exact path coverage before using the result. Do not flatten a folder into an untyped string or let a batch finding replace the per-record evidence.
-
-When a program uses several nested named stages, give each stage an owned typed contribution: state what new judgment it makes, which exact source path and quotation support it, and which inherited fields the next stage consumes. A stage with no applicable evidence records a grounded absence. Merely forwarding an unchanged state or constructing an unused `nl` literal does not perform that stage's semantic job. Keep the record ID attached to the typed record wherever an output uses that ID.
-
 Heterogeneous arrays can retain their declared record-union shape. For example, a list may contain one record arm with `invoiceId` and another without it when the type is an explicit union. The result is complete if every element satisfies at least one complete arm; there is no need to add invented placeholder fields to satisfy another arm.
 
 A synchronous hook (an SQLite function, a sort comparator, a parser callback) cannot await a natural-language call. Decide first: collect the distinct values the hook will see, judge them in parallel (a `readout: decision` function is one scoring pass each), store the verdicts keyed by value, and let the hook look them up. The cache also makes repeated questions free.
@@ -103,6 +99,34 @@ A function that returns what a service produced (a provider message, a derived v
 ## One set of stages, two drivers
 
 To run the same stages from a checked host driver and from a natural-language driver, put them in the natural-language driver's callable folder (`compiler.nl` beside `compiler/`) and call them from host code through the import's typed children (`compiler.opt.mem2reg(fn, context)`); items inside a callable folder cannot be imported on their own. Run the natural-language driver with `codeEdits: 'deny'` when its stages must not be rewritten during a run, limit model requests in flight by wrapping the `ModelDriver` (the driver schedules its own concurrent calls, which a host-level limiter never sees), and check its final result in the host. (`applications/compilers`)
+
+## Semantic pipelines over source records
+
+For programs that read a set of documents or records and build findings from them:
+
+- **One item per step.** A named step function owns one original record: it returns the updated typed state and
+  finishes (`eval({ code: "return next;", finish: true })`); the parent's `iterateOn` picks the next record. Carry
+  the cursor or the shrinking frontier of original IDs in the state and use it as the measure
+  (`.withMeasure(s => s.pending.length).until(s => s.pending.length === 0)`), or `withLimit({ maxSteps: items.length })`.
+  An accumulator that stays the same across many items is not a stalled loop.
+- **Keep identities exact.** Bind source IDs and paths in the parent from the original record, and let the
+  natural-language child return meanings and exact quotes. Check in code that every quote is a substring of its
+  source and that every record got exactly one result; a finding without a passing quote stays unresolved.
+- **Hand typed results forward.** A later stage receives the earlier stage's typed findings with their witnesses,
+  not the raw documents again, and adds its own decision. Keep extracting a claim, judging a relation and assessing
+  support as separate typed steps when each can disagree.
+- **Make output conventions visible.** If the result uses derived IDs, case-folded names or another encoding, state
+  the rule in the root's instructions or types; an oracle must never require an encoding the program does not show.
+- **Keep failures distinct.** A malformed child result keeps its item pending and is repaired; a source-grounded
+  "cannot tell" is a completed unresolved result; neither erases earlier results.
+- **Complete every branch.** A public operation returns its full declared result on blocked, partial and successful
+  paths; a root that returns outgoing intentions declares an effects array and returns `[]` for no action.
+- **A small fixed judgment is a direct template.** Put the numbered steps in the `nl` literal itself rather than in a
+  captured instruction string, which adds a second interpretation boundary.
+
+Services that can reject a call should say why in one sentence with the valid form (the expected positional
+arguments, the valid page range); the model recovers from that sentence, so the instructions need not list invalid
+forms.
 
 ## Extension decisions
 

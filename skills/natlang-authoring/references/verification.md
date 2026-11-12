@@ -33,6 +33,15 @@ fixture workflow in [adaptation and evaluation](adaptation.md). Keep related sou
 families in one split, score independent observations, and preserve infrastructure
 failures separately from incorrect or blocked execution outcomes.
 
+## Debug a wrong result
+
+1. `natlang check --json` first: a structural error is cheaper to find without a model.
+2. Reproduce with `natlang call FILE.nl ARG... --json` (or the failing case of `natlang test --json`).
+3. `natlang traces list --definition NAME` finds the call; `natlang traces show CALL_ID` shows its inputs, each eval
+   the model ran, tool results, child calls and the outcome (`--events` for the raw trace events). Read where the
+   model's first wrong step was, then change the instruction, type or decomposition that allowed it.
+4. Add the failing input to `examples.json` with the right `expected` value, so `natlang test` keeps it fixed.
+
 ## Diagnose before changing policy
 
 - `nl-unknown-return` or `nl-ambiguous-signature`: add the missing annotation or `nl<T>`; do not widen to `any` to silence it.
@@ -42,17 +51,10 @@ failures separately from incorrect or blocked execution outcomes.
 - Correct type, wrong answer: improve instructions, evidence access, or decomposition; structural validation is working.
 - Growing prompts: inspect repeated data and live-value previews, not just source length.
 - A long call that loses track after compacting: check that its progress lives in scope variables, and that the compaction note says what is done and what is left; the full history stays in `transcript`.
-- Every run fails the same way: suspect the program before the model. In teacher data, uniform failures were an instruction naming a technique without its step, a phrase that read as a finishing status, a store the model could not see how to reach, or an environment it could edit.
+- Every run fails the same way: suspect the program before the model. In recorded runs, uniform failures were an instruction naming a technique without its step, a phrase that read as a finishing status, a store the model could not see how to reach, or an environment it could edit.
 - A run succeeds by changing what it was meant to use (editing a checker, a board, a simulated world to accept its move): that module is outside the program; make it a service.
 - A run skips the helper it was meant to use and reads the helper's data itself, correctly: the task depended on privacy. Give the helper the access (a scoped service) or accept the direct route.
+- A call ends `model_incomplete: terminated_without_result` (the model stopped without a result twice) or `truncated_without_action` (replies cut off before any action): an incomplete model answer, not a provider outage; make the step clearer or smaller.
 - The model replies with code, or with a result written as text, instead of calling a tool: the runtime tells it so; if it persists with a model, check that its chat template renders the tools and that the server parses its tool-call syntax before changing the program.
 
 Rejected actions and failed evals are reported to the model, which repairs them; `maxFailureRepairs` and the turn, token, and time budgets bound a call only when set. Nothing rolls back an external effect. Record the budgets used in any model study.
-
-## Training handoff
-
-Traces (`runtime.run(fn, { trace })`, or `fileTraceSink(dir)`) record the presented messages and tools, actions, observations, effects, seeds, and outcomes of every invocation. Teacher tasks are program IR projects (`natlang.program/2`: root `.nl`, files, services, inputs, expected). Do not admit a trajectory because it parses or reaches `done`; evaluate semantics independently and split related variants by source family. Review rejections by family, not only by reason: a family whose runs all fail alike is a task to fix, while scattered failures are the model's to learn from. A technique the model skips unprompted is taught by a hinted twin of the same case; the unhinted run is the matching negative.
-
-A `:hinted` curriculum twin states a technique as required (`iterateOn`, inline natural-language calls); its oracle enforces it on the run (`teacher/required-technique.ts`: an iterateOn that took steps and finished, at least one inline `nl` child), so a hand-typed answer scores as a failure there and still passes the unhinted twin. A recreated (removed) function is held to its parameter types, order and optionality by position, not to parameter names that no instruction states (`codebase-check.ts`); a function repaired in place keeps its names. Give such a task negative controls (dropped or retyped parameter) and `alias_code` controls (other parameter names) that `scripts/rl_tasks/verify.mjs` replays.
-
-Anchors: `ts-host/src/teacher/`, `ts-host/scripts/teacher-collector.mjs`, `PROGRAM_IR_PIPELINE.md`, `TEACHER_SETUP.md`.

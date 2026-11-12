@@ -33,6 +33,12 @@ at once, an ambiguous type, an instruction that names the wrong thing. Tuning le
   document, repository or session, not by label.
 - `"protected": true` holds an example out of every split for final reporting; nothing rewrites it.
 
+When a result can be partly right, add a crisp verifier `tune.reward.mjs` whose default export
+`(value, example) => number` grades it in [0, 1] (a boolean also works; anything else stops scoring with that error).
+Changing it rescores every root. When roots call host services, add `tune.services.mjs` whose default export
+`(example) => services` builds them per root (an optional `declarations` export is what the model is shown of each
+service); without it a root runs with no services and a service call fails.
+
 Write examples from real inputs and cover the variety the program meets. The same input within one group counts once;
 in different groups it is a distinct invocation.
 

@@ -30,6 +30,8 @@ teacher commands, RL preparation, split rules, and validation evidence live in
 
 All source authors used the repository's
 [`natlang-authoring`](../../skills/natlang-authoring/SKILL.md) contracts.
+The application-design and verification notes those repairs produced are in
+[`docs/SEMANTIC_APPLICATION_NOTES.md`](../../docs/SEMANTIC_APPLICATION_NOTES.md).
 Illustrative generic types from the briefs are expanded into concrete native
 aliases where the current loader requires them. No generated assistant answers
 or model executions are included in these source packages.

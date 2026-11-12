@@ -524,9 +524,12 @@ afterwards. The rules below are consequences of this one.
 - **Teach in errors, not prompts.** Never spell out a wrong form in a prompt; it
   primes the model to produce it. Handle wrong forms in the runtime and teach the
   fix in a one-sentence error. Prefer making standard JS idioms work over new
-  names; be very circumspect with new model-facing names. Every semantic change
-  updates `skills/natlang-authoring` and `skills/natlang-integration` in the same
-  push, with recovery advice for each new error.
+  names; be very circumspect with new model-facing names. Every user-facing
+  semantic change updates the covering reference of `skills/natlang-authoring` or
+  `skills/natlang-integration` in the same push, with recovery advice for each new
+  error; native-training and training-application notes go to
+  `docs/NATIVE_RUNTIME_NOTES.md` and `docs/SEMANTIC_APPLICATION_NOTES.md`, not the
+  skills (`skills/README.md`).
 - **No premature limits.** Termination is structural (no while loops; recursion
   on a smaller argument; `iterateOn` with a measure or a natural-language
   predicate), not budgets or default timeouts. Add a resource limit when a

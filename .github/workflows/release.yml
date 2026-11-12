@@ -1,0 +1,52 @@
+name: Release
+
+# Pushing a tag vX.Y.Z (matching the version in npm-packages/{node,cli}/package.json) builds the Node runtime, packs
+# @natlang/node and @natlang/cli, checks that scripts/install.sh installs a working `natlang` from them, and attaches
+# them to the GitHub release of that tag as natlang-node.tgz and natlang-cli.tgz (what install.sh downloads). With an
+# NPM_TOKEN secret it also publishes both packages to npm, which `npx @natlang/cli init` needs.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+      - name: Check the tag names the package version
+        run: |
+          for package in node cli; do
+            version=$(node -p "require('./npm-packages/$package/package.json').version")
+            [ "v$version" = "$GITHUB_REF_NAME" ] || { echo "npm-packages/$package is $version, the tag is $GITHUB_REF_NAME"; exit 1; }
+          done
+      - name: Build and pack
+        run: |
+          npm ci
+          npm run build:node
+          mkdir release
+          npm pack --ignore-scripts --workspace @natlang/node --workspace @natlang/cli --pack-destination release
+          mv release/natlang-node-*.tgz release/natlang-node.tgz
+          mv release/natlang-cli-*.tgz release/natlang-cli.tgz
+      - name: Install with scripts/install.sh and create a program
+        run: |
+          NATLANG_FROM=release NATLANG_PREFIX="$RUNNER_TEMP/natlang" sh scripts/install.sh
+          cd "$RUNNER_TEMP" && "$RUNNER_TEMP/natlang/bin/natlang" init smoke && cd smoke && "$RUNNER_TEMP/natlang/bin/natlang" check
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" release/natlang-node.tgz release/natlang-cli.tgz --title "natlang $GITHUB_REF_NAME" --generate-notes
+      - name: Publish to npm
+        if: ${{ env.NPM_TOKEN != '' }}
+        env:
+          NODE_AUTH_TOKEN: ${{ env.NPM_TOKEN }}
+        run: npm publish --ignore-scripts --access public --workspace @natlang/node --workspace @natlang/cli
