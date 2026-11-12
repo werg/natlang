@@ -119,6 +119,52 @@ Training stays consistent: each call's exact prompt is used. But the model condi
 history that differs from its own outputs, and learner chaining breaks there. Cause not traced: the history is presumably
 re-encoded from streamed or normalized text. Owner: harness.
 
-## Checks 3, 5
+## Check 3: artificial SFT goal (marker phrase): PASS
 
-Pending GPU windows (an FP32-master AdamW fine-tune peaked at 39-54 GB in ft2's run; the DGX is GRPO's from 18:00).
+Data: 200 calls from 88 tasks of Experiment 1's base successes (guidance off). Each sampled reply gets
+"Zebra protocol engaged. " prepended (right after the prompt's `<think>`). Built by `sanity-1112/marker_chains.py`.
+Training: from the base, 2 epochs, 11 steps at LR 2e-5; loss 0.83 -> 0.57.
+Eval: held-v2 engine, `exp1_collect` on 24 tasks x 2 samples (16 tasks not in the marker set), at most 6 model calls each.
+Measured with `sanity-1112/marker_rate.py`: does the policy turn's reasoning start with the marker?
+
+- Base, same measure: 0/54 turns.
+- Fine-tuned: 53/54 turns (98%); 11/11 episodes open with it. By task: 24/24 on tasks not in the marker set, 29/30 on trained
+  tasks.
+- Stopped at 11 finished episodes to free the GPU; the verdict was already clear.
+
+So a supervised behaviour learned in `exp0_sft` reaches real harness episodes, and it generalises to unseen tasks.
+
+## Check 5: task-level overfit (RFT on 4 tasks): partial lift, not ~100%
+
+Data: 5 clean base successes (guidance off) from Experiment 1's collection, on 4 tasks with base pass rate 0.4-0.5:
+design-brief-gates 008, decisions inbox-n7-119, codebase-ops select-leaf, auth line-support-desk.
+Training: `exp0_sft` from the base, 8 epochs, LR 1e-5, 34 steps; loss 0.67 -> 0.09.
+Eval: held-v2 engine, 8 samples per task at T=1. Three long line-support-desk episodes were cut at the window end and are
+unscored.
+Baseline: Experiment 1's base pass rates (4-5 samples per task, other seeds; no paired base run fitted the window).
+
+| task | base (exp1) | fine-tuned |
+|---|---|---|
+| auth line-support-desk billing-flag-0001 | 2/4 | 5/6 |
+| codebase-ops select-leaf length-3 | 2/5 | 7/8 |
+| decisions inbox-n7 sms-spam-119 | 2/4 | 2/8 |
+| design-brief-gates 008 reconstructNeeds | 2/4 | 4/8 |
+| total | 8/17 (47%) | 18/30 (60%) |
+
+- Moderate fine-tuning on own successes (loss 0.09) lifts two tasks and leaves two flat. Contrast check 2: driving one episode
+  to NLL 1e-4 gives 8/8.
+- Small n and unpaired, so no claim of lift. But a training loss near memorisation does not carry a task to ~100% at T=1:
+  outcomes hinge on a few high-entropy decision tokens that a low average NLL does not pin down.
+- So the plain SFT-on-successes signal is weak per task even when the plumbing is right. It is not a bug.
+
+## Summary
+
+The nuts and bolts work. Trainer, write-back, export, serving, weight sync and GRPO math all pass (checks 1-4).
+Supervised behaviour reaches the harness and generalises (check 3); a fully overfit episode reproduces verbatim and succeeds
+8/8 (check 2).
+The failure to improve comes from data and objective:
+- Experiment 0 trained 54% on off-distribution guidance-authoring calls.
+- The harness rewrites the sampled history in 16% of call pairs.
+- At GRPO's LR 1e-6 the BF16 policy barely moves: about 2% of elements in 4 steps, mostly flipping back. GRPO's real run now
+  uses 3e-6.
+- Moderate SFT on own successes lifts per-task success only partly (check 5).

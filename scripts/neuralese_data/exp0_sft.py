@@ -360,6 +360,9 @@ def train(args):
         return now
 
     for step, group in enumerate(steps):
+        if args.stop_file and Path(args.stop_file).exists():
+            print(json.dumps({'stopped_by': args.stop_file, 'at_step': step}), flush=True)
+            break
         fraction = step / max(1, total - 1)
         scale = min(1., (step + 1) / args.warmup) * (args.min_lr_fraction + (1 - args.min_lr_fraction) * 0.5 * (1 + math.cos(math.pi * fraction)))
         for g in optimizer.param_groups:
@@ -409,6 +412,13 @@ def train(args):
                 if best is None or current < best['loss']:
                     best = {'loss': current, 'step': step + 1,
                             'masters': {name: master.detach().cpu().clone() for name, master in masters.items()}}
+                    if args.save_best:
+                        # the live BF16 parameters are the rounded masters of this very step: write them now, so the
+                        # best checkpoint exists on disk whatever happens to the run (preemption, an early stop)
+                        from natlang_neuralese.common.hashing import sha256_file_hex_cached
+                        write_checkpoint(model, state, special, Path(args.out_dir) / 'checkpoint.pt',
+                                         sha256_file_hex_cached(Path(args.checkpoint)), total)
+                        record['saved_best'] = {'step': step + 1, 'val_loss': current}
                 record['best_val'] = {'loss': best['loss'], 'step': best['step']}
         if args.hours and step + 1 == args.replan_step and step + 1 < len(steps):
             # fit the schedule to the wall-clock budget from the measured rate (compile included: conservative)
@@ -537,6 +547,8 @@ def main():
     p.add_argument('--val-chains', action='append', default=[],
                    help='prebuilt validation sequences (repeatable, named by file stem): weighted NLL every --val-every steps')
     p.add_argument('--val-every', type=int, default=50)
+    p.add_argument('--save-best', action='store_true', help='with --keep-best-val: write checkpoint.pt at every new best validation step')
+    p.add_argument('--stop-file', help='stop before the next optimizer step when this file exists (the best-validation checkpoint is written)')
     p.add_argument('--keep-best-val', help='name (file stem) of a --val-chains set: write the checkpoint of the step with its lowest NLL (step 0 counts)')
     p.add_argument('--hours', type=float, default=0., help='wall-clock budget: at --replan-step the schedule (cosine '
                    'included) is cut to the steps that fit at the measured rate, keeping --reserve-minutes for eval and save')
