@@ -86,6 +86,12 @@ packed rows the same (0.69 / 0.0194). Against FP32 (`--fp32-reference` semantics
 0.089, stock 0.9964 / 0.086, fast vs stock 0.9978 / 0.067, loss max |diff| vs FP32 0.013 / 0.009 (another 6 chains: 0.9978 / 0.066 vs 0.9973 / 0.075):
 the fast path is as far from FP32 as stock HF, i.e. BF16 noise. Tried and dropped: selective recompute
 of the SwiGLU product (saved activations -18%, but 1949 +- 55 vs 1987 +- 38 tok/s at equal budget).
+Kernel fusion is at its limit on this hardware (layer bench, real dims, T=6000): Liger-Kernel (HF-exact `llama` RMSNorm, fused add+RMSNorm, SwiGLU;
+it does not trace inside `torch.compile`) runs at the speed of inductor's kernels (non-matmul GPU ms per conv layer 12.13 vs 12.18; SwiGLU backward
+2.04 vs 1.97 ms, about 234 GB/s, 85% of the GB10's 273 GB/s), so it is not used. Removing those bytes needs norm/SwiGLU fusion into the GEMMs, but
+inductor's Triton GEMM templates (max-autotune, forced past its SM-count gate) run at 34-35% of cuBLAS nvjet on sm_121 and cuBLASLt has no such
+epilogues; the matmul-only floor bounds what any fusion could still win at about 8% (conv layer 33.7 vs 39.5 ms, attention 43.7 vs 45.3).
+BF16 matmuls at about 86-90 TFLOPs cap fwd+bwd near 9.8k tok/s with zero other work, so 10k tok/s is out of reach for 1.7B on one GB10.
 GPU kernel time equals wall time per chain (no launch gaps), so CUDA graphs buy nothing at these lengths; the old per-instance layer compile already fused
 (3 shared graphs, no breaks), so the gain is the sliding attention (mem-efficient masked kernel + GQA copies, about 0.47 GPU s/chain) and the CE (0.45).
 Matmuls are now about 60-65% of GPU time; what remains is elementwise in the compiled layers (about 22%), flash (8%) and layer recompute.
