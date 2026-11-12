@@ -11,6 +11,18 @@ cosine 0.987 / rel-L2 0.16, stock vs FP32 0.983 / 0.18, per-chain loss within 1e
 (`model/hf_port.py`) already uses FlexAttention for the window; its norms/RoPE/gates/conv are still eager HF ops, so the same fusion applies there, but its 2.6-3k tok/s
 is dominated by the 16x forward inflation and the 2x privileged twin (APPROACH_REVIEW section 1.2).
 
+## Course change: review plan adopted, w5 retired (owner, 2026-11-12)
+
+`plans/neuralese/APPROACH_REVIEW_20261111.md` is the plan. No w5 checkpoint beats the untouched base on held-out
+(base 5ff07638 54/118, step 92 50/127, steps 110-134 down to 39/128), so w5 is retired (data kept, no restarts) and the
+base is the start policy. Suspended until two consecutive held gains: "no full precision" (fine-tuning uses FP32 master
+weights, `scripts/neuralese_data/exp0_sft.py`), "no experiments" (bounded experiments with a pinned commit and one
+change each, judged by paired held eval, are how we decide), whole-graph-only updates (per-call rows are fine while
+Neuralese use is rare), frugal eval and dev16 gating. Sequence: Experiment 0 (SFT on own successes), Experiment 1
+(RFT, 256 tasks x 8, pass >= +8 held, p<0.05), then plain GRPO; novelties return one at a time, each with its own
+paired eval. Heartbeats check the pinned experiment; they do not re-plan. Agents adopt plans like this themselves:
+waiting for the owner's OK on a technical course change is a defect (owner, 2026-11-12).
+
 ## RL round scheduling: per-group teachers and Pop pre-collection (engineering, 2026-11-10)
 
 `rl/teacher_feed.py`: each group is scored and its JOLT+ teachers planned (batch of `jolt_teacher_plan_batch` groups, 1 for the
