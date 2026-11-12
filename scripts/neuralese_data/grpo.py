@@ -952,7 +952,9 @@ def train(args):
                 continue
             spread += 1
             for episode, advantage in zip(episodes, advantages):
-                for chain in exp0_sft.chains_of([episode]):
+                kept = exp0_sft.chains_of([episode], max_len=args.max_sequence_tokens)
+                stats['calls_too_long_dropped'] += len(episode['rows']) - sum(len(c['segs']) for c in kept)
+                for chain in kept:
                     chain['advantage'] = advantage
                     chains.append(chain)
         loss_tokens = sum(length for c in chains for _, length, _ in c['segs'])
@@ -1144,6 +1146,9 @@ def main():
     t.add_argument('--exclude-family-regex', default=r'^ext_codebase-(py|natlang)_codebase_',
                    help='families never selected (default: codebase families whose repos are missing on the DGX)')
     t.add_argument('--max-turns', type=int, default=128)
+    t.add_argument('--max-sequence-tokens', type=int, default=65536,
+                   help='longest learner sequence; calls beyond it are dropped and counted (calls_too_long_dropped): at 131k a '
+                        'fully checkpointed sequence saves ~16 GB of layer inputs beside the actor')
     t.add_argument('--context-tokens', type=int, default=131072, help="call budget; follows the actor's served window when smaller")
     t.add_argument('--seed', type=int, default=20261112)
     t.add_argument('--seed-base', type=int, default=30_000_000)
