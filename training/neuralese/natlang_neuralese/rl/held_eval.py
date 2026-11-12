@@ -403,7 +403,7 @@ def finalize(directory, spec, started, *, complete):
     elapsed = round(time.time() - started, 1)
     result = {'schema': RESULT_SCHEMA, 'policy_id': spec['policy_id'], 'round': spec.get('round'),
               'manifest_sha256': spec['manifest_sha256'], 'series': spec['series'], 'code': spec['code'],
-              'endpoint': spec['endpoint'], 'actor': spec.get('actor'), 'tasks': spec['tasks'], 'samples_per_task': spec['samples'],
+              'endpoint': spec['endpoint'], 'actor': spec.get('actor'), 'engine': spec.get('engine'), 'tasks': spec['tasks'], 'samples_per_task': spec['samples'],
               'seed_base': spec.get('seed_base', SEED_BASE), 'case_seconds': spec.get('case_seconds'),
               'started_at': started, 'finished_at': time.time(), 'elapsed_seconds': elapsed,
               'complete': bool(complete and len(ran) == len(samples)), 'ran': len(ran), 'scored': len(scored),
@@ -471,6 +471,11 @@ def compare(first, second, *, resamples=2000):
     over the matched samples, each side's timeouts and loop rate, and whether the two ran under one code commit and series.
     Pairs lost to a timeout on either side are counted, never scored."""
     import random
+    engines = result_engine(first), result_engine(second)
+    if None not in engines and engines[0] != engines[1]:
+        raise ValueError('results served by different engine settings are not paired: '
+                         + json.dumps({k: [engines[0].get(k), engines[1].get(k)] for k in engines[0]
+                                       if engines[0].get(k) != engines[1].get(k)}))
 
     def timed_out(sample):
         return bool(sample.get('timed_out') or sample.get('finish_status') == 'timeout')
@@ -501,7 +506,8 @@ def compare(first, second, *, resamples=2000):
                 'loop_rate': result['loop_rate'], 'repeated_action_rate': result.get('repeated_action_rate'),
                 'elapsed_seconds': result.get('elapsed_seconds'), 'complete': result.get('complete')}
     n = sum(len(v) for v in by_task.values())
-    return {'first': side(first), 'second': side(second), 'same_code': side(first)['code'] == side(second)['code'],
+    return {'first': side(first), 'second': side(second), 'engine': engines[0] or engines[1],
+            'engine_attested': None not in engines, 'same_code': side(first)['code'] == side(second)['code'],
             'same_series': side(first)['series'] == side(second)['series'],
             'same_manifest': first.get('manifest_sha256') == second.get('manifest_sha256'),
             'matched_pairs': len(common), 'pairs_lost_to_timeout': sum(
@@ -536,7 +542,32 @@ def trend(out):
 # ---- standalone measurement (experiments) ----------------------------------------------------------------------------
 BASE_SNAPSHOT = Path.home() / '.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd'
 # The actor's throughput settings are serve_native_checkpoint.py's defaults (concurrency, KV pool, FP8 KV).
-ACTOR_ARGS = ('--engine', 'sglang', '--sglang-projection', 'vendor')
+# The held-v2 eval engine (coordinator decision 2026-11-12, pinned in ops/held-v2/engine.json): one SGLang engine per
+# checkpoint, FP8 KV. Every measured policy is served with exactly these settings; ``compare`` refuses other pairings.
+ACTOR_ARGS = ('--engine', 'sglang', '--sglang-projection', 'vendor', '--sglang-kv-cache-dtype', 'fp8_e4m3',
+              '--sglang-kv-gb', '16', '--sglang-max-running', '128')
+ACTOR_BUDGET_GB = 30   # --sglang-kv-gb + 14
+ENGINE_FIELDS = ('engine', 'dtype', 'projection', 'kv_cache_dtype', 'overlap_schedule', 'bf16_reduction')
+
+
+def engine_of(binding):
+    """The arithmetic-relevant serving settings an actor attests (``rl_policy_binding.serving_engine``): engine, fork
+    commit, dtype, projection, KV dtype, overlap, reduction, and the actor export format; None when not attested."""
+    engine = (binding or {}).get('serving_engine')
+    if not isinstance(engine, dict):
+        return None
+    return {**{key: engine.get(key) for key in ENGINE_FIELDS}, 'fork_commit': (engine.get('fork') or {}).get('commit'),
+            'export_format': ((binding.get('actor_export') or {}).get('format'))}
+
+
+def result_engine(result):
+    return result.get('engine') or engine_of(((result.get('actor') or {}).get('info')))
+
+
+def pinned_engine(manifest):
+    """The engine pin beside a held manifest (``engine.json``: ``serve_args`` and the ``expect``ed attested fields)."""
+    path = Path(manifest).parent / 'engine.json'
+    return json.loads(path.read_text()) if path.exists() else None
 
 
 def _free_port():
@@ -553,7 +584,7 @@ def _free_port():
 
 
 def serve(checkpoint, sha256, store, *, unit, budget_gb, extra=(), base=BASE_SNAPSHOT, wait_seconds=3600,
-          admission_seconds=14400, priority='medium', log=print):
+          admission_seconds=14400, priority='medium', actor_args=ACTOR_ARGS, log=print):
     """Serve ``checkpoint`` as a ledger unit (SGLang, vendor projection) and wait until it attests ``sha256``; returns
     the endpoint URL (``store/endpoint``). An active ``unit`` that already serves it is reused. The unit is stopped with
     ``systemctl --user stop UNIT``."""
@@ -583,7 +614,7 @@ def serve(checkpoint, sha256, store, *, unit, budget_gb, extra=(), base=BASE_SNA
                'env', f'NATLANG_REPO={repo}', f'PYTHONPATH={repo}/training/neuralese:{repo}', 'HF_HUB_OFFLINE=1',
                'OMP_NUM_THREADS=1', 'MKL_NUM_THREADS=1', str(python), str(repo / 'scripts/neuralese_data/serve_native_checkpoint.py'),
                '--store-dir', str(store), '--checkpoint', str(checkpoint), '--checkpoint-sha256', sha256, '--base', str(base),
-               '--port', str(port), '--prompt-rendering', 'full', *ACTOR_ARGS, '--hf-export-dir', str(store / 'sglang-hf'), *extra]
+               '--port', str(port), '--prompt-rendering', 'full', *actor_args, '--hf-export-dir', str(store / 'sglang-hf'), *extra]
     url = f'http://127.0.0.1:{port}'
     (store / 'endpoint').write_text(url + '\n')
     subprocess.run(command, check=True)
@@ -604,7 +635,7 @@ def serve(checkpoint, sha256, store, *, unit, budget_gb, extra=(), base=BASE_SNA
 
 
 def measure(out, manifest, endpoints, policy_id, *, samples=4, seed_base=SEED_BASE, case_seconds=3600,
-            max_model_requests=64, max_turns=128, context_tokens=32768, label=None, log=print):
+            max_model_requests=64, max_turns=128, context_tokens=32768, label=None, allow_other_engine=False, log=print):
     """Measure the policy served at ``endpoints`` ([(url, slots)]) on every task of ``manifest`` x ``samples`` into
     ``out/result.json`` (resumable: an existing ``run.json`` must name the same manifest, policy and sampling)."""
     from .actor_client import NativeActorClient
@@ -623,7 +654,14 @@ def measure(out, manifest, endpoints, policy_id, *, samples=4, seed_base=SEED_BA
             'tasks': len(pinned['tasks']), 'samples': samples, 'seed_base': seed_base, 'workers': sum(n for _, n in endpoints),
             'case_seconds': case_seconds, 'max_model_requests': max_model_requests, 'max_turns': max_turns,
             'context_tokens': context_tokens, 'runtime': str(repo / 'ts-host'), 'repo': str(repo),
-            'series': series(), 'code': code_provenance(), 'actor': {'info': info.get('rl_policy_binding')}}
+            'series': series(), 'code': code_provenance(), 'actor': {'info': info.get('rl_policy_binding')},
+            'engine': engine_of(info.get('rl_policy_binding'))}
+    pin = pinned_engine(manifest)
+    if pin and not allow_other_engine:
+        attested = spec['engine'] or {}
+        wrong = {k: attested.get(k) for k, v in pin['expect'].items() if attested.get(k) != v}
+        if wrong:
+            raise ValueError(f'the actor does not serve the pinned eval engine ({Path(manifest).parent / "engine.json"}): {wrong}')
     if spec['code'].get('dirty') or spec['series']['ts_host_dirty']:
         log(json.dumps({'event': 'held eval warning', 'warning': 'the checkout is dirty; the result records it'}))
     out.mkdir(parents=True, exist_ok=True)
@@ -671,7 +709,8 @@ def main(argv=None):
     m.add_argument('--context-tokens', type=int, default=32768)
     m.add_argument('--label')
     m.add_argument('--actor-unit', help='ledger unit name of the actor (default heldv2-actor-<sha8>)')
-    m.add_argument('--actor-budget-gb', type=int, default=26, help='ledger claim: serve_native_checkpoint --sglang-kv-gb (12) + 14')
+    m.add_argument('--actor-budget-gb', type=int, default=ACTOR_BUDGET_GB, help='ledger claim: --sglang-kv-gb + 14')
+    m.add_argument('--allow-other-engine', action='store_true', help='measure an actor that is not the pinned eval engine')
     m.add_argument('--actor-arg', action='append', default=[], help='extra serve_native_checkpoint.py argument (repeatable)')
     m.add_argument('--keep-actor', action='store_true')
     v = sub.add_parser('serve', help='serve a checkpoint as a ledger actor unit (or reuse it) and print its URL')
@@ -679,7 +718,7 @@ def main(argv=None):
     v.add_argument('--checkpoint-sha256')
     v.add_argument('--store', type=Path, required=True)
     v.add_argument('--unit', required=True)
-    v.add_argument('--budget-gb', type=int, default=26, help='ledger claim: --sglang-kv-gb (12) + 14')
+    v.add_argument('--budget-gb', type=int, default=ACTOR_BUDGET_GB, help='ledger claim: --sglang-kv-gb + 14')
     v.add_argument('--actor-arg', action='append', default=[])
     v.add_argument('--priority', default='medium', choices=('low', 'medium', 'high'))
     c = sub.add_parser('compare', help='paired comparison of two result.json files (second against first)')
@@ -708,7 +747,7 @@ def main(argv=None):
             sha = args.checkpoint_sha256 or _sha256(args.checkpoint)
             unit = args.actor_unit or f'heldv2-actor-{sha[:8]}'
             url = serve(args.checkpoint, sha, args.out / 'actor', unit=unit, budget_gb=args.actor_budget_gb,
-                        extra=args.actor_arg)
+                        extra=args.actor_arg, actor_args=(pinned_engine(args.manifest) or {}).get('serve_args', ACTOR_ARGS))
             endpoints.append((url, args.workers))
             policy = sha
         else:
@@ -720,7 +759,7 @@ def main(argv=None):
         try:
             measure(args.out, args.manifest, endpoints, policy, samples=args.samples, seed_base=args.seed_base,
                     case_seconds=args.case_seconds, max_model_requests=args.max_model_requests, max_turns=args.max_turns,
-                    context_tokens=args.context_tokens, label=args.label)
+                    context_tokens=args.context_tokens, label=args.label, allow_other_engine=args.allow_other_engine)
         finally:
             if unit and not args.keep_actor:
                 subprocess.run(['systemctl', '--user', 'stop', unit])

@@ -48,7 +48,10 @@ Measure with `held_eval measure --manifest M --out DIR (--endpoint URL[=SLOTS] |
 (work-stealing episodes, resumable, sample-major so a cut run stays balanced; `serve` launches/reuses a ledger SGLang actor) and
 compare with `held_eval compare A/result.json B/result.json` (McNemar on matched samples, task sign test, task-bootstrap CI,
 loop rate). A wall-clock timeout is unscored and reported as `timeouts`, never a failure; compare only results with one code
-commit and series (`same_code`, `same_series`). Baselines and the A/A noise floor: `ops/held-v2/runs/`.
+commit and series (`same_code`, `same_series`). Baselines and the A/A noise floor: `ops/held-v2/runs/`. The eval engine is
+pinned in `held-v2/engine.json` (SGLang, vendor projection, FP8 KV, `--sglang-kv-gb 16`, 128 running; one engine per
+checkpoint): `measure` refuses another actor (`--allow-other-engine`), `serve` launches exactly it, and `compare` refuses to
+pair results with different attested engines (`serving_engine`, export format).
 
 ## RL actor on the DGX: one engine, many slots, absolute KV size (engineering, 2026-11-12)
 

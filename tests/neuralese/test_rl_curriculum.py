@@ -420,6 +420,12 @@ def test_held_standalone_comparison_counts_timeouts_apart_and_bounds_the_change(
     low,high=report['delta_ci95_task_bootstrap']
     assert 0<low<=report['success_rate_delta']<=high and report['loop_rate_delta']==0
     assert held_eval.compare(first,first)['success_rate_delta']==0
+    def served(result,kv):
+        return {**result,'actor':{'info':{'serving_engine':{'engine':'sglang','dtype':'bfloat16','projection':'vendor',
+                'kv_cache_dtype':kv,'overlap_schedule':False,'fork':{'commit':'f'}},'actor_export':{'format':'x'}}}}
+    assert held_eval.compare(served(first,'fp8_e4m3'),served(second,'fp8_e4m3'))['engine']['kv_cache_dtype']=='fp8_e4m3'
+    with pytest.raises(ValueError,match='different engine'):
+        held_eval.compare(served(first,'auto'),served(second,'fp8_e4m3'))
 
 
 def test_held_trend_pairs_with_previous_and_first_within_one_series(tmp_path):
