@@ -581,6 +581,15 @@ def train(args):
     parameters = [masters[name] for name in live]
     for master in parameters:
         master.grad = torch.zeros_like(master)
+    # Each BF16 gradient is added into its FP32 master gradient as soon as autograd finishes it, then freed: a full set of
+    # BF16 gradients never exists at once.
+    def into_master(master):
+        def hook(param):
+            master.grad.add_(param.grad)
+            param.grad = None
+        return hook
+    for name, p in model.named_parameters():
+        p.register_post_accumulate_grad_hook(into_master(masters[name]))
     optimizer = torch.optim.AdamW([{'params': [p for p in parameters if p.ndim >= 2], 'weight_decay': args.weight_decay},
                                    {'params': [p for p in parameters if p.ndim < 2], 'weight_decay': 0.}],
                                   lr=args.lr, betas=(0.9, 0.99), eps=1e-8, fused=True)
@@ -758,9 +767,6 @@ def train(args):
                 loss_terms = loss_terms + args.kl_beta * kl
                 sums['kl'] += kl.detach().sum().item()
             (loss_terms.sum() / loss_tokens).backward()
-            torch._foreach_add_([masters[name].grad for name in live], [p.grad for p in live.values()])
-            for p in live.values():
-                p.grad = None
             sums['rho'] += rho.sum().item()
             sums['rho_capped'] += (rho > args.rho_cap).sum().item()
             sums['abs_log_rho'] += log_rho.abs().sum().item()
