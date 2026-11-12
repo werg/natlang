@@ -55,8 +55,11 @@ budget yet), wall clock 3600 s as a safety net only (unscored). Reward = task ou
 SGLang `pause_generation(retract)` / `update_weights_from_disk` / `continue_generation` in a background thread; a pruned
 native checkpoint every 2 steps and the FP32 state (masters + moments, `/mnt/external/natlang-grpo-v1`) every 4, also in
 background threads. Episodes run the run's pinned copy of ts-host (`WORK/pin-<commit>`), the run records its commit
-(`runs.jsonl`); restart (`--resume`) to adopt newer code. Every 4 h `held_eval measure` (held-v2, 2 samples) runs on the
-newest checkpoint and `held_eval compare` pairs it with step 0 (`WORK/held/step-N/`). `train.jsonl` logs per step: reward
+(`runs.jsonl`); restart (`--resume`) to adopt newer code. Held evals run on the training actor itself (it serves the
+current policy with the held-v2 engine pin): new collection pauses, `held_eval measure` (held-v2; 4 samples for the start
+policy before the first step, then 2 samples every 4 h on that step's checkpoint) and `held_eval compare` with step 0
+(`WORK/held/step-N/`). After each in-place update the front attests what it serves (`POST /v1/neuralese/rebind-policy`:
+the step's checkpoint sha, else the served weights' sha; the native engine keeps the start checkpoint). `train.jsonl` logs per step: reward
 mean, spread fraction, KL, rho (mean, pre/post-cap max, capped fraction, |log rho|), learner and actor tokens/s, phase seconds.
 Memory (smoke 2026-11-12): on the GB10 the unit's MemoryMax (= ledger budget) also bounds its CUDA allocations, so the
 budget must cover GPU + host: learner CUDA 19.3 GB before AdamW state, 32 GB peak at step 1, about 36 GB with the FP32 moments

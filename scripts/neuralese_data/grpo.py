@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import hashlib
 import json
 import math
 import os
@@ -135,6 +136,7 @@ class Collector:
         self.learnable_ids, self.learnable_order, self.measured, self.rates_read = [], [], set(), 0.
         self.rng = random.Random(args.seed + first_group)
         self.stop = threading.Event()
+        self.paused = threading.Event()             # set during a held measurement on the training actor
         self.generated = 0                          # sampled tokens of finished episodes (throughput)
         self.episodes = 0
         self.env = {**os.environ}
@@ -200,6 +202,8 @@ class Collector:
                 return row
 
     def _take(self):
+        if self.paused.is_set():
+            return None
         with self.lock:
             if not self.pending and self.outstanding < self.args.max_outstanding:
                 self._new_group()
@@ -323,11 +327,12 @@ class WeightSync:
     """The actor's HF export in one pinned host buffer: snapshot (GPU -> pinned, the only synchronous part), then in a
     background thread write it, load it into SGLang in place, and optionally write a native checkpoint."""
 
-    def __init__(self, model, export_dir, sglang_url, weights_dir):
+    def __init__(self, model, export_dir, sglang_url, weights_dir, front_url=None):
         import torch
         from safetensors import safe_open
         self.export_dir, self.sglang_url = Path(export_dir), sglang_url
         self.weights_dir = Path(weights_dir)
+        self.front_url = front_url
         self.weights_dir.mkdir(parents=True, exist_ok=True)
         for path in self.export_dir.iterdir():
             if path.is_file() and path.name != 'model.safetensors':
@@ -407,10 +412,25 @@ class WeightSync:
                 except Exception:
                     pass
             timing['actor_update_s'] = round(time.time() - t, 2)
+            extra = {}
             if also is not None:
                 t = time.time()
-                timing.update(also() or {})
+                extra = also() or {}
+                timing.update(extra)
                 timing['checkpoint_s'] = round(time.time() - t, 2)
+            if ok and self.front_url is not None:
+                # the actor front attests what it now serves: the step's native checkpoint when one was written, else the
+                # served weights' digest (held_eval measure and the rollout captures read this binding)
+                t = time.time()
+                weights = hashlib.sha256(memoryview(self.buffer.numpy())).hexdigest()
+                policy = extra.get('checkpoint_sha256') or weights
+                try:
+                    post(self.front_url + '/v1/neuralese/rebind-policy',
+                         {'policy_id': policy, 'weights_sha256': weights, 'version': version})
+                    timing['policy_id'] = policy
+                except Exception as error:
+                    ok, answer = False, f'rebind failed: {error!r}'[:400]
+                timing['rebind_s'] = round(time.time() - t, 2)
             self.last = {'version': version, 'ok': ok, 'answer': None if ok else answer, **timing}
             on_done(version, ok)
         self.thread = threading.Thread(target=run, daemon=True)
@@ -682,7 +702,8 @@ def train(args):
     # The actor's weights live on tmpfs: the shared NVMe wrote at 60-230 MB/s under other jobs' load (2026-11-12 bench),
     # which put 20-60 s of file write in front of every actor update.
     weights_dir = Path('/dev/shm') / f'natlang-{args.unit_prefix}-actor-weights'
-    sync = WeightSync(model, args.actor_export, None if args.no_actor_sync else sglang_url, weights_dir)
+    sync = WeightSync(model, args.actor_export, None if args.no_actor_sync else sglang_url, weights_dir,
+                      front_url=None if args.no_actor_sync else args.actor)
     atexit.register(shutil.rmtree, weights_dir, True)
     drop_cache([Path(args.actor_export) / 'model.safetensors'])
     saver = StateSaver()
@@ -704,6 +725,9 @@ def train(args):
     log_line(log, {'event': 'learner ready', 'init_s': round(time.time() - t0, 1), 'meminfo_gb': meminfo(),
                    'cuda_allocated_gb': round(torch.cuda.memory_allocated() / 2**30, 1),
                    'cuda_reserved_gb': round(torch.cuda.memory_reserved() / 2**30, 1)})
+    if args.held_every_hours > 0 and not (work / 'held' / 'step-00000' / 'result.json').exists() \
+            and not args.skip_base_held and not args.held_baseline:
+        collector.paused.set()            # the start policy's held measurement goes first (held() resumes collection)
     slots = [threading.Thread(target=collector.slot, daemon=True) for _ in range(args.slots)]
     for thread in slots:
         thread.start()
@@ -711,7 +735,6 @@ def train(args):
     checkpoint_root = Path(args.checkpoint_dir or Path(args.state_dir) / 'checkpoints')   # off the busy NVMe by default
     checkpoints = sorted(checkpoint_root.glob('step-*'))
     held_steps = set(json.loads((work / 'held-steps.json').read_text())) if (work / 'held-steps.json').exists() else set()
-    last_held = time.time() if step else 0.
     stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
 
@@ -732,31 +755,41 @@ def train(args):
         checkpoints[:] = [c for c in checkpoints if c.exists()]
         return {'checkpoint': str(path), 'checkpoint_sha256': sha}
 
-    def start_held(step_number, checkpoint_dir):
-        """``held_eval measure`` of a checkpoint (its own actor unit) in a ledger unit, then ``compare`` against step 0."""
+    def held(step_number, samples):
+        """``held_eval measure`` on the training actor itself (it serves the current policy with the held-v2 engine pin):
+        new collection pauses, the actor's weights stay fixed until the measurement ends, then ``compare`` with step 0."""
         held_steps.add(step_number)
         (work / 'held-steps.json').write_text(json.dumps(sorted(held_steps)) + '\n')
         out = work / 'held' / f'step-{step_number:05d}'
-        sha = (checkpoint_dir / 'sha256.txt').read_text().strip() if checkpoint_dir else source_sha
-        checkpoint = str(checkpoint_dir / 'checkpoint.pt') if checkpoint_dir else args.checkpoint
-        python = f'{sys.executable} -m natlang_neuralese.rl.held_eval'
-        script = (f'{python} measure --manifest {args.held_manifest} --checkpoint {checkpoint} --checkpoint-sha256 {sha} '
-                  f'--out {out} --samples {args.held_samples} --workers {args.held_workers} --label grpo-step-{step_number} '
-                  f'--actor-unit {args.unit_prefix}-heldactor-{step_number}')
-        base = Path(args.held_baseline) if args.held_baseline else work / 'held' / 'step-00000' / 'result.json'
-        if step_number:
-            script += f' && {python} compare {base} {out}/result.json --out {out}/compare-vs-step0.json'
-        command = ['/usr/bin/python3', str(REPO / 'scripts/memory_ledger.py'), 'run', '--unit', f'{args.unit_prefix}-held-{step_number}',
-                   '--budget-gb', '12', '--priority', 'medium', '--wait', '86400', '--detach', '--workdir', str(REPO), '--',
-                   '/usr/bin/env', f'PYTHONPATH={REPO}/training/neuralese:{REPO}', f'NATLANG_REPO={REPO}', 'HF_HUB_OFFLINE=1',
-                   'OMP_NUM_THREADS=1', 'MKL_NUM_THREADS=1', 'sh', '-c', script]
-        result = subprocess.run(command, capture_output=True, text=True)
-        log_line(log, {'event': 'held eval queued', 'step': step_number, 'returncode': result.returncode,
-                       'output': (result.stdout + result.stderr)[-400:]})
+        policy = (sync.last or {}).get('policy_id') or source_sha
+        collector.paused.set()
+        started = time.time()
+        python = [sys.executable, '-m', 'natlang_neuralese.rl.held_eval']
+        try:
+            with (work / 'held.log').open('a') as handle:
+                code = subprocess.run([*python, 'measure', '--manifest', args.held_manifest, '--endpoint',
+                                       f'{args.actor}={args.held_workers}', '--policy-id', policy, '--samples', str(samples),
+                                       '--out', str(out), '--label', f'grpo-step-{step_number}'],
+                                      cwd=REPO, stdout=handle, stderr=subprocess.STDOUT).returncode
+                base = Path(args.held_baseline) if args.held_baseline else work / 'held' / 'step-00000' / 'result.json'
+                if step_number and code == 0 and base.exists():
+                    subprocess.run([*python, 'compare', str(base), str(out / 'result.json'), '--out',
+                                    str(out / 'compare-vs-step0.json')], cwd=REPO, stdout=handle, stderr=subprocess.STDOUT)
+        finally:
+            collector.paused.clear()
+        summary = {}
+        if (out / 'result.json').exists():
+            result = json.loads((out / 'result.json').read_text())
+            summary = {k: result.get(k) for k in ('ran', 'scored', 'successes', 'loop_rate', 'complete')}
+        if (out / 'compare-vs-step0.json').exists():
+            summary['compare'] = json.loads((out / 'compare-vs-step0.json').read_text())
+        log_line(log, {'event': 'held eval', 'step': step_number, 'policy': policy, 'returncode': code,
+                       'seconds': round(time.time() - started), **summary})
 
-    if args.held_every_hours > 0 and not (work / 'held' / 'step-00000').exists() and not args.skip_base_held \
-            and not args.held_baseline:
-        start_held(0, None)
+    if args.held_every_hours > 0 and not (work / 'held' / 'step-00000' / 'result.json').exists() \
+            and not args.skip_base_held and not args.held_baseline:
+        held(0, args.held_samples_start)
+    last_held = time.time()
 
     while not stop.is_set() and (not args.max_steps or step < args.max_steps):
         phase = collections.OrderedDict()
@@ -862,7 +895,8 @@ def train(args):
         phase['snapshot'] = time.time() - t
         if sync.last and not sync.last.get('ok'):
             raise RuntimeError(f'actor weight update failed: {sync.last}')
-        save_native = step % args.save_every == 0 or (args.max_steps and step == args.max_steps)
+        held_due = args.held_every_hours > 0 and time.time() - last_held > args.held_every_hours * 3600
+        save_native = step % args.save_every == 0 or (args.max_steps and step == args.max_steps) or held_due
         sync.publish(step, on_published, also=(lambda s=step: write_native(s)) if save_native else None)
         if args.state_every and step % args.state_every == 0:
             tensors = {}
@@ -890,9 +924,9 @@ def train(args):
             outstanding_groups=collector.outstanding, elapsed_s=round(elapsed))
         log_line(log, record)
         if save_native and args.held_every_hours > 0 and time.time() - last_held > args.held_every_hours * 3600:
-            sync.wait()
+            sync.wait()                   # the actor now serves (and attests) this step's checkpoint
+            held(step, args.held_samples)
             last_held = time.time()
-            start_held(step, checkpoint_root / f'step-{step:05d}')
     sync.wait()
     saver.wait()
     collector.stop.set()
@@ -959,8 +993,9 @@ def main():
     t.add_argument('--skip-base-held', action='store_true')
     t.add_argument('--held-baseline', help="a start-policy held result.json to compare with (e.g. held-v2's base run) instead "
                    'of measuring step 0 (compare refuses another engine or series)')
-    t.add_argument('--held-samples', type=int, default=2)
-    t.add_argument('--held-workers', type=int, default=48)
+    t.add_argument('--held-samples', type=int, default=2, help='samples per held task at the periodic measurements')
+    t.add_argument('--held-samples-start', type=int, default=4, help='samples per held task for the start policy (step 0)')
+    t.add_argument('--held-workers', type=int, default=96, help='collector slots of a held measurement on the training actor')
     t.add_argument('--unit-prefix', default='grpo')
     args = parser.parse_args()
     if args.command == 'train':

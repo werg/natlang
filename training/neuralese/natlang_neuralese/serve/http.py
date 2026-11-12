@@ -255,6 +255,12 @@ def make_handler(engine: Engine):
                         placeholder_occurrence=body.get("placeholder_occurrence"), adapters=body.get('adapters'), native_state_modes=body.get('native_state_modes')))
                 if self.path == "/v1/chat/completions":
                     return self._chat(self._object())
+                if self.path == "/v1/neuralese/rebind-policy":
+                    if not hasattr(engine, "rebind_in_place"):
+                        return self._error(400, "unsupported", "only the SGLang actor takes in-place policy updates")
+                    body = self._object()
+                    return self._json(200, engine.rebind_in_place(body.get("policy_id"), body.get("weights_sha256"),
+                                                                  body.get("version")))
                 if self.path == "/v1/neuralese/collect":
                     referenced = self._object().get("referenced")
                     if referenced is None:
