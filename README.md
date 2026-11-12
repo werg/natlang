@@ -29,23 +29,29 @@ introduction in nine chapters; its source is in [`website/`](website/).
 
 ## Get started
 
+[Try natlang in your browser](https://werg.github.io/natlang/play/): the example
+gallery, an editor and a small model that runs in the page, with nothing to install.
+
+To install the `natlang` command (it needs Node.js 22.13 or newer):
+
 ```sh
-scripts/setup_dev.sh --node-only        # install the CLI; no model download required
-natlang run examples/hello              # one input, one natural-language function, one label
-natlang dashboard --root examples --open # browse examples, configure models, run and inspect results
+curl -fsSL https://raw.githubusercontent.com/werg/natlang/main/scripts/install.sh | sh
+natlang init my-program && cd my-program
+natlang setup                          # the managed local model, once (a 1.8 GB download)
+natlang run
 ```
 
-From a fresh terminal, clone this repository and enter its directory before running setup.
-The first local run prepares the runtime and model once (the default model is a
-1.8 GB download). Run `natlang setup` to prepare it in advance. For a hosted
-model, configure a profile on the dashboard's Models page before your first run.
-The next example is `natlang run examples/triage`, which processes bundled support tickets.
+The script installs the `@natlang/node` and `@natlang/cli` packages of the newest
+release with npm, into npm's global prefix or `~/.local`. `natlang setup` is
+optional: for a hosted model, configure a profile on the dashboard's Models page
+(`natlang dashboard --open`) or pass `--provider`. To work on natlang itself, or to
+run the bundled examples (`natlang run examples/hello`, `natlang run examples/triage`),
+clone this repository and run `scripts/setup_dev.sh --node-only`
+([development setup](DEV_SETUP.md)).
 
-Create your own program:
+Inside a program:
 
 ```sh
-natlang init my-program
-cd my-program
 natlang run                            # answer.nl on the sample input
 natlang call answer.nl "Your text"     # one call with your own input
 natlang dev                            # reruns after source or input edits; Ctrl+C stops

@@ -29,8 +29,21 @@ evaluation APIs (`eval/natlang-eval.js` with its worker), each with declarations
 The browser package carries the 35 MB inference bundle, so it is separate from
 Node installs. The checkout builds both from one implementation. `npm pack` in
 each directory under `npm-packages/` stages and packs the build
-(`scripts/stage-npm-package.mjs`). Public registry publication still requires
-the project owner to choose a license and supply credentials.
+(`scripts/stage-npm-package.mjs`). `@natlang/node` also ships the coding-agent
+skills (`skills/`) that `natlang skills install` copies.
+
+Releases: pushing a tag `vX.Y.Z` that matches the packages' version runs
+`.github/workflows/release.yml`. It packs `@natlang/node` and `@natlang/cli`, checks
+that `scripts/install.sh` installs a working `natlang` from them, attaches them to
+the tag's GitHub release as `natlang-node.tgz` and `natlang-cli.tgz`, and publishes
+both to npm when the repository has an `NPM_TOKEN` secret. `scripts/install.sh`
+(`curl -fsSL https://raw.githubusercontent.com/werg/natlang/main/scripts/install.sh | sh`)
+installs the newest such release with `npm install --global`; `NATLANG_VERSION`,
+`NATLANG_FROM` (a directory or URL with the two tarballs), `NATLANG_PACKAGE` (an npm
+spec such as `@natlang/cli`) and `NATLANG_PREFIX` override what and where it
+installs. `ts-host/test/cli-install.test.mjs` runs that path against the staged
+packages. Public registry publication still requires the project owner to choose
+a license and supply credentials.
 
 ## Package an application
 

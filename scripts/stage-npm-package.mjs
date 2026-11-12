@@ -49,6 +49,10 @@ if (kind === 'node') {
   // The dashboard's static UI sits beside dist/ as in ts-host (src/dashboard/server.ts resolves ../../dashboard).
   const dashboardAssets = join(root, 'npm-packages', 'node', 'dashboard');
   rmSync(dashboardAssets, { recursive: true, force: true }); cpSync(join(root, 'ts-host', 'dashboard'), dashboardAssets, { recursive: true });
+  // The coding-agent skills `natlang skills install` copies (src/cli/main.ts resolves ../../skills from dist/cli).
+  const skills = join(root, 'npm-packages', 'node', 'skills');
+  rmSync(skills, { recursive: true, force: true });
+  for (const name of ['natlang-authoring', 'natlang-integration']) cpSync(join(root, 'skills', name), join(skills, name), { recursive: true });
   const modelAssets = join(root, 'npm-packages', 'node', 'model-assets');
   rmSync(modelAssets, { recursive: true, force: true }); mkdirSync(modelAssets, { recursive: true });
   for (const template of new Set(STOCK_MODELS.map(model => model.template)))

@@ -8,6 +8,9 @@ const { BROWSER_MODEL_CATALOG, loadBrowserModelCatalog, loadBrowserLocalModel, c
   probeBrowserGpu, newPlaygroundProject, assertPlaygroundProject, editPlaygroundProject, validProjectPath,
   validatePlaygroundProject, projectSignature, runPlaygroundProject, traceFrame, admitPlaygroundRun } = natlang;
 const $ = id => document.getElementById(id);
+/** The public edition (scripts/build-playground-site.mjs) has no case or training workbench and its own model catalog. */
+const page = document.documentElement.dataset, PUBLIC = page.edition === 'public';
+if (PUBLIC) for (const id of ['advancedButton', 'captureCase']) $(id).hidden = true;
 const escapeHTML = value => String(value).replace(/[&<>"']/g, ch =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
 const pretty = value => JSON.stringify(value, null, 2) ?? 'null';
@@ -872,7 +875,7 @@ async function start() {
     if (!projects.length) { const template = examples[0]; const starter = newPlaygroundProject(template.name,
       template.root, template.files, template.inputs, template.expected);
       await storage.put('projects', starter); projects.push(starter); }
-    try { modelCatalog = await loadBrowserModelCatalog(); modelChoices = [...modelCatalog.models]; }
+    try { modelCatalog = await loadBrowserModelCatalog(page.modelCatalog); modelChoices = [...modelCatalog.models]; }
     catch (error) { message(`Model catalog: ${error.message}`, true); }
     renderModelChoices();
     bind();
@@ -881,7 +884,7 @@ async function start() {
     switchProject(projects.find(item => item.id === savedProject) ?? projects[0]);
     const gpu = await probeBrowserGpu();
     $('runtimeStatus').textContent = gpu.usable ? 'WebGPU ready' : `CPU available · ${gpu.reason}`;
-    void initJobs();
+    if (!PUBLIC) void initJobs();
   } catch (error) {
     $('runtimeStatus').textContent = 'Startup failed'; message(`Cannot start playground: ${error.message}`, true);
   }

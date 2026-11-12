@@ -209,6 +209,7 @@ h1 em { display: block; font: italic 400 94px/1.05 "Libre Caslon Text", Georgia,
 .btn:hover { background: var(--card-2); }
 .btn.primary { background: var(--vermilion-ink); border-color: var(--vermilion-ink); color: var(--cream); }
 .btn.primary:hover { background: #8f2f15; }
+a.btn { display: inline-block; text-decoration: none; }
 .btn[disabled] { opacity: 0.4; cursor: not-allowed; }
 .btn:active, .chip:active { transform: translateY(1px); }
 

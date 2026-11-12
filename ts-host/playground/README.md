@@ -2,6 +2,8 @@
 
 From `ts-host`, run `npm ci` once and then `npm run playground`. This builds the browser runtime, starts a server bound to `127.0.0.1`, and opens Chromium with the Linux WebGPU flags when available. `npm run serve:browser -- --playground` prints the URL without opening a browser. The page can also be served as static files after `npm run build`; the Jobs tab then has no local pipeline API.
 
+The public playground at <https://werg.github.io/natlang/play/> is this page's public edition: `node scripts/build-playground-site.mjs --out SITE` (after `npm run build`) writes it to `SITE/play/` with the browser runtime in `SITE/dist/browser/`, marks it `data-edition="public"` (no case and training workbench, no local pipeline API) and gives it a model catalog with the stock LFM3 1.7B Q4_K_M GGUF, which the browser downloads from Hugging Face. `.github/workflows/pages.yml` builds and deploys it with the website; `node scripts/playground-site-smoke.mjs [--network]` checks it in Chromium, served like GitHub Pages.
+
 ## Playground layout
 
 The file explorer opens beside the editor and selected output view. Its header collapses it to a narrow left rail, which also reopens it. The top bar selects a project, opens the example library, reveals case/training tools, and runs the current program. A compact help menu holds each example's description. Inputs, entry function, and expected value sit below the editor; output, live UI, and trace use the adjacent pane. On small screens, the panes stack.

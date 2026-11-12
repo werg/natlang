@@ -886,15 +886,16 @@ async function callWithArguments(parsed: Parsed, name: string, raw: string[]): P
   return 0;
 }
 
-/** The coding-agent skills of this checkout (`skills/` at the repository root, beside ts-host). */
-const SKILLS_ROOT = fileURLToPath(new URL('../../../skills/', import.meta.url));
+/** The coding-agent skills: `skills/` in the installed package, else at the root of this checkout (beside ts-host). */
+const SKILLS_ROOT = ['../../skills/', '../../../skills/'].map(path => fileURLToPath(new URL(path, import.meta.url)))
+  .find(path => existsSync(join(path, 'natlang-authoring', 'SKILL.md'))) ?? fileURLToPath(new URL('../../../skills/', import.meta.url));
 const SKILL_NAMES = ['natlang-authoring', 'natlang-integration'];
 
 /** `natlang skills`: where the skills are; `install` copies them into Claude Code's and/or Codex's skill folders. */
 function skillsCommand(parsed: Parsed, action: string): number {
   const json = parsed.options.has('--json');
   const missing = SKILL_NAMES.filter(name => !existsSync(join(SKILLS_ROOT, name, 'SKILL.md')));
-  if (missing.length) throw new Error(`the natlang skills are not in this installation (${SKILLS_ROOT}); they ship in the skills/ folder of the natlang repository`);
+  if (missing.length) throw new Error(`the natlang skills are not in this installation (${SKILLS_ROOT}); reinstall natlang or use a checkout of the natlang repository`);
   const home = homedir(), homes = { claude: join(home, '.claude', 'skills'), codex: join(home, '.codex', 'skills') };
   if (action === 'list') {
     output(json ? { root: SKILLS_ROOT, skills: SKILL_NAMES } : `${SKILL_NAMES.map(name => `${name}  ${join(SKILLS_ROOT, name)}`).join('\n')}\n\n` +
