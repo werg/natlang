@@ -703,3 +703,42 @@ def teacher_entries(student_entries, student_rows, *, cases, config, out, attemp
             entries.append(entry)
     return {'entries': entries, 'refusal': None, 'plan': record,
             'accounting': {'budget': budget, 'planned': len(entries)}}
+
+
+def jolt_privileged_source(*, rows, tokenizer, cases, roles, tokenizer_fingerprint, registry=None, fetch_text=None):
+    """Verified captured guidance for JOLT+; custody fails closed per episode.
+
+    Without readable protected packets or bound training cases every student episode is refused a privileged
+    teacher (recorded per row) and keeps its outcome term; nothing is dropped from RL.
+    """
+    from types import SimpleNamespace
+    from ..common.jsonio import iter_jsonl_rows
+    from ..data.render import Renderer
+    from ..serve.chat import tokenizer_model_type
+    from ..common.custody import CustodyError, ProtectedWorlds
+    from .privileged_context import PrivilegedRendering
+    try:
+        if cases is None:
+            raise CustodyError('no training cases are bound to this learner (--jolt-cases)')
+        custody = ProtectedWorlds.load(registry=registry)
+    except CustodyError as error:
+        reason = error
+        def refused(rollout, replay, turns):
+            raise CustodyError(str(reason))
+        return refused
+    worlds = {}
+    for _, case in iter_jsonl_rows(Path(cases)):
+        if case.get('id') in worlds:
+            raise ValueError('JOLT+ training cases repeat a world id')
+        worlds[case.get('id')] = case
+    # Raw-policy tokenizers are saved separately from the base config.json. The
+    # checkpoint-bound history sidecar was already verified by prepare(); use
+    # its backbone rather than guessing from the exported tokenizer directory.
+    model_type=(getattr(tokenizer,'natlang_history_reasoning',None) or {}).get('backbone') or tokenizer_model_type(tokenizer)
+    if not model_type:
+        raise ValueError('JOLT replay requires its authenticated tokenizer backbone')
+    renderer = Renderer(tokenizer, SimpleNamespace(open_id=roles.produce_open, close_id=roles.produce_close),model_type=model_type)
+    rendering = PrivilegedRendering.from_renderer(renderer, template=model_type,
+                                                  tokenizer_fingerprint=tokenizer_fingerprint,
+                                                  consume_open=roles.consume_open, consume_close=roles.consume_close)
+    return privileged_source(rows, cases=worlds, rendering=rendering, custody=custody, fetch_text=fetch_text)

@@ -32,10 +32,6 @@ def main() -> None:
     parser.add_argument('--training-source-sha256')
     parser.add_argument('--transport-scope',choices=('independent-recovery','diagnostic-local-pin','rl-controller-pin'))
     parser.add_argument('--actor-export-format',help='bind this exact-weights export format in the receipt and every capture (an actor on another device: the learner guards the engine mismatch)')
-    parser.add_argument('--coefficient-policy', type=Path)
-    parser.add_argument('--coefficient-policy-sha256')
-    parser.add_argument('--coefficient-rebase-out', type=Path)
-    parser.add_argument('--coefficient-cancel-stale-reason')
     parser.add_argument('--prompt-rendering', choices=('full', 'program-header'), default='full')
     parser.add_argument('--prefill-tokens', type=int, default=None,
                         help='native prompt-forward chunk size (default: 2048 on GPUs <=12 GiB, otherwise 8192)')
@@ -72,8 +68,8 @@ def main() -> None:
     parser.add_argument('--sglang-arg', action='append', default=[], help='extra sglang.launch_server argument')
     parser.add_argument('--hf-export-dir', type=Path, help='HF export cache (default: <store-dir or checkpoint dir>/sglang-hf/<sha>)')
     args = parser.parse_args()
-    if args.engine == 'sglang' and (args.coefficient_policy or args.transport_receipt):
-        parser.error('the SGLang actor serves ordinary checkpoints only (no coefficient policy or transport view)')
+    if args.engine == 'sglang' and args.transport_receipt:
+        parser.error('the SGLang actor serves ordinary checkpoints only (no transport view)')
     if bool(args.native_actor_view) != bool(args.native_actor_view_sha256):
         parser.error('native actor view requires its exact receipt SHA-256')
     transport_values=(args.transport_receipt,args.transport_receipt_sha256,args.transport_view_receipt,
@@ -83,8 +79,6 @@ def main() -> None:
             or (args.transport_scope=='independent-recovery' and not all(recovery_values))
             or (args.transport_scope!='independent-recovery' and any(recovery_values))):
         parser.error('transported actor requires all exact receipt bindings and no full-source actor view or participant')
-    if bool(args.coefficient_policy) != bool(args.coefficient_policy_sha256):
-        parser.error('coefficient policy requires its exact SHA-256')
 
     import torch
 
@@ -93,8 +87,6 @@ def main() -> None:
     configure_sdpa_backend(args.sdpa_backend)
     checkpoint = args.checkpoint.resolve(strict=True)
     bindings = [('checkpoint', checkpoint, args.checkpoint_sha256)]
-    if args.coefficient_policy:
-        bindings.append(('coefficient policy', args.coefficient_policy.resolve(strict=True), args.coefficient_policy_sha256))
     if args.native_actor_view:
         bindings.append(('actor view', args.native_actor_view.resolve(strict=True), args.native_actor_view_sha256))
     if args.transport_receipt:
@@ -137,22 +129,6 @@ def main() -> None:
         engine.store = TensorStore(args.store_dir)
     if args.actor_export_format:
         engine.set_actor_export({'kind': 'exact', 'format': args.actor_export_format, 'sha256': args.checkpoint_sha256})
-    if args.coefficient_policy:
-        from natlang_neuralese.model.native_coefficient_policy import policy_core, rebase_policy
-        from natlang_neuralese.rl.native_coefficient_stage import bind_policy
-        source = args.coefficient_policy.resolve(strict=True)
-        source_core = policy_core(json.loads(source.read_text()))
-        actual = source
-        if source_core['base_native_identity'] != engine.native_identity:
-            if args.coefficient_rebase_out is None:
-                raise ValueError('coefficient policy changed base; explicitly configure its preserved-value rebase output')
-            actual = rebase_policy(engine, source, args.coefficient_rebase_out,
-                                   cancel_stale_reason=args.coefficient_cancel_stale_reason)
-        bind_policy(engine, actual)
-        engine.rl_policy_binding['coefficient_policy_binding'] = {
-            'path': str(actual), 'sha256': sha256_file_hex_cached(actual)}
-        engine.rl_policy_binding['coefficient_policy_source'] = {
-            'path': str(source), 'sha256': sha256_file_hex_cached(source)}
     engine.start()
     server = serve(engine, args.host, args.port)
     print(json.dumps({'event': 'native_training_checkpoint_serving',

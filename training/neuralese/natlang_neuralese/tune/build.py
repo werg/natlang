@@ -219,7 +219,7 @@ def main(argv=None):
         # imported from the plan's `artifacts` directories, e.g. the active release's).
         privileged = None
         if rollouts and plan.get('jolt_cases'):
-            from ..rl.native_stage import jolt_privileged_source
+            from ..rl.jolt import jolt_privileged_source
             privileged = jolt_privileged_source(rows=[row['episode'] for row in rollouts], tokenizer=engine.tokenizer,
                 cases=Path(args.plan).parent / plan['jolt_cases'], roles=engine.role_tokens,
                 tokenizer_fingerprint=engine.native_identity['tokenizer_fingerprint'],

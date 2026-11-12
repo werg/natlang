@@ -96,7 +96,7 @@ def native_graph_gradient(engine, body, owner, *, coefficient_targets=None, eval
                 raise ValueError('invocation_adapters must map actual invocation names to explicit adapter lists')
             source_names={name:name for name in names}
             if isinstance(body.get('objective'),dict) and body['objective'].get('kind')=='native-policy':
-                from ..train.native_state_sft import pack_native_graphs
+                from ..train.native_graph_loss import pack_native_graphs
                 packed,_,_,_=pack_native_graphs([example])
                 source_names={before.name:after.name for before,after in zip(example.plan.invocations,packed.invocations)}
                 declarations={source_names[name]:value for name,value in declarations.items()}
@@ -391,7 +391,7 @@ def _native_graph_gradient_impl(engine, body, owner, adapter_leaves, *, actor_ba
         if not target_tensors:
             raise ValueError('gradient target has no tensors')
         if objective is not None:
-            from ..train.native_state_sft import packed_graph_loss
+            from ..train.native_graph_loss import packed_graph_loss
             objective.external_state_overrides = state_overrides
             loss, stats = packed_graph_loss(engine.shared_model, [example], objective=objective)
         else:

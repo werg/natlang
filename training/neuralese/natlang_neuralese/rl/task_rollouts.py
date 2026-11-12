@@ -493,42 +493,6 @@ def _budget_terminated_prefix(entry: dict[str, Any], task: dict[str, Any], finis
                             if cut is not None else {})}}
 
 
-def memetic_outcome(task: dict, result: dict | None) -> dict | None:
-    """The graded outcome of a memetic improvement episode (``natlang.memetic-outcome/1`` in the world score),
-    or None for every other task. A memetic episode without one (it crashed before scoring) scores as a failure."""
-    world = (task.get("semantics") or {}).get("world") or {}
-    if world.get("kind") != "memetic" or not result:
-        return None
-    memetic = ((result.get("outcome") or {}).get("world") or {}).get("memetic")
-    if not isinstance(memetic, dict) or memetic.get("schema") != "natlang.memetic-outcome/1":
-        # The episode ended without a scored workspace (repetition, a crash, a budget stop): a failed improvement,
-        # scored 0 against the same anchor as its group so the group stays comparable.
-        # The anchor comes from the episode's shared per-parent preparation; an episode group whose preparation never
-        # completed has no measured anchor (0 for every member, so the group stays comparable).
-        spec = json.loads(Path(world["task"]).read_text())
-        prepared = Path(spec["prepared_path"])
-        baselines = json.loads(prepared.read_text())["baselines"] if prepared.exists() else {}
-        from .memetic_workspace import memetic_reward
-        _, anchor, _, _ = memetic_reward(0., baselines, evaluations=0, fits=0, budget=spec["budget"],
-                                         cost_weight=0., committed=True)
-        return {"schema": "natlang.memetic-outcome/1", "quality": 0., "anchor": anchor, "gain": -anchor,
-                "cost": 0., "query_success": 0., "unscored_workspace": True}
-    quality = memetic.get("quality")
-    if type(quality) not in (int, float) or not 0 <= quality <= 1:
-        raise ValueError("memetic outcome quality must be in [0, 1]")
-    return memetic
-
-
-def memetic_reward_record(memetic: dict) -> dict:
-    """The reward fields the learner reads (rl.native_replay.group_episode_advantages): the trivial-improvement
-    anchor and the measured gain, cost and query success."""
-    return {"anchor": float(memetic["anchor"]), "gain": float(memetic["gain"]), "cost": float(memetic["cost"]),
-            "query_success": float(memetic["query_success"]),
-            # Distillation and promotion read these (rl.memetic_stage.distill / held_gains).
-            "query_dir": memetic.get("query_dir"), "committed": memetic.get("committed"),
-            "unscored_workspace": bool(memetic.get("unscored_workspace")), "score_path": memetic.get("score_path")}
-
-
 def build_queue(packet: Path, rows: int, group: int, out: Path, *, temperature: float, case_seconds: int,
                 max_model_requests: int, max_turns: int, seed_base: int) -> list[dict[str, Any]]:
     if group < 2:
@@ -541,16 +505,12 @@ def build_queue(packet: Path, rows: int, group: int, out: Path, *, temperature: 
         raise ValueError("queue row count must match the authenticated task packet")
     entries = []
     for index in range(rows):
-        # A memetic improvement episode runs its program on support (and, at the end, query) worlds inside the
-        # episode; its world declares the wall budget that needs (rl.memetic_stage).
-        world = ((packet_tasks[index].get("semantics") or {}).get("world") or {}) if packet_tasks else {}
-        seconds = max(case_seconds, int(world.get("case_seconds") or 0)) if world.get("kind") == "memetic" else case_seconds
         for sample in range(group):
             case = out / f"row-{index:03d}" / f"sample-{sample:02d}"
             entries.append({
                 "key": f"s7-task-{index:03d}-{sample:02d}", "index": index, "count": 1, "source": str(packet),
                 "seed": seed_base + 1000 * index + sample, "temperature": temperature,
-                "case_seconds": seconds, "max_model_requests": max_model_requests, "max_turns": max_turns,
+                "case_seconds": case_seconds, "max_model_requests": max_model_requests, "max_turns": max_turns,
                 "jobs": str(case / "jobs"), "log": str(case / "collector.log"), "output": str(case / "results.jsonl"),
                 "group": index, "sample": sample,
                 **({"task_id": packet_tasks[index]["id"], "packet_sha256": packet_sha256}
@@ -649,15 +609,6 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0,
                     raise ValueError(f"student-root rollout {entry['key']} replayed an authored root")
         outcome = classify_case(result, finishes.get(entry["key"]))
         reward = reward_of(outcome, finishes.get(entry["key"]))
-        memetic = memetic_outcome(packet[entry["index"]], result)
-        if memetic is not None and memetic.get("unscored_workspace") and reward is None:
-            # No workspace score and an unresolved run (wall-clock timeout, infrastructure): unresolved, not a
-            # failed improvement; it carries no reward.
-            memetic = None
-        if memetic is not None:
-            # An improvement episode's outcome is graded: its committed change set's success on held query worlds
-            # (rl.memetic_workspace.Workspace.score), anchored on the best trivial improvement.
-            outcome, reward = "memetic_scored", memetic["quality"]
         expected_packet_sha256 = packet_sha256 if preparation.get("packet_sha256") == packet_sha256 else None
         budget_prefix = _budget_terminated_prefix(
             entry, packet[entry["index"]], finishes.get(entry["key"]),
@@ -705,7 +656,6 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0,
                             "outcome": outcome,
                             "reward": None if training_reward is None else {"quality": training_reward,
                                 **({"neuralese_bonus": episode_bonus} if episode_bonus else {}),
-                                **({"memetic": memetic_reward_record(memetic)} if memetic is not None else {}),
                                 "execution_efficiency": efficiency},
                             "unscored": ("budget_prefix_capture_unavailable" if result is None and reward is not None and
                                          budget_prefix is None else outcome if reward is None else None),

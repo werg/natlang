@@ -30,7 +30,9 @@ count, and (b) ranks a row behind every other candidate once it has had ``visit_
 recently over-visited rows last. Rotating breadth (its own cursor), ``class_quota`` shares, per-family frontiers and the
 ``min_rows_per_round``/``min_group`` floor are untouched; unobserved rows have no visits.
 """
+import json
 import math
+import subprocess
 
 V1_SCHEMA='natlang.rl-task-curriculum/1'
 V2_SCHEMA='natlang.rl-task-curriculum/2'
@@ -320,3 +322,47 @@ def validate_quota(cases,budget,config,chosen):
         got=sum(1 for item in chosen if metadata(cases[item['row']]).get('mix_class')==name)
         if got<required:
             raise ValueError(f'selectTrainingTasks must give class {name} at least {required} of {count} rows (got {got})')
+
+
+def select_tasks(cases, stats, budget, *, command=None, curriculum=None, exclude_ids=None):
+    """selectTasks(groupStats,budget)->{row,samples}[], crisp/NL boundary.
+
+    A command may execute the existing natlang runtime and return the same typed
+    JSON. This mechanism validates identities/counts; policy wording is in S7.
+    ``exclude_ids`` (the held-out evaluation tasks, rl.held_eval) are never selected: the selector sees the pool without
+    them (its offset and breadth cursor follow the remaining rows) and the chosen rows map back to the full pool.
+    """
+    if exclude_ids:
+        from bisect import bisect_left
+        eligible = [i for i, row in enumerate(cases) if row.get('id') not in exclude_ids]
+        if len(eligible) < len(cases):
+            if not eligible:
+                return []
+            sub_budget = {**budget, 'offset': bisect_left(eligible, budget['offset']) % len(eligible)}
+            chosen = select_tasks([cases[i] for i in eligible], stats, sub_budget, command=command, curriculum=curriculum)
+            return [{**item, 'row': eligible[item['row']]} for item in chosen]
+    tasks=task_descriptors(cases)
+    if command:
+        response = subprocess.run(command, input=json.dumps({'groupStats': stats,
+            'budget': budget, 'curriculum':policy_options(curriculum or {}), 'tasks': tasks}),
+            text=True, capture_output=True, check=True)
+        chosen = json.loads(response.stdout)
+    elif curriculum is not None:
+        chosen=select(cases,stats,budget,curriculum)
+    else:
+        order = list(range(budget['offset'], len(cases))) + list(range(budget['offset']))
+        chosen = [{'row': i, 'samples': budget['group']} for i in order][:budget['rows']]
+    if not isinstance(chosen, list) or any(not isinstance(item, dict) or
+            type(item.get('row')) is not int or not 0 <= item['row'] < len(cases) or
+            type(item.get('samples')) is not int or item['samples'] < 2 for item in chosen):
+        raise ValueError('selectTasks must return distinct valid {row,samples>=2} entries')
+    if len(chosen)>budget['rows']:
+        raise ValueError('selectTasks exceeded the declared row allocation')
+    if len({item['row'] for item in chosen}) != len(chosen):
+        raise ValueError('selectTasks returned duplicate task rows')
+    if len({item['samples'] for item in chosen}) > 1:
+        raise ValueError('current collector fanout requires one shared group size per round')
+    if curriculum is not None:
+        validate_breadth(cases,budget,curriculum,chosen)
+        validate_quota(cases,budget,curriculum,chosen)
+    return chosen

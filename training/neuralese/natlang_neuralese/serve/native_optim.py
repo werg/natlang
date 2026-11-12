@@ -161,9 +161,9 @@ def _native_optimizer_step_impl(engine, body, owner):
         device = next(updated_model.parameters()).device
         prior_training = getattr(engine,'native_training_state',{})
         rng = prior_training.get('rng') or capture_training_rng_state(device)
-        from ..train.native_continuation import collect_sft_progress
+        import copy
         training = {**{key:value for key,value in prior_training.items() if key.startswith('service_')},
-                    'sft_progress':collect_sft_progress(prior_training),
+                    'sft_progress':copy.deepcopy(prior_training.get('sft_progress') or {}),
                     'global_step':int(prior_training.get('global_step',prior_training.get('step',0)))+1,
                     'rng':rng, 'service_rng_policy':'training-stream-unchanged; chat-stream-per-request',
                     'service_optimizer_step':step,

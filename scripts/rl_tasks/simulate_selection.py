@@ -3,7 +3,7 @@
 
   simulate_selection.py --cases POOL/cases.jsonl [--rounds 400] [--rows 16] [--group 8] [--compare-without-quota] -o report.json
 
-Runs ``production.select_tasks`` (the interleaved controller's own entry, policy ``natlang.rl-task-curriculum/2`` with its
+Runs ``curriculum.select_tasks`` (policy ``natlang.rl-task-curriculum/2`` with its
 default ``class_quota``) for many rounds against synthetic outcomes: a task's pass probability falls with its level and each
 group of samples is drawn from it, so family frontiers move and outcome-spread groups appear as in a live run. Synthetic
 outcomes only drive the selector's adaptation; nothing here is a model result. The report measures, per round and overall,
@@ -63,7 +63,7 @@ def _top_share(picked, keys, total, top=8):
 
 
 def simulate(cases, *, rounds, rows, group, config, seed=1103, outcomes='level'):
-    from natlang_neuralese.rl import production
+    from natlang_neuralese.rl import curriculum
     from natlang_neuralese.rl.curriculum import metadata, record_visit
     rng = random.Random(seed)
     model = OutcomeModel(outcomes, random.Random(seed + 1))
@@ -72,10 +72,9 @@ def simulate(cases, *, rounds, rows, group, config, seed=1103, outcomes='level')
     history, offset = {}, 0
     picked = collections.Counter()
     per_round = []
-    tagged_disagree = 0
     for number in range(rounds):
         stats = list(history.values())
-        chosen = production.select_tasks(cases, stats, {'rows': rows, 'group': group, 'offset': offset}, curriculum=config)
+        chosen = curriculum.select_tasks(cases, stats, {'rows': rows, 'group': group, 'offset': offset}, curriculum=config)
         effect = sum(1 for item in chosen if features[item['row']]['effect_state_oracle'])
         per_round.append(effect / len(chosen))
         for item in chosen:

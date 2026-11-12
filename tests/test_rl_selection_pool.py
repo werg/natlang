@@ -81,7 +81,7 @@ def test_repeated_effect_template_rows_stay_in_the_pool_while_repeated_plain_row
 
 
 def test_selector_honours_the_class_quota_every_round_on_a_low_effect_pool(tmp_path):
-    from natlang_neuralese.rl import production
+    from natlang_neuralese.rl import curriculum
     from natlang_neuralese.rl.curriculum import DEFAULT
     rows = []
     for name in 'abcd':
@@ -97,7 +97,7 @@ def test_selector_honours_the_class_quota_every_round_on_a_low_effect_pool(tmp_p
     assert sum(c['curriculum']['rl'].get('mix_class') == 'effect_state' for c in cases) < .1 * len(cases)
     offset = 0
     for _ in range(12):
-        chosen = production.select_tasks(cases, [], {'rows': 16, 'group': 8, 'offset': offset}, curriculum=DEFAULT)
+        chosen = curriculum.select_tasks(cases, [], {'rows': 16, 'group': 8, 'offset': offset}, curriculum=DEFAULT)
         effect = sum(cases[item['row']]['curriculum']['rl'].get('mix_class') == 'effect_state' for item in chosen)
         assert effect >= .34 * 16 and len({item['row'] for item in chosen}) == 16
         offset = (chosen[-1]['row'] + 1) % len(cases)

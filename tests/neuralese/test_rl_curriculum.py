@@ -1,7 +1,7 @@
 import json
 
 import pytest
-from natlang_neuralese.rl import production
+from natlang_neuralese.rl import curriculum
 from natlang_neuralese.rl.curriculum import DEFAULT_V1 as DEFAULT, DEFAULT as DEFAULT_V2
 
 
@@ -12,26 +12,26 @@ def cases():
 
 def test_practice_starts_easy_and_grows_from_actual_successes():
     rows=cases();budget={'rows':3,'group':4,'offset':9}
-    chosen=production.select_tasks(rows,[],budget,curriculum=DEFAULT)
+    chosen=curriculum.select_tasks(rows,[],budget,curriculum=DEFAULT)
     assert [item['row'] for item in chosen]==[0,1,9]
     stats=[{'task_id':row['id'],'scored':4,'mean':1.} for row in rows[:3]]
-    chosen=production.select_tasks(rows,stats,budget,curriculum=DEFAULT)
+    chosen=curriculum.select_tasks(rows,stats,budget,curriculum=DEFAULT)
     assert [item['row'] for item in chosen]==[3,4,9]
     # Unscored infrastructure cannot masquerade as mastery or a scored failure.
     stats.append({'task_id':'task-3','scored':0,'mean':None})
-    assert production.select_tasks(rows,stats,budget,curriculum=DEFAULT)==chosen
+    assert curriculum.select_tasks(rows,stats,budget,curriculum=DEFAULT)==chosen
 
 
 def test_rotating_breadth_reaches_every_task_even_when_solved_or_harder():
     rows=cases();stats=[{'task_id':row['id'],'scored':4,'mean':1.} for row in rows]
     offset=0;seen=set()
     for _ in rows:
-        chosen=production.select_tasks(rows,stats,{'rows':3,'group':4,'offset':offset},curriculum=DEFAULT)
+        chosen=curriculum.select_tasks(rows,stats,{'rows':3,'group':4,'offset':offset},curriculum=DEFAULT)
         seen.update(item['row'] for item in chosen);offset=(chosen[-1]['row']+1)%len(rows)
     assert seen==set(range(len(rows)))
     rows.append({'id':'new-hard','curriculum':{'rl':{'level':8}}})
     for _ in rows:
-        chosen=production.select_tasks(rows,stats,{'rows':3,'group':4,'offset':offset},curriculum=DEFAULT)
+        chosen=curriculum.select_tasks(rows,stats,{'rows':3,'group':4,'offset':offset},curriculum=DEFAULT)
         seen.update(item['row'] for item in chosen);offset=(chosen[-1]['row']+1)%len(rows)
     assert 12 in seen
 
@@ -39,7 +39,7 @@ def test_rotating_breadth_reaches_every_task_even_when_solved_or_harder():
 def test_pending_scaffolds_are_not_silently_adopted():
     rows=cases();rows[0]['curriculum']['rl']['qualification']='pending-live-48'
     with pytest.raises(ValueError,match='qualification'):
-        production.select_tasks(rows,[],{'rows':3,'group':4,'offset':0},curriculum=DEFAULT)
+        curriculum.select_tasks(rows,[],{'rows':3,'group':4,'offset':0},curriculum=DEFAULT)
 
 
 def test_nl_policy_receives_typed_facts_and_cannot_drop_breadth(monkeypatch):
@@ -49,9 +49,9 @@ def test_nl_policy_receives_typed_facts_and_cannot_drop_breadth(monkeypatch):
     def command(argv,**kwargs):
         captured.append(json.loads(kwargs['input']))
         return SimpleNamespace(stdout=json.dumps([{'row':0,'samples':4},{'row':1,'samples':4}]))
-    monkeypatch.setattr(production.subprocess,'run',command)
+    monkeypatch.setattr(curriculum.subprocess,'run',command)
     with pytest.raises(ValueError,match='breadth'):
-        production.select_tasks(cases(),[],{'rows':2,'group':4,'offset':9},
+        curriculum.select_tasks(cases(),[],{'rows':2,'group':4,'offset':9},
                                 curriculum=DEFAULT,command=['natlang-selector'])
     assert captured[0]['tasks'][0]=={'row':0,'id':'task-0','level':0,'family':'unspecified'}
     assert captured[0]['curriculum']==DEFAULT
@@ -60,10 +60,10 @@ def test_nl_policy_receives_typed_facts_and_cannot_drop_breadth(monkeypatch):
 def test_declared_selection_allocation_is_verified(monkeypatch):
     import json
     from types import SimpleNamespace
-    monkeypatch.setattr(production.subprocess,'run',lambda *a,**kw:SimpleNamespace(
+    monkeypatch.setattr(curriculum.subprocess,'run',lambda *a,**kw:SimpleNamespace(
         stdout=json.dumps([{'row':i,'samples':4} for i in range(3)])))
     with pytest.raises(ValueError,match='allocation'):
-        production.select_tasks(cases(),[],{'rows':2,'group':4,'offset':0},command=['selector'])
+        curriculum.select_tasks(cases(),[],{'rows':2,'group':4,'offset':0},command=['selector'])
 
 
 def test_mixed_outcome_practice_does_not_crowd_out_unvisited_families():
@@ -72,14 +72,14 @@ def test_mixed_outcome_practice_does_not_crowd_out_unvisited_families():
              {'id':'new-state','family':'stateful-control','curriculum':{'rl':{'level':0}}}]
     stats=[{'task_id':f'qa-{i}','scored':6,'mean':.5} for i in range(8)]
     budget={'rows':6,'group':6,'offset':0}
-    selected=production.select_tasks(rows,stats,budget,curriculum=DEFAULT)
+    selected=curriculum.select_tasks(rows,stats,budget,curriculum=DEFAULT)
     ids={rows[item['row']]['id'] for item in selected}
     assert {'new-program','new-state'}<=ids
     assert any(value.startswith('qa-') for value in ids)
     assert len(selected)==6 and {item['samples'] for item in selected}=={6}
     assert [item['row'] for item in selected[-2:]]==[0,1]
     # A retired task's historical outcome is not current-source coverage.
-    assert production.select_tasks(rows,[*stats,{'task_id':'retired','scored':1000,'mean':1.}],
+    assert curriculum.select_tasks(rows,[*stats,{'task_id':'retired','scored':1000,'mean':1.}],
                                    budget,curriculum=DEFAULT)==selected
 
 
@@ -87,14 +87,14 @@ def test_exploration_does_not_repeat_solved_singleton_instead_of_new_invocations
     rows=[{'id':'done','family':'singleton','curriculum':{'rl':{'level':0}}},
           {'id':'fresh','family':'other','curriculum':{'rl':{'level':0}}}]
     stats=[{'task_id':'done','scored':6,'mean':1.}]
-    selected=production.select_tasks(rows,stats,{'rows':2,'group':4,'offset':0},curriculum=DEFAULT)
+    selected=curriculum.select_tasks(rows,stats,{'rows':2,'group':4,'offset':0},curriculum=DEFAULT)
     assert [item['row'] for item in selected]==[1,0]
 
 
 @pytest.mark.parametrize('fraction',[float('nan'),float('inf'),-0.1,1.1,True])
 def test_invalid_family_exploration_fraction_is_rejected(fraction):
     with pytest.raises(ValueError,match='family_exploration_fraction'):
-        production.select_tasks(cases(),[],{'rows':3,'group':4,'offset':0},
+        curriculum.select_tasks(cases(),[],{'rows':3,'group':4,'offset':0},
                                 curriculum={**DEFAULT,'family_exploration_fraction':fraction})
 
 
@@ -114,7 +114,7 @@ def test_mastered_family_advances_independently_of_unrelated_failures():
           {'id':'breadth','family':'other','curriculum':{'rl':{'level':0}}}]
     stats=[{'task_id':'math-easy','scored':4,'mean':1.},
            {'task_id':'tools-easy','scored':4,'mean':.5}]
-    chosen=production.select_tasks(rows,stats,{'rows':3,'group':4,'offset':4},
+    chosen=curriculum.select_tasks(rows,stats,{'rows':3,'group':4,'offset':4},
                                   curriculum={**DEFAULT,'family_exploration_fraction':0.})
     ids=[rows[item['row']]['id'] for item in chosen]
     assert ids==['tools-easy','math-hard','breadth']
@@ -123,7 +123,7 @@ def test_mastered_family_advances_independently_of_unrelated_failures():
 
 def test_curriculum_cannot_silently_reintroduce_a_global_difficulty_gate():
     with pytest.raises(ValueError,match='frontier_scope'):
-        production.select_tasks(cases(),[],{'rows':3,'group':4,'offset':0},
+        curriculum.select_tasks(cases(),[],{'rows':3,'group':4,'offset':0},
                                 curriculum={**DEFAULT,'frontier_scope':'global'})
 
 
@@ -136,12 +136,12 @@ def family_rows(family,levels,per_level=3):
 
 def test_v2_new_families_start_at_their_median_level():
     rows=family_rows('math',[0,1,2,3])+family_rows('qa',[0,1,2])
-    chosen=production.select_tasks(rows,[],{'rows':4,'group':8,'offset':0},curriculum=DEFAULT_V2)
+    chosen=curriculum.select_tasks(rows,[],{'rows':4,'group':8,'offset':0},curriculum=DEFAULT_V2)
     practice=[rows[item['row']] for item in chosen[:-1]]
     levels={row['family']:row['curriculum']['rl']['level'] for row in practice}
     assert levels=={'math':1,'qa':1}
     # The historical /1 selector starts both at their easiest level.
-    chosen=production.select_tasks(rows,[],{'rows':4,'group':8,'offset':0},curriculum=DEFAULT)
+    chosen=curriculum.select_tasks(rows,[],{'rows':4,'group':8,'offset':0},curriculum=DEFAULT)
     assert {rows[item['row']]['curriculum']['rl']['level'] for item in chosen[:2]}=={0}
     assert {item['samples'] for item in chosen}=={8}
 
@@ -149,7 +149,7 @@ def test_v2_new_families_start_at_their_median_level():
 def test_v2_skipped_easier_levels_count_as_passed_after_median_start():
     rows=family_rows('math',[0,1,2,3])
     stats=[{'task_id':'math-1-0','scored':8,'mean':1.}]
-    chosen=production.select_tasks(rows,stats,{'rows':3,'group':8,'offset':0},
+    chosen=curriculum.select_tasks(rows,stats,{'rows':3,'group':8,'offset':0},
                                   curriculum={**DEFAULT_V2,'family_exploration_fraction':0.})
     assert rows[chosen[0]['row']]['curriculum']['rl']['level']==2
 
@@ -179,7 +179,7 @@ def test_v2_shift_moves_every_family_and_stays_within_its_levels():
     rows=family_rows('math',[0,1,2,3])+family_rows('qa',[0,1])
     stats=[{**row,'task_id':'math-1-0'} for row in outcomes(0,1,1.,False)]
     stats+=[{**row,'task_id':'qa-0-0'} for row in outcomes(0,1,1.,False)]
-    chosen=production.select_tasks(rows,stats,{'rows':3,'group':8,'offset':0},
+    chosen=curriculum.select_tasks(rows,stats,{'rows':3,'group':8,'offset':0},
                                   curriculum={**DEFAULT_V2,'family_exploration_fraction':0.})
     practice=[rows[item['row']] for item in chosen[:-1]]
     assert {row['family']:row['curriculum']['rl']['level'] for row in practice}=={'math':3,'qa':1}
@@ -187,29 +187,11 @@ def test_v2_shift_moves_every_family_and_stays_within_its_levels():
 
 def test_v2_options_are_validated_and_v1_rejects_v2_fields():
     with pytest.raises(ValueError,match='spread_target'):
-        production.select_tasks(cases(),[],{'rows':3,'group':8,'offset':0},curriculum={**DEFAULT_V2,'spread_target':2})
+        curriculum.select_tasks(cases(),[],{'rows':3,'group':8,'offset':0},curriculum={**DEFAULT_V2,'spread_target':2})
     with pytest.raises(ValueError,match='/1 does not accept'):
-        production.select_tasks(cases(),[],{'rows':3,'group':8,'offset':0},curriculum={**DEFAULT,'spread_target':.3})
+        curriculum.select_tasks(cases(),[],{'rows':3,'group':8,'offset':0},curriculum={**DEFAULT,'spread_target':.3})
     with pytest.raises(ValueError,match='new_family_start'):
-        production.select_tasks(cases(),[],{'rows':3,'group':8,'offset':0},curriculum={**DEFAULT_V2,'new_family_start':'hard'})
-
-
-def test_v1_config_adopts_v2_through_one_recorded_transition(tmp_path):
-    state={'round':3};path=tmp_path/'state.json'
-    config={'task_curriculum':{'schema':'natlang.rl-task-curriculum/1','breadth_fraction':.25,
-            'promotion_success_rate':.6},'rows_per_round':4,'group':4}
-    adopted=production.adopt_task_curriculum_defaults(config,state,path)
-    assert adopted['task_curriculum']==DEFAULT_V2
-    assert (adopted['rows_per_round'],adopted['group'])==(16,8)
-    [record]=state['task_curriculum_transitions']
-    assert record['from']['rows_per_round']==4 and record['to']['group']==8 and record['round']==3
-    assert production.adopt_task_curriculum_defaults(config,state,path)==adopted
-    assert len(state['task_curriculum_transitions'])==1
-    # Larger explicit budgets stay; a sealed in-flight selection and the opt-out keep the recorded policy.
-    assert production.adopt_task_curriculum_defaults({**config,'rows_per_round':32},{},path)['rows_per_round']==32
-    assert production.adopt_task_curriculum_defaults(config,{},path,sealed_selection=True)==config
-    assert production.adopt_task_curriculum_defaults({**config,'task_curriculum_keep_v1':True},{},path)['group']==4
-    assert production.adopt_task_curriculum_defaults({'rows_per_round':4},{},path)=={'rows_per_round':4}
+        curriculum.select_tasks(cases(),[],{'rows':3,'group':8,'offset':0},curriculum={**DEFAULT_V2,'new_family_start':'hard'})
 
 
 def test_spread_yield_counts_only_scored_groups():
@@ -224,20 +206,20 @@ def test_class_quota_is_filled_by_the_selector_and_enforced_on_an_external_polic
     rows=[{'id':f'q-{index}','curriculum':{'rl':{'level':0,'family':f'f{index%7}','qualification':'qualified',
            **({'mix_class':'effect_state'} if index%10==0 else {})}}} for index in range(100)]
     budget={'rows':16,'group':8,'offset':3}
-    chosen=production.select_tasks(rows,[],budget,curriculum=DEFAULT_V2)
+    chosen=curriculum.select_tasks(rows,[],budget,curriculum=DEFAULT_V2)
     effect=[item['row'] for item in chosen if rows[item['row']]['curriculum']['rl'].get('mix_class')]
     assert len(effect)>=6 and len({item['row'] for item in chosen})==16
     # A pool without tagged rows selects exactly as the quota-free policy.
     plain=[{**row,'curriculum':{'rl':{key:value for key,value in row['curriculum']['rl'].items() if key!='mix_class'}}} for row in rows]
-    assert production.select_tasks(plain,[],budget,curriculum=DEFAULT_V2)==production.select_tasks(
+    assert curriculum.select_tasks(plain,[],budget,curriculum=DEFAULT_V2)==curriculum.select_tasks(
         plain,[],budget,curriculum={**DEFAULT_V2,'class_quota':{}})
     # An external policy that ignores the quota is refused.
     ignoring=[item for item in chosen if item not in [c for c in chosen if rows[c['row']]['curriculum']['rl'].get('mix_class')]]
     ignoring=ignoring[:-4]+[c for c in chosen if rows[c['row']]['curriculum']['rl'].get('mix_class')][:0]+chosen[-4:]
     ignoring=list({item['row']:item for item in ignoring}.values())
-    monkeypatch.setattr(production.subprocess,'run',lambda argv,**kwargs:SimpleNamespace(stdout=json.dumps(ignoring)))
+    monkeypatch.setattr(curriculum.subprocess,'run',lambda argv,**kwargs:SimpleNamespace(stdout=json.dumps(ignoring)))
     with pytest.raises(ValueError,match='class effect_state'):
-        production.select_tasks(rows,[],budget,curriculum=DEFAULT_V2,command=['natlang-selector'])
+        curriculum.select_tasks(rows,[],budget,curriculum=DEFAULT_V2,command=['natlang-selector'])
 
 
 def mixed_pool(count=60):
@@ -270,7 +252,7 @@ def test_visit_penalty_moves_an_overvisited_mixed_row_behind_fresh_rows_of_the_s
     rows=mixed_pool();budget={'rows':8,'group':8,'offset':3}  # breadth holds rows 3-4; rotation order then starts at row 5
     off={**DEFAULT_V2,'visit_penalty':0,'visit_cap':0,'class_quota':{},'family_exploration_fraction':0.}
     on={**off,'visit_penalty':1.0}
-    pick=lambda stats,config:[item['row'] for item in production.select_tasks(rows,stats,budget,curriculum=config)]
+    pick=lambda stats,config:[item['row'] for item in curriculum.select_tasks(rows,stats,budget,curriculum=config)]
     heavy=observed_mixed(rows,visits={'v-5':40})
     # Without decay the mixed row is picked as soon as its rotation turn comes; with it, it waits behind fresher rows.
     assert 5 in pick(heavy,off) and 5 not in pick(heavy,on)
@@ -284,22 +266,22 @@ def test_visit_cap_ranks_capped_rows_last_inside_the_window_and_releases_them_af
     config={**DEFAULT_V2,'visit_penalty':0,'visit_cap':2,'visit_cap_window':50,'class_quota':{},'family_exploration_fraction':0.}
     hot=['v-5','v-6','v-7']
     stats=observed_mixed(rows,visits={r:2 for r in hot},rounds={r:[8,10] for r in hot})
-    chosen={rows[item['row']]['id'] for item in production.select_tasks(rows,stats,budget,curriculum=config)}
+    chosen={rows[item['row']]['id'] for item in curriculum.select_tasks(rows,stats,budget,curriculum=config)}
     assert not chosen&set(hot)
     # The same visits older than the window no longer cap them.
     old=observed_mixed(rows,visits={r:2 for r in hot},rounds={r:[8,10] for r in hot})
     for item in old:item['observed_round']=200
     for item in old:
         if item['task_id'] not in hot:item['visit_rounds']=[200]
-    released=production.select_tasks(rows,old,budget,curriculum=config)
-    assert released==production.select_tasks(rows,old,budget,curriculum={**config,'visit_cap':0})
+    released=curriculum.select_tasks(rows,old,budget,curriculum=config)
+    assert released==curriculum.select_tasks(rows,old,budget,curriculum={**config,'visit_cap':0})
 
 
 def test_visit_cap_still_fills_the_round_when_the_pool_has_too_few_uncapped_rows():
     rows=mixed_pool(10)
     config={**DEFAULT_V2,'visit_penalty':1.,'visit_cap':1,'visit_cap_window':50,'class_quota':{}}
     stats=observed_mixed(rows,visits={row['id']:5 for row in rows},rounds={row['id']:[9] for row in rows})
-    chosen=production.select_tasks(rows,stats,{'rows':8,'group':8,'offset':2},curriculum=config)
+    chosen=curriculum.select_tasks(rows,stats,{'rows':8,'group':8,'offset':2},curriculum=config)
     assert len(chosen)==8 and len({item['row'] for item in chosen})==8 and all(item['samples']==8 for item in chosen)
 
 
@@ -307,7 +289,7 @@ def test_visit_decay_keeps_class_quota_breadth_and_floor():
     rows=mixed_pool(200);budget={'rows':16,'group':8,'offset':20}
     hot={row['id']:30 for row in rows[:60]}
     stats=observed_mixed(rows,visits=hot,rounds={r:[7,8,9] for r in hot})
-    chosen=production.select_tasks(rows,stats,budget,curriculum=DEFAULT_V2)
+    chosen=curriculum.select_tasks(rows,stats,budget,curriculum=DEFAULT_V2)
     from natlang_neuralese.rl.curriculum import breadth_rows
     assert len(chosen)==16 and {item['row'] for item in chosen}>=set(breadth_rows(rows,budget,DEFAULT_V2))
     effect=[item['row'] for item in chosen if rows[item['row']]['curriculum']['rl'].get('mix_class')]
@@ -319,7 +301,7 @@ def test_untracked_observations_and_a_disabled_decay_select_as_before():
     rows=mixed_pool();budget={'rows':8,'group':8,'offset':5}
     legacy=[{'task_id':row['id'],'scored':8,'mean':.5,'spread':True,'observed_round':3} for row in rows]
     off={**DEFAULT_V2,'visit_penalty':0,'visit_cap':0}
-    assert production.select_tasks(rows,legacy,budget,curriculum=DEFAULT_V2)==production.select_tasks(rows,legacy,budget,curriculum=off)
+    assert curriculum.select_tasks(rows,legacy,budget,curriculum=DEFAULT_V2)==curriculum.select_tasks(rows,legacy,budget,curriculum=off)
 
 
 def test_repeated_selection_spreads_visits_across_the_pool():
@@ -328,7 +310,7 @@ def test_repeated_selection_spreads_visits_across_the_pool():
     def run(config,rounds=150):
         history={};offset=0;visits={}
         for number in range(rounds):
-            chosen=production.select_tasks(rows,list(history.values()),{'rows':16,'group':8,'offset':offset},curriculum=config)
+            chosen=curriculum.select_tasks(rows,list(history.values()),{'rows':16,'group':8,'offset':offset},curriculum=config)
             for item in chosen:
                 row=rows[item['row']]
                 history[row['id']]={'task_id':row['id'],'scored':8,'mean':.5,'spread':True,'observed_round':number,
@@ -345,31 +327,9 @@ def test_repeated_selection_spreads_visits_across_the_pool():
 def test_visit_decay_options_are_validated():
     for bad in ({'visit_penalty':-1},{'visit_cap':-1},{'visit_cap_window':1.5},{'visit_cap':65},{'visit_penalty':float('nan')}):
         with pytest.raises(ValueError,match='visit'):
-            production.select_tasks(cases(),[],{'rows':3,'group':8,'offset':0},curriculum={**DEFAULT_V2,**bad})
+            curriculum.select_tasks(cases(),[],{'rows':3,'group':8,'offset':0},curriculum={**DEFAULT_V2,**bad})
     with pytest.raises(ValueError,match='/1 does not accept'):
-        production.select_tasks(cases(),[],{'rows':3,'group':8,'offset':0},curriculum={**DEFAULT,'visit_cap':2})
-
-
-def test_v2_config_without_visit_decay_adopts_it_through_its_own_recorded_transition(tmp_path):
-    state={'round':9};path=tmp_path/'state.json'
-    legacy={key:value for key,value in DEFAULT_V2.items() if not key.startswith('visit_')}
-    config={'task_curriculum':legacy,'rows_per_round':32,'group':8}
-    adopted=production.adopt_task_curriculum_defaults(config,state,path)
-    assert adopted['task_curriculum']==DEFAULT_V2 and (adopted['rows_per_round'],adopted['group'])==(32,8)
-    [record]=state['task_curriculum_transitions']
-    assert record['transition']==production.TASK_CURRICULUM_VISIT_DECAY_TRANSITION=='task-curriculum-visit-decay-20261104'
-    assert record['adopted_options']==['visit_cap','visit_cap_window','visit_penalty'] and record['round']==9
-    assert production.adopt_task_curriculum_defaults(config,state,path)==adopted and len(state['task_curriculum_transitions'])==1
-    # A sealed in-flight selection, the explicit opt-out and an already adopted config keep what they have.
-    assert production.adopt_task_curriculum_defaults(config,{},path,sealed_selection=True)==config
-    assert production.adopt_task_curriculum_defaults(adopted,{},path)==adopted
-    # An explicit opt-out of the decay itself is a complete declaration, not a missing field.
-    off={**DEFAULT_V2,'visit_penalty':0,'visit_cap':0}
-    assert production.adopt_task_curriculum_defaults({**config,'task_curriculum':off},{},path)['task_curriculum']==off
-    # A /2 config that also predates class_quota records the earlier transition for the combined default adoption.
-    older={key:value for key,value in legacy.items() if key!='class_quota'}
-    state={};production.adopt_task_curriculum_defaults({**config,'task_curriculum':older},state,path)
-    assert state['task_curriculum_transitions'][0]['transition']==production.TASK_CURRICULUM_CLASS_QUOTA_TRANSITION
+        curriculum.select_tasks(cases(),[],{'rows':3,'group':8,'offset':0},curriculum={**DEFAULT,'visit_cap':2})
 
 
 # ---- the held-out evaluation set (rl.held_eval) -------------------------------------------------------------------------
@@ -444,7 +404,7 @@ def test_held_tasks_and_their_group_siblings_are_never_selected_from_the_adoptin
     assert held<=excluded and all(r['curriculum']['split_group'] in groups for r in rows if r['id'] in excluded)
     offset=0;seen=set()
     for _ in range(40):
-        chosen=production.select_tasks(rows,[],{'rows':16,'group':8,'offset':offset},curriculum=DEFAULT_V2,exclude_ids=excluded)
+        chosen=curriculum.select_tasks(rows,[],{'rows':16,'group':8,'offset':offset},curriculum=DEFAULT_V2,exclude_ids=excluded)
         ids={rows[item['row']]['id'] for item in chosen}
         assert not ids&excluded and len(chosen)==16
         seen|=ids;offset=(chosen[-1]['row']+1)%len(rows)
@@ -455,8 +415,8 @@ def test_held_tasks_and_their_group_siblings_are_never_selected_from_the_adoptin
     def fake(command,input,**kw):
         request=json.loads(input);assert len(request['tasks'])==len(sub)
         return mock.Mock(stdout=json.dumps([{'row':len(sub)-1,'samples':4}]))
-    with mock.patch.object(production.subprocess,'run',fake):
-        chosen=production.select_tasks(rows,[],{'rows':1,'group':4,'offset':0},command=['x'],exclude_ids=excluded)
+    with mock.patch.object(curriculum.subprocess,'run',fake):
+        chosen=curriculum.select_tasks(rows,[],{'rows':1,'group':4,'offset':0},command=['x'],exclude_ids=excluded)
     assert rows[chosen[0]['row']]['id']==sub[-1]['id']
     # Opt-out keeps the whole pool selectable and records nothing.
     off=held_eval.adopt_defaults({**config,'held_eval':False},{},state_path,out=tmp_path)

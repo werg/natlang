@@ -657,7 +657,7 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
               provider=None, model_concurrency=None, execution_plans=False, reasoning_effort='low', min_free_mib=0,
               no_observation_seconds=0, max_batch_cases=5, provider_request_config=None,
               server=None, chat_completions_url=None, api_key_env=None, chat_request_config=None,
-              identical_turn_limit=0, neuralese_server=False, drain_file=None, teacher_identity=None,
+              identical_turn_limit=0, neuralese_server=False, drain_file=None,
               journal_spool_root=None):
     if provider and (server or chat_completions_url or api_key_env):
         raise ValueError('Pi provider and external HTTP controls are mutually exclusive')
@@ -867,25 +867,12 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
         limit_reason = None
         limit_evidence = None
         previous_decode = None
-        teacher_proof = None
-        if teacher_identity is not None:
-            try:
-                from scripts.coreweave.teacher_generation_guardian import verify_teacher_identity
-            except ModuleNotFoundError:
-                from teacher_generation_guardian import verify_teacher_identity
-            teacher_proof = verify_teacher_identity(teacher_identity,server=server,model_id=model_id)
         record({'event': 'start', 'key': entry['key'], 'time': time.time(), 'budget_seconds': case_seconds,
                 'max_turns': max_turns, 'observation_policy': OBSERVATION_POLICY_VERSION,
                 'no_observation_seconds': no_observation_seconds,
-                'budget_semantics': 'collection_resource_limit; not a language deadline or model-negative label',
-                **({'teacher_identity':teacher_proof} if teacher_proof is not None else {})})
+                'budget_semantics': 'collection_resource_limit; not a language deadline or model-negative label'})
         with Path(entry['log']).open('a') as log:
             child_env = os.environ.copy()
-            if server:
-                # A memetic improvement episode's workspace runs its program on the episode's own actor.
-                child_env.setdefault('NATLANG_MEMETIC_ENDPOINT', server)
-                # The memetic workspace world runs under the collector's own Python (a frozen runtime's interpreter).
-                child_env.setdefault('NATLANG_MEMETIC_PYTHON', _sys.executable)
             if journal_spool_root is not None:
                 child_env['NATLANG_TEACHER_JOURNAL_SPOOL_ROOT'] = str(journal_spool_root)
             child = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, env=child_env)
@@ -1070,7 +1057,6 @@ if __name__ == '__main__':
     parser.add_argument('--identical-turn-limit', type=int, default=0,
                         help='stop after this many exact action/observation repeats or completed truncated no-action continuations in one invocation; zero disables')
     parser.add_argument('--max-batch-cases', type=int, default=5, help='explicit local queue batch ceiling; request concurrency remains separate')
-    parser.add_argument('--teacher-identity', type=Path, help='verify immutable actual teacher actor and engine process identity before each case')
     parser.add_argument('--drain-file', type=Path, help='finish the active case, then stop before another case with a durable unstarted frontier')
     parser.add_argument('--journal-spool-root', type=Path,
                         help='bounded local durable journal root; completed journal files are hash-verified into JOBS_DIR')
@@ -1097,5 +1083,5 @@ if __name__ == '__main__':
               args.model_concurrency, args.execution_plans, args.reasoning_effort, args.min_free_mib,
               args.no_observation_seconds, args.max_batch_cases, args.provider_request_config,
               args.server, args.chat_completions_url, args.api_key_env, args.chat_request_config,
-              args.identical_turn_limit, args.neuralese_server, args.drain_file, args.teacher_identity,
+              args.identical_turn_limit, args.neuralese_server, args.drain_file,
               args.journal_spool_root))
