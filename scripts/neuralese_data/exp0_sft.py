@@ -21,9 +21,10 @@ share); the step loss is then the weighted mean over its targets. Each `--val-ch
 `--val-every` steps and at the end (the run's held-out training curve).
 
 Speed (GB10, 11k-token sequences): the stock HF modelling code runs at about 1.9k fwd+bwd tokens/s because half of the GPU
-time is unfused elementwise work and a fifth dense sliding-window attention; `lfm3_fast_train` (banded sliding attention,
-compiled layers, shifted-add conv) plus partial activation checkpointing sized to `--activation-gb` runs about 3x faster
-with the same BF16 arithmetic (`--stock-model` opts out).
+time is unfused elementwise work and a fifth dense sliding-window attention; `lfm3_fast_train` (compiled per-kind layers,
+varlen flash attention with the sliding window, shifted-add conv, fused linear NLL) plus partial activation checkpointing
+sized to `--activation-gb` runs about 3x faster with the same BF16 arithmetic (`--stock-model` opts out). A step's chains
+are packed into rows up to the length the activation budget holds unrecomputed (`--pack-tokens`).
 """
 from __future__ import annotations
 

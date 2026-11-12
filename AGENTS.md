@@ -65,16 +65,28 @@ ran 16-38 slots, 30 running sequences, pool 93% full with queued requests, 8-14 
 
 ## HF-path fine-tuning speed: elementwise and dense sliding attention, not matmul (engineering, 2026-11-12)
 
-`exp0_sft.py train` ran 1.8-1.9k fwd+bwd tokens/s on an idle GB10 (11k-token chains; the logged 900 tok/s run shared the GPU). Profile of one chain: matmuls
-(nvjet) 1.4 of 5.1 GPU s, already about 90 TFLOPs; unfused elementwise (fp32 RMSNorm, RoPE, gates, SwiGLU, bf16<->fp32 casts, depthwise width-7 conv) about 2.5 s;
-sliding-window layers as a dense masked 11k x 11k memory-efficient kernel 0.9 s (window is 256); FP32-master accumulate + AdamW + copy-back 2% of a step. The
-`causal_conv1d`/Triton conv kernels are inference-only (`not torch.is_grad_enabled()`), so training ran the cuDNN depthwise conv. `scripts/neuralese_data/lfm3_fast_train.py`
-(instance patches; the vendored sources are hash-pinned): banded 256-token-block sliding attention (exact), causal flash for full layers, `torch.compile(dynamic=True)` per
-decoder layer, conv as seven fp32 shifted adds; `exp0_sft.set_checkpointing` recomputes only the layers beyond `--activation-gb` (20; peak 52.7 GB, ledger budget 64+).
-Result 3.0-3.6x (bench 5.3k tok/s, loop 4.4k tok/s including compile, steady steps 36 s against 94-129 s); `exp0_sft.py bench --fp32-reference` is the check: fast vs FP32 gradients
-cosine 0.987 / rel-L2 0.16, stock vs FP32 0.983 / 0.18, per-chain loss within 1e-3, 4-step training losses equal to 3e-4. `--stock-model` opts out. The native learner
-(`model/hf_port.py`) already uses FlexAttention for the window; its norms/RoPE/gates/conv are still eager HF ops, so the same fusion applies there, but its 2.6-3k tok/s
-is dominated by the 16x forward inflation and the 2x privileged twin (APPROACH_REVIEW section 1.2).
+`exp0_sft.py train` ran 1.8-1.9k fwd+bwd tokens/s on an idle GB10 (11k-token chains). Profile: matmuls (nvjet) 1.4 of 5.1 GPU s at about 90 TFLOPs; unfused
+elementwise about 2.5 s; sliding layers as a dense masked 11k x 11k mem-efficient kernel 0.9 s (window 256); FP32-master accumulate + AdamW + copy-back 2%.
+`scripts/neuralese_data/lfm3_fast_train.py` (reads the HF instance; vendored sources stay hash-pinned): `prepare(model)`, `hidden(model, ids, lengths=None)`,
+`linear_nll(h, weight, targets)`, `token_logprobs(model, ids, positions, targets, lengths=None)` (no grad: GRPO behaviour/reference pass). The decoder layer is two
+functions over explicit tensors (conv, attention), each `torch.compile(fullgraph, dynamic)` once and shared by all layers of its kind; attention is varlen flash
+(`torch.nn.attention.varlen`, sliding layers window (255, 0), exact); `lengths` packs documents into one row (positions restart, attention and conv taps stay
+in the document); the conv is seven fp32 shifted adds; `linear_nll` keeps only the fp32 log-sum-exp and recomputes each 4096-row logits chunk once in backward
+(the stock checkpointed CE ran the head 4x and stored fp32 logits). Rounding points follow HF. `exp0_sft`: `token_nll` uses `linear_nll` on prepared models;
+`set_checkpointing` recomputes layers beyond `--activation-gb` at 88 KB saved per token-layer (measured 84.8); a step's chains are packed into rows up to
+`resident_tokens` (the longest row the budget holds unrecomputed, about 10k at 20 GB; `--pack-tokens`, 0 off): SFT v2 chains are short (median 2.0k).
+Measured (2026-11-12, GPU shared with two SGLang eval actors at 94-96% util, so absolute rates are about a third of idle; A/B alternated back to back):
+fwd+bwd all layers recomputed 1370 +- 39 (ed2ac83c0) -> 1471 +- 26 (new layers) -> 1496 +- 8 tok/s (+ fused CE), GPU s/chain 9.04 -> 8.36 -> 7.90;
+packing on 20 SFT v2 chains 1739 +- 29 -> 1773 +- 20 (4k rows) -> 1803 +- 22 (8k); no-grad logprob pass 2982 +- 366 (stock HF) -> 7330 +- 1270.
+Agreement: new vs ed2ac83c0 gradient cosine 0.998 / rel-L2 0.063, loss within 6e-4; per-token logprob vs stock BF16 max 0.61 / mean 0.0195 (the BF16 floor),
+packed rows the same (0.69 / 0.0194). Against FP32 (6 chains of 5.5-7k tokens, `--fp32-reference` semantics): fast cosine 0.9978 / rel-L2 0.066,
+stock 0.9973 / 0.075, loss max |diff| 0.0021 vs 0.0032: the fast path is at least as close to FP32 as stock HF. Tried and dropped: selective recompute
+of the SwiGLU product (saved activations -18%, but 1949 +- 55 vs 1987 +- 38 tok/s at equal budget).
+GPU kernel time equals wall time per chain (no launch gaps), so CUDA graphs buy nothing at these lengths; the old per-instance layer compile already fused
+(3 shared graphs, no breaks), so the gain is the sliding attention (mem-efficient masked kernel + GQA copies, about 0.47 GPU s/chain) and the CE (0.45).
+Matmuls are now about 60-65% of GPU time; what remains is elementwise in the compiled layers (about 22%), flash (8%) and layer recompute.
+`--stock-model` opts out. Check: `exp0_sft.py bench --fp32-reference`, `tests/neuralese/test_lfm3_fast_train.py`. The native learner
+(`model/hf_port.py`) is a separate path (APPROACH_REVIEW section 1.2).
 
 ## Retired w5 machinery (removed 2026-11-12; git history keeps it)
 
