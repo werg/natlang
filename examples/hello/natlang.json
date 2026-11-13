@@ -4,8 +4,10 @@
   "version": "0.1.0",
   "description": "My first natlang program.",
   "include": [
+    "answer",
     "answer.nl",
     "examples.json",
+    "package.json",
     "README.md"
   ],
   "targets": {
@@ -14,7 +16,7 @@
       "description": "Run answer.nl on the sample input, or supply your own text.",
       "arguments": [
         {
-          "name": "input",
+          "name": "message",
           "type": "string",
           "description": "Text to process; leave blank for the sample.",
           "default": "I was charged twice for my subscription."
@@ -27,7 +29,7 @@
       "name": "sample input",
       "function": "answer.nl",
       "inputs": {
-        "input": "I was charged twice for my subscription."
+        "message": "I was charged twice for my subscription."
       }
     }
   ]

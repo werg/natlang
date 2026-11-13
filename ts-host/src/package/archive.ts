@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { packagePath, parsePackageManifest, type NatlangPackageManifest } from './manifest.js';
 
@@ -36,6 +36,9 @@ export function createPackageArchive(manifestValue: unknown, rootDirectory: stri
   for (const include of manifest.include) {
     const absolute = resolve(root, include);
     if (absolute !== root && !absolute.startsWith(root + sep)) throw new TypeError(`include escapes package: ${include}`);
+    // A listed path that does not exist yet holds no files (a new program's `answer/` helper folder); a target or
+    // export entry that is missing still fails below.
+    if (!existsSync(absolute)) continue;
     for (const file of filesBelow(root, absolute)) paths.add(packagePath(relative(root, file).split(sep).join('/'), 'file path'));
   }
   for (const [name, target] of Object.entries(manifest.targets ?? {})) {

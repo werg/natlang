@@ -3,6 +3,17 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-13 — the `natlang init` starter answers by decision readout, with a specific signature
+
+`natlang init` (and `examples/hello`, now byte-identical to it) writes `answer.nl` as
+`description: Classify a customer message as billing, technical or other.`, parameter `message` (was `input`; the
+instruction says "Classify message as ..."), `returns: '"billing" | "technical" | "other"'` (YAML single-quoted, was
+JSON-escaped) and `readout: decision`. Measured on the local LFM3-1.7B before the change: the starter's one-word
+classification generated 365 reasoning tokens (136 s); the same call with `readout: decision` took 18.7 s and returned
+the same label. The model now sees the decision readout's prompt (short system turn, no tool manual) and scores the three
+labels instead of running the tool loop; a backend that cannot score replies (hosted providers, servers without
+`prompt_logprobs`) still runs the tool loop. Programs saved from the dashboard Playground keep `input` and no readout.
+
 ### 2026-11-13 — a child call's driver or host failure reads as the child's failure; prose-only replies end the call
 
 Two changes from the Vibestudio agent-DX work (a failed call must name itself and end).
