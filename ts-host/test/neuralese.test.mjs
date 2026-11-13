@@ -1848,7 +1848,8 @@ test('iteration needs a hard bound only for TypeScript predicates or with review
   const prompts = [];
   let checks = 0;
   const driver = ({ messages }) => {
-    prompts.push(String(messages[0].content));
+    // The stopping note is the last paragraph of the call's opening; the system prompt is every call's.
+    prompts.push(String(messages[1].content));
     checks++;
     return { calls: [['return_result', { status: 'success', value: checks >= 3 }]] };
   };

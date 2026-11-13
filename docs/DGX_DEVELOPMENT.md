@@ -8,7 +8,11 @@ code synchronization must preserve development edits on either machine.
 ## Environment
 
 - Node 24.0.1 ARM64 lives in `~/.local/share/natlang-dev/`, with commands in
-  `~/.local/bin`. It is separate from sealed generation runtimes.
+  `~/.local/bin`. It is separate from sealed generation runtimes. Other development machines put an official
+  Node 24 build in the same place (tick: `node-v24.22.1-linux-x64`, checksum from nodejs.org's SHASUMS256.txt):
+  `scripts/check-main.sh` and `scripts/pin_checkout.py` use the newest `node-v24*` there before PATH's node.
+  Distribution packages such as Ubuntu's `nodejs` (+dfsg) cannot load TypeScript source, which tests for skill
+  objectives and design-brief codebases import; `check-main.sh` refuses such a Node with that reason.
 - `ripgrep` 14.1.0 ARM64 is installed in user tooling without replacing system packages.
 - Pinned npm dependencies are installed with the workspace lockfile; Node and
   browser outputs are built. Python checkout tools use `~/natlang/.venv`.
