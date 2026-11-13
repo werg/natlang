@@ -87,7 +87,7 @@ def test_pruned_groups_keep_their_rollouts_compressed(tmp_path):
     archived = tmp_path / 'rollouts' / 'g000007.rollouts.jsonl.zst'
     assert zstandard.ZstdDecompressor().stream_reader(archived.open('rb')).read() == rollouts
     assert stats['rollouts_archived'] == 1 and stats['rollouts_archived_bytes'] == archived.stat().st_size
-    assert sorted(p.name for p in directory.iterdir()) == ['cases.jsonl', 'rewards.jsonl', 'score.json', 'versions.json']
+    assert sorted(p.name for p in directory.iterdir()) == ['cases.jsonl', 'retired', 'rewards.jsonl', 'score.json', 'versions.json']
 
 
 def test_a_failed_archive_keeps_the_group_in_place(tmp_path):
