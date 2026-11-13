@@ -4,7 +4,7 @@ How to run natlang programs and functions, what a compiled program carries, and 
 
 ## First result and first edit
 
-From the repository root after setup:
+From the root of a natlang clone after `scripts/setup_dev.sh --node-only` (see the [README](../README.md#install)):
 
 ```sh
 natlang run examples/hello
@@ -12,11 +12,11 @@ natlang dashboard --root examples --open
 ```
 
 The hello example runs one classifier using its bundled sample input. In the
-dashboard, choose a program and click **Run**. Output opens alongside **Live execution**,
+dashboard, choose a program and click **Run**. Output opens alongside **Execution**,
 with startup messages under **Log**. The run
 form explains the selected model and any required download before execution.
 
-Live execution shows the current lambda, what it is doing, elapsed time, and
+Execution shows the current lambda, what it is doing, elapsed time, and
 counts of running and finished calls. Inline lambdas show their source file and
 line; nested calls appear under their caller. Expand a lambda, then a step to
 inspect incremental model output, generated code, step results, and any retry or
@@ -39,7 +39,7 @@ keeps running and **Resume updates** catches up. **Stop** stops the actual progr
 If the dashboard loses contact, it shows a reconnecting status and resumes from
 its last event offset. Completed runs retain the same expandable execution view.
 
-To create your own:
+To create your own, in an empty directory outside the clone:
 
 ```sh
 natlang init my-program
@@ -49,8 +49,10 @@ natlang call answer.nl "Your text"   # one call with your own input
 natlang dev
 ```
 
-A new program is `answer.nl`, `natlang.json` (its `main` target is `answer.nl` itself; the `input` argument's default
-is the sample), `examples.json`, a README and an `AGENTS.md` for coding agents. Edit `answer.nl` or the sample while `dev` runs; it stops the previous run
+A new program is `answer.nl`, `natlang.json` (its `main` target is `answer.nl` itself; the `message` argument's
+default is the sample), `examples.json`, `README.md`, `AGENTS.md` and `CLAUDE.md` for coding agents, `.gitignore` and
+`package.json`. `answer.nl` declares `readout: decision`: the model scores the declared labels instead of writing an
+answer, which keeps a first local call short. Edit `answer.nl` or the sample while `dev` runs; it stops the previous run
 before starting a replacement and ignores generated files. Ctrl+C stops both
 the watcher and its current run. Successive runs reuse the loaded local model
 (see "One loaded model for every run").
@@ -58,7 +60,7 @@ the watcher and its current run. Successive runs reuse the loaded local model
 `natlang check` checks the source without a model. `natlang test` runs real
 calls for the `{ function, inputs, expected }` cases in `examples.json` and
 compares outputs exactly. A mismatch prints expected and received values and
-returns a nonzero exit code. From a dashboard function form, enter an expected
+exits with code 1; an unavailable model exits with 3 and names the next step (see below). From a dashboard function form, enter an expected
 result using its typed controls and choose **Save test**, then **Run tests**.
 Changing an existing input's expectation replaces that test. Tests measure the selected model;
 they do not establish correctness on unseen inputs.
@@ -104,7 +106,7 @@ is the default. On the triage example 256 kept every answer right and cut the ur
 
 ```sh
 natlang run examples/triage                       # an application (natlang.json target)
-natlang call examples/triage/classify.nl "My printer is on fire" "technical, billing or other"   # arguments in parameter order
+natlang call examples/triage/classify.nl "My printer is on fire" "technical, billing or spam"   # arguments in parameter order
 natlang call examples/triage/classify.nl --inputs inputs.json
 natlang ask "Summarize the input in one sentence." < notes.txt
 ```
@@ -113,6 +115,19 @@ While calls run, a terminal shows one status line: the function, its turn, promp
 the elapsed time (`--progress line` prints a line every 15 seconds instead, `--progress off` nothing). A call that
 fails is always reported, even when the program catches the error. A call whose model repeats the same failing action
 four times in a row ends as `model_incomplete: repeated_failed_action` rather than running on without end.
+
+`natlang call` prints the result on stdout (with `--json`, the bare result JSON) and the call's ID on stderr:
+`natlang: call CALL_ID (natlang traces show CALL_ID)`. `natlang traces show CALL_ID` shows its inputs, turns, code and
+output; `natlang traces fix CALL_ID --expected JSON` saves the right answer as an example in the program's
+`examples.json`, which `natlang test` then checks. A unique prefix of a call ID is enough, and `natlang traces list`
+inside a program lists that program's calls (`--all` for the whole machine).
+
+`check`, `call`, `test` and `run` exit with 0 on success, 1 when the program is wrong (diagnostics, failed examples, a
+call that failed for model-work reasons), 2 on a usage error (bad flags, arguments or paths) and 3 when the model or
+runtime is unavailable (not installed, endpoint unreachable, missing credentials). `natlang check --json` prints
+`{ ok, diagnostics: [{ file, line, column, code, message, hint? }], functions: [{ source, signature }] }` (the full
+manifest with `--manifest`); with `--json`, `natlang test` gives each result its `call_id`, and a model that is
+unavailable is `{ ok: false, error: { kind: "model-unavailable", message, next } }`.
 
 ## A compiled program carries its model and a warm start
 
