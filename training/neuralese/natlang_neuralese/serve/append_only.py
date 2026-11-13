@@ -70,16 +70,18 @@ def _prefix_hashes(ids):
 
 
 class TokenHistory:
-    """Bounded LRU: (prompt length, prompt hash) -> the ids the actor generated after that prompt.
+    """Bounded LRU: (prompt length, prompt hash) -> the replies the actor generated after that prompt (the samples of
+    one task group send the same first prompt, so a prompt keeps its last `max_replies` distinct replies and a splice
+    takes the one whose bytes the new prompt continues furthest).
 
     Only the hash identifies the prompt: a collision can only change the tokenization of an identical text, because a
     splice is accepted only when its bytes equal the rendered prompt's bytes."""
 
-    def __init__(self, tokenizer, max_entries=32768):
+    def __init__(self, tokenizer, max_entries=32768, max_replies=16):
         self.table = token_bytes_table(tokenizer)
-        self.max_entries = max_entries
-        # (length, hash) -> (array('i') of generated ids, time it was stored, the ids actually sent for this prompt
-        # when they differ from these (a spliced prompt, stored also under its re-tokenized key), else None)
+        self.max_entries, self.max_replies = max_entries, max_replies
+        # (length, hash) -> [(array('i') of generated ids, time it was stored, the ids actually sent for this prompt
+        # when they differ from these (a spliced prompt, stored also under its re-tokenized key), else None)], newest last
         self.entries = OrderedDict()
         self.lengths = {}                 # prompt length -> entry count
         # A spliced prompt's key -> the key of the ids it was spliced from: the next call re-tokenizes the same text the
@@ -95,9 +97,12 @@ class TokenHistory:
         return self.table is not None
 
     def _put(self, key, value):
-        if self.entries.pop(key, None) is None:
+        replies = self.entries.pop(key, None)
+        if replies is None:
+            replies = []
             self.lengths[key[0]] = self.lengths.get(key[0], 0) + 1
-        self.entries[key] = value
+        replies = [reply for reply in replies if reply[0] != value[0]] + [value]
+        self.entries[key] = replies[-self.max_replies:]
 
     def store(self, prompt, generated):
         if not self.enabled or not len(generated):
@@ -122,20 +127,21 @@ class TokenHistory:
         hashes = _prefix_hashes(ids)
         with self.lock:
             self.stats['append_only_lookups'] += 1
-            old = start = None
             for length in sorted((n for n in self.lengths if n < len(ids)), reverse=True):
                 key = (length, hashes[length])
                 if key in self.entries:
-                    (old, stored, sent), start = self.entries[key], length
+                    replies, start = list(self.entries[key]), length
                     self.entries.move_to_end(key)
-                    # A continuation of a stored reply: the time between the reply and this request is the client's
-                    # (harness, tool execution, queueing) share of the episode.
-                    self.stats['append_only_continuations'] += 1
-                    self.stats['append_only_gap_seconds'] += time.monotonic() - stored
                     break
-        if old is None:
-            return ids
+            else:
+                return ids
         new = ids[start:]
+        old, stored, sent = max(replies, key=lambda reply: self._shared_bytes(reply[0], new)) if len(replies) > 1 else replies[0]
+        with self.lock:
+            # A continuation of a stored reply: the time between the reply and this request is the client's
+            # (harness, tool execution, queueing) share of the episode.
+            self.stats['append_only_continuations'] += 1
+            self.stats['append_only_gap_seconds'] += time.monotonic() - stored
         # Skip the common token prefix, then align on bytes.
         j = 0
         while j < len(old) and j < len(new) and old[j] == new[j]:
@@ -166,6 +172,18 @@ class TokenHistory:
         if best_i == 0:
             return ids if sent is None else self._accept(ids, base + list(ids[start:]), j)
         return self._accept(ids, base + list(new[:j]) + list(old[j:j + best_i]) + list(new[j + best_m:]), j + best_i)
+
+    def _shared_bytes(self, old, new):
+        """Length of the common byte prefix of two id sequences."""
+        table = self.table
+        j = 0
+        while j < len(old) and j < len(new) and old[j] == new[j]:
+            j += 1
+        a, b = b''.join(table[t] for t in old[j:]), b''.join(table[t] for t in new[j:j + len(old)])
+        common, limit = 0, min(len(a), len(b))
+        while common < limit and a[common] == b[common]:
+            common += 1
+        return sum(len(table[t]) for t in old[:j]) + common
 
     def _accept(self, ids, result, kept):
         """`result` when it is the same text as `ids` (never change the text), recorded so its continuation is found."""

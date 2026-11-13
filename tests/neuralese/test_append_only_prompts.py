@@ -95,3 +95,16 @@ def test_splices_chain_across_an_episode():
     call2 = h.splice(rendered)
     assert call2 == [C, A, B, C, END, SPACE_A, A, B, C, END, C]
     assert text(h, call2) == text(h, rendered)
+
+
+def test_samples_sharing_a_prompt_each_keep_their_own_reply():
+    """The samples of a task group send the same first prompt: a sibling's reply stored in between must not replace
+    this sample's reply (run2 g000011: the one text-identical pair in 817 whose sampled ids were lost)."""
+    h = TokenHistory(ByteTokenizer(['a', 'b', 'ab', 'c', 'abc', ' a'], ['<|im_end|>']), max_replies=2)
+    h.store([C], [A, B, C, END])                  # this sample: "abc" as three tokens
+    h.store([C], [B, A, END])                     # a sibling's reply to the same prompt, stored later
+    assert h.splice([C, ABC, END, SPACE_A]) == [C, A, B, C, END, SPACE_A]
+    assert h.splice([C, B, A, END, SPACE_A]) == [C, B, A, END, SPACE_A]
+    h.store([C], [A, B, C, END])                  # the same reply again is one entry, now the newest
+    h.store([C], [C, END])
+    assert [list(reply[0]) for reply in h.entries[(1, next(iter(h.entries))[1])]] == [[A, B, C, END], [C, END]]
