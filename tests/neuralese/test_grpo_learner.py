@@ -201,3 +201,16 @@ def test_prefix_tree_over_a_subset_maps_back_to_the_steps_chains():
     for node in nodes:
         walk(node)
     assert sorted(leaves) == [(0, 10), (2, 10), (3, 0)]
+
+
+def test_the_pop_loop_reads_held_complete_from_the_module():
+    """A local named like the module helper in train() made it a closure variable of the Pop loop (NameError at start)."""
+    import symtable
+    table = symtable.symtable(Path(grpo.__file__).read_text(), 'grpo.py', 'exec')
+    scopes = [table]
+    while scopes:
+        scope = scopes.pop()
+        scopes += scope.get_children()
+        names = scope.get_identifiers()
+        if 'held_complete' in names and scope.get_type() == 'function':
+            assert scope.lookup('held_complete').is_global(), scope.get_name()
