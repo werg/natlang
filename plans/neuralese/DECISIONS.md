@@ -1959,3 +1959,9 @@ writes, payments.md wrong, 0.94), 9/0 (copied instead of moved: 5 writes right, 
 0.59), 24/0 (1 of 43, right answer, 0.51), 51/0 (both files right, wrong answer, 0.5), 109/0 (1 of 4, wrong answer,
 0.125), 136/0 (1 of 21, 0.05), 148/1 (2 of 3, wrong answer, 0.33), 50/1 and 55/0 (wrong-folder moves, 0). Note:
 the answer half dominates when the files are mostly wrong (24/0); revisit if graded GRPO favours answer-only episodes.
+
+Correction the same day (supervisor): the graded value is `effect_fraction`, halved when the answer is wrong too, not the
+mean of answer and effects. Under the mean a right answer with 1 of 43 files scored 0.51 (held row 24/0): inside a group
+that ranks "return the value, skip the work" above honest wrong attempts, and that is already the base model's commonest
+failure (4 of 7 model-caused failures read on 2026-11-13 had the right value and missing effects). Now that episode
+scores 0.02 and a right answer with 0.85 of the effects scores 0.85.

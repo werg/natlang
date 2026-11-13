@@ -207,9 +207,10 @@ def graded_reward(outcome_class: str, reward: float | None, result: dict[str, An
                   semantics: dict[str, Any] | None) -> float | None:
     """The episode's reward in [0, 1] with partial credit for file effects (owner decision 2026-11-13): 1 for an accepted
     episode, None when unscored, and for a finished episode the oracle rejected (``semantic_mismatch``) whose only failed
-    checks are the answer and the files, the mean of the answer (one exact check) and ``effect_fraction``. An episode
-    that achieved none of the effects it had to make earns 0 whatever it returned (a constant answer such as
-    "repair complete" is no work), and a task without a checked folder effect stays binary. Budget stops, other outcomes
+    checks are the answer and the files, ``effect_fraction`` (halved when the answer is wrong too). The work done is
+    the credit: a right answer with 1 of 43 files earns 0.02, not half (returning the value and skipping the effects is
+    the base model's commonest failure and must not be rewarded), and an episode that achieved none of the effects it
+    had to make earns 0 whatever it returned. A task without a checked folder effect stays binary. Budget stops, other outcomes
     and any other failed check are 0."""
     if reward is None or reward == 1.0:
         return reward
@@ -223,7 +224,7 @@ def graded_reward(outcome_class: str, reward: float | None, result: dict[str, An
     effects = effect_fraction(outcome, semantics or {})
     if not effects:
         return 0.0
-    return round((float(bool(checks.get("answer"))) + effects) / 2, 6)
+    return round(effects * (1.0 if checks.get("answer") else 0.5), 6)
 
 
 def expand_captures(trajectory: list[Any]) -> list[Any]:
