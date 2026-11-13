@@ -137,6 +137,10 @@ def accepted_babi_article_answer(result, finish=None):
 
 
 _MODEL_TERMINAL = re.compile(r"^(?:blocked|error): ")
+# A child call that an error from outside the model ended rejects as NatlangCallError `<call>: <outcome>: <message>`
+# (ts-host 9f13cce63), so the undici stream cut `terminated` reaches the caller's eval with that prefix, once per call.
+# Call names may hold a colon (an inline call is `nl@eval:1`).
+_CALL_FAILURE_PREFIX = re.compile(r"^(?:[^\n]{1,200}?: (?:failed|quiesced): )+")
 # Host-written interruption details are plain lowercase phrases. A model's own stop reason is always prefixed
 # ("blocked: " / "error: ", ts-host runtime.ts return_result), and a `done` detail is the dumped return value.
 _HOST_WALL_DETAIL = re.compile(r"[a-z ,-]{0,60}wall(?:-clock)? budget exhausted")
@@ -268,7 +272,8 @@ def classify_case(result: dict[str, Any] | None, finish: dict[str, Any] | None) 
         return "unresolved"
     if any(_HOST_REQUEST_DETAIL.fullmatch(detail) for detail in host_details):
         return "budget_exhaustion"
-    if any(re.match(r"^model_incomplete:\s*(terminated_without_result|truncated_without_action)\b", detail)
+    # no_action: four complete replies in a row without a tool call or result end the call (ts-host 9f13cce63).
+    if any(re.match(r"^model_incomplete:\s*(terminated_without_result|truncated_without_action|no_action)\b", detail)
            for detail in host_details):
         return "model_incomplete"
 
@@ -278,7 +283,7 @@ def classify_case(result: dict[str, Any] | None, finish: dict[str, Any] | None) 
             if not isinstance(failure, dict):
                 continue
             message = str(failure.get("message", "")).casefold()
-            if message.strip() == "terminated":
+            if _CALL_FAILURE_PREFIX.sub("", message.strip()) == "terminated":
                 return "infrastructure_error"
             if re.search(r"\b(syntaxerror|typeerror|referenceerror|rangeerror|not a function|cannot read properties|undefined variable|unknown identifier)\b", message):
                 return "invalid_action"

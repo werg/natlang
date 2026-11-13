@@ -70,7 +70,7 @@ held evals to Pop's GPU and the DGX never pauses: the start policy once as `held
 pairs only one engine), then the newest native checkpoint every `--held-every-hours` or back to back if an eval takes
 longer (`pop_rl_actor.py serve-checkpoint`: rsync of the pruned checkpoint, the actor runs a `git archive` of the run's
 commit on Pop, Pop keeps 2 checkpoints), measured by this run's pinned harness from the DGX against Pop's endpoint
-(`--held-remote-slots` 20, `held-pop.log`). Step sizing (smoke): ~27k forward tokens per episode (chaining already merges 282 of 329
+(`--held-remote-slots` 14, `held-pop.log`). Pop's engine is KV-pool bound (2026-11-13): BF16 KV held 94.7k tokens, so 7.5 of 10 sequences ran, waiting requests evicted the prefixes of episodes between calls (prefix hit 41% vs 94% on the DGX) and decode tokens/s scale with running sequences (~20 ms a step at any batch); hence FP8 KV and 16 running (`--pop-kv-cache-dtype`, `--pop-max-running`; FP8 is part of the attested engine, so a start-policy result of another setting moves to `step-00000-pop-<time>-other-engine` and is re-measured). Step sizing (smoke): ~27k forward tokens per episode (chaining already merges 282 of 329
 consecutive calls; 38 diverge inside the sampled reply, 9 in the prompt), learner 600-800 tok/s while sharing the GPU with
 decode at `--activation-gb 4`; defaults now 12-24 groups per step, `--activation-gb 12`, 8 collector slots during the learner phase
 (`--learner-phase-slots`: check 4 measured the learner 3x faster with actor decode at 32 slots than at 48-64; the run logs

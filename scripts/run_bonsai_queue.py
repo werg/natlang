@@ -270,7 +270,9 @@ def output_accounting(entry, runtime=None):
                                   'sha256': error_sha256, 'program_ir_sha256':error['program_ir_sha256'],
                                   'source_sha256':error['source_sha256'], 'record_binding_verified':False}
                 message = terminal_error['error'].lower()
-                state = 'transport_failed' if message.strip() == 'typeerror: terminated' or any(term in message for term in
+                # A natlang call's wrapper (NatlangCallError `<call>: failed: terminated`, ts-host 9f13cce63) keeps the cut.
+                state = 'transport_failed' if re.fullmatch(r'(?:typeerror|natlangcallerror: .{1,400}?: (?:failed|quiesced)): terminated',
+                                                            message.strip()) or any(term in message for term in
                     ('transport', 'rate limit', 'timed out', 'timeout', 'socket', 'connection', 'fetch failed')) else 'failed'
             elif partial_path.is_file():
                 partial = read_json(partial_path)
@@ -802,6 +804,23 @@ class SharedChild:
     kill = terminate
 
 
+# Data-backed RL task services (repo/sql/table snapshots) read their sha-pinned files from the root named by
+# NATLANG_RL_TASK_ASSETS_V3, defaulting to runs/natlang-rl-broad-external-20261031-v3/assets in the checkout. That
+# default was never populated on the DGX, so every ext_codebase-* task failed with ENOENT (27 of held-v2's 256 tasks,
+# plans/neuralese/BASE_FAILURES_20261113.md). The build tree keeps the same files; each service still checks its file's
+# sha256, so a wrong root fails loudly rather than serving other data.
+TASK_ASSET_BUILD_ROOTS = {'NATLANG_RL_TASK_ASSETS_V3': ('data_nvme', 'broad-rl-tasks-20261031', 'assets-v3')}
+
+
+def bind_task_assets(env=os.environ):
+    """Point unset task-asset variables at the build tree when it exists here; an explicit setting wins."""
+    for name, parts in TASK_ASSET_BUILD_ROOTS.items():
+        root = resolve_machine_path(*parts)
+        if not env.get(name) and root.is_dir():
+            env[name] = str(root)
+    return env
+
+
 def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-27B',
               provider=None, model_concurrency=None, execution_plans=False, reasoning_effort='low', min_free_mib=0,
               no_observation_seconds=0, max_batch_cases=5, provider_request_config=None,
@@ -814,6 +833,7 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
         raise ValueError('external HTTP controls require an explicit server')
     if neuralese_server and (not server or provider):
         raise ValueError('Neuralese server collection requires an explicit external server')
+    bind_task_assets()   # before any collector process (own or shared) starts
     external = bool(server)
     remote = bool(provider or external)
     if chat_request_config is not None:

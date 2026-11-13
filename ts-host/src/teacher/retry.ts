@@ -1,7 +1,20 @@
 /** Retry policy for operational failures only; incorrect model answers are ordinary results. */
+import { NatlangCallError } from '../runtime/kernel.js';
+
+/**
+ * The operational error behind a natlang call's failure. A call that an error from outside the model ended rejects as
+ * its NatlangCallError (reason `error` or `cancelled`) with the original as `cause`, perhaps through several calls;
+ * its code, HTTP status, headers and type are the cause's. Any other error is itself.
+ */
+export function underlyingError(error: unknown): unknown {
+  for (let depth = 0; depth < 16 && error instanceof NatlangCallError && (error.reason === 'error' || error.reason === 'cancelled') &&
+    error.cause !== undefined; depth++) error = error.cause;
+  return error;
+}
 const details = (error: unknown): any => error && typeof error === 'object' ? error : {};
 const text = (error: unknown) => String(error instanceof Error ? error.message : error).toLowerCase();
 export function rateLimited(error: unknown): boolean {
+  error = underlyingError(error);
   const value = details(error);
   return Number(value.status ?? value.statusCode) === 429 ||
     /rate.?limit|too many requests|usage_limit_reached|\b429\b/.test(text(error));
@@ -11,10 +24,12 @@ export function rateLimited(error: unknown): boolean {
  * content filters, malformed arguments, auth, and request validation are not retryable here.
  */
 export function providerFinishReason(error: unknown): 'error' | 'network_error' | undefined {
+  error = underlyingError(error);
   const match = text(error).trim().match(/^provider finish_reason: (error|network_error)$/);
   return match?.[1] as 'error' | 'network_error' | undefined;
 }
 export function transportFailure(error: unknown, scope: 'case' | 'request' = 'case'): boolean {
+  error = underlyingError(error);
   const value = details(error);
   const code = String(value.providerCode ?? value.provider_code ?? value.code ?? '').toUpperCase();
   const neverRetryCodes = new Set(['NON_BRIDGE_TOOL_USE', 'NATLANG_PROVIDER_REQUEST_RETRIES_EXHAUSTED',
@@ -37,6 +52,7 @@ export function providerRequestRetryable(error: unknown): boolean {
 }
 /** Headers may be unavailable after a provider SDK flattens its error. Use only supplied delays. */
 export function retryAfterMs(error: unknown, now = Date.now()): number {
+  error = underlyingError(error);
   const value = details(error), headers = value.headers ?? value.response?.headers;
   const header = headers?.get?.('retry-after') ?? headers?.['retry-after'] ?? headers?.['Retry-After'];
   if (header !== undefined && header !== null) {

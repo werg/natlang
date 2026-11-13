@@ -714,6 +714,11 @@ def measure(out, manifest, endpoints, policy_id, *, samples=4, seed_base=SEED_BA
                     'context_tokens'):
             if previous[key] != spec[key]:
                 raise ValueError(f'{out} holds a run with another {key}: {previous[key]!r}')
+        # A resumed run must keep its engine: the result attests the first one, so episodes of a relaunched actor with
+        # another KV dtype, projection or fork would be mixed in silently (compare pairs results by engine).
+        if previous.get('engine') and spec['engine'] and previous['engine'] != spec['engine']:
+            raise ValueError(f'{out} holds a run measured on another engine: {previous["engine"]!r}, '
+                             f'the endpoint attests {spec["engine"]!r}')
         spec = {**previous, 'endpoint': spec['endpoint'], 'endpoints': spec['endpoints'], 'workers': spec['workers'],
                 'resumed_code': spec['code']}
     (out / 'run.json').write_text(json.dumps(spec, indent=1) + '\n')

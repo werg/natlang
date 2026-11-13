@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rateLimited, transportFailure, retryAfterMs, retryWaitMs, providerFinishReason, providerRequestRetryable } from '../dist/teacher/retry.js';
+import { rateLimited, transportFailure, retryAfterMs, retryWaitMs, providerFinishReason, providerRequestRetryable, underlyingError } from '../dist/teacher/retry.js';
+import { NatlangCallError } from '../dist/runtime/kernel.js';
+import { ProviderRequestTimeoutError } from '../dist/teacher/provider-deadline.js';
 
 test('transient provider failures are retried, model and authentication errors are not', () => {
   for (const error of [new Error('HTTP 503'), { status: 500 }, new Error('fetch failed'), new Error('usage_limit_reached'), new Error('Connection error.'), new Error('Connection error')])
@@ -61,4 +63,25 @@ test('loopback OpenCode JSON provider errors preserve status and retry-after for
   assert.equal(rateLimited(error), true);
   assert.equal(transportFailure(error), true);
   assert.equal(retryAfterMs(error), 7000);
+});
+
+test('a failure wrapped as natlang calls\' NatlangCallError is judged by its cause: code, status, headers and type', () => {
+  // A call that an outside error ended rejects as `<call>: failed: <message>` with the original as cause (kernel.ts).
+  const wrap = (cause, name = 'nl@eval:1') => new NatlangCallError(name, 'failed', cause.message ?? String(cause), 'c1', [], 'error', { cause });
+  const limited = Object.assign(new Error('provider said no'), { status: 429, headers: { 'retry-after': '7' } });
+  assert.equal(rateLimited(wrap(wrap(limited), 'outer')), true);
+  assert.equal(retryAfterMs(wrap(limited)), 7000);
+  assert.equal(transportFailure(wrap(Object.assign(new Error('bad gateway'), { status: 502 }))), true);
+  // A never-retry code wins over its message's "timeout" through the wrapper, as it does unwrapped.
+  const exhausted = Object.assign(new Error('request timeout retries exhausted'), { code: 'NATLANG_PROVIDER_REQUEST_RETRIES_EXHAUSTED' });
+  assert.equal(transportFailure(exhausted), false);
+  assert.equal(transportFailure(wrap(exhausted)), false);
+  assert.equal(providerFinishReason(wrap(new Error('provider finish_reason: network_error'))), 'network_error');
+  const deadline = new ProviderRequestTimeoutError({ role: 'teacher', phase: 'provider_turn', requestOrdinal: 3, timeoutMs: 10,
+    startedAt: 'a', deadlineAt: 'b' });
+  assert.equal(underlyingError(wrap(wrap(deadline), 'root')), deadline);
+  // A call the model's own work ended is not an operational failure, whatever it carries.
+  const outcome = new NatlangCallError('f', 'quiesced', 'budget', 'c2', [], 'budget-exhausted', { cause: limited });
+  assert.equal(underlyingError(outcome), outcome);
+  assert.equal(rateLimited(outcome), false);
 });

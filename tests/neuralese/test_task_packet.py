@@ -271,3 +271,24 @@ def test_failed_terminal_is_scored_like_blocked():
                               "action_ledger": [{"name": "return_result", "outcome": "blocked",
                                                  "arguments": {"status": status, "reason": "sample not delivered"}}]}}
         assert classify_case(result, finish) == "semantic_mismatch", status
+
+
+def test_no_action_stop_is_model_incomplete_even_after_scope_failures():
+    # ts-host 9f13cce63: four complete replies without a tool call or result end the call.
+    result = {"outcome": {"status": "quiesced", "accepted": False,
+                          "detail": "model_incomplete: no_action (4 replies in a row called no tool and returned no result)",
+                          "invocation_ledger": [], "action_ledger": [],
+                          "scope_failures": [{"failure_kind": "runtime", "message": "x is not iterable"}]}}
+    assert classify_case(result, {"status": "complete", "resource_limit_reason": None}) == "model_incomplete"
+
+
+def test_stream_cut_in_a_child_call_stays_infrastructure_through_its_call_error_wrapper():
+    finish = {"status": "complete", "resource_limit_reason": None}
+    for message in ("terminated", "checkItem: failed: terminated", "nl@eval:1: failed: terminated",
+                    "outer: failed: nl@eval:2: failed: terminated"):
+        result = {"outcome": {"status": "quiesced", "accepted": False, "detail": "root eval did not finish",
+                              "invocation_ledger": [], "action_ledger": [],
+                              "scope_failures": [{"failure_kind": "runtime", "message": message}]}}
+        assert classify_case(result, finish) == "infrastructure_error", message
+    result["outcome"]["scope_failures"] = [{"failure_kind": "runtime", "message": "checkItem: failed: not terminated"}]
+    assert classify_case(result, finish) != "infrastructure_error"
