@@ -22,6 +22,9 @@ sys.path[:0] = [str(REPO / 'training/neuralese'), str(REPO)]
 from natlang_neuralese.common.jsonio import read_jsonl  # noqa: E402
 from natlang_neuralese.rl import task_rollouts  # noqa: E402
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from exp1_collect import journals  # noqa: E402
+
 BATCH = 60
 
 
@@ -37,7 +40,7 @@ def refresh(runs, out):
         for entry in read_jsonl(run / 'queue.jsonl'):
             if f"{run.name}/{entry['key']}" in cache:
                 continue
-            rows = [row for path in sorted(work.glob(f"{entry['key']}.a*.journal.jsonl")) for row in read_jsonl(path)]
+            rows = [row for path in journals(work, entry['key']) for row in read_jsonl(path)]
             done = [row for row in rows if row.get('event') == 'finish']
             if done and done[-1].get('status') != 'incomplete' and Path(entry['output']).is_file():
                 entries.append(entry)

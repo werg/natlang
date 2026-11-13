@@ -975,7 +975,10 @@ class SglangEngine(Engine):
         """The block's tensors in the fork's import format (written once per block, content-addressed by its id)."""
         from safetensors.torch import save_file
         path = os.path.join(self._sglang_scratch(), f'import-{block_id}.safetensors')
-        if not os.path.exists(path):
+        if os.path.exists(path):
+            os.utime(path)   # recency for _sglang_prune_imports
+        else:
+            self._sglang_prune_imports()
             tensors = {'token_ids': block.token_ids.detach().cpu().contiguous()}
             for index, layer in enumerate(block.layers):
                 for name, value in layer.items():
@@ -993,9 +996,32 @@ class SglangEngine(Engine):
             if directory is not None:
                 self.sglang_capture_dir = os.path.join(directory, 'sglang-capture')
                 os.makedirs(self.sglang_capture_dir, exist_ok=True)
+                # Captures and partial writes left by a front that died mid-request (nothing reads them again).
+                for name in os.listdir(self.sglang_capture_dir):
+                    if name.endswith('.partial') or (name.endswith('.safetensors') and not name.startswith(('import-', 'adapter-'))):
+                        try:
+                            os.unlink(os.path.join(self.sglang_capture_dir, name))
+                        except FileNotFoundError:
+                            pass
             else:
                 self.sglang_capture_dir = tempfile.mkdtemp(prefix='sglang-capture-')
         return self.sglang_capture_dir
+
+    def _sglang_prune_imports(self, idle_seconds=6 * 3600):
+        """Import files are a cache of store blocks (rewritten on demand): drop those unused for `idle_seconds` (Pop's
+        actor gathered 1.2 GB of them in 17 h). At most every 10 minutes; an episode reuses its imports within its hour."""
+        now = time.time()
+        if now - getattr(self, '_sglang_imports_pruned', 0) < 600:
+            return
+        self._sglang_imports_pruned = now
+        directory = self._sglang_scratch()
+        for name in os.listdir(directory):
+            path = os.path.join(directory, name)
+            try:
+                if name.startswith('import-') and name.endswith('.safetensors') and now - os.stat(path).st_mtime > idle_seconds:
+                    os.unlink(path)
+            except FileNotFoundError:
+                pass
 
     def _sglang_finish_block(self, seq, state):
         """Store the span that just closed: SGLang recomputes it once and exports its native state."""

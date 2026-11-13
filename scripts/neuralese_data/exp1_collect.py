@@ -28,10 +28,22 @@ from natlang_neuralese.rl.actor_client import NativeActorClient  # noqa: E402
 from natlang_neuralese.rl.held_eval import SEED_BASE, series  # noqa: E402
 
 
+def serves(endpoint, policy_id):
+    try:
+        info = json.loads(NativeActorClient(endpoint, timeout=10).get_bytes('/v1/neuralese/info'))
+    except Exception:
+        return False
+    return (info.get('rl_policy_binding') or {}).get('checkpoint_sha256') == policy_id
+
+
 def attest(endpoint, policy_id):
-    info = json.loads(NativeActorClient(endpoint, timeout=10).get_bytes('/v1/neuralese/info'))
-    if (info.get('rl_policy_binding') or {}).get('checkpoint_sha256') != policy_id:
+    if not serves(endpoint, policy_id):
         raise SystemExit(f'{endpoint} does not serve {policy_id[:12]}')
+
+
+def journals(work, key):
+    """An episode's attempt journals in attempt order (numeric: a10 follows a9)."""
+    return sorted(work.glob(f'{key}.a*.journal.jsonl'), key=lambda path: int(path.name[len(key) + 2:].split('.', 1)[0]))
 
 
 def main():
@@ -77,19 +89,17 @@ def main():
     work = out / 'workers'
     work.mkdir(exist_ok=True)
 
-    def journals(key):
-        return sorted(work.glob(f'{key}.a*.journal.jsonl'))
-
     def finished(key):
         # An infrastructure failure (status 'incomplete': an actor OOM, a dropped connection) is retried from the
         # episode's durable partial; every other finish (complete, a resource limit) is the episode's outcome.
-        done = [row for path in journals(key) for row in read_jsonl(path) if row.get('event') == 'finish']
+        done = [row for path in journals(work, key) for row in read_jsonl(path) if row.get('event') == 'finish']
         return bool(done) and done[-1].get('status') != 'incomplete'
 
     todo = [e for e in entries if not finished(e['key'])] if not args.finalize_only else []
     lock, cursor = threading.Lock(), [0]
     stop = threading.Event()
-    stats = {'done': 0, 'started': time.time()}
+    stats = {'done': 0, 'gave_up': 0, 'started': time.time()}
+    down = set()   # endpoints currently not attesting the policy
     env = {**os.environ, 'NATLANG_MODEL_FACING': spec['series']['model_facing']}
 
     def slot(url, delay):
@@ -101,20 +111,42 @@ def main():
                 entry = todo[cursor[0]]
                 cursor[0] += 1
             key = entry['key']
-            attempt = 0
-            while True:
-                attempt += 1
-                queue, journal = work / f'{key}.queue.jsonl', work / f'{key}.a{attempt}.journal.jsonl'
+            attempts = 0
+            while not stop.is_set():
+                wait_for(url)
+                # A new journal per attempt, numbered after every earlier one (also a previous run's): run_bonsai_queue
+                # skips a key its journal already finished, so reusing a1 after a restart retried nothing.
+                number = len(journals(work, key)) + 1
+                queue, journal = work / f'{key}.queue.jsonl', work / f'{key}.a{number}.journal.jsonl'
                 queue.write_text(json.dumps({**entry, 'rl_endpoint': url}, sort_keys=True) + '\n')
-                if run_entry(url, key, queue, journal) or attempt >= args.attempts or stop.is_set():
+                if run_entry(url, key, queue, journal) or stop.is_set():
                     break
-                time.sleep(args.backoff)   # an actor that is down fails every episode at once: do not burn the attempts
+                if not serves(url, args.policy_id):
+                    continue   # the actor went away: not the episode's attempt; wait for it to serve again
+                attempts += 1
+                if attempts >= args.attempts:
+                    break
+                time.sleep(args.backoff)
             trim(entry)
             with lock:
                 stats['done'] += 1
+                stats['gave_up'] += not finished(key) and not stop.is_set()
                 if stats['done'] % 8 == 0:
-                    print(json.dumps({'done': stats['done'], 'of': len(todo),
+                    print(json.dumps({'done': stats['done'], 'gave_up': stats['gave_up'], 'of': len(todo),
                                       'minutes': round((time.time() - stats['started']) / 60, 1)}), flush=True)
+
+    def wait_for(url):
+        # An unreachable actor fails every episode at once: slots wait for it instead of spending their attempts.
+        while not stop.is_set() and not serves(url, args.policy_id):
+            with lock:
+                if url not in down:
+                    down.add(url)
+                    print(json.dumps({'endpoint_down': url, 'at': time.strftime('%H:%M:%S')}), flush=True)
+            time.sleep(args.backoff)
+        with lock:
+            if url in down:
+                down.discard(url)
+                print(json.dumps({'endpoint_up': url, 'at': time.strftime('%H:%M:%S')}), flush=True)
 
     def trim(entry):
         # A finished episode's output (results.jsonl) is a byte copy of jobs/*.result.json: keep one (disk: about 6 MB each)
@@ -165,7 +197,7 @@ def main():
         raise SystemExit(3 if unfinished and not stop.is_set() else 0)
     with (out / 'journal.jsonl').open('w') as merged:
         for entry in entries:
-            for path in journals(entry['key']):
+            for path in journals(work, entry['key']):
                 merged.write(path.read_text())
     report = task_rollouts.score(out, out / 'rollouts.jsonl')
     print(json.dumps({k: report[k] for k in ('rollouts', 'scored', 'successes', 'outcome_counts')}))
