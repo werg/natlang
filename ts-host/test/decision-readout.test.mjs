@@ -181,3 +181,25 @@ test('the readout offers no tools: its system turn is the decision prompt, not t
   assert.doesNotMatch(system.content, /return_result|eval|read_code/, 'the tool manual stays out of a prompt that offers no tools');
   assert.match(String(rest.at(-1).content), /exactly one of these JSON values/);
 });
+
+test('framedDecision asks for and scores {"result": VALUE} on a readout request and leaves every other request, and the bare-value frame, alone', async () => {
+  const { decisionPrompt, decisionReply, framedDecision } = await import('../dist/decision-frame.js');
+  const { decisionPrompt: nativePrompt } = await import('../dist/native/decision.js');
+  const options = ['"knight"', '"knave"'];
+  assert.equal(nativePrompt(options), decisionPrompt(options), 'the runtime asks for the bare value');
+  assert.equal(nativePrompt(options), 'Answer this call now, without tools. Reply with exactly one of these JSON values and nothing else: "knight", "knave".');
+  assert.equal(decisionReply('"yes"'), '"yes"');
+  assert.equal(decisionReply('"yes"', 'result-object'), '{"result": "yes"}');
+  const request = { messages: [{ role: 'system', content: 's' }, { role: 'user', content: nativePrompt(options) }], options, invocation_id: 'c1' };
+  assert.equal(framedDecision(request, undefined), request);
+  assert.equal(framedDecision(request, 'value'), request);
+  const framed = framedDecision(request, 'result-object');
+  assert.deepEqual(framed.options, ['{"result": "knight"}', '{"result": "knave"}']);
+  assert.equal(framed.messages.at(-1).content,
+    'Answer this call now, without tools. Reply with exactly one JSON object {"result": VALUE} and nothing else, where VALUE is one of these JSON values: "knight", "knave".');
+  assert.deepEqual(framed.messages[0], request.messages[0]);
+  assert.equal(framed.invocation_id, 'c1');
+  assert.equal(request.options[0], '"knight"', 'the request is not modified');
+  const judge = { messages: [{ role: 'user', content: 'Is this acceptable? Reply "yes" or "no".' }], options: ['"yes"', '"no"'] };
+  assert.equal(framedDecision(judge, 'result-object'), judge, 'a request that is not a readout carries its own instructions');
+});

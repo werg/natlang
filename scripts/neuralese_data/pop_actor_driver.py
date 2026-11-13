@@ -187,51 +187,75 @@ def serve_sglang(job, checkpoint, transport, stage, work):
            'PYTHONUNBUFFERED': '1', 'CUDA_HOME': cuda, 'PATH': f'{Path(python).parent}:{cuda}/bin:' + os.environ.get('PATH', ''),
            'NATLANG_CODE_COMMIT': (job.get('code') or {}).get('git_commit') or '',
            'NATLANG_CODE_DIRTY': '1' if (job.get('code') or {}).get('dirty') else '0'}
+    # The input logprobs of a Neuralese capture or score request ran the whole span's fp32 logits at once (SGLang's
+    # default 2048-row chunks: 860 rows x 128k vocab = 420 MiB) and OOMed the 8 GB GPU's 0.87 GB of headroom
+    # (2026-11-12 18:08 and 11-13 02:49, both while writing a capture). 256 rows: about 130 MiB.
+    env.setdefault('SGLANG_LOGPROB_CHUNK_SIZE', '256')
     lease = stage / f"{job['name']}.consumer.json"
     lease.write_text(json.dumps({'role': 'rl-rollout-actor', 'checkpoint_sha256': job['source_sha256'],
                                  'consumer': job['name'], 'started': time.time(), 'engine': 'sglang',
                                  'release': 'after the actor process exits; no training admission'}) + '\n')
-    log = (work / 'actor.log').open('ab')
-    process = subprocess.Popen(command, cwd=str(work), env=env, stdout=log, stderr=subprocess.STDOUT,
-                               start_new_session=True)
-    (work / 'launch.json').write_text(json.dumps({
-        'pid': process.pid, 'engine': 'sglang', 'command': command, 'step': job['step'],
-        'checkpoint_sha256': job['source_sha256'], 'arm': job['arm'], 'code_commit': (job.get('code') or {}).get('git_commit'),
-        'mode': job.get('mode', 'rl-actor'), 'transport_sha256': (transport or {}).get('sha256'),
-        'inference_view_sha256': job['view_sha256'], 'driver_sha256': digest(__file__)}, indent=2) + '\n')
+    current = {}
 
     def stop(*_):
-        if process.poll() is None:
+        process = current.get('process')
+        if process is not None and process.poll() is None:
             os.killpg(process.pid, signal.SIGTERM)
             try:
                 process.wait(timeout=90)
             except subprocess.TimeoutExpired:
                 os.killpg(process.pid, signal.SIGKILL)
         lease.unlink(missing_ok=True)
-        sys.exit(0)
+        sys.exit(current.get('exit', 0))
     signal.signal(signal.SIGTERM, stop)
+    # The actor serves until the unit is stopped: an engine that dies (a CUDA OOM kills the front with exit 70) is
+    # relaunched, so collectors see a minute's outage instead of a dead endpoint. One that dies again within 10 minutes
+    # of readiness three times in a row is broken: the unit fails with its exit code. Output: work/host/actor.log.
+    quick_deaths = 0
     try:
         while True:
-            if process.poll() is not None:
-                raise RuntimeError(f'actor exited with {process.returncode} before readiness')
-            try:
-                with urllib.request.urlopen(f'http://{host}:{port}/v1/neuralese/info', timeout=2) as f:
-                    info = json.load(f)
-                if info['native_state']['checkpoint_sha256'] != job['source_sha256'] or info['prompt_rendering'] != 'full':
-                    raise RuntimeError('actor serves another identity: ' + info['native_state']['checkpoint_sha256'])
-                (work / 'actor-info.json').write_text(json.dumps(info, indent=2) + '\n')
+            log = (work / 'actor.log').open('ab')
+            process = current['process'] = subprocess.Popen(command, cwd=str(work), env=env, stdout=log,
+                                                            stderr=subprocess.STDOUT, start_new_session=True)
+            log.close()
+            (work / 'launch.json').write_text(json.dumps({
+                'pid': process.pid, 'engine': 'sglang', 'command': command, 'step': job['step'],
+                'checkpoint_sha256': job['source_sha256'], 'arm': job['arm'],
+                'code_commit': (job.get('code') or {}).get('git_commit'), 'mode': job.get('mode', 'rl-actor'),
+                'transport_sha256': (transport or {}).get('sha256'), 'inference_view_sha256': job['view_sha256'],
+                'driver_sha256': digest(__file__), 'started': time.time()}, indent=2) + '\n')
+            while True:
+                if process.poll() is not None:
+                    current['exit'] = 1
+                    raise RuntimeError(f'actor exited with {process.returncode} before readiness (see {work}/actor.log)')
+                try:
+                    with urllib.request.urlopen(f'http://{host}:{port}/v1/neuralese/info', timeout=2) as f:
+                        info = json.load(f)
+                    if info['native_state']['checkpoint_sha256'] != job['source_sha256'] or info['prompt_rendering'] != 'full':
+                        current['exit'] = 1
+                        raise RuntimeError('actor serves another identity: ' + info['native_state']['checkpoint_sha256'])
+                    (work / 'actor-info.json').write_text(json.dumps(info, indent=2) + '\n')
+                    break
+                except RuntimeError:
+                    raise
+                except Exception:
+                    time.sleep(3)
+            ready = time.time()
+            print(json.dumps({'step': job['step'], 'arm': job['arm'], 'state': 'actor ready', 'engine': 'sglang',
+                              'pid': process.pid}), flush=True)
+            (work / 'actor-ready.json').write_text(json.dumps({'pid': process.pid, 'host': host, 'port': port, 'engine': 'sglang',
+                                                               'source_sha256': job['source_sha256'], 'at': ready}) + '\n')
+            process.wait()
+            quick_deaths = quick_deaths + 1 if time.time() - ready < 600 else 1
+            print(json.dumps({'state': 'actor exited', 'returncode': process.returncode, 'pid': process.pid,
+                              'served_seconds': round(time.time() - ready), 'log': str(work / 'actor.log'),
+                              'action': 'fail' if quick_deaths >= 3 else 'relaunch'}), flush=True)
+            if quick_deaths >= 3:
+                current['exit'] = 1
                 break
-            except RuntimeError:
-                raise
-            except Exception:
-                time.sleep(3)
-        print(json.dumps({'step': job['step'], 'arm': job['arm'], 'state': 'actor ready', 'engine': 'sglang'}), flush=True)
-        (work / 'actor-ready.json').write_text(json.dumps({'pid': process.pid, 'host': host, 'port': port, 'engine': 'sglang',
-                                                           'source_sha256': job['source_sha256'], 'at': time.time()}) + '\n')
-        process.wait()
+            time.sleep(10)   # the dead engine's GPU memory returns to the driver
     finally:
         stop()
-
 
 if __name__ == '__main__':
     main(sys.argv[1])

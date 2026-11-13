@@ -27,5 +27,9 @@ test('the pi bundle imports nothing and scores replies', async () => {
     assert.ok(Math.abs(pi.softmax([0, 0]).reduce((a, b) => a + b) - 1) < 1e-12);
     assert.throws(() => pi.scoresFromPromptLogprobs([{}]), /decision-unsupported/);
     assert.throws(() => pi.scoresFromBatchResult({ error: 'no slot' }, 2), /no slot/);
+    // A host that scores through its own model service frames the readout for a model natlang did not train.
+    const request = { messages: [{ role: 'user', content: pi.decisionPrompt(['"a"', '"b"']) }], options: ['"a"', '"b"'] };
+    assert.deepEqual(pi.framedDecision(request, 'result-object').options, ['{"result": "a"}', '{"result": "b"}']);
+    assert.equal(pi.framedDecision(request, 'value'), request);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });

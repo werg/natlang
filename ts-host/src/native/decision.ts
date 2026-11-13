@@ -40,9 +40,7 @@ export const DECISION_SYSTEM_PROMPT = 'You are running one call of a natural-lan
   "instructions yourself for this call's argument values, judging the visible inputs. Your reply is the function's " +
   'return value: one JSON value of the declared type, with nothing else.';
 
-export const decisionPrompt = (replies: string[]) =>
-  'Answer this call now, without tools. Reply with exactly one of these JSON values and nothing else: ' +
-  replies.join(', ') + '.';
+export { decisionPrompt } from '../decision-frame.js';
 
 /** The driver's decision scorer (contracts.ts `DecisionRequest`), if it carries the optional capability. */
 export function decisionScorer(driver: { decide?: DecisionScorer } | null | undefined): DecisionScorer | undefined {

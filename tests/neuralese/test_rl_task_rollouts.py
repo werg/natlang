@@ -726,3 +726,26 @@ def test_lowering_puts_a_forced_call_opening_into_the_prompt():
     rows = episode_turns({'turns': [forced, middle]}, stats)
     assert len(rows) == 1 and rows[0]['prompt'].tolist() == [1, 2, 7, 8] and rows[0]['sample'].tolist() == [9, 10]
     assert stats['forced_prefix_calls'] == 1 and stats['skip_forced_after_sample'] == 1
+
+
+def test_lowering_keeps_sampled_decisions_as_categorical_actions():
+    import sys, collections, math
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts/neuralese_data'))
+    from lower_rollout_turns import decision_turns, episode_turns
+    decision = {'invocation_id': 'd', 'sampling': {'policy': {'checkpoint_sha256': 'p'}, 'prompt': [
+        {'kind': 'tokens', 'token_ids': [1, 2, 3]}], 'continuations': [[5, 6], [5, 7, 8]],
+        'decision_sample': {'schema': 'natlang.decision-sample/1', 'log_probs': [-3.0, -1.0], 'chosen': 1, 'temperature': 1}}}
+    argmax = {'invocation_id': 'e', 'sampling': {'policy': {'checkpoint_sha256': 'p'}, 'prompt': [
+        {'kind': 'tokens', 'token_ids': [1]}], 'continuations': [[5], [6]]}}
+    stats = collections.Counter()
+    assert episode_turns({'turns': [decision, argmax]}, stats) == []
+    assert stats['decision_calls'] == 1 and stats['skip_no_sample_stream'] == 1
+    rows = decision_turns({'turns': [decision, argmax]}, stats)
+    assert len(rows) == 1 and rows[0]['prompt'].tolist() == [1, 2, 3] and rows[0]['chosen'] == 1
+    assert [o.tolist() for o in rows[0]['options']] == [[5, 6], [5, 7, 8]]
+    assert math.isclose(rows[0]['behavior_logq'], -math.log1p(math.exp(-2.0)), rel_tol=1e-9)
+    import grpo
+    ids, lengths, positions, targets, owner, counts = grpo.decision_tensors([{'row': rows[0], 'advantage': 1.}], 'cpu')
+    assert ids.tolist() == [1, 2, 3, 5, 6, 1, 2, 3, 5, 7, 8] and lengths == [5, 6] and counts == [2]
+    assert positions.tolist() == [2, 3, 7, 8, 9] and targets.tolist() == [5, 6, 5, 7, 8] and owner.tolist() == [0, 0, 1, 1, 1]

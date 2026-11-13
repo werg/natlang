@@ -4,7 +4,7 @@
 One process runs the whole loop; nothing else (no controller, custody or transitions):
 
 * rollouts: ``--slots`` collector slots run episodes (one ``run_bonsai_queue`` process each, the RL sampling capture) against
-  one SGLang actor (``serve_native_checkpoint.py --engine sglang``, started separately). Tasks come shuffled from the pool
+  the run's SGLang actor (``serve_native_checkpoint.py --engine sglang``, a child of this process). Tasks come shuffled from the pool
   minus the held set (``held_eval.exclusion_ids``); each task is a group of ``--group`` samples. Reward = task outcome
   (no teacher, no privileged twin, no Neuralese bonus, no efficiency shaping).
 * overlap: collection never stops. The learner trains on the groups that finished since its last step (at least
@@ -25,10 +25,14 @@ One process runs the whole loop; nothing else (no controller, custody or transit
   from pinned host memory in background threads (training never waits on I/O). Keeps the last two native checkpoints plus
   every held-evaluated one, and the last training state.
 * held evaluation: the start policy first, then every ``--held-every-hours`` the newest native checkpoint is measured on
-  the held set (``python -m natlang_neuralese.rl.held_eval measure``: its own actor and ledger unit, same pinned code) and
+  the held set (``python -m natlang_neuralese.rl.held_eval measure`` on the training actor, collection paused) and
   compared with the start policy (``held_eval compare`` -> ``held/step-N/compare-vs-step0.json``).
 
-    grpo.py train --work W --checkpoint C --actor http://127.0.0.1:8310 [...]
+* pin: the run executes from its own pinned copy of one commit (``scripts/pin_checkout.py create COMMIT W/pin-<c12>``,
+  then launch ``W/pin-<c12>/scripts/neuralese_data/grpo.py`` with that copy as workdir); every child (actor, episodes,
+  held_eval measure/compare) gets the copy's PYTHONPATH/NATLANG_REPO, so all of them record one commit and series.
+
+    grpo.py train --work W --checkpoint C [...]
 """
 from __future__ import annotations
 
@@ -93,6 +97,17 @@ def actor_generated(url):
     return None
 
 
+def meminfo():
+    fields = dict(line.split(':', 1) for line in open('/proc/meminfo'))
+    return {k: round(int(fields[k].split()[0]) / 2**20, 1) for k in ('MemFree', 'MemAvailable', 'Cached', 'SwapFree')}
+
+
+def vmstat():
+    """Cumulative swap traffic (pages): a learner phase that swaps is memory-bound, not compute-bound."""
+    fields = dict(line.split() for line in open('/proc/vmstat'))
+    return {k: int(fields[k]) for k in ('pswpin', 'pswpout')}
+
+
 def log_line(handle, record):
     text = json.dumps(record)
     print(text, flush=True)
@@ -113,22 +128,25 @@ def git_pin():
     return code_provenance()
 
 
-def pin_runtime(work, commit):
-    """The run's own copy of the collector runtime (ts-host with its built dist), so episodes keep one harness while main
-    moves; every other top-level entry of the checkout is linked (dist resolves ../applications etc. there). The learner
-    and the collector's Python are pinned by being this one long-lived process."""
-    pin = Path(work) / f'pin-{commit[:12]}'
-    if not (pin / 'ts-host' / 'dist' / 'teacher' / 'cli.js').is_file():
-        partial = Path(work) / f'pin-{commit[:12]}.partial'
-        shutil.rmtree(partial, ignore_errors=True)
-        partial.mkdir(parents=True)
-        subprocess.run(['cp', '-a', str(REPO / 'ts-host'), str(partial / 'ts-host')], check=True)
-        for entry in REPO.iterdir():
-            if entry.name not in ('ts-host', '.git'):
-                (partial / entry.name).symlink_to(entry)
-        shutil.rmtree(pin, ignore_errors=True)
-        os.replace(partial, pin)
-    return pin / 'ts-host'
+def pinned_env():
+    """The environment every child of the run gets (collector episodes, the actor, held_eval measure/compare): this
+    process's own checkout (``REPO``: the run's pinned copy, ``scripts/pin_checkout.py``) on PYTHONPATH and NATLANG_REPO,
+    so their code, ts-host and recorded commit/series are the run's, whatever main does meanwhile."""
+    return {**os.environ, 'NATLANG_REPO': str(REPO), 'PYTHONPATH': f'{REPO}/training/neuralese:{REPO}'}
+
+
+def check_pin(work, commit, unpinned):
+    """A run executes from ``WORK/pin-<commit12>`` (a detached ``pin_checkout.py`` copy); ``--unpinned`` (smokes) runs
+    the live checkout."""
+    marker = REPO / '.natlang-pin.json'
+    if unpinned:
+        return None
+    if not marker.exists() or json.loads(marker.read_text())['commit'] != commit:
+        raise SystemExit(f'{REPO} is not a pinned copy of {commit[:12]}: launch from '
+                         f'`scripts/pin_checkout.py create <commit> {Path(work) / "pin-<commit12>"}` (or pass --unpinned)')
+    if REPO.resolve().parent != Path(work).resolve():
+        print(f'note: the pin {REPO} lives outside the work dir {work}', file=sys.stderr)
+    return str(REPO)
 
 
 # ---- rollouts --------------------------------------------------------------------------------------------------------
@@ -152,7 +170,7 @@ class Collector:
         self.active_slots = args.slots
         self.generated = 0                          # sampled tokens of finished episodes (throughput)
         self.episodes = 0
-        self.env = {**os.environ}
+        self.env = pinned_env()
         from natlang_neuralese.rl.held_eval import series
         self.env['NATLANG_MODEL_FACING'] = series()['model_facing']
 
@@ -298,19 +316,21 @@ class Collector:
 def load_group(collector, group, stats):
     """(task_id, [episode dicts with 'reward', 'rows'], versions) of one scored group."""
     from natlang_neuralese.common.jsonio import read_jsonl
-    from lower_rollout_turns import episode_turns
+    from lower_rollout_turns import decision_turns, episode_turns
     info = collector.groups[group]
     episodes = []
     for row in read_jsonl(info['dir'] / 'rollouts.jsonl'):
         reward = row.get('reward')
         rows = episode_turns(row, stats) if row.get('turns') else []
+        decisions = decision_turns(row, stats) if row.get('turns') else []
         sampled = sum(len(r['sample']) for r in rows)
         collector.generated += sampled
         collector.episodes += 1
         if reward is None or row.get('unscored'):
             stats['episodes_unscored'] += 1
             continue
-        episodes.append({'reward': float(reward['quality']), 'rows': rows, 'task_id': row['task_id'], 'round': group,
+        episodes.append({'reward': float(reward['quality']), 'rows': rows, 'decisions': decisions,
+                         'task_id': row['task_id'], 'round': group,
                          'outcome': row.get('outcome')})
     return info['task_id'], episodes, info['versions']
 
@@ -539,6 +559,40 @@ def write_pruned_checkpoint(state, native_rows, special, path, source_sha256, tr
     return None
 
 
+def decision_batches(items, max_tokens):
+    """Pack sampled decisions (``lower_rollout_turns.decision_turns`` rows with their advantage) into forward batches: each
+    option is one document (exact prompt + option continuation), so a decision of K options is K packed documents."""
+    batches, batch, size = [], [], 0
+    for item in items:
+        n = sum(len(item['row']['prompt']) + len(o) for o in item['row']['options'])
+        if batch and size + n > max_tokens:
+            batches.append(batch)
+            batch, size = [], 0
+        batch.append(item)
+        size += n
+    return batches + ([batch] if batch else [])
+
+
+def decision_tensors(batch, device):
+    """(ids, lengths, positions, targets, option index per target, options per decision) of a decision batch."""
+    import torch
+    ids, lengths, positions, targets, owner, counts, offset, option = [], [], [], [], [], [], 0, 0
+    for item in batch:
+        row = item['row']
+        counts.append(len(row['options']))
+        for continuation in row['options']:
+            prompt = len(row['prompt'])
+            ids += [row['prompt'], continuation]
+            lengths.append(prompt + len(continuation))
+            positions.append(np.arange(offset + prompt - 1, offset + prompt + len(continuation) - 1))
+            targets.append(continuation)
+            owner.append(np.full(len(continuation), option))
+            offset += prompt + len(continuation)
+            option += 1
+    as_long = lambda parts: torch.from_numpy(np.concatenate(parts).astype(np.int64)).to(device)
+    return as_long(ids), lengths, as_long(positions), as_long(targets), as_long(owner), counts
+
+
 def group_advantages(rewards):
     mean = sum(rewards) / len(rewards)
     std = math.sqrt(sum((r - mean) ** 2 for r in rewards) / len(rewards))
@@ -634,9 +688,10 @@ def train(args):
     tasks, excluded = load_tasks(args, work)
     source_sha = args.checkpoint_sha256 or sha256_file_hex_cached(Path(args.checkpoint))
     code = git_pin()
-    runtime = pin_runtime(work, code['git_commit']) if args.pin_runtime else REPO / 'ts-host'
+    pin = check_pin(work, code['git_commit'], args.unpinned)
+    runtime = REPO / 'ts-host'
     from natlang_neuralese.rl.held_eval import series
-    run = {'started': time.time(), 'code': code, 'runtime': str(runtime), 'series': series(), 'argv': sys.argv, 'checkpoint': args.checkpoint,
+    run = {'started': time.time(), 'code': code, 'pin': pin, 'runtime': str(runtime), 'series': series(), 'argv': sys.argv, 'checkpoint': args.checkpoint,
            'checkpoint_sha256': source_sha, 'pool': args.pool, 'held_manifest': args.held_manifest,
            'excluded_ids': excluded, 'eligible_tasks': len(tasks), 'args': vars(args)}
     with (work / 'runs.jsonl').open('a') as handle:
@@ -661,7 +716,7 @@ def train(args):
                        '--port', str(args.actor_port), '--prompt-rendering', 'full', *engine,
                        '--hf-export-dir', str(store / 'sglang-hf'), *args.actor_arg]
             with (work / 'actor.log').open('a') as handle:
-                process = subprocess.Popen(command, cwd=REPO, stdout=handle, stderr=subprocess.STDOUT,
+                process = subprocess.Popen(command, cwd=REPO, env=pinned_env(), stdout=handle, stderr=subprocess.STDOUT,
                                            start_new_session=True)
             actor_process.append(process)
             deadline = time.time() + 3600
@@ -704,9 +759,6 @@ def train(args):
     import gc
     gc.collect()
     drop_cache([args.checkpoint, *Path(args.base).glob('*.safetensors')])
-    def meminfo():
-        fields = dict(line.split(':', 1) for line in open('/proc/meminfo'))
-        return {k: round(int(fields[k].split()[0]) / 2**20, 1) for k in ('MemFree', 'MemAvailable', 'Cached')}
     log_line(log, {'event': 'host model loaded', 'meminfo_gb': meminfo(), 'load_s': round(time.time() - t0, 1)})
     model.to('cuda')
     masters = {name: p.detach().clone().float() for name, p in model.named_parameters()}
@@ -767,6 +819,10 @@ def train(args):
             for name, p in live.items():
                 p.copy_(masters[name])
         log_line(log, {'event': 'resumed', 'step': step, 'cursor': cursor, 'next_group': first_group})
+    # Group directories past the saved cursor (collected after the last state save, before a stop) are never reused:
+    # numbering continues after the highest existing one.
+    existing = [int(d.name[1:]) for d in (work / 'groups').glob('g*') if d.name[1:].isdigit()]
+    first_group = max([first_group, *(i + 1 for i in existing)])
 
     if actor_thread is not None:
         actor_thread.join()
@@ -873,11 +929,11 @@ def train(args):
                 code = subprocess.run([*python, 'measure', '--manifest', args.held_manifest, '--endpoint',
                                        f'{args.actor}={args.held_workers}', '--policy-id', policy, '--samples', str(samples),
                                        '--out', str(out), '--label', f'grpo-{name or f"step-{step_number}"}'],
-                                      cwd=REPO, stdout=handle, stderr=subprocess.STDOUT).returncode
+                                      cwd=REPO, env=pinned_env(), stdout=handle, stderr=subprocess.STDOUT).returncode
                 base = Path(args.held_baseline) if args.held_baseline else work / 'held' / 'step-00000' / 'result.json'
                 if (step_number or name) and code == 0 and base.exists():
                     subprocess.run([*python, 'compare', str(base), str(out / 'result.json'), '--out',
-                                    str(out / 'compare-vs-step0.json')], cwd=REPO, stdout=handle, stderr=subprocess.STDOUT)
+                                    str(out / 'compare-vs-step0.json')], cwd=REPO, env=pinned_env(), stdout=handle, stderr=subprocess.STDOUT)
         finally:
             collector.paused.clear()
         summary = {}
@@ -931,7 +987,7 @@ def train(args):
         phase['wait_groups'] = time.time() - t
         t = time.time()
         stats = collections.Counter()
-        chains, rewards, spread, dropped_stale, staleness, task_rewards = [], [], 0, 0, [], []
+        chains, decisions, rewards, spread, dropped_stale, staleness, task_rewards = [], [], [], 0, 0, [], []
         for group in groups:
             task_id, episodes, versions = load_group(collector, group, stats)
             prune_group(collector, group, keep=args.keep_rollouts)
@@ -957,19 +1013,23 @@ def train(args):
                 for chain in kept:
                     chain['advantage'] = advantage
                     chains.append(chain)
+                decisions += [{'row': d, 'advantage': advantage} for d in episode['decisions']]
+        # A sampled decision is one action (one categorical sample), so it counts as one unit beside the sampled tokens.
         loss_tokens = sum(length for c in chains for _, length, _ in c['segs'])
+        units = loss_tokens + len(decisions)
         phase['lower'] = time.time() - t
         record = {'step': step + 1, 'groups': len(groups), 'groups_with_spread': spread,
                   'spread_fraction': round(spread / max(1, len(groups)), 3), 'dropped_stale_groups': dropped_stale,
                   'staleness': dict(collections.Counter(staleness)), 'episodes': len(rewards),
                   'reward_mean': round(sum(rewards) / max(1, len(rewards)), 4), 'sequences': len(chains),
-                  'loss_tokens': loss_tokens, 'lowering': dict(stats), 'actor_version': versions_live['actor']}
+                  'loss_tokens': loss_tokens, 'decisions': len(decisions), 'lowering': dict(stats),
+                  'actor_version': versions_live['actor']}
         if args.synthetic_reward:
             record.update(synthetic_reward=args.synthetic_reward,
                           task_reward_mean=round(sum(task_rewards) / max(1, len(task_rewards)), 4),
                           mean_sampled_per_call=round(sum(len(r['sample']) for c in chains for _, _, r in c['segs'])
                                                       / max(1, sum(len(c['segs']) for c in chains)), 1))
-        if not chains:
+        if not chains and not decisions:
             log_line(log, {**record, 'event': 'no learning signal in these groups',
                            'phase_s': {k: round(v, 1) for k, v in phase.items()}})
             continue
@@ -977,6 +1037,8 @@ def train(args):
         torch.cuda.reset_peak_memory_stats()
         collector.active_slots = args.learner_phase_slots
         learn_started, learn_tokens0 = time.time(), actor_generated(args.actor)
+        swap0, mem0 = vmstat(), meminfo()
+        progress_mark = time.time()
         if phase_mark['tokens'] is not None and learn_tokens0 is not None:
             phase_totals['collect_s'] += learn_started - phase_mark['time']
             phase_totals['collect_tokens'] += learn_tokens0 - phase_mark['tokens']
@@ -1012,7 +1074,7 @@ def train(args):
                 loss_terms = loss_terms + args.kl_beta * kl
                 sums['kl'] += kl.detach().sum().item()
                 sums['ref_abs_dlogp'] += d.detach().abs().sum().item()
-            (loss_terms.sum() / loss_tokens).backward()
+            (loss_terms.sum() / units).backward()
             sums['rho'] += rho.sum().item()
             sums['rho_capped'] += (rho > args.rho_cap).sum().item()
             sums['abs_log_rho'] += log_rho.abs().sum().item()
@@ -1023,6 +1085,62 @@ def train(args):
             del h, logp, loss_terms
             torch.cuda.synchronize()
             phase['policy_forward_backward'] = phase.get('policy_forward_backward', 0.) + time.time() - t
+            if time.time() - progress_mark > 300:
+                progress_mark = time.time()
+                busy = phase.get('reference_forward', 0.) + phase['policy_forward_backward']
+                log_line(log, {'event': 'learner progress', 'step': step + 1, 'forward_tokens': forward_tokens,
+                               'tokens_per_s': round(forward_tokens / busy), 'meminfo_gb': meminfo(),
+                               'swap_pages': {k: v - swap0[k] for k, v in vmstat().items()}})
+        # Sampled decisions: log pi(chosen) = log_softmax(s / T)[chosen], s_o the summed log-probability of option o's
+        # continuation after the exact prompt (as the actor scored it); TIS and k3 on the chosen option as for a token.
+        for batch in decision_batches(decisions, args.decision_batch_tokens):
+            ids, lengths, positions, targets, owner, counts = decision_tensors(batch, 'cuda')
+            options = sum(counts)
+            def scores_of(net):
+                token = -exp0_sft.token_nll(net, forward(net, ids, lengths), positions, targets)
+                return torch.zeros(options, device='cuda', dtype=token.dtype).index_add(0, owner, token)
+            t = time.time()
+            ref_scores = None
+            if reference is not None:
+                exp0_sft.set_checkpointing(reference, len(ids), args.activation_gb)
+                with torch.enable_grad():
+                    ref_scores = scores_of(reference).detach()
+                for p in reference.parameters():
+                    p.grad = None
+                torch.cuda.synchronize()
+                phase['reference_forward'] = phase.get('reference_forward', 0.) + time.time() - t
+                t = time.time()
+            exp0_sft.set_checkpointing(model, len(ids), args.activation_gb)
+            scores = scores_of(model)
+            terms, start = [], 0
+            for item, k in zip(batch, counts):
+                row = item['row']
+                logpi = torch.log_softmax(scores[start:start + k] / row['temperature'], 0)[row['chosen']]
+                with torch.no_grad():
+                    log_rho = logpi.detach() - row['behavior_logq']
+                    rho = log_rho.clamp(max=20).exp()
+                    weight = rho.clamp(max=args.rho_cap)
+                    actor_scores = torch.from_numpy(row['scores']).cuda()
+                    sums['decision_abs_dscore'] += (scores[start:start + k].detach() - actor_scores).abs().mean().item()
+                term = -(weight * item['advantage'] * logpi)
+                if ref_scores is not None:
+                    d = torch.log_softmax(ref_scores[start:start + k] / row['temperature'], 0)[row['chosen']] - logpi
+                    kl = d.exp() - d - 1
+                    term = term + args.kl_beta * kl
+                    sums['kl'] += kl.item()
+                    sums['ref_abs_dlogp'] += d.detach().abs().item()
+                terms.append(term)
+                sums['decision_rho'] += rho.item()
+                sums['decision_abs_log_rho'] += log_rho.abs().item()
+                sums['decision_logpi'] += logpi.item()
+                rho_pre_max = max(rho_pre_max, rho.item())
+                rho_post_max = max(rho_post_max, weight.item())
+                start += k
+            (torch.stack(terms).sum() / units).backward()
+            forward_tokens += len(ids)
+            del scores, terms
+            torch.cuda.synchronize()
+            phase['decision_forward_backward'] = phase.get('decision_forward_backward', 0.) + time.time() - t
         t = time.time()
         saver.wait()                      # a state save in flight must finish before the masters change
         phase['wait_state_save'] = time.time() - t
@@ -1078,14 +1196,20 @@ def train(args):
             adam_step = optimizer.state[parameters[0]]['step'].item()
             saver.save(state_path, tensors, {'step': step, 'adam_step': adam_step, 'cursor': collector.cursor,
                                              'next_group': collector.next_group, 'source_sha256': source_sha})
-        learner_seconds = sum(v for k, v in phase.items() if k in ('reference_forward', 'policy_forward_backward', 'optimizer'))
+        learner_seconds = sum(v for k, v in phase.items()
+                              if k in ('reference_forward', 'policy_forward_backward', 'decision_forward_backward', 'optimizer'))
+        n_dec = max(1, len(decisions))
         elapsed = time.time() - run['started']
         record.update(
             loss_tokens=loss_tokens, forward_tokens=forward_tokens, lr=lr, grad_norm=round(grad_norm, 4),
-            kl_mean=round(sums['kl'] / loss_tokens, 7), ref_abs_dlogp_mean=round(sums['ref_abs_dlogp'] / loss_tokens, 6), mean_logp=round(sums['logp'] / loss_tokens, 4),
-            rho_mean=round(sums['rho'] / loss_tokens, 4), rho_pre_cap_max=round(rho_pre_max, 3),
-            rho_post_cap_max=round(rho_post_max, 3), rho_capped_fraction=round(sums['rho_capped'] / loss_tokens, 5),
-            abs_log_rho_mean=round(sums['abs_log_rho'] / loss_tokens, 5),
+            kl_mean=round(sums['kl'] / units, 7), ref_abs_dlogp_mean=round(sums['ref_abs_dlogp'] / units, 6),
+            mean_logp=round(sums['logp'] / max(1, loss_tokens), 4),
+            decision_rho_mean=round(sums['decision_rho'] / n_dec, 4), decision_abs_log_rho_mean=round(sums['decision_abs_log_rho'] / n_dec, 5),
+            decision_mean_logpi=round(sums['decision_logpi'] / n_dec, 4),
+            decision_abs_dscore_mean=round(sums['decision_abs_dscore'] / n_dec, 4),
+            rho_mean=round(sums['rho'] / max(1, loss_tokens), 4), rho_pre_cap_max=round(rho_pre_max, 3),
+            rho_post_cap_max=round(rho_post_max, 3), rho_capped_fraction=round(sums['rho_capped'] / max(1, loss_tokens), 5),
+            abs_log_rho_mean=round(sums['abs_log_rho'] / max(1, loss_tokens), 5),
             learner_tokens_per_s=round(forward_tokens / max(1e-6, learner_seconds)),
             actor_generated_tokens=collector.generated, actor_episodes=collector.episodes,
             actor_generated_tokens_per_s=round(collector.generated / max(1., elapsed)),
@@ -1093,6 +1217,7 @@ def train(args):
             actor_tokens_per_s_learn_phase=round(phase_totals['learn_tokens'] / phase_totals['learn_s']) if phase_totals['learn_s'] else None,
             actor_tokens_per_s_collect_phase=round(phase_totals['collect_tokens'] / phase_totals['collect_s']) if phase_totals['collect_s'] else None,
             learner_phase_slots=args.learner_phase_slots,
+            learner_swap_pages={k: v - swap0[k] for k, v in vmstat().items()}, meminfo_learn_start_gb=mem0,
             previous_state_save=saver.last, cuda_peak_gb=round(torch.cuda.max_memory_allocated() / 2**30, 1),
             outstanding_groups=collector.outstanding, elapsed_s=round(elapsed))
         log_line(log, record)
@@ -1146,6 +1271,8 @@ def main():
     t.add_argument('--exclude-family-regex', default=r'^ext_codebase-(py|natlang)_codebase_',
                    help='families never selected (default: codebase families whose repos are missing on the DGX)')
     t.add_argument('--max-turns', type=int, default=128)
+    t.add_argument('--decision-batch-tokens', type=int, default=16384,
+                   help='sampled decisions are scored in packed batches of about this many tokens (all options of each)')
     t.add_argument('--max-sequence-tokens', type=int, default=65536,
                    help='longest learner sequence; calls beyond it are dropped and counted (calls_too_long_dropped): at 131k a '
                         'fully checkpointed sequence saves ~16 GB of layer inputs beside the actor')
@@ -1168,8 +1295,8 @@ def main():
     t.add_argument('--keep-rollouts', action='store_true')
     t.add_argument('--no-actor-sync', action='store_true',
                    help='never update the actor (smoke against a shared actor of the start policy; versions advance nominally)')
-    t.add_argument('--no-pin-runtime', dest='pin_runtime', action='store_false',
-                   help="episodes run the checkout's live ts-host instead of the run's pinned copy")
+    t.add_argument('--unpinned', action='store_true',
+                   help='run from a live checkout instead of a pinned copy (smokes only; see check_pin)')
     t.add_argument('--held-every-hours', type=float, default=4.)
     t.add_argument('--skip-base-held', action='store_true')
     t.add_argument('--held-baseline', help="a start-policy held result.json to compare with (e.g. held-v2's base run) instead "
