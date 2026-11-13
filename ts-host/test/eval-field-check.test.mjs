@@ -24,7 +24,7 @@ async function run(code) {
   const model = scriptedModel(() => code);
   const driver = async request => {
     const last = request.messages.at(-1);
-    if (last.role === 'tool' && /^(?:rejected|error)|\nerror|undeclared-field|has no field/.test(String(last.content))) errors.push(String(last.content));
+    if (last.role === 'tool' && /^(?:rejected|error)|\nerror|undeclared-field|has no field|decision-compare/.test(String(last.content))) errors.push(String(last.content));
     return model.driver(request);
   };
   const runtime = createNatlangRuntime({ model: driver });
@@ -79,3 +79,14 @@ test('a service declared as a constant of its own name is that value, and an unr
   assert.deepEqual(await run(imported, 'return String(calendar.check("mon").ok);'), { value: 'true' });
 });
 
+
+test('comparing a decide(...) record with an answer is rejected before the eval runs, naming .value', async () => {
+  // held-v2 row 91: `const verb = await decide(calendar_verb, ...)`, then `switch (verb) { case "create_booking": ... }`.
+  const pick = 'const pick = async (text: string): Promise<"book" | "cancel"> => "book";\n';
+  const compared = await run(pick + 'const verb = await decide(pick, "x"); if (verb === "book") return "b"; return "n";');
+  assert.match(compared.error, /decision-compare: verb is the decision record that decide\(\.\.\.\) returns, not its answer: compare verb\.value\./);
+  const switched = await run(pick + 'const verb = await decide(pick, "x");\nswitch (verb) { case "book": return "b"; case "cancel": return "c"; }\nreturn "n";');
+  assert.equal((switched.error.match(/decision-compare/g) ?? []).length, 1, switched.error);
+  const fine = await run(pick + 'const verb = await decide(pick, "x"); return verb.value === "book" ? "b" : "n";');
+  assert.doesNotMatch(fine.error ?? '', /decision-compare/);
+});

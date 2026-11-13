@@ -15,7 +15,7 @@ export type NatlangDiagnostic = SourceSpan & {
     'forbidden-loop' | 'forbidden-dynamic-code' | 'recursion' | 'callable-scope' | 'reserved-property' |
     'duplicate-site' | 'iterate-step' | 'iterate-predicate' | 'module-collision' | 'typescript' | 'nl-undeclared-type' |
     'neuralese-opaque-access' | 'neuralese-condition' | 'neuralese-untyped-literal' |
-    'neuralese-nested' | 'neuralese-readout-sync' | 'neuralese-crisp-result' | 'type-recursive-function' | 'neuralese-file' | 'nl-explicit-captures' | 'nl-type-arguments' | 'undeclared-field' | 'untrusted-instruction';
+    'neuralese-nested' | 'neuralese-readout-sync' | 'neuralese-crisp-result' | 'type-recursive-function' | 'neuralese-file' | 'nl-explicit-captures' | 'nl-type-arguments' | 'undeclared-field' | 'decision-compare' | 'untrusted-instruction';
   message: string;
   severity: 'error' | 'warning';
 };

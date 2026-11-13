@@ -3,6 +3,16 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-13 — eval refuses comparing a decide(...) record with an answer (decision-compare)
+
+`const verb = await decide(f, x); switch (verb) { case "create_booking": ... }` (or `verb === "..."`) never matches: the
+record is not its answer. Authored task text writes exactly this in 172 places of the RL pool (b3fef4c7; families
+auth_request_routing_gates 31, auth_ops_directory_reducers 28, auth_exact_algorithm_state_workflows 24, ...), and the
+base followed it literally in held-v2 row 91/0 and returned the bookings unchanged. The eval check (ts-host
+`compiler/eval-check.ts`, from TypeScript's own no-overlap diagnostics 2367/2678) now rejects such code before it runs:
+`verb is the decision record that decide(...) returns, not its answer: compare verb.value.` Test:
+`eval-field-check.test.mjs`.
+
 ### 2026-11-13 — eval-scope names sent as tool calls, Python-in-eval hint, read(value) without a library (base failure taxonomy)
 
 From `plans/neuralese/BASE_FAILURES_20261113.md` (base 5ff07638, held-v2, 256 x 2); first-principles fixes, not A/B-gated.
