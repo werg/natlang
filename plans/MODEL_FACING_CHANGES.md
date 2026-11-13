@@ -2351,3 +2351,21 @@ call-specific moved into the call's opening user message, after its signature an
   GRPO) were already the actor's exact prompt ids.
 Tests: `adaptation-runtime`, `native-program-guidance`, `decision-readout`, `serving-request` (rebuild == live agent
 request), `builtin-programs` fixture.
+
+## 2026-11-13: scorer false negatives fixed (answer comparison `normalized-decimal-exact/3`)
+
+From the run2 reward audit (113 GRPO groups, 294 scored failures read against their gold). `ts-host/src/evaluation/oracles.ts`:
+- **Yes/no polarity.** `true`/`"yes"`/`"true"` and `false`/`"no"`/`"false"` are one answer under `normalized`, `qa`
+  scalar and `qa` span oracles (bAbI "false" for gold "no": 2 episodes in g000085). Hedged answers ("yes but no") still fail.
+- **JSON-quoted strings.** A string answer written as a JSON string literal (`"\"#B A#\""`) is its text when the gold
+  is a string that is not itself quoted (g000019).
+- **QA span containment.** A `qa` span answer passes when it holds the whole gold span of two or more tokens,
+  contiguous and in order, with the same numbers, and is at most twice the gold's length ("Celine Dion's \"Because You
+  Loved Me\"" for "Because You Loved Me": 3 episodes in g000015). Chosen over dropping question tokens: the oracle
+  never sees the question (it would need a new pinned pool), and the observed false negatives add context the question
+  does not contain. One-token golds stay with F1 ("Duke Lemur Center" for "Duke" must fail; held rows 23/52 stay
+  false negatives). No synonym tables ("spouse" for "wife" stays a failure).
+Data: the garbled HybridQA row (g000011) is pool errata `ops/pool-errata/hybridqa-garbled-question-20261113.jsonl`;
+the 8 wrong-oracle held-v2 tasks and the 23 ENOENT codebase tasks are `ops/held-v2/ignore-ids-*-20261113.jsonl` for
+`held_eval compare --ignore-ids` (held manifest unchanged). Changes the held series: re-measure the start policy at the
+next pin. Tests: `ts-host/test/oracle.test.mjs`.
