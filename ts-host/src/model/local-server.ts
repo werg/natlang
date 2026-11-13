@@ -11,6 +11,7 @@ import { schedulerForSettings } from './scheduler.js';
 import type { Scheduler } from './scheduler.js';
 import type { SlotPlan } from '../llama/slots.js';
 import type { WarmPrefix } from '../package/warm.js';
+import { framedDecision } from '../decision-frame.js';
 import type { DecisionRequest, DecisionScores, ModelTurn, ModelTurnRequest, SessionTurnOptions } from '../contracts.js';
 import type { LlamaRuntimeDiscovery, LlamaServerInspection } from '../llama/runtime.js';
 import * as models from '../llama/models.js';
@@ -214,7 +215,8 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
       if (choice.kind === 'pi-provider') throw new Error('decision-unsupported: Pi provider backends cannot score replies');
       if (unscored) throw new Error(unscored);
       const options = await start();
-      try { return await driver(options).decide(request, signal); }
+      // The readout asks for a bare JSON value; a model natlang did not train is asked for, and scored on, the form it answers in.
+      try { return await driver(options).decide(framedDecision(request, choice.decisionReply), signal); }
       catch (error) { if (String((error as Error)?.message).startsWith('decision-unsupported')) unscored = (error as Error).message; throw error; }
     },
     contextWindow() {

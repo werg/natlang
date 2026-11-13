@@ -215,3 +215,46 @@ test('a profile request refines the stock model request field by field', async (
     chat_template_kwargs: { preserve_thinking: true, enable_thinking: true } });
   assert.deepEqual(resolveModelChoice({}).request, { temperature: 0, chat_template_kwargs: { preserve_thinking: true } });
 });
+
+test('a managed stock model is asked for and scored on {"result": VALUE}; a profile can keep the bare value', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'natlang-managed-decide-'));
+  const executable = join(root, 'fake-llama-server'), marker = join(root, 'scores.jsonl'), model = join(root, 'model.gguf');
+  const template = join(root, 'template.jinja');
+  writeFileSync(model, 'fixture'); writeFileSync(template, 'fixture');
+  writeFileSync(executable, `#!${process.execPath}
+if (process.argv.includes('--version')) { console.log('version: 0.8.0 (build 12069, commit a0c92ce36)'); process.exit(0); }
+const http = require('node:http'), fs = require('node:fs');
+const args = process.argv.slice(2), port = Number(args[args.indexOf('--port') + 1]);
+const server = http.createServer((request, response) => {
+  response.setHeader('content-type', 'application/json');
+  if (request.url === '/health') return response.end(JSON.stringify({ status: 'ok' }));
+  let body = ''; request.on('data', chunk => body += chunk); request.on('end', () => {
+    fs.appendFileSync(${JSON.stringify(marker)}, body + '\\n');
+    const items = JSON.parse(body).items ?? [];
+    response.end(JSON.stringify({ results: items.map(item => ({ log_probs: item.continuations.map((_, index) => -index), tokens: item.continuations.map(() => 1) })) }));
+  });
+});
+server.listen(port, '127.0.0.1');
+process.on('SIGTERM', () => server.close(() => process.exit(0)));
+`);
+  chmodSync(executable, 0o755);
+  const environment = { ...process.env, NATLANG_LLAMA_SERVER: executable, NATLANG_SHARED_SERVER: 'off',
+    NATLANG_MODEL_PATH: model, NATLANG_TEMPLATE: template, NATLANG_MODEL_START_TIMEOUT_MS: '5000' };
+  const { decisionPrompt } = await import('../dist/decision-frame.js');
+  const options = ['"knight"', '"knave"'];
+  const request = { messages: [{ role: 'system', content: 's' }, { role: 'user', content: decisionPrompt(options) }], options };
+  const sent = async profile => {
+    const session = createManagedModelSession(profile, environment);
+    try { await session.prepare(); const scores = await session.decide(request); assert.deepEqual(scores.log_probs, [0, -1]); }
+    finally { await session.close(); }
+    const bodies = readFileSync(marker, 'utf8').trim().split('\n').map(line => JSON.parse(line));
+    writeFileSync(marker, '');
+    return bodies.at(-1).items[0];
+  };
+  const stock = await sent({});
+  assert.deepEqual(stock.continuations ?? stock.options, ['{"result": "knight"}', '{"result": "knave"}']);
+  assert.match(stock.messages.at(-1).content, /exactly one JSON object \{"result": VALUE\}/);
+  const bare = await sent({ decisionReply: 'value' });
+  assert.deepEqual(bare.continuations ?? bare.options, options);
+  assert.equal(bare.messages.at(-1).content, decisionPrompt(options));
+});
