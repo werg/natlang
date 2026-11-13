@@ -13,7 +13,7 @@ import { controlledProviderProfile, type ProviderRequestControls } from './provi
 import { createHash, randomUUID } from 'node:crypto';
 import { acquireJournalSpool, type JournalSpool } from './journal-spool.js';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { rateLimited, transportFailure, retryWaitMs, retryAfterMs, providerFinishReason, providerRequestRetryable } from './retry.js';
+import { rateLimited, transportFailure, retryWaitMs, retryAfterMs, providerFinishReason, providerRequestRetryable, underlyingError } from './retry.js';
 import { mkdir, open, readFile, readdir, rename, stat, unlink } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
@@ -527,8 +527,10 @@ export async function collectBatch(records: IndexedRecord[], config: CollectorCo
         if (!config.finalExportOnly) scheduleMerge();
         process.stderr.write(`completed ${item.index} ${item.record.id}: accepted=${row.outcome?.accepted ?? false}; ${durableCompleted}/${records.length} durable\n`);
         break;
-      } catch (error) {
+      } catch (wrapped) {
         if (signal?.aborted) return;
+        // A natlang call ended by this failure rejects as its NatlangCallError; the failure itself is the cause.
+        const error = underlyingError(wrapped);
         if (error instanceof ProviderRequestTimeoutError || error instanceof ProviderActionCycleTimeoutError) {
           await writeAtomic(join(config.jobs, `${String(item.index).padStart(6, '0')}.error.json`),
             JSON.stringify({ index: item.index, program_id: item.record.id, ...errorBinding(expected), code: error.code,
@@ -833,9 +835,10 @@ export function withExecutionPlans(send: (request: ModelTurnRequest) => Promise<
       } catch (error) {
         // An outage or rate limit fails the job, which resumes from its journal: skipping the plan would leave a
         // training turn without reasoning.
-        if (error instanceof ProviderRequestTimeoutError || error instanceof ProviderActionCycleTimeoutError ||
-            (error && typeof error === 'object' && 'code' in error &&
-             (error as { code?: unknown }).code === 'NATLANG_PROVIDER_REQUEST_RETRIES_EXHAUSTED') ||
+        const cause = underlyingError(error);
+        if (cause instanceof ProviderRequestTimeoutError || cause instanceof ProviderActionCycleTimeoutError ||
+            (cause && typeof cause === 'object' && 'code' in cause &&
+             (cause as { code?: unknown }).code === 'NATLANG_PROVIDER_REQUEST_RETRIES_EXHAUSTED') ||
             transportFailure(error)) throw error;
         // Required tool selection is not universal. Otherwise planning is best-effort: the ordinary action still runs.
         break;
@@ -998,12 +1001,13 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     let fatalProviderDeadline: ProviderRequestTimeoutError | ProviderActionCycleTimeoutError | undefined;
     let fatalCollectionError: Error | undefined;
     const providerFatalAbort = new AbortController();
-    const rememberProviderDeadline = (error: unknown) => {
+    const rememberProviderDeadline = (wrapped: unknown) => {
+      const error = underlyingError(wrapped);
       if (!fatalProviderDeadline && (error instanceof ProviderRequestTimeoutError || error instanceof ProviderActionCycleTimeoutError)) {
         fatalProviderDeadline = error;
         providerFatalAbort.abort(error);
       }
-      return fatalProviderDeadline ?? error;
+      return fatalProviderDeadline ?? wrapped;
     };
     const providerParentSignal = () => signal ? AbortSignal.any([signal, providerFatalAbort.signal]) : providerFatalAbort.signal;
     const throwIfCollectionFatal = () => {
