@@ -1450,6 +1450,7 @@ export class NativeToolAgent {
     const chosen = scores.chosen ?? probabilities.indexOf(Math.max(...probabilities));
     session.runtime.trace.emit('decision_readout', { call_id: callId, phase: 'scored', options: replies,
       log_probs: scores.log_probs, probabilities, tokens: scores.tokens ?? null, chosen,
+      ...(scores.prompt_tokens !== undefined ? { prompt_tokens: scores.prompt_tokens } : {}),
       duration_ms: Math.round(performance.now() - started),
       ...(scores.batch ? { batch_id: scores.batch.batch_id, batch_size: scores.batch.batch_size } : {}) });
     lam.return = values[chosen] as Value;

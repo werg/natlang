@@ -56,6 +56,27 @@ test('a readout: decision function answers by scoring its values once, without t
   assert.deepEqual(event.probabilities.map(p => +p.toFixed(6)), [0.2, 0.8]);
 });
 
+test('a call store counts a scored readout as one model request with the prompt tokens it evaluated', async () => {
+  const { mkdtempSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { openCallStore } = await import('../dist/calls/store.js');
+  const root = mkdtempSync(join(tmpdir(), 'natlang-decision-cost-'));
+  const store = openCallStore(root);
+  try {
+    const driver = Object.assign(async () => { throw new Error('the tool loop must not run'); }, {
+      decide: async () => ({ log_probs: [Math.log(0.3), Math.log(0.7)], tokens: [2, 2], prompt_tokens: 812 }) });
+    const runtime = createNatlangRuntime({ model: { driver }, seed: { mode: 'backend' }, calls: store });
+    const fn = loadVirtualNatlang({ 'verdict.nl': VERDICT }, 'verdict.nl');
+    assert.equal(await runtime.run(() => fn('I always lie.')), 'knave');
+    const [summary] = store.calls();
+    const record = store.call(summary.call_id);
+    assert.equal(record.cost.model_requests, 1);
+    assert.equal(record.cost.tokens_in, 812);
+    assert.equal(record.cost.tokens_out, 0);
+  } finally { store.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
 test('without a scorer the call falls back to the tool loop; finite-returns applies the readout to every finite call', async () => {
   const plain = async () => ({ calls: [['return_result', { status: 'success', value: 'knight' }]] });
   const fn = loadVirtualNatlang({ 'verdict.nl': VERDICT }, 'verdict.nl');

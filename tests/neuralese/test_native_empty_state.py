@@ -7,6 +7,10 @@ from natlang_neuralese.model.shared_state import (SharedStateModel, native_step,
 from natlang_neuralese.model.state_block import NativeStateBlock
 from natlang_neuralese.serve.store import encode_native_state, decode_native_state
 
+# Another cache or batch shape may round differently on some BLAS paths (MKL on AMD CPUs): FP32 roundoff, far below
+# what lost or mutated state does.
+SAME_STATE = dict(rtol=1e-5, atol=1e-6)
+
 
 @pytest.mark.parametrize('family', ['lfm'])
 @pytest.mark.parametrize('dtype', [torch.float32, torch.bfloat16])
@@ -29,11 +33,11 @@ def test_empty_capture_roundtrip_splice_and_graph(family, dtype):
         actual = native_step(model, torch.tensor([[9]]), prefix['cache'])
         # Compare against an independent cache to catch hidden state mutation.
         expected = native_step(model, torch.tensor([[9]]), native_step(model, torch.tensor([[7, 8]]))['cache'])
-        assert torch.equal(actual['h_final'], expected['h_final'])
+        torch.testing.assert_close(actual['h_final'], expected['h_final'], **SAME_STATE)
         plan = compile_graph([Invocation('source', (60, 61), producing=((1, 1),)),
             Invocation('target', (62, 63, 9), imports=(ImportSpan(1, 'source', 1, 1), ImportSpan(1, 'empty', 0, 0)))], external_sizes={'empty': 0})
         result = model(plan, external_blocks={'empty': restored}, external_identity=dict(identity, architecture=architecture))
         captured = capture_block(result, 'source', 1, 1, text='', architecture=architecture, **identity)
         assert len(captured.token_ids) == 0
         plain = model(compile_graph([Invocation('target', (62, 63, 9))]))
-        assert torch.equal(result['h_final'][:, 2:], plain['h_final'])
+        torch.testing.assert_close(result['h_final'][:, 2:], plain['h_final'], **SAME_STATE)

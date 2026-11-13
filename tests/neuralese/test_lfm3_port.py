@@ -136,9 +136,10 @@ def test_gradients_match_reference():
     actual = torch.autograd.grad((port.forward_ids(ids)['logits'] * weight).sum(), watched)
     for name, left, right in zip(names, actual, expected):
         assert right.abs().sum() > 0, name
-        # FP32 roundoff relative to each gradient's scale (the tied embedding's reaches ~200).
+        # FP32 roundoff relative to each gradient's scale (the tied embedding's reaches ~200); BLAS paths that
+        # block the matmuls differently (MKL on AMD CPUs) measured 2.3e-6 of scale.
         scale = float(right.abs().max())
-        assert float((left - right).abs().max()) <= 2e-6 * scale + 1e-7, name
+        assert float((left - right).abs().max()) <= 1e-5 * scale + 1e-7, name
 
 
 def test_checkpointed_layers_match_plain_outputs_and_gradients():

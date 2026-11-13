@@ -187,6 +187,27 @@ def _protocol_view(capture):
     return samples, capture['generated_inputs'], writes, capture['finish_reason']
 
 
+def _same_reply_and_blocks(actual, expected, stored):
+    """The same reply and stored blocks from both engines. A native-state id hashes the block's FP32 tensors, which two
+    computation paths need not reproduce bit for bit (BLAS paths differ by CPU), so ids are compared through the blocks."""
+    import torch
+    strip = lambda content: [{k: v for k, v in part.items() if k != 'id'} if isinstance(part, dict) else part
+                             for part in (content if isinstance(content, list) else [content])]
+    mine_message, their_message = actual['choices'][0]['message'], expected['choices'][0]['message']
+    assert {k: v for k, v in mine_message.items() if k != 'content'} == {k: v for k, v in their_message.items() if k != 'content'}
+    assert strip(mine_message['content']) == strip(their_message['content'])
+    assert len(stored['front']) == len(stored['native'])
+    for mine, theirs in zip(stored['front'], stored['native']):
+        assert torch.equal(mine.token_ids, theirs.token_ids) and torch.equal(mine.positions, theirs.positions)
+        assert mine.embeddings.dtype == theirs.embeddings.dtype
+        assert torch.allclose(mine.embeddings.float(), theirs.embeddings.float())
+        for a, b in zip(mine.layers, theirs.layers):
+            assert a['kind'] == b['kind'] and a.keys() == b.keys()
+            for key in a:
+                if key != 'kind':
+                    assert a[key].dtype == b[key].dtype and torch.allclose(a[key], b[key], atol=1e-4, rtol=1e-3)
+
+
 def test_produce_span_follows_the_native_protocol_and_stores_the_same_block(tmp_path):
     import torch
     native, front, roles, word, stored = _span_fixture(tmp_path)
@@ -198,18 +219,7 @@ def test_produce_span_follows_the_native_protocol_and_stores_the_same_block(tmp_
     expected, actual = _scripted(native, front, tokens, make)
     assert _protocol_view(actual['x_natlang_rl_capture']) == _protocol_view(expected['x_natlang_rl_capture'])
     assert len(stored['front']) == len(stored['native']) == 2 and front.sglang_state_writes == 2
-    for mine, theirs in zip(stored['front'], stored['native']):
-        assert torch.equal(mine.token_ids, theirs.token_ids) and torch.equal(mine.positions, theirs.positions)
-        assert mine.embeddings.dtype == theirs.embeddings.dtype
-        assert torch.allclose(mine.embeddings.float(), theirs.embeddings.float())
-        for a, b in zip(mine.layers, theirs.layers):
-            assert a['kind'] == b['kind'] and a.keys() == b.keys()
-            for key in a:
-                if key != 'kind':
-                    assert a[key].dtype == b[key].dtype and torch.allclose(a[key], b[key], atol=1e-4, rtol=1e-3)
-    strip = lambda content: [{k: v for k, v in part.items() if k != 'id'} if isinstance(part, dict) else part
-                             for part in (content if isinstance(content, list) else [content])]
-    assert strip(actual['choices'][0]['message']['content']) == strip(expected['choices'][0]['message']['content'])
+    _same_reply_and_blocks(actual, expected, stored)
     # Streamed: text and native-state deltas in order, the same capture.
     deltas = []
     stored['front'].clear()
@@ -359,7 +369,7 @@ def test_forced_teacher_replay_records_like_the_native_engine(tmp_path, monkeypa
         assert mine[key] == theirs[key], key
     assert all(sample['forced'] is True and sample['logp'] is None for sample in mine['samples'])
     assert _protocol_view(mine) == _protocol_view(theirs)
-    assert actual['choices'][0]['message'] == expected['choices'][0]['message']
+    _same_reply_and_blocks(actual, expected, stored)
     assert len(stored['front']) == len(stored['native']) == 1
     assert stored['front'][0].text == stored['native'][0].text == 't6 t7'
     short = GenerationRequest(messages=prompt, temperature=0.0, max_tokens=2, native_recording=True, rl_capture=True,
@@ -410,7 +420,7 @@ def test_templated_replies_follow_the_native_engine(tmp_path, case):
     actual = front.generate(make())
     mine, theirs = actual['x_natlang_rl_capture'], expected['x_natlang_rl_capture']
     assert _protocol_view(mine) == _protocol_view(theirs) and mine['prompt'] == theirs['prompt']
-    assert actual['choices'][0]['message'] == expected['choices'][0]['message']
+    _same_reply_and_blocks(actual, expected, stored)
     assert len(sent) == (2 if case == 'write-continues' else 1)
     first = sent[0]['input_ids']
     assert first[-len(prefix) - write:] == prefix + [roles.produce_open] * write

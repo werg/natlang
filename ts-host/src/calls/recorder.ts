@@ -213,7 +213,9 @@ export class CallCapture {
         return { code: typeof code === 'string' ? code : JSON.stringify(code ?? null), ok: !['error', 'rejected'].includes(String(event.outcome)) };
       });
       const evals = actions.map(action => action.code);
-      const requests = events.filter(event => event.kind === 'model_request' && event.phase === 'end');
+      // A scored decision readout is one model request too: it evaluates its prompt and generates nothing.
+      const requests = events.filter(event => (event.kind === 'model_request' && event.phase === 'end') ||
+        (event.kind === 'decision_readout' && event.phase === 'scored'));
       const definition = this.base.definition;
       const output = result.hasOutput ? this.ref(result.output,
         excluded(this.base.exclude, { name: definition.name, source: definition.source }, 'return')) : null;

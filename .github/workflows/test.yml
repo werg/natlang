@@ -40,8 +40,8 @@ jobs:
         # applications/pi has its own lockfile and is not an npm workspace.
         # The application compiler needs these exact dependencies.
         run: npm --prefix applications/pi ci
-      - name: Install ffmpeg for the media workbench tests
-        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends ffmpeg
+      - name: Install ffmpeg (media workbench tests) and ripgrep (dependency reference scans)
+        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends ffmpeg ripgrep
       - name: Runtime, applications, and conformance tests
         id: runtime_tests
         working-directory: ts-host
