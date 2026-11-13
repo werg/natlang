@@ -59,6 +59,24 @@ RL_PORT = 18531
 STATE = ROOT / 'rl-actor.json'
 EXPORT_FORMAT = 'native-pop-rtx4060-bf16'
 SGLANG_EXPORT_FORMAT = 'sglang-pop-rtx4060-bf16-vendor-projection'
+# Pop's SGLang engine (RTX 4060, 8 GB; measured 2026-11-13, ops decisions.log): the KV pool, not the GPU, capped the
+# held evals. BF16 KV held 94.7k tokens (22 KB a token: all 11 attention layers, the sliding ones at full length), so 7.5
+# of 10 sequences ran, 13.7 requests waited and each evicted the waiting episodes' prefixes, which were prefilled again
+# (prefix hit 41% against 94% on the DGX). A decode step costs about 20 ms whatever the batch, so tokens/s scale with
+# running sequences (312 at 7.5, 672 at 16). FP8 KV holds about 180k tokens. FP8 is part of the actor law (attested
+# kv_cache_dtype and the export format suffix): held results pair only within one setting.
+POP_KV_CACHE_DTYPE = 'fp8_e4m3'
+POP_MAX_RUNNING = 16
+
+
+def pop_sglang(kv_cache_dtype=POP_KV_CACHE_DTYPE, max_running=POP_MAX_RUNNING):
+    """(job['sglang'] settings, actor export format) of Pop's SGLang engine. max_total_tokens is only a cap: SGLang
+    sizes the pool from what mem-fraction 0.8 leaves (BF16 94.7k, FP8 about 180k tokens)."""
+    fp8 = kv_cache_dtype != 'auto'
+    settings = {'kv_cache_dtype': kv_cache_dtype, 'max_running': max_running, 'max_total_tokens': 262144 if fp8 else 131072}
+    return settings, SGLANG_EXPORT_FORMAT + (f'-kv-{kv_cache_dtype}' if fp8 else '')
+
+
 SGLANG_MEMORY_GB = 11   # 8 GiB was OOM-killed at CUDA-graph capture (2026-11-12): front + view on CPU + server
 RL_MEMORY_GB = 8   # container cap and ledger claim; 4 GiB was OOM-killed after 4 h at 3 workers (anon 4.2 GiB, 2026-11-09)
 
@@ -341,12 +359,13 @@ def start(args):
     work = f'{POP_EVAL_ROOT}/rl-actor-{prep["step"]}-{source[:12]}'
     name = f'poprl-{source[:12]}'
     transport_json = json.loads(Path(prep['transport']['path']).read_text())
+    sglang, sglang_format = pop_sglang(args.kv_cache_dtype, args.max_running)
     job = {'mode': 'rl-actor', 'arm': 'rl', 'name': name, 'port': args.port, 'host': host, 'runtime': POP_REPO,
            'code': code['pop'], 'base': POP_BASE, 'image': IMAGE, 'step': prep['step'],
            'source_sha256': source, 'stage': f'{POP_TRANSPORT_ROOT}/{source}', 'view': prep['view']['path'],
            'view_sha256': prep['view']['sha256'], 'work': work, 'min_free_bytes': POP_MIN_FREE,
-           'actor_export_format': SGLANG_EXPORT_FORMAT if args.engine == 'sglang' else EXPORT_FORMAT,
-           'memory': f'{RL_MEMORY_GB}g', 'engine': args.engine,
+           'actor_export_format': sglang_format if args.engine == 'sglang' else EXPORT_FORMAT,
+           'memory': f'{RL_MEMORY_GB}g', 'engine': args.engine, **({'sglang': sglang} if args.engine == 'sglang' else {}),
            'transport': {'name': Path(prep['transport']['path']).name, 'sha256': prep['transport']['sha256'],
                          'view_receipt_name': prep['view_receipt']['sha256'] + '.json',
                          'view_receipt_sha256': prep['view_receipt']['sha256'], 'scope': transport_json['scope']}}
@@ -370,7 +389,7 @@ def start(args):
                         '--class', 'experiment', '--no-resumable', *container, '--workdir', work, '--',
                         '/usr/bin/python3', f'{work}/driver.py', f'{work}/job.json']))
     result = {'endpoint': endpoint, 'unit': unit, 'container': name, 'policy_id': source, 'work': work, 'runtime': runtime,
-              'engine': args.engine,
+              'engine': args.engine, **({'sglang': sglang} if args.engine == 'sglang' else {}),
               'prepared_seconds': round(time.time() - started, 1)}
     write_json(STATE, result)
     try:
@@ -434,8 +453,10 @@ def prune_pop_newest(pattern, keep, protect=()):
 def serve_checkpoint(args):
     """Serve a pruned native checkpoint on Pop's GPU (replacing whatever Pop's actor serves) and wait until it attests."""
     sha, commit = args.policy_id, args.commit
+    sglang, sglang_format = pop_sglang(args.kv_cache_dtype, args.max_running)
     previous = read_json(STATE)
-    if previous and previous['policy_id'] == sha and previous.get('code') == commit and attested(previous['endpoint'], sha):
+    if (previous and previous['policy_id'] == sha and previous.get('code') == commit and previous.get('sglang') == sglang
+            and attested(previous['endpoint'], sha)):
         log(event='Pop actor already serves the checkpoint', endpoint=previous['endpoint'])
         return previous
     host = args.bind_host or pop_host_address()
@@ -457,8 +478,8 @@ def serve_checkpoint(args):
     job = {'mode': 'held-eval', 'arm': 'held', 'name': name, 'port': args.port, 'host': host, 'runtime': runtime,
            'code': {'schema': 'natlang.code-provenance/1', 'git_commit': commit, 'dirty': False}, 'base': POP_BASE,
            'image': IMAGE, 'step': args.step, 'source_sha256': sha, 'stage': POP_CHECKPOINTS, 'view': f'{sha}.pt',
-           'view_sha256': sha, 'work': work, 'min_free_bytes': 4 * 2**30, 'actor_export_format': SGLANG_EXPORT_FORMAT,
-           'memory': f'{RL_MEMORY_GB}g', 'engine': 'sglang'}
+           'view_sha256': sha, 'work': work, 'min_free_bytes': 4 * 2**30, 'actor_export_format': sglang_format,
+           'memory': f'{RL_MEMORY_GB}g', 'engine': 'sglang', 'sglang': sglang}
     ssh(shlex.join(['rm', '-f', f'{work}/driver.py']))
     subprocess.run(['scp', '-q', str(REPO / 'scripts/neuralese_data/pop_actor_driver.py'), f'{POP}:{work}/driver.py'],
                    check=True, timeout=120)
@@ -469,7 +490,7 @@ def serve_checkpoint(args):
                     '--budget-gb', str(SGLANG_MEMORY_GB - .5), '--reserve-gb', str(POP_RESERVE_GB), '--class', 'experiment',
                     '--no-resumable', '--wait', '900', '--workdir', work, '--', '/usr/bin/python3', f'{work}/driver.py', f'{work}/job.json']))
     result = {'endpoint': endpoint, 'unit': unit, 'container': name, 'policy_id': sha, 'work': work, 'runtime': runtime,
-              'code': commit, 'engine': 'sglang', 'copy_seconds': round(copied - started, 1)}
+              'code': commit, 'engine': 'sglang', 'sglang': sglang, 'copy_seconds': round(copied - started, 1)}
     write_json(STATE, result)
     deadline = time.monotonic() + args.ready_seconds
     while time.monotonic() < deadline:
@@ -515,6 +536,11 @@ def main(argv=None):
                         'native engine in its container')
     s.add_argument('--prepare-wait', type=int, default=900, help='ledger admission bound of the DGX view preparation')
     c = commands.add_parser('serve-checkpoint', help='serve a pruned native checkpoint on Pop (exits once it attests)')
+    for sub in (s, c):
+        sub.add_argument('--kv-cache-dtype', choices=('fp8_e4m3', 'auto'), default=POP_KV_CACHE_DTYPE,
+                         help="SGLang KV dtype (part of the attested engine: held results pair only within one setting; "
+                              "auto = BF16, Pop's engine until 2026-11-13)")
+        sub.add_argument('--max-running', type=int, default=POP_MAX_RUNNING, help='concurrent sequences on SGLang (capacity)')
     c.add_argument('--checkpoint', required=True)
     c.add_argument('--policy-id', required=True, help="the checkpoint file's sha256")
     c.add_argument('--commit', required=True, help='code commit the actor runs (exported on Pop)')

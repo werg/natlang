@@ -168,6 +168,7 @@ def serve_sglang(job, checkpoint, transport, stage, work):
                '--sglang-mem-fraction', str(sglang.get('mem_fraction', 0.8)),
                '--sglang-max-running', str(sglang.get('max_running', 10)),
                '--sglang-max-total-tokens', str(sglang.get('max_total_tokens', 131072)),
+               '--sglang-kv-cache-dtype', sglang.get('kv_cache_dtype', 'auto'),
                '--sglang-adapter-slots', '0', '--hf-export-dir', str(work / 'sglang-hf' / job['source_sha256'][:16]),
                *sglang.get('extra', [])]
     # FlashInfer JIT-compiles kernels with nvcc: Pop has no system CUDA toolkit, the venv's nvidia-cuda-nvcc wheel is it.
