@@ -626,6 +626,11 @@ def test_exact_terminated_transport_error_is_sha_bound_in_output_accounting(tmp_
                                        'sha256': hashlib.sha256(error.read_bytes()).hexdigest(),
         'program_ir_sha256':job['digest'],'source_sha256':hashlib.sha256(Path(entry['source']).read_bytes()).hexdigest(),
         'record_binding_verified':False}
+    # The same cut through a natlang call's wrapper (an application-controller root, ts-host 9f13cce63).
+    error.write_text(json.dumps({'index': 0, 'program_id': 'case-0', 'program_ir_sha256':job['digest'],
+                                 'source_sha256':hashlib.sha256(Path(entry['source']).read_bytes()).hexdigest(),
+                                 'error': 'NatlangCallError: nl@eval:1: failed: terminated'}))
+    assert queue_module.output_accounting(entry)['job_states'][0]['state'] == 'transport_failed'
     # An unrelated model/runtime failure is not declared infrastructure by this exact transport case.
     error.write_text(json.dumps({'index': 0, 'program_id': 'case-0', 'program_ir_sha256':job['digest'],
                                  'source_sha256':hashlib.sha256(Path(entry['source']).read_bytes()).hexdigest(),

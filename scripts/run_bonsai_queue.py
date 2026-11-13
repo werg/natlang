@@ -270,7 +270,9 @@ def output_accounting(entry, runtime=None):
                                   'sha256': error_sha256, 'program_ir_sha256':error['program_ir_sha256'],
                                   'source_sha256':error['source_sha256'], 'record_binding_verified':False}
                 message = terminal_error['error'].lower()
-                state = 'transport_failed' if message.strip() == 'typeerror: terminated' or any(term in message for term in
+                # A natlang call's wrapper (NatlangCallError `<call>: failed: terminated`, ts-host 9f13cce63) keeps the cut.
+                state = 'transport_failed' if re.fullmatch(r'(?:typeerror|natlangcallerror: .{1,400}?: (?:failed|quiesced)): terminated',
+                                                            message.strip()) or any(term in message for term in
                     ('transport', 'rate limit', 'timed out', 'timeout', 'socket', 'connection', 'fetch failed')) else 'failed'
             elif partial_path.is_file():
                 partial = read_json(partial_path)
