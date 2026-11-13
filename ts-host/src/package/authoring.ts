@@ -126,6 +126,21 @@ OpenAI-compatible endpoint. \`natlang doctor --json\` reports the setup.
 - Language reference and patterns: the natlang-authoring skill (\`natlang skills install\` adds it to Claude Code or Codex).
 `;
 
+/**
+ * Add a natural-language function to a program from a template: `file` is a new `.nl` path inside it, such as
+ * `classify.nl` or `answer/lookup.nl` (a helper in answer.nl's callable folder). Existing files are never overwritten.
+ */
+export function createFunction(root: string, file: string): string {
+  if (!/^([A-Za-z_][A-Za-z0-9_]*\/)*[A-Za-z_][A-Za-z0-9_]*\.nl$/.test(file))
+    throw new Error(`${file} is not a function file name: use letters, digits and underscores ending in .nl, such as classify.nl or answer/lookup.nl`);
+  const path = join(resolve(root), ...file.split('/'));
+  if (existsSync(path)) throw new Error(`${file} already exists. Choose a new name; existing files are never overwritten.`);
+  mkdirSync(join(path, '..'), { recursive: true });
+  writeFileSync(path, `---\ndescription: Say in one sentence what this function decides or produces.\nargs:\n  text: string\nreturns: string\n---\n` +
+    'Write the instructions for text here. Number the steps if there are several, and name the data each step uses.\n', { flag: 'wx' });
+  return path;
+}
+
 export function readExamples(root: string): SavedExample[] {
   const path = join(root, 'examples.json');
   if (!existsSync(path)) return [];
