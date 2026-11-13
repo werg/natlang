@@ -3,6 +3,20 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-13 — `bash -c 'literal'` runs; mkdir'd directories persist across bash calls (base failure taxonomy)
+
+From `plans/neuralese/BASE_FAILURES_20261113.md` (base 5ff07638, held-v2, 256 x 2). Both are first-principles fixes of
+the folder shell (ts-host `native/folder-shell.ts`), not A/B-gated.
+- `bash -c '...'` / `sh -c '...'` (also `-lc`, `-ec`): the inner literal script is checked by the same policy (finite
+  loops, no recursion) and runs; only a non-literal script (`bash -c "$X"`, `bash file.sh`), `eval` and `source` are still
+  refused, now with "bash runs only a literal script here, as bash -c '...'; or write the commands directly". The base
+  wrapped commands this way in 50 of 512 episodes (96 refusals; 42 of those episodes failed, vs 8 succeeded), often
+  retrying the refused form or giving up on the moves the task needed.
+- A directory made by `mkdir` with no file in it yet was forgotten at the end of that bash call: `mkdir -p filed` and
+  then `mv visits/*.md filed/` in the next call failed `target 'filed/' is not a directory` (9 episodes, 8 failed). Empty
+  directories are now kept per folder for the whole call.
+Tests: `ts-host/test/folder-shell.test.mjs`.
+
 ### 2026-11-13 — a child call's driver or host failure reads as the child's failure; prose-only replies end the call
 
 Two changes from the Vibestudio agent-DX work (a failed call must name itself and end).

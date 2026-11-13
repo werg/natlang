@@ -18,6 +18,31 @@ test('bash policy allows finite for loops and rejects open loops and recursion',
   assert.throws(() => checkBashPolicy('a(){ b; }; b(){ a; }; a'), /calls itself/);
 });
 
+test('bash -c and sh -c run a literal script under the same policy (base LFM3 wrapped 50 of 512 held episodes this way)', async () => {
+  assert.doesNotThrow(() => checkBashPolicy("bash -c 'mkdir -p filed && mv a.md filed/'"));
+  assert.doesNotThrow(() => checkBashPolicy('sh -lc "ls -R ."'));
+  assert.throws(() => checkBashPolicy("bash -c 'while true; do echo x; done'"), /While loops/);
+  assert.throws(() => checkBashPolicy('bash -c "$SCRIPT"'), /literal script/);
+  assert.throws(() => checkBashPolicy('bash run.sh'), /literal script/);
+  assert.throws(() => checkBashPolicy("bash -c 'eval ls'"), /cannot bypass/);
+  const folder = Folder.fromFiles({ 'inbox/a.md': 'a\n' });
+  const result = await runFolderBash(folder, "bash -c 'mkdir -p filed && mv inbox/a.md filed/ && ls filed'");
+  assert.equal(result.exitCode, 0, result.stderr);
+  assert.equal(result.stdout.trim(), 'a.md');
+  assert.equal(await folder.readText('filed/a.md'), 'a\n');
+});
+
+test('a directory made by mkdir persists into the next bash call of the same folder', async () => {
+  const folder = Folder.fromFiles({ 'visits/a.md': 'a\n', 'visits/b.md': 'b\n' });
+  assert.equal((await runFolderBash(folder, 'mkdir -p filed')).exitCode, 0);
+  const listed = await runFolderBash(folder, 'ls');
+  assert.deepEqual(listed.stdout.trim().split(/\s+/), ['filed', 'visits']);
+  const moved = await runFolderBash(folder, 'mv visits/*.md filed/');
+  assert.equal(moved.exitCode, 0, moved.stderr);
+  assert.deepEqual(folder.listFiles().map(entry => entry.path).sort(), ['filed/a.md', 'filed/b.md']);
+  assert.equal((await runFolderBash(Folder.fromFiles({}), 'ls filed')).exitCode, 2, 'another folder does not see it');
+});
+
 test('bash refuses paths outside its folder root', async () => {
   const folder = Folder.fromFiles({ 'a.txt': 'a' });
   const result = await runFolderBash(folder, 'cat /etc/passwd');
