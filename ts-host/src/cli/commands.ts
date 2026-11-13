@@ -1,4 +1,5 @@
 /** The implementations of the natlang commands main.ts dispatches to (help and argument parsing are in main.ts and args.ts). */
+import type { LocalModelRelease } from '../model-catalog.js';
 import { enclosingProgram } from '../calls/feedback.js';
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -105,6 +106,9 @@ async function ensureLocalModel(choice: ManagedChoice | undefined, assumeYes: bo
 /** The managed session's own runtime check (a server started by a command that did not preflight its model). */
 const sessionRuntime = (assumeYes: boolean) => async (_discovery: LlamaRuntimeDiscovery): Promise<LlamaServerInspection | null> =>
   await ensureLocalModel(undefined, assumeYes) ? discoverLlamaRuntime().selected : null;
+/** The managed session's own model check: download a missing stock model after asking (--yes answers). */
+const sessionModel = (assumeYes: boolean) => async (release: LocalModelRelease): Promise<boolean> =>
+  ensureLocalModel({ kind: 'managed-local', release } as ManagedChoice, assumeYes);
 
 /** The environment variable that holds a hosted provider's API key (pi-ai's own table), when it has one. */
 async function providerKeyName(provider: string): Promise<string | undefined> {
@@ -310,7 +314,7 @@ async function serveCommand(parsed: Parsed): Promise<number> {
 function modelSession(choice: ResolvedModelChoice, assumeYes = false, loraAdapters?: () => readonly { id: string; path: string }[],
   nativeStates?: () => readonly { id: string; path: string }[]) {
   return createResolvedModelSession(choice, process.env, process.stderr,
-  { ensureRuntime: sessionRuntime(assumeYes), ...(loraAdapters ? { loraAdapters } : {}), ...(nativeStates ? { nativeStates } : {}) });
+  { ensureRuntime: sessionRuntime(assumeYes), ensureModel: sessionModel(assumeYes), ...(loraAdapters ? { loraAdapters } : {}), ...(nativeStates ? { nativeStates } : {}) });
 }
 
 function selectTarget(manifest: { name: string; targets?: Record<string, unknown> }, requested?: string): string {
@@ -492,7 +496,7 @@ async function launch(parsed: Parsed, spec: Launch): Promise<number> {
   const natlang = await natlangRuntime({ ...selectionOptions(parsed), ...(declared?.model ? { programModel: declared.model } : {}),
     programRoot: spec.root, program: inventory.manifest.adaptation!,
     weights: !parsed.options.has('--no-weights'), escalate: escalateOption(parsed), ...(artifact ? { adaptation: artifact } : {}),
-    ensureRuntime: sessionRuntime(parsed.options.has('--yes')),
+    ensureRuntime: sessionRuntime(parsed.options.has('--yes')), ensureModel: sessionModel(parsed.options.has('--yes')),
     runtime: { trace: fileTraceSink(traceDirectory), programRoot: spec.root, ...manifest, ...(refinements ? { refinements } : {}),
       onLive: progress.live } });
   const { runtime, driver, executorIdentity, adaptation } = natlang, program = natlang.program!, choice = natlang.selection.choice;
@@ -594,7 +598,7 @@ async function buildLock(parsed: Parsed, root: string): Promise<{ lock: BuildLoc
     const progress = progressFor(parsed);
     try {
       return await warmProgram(root, { ...selectionOptions(parsed), version: NATLANG_CLI_VERSION, log: process.stderr,
-        live: progress.live, ensureRuntime: sessionRuntime(parsed.options.has('--yes')) });
+        live: progress.live, ensureRuntime: sessionRuntime(parsed.options.has('--yes')), ensureModel: sessionModel(parsed.options.has('--yes')) });
     } finally { progress.close(); }
   }
   const manifest = (() => { try { return readProgramManifest(root); } catch { return undefined; } })();
@@ -644,7 +648,7 @@ async function withModelRuntime<T>(parsed: Parsed, fn: (runtime: NatlangRuntime)
   const manifest = readProgramManifest(sourceRoot);
   const natlang = await natlangRuntime({ ...selectionOptions(parsed), ...(manifest?.model ? { programModel: manifest.model } : {}), ...(inventory ? { programRoot: process.cwd(), program: inventory.manifest.adaptation } : {}),
     weights, escalate: escalateOption(parsed), ...(artifact ? { adaptation: artifact } : {}),
-    ensureRuntime: sessionRuntime(parsed.options.has('--yes')),
+    ensureRuntime: sessionRuntime(parsed.options.has('--yes')), ensureModel: sessionModel(parsed.options.has('--yes')),
     runtime: { ...(trace ? { trace: fileTraceSink(resolve(trace)) } : {}), onLive: progress.live,
       // Calls of a program's functions are recorded under that program (natlang traces list inside it shows them).
       ...(existsSync(join(sourceRoot, 'natlang.json')) ? { programRoot: sourceRoot } : {}) } });
@@ -1011,7 +1015,7 @@ export async function runCommand(command: string, words: string[], parsed: Parse
     // Each example prints its own outcome, so the display leaves root-call failures to it.
     const manifest = readProgramManifest(root), progress = progressFor(parsed, { roots: false });
     const natlang = await natlangRuntime({ ...selectionOptions(parsed), programRoot: root, programModel: manifest?.model,
-      ensureRuntime: sessionRuntime(parsed.options.has('--yes')),
+      ensureRuntime: sessionRuntime(parsed.options.has('--yes')), ensureModel: sessionModel(parsed.options.has('--yes')),
       runtime: { onLive: progress.live } });
     let failed = 0;
     try {

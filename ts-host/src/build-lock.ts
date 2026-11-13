@@ -3,6 +3,7 @@
  * tracing run (package/warm.ts). `natlang run` reads the lock: the program's model is used unless the command selects
  * one, and the warm prefixes are restored when they were prefilled for exactly the model file and llama.cpp build.
  */
+import type { LocalModelRelease } from './model-catalog.js';
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { basename, join, relative, resolve } from 'node:path';
 import { currentRelease } from './adaptation/weights/release.js';
@@ -78,7 +79,8 @@ export function lockFor(root: string, selection: LoadedModelConfiguration, versi
  * and saved (package/warm.ts), so `natlang run` starts warm. The lock records the calls and the openings.
  */
 export async function warmProgram(root: string, options: { profile?: string; provider?: string; model?: string; version: string;
-  live?: LiveSink; log: NodeJS.WritableStream; ensureRuntime: (discovery: LlamaRuntimeDiscovery) => Promise<LlamaServerInspection | null> }):
+  live?: LiveSink; log: NodeJS.WritableStream; ensureRuntime: (discovery: LlamaRuntimeDiscovery) => Promise<LlamaServerInspection | null>;
+  ensureModel?: (release: LocalModelRelease) => Promise<boolean> }):
   Promise<{ lock: BuildLock; path: string }> {
   const manifest = readProgramManifest(root);
   const cases = manifest?.warmup ?? [];
@@ -86,7 +88,8 @@ export async function warmProgram(root: string, options: { profile?: string; pro
   rmSync(traces, { recursive: true, force: true });
   if (!cases.length) options.log.write('natlang: natlang.json declares no "warmup" calls; nothing to trace or prefill ahead of time\n');
   const natlang = await natlangRuntime({ profile: options.profile, provider: options.provider, model: options.model,
-    ...(manifest?.model ? { programModel: manifest.model } : {}), programRoot: root, ensureRuntime: options.ensureRuntime, log: options.log,
+    ...(manifest?.model ? { programModel: manifest.model } : {}), programRoot: root, ensureRuntime: options.ensureRuntime,
+    ...(options.ensureModel ? { ensureModel: options.ensureModel } : {}), log: options.log,
     runtime: { trace: fileTraceSink(traces), programRoot: root, ...(options.live ? { onLive: options.live } : {}) } });
   const started = Date.now(), results: WarmCaseResult[] = [];
   try {

@@ -10,6 +10,7 @@
  * checkpoint its active release was tuned on and serves that release, starts and stops natlang-owned model servers,
  * wires a profile's `escalate` chain into live invocation handoffs, and reports each on `log` in one line.
  */
+import type { LocalModelRelease } from './model-catalog.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import type { ProgramDescriptor } from './adaptation/types.js';
@@ -51,6 +52,8 @@ export type NatlangRuntimeConfiguration = {
   adaptation?: AdaptationArtifact;
   /** Installs a managed llama.cpp runtime when none is compatible (the CLI asks first); default: none is installed. */
   ensureRuntime?: (discovery: LlamaRuntimeDiscovery) => Promise<LlamaServerInspection | null>;
+  /** Downloads a missing stock model when it returns true (the CLI asks first); default: a missing model is an error. */
+  ensureModel?: (release: LocalModelRelease) => Promise<boolean>;
   environment?: NodeJS.ProcessEnv;
   /** A root program call the model fails and the escalation teacher runs adds its input to the program's
    * examples.json when the runtime closes (recordEscalation); default true, NATLANG_ESCALATION_EXAMPLES=off. */
@@ -178,7 +181,8 @@ async function escalation(name: string | undefined, selected: LoadedModelConfigu
       if (actors.has(actor)) throw new Error(`escalation profile ${JSON.stringify(name)} repeats actor ${JSON.stringify(actor)}`);
       actors.add(actor);
       const session = createResolvedModelSession(profile.choice, fallbackEnvironment, log,
-        configuration.ensureRuntime ? { ensureRuntime: configuration.ensureRuntime } : {});
+        { ...(configuration.ensureRuntime ? { ensureRuntime: configuration.ensureRuntime } : {}),
+          ...(configuration.ensureModel ? { ensureModel: configuration.ensureModel } : {}) });
       closers.push(() => session.close());
       const loaded = (await runtimeModel(profile.choice, sessionDriver(session))).model!;
       models[name] = typeof loaded === 'function' ? { driver: loaded, id: actor } : { ...loaded, id: actor };
@@ -228,6 +232,7 @@ export async function natlangRuntime(configuration: NatlangRuntimeConfiguration 
   const tuned = release ? await tunedServing(root!, program, choice, environment) : {};
   if (tuned.notice) log.write(tuned.notice + '\n');
   const session = createResolvedModelSession(choice, environment, log, { ...(configuration.ensureRuntime ? { ensureRuntime: configuration.ensureRuntime } : {}),
+    ...(configuration.ensureModel ? { ensureModel: configuration.ensureModel } : {}),
     ...(tuned.loraAdapters ? { loraAdapters: tuned.loraAdapters } : {}), ...(tuned.nativeStates ? { nativeStates: tuned.nativeStates } : {}),
   });
   const closers: (() => Promise<void>)[] = [() => session.close()];

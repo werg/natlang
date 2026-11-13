@@ -37,6 +37,27 @@ function fixtureHost(root, { fetch, spawn } = {}) {
   return { host, log, spawned, model };
 }
 
+test('a missing stock model is downloaded only with the host\'s consent', async () => {
+  for (const useSharedServer of [false, true]) {
+    const root = mkdtempSync(join(tmpdir(), 'natlang-llama-consent-'));
+    const fetched = [];
+    const { host, spawned } = fixtureHost(root, { fetch: async url => { fetched.push(String(url));
+      return String(url).endsWith('/health') ? new Response('{"status":"ok"}') : new Response('', { status: 503 }); } });
+    delete host.environment.NATLANG_MODEL_PATH;
+    const asked = [];
+    for (const ensureModel of [undefined, async release => { asked.push(release.id); return false; }]) {
+      const server = createLlamaServer(host, { useSharedServer, ...(ensureModel ? { ensureModel } : {}) });
+      await assert.rejects(server.start(), /^Error: model-unavailable: the .* model \(\d+ MB\) is not downloaded; run natlang setup --yes/);
+    }
+    assert.equal(asked.length, 1, 'the host is asked');
+    assert.deepEqual(fetched, [], 'nothing is downloaded without consent');
+    const consenting = createLlamaServer(host, { useSharedServer, ensureModel: async () => true });
+    await assert.rejects(consenting.start(), /model download failed: HTTP 503/);
+    assert.equal(fetched.length, 1, 'with consent the server downloads the model');
+    assert.equal(spawned.length, 0);
+  }
+});
+
 test('the package spawns through the host and sizes, arguments and warm directory come from the host\'s settings', async () => {
   const root = mkdtempSync(join(tmpdir(), 'natlang-llama-host-'));
   const requests = [];

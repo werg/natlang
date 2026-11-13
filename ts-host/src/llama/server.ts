@@ -18,7 +18,7 @@ import type { ModelTurnRequest } from '../contracts.js';
 import type { WarmPrefix } from '../package/warm.js';
 import type { LlamaHost, LlamaProcess } from './host.js';
 import { describeLlamaRuntime, type LlamaRuntimeDiscovery, type LlamaServerInspection } from './runtime.js';
-import { ensureModel, localModelPrerequisites, localSlotPlan, managedModelSha256, runtimeLabel, templatePath, warmTag } from './models.js';
+import { ensureModel, localModelPrerequisites, stockModelDownload, localSlotPlan, managedModelSha256, runtimeLabel, templatePath, warmTag } from './models.js';
 import { acquireSharedServer, sharedIdleSeconds, sharedServerKey, sharedServersDirectory, sharingEnabled, type SupervisedServer } from './shared.js';
 import { createHash } from 'node:crypto';
 import type { LocalServerSettings, SlotPlan } from './slots.js';
@@ -47,6 +47,9 @@ export type LlamaServerOptions = {
   nativeStates?: () => readonly { readonly id: string; readonly path: string }[];
   /** Called when no compatible runtime is found; may install one and return it (a host's consent decides). */
   ensureRuntime?: (discovery: LlamaRuntimeDiscovery) => Promise<LlamaServerInspection | null>;
+  /** Called when the stock model file is not downloaded; true lets the server download it (the host may have done so
+   * already), false declines. Without it a missing model is an error: a library never downloads gigabytes unasked. */
+  ensureModel?: (release: LocalModelRelease) => Promise<boolean>;
   /** Sent with the package's own requests to the server (health, slots, warm states). */
   headers?: Record<string, string>;
   /** Use (or start) the server shared by natlang processes on this machine that need the same model, settings, adapters
@@ -221,6 +224,14 @@ export function createLlamaServer(host: LlamaHost, options: LlamaServerOptions =
       if (explicit) throw new Error(`NATLANG_LLAMA_SERVER is incompatible: ${describeLlamaRuntime(prerequisites.runtime)}`);
       throw new Error(`managed model server is unavailable: ${describeLlamaRuntime(prerequisites.runtime)}; run natlang setup --yes to install it, or select a hosted model with --provider ID`);
     }
+    // The model file: installed, being downloaded by another process, or downloaded now with the host's consent.
+    const modelFile = async (): Promise<string> => {
+      if (!environment.NATLANG_MODEL_PATH && !prerequisites.modelPath && !localModelPrerequisites(host, release).modelPath && !stockModelDownload(host, release) &&
+          !(options.ensureModel && await options.ensureModel(release)))
+        throw new Error(`model-unavailable: the ${release.label} model (${Math.ceil(release.bytes / 1_000_000)} MB) is not downloaded; ` +
+          'run natlang setup --yes to download it, or select a hosted model with --provider ID');
+      return ensureModel(host, release);
+    };
     // Adapters and states in a fixed order: the adapter index each request's scales name follows it, so every process
     // sharing a server agrees on it.
     const byId = (a: { id: string }, b: { id: string }) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
@@ -273,7 +284,7 @@ export function createLlamaServer(host: LlamaHost, options: LlamaServerOptions =
       // made: it stops soon after its last run (at most 30 s) rather than holding memory for the full idle time.
       const idleSeconds = tuned ? Math.min(30, sharedIdleSeconds(environment)) : sharedIdleSeconds(environment);
       const spec = async (): Promise<SupervisedServer> => {
-        const modelPath = await ensureModel(host, release), port = await host.processes.freePort();
+        const modelPath = await modelFile(), port = await host.processes.freePort();
         const slotPlan = localSlotPlan(host, options.local, modelPath, release);
         if (warmAllowed) mkdirSync(host.directories.warmPrefixes, { recursive: true });
         log.write(`natlang: starting managed model ${basename(modelPath)}${tuned ? ` with ${adapters.length} adapter${adapters.length === 1 ? '' : 's'} and ${states.length} native state${states.length === 1 ? '' : 's'}` : ''}, ${slotPlan.slots} slot${slotPlan.slots === 1 ? '' : 's'} (${slotPlan.contextPerSlot} tokens each), shared by natlang runs on this machine\n`);
@@ -300,7 +311,7 @@ export function createLlamaServer(host: LlamaHost, options: LlamaServerOptions =
         return shared.endpoint;
       }
     }
-    const modelPath = await ensureModel(host, release);
+    const modelPath = await modelFile();
     if (closed) throw new Error('model session is closed');
     const port = await host.processes.freePort();
     const base = `http://127.0.0.1:${port}`;

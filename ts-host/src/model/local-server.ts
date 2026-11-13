@@ -63,6 +63,8 @@ export type ManagedModelSession = { prepare(): Promise<ManagedModelStatus>;
   slotPlan(): SlotPlan | null };
 export type ManagedModelRuntimeOptions = { ensureRuntime?:
   (discovery: LlamaRuntimeDiscovery) => Promise<LlamaServerInspection | null>;
+  /** Consent to download a missing stock model (true: download it); without it a missing model is an error. */
+  ensureModel?: (release: LocalModelRelease) => Promise<boolean>;
   /** Tuned weight adapters (GGUF LoRA exports of the active release) to load at server start, keyed by artifact ID.
    * Each request then applies only its own call's stack through per-request `lora` scales. */
   loraAdapters?: () => readonly { readonly id: string; readonly path: string }[];
@@ -138,6 +140,7 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
   // The managed llama.cpp server (llama/server.ts), over the Node host.
   const llama = managed ? createLlamaServer(nodeLlamaHost(environment, error), { release, local: managed.local,
     ...(runtimeOptions.ensureRuntime ? { ensureRuntime: runtimeOptions.ensureRuntime } : {}),
+    ...(runtimeOptions.ensureModel ? { ensureModel: runtimeOptions.ensureModel } : {}),
     ...(runtimeOptions.loraAdapters ? { loraAdapters: runtimeOptions.loraAdapters } : {}),
     ...(runtimeOptions.nativeStates ? { nativeStates: runtimeOptions.nativeStates } : {}) }) : null;
   // One scheduler over every request of the session; a server found unable to score is not asked again. A managed
