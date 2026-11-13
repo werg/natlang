@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..'), repository_root = repository;
 const destination = resolve(repository, 'ts-host/src/llama-runtime-release.ts');
 const vendor = resolve(repository, 'ts-host/vendor');
 const args = process.argv.slice(2), value = name => args.includes(name) ? args[args.indexOf(name) + 1] : undefined;
@@ -48,6 +48,7 @@ if (forkTag) {
   const base = `https://github.com/${repository}/releases/download/${forkTag}`;
   const release = JSON.parse(await getText(`${base}/natlang-runtime.json`));
   if (release.schema !== 'natlang.llama-runtime-release/2' || release.tag !== forkTag) throw new Error(`${base}/natlang-runtime.json is not this release's manifest`);
+  await requireParityReview(repository, release);
   const servers = release.archives.filter(archive => archive.role === 'server');
   const artifacts = [];
   for (const [platform, arch] of [...new Set(servers.map(archive => `${archive.os} ${archive.arch}`))].map(pair => pair.split(' '))) {
@@ -68,6 +69,24 @@ if (forkTag) {
   await writeManifest({ version: release.version, build: release.build, commit: release.commit,
     compatible: { minimumVersion: release.version, maximumVersionExclusive: `${major}.${minor + 1}.0`, minimumBuild: release.build }, artifacts });
   process.exit(0);
+}
+
+/**
+ * The fork's own commits between the pinned runtime and this release (upstream merges carry a `(#NNNN)` PR suffix) must
+ * each be accounted for in docs/ENGINE_PARITY.md: a serving change reaches the Python native engine and the SGLang actor
+ * too, or its gap is recorded with a next action.
+ */
+async function requireParityReview(repository, release) {
+  const pinned = /"commit": "([0-9a-f]+)"/.exec(await readFile(destination, 'utf8'))?.[1];
+  if (!pinned || release.commit.startsWith(pinned)) return;
+  const compare = await getJson(`https://api.github.com/repos/${repository}/compare/${pinned}...${release.commit}`);
+  if (compare.status !== 'ahead') throw new Error(`${release.tag} (${release.commit}) does not descend from the pinned ${pinned}`);
+  if (compare.total_commits > compare.commits.length) throw new Error(`${compare.total_commits} commits since ${pinned}: review them in smaller pin steps`);
+  const parity = await readFile(resolve(repository_root, 'docs/ENGINE_PARITY.md'), 'utf8');
+  const own = compare.commits.filter(commit => commit.parents.length === 1 && !/\(#\d+\)\s*$/.test(commit.commit.message.split('\n')[0]));
+  const missing = own.filter(commit => !parity.includes(commit.sha.slice(0, 9)));
+  if (missing.length) throw new Error(`fork commits not yet reviewed for engine parity; add each to docs/ENGINE_PARITY.md (its gap row, or the reviewed list):\n${
+    missing.map(commit => `  ${commit.sha.slice(0, 9)} ${commit.commit.message.split('\n')[0]}`).join('\n')}`);
 }
 
 /**
@@ -111,7 +130,7 @@ async function installWllama(release, base, repository) {
       : `${repository} .github/workflows/natlang-runtime.yml job wllama (werg/wllama scripts/build_wasm.sh; npm run build)`,
     sha256: Object.fromEntries(await Promise.all(['wllama/esm/index.js', 'wllama/esm/wasm/wllama.wasm', 'wllama-compat/index.js',
       'wllama-compat/wasm/wllama.js', 'wllama-compat/wasm/wllama.wasm'].map(async path => [path, await sha256(path)]))),
-    verify: previous.verify };
+    verify: 'node scripts/wllama_smoke.mjs --model <LFM3 gguf> --server <this release\'s llama-server> (docs/ENGINE_PARITY.md)' };
   await writeFile(provenancePath, JSON.stringify(provenance, null, 1) + '\n');
   for (const name of ['wllama', 'wllama-compat']) {
     const path = join(vendor, name, 'package.json'), pkg = JSON.parse(await readFile(path, 'utf8'));
