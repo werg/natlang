@@ -50,8 +50,9 @@ dropped). Tasks (EPISODE_COST_20261112): 85% from tasks whose measured base pass
 (repos missing on the DGX). Episode budget 40 model calls (a budget stop scores 0; the collector has no generated-token
 budget yet), wall clock 3600 s as a safety net only (unscored). Reward = task outcome only. Per-call sequences with the actor's exact prompt and sampled ids
 (`lower_rollout_turns.episode_turns`, chained as in `exp0_sft.chains_of`); sampled decision calls train as one action each
-(`decision_turns`: log softmax of the learner's option scores over prompt + each captured continuation; Neuralese-state
-consumer calls stay context, `plans/MODEL_FACING_CHANGES.md` 2026-11-13); loss on sampled tokens
+(`decision_turns`: log softmax of the learner's option scores over prompt + each captured continuation); Neuralese-state
+consumer calls train too, the imported state fixed context spliced from the actor's block store as the fork fed it (K/V
+pre-RoPE, conv B*x; `lfm3_fast_train.import_tensors`, no producer gradient; `plans/MODEL_FACING_CHANGES.md` 2026-11-13); loss on sampled tokens
 `-min(rho, 2) * A * logp + 0.02 * k3(start || policy)`, `A` group-normalized; FP32-master AdamW, LR 3e-6 (check 4), BF16 compute
 (`exp0_sft.load_model`, `lfm3_fast_train`). Weight sync each step: BF16 weights -> pinned buffer -> actor's HF safetensors ->
 SGLang `pause_generation(retract)` / `update_weights_from_disk` / `continue_generation` in a background thread; a pruned

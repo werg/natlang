@@ -3,7 +3,45 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
-### 2026-11-13 — GRPO trains sampled decision calls; Neuralese-state consumer calls stay context
+### 2026-11-13 — GRPO trains Neuralese-state consumer calls; the imported state is fixed context
+
+Correction of the entry below (owner decision 2026-11-13). The whole-graph rule ("the update covers the entire actual
+graph", "never turn an in-episode producer into a detached external input") governs Neuralese gradients: when gradients
+flow through a state, they must flow through the real producer. It does not forbid training a consumer call's own
+sampled actions with the state as context. Nothing that would otherwise be trained is detached: the producer's own
+sampled tokens already train as its own calls, and no gradient reached the state before either. Skipping the consumers
+dropped every action taken after reading a state (11 and 17 calls in grpo-v1 run2 steps 2 and 3).
+The whole-graph Neuralese gradient remains a later controlled addition.
+
+What the actor fed. A `native_state` prompt segment is an exact state block of the actor's store (`blocks/<id[5:7]>/<id>
+.safetensors`; content-addressed, never collected during a run): per position, every attention layer's keys after the
+K norm and before RoPE (`raw_k`) and values (`v`), and every conv layer's input B*x (`gated_inputs`), FP32. The SGLang
+front (`serve/sglang_actor._sglang_import`) feeds `consume_open`, `len(block.token_ids)` content-hashed placeholder ids,
+`consume_close`; the fork (`sglang-natlang` `models/lfm3.py` `NatlangImport`) overwrites K (pre-RoPE, so RoPE uses the
+consumer's own positions) and V at those rows of every attention layer and sets B = 1, x = state in every conv layer
+(BF16), so later rows see the stored KV and conv taps; the placeholder rows' own outputs are never read. Not an input
+embedding: no layer reads the placeholder embedding except through those replaced quantities.
+
+Change. `lower_rollout_turns.episode_turns`/`decision_turns(row, stats, states)` with a `NativeStates` reader of the
+actor's store lower these calls: the prompt holds the block's own token ids at the placeholder positions (their
+embedding reaches nothing) and `imports` [(start, block_id)]. `exp0_sft.chains_of` merges consecutive calls only when the
+imports inside the shared prefix agree. `lfm3_fast_train.import_tensors` turns a chain's imports into rows and per-layer
+BF16 tensors; `lfm3_fast_train.hidden(..., imports=)` replaces K/V after the K norm and B*x in the compiled layers (the
+policy, the KL reference and decision batches); `exp0_sft.hidden(..., imports)` does the same on the stock HF modules via
+forward hooks (no-grad / no-recompute only). The state is a constant: no gradient into the producer. Without a reader
+(Experiment 0's SFT lowering) the calls are still skipped (`skip_native_state_prompt`); a block missing from the store is
+`skip_native_state_missing`; telemetry `lowering.native_state_calls`. GRPO reads `--actor-store` (default WORK/actor).
+Test: `tests/neuralese/test_lfm3_fast_train.py::test_imported_native_state_reproduces_the_producing_context` (a state
+captured from the model's own forward, imported over random placeholder tokens, reproduces the original sequence's
+hidden states after the span, fast and stock-hook paths, gradients equal; without it they differ).
+Agreement with the actor on real consumer calls is not measured yet: with grpo-v1 run2 holding the DGX at the memory
+guard's MemAvailable floor (MemFree ~4 GB, so no CUDA context for a probe), three CPU probes on run2's 9-20 consumer
+chains (13-24k tokens each) were stopped by the guard ("free memory below floor", at 1.5-2.5 GB) before finishing one
+chain. The run measures it itself from its first step after adoption: `consumer_tokens` and `consumer_abs_log_rho_mean`
+(|learner - actor| logp on consumer-call tokens) beside `abs_log_rho_mean` (all tokens; ordinary calls run about
+0.02-0.05 at staleness 0). A consumer mean well above the ordinary one means the splice differs from the fork's.
+
+### 2026-11-13 — GRPO trains sampled decision calls (Neuralese-state consumer calls: corrected below, they train too)
 
 Finding (grpo-v1 run2 step 1): the per-call lowering (`lower_rollout_turns.episode_turns`) kept only calls with a sampled
 token stream, so every sampled `decide` readout was dropped (117 calls against 111 trained sequences) and a task whose
@@ -24,12 +62,8 @@ shared offset, about 0.05 per token: the BF16/FP8 floor) and log q(chosen) withi
 log q(chosen), one unit in the token normalisation. Telemetry: `decisions`, `decision_rho_mean`,
 `decision_abs_dscore_mean`.
 
-Native-state consumer calls. Their prompt holds a `native_state` segment: a Neuralese state produced by another call of
-the same episode (`source_occurrence`), injected as embeddings, not tokens. The token learner cannot feed it, and
-training the consumer against that state as a fixed input would turn an in-episode producer into a detached external
-input, which the owner rule forbids ("the update covers the entire actual graph"). They stay context until whole-graph
-Neuralese gradients return as their own controlled addition (`rl/native_replay.py` builds that graph). Counted as
-`skip_native_state_prompt` (decisions: `skip_decision_native_state_prompt`).
+Native-state consumer calls (this paragraph's original reasoning was wrong; see the next entry): they were skipped as
+`skip_native_state_prompt` on the grounds that training the consumer against a fixed state detaches the producer.
 
 ### 2026-11-13 — Decision readout on a stock model: the reply is `{"result": VALUE}`, not the bare JSON value
 
