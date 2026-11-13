@@ -3,6 +3,34 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-13 — GRPO trains sampled decision calls; Neuralese-state consumer calls stay context
+
+Finding (grpo-v1 run2 step 1): the per-call lowering (`lower_rollout_turns.episode_turns`) kept only calls with a sampled
+token stream, so every sampled `decide` readout was dropped (117 calls against 111 trained sequences) and a task whose
+answer is one decision call gave no gradient at all. 58 more calls were dropped because their prompt carries a native
+Neuralese state.
+
+Decision calls. A readout scores each option o as s_o, the summed log-probability of its closed continuation after the
+exact captured prompt, and samples from softmax(s / T) (`natlang.decision-sample/1`). The continuation is
+`</think>` `"` VALUE `"` `<|im_end|>` (ids 124902 and 124900 are `</think>` and `<|im_end|>`, 10 is `"`): the prompt ends
+in the opening `<think>`, so every option begins with an immediate `</think>`, which the base scores about -21.4 (mean of
+400 options, min -23.0). That shared token is why option scores sit near -40 for about 5-13 tokens; it is the same
+token at the same position for every option and cancels in the softmax. Checked on 60 sampled decisions of the base
+(exp1 rollouts, SGLang vendor projection, FP8 KV): the learner, scoring the captured ids exactly (prompt + option, one
+packed document per option), gives s_o within 1.1-1.3 nats of the actor's (0.49 within a decision after removing the
+shared offset, about 0.05 per token: the BF16/FP8 floor) and log q(chosen) within 0.046 mean (max 1.4). Change:
+`lower_rollout_turns.decision_turns` lowers them and grpo.py trains each as one action:
+`-min(rho, 2) A log pi(chosen) + beta k3` with `log pi = log_softmax(s_theta / T)[chosen]`, rho against the captured
+log q(chosen), one unit in the token normalisation. Telemetry: `decisions`, `decision_rho_mean`,
+`decision_abs_dscore_mean`.
+
+Native-state consumer calls. Their prompt holds a `native_state` segment: a Neuralese state produced by another call of
+the same episode (`source_occurrence`), injected as embeddings, not tokens. The token learner cannot feed it, and
+training the consumer against that state as a fixed input would turn an in-episode producer into a detached external
+input, which the owner rule forbids ("the update covers the entire actual graph"). They stay context until whole-graph
+Neuralese gradients return as their own controlled addition (`rl/native_replay.py` builds that graph). Counted as
+`skip_native_state_prompt` (decisions: `skip_decision_native_state_prompt`).
+
 ### 2026-11-13 — Decision readout on a stock model: the reply is `{"result": VALUE}`, not the bare JSON value
 
 Finding: a `readout: decision` function on LFM3-1.7B Q8_0 (the managed stock model, CPU) answered by the order its options were
