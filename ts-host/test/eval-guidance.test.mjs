@@ -271,7 +271,7 @@ test('a reply that only writes out return_result({...}) is carried out as the to
 test('read_code names the executing call, scope values and source file names for what they are', async () => {
   const own = await script([['read_code', { name: 'root' }], ['read_code', { name: 'name' }],
     ['return_result', { status: 'success', value: 'hi' }]]);
-  assert.match(own.results[0], /root is the call you are executing: the opening message has all of its signature and instructions/);
+  assert.match(own.results[0], /root is the call you are executing\. Its instructions, as in the opening message:/);
   assert.match(own.results[1], /name is a value in this call's eval scope: inspect it with eval, for example console\.log\(name\)/);
   const runtime = createNatlangRuntime({ seed: { mode: 'backend' }, model: async request => {
     const last = request.messages.at(-1);

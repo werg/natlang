@@ -2416,3 +2416,21 @@ post-temperature-untruncated`) and refuses a sampled reply whose path did not ap
 full softmax over their finite option set. Changes the held series: `result.json` records `sampling`, `held_eval
 compare` refuses pairs of different laws, and the start policy is re-measured at the next pin. Tests:
 `tests/neuralese/test_top_p_sampling_law.py`, `test_sglang_actor.py` (top-p forwarded and declared).
+
+## 2026-11-13: read_code of the executing call, structured inputs written out again, a one-sentence eval-failure tail
+
+From the held-v2 base episode read (run2 `held/step-00000`, 512 episodes, 1,190 invocations). `ts-host/src/native/runtime.ts`,
+`ts-host/src/scope-compiler.ts`:
+- **read_code of the call's own name** returns its instructions as an ok result ("NAME is the call you are executing.
+  Its instructions, as in the opening message: ...", then the do-it-here advice) instead of a `no-such-function` error.
+  278 read_code calls targeted the call's own name; the error made the model probe further.
+- **An input or capture written out again as its exact value** is removed with a repair note for records and lists
+  too, not only strings, numbers and booleans (structural equality, key order ignored; a different value, a spread or an
+  extra field is still refused with the existing advice). 298 `invalid-binding ... already holds the caller's value`
+  rejections in 138 episodes; each discarded the whole eval.
+- **The failed-eval tail** is one sentence: "Nothing else from this eval was kept; writes to files, services or live
+  values stay done, so check them before writing again." (was 45 tokens, emitted 1,179 times; the prefix that the
+  collectors match is unchanged).
+Not changed: computed records keep their extra fields (bda8fb9f1, 2026-10-08: a refusal sent executors back to retyping
+provider values); one held episode (101/1) failed with an extra field, too little to reverse that. Tests:
+`ts-host/test/scope-compiler.test.mjs`, `eval-guidance.test.mjs`. Changes the held series (ts-host tree).

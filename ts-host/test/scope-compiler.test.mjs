@@ -264,6 +264,15 @@ test('scope compiler removes an input written out again as a literal of its exac
   assert.deepEqual(recapture.repairs.map(repair => repair.message), ['Removed a declaration of captured value "note": it already holds that value.']);
   assert.match(compileScopeSnippet('const note = "calm";\n1', captured).diagnostics[0].message,
     /^note is already a variable of the enclosing code, captured by this call/);
+  // A structured input (records, lists) written out again exactly is removed too; key order does not matter.
+  const order = { id: 7, items: [{ sku: 'a', qty: 2 }, { sku: 'b', qty: null }], rush: false };
+  const structured = { inputBindings: ['order'], boundValues: { order } };
+  const same = compileScopeSnippet('const order = { rush: false, id: 7, items: [{ qty: 2, sku: "a" }, { sku: "b", qty: null }] };\norder.id', structured);
+  assert.equal(same.ok, true, JSON.stringify(same.diagnostics));
+  assert.deepEqual(same.repairs.map(repair => repair.message), ['Removed a declaration of input "order": it already holds that value.']);
+  for (const other of ['const order = { id: 7, items: [], rush: false };\n1', 'const order = { ...{ id: 7 } };\n1',
+    'const order = { id: 7, items: [{ sku: "a", qty: 2 }, { sku: "b", qty: null }], rush: false, extra: 1 };\n1'])
+    assert.match(compileScopeSnippet(other, structured).diagnostics[0].message, /order is this call's input and already holds the caller's value/);
 });
 
 test('scope compiler transactionally captures existing locals and rejects immutable writes', async () => {

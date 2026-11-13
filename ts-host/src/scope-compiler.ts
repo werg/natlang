@@ -38,7 +38,8 @@ export type ScopeCompileOptions = {
   inputBindings?: readonly string[];
   /** The current values of text, number and boolean inputs and captures: a declaration that re-binds one to a literal
    * of its exact value (`const ticket = "…the ticket…"`) is removed as a repair, like `const ticket = ticket`. */
-  boundValues?: Readonly<Record<string, string | number | boolean>>;
+  /** Plain JSON values of inputs and captures, so a declaration that writes one out again as its exact literal is a no-op. */
+  boundValues?: Readonly<Record<string, unknown>>;
   /** Existing persistent locals copied into the transaction before execution. */
   localBindings?: readonly ScopeExistingBinding[];
   /** Checked async callables generated over the runtime's host dispatcher. */
@@ -470,6 +471,48 @@ function literalValue(node: ts.Expression): string | number | boolean | undefine
   return undefined;
 }
 
+const NOT_LITERAL = Symbol('not a literal');
+/** The JSON value of a literal expression (strings, numbers, booleans, null, and arrays and objects of them), else NOT_LITERAL. */
+function jsonLiteral(node: ts.Expression): unknown {
+  const primitive = literalValue(node);
+  if (primitive !== undefined) return primitive;
+  if (node.kind === ts.SyntaxKind.NullKeyword) return null;
+  if (ts.isParenthesizedExpression(node) || ts.isAsExpression(node) || ts.isSatisfiesExpression(node)) return jsonLiteral(node.expression);
+  if (ts.isArrayLiteralExpression(node)) {
+    const items: unknown[] = [];
+    for (const element of node.elements) {
+      const value = ts.isSpreadElement(element) || ts.isOmittedExpression(element) ? NOT_LITERAL : jsonLiteral(element);
+      if (value === NOT_LITERAL) return NOT_LITERAL;
+      items.push(value);
+    }
+    return items;
+  }
+  if (ts.isObjectLiteralExpression(node)) {
+    const record: Record<string, unknown> = {};
+    for (const property of node.properties) {
+      if (!ts.isPropertyAssignment(property)) return NOT_LITERAL;
+      const key = ts.isIdentifier(property.name) || ts.isStringLiteral(property.name) || ts.isNumericLiteral(property.name) ?
+        property.name.text : undefined;
+      const value = key === undefined ? NOT_LITERAL : jsonLiteral(property.initializer);
+      if (value === NOT_LITERAL) return NOT_LITERAL;
+      record[key!] = value;
+    }
+    return record;
+  }
+  return NOT_LITERAL;
+}
+
+/** Deep equality of plain JSON values; object key order does not matter. */
+function sameJson(a: unknown, b: unknown): boolean {
+  if (a === NOT_LITERAL || b === NOT_LITERAL) return false;
+  if (a === b) return true;
+  if (Array.isArray(a) || Array.isArray(b)) return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((item, i) => sameJson(item, b[i]));
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length && keys.every(key => Object.hasOwn(b, key) &&
+    sameJson((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]));
+}
+
 const JS_KEYWORDS = new Set(['const', 'let', 'var', 'function', 'return', 'await', 'if', 'else', 'for', 'while', 'try', 'catch',
   'throw', 'new', 'import', 'export', 'class', 'type', 'interface', 'async', 'yield', 'do', 'switch', 'case', 'default',
   'break', 'continue', 'typeof', 'delete', 'void', 'in', 'of']);
@@ -662,7 +705,7 @@ function compileScopeSnippetUnhinted(source: string, options: ScopeCompileOption
         const bound = ts.isIdentifier(declaration.name) ? declaration.name.text : '';
         const role = options.inputBindings?.includes(bound) ? 'input' : captureNames.includes(bound) ? 'captured value' : undefined;
         if (role && declaration.initializer && options.boundValues && Object.hasOwn(options.boundValues, bound) &&
-            literalValue(declaration.initializer) === options.boundValues[bound]) {
+            sameJson(jsonLiteral(declaration.initializer), options.boundValues[bound])) {
           const location = span(statement);
           redundantAliases.push(location);
           repairs.push({ code: 'invalid-binding',

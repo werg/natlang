@@ -55,6 +55,17 @@ function typeAliasesFromEnv(env: TypeEnv): Record<string, string> {
 
 /** What the model is told when it reaches for the call it is executing (calling it, or reading its code): a judgment is
  * made here and returned, and eval serves the exact work the instructions need, not as a stand-in for the judgment. */
+/** A value built only of strings, finite numbers, booleans, null, arrays and plain objects (no runtime values). */
+function isPlainJson(value: unknown, depth = 0): boolean {
+  if (depth > 32) return false;
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (Array.isArray(value)) return value.every(item => isPlainJson(item, depth + 1));
+  if (typeof value !== 'object') return false;
+  const proto = Object.getPrototypeOf(value);
+  return (proto === Object.prototype || proto === null) && Object.values(value).every(item => isPlainJson(item, depth + 1));
+}
+
 const SELF_CALL_ADVICE = 'Do what its instructions ask here. For a judgment, decide it yourself from the inputs and return the answer with ' +
   'return_result; use eval only for exact work the instructions need.';
 
@@ -1342,9 +1353,8 @@ export class NativeSession {
     return toolNote + bindingNote + sameQuestionNote + repeatNote + (reaching ? `\n${this.scopeGuide()}` : '') + (logs.length ? `\nconsole:\n${this.show(logs.join('\n'))}` : '') +
       (effects.length ? `\nAlready performed before the failure (not undone): ${[...new Set(effects)].join(', ')}.` : '') +
       (receipts.length ? `\nCompleted service calls succeeded:\n${receipts.join('\n')}\nRepair subsequent work without repeating an already completed write.` : '') +
-      '\nNothing else from this eval was kept. This refers to new eval bindings and the staged result; ' +
-      'state changes made through live values, callable modules, files or external services are not undone. ' +
-      'Inspect the current state before retrying a write.';
+      // Emitted 1,179 times in 512 held-v2 episodes (2026-11-13): one sentence, the prefix kept for the collectors.
+      '\nNothing else from this eval was kept; writes to files, services or live values stay done, so check them before writing again.';
   }
 
   /**
@@ -1912,6 +1922,13 @@ export class NativeSession {
     if (!found && name === 'edit_code' && !Object.keys(this.lam.codebase).length) throw new Reject([{ path: requested, code: 'no-own-code',
       expected: 'a function in this call\'s callable folder; this function has none, so there is no code of its own to edit' }]);
     if (!found) {
+      // The call's own name: LFM3 read it first in 278 of 1,190 held-v2 invocations and got a no-such-function error
+      // (2026-11-13). Its source is the instructions it is executing, so that is what reading it shows.
+      if (name === 'read_code' && this.lam.functionName && requested === this.lam.functionName) {
+        const body = (this.lam.originalBody ?? this.lam.body).replace(/^\n+|\n+$/g, '');
+        const text = `${requested} is the call you are executing. Its instructions, as in the opening message:\n${body}\n\n${SELF_CALL_ADVICE}`;
+        return { kind: 'ok', text, value: body };
+      }
       const toolDocumentation = name === 'read_code' ? this.toolDocumentation(requested) : undefined;
       if (toolDocumentation !== undefined) return { kind: 'ok', text: toolDocumentation, value: toolDocumentation };
       const availableServices = this.availableServices();
@@ -2211,7 +2228,7 @@ export class NativeSession {
     const persistentTypeNames = [...new Set([...Object.keys(visibleTypes), ...Object.keys(currentTypes)])];
     const hooks = this.runtime.hooks;
     const boundValues = Object.fromEntries([...Object.entries(captureRead), ...inputNames.map(name => [name, this.lam.args[name]])]
-      .filter((entry): entry is [string, string | number | boolean] => ['string', 'number', 'boolean'].includes(typeof entry[1])));
+      .filter(entry => isPlainJson(entry[1])));
     // The system prompt's inline-nl example copied into a call that has nothing to do with it (its policy literal, its
     // instructions): refused before running, or the copy runs as a child that answers an unrelated question.
     const ownText = (this.lam.body) + '\n' + JSON.stringify(this.lam.args ?? {}) + '\n' + JSON.stringify(this.lam.let ?? {});
