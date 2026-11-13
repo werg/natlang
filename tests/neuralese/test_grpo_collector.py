@@ -89,3 +89,37 @@ def test_an_episode_ending_as_the_run_stops_is_not_counted(tmp_path, monkeypatch
     c = collector(tmp_path, size=1)
     run_slot(c, monkeypatch, [2], stop_on_exit={0})
     assert c.scored == [] and 0 not in c.groups and c.outstanding == 1
+
+
+def test_a_resume_reuses_untrained_scored_groups_of_policies_it_has_served(tmp_path):
+    import json
+    c = grpo.Collector.__new__(grpo.Collector)
+    c.work, c.lock, c.groups, c.outstanding = tmp_path, threading.Lock(), {}, 0
+    import queue
+    c.ready = queue.Queue()
+
+    def group(n, versions, files=('rollouts.jsonl', 'score.json'), retired=False):
+        d = tmp_path / 'groups' / f'g{n:06d}'
+        d.mkdir(parents=True)
+        for name in files:
+            (d / name).write_text('{}\n')
+        (d / 'versions.json').write_text(json.dumps(versions))
+        (d / 'rewards.jsonl').write_text(json.dumps({'task_id': f't{n}', 'reward': 1.0}) + '\n')
+        if retired:
+            (d / grpo.RETIRED).touch()
+        return d
+    group(1, [5, 5, 6])                     # served by this run's history: reused
+    group(2, [4, 6])                        # 6 - 4 = 2 <= max staleness: reused
+    group(3, [6, 7])                        # sampled by version 7, past the saved state: retired
+    group(4, [3, 6])                        # too stale: retired
+    group(5, [6], retired=True)             # already trained
+    group(6, [6], files=('score.json',))    # never finished scoring
+    reused, left = c.reuse_scored(6, 2)
+    assert reused == ['g000001', 'g000002'] and left == ['g000003', 'g000004']
+    assert c.outstanding == 2 and c.take_groups(2, 2) == [1, 2] and c.groups[2]['task_id'] == 't2'
+    assert (tmp_path / 'groups/g000003' / grpo.RETIRED).exists()
+    c2 = grpo.Collector.__new__(grpo.Collector)
+    c2.work, c2.lock, c2.groups, c2.outstanding, c2.ready = tmp_path, threading.Lock(), {}, 0, queue.Queue()
+    assert c2.reuse_scored(7, 2) == (['g000001'], ['g000002'])   # g3 stays retired though 7 <= 7 now; g2 is now stale
+    grpo.prune_group(c, 1, keep=True)
+    assert (tmp_path / 'groups/g000001' / grpo.RETIRED).exists()
