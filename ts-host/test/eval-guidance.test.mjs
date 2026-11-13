@@ -343,3 +343,27 @@ test('an inline nl call with the same instructions on a different input is a new
   assert.equal(childOpenings, 2);
   assert.ok(!seen.some(text => /same instructions and inputs|refused the same way/.test(text)), seen.join('\n---\n'));
 });
+
+test("an eval that copies the system prompt's inline-nl example into an unrelated call is refused before it runs", async () => {
+  const { results } = await script([
+    ['eval', { code: "const policy = 'Refunds are allowed within 30 days of delivery.'; const ok = await nl<boolean>`Decide whether item meets policy.`(name); ok" }],
+    ['eval', { code: 'const greeting = `Hello, ${name}`; greeting' }],
+    ['return_result', { status: 'success', value: 'Hello, Ada' }]]);
+  assert.match(results[0], /^prompt-example: "Refunds are allowed within 30 days of delivery\." comes from the example in your system prompt, not from this call; work from this call's own instructions and inputs \(name\) instead\./);
+  assert.match(results[1], /Hello, Ada/);
+});
+
+test('example text that is part of the call itself is not refused', async () => {
+  const seen = [];
+  const runtime = createNatlangRuntime({ seed: { mode: 'backend' }, model: async request => {
+    const last = request.messages.at(-1);
+    if (last.role === 'tool' && last.tool_call_id !== 'scope_0') {
+      seen.push(String(last.content));
+      return { calls: [['return_result', { status: 'success', value: true }]] };
+    }
+    return { calls: [['eval', { code: "const copy = policy; copy === 'Refunds are allowed within 30 days of delivery.'" }]] };
+  } });
+  const fn = loadVirtualNatlang({ 'root.nl': '---\nargs: { policy: string }\nreturns: boolean\n---\nDecide whether item meets policy.\n' }, 'root.nl');
+  assert.equal(await runtime.run(() => fn('Refunds are allowed within 30 days of delivery.')), true);
+  assert.ok(!seen.some(text => /prompt-example/.test(text)), seen.join('\n---\n'));
+});

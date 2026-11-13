@@ -5,7 +5,7 @@
  * Portable data reaches eval as a frozen snapshot; live values (host objects, functions, folder
  * handles, captured bindings, callables, services) arrive by reference through `__live`.
  */
-import { COMPACTED_RESULT } from './prompt.js';
+import { COMPACTED_RESULT, PROMPT_EXAMPLE_TEXTS } from './prompt.js';
 import { arrayToStringNeuralese, concatNeuralese, instantiate, invokeWithReceiver, joinNeuralese, mapNeuraleseReadout, readNeuraleseIfReference, rebindInlineCallable, type InlineInstructionOrigin } from '../runtime/lowered.js';
 import { EvalFailure, type EvalEnvironment, type HostEvent } from './evaluator.js';
 import { PageStore } from './pages.js';
@@ -2168,6 +2168,16 @@ export class NativeSession {
     const hooks = this.runtime.hooks;
     const boundValues = Object.fromEntries([...Object.entries(captureRead), ...inputNames.map(name => [name, this.lam.args[name]])]
       .filter((entry): entry is [string, string | number | boolean] => ['string', 'number', 'boolean'].includes(typeof entry[1])));
+    // The system prompt's inline-nl example copied into a call that has nothing to do with it (its policy literal, its
+    // instructions): refused before running, or the copy runs as a child that answers an unrelated question.
+    const ownText = (this.lam.body) + '\n' + JSON.stringify(this.lam.args ?? {}) + '\n' + JSON.stringify(this.lam.let ?? {});
+    const copied = PROMPT_EXAMPLE_TEXTS.find(text => code.includes(text) && !ownText.includes(text));
+    if (copied) {
+      const own = inputNames.length ? `this call's own instructions and inputs (${inputNames.join(', ')})` : "this call's own instructions";
+      const text = `prompt-example: ${JSON.stringify(copied)} comes from the example in your system prompt, not from this call; ` +
+        `work from ${own} instead.`;
+      return { kind: 'rejected', text: text + this.captureScopeFailure('compile', code, scopeBefore, text), codes: ['prompt-example'] };
+    }
     const compiled = compileScopeSnippet(code, { inputBindings: inputNames, boundValues, localBindings, helperBindings: callableNames,
       persistentHelpers: savedHelpers, persistentHelperNames: savedHelperNames, persistentTypeNames,
       opaqueBindings: opaqueNames,
