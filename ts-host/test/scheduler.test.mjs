@@ -357,11 +357,12 @@ test('a scoreAll endpoint (the llama.cpp fork) scores single readouts too and ca
     let lora = [{ id: 0, scale: 1 }];
     const driver = openAICompatibleModelTurn({ endpoint: `http://127.0.0.1:${instance.address().port}/v1`, model: 'm', scoreEndpoint: true, scoreAll: true,
       tunedRequest: () => ({ lora }) });
-    const scores = await driver.decide({ messages: [{ role: 'user', content: 'q' }], options: ['a', 'b'] });
+    const scores = await driver.decide({ messages: [{ role: 'system', content: 's' }, { role: 'user', content: 'q' }], options: ['a', 'b'], cache_messages: 1 });
     assert.deepEqual(scores.log_probs, [-1, -1]);
     assert.equal(bodies.length, 1);
     assert.equal(bodies[0].url, '/v1/natlang/score', 'a single readout goes to the score endpoint');
     assert.deepEqual(bodies[0].body.items[0].lora, [{ id: 0, scale: 1 }]);
+    assert.equal(bodies[0].body.items[0].cache_messages, 1, 'the cache hint reaches the server');
     const first = driver.decide({ messages: [{ role: 'user', content: 'q1' }], options: ['a'] });
     lora = [{ id: 0, scale: 0 }];
     const second = driver.decide({ messages: [{ role: 'user', content: 'q2' }], options: ['a'] });

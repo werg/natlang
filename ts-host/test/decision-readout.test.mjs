@@ -51,6 +51,9 @@ test('a readout: decision function answers by scoring its values once, without t
   assert.equal(await runtime.run(() => fn('I always lie.')), 'knave');
   assert.deepEqual(requests[0].options, ['"knight"', '"knave"']);
   assert.match(String(requests[0].messages.at(-1).content), /exactly one of these JSON values/);
+  // The cache hint: every call of the function shares the messages before the argument values (the first tool result).
+  assert.equal(requests[0].messages[requests[0].cache_messages].role, 'tool');
+  assert.ok(requests[0].messages.slice(0, requests[0].cache_messages).every(message => !JSON.stringify(message).includes('I always lie.')));
   const event = traces.flatMap(trace => trace.events).find(item => item.kind === 'decision_readout' || item.type === 'decision_readout' || item.event === 'decision_readout');
   assert.ok(event, 'the readout is traced');
   assert.deepEqual(event.probabilities.map(p => +p.toFixed(6)), [0.2, 0.8]);

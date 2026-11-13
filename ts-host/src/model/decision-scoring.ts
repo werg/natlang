@@ -60,9 +60,10 @@ export function scoresFromPromptLogprobs(responses: readonly PromptLogprobRespon
 }
 
 /** One item of the explicit-batch endpoint's request: the prompt and its replies as continuations. */
-export function batchScoreItem(item: Pick<DecisionRequest, 'messages' | 'options'> & Partial<Pick<DecisionRequest, 'adapters' | 'native_state_modes' | 'native_recording'>>,
+export function batchScoreItem(item: Pick<DecisionRequest, 'messages' | 'options'> & Partial<Pick<DecisionRequest, 'adapters' | 'native_state_modes' | 'native_recording' | 'cache_messages'>>,
   extra?: Json): Json {
   return { ...extra, messages: item.messages, continuations: item.options,
+    ...(item.cache_messages ? { cache_messages: item.cache_messages } : {}),
     ...(item.adapters?.length ? { adapters: item.adapters } : {}),
     ...(item.native_state_modes ? { native_state_modes: item.native_state_modes } : {}),
     ...(item.native_recording ? { native_recording: true } : {}) };

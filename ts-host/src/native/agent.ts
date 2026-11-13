@@ -1428,7 +1428,11 @@ export class NativeToolAgent {
       if (adapters.length && !supportsNeuralese(this.driver))
         throw new NeuraleseUnsupportedError('this model backend cannot apply weight adapters');
       // model-call-kind: decision-readout -- training/model-call-kinds.json
-      scores = await runInFrame(session.runtime.frame, () => decide({ messages: encoded.messages, options: replies,
+      // Every call of this function shares its messages before the first tool result (the argument values), or all but
+      // the final question when it has none: a server that caches by prefix continues the next call from there.
+      const firstValues = encoded.messages.findIndex(message => (message as { role?: unknown }).role === 'tool');
+      const cacheMessages = firstValues >= 0 ? firstValues : encoded.messages.length - 1;
+      scores = await runInFrame(session.runtime.frame, () => decide({ messages: encoded.messages, options: replies, cache_messages: cacheMessages,
         ...(callId ? { invocation_id: callId, invocation_role: session.runtime.options.parentCallId ? 'child' as const : 'root' as const } : {}),
         ...(capturedGuidance ? { x_natlang_privileged_context: capturedGuidance } : {}),
         ...(adapters.length ? { adapters } : {}) }, session.runtime.signal));

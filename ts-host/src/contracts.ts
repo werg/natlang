@@ -132,6 +132,10 @@ export type DecisionRequest = { messages: unknown[]; options: string[]; adapters
   /** The call this readout answers and whether it is the run's root or a child call (host metadata: rollout turn
    * identity, JOLT+ privileged context), never model input. */
   invocation_id?: string; invocation_role?: 'root' | 'child';
+  /** Cache hint, never model input: the first `cache_messages` messages recur in other calls of the same function (its
+   * opening before the argument values), so a server may checkpoint its memory where they end and continue later
+   * prompts that share them from there (the llama.cpp fork's score endpoint does). */
+  cache_messages?: number;
   /** Set by the transport for a JOLT+ teacher attempt: the server renders this invocation's privileged block. */
   x_natlang_privileged_context?: Record<string, unknown> };
 export type DecisionScores = { log_probs: number[]; tokens?: number[];
