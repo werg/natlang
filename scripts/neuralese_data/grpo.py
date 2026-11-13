@@ -1110,19 +1110,34 @@ def train(args):
         or as soon as the previous evaluation ends if it took longer, the newest native checkpoint is served on Pop
         (``pop_rl_actor.py serve-checkpoint``: rsync, the run's commit) and measured with this run's pinned harness (the
         collector processes run here, against Pop's endpoint) into ``held/step-N`` with ``compare-vs-step0.json``."""
+        from pop_rl_actor import pop_sglang
         held_root, tool = work / 'held', [sys.executable, str(HERE / 'pop_rl_actor.py')]
         base_out = held_root / 'step-00000-pop'
         python = [sys.executable, '-m', 'natlang_neuralese.rl.held_eval']
+        # Pop's engine settings: the KV dtype is part of the attested engine (export format), so the start policy's
+        # result is kept only if it was measured with the same one; max running sequences are capacity only.
+        pop_engine = ['--kv-cache-dtype', args.pop_kv_cache_dtype, '--max-running', str(args.pop_max_running)]
+        pop_format = pop_sglang(args.pop_kv_cache_dtype, args.pop_max_running)[1]
+
+        def base_engine_matches():
+            """False when held/step-00000-pop (finished or partial) was measured on another Pop engine: it moves to
+            step-00000-pop-<time>-other-engine and the start policy is measured again (its steps would not pair with it)."""
+            for name in ('result.json', 'run.json'):
+                if (base_out / name).exists():
+                    measured = ((json.loads((base_out / name).read_text()).get('engine') or {}).get('export_format'))
+                    return measured in (None, pop_format)
+            return True
 
         def pop_endpoint(policy):
             state = json.loads(subprocess.run([*tool, 'status'], capture_output=True, text=True, cwd=REPO,
                                               env=pinned_env()).stdout or '{}').get('state') or {}
             try:
                 with urllib.request.urlopen(state['endpoint'] + '/v1/neuralese/info', timeout=10) as response:
-                    served = (json.loads(response.read()).get('rl_policy_binding') or {}).get('checkpoint_sha256')
+                    binding = json.loads(response.read()).get('rl_policy_binding') or {}
             except (KeyError, OSError, ValueError):
                 return None
-            return state['endpoint'] if served == policy else None
+            served, served_format = binding.get('checkpoint_sha256'), (binding.get('actor_export') or {}).get('format')
+            return state['endpoint'] if served == policy and served_format == pop_format else None
 
         def evaluate(step_number, out, policy, serve):
             started = time.time()
@@ -1160,8 +1175,14 @@ def train(args):
         last_start, last_step = 0., max(measured_steps() - {0}, default=0)
         while not stop.is_set():
             try:
+                if not base_engine_matches():
+                    aside = held_root / f'step-00000-pop-{time.strftime("%Y%m%d%H%M")}-other-engine'
+                    base_out.rename(aside)
+                    log_line(log, {'event': 'held eval', 'remote': 'pop', 'moved_start_policy_result': str(aside),
+                                   'reason': f'measured on another Pop engine than {pop_format}'})
                 if not (base_out / 'result.json').exists():
-                    evaluate(0, base_out, source_sha, ['start', '--checkpoint', args.checkpoint, '--policy-id', source_sha])
+                    evaluate(0, base_out, source_sha, ['start', '--checkpoint', args.checkpoint, '--policy-id', source_sha,
+                                                       *pop_engine])
                     if not (base_out / 'result.json').exists():
                         raise RuntimeError(f'the start policy measurement ended without a result (see {work}/held-pop.log)')
                 ready = sorted(d for d in checkpoint_root.glob('step-*') if (d / 'sha256.txt').exists()
@@ -1176,7 +1197,7 @@ def train(args):
                         last_start, last_step = time.time(), step_number
                         evaluate(step_number, held_root / f'step-{step_number:05d}', sha,
                                  ['serve-checkpoint', '--checkpoint', str(directory / 'checkpoint.pt'), '--policy-id', sha,
-                                  '--commit', run['code']['git_commit'], '--step', str(step_number)])
+                                  '--commit', run['code']['git_commit'], '--step', str(step_number), *pop_engine])
             except Exception as error:   # Pop or the network failed: the run trains on, the evaluation retries later
                 log_line(log, {'event': 'held eval failed', 'remote': 'pop', 'error': repr(error)[:500]})
                 stop.wait(540)
@@ -1563,7 +1584,14 @@ def main():
     t.add_argument('--held-workers', type=int, default=96, help='collector slots of a held measurement on the training actor')
     t.add_argument('--held-remote', choices=('pop',), help="measure held on Pop's GPU in parallel with training instead of "
                    'pausing collection on the training actor (pop_held_loop)')
-    t.add_argument('--held-remote-slots', type=int, default=20, help="episodes in flight against Pop's actor (it runs 10)")
+    t.add_argument('--held-remote-slots', type=int, default=14,
+                   help="episodes in flight against Pop's actor: about what its KV pool holds (FP8: ~180k tokens, 11-13k per "
+                        'call), so waiting requests do not evict the prefixes of episodes between calls (BF16 at 20 slots: '
+                        '41%% prefix hit, 13.7 requests waiting)')
+    t.add_argument('--pop-kv-cache-dtype', choices=('fp8_e4m3', 'auto'), default='fp8_e4m3',
+                   help="Pop actor's KV dtype (auto = BF16, its engine until 2026-11-13); part of the attested engine: "
+                        'a start-policy result of another setting is moved aside and re-measured')
+    t.add_argument('--pop-max-running', type=int, default=16, help="Pop actor's concurrent sequences (capacity)")
     t.add_argument('--unit-prefix', default='grpo')
     t.add_argument('--synthetic-reward', help='sanity check: replace the task outcome by a trivially learnable reward '
                    '(short-calls:N = mean sampled tokens per model call under N; short-calls = minus that mean / 1000); the task '
