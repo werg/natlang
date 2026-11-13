@@ -8,9 +8,9 @@ natlang is TypeScript with natural-language functions. A natural-language
 function is an asynchronous, typed function whose body is instructions; a model
 executes them in a persistent TypeScript scope. Everything else is ordinary
 TypeScript. The design rationale is in
-[`docs/TS_INLINE_HOST_INTEGRATION_PLAN.md`](../docs/TS_INLINE_HOST_INTEGRATION_PLAN.md),
-[`docs/inline-natlang-lambdas.md`](../docs/inline-natlang-lambdas.md), and
-[`docs/ITERATE_ON_PLAN.md`](../docs/ITERATE_ON_PLAN.md).
+[`docs/research/TS_INLINE_HOST_INTEGRATION_PLAN.md`](../docs/research/TS_INLINE_HOST_INTEGRATION_PLAN.md),
+[`docs/research/inline-natlang-lambdas.md`](../docs/research/inline-natlang-lambdas.md), and
+[`docs/research/ITERATE_ON_PLAN.md`](../docs/research/ITERATE_ON_PLAN.md).
 
 ## Extensions
 

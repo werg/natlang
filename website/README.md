@@ -11,7 +11,7 @@ build step and no dependencies beyond three Google Fonts.
 | `og.png` | The preview image that links to the site show, rendered from the page by `scripts/website-dev/social-card.mjs` |
 
 The exhibits model rules from [`spec/SPEC.md`](../spec/SPEC.md), its [extensions](../spec/ext/), the
-[inline lambda design](../docs/inline-natlang-lambdas.md), [`iterateOn`](../docs/ITERATE_ON_PLAN.md) and
+[inline lambda design](../docs/research/inline-natlang-lambdas.md), [`iterateOn`](../docs/research/ITERATE_ON_PLAN.md) and
 [trace specialization](../plans/TRACE_SPECIALIZATION.md). None of them calls a model; where an exhibit shows a
 model's answer, the page marks it as an example. When the specification changes, update the chapter text and the
 exhibit that models the rule. The specification wins any disagreement.

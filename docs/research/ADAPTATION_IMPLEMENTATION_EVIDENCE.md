@@ -1,6 +1,6 @@
 # Adaptation implementation evidence
 
-Implementation of [the adaptation plan](../plans/ADAPTATION_SYSTEM_IMPLEMENTATION.md), verified on 2026-09-29. See [the author guide](ADAPTATION.md) for the installed SDK and CLI workflows.
+Implementation of [the adaptation plan](../../plans/ADAPTATION_SYSTEM_IMPLEMENTATION.md), verified on 2026-09-29. See [the author guide](../ADAPTATION.md) for the installed SDK and CLI workflows.
 
 | Plan gate | Implementation and verification |
 | --- | --- |
@@ -28,10 +28,10 @@ Final automated verification:
 
 The executor and reflection model were explicitly configured as local LFM2.5 350M base Q8. Searches used matched bounded allowances. These small hand-authored fixtures and two replicates measure lifecycle behavior and instability; they do not establish benchmark accuracy.
 
-[The evidence guide](../examples/adaptation/README.md) describes the historical runs and their fixture changes. [The final compositional run](../examples/adaptation/evidence/acceptance-compositional-live-2026-09-29.json) explicitly invokes the named risk helper and authored inline decision helper and records independent local and final metrics. Its six searches across lambda-only, guidance-only and joint modes made 101 model requests and produced no promotable artifact. Twelve fresh baseline validation replicates were attempted: eight scored and four failed infrastructure checks. Scored cases covered all authored helpers; helper completion gates failed. Transport failures and elapsed-budget exhaustion are retained, rather than converted to semantic zeroes.
+[The evidence guide](../../examples/adaptation/README.md) describes the historical runs and their fixture changes. [The final compositional run](../../examples/adaptation/evidence/acceptance-compositional-live-2026-09-29.json) explicitly invokes the named risk helper and authored inline decision helper and records independent local and final metrics. Its six searches across lambda-only, guidance-only and joint modes made 101 model requests and produced no promotable artifact. Twelve fresh baseline validation replicates were attempted: eight scored and four failed infrastructure checks. Scored cases covered all authored helpers; helper completion gates failed. Transport failures and elapsed-budget exhaustion are retained, rather than converted to semantic zeroes.
 
 Search provenance and usage were recovered from durable run records. Failed validation replicate usage was not captured by that process version and remains unknown; scored replicates retain per-case usage. The current runner captures a gateway ledger for both successful and failed attempts. Unknown token counts and unavailable pricing remain null.
 
-[Saved-artifact consumer evidence](../examples/adaptation/evidence/consumers-live-2026-09-29.json) records the same stateful artifact digest loaded by the packaged Node SDK and actual Chromium browser SDK. Both preserved the unrelated file and exposed the selected digest. Both scored zero: the Node call quiesced and the browser returned an incorrect answer. This verifies the deployment lifecycle, without demonstrating quality improvement.
+[Saved-artifact consumer evidence](../../examples/adaptation/evidence/consumers-live-2026-09-29.json) records the same stateful artifact digest loaded by the packaged Node SDK and actual Chromium browser SDK. Both preserved the unrelated file and exposed the selected digest. Both scored zero: the Node call quiesced and the browser returned an incorrect answer. This verifies the deployment lifecycle, without demonstrating quality improvement.
 
 Historical moderation artifacts precede the explicit-helper fixture change and are stale by design. Strict binding rejects them; adopting them requires explicit revalidation. No live run demonstrated an instruction-quality gain.

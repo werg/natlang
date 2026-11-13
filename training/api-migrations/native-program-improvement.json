@@ -360,7 +360,7 @@
       "incident_inventory": "runs/luna-bonsai-improvement-20261001/incident-index",
       "generated_cases": "runs/luna-bonsai-improvement-20261001/native-decision-cases/cases.jsonl",
       "generated_cases_disposition": "Two compiled native optimizer-decision repair cases from genuine failed decisions; faulty starting instructions explicitly reconstructed. Requires student reproduction and independently verified collection; not positive SFT.",
-      "results": "docs/LUNA_BONSAI_IMPROVEMENT_RESULTS.md",
+      "results": "docs/research/LUNA_BONSAI_IMPROVEMENT_RESULTS.md",
       "verification_result": "708 tests plus focused native helper/data-ingestion checks, 22 conformance cases, browser types/bundle and actual Chromium smoke passed.",
       "study_result": "Coherent candidate edited and evaluated; rejected at equal validation model-call count. Frozen retained-baseline confirmation 1/2 with one timeout, effect zero; no optimization gain demonstrated."
     },

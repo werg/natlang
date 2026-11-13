@@ -235,5 +235,5 @@ const sheet = '# Read-before-code probe: sample problems\n\n' +
   'The agent sees the function instructions and typed scope. Large ordinary input batches show only their first few rows in the opening preview. ' +
   'Folder contents must be read through the folder handle in `eval`. Expected returns are oracle data, not shown to the agent.\n\n' +
   examples.join('\n');
-await writeFile(resolve('docs/read-before-code-examples.md'), sheet);
+await writeFile(resolve('docs/research/read-before-code-examples.md'), sheet);
 console.log(`${rows.length} cases across ${new Set(rows.map(row => row.family)).size} families -> ${output}`);

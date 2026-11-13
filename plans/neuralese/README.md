@@ -23,7 +23,7 @@ These inputs are source material, not the specification. Where they conflict wit
 | Data | Use all available data from all teachers. Restrictive licences (including CC-BY-NC) are acceptable; licence is still recorded per record. Model- and harness-specific conventions are stripped; content and supervision are kept. |
 | Code | Everything lives in this repository. |
 | Starting point | The best Natlang crisp student (currently the LFM2.5-350M LoRA line). The final model size is decided later. |
-| Backbone facts | LFM2.5-350M: 16 layers, width 1024, vocab 65,536, full attention at layers 2, 5, 8, 10, 12, 14, short convolutions elsewhere. (`TRAINING.md` §0 says 14 layers; that is wrong for 350M.) |
+| Backbone facts | LFM2.5-350M: 16 layers, width 1024, vocab 65,536, full attention at layers 2, 5, 8, 10, 12, 14, short convolutions elsewhere. (`docs/research/TRAINING.md` §0 says 14 layers; that is wrong for 350M.) |
 | Compute | The whole DGX Spark is available. Train without throughput-costly memory savers such as gradient checkpointing. |
 | Serving | Neuralese is a first-class target of real inference servers: llama.cpp (which also gives the browser via wllama) and vLLM, parity-tested against the PyTorch reference. The llama.cpp and vLLM changes live in forks designed for upstreaming: general APIs, small patches, upstream conventions. The browser stores blocks and `.nz` files in OPFS. |
 | Distillation teacher | No separate teacher model. The KL target is the same model given the full source. |

@@ -160,6 +160,6 @@ Evaluate complete-program correctness, type and capability compliance, exact-val
 [^natlang]: [Natlang language specification](https://github.com/werg/natlang/blob/main/spec/SPEC.md).
 [^types]: [Proposed neuralese type and callable surface](https://github.com/werg/neuralese-/blob/main/spec/neuralese.d.ts). The contracts in this document specify the extension; they do not assert that its runtime is already implemented.
 [^graph]: [Typed execution-graph specification](https://github.com/werg/neuralese-/blob/main/spec/graph.d.ts).
-[^trajectories]: [Executable task records and reproducible training builds](https://github.com/werg/natlang/blob/main/PROGRAM_IR_PIPELINE.md).
+[^trajectories]: [Executable task records and reproducible training builds](https://github.com/werg/natlang/blob/main/docs/research/PROGRAM_IR_PIPELINE.md).
 [^imports]: bgkit, [training workflows](https://github.com/werg/bgkit/blob/main/docs/02_training_plan.md) and [context-compression task families](https://github.com/werg/bgkit/blob/main/plans/capability_packaging_2026_08_20.md); Schnitzeljagd, [teacher datasets and episode construction](https://github.com/werg/schnitzel/blob/main/docs/datasets.md).
 [^learning]: [Neuralese learning operations and objectives](https://github.com/werg/neuralese-/blob/main/docs/design.md#learning-to-improve).

@@ -271,7 +271,7 @@ the acquisition script to download and verify a source. The default cache is
 `vendor/datasets`; set `NATLANG_DATASETS` to use a shared or external cache.
 Each source keeps its pinned revision and checksum in the generated manifest.
 Some world adapters also need a source-specific Python environment; ALFWorld
-and ScienceWorld setup is described in [Inline curriculum](docs/INLINE_CURRICULUM.md).
+and ScienceWorld setup is described in [Inline curriculum](docs/research/INLINE_CURRICULUM.md).
 
 ```bash
 export NATLANG_DATASETS=/data/natlang/datasets  # optional; omit for vendor/datasets

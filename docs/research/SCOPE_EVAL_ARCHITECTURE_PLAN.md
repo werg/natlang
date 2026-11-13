@@ -1,7 +1,7 @@
 # Typed TypeScript scope and reducer architecture
 
 Status: clean-break architecture implemented in the canonical TypeScript host;
-this document records its design contract. [`spec/SPEC.md`](../spec/SPEC.md) is
+this document records its design contract. [`spec/SPEC.md`](../../spec/SPEC.md) is
 normative when details differ.
 
 ## Source model

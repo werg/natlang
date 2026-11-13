@@ -3,7 +3,7 @@
 For the project-wide TypeScript compiler, host, portability, application, and documentation migration, see [TypeScript-native natlang integration](TS_INLINE_HOST_INTEGRATION_PLAN.md).
 Compiled natlang callables also provide the standard monitored iteration method specified in [`iterateOn`](ITERATE_ON_PLAN.md).
 
-Authored application and callable-folder sites can be selected for [adaptation](ADAPTATION.md).
+Authored application and callable-folder sites can be selected for [adaptation](../ADAPTATION.md).
 Attach a unique `/* @natlangSite name */` immediately before `nl` to give a site
 a reportable logical key. Optimize static instruction segments while preserving
 capture names, types, mutability and interpolation expressions. Runtime-generated

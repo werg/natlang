@@ -168,7 +168,7 @@ Selection is itself a decision the model makes (which skills apply), recorded as
 | S1 Natlang task adapters (SQL, function calling, code, offline web, repository, reasoning, retired natlang sources, worlds, SWE) | Families of executable tasks with checked results. Support and query cases are drawn from the same family. |
 | Schnitzeljagd cross-experience episodes (S1 §9) | Ready-made support/next-task pairs grouped by repository or tool schema. |
 | Optimizer curriculum slate (192 tasks, 16 families) | Families with gold references; extended with query variants. |
-| Natlang's own failure index (`index-failures.mjs`, `LEARNING_LESSONS.md`) | Failure clusters as repair-episode triggers. |
+| Natlang's own failure index (`index-failures.mjs`, `docs/research/LEARNING_LESSONS.md`) | Failure clusters as repair-episode triggers. |
 | Directory campaign (`build-directory-campaign.mjs`) | Folder-editing tasks as skill targets. |
 
 ### 5.1a Graded families

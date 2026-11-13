@@ -91,11 +91,11 @@ for profiles, overrides, and provider options; see
 | [Our trained models](docs/NATIVE_MODELS.md) | Pin a trained checkpoint, native server or GGUF, prefix reuse, escalation, feedback to tuning |
 | [Adaptation](docs/ADAPTATION.md) | Evaluation suites, native GEPA/reflection, resumable runs, artifact deployment and rollback |
 | [Applications](applications/) | Wiki, notebook, evidence, logs, terminal, publisher, games, and more |
-| [Training](TRAINING.md), [teacher setup](TEACHER_SETUP.md), [program IR](PROGRAM_IR_PIPELINE.md) | Teacher data, student training, and evaluation |
+| [Training](docs/research/TRAINING.md), [teacher setup](docs/research/TEACHER_SETUP.md), [program IR](docs/research/PROGRAM_IR_PIPELINE.md) | Teacher data, student training, and evaluation |
 
 The design notes behind the TypeScript-native runtime are in
-[`docs/TS_INLINE_HOST_INTEGRATION_PLAN.md`](docs/TS_INLINE_HOST_INTEGRATION_PLAN.md),
-[`docs/inline-natlang-lambdas.md`](docs/inline-natlang-lambdas.md), and
-[`docs/ITERATE_ON_PLAN.md`](docs/ITERATE_ON_PLAN.md). `PLAN.md` and `plans/`
+[`docs/research/TS_INLINE_HOST_INTEGRATION_PLAN.md`](docs/research/TS_INLINE_HOST_INTEGRATION_PLAN.md),
+[`docs/research/inline-natlang-lambdas.md`](docs/research/inline-natlang-lambdas.md), and
+[`docs/research/ITERATE_ON_PLAN.md`](docs/research/ITERATE_ON_PLAN.md). `docs/research/PLAN.md` and `plans/`
 hold research history; the specification and the source are the active
 contract.

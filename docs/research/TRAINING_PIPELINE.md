@@ -249,7 +249,7 @@ materialized on the frozen runtime, and joined into the final teacher curriculum
 Use repeatable `--teacher-results` to select explicit completed result snapshots,
 or `--no-existing-teacher-results` to omit them. Old code turn snapshots containing
 IR `/1` are held; eligible self-contained saved unit captures are replayed before
-coding preparation. See [the static data audit](../plans/STATIC_DATA_RECOVERY.md)
+coding preparation. See [the static data audit](../../plans/STATIC_DATA_RECOVERY.md)
 for recovered counts and source adapters still missing since Python retirement.
 
 The replayable synthetic generator has 16 distinct implementation families:

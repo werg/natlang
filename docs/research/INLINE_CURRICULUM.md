@@ -77,7 +77,7 @@ coverage/efficiency notes, not incorrect-result labels. Reference child markers 
 they do not impose a hidden requirement to reproduce that example's delegation layout.
 
 Admission version 2 records `quality_pending`, legacy contract exclusions and partial-result review requirements.
-See [DATA_QUALITY.md](../plans/DATA_QUALITY.md) for source, file, evidence and oracle rules.
+See [DATA_QUALITY.md](../../plans/DATA_QUALITY.md) for source, file, evidence and oracle rules.
 An eval that failed (nothing kept) does not count as a result decision, even if it contained a `return`.
 
 ### Hinted twins and preference pairs

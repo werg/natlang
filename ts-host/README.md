@@ -20,7 +20,7 @@ npm run test:browser       # real Chromium smoke (needs a Playwright browser)
 npm run test:dashboard-embed   # the dashboard pages mounted into a bare host page (Chromium)
 ```
 
-Node 22.13 or newer is required. `docs/TS_NATIVE_IMPLEMENTATION_STATUS.md` maps
+Node 22.13 or newer is required. `docs/research/TS_NATIVE_IMPLEMENTATION_STATUS.md` maps
 the source modules.
 
 The dashboard (`dashboard/`) is framework-free ES modules: one `pages/<name>.js` per page, each

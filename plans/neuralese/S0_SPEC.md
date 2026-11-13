@@ -21,7 +21,7 @@ Revision 2 changes: mutable parameters are replaced by immutable values, `grad` 
 | Training-data rewrite contract (eager typing, explicit captures) | `spec/NEURALESE_DATA.md` and a `training/api-migrations/` entry |
 | Failing conformance cases | `conformance/neuralese/` |
 | Decision log | `plans/neuralese/DECISIONS.md` |
-| Documentation and iteration fixes | `TRAINING.md` §0 (LFM2.5-350M has 16 layers, not 14); `spec/SPEC.md` "Iteration and recursion" rewritten to the termination rules (§8, §13); the predicate system prompt and limit rules in `ts-host/src/runtime/iterate.ts` |
+| Documentation and iteration fixes | `docs/research/TRAINING.md` §0 (LFM2.5-350M has 16 layers, not 14); `spec/SPEC.md` "Iteration and recursion" rewritten to the termination rules (§8, §13); the predicate system prompt and limit rules in `ts-host/src/runtime/iterate.ts` |
 
 ## 2. The type
 
@@ -430,7 +430,7 @@ None at revision 2. Dialects are lightweight version tags (§12). Resolved on 20
 - The spec chapters, declarations and schemas above exist and agree with the README's decisions table, with no contradictions.
 - `spec/neuralese.d.ts` type-checks against the examples in `conformance/neuralese/`, including the expected compile errors (opacity, untyped literal, nested type, dialect mismatch, context-interface mismatch on rebinding).
 - Failing conformance cases exist for: literal round-trip between reference and model form; escaping of marker text in ordinary content; write-port invocation inside eval code and `return_result`; readback agreement with recomputation; each combinator's type and failure behaviour; each rewrite rule's gating and trace record; `.nz` load, type check, import and capture resolution; soft-function capture and authority rules; context rebinding and its interface check; `grad` through a context item; iteration with a TypeScript predicate and reviews off; graph replay with fixed discrete choices; the eager-typing and explicit-capture rewrites.
-- `TRAINING.md` §0 and the iteration section of `spec/SPEC.md` are corrected.
+- `docs/research/TRAINING.md` §0 and the iteration section of `spec/SPEC.md` are corrected.
 - Conformance cases also cover: a context that would contain itself is unrepresentable; rebinding that adds an executable node not present in any loaded file context is rejected; adding data entries is accepted; an edited executable node that does not compile against its interface is rejected; `type-recursive-function`; a TypeScript-predicate iteration without a bound is rejected; `valueAndGrad`, `stopGradient`, first-order nested `grad`, and `logLikelihood` over a recorded trajectory.
 - `DECISIONS.md` records every decision with date and reason.
 
@@ -447,4 +447,4 @@ None at revision 2. Dialects are lightweight version tags (§12). Resolved on 20
 9. Write `spec/NEURALESE_GRAPH.md` and the graph-record schema as an extension of the native trace.
 10. Write `spec/NEURALESE_DATA.md` for the two rewrite passes and register the API migration.
 11. Write the conformance cases in `conformance/neuralese/`.
-12. Start `DECISIONS.md`, fix `TRAINING.md` §0 and the iteration section of `spec/SPEC.md`.
+12. Start `DECISIONS.md`, fix `docs/research/TRAINING.md` §0 and the iteration section of `spec/SPEC.md`.
