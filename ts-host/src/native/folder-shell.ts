@@ -3,7 +3,7 @@ import { Bash, InMemoryFs, MountableFs, defineCommand, getCommandNames,
   type IFileSystem, type FsStat, type FileContent, type BufferEncoding,
   type RmOptions, type CpOptions, type MkdirOptions } from 'just-bash';
 import { Folder } from './scoped-fs.js';
-import { runFolderPython, type PythonHost } from './folder-python.js';
+import { folderContents, pathsChangedSince, runFolderPython, type PythonHost } from './folder-python.js';
 import { executeNatlangAsk, executeNatlangCall, parseAskArgs, type AskHost, type CallHost } from './natlang-command.js';
 
 const ROOT = '/workspace';
@@ -219,7 +219,8 @@ function checkBashAst(tree: unknown): void {
     throw new SyntaxError(`function ${name} calls itself; use a finite for loop`);
 }
 
-export type FolderBashResult = { exitCode: number; stdout: string; stderr: string; changedPaths: string[] };
+/** `changedPaths`: files the command created or rewrote; `removedPaths`: files it removed (a move's old path), when there are some. */
+export type FolderBashResult = { exitCode: number; stdout: string; stderr: string; changedPaths: string[]; removedPaths?: string[] };
 export type FolderBashOptions = { network?: boolean; python?: PythonHost; ask?: AskHost; call?: CallHost;
   apply?: (name: string, path: string) => Promise<unknown>;
   /** The directory the command starts in: absolute under /workspace, or relative to it (default /workspace). */
@@ -231,7 +232,7 @@ export type FolderBashOptions = { network?: boolean; python?: PythonHost; ask?: 
   /** Arguments appended to the first command as they are, without shell parsing (an argv run as `command`, `args`). */
   args?: string[] };
 export async function runFolderBash(folder: Folder, command: string, options: FolderBashOptions = {}): Promise<FolderBashResult> {
-  const before = new Map(folder.diffSync().changes.map(change => [change.path, change.after]));
+  const before = folderContents(folder);
   const changes = defineCommand('changes', async () => ({ stdout: JSON.stringify(folder.diffSync().changes.map(change =>
     ({ path: change.path, kind: change.kind })), null, 2) + '\n', stderr: '', exitCode: 0 }));
   const pythonCommand = (name: string) => defineCommand(name, async (args, ctx) => {
@@ -309,7 +310,8 @@ export async function runFolderBash(folder: Folder, command: string, options: Fo
       return { stdout: '', stderr: 'usage: natlang ask|call|apply ...', exitCode: 2 };
     } catch (error) { return { stdout: '', stderr: String(error), exitCode: 1 }; }
   });
-  const bash = new Bash({ fs: shellFs(folder), cwd: ROOT, python: false, javascript: false,
+  // The folder is the home directory too: `~`, `cd` and $HOME stay inside it.
+  const bash = new Bash({ fs: shellFs(folder), cwd: ROOT, env: { HOME: ROOT }, python: false, javascript: false,
     ...(options.network === false ? {} : { network: { dangerouslyAllowFullInternetAccess: true } }),
     customCommands: [changes, pythonCommand('python'), pythonCommand('python3'), sqlite, natlang],
     executionLimits: { maxCommandCount: 1000, maxLoopIterations: 10000 } });
@@ -317,9 +319,5 @@ export async function runFolderBash(folder: Folder, command: string, options: Fo
   const result = await bash.exec(command, { ...(options.cwd === undefined ? {} : { cwd: bash.fs.resolvePath(ROOT, options.cwd) }),
     ...(options.env ? { env: options.env } : {}), ...(options.signal ? { signal: options.signal } : {}),
     ...(options.args ? { args: options.args } : {}) });
-  const changedPaths = folder.diffSync().changes.filter(change => {
-    const prior = before.get(change.path), after = change.after;
-    return !before.has(change.path) || prior?.length !== after?.length || prior?.some((byte, i) => byte !== after?.[i]);
-  }).map(change => change.path);
-  return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr, changedPaths };
+  return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr, ...pathsChangedSince(folder, before) };
 }

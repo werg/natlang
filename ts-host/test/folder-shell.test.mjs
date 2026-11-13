@@ -40,7 +40,18 @@ test('a directory made by mkdir persists into the next bash call of the same fol
   const moved = await runFolderBash(folder, 'mv visits/*.md filed/');
   assert.equal(moved.exitCode, 0, moved.stderr);
   assert.deepEqual(folder.listFiles().map(entry => entry.path).sort(), ['filed/a.md', 'filed/b.md']);
+  assert.deepEqual(moved.changedPaths, ['filed/a.md', 'filed/b.md'], 'a move reports the new paths as changed');
+  assert.deepEqual(moved.removedPaths, ['visits/a.md', 'visits/b.md'], 'and the old paths as removed');
+  assert.equal('removedPaths' in listed, false, 'a command that removes nothing has no removed list');
   assert.equal((await runFolderBash(Folder.fromFiles({}), 'ls filed')).exitCode, 2, 'another folder does not see it');
+});
+
+test('the home directory is the folder', async () => {
+  const folder = Folder.fromFiles({ 'a.md': 'a\n' });
+  const result = await runFolderBash(folder, 'cd ~ && mkdir -p filed && mv a.md ~/filed/ && cd filed && cd && pwd && echo $HOME && ls filed');
+  assert.equal(result.exitCode, 0, result.stderr);
+  assert.deepEqual(result.stdout.trim().split('\n'), ['/workspace', '/workspace', 'a.md']);
+  assert.deepEqual([result.changedPaths, result.removedPaths], [['filed/a.md'], ['a.md']]);
 });
 
 test('bash refuses paths outside its folder root', async () => {
