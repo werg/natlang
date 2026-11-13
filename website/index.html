@@ -169,7 +169,7 @@ export async function triage(
   <div class="facts">
     <div style="--fc: #efb02e"><b>Model calls are typed function calls.</b> The compiler works out each call's argument and result types before the model runs. A wrong-shaped answer goes back to the model as an error, never to your code. <a href="#contract">Chapters I and II</a></div>
     <div style="--fc: #2f9c92"><b>Small models are enough.</b> The program holds the algorithm and the data flow. Each natural-language function makes one narrow judgment, which a small local model can carry out. <a href="#policy">Chapter IX</a></div>
-    <div style="--fc: #9cc8d6"><b>Programs end by construction.</b> There are no while loops and no recursion between natural-language functions, and open-ended loops need a decreasing measure or an English stopping test. No token budgets are needed. <a href="#termination">Chapter V</a></div>
+    <div style="--fc: #9cc8d6"><b>Programs end by construction.</b> There are no while loops and no recursion between natural-language functions, and open-ended loops need a decreasing measure or an English stopping test. No budgets are set by default. <a href="#termination">Chapter V</a></div>
     <div style="--fc: #c4421f"><b>Variables are captured by name.</b> Mention a variable in the instructions and the function reads its current value. Text from outside the program can be marked untrusted, and then it can never become instructions. <a href="#captures">Chapter III</a></div>
     <div style="--fc: #1d2840"><b>Every call is recorded.</b> Traces show what the model did. Inputs that always lead to the same code are compiled into plain TypeScript cases that answer without the model. <a href="#jit">Chapters IV and VII</a></div>
     <div style="--fc: #6a4c93"><b>Judgments are measurable.</b> Finite answers come back as probability distributions, and a type can carry an English predicate that is checked at run time. <a href="#judgment">Chapter VI</a></div>
@@ -425,7 +425,7 @@ the ticket, report an error saying what is missing.</pre>
   </header>
   <div class="cols">
     <div class="read">
-      <p>natlang has no turn, token or time budgets. Programs end because three rules leave no way to loop forever.</p>
+      <p>natlang sets no turn, token or time budgets by default: termination is structural. Programs end because three rules leave no way to loop forever. A deployment can still bound a function with <code>budget:</code> in its front matter, or an iteration with <code>withLimit</code>.</p>
       <p><b>1. Natural-language functions cannot call themselves.</b> <code>foo.nl</code> may call only the items in its folder <code>foo/</code>, and each folder is identified by a hash of its contents. Calls therefore always move down a tree of folders and can never return to a caller.</p>
       <div class="rule"><div class="frac">
         <div class="pre"><span>f ∈ items(<i>ctx</i>)</span><span>id(<i>ctx</i>) = H(contents(<i>ctx</i>))</span></div>
@@ -704,7 +704,7 @@ const choose = pluggable(
     <div class="app"><h3>wiki</h3><p>A collaborative wiki whose edit pipeline is written in natural language: change summaries, conflict detection, merge planning, verification against each edit's intent, and repair with iterateOn.</p><div class="files">merge.nl · maintain.nl · cells.nl · index.ts</div></div>
     <div class="app"><h3>specializer</h3><p>Compiles recorded calls into guarded TypeScript cases, as described in chapter VII. Its own decisions are natural-language functions.</p><div class="files">worthLooking.nl · chooseCondition.nl · promote.nl</div></div>
     <div class="app"><h3>evidence</h3><p>A question-answering console that checks citations: it plans a search, selects sources, extracts claims, finds gaps and writes an answer.</p><div class="files">plan_search.nl · claims.nl · gaps.nl</div></div>
-    <div class="app"><h3>More in applications/</h3><p>A notebook, logs, a terminal, a publisher, a migration tool, a program improver, a scheduler and a treaty-obligation ledger.</p><div class="files">natlang run applications/&lt;name&gt;</div></div>
+    <div class="app"><h3>More in applications/</h3><p>A notebook, logs, a terminal, a publisher, a migration tool, a program improver, a scheduler and a treaty-obligation ledger.</p><div class="files">git clone, then natlang run applications/&lt;name&gt;</div></div>
   </div>
 </section>
 
@@ -714,9 +714,10 @@ const choose = pluggable(
     <div style="flex: 1 1 340px">
       <h2>Try it</h2>
       <p style="margin: 0 0 12px"><a class="btn primary" href="play/">Open the playground</a> runs the examples in your browser, with nothing to install: edit a program, load a small model into the page (about 1.1 GB, kept by the browser) and inspect each run's trace.</p>
-      <p style="margin: 0">To run natlang on your machine, install the <code>natlang</code> command (it needs Node.js 22.13 or newer) and create a program. <code>natlang setup</code> prepares the local model once; the dashboard lets you choose an API provider or another backend instead.</p>
+      <p style="margin: 0">To run natlang on your machine, install the <code>natlang</code> command from a clone (it needs Node.js 22.13 or newer; <code>setup_dev.sh</code> links the command into <code>~/.local/bin</code>) and create a program in an empty directory. <code>natlang setup</code> prepares the local model once; the dashboard lets you choose an API provider or another backend instead. Once a release is published, <code>curl -fsSL https://raw.githubusercontent.com/werg/natlang/main/scripts/install.sh | sh</code> installs it without a clone.</p>
     </div>
-    <div class="copywrap"><button class="btn copy" id="copy-cmds" type="button">Copy</button><pre class="code" data-hl="sh" id="cmds">curl -fsSL https://raw.githubusercontent.com/werg/natlang/main/scripts/install.sh | sh
+    <div class="copywrap"><button class="btn copy" id="copy-cmds" type="button">Copy</button><pre class="code" data-hl="sh" id="cmds">git clone https://github.com/werg/natlang.git
+natlang/scripts/setup_dev.sh --node-only
 natlang init my-program
 cd my-program
 natlang setup
