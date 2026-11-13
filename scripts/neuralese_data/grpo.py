@@ -1546,6 +1546,9 @@ def train(args):
         phase = collections.OrderedDict()
         t = time.time()
         groups = collector.take_groups(args.min_groups, args.max_groups, stop)
+        if stop.is_set() and len(groups) < args.min_groups:
+            # a stop never trains a short step: these scored groups stay on disk and a resume offers them again
+            break
         phase['wait_groups'] = time.time() - t
         t = time.time()
         stats = collections.Counter()
