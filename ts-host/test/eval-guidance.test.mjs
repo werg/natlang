@@ -319,7 +319,9 @@ test('an inline nl call that hands its own question down again is told to answer
   } });
   const fn = loadVirtualNatlang({ 'root.nl': '---\nargs: { name: string }\nreturns: string\n---\nJudge name.\n' }, 'root.nl');
   await runtime.run(() => fn('Ada'));
-  assert.ok(seen.some(text => /this call was itself created with these same instructions and inputs; make the judgment here/.test(text)), seen.join('\n---\n'));
+  const refusal = seen.find(text => /not run: it has the same instructions and inputs as the call that made it/.test(text));
+  assert.ok(refusal, seen.join('\n---\n'));
+  assert.match(refusal, /you are the call that answers it\. Any nl call with these instructions and inputs is refused the same way\. Do what its instructions ask here/);
 });
 
 test('an inline nl call with the same instructions on a different input is a new question and runs', async () => {
@@ -339,5 +341,5 @@ test('an inline nl call with the same instructions on a different input is a new
   const fn = loadVirtualNatlang({ 'root.nl': '---\nargs: { name: string }\nreturns: string\n---\nJudge name.\n' }, 'root.nl');
   assert.equal(await runtime.run(() => fn('Ada')), 'done');
   assert.equal(childOpenings, 2);
-  assert.ok(!seen.some(text => /same instructions and inputs/.test(text)), seen.join('\n---\n'));
+  assert.ok(!seen.some(text => /same instructions and inputs|refused the same way/.test(text)), seen.join('\n---\n'));
 });

@@ -28,6 +28,7 @@ import { dialectBinding, isNeuraleseRef, isTeacherTextNeuraleseId, neuraleseRef,
   type NeuraleseRuntimeOptions } from './neuralese.js';
 import { bindTraceScope, blockInput, FILE_CONTEXT, graphNode, invocationNodeId, producerScopeForTrace, valueInputs } from './graph.js';
 import { canGenerateNl, currentFrame, racedCalls, runInFrame, type Frame } from '../runtime/context.js';
+import { SAME_QUESTION_REFUSAL } from '../runtime/kernel.js';
 import { isNatlangCallable } from '../runtime/callable.js';
 import { withSelectedCaptureAccessors } from '../runtime/selected-captures.js';
 import { declareSelectedSurface } from './selected-surface.js';
@@ -1320,8 +1321,12 @@ export class NativeSession {
       // Only an interpolated template can be the cause of the template advice.
       (code.includes('${') ? ' JavaScript template interpolation runs when the template is created: create an item-specific template inside the callback or loop that binds the item, ' +
         'or mention a future child parameter by name in literal instructions and pass its value when calling the child.' : '') : '';
+    // An nl call asking this call's own question again (kernel SAME_QUESTION_REFUSAL): LFM3 read the refusal as a
+    // failed child and retried it in new spellings 6-15 times (triage suite, 2026-11-13), so it says what this call is.
+    const sameQuestionNote = message.includes(SAME_QUESTION_REFUSAL) ?
+      `\nThat question is this call's own: you are the call that answers it. Any nl call with these instructions and inputs is refused the same way. ${SELF_CALL_ADVICE}` : '';
     const repeatNote = repeated ? '\nThis is the code of your previous eval, and it failed the same way: change it before running it again.' : '';
-    return toolNote + bindingNote + repeatNote + (reaching ? `\n${this.scopeGuide()}` : '') + (logs.length ? `\nconsole:\n${this.show(logs.join('\n'))}` : '') +
+    return toolNote + bindingNote + sameQuestionNote + repeatNote + (reaching ? `\n${this.scopeGuide()}` : '') + (logs.length ? `\nconsole:\n${this.show(logs.join('\n'))}` : '') +
       (effects.length ? `\nAlready performed before the failure (not undone): ${[...new Set(effects)].join(', ')}.` : '') +
       (receipts.length ? `\nCompleted service calls succeeded:\n${receipts.join('\n')}\nRepair subsequent work without repeating an already completed write.` : '') +
       '\nNothing else from this eval was kept. This refers to new eval bindings and the staged result; ' +

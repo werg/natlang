@@ -340,6 +340,11 @@ export async function prepareDefinitionNode(definition: CallableDefinition, inpu
   return node;
 }
 
+/** Why an ad hoc nl call that asks its enclosing call's own question on the same inputs is not run (native/runtime.ts
+ * recognizes it to add what to do instead). */
+export const SAME_QUESTION_REFUSAL = 'not run: it has the same instructions and inputs as the call that made it, so it would only ' +
+  'hand that question back; that call answers it itself';
+
 /**
  * Run one natlang definition in the given frame and return its checked value. Model code can start a call and never
  * await it (an eval that fails first, a promise left in a variable): its failure is then no one's to handle, and it must
@@ -477,8 +482,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   // The same instructions on different inputs (recursion on a smaller argument) are a new question.
   const question = adHoc ? (options.instructions ?? definition.body).replace(/\s+/g, ' ').trim().toLowerCase() + '\u0000' + inputsKey(positional) : '';
   if (question && !fileRoot && (frame.adHocQuestions ?? []).includes(question))
-    throw new NatlangCallError(definition.name, 'quiesced',
-      'this call was itself created with these same instructions and inputs; make the judgment here from its inputs and return it instead of delegating it again', '', []);
+    throw new NatlangCallError(definition.name, 'quiesced', SAME_QUESTION_REFUSAL, '', []);
   const adHocQuestions = fileRoot ? [] : question ? [...(frame.adHocQuestions ?? []), question] : frame.adHocQuestions;
   // Definitions from separate programs may share the same relative source ID.
   // Ownership scopes recursion without changing persisted component identities.

@@ -3,6 +3,21 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-13 — same-question refusal says the call answers it itself (measuring)
+
+An inline `nl` call with the same instructions and inputs as the call that made it is refused (kernel, since
+2026-10-28). In the thinking-budget runs above the stock LFM3 1.7B read the refusal as a failed child and retried
+it in new spellings: 6 refusals in 1 call (unlimited), 27 in 5 calls (256), 17 in 6 calls (0); the 256 run's 9
+calls copying the system prompt's `Decide whether item meets policy.` example took 73 turns. Its reasoning:
+"once an nl call is created, it's considered quiesced and we cannot get its result by awaiting again". The
+refusal now reads "not run: it has the same instructions and inputs as the call that made it, so it would only hand
+that question back; that call answers it itself", and the native runtime adds "That question is this call's own: you
+are the call that answers it. Any nl call with these instructions and inputs is refused the same way." plus the
+self-call advice (`SELF_CALL_ADVICE`). Copying the prompt example itself is not changed here (rejected 2026-11-10 for
+the trained policy, where it no longer occurs; it occurs on the stock model with a thinking budget, 0 with unlimited).
+**Measurement debt (running):** full triage suite at `thinking_budget_tokens` 256, old vs new text, refusals per
+refusing call, turns and correctness of those calls.
+
 ### 2026-11-13 — GRPO trains sampled decision calls; Neuralese-state consumer calls stay context
 
 Finding (grpo-v1 run2 step 1): the per-call lowering (`lower_rollout_turns.episode_turns`) kept only calls with a sampled
