@@ -43,9 +43,9 @@ test('a newly scaffolded program checks, runs, and checks saved expected results
     assert.equal(readFileSync(join(program, 'answer.nl'), 'utf8'), original, 'init never overwrites a project');
     const checked = await run(['check'], program, env); assert.equal(checked.code, 0, checked.err);
     assert.equal(requests, 0, 'creation and checking never contact the model');
-    const result = await run(['run'], program, env); assert.equal(result.code, 0, result.err); assert.equal(JSON.parse(result.out), 'billing');
+    const result = await run(['run'], program, env); assert.equal(result.code, 0, result.err); assert.equal(result.out, 'billing\n', 'a .nl entry prints as call does');
     const own = await run(['run', '.', '--', 'The app crashes on upload'], program, env); assert.equal(own.code, 0, own.err);
-    assert.equal(JSON.parse(own.out), 'billing');
+    assert.equal(own.out, 'billing\n');
     const positional = await run(['call', 'answer.nl', 'I was charged twice'], program, env);
     assert.equal(positional.code, 0, positional.err); assert.equal(positional.out, 'billing\n', 'call takes its input as an argument');
     const asJson = await run(['call', 'answer.nl', 'I was charged twice', '--json'], program, env); assert.equal(asJson.out, '"billing"\n');
