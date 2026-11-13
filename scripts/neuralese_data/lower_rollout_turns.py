@@ -112,8 +112,10 @@ def episode_turns(row, stats, states=None):
             prompt = np.concatenate([prompt, np.array([item['token_id'] for item in inputs[:lead]], dtype=np.int32)])
         sample = np.array([item['token_id'] for item in sampling['samples']], dtype=np.int32)
         logp = np.array([item['logp'] for item in sampling['samples']], dtype=np.float32)
+        law = sampling.get('sampling_law') or {}
         rows.append({'invocation': turn['invocation_id'], 'index': index, 'prompt': prompt, 'sample': sample, 'logp': logp,
-                     'imports': imports, 'policy': sampling['policy']['checkpoint_sha256']})
+                     'imports': imports, 'policy': sampling['policy']['checkpoint_sha256'],
+                     'temperature': law.get('temperature'), 'guidance': bool(law.get('guidance'))})
     return rows
 
 

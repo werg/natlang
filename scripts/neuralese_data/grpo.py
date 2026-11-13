@@ -318,6 +318,8 @@ class Collector:
                           flush=True)
                     with self.lock:
                         self.outstanding -= 1
+                        # no longer outstanding: its creation time must not pin the block GC's cutoff for the whole run
+                        self.groups.pop(group, None)
 
     def _score(self, group):
         from natlang_neuralese.rl import task_rollouts
@@ -351,6 +353,21 @@ class Collector:
         return taken
 
 
+def trainable_rows(rows, stats):
+    """The calls whose actor log-probabilities are the law the learner scores: every sampled token has a finite logp
+    (a call captured without sampling records None, which would turn rho, the loss and then every FP32 master into NaN)
+    and the call sampled at temperature 1 without guidance (the learner's logp is the plain T=1 softmax)."""
+    kept = []
+    for row in rows:
+        if not np.isfinite(row['logp']).all():
+            stats['skip_nonfinite_actor_logp'] += 1
+        elif row.get('temperature') not in (None, 1, 1.0) or row.get('guidance'):
+            stats['skip_other_sampling_law'] += 1
+        else:
+            kept.append(row)
+    return kept
+
+
 def load_group(collector, group, stats):
     """(task_id, [episode dicts with 'reward', 'rows'], versions) of one scored group."""
     from natlang_neuralese.common.jsonio import read_jsonl
@@ -359,7 +376,7 @@ def load_group(collector, group, stats):
     episodes = []
     for row in read_jsonl(info['dir'] / 'rollouts.jsonl'):
         reward = row.get('reward')
-        rows = episode_turns(row, stats, collector.states) if row.get('turns') else []
+        rows = trainable_rows(episode_turns(row, stats, collector.states), stats) if row.get('turns') else []
         decisions = decision_turns(row, stats, collector.states) if row.get('turns') else []
         sampled = sum(len(r['sample']) for r in rows)
         collector.generated += sampled
@@ -504,6 +521,15 @@ class WeightSync:
 
     def publish(self, version, on_done, also=None, policy=None):
         def run():
+            # An exception here used to end the thread silently: ``last`` kept the previous step's ok, so the loop went
+            # on as if the actor had been updated and attested. It is now this version's failure (the loop stops on it).
+            try:
+                body()
+            except Exception as error:
+                self.last = {'version': version, 'ok': False, 'answer': f'publish failed: {error!r}'[:400]}
+                on_done(version, False)
+
+        def body():
             timing = {}
             started = time.time()
             partial = self.weights_dir / 'model.safetensors.partial'
@@ -532,7 +558,10 @@ class WeightSync:
             extra = {}
             if also is not None:
                 t = time.time()
-                extra = also() or {}
+                try:
+                    extra = also() or {}
+                except Exception as error:   # the actor already serves the new weights: attest them, report the write
+                    extra = {'checkpoint_error': repr(error)[:400]}
                 timing.update(extra)
                 timing['checkpoint_s'] = round(time.time() - t, 2)
             if ok and self.front_url is not None:
@@ -617,12 +646,17 @@ def write_pruned_checkpoint(state, native_rows, special, path, source_sha256, tr
     return None
 
 
+def decision_tokens(row):
+    """Packed tokens of one decision: its prompt once per option plus the option's continuation."""
+    return sum(len(row['prompt']) + len(o) for o in row['options'])
+
+
 def decision_batches(items, max_tokens):
     """Pack sampled decisions (``lower_rollout_turns.decision_turns`` rows with their advantage) into forward batches: each
     option is one document (exact prompt + option continuation), so a decision of K options is K packed documents."""
     batches, batch, size = [], [], 0
     for item in items:
-        n = sum(len(item['row']['prompt']) + len(o) for o in item['row']['options'])
+        n = decision_tokens(item['row'])
         if batch and size + n > max_tokens:
             batches.append(batch)
             batch, size = [], 0
@@ -866,9 +900,11 @@ def train(args):
         from safetensors import safe_open
         with safe_open(str(state_path), 'pt', device='cuda') as handle:
             meta = handle.metadata()
+            # materialise AdamW state (zero grads) before the masters are restored: with weight decay this step moves
+            # the parameters, and it must not move the restored ones
+            optimizer.step()
             for name in live:
                 masters[name].copy_(handle.get_tensor('master/' + name))
-            optimizer.step()        # materialise AdamW state (zero grads), then overwrite it
             for name in live:
                 st = optimizer.state[masters[name]]
                 st['exp_avg'].copy_(handle.get_tensor('exp_avg/' + name))
@@ -983,9 +1019,11 @@ def train(args):
         checkpoints[:] = [c for c in checkpoints if c.exists()]
         return {'checkpoint': str(path), 'checkpoint_sha256': sha}
 
-    def held(step_number, samples, name=None, policy=None):
+    def held(step_number, samples, name=None, policy=None, resume_collection=True):
         """``held_eval measure`` on the training actor itself (it serves the current policy with the held-v2 engine pin):
-        new collection pauses, the actor's weights stay fixed until the measurement ends, then ``compare`` with step 0."""
+        new collection pauses, the actor's weights stay fixed until the measurement ends, then ``compare`` with step 0.
+        ``resume_collection=False``: the actor serves another policy than the learner's (start policy, --held-extra), so
+        collection stays paused until the caller has restored the learner's weights."""
         if name is None:
             held_steps.add(step_number)
             (work / 'held-steps.json').write_text(json.dumps(sorted(held_steps)) + '\n')
@@ -1005,7 +1043,8 @@ def train(args):
                     subprocess.run([*python, 'compare', str(base), str(out / 'result.json'), '--out',
                                     str(out / 'compare-vs-step0.json')], cwd=REPO, env=pinned_env(), stdout=handle, stderr=subprocess.STDOUT)
         finally:
-            collector.paused.clear()
+            if resume_collection:
+                collector.paused.clear()
         summary = {}
         if (out / 'result.json').exists():
             result = json.loads((out / 'result.json').read_text())
@@ -1029,8 +1068,7 @@ def train(args):
                 sync.wait()
                 if not sync.last.get('ok'):
                     raise RuntimeError(f'loading the start policy into the actor failed: {sync.last}')
-                held(0, args.held_samples_start, policy=source_sha)
-                collector.paused.set()
+                held(0, args.held_samples_start, policy=source_sha, resume_collection=False)
             finally:
                 sync.snapshot()
                 sync.publish(step, on_published, also=lambda s=step: write_native(s))
@@ -1056,8 +1094,7 @@ def train(args):
                     raise RuntimeError(f'loading {path} into the actor failed: {sync.last}')
                 (work / 'held').mkdir(exist_ok=True)
                 (work / 'held' / f'{name}.source').write_text(path + '\n')
-                held(0, args.held_samples_extra, name=name, policy=sha)
-                collector.paused.set()
+                held(0, args.held_samples_extra, name=name, policy=sha, resume_collection=False)
         finally:
             sync.snapshot()                   # the learner's own (start) weights back on the actor
             sync.publish(0, on_published, policy=source_sha)
@@ -1159,7 +1196,13 @@ def train(args):
         stats = collections.Counter()
         chains, decisions, rewards, spread, dropped_stale, staleness, task_rewards = [], [], [], 0, 0, [], []
         for group in groups:
-            task_id, episodes, versions = load_group(collector, group, stats)
+            try:
+                task_id, episodes, versions = load_group(collector, group, stats)
+            except Exception as error:   # one malformed capture loses its group (kept for diagnosis), never the run
+                stats['groups_lowering_failed'] += 1
+                log_line(log, {'event': 'group lowering failed', 'group': group, 'error': repr(error)[:400]})
+                prune_group(collector, group, keep=True)
+                continue
             prune_group(collector, group, keep=args.keep_rollouts)
             if not episodes:
                 continue
@@ -1183,7 +1226,13 @@ def train(args):
                 for chain in kept:
                     chain['advantage'] = advantage
                     chains.append(chain)
-                decisions += [{'row': d, 'advantage': advantage} for d in episode['decisions']]
+                for d in episode['decisions']:
+                    # every option is scored as its own copy of the prompt, so a decision is one forward of K prompts:
+                    # beyond the sequence cap it would not fit beside the actor (the chains' cap, per decision)
+                    if decision_tokens(d) > args.max_sequence_tokens:
+                        stats['decisions_too_long_dropped'] += 1
+                    else:
+                        decisions.append({'row': d, 'advantage': advantage})
         # A sampled decision is one action (one categorical sample), so it counts as one unit beside the sampled tokens.
         loss_tokens = sum(length for c in chains for _, length, _ in c['segs'])
         units = loss_tokens + len(decisions)
@@ -1327,6 +1376,15 @@ def train(args):
         t = time.time()
         embedding_master.grad[special_index] = 0
         grad_norm = torch.nn.utils.clip_grad_norm_(parameters, args.clip).item()
+        if not math.isfinite(grad_norm):
+            # a NaN/inf gradient would make every FP32 master and AdamW moment NaN, and the next state save would
+            # overwrite the only training state with it: drop this step's update, keep the weights
+            for p in parameters:
+                p.grad.zero_()
+            collector.active_slots = args.slots
+            log_line(log, {**record, 'event': 'non-finite gradient: update skipped', 'grad_norm': repr(grad_norm),
+                           'loss_sums': {k: v for k, v in sums.items() if isinstance(v, float)}})
+            continue
         lr = args.lr * min(1., (step + 1) / args.warmup)
         for g in optimizer.param_groups:
             g['lr'] = lr
@@ -1456,7 +1514,7 @@ def main():
     t.add_argument('--max-model-requests', type=int, default=40,
                    help='episode budget in model calls; a budget stop scores as a failure (EPISODE_COST_20261112)')
     t.add_argument('--pass-rates', default=resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'exp1-rft', 'base-pass-rates.json'),
-                   help='measured base pass rates per task (re-read every 10 min; a task's own latest group replaces its '
+                   help="measured base pass rates per task (re-read every 10 min; a task's own latest group replaces its "
                    'rate); empty: own outcomes only')
     t.add_argument('--pass-band', type=float, nargs=2, default=(0.1, 0.9))
     t.add_argument('--pass-min-scored', type=int, default=2)
