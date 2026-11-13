@@ -92,6 +92,23 @@ export function callWrittenAsText(text: string, tools: Array<{ function: { name:
 const MALFORMED_RETRY = 'The last tool call was malformed. Call one offered tool with valid JSON object arguments. ' +
   'Do not change the task or invent a new tool.';
 
+/** One sentence on why the tool-call markup of a reply is no call (`ModelTurn.malformed_call`). */
+function leakedCallFeedback(text: string, tools: Array<{ function: { name: string } & Json }>): string {
+  const at = text.indexOf('<tool_call>');
+  let problem = 'could not be read';
+  if (at >= 0) try { parseNativeXmlCalls(text.slice(at), tools); } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    problem = /function frame/.test(message) ? 'did not name its function on the line after the opening tag' :
+      /not offered/.test(message) ? 'named a tool this call does not offer' :
+      /duplicate parameter/.test(message) ? 'left a parameter open or gave one twice' :
+      /unknown parameter/.test(message) ? 'gave a parameter its tool does not have' :
+      /incomplete tool frame/.test(message) ? 'was not closed after its last parameter' :
+      /mixed prose/.test(message) ? 'was followed by text that is not a call' :
+      /declared|schema/.test(message) ? 'gave an argument that is not of its declared type' : problem;
+  }
+  return `The tool call in your last reply ${problem}, so nothing ran; send the call again, complete.`;
+}
+
 /** Whether a transport answered with streamed chunks rather than one whole body. */
 export function isStream(value: AsyncIterable<Json> | Json): value is AsyncIterable<Json> {
   return typeof (value as AsyncIterable<Json>)[Symbol.asyncIterator] === 'function';
@@ -340,8 +357,8 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
             try {
               calls.push(...parseNativeXmlCalls(replyText, responseTools).map(([name,args]) => [reverse[name] ?? name,args] as [string,Json]));
               parsedNative = true;
-            } catch { throw new LeakedCall('the tool call came back as invalid native XML'); }
-          } else throw new LeakedCall('the tool call came back as text');
+            } catch { throw new LeakedCall(leakedCallFeedback(replyText, responseTools)); }
+          } else throw new LeakedCall(leakedCallFeedback(replyText, tools));
         }
         // A reply that is nothing but one offered tool's arguments, written out as JSON, is that call.
         const written = calls.length ? undefined : callWrittenAsText(replyText, tools);
@@ -355,8 +372,13 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
         // A reply cut off mid tool call is a truncated turn, not a transport failure.
         if (truncated) return finish({ calls: [], text: contentText(message?.content), truncated: true,
           ...counts(), raw_response: body });
-        // A second leaked call ends the turn as an empty reply: its markup must never read as the answer.
-        if (retries >= 1 && error instanceof LeakedCall) return finish({ calls: [], text: '', ...counts(), raw_response: body });
+        // Tool-call markup that is no call: the turn carries the reply as sampled and what was wrong with it, so the
+        // caller keeps it in the history. `malformed_call` marks it: the markup must never read as the answer.
+        if (error instanceof LeakedCall) {
+          const reasoning = message?.reasoning_content ?? message?.reasoning;
+          return finish({ calls: [], text: contentText(message?.content), malformed_call: error.message,
+            ...(typeof reasoning === 'string' && reasoning.trim() ? { reasoning } : {}), ...counts(), raw_response: body });
+        }
         if (retries >= 1 || signal?.aborted)
           throw new Error(`model returned malformed tool arguments after ${retries + 1} attempt${retries ? 's' : ''}: ` +
             `${error instanceof Error ? error.message : String(error)}`, { cause: error });

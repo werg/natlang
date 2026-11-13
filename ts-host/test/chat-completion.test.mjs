@@ -150,16 +150,18 @@ test('tool aliases rename tools on the wire and back', async () => {
   } finally { await model.close(); }
 });
 
-test('tool-call markup left in the text is a malformed call: retried once, and never returned as a reply', async () => {
-  const leaked = '<tool_call>\n<function=eval>\n<parameter=code>\n1\n</parameter>\n</function>\n</tool_call>';
-  const model = await server((body, count) => count === 1 ? { choices: [{ finish_reason: 'stop', message: { content: leaked } }] } :
-    count === 2 ? { choices: [{ finish_reason: 'tool_calls', message: { tool_calls: [{ type: 'function', function: { name: 'eval', arguments: '{"code":"1"}' } }] } }] } :
-    { choices: [{ finish_reason: 'stop', message: { content: '</parameter>\n</function>\n</tool_call>' } }] });
+test('tool-call markup left in the text is a malformed call: returned as sampled with what was wrong, never as a reply', async () => {
+  const open = 'Running it.\n<tool_call>\n<function=eval>\n<parameter=code>\n1\n';
+  const model = await server((body, count) => ({ choices: [{ finish_reason: 'stop', message: count === 1 ?
+    { content: open, reasoning_content: 'Evaluate one.' } : { content: '</parameter>\n</function>\n</tool_call>' } }] }));
   try {
     const drive = chatCompletionModelTurn(httpChatTransport({ endpoint: model.endpoint, model: 'm' }));
-    assert.deepEqual((await drive(request())).calls, [['eval', { code: '1' }]], 'the retry produced a real call');
-    const twice = await drive(request());
-    assert.deepEqual(twice.calls, []); assert.equal(twice.text, '', 'a second leak is an empty reply, not the markup');
+    const turn = await drive(request());
+    assert.deepEqual(turn.calls, []); assert.equal(turn.text, open, 'the reply as sampled, for the history');
+    assert.equal(turn.reasoning, 'Evaluate one.');
+    assert.equal(turn.malformed_call, 'The tool call in your last reply left a parameter open or gave one twice, so nothing ran; send the call again, complete.');
+    assert.equal(model.bodies.length, 1, 'no hidden second request');
+    assert.match((await drive(request())).malformed_call, /^The tool call in your last reply could not be read, so nothing ran; /);
   } finally { await model.close(); }
 });
 
@@ -167,11 +169,11 @@ test('tool-call markup left in the text is a malformed call: retried once, and n
 test('LFM2 pythonic call markers left in the text are a malformed call too', async () => {
   // A Neuralese-typed call answered with an unparseable return_result (here `]]`) must not read as a text reply.
   const leaked = "<|tool_call_start|>[return_result(status='success', value='x']]<|tool_call_end|>";
-  const model = await server((body, count) => count === 1 ? { choices: [{ finish_reason: 'stop', message: { content: leaked } }] } :
-    { choices: [{ finish_reason: 'tool_calls', message: { tool_calls: [{ type: 'function', function: { name: 'eval', arguments: '{"code":"1"}' } }] } }] });
+  const model = await server(() => ({ choices: [{ finish_reason: 'stop', message: { content: leaked } }] }));
   try {
     const turn = await chatCompletionModelTurn(httpChatTransport({ endpoint: model.endpoint, model: 'm' }))(request());
-    assert.deepEqual(turn.calls, [['eval', { code: '1' }]], 'the leak was retried');
+    assert.deepEqual(turn.calls, []); assert.equal(turn.text, leaked);
+    assert.match(turn.malformed_call, /could not be read, so nothing ran/);
   } finally { await model.close(); }
 });
 

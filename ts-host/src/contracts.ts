@@ -77,6 +77,9 @@ export type ModelTurn = { protocol_failure?: NativeProtocolFailure; calls?: [str
   execution_plan?: string | null;
   /** The reply stopped at max_tokens. */
   truncated?: boolean;
+  /** The reply held tool-call markup that is no complete call: `text` is the reply as sampled, `calls` is empty and
+   * this is the one sentence that tells the model what was wrong. Nothing ran. */
+  malformed_call?: string;
   /** How the model scheduler batched this turn's request (batch id and size, requests in flight, queue wait). */
   scheduling?: { batch_id: string; batch_size: number; in_flight: number; queue_wait_ms: number; priority: 'running' | 'new' } };
 

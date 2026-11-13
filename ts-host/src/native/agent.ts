@@ -52,14 +52,12 @@ import {activeRecorder, activeNativeAdapters, activeNativeStates} from './model-
 import { hexDigest } from './hash.js';
 import { activeSystemPrompts, softenMessages, renderPromptMessages, renderSystemPrompt, type PromptRendering } from './system-prompts.js';
 import type { ModelBudget } from './model-budget.js';
-import { modelFacing } from '../runtime/model-facing.js';
 /** The answer to a call of a reply that did not run because an earlier call of the same reply failed. */
 const UNRUN_CALL = 'Not run: an earlier call in this reply failed; call it again if you still need it.';
 /** Calls that only read the folder or code: a failed call earlier in the same reply cannot change what they return. */
 const READ_ONLY_TOOLS = new Set(['read_file', 'list_files', 'search_files', 'diff_files', 'read_code', 'diff_code', 'read_page']);
-/** Variant reply-text-with-calls: the prose a reply carried before its tool calls stays in the transcript (it was
- * dropped, so the next prompt differed from what the model wrote and the actor's prefix cache re-prefilled). */
-const replyText = (response: { text?: string }): string => modelFacing('reply-text-with-calls') ? response.text ?? '' : '';
+/** What a reply said before its tool calls stays in the transcript: the history is the reply as it was sampled. */
+const replyText = (response: { text?: string }): string => response.text ?? '';
 
 /** The code tools, as offered. Kept here so data collected under earlier wording can be migrated to it exactly. */
 export const READ_CODE_DESCRIPTION = 'Inspect a named item this call can use but does not show: source of a function in the program\'s codebase; ' +
@@ -1975,6 +1973,19 @@ export class NativeToolAgent {
           elided, note: null, estimated_tokens: Math.round(estimate(allTools)) });
         continue;
       }
+      if (response.malformed_call) {
+        // A tool call that could not be read ran nothing. The reply stays in the history as it was sampled, answered
+        // with what was wrong; it counts as a reply without an action.
+        messages.push({ role: 'assistant', content: response.text ?? '', ...thought(response.reasoning) },
+          { role: 'user', content: response.malformed_call });
+        if (++repliesWithoutAction >= 4) {
+          session.runtime.trace.emit('model_incomplete', { call_id: callId, turn: turns,
+            reason: 'no_action', evidence: 'four_consecutive_replies_without_a_tool_call', replies: repliesWithoutAction });
+          return `model_incomplete: no_action (${repliesWithoutAction} replies in a row called no tool and returned no result; ` +
+            'the last one held a tool call that could not be read)';
+        }
+        continue;
+      }
       if (!response.calls?.length) {
         // A reply without a tool call ends the turn: it returns the staged result, or, for a string-typed
         // call with nothing staged, the reply's text is the result.
@@ -2062,8 +2073,10 @@ export class NativeToolAgent {
             'Handoff accepted. Continue this same invocation from its existing scope and transcript. Do not repeat completed effects.' };
         }, String(raw[0]!.id));
         const failure = action.kind === 'ok' ? undefined : action.text;
-        messages.push({ role: 'assistant', content: replyText(response), tool_calls: raw.slice(0, 1), ...thought(response.reasoning) },
-          { role: 'tool', tool_call_id: String(raw[0]!.id), content: action.text });
+        // Every sampled call stays in the history; only the first is answered by the handoff decision.
+        messages.push({ role: 'assistant', content: replyText(response), tool_calls: raw, ...thought(response.reasoning) },
+          { role: 'tool', tool_call_id: String(raw[0]!.id), content: action.text },
+          ...raw.slice(1).map(call => ({ role: 'tool', tool_call_id: String(call.id), content: UNRUN_CALL })));
         if (action.kind === 'budget') return budgetStop(action.text);
         if (failure?.startsWith('escalation unavailable:') || failure?.startsWith('graph model ')) return failure;
         if (failure) {
@@ -2118,7 +2131,8 @@ export class NativeToolAgent {
           if (failures) {
             refinementFailures = failures;
             results.push({ kind: 'rejected', text: failureFeedback(failures), codes: failures.map(failure => failure.code) });
-            break;
+            stoppedAt ??= index;
+            continue;
           }
         }
         const result: NativeResult = await session.applyAsync(name, appliedArgs,
