@@ -88,18 +88,38 @@ export function isIterationStream(expression: ts.Expression, checker?: ts.TypeCh
     current.expression.name.text === 'streamUntil';
 }
 
+/** Names a statement declares for its own scope: a loop's `let i`, a block's or a function's declarations and parameters. */
+function ownDeclarations(node: ts.Node): string[] {
+  const names: string[] = [];
+  const bind = (name: ts.BindingName): void => {
+    if (ts.isIdentifier(name)) names.push(name.text);
+    else for (const element of name.elements) if (!ts.isOmittedExpression(element)) bind(element.name);
+  };
+  const list = (declarations: ts.Node | undefined): void => {
+    if (declarations && ts.isVariableDeclarationList(declarations)) for (const declaration of declarations.declarations) bind(declaration.name);
+  };
+  if (ts.isForStatement(node) || ts.isForOfStatement(node) || ts.isForInStatement(node)) list(node.initializer);
+  else if (ts.isBlock(node)) { for (const statement of node.statements) if (ts.isVariableStatement(statement)) list(statement.declarationList); }
+  else if (ts.isFunctionLike(node)) for (const parameter of node.parameters) bind(parameter.name);
+  else if (ts.isCatchClause(node) && node.variableDeclaration) bind(node.variableDeclaration.name);
+  return names;
+}
+
+/** The outer names a statement assigns; a name an inner scope declares again (a nested `for (let i ...)`) is another variable. */
 function assignedIdentifiers(node: ts.Node): Set<string> {
   const names = new Set<string>();
-  const visit = (child: ts.Node): void => {
+  const visit = (child: ts.Node, shadowed: ReadonlySet<string>): void => {
+    const own = ownDeclarations(child);
+    if (own.length) shadowed = new Set([...shadowed, ...own]);
     let target: ts.Expression | undefined;
     if (ts.isBinaryExpression(child) && child.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
         child.operatorToken.kind <= ts.SyntaxKind.LastAssignment) target = child.left;
     if ((ts.isPrefixUnaryExpression(child) || ts.isPostfixUnaryExpression(child)) &&
         (child.operator === ts.SyntaxKind.PlusPlusToken || child.operator === ts.SyntaxKind.MinusMinusToken)) target = child.operand;
-    if (target && ts.isIdentifier(target)) names.add(target.text);
-    ts.forEachChild(child, visit);
+    if (target && ts.isIdentifier(target) && !shadowed.has(target.text)) names.add(target.text);
+    ts.forEachChild(child, next => visit(next, shadowed));
   };
-  visit(node);
+  visit(node, new Set());
   return names;
 }
 
@@ -214,8 +234,7 @@ function canonicalFor(node: ts.ForStatement): string | undefined {
   if (boundRoot && assigned.has(boundRoot)) return 'do not reassign the loop bound inside the loop body';
   if (boundRoot && grownReceivers(node.statement).has(boundRoot))
     return 'do not grow the collection that bounds the loop inside its body';
-  if (ts.isCallExpression(bound)) return 'compute the bound once before the loop, for example ' +
-    '`const pages = store.pages(); for (let p = 1; p <= pages; p++) { ... }`';
+  // A call in the bound (`n <= store.pages()`) is fine: the lowered loop evaluates its bound once, when it starts.
   return;
 }
 

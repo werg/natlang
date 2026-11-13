@@ -145,6 +145,14 @@ export function neuraleseRefSentinel(ref:NeuraleseRef):string {
   return neuraleseSentinel(ref.$neuralese.id,ref.$neuralese.stop_gradient,ref.$neuralese.source_occurrence);
 }
 
+/**
+ * A Neuralese value as plain text, where no state can be shown (console output): one line that says what it is and what
+ * to do with it. The reference's JSON (`{"$neuralese":{…,"id":"nzs1_…"}}`) read as garbled data, and its id as a page to read.
+ */
+export function neuraleseDisplayText(ref: NeuraleseRef): string {
+  return `[${ref.$neuralese.type} value: opaque here; pass it on as is, or read it with read(value)]`;
+}
+
 /** The block a text consists of exactly, if it is one sentinel. */
 export function soleSentinel(text: string): string | undefined {
   return soleSentinelUse(text)?.id;

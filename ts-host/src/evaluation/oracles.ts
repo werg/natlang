@@ -9,7 +9,7 @@ export { jsonStringRecordCanonical };
 export type OracleLevel = 'exact' | 'normalized' | 'span' | 'agreement' | 'judged' | 'constraints';
 export const ORACLE_LEVELS: readonly OracleLevel[] = ['exact', 'normalized', 'span', 'agreement', 'judged', 'constraints'];
 /** Baseline answer comparison version; explicit specialized comparators carry their own verdict version. */
-export const ANSWER_COMPARISON_VERSION = 'normalized-decimal-exact/2';
+export const ANSWER_COMPARISON_VERSION = 'normalized-decimal-exact/4';
 export type NumericListFieldSpec = { key: string; separator: '; '; empty_value: 'none' };
 export type SemanticStructuredComparisonSpec = { schema_version: string; unordered_paths: string[]; prose_paths: string[];
   ordered_paths?: string[]; witness_review_required?: boolean; witness_policy?: string; prose_policy?: string };
@@ -276,6 +276,71 @@ function qaNumbers(value: unknown): string[] {
   return String(value).match(/[+-]?\d+(?:\.\d+)?/g)?.map(token =>
     decimalForms(token)?.exact ?? token).sort() ?? [];
 }
+/** A yes/no answer's polarity: `true`, `"yes"` and `"true"` are true, `false`, `"no"` and `"false"` false, else undefined. */
+function polarity(value: unknown): boolean | undefined {
+  if (typeof value === 'boolean') return value;
+  if (typeof value !== 'string') return undefined;
+  const text = normalizeText(value).replace(/[.!]$/, '');
+  return text === 'yes' || text === 'true' ? true : text === 'no' || text === 'false' ? false : undefined;
+}
+/** A string answer written as a JSON string literal (`"\"#B A#\""`) is that string when the gold is a string that is not
+ * itself quoted. */
+function unquotedAnswer(actual: unknown, candidates: unknown[]): unknown {
+  if (typeof actual !== 'string') return actual;
+  const text = actual.trim();
+  if (text.length < 2 || !text.startsWith('"') || !text.endsWith('"')) return actual;
+  if (!candidates.some(candidate => typeof candidate === 'string') ||
+      candidates.some(candidate => typeof candidate === 'string' && candidate.trim().startsWith('"'))) return actual;
+  try {
+    const inner: unknown = JSON.parse(text);
+    return typeof inner === 'string' ? inner : actual;
+  } catch { return actual; }
+}
+/**
+ * Extractive QA: a short answer that holds the whole gold span of two or more tokens, contiguous and in order, with the
+ * same numbers, and is at most twice the gold's length ("Celine Dion's \"Because You Loved Me\"" for "Because You Loved
+ * Me"). One-token golds stay with F1: "Duke Lemur Center" must not pass for "Duke".
+ */
+export function containsQaSpan(actual: unknown, expected: unknown): boolean {
+  if (canonical(qaNumbers(actual)) !== canonical(qaNumbers(expected))) return false;
+  const got = words(actual, true), want = words(expected, true);
+  if (want.length < 2 || got.length > 2 * want.length) return false;
+  for (let start = 0; start + want.length <= got.length; start++)
+    if (want.every((word, index) => got[start + index] === word)) return true;
+  return false;
+}
+const QA_HEDGES = new Set(['or', 'and', 'nor', 'either', 'neither', 'not', 'no', 'never', 'maybe', 'perhaps', 'possibly',
+  'probably', 'unclear', 'unknown']);
+const QA_POSSESSOR = /^\s*(?:(?:the|a|an)\s+)?(?:(?:my|your|his|her|its|our|their)\s+|(?:[\p{L}\p{N}][\p{L}\p{N}.-]*\s+)?[\p{L}\p{N}][\p{L}\p{N}.-]*['\u2019]s\s+)(?=\S)/iu;
+/**
+ * Extractive QA: the core of a short answer that restates part of the question or names a possessor before the answer
+ * ("just had sex" for "What did A say they just had ...?", "the alien's spaceship" for "the spaceship"). Drops a leading
+ * possessor (`X's`, `X Y's`, a possessive determiner), then the longest leading run of words that occurs contiguously in
+ * the question and holds no gold word. A core that is empty, unchanged, or hedges (or/and/not/maybe ... absent from the
+ * gold: "sex or coffee") is not offered, so a multi-answer reply never passes this way.
+ */
+export function qaAnswerCores(actual: unknown, expected: unknown, question?: string): string[] {
+  if (typeof actual !== 'string') return [];
+  const gold = new Set(words(expected, true));
+  const cores = new Set<string>();
+  const echoFree = (tokens: string[]): string[] => {
+    const asked = question ? words(question, true) : [];
+    for (let k = tokens.length - 1; k >= 1; k--) {
+      const lead = tokens.slice(0, k);
+      if (lead.some(word => gold.has(word))) continue;
+      for (let start = 0; start + k <= asked.length; start++)
+        if (lead.every((word, index) => asked[start + index] === word)) return tokens.slice(k);
+    }
+    return tokens;
+  };
+  const possessorFree = actual.replace(QA_POSSESSOR, '');
+  for (const text of new Set([actual, possessorFree])) {
+    const core = echoFree(words(text, true));
+    if (core.length) cores.add(core.join(' '));
+  }
+  cores.delete(words(actual, true).join(' '));
+  return [...cores].filter(core => !core.split(' ').some(word => QA_HEDGES.has(word) && !gold.has(word)));
+}
 /** Multiset token F1; repeated words count only when they occur on both sides. */
 export function spanF1(actual: unknown, expected: unknown, qa = false): number {
   if (qa) {
@@ -321,7 +386,7 @@ export function agreement(actual: unknown, expected: unknown): number {
 
 /** File contracts fail closed on malformed reports and unverified rewrites. */
 export const DATA_QUALITY_VERSION = 3;
-export const FILE_CONTENT_COMPARISON_VERSION = 'json-content/2';
+export const FILE_CONTENT_COMPARISON_VERSION = 'json-content/3';
 export type FilesOracle = { compare?: 'content' | 'exact' | 'moves' | 'rewrite' | 'csv' | 'counts' | 'json-string-record' | 'qa-string-map' | 'json-semantic-structured' | 'markdown-terminal-newline' | (string & {}); threshold?: number; span?: number;
   total?: number; rubric?: string; alternates?: Record<string, string[]>;
   /** JSON outputs whose prose-only fields may vary while all other structure remains exact. */
@@ -331,6 +396,9 @@ export type FilesOracle = { compare?: 'content' | 'exact' | 'moves' | 'rewrite' 
   rationale_context_paths?: string[];
   /** Explicit answer file for return-value consistency when the default answers.json names do not apply. */
   return_path?: string;
+  /** `content` compares: whether one terminal LF/CRLF of a non-JSON file counts (`exact`, the default) or not
+   * (`lenient`: the collector's choice when the task's instructions never mention a newline). */
+  terminal_newline?: 'exact' | 'lenient';
   /** Explicit answer-map keys whose string values are exact decimal quantities. */
   numeric_keys?: string[];
   /** Explicit answer-map keys whose values are ordered exact unsigned integer lists. */
@@ -566,7 +634,10 @@ export function checkFiles(actual: Record<string, string>, expected: Record<stri
     span = probability(spec.span ?? 0.5, 'files span');
   if (compare === 'content') {
     const paths = [...new Set([...Object.keys(expected), ...Object.keys(actual)])].sort();
-    const failed = paths.filter(path => !fileContentEqual(path, actual[path], expected[path]));
+    const lenient = spec.terminal_newline === 'lenient';
+    const failed = paths.filter(path => !fileContentEqual(path, actual[path], expected[path]) &&
+      !(lenient && !/\.json$/i.test(path) && typeof actual[path] === 'string' && typeof expected[path] === 'string' &&
+        markdownTerminalNewlineBody(actual[path]!) === markdownTerminalNewlineBody(expected[path]!)));
     // Structural file contracts always require every file; no partial-credit threshold.
     return { accepted: !failed.length, score: paths.length ? (paths.length - failed.length) / paths.length : 1,
       passed: paths.length - failed.length, items: paths.length, failed, errors: [], pending: [],
@@ -822,12 +893,15 @@ export function checkFileReturn(actual: unknown, files: Record<string, string>, 
 
 /** A judge's verdict is supplied by the collection caller; no case can self-certify its own prose. */
 export async function checkOracle(actual: unknown, expected: unknown, oracle: OracleSpec = 'exact',
-  judge?: (input: { actual: unknown; expected: unknown; rubric: string }) => Promise<{ accepted: boolean; verdict: string; needs_review?: boolean }>):
+  judge?: (input: { actual: unknown; expected: unknown; rubric: string }) => Promise<{ accepted: boolean; verdict: string; needs_review?: boolean }>,
+  /** The task's question (its `question` input), for extractive QA answers that restate it (`qaAnswerCores`). */
+  context: { question?: string } = {}):
   Promise<OracleVerdict> {
   const spec = typeof oracle === 'string' ? { level: oracle } : oracle;
   const { level } = spec;
   if (!ORACLE_LEVELS.includes(level)) throw new RangeError(`unknown oracle level: ${level}`);
   const candidates = [expected, ...('alternates' in spec ? spec.alternates ?? [] : [])];
+  actual = unquotedAnswer(actual, candidates);
   if (level === 'exact') return { accepted: candidates.some(candidate => canonical(actual) === canonical(candidate)), level };
   if (level === 'normalized' && spec.normalization === 'ordinal-distance-record') {
     const review = ordinalDistanceRecordReview(actual, expected, spec.ordinal_levels, spec.ordinal_distance_max);
@@ -919,11 +993,14 @@ export async function checkOracle(actual: unknown, expected: unknown, oracle: Or
     const same = (candidate: unknown) => typeof actual === 'string' && typeof candidate === 'string' &&
       qaAnswerText(candidate).length > 0 && qaAnswerText(actual) === qaAnswerText(candidate) &&
       canonical(qaNumbers(actual)) === canonical(qaNumbers(candidate));
-    return { accepted: candidates.some(same), level, comparison_version: 'qa-scalar-exact/1' };
+    const samePolarity = (candidate: unknown) => polarity(actual) !== undefined && polarity(actual) === polarity(candidate);
+    return { accepted: candidates.some(candidate => same(candidate) || samePolarity(candidate)), level,
+      comparison_version: 'qa-scalar-exact/2' };
   }
   if (registered) return { accepted: candidates.some(candidate => registered.equal(actual, candidate)), level };
   if (level === 'normalized') assertKnownComparator('normalization', spec.normalization, BUILTIN_NORMALIZATIONS);
-  if (level === 'normalized') return { accepted: candidates.some(candidate => normalized(actual) === normalized(candidate)), level };
+  if (level === 'normalized') return { accepted: candidates.some(candidate => normalized(actual) === normalized(candidate) ||
+    polarity(actual) !== undefined && polarity(actual) === polarity(candidate)), level };
   if (level === 'agreement') {
     const threshold = probability('threshold' in spec ? spec.threshold ?? 0.9 : 0.9, 'agreement');
     const score = Math.max(...candidates.map(candidate => agreement(actual, candidate)));
@@ -932,7 +1009,17 @@ export async function checkOracle(actual: unknown, expected: unknown, oracle: Or
   if (level === 'span') {
     const threshold = 'threshold' in spec ? spec.threshold ?? 0.5 : 0.5;
     if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1) throw new RangeError('span threshold must be between 0 and 1');
-    const score = Math.max(...candidates.map(candidate => spanF1(actual, candidate, 'normalization' in spec && spec.normalization === 'qa')));
+    const qa = 'normalization' in spec && spec.normalization === 'qa';
+    const score = Math.max(...candidates.map(candidate => spanF1(actual, candidate, qa)));
+    if (qa && score < threshold) {
+      if (candidates.some(candidate => polarity(actual) !== undefined && polarity(actual) === polarity(candidate)))
+        return { accepted: true, level, score, comparison_version: 'qa-polarity/1' };
+      if (candidates.some(candidate => containsQaSpan(actual, candidate)))
+        return { accepted: true, level, score, comparison_version: 'qa-span-containment/1' };
+      const core = Math.max(0, ...candidates.flatMap(candidate =>
+        qaAnswerCores(actual, candidate, context.question).map(text => spanF1(text, candidate, true))));
+      if (core >= threshold) return { accepted: true, level, score: core, comparison_version: 'qa-span-core/1' };
+    }
     if (score < threshold && !judge && 'rubric' in spec && spec.rubric)
       return { accepted: false, level, score, needs_review: true, verdict: 'answer equivalence needs independent review' };
     if (score < threshold && judge && 'rubric' in spec && spec.rubric) {

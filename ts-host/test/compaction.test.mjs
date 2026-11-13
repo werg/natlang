@@ -117,6 +117,17 @@ test('the model may compact on its own, a note over the limit is rejected, and a
   assert.equal(forcedText.lam.return, 'hello', 'the text reply to the compaction turn did not become the result');
 });
 
+test('a tool call naming something in the eval scope gets its eval form, not just "expected a scope-eval tool"', async () => {
+  const { session } = open({ type: '(note: string) => number', instructions: 'Look around.' });
+  const search = await session.applyAsync('transcript.search', { text: 'freight', in: 'everything' });
+  assert.equal(search.kind, 'rejected');
+  assert.match(search.text, /transcript\.search is not a tool: transcript is in this call's eval scope\. Use it in code, for example eval with code: transcript\.search\("freight"\); read_code\("transcript"\)/);
+  const input = await session.applyAsync('note', {});
+  assert.match(input.text, /note is not a tool: note is in this call's eval scope\. Use it in code, for example eval with code: note\./);
+  const unknown = await session.applyAsync('open_door', { door: 'front' });
+  assert.match(unknown.text, /open_door: bad-action, expected a scope-eval tool/);
+});
+
 test('transcript is searched, not read through: search finds lines, entry gives one call, printing shows a summary', async () => {
   const { session } = open({ type: '() => number', instructions: 'Look around.' });
   await session.applyAsync('eval', { code: 'console.log("alpha\\nthe locker is locked\\nomega"); 1' });

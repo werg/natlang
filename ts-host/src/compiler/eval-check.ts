@@ -205,7 +205,33 @@ export function checkEvalFields(source: string, scope: EvalScopeDeclarations): N
     return !!symbol?.declarations?.length && symbol.declarations.every(declared);
   };
   const found: NatlangDiagnostic[] = [];
+  const at = (node: ts.Node, code: NatlangDiagnostic['code'], message: string) => {
+    const start = node.getStart(snippet), location = snippet.getLineAndCharacterOfPosition(start);
+    found.push({ code, severity: 'error', file: 'eval', start: start - prefix.length, end: node.getEnd() - prefix.length,
+      line: Math.max(1, location.line), column: location.character + 1, message });
+  };
+  // decide(fn, ...) answers a decision record; its answer is .value. Comparing the record itself with an answer
+  // (`verb === "create_booking"`, `switch (verb) { case "create_booking": ... }`) is never true, so every branch is
+  // silently skipped (held-v2 row 91: task text wrote `const verb = await decide(...)` and branched on verb).
+  const isDecision = (node: ts.Expression): boolean => {
+    const type = checker.getNonNullableType(checker.getTypeAtLocation(node));
+    return ['value', 'probabilities', 'confidence', 'scored'].every(name => !!checker.getPropertyOfType(type, name));
+  };
+  const decisionCompare = (node: ts.Expression) => at(node, 'decision-compare',
+    `${node.getText(snippet)} is the decision record that decide(...) returns, not its answer: compare ${node.getText(snippet)}.value.`);
+  const comparisons = new Set<ts.Node>();
   for (const diagnostic of program.getSemanticDiagnostics(snippet)) {
+    if ((diagnostic.code === 2367 || diagnostic.code === 2678) && diagnostic.start !== undefined) {
+      let node: ts.Node | undefined = innermostNode(snippet, diagnostic.start);
+      while (node && !ts.isBinaryExpression(node) && !ts.isCaseClause(node)) node = node.parent;
+      if (!node) continue;
+      const key = ts.isCaseClause(node) ? node.parent.parent : node;
+      if (comparisons.has(key)) continue;
+      const sides = ts.isBinaryExpression(node) ? [node.left, node.right] : [node.parent.parent.expression];
+      const decision = sides.find(isDecision);
+      if (decision) { comparisons.add(key); decisionCompare(decision); }
+      continue;
+    }
     if ((diagnostic.code !== 2339 && diagnostic.code !== 2551) || diagnostic.start === undefined) continue;
     const name = findNode(snippet, diagnostic.start);
     const access = name?.parent;
@@ -230,6 +256,18 @@ export function checkEvalFields(source: string, scope: EvalScopeDeclarations): N
       line: Math.max(1, location.line), column: location.character + 1,
       message: `${access.expression.getText(snippet)} has no field ${name.text}: ${fields}. Read the field that holds what you need.` });
   }
+  return found;
+}
+
+/** The innermost node of any kind at `position`. */
+function innermostNode(file: ts.SourceFile, position: number): ts.Node | undefined {
+  let found: ts.Node | undefined;
+  const visit = (node: ts.Node): void => {
+    if (position < node.getStart(file) || position >= node.getEnd()) return;
+    found = node;
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
   return found;
 }
 

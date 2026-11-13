@@ -741240,6 +741240,20 @@
         "path": "/home/werg/natlang/runs/lfm3-mixture/joint-v4-quality-corrected-20261031/mixture/train-sources.json",
         "sha256": "98be7f77c580dde83a8e5c08e04cd5516e64472bd437fc17b00facf20aa50256"
       }
+    },
+    {
+      "id": "natlang-rl-neuralese-variants-20261113",
+      "owner": "dgx",
+      "path": "runs/natlang-rl-neuralese-variants-20261113",
+      "admission": "rl-task-pool-controlled-addition-off-by-default",
+      "include": [
+        "cases.jsonl",
+        "verification.json",
+        "selection.json",
+        "repetition.json",
+        "task-helpers.jsonl"
+      ],
+      "note": "Neuralese-declaring variants (neuralese-helper framing: one callable Neuralese<string> helper and a root note) of 1,381 eligible GRPO pool tasks in 47 families, 112 of them measured mid-range (base pass rate in [0.1, 0.9]); inputs, oracle, checks, reference, split and source groups are the originals'. Built by scripts/rl_tasks/neuralese_variants.py (generator helpers read from the pool's own neuralese-framed rows, 14 script-authored family helpers, 97 per-task helpers authored by Haiku subagents); all 1,381 qualified by verify.mjs reference/negative/alias replay (3,866 wrong controls rejected, 0 alias rejections). Held-v2 closure: no variant or original excluded. Selectable only through grpo.py --neuralese-variants (off by default); enters as its own controlled addition with a paired held-v2 measurement. plans/neuralese/TASK_SUPPLY_20261113.md."
     }
   ],
   "coverage_backlog": [

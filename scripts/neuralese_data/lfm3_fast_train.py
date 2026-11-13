@@ -6,6 +6,7 @@ linear cross-entropy and a no-grad log-prob pass.
     h = hidden(model, ids, lengths=[n1, n2, ...])  # several documents packed into one row, each attending only itself
     nll = linear_nll(h[positions], model.lm_head.weight, targets)        # fp32 per-token NLL, logits never stored
     logp = token_logprobs(model, ids, positions, targets, lengths=...)   # no grad (GRPO old-policy / reference pass)
+    nll, nucleus_nll, outside = linear_nll_nucleus(h[positions], weight, targets, top_p)   # + NLL under the top-p nucleus
     h = hidden(model, ids, imports=import_tensors(model, [(start, block)], device))   # imported native state spliced in
 
 The HF decoder layer is replaced by two functions over explicit tensors, one per layer kind (conv, attention), each
@@ -325,9 +326,103 @@ def linear_nll(h, weight, target, chunk=LOGIT_CHUNK):
     return _LinearNLL.apply(h, weight, target, chunk)
 
 
+NUCLEUS_TOP_K = 1024
+NUCLEUS_CHUNK = 2048    # rows per head chunk of the nucleus NLL: it holds about twice the fp32 temporaries of the plain CE
+
+
+def _nucleus_cut(lf, lse, top_p, top_k):
+    """Per row of fp32 logits ``lf`` (log-sum-exp ``lse``), the logit of the last token of the top-p nucleus: tokens by
+    decreasing probability, a token kept while the mass before it is <= ``top_p`` (SGLang's rule,
+    ``top_k_top_p_min_p_sampling_from_probs_torch``). The nucleus is every token with a logit >= this cut (ties with
+    the last kept token are in). Only the ``top_k`` largest logits are sorted; a row whose nucleus may reach past them
+    is sorted in full."""
+    k = min(top_k, lf.shape[-1])
+
+    def cut_of(values, row_lse):
+        p = torch.exp(values - row_lse[:, None])
+        count = ((torch.cumsum(p, -1) - p) <= top_p).sum(-1).clamp(min=1)
+        return values.gather(1, (count - 1)[:, None])[:, 0]
+    values = lf.topk(k, dim=-1).values
+    cut = cut_of(values, lse)
+    if k < lf.shape[-1]:
+        wide = cut <= values[:, -1]
+        if wide.any():
+            cut[wide] = cut_of(lf[wide].sort(dim=-1, descending=True).values, lse[wide])
+    return cut
+
+
+class _LinearNLLNucleus(torch.autograd.Function):
+    """``_LinearNLL`` plus the NLL under the top-p nucleus of each row's own distribution: outputs (nll, nucleus nll,
+    target outside the nucleus). The nucleus (``_nucleus_cut``; the target is always in it) is a constant set, so
+    nucleus nll = logsumexp over the set - target logit, with gradient softmax-over-the-set - onehot. Per row only
+    three scalars are kept (log-sum-exp, the set's log-sum-exp, the cut logit); backward recomputes each chunk's
+    logits once and rebuilds the set from the cut."""
+
+    @staticmethod
+    def forward(ctx, h, weight, target, chunk, top_p, top_k):
+        rows = h.shape[0]
+        nll, lse, set_lse, cut = (torch.empty(rows, dtype=torch.float32, device=h.device) for _ in range(4))
+        outside = torch.empty(rows, dtype=torch.bool, device=h.device)
+        for start in range(0, rows, chunk):
+            stop = min(rows, start + chunk)
+            lf = F.linear(h[start:stop], weight).float()
+            own = lf.gather(-1, target[start:stop, None])[:, 0]
+            lse[start:stop] = torch.logsumexp(lf, dim=-1)
+            cut[start:stop] = _nucleus_cut(lf, lse[start:stop], top_p, top_k)
+            inside = torch.logsumexp(lf.masked_fill(lf < cut[start:stop, None], float('-inf')), dim=-1)
+            outside[start:stop] = own < cut[start:stop]
+            set_lse[start:stop] = torch.where(outside[start:stop], torch.logaddexp(inside, own), inside)
+            nll[start:stop] = lse[start:stop] - own
+        ctx.save_for_backward(h, weight, target, lse, set_lse, cut)
+        ctx.chunk = chunk
+        ctx.mark_non_differentiable(outside)
+        return nll, set_lse - (lse - nll), outside
+
+    @staticmethod
+    def backward(ctx, grad, grad_nucleus, _):
+        h, weight, target, lse, set_lse, cut = ctx.saved_tensors
+        zeros = torch.zeros(h.shape[0], dtype=torch.float32, device=h.device)
+        grad = zeros if grad is None else grad.float()
+        grad_nucleus = zeros if grad_nucleus is None else grad_nucleus.float()
+        need_h, need_w = ctx.needs_input_grad[0], ctx.needs_input_grad[1]
+        dh = torch.empty_like(h) if need_h else None
+        dw = torch.zeros(weight.shape, dtype=torch.float32, device=weight.device) if need_w else None
+        for start in range(0, h.shape[0], ctx.chunk):
+            stop = min(h.shape[0], start + ctx.chunk)
+            rows = h[start:stop]
+            lf = F.linear(rows, weight).float()
+            onehot = torch.arange(lf.shape[-1], device=lf.device)[None, :] == target[start:stop, None]
+            d = (torch.exp(lf - lse[start:stop, None]) - onehot.float()) * grad[start:stop, None]
+            kept = (lf >= cut[start:stop, None]) | onehot
+            d = d + (torch.exp(lf - set_lse[start:stop, None]) * kept - onehot.float()) * grad_nucleus[start:stop, None]
+            d = d.to(rows.dtype)
+            if need_h:
+                dh[start:stop] = d @ weight
+            if need_w:
+                if d.is_cuda:
+                    dw += torch.mm(d.t(), rows, out_dtype=torch.float32)
+                else:
+                    dw += (d.t() @ rows).float()
+        return dh, None if dw is None else dw.to(weight.dtype), None, None, None, None
+
+
+def linear_nll_nucleus(h, weight, target, top_p, chunk=NUCLEUS_CHUNK, top_k=NUCLEUS_TOP_K):
+    """(nll, nucleus nll, outside): ``linear_nll`` and the NLL of ``target`` under the row's distribution truncated to
+    its own top-p nucleus and renormalized (the set is a constant; the gradient flows through the target logit and the
+    set's mass), with the target kept in the set even when it lies outside (``outside`` marks those rows).
+    log(nucleus mass) = nll - nucleus nll. ``linear_nll`` itself is untouched (top_p = 1)."""
+    if not 0. < top_p < 1.:
+        raise ValueError(f'top_p must be in (0, 1) for the nucleus NLL, got {top_p} (use linear_nll at 1)')
+    return _LinearNLLNucleus.apply(h, weight, target, chunk, float(top_p), int(top_k))
+
+
 @torch.no_grad()
-def token_logprobs(model, ids, positions, targets, lengths=None, chunk=LOGIT_CHUNK, imports=None):
+def token_logprobs(model, ids, positions, targets, lengths=None, chunk=LOGIT_CHUNK, imports=None, top_p=1.0):
     """Log-probabilities (fp32) of ``targets`` predicted at rows ``positions`` of the packed ``ids`` (no grad: the
-    GRPO behaviour / reference recompute). Pack many sequences per call (``lengths``) for throughput."""
+    GRPO behaviour / reference recompute). Pack many sequences per call (``lengths``) for throughput. ``top_p`` < 1:
+    (logp, logp under the row's own top-p nucleus, target outside the nucleus) (``linear_nll_nucleus``)."""
     h = hidden(model, ids, lengths, imports)
-    return -linear_nll(h[positions], model.lm_head.weight, targets, chunk)
+    if top_p >= 1.:
+        return -linear_nll(h[positions], model.lm_head.weight, targets, chunk)
+    nll, nucleus, outside = linear_nll_nucleus(h[positions], model.lm_head.weight, targets, top_p)
+    return -nll, -nucleus, outside

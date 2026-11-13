@@ -7,7 +7,24 @@ import type { PythonWatchdog } from './python-watchdog.js';
 /** What a Python cell can reach: the platform's watchdog for its timeout, and `nl` and `iterateOn` over the calling task. */
 export type PythonHost = { watchdog?: PythonWatchdog; nl?: (instructions: string, returns: string) => (...args: unknown[]) => Promise<unknown>;
   iterateOn?: (step: unknown, initial: unknown, ...fixed: unknown[]) => unknown };
-export type PythonResult = { value: unknown; stdout: string; stderr: string; changedPaths: string[] };
+export type PythonResult = { value: unknown; stdout: string; stderr: string; changedPaths: string[]; removedPaths?: string[] };
+
+/** The folder's file contents before a command, for `pathsChangedSince`. */
+export const folderContents = (folder: Folder) => new Map(folder.diffSync().changes.map(change => [change.path, change.after]));
+/**
+ * What a command did to the folder: `changedPaths` are the files it created or rewrote (all exist afterwards), and
+ * `removedPaths` the files it removed (present only when there are some). A move reports its new path as changed and
+ * its old path as removed.
+ */
+export function pathsChangedSince(folder: Folder, before: Map<string, Uint8Array | undefined>): { changedPaths: string[]; removedPaths?: string[] } {
+  const changedPaths: string[] = [], removedPaths: string[] = [];
+  for (const change of folder.diffSync().changes) {
+    const prior = before.get(change.path), after = change.after;
+    if (before.has(change.path) && prior?.length === after?.length && !prior?.some((byte, i) => byte !== after?.[i])) continue;
+    (after === undefined ? removedPaths : changedPaths).push(change.path);
+  }
+  return { changedPaths, ...(removedPaths.length ? { removedPaths } : {}) };
+}
 
 const RUNNER = `
 import ast as __ast, builtins as __builtins, inspect as __inspect
@@ -88,7 +105,7 @@ export async function runFolderPython(folder: Folder, source: string, host: Pyth
   tail = new Promise<void>(resolve => { unlock = resolve; });
   await previous;
   let py: any;
-  const before = new Map(folder.diffSync().changes.map(change => [change.path, change.after]));
+  const before = folderContents(folder);
   // The folder is /workspace, as in the shell: `os.getcwd()` and tracebacks show a path the model can use with bash too.
   const mount = '/workspace';
   // Raw writes, not line batches: a last line without a newline is still output. One trailing newline is dropped, as the
@@ -135,11 +152,7 @@ export async function runFolderPython(folder: Folder, source: string, host: Pyth
     const converted = fromPython(value);
     if (converted && typeof converted === 'object' && (converted as Record<string, unknown>).__natlang_timeout__)
       throw new Error(`Python timed out after ${timeoutMs} ms`);
-    const changedPaths = folder.diffSync().changes.filter(change => {
-      const prior = before.get(change.path), after = change.after;
-      return !before.has(change.path) || prior?.length !== after?.length || prior?.some((byte, i) => byte !== after?.[i]);
-    }).map(change => change.path);
-    return { value: converted, stdout: collected(stdout), stderr: collected(stderr), changedPaths };
+    return { value: converted, stdout: collected(stdout), stderr: collected(stderr), ...pathsChangedSince(folder, before) };
   } finally {
     currentHost = undefined;
     currentRefresh = undefined;

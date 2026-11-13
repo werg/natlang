@@ -69,6 +69,8 @@ class GenerationRequest:
     tools: list | None = None
     max_tokens: int = 512
     temperature: float = 0.0
+    # Nucleus truncation of a sampled reply (common.sampling.RL_TOP_P for RL and held episodes); 1.0: none.
+    top_p: float = 1.0
     seed: int | None = None
     forced_message: dict | None = None
     template: dict | None = None
@@ -133,6 +135,9 @@ class Sequence:
     native_own_position: int = 0
     native_sampling_seed: int | None = None
     native_seed_honored: bool | None = None
+    # The top_p the engine path that samples this reply applies (set where the draw is configured); a sampled reply
+    # whose request asked for another one is refused instead of recorded under a law it did not have.
+    nucleus_applied: float | None = None
     native_sample_top_k: dict | None = None
     native_forced_tokens: list[int] = field(default_factory=list)
     native_forced_replay: bool = False
@@ -712,6 +717,8 @@ class Engine:
                 'adapters': bindings} if bindings else None)
         if seq.request.rl_capture and seq.request.temperature <= 0 and not seq.request.native_recording:
             raise RequestError("native-rl-sampling-law", "native rollout capture requires positive temperature")
+        if seq.request.temperature > 0 and seq.request.top_p < 1:
+            seq.nucleus_applied = seq.request.top_p      # `_native_token` draws from the nucleus
         seq.cache = None
         seq.native_sampling_seed = (int(seq.request.seed) if seq.request.seed is not None else
                                     derive_seed("native-chat", seq.request.request_id))
@@ -806,7 +813,13 @@ class Engine:
         log_probs = masked_log_distribution(seq.logits[0], seq.request.temperature or 1.0,
             banned=sorted(seq.bans.get(seq.native_own_position, ())))
         if seq.request.temperature and seq.request.temperature > 0:
-            token = int(torch.multinomial(log_probs.exp().cpu(), 1, generator=seq.rng))
+            if seq.nucleus_applied is not None:
+                # top-p: the draw comes from the nucleus; the recorded logp stays the untruncated law (as the SGLang
+                # fork records it), declared in the capture's sampling law
+                from ..common.sampling import nucleus_sample
+                token = nucleus_sample(log_probs, seq.nucleus_applied, seq.rng)
+            else:
+                token = int(torch.multinomial(log_probs.exp().cpu(), 1, generator=seq.rng))
             if seq.request.rl_top_k is not None:
                 from ..common.sampling import encode_top_k
                 seq.native_sample_top_k = encode_top_k(log_probs, seq.request.rl_top_k)
@@ -1538,6 +1551,10 @@ class Engine:
         listener({"text": text})
 
     def _native_response(self, seq: Sequence) -> dict:
+        sampled = seq.request.temperature > 0 and not seq.native_forced_replay
+        if sampled and seq.request.top_p < 1 and seq.nucleus_applied != seq.request.top_p:
+            raise RequestError('sampling-law-unsupported', f'this reply was not sampled with the requested top_p '
+                               f'{seq.request.top_p} (applied: {seq.nucleus_applied or 1.0})')
         from .chat import arguments_text, build_message
         text, run, block_ids = [], [], []
         for item in seq.items:
@@ -1618,10 +1635,14 @@ class Engine:
                                     'value': seq.request.template.get('value')}} if seq.request.template else {}),
                 **({'behavior_top_k': behavior_top_k_declaration(seq.request.rl_top_k)}
                    if seq.request.rl_top_k is not None and seq.request.temperature > 0 and not seq.native_forced_replay else {}),
+                # Under top-p the samples' logp is the untruncated post-temperature law and the draw came from its
+                # nucleus (common.sampling): the law names both, and consumers of the normalized law refuse it.
                 "sampling_law": {"temperature": seq.request.temperature, "seed": seq.native_sampling_seed,
                                  "guidance": seq.guide is not None, "probabilities": ("exact-forced-sequence"
                                      if seq.native_forced_replay else "greedy-argmax"
-                                     if seq.request.temperature <= 0 else "post-processing-normalized")}}
+                                     if seq.request.temperature <= 0 else "post-temperature-untruncated"
+                                     if seq.nucleus_applied is not None else "post-processing-normalized"),
+                                 **({"top_p": seq.nucleus_applied} if sampled and seq.nucleus_applied is not None else {})}}
         if seq.native_protocol_failure is not None:
             failure=seq.native_protocol_failure
             response['x_natlang_native_failure']=failure

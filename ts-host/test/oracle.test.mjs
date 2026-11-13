@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { agreement, checkFiles, checkFilesWithJudge, checkFileReturn, csvRows, checkOracle, spanF1 } from '../dist/teacher/oracle.js';
+import { agreement, checkFiles, checkFilesWithJudge, checkFileReturn, csvRows, checkOracle, containsQaSpan, qaAnswerCores, spanF1 } from '../dist/teacher/oracle.js';
+import { withTerminalNewlinePolicy } from '../dist/teacher/collector.js';
 
 test('normalized oracle accepts equivalent casing, spacing, numbers and dates', async () => {
   assert.equal((await checkOracle('  YES   Please ', 'yes please', 'normalized')).accepted, true);
@@ -206,4 +207,79 @@ test('JSON answer and output file tolerate formatting but reject duplicates and 
     assert.equal(checkFiles({'answer.json': bad}, {'answer.json': gold}, {}, {compare: 'json-string-record', threshold: 1}).accepted, false);
   }
   assert.equal(checkFiles({'answer.json': equivalent, 'source.txt': 'changed'}, {'answer.json': gold, 'source.txt': 'original'}, {'source.txt': 'original'}, {compare: 'json-string-record', threshold: 1}).accepted, false);
+});
+
+test('yes/no and true/false answers of one polarity are equal; JSON-quoted strings are their text', async () => {
+  assert.equal((await checkOracle('false', 'no', 'normalized')).accepted, true);
+  assert.equal((await checkOracle('Yes.', 'true', 'normalized')).accepted, true);
+  assert.equal((await checkOracle(false, 'no', 'normalized')).accepted, true);
+  assert.equal((await checkOracle('true', 'no', 'normalized')).accepted, false);
+  assert.equal((await checkOracle('maybe', 'no', 'normalized')).accepted, false);
+  const qa = { level: 'span', threshold: 0.8, normalization: 'qa' };
+  assert.equal((await checkOracle('false', 'no', qa)).accepted, true);
+  assert.equal((await checkOracle('yes but no', 'yes', qa)).accepted, false);
+  assert.equal((await checkOracle('"#B A#"', '#B A#', 'normalized')).accepted, true);
+  assert.equal((await checkOracle('"needs-review"', 'needs-review', 'exact')).accepted, true);
+  assert.equal((await checkOracle('"pass"', 'needs-review', 'exact')).accepted, false);
+  assert.equal((await checkOracle('"5"', 5, 'exact')).accepted, false);              // a number's gold keeps its type
+  assert.equal((await checkOracle('"\\"q\\""', '"q"', 'exact')).accepted, false);     // a quoted gold is never unwrapped
+});
+
+test('a short QA answer holding the whole multi-token gold span passes; one-token golds and long answers stay with F1', async () => {
+  const qa = { level: 'span', threshold: 0.8, normalization: 'qa' };
+  const accepted = await checkOracle('Celine Dion\'s "Because You Loved Me"', 'Because You Loved Me', qa);
+  assert.equal(accepted.accepted, true);
+  assert.equal(accepted.comparison_version, 'qa-span-containment/1');
+  assert.equal((await checkOracle('"Because You Loved Me" by Celine Dion', 'Because You Loved Me', qa)).accepted, true);
+  assert.equal((await checkOracle('Celine Dion\'s "Because You Loved Me" knocked "One Sweet Day" off the top', 'Because You Loved Me', qa)).accepted, false);
+  assert.equal((await checkOracle('Woodrow Wilson, Lloyd George, Vittorio Orlando, and Georges Clemenceau', 'Georges Clemenceau', qa)).accepted, false);
+  assert.equal((await checkOracle('Duke Lemur Center', 'Duke', qa)).accepted, false);
+  assert.equal(containsQaSpan('Celine Dion: Loved Me Because You', 'Because You Loved Me'), false);   // contiguous, in order
+  assert.equal(containsQaSpan('Celine Dion: Because You Loved Me', 'Because You Loved Me'), true);
+  assert.equal((await checkOracle('the 2010 UCI BMX World Championships', 'UCI BMX World Championships 2009', qa)).accepted, false);
+  assert.equal((await checkOracle('14 surgeries', '14', qa)).accepted, false);
+});
+
+test('a short QA answer is scored on its core when it restates the question or names a possessor, never when it hedges', async () => {
+  const qa = { level: 'span', threshold: 0.8, normalization: 'qa' };
+  const question = 'What did Co-workers A say they just had in the session on 2024/06/29 at 04:23?';
+  const echoed = await checkOracle('just had sex', 'Sex', qa, undefined, { question });
+  assert.equal(echoed.accepted, true);
+  assert.equal(echoed.comparison_version, 'qa-span-core/1');
+  assert.equal((await checkOracle('just had sex', 'Sex', qa)).accepted, false);          // no question, no echo to drop
+  const possessed = await checkOracle("the alien's spaceship", 'The spaceship', qa);
+  assert.equal(possessed.accepted, true);
+  assert.equal(possessed.comparison_version, 'qa-span-core/1');
+  assert.equal((await checkOracle('their spaceship', 'The spaceship', qa)).accepted, true);
+  // Hedged or negated cores, echoes of gold words and other content stay with F1.
+  const choice = 'Did they have sex or coffee after the meeting?';
+  assert.equal((await checkOracle('sex or coffee', 'sex', qa, undefined, { question: choice })).accepted, false);
+  assert.equal((await checkOracle('coffee or sex', 'sex', qa, undefined, { question: choice })).accepted, false);
+  assert.equal((await checkOracle('did not have sex', 'sex', qa, undefined, { question: choice })).accepted, false);
+  assert.equal((await checkOracle('Duke Lemur Center', 'Duke', qa, undefined,
+    { question: 'Which university runs the lemur center in Durham?' })).accepted, false);
+  assert.equal((await checkOracle("the alien's laser", 'The spaceship', qa)).accepted, false);
+  assert.equal((await checkOracle('14 surgeries', '14', qa, undefined, { question: 'How many surgeries did she have?' })).accepted, false);
+  assert.deepEqual(qaAnswerCores('just had sex', 'Sex', question), ['sex']);
+  assert.deepEqual(qaAnswerCores('sex', 'Sex', question), []);                           // nothing to drop
+});
+
+test('content compares ignore one terminal newline of a text file only when the policy is lenient', () => {
+  const lenient = { compare: 'content', threshold: 1, terminal_newline: 'lenient' };
+  const got = { 'rejected.md': '01.md: taken by badminton', 'report.json': '{"a":1}' };
+  const want = { 'rejected.md': '01.md: taken by badminton\n', 'report.json': '{"a": 1}\n' };
+  assert.equal(checkFiles(got, want, {}, lenient).accepted, true);
+  assert.equal(checkFiles(got, want, {}, { compare: 'content', threshold: 1 }).accepted, false);
+  assert.equal(checkFiles({ 'a.md': 'x\n\n' }, { 'a.md': 'x' }, {}, lenient).accepted, false);   // one newline at most
+  assert.equal(checkFiles({ 'a.md': 'x ' }, { 'a.md': 'x' }, {}, lenient).accepted, false);       // no other whitespace
+});
+
+test('the collector keeps a terminal newline exact only when the task instructions mention one', () => {
+  const record = (text) => ({ semantics: { root: 'a.nl', files: { 'a.nl': text, 'a/helper.ts': 'export const nl = "\\n";' } } });
+  const content = { compare: 'content', threshold: 1 };
+  assert.equal(withTerminalNewlinePolicy(content, record('Write rejected.md with its lines in order.')).terminal_newline, 'lenient');
+  assert.equal(withTerminalNewlinePolicy(content, record('Write desk_log.md, then a final newline.')).terminal_newline, 'exact');
+  assert.equal(withTerminalNewlinePolicy(content, record('Each line ends with a line break.')).terminal_newline, 'exact');
+  assert.equal(withTerminalNewlinePolicy({ compare: 'exact' }, record('Write it.')).terminal_newline, undefined);
+  assert.equal(withTerminalNewlinePolicy({ ...content, terminal_newline: 'exact' }, record('Write it.')).terminal_newline, 'exact');
 });

@@ -4,6 +4,7 @@ the same math, not the same kernels)."""
 import sys
 from pathlib import Path
 
+import pytest
 import torch
 import torch.nn.functional as F
 
@@ -175,3 +176,62 @@ def test_chains_never_merge_across_different_imported_state():
     other = [row(0, a, [(2, 'x')]), row(1, np.concatenate([full, [7]]).astype(np.int32), [(2, 'z')])]
     chains = exp0_sft.chains_of([{'rows': other, 'task_id': 't', 'round': 0}])
     assert [c['imports'] for c in chains] == [[(2, 'x')], [(2, 'z')]]
+
+
+def _dense_nucleus(h, weight, target, top_p):
+    """Brute force: the full sort, SGLang's rule (a token is kept while the mass before it is <= top_p), ties with the
+    last kept token and the target added; (nll, nucleus nll, outside) through plain autograd."""
+    logits = F.linear(h, weight).float()
+    logp = torch.log_softmax(logits, -1)
+    values, order = logp.sort(dim=-1, descending=True)
+    p = values.exp()
+    count = ((p.cumsum(-1) - p) <= top_p).sum(-1)
+    cut = values.gather(1, (count - 1)[:, None])
+    onehot = F.one_hot(target, logits.shape[-1]).bool()
+    kept = (logp >= cut) | onehot
+    nucleus = torch.logsumexp(logits.masked_fill(~kept, float('-inf')), -1) - logits.gather(1, target[:, None])[:, 0]
+    return -logp.gather(1, target[:, None])[:, 0], nucleus, ~(logp >= cut).gather(1, target[:, None])[:, 0]
+
+
+def test_nucleus_nll_matches_brute_force_and_dense_autograd():
+    torch.manual_seed(0)
+    rows, width, vocab = 37, 12, 90
+    weight = (torch.randn(vocab, width) * .9).requires_grad_()
+    h = torch.randn(rows, width, requires_grad=True)
+    target = torch.randint(0, vocab, (rows,))
+    target[:6] = F.linear(h, weight).argmin(-1)[:6]            # sampled tokens outside the nucleus
+    scale, scale_nucleus = torch.randn(rows), torch.randn(rows)
+    for top_p in (.5, .95):
+        want = _dense_nucleus(h, weight, target, top_p)
+        want_grads = torch.autograd.grad((want[0] * scale).sum() + (want[1] * scale_nucleus).sum(), (h, weight))
+        assert want[2][:6].all() and not want[2].all()
+        for top_k in (4, 1024):                                # 4: most rows take the full-sort path
+            got = lfm3_fast_train.linear_nll_nucleus(h, weight, target, top_p, chunk=16, top_k=top_k)
+            assert torch.allclose(got[0], want[0], atol=1e-5) and torch.allclose(got[1], want[1], atol=1e-5)
+            assert torch.equal(got[2], want[2]) and not got[2].requires_grad
+            grads = torch.autograd.grad((got[0] * scale).sum() + (got[1] * scale_nucleus).sum(), (h, weight))
+            assert torch.allclose(grads[0], want_grads[0], atol=1e-5) and torch.allclose(grads[1], want_grads[1], atol=1e-5)
+        # the nucleus holds at least top_p of the mass, and the truncated log-probability is never below the full one
+        mass = (got[1] - got[0]).exp()
+        assert (mass[~got[2]] >= top_p - 1e-6).all() and (mass <= 1 + 1e-6).all()
+    only = lfm3_fast_train.linear_nll_nucleus(h, weight, target, .95, chunk=16)[1]   # one output used: the other grad is None
+    assert torch.allclose(torch.autograd.grad(only.sum(), h)[0],
+                          torch.autograd.grad(_dense_nucleus(h, weight, target, .95)[1].sum(), h)[0], atol=1e-5)
+
+
+def test_nucleus_ties_and_top_p_one_identity():
+    weight = torch.eye(6)
+    h = torch.tensor([[2., 1., 1., 1., -9., -9.]])            # three tied tokens straddle the cut: all are in
+    nll, nucleus, outside = lfm3_fast_train.linear_nll_nucleus(h, weight, torch.tensor([3]), .6)
+    assert not outside.item()
+    assert nucleus.item() == pytest.approx(float(torch.logsumexp(h[0, :4], 0) - 1.), abs=1e-6)
+    torch.manual_seed(1)
+    h, weight, target = torch.randn(9, 5), torch.randn(20, 5), torch.randint(0, 20, (9,))
+    plain = lfm3_fast_train.linear_nll(h, weight, target)
+    assert torch.equal(plain, F.cross_entropy(F.linear(h, weight), target, reduction='none')) or \
+        torch.allclose(plain, F.cross_entropy(F.linear(h, weight), target, reduction='none'), atol=1e-6)
+    almost = lfm3_fast_train.linear_nll_nucleus(h, weight, target, 1 - 1e-7)   # the whole vocabulary: the same law
+    assert torch.allclose(almost[0], plain, atol=1e-6) and torch.allclose(almost[1], plain, atol=1e-5)
+    for bad in (1., 0., 1.5):
+        with pytest.raises(ValueError):
+            lfm3_fast_train.linear_nll_nucleus(h, weight, target, bad)

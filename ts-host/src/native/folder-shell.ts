@@ -3,7 +3,7 @@ import { Bash, InMemoryFs, MountableFs, defineCommand, getCommandNames,
   type IFileSystem, type FsStat, type FileContent, type BufferEncoding,
   type RmOptions, type CpOptions, type MkdirOptions } from 'just-bash';
 import { Folder } from './scoped-fs.js';
-import { runFolderPython, type PythonHost } from './folder-python.js';
+import { folderContents, pathsChangedSince, runFolderPython, type PythonHost } from './folder-python.js';
 import { executeNatlangAsk, executeNatlangCall, parseAskArgs, type AskHost, type CallHost } from './natlang-command.js';
 
 const ROOT = '/workspace';
@@ -15,9 +15,19 @@ const asBytes = (value: FileContent) => typeof value === 'string' ? new TextEnco
 const decodeStdin = (value: unknown) => new TextDecoder().decode(Uint8Array.from(value as string, char => char.charCodeAt(0)));
 
 /** A lazy filesystem adapter: stat and directory traversal use metadata, not file contents. */
+/**
+ * Directories made by mkdir that hold no file yet. A Folder knows directories only through their files, so these are
+ * kept per Folder: `mkdir -p filed` in one bash call and `mv a.md filed/` in the next must work as in a real shell.
+ */
+const EMPTY_DIRS = new WeakMap<Folder, Set<string>>();
+
 export class FolderFs implements IFileSystem {
-  private readonly emptyDirs = new Set<string>();
-  constructor(readonly folder: Folder) {}
+  private readonly emptyDirs: Set<string>;
+  constructor(readonly folder: Folder) {
+    let dirs = EMPTY_DIRS.get(folder);
+    if (!dirs) EMPTY_DIRS.set(folder, dirs = new Set());
+    this.emptyDirs = dirs;
+  }
   resolvePath(base: string, path: string): string {
     const full = path.startsWith('/') ? path : `${base}/${path}`;
     const parts: string[] = [];
@@ -150,6 +160,34 @@ function shellFs(folder: Folder): IFileSystem {
 export function checkBashPolicy(command: string): void {
   checkBashAst(new Bash().transform(command).ast);
 }
+type WordPart = { type: string; value?: string; parts?: WordPart[] };
+/** The text of a shell word written without expansions (plain, single- or double-quoted), else undefined. */
+function staticWord(word: { parts?: WordPart[] } | undefined): string | undefined {
+  const text = (parts: WordPart[] | undefined): string | undefined => {
+    if (!parts) return undefined;
+    let out = '';
+    for (const part of parts) {
+      if (part.type === 'Literal' || part.type === 'SingleQuoted') out += part.value ?? '';
+      else if (part.type === 'DoubleQuoted') { const inner = text(part.parts); if (inner === undefined) return undefined; out += inner; }
+      else return undefined;
+    }
+    return out;
+  };
+  return text(word?.parts);
+}
+/**
+ * `bash -c 'script'` and `sh -c 'script'` run a literal script in the same shell, so the script is checked by the same
+ * policy and allowed. Returns false for any other form of bash/sh, which could run code the policy never saw.
+ */
+function checkNestedShell(node: Record<string, unknown>): boolean {
+  const args = node.args as Array<{ parts?: WordPart[] }> | undefined;
+  const flag = staticWord(args?.[0]);
+  if (!flag || !/^-[a-z]*c[a-z]*$/.test(flag)) return false;
+  const script = staticWord(args?.[1]);
+  if (script === undefined) return false;
+  checkBashAst(new Bash().transform(script).ast);
+  return true;
+}
 function checkBashAst(tree: unknown): void {
   const calls = new Map<string, Set<string>>();
   const visit = (value: unknown, current?: string): void => {
@@ -162,8 +200,11 @@ function checkBashAst(tree: unknown): void {
     if (node.type === 'SimpleCommand') {
       const parts = (node.name as { parts?: Array<{ type: string; value?: string }> } | null)?.parts;
       const name = parts?.every(part => part.type === 'Literal') ? parts.map(part => part.value).join('') : undefined;
+      if (name && (name === 'bash' || name === 'sh') && checkNestedShell(node)) return;
       if (name && ['source', '.', 'eval', 'bash', 'sh'].includes(name))
-        throw new SyntaxError(`${name} cannot bypass the bash policy; use commands directly`);
+        throw new SyntaxError(name === 'bash' || name === 'sh' ?
+          `${name} runs only a literal script here, as ${name} -c '...'; or write the commands directly` :
+          `${name} cannot bypass the bash policy; use commands directly`);
       if (current && name) calls.get(current)?.add(name);
     }
     for (const [key, child] of Object.entries(node)) if (key !== 'name' || node.type !== 'SimpleCommand') visit(child, current);
@@ -178,7 +219,8 @@ function checkBashAst(tree: unknown): void {
     throw new SyntaxError(`function ${name} calls itself; use a finite for loop`);
 }
 
-export type FolderBashResult = { exitCode: number; stdout: string; stderr: string; changedPaths: string[] };
+/** `changedPaths`: files the command created or rewrote; `removedPaths`: files it removed (a move's old path), when there are some. */
+export type FolderBashResult = { exitCode: number; stdout: string; stderr: string; changedPaths: string[]; removedPaths?: string[] };
 export type FolderBashOptions = { network?: boolean; python?: PythonHost; ask?: AskHost; call?: CallHost;
   apply?: (name: string, path: string) => Promise<unknown>;
   /** The directory the command starts in: absolute under /workspace, or relative to it (default /workspace). */
@@ -190,7 +232,7 @@ export type FolderBashOptions = { network?: boolean; python?: PythonHost; ask?: 
   /** Arguments appended to the first command as they are, without shell parsing (an argv run as `command`, `args`). */
   args?: string[] };
 export async function runFolderBash(folder: Folder, command: string, options: FolderBashOptions = {}): Promise<FolderBashResult> {
-  const before = new Map(folder.diffSync().changes.map(change => [change.path, change.after]));
+  const before = folderContents(folder);
   const changes = defineCommand('changes', async () => ({ stdout: JSON.stringify(folder.diffSync().changes.map(change =>
     ({ path: change.path, kind: change.kind })), null, 2) + '\n', stderr: '', exitCode: 0 }));
   const pythonCommand = (name: string) => defineCommand(name, async (args, ctx) => {
@@ -268,7 +310,8 @@ export async function runFolderBash(folder: Folder, command: string, options: Fo
       return { stdout: '', stderr: 'usage: natlang ask|call|apply ...', exitCode: 2 };
     } catch (error) { return { stdout: '', stderr: String(error), exitCode: 1 }; }
   });
-  const bash = new Bash({ fs: shellFs(folder), cwd: ROOT, python: false, javascript: false,
+  // The folder is the home directory too: `~`, `cd` and $HOME stay inside it.
+  const bash = new Bash({ fs: shellFs(folder), cwd: ROOT, env: { HOME: ROOT }, python: false, javascript: false,
     ...(options.network === false ? {} : { network: { dangerouslyAllowFullInternetAccess: true } }),
     customCommands: [changes, pythonCommand('python'), pythonCommand('python3'), sqlite, natlang],
     executionLimits: { maxCommandCount: 1000, maxLoopIterations: 10000 } });
@@ -276,9 +319,5 @@ export async function runFolderBash(folder: Folder, command: string, options: Fo
   const result = await bash.exec(command, { ...(options.cwd === undefined ? {} : { cwd: bash.fs.resolvePath(ROOT, options.cwd) }),
     ...(options.env ? { env: options.env } : {}), ...(options.signal ? { signal: options.signal } : {}),
     ...(options.args ? { args: options.args } : {}) });
-  const changedPaths = folder.diffSync().changes.filter(change => {
-    const prior = before.get(change.path), after = change.after;
-    return !before.has(change.path) || prior?.length !== after?.length || prior?.some((byte, i) => byte !== after?.[i]);
-  }).map(change => change.path);
-  return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr, changedPaths };
+  return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr, ...pathsChangedSince(folder, before) };
 }

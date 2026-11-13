@@ -1894,3 +1894,257 @@ per-call (prompt, completion) sequences weighted by the episode reward; whole-gr
 Neuralese bonus, memetic programs, expert-iteration shares, pre-collection, interleaved SFT windows and QAT return
 only as measured controlled additions. Evaluation gets real compute (dev16 is a smoke test at most); heartbeats check
 the pinned experiments and do not re-plan; the training stack uses standard tooling. Rules: AGENTS.md "How we train now".
+
+### 2026-11-13 — GRPO learner defaults after the run2 audit (engineering)
+
+Audit of the plain-GRPO learner on run2 (5 optimizer steps; step-5 held 231 vs 229 of 509 pairs, p=0.91; 9 groups of
+rollouts, 814k sampled tokens). No sign, advantage, alignment or resume bug. The signal was weak for measured reasons;
+these become the defaults of the next pin (`scripts/neuralese_data/grpo.py`), each with an opt-out:
+
+- **Per-episode loss normalization** (`--loss-norm episode`; `token` is the old behaviour). The token sum weighed an
+  episode by its length: failures run 16.5 model calls against 9.9 for successes (16% of failures hit the 40-call
+  budget), negative advantage mass exceeded positive by 36% (calls as the length proxy, 68 groups with spread), one
+  episode carried 34% of its group's |A| x length, and 90.6% of loss tokens (96.8% of logit-gradient mass) were
+  reasoning. Now each trained episode contributes A_i times the mean over its units, averaged over episodes; the KL
+  term the same way.
+- **Tail-token guard** (`--tail-logp-floor -7`; 0 off). Untruncated T=1 sampling: 1.8% of sampled tokens have actor
+  p < 0.0067, 0.36% p < 3.4e-4, 175 p < 8e-7; tokens with p < 0.1 are 10% of tokens and 34% of gradient mass. A token
+  sampled below the floor in an episode with A > 0 gets no policy term (KL stays; a negative advantage still pushes it
+  down). Truncated sampling (min-p/top-p with the same law in the learner) is a proposed experiment, not done here: it
+  changes held-v2's sampling config.
+- **A sampled decision weighs like an average call of its episode** (`--decision-weight call`; `token` = 1 unit). It
+  was 1 unit among about 855k per step.
+- **LR 1e-5, 24-48 groups per step** (were 3e-6, 12-24). At 3e-6 with about 75 informative episodes a step, mean
+  |dlogp| against the start policy went 0.014, 0.015, 0.016, 0.023 over 4 updates (the floor is exactly 0 at step 1),
+  under the actor's FP8 noise (0.033); 8.0% of BF16 elements differed from the start against 16% summed per-step flips.
+  Check 4 learned at 1e-5.
+- **Telemetry**: `grad_moment_cosine` (the step's gradient against AdamW's first moment, before the update),
+  `grad_mass_share` (reasoning / post-`</think>` / decisions), `tail_masked_fraction`.
+
+Success criterion for the next GRPO pin stays the paired held-v2 comparison; `grad_moment_cosine` near 0 over the first
+steps means the updates are still unrelated noise and the batch must grow before anything else.
+
+## 2026-11-13: held comparison, series and episode budget after the run2 validity audit (engineering)
+
+- **Held comparison statistic (4578d6404).** Primary: mean per-task pass-rate change, within-task permutation test,
+  task-bootstrap CI, a wall-clock timeout counted as a failure. Dropping timeouts biased the A/A (base-a1 vs base-a2:
+  -6.4 pts, p=0.036; as failures -4.4 pts, p=0.12). Noise floor from the base runs on disk (mean per-task p(1-p) 0.083):
+  95% band +-3.5 pts at 2 vs 2 samples, MDE (80% power) 5.0 pts; +-2.5 / 3.6 pts at 4 vs 4. run2's two step-0
+  measurements: +1.2 pts, CI [-2.5, +4.7], p=0.60. Of 256 held tasks, 65 always pass and 99 never pass for the base
+  (23 of them ENOENT codebase tasks before e9a7360cc, 6 wrong-oracle); `--ignore-ids ops/held-v2/ignore-ids-*.jsonl`
+  reports the change without them.
+- **Series covers scoring (4578d6404).** The series key hashes the ts-host tree plus the Python sources that run and
+  score episodes; before, a scorer/collector fix (e9a7360cc) kept the series.
+- **Pool errata on by default (8d0dcf296).** GRPO excludes every `ops/pool-errata/*.jsonl` row unless `--exclude-ids`
+  or `--no-default-errata` is given; run2 drew none of the 380 wrong-oracle rows in 113 groups, but explore 0.4 would.
+- **One episode budget (4578d6404, 8d0dcf296).** Training and held eval both stop at 40 model calls
+  (`held_eval.EPISODE_MODEL_CALLS`); held ran 64, so the start policy is re-measured at the next pin.
+
+## 2026-11-13: graded reward with file-effect credit (owner decision; engineering design)
+
+`task_rollouts.graded_reward` (rewards.jsonl `graded_reward`, rollout `reward.graded`): 1.0 for an accepted episode;
+None when unscored; 0 for every outcome but `semantic_mismatch` and for any failed check other than `answer` and
+`files`. Otherwise the mean of the answer (one exact check) and `effect_fraction`: over the files the episode had to
+write (expected present and different from the start; passes when it ends equal), plus the files it had to remove but
+left and the files it changed, created or removed that should have stayed (failures). A correct removal earns nothing
+on its own: the first version counted emptied sources, and held row 50/1 (slips moved into a wrong folder) scored 0.66
+for it. An effect fraction of 0 gives 0 whatever the answer (a constant answer such as "repair complete" is no work);
+a task without a folder effect stays binary. Modes whose `files_check` is already over changed paths use its
+passed/items; other modes count as one check.
+GRPO trains on it by default (`--reward graded`; `binary` opts out); selection pass rates stay on acceptance; held eval
+stays binary and reports `mean_graded_reward` beside it.
+Real episodes (run2 held/step-00000, 512): all 229 accepted score 1.0; of 281 scored failures 231 score 0, 50 partial
+(8 in (0, .5), 20 in [.5, .75), 22 in [.75, 1)), all in authored effect-state families. Hand-checked 10: 2/0 (8 of 9
+writes, payments.md wrong, 0.94), 9/0 (copied instead of moved: 5 writes right, 4 sources left, 0.75), 17/1 (5 of 29,
+0.59), 24/0 (1 of 43, right answer, 0.51), 51/0 (both files right, wrong answer, 0.5), 109/0 (1 of 4, wrong answer,
+0.125), 136/0 (1 of 21, 0.05), 148/1 (2 of 3, wrong answer, 0.33), 50/1 and 55/0 (wrong-folder moves, 0). Note:
+the answer half dominates when the files are mostly wrong (24/0); revisit if graded GRPO favours answer-only episodes.
+
+Correction the same day (supervisor): the graded value is `effect_fraction`, halved when the answer is wrong too, not the
+mean of answer and effects. Under the mean a right answer with 1 of 43 files scored 0.51 (held row 24/0): inside a group
+that ranks "return the value, skip the work" above honest wrong attempts, and that is already the base model's commonest
+failure (4 of 7 model-caused failures read on 2026-11-13 had the right value and missing effects). Now that episode
+scores 0.02 and a right answer with 0.85 of the effects scores 0.85.
+
+### 2026-11-13 — the sampling law is top-p 0.95; the learner scores its own nucleus (owner, engineering)
+
+Owner: top-p sampling now, from first principles. Measured on run2 (814k sampled tokens at untruncated T=1): 1.8% of
+sampled tokens had actor p < 0.0067, 0.36% p < 3.4e-4, 175 p < 8e-7; tokens with p < 0.1 were 10% of tokens and 34% of
+the policy-gradient mass; 86 of 509 held pairs flipped between two near-identical policies. The tail is noise in the
+episodes and in the gradient, so collection, held eval and the learner move to one law: temperature 1, top-p 0.95
+(`common/sampling.py` `RL_TOP_P`; `--top-p 1.0` opts out everywhere).
+
+- **What SGLang returns** (fork 70b1991e66, `python/sglang/srt/layers/sampler.py`): the natlang record's logp is the
+  untruncated post-temperature log-softmax (`natlang_post_temperature_logprobs` :769, taken at :191-197 before the
+  sampling ops, gathered in `natlang_capture_top_k` :798); the draw is truncated (`_sample_from_probs` :419-455,
+  flashinfer `top_k_top_p_sampling_from_probs`; the torch rule :905-911 keeps a token while the mass before it is
+  <= top_p). The nucleus mass is not returned. Decision scoring sends no top_p (`serve/sglang_actor.py`
+  `_sglang_score_bound`): raw summed input logprobs, and the collector samples the option from the full softmax over
+  the finite option set (no tail to cut), unchanged.
+- **Estimator.** Behaviour mu' = the actor's distribution on its nucleus, renormalized. Policy pi' = the learner's
+  distribution on its own nucleus S (a constant set, the sampled token always in it): log pi'(a) = logp(a) -
+  log(mass of S), gradient onehot - softmax over S, through both terms (`lfm3_fast_train.linear_nll_nucleus`: per
+  2048-row head chunk the cut logit from the 1024 largest logits, full sort only for wider rows, three scalars kept per
+  row, logits recomputed once in backward; ties with the last kept token are in the set). The policy term is
+  -min(rho, C) * A * log pi'(a).
+- **Residual approximation (rho).** rho' = pi'(a)/mu'(a) = exp(logp_learner - logp_actor) * Z_actor / Z_learner. The
+  actor's nucleus mass Z_actor is not in the fork record, so it is taken as the learner's own: rho is the ratio of
+  the untruncated logps. Both masses lie in [top_p, 1], so |d log rho| <= -log(0.95) = 0.051, usually far less (the
+  two nuclei differ by boundary tokens), under the FP8 noise of log rho (0.033 mean) and the cap. Removing it needs
+  either a fork record field (a fork release: not started) or a wide top-k record per token (128x the record, a top-k
+  of that width in the actor's decode step, unmeasured): not cheap, so not done.
+- **A sampled token outside the learner's nucleus** (the actor's nucleus held it, the learner's does not) is kept in
+  the learner's set rather than given probability 0: it keeps a gradient. Logged as `outside_nucleus_fraction`.
+- **KL to the start policy stays on untruncated logps.** With a ~ pi' on S, the k3 estimator of d = log ref(a) -
+  log pi(a) has expectation KL(pi' || ref renormalized on S) + k3(ref(S)/pi(S)): non-negative, zero only when the two
+  agree on S and in the nucleus mass, so it also holds the tail mass in place. The truncated variant (each side's own
+  nucleus) is not a k3 argument: ref' has mass outside S, and pi' can have mass outside ref's nucleus.
+- **Tail guard** (`--tail-logp-floor -7`) stays; it reads the actor's untruncated logp and only zeroes the policy
+  weight, so it composes with the nucleus term (nothing is masked twice). Under top-p it rarely fires.
+- **Law custody.** `sampling-config.json` carries `top_p`; `serve/http.py` reads it (it was dropped before), both
+  engines apply it, the capture's `sampling_law` records `top_p` and `probabilities: post-temperature-untruncated`,
+  and a sampled reply whose path did not apply the requested top_p is refused. The learner refuses calls of another
+  top_p (`skip_other_sampling_law`); `held_eval` records `sampling` in `run.json`/`result.json`, a resumed measure and
+  `compare` refuse another law, and GRPO moves a start-policy result of another law aside and measures again. The held
+  series therefore restarts: the base is re-measured at the next pin. `held-v2/engine.json` is unchanged.
+- **Not measured here:** the nucleus head on the GPU (memory beside the actor, tokens/s; it is plain torch, not
+  compiled): the next pin's smoke.
+
+## 2026-11-13: grpo-v1, recorded retroactively (supervisor)
+
+grpo-v1 ran without the declaration AGENTS.md requires; this entry supplies it after the fact and says so.
+
+- **Change vs baseline.** Plain GRPO (`scripts/neuralese_data/grpo.py`) from base 5ff07638 against the untouched base:
+  group 8, per-call sequences, binary reward, token-sum loss, LR 3e-6 (warmup 2), 12-24 groups/step, KL 0.02 (k3),
+  rho cap 2, T=1 untruncated, 40-call training budget (held ran 64).
+- **Pins.** run1 784ab4cd5 (no training step). run2: 17f1866c2 and 8b04cb74c (series c33dee66a4b7; 8b04cb74c added
+  decision-call training), then 37c221bfe from the step-5 state (series e3a1066c7874: harness fixes and consumer-call
+  training). So the learner and harness changed mid-run twice, against the one-commit rule; the held comparison below
+  is valid only because base and step 5 were both measured on pin 37c221bfe.
+- **Success criterion (declared retroactively).** At a scheduled held-v2 eval, a positive paired change against the
+  base on the same series and engine with p < 0.05 (`held_eval compare`), and the ran-out/loop rate no worse.
+- **Result.** Step 5 (b319e947) 232/510 vs base 229/510, McNemar p = 0.91; loop rate 0.061 -> 0.025. **Not met.** The
+  run2 audit (entry "GRPO learner defaults after the run2 audit") explains the weak signal: mean |dlogp| against the
+  start policy was 0.014-0.023 over 5 updates, under the actor's FP8 noise (0.033). The updates had barely moved the
+  policy.
+- **End.** grpo-v1 ends at the grpo-v2 boundary below, with no further held eval. Its groups, held results and the
+  held-evaluated checkpoints stay. Its FP32 state (`ops/grpo-v1/run2-state`, 20.7 GB) is deleted once grpo-v2 has
+  saved its own step-2 state.
+
+## 2026-11-13: grpo-v2, a fresh GRPO run from base on the corrected stack (supervisor)
+
+**Decision: start fresh from base. Do not continue grpo-v1's weights.**
+- *Attribution.* The next pin changes the objective, not just the harness: LR 3e-6 -> 1e-5, per-episode
+  normalization, graded reward, top-p 0.95 with nucleus scoring, the tail guard and decision weighting. Continuing
+  would apply these to AdamW moments built under a different loss and scale. The resulting checkpoint would mix two
+  objectives, two sampling laws and three harness series, and no held result could be attributed to either. From
+  base, the experiment is one clean question: does the corrected GRPO stack beat base on one pin?
+- *Throughput.* Continuing would save about 5 steps (~6 h) of updates that measurably did not move the policy. It
+  would also cost a second start measurement, because both base and the grpo-v1 checkpoint would have to be
+  re-measured on the new series. Fresh needs only the base measurement, which the series change forces anyway.
+
+**Change vs baseline.** grpo.py's defaults at the pin against the untouched base 5ff07638, both measured on the same
+pin and the same Pop engine. The environment is identical for both arms: the harness/runtime fixes (be6194095,
+45f7c0ddb, c0b7ac776, 802e111bc, 0c6e59952, 9f13cce63, d12bdb5a1, 9d1406d32, 4ebd5edf7, e221b45f5, b4f482cc1,
+499c7b326), the scorer/oracle fixes (3bb470c41, f42a6a3db, ef79eb407) and the codebase asset path (e9a7360cc: 45 held
+episodes were ENOENT). They are therefore not the treatment: under the 2026-11-12 rule they are fixed directly. The
+treatment is the learner as it now stands on main: LR 1e-5, 24-48 groups, `--loss-norm episode`, `--reward graded`,
+top-p 0.95, tail floor -7, `--decision-weight call`, KL 0.02 and rho cap 2. Task supply: the pool errata are excluded
+by default, explore is 0.4, and the `ext_codebase-{py,natlang}` families return (~3.8k rows; their repos now
+resolve). Neuralese variants stay off.
+
+**Pin.** The newest `origin/main` commit at the boundary on which `scripts/check-main.sh` passes. Work that is in
+progress or unpushed is not waited for. That includes the SGLang fork's hybrid-SWA KV pool: it changes the engine
+identity on both machines, so it enters at the next boundary with its own base measurement. Run directory
+`ops/grpo-v2/run1`, pin `ops/grpo-v2/run1/pin-<c12>`. The series key is recorded in `pin-<c12>.series.json`. Memory
+sizing is the measured grpo-v1-run2 setting: slots 28, `--activation-gb 6`, actor KV 6 GB, budget 100 GB.
+
+**Base measurements.**
+- *Pop engine* (FP8 KV, 16 running, the pin's code export): required. grpo.py `--held-remote pop` measures it
+  automatically into `held/step-00000-pop`, 256 x 2, about 3.5-4 h, in parallel with training.
+- *DGX engine* (`held-v2/engine.json`): not measured up front. It would pause collection for about 3 h, and every v2
+  comparison is Pop vs Pop. It is measured only when a DGX-engine comparison is actually needed, with base and
+  candidate run back to back on one actor.
+
+**Success criterion (declared now, before the run).** All four must hold:
+1. A scheduled Pop held eval of checkpoint N shows a positive mean per-task pass-rate change against the Pop base
+   (`compare-vs-step0.json`, within-task permutation test) with p < 0.05.
+2. The next scheduled eval also shows a positive change with p < 0.05. This guards against repeated looks, and it is
+   the "two consecutive held gains" that unlocks controlled additions.
+3. `ran_out_rate` is not significantly worse (`ran_out_paired`, p < 0.05).
+4. The 2-sample noise band is ±3.5 pts and the MDE is 5 pts.
+
+**Failure.** Either of these ends the run as failed:
+- no step meets (1) by 48 h of training;
+- two consecutive evals fall below -3.5 pts.
+
+Degradation means a bug: diagnose it before anything else.
+
+**Early checks, steps 1-4.** Any of these stops the run as invalid for a fix and rerun, not a tuning change:
+- NaN;
+- step-1 KL above 1e-3, since the weights are identical then;
+- `outside_nucleus_fraction` above 1%;
+- `abs_log_rho_mean` above 0.1;
+- `grad_moment_cosine` within ±0.05 over steps 3-6. That means the gradient is still noise, and the next run grows
+  the batch first (audit entry).
+
+The nucleus head's GPU memory has not been measured yet. If the memory guard stops the run twice, lower `--slots`.
+That is a capacity change, not an experimental one.
+
+**Boundary trigger.** Switch as soon as the pin passes. Do not wait for a grpo-v1 plateau: its learner is the one the
+audit replaced, and every further v1 hour delays v2. The procedure is as follows.
+1. `scripts/neuralese_data/grpo_boundary.sh pin <commit>` creates the pin, records its series and runs the targeted
+   tests in it. It touches no running unit.
+2. `grpo_boundary.sh switch` waits for grpo-v1-run2's next step record and its state save. It then stops the unit
+   and its Pop/held child units, cancels any requeue, launches `grpo-v2-run1` from the pin and logs to
+   `ops/decisions.log`.
+3. The switch also ends any grpo-v1 Pop measurement in flight.
+
+**grpo-v2's own end.** It ends when it has passed and then shows three consecutive evals with no further gain (a
+plateau), or when it fails. Its best checkpoint is the start policy and baseline for the next experiment.
+
+**Controlled additions, in order.** Each one starts only after grpo-v2 passes, adds one thing and is judged by paired
+held eval. The design is an A/B from the same grpo-v2 checkpoint:
+- *Arm A:* plain continuation for N steps. This is also the main lineage, so it is not wasted.
+- *Arm B:* continuation with the addition for the same N steps.
+- *Judgement:* paired held eval of the two end checkpoints on one pin and engine, with the Neuralese use rate
+  reported beside it.
+- Each launch is `EXTRA=... grpo_boundary.sh switch`.
+
+1. **Neuralese-declaring task variants** (`--neuralese-variants`, 1,381 replay-qualified rows, share 0.5). These are
+   data, not machinery.
+2. **Whole-graph Neuralese gradients:** producer gradients through consumer imports, using the actual episode graph.
+   Today consumer calls train against fixed imported state.
+3. **Neuralese use bonus**, for correct episodes only.
+4. Then, one at a time and in this order:
+   - the JOLT+ teacher/privileged twin;
+   - memetic guidance programs;
+   - expert-iteration shares;
+   - interleaved SFT;
+   - QAT.
+
+Engine changes (hybrid-SWA KV, a DGX-engine re-pin) are not additions. They enter at a boundary with a fresh base
+measurement and no claim of a gain.
+
+## 2026-11-13: held-v3 replaces held-v2 from the next boundary; scorer false negatives fixed (held-set agent)
+
+**Decision.** grpo-v2-run1 launched at 16:12 on pin c06a50581 and stays on held-v2 throughout its run. Experiments pinned after it are judged on held-v3 (`ops/held-v3/manifest.json`, sha 45471060).
+It is `grpo.py`'s default `HELD`; `--held-manifest .../held-v2/manifest.json` opts out. Held-v3 keeps 242 held-v2 tasks
+and replaces 14. Eight had a wrong or ambiguous gold (BASE_FAILURES_20261113). Six shared a source group with tasks
+Exp1 trained on. The replacements were reviewed against their inputs; 5 ambiguous candidates were rejected. Held-v3's
+exclusion covers held-v2's ids and siblings (`also_excludes`), and `held_eval verify` finds no overlap with any recorded
+training exposure (9,427 ids, 1,389 groups). Details: `plans/neuralese/HELD_V3_20261113.md`.
+
+**Scorer changes (enter with the boundary pin, new series):**
+- the core of a span-QA answer (a possessor or a question echo dropped; hedges never pass);
+- a terminal newline ignored in `content` compares when the task never mentions one;
+- iterateOn step markers also met by a bounded loop over the real step function that saw the state recur.
+
+Re-scoring all 512 base episodes flips exactly the 4 intended verdicts.
+
+**At the boundary.**
+1. Rerun `ops/held-v3/exposure/collect_exposure.py` and `held_eval verify`. grpo-v2-run1 excludes only held-v2 and can
+   draw any of the 14 new tasks; collection globs `ops/grpo-v*/run*/groups`. If its groups hit a held-v3 task,
+   re-pin with `--include-manifest held-v3 --replace-ids <hits>` before an experiment that starts from a grpo-v2
+   checkpoint relies on held-v3.
+2. Run `ops/held-v3/runs/run-aa.sh PIN` (base x2, 2 samples, one DGX engine) for the noise floor.

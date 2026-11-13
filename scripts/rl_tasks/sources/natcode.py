@@ -215,7 +215,8 @@ def _type_aliases(files):
                 i += 1
             body = text[start:i - 1]
             fields, depth, current = {}, 0, ''
-            for ch in body:
+            # The closing brace ends the last member too: `{ a: A; evidenceRef: Ref }` has two fields, not one.
+            for ch in body + ';':
                 depth += {'{': 1, '(': 1, '[': 1, '<': 1, '}': -1, ')': -1, ']': -1, '>': -1}.get(ch, 0)
                 if ch in ';\n,' and depth == 0:
                     current = current.strip()

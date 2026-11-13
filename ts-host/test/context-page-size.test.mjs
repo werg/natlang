@@ -20,7 +20,7 @@ test('a text that fits the budget is shown whole; a longer one is paged at the b
   assert.equal(store.show(evidence, 'item.evidence'), evidence);
   const long = Array.from({ length: 2000 }, (_, i) => `line ${i} ${'y'.repeat(40)}`).join('\n');
   const shown = store.show(long, 'item.evidence');
-  assert.match(shown, /<<cut off: \d+ of \d+ characters not shown; item\.evidence holds all of it; read_page\("amber", 2\) shows the next part>>/);
+  assert.match(shown, /<<cut off: \d+ of \d+ characters not shown; only this display is shortened, item\.evidence holds the complete value; read_page\("amber", 2\) shows the next part>>/);
   assert.ok(shown.length > 20000 && shown.length < store.budget + 300);
   const page2 = store.read('amber', 2);
   assert.ok(page2.length > 20000);

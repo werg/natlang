@@ -464,6 +464,8 @@ export { importedNativeArtifacts };
 
 /** Numeric loop bounds are fixed at entry; rounding must never stall the counter. */
 export function numericProgress(initial: number, bound: number, upward: boolean): (current: number) => void {
+  if (typeof (bound as unknown as PromiseLike<unknown> | undefined)?.then === 'function')
+    throw new RangeError('the bound of this counted for loop is a Promise; write await before the call in the bound');
   if (!Number.isFinite(initial) || !Number.isFinite(bound)) throw new RangeError('numeric loop requires a finite counter and bound');
   let previous: number | undefined;
   return current => {

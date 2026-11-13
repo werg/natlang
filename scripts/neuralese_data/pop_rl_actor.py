@@ -383,7 +383,8 @@ def start(args):
     # The SGLang actor runs on Pop's host (the fork's venv); the native one in its container.
     container = [] if args.engine == 'sglang' else ['--container', name]
     # The SGLang front holds the CPU-loaded view until the server is up, beside the server's own processes.
-    budget = SGLANG_MEMORY_GB if args.engine == 'sglang' else RL_MEMORY_GB
+    # SGLANG_MEMORY_GB - 0.5 as serve-checkpoint asks: Pop admits about 11.3 GiB, so 11 + 0.5 reserve was refused.
+    budget = SGLANG_MEMORY_GB - .5 if args.engine == 'sglang' else RL_MEMORY_GB
     ssh(shlex.join(['/usr/bin/python3', POP_REPO + '/scripts/memory_ledger.py', 'run', '--unit', unit,
                         '--budget-gb', str(budget), '--reserve-gb', str(POP_RESERVE_GB),
                         '--class', 'experiment', '--no-resumable', *container, '--workdir', work, '--',

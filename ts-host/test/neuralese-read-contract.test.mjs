@@ -110,3 +110,41 @@ test('eval read(value) returns typed string, number and object payloads and reje
   assert.equal(written, 3);
   assert.equal(read, 3, 'each typed read invokes the configured reader once');
 });
+
+test('eval read(value) without a standard library reads the value with the executing model as a typed call', async () => {
+  // Held collection runs no services.neuralese; the opaque-access error advises read(value), which then failed.
+  const reads = [];
+  const { session } = open({ type: '() => string', instructions: 'Return the text read from the child.' }, {
+    agent: child => {
+      if (child.lam.type.returns.kind === 'neuralese')
+        child.lam.return = neuraleseRef('Neuralese<string>', `nzs1_${'c'.repeat(52)}`);
+      else { reads.push(child); child.lam.return = 'The garden'; }
+    },
+  });
+  const result = await session.applyAsync('eval', { code: `
+    const soft = await nl<Neuralese<string>>\`Write where the ball is.\`({});
+    const text: string = await read(soft);
+    text;
+  ` });
+  assert.equal(result.kind, 'ok', result.text);
+  assert.equal(result.value, 'The garden');
+  assert.equal(reads.length, 1, 'one model readout call');
+  assert.equal(reads[0].lam.type.params.fields[0].name, 'value');
+  assert.match(String(reads[0].lam.instructions ?? reads[0].lam.body ?? ''), /Read the supplied Neuralese value/);
+});
+
+test('a Neuralese value printed or stored in eval reads as one plain line', async () => {
+  const { session } = open({ type: '() => string', instructions: 'Return the text read from the child.' }, {
+    agent: child => { child.lam.return = neuraleseRef('Neuralese<string>', 'nzs1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'); },
+  });
+  const result = await session.applyAsync('eval', { code: `
+    const child = nl<Neuralese<string>>\`Return the answer as a soft string.\`;
+    const note = await child({});
+    console.log(note); console.log('note:', note); console.log({ notes: [note] });
+  ` });
+  assert.equal(result.kind, 'ok', result.text);
+  const line = '[Neuralese<string> value: opaque here; pass it on as is, or read it with read(value)]';
+  assert.ok(result.text.includes(`console:\n${line}\nnote: ${line}\n{"notes":["${line}"]}\n`), result.text);
+  assert.doesNotMatch(result.text.split('Stored local')[0], /\$neuralese|nzs1_/);
+  assert.match(result.text, /local note = \S+ \(Neuralese<string>: pass it on as is, or read it with read\(note\)\)/);
+});

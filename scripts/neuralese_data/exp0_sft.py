@@ -194,6 +194,14 @@ def token_nll(model, h, positions, targets, chunk=2048):
     return torch.cat(out)
 
 
+def token_nll_nucleus(model, h, positions, targets, top_p):
+    """(nll, nll under each row's own top-p nucleus, target outside the nucleus) of ``targets`` at hidden rows
+    ``positions`` (`lfm3_fast_train.linear_nll_nucleus`; prepared models only)."""
+    if getattr(model, '_lfm3_fast', None) is None:
+        raise ValueError('the nucleus NLL needs a lfm3_fast_train.prepare()d model')
+    return lfm3_fast_train.linear_nll_nucleus(h[positions], model.lm_head.weight, targets, top_p)
+
+
 def chain_tensors(chain, device):
     ids = torch.from_numpy(chain['ids'].astype(np.int64)).to(device)
     positions = np.concatenate([np.arange(start - 1, start + length - 1) for start, length, _ in chain['segs']])

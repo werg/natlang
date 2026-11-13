@@ -85,7 +85,8 @@ export class IterationLimitError extends IterationFailure {
   }
 }
 
-function stableHash(value: unknown): string {
+/** The state hash of iteration traces (`state_hash`); also the step-state evidence of plain loops (callable.ts). */
+export function stableHash(value: unknown): string {
   const seen = new WeakSet<object>();
   const canonical = (item: unknown): unknown => {
     if (item === null || typeof item !== 'object') return typeof item === 'function' ? `live:${liveId(item)}` : item;

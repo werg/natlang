@@ -1,0 +1,36 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "natlang-rl-neuralese-variants-20261113",
+  "owner": "dgx",
+  "path": "runs/natlang-rl-neuralese-variants-20261113",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 16799741,
+      "sha256": "bff3f3a9e88e71a1244a9cd548794312db6d13512c974ae18ec167273c6c4373",
+      "lines": 1381
+    },
+    {
+      "path": "repetition.json",
+      "bytes": 2983,
+      "sha256": "80772aaef5d244e07076cdd7b7a2d423a85b5bc7e1b06453368d747eab0e0af3"
+    },
+    {
+      "path": "selection.json",
+      "bytes": 5139,
+      "sha256": "820fe34c8a53f518dd6af5b1a03dac45e2c28f479009595dc9a30a67aa4978e9"
+    },
+    {
+      "path": "task-helpers.jsonl",
+      "bytes": 73216,
+      "sha256": "69fe0f6cd1a9f507b3c8bffd4640e8c9af16690ddefa9f47540965cd5bf1ab39",
+      "lines": 118
+    },
+    {
+      "path": "verification.json",
+      "bytes": 733005,
+      "sha256": "f9f1dce658c74c493516a7077b43caa699aab4f1ae3f056fe72f4eed6141d9ac"
+    }
+  ],
+  "bytes": 17614084
+}

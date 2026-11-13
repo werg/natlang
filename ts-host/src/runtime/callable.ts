@@ -13,7 +13,7 @@ import { parseNatlang, PATH_ONLY, type ItemRecord, type ModuleRecord, type Natla
 import { moduleInstance, moduleInstanceAsync, moduleRealmUsesAsync } from './modules.js';
 import { resolveFrame } from './runtime.js';
 import type { Platform } from './platform.js';
-import { iterateOn } from './iterate.js';
+import { iterateOn, stableHash } from './iterate.js';
 import { traceFor } from '../native/graph.js';
 
 export const NATLANG_CALLABLE: unique symbol = Symbol.for('natlang.callable') as never;
@@ -228,7 +228,15 @@ function moduleValue(record: ModuleRecord, level: Record<string, ItemRecord>, bo
       return target(...args);
     };
     const value = instance();
-    return value instanceof Promise ? value.then(invokeExport) : invokeExport(value);
+    const result = value instanceof Promise ? value.then(invokeExport) : invokeExport(value);
+    const frame = bound ?? currentFrame();
+    if (!frame?.task.runtime.options.traceStepStates) return result;
+    const noteState = (state: unknown) => {
+      try { traceFor(frame.parentCallId)?.emit('step_state', { helper: `${record.source}#${exportName}`, state_hash: stableHash(state) }); }
+      catch { /* evidence only: never affects the call */ }
+      return state;
+    };
+    return result instanceof Promise ? result.then(noteState) : noteState(result);
   });
   const defaultExport = record.exports.default;
   const node: object = defaultExport?.kind === 'function' ?

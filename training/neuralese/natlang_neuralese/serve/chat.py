@@ -49,7 +49,9 @@ vocabulary (LFM3 keeps LFM2's unused `<|tool_call_start|>` token):
   first `XML_PARAMETER_CLOSE` after its opening line (the rule of llama.cpp's Qwen3-Coder/LFM3 parser), so a string
   is representable exactly when that delimiter does not occur in `VALUE + XML_PARAMETER_CLOSE` before its end
   (`xml_value_representable`). Types come from the tool schema: a string-only parameter is verbatim text, any other
-  declared type is JSON first, and an undeclared parameter is JSON when its text parses as JSON, else a string."""
+  declared type is JSON first, and an undeclared parameter is JSON when its text parses as JSON, else a string. Text
+  that is not a value of its parameter's declared type is the string the model wrote (`xml_value`): the call reaches
+  the runtime, which answers with the specific type error, and the history renders the text as it was sampled."""
 XML_PARAMETER_CLOSE = "\n</parameter>\n"
 _XML_FUNCTION_OPEN = re.compile(r"<function=([^>\n]+)>\n")
 _XML_PARAMETER_OPEN = re.compile(r"<parameter=([^>\n]+)>\n")
@@ -80,11 +82,15 @@ def xml_value_text(value) -> str:
 
 
 def xml_wire_arguments(name, arguments, tools):
-    """Encode strings where a parameter's schema also permits JSON values."""
+    """A call's arguments as the template receives them. A string stays verbatim wherever its bare text parses back
+    to the same string under the parameter's schema (`xml_value`), so a value the model sampled renders in the
+    history as it was sampled; only a string whose bare text would read as another value is written as JSON text."""
     properties = _tool_parameter_schemas(tools).get(name, {})
-    return {key: (json.dumps(value, ensure_ascii=False)
-                  if isinstance(value, str) and _schema_types(properties.get(key)) != {"string"}
-                  else value) for key, value in arguments.items()}
+    def verbatim(key, value):
+        return (_schema_types(properties.get(key)) == {"string"}
+                or xml_value_representable(value) and xml_value(value, properties.get(key)) == value)
+    return {key: value if not isinstance(value, str) or verbatim(key, value) else json.dumps(value, ensure_ascii=False)
+            for key, value in arguments.items()}
 
 
 def check_xml_call(name, arguments, tools=None, *, types: bool = True) -> None:
@@ -109,16 +115,10 @@ def check_xml_call(name, arguments, tools=None, *, types: bool = True) -> None:
                                f"{XML_PARAMETER_CLOSE!r}; the template has no escape for it")
         if not types:
             continue
-        try:
-            parsed = xml_value(text, properties.get(key))
-        except ValueError:
-            parsed = _UNPARSED
-        if parsed is _UNPARSED or json.dumps(parsed, ensure_ascii=False) != json.dumps(value, ensure_ascii=False):
+        parsed = xml_value(text, properties.get(key))
+        if json.dumps(parsed, ensure_ascii=False) != json.dumps(value, ensure_ascii=False):
             raise RequestError("tool-call-unrepresentable",
                                f"parameter {key!r} of {name!r} does not keep its type in the XML rendering")
-
-
-_UNPARSED = object()
 
 
 def _schema_types(schema) -> set[str] | None:
@@ -142,16 +142,19 @@ def _schema_types(schema) -> set[str] | None:
     return None
 
 
+def _not_json(name):
+    raise ValueError(f"{name} is not JSON")
+
+
 def xml_value(text: str, schema=None):
-    """An XML parameter's text → its value, typed by the parameter's schema (see TOOL_CALL_FORMATS)."""
+    """An XML parameter's text → its value, typed by the parameter's schema (see TOOL_CALL_FORMATS). Text that is not
+    a value of the declared type is returned as the string it is, never refused: the runtime reports the type."""
     types = _schema_types(schema)
     if types == {"string"}:
         return text
     try:
-        value = json.loads(text)
+        value = json.loads(text, parse_constant=_not_json)
     except ValueError:
-        if types is not None and "string" not in types:
-            raise ValueError(f"parameter value is not JSON of its declared type {sorted(types)}")
         return text
     if types is None:
         # Ambiguous strings are explicitly JSON quoted by the shared renderer;
@@ -164,11 +167,7 @@ def xml_value(text: str, schema=None):
                "integer": isinstance(value, int) and not isinstance(value, bool),
                "boolean": isinstance(value, bool), "null": value is None,
                "string": isinstance(value, str) and json.dumps(value, ensure_ascii=False) == text}
-    if any(allowed.get(kind) for kind in types):
-        return value
-    if "string" in types:
-        return text
-    raise ValueError(f"parameter value is not of its declared type {sorted(types)}")
+    return value if any(allowed.get(kind) for kind in types) else text
 
 
 def _tool_parameter_schemas(tools) -> dict:
@@ -248,12 +247,8 @@ def parse_xml_calls(text: str, tools=None) -> list[tuple[str, dict]]:
             if parameter.key in arguments:
                 raise ValueError(f"parameter {parameter.key!r} repeats")
             raw = text[parameter.value_start:parameter.value_end]
-            try:
-                arguments[parameter.key] = xml_value(raw, properties.get(parameter.key))
-            except ValueError:
-                if not _PH.search(raw):
-                    raise
-                arguments[parameter.key] = raw  # a written block stands for the value (native write sites)
+            # A written block's placeholder (native write sites) is not JSON, so it stands for the value as text.
+            arguments[parameter.key] = xml_value(raw, properties.get(parameter.key))
         calls.append((call.name, arguments))
         last = call.end
     if not calls or text[last:].strip():
@@ -920,9 +915,9 @@ def arguments_text(arguments) -> str:
     return json.dumps(arguments, ensure_ascii=False, separators=(",", ":"))
 
 
-def _take_xml_calls(text: str, tools=None) -> tuple[list[tuple[str, dict]], str]:
-    """Complete, well-typed XML calls of `text` (in order) and the text without them. A malformed or ill-typed call
-    stays in the text, where the runtime treats leaked markup as a malformed call."""
+def _take_xml_calls(text: str, tools=None) -> tuple[list[tuple[str, dict]], str, str]:
+    """Complete XML calls of `text` (in order), the text without them, and the text before the first of them. A
+    malformed call stays in the text, where the runtime treats leaked markup as a malformed call."""
     calls, kept, last = [], [], 0
     for call in scan_xml_calls(text):
         if call.end is None or call.name is None:
@@ -935,7 +930,7 @@ def _take_xml_calls(text: str, tools=None) -> tuple[list[tuple[str, dict]], str]
         kept.append(text[last:call.start])
         last = call.end
     kept.append(text[last:])
-    return calls, "".join(kept)
+    return calls, "".join(kept), kept[0]
 
 
 def build_message(text: str, block_ids: list[str], call_prefix: str = "call", tools=None) -> dict:
@@ -951,7 +946,7 @@ def build_message(text: str, block_ids: list[str], call_prefix: str = "call", to
         head, _, text = text.partition("</think>")
         reasoning = head.strip()
     tool_calls = []
-    xml_calls, text = _take_xml_calls(text, tools)
+    xml_calls, text, lead = _take_xml_calls(text, tools)
     for name, arguments in xml_calls:
         tool_calls.append({
             "id": f"{call_prefix}_{len(tool_calls)}", "type": "function",
@@ -970,6 +965,10 @@ def build_message(text: str, block_ids: list[str], call_prefix: str = "call", to
                 })
     content = _CALLS.sub(lambda m: "" if _parses(m.group(1)) else m.group(0), text)
     content = _JSON_CALLS.sub(lambda m: "" if _parses(m.group(1), parse_json_call) else m.group(0), content).strip()
+    if xml_calls and lead.strip() == content:
+        # What the reply said before its calls, whitespace included: the template writes content and calls back to
+        # back, so the history renders the reply as it was sampled (text after or between calls has no rendering).
+        content = lead
     message = {"role": "assistant", "content": _to_parts(content, block_ids) if content else None}
     if reasoning:
         message["reasoning_content"] = reasoning

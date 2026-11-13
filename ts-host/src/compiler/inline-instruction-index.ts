@@ -573,7 +573,7 @@ function visiblePrimitive(text: string, name: string, type: string, declaration:
 function truncatedStringCapturePreview(text: string, name: string, fullValue: string):
   { text: string; omitted_characters: number; sha256: string } | undefined {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const pattern = new RegExp(`(?:^|\\n)\\s*const\\s+${escaped}\\s*:\\s*(?:string|unknown|any)\\s*=\\s*("(?:\\\\.|[^"\\\\])*")\\s+<<cut off: (\\d+) of (\\d+) characters not shown; ${escaped} holds all of it>>;?(?=\\n|$)`, 'g');
+  const pattern = new RegExp(`(?:^|\\n)\\s*const\\s+${escaped}\\s*:\\s*(?:string|unknown|any)\\s*=\\s*("(?:\\\\.|[^"\\\\])*")\\s+<<cut off: (\\d+) of (\\d+) characters not shown; (?:${escaped} holds all of it|only this display is shortened, ${escaped} holds the complete value)>>;?(?=\\n|$)`, 'g');
   const matches = [...text.matchAll(pattern)];
   if (matches.length !== 1) return undefined;
   let preview: unknown;

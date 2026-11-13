@@ -4,13 +4,16 @@ dev16 is 16 single-sample cases (about +-1.7 cases of noise). A held set pins po
 families and levels (``build_manifest``; ``pin`` writes a standalone one such as ops/held-v2 with its ``exclusion-ids.json``),
 and training code never selects them or their ``split_group`` siblings (``exclusion_ids``, ``curriculum.select_tasks``
 ``exclude_ids``). ``measure`` runs N samples per held task against a served actor (``serve`` launches one for a checkpoint)
-and writes ``result.json``; ``compare``/``paired`` pair two results on matched (task, sample) episodes (McNemar exact).
+and writes ``result.json``; ``compare`` tests the mean per-task pass-rate change (within-task permutation test, task
+bootstrap; a wall-clock timeout counts as a failure, dropping them is reported beside it), with McNemar on matched
+(task, sample) episodes (``paired``) as a secondary field.
 
 - ``manifest.json`` + ``cases.jsonl``: task ids and row digests, the pool's digest, and the excluded split groups.
 - ``run`` measures one policy directory; failures and a cut-short run are recorded, and a partial run is still a balanced
   one (sample-major order) and pairs on what it finished.
-- A comparison series is the collector runtime (ts-host tree) plus the resolved ``NATLANG_MODEL_FACING`` variants, recorded
-  in every result: only results of one series are compared, a change of either starts a new series with its own baseline.
+- A comparison series is the collector runtime (ts-host tree), the Python sources that run and score episodes
+  (``SCORING_SOURCES``) and the resolved ``NATLANG_MODEL_FACING`` variants, recorded in every result: only results of
+  one series are compared, a change of any starts a new series with its own baseline.
 """
 from __future__ import annotations
 
@@ -37,6 +40,14 @@ MAX_GROUP_ROWS = 24          # a held task whose split group is larger would shr
 SEED = 'held-eval-20261110'
 SEED_BASE = 4200000
 LOOP = ('budget_exhaustion', 'repetition')
+# One episode budget in model calls for training (grpo.py) and held measurement (EPISODE_COST_20261112: a budget stop
+# scores 0). Held results measured before 2026-11-13 ran at 64; they are another baseline.
+EPISODE_MODEL_CALLS = 40
+# The Python sources that run episodes and decide their outcome; a change of any is a new series (with the ts-host tree).
+SCORING_SOURCES = ('scripts/run_bonsai_queue.py', 'training/neuralese/natlang_neuralese/eval/task_packet.py',
+                   'training/neuralese/natlang_neuralese/rl/task_rollouts.py',
+                   'training/neuralese/natlang_neuralese/rl/rollout_math.py',
+                   'training/neuralese/natlang_neuralese/common/task_roots.py')
 
 
 def sample_timed_out(sample):
@@ -100,34 +111,82 @@ def avoid_ids(state, directories=()):
     return ids
 
 
-def build_manifest(cases_path, *, avoid, tasks=DEFAULT_TASKS, include=(), seed=SEED):
+def _source_groups(row):
+    return set(row.get('source_groups') or ())
+
+
+def build_manifest(cases_path, *, avoid, tasks=DEFAULT_TASKS, include=(), seed=SEED, avoid_groups=(), replace=(), reject=()):
     """(manifest, held rows): ``tasks`` pool rows, family- and level-stratified, of which a third carry the effect-state class.
-    Deterministic in the pool and ``avoid``. Rows whose split group holds an avoided task are not candidates. ``include``:
-    task ids held already (an earlier, smaller manifest) that the new one keeps; the rest is chosen around them."""
+    Deterministic in the pool and the arguments. Rows whose split group or a source group is shared with an avoided task
+    (``avoid`` ids, resolved in the pool, and ``avoid_groups``: split/source group names of exposed rows outside it) are
+    not candidates. ``include``: task ids held already (an earlier manifest) that the new one keeps. ``replace``: ids of
+    ``include`` to drop (a wrong or ambiguous oracle); each gets a fresh task of its family and level, else of its family
+    at the nearest level, else the stratified fill. ``reject``: rows that are never candidates (pool errata), without
+    taking their split groups out."""
     from .curriculum import metadata
     cases = list(read_jsonl(cases_path))
-    include = set(include)
-    if include & set(avoid):
-        raise ValueError('an included held task is also to be avoided: ' + ', '.join(sorted(include & set(avoid))[:5]))
-    avoid_groups = {_split_group(row) for row in cases if row.get('id') in avoid}
+    replace = set(replace)
+    if replace - set(include):
+        raise ValueError('replaced held tasks are not in the included manifest: ' + ', '.join(sorted(replace - set(include))[:5]))
+    include = [i for i in include if i not in replace]
+    include_set = set(include)
+    if include_set & set(avoid):
+        raise ValueError('an included held task is also to be avoided: ' + ', '.join(sorted(include_set & set(avoid))[:5]))
+    avoid_groups = set(avoid_groups)
+    for row in cases:
+        if row.get('id') in avoid:
+            avoid_groups.add(_split_group(row))
+            avoid_groups |= _source_groups(row)
+    reject = set(reject)
     groups = {}
     for row in cases:
         groups[_split_group(row)] = groups.get(_split_group(row), 0) + 1
-    candidates = []
+    candidates, blocked = [], []
     for index, row in enumerate(cases):
         meta = metadata(row)
-        if (row.get('split') == 'train' and row['id'] not in avoid and _split_group(row) not in avoid_groups
+        exposed = _split_group(row) in avoid_groups or bool(_source_groups(row) & avoid_groups)
+        if (row.get('split') == 'train' and row['id'] not in avoid and not exposed and row['id'] not in reject
                 and groups[_split_group(row)] <= MAX_GROUP_ROWS):
-            candidates.append({'row': index, 'id': row['id'], 'group': _split_group(row), **meta})
+            candidates.append({'row': index, 'id': row['id'], 'group': _split_group(row), 'source_family': row.get('family'),
+                               **meta})
+        elif row.get('id') in include_set:
+            blocked.append(row['id'])
+    if blocked:
+        raise ValueError(f'{len(blocked)} included held tasks are no longer eligible (exposed group, rejected or not '
+                         'train): ' + ', '.join(sorted(blocked)[:20]))
     levels = sorted({c['level'] for c in candidates})
-    chosen = [c for c in candidates if c['id'] in include]
-    if len(chosen) != len(include):
-        raise ValueError(f'{len(include) - len(chosen)} included held tasks are not eligible pool rows')
-    used_groups = {c['group'] for c in chosen}
+    chosen = [c for c in candidates if c['id'] in include_set]
+    if len(chosen) != len(include_set):
+        raise ValueError(f'{len(include_set) - len(chosen)} included held tasks are not eligible pool rows')
+    by_id = {row['id']: (index, row) for index, row in enumerate(cases)}
+    # A replaced task's split group stays out too: a sibling would share its source (and often its defect).
+    used_groups = {c['group'] for c in chosen} | {_split_group(by_id[i][1]) for i in replace if i in by_id}
     family_count = {}
     for c in chosen:
         family_count[c['family']] = family_count.get(c['family'], 0) + 1
-    effect = max(0, round(tasks * EFFECT_STATE_SHARE) - sum(1 for c in chosen if c.get('mix_class') == 'effect_state'))
+    replaced = []
+    for old in sorted(replace, key=lambda i: _hash('replace', i, seed=seed)):
+        if old not in by_id:
+            raise ValueError(f'replaced held task {old} is not a pool row')
+        meta = metadata(by_id[old][1])
+        options = [c for c in candidates if c['family'] == meta['family'] and c['group'] not in used_groups
+                   and c['id'] not in include_set]
+        # Prefer the replaced task's class (effect-state or not, keeping the class share) and source family (e.g.
+        # multihiertt within table-text QA).
+        same_class = [c for c in options if c.get('mix_class') == meta.get('mix_class')] or options
+        options = [c for c in same_class if c['source_family'] == by_id[old][1].get('family')] or same_class
+        pick = None
+        if options:
+            level = min({c['level'] for c in options}, key=lambda lv: (abs(lv - meta['level']), lv))
+            pick = min((c for c in options if c['level'] == level), key=lambda c: _hash('row', c['id'], seed=seed))
+            chosen.append(pick)
+            used_groups.add(pick['group'])
+            family_count[pick['family']] = family_count.get(pick['family'], 0) + 1
+        replaced.append({'id': old, 'family': meta['family'], 'level': meta['level'],
+                         'by': pick['id'] if pick else None, 'by_level': pick['level'] if pick else None})
+    picked_ids = {c['id'] for c in chosen}
+    effect = min(max(0, round(tasks * EFFECT_STATE_SHARE) - sum(1 for c in chosen if c.get('mix_class') == 'effect_state')),
+                 max(0, tasks - len(chosen)))
 
     def take(pool, quota):
         by_family = {}
@@ -155,22 +214,23 @@ def build_manifest(cases_path, *, avoid, tasks=DEFAULT_TASKS, include=(), seed=S
                 break
         return picked
 
-    chosen += take([c for c in candidates if c.get('mix_class') == 'effect_state' and c['id'] not in include], effect)
-    chosen += take([c for c in candidates if c.get('mix_class') != 'effect_state' and c['id'] not in include],
+    chosen += take([c for c in candidates if c.get('mix_class') == 'effect_state' and c['id'] not in picked_ids], effect)
+    chosen += take([c for c in candidates if c.get('mix_class') != 'effect_state' and c['id'] not in picked_ids],
                    tasks - len(chosen))
     if len(chosen) < tasks:
         raise ValueError(f'the pool has only {len(chosen)} eligible held tasks (wanted {tasks})')
     chosen.sort(key=lambda c: c['row'])
     rows = [cases[c['row']] for c in chosen]
     manifest = {
-        'schema': MANIFEST_SCHEMA, 'seed': seed, 'included': len(include), 'tasks': [
+        'schema': MANIFEST_SCHEMA, 'seed': seed, 'included': len(include_set), 'tasks': [
             {'id': c['id'], 'pool_row': c['row'], 'family': c['family'], 'level': c['level'],
              **({'mix_class': c['mix_class']} if c.get('mix_class') else {}), 'split_group': c['group'],
              'row_sha256': hashlib.sha256(json.dumps(cases[c['row']], sort_keys=True).encode()).hexdigest()}
             for c in chosen],
         'excluded_split_groups': sorted({c['group'] for c in chosen}),
         'pool': {'path': str(cases_path), 'sha256': _sha256(cases_path), 'rows': len(cases)},
-        'avoided_task_ids': len(avoid), 'avoided_split_groups': len(avoid_groups),
+        'avoided_task_ids': len(avoid), 'avoided_groups': len(avoid_groups), 'rejected_rows': len(reject),
+        **({'replaced': replaced} if replace else {}),
         'by_level': {str(lv): sum(1 for c in chosen if c['level'] == lv) for lv in levels},
         'families': len({c['family'] for c in chosen}),
         'effect_state': sum(1 for c in chosen if c.get('mix_class') == 'effect_state')}
@@ -211,8 +271,10 @@ def load_manifest(path, sha256):
 # ---- selector exclusion and its transition ------------------------------------------------------------------------------
 def exclusion_ids(manifest, cases=None):
     """Ids of pool rows training must never take: the held tasks of ``manifest`` (a path or the loaded manifest) and every
-    row sharing a held ``split_group``. ``cases``: the pool rows (or a path); by default the manifest's pool, whose sha256
-    must match the pinned one. Experiments call this to exclude a held set (e.g. ``ops/held-v2/manifest.json``)."""
+    row sharing a held ``split_group``, plus the same for each earlier held manifest it lists in ``also_excludes`` (a
+    successor set keeps its predecessor's tasks out of training: held-v3 excludes held-v2). ``cases``: the pool rows (or
+    a path); by default the manifest's pool, whose sha256 must match the pinned one. Experiments call this to exclude a
+    held set (e.g. ``ops/held-v3/manifest.json``)."""
     if not isinstance(manifest, dict):
         manifest = json.loads(Path(manifest).read_text())
     if cases is None:
@@ -221,9 +283,14 @@ def exclusion_ids(manifest, cases=None):
             raise ValueError('the pool changed since the held manifest was pinned: ' + pool['path'])
         cases = pool['path']
     if isinstance(cases, (str, Path)):
-        cases = read_jsonl(cases)
+        cases = list(read_jsonl(cases))
     held, groups = {t['id'] for t in manifest['tasks']}, set(manifest['excluded_split_groups'])
-    return frozenset(row['id'] for row in cases if row.get('id') in held or _split_group(row) in groups)
+    excluded = {row['id'] for row in cases if row.get('id') in held or _split_group(row) in groups}
+    for earlier in manifest.get('also_excludes') or ():
+        if _sha256(earlier['path']) != earlier['sha256']:
+            raise ValueError('an excluded earlier held manifest changed: ' + earlier['path'])
+        excluded |= exclusion_ids(earlier['path'], cases)
+    return frozenset(excluded)
 
 
 # ---- series identity --------------------------------------------------------------------------------------------------
@@ -244,9 +311,13 @@ def series(config=None):
     root = repository_root()
     tree = _git(root, 'rev-parse', 'HEAD:ts-host')
     dirty = bool(_git(root, 'status', '--porcelain', '--untracked-files=no', '--', 'ts-host'))
+    scoring = {path: _git(root, 'rev-parse', f'HEAD:{path}') for path in SCORING_SOURCES}
+    scoring_dirty = bool(_git(root, 'status', '--porcelain', '--untracked-files=no', '--', *SCORING_SOURCES))
     variants = ','.join(sorted(model_facing(config).split(',')))
-    key = hashlib.sha256(f'{tree}|{variants}'.encode()).hexdigest()[:12]
-    return {'key': key, 'ts_host_tree': tree, 'ts_host_dirty': dirty, 'model_facing': variants}
+    scored_by = ','.join(f'{path}={blob}' for path, blob in sorted(scoring.items()))
+    key = hashlib.sha256(f'{tree}|{scored_by}|{variants}'.encode()).hexdigest()[:12]
+    return {'key': key, 'ts_host_tree': tree, 'ts_host_dirty': dirty, 'scoring_sources': scoring,
+            'scoring_dirty': scoring_dirty, 'model_facing': variants}
 
 
 # ---- the measurement ----------------------------------------------------------------------------------------------------
@@ -358,7 +429,9 @@ def run(directory):
         entries = _entries(spec)
         queue.write_text(''.join(json.dumps(entry, sort_keys=True) + '\n' for entry in entries))
     entries = list(read_jsonl(queue))
-    (directory / 'sampling-config.json').write_text(json.dumps({'guidance': False}) + '\n')
+    from ..common.sampling import rl_sampling_controls
+    (directory / 'sampling-config.json').write_text(json.dumps(
+        rl_sampling_controls(spec.get('sampling', LEGACY_SAMPLING)['top_p'])) + '\n')
     stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     signal.signal(signal.SIGINT, lambda *_: stop.set())
@@ -403,6 +476,7 @@ def finalize(directory, spec, started, *, complete):
         efficiency = row.get('execution_efficiency') or {}
         samples.append({'task_id': row['task_id'], 'family': row.get('family'), 'level': _level(packet[row['group']]),
                         'sample': row['sample'], 'outcome': row['outcome'], 'reward': row['reward'],
+                        'graded_reward': row.get('graded_reward'),
                         'ran': key in finishes, 'finish_status': row.get('finish_status'), 'timed_out': _timed_out(finish),
                         'elapsed_seconds': (finish or {}).get('elapsed_seconds'),
                         'completion_tokens': (finish or {}).get('completion_tokens'),
@@ -423,9 +497,13 @@ def finalize(directory, spec, started, *, complete):
               'endpoint': spec['endpoint'], 'actor': spec.get('actor'), 'engine': spec.get('engine'), 'tasks': spec['tasks'], 'samples_per_task': spec['samples'],
               'seed_base': spec.get('seed_base', SEED_BASE), 'case_seconds': spec.get('case_seconds'),
               'context_tokens': spec.get('context_tokens', LEGACY_CONTEXT_TOKENS),
+              'sampling': spec.get('sampling', LEGACY_SAMPLING),
               'started_at': started, 'finished_at': time.time(), 'elapsed_seconds': elapsed,
               'complete': bool(complete and len(ran) == len(samples)), 'ran': len(ran), 'scored': len(scored),
               'successes': successes, 'success_rate': round(successes / len(scored), 4) if scored else None,
+              # Secondary: the training reward with partial file-effect credit (held is judged on acceptance).
+              'mean_graded_reward': (round(sum(s['graded_reward'] for s in scored) / len(scored), 4)
+                                     if scored and all(s.get('graded_reward') is not None for s in scored) else None),
               'timeouts': timeouts, 'timeout_rate': round(timeouts / len(ran), 4) if ran else None,
               'unscored_other': len(ran) - len(scored) - sum(s['timed_out'] and s['reward'] is None for s in ran),
               'outcome_counts': counts,
@@ -487,17 +565,84 @@ def paired(first, second):
 # The call budget of a held measurement (the harness compacts near it); results measured before it was recorded ran at 32768.
 CONTEXT_TOKENS = 131072
 LEGACY_CONTEXT_TOKENS = 32768
+# Results measured before the sampling law was recorded (2026-11-13) sampled the untruncated distribution at T=1.
+LEGACY_SAMPLING = {'temperature': 1., 'top_p': 1.}
 
 
-def compare(first, second, *, resamples=2000):
-    """The standalone comparison of two result.json files (``second`` against ``first``): the paired test (McNemar on
-    matched scored samples, task-level sign test), the task-clustered bootstrap 95% interval of the success-rate change
-    over the matched samples, each side's timeouts and loop rate, and whether the two ran under one code commit and series.
-    Pairs lost to a timeout on either side are counted, never scored."""
+def task_counts(result, *, timeouts='failure'):
+    """{task: [successes, counted]} over the episodes that ran. ``timeouts='failure'`` counts a wall-clock stop as a
+    failure (it falls on hard tasks, so dropping it biases the rate up for the side that times out more); ``'drop'``
+    leaves it out. Other unscored episodes (infrastructure) are left out either way."""
+    counts = {}
+    for s in result['samples']:
+        if not s['ran']:
+            continue
+        if s['reward'] is None and not (timeouts == 'failure' and sample_timed_out(s)):
+            continue
+        entry = counts.setdefault(s['task_id'], [0, 0])
+        entry[0] += s['reward'] == 1.0
+        entry[1] += 1
+    return counts
+
+
+def _rate_change(a, b, tasks, *, resamples, seed=0):
+    """The mean over ``tasks`` of the per-task pass-rate change b - a ({task: [successes, n]}; sample counts may differ),
+    its task-bootstrap 95% interval and the two-sided p of a within-task permutation test: under no change, a task's
+    pooled outcomes are exchangeable between the two sides, so each side's success count is hypergeometric given the
+    pooled count (Monte Carlo over all tasks at once; tasks that all pass or all fail contribute a constant)."""
+    import bisect
     import random
+    tasks = [t for t in tasks if t in a and t in b and a[t][1] and b[t][1]]
+    if not tasks:
+        return {'tasks': 0, 'first_rate': None, 'second_rate': None, 'delta': None, 'ci95_task_bootstrap': None,
+                'permutation_p': None}
+    diffs = {t: b[t][0] / b[t][1] - a[t][0] / a[t][1] for t in tasks}
+    observed = sum(diffs.values()) / len(tasks)
+    rng = random.Random(seed)
+    boot = sorted(sum(diffs[rng.choice(tasks)] for _ in tasks) / len(tasks) for _ in range(resamples))
+    constant, varying = 0.0, []
+    for t in tasks:
+        (sa, na), (sb, nb) = a[t], b[t]
+        k, n = sa + sb, na + nb
+        lo, hi = max(0, k - na), min(k, nb)
+        if lo == hi:
+            constant += lo / nb - (k - lo) / na
+            continue
+        support = list(range(lo, hi + 1))
+        weights = [math.comb(nb, x) * math.comb(na, k - x) for x in support]
+        total, cumulative, acc = sum(weights), [], 0
+        for w in weights:
+            acc += w
+            cumulative.append(acc / total)
+        varying.append(([x / nb - (k - x) / na for x in support], cumulative))
+    extreme = 0
+    for _ in range(resamples):
+        stat = constant
+        for values, cumulative in varying:
+            stat += values[min(bisect.bisect_left(cumulative, rng.random()), len(values) - 1)]
+        extreme += abs(stat / len(tasks)) >= abs(observed) - 1e-12
+    return {'tasks': len(tasks), 'first_rate': round(sum(a[t][0] / a[t][1] for t in tasks) / len(tasks), 4),
+            'second_rate': round(sum(b[t][0] / b[t][1] for t in tasks) / len(tasks), 4), 'delta': round(observed, 4),
+            'ci95_task_bootstrap': [round(boot[int(.025 * resamples)], 4), round(boot[int(.975 * resamples) - 1], 4)],
+            'permutation_p': round((1 + extreme) / (1 + resamples), 4)}
+
+
+def compare(first, second, *, resamples=2000, trained_families=None, ignore_ids=()):
+    """The standalone comparison of two result.json files (``second`` against first).
+
+    Primary: the mean per-task pass-rate change over the tasks both measured, with a within-task permutation test (valid
+    for unequal sample counts, no arbitrary pairing of independent samples) and a task-bootstrap 95% interval; a
+    wall-clock timeout counts as a failure. ``sensitivity_drop_timeouts`` is the same with timeouts left out. Subsets:
+    ``without_ignored`` drops ``ignore_ids`` (structurally-zero or wrong-oracle tasks), and with ``trained_families``
+    (families the second policy trained on) ``trained_families``/``untrained_families`` split the tasks. Secondary:
+    McNemar and the task sign test on matched scored (task, sample) episodes (``paired``), timeouts, loop and ran-out
+    rates, and whether the two ran under one code commit and series."""
     budgets = [result.get('context_tokens', LEGACY_CONTEXT_TOKENS) for result in (first, second)]
     if budgets[0] != budgets[1]:
         raise ValueError(f'results measured with different context budgets are not paired: {budgets[0]} vs {budgets[1]}')
+    laws = [result.get('sampling', LEGACY_SAMPLING) for result in (first, second)]
+    if laws[0] != laws[1]:
+        raise ValueError(f'results sampled under different laws are not paired: {laws[0]} vs {laws[1]}')
     engines = result_engine(first), result_engine(second)
     if None not in engines and engines[0] != engines[1]:
         raise ValueError('results served by different engine settings are not paired: '
@@ -510,28 +655,31 @@ def compare(first, second, *, resamples=2000):
         return {(s['task_id'], s['sample']): s for s in result['samples'] if s['ran']}
     a, b = table(first), table(second)
     common = set(a) & set(b)
-    scored = [k for k in common if a[k]['reward'] is not None and b[k]['reward'] is not None]
-    by_task = {}
-    for task, sample in scored:
-        by_task.setdefault(task, []).append((a[(task, sample)]['reward'] == 1.0, b[(task, sample)]['reward'] == 1.0))
-    tasks = sorted(by_task)
-    rng = random.Random(0)
-    deltas = []
-    for _ in range(resamples if tasks else 0):
-        pick = [by_task[rng.choice(tasks)] for _ in tasks]
-        n = sum(len(v) for v in pick)
-        deltas.append(sum(y - x for v in pick for x, y in v) / n)
-    deltas.sort()
 
     def side(result):
         return {'policy': result['policy_id'], 'code': (result.get('code') or {}).get('git_commit'),
                 'series': result['series']['key'], 'seed_base': result.get('seed_base', SEED_BASE), 'ran': result['ran'],
                 'scored': result['scored'], 'successes': result['successes'],
                 'success_rate': round(result['successes'] / result['scored'], 4) if result['scored'] else None,
+                'mean_graded_reward': result.get('mean_graded_reward'),
                 'timeouts': sum(timed_out(s) for s in result['samples'] if s['ran']),
                 'loop_rate': result['loop_rate'], 'ran_out_rate': ran_out_rate(result),
                 'repeated_action_rate': result.get('repeated_action_rate'), 'elapsed_seconds': result.get('elapsed_seconds'), 'complete': result.get('complete')}
-    n = sum(len(v) for v in by_task.values())
+    counts = {mode: (task_counts(first, timeouts=mode), task_counts(second, timeouts=mode)) for mode in ('failure', 'drop')}
+    every = sorted(set(counts['failure'][0]) | set(counts['failure'][1]))
+    ignored = set(ignore_ids)
+    family = {s['task_id']: s.get('family') for result in (first, second) for s in result['samples']}
+
+    def change(tasks, mode='failure'):
+        return _rate_change(*counts[mode], tasks, resamples=resamples)
+    subsets = {}
+    if ignored:
+        subsets['without_ignored'] = {**change([t for t in every if t not in ignored]),
+                                      'ignored_tasks': len(ignored & set(every))}
+    if trained_families is not None:
+        trained = set(trained_families)
+        subsets['trained_families'] = change([t for t in every if family.get(t) in trained and t not in ignored])
+        subsets['untrained_families'] = change([t for t in every if family.get(t) not in trained and t not in ignored])
     out_first = sum(ran_out(a[k]) and not ran_out(b[k]) for k in common)
     out_second = sum(ran_out(b[k]) and not ran_out(a[k]) for k in common)
     rates = ran_out_rate(first), ran_out_rate(second)
@@ -539,12 +687,12 @@ def compare(first, second, *, resamples=2000):
             'engine_attested': None not in engines, 'same_code': side(first)['code'] == side(second)['code'],
             'same_series': side(first)['series'] == side(second)['series'],
             'same_manifest': first.get('manifest_sha256') == second.get('manifest_sha256'),
+            'primary': {**change(every), 'statistic': 'mean per-task pass-rate change', 'timeouts': 'failure'},
+            'sensitivity_drop_timeouts': {**change(every, 'drop'), 'timeouts': 'dropped'},
+            'subsets': subsets,
             'matched_pairs': len(common), 'pairs_lost_to_timeout': sum(
                 1 for k in common if timed_out(a[k]) or timed_out(b[k])),
             'paired': paired(first, second),
-            'success_rate_delta': round(sum(y - x for v in by_task.values() for x, y in v) / n, 4) if n else None,
-            'delta_ci95_task_bootstrap': [round(deltas[int(.025 * len(deltas))], 4),
-                                          round(deltas[int(.975 * len(deltas)) - 1], 4)] if deltas else None,
             'loop_rate_delta': (round(second['loop_rate'] - first['loop_rate'], 4)
                                 if first['loop_rate'] is not None and second['loop_rate'] is not None else None),
             'ran_out_rate_delta': round(rates[1] - rates[0], 4) if None not in rates else None,
@@ -553,6 +701,18 @@ def compare(first, second, *, resamples=2000):
                                'second': sum(ran_out(b[k]) for k in common), 'only_first': out_first,
                                'only_second': out_second,
                                'mcnemar_exact_p': round(binomial_two_sided(out_first, out_second), 4)}}
+
+
+def read_ids(paths):
+    """Task ids from JSONL files ({"id": ...} per line) or JSON lists."""
+    ids = set()
+    for path in paths:
+        text = Path(path).read_text()
+        if text.lstrip().startswith('['):
+            ids |= set(json.loads(text))
+        else:
+            ids |= {json.loads(line)['id'] for line in text.splitlines() if line.strip()}
+    return ids
 
 
 def trend(out):
@@ -670,9 +830,13 @@ def serve(checkpoint, sha256, store, *, unit, budget_gb, extra=(), base=BASE_SNA
 
 
 def measure(out, manifest, endpoints, policy_id, *, samples=4, seed_base=SEED_BASE, case_seconds=3600,
-            max_model_requests=64, max_turns=128, context_tokens=CONTEXT_TOKENS, label=None, allow_other_engine=False, log=print):
+            max_model_requests=EPISODE_MODEL_CALLS, max_turns=128, context_tokens=CONTEXT_TOKENS, label=None, allow_other_engine=False, log=print,
+            top_p=None):
     """Measure the policy served at ``endpoints`` ([(url, slots)]) on every task of ``manifest`` x ``samples`` into
-    ``out/result.json`` (resumable: an existing ``run.json`` must name the same manifest, policy and sampling)."""
+    ``out/result.json`` (resumable: an existing ``run.json`` must name the same manifest, policy and sampling).
+    ``top_p``: the nucleus of the sampling law (default ``common.sampling.RL_TOP_P``; 1.0: untruncated), recorded as
+    the result's ``sampling``; ``compare`` refuses results of different laws."""
+    from ..common.sampling import RL_TOP_P, sampling_law_of
     from .actor_client import NativeActorClient
     from ..common.code_provenance import code_provenance, repository_root
     out, manifest = Path(out), Path(manifest)
@@ -690,7 +854,8 @@ def measure(out, manifest, endpoints, policy_id, *, samples=4, seed_base=SEED_BA
             'case_seconds': case_seconds, 'max_model_requests': max_model_requests, 'max_turns': max_turns,
             'context_tokens': context_tokens, 'runtime': str(repo / 'ts-host'), 'repo': str(repo),
             'series': series(), 'code': code_provenance(), 'actor': {'info': info.get('rl_policy_binding')},
-            'engine': engine_of(info.get('rl_policy_binding'))}
+            'engine': engine_of(info.get('rl_policy_binding')),
+            'sampling': sampling_law_of(RL_TOP_P if top_p is None else top_p)}
     pin = pinned_engine(manifest)
     if pin and not allow_other_engine:
         attested = spec['engine'] or {}
@@ -704,14 +869,15 @@ def measure(out, manifest, endpoints, policy_id, *, samples=4, seed_base=SEED_BA
     if isinstance(served, int) and served < context_tokens and not allow_other_engine:
         raise ValueError(f'the actor serves {served} tokens per request, less than the call budget {context_tokens}; '
                          'relaunch it with --sglang-context >= the budget')
-    if spec['code'].get('dirty') or spec['series']['ts_host_dirty']:
+    if spec['code'].get('dirty') or spec['series']['ts_host_dirty'] or spec['series'].get('scoring_dirty'):
         log(json.dumps({'event': 'held eval warning', 'warning': 'the checkout is dirty; the result records it'}))
     out.mkdir(parents=True, exist_ok=True)
     if (out / 'run.json').exists():
         previous = json.loads((out / 'run.json').read_text())
         previous.setdefault('context_tokens', LEGACY_CONTEXT_TOKENS)
+        previous.setdefault('sampling', LEGACY_SAMPLING)
         for key in ('policy_id', 'manifest_sha256', 'samples', 'seed_base', 'case_seconds', 'max_model_requests', 'max_turns',
-                    'context_tokens'):
+                    'context_tokens', 'sampling'):
             if previous[key] != spec[key]:
                 raise ValueError(f'{out} holds a run with another {key}: {previous[key]!r}')
         # A resumed run must keep its engine: the result attests the first one, so episodes of a relaunched actor with
@@ -741,7 +907,20 @@ def main(argv=None):
                    help='JSON list of task ids (with their split groups) the held set must not contain (e.g. a training selection)')
     p.add_argument('--avoid-from', type=Path, action='append', default=[],
                    help='controller directories whose state and round-*-selection.json tasks to avoid')
+    p.add_argument('--avoid-groups', type=Path, action='append', default=[],
+                   help='JSON list of split/source group names of exposed rows (rows outside --cases, e.g. other pools)')
+    p.add_argument('--replace-ids', type=Path, action='append', default=[],
+                   help='JSONL ({"id": ...}) or JSON list of --include-manifest tasks to replace (wrong/ambiguous oracle)')
+    p.add_argument('--reject-ids', type=Path, action='append', default=[],
+                   help='JSONL or JSON list of pool rows that may never be held tasks (pool errata); groups stay eligible')
+    p.add_argument('--also-exclude', type=Path, action='append', default=[],
+                   help='an earlier held manifest whose exclusion this one carries (exclusion_ids covers both)')
     p.add_argument('--dry-run', action='store_true')
+    y = sub.add_parser('verify', help='check a pinned manifest against training exposure (ids and split/source groups)')
+    y.add_argument('--manifest', type=Path, required=True)
+    y.add_argument('--avoid-ids', type=Path, action='append', default=[])
+    y.add_argument('--avoid-groups', type=Path, action='append', default=[])
+    y.add_argument('--avoid-from', type=Path, action='append', default=[])
     m = sub.add_parser('measure', help='standalone: N samples per held task of a served actor or a checkpoint -> result.json')
     m.add_argument('--manifest', type=Path, required=True, help='e.g. ops/held-v2/manifest.json')
     m.add_argument('--out', type=Path, required=True, help='run directory (resumable)')
@@ -753,11 +932,14 @@ def main(argv=None):
     m.add_argument('--workers', type=int, default=64, help='concurrent episodes per endpoint without =SLOTS')
     m.add_argument('--seed-base', type=int, default=SEED_BASE)
     m.add_argument('--case-seconds', type=int, default=3600)
-    m.add_argument('--max-model-requests', type=int, default=64)
+    m.add_argument('--max-model-requests', type=int, default=EPISODE_MODEL_CALLS,
+                   help='episode budget in model calls (default: the training budget, one for both)')
     m.add_argument('--max-turns', type=int, default=128)
     m.add_argument('--context-tokens', type=int, default=CONTEXT_TOKENS,
                    help='call budget (the pinned engine.json harness may require one; compare refuses other pairings)')
     m.add_argument('--label')
+    m.add_argument('--top-p', type=float, help='nucleus of the sampling law at temperature 1 (default: common.sampling.'
+                   'RL_TOP_P, 0.95; 1.0: untruncated). Recorded in the result; compare refuses pairs of different laws')
     m.add_argument('--actor-unit', help='ledger unit name of the actor (default heldv2-actor-<sha8>)')
     m.add_argument('--actor-budget-gb', type=int, default=ACTOR_BUDGET_GB, help='ledger claim: --sglang-kv-gb + 24')
     m.add_argument('--allow-other-engine', action='store_true', help='measure an actor that is not the pinned eval engine')
@@ -775,11 +957,19 @@ def main(argv=None):
     c.add_argument('first', type=Path)
     c.add_argument('second', type=Path)
     c.add_argument('--out', type=Path)
+    c.add_argument('--ignore-ids', type=Path, action='append', default=[],
+                   help='JSONL ({"id": ...}) or JSON list of held tasks to leave out of the without_ignored subset '
+                        '(structurally-zero or wrong-oracle tasks, e.g. ops/held-v2/ignore-ids-*.jsonl)')
+    c.add_argument('--trained-families', type=Path,
+                   help='JSON list of families the second policy trained on: splits the change into trained/untrained')
+    c.add_argument('--resamples', type=int, default=2000)
     args = parser.parse_args(argv)
     if args.command == 'run':
         run(args.dir)
     elif args.command == 'compare':
-        report = compare(json.loads(args.first.read_text()), json.loads(args.second.read_text()))
+        report = compare(json.loads(args.first.read_text()), json.loads(args.second.read_text()), resamples=args.resamples,
+                         trained_families=json.loads(args.trained_families.read_text()) if args.trained_families else None,
+                         ignore_ids=read_ids(args.ignore_ids))
         text = json.dumps(report, indent=1)
         if args.out:
             args.out.write_text(text + '\n')
@@ -809,21 +999,26 @@ def main(argv=None):
         try:
             measure(args.out, args.manifest, endpoints, policy, samples=args.samples, seed_base=args.seed_base,
                     case_seconds=args.case_seconds, max_model_requests=args.max_model_requests, max_turns=args.max_turns,
-                    context_tokens=args.context_tokens, label=args.label, allow_other_engine=args.allow_other_engine)
+                    context_tokens=args.context_tokens, label=args.label, allow_other_engine=args.allow_other_engine,
+                    top_p=args.top_p)
         finally:
             if unit and not args.keep_actor:
                 subprocess.run(['systemctl', '--user', 'stop', unit])
     elif args.command == 'pin':
-        avoid = set()
-        for path in args.avoid_ids:
-            avoid |= set(json.loads(path.read_text()))
-        for directory in args.avoid_from:
-            state = json.loads((directory / 'state.json').read_text()) if (directory / 'state.json').exists() else {}
-            avoid |= avoid_ids(state, [directory])
+        avoid = _avoid_set(args)
         include = [t['id'] for t in json.loads(args.include_manifest.read_text())['tasks']] if args.include_manifest else ()
-        manifest, rows = build_manifest(args.cases, avoid=avoid, tasks=args.tasks, include=include, seed=args.seed)
+        manifest, rows = build_manifest(args.cases, avoid=avoid, tasks=args.tasks, include=include, seed=args.seed,
+                                        avoid_groups=_avoid_group_set(args), replace=read_ids(args.replace_ids),
+                                        reject=read_ids(args.reject_ids))
         if args.include_manifest:
             manifest['included_manifest'] = {'path': str(args.include_manifest), 'sha256': _sha256(args.include_manifest)}
+        inputs = [*args.avoid_ids, *args.avoid_groups, *args.replace_ids, *args.reject_ids]
+        if inputs:
+            manifest['pin_inputs'] = [{'path': str(path), 'sha256': _sha256(path)} for path in inputs]
+        if args.avoid_from:
+            manifest['avoided_from'] = [str(path) for path in args.avoid_from]
+        if args.also_exclude:
+            manifest['also_excludes'] = [{'path': str(path), 'sha256': _sha256(path)} for path in args.also_exclude]
         summary = {k: v for k, v in manifest.items() if k not in ('tasks', 'excluded_split_groups')}
         if args.dry_run:
             print(json.dumps(summary, indent=1))
@@ -832,6 +1027,39 @@ def main(argv=None):
         ids = sorted(exclusion_ids(args.dir / 'manifest.json'))
         (args.dir / 'exclusion-ids.json').write_text(json.dumps(ids, indent=0) + '\n')
         print(json.dumps({'manifest_sha256': sha, 'exclusion_ids': len(ids), **summary}, indent=1))
+    elif args.command == 'verify':
+        report = verify(args.manifest, _avoid_set(args), _avoid_group_set(args))
+        print(json.dumps(report, indent=1))
+        if report['overlap_ids'] or report['overlap_groups']:
+            raise SystemExit(1)
+
+
+def _avoid_set(args):
+    avoid = set(read_ids(args.avoid_ids))
+    for directory in args.avoid_from:
+        state = json.loads((directory / 'state.json').read_text()) if (directory / 'state.json').exists() else {}
+        avoid |= avoid_ids(state, [directory])
+    return avoid
+
+
+def _avoid_group_set(args):
+    return set(read_ids(args.avoid_groups))
+
+
+def verify(manifest_path, avoid, avoid_groups=()):
+    """Held tasks of a pinned manifest that training saw: ids in ``avoid``, or a split/source group shared with an avoided
+    pool row or listed in ``avoid_groups``."""
+    manifest = json.loads(Path(manifest_path).read_text())
+    rows = {row['id']: row for row in read_jsonl(Path(manifest_path).parent / manifest['cases']['path'])}
+    groups = set(avoid_groups)
+    for row in read_jsonl(manifest['pool']['path']):
+        if row.get('id') in avoid:
+            groups.add(_split_group(row))
+            groups |= _source_groups(row)
+    held = [t['id'] for t in manifest['tasks']]
+    overlap_groups = sorted(i for i in held if _split_group(rows[i]) in groups or _source_groups(rows[i]) & groups)
+    return {'manifest': str(manifest_path), 'held': len(held), 'avoid_ids': len(avoid), 'avoid_groups': len(groups),
+            'overlap_ids': sorted(set(held) & set(avoid)), 'overlap_groups': overlap_groups}
 
 if __name__ == '__main__':
     main()

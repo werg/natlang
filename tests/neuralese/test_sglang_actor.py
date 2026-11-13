@@ -700,3 +700,45 @@ def test_server_info_decides_whether_the_seed_is_honored(tmp_path, monkeypatch):
     monkeypatch.setattr(urllib.request, 'urlopen', down)
     front.__dict__.pop('_sglang_seed_support', None)
     assert front._sglang_seed_honored() is False
+
+
+def test_top_p_is_forwarded_to_sglang_and_declared_in_the_sampling_law(tmp_path, monkeypatch):
+    """Top-p (common.sampling): SGLang draws from the nucleus and its record stays the untruncated logp, so the capture
+    names the law; the native engine draws from the same nucleus; a reply whose path did not apply the requested top_p
+    is refused, never recorded under it."""
+    import threading
+    from test_native_serving_adapters import engine_fixture
+    from natlang_neuralese.serve import load_native_engine
+    native = engine_fixture(tmp_path, 'lfm')
+    front = load_native_engine(str(tmp_path / 'native.pt'), device='cpu', dtype=native.backbone.embedding_weight.dtype,
+                               engine_class=SglangEngine)
+    front.sglang_banned = sorted(front.role_tokens.ids)
+    front._sglang_lock, front.sglang_requests, front.sglang_tokens, front.native_fallbacks = threading.Lock(), 0, 0, 0
+    front.native_fallback_reasons = {}
+    tokens = list(front.tokenizer('t4 t5', add_special_tokens=False)['input_ids']) + [sorted(front.stop_ids)[0]]
+    bodies = []
+    def generate(body):
+        bodies.append(body)
+        return {'output_ids': tokens, 'meta_info': {'natlang_top_k': [record(-0.5, [t], [-0.5]) for t in tokens]}}
+    front._sglang_generate = generate
+    make = lambda **extra: GenerationRequest(messages=[{'role': 'user', 'content': 't4 t5'}], temperature=1.0,
+                                             max_tokens=16, rl_capture=True, request_id='r', seed=1, **extra)
+    law = front.generate(make(top_p=.95))['x_natlang_rl_capture']['sampling_law']
+    assert bodies[-1]['sampling_params']['top_p'] == .95
+    assert law['top_p'] == .95 and law['probabilities'] == 'post-temperature-untruncated' and law['temperature'] == 1.0
+    law = front.generate(make())['x_natlang_rl_capture']['sampling_law']
+    assert 'top_p' not in bodies[-1]['sampling_params']
+    assert 'top_p' not in law and law['probabilities'] == 'post-processing-normalized'
+    greedy = front.generate(GenerationRequest(messages=[{'role': 'user', 'content': 't4'}], top_p=.95, max_tokens=4))
+    assert 'top_p' not in bodies[-1]['sampling_params'] and greedy['choices']
+    # the native engine: the same law, the draw from the nucleus
+    law = native.generate(make(top_p=.5))['x_natlang_rl_capture']['sampling_law']
+    assert law['top_p'] == .5 and law['probabilities'] == 'post-temperature-untruncated'
+    # a path that sampled without the requested nucleus refuses the reply
+    consume = SglangEngine._sglang_consume
+    def forgetful(self, seq, *args):
+        seq.nucleus_applied = None
+        return consume(self, seq, *args)
+    monkeypatch.setattr(SglangEngine, '_sglang_consume', forgetful)
+    with pytest.raises(RequestError, match='not sampled with the requested top_p'):
+        front.generate(make(top_p=.95))

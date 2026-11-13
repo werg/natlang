@@ -14,6 +14,84 @@ the same label. The model now sees the decision readout's prompt (short system t
 labels instead of running the tool loop; a backend that cannot score replies (hosted providers, servers without
 `prompt_logprobs`) still runs the tool loop. Programs saved from the dashboard Playground keep `input` and no readout.
 
+### 2026-11-13 — harness review of 512 base held-v2 episodes: history as sampled, tool-result texts, loop bound, folder bash
+
+From the review of `run2/held/step-00000` (base 5ff07638, pin 37c221bfe, 256 x 2) and the token captures of 7 run2 groups.
+First-principles fixes, not A/B-gated; they enter at the next pin. Removing `read-file-binding` changes the held series
+key, so the base is re-measured there.
+- **History is the reply as sampled** (499c7b326, b4f482cc1, d12bdb5a1). 43 of 659 consecutive call pairs (6.5%) did not
+  extend prompt + sampled ids. (a) ~11: a string argument renders bare wherever the bare text parses back to the same
+  string (it came back JSON-quoted for unknown tools, unknown parameters and a typed `return_result.value`). (b) 8: text
+  before tool calls stays in the history (`reply-text-with-calls` is unconditional and the name is removed; the 11-12 A/B
+  is superseded by the owner rule); every sampled call stays, an unrun one is answered "Not run: ...". (c) ~11: an
+  argument that is not of its declared type reaches the tool as the sampled text (802e111bc did not cover this: the
+  server parse rejected the value first and the reply arrived as markup, got the generic "malformed" retry and was then
+  erased); unreadable markup stays in the history with one sentence and there is no hidden retry. (d) ~9 re-tokenised
+  think texts: sibling samples sharing a first prompt overwrote each other's stored reply in the append-only splice (cause
+  inferred); a prompt now keeps its last 16 distinct replies. Test: `tests/neuralese/test_history_fidelity.py`.
+  Open: a string sampled JSON-quoted for an untyped parameter renders bare; reasoning is still stripped server-side.
+- **`read_file` returns the file text only** (9d1406d32). The footer `(in eval: const text = ...)` appeared in the
+  model's reasoning in 62 episodes (49 failed), was written into files in 6, and read as a trailing blank line (rewrite
+  loops in rows 155/1, 87/1, 26/1). The hint is in the tool description; the variant is removed.
+- **Elision** (9d1406d32). A value whose whole literal is at most 300 characters is never elided; remaining notes say
+  only the display is shortened and name the holder of the complete value. The old markers were read as missing data
+  (failures 165/0, 31/0).
+- **Neuralese values in console output and stored-local lines** print as one plain line naming `read(value)`
+  (9d1406d32). The reference JSON was called garbled and cost 20+ `read_page`/`read_code` calls (28/0, 195/0, 182/1, 48/1).
+  `console.log(JSON.stringify(value))` still prints the raw reference.
+- **A call in a counted loop's bound is accepted** and read once at loop start; a nested loop reusing the counter name
+  no longer counts as assigning it (e221b45f5). 32 `forbidden-loop` rejections in 26 episodes.
+- **Folder bash**: `~`, `cd` and `$HOME` are the folder; removed files are listed as `removedPaths`, so `changedPaths`
+  holds only files that exist afterwards (4ebd5edf7). `mkdir` escaped to `/filed` after `cd ~`; `mv` results were read
+  as "mv didn't remove old files" (26/1, 87/1, 7/1).
+- Not done from the same review (open): `read_code` as an attractor (23% of actions, first action of 47% of
+  invocations; 718 `no-such-function`); re-declaring an input (298 `invalid-binding` rejections in 138 episodes); a
+  staged eval return with a field the declared type lacks, finalized by an empty reply (row 101/1).
+
+### 2026-11-13 — eval refuses comparing a decide(...) record with an answer (decision-compare)
+
+`const verb = await decide(f, x); switch (verb) { case "create_booking": ... }` (or `verb === "..."`) never matches: the
+record is not its answer. Authored task text writes exactly this in 172 places of the RL pool (b3fef4c7; families
+auth_request_routing_gates 31, auth_ops_directory_reducers 28, auth_exact_algorithm_state_workflows 24, ...), and the
+base followed it literally in held-v2 row 91/0 and returned the bookings unchanged. The eval check (ts-host
+`compiler/eval-check.ts`, from TypeScript's own no-overlap diagnostics 2367/2678) now rejects such code before it runs:
+`verb is the decision record that decide(...) returns, not its answer: compare verb.value.` Test:
+`eval-field-check.test.mjs`.
+
+### 2026-11-13 — eval-scope names sent as tool calls, Python-in-eval hint, read(value) without a library (base failure taxonomy)
+
+From `plans/neuralese/BASE_FAILURES_20261113.md` (base 5ff07638, held-v2, 256 x 2); first-principles fixes, not A/B-gated.
+- A tool call whose name is in the call's eval scope (`transcript.search`, `transcript.entry`, `transcript`, an input, a
+  function of the call such as `read_function`, a service) was answered `X: bad-action, expected a scope-eval tool`
+  (80 actions in 46 episodes, 33 of them failed). It now says what it is and how to use it: `transcript.search:
+  bad-action, transcript.search is not a tool: transcript is in this call's eval scope. Use it in code, for example
+  eval with code: transcript.search("freight"); read_code("transcript") shows how to use it.` Unknown names keep the
+  old text (ts-host `native/runtime.ts` `notATool`).
+- The Python-in-eval recovery sentence told the model to "write judgment as `await nl(...)`", which the nl-not-tag
+  check then refuses; it now shows the tag form, `await nl\`instructions\`(value)`, and says Python is not available
+  *in eval* (the python tool exists).
+- `read(value)` on a Neuralese value in a task without `services.neuralese` failed with an operator-facing capability
+  error, although our own opaque-access error advises exactly `read(value)` (17 episodes, 11 failed). Without a
+  standard library it is now a typed `natlang.read` call of the executing model that takes the value as its argument,
+  as the teacher-text readout already was (ts-host `neuralese/combinators.ts`; model-call kind runtime-authored-call).
+- A helper whose code has a parse error no longer also gets `Saved helper "main" cannot persist because it refers to
+  unavailable ;` (an empty name from the broken parse).
+Tests: `compaction.test.mjs` (tool names), `scope-compiler.test.mjs`, `neuralese-read-contract.test.mjs`.
+
+### 2026-11-13 — `bash -c 'literal'` runs; mkdir'd directories persist across bash calls (base failure taxonomy)
+
+From `plans/neuralese/BASE_FAILURES_20261113.md` (base 5ff07638, held-v2, 256 x 2). Both are first-principles fixes of
+the folder shell (ts-host `native/folder-shell.ts`), not A/B-gated.
+- `bash -c '...'` / `sh -c '...'` (also `-lc`, `-ec`): the inner literal script is checked by the same policy (finite
+  loops, no recursion) and runs; only a non-literal script (`bash -c "$X"`, `bash file.sh`), `eval` and `source` are still
+  refused, now with "bash runs only a literal script here, as bash -c '...'; or write the commands directly". The base
+  wrapped commands this way in 50 of 512 episodes (96 refusals; 42 of those episodes failed, vs 8 succeeded), often
+  retrying the refused form or giving up on the moves the task needed.
+- A directory made by `mkdir` with no file in it yet was forgotten at the end of that bash call: `mkdir -p filed` and
+  then `mv visits/*.md filed/` in the next call failed `target 'filed/' is not a directory` (9 episodes, 8 failed). Empty
+  directories are now kept per folder for the whole call.
+Tests: `ts-host/test/folder-shell.test.mjs`.
+
 ### 2026-11-13 — a child call's driver or host failure reads as the child's failure; prose-only replies end the call
 
 Two changes from the Vibestudio agent-DX work (a failed call must name itself and end).
@@ -2318,3 +2396,52 @@ call-specific moved into the call's opening user message, after its signature an
   GRPO) were already the actor's exact prompt ids.
 Tests: `adaptation-runtime`, `native-program-guidance`, `decision-readout`, `serving-request` (rebuild == live agent
 request), `builtin-programs` fixture.
+
+## 2026-11-13: scorer false negatives fixed (answer comparison `normalized-decimal-exact/3`)
+
+From the run2 reward audit (113 GRPO groups, 294 scored failures read against their gold). `ts-host/src/evaluation/oracles.ts`:
+- **Yes/no polarity.** `true`/`"yes"`/`"true"` and `false`/`"no"`/`"false"` are one answer under `normalized`, `qa`
+  scalar and `qa` span oracles (bAbI "false" for gold "no": 2 episodes in g000085). Hedged answers ("yes but no") still fail.
+- **JSON-quoted strings.** A string answer written as a JSON string literal (`"\"#B A#\""`) is its text when the gold
+  is a string that is not itself quoted (g000019).
+- **QA span containment.** A `qa` span answer passes when it holds the whole gold span of two or more tokens,
+  contiguous and in order, with the same numbers, and is at most twice the gold's length ("Celine Dion's \"Because You
+  Loved Me\"" for "Because You Loved Me": 3 episodes in g000015). Chosen over dropping question tokens: the oracle
+  never sees the question (it would need a new pinned pool), and the observed false negatives add context the question
+  does not contain. One-token golds stay with F1 ("Duke Lemur Center" for "Duke" must fail; held rows 23/52 stay
+  false negatives). No synonym tables ("spouse" for "wife" stays a failure).
+Data: the garbled HybridQA row (g000011) is pool errata `ops/pool-errata/hybridqa-garbled-question-20261113.jsonl`;
+the 8 wrong-oracle held-v2 tasks and the 23 ENOENT codebase tasks are `ops/held-v2/ignore-ids-*-20261113.jsonl` for
+`held_eval compare --ignore-ids` (held manifest unchanged). Changes the held series: re-measure the start policy at the
+next pin. Tests: `ts-host/test/oracle.test.mjs`.
+
+## 2026-11-13: sampling law is top-p 0.95 at temperature 1 (owner)
+
+RL collection (`grpo.py`, `exp1_collect.py`) and held evaluation sample from the top-p nucleus (`common/sampling.py`
+`RL_TOP_P = 0.95`; `--top-p 1.0` restores the untruncated law). Reason: at untruncated T=1 the model drew a token of
+probability < 0.0067 once in 55 samples (about 150 per episode, 0.36% below 3.4e-4), visible as derailing words inside
+its reasoning; no deployment samples that way. What the model sees is unchanged (prompts, tools, history); what changes
+is which continuations it produces. The front honours the request's `top_p` on both engines (it was silently dropped
+before: `serve/http.py` never read it), records it in the capture's `sampling_law` (`top_p`, `probabilities:
+post-temperature-untruncated`) and refuses a sampled reply whose path did not apply it. Decisions still sample from the
+full softmax over their finite option set. Changes the held series: `result.json` records `sampling`, `held_eval
+compare` refuses pairs of different laws, and the start policy is re-measured at the next pin. Tests:
+`tests/neuralese/test_top_p_sampling_law.py`, `test_sglang_actor.py` (top-p forwarded and declared).
+
+## 2026-11-13: read_code of the executing call, structured inputs written out again, a one-sentence eval-failure tail
+
+From the held-v2 base episode read (run2 `held/step-00000`, 512 episodes, 1,190 invocations). `ts-host/src/native/runtime.ts`,
+`ts-host/src/scope-compiler.ts`:
+- **read_code of the call's own name** returns its instructions as an ok result ("NAME is the call you are executing.
+  Its instructions, as in the opening message: ...", then the do-it-here advice) instead of a `no-such-function` error.
+  278 read_code calls targeted the call's own name; the error made the model probe further.
+- **An input or capture written out again as its exact value** is removed with a repair note for records and lists
+  too, not only strings, numbers and booleans (structural equality, key order ignored; a different value, a spread or an
+  extra field is still refused with the existing advice). 298 `invalid-binding ... already holds the caller's value`
+  rejections in 138 episodes; each discarded the whole eval.
+- **The failed-eval tail** is one sentence: "Nothing else from this eval was kept; writes to files, services or live
+  values stay done, so check them before writing again." (was 45 tokens, emitted 1,179 times; the prefix that the
+  collectors match is unchanged).
+Not changed: computed records keep their extra fields (bda8fb9f1, 2026-10-08: a refusal sent executors back to retyping
+provider values); one held episode (101/1) failed with an extra field, too little to reverse that. Tests:
+`ts-host/test/scope-compiler.test.mjs`, `eval-guidance.test.mjs`. Changes the held series (ts-host tree).

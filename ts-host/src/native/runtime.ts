@@ -55,6 +55,17 @@ function typeAliasesFromEnv(env: TypeEnv): Record<string, string> {
 
 /** What the model is told when it reaches for the call it is executing (calling it, or reading its code): a judgment is
  * made here and returned, and eval serves the exact work the instructions need, not as a stand-in for the judgment. */
+/** A value built only of strings, finite numbers, booleans, null, arrays and plain objects (no runtime values). */
+function isPlainJson(value: unknown, depth = 0): boolean {
+  if (depth > 32) return false;
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (Array.isArray(value)) return value.every(item => isPlainJson(item, depth + 1));
+  if (typeof value !== 'object') return false;
+  const proto = Object.getPrototypeOf(value);
+  return (proto === Object.prototype || proto === null) && Object.values(value).every(item => isPlainJson(item, depth + 1));
+}
+
 const SELF_CALL_ADVICE = 'Do what its instructions ask here. For a judgment, decide it yourself from the inputs and return the answer with ' +
   'return_result; use eval only for exact work the instructions need.';
 
@@ -1342,9 +1353,8 @@ export class NativeSession {
     return toolNote + bindingNote + sameQuestionNote + repeatNote + (reaching ? `\n${this.scopeGuide()}` : '') + (logs.length ? `\nconsole:\n${this.show(logs.join('\n'))}` : '') +
       (effects.length ? `\nAlready performed before the failure (not undone): ${[...new Set(effects)].join(', ')}.` : '') +
       (receipts.length ? `\nCompleted service calls succeeded:\n${receipts.join('\n')}\nRepair subsequent work without repeating an already completed write.` : '') +
-      '\nNothing else from this eval was kept. This refers to new eval bindings and the staged result; ' +
-      'state changes made through live values, callable modules, files or external services are not undone. ' +
-      'Inspect the current state before retrying a write.';
+      // Emitted 1,179 times in 512 held-v2 episodes (2026-11-13): one sentence, the prefix kept for the collectors.
+      '\nNothing else from this eval was kept; writes to files, services or live values stay done, so check them before writing again.';
   }
 
   /**
@@ -1565,7 +1575,7 @@ export class NativeSession {
     this.runtime.checkInterruption();
     if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
     if (!NATIVE_TOOLS.includes(name))
-      return this.record(name, args, rejected(new Reject([{ path: name, code: 'bad-action', expected: 'a scope-eval tool' }])));
+      return this.record(name, args, rejected(new Reject([this.notATool(name, args)])));
     if (this.lam.withheldTools?.includes(name))
       return this.record(name, args, rejected(new Reject([{ path: name, code: 'withheld-tool', text:
         `${name} is withheld from calls of ${this.lam.functionName || 'this function'} by its definition; do this step with the tools this call offers` }])));
@@ -1801,6 +1811,30 @@ export class NativeSession {
     throw new Reject([{ path: name, code: 'bad-action', expected: 'a scope-eval tool' }]);
   }
 
+  /**
+   * A tool call whose name is something in the eval scope (transcript.search, an input, a function of this call, a
+   * service): the base LFM3 sent transcript.search/transcript.entry/read_function as tool calls in 46 of 512 held-v2
+   * episodes and got only "expected a scope-eval tool". Name the eval form instead.
+   */
+  private notATool(name: string, args: Record<string, unknown>): { path: string; code: string; text?: string; expected?: string } {
+    const root = name.split('.')[0]!;
+    const builtins = ['transcript', 'nl', 'iterateOn', 'decide', 'read'];
+    const inputs = this.lam.type.kind === 'lambda' ? this.lam.type.params.fields.map(field => field.name) : [];
+    const scope = new Set([...builtins, ...inputs, ...Object.keys(this.lam.captures ?? {}), ...Object.keys(this.lam.let),
+      ...this.persistentScopeHelpers.keys(), ...Object.keys(this.lam.codebase), ...Object.keys(this.availableServices())]);
+    if (!/^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/.test(name) || !scope.has(root))
+      return { path: name, code: 'bad-action', expected: 'a scope-eval tool' };
+    const first = Object.values(args).find(value => typeof value === 'string' || typeof value === 'number');
+    const shown = first === undefined ? '' : JSON.stringify(first);
+    const awaited = builtins.includes(root) && root !== 'transcript' || Object.hasOwn(this.lam.codebase, root) ||
+      this.persistentScopeHelpers.has(root);
+    const value = !awaited && root !== 'transcript' && !Object.hasOwn(this.availableServices(), root);
+    const example = name === 'transcript' ? 'transcript.search("…")' : value && name === root ? name :
+      `${awaited ? 'await ' : ''}${name}(${shown})`;
+    return { path: name, code: 'bad-action', text: `${name}: bad-action, ${name} is not a tool: ${root} is in this call's eval scope. ` +
+      `Use it in code, for example eval with code: ${example}${builtins.includes(root) ? `; read_code("${root}") shows how to use it` : ''}.` };
+  }
+
   /** The services this call may use: all but those scoped to functions it is not running within. */
   /** What eval code in this call can use, for a model looking for something it does not have. */
   private scopeGuide(): string {
@@ -1888,6 +1922,13 @@ export class NativeSession {
     if (!found && name === 'edit_code' && !Object.keys(this.lam.codebase).length) throw new Reject([{ path: requested, code: 'no-own-code',
       expected: 'a function in this call\'s callable folder; this function has none, so there is no code of its own to edit' }]);
     if (!found) {
+      // The call's own name: LFM3 read it first in 278 of 1,190 held-v2 invocations and got a no-such-function error
+      // (2026-11-13). Its source is the instructions it is executing, so that is what reading it shows.
+      if (name === 'read_code' && this.lam.functionName && requested === this.lam.functionName) {
+        const body = (this.lam.originalBody ?? this.lam.body).replace(/^\n+|\n+$/g, '');
+        const text = `${requested} is the call you are executing. Its instructions, as in the opening message:\n${body}\n\n${SELF_CALL_ADVICE}`;
+        return { kind: 'ok', text, value: body };
+      }
       const toolDocumentation = name === 'read_code' ? this.toolDocumentation(requested) : undefined;
       if (toolDocumentation !== undefined) return { kind: 'ok', text: toolDocumentation, value: toolDocumentation };
       const availableServices = this.availableServices();
@@ -1998,10 +2039,8 @@ export class NativeSession {
     else value = folder.diffSync(path);
     const text = name === 'diff_files' ? fileDiffPreview(value as ReturnType<Folder['diffSync']>) :
       name === 'list_files' ? fileListingText(value as EntryStat[]) : typeof value === 'string' ? value : JSON.stringify(value, null, 1);
-    // Variant read-file-binding: say how the file is bound in eval, so its text is read from the file, not retyped.
-    const binding = name === 'read_file' && modelFacing('read-file-binding') ?
-      `\n(in eval: const text = await folder.file(${JSON.stringify(path)}).readText())` : '';
-    return { kind: 'ok', text: this.show(text) + binding, value: value as Value };
+    // A read_file result is the file's text and nothing else: an appended hint read as file content (and was written into files).
+    return { kind: 'ok', text: this.show(text), value: value as Value };
   }
 
   private inferScopeType(value: unknown): string { return inferValueType(value); }
@@ -2189,7 +2228,7 @@ export class NativeSession {
     const persistentTypeNames = [...new Set([...Object.keys(visibleTypes), ...Object.keys(currentTypes)])];
     const hooks = this.runtime.hooks;
     const boundValues = Object.fromEntries([...Object.entries(captureRead), ...inputNames.map(name => [name, this.lam.args[name]])]
-      .filter((entry): entry is [string, string | number | boolean] => ['string', 'number', 'boolean'].includes(typeof entry[1])));
+      .filter(entry => isPlainJson(entry[1])));
     // The system prompt's inline-nl example copied into a call that has nothing to do with it (its policy literal, its
     // instructions): refused before running, or the copy runs as a child that answers an unrelated question.
     const ownText = (this.lam.body) + '\n' + JSON.stringify(this.lam.args ?? {}) + '\n' + JSON.stringify(this.lam.let ?? {});
@@ -2469,7 +2508,9 @@ export class NativeSession {
         raw.valueless === true && !isHandle(output.result) ? 'undefined' : this.showValue(output.result ?? null);
       const status = functionResult !== undefined ?
         stagedMessage(functionResult, this.runtime.displayLiveId, this.runtime.untrusted) : notResult;
-      const stored = changed.map(([name, , value]) => `local ${name} = ${oneLine(value, name, this.runtime.displayLiveId, this.runtime.untrusted)}`);
+      const stored = changed.map(([name, , value]) => `local ${name} = ${oneLine(value, name, this.runtime.displayLiveId, this.runtime.untrusted)}` +
+        // A Neuralese value is shown as its state; the words beside it say what it is and how to use it.
+        (isNeuraleseRef(value) ? ` (${value.$neuralese.type}: pass it on as is, or read it with read(${name}))` : ''));
       // Variant effect-receipt: a successful eval lists the service calls it completed, as a failed one does, so a model
       // does not rerun an effectful eval that already succeeded.
       const performed = new Map<string, number>();

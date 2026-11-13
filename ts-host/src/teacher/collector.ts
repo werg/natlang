@@ -49,7 +49,7 @@ import { quarantineReason, retiredFamily, generationHoldReason } from './curricu
 import { checkAuthoring, type AuthoringSpec } from './authoring.js';
 import { checkCodebase, type CodebaseCheckSpec } from './codebase-check.js';
 import { WorldBridge, type WorldSpec } from './world-bridge.js';
-import { ANSWER_COMPARISON_VERSION } from '../evaluation/oracles.js';
+import { ANSWER_COMPARISON_VERSION, type FilesOracle } from '../evaluation/oracles.js';
 import type { DecisionRequest, DecisionScores, ModelStreamProgress, ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { activeRecorder } from '../native/model-recording.js';
 import { sampleOption, derivedSeed } from '../runtime/seeded-decision.js';
@@ -180,6 +180,39 @@ export const sha256 = (value: string | Uint8Array): string => createHash('sha256
 export function graphShowsMarker(graph: unknown, marker: string): boolean {
   const observed = typeof graph === 'string' ? graph : JSON.stringify(graph ?? []);
   return observed.includes(marker) || observed.includes(JSON.stringify(marker).slice(1, -1));
+}
+const ITERATION_STEP_MARKER = /^"phase":"step","step":\d+,"state_hash":"([0-9a-f]{16})"$/;
+/** The case's decisive `iterateOn` step markers (`"phase":"step","step":N,"state_hash":"H"`). */
+export function iterationStepMarkers(record: ProgramRecord): string[] {
+  return (((record as { curriculum?: { decisive?: { marker?: unknown }[] } }).curriculum?.decisive) ?? [])
+    .map(item => item.marker).filter((marker): marker is string => typeof marker === 'string' && ITERATION_STEP_MARKER.test(marker));
+}
+/** How often each state hash was the result of a program TypeScript function (`step_state`, runtime option traceStepStates). */
+export function stepStateCounts(events: readonly Record<string, unknown>[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const event of events) if (event.kind === 'step_state' && typeof event.state_hash === 'string')
+    counts.set(event.state_hash, (counts.get(event.state_hash) ?? 0) + 1);
+  return counts;
+}
+/**
+ * A plain loop's equivalent of an `iterateOn` step marker: the marker names a state the iteration revisits (the
+ * cycle that makes the stop decisive), and the run's own calls of the program's step function produced that state at
+ * least twice, i.e. the loop ran the real step function and saw the state recur. Only runtime-recorded results count.
+ */
+export function loopShowsIterationMarker(stepStates: ReadonlyMap<string, number>, marker: string): boolean {
+  const hash = ITERATION_STEP_MARKER.exec(marker)?.[1];
+  return hash !== undefined && (stepStates.get(hash) ?? 0) >= 2;
+}
+/**
+ * A text file's single terminal newline is part of its content only when the task says so: the case's instructions
+ * (its `.nl` files) mention a newline or line ending. Otherwise `content` compares accept one missing or extra
+ * terminal LF/CRLF on non-JSON files (an explicit `terminal_newline` in the oracle wins).
+ */
+export function withTerminalNewlinePolicy(spec: FilesOracle, record: ProgramRecord): FilesOracle {
+  if (spec.terminal_newline !== undefined || (spec.compare ?? 'exact') !== 'content') return spec;
+  const instructions = Object.entries(record.semantics.files ?? {}).filter(([path]) => path.endsWith('.nl'))
+    .map(([, text]) => String(text)).join('\n');
+  return { ...spec, terminal_newline: /new[ -]?line|line[ -](?:break|ending)/i.test(instructions) ? 'exact' : 'lenient' };
 }
 export const recordDigest = (record: ProgramRecord): string => sha256(canonical(record));
 
@@ -1728,11 +1761,13 @@ export async function executeProgram(record: ProgramRecord, driver:(request: Mod
   const serviceScopes = (record.semantics as { service_scopes?: Record<string, string[]> }).service_scopes;
   // The run is recorded in the machine's call store under its run ID, with the driver's model when it names one.
   const driverModel = (driver as { model?: unknown }).model;
+  const stepMarkers = iterationStepMarkers(record);
   runtime = new NodeNativeRuntime({ environment, agent: session => agent.run(session), services, declarations,
     modelId: typeof driverModel === 'string' && driverModel ? driverModel : `undeclared:${driver.name || 'teacher-driver'}`,
     ...(options.calls !== undefined ? { calls: options.calls } : {}),
     ...(serviceScopes ? { serviceScopes } : {}),
     ...(options.neuralese ? { neuralese: options.neuralese } : {}),
+    ...(stepMarkers.length ? { traceStepStates: true } : {}),
     // Host-only provenance: exact portable values, bounded and explicitly incomplete otherwise.
     // Never invent a model return action from an eval-computed value.
     exactHostTraceCapture: { definitionSources: [], inputArguments: [], captureOutput: true,
@@ -1818,7 +1853,8 @@ export async function executeProgram(record: ProgramRecord, driver:(request: Mod
     // Explicit exact oracles still cover byte-sensitive fixture/edit contracts.
     const filesCheck = folder && !authoring && actualFiles ?
       await checkFilesWithJudge(actualFiles, record.semantics.expected_files ?? folderFiles!, folderFiles!,
-        record.semantics.files_oracle ?? { compare: 'content', threshold: 1 }, options.judge) : undefined;
+        withTerminalNewlinePolicy(record.semantics.files_oracle ?? { compare: 'content', threshold: 1 }, record),
+        options.judge) : undefined;
     const filesOk = !folder || (authoring ? authoring.ok : filesCheck ? filesCheck.accepted :
       same(actualFiles, record.semantics.expected_files ?? folderFiles));
     // A blocked case needs the model's own blocked or failed call; running out of turns also quiesces.
@@ -1832,7 +1868,9 @@ export async function executeProgram(record: ProgramRecord, driver:(request: Mod
     const decisive = ((record as { curriculum?: { decisive?: { marker: string }[] } }).curriculum?.decisive ?? [])
       .map(item => item.marker).filter(marker => typeof marker === 'string' && marker.length > 0);
     const observedGraph = expectedKind === 'quiesced' && decisive.length ? JSON.stringify(executionGraph) : '';
-    const stopEvidence = expectedKind !== 'quiesced' || decisive.every(marker => graphShowsMarker(observedGraph, marker));
+    const stepStates = stepMarkers.length ? stepStateCounts(invocationTraces.flat()) : undefined;
+    const stopEvidence = expectedKind !== 'quiesced' || decisive.every(marker => graphShowsMarker(observedGraph, marker) ||
+      (stepStates !== undefined && loopShowsIterationMarker(stepStates, marker)));
     const worldScore = world ? await world.request('score') as { score: number; done: boolean } : undefined;
     // Some source-backed worlds are in-process external modules rather than WorldBridge processes. Their
     // certificate is trusted host state: a returned literal alone must not satisfy the world objective.
@@ -1857,7 +1895,8 @@ export async function executeProgram(record: ProgramRecord, driver:(request: Mod
       await checkTrustedExactVerifier(record.semantics.trusted_exact_verifier,
         { value: actual, oracle: record.semantics.trusted_exact_verifier.oracle,
           inputs: record.semantics.inputs, fixture: folderFiles ?? {} }) :
-      await checkOracle(actual, answerExpected, record.semantics.oracle, options.judge);
+      await checkOracle(actual, answerExpected, record.semantics.oracle, options.judge,
+        typeof record.semantics.inputs?.question === 'string' ? { question: record.semantics.inputs.question } : {});
     // A required repair (or a forbidden edit) of a program function is judged on the function the run left behind.
     const functionSpec = record.semantics.function_checks;
     const functionEffects = functionSpec && expectedKind === 'done' ?

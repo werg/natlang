@@ -264,6 +264,15 @@ test('scope compiler removes an input written out again as a literal of its exac
   assert.deepEqual(recapture.repairs.map(repair => repair.message), ['Removed a declaration of captured value "note": it already holds that value.']);
   assert.match(compileScopeSnippet('const note = "calm";\n1', captured).diagnostics[0].message,
     /^note is already a variable of the enclosing code, captured by this call/);
+  // A structured input (records, lists) written out again exactly is removed too; key order does not matter.
+  const order = { id: 7, items: [{ sku: 'a', qty: 2 }, { sku: 'b', qty: null }], rush: false };
+  const structured = { inputBindings: ['order'], boundValues: { order } };
+  const same = compileScopeSnippet('const order = { rush: false, id: 7, items: [{ qty: 2, sku: "a" }, { sku: "b", qty: null }] };\norder.id', structured);
+  assert.equal(same.ok, true, JSON.stringify(same.diagnostics));
+  assert.deepEqual(same.repairs.map(repair => repair.message), ['Removed a declaration of input "order": it already holds that value.']);
+  for (const other of ['const order = { id: 7, items: [], rush: false };\n1', 'const order = { ...{ id: 7 } };\n1',
+    'const order = { id: 7, items: [{ sku: "a", qty: 2 }, { sku: "b", qty: null }], rush: false, extra: 1 };\n1'])
+    assert.match(compileScopeSnippet(other, structured).diagnostics[0].message, /order is this call's input and already holds the caller's value/);
 });
 
 test('scope compiler transactionally captures existing locals and rejects immutable writes', async () => {
@@ -329,12 +338,20 @@ test('redeclaring an injected name names its kind and the fix for that kind', ()
     /^shipments is already in this eval's scope; use it directly instead of importing it\.$/);
 });
 
+test('a helper with a parse error is reported as syntax, never as "refers to unavailable ;" with an empty name', () => {
+  const code = 'async function main() {\n  for (const text of texts) {\n    const pick = await (await nl.decide?)(\'cold\', text)??? \n  }\n}\nmain()';
+  const result = compileScopeSnippet(code, {});
+  assert.equal(result.ok, false);
+  assert.ok(result.diagnostics.some(item => item.code === 'typescript-syntax'));
+  assert.ok(!result.diagnostics.some(item => /unavailable\s*[;,]/.test(item.message)), JSON.stringify(result.diagnostics));
+});
+
 test('eval code that is Python or prose gets one sentence of recovery before the parser errors; valid code is untouched', () => {
   const first = code => { const result = compileScopeSnippet(code, { allowModules: true }); return [result.ok, result.diagnostics[0]]; };
   for (const code of ['import os, json, shutil\nfrom pathlib import Path\nx = 1', 'from pathlib import Path\nprint(Path("."))']) {
     const [ok, diagnostic] = first(code);
     assert.equal(ok, false);
-    assert.match(diagnostic.message, /^The code argument is run as TypeScript in this call's scope\. Python is not available: .*await nl\(\.\.\.\)`\.$/);
+    assert.match(diagnostic.message, /^The code argument is run as TypeScript in this call's scope\. Python is not available in eval: .*await nl`instructions`\(value\)\.$/);
     assert.equal(diagnostic.line, 1);
   }
   const [, python] = first('const a = 1;\ndef f(x):\n    return x');

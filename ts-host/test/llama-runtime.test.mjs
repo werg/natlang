@@ -9,14 +9,14 @@ import { join } from 'node:path';
 import { discoverLlamaRuntime, inspectLlamaServer, installManagedLlamaRuntime,
   isCompatibleLlamaVersion } from '../dist/model/index.js';
 
-function fakeServer(path, version = '0.8.0', build = 12070) {
+function fakeServer(path, version = '0.8.0', build = 12071) {
   writeFileSync(path, `#!${process.execPath}\nconsole.log('version: ${version} (build ${build}, commit b29c606e2)');\n`);
   chmodSync(path, 0o755);
 }
 
 test('llama.cpp compatibility checks version and build boundaries', () => {
-  assert.equal(isCompatibleLlamaVersion('0.8.0', 12070), true);
-  assert.equal(isCompatibleLlamaVersion('0.8.0-dev', 12070), true);
+  assert.equal(isCompatibleLlamaVersion('0.8.0', 12071), true);
+  assert.equal(isCompatibleLlamaVersion('0.8.0-dev', 12071), true);
   assert.equal(isCompatibleLlamaVersion('0.8.0', 12068), false);
   assert.equal(isCompatibleLlamaVersion('0.5.0', 11146), false, 'llama.cpp before b11938 cannot load LFM3');
   assert.equal(isCompatibleLlamaVersion('0.9.0', 20000), false);

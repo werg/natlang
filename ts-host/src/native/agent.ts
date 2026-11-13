@@ -15,7 +15,7 @@ import { AUTOMATIC_NOTE, COMPACTION_NOTICE, directoryReducerPrompt, scopedFileTo
 import { canGenerateNl, runInFrame } from '../runtime/context.js';
 import { adoptImportedNativeArtifacts } from './nz-file.js';
 import { FileHandle, FolderHandle, fileListingText, type Folder } from './scoped-fs.js';
-import { SHOWN_CHARS, SCOPE_VALUE_CHARS, shownCharsFor, note as cutNote } from './cutoff.js';
+import { SHOWN_CHARS, SCOPE_VALUE_CHARS, SMALL_VALUE_CHARS, literalFits, shownCharsFor, note as cutNote } from './cutoff.js';
 import type { TrainingGuidance } from './training-guidance.js';
 
 /** Scope and input values show at least SCOPE_VALUE_CHARS, and never less than a tool output of the call may. */
@@ -52,14 +52,12 @@ import {activeRecorder, activeNativeAdapters, activeNativeStates} from './model-
 import { hexDigest } from './hash.js';
 import { activeSystemPrompts, softenMessages, renderPromptMessages, renderSystemPrompt, type PromptRendering } from './system-prompts.js';
 import type { ModelBudget } from './model-budget.js';
-import { modelFacing } from '../runtime/model-facing.js';
 /** The answer to a call of a reply that did not run because an earlier call of the same reply failed. */
 const UNRUN_CALL = 'Not run: an earlier call in this reply failed; call it again if you still need it.';
 /** Calls that only read the folder or code: a failed call earlier in the same reply cannot change what they return. */
 const READ_ONLY_TOOLS = new Set(['read_file', 'list_files', 'search_files', 'diff_files', 'read_code', 'diff_code', 'read_page']);
-/** Variant reply-text-with-calls: the prose a reply carried before its tool calls stays in the transcript (it was
- * dropped, so the next prompt differed from what the model wrote and the actor's prefix cache re-prefilled). */
-const replyText = (response: { text?: string }): string => modelFacing('reply-text-with-calls') ? response.text ?? '' : '';
+/** What a reply said before its tool calls stays in the transcript: the history is the reply as it was sampled. */
+const replyText = (response: { text?: string }): string => response.text ?? '';
 
 /** The code tools, as offered. Kept here so data collected under earlier wording can be migrated to it exactly. */
 export const READ_CODE_DESCRIPTION = 'Inspect a named item this call can use but does not show: source of a function in the program\'s codebase; ' +
@@ -361,13 +359,16 @@ const isPlainRecord = (value: object) => Object.prototype.toString.call(value) =
 /**
  * TypeScript that evaluates to a scope value: a literal for data, `folder.file(...)` for a handle into the
  * reducer's folder, `new Date(...)`/`new Map(...)`/`new Set(...)`/`new Uint8Array(...)` for those built-ins.
- * A value beyond the budget is cut off with a comment saying `holder` (the variable) holds all of it.
+ * A value beyond the budget is cut off with a note saying `holder` (the variable) holds the complete value; a value whose
+ * whole literal is small (SMALL_VALUE_CHARS) is never cut.
  * Undefined when no expression produces the value (an opaque host object).
  */
 function scopeExpression(value: unknown, root: Folder | undefined, holder?: string, budget = SHOWN_CHARS,
   state: { nodes: number; depth: number; untrusted?: UntrustedRegistry } = { nodes: 0, depth: 0 }): string | undefined {
   if (++state.nodes > 8192 || state.depth >= 64)
     return cutNote('inspection limit reached', { holder });
+  // A small value is shown whole, whatever share of the budget is left for it.
+  if (budget < SMALL_VALUE_CHARS && literalFits(value, SMALL_VALUE_CHARS)) budget = SMALL_VALUE_CHARS;
   state.depth++;
   try {
   const sequence = <T,>(items: Iterable<T>, count: number, open: string, close: string, noun: string,
@@ -1133,7 +1134,7 @@ export class NativeToolAgent {
         { path: { type: 'string' }, pattern: { type: 'string' } }, []),
       tool('search_files', 'Search text files in the current folder and return matching file, line, and context.',
         { query: { type: 'string' }, path: { type: 'string' }, pattern: { type: 'string' }, regex: { type: 'boolean' } }, ['query']),
-      tool('read_file', 'Read a file in the current folder, optionally by one-based inclusive line range.',
+      tool('read_file', 'Read a file in the current folder, optionally by one-based inclusive line range. The result is the file\'s text; eval reads the same text with await folder.file(path).readText().',
         { path: { type: 'string' }, start_line: { type: 'integer' }, end_line: { type: 'integer' } }, ['path']),
       tool('write_file', 'Create or replace a text file in the current folder.',
         { path: { type: 'string' }, content: { type: 'string' } }, ['path', 'content']),
@@ -1142,9 +1143,9 @@ export class NativeToolAgent {
         ['path', 'find', 'replace_with']),
       tool('diff_files', 'Inspect changes in the current folder.',
         { path: { type: 'string' } }, []),
-      tool('bash', 'Run bash over the current folder. Returns exit code, stdout, stderr and changed paths. Use finite for loops; while, until, C-style for and recursive functions are refused.',
+      tool('bash', 'Run bash over the current folder. Returns exit code, stdout, stderr, changedPaths (files created or rewritten) and, when files were removed or moved away, removedPaths. Use finite for loops; while, until, C-style for and recursive functions are refused.',
         { command: { type: 'string' } }, ['command']),
-      tool('python', 'Run a Python cell over the current folder with pathlib, pandas and sqlite3. Returns its last expression, stdout, stderr and changed paths. Use finite for loops; while and recursion are refused.',
+      tool('python', 'Run a Python cell over the current folder with pathlib, pandas and sqlite3. Returns its last expression, stdout, stderr, changedPaths (files created or rewritten) and, when files were removed or moved away, removedPaths. Use finite for loops; while and recursion are refused.',
         { code: { type: 'string' }, finish: { type: 'boolean', description: 'Finish this function using the fresh typed final expression or explicit return computed in this eval. Omit finish or set false for inspection or staging; true needs a fresh typed final result and cannot reuse an older staged value.' }, timeout_ms: { type: 'integer', minimum: 1 } }, ['code']),
       tool('delegate', 'Give one subfolder to a directory reducer child with its own context. Its successful file changes are merged into this folder.',
         { path: { type: 'string', description: 'Relative subfolder path.' },
@@ -1972,6 +1973,19 @@ export class NativeToolAgent {
           elided, note: null, estimated_tokens: Math.round(estimate(allTools)) });
         continue;
       }
+      if (response.malformed_call) {
+        // A tool call that could not be read ran nothing. The reply stays in the history as it was sampled, answered
+        // with what was wrong; it counts as a reply without an action.
+        messages.push({ role: 'assistant', content: response.text ?? '', ...thought(response.reasoning) },
+          { role: 'user', content: response.malformed_call });
+        if (++repliesWithoutAction >= 4) {
+          session.runtime.trace.emit('model_incomplete', { call_id: callId, turn: turns,
+            reason: 'no_action', evidence: 'four_consecutive_replies_without_a_tool_call', replies: repliesWithoutAction });
+          return `model_incomplete: no_action (${repliesWithoutAction} replies in a row called no tool and returned no result; ` +
+            'the last one held a tool call that could not be read)';
+        }
+        continue;
+      }
       if (!response.calls?.length) {
         // A reply without a tool call ends the turn: it returns the staged result, or, for a string-typed
         // call with nothing staged, the reply's text is the result.
@@ -2059,8 +2073,10 @@ export class NativeToolAgent {
             'Handoff accepted. Continue this same invocation from its existing scope and transcript. Do not repeat completed effects.' };
         }, String(raw[0]!.id));
         const failure = action.kind === 'ok' ? undefined : action.text;
-        messages.push({ role: 'assistant', content: replyText(response), tool_calls: raw.slice(0, 1), ...thought(response.reasoning) },
-          { role: 'tool', tool_call_id: String(raw[0]!.id), content: action.text });
+        // Every sampled call stays in the history; only the first is answered by the handoff decision.
+        messages.push({ role: 'assistant', content: replyText(response), tool_calls: raw, ...thought(response.reasoning) },
+          { role: 'tool', tool_call_id: String(raw[0]!.id), content: action.text },
+          ...raw.slice(1).map(call => ({ role: 'tool', tool_call_id: String(call.id), content: UNRUN_CALL })));
         if (action.kind === 'budget') return budgetStop(action.text);
         if (failure?.startsWith('escalation unavailable:') || failure?.startsWith('graph model ')) return failure;
         if (failure) {
@@ -2115,7 +2131,8 @@ export class NativeToolAgent {
           if (failures) {
             refinementFailures = failures;
             results.push({ kind: 'rejected', text: failureFeedback(failures), codes: failures.map(failure => failure.code) });
-            break;
+            stoppedAt ??= index;
+            continue;
           }
         }
         const result: NativeResult = await session.applyAsync(name, appliedArgs,

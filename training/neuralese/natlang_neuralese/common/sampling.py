@@ -9,6 +9,55 @@ def masked_log_distribution(logits,temperature,*,allowed=None,banned=None):
     return log_softmax(masked_logits(logits,temperature,allowed=allowed,banned=banned),dim=-1)
 
 
+# The sampling law of RL collection and held evaluation: temperature 1 with nucleus truncation (owner 2026-11-13).
+# Untruncated T=1 sampling drew a token of probability < 0.0067 once in 55 samples (about 150 per episode) and 34% of
+# the policy-gradient mass sat on tokens with p < 0.1 (DECISIONS 2026-11-13). One default, read by every collector
+# (grpo.py, exp1_collect.py, held_eval): 1.0 turns truncation off.
+RL_TOP_P = 0.95
+# `sampling_law.probabilities` of a capture: what a sample's recorded `logp` is. Under top-p the engines record the
+# untruncated post-temperature log-probability (the SGLang fork's record, `natlang_post_temperature_logprobs`); the
+# draw itself came from the top-p nucleus of that distribution, renormalized.
+NORMALIZED_LAW = 'post-processing-normalized'
+UNTRUNCATED_LAW = 'post-temperature-untruncated'
+
+
+def check_top_p(value):
+    """A request's top_p as a float in (0, 1] (None: 1.0)."""
+    if value is None:
+        return 1.
+    if type(value) not in (int, float) or not math.isfinite(value) or not 0. < value <= 1.:
+        raise ValueError('top_p must be a number in (0, 1]')
+    return float(value)
+
+
+def rl_sampling_controls(top_p=RL_TOP_P, *, capture=False):
+    """The chat request controls (`sampling-config.json`, `run_bonsai_queue --chat-request-config`) of an RL or held
+    episode: no guidance, the sampling capture when a learner reads the rollouts (`capture`), top-p when below 1."""
+    top_p = check_top_p(top_p)
+    return {'guidance': False, **({'x_natlang_rl_capture': True, 'x_natlang_rl_top_k': 0} if capture else {}),
+            **({'top_p': top_p} if top_p < 1. else {})}
+
+
+def sampling_law_of(top_p=RL_TOP_P):
+    """The law a run records beside its results ({temperature, top_p}): results of different laws are never paired."""
+    return {'temperature': 1., 'top_p': check_top_p(top_p)}
+
+
+def nucleus_keep(sorted_probs, top_p):
+    """Mask over probabilities sorted by decreasing value: a token is kept while the mass before it is <= top_p (the
+    SGLang sampler's rule, `top_k_top_p_min_p_sampling_from_probs_torch`); the first token is always kept."""
+    keep = (torch.cumsum(sorted_probs, -1) - sorted_probs) <= top_p
+    keep[..., 0] = True
+    return keep
+
+
+def nucleus_sample(log_probs, top_p, generator=None):
+    """One token id drawn from the top-p nucleus of a 1-D normalized log-distribution (renormalized)."""
+    probs, order = log_probs.exp().sort(descending=True)
+    probs = probs * nucleus_keep(probs, top_p)
+    return int(order[torch.multinomial(probs.cpu(), 1, generator=generator)])
+
+
 def masked_token_logprobs(logits,labels,temperature,*,allowed=None,banned=None,policy=None):
     """Selected-token probabilities under the exact serving mask and stable gradient law."""
     from .stable_softmax import token_logprobs

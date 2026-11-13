@@ -33,7 +33,8 @@ so w5 is retired (data kept, never resumed) and the base is the start policy.
   pre-collection, interleaved SFT windows and QAT. They come back one at a time, after two consecutive held gains
   from plain updates. Neuralese-declaring task variants come first, because they are data, not machinery.
 - **Evaluation gets real compute.** Paired held-out eval on a large pinned set decides every comparison (held-v2
-  below; McNemar exact on matched task-samples, task sign test, loop rate beside it). dev16 is a smoke test at most,
+  below; mean per-task pass-rate change with a within-task permutation test and task-bootstrap CI, timeouts as failures;
+  McNemar, task sign test and loop rate beside it). dev16 is a smoke test at most,
   never a gate.
 - **Heartbeats check, they do not re-plan.** A monitoring cycle checks that the pinned experiments run correctly and
   the machines are healthy, and fixes breakage. Plans change between experiments, from their results.
@@ -53,14 +54,23 @@ with its split groups and every row sharing a source group; `WORK/pool.json` rec
 whatever groups finished since its last step (16-128; stragglers join a later step, groups more than 2 versions stale are
 dropped). Tasks (EPISODE_COST_20261112): 85% from tasks whose measured base pass rate is in [0.1, 0.9] (exp1-rft
 `base-pass-rates.json`, re-read every 10 min; a task's own latest scored GRPO group replaces its rate, so tasks the policy
-solves 0/8 or 8/8 leave the band and explored ones enter it; exp1's pass-rate collection stopped 2026-11-13), 15% unmeasured pool tasks; `ext_codebase-{py,natlang}_codebase_*` excluded
+solves 0/8 or 8/8 leave the band and explored ones enter it; exp1's pass-rate collection stopped 2026-11-13), the rest unmeasured pool tasks (`--explore`, default 0.4 from 2026-11-13, run2 runs 0.15: below ~0.35 the learnable set drains, and family/level priors do not predict which task is mid-range, TASK_SUPPLY_20261113); Neuralese-declaring variants `--neuralese-variants` are off until their controlled addition; `ext_codebase-{py,natlang}_codebase_*` excluded
 (repos missing on the DGX). Episode budget 40 model calls (a budget stop scores 0; the collector has no generated-token
-budget yet), wall clock 3600 s as a safety net only (unscored). Reward = task outcome only. Per-call sequences with the actor's exact prompt and sampled ids
+budget yet), wall clock 3600 s as a safety net only (unscored; run2: 4 of 1,100 episodes, all model decode, no tool time). An episode killed by a signal (unit stop, OOM killer) abandons its group, which is never scored (run2's restarts had scored 127 killed episodes as `unresolved`, leaving groups biased to short episodes). Reward = task outcome only: by default graded (`--reward graded`, opt-out `binary`): 1 accepted; an episode whose only failed checks are the answer and the files gets the share of the files it had to write (halved when the answer is wrong too) that it wrote right, with stray changes and unremoved files as failures and nothing for doing nothing (`task_rollouts.graded_reward`); selection pass rates and held eval stay binary. Per-call sequences with the actor's exact prompt and sampled ids
 (`lower_rollout_turns.episode_turns`, chained as in `exp0_sft.chains_of`); sampled decision calls train as one action each
 (`decision_turns`: log softmax of the learner's option scores over prompt + each captured continuation); Neuralese-state
 consumer calls train too, the imported state fixed context spliced from the actor's block store as the fork fed it (K/V
 pre-RoPE, conv B*x; `lfm3_fast_train.import_tensors`, no producer gradient; `plans/MODEL_FACING_CHANGES.md` 2026-11-13); loss on sampled tokens
-`-min(rho, 2) * A * logp + 0.02 * k3(start || policy)`, `A` group-normalized; FP32-master AdamW, LR 3e-6 (check 4), BF16 compute
+`-min(rho, 2) * A * logp + 0.02 * k3(start || policy)`, `A` group-normalized, averaged over each episode's units and then over the step's
+episodes (`--loss-norm episode`; `token` is the old sum over all tokens: failures are 1.7x longer and 97% of the mass was reasoning), a sampled
+decision counting as one average call of its episode (`--decision-weight call`), no policy term on a token the actor sampled below
+log-probability -7 when `A > 0` (`--tail-logp-floor`; 0.5% of tokens at untruncated T=1). Sampling law (owner 2026-11-13): temperature 1 with
+top-p 0.95 for collection, held eval and the learner alike (`common/sampling.py` `RL_TOP_P`, `--top-p`, 1.0 off; it travels as `top_p` in
+`sampling-config.json` and each capture's `sampling_law`; the front refuses a reply it did not sample that way). The actor records the
+untruncated logp; the policy term scores the token under the learner's own nucleus (`lfm3_fast_train.linear_nll_nucleus`, the sampled token always
+in the set), `rho` and the KL term use untruncated logps (`rho` takes the actor's nucleus mass as the learner's: |d log rho| <= 0.051); calls of
+another law are refused (`skip_other_sampling_law`); decisions keep their full option softmax; FP32-master AdamW, LR 1e-5 (check 4; run2 at 3e-6:
+half of the BF16 flips reverted, DECISIONS 2026-11-13), BF16 compute
 (`exp0_sft.load_model`, `lfm3_fast_train`). Weight sync each step: BF16 weights -> pinned buffer -> actor's HF safetensors ->
 SGLang `pause_generation(retract)` / `update_weights_from_disk` / `continue_generation` in a background thread; a pruned
 native checkpoint every 2 steps and the FP32 state (masters + moments, `/mnt/external/natlang-grpo-v1`) every 4 (grpo-v1 runs `--state-every 1`: a guard stop loses no step), also in
@@ -78,18 +88,28 @@ longer (`pop_rl_actor.py serve-checkpoint`: rsync of the pruned checkpoint, the 
 commit on Pop, Pop keeps 2 checkpoints), measured by this run's pinned harness from the DGX against Pop's endpoint
 (`--held-remote-slots` 14, `held-pop.log`). Pop's engine is KV-pool bound (2026-11-13): BF16 KV held 94.7k tokens, so 7.5 of 10 sequences ran, waiting requests evicted the prefixes of episodes between calls (prefix hit 41% vs 94% on the DGX) and decode tokens/s scale with running sequences (~20 ms a step at any batch); hence FP8 KV and 16 running (`--pop-kv-cache-dtype`, `--pop-max-running`; FP8 is part of the attested engine, so a start-policy result of another setting moves to `step-00000-pop-<time>-other-engine` and is re-measured). Step sizing (smoke): ~27k forward tokens per episode (chaining already merges 282 of 329
 consecutive calls; 38 diverge inside the sampled reply, 9 in the prompt), learner 600-800 tok/s while sharing the GPU with
-decode at `--activation-gb 4`; defaults now 12-24 groups per step, `--activation-gb 12`, 8 collector slots during the learner phase
+decode at `--activation-gb 4`; defaults now 24-48 groups per step (12 gave about 75 informative episodes a step), `--activation-gb 12`, 8 collector slots during the learner phase
 (`--learner-phase-slots`: check 4 measured the learner 3x faster with actor decode at 32 slots than at 48-64; the run logs
 actor tok/s per phase). The KL
 reference runs the policy's own training graph (a no_grad pass compiles other kernels: KL 5e-4 at identical weights). After each in-place update the front attests what it serves (`POST /v1/neuralese/rebind-policy`:
 the step's checkpoint sha, else the served weights' sha; the native engine keeps the start checkpoint). `train.jsonl` logs per step: reward
-mean, spread fraction, KL, rho (mean, pre/post-cap max, capped fraction, |log rho|), learner and actor tokens/s, phase seconds.
+mean, spread fraction, KL, rho (mean, pre/post-cap max, capped fraction, |log rho|), the cosine of the step's gradient with AdamW's first moment
+(`grad_moment_cosine`), the gradient-mass share of reasoning, reply and decision terms, the tail-masked fraction, learner and actor tokens/s, phase seconds.
 Memory (smoke 2026-11-12): on the GB10 the unit's MemoryMax (= ledger budget) also bounds its CUDA allocations, so the
 budget must cover GPU + host: learner CUDA 19.3 GB before AdamW state, 32 GB peak at step 1, about 36 GB with the FP32 moments
 (FP32 masters + moments + FP32 gradients alone are 27 GB), host about 5 GB plus the collector node processes (in the same
 cgroup, 0.3-0.7 GB per slot; shared collectors save about 0.25 GB a slot), plus the child actor (kv-gb + 24). The actor's
 weight file lives on /dev/shm (the shared NVMe wrote at 60-230 MB/s under load); pruned checkpoints go to /mnt/external
 (last 2 plus held-evaluated ones), the single FP32 training state (20.7 GB, temp file renamed over the previous) to NVMe.
+
+## Held-v3: the experiments' held-out set for experiments pinned after grpo-v2-run1 (engineering, 2026-11-13)
+
+`ops/held-v3/manifest.json` (sha 45471060; `plans/neuralese/HELD_V3_20261113.md`) is held-v2 with 14 tasks replaced:
+wrong or ambiguous gold, and source groups shared with Exp1 training. It uses the same engine.json and is
+`grpo.HELD`. Its `exclusion_ids()` also covers held-v2 (`also_excludes`), so neither set's tasks or siblings ever
+enter training. Before relying on it, rerun `held_eval verify` against `ops/held-v3/exposure/collect_exposure.py`.
+Results on it use the 2026-11-13 scorer (QA answer cores, terminal-newline policy, loop evidence for iterateOn
+markers): a new series. The held-v2 section below describes the predecessor and the shared tooling.
 
 ## Held-v2: the experiments' held-out set (engineering, 2026-11-12)
 
@@ -100,9 +120,13 @@ families, levels 63/64/64/65, 85 effect-state, keeping w5's 64 held tasks; disjo
 these ids. Built by `python -m natlang_neuralese.rl.held_eval pin` (`--include-manifest`, `--avoid-ids`, `--avoid-from`).
 Measure with `held_eval measure --manifest M --out DIR (--endpoint URL[=SLOTS] | --checkpoint CKPT) [--samples 4]`
 (work-stealing episodes, resumable, sample-major so a cut run stays balanced; `serve` launches/reuses a ledger SGLang actor) and
-compare with `held_eval compare A/result.json B/result.json` (McNemar on matched samples, task sign test, task-bootstrap CI,
-loop rate). A wall-clock timeout is unscored and reported as `timeouts`, never a failure; compare only results with one code
-commit and series (`same_code`, `same_series`). Baselines and the A/A noise floor: `ops/held-v2/runs/`. The eval engine is
+compare with `held_eval compare A/result.json B/result.json [--ignore-ids F.jsonl] [--trained-families F.json]` (primary:
+mean per-task pass-rate change, within-task permutation p, task-bootstrap CI, a wall-clock timeout counted as a failure;
+beside it the drop-timeouts sensitivity, McNemar on matched samples, task sign test, loop rate; subsets without the
+`held-v2/ignore-ids-*.jsonl` tasks and by trained family). A timed-out episode stays unscored in `result.json`
+(`timeouts`); compare only results with one code commit and series (`same_code`, `same_series`; the series covers the
+ts-host tree and the Python scoring sources) and one sampling law (`result.json` `sampling`: temperature 1, top-p 0.95 from 2026-11-13,
+`measure --top-p`; `compare` refuses to pair laws, so the start policy is re-measured at the next pin). Training and held eval share one call budget (`EPISODE_MODEL_CALLS`, 40). Baselines and the A/A noise floor: `ops/held-v2/runs/`. The eval engine is
 pinned in `held-v2/engine.json` (SGLang, vendor projection, FP8 KV, `--sglang-kv-gb 16`, 128 running; one engine per
 checkpoint): `measure` refuses another actor (`--allow-other-engine`), `serve` launches exactly it, and `compare` refuses to
 pair results with different attested engines (`serving_engine`, export format). Interim A/A (base twice, independent seeds,

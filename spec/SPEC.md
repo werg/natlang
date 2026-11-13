@@ -220,7 +220,7 @@ TypeScript outside callable folders is unrestricted.
 
 Callable-folder TypeScript and eval code use finite iteration: `for...of`,
 `for...in` (an object's enumerable string keys, inherited ones included), counted `for` loops (the condition may join the counter bound to an early exit with `&&`, as in `i < n && !found`), and array methods. A counted loop reads its bound once,
-when it starts; the bound must be a finite number and the counter must advance
+when it starts, so the bound may be a call (`p <= store.pages()`, or `p <= await store.pages()` for an async one); the bound must be a finite number and the counter must advance
 toward it. `while`, `do`, open `for(;;)`, generators, and code that
 defines iterators (`Symbol.iterator`, `Symbol.asyncIterator`, `Iterator.from`, a
 class extending `Iterator`) are rejected; `for...of` is guarded at run time
@@ -428,7 +428,8 @@ turn that made the call (on its first call), `status` is the outcome (`ok`, `rej
 ## Cut-offs
 
 Whatever is too long to show is shortened one way, with a note that is not
-TypeScript: `<<cut off: 338 of 340 items not shown; customers holds all of it>>`.
+TypeScript: `<<cut off: 338 of 340 items not shown; only this display is shortened, customers holds the complete value>>`.
+A value whose whole literal is small (300 characters) is never shortened, also in one-line status texts.
 The note says what was left out, where all of it is in the scope (a variable, or
 `transcript.entry(n).output` for a tool output), and for tool output which
 `read_page` call shows the next part. Values (the opening's declarations, eval

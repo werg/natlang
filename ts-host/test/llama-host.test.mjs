@@ -23,7 +23,7 @@ function fixtureHost(root, { fetch, spawn } = {}) {
       return spawn?.(command, args, options) ?? { pid: 4242, hasExited: () => false, exited: new Promise(() => {}), kill() {} };
     },
     run(command, args) {
-      if (args.includes('--version')) return { status: 0, stdout: 'version: 0.8.0 (build 12070, commit 0da69f720)\n', stderr: '' };
+      if (args.includes('--version')) return { status: 0, stdout: 'version: 0.8.0 (build 12071, commit ff6e734e3)\n', stderr: '' };
       if (args.includes('--help')) return { status: 0, stdout: '--lora-per-sequence\n--native-state FNAME', stderr: '' };
       return { status: 1, stdout: '', stderr: `unexpected command ${command}` };
     },
@@ -126,7 +126,7 @@ test('an attached server is planned and warmed through the host\'s fetch, with i
   mkdirSync(host.directories.warmPrefixes, { recursive: true });
   const sha = createHash('sha256').update('supervised weights').digest('hex');
   const server = createLlamaServer(host, { headers: { authorization: 'Bearer secret' },
-    attach: { endpoint: 'http://127.0.0.1:9000', slots: 2, contextPerSlot: 8192, modelSha256: sha, runtime: 'b12070g0da69f7', warm: true } });
+    attach: { endpoint: 'http://127.0.0.1:9000', slots: 2, contextPerSlot: 8192, modelSha256: sha, runtime: 'b12071gff6e734e', warm: true } });
   assert.equal(await server.start(), 'http://127.0.0.1:9000');
   assert.equal(spawned.length, 0);
   assert.equal(server.plan().slots, 2); assert.equal(server.plan().totalContext, 16384);
@@ -140,12 +140,12 @@ test('an attached server is planned and warmed through the host\'s fetch, with i
   assert.ok(posts.every(post => post.authorization === 'Bearer secret'), 'every request to the server carries the host\'s credentials');
   const warmed = server.status().warm;
   assert.equal(warmed.length, 1); assert.equal(warmed[0].prefilled, 321); assert.equal(warmed[0].restoredSlots, 2); assert.equal(warmed[0].created, true);
-  assert.match(warmed[0].file, new RegExp(`-${sha.slice(0, 12)}-b12070g0da69f7-p2x8192\\.slot$`), 'keyed by the model, the build and the slot layout');
+  assert.match(warmed[0].file, new RegExp(`-${sha.slice(0, 12)}-b12071gff6e734e-p2x8192\\.slot$`), 'keyed by the model, the build and the slot layout');
   assert.ok(readdirSync(host.directories.warmPrefixes).some(name => name.endsWith('.slot')));
   assert.match(log.join(''), new RegExp(`prefilled the ${warmed[0].tokens}-token prompt opening`));
   // a second server over the same states restores instead of prefilling
   const again = createLlamaServer(host, { headers: { authorization: 'Bearer secret' },
-    attach: { endpoint: 'http://127.0.0.1:9000', slots: 2, contextPerSlot: 8192, modelSha256: sha, runtime: 'b12070g0da69f7', warm: true } });
+    attach: { endpoint: 'http://127.0.0.1:9000', slots: 2, contextPerSlot: 8192, modelSha256: sha, runtime: 'b12071gff6e734e', warm: true } });
   posts.length = 0;
   (await again.admit(request)).release();
   assert.equal(again.status().warm[0].created, false);
@@ -196,7 +196,7 @@ test('openings that differ only in their last tool share a saved base: a new one
     return new Response('{}');
   } });
   mkdirSync(host.directories.warmPrefixes, { recursive: true });
-  const attach = { endpoint: 'http://127.0.0.1:9000', slots: 1, contextPerSlot: 8192, modelSha256: 'a'.repeat(64), runtime: 'b12070g0da69f7', warm: true };
+  const attach = { endpoint: 'http://127.0.0.1:9000', slots: 1, contextPerSlot: 8192, modelSha256: 'a'.repeat(64), runtime: 'b12071gff6e734e', warm: true };
   const tool = (name, extra = {}) => ({ type: 'function', function: { name, description: `The ${name} tool. `.repeat(20), ...extra } });
   const opening = returns => ({ messages: [{ role: 'system', content: 'You run one call. '.repeat(40) }, { role: 'user', content: 'hi' }],
     tools: [tool('eval'), tool('read_page'), tool('return_result', { parameters: { value: { enum: returns } } })] });
