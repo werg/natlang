@@ -126,15 +126,14 @@ def attention_layer(x, cos, sin, cu, max_len: int, doc, pos, operator_norm, wq, 
     return _ffn(x + y, ffn_norm, w1, w3, w2, post_ffn_norm, eps)
 
 
-def _attend_past(q, k, v, window):
+def _attend_past(q, k, v, cu_q, cu_k, window):
     """Attention of ``q`` (the last S of the K key positions) over ``k``/``v`` (K, H, D): causal, keys at most ``window``
-    positions back (-1: unbounded), the queries aligned to the end of the keys."""
+    positions back (-1: unbounded), the queries aligned to the end of the keys (flash's causal rule for S < K).
+    ``cu_q``/``cu_k``: int32 [0, S] / [0, K], made outside the compiled layer like ``hidden``'s ``cu``."""
     scale = q.shape[-1] ** -0.5
     s, n = q.shape[0], k.shape[0]
     if q.is_cuda:
         from torch.nn.attention.varlen import varlen_attn
-        cu_q = torch.tensor([0, s], dtype=torch.int32, device=q.device)
-        cu_k = torch.tensor([0, n], dtype=torch.int32, device=q.device)
         return varlen_attn(q, k, v, cu_q, cu_k, s, n, scale=scale, window_size=(window, 0))
     i = torch.arange(s, device=q.device)[:, None] + (n - s)
     j = torch.arange(n, device=q.device)[None, :]
@@ -168,7 +167,7 @@ def conv_layer_past(x, past_bx, operator_norm, in_proj, conv_weight, out_proj, p
     return _ffn(x + y, ffn_norm, w1, w3, w2, post_ffn_norm, eps), joined[length:]
 
 
-def attention_layer_past(x, cos, sin, past_k, past_v, operator_norm, wq, wk, wv, wo, wg, q_norm, k_norm,
+def attention_layer_past(x, cos, sin, cu_q, cu_k, past_k, past_v, operator_norm, wq, wk, wv, wo, wg, q_norm, k_norm,
                          post_operator_norm, ffn_norm, w1, w3, w2, post_ffn_norm, eps: float, head_dim: int,
                          window: int):
     """``attention_layer`` for one document that continues a computed prefix whose keys (after RoPE) and values are
@@ -181,7 +180,7 @@ def attention_layer_past(x, cos, sin, past_k, past_v, operator_norm, wq, wk, wv,
     v = F.linear(h, wv).view(length, -1, head_dim)
     q, k = _rope(q, cos, sin), _rope(k, cos, sin)
     keys, values = torch.cat([past_k, k]), torch.cat([past_v, v])
-    o = _attend_past(q, keys, values, window)
+    o = _attend_past(q, keys, values, cu_q, cu_k, window)
     o = (o * torch.sigmoid(F.linear(h, wg))[..., None]).reshape(length, -1)
     y = F.linear(o, wo)
     if post_operator_norm is not None:
@@ -329,6 +328,7 @@ def _hidden_past(model, ids, past, compiled):
         past = _empty_past(model, x)
     pos = torch.arange(past.length, past.length + ids.shape[0], device=ids.device)
     tables = _rope_tables(model, pos, x.dtype)
+    cu_q = torch.tensor([0, ids.shape[0]], dtype=torch.int32, device=ids.device)
     grad = torch.is_grad_enabled()
     layers = []
     for index, layer in enumerate(model.model.layers):
@@ -338,7 +338,9 @@ def _hidden_past(model, ids, past, compiled):
             args = (x, past.layers[index][0]) + static
         else:
             cos, sin = tables[config.layer_types[index]]
-            args = (x, cos, sin) + tuple(past.layers[index]) + static
+            keys = past.layers[index][0].shape[0] + ids.shape[0]
+            cu_k = torch.tensor([0, keys], dtype=torch.int32, device=ids.device)
+            args = (x, cos, sin, cu_q, cu_k) + tuple(past.layers[index]) + static
         if grad and getattr(layer, 'gradient_checkpointing', False):
             x, *state = torch_checkpoint(function, *args, use_reentrant=False)
         else:
