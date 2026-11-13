@@ -1,16 +1,29 @@
 [
   {
-    "name": "no observations",
-    "function": "review.nl",
+    "name": "a measurement within the limit",
+    "function": "review/assess/verdict.nl",
     "inputs": {
-      "observations": [],
+      "observation": "The nightly backup finished in 42 minutes on Monday.",
       "criterion": "Nightly backups finish within one hour."
     },
-    "expected": {
-      "assessments": [],
-      "supported": 0,
-      "contradicted": 0,
-      "uncertain": 0
-    }
+    "expected": "supported"
+  },
+  {
+    "name": "a measurement over the limit",
+    "function": "review/assess/verdict.nl",
+    "inputs": {
+      "observation": "Tuesday's backup log shows it completed after 3 hours 10 minutes.",
+      "criterion": "Nightly backups finish within one hour."
+    },
+    "expected": "contradicted"
+  },
+  {
+    "name": "nothing about duration",
+    "function": "review/assess/verdict.nl",
+    "inputs": {
+      "observation": "The backup server was moved to a new rack on Wednesday.",
+      "criterion": "Nightly backups finish within one hour."
+    },
+    "expected": "uncertain"
   }
 ]

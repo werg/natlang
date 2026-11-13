@@ -5,6 +5,5 @@ args:
   criterion: string
 returns: Assessment
 ---
-Assess whether the observation supports or contradicts the criterion.
-If it is irrelevant, ambiguous, or insufficient to decide, choose uncertain.
-Return the verdict and a brief reason grounded in the observation. Do not infer missing measurements.
+Decide the verdict with verdict, then return it with a brief reason grounded in the observation.
+Do not infer missing measurements.

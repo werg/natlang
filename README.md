@@ -84,7 +84,8 @@ profiles and overrides.
 ### A second program
 
 [`examples/review`](examples/review/) in the clone is the next step up: a named function whose callable folder holds
-a natural-language helper (`.nl`) and an exact TypeScript one (`.ts`), with its manifest, saved examples and a README.
+a natural-language helper (`.nl`) with its own typed decision (`readout: decision`) and an exact TypeScript helper
+(`.ts`), with its manifest, saved examples that test the decisions, and a README.
 
 ```sh
 natlang run examples/review            # from the clone

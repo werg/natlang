@@ -44,6 +44,8 @@ review/
   review.nl           the function
   review/             its callable folder: what review.nl may call
     assess.nl         a natural-language helper
+    assess/
+      verdict.nl      its own helper: a typed decision (readout: decision), testable exactly
     summarize.ts      an exact TypeScript helper (default export)
 ```
 
