@@ -7,7 +7,8 @@ import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createInterface } from 'node:readline/promises';
 import { isDeepStrictEqual } from 'node:util';
-import { answerSource, createProgram, readExamples, sampleInput } from '../package/authoring.js';
+import { answerSource, createProgram, sampleInput } from '../package/authoring.js';
+import { readExamples } from '../calls/examples.js';
 import { createPackageArchive, NatlangPackageStore, readPackageArchive,
   writePackageArchive, defaultNatlangStateDirectory } from '../package/index.js';
 import { compareVersions, defaultNatlangConfigDirectory, satisfiesVersion } from '../package/store.js';
@@ -1069,7 +1070,7 @@ export async function runCommand(command: string, words: string[], parsed: Parse
       functions: [...result.manifest.named.map(({ source, signature }) => ({ source, signature })),
         ...result.manifest.inline.map(({ source, line, signature }) => ({ source: `${source}:${line}`, signature }))],
       ...(command === 'build' ? { outDir: result.outDir } : {}), ...(parsed.options.has('--manifest') ? { manifest: result.manifest } : {}),
-      ...(result.refinedSlots ? { refinedSlots: result.refinedSlots } : {}), ...(fusion ? { fusion } : {}), ...(lock ? { lock } : {}) }, true);
+      ...(result.refinedSlots ? { refinedSlots: result.refinedSlots } : {}), ...(fusion && (fusion.counts.edges || parsed.options.has('--fusion')) ? { fusion } : {}), ...(lock ? { lock } : {}) }, true);
     else output(result.ok ? `${command === 'build' ? `built ${Object.keys(result.outputs).length} files into ${result.outDir}` : 'ok'}` +
       (lock ? `\n${describeLock(lock.lock, lock.path)}` : '') +
       (result.refinedSlots?.length ? `\nrefined slots (checked at run time):\n${result.refinedSlots.map(slot =>

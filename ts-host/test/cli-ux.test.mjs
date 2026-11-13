@@ -90,7 +90,7 @@ test('usage errors exit 2, an unreachable model exits 3 with one line, and check
     writeFileSync(join(program, 'answer.nl'), source.replace(/^returns: .*$/m, 'returns: Strng'));
     const unknownType = await run(['check'], program, env);
     assert.match(unknownType.out, /answer\.nl:5:1 .*unknown type name Strng\n {2}hint: did you mean string\?/);
-    writeFileSync(join(program, 'answer.nl'), source.replace(/^returns: (.*)$/m, 'returns: $1\nreadout: sometimes'));
+    writeFileSync(join(program, 'answer.nl'), source.replace(/^readout: .*$/m, 'readout: sometimes'));
     assert.match((await run(['check'], program, env)).out, /answer\.nl:6:1 .*readout must be decision or template/);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

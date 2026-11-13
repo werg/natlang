@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { hostname, userInfo } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { saveExample, type SavedExample } from '../package/authoring.js';
+import { saveExample, type SavedExample } from './examples.js';
 import type { CallStore } from './store.js';
 import type { CallRecord } from './types.js';
 
