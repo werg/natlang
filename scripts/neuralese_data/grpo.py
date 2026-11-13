@@ -1680,8 +1680,8 @@ def main():
     t.add_argument('--pass-min-scored', type=int, default=2)
     t.add_argument('--explore', type=float, default=0.4,
                    help='share of groups from unmeasured pool tasks (TASK_SUPPLY_20261113: a learnable-task group leaves '
-                        'the band at 0/8 or 8/8 about 22%% of the time and an explored group enters it about 44%%, so '
-                        'below ~1/3 the learnable set shrinks)')
+                        'the band at 0/8 or 8/8 about 22%% of the time and an explored group enters it about 40%%, so '
+                        'below ~0.35 the learnable set shrinks)')
     t.add_argument('--neuralese-variants', help='Neuralese-declaring variants of pool tasks (cases.jsonl from '
                    'scripts/rl_tasks/neuralese_variants.py; off by default: a controlled addition)')
     t.add_argument('--neuralese-variant-share', type=float, default=0.5,

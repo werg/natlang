@@ -47,7 +47,7 @@ with its split groups and every row sharing a source group; `WORK/pool.json` rec
 whatever groups finished since its last step (16-128; stragglers join a later step, groups more than 2 versions stale are
 dropped). Tasks (EPISODE_COST_20261112): 85% from tasks whose measured base pass rate is in [0.1, 0.9] (exp1-rft
 `base-pass-rates.json`, re-read every 10 min; a task's own latest scored GRPO group replaces its rate, so tasks the policy
-solves 0/8 or 8/8 leave the band and explored ones enter it; exp1's pass-rate collection stopped 2026-11-13), 15% unmeasured pool tasks; `ext_codebase-{py,natlang}_codebase_*` excluded
+solves 0/8 or 8/8 leave the band and explored ones enter it; exp1's pass-rate collection stopped 2026-11-13), the rest unmeasured pool tasks (`--explore`, default 0.4 from 2026-11-13, run2 runs 0.15: below ~0.35 the learnable set drains, and family/level priors do not predict which task is mid-range, TASK_SUPPLY_20261113); Neuralese-declaring variants `--neuralese-variants` are off until their controlled addition; `ext_codebase-{py,natlang}_codebase_*` excluded
 (repos missing on the DGX). Episode budget 40 model calls (a budget stop scores 0; the collector has no generated-token
 budget yet), wall clock 3600 s as a safety net only (unscored). Reward = task outcome only. Per-call sequences with the actor's exact prompt and sampled ids
 (`lower_rollout_turns.episode_turns`, chained as in `exp0_sft.chains_of`); sampled decision calls train as one action each
