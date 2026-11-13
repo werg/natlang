@@ -158,7 +158,7 @@ def git_pin():
     return code_provenance()
 
 
-def measured(out):
+def held_complete(out):
     """A finished held measurement in ``out``: a cut ``held_eval measure`` also writes result.json (complete false), and a
     loop that took that for done would compare against a 20-episode start policy (grpo-v2-run1, 2026-11-13)."""
     try:
@@ -1489,7 +1489,7 @@ def train(args):
                                        '--allow-other-engine', '--max-model-requests', str(args.max_model_requests)],
                                       cwd=REPO, env=pinned_env(), stdout=handle,
                                       stderr=subprocess.STDOUT).returncode
-                if step_number and code == 0 and measured(base_out):
+                if step_number and code == 0 and held_complete(base_out):
                     subprocess.run([*python, 'compare', str(base_out / 'result.json'), str(out / 'result.json'), '--out',
                                     str(out / 'compare-vs-step0.json')], cwd=REPO, env=pinned_env(), stdout=handle,
                                    stderr=subprocess.STDOUT)
@@ -1504,7 +1504,7 @@ def train(args):
 
         def measured_steps():
             return {int(d.name.split('-')[1]) for d in held_root.glob('step-*') if d.name.split('-')[1].isdigit()
-                    and measured(d)}
+                    and held_complete(d)}
 
         last_start, last_step = 0., max(measured_steps() - {0}, default=0)
         while not stop.is_set():
@@ -1514,10 +1514,10 @@ def train(args):
                     base_out.rename(aside)
                     log_line(log, {'event': 'held eval', 'remote': 'pop', 'moved_start_policy_result': str(aside),
                                    'reason': f'measured on another Pop engine than {pop_format}'})
-                if not measured(base_out):
+                if not held_complete(base_out):
                     evaluate(0, base_out, source_sha, ['start', '--checkpoint', args.checkpoint, '--policy-id', source_sha,
                                                        *pop_engine])
-                    if not measured(base_out):
+                    if not held_complete(base_out):
                         raise RuntimeError(f'the start policy measurement ended without a result (see {work}/held-pop.log)')
                 ready = sorted(d for d in checkpoint_root.glob('step-*') if (d / 'sha256.txt').exists()
                                and int(d.name.split('-')[1]) > last_step)
