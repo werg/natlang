@@ -107,6 +107,9 @@ LEGACY_SEARCH_TEXT_CORPUS_DEFAULT_PROFILE_TRANSITION = {
     'historical_sha256': '004659afb57d4c23dd64262ed49ca4b3964938b60e701789a61b63091464773a',
     'current_sha256': '622b4ad08257ed09d0dd10d52d97adfa1c45cc8b9c8c46bbeef57fae6caff63b',
 }
+# Reviewed successors of the legacy program-header stripper whose output is unchanged: f5aa37b68 calls the same
+# ts-host renderSystemPrompt through prompt_rendering's thin client (the piece table is ts-host's either way).
+LEGACY_SEARCH_STRIP_PROMPT_SUCCESSORS = ('3446339fea16d1c99794e7eb8309f04b6b73e0a2329a39caf80d6b49f23bd05f',)
 # Upstream held-out split names rendered as test (recorded as selection counts split_mapped:<name>->test and as each
 # row's source_split). Any other split other than train/test stays an omission with its reason.
 HELD_SPLIT_ALIASES = ('validation', 'valid', 'val', 'dev')
@@ -1477,6 +1480,8 @@ def _legacy_render_job_binding(job, source_sha, renderer_sha, *, historical_text
             transition = LEGACY_SEARCH_TEXT_CORPUS_DEFAULT_PROFILE_TRANSITION
             if actual_sha == transition['current_sha256'] and selected_profile in (None, 'backbone-default'):
                 continue
+        if name == 'strip_generic_system_prompt.py' and actual_sha in LEGACY_SEARCH_STRIP_PROMPT_SUCCESSORS:
+            continue
         if actual_sha != expected_sha:
             raise ValueError(f'legacy renderer dependency differs from its historical binding: {name}')
     (_shard_path, _out_dir, tok_name, blocked, corpus, held_groups, decision_exclude,

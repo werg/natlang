@@ -82,7 +82,7 @@ def fixture(tmp_path, monkeypatch, mutation=None):
     return args,protection
 
 
-def test_closed_provider_source_keeps_every_world_and_actual_actor(tmp_path,monkeypatch):
+def test_closed_provider_source_keeps_every_world_and_actual_actor(tmp_path,monkeypatch,protected_worlds_available):
     args,protection=fixture(tmp_path,monkeypatch)
     result=source.source_binding(args,protection_reader=lambda _:protection)
     assert result['train_groups']=={'world-a','world-b'}
@@ -91,7 +91,7 @@ def test_closed_provider_source_keeps_every_world_and_actual_actor(tmp_path,monk
     assert result['collections'][next(iter(result['collections']))]['runtime_model']=='gpt-6-luna'
 
 
-def test_provider_source_accepts_exact_honest_root_block(tmp_path,monkeypatch):
+def test_provider_source_accepts_exact_honest_root_block(tmp_path,monkeypatch,protected_worlds_available):
     args,protection=fixture(tmp_path,monkeypatch,'honest-root-block')
     result=source.source_binding(args,protection_reader=lambda _:protection)
     assert result['selected_ids']=={'task'}

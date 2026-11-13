@@ -183,6 +183,8 @@ def test_provider_observations_ignore_known_cleanup_and_count_unknown_phases(tmp
 
 
 def install_child(monkeypatch, child_class):
+    # A faked collector child is the invocation's own process: the shared node server (default) is not faked.
+    monkeypatch.setenv('NATLANG_COLLECTOR_SHARED', '0')
     real_subprocess = queue_module.subprocess
     class SubprocessProxy:
         Popen = child_class

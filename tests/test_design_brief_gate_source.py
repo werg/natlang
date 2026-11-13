@@ -1,8 +1,11 @@
 from collections import Counter, defaultdict
 
-from scripts.rl_tasks.sources.design_brief_gates import cases
+import pytest
+
+from scripts.rl_tasks.sources.design_brief_gates import PACKET, cases
 
 
+@pytest.mark.skipif(not PACKET.exists(), reason='the design-brief gate packet is not available')
 def test_exact_gate_packet_becomes_separated_rl_cases():
     rows = cases()
     assert len(rows) == 300

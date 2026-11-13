@@ -21,6 +21,16 @@
 # Node packages come from `npm install` at the workspace root (never `npm ci` while other sessions run).
 set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
+# Node: the development Node 24 in ~/.local/share/natlang-dev when present (as scripts/pin_checkout.py builds with), else
+# PATH's. Tests load TypeScript source (skill objectives, design-brief codebases), which needs a Node that strips types:
+# distribution builds such as Ubuntu's nodejs (+dfsg) leave that out, and every such test then fails on its import.
+DEV_NODE=$(ls -d "$HOME"/.local/share/natlang-dev/node-v24*/bin 2>/dev/null | sort -V | tail -n 1)
+[ -n "$DEV_NODE" ] && export PATH="$DEV_NODE:$PATH"
+if [ "$(node -p 'process.features.typescript || false' 2>/dev/null)" = false ]; then
+  echo "check-main: $(command -v node) ($(node --version)) cannot load TypeScript source; install an official Node 24 build" \
+    "under ~/.local/share/natlang-dev/ (docs/DGX_DEVELOPMENT.md)" >&2
+  exit 1
+fi
 # Runtime inventories in tests must describe this checkout. A linked worktree
 # otherwise falls back to the live machine checkout and concurrent development
 # can change a frozen task policy in the middle of a test.

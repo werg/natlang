@@ -3,6 +3,18 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-13 — copied prompt example refused in eval (`prompt-example`)
+
+The stock LFM3 1.7B with a thinking budget copied TOOLS_PROMPT's inline-nl example into triage calls: 9 of 42 calls at
+256 tokens, 5 of 39 at 0, none unlimited (the thinking-budget entry below); each copy ran a child that judged an
+unrelated refund policy and then looped on the same-question refusal (73 turns for the 9). The prompt is unchanged (it
+is the training and held-eval prompt; replacing the example was rejected 2026-11-10). Instead an eval whose code
+contains the example's policy literal or instruction text, in a call whose instructions, inputs and locals do not, is
+rejected before running: `prompt-example: "<text>" comes from the example in your system prompt, not from this call;
+work from this call's own instructions and inputs (<names>) instead.` (`PROMPT_EXAMPLE_TEXTS`, native/runtime.ts).
+Measured with the same-question refusal A/B's successor run (below, when it lands); trained policies do not copy the
+example (0 in 119 w5 episodes), so this only fires on models that do.
+
 ### 2026-11-13 — same-question refusal says the call answers it itself (measuring)
 
 An inline `nl` call with the same instructions and inputs as the call that made it is refused (kernel, since

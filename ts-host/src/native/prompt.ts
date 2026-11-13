@@ -118,6 +118,11 @@ How a call usually goes (a schematic: <angle brackets> stand for whatever this c
 - Returning stored data: if eval already holds the exact answer in a local value, complete with eval({ code: "<storedAnswer>", finish: true }) or an explicit return of that value. This preserves every field, including long descriptions; do not retype an object from an abbreviated preview. console.log inspects a value but does not return it: a finishing eval must also evaluate or explicitly return the actual typed answer.
 - Finishing: for a semantic answer, reply with the declared string or a JSON value of the declared type. For computation or effects, eval({ code: "<computation>; <value>", finish: true }) completes the fresh typed result. You can also use return_result({ status: "success", value: <value of the declared type> }). When something the instructions rely on is absent: return_result({ status: "blocked", reason: "<what is missing>" }); when they ask for the impossible, status "failed". Code in a reply does not execute.`;
 
+/** Text of TOOLS_PROMPT's inline-nl example that only a copy of the example would contain: an eval using one in a call
+ * whose own instructions and inputs do not is told so (native/runtime.ts). LFM3 1.7B with a thinking budget copied the
+ * example into 9 of 42 triage calls (2026-11-13). */
+export const PROMPT_EXAMPLE_TEXTS = ['Refunds are allowed within 30 days of delivery.', 'Decide whether item meets policy.'] as const;
+
 /** At the ad hoc depth limit, named helpers remain available but no new lambda is suggested. */
 export const APPROACH_PROMPT_AT_NL_DEPTH_LIMIT = APPROACH_PROMPT.replace(
   /^- Judging items:.*$/m,

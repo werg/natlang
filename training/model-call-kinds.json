@@ -9,7 +9,7 @@
    "endpoints": ["/v1/chat/completions"],
    "sft": {"status": "covered", "evidence": ["training/neuralese/natlang_neuralese/train/own_output_supervision.py", "tests/neuralese/test_own_output_supervision.py", "tests/neuralese/test_own_output_supervision_real_rows.py"]},
    "rl": {"status": "covered", "evidence": ["training/neuralese/natlang_neuralese/rl/native_replay.py", "tests/neuralese/test_rl_episode_graph.py"]},
-   "parity": {"status": "covered", "evidence": ["tests/neuralese/test_prompt_rendering_parity.py", "tests/neuralese/test_lfm3_format.py", "ts-host/test/prompt-pieces-export.test.mjs"]}
+   "parity": {"status": "covered", "evidence": ["tests/neuralese/test_serving_prompt_rebuild.py", "tests/neuralese/test_lfm3_format.py", "ts-host/test/prompt-pieces-export.test.mjs"]}
   },
   "runtime-authored-call": {
    "summary": "A natlang call whose instructions the runtime or a host tool writes: refinement:holds (no scoring driver), the iterateOn progress judge (builtin progressJudge), bash ask, natlang ask (CLI), nl@python, the delegate tool's directory reducer, the specializer's compareBehaviors judge. Each runs as tool-loop turns, so the generic mechanisms apply; their data coverage is measured in the audit.",
@@ -17,7 +17,7 @@
    "endpoints": ["/v1/chat/completions"],
    "sft": {"status": "covered", "evidence": ["training/neuralese/natlang_neuralese/train/own_output_supervision.py"]},
    "rl": {"status": "covered", "evidence": ["training/neuralese/natlang_neuralese/rl/episode_graph.py", "tests/neuralese/test_rl_episode_graph.py"]},
-   "parity": {"status": "covered", "evidence": ["tests/neuralese/test_prompt_rendering_parity.py", "ts-host/test/prompt-pieces-export.test.mjs"]}
+   "parity": {"status": "covered", "evidence": ["tests/neuralese/test_serving_prompt_rebuild.py", "ts-host/test/prompt-pieces-export.test.mjs"]}
   },
   "decision-readout": {
    "summary": "A finite-typed call answered by scoring every allowed JSON value as the reply (readout: decision, decisionReadout: finite-returns, decide()).",
@@ -96,6 +96,7 @@
   "/v1/neuralese/info": {"model_facing": false, "reason": "capabilities and rendering identity"},
   "/v1/neuralese/adapters": {"model_facing": false, "reason": "adapter artifact creation"},
   "/v1/neuralese/collect": {"model_facing": false, "reason": "store garbage collection"},
+  "/v1/neuralese/rebind-policy": {"model_facing": false, "reason": "attests which policy an in-place GRPO weight update serves"},
   "/v1/neuralese/grad": {"model_facing": false, "reason": "learning: gradients of recorded objectives (consumes recordings of the kinds above)"},
   "/v1/neuralese/optim": {"model_facing": false, "reason": "learning: optimizer step"},
   "/v1/neuralese/guidance/check": {"model_facing": false, "reason": "crisp guidance verdict on a given reply; no model call"},

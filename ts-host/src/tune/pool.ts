@@ -8,9 +8,9 @@
  *   importCases   the pool's collector result rows → `natlang.tune-root/v1` records, each model turn mapped to its
  *                 invocation's binding through the site-aware scaffold, under the exact collector actor identity.
  *
- * The collector renders the same call messages as the ordinary runtime, but its system prompt appends the collection
- * guidance (`GENERATION_GUIDANCE`). Training rows present the serving prompt: the import removes exactly that block
- * from each system message and rejects a row whose prompt is anything else.
+ * The collector renders the same call messages and system prompt as the ordinary runtime (`SYSTEM_PROMPT`: the tool
+ * prompt and its guidance block; one prompt for run and training since 2026-11-12). The import keeps each system message
+ * as recorded and rejects a row whose prompt is anything else.
  */
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
@@ -112,12 +112,12 @@ export function collectorTeacherId(provenance: Record<string, unknown>, reviewed
   return `collector:${String(provenance.provider ?? provenance.transport ?? 'unknown')}:${String(provenance.model)}:${sha(json(identity)).slice(0, 16)}`;
 }
 
-/** The serving system message for a collector system message: exactly one collection-guidance block removed. */
+/** A collector system message is the serving one: the tool prompt with exactly one guidance block (the full one, or
+ * the one at the nl depth limit). */
 function servingSystem(content: string): string | null {
   for (const block of [GENERATION_GUIDANCE, GENERATION_GUIDANCE_AT_NL_DEPTH_LIMIT]) {
     const at = content.indexOf(block);
-    if (at >= 0 && content.indexOf(block, at + 1) < 0 && content.startsWith(TOOLS_PROMPT.slice(0, 400)))
-      return content.slice(0, at) + content.slice(at + block.length);
+    if (at >= 0 && content.indexOf(block, at + 1) < 0 && content.startsWith(TOOLS_PROMPT.slice(0, 400))) return content;
   }
   return null;
 }
@@ -396,7 +396,7 @@ export function importCases(context: PoolContext, path: string, custody: TunePoo
       const messages = structuredClone(step.context ?? []);
       const system = messages[0];
       const served = system?.role === 'system' && typeof system.content === 'string' ? servingSystem(system.content) : null;
-      if (served === null) { bad = 'a system message is not the collector prompt with exactly one collection-guidance block'; break; }
+      if (served === null) { bad = 'a system message is not the serving prompt with exactly one guidance block'; break; }
       messages[0] = { ...system!, content: served };
       const call = step.invocation_id ?? null, turn = (counters.get(call ?? '') ?? 0) + 1;
       counters.set(call ?? '', turn);
@@ -435,7 +435,7 @@ export function importCases(context: PoolContext, path: string, custody: TunePoo
         action_policy: 'natlang.tune-action-outcome/2',
         program_ir_sha256: provenance.program_ir_sha256 ?? null,
         model: provenance.model ?? null, provider: provenance.provider ?? null, system_prompt_sha256: provenance.system_prompt_sha256 ?? null,
-        rerendered: 'collector system prompt with its collection-guidance block removed' } };
+        rerendered: null } };
     const target = rootRecordPath(root, example, teacher);
     mkdirSync(join(tuneDirectory(root), 'data', 'roots'), { recursive: true });
     const encoded = JSON.stringify(record);

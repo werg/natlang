@@ -226,6 +226,8 @@ def test_reviewed_plan_rejects_spool_outside_configured_root(reviewed_plan):
 
 
 def test_external_campaign_root_is_allowlisted_and_bound_to_its_filesystem(reviewed_plan):
+    if not os.path.ismount(dispatcher.machine_resolve('data_hdd').expanduser().resolve(strict=False)):
+        pytest.skip('the external data disk (data_hdd) is not mounted')
     plan_path, _, _, plan = reviewed_plan
     approved_root = dispatcher._external_campaign_root()
     external_root = approved_root / f'.dispatch-test-{uuid.uuid4().hex}'
