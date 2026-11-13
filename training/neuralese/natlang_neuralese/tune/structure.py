@@ -80,11 +80,9 @@ def program_structure(root):
     main = root / 'main.nl'
     fields, _ = _frontmatter(main.read_text()) if main.is_file() else ({}, '')
     operations = set()
-    examples = root / 'tune.examples.jsonl'
+    examples = root / 'examples.json'
     if examples.is_file():
-        for line in examples.read_text().splitlines():
-            if line.strip():
-                operations.add(json.loads(line).get('function'))
+        operations.update(example.get('function') for example in json.loads(examples.read_text()))
     everything = '\n'.join(texts.values()) + '\n' + '\n'.join(path.read_text() for path in ts_files)
     ordered_rules = any(_ordered_rules(_frontmatter(text)[1]) for text in texts.values())
     features = {

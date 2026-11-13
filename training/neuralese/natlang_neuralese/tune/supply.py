@@ -438,7 +438,7 @@ def examples(domain, family, *, worlds, seed):
                     break
             counts[label] += 1
             note = NOTES[(world + invocation) % len(NOTES)] + f' Reference {world}-{invocation}'
-            rows.append({'function': 'main.nl', 'input': {domain.arg: {domain.note: note, **record}}, 'expected': label,
+            rows.append({'function': 'main.nl', 'inputs': {domain.arg: {domain.note: note, **record}}, 'expected': label,
                          'group': f'{family}:world-{world:04d}'})
     return rows, counts
 
@@ -465,8 +465,8 @@ def write_programs(out, *, domains=None, variants=None, worlds=64, seed=20261027
                 path.write_text(text)
             (directory / 'package.json').write_text(json.dumps({'name': f'@natlang/tune-{name}', 'private': True, 'type': 'module'}) + '\n')
             rows, counts = examples(program, f'{prefix}:{name}', worlds=worlds, seed=hash_seed(seed, name))
-            payload = ''.join(json.dumps(row, sort_keys=True) + '\n' for row in rows)
-            (directory / 'tune.examples.jsonl').write_text(payload)
+            payload = json.dumps(rows, indent=1, sort_keys=True) + '\n'
+            (directory / 'examples.json').write_text(payload)
             summaries.append({'program': name, 'family': domain.name, 'variant': index, 'path': str(directory), 'roots': len(rows),
                               'worlds': worlds, 'examples_sha256': hashlib.sha256(payload.encode()).hexdigest(), 'outcomes': counts,
                               'files': {relative: hashlib.sha256(text.encode()).hexdigest() for relative, text in sorted(files.items())}})
@@ -522,7 +522,7 @@ def privileged_case(program, example, *, program_name, files):
     """One training root as a shared privileged-context case (`rl.privileged_context.case_facts` reads it): the
     verified root result, each natural-language child call's verified value bound to its own prompt by an exact match
     string, and an exact helper output as decisive evidence."""
-    record = {key: value for key, value in example['input'][program.arg].items() if key != program.note}
+    record = {key: value for key, value in example['inputs'][program.arg].items() if key != program.note}
     calls, result = reference_values(program, record)
     if result != example['expected']:
         raise ValueError(f'{program_name}: recomputed oracle {result!r} differs from the recorded expected value '
@@ -534,9 +534,9 @@ def privileged_case(program, example, *, program_name, files):
             children.append({'match': [_instruction_match(source)], 'value': value})
         else:  # an exact TypeScript helper: its output is evidence for the root, not a model call's answer
             decisive.append(f'{name}({program.arg}) returns {json.dumps(value)}')
-    ident = hashlib.sha256(json.dumps([program_name, example['group'], example['input']], sort_keys=True).encode()).hexdigest()[:24]
+    ident = hashlib.sha256(json.dumps([program_name, example['group'], example['inputs']], sort_keys=True).encode()).hexdigest()[:24]
     return {'id': f'supply:{program_name}:{ident}', 'split': 'train', 'source_groups': [example['group']],
-            'semantics': {'root': example['function'], 'inputs': example['input'], 'expected': result},
+            'semantics': {'root': example['function'], 'inputs': example['inputs'], 'expected': result},
             'curriculum': {'reference': {'children': children}, **({'decisive': decisive} if decisive else {})}}
 
 
@@ -555,10 +555,7 @@ def privileged_rows(directory, program, custody):
     components = split['components']
     files = program_files(program)
     rows, counts = [], {}
-    for line in (directory / 'tune.examples.jsonl').read_text().splitlines():
-        if not line.strip():
-            continue
-        example = json.loads(line)
+    for example in json.loads((directory / 'examples.json').read_text()):
         group = example.get('group')
         if group not in components:
             raise ValueError(f'{directory}: root group {group!r} has no persisted partition')
@@ -568,7 +565,7 @@ def privileged_rows(directory, program, custody):
             continue  # privileged context comes only from training worlds
         case = privileged_case(program, example, program_name=directory.name, files=files)
         receipt, facts = case_facts(case, custody=custody)
-        rows.append({'schema': PRIVILEGED_SCHEMA, 'function': example['function'], 'group': group, 'input': example['input'],
+        rows.append({'schema': PRIVILEGED_SCHEMA, 'function': example['function'], 'group': group, 'input': example['inputs'],
                      'result': case['semantics']['expected'], 'case_id': case['id'], 'custody': receipt,
                      'facts': [{'id': fact.id, 'kind': fact.kind, 'text': fact.text, 'match': list(fact.match),
                                 'sha256': fact.digest} for fact in facts],

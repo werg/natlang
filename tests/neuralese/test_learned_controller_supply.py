@@ -28,21 +28,21 @@ def test_controller_references_only_training_worlds_and_reject_conflicting_label
     split.parent.mkdir(parents=True)
     split.write_text(json.dumps({'schema': 'natlang.tune-split/v1',
                                  'components': {'train-world': 'train', 'held-world': 'development'}}))
-    train = {'group': 'train-world', 'function': 'adapt/shouldStop.nl', 'input': {'state': 17}, 'expected': True}
+    train = {'group': 'train-world', 'function': 'adapt/shouldStop.nl', 'inputs': {'state': 17}, 'expected': True}
     held = {**train, 'group': 'held-world'}
-    examples = tmp_path / 'examples.jsonl'
-    examples.write_text('\n'.join(map(json.dumps, [train, train, held])) + '\n')
+    examples = tmp_path / 'examples.json'
+    examples.write_text(json.dumps([train, train, held]))
     monkeypatch.setattr(sys, 'argv', ['controller-supply', '--controller', str(program), '--examples', str(examples),
                                       '--root', str(protection_root)])
     MODULE.main()
     rows = [json.loads(line) for line in (program / 'tune.privileged.jsonl').read_text().splitlines()]
     assert len(rows) == 1 and rows[0]['group'] == 'train-world'
     assert rows[0]['result'] is True and rows[0]['custody']['split'] == 'train'
-    examples.write_text('\n'.join(map(json.dumps, [train, {**train, 'expected': False}])) + '\n')
+    examples.write_text(json.dumps([train, {**train, 'expected': False}]))
     with pytest.raises(ValueError, match='conflicting exact controller labels'):
         MODULE.main()
     split.write_text(json.dumps({'schema': 'natlang.tune-split/v1',
                                  'components': {'protected-world': 'train'}}))
-    examples.write_text(json.dumps({**train, 'group': 'protected-world'}) + '\n')
+    examples.write_text(json.dumps([{**train, 'group': 'protected-world'}]))
     with pytest.raises(ValueError, match='protected'):
         MODULE.main()
