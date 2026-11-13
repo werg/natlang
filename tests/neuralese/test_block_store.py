@@ -320,3 +320,16 @@ def test_trainer_block_collection_keeps_blocks_the_actor_used_since_the_cutoff(t
     assert all(store._path(r.id).exists() for r in (read, rewritten, fresh, artifact))   # artifacts are never collected
     assert store.get_native_state(old.id) is not None and store._path(old.id).exists()     # resident: written again
     store.close()
+
+
+def test_directory_store_is_a_bounded_lru_by_default(tmp_path):
+    """A directory store without an explicit bound evicts beyond DEFAULT_RESIDENT_BYTES (the actor front's leak)."""
+    from natlang_neuralese.serve import store as store_module
+    assert TensorStore().resident_bytes is None
+    store = TensorStore(tmp_path)
+    assert store.resident_bytes == store_module.DEFAULT_RESIDENT_BYTES
+    store.resident_bytes = 40
+    records = [store.put_native_state(_state(float(i)), "producer") for i in range(1, 5)]
+    assert store.resident < 4
+    assert store.get_native_state(records[0].id).id == records[0].id
+    store.close()

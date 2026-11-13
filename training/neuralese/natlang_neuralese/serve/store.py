@@ -24,6 +24,9 @@ _NATIVE_DTYPES = {torch.float16: ("F16", 2), torch.bfloat16: ("BF16", 2),
 _NATIVE_FROM_SAFE = {value[0]: (key, value[1]) for key, value in _NATIVE_DTYPES.items()}
 
 
+DEFAULT_RESIDENT_BYTES = 2 << 30  # resident payload bytes of a directory store (serve --store-resident-gb)
+
+
 def _native_tensor_bytes(tensor: torch.Tensor) -> bytes:
     data = tensor.detach().contiguous().cpu()
     if data.dtype == torch.bfloat16:
@@ -154,7 +157,10 @@ class TensorStore:
 
     def __init__(self, directory: str | os.PathLike | None = None, resident_bytes: int | None = None):
         self.directory = Path(directory) if directory is not None else None
-        self.resident_bytes = resident_bytes
+        # A directory store keeps its payloads on disk, so residency is a bounded LRU by default: unbounded, the GRPO
+        # actor front (serve_native_checkpoint.py) held every block it ever stored, ~8 GB of RSS by grpo-v1-run2 step 5.
+        self.resident_bytes = (DEFAULT_RESIDENT_BYTES if resident_bytes is None and self.directory is not None
+                               else resident_bytes)
         self._resident: OrderedDict[str, NativeStateRecord | NativeTensorRecord] = OrderedDict()
         self._resident_size = 0
         self._lock = threading.Lock()
