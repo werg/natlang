@@ -29,7 +29,7 @@
     {
      "role": "tool",
      "tool_call_id": "scope_0",
-     "content": "trajectory: IterationTrajectory = { iterationId: \"iter-<id>\", siteId: \"unsited:step\", length: 11, state: [function state #1 (1 parameters); live value, use it in eval], states: [function states #2; live value, use it in eval], steps: [function steps #3; live value, use it in eval], <<cut off: 2 of 8 fields not shown; trajectory holds all of it>> }\nstep: string = \"step\"\nDeclared trajectory, step for the rest of this call."
+     "content": "trajectory: IterationTrajectory = { iterationId: \"iter-<id>\", siteId: \"unsited:step\", length: 11, state: [function state #1 (1 parameters); live value, use it in eval], states: [function states #2; live value, use it in eval], steps: [function steps #3; live value, use it in eval], <<cut off: 2 of 8 fields not shown; only this display is shortened, trajectory holds the complete value>> }\nstep: string = \"step\"\nDeclared trajectory, step for the rest of this call."
     }
    ],
    "tools": [
