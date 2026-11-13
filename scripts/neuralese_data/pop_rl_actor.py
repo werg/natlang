@@ -71,9 +71,10 @@ POP_MAX_RUNNING = 16
 
 def pop_sglang(kv_cache_dtype=POP_KV_CACHE_DTYPE, max_running=POP_MAX_RUNNING):
     """(job['sglang'] settings, actor export format) of Pop's SGLang engine. max_total_tokens is only a cap: SGLang
-    sizes the pool from what mem-fraction 0.8 leaves (BF16 94.7k, FP8 about 180k tokens)."""
+    sizes the pool from what mem-fraction 0.8 leaves (BF16 94.7k, FP8 about 180k tokens; a fork with hybrid SWA KV keeps
+    the 5 sliding layers at their window, about 1.7x the tokens, so the caps leave room for that)."""
     fp8 = kv_cache_dtype != 'auto'
-    settings = {'kv_cache_dtype': kv_cache_dtype, 'max_running': max_running, 'max_total_tokens': 262144 if fp8 else 131072}
+    settings = {'kv_cache_dtype': kv_cache_dtype, 'max_running': max_running, 'max_total_tokens': 524288 if fp8 else 262144}
     return settings, SGLANG_EXPORT_FORMAT + (f'-kv-{kv_cache_dtype}' if fp8 else '')
 
 

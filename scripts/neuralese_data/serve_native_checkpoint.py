@@ -88,6 +88,15 @@ def main() -> None:
                         help="SGLang's overlapped scheduler. Off by default: on DGX GB10 with CUDA graphs it put "
                              'tokens of a wrong distribution into 2-6%% of real RL turns (up to 24 nats from the '
                              'learner); without it 0 of 64 (2026-11-03, plans/neuralese/LFM3_RL_ACTOR_ENGINE_20261028.md)')
+    # Hybrid SWA KV (fork NATLANG_HYBRID_SWA_KV): LFM3's 5 sliding layers keep only their 256-token window in SGLang's
+    # SWA pool, the 6 full layers every token (12 of 22 KB a token in BF16). The SWA pool holds swa-ratio x the full
+    # pool's tokens: the running requests' windows, prefill chunks in flight and the radix cache's window tails.
+    parser.add_argument('--sglang-swa-ratio', type=float, default=0.1,
+                        help="SWA-pool tokens per full-pool token (SGLang --swa-full-tokens-ratio) on a fork with "
+                             "hybrid SWA KV")
+    parser.add_argument('--sglang-full-kv', action='store_true',
+                        help='opt out of hybrid SWA KV: every attention layer keeps full-length KV '
+                             '(--disable-hybrid-swa-memory)')
     parser.add_argument('--sglang-arg', action='append', default=[], help='extra sglang.launch_server argument')
     parser.add_argument('--hf-export-dir', type=Path, help='HF export cache (default: <store-dir or checkpoint dir>/sglang-hf/<sha>)')
     args = parser.parse_args()
@@ -299,21 +308,50 @@ def attest_sglang_source(python, fork, pythonpath=''):
     actual = git('rev-parse', 'HEAD') if git('rev-parse', '--show-toplevel') is not None else None
     dirty = bool(git('status', '--porcelain', '--untracked-files=all', '--', 'python/sglang')) if actual else None
     declared = fork.get('commit')
+    lfm3 = package.parent / 'srt/models/lfm3.py'
     record = {'commit': actual, 'declared_commit': declared, 'matches_declared': actual == declared, 'dirty': dirty,
-              'package': str(package), 'python': str(Path(python).resolve())}
+              'package': str(package), 'python': str(Path(python).resolve()),
+              'hybrid_swa_kv': lfm3.is_file() and 'NATLANG_HYBRID_SWA_KV = True' in lfm3.read_text()}
     if actual != declared or dirty:
         print(json.dumps({'event': 'sglang_fork_differs_from_declared', **record}), file=sys.stderr, flush=True)
     return record
 
 
-def sglang_pool(export_dir, args, context):
-    """(KV pool tokens, mem-fraction-static): the pool from --sglang-max-total-tokens or --sglang-kv-gb (the export's
-    attention layers x KV heads x head dim x K and V x dtype bytes per token), the fraction so that SGLang's static
-    allocation (weights + pool + ~6 GB graphs/activations) fits the memory free now, whatever other jobs hold."""
+def kv_layout(export_dir, args, source):
+    """'hybrid-swa' when the fork keeps LFM3's sliding layers at their window (NATLANG_HYBRID_SWA_KV) and the export has
+    sliding and full attention layers, unless --sglang-full-kv; else 'full'."""
     config = json.loads((Path(export_dir) / 'config.json').read_text())
-    layers = sum(1 for kind in config.get('layer_types', []) if 'attention' in kind) or config['num_hidden_layers']
+    kinds = set(config.get('layer_types', []))
+    mixed = {'sliding_attention', 'full_attention'} <= kinds and bool(config.get('sliding_window'))
+    return 'hybrid-swa' if mixed and source.get('hybrid_swa_kv') and not args.sglang_full_kv else 'full'
+
+
+def sglang_pool(export_dir, args, context, layout='full'):
+    """(KV pool tokens, mem-fraction-static): the pool from --sglang-max-total-tokens or --sglang-kv-gb, the fraction so
+    that SGLang's static allocation (weights + pool + ~6 GB graphs/activations) fits the memory free now, whatever
+    other jobs hold. Bytes per pool token: KV heads x head dim x K and V x dtype bytes per attention layer; with hybrid
+    SWA KV (``layout``) the full layers count once and the sliding layers ``--sglang-swa-ratio`` times (SGLang sizes the
+    SWA pool as that share of the full pool's tokens). The pool tokens are the full layers' tokens."""
+    config = json.loads((Path(export_dir) / 'config.json').read_text())
+    kinds = config.get('layer_types', [])
     head_dim = config.get('head_dim') or config['hidden_size'] // config['num_attention_heads']
-    per_token = layers * config['num_key_value_heads'] * head_dim * 2 * (1 if args.sglang_kv_cache_dtype.startswith('fp8') else 2)
+    per_layer = config['num_key_value_heads'] * head_dim * 2 * (1 if args.sglang_kv_cache_dtype.startswith('fp8') else 2)
+    if layout == 'hybrid-swa':
+        full = sum(1 for kind in kinds if kind == 'full_attention')
+        sliding = sum(1 for kind in kinds if kind == 'sliding_attention')
+        per_token = per_layer * (full + args.sglang_swa_ratio * sliding)
+        total = args.sglang_max_total_tokens or int(args.sglang_kv_gb * 1e9 // per_token)
+        # The SWA pool must hold every running request's window (+ SGLang's 128-token eviction interval and a page)
+        # and two prefill chunks in flight; below that the ratio is raised (small pools only).
+        floor = args.sglang_max_running * (config['sliding_window'] + 130) + 2 * 16384
+        if args.sglang_swa_ratio * total < floor:
+            if not args.sglang_max_total_tokens:   # the GB budget then holds the floor's SWA bytes first
+                total = int((args.sglang_kv_gb * 1e9 / per_layer - floor * sliding) / full)
+            args.sglang_swa_ratio = min(1.0, -(-floor * 1000 // max(total, 1)) / 1000)
+            per_token = per_layer * (full + args.sglang_swa_ratio * sliding)
+    else:
+        layers = sum(1 for kind in kinds if 'attention' in kind) or config['num_hidden_layers']
+        per_token = per_layer * layers
     total = args.sglang_max_total_tokens or int(args.sglang_kv_gb * 1e9 // per_token)
     if total < context:
         raise ValueError('the KV pool must hold one full-context sequence')
@@ -332,7 +370,8 @@ def sglang_pool(export_dir, args, context):
     if fraction > 0.95:
         raise RuntimeError(f'SGLang needs {need / 1e9:.1f} GB (KV {total * per_token / 1e9:.1f} GB) but only '
                            f'{free / 1e9:.1f} GB is free; lower --sglang-kv-gb')
-    print(json.dumps({'event': 'sglang_pool', 'tokens': total, 'kv_bytes_per_token': per_token,
+    print(json.dumps({'event': 'sglang_pool', 'tokens': total, 'kv_layout': layout, 'kv_bytes_per_token': round(per_token),
+                      **({'swa_tokens': int(total * args.sglang_swa_ratio)} if layout == 'hybrid-swa' else {}),
                       'kv_gb': round(total * per_token / 1e9, 2), 'free_gb': round(free / 1e9, 1),
                       'mem_fraction_static': round(fraction, 4)}), flush=True)
     return total, fraction
@@ -366,7 +405,10 @@ def launch_sglang(engine, args, checkpoint, release=None):
     # The front sizes each reply to the room left in the backend's context; with the trained maximum it asked for
     # 8192 tokens after a 24.6k prompt and SGLang refused the request (w5 round 2: 2 episodes lost, 5 held-eval).
     engine.context = context
-    total, fraction = sglang_pool(export_dir, args, context)
+    layout = kv_layout(export_dir, args, source)
+    total, fraction = sglang_pool(export_dir, args, context, layout)
+    swa = (['--swa-full-tokens-ratio', str(args.sglang_swa_ratio)] if layout == 'hybrid-swa'
+           else ['--disable-hybrid-swa-memory'] if args.sglang_full_kv else [])
     command = [python, '-m', 'sglang.launch_server', '--model-path', str(export_dir), '--host', '127.0.0.1',
                '--port', str(port), '--dtype', 'bfloat16', '--mem-fraction-static', f'{fraction:.4f}',
                '--context-length', str(context), '--max-total-tokens', str(total),
@@ -376,7 +418,7 @@ def launch_sglang(engine, args, checkpoint, release=None):
                '--max-mamba-cache-size', str(8 * args.sglang_max_running),
                '--cuda-graph-max-bs-decode', str(args.sglang_max_running),
                '--incremental-streaming-output', '--stream-interval', '8',
-               '--skip-tokenizer-init', '--trust-remote-code',
+               '--skip-tokenizer-init', '--trust-remote-code', *swa,
                *([] if args.sglang_overlap_schedule else ['--disable-overlap-schedule']), *args.sglang_arg]
     print(json.dumps({'event': 'sglang_launch', 'command': command, 'export': manifest, 'source': source}), flush=True)
     # FlashInfer and SGLang JIT-compile kernels: the fork venv's ninja and a CUDA toolkit's nvcc on PATH. Without a system
@@ -398,7 +440,7 @@ def launch_sglang(engine, args, checkpoint, release=None):
                              'declared_commit': source['declared_commit'], 'dirty': source['dirty']},
                        adapter_slots=args.sglang_adapter_slots, adapter_rank=args.sglang_adapter_rank,
                        projection=args.sglang_projection, overlap_schedule=args.sglang_overlap_schedule,
-                       kv_cache_dtype=args.sglang_kv_cache_dtype)
+                       kv_cache_dtype=args.sglang_kv_cache_dtype, kv_layout=layout)
     return process
 
 

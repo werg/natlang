@@ -155,7 +155,7 @@ class SglangEngine(Engine):
             self.native_reloads = getattr(self, 'native_reloads', 0) + 1
 
     def bind_sglang(self, url, *, export_manifest, fork, workers=512, adapter_slots=0, adapter_rank=32,
-                    projection='native', overlap_schedule=False, kv_cache_dtype='auto'):
+                    projection='native', overlap_schedule=False, kv_cache_dtype='auto', kv_layout='full'):
         self.sglang_url, self.sglang_workers = url.rstrip('/'), workers
         # Native adapters on SGLang (fork NatlangAdapters): `adapter_slots` resident stacks of summed rank
         # <= `adapter_rank` per module; the front assigns slots and never reassigns one while a request uses it.
@@ -204,7 +204,7 @@ class SglangEngine(Engine):
             binding['serving_engine'] = {'engine': 'sglang', 'fork': dict(fork),
                 'hf_export_weights_sha256': export_manifest['weights_sha256'], 'dtype': export_manifest['dtype'],
                 'bf16_reduction': os.environ.get('NATLANG_BF16_REDUCTION', 'fp32-accumulate'), 'projection': projection,
-                'overlap_schedule': bool(overlap_schedule), 'kv_cache_dtype': kv_cache_dtype,
+                'overlap_schedule': bool(overlap_schedule), 'kv_cache_dtype': kv_cache_dtype, 'kv_layout': kv_layout,
                 'banned_token_ids': list(self.sglang_banned)}
             binding['actor_export'] = dict(self.sglang_actor_export)
         return self
