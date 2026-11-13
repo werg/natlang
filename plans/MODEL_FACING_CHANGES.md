@@ -3,6 +3,40 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-13 — harness review of 512 base held-v2 episodes: history as sampled, tool-result texts, loop bound, folder bash
+
+From the review of `run2/held/step-00000` (base 5ff07638, pin 37c221bfe, 256 x 2) and the token captures of 7 run2 groups.
+First-principles fixes, not A/B-gated; they enter at the next pin. Removing `read-file-binding` changes the held series
+key, so the base is re-measured there.
+- **History is the reply as sampled** (499c7b326, b4f482cc1, d12bdb5a1). 43 of 659 consecutive call pairs (6.5%) did not
+  extend prompt + sampled ids. (a) ~11: a string argument renders bare wherever the bare text parses back to the same
+  string (it came back JSON-quoted for unknown tools, unknown parameters and a typed `return_result.value`). (b) 8: text
+  before tool calls stays in the history (`reply-text-with-calls` is unconditional and the name is removed; the 11-12 A/B
+  is superseded by the owner rule); every sampled call stays, an unrun one is answered "Not run: ...". (c) ~11: an
+  argument that is not of its declared type reaches the tool as the sampled text (802e111bc did not cover this: the
+  server parse rejected the value first and the reply arrived as markup, got the generic "malformed" retry and was then
+  erased); unreadable markup stays in the history with one sentence and there is no hidden retry. (d) ~9 re-tokenised
+  think texts: sibling samples sharing a first prompt overwrote each other's stored reply in the append-only splice (cause
+  inferred); a prompt now keeps its last 16 distinct replies. Test: `tests/neuralese/test_history_fidelity.py`.
+  Open: a string sampled JSON-quoted for an untyped parameter renders bare; reasoning is still stripped server-side.
+- **`read_file` returns the file text only** (9d1406d32). The footer `(in eval: const text = ...)` appeared in the
+  model's reasoning in 62 episodes (49 failed), was written into files in 6, and read as a trailing blank line (rewrite
+  loops in rows 155/1, 87/1, 26/1). The hint is in the tool description; the variant is removed.
+- **Elision** (9d1406d32). A value whose whole literal is at most 300 characters is never elided; remaining notes say
+  only the display is shortened and name the holder of the complete value. The old markers were read as missing data
+  (failures 165/0, 31/0).
+- **Neuralese values in console output and stored-local lines** print as one plain line naming `read(value)`
+  (9d1406d32). The reference JSON was called garbled and cost 20+ `read_page`/`read_code` calls (28/0, 195/0, 182/1, 48/1).
+  `console.log(JSON.stringify(value))` still prints the raw reference.
+- **A call in a counted loop's bound is accepted** and read once at loop start; a nested loop reusing the counter name
+  no longer counts as assigning it (e221b45f5). 32 `forbidden-loop` rejections in 26 episodes.
+- **Folder bash**: `~`, `cd` and `$HOME` are the folder; removed files are listed as `removedPaths`, so `changedPaths`
+  holds only files that exist afterwards (4ebd5edf7). `mkdir` escaped to `/filed` after `cd ~`; `mv` results were read
+  as "mv didn't remove old files" (26/1, 87/1, 7/1).
+- Not done from the same review (open): `read_code` as an attractor (23% of actions, first action of 47% of
+  invocations; 718 `no-such-function`); re-declaring an input (298 `invalid-binding` rejections in 138 episodes); a
+  staged eval return with a field the declared type lacks, finalized by an empty reply (row 101/1).
+
 ### 2026-11-13 — eval refuses comparing a decide(...) record with an answer (decision-compare)
 
 `const verb = await decide(f, x); switch (verb) { case "create_booking": ... }` (or `verb === "..."`) never matches: the
