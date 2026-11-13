@@ -746,6 +746,46 @@ def test_lowering_keeps_sampled_decisions_as_categorical_actions():
     assert [o.tolist() for o in rows[0]['options']] == [[5, 6], [5, 7, 8]]
     assert math.isclose(rows[0]['behavior_logq'], -math.log1p(math.exp(-2.0)), rel_tol=1e-9)
     import grpo
-    ids, lengths, positions, targets, owner, counts = grpo.decision_tensors([{'row': rows[0], 'advantage': 1.}], 'cpu')
-    assert ids.tolist() == [1, 2, 3, 5, 6, 1, 2, 3, 5, 7, 8] and lengths == [5, 6] and counts == [2]
+    ids, lengths, positions, targets, owner, counts, spans = grpo.decision_tensors([{'row': rows[0], 'advantage': 1.}], 'cpu')
+    assert ids.tolist() == [1, 2, 3, 5, 6, 1, 2, 3, 5, 7, 8] and lengths == [5, 6] and counts == [2] and spans == []
     assert positions.tolist() == [2, 3, 7, 8, 9] and targets.tolist() == [5, 6, 5, 7, 8] and owner.tolist() == [0, 0, 1, 1, 1]
+    # a decision whose prompt imports native state: each option document carries the import at its own offset
+    native = {**decision, 'sampling': {**decision['sampling'], 'prompt': [
+        {'kind': 'tokens', 'token_ids': [1]}, {'kind': 'native_state', 'id': 'nzs1_ab'}, {'kind': 'tokens', 'token_ids': [3]}]}}
+    assert decision_turns({'turns': [native]}, stats) == [] and stats['skip_decision_native_state_prompt'] == 1
+    rows = decision_turns({'turns': [native]}, stats, _FakeStates({'nzs1_ab': [40, 41]}))
+    assert rows[0]['prompt'].tolist() == [1, 40, 41, 3] and rows[0]['imports'] == [(1, 'nzs1_ab')]
+    *_, spans = grpo.decision_tensors([{'row': rows[0], 'advantage': 1.}], 'cpu')
+    assert spans == [(1, 'nzs1_ab'), (7, 'nzs1_ab')]
+
+
+class _FakeStates:
+    def __init__(self, blocks):
+        import types
+        self.blocks = {k: types.SimpleNamespace(token_ids=v) for k, v in blocks.items()}
+
+    def exists(self, block_id):
+        return block_id in self.blocks
+
+    def __call__(self, block_id):
+        return self.blocks[block_id]
+
+
+def test_lowering_imports_native_state_of_consumer_calls():
+    import sys, collections
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts/neuralese_data'))
+    from lower_rollout_turns import episode_turns
+    turn = {'invocation_id': 'c', 'sampling': {'policy': {'checkpoint_sha256': 'p'}, 'prompt': [
+        {'kind': 'tokens', 'token_ids': [1, 2], 'producing': [False, False]}, {'kind': 'tokens', 'token_ids': [90]},
+        {'kind': 'native_state', 'id': 'nzs1_ab'}, {'kind': 'tokens', 'token_ids': [91]},
+        {'kind': 'native_state', 'id': 'nzs1_gone'}],
+        'samples': [{'index': 0, 'token_id': 9, 'logp': -0.5, 'input_role': 'ordinary'}], 'generated_inputs': []}}
+    stats = collections.Counter()
+    assert episode_turns({'turns': [turn]}, stats) == [] and stats['skip_native_state_prompt'] == 1
+    assert episode_turns({'turns': [turn]}, stats, _FakeStates({'nzs1_ab': [40, 41, 42]})) == []
+    assert stats['skip_native_state_missing'] == 1
+    turn['sampling']['prompt'].pop()
+    rows = episode_turns({'turns': [turn]}, stats, _FakeStates({'nzs1_ab': [40, 41, 42]}))
+    assert rows[0]['prompt'].tolist() == [1, 2, 90, 40, 41, 42, 91] and rows[0]['imports'] == [(3, 'nzs1_ab')]
+    assert stats['native_state_calls'] == 1

@@ -12,7 +12,9 @@ One process runs the whole loop; nothing else (no controller, custody or transit
   stragglers. A group sampled more than ``--max-staleness`` policy versions ago is dropped and counted.
 * learner (the Experiment 0 model path, ``exp0_sft`` / ``lfm3_fast_train``): FP32 master weights, AdamW, BF16 compute. Every
   model call is (exact actor prompt ids, sampled ids) (``lower_rollout_turns.episode_turns``; calls of one invocation chain
-  into one sequence as in ``exp0_sft.chains_of``). Loss on sampled tokens only:
+  into one sequence as in ``exp0_sft.chains_of``). A consumer call's imported Neuralese state is fixed context read from the
+  actor's block store and spliced into every layer as the actor's SGLang fork did (``lfm3_fast_train.import_tensors``);
+  no gradient reaches the producer, whose own sampled tokens train as its own calls. Loss on sampled tokens only:
   ``-min(rho, C) * A * logp + beta * k3(ref || policy)``, ``rho = exp(logp_learner - logp_actor)`` (truncated importance
   sampling against the actor's own sampling logprobs), ``A`` the group-normalized episode reward on every call of the
   episode, the reference the start policy. Summed over tokens, divided by the step's loss tokens.
@@ -173,6 +175,8 @@ class Collector:
         self.env = pinned_env()
         from natlang_neuralese.rl.held_eval import series
         self.env['NATLANG_MODEL_FACING'] = series()['model_facing']
+        from lower_rollout_turns import NativeStates
+        self.states = NativeStates(args.actor_store or work / 'actor')   # imported Neuralese state of consumer calls
 
     def _new_group(self):
         from natlang_neuralese.rl import task_rollouts
@@ -321,8 +325,8 @@ def load_group(collector, group, stats):
     episodes = []
     for row in read_jsonl(info['dir'] / 'rollouts.jsonl'):
         reward = row.get('reward')
-        rows = episode_turns(row, stats) if row.get('turns') else []
-        decisions = decision_turns(row, stats) if row.get('turns') else []
+        rows = episode_turns(row, stats, collector.states) if row.get('turns') else []
+        decisions = decision_turns(row, stats, collector.states) if row.get('turns') else []
         sampled = sum(len(r['sample']) for r in rows)
         collector.generated += sampled
         collector.episodes += 1
@@ -574,14 +578,16 @@ def decision_batches(items, max_tokens):
 
 
 def decision_tensors(batch, device):
-    """(ids, lengths, positions, targets, option index per target, options per decision) of a decision batch."""
+    """(ids, lengths, positions, targets, option index per target, options per decision, imported state spans
+    [(packed row start, block_id)]) of a decision batch."""
     import torch
-    ids, lengths, positions, targets, owner, counts, offset, option = [], [], [], [], [], [], 0, 0
+    ids, lengths, positions, targets, owner, counts, offset, option, imports = [], [], [], [], [], [], 0, 0, []
     for item in batch:
         row = item['row']
         counts.append(len(row['options']))
         for continuation in row['options']:
             prompt = len(row['prompt'])
+            imports += [(offset + start, block_id) for start, block_id in row.get('imports') or ()]
             ids += [row['prompt'], continuation]
             lengths.append(prompt + len(continuation))
             positions.append(np.arange(offset + prompt - 1, offset + prompt + len(continuation) - 1))
@@ -590,7 +596,7 @@ def decision_tensors(batch, device):
             offset += prompt + len(continuation)
             option += 1
     as_long = lambda parts: torch.from_numpy(np.concatenate(parts).astype(np.int64)).to(device)
-    return as_long(ids), lengths, as_long(positions), as_long(targets), as_long(owner), counts
+    return as_long(ids), lengths, as_long(positions), as_long(targets), as_long(owner), counts, imports
 
 
 def group_advantages(rewards):
@@ -1048,20 +1054,23 @@ def train(args):
         rng.shuffle(chains)
         for chain in chains:
             ids, positions, targets = exp0_sft.chain_tensors(chain, 'cuda')
+            # a consumer call's imported native state: fixed context exactly as the actor fed it (no producer gradient)
+            imports = lfm3_fast_train.import_tensors(model, [(start, collector.states(block_id))
+                                                             for start, block_id in chain.get('imports') or ()])
             actor = torch.from_numpy(np.concatenate([row['logp'] for _, _, row in chain['segs']])).cuda().float()
             t = time.time()
             ref = None
             if reference is not None:
                 exp0_sft.set_checkpointing(reference, len(ids), args.activation_gb)
                 with torch.enable_grad():
-                    ref = -exp0_sft.token_nll(reference, forward(reference, ids), positions, targets).detach()
+                    ref = -exp0_sft.token_nll(reference, forward(reference, ids, None, imports), positions, targets).detach()
                 for p in reference.parameters():
                     p.grad = None
                 torch.cuda.synchronize()
                 phase['reference_forward'] = phase.get('reference_forward', 0.) + time.time() - t
                 t = time.time()
             exp0_sft.set_checkpointing(model, len(ids), args.activation_gb)
-            h = forward(model, ids)
+            h = forward(model, ids, None, imports)
             logp = -exp0_sft.token_nll(model, h, positions, targets)
             with torch.no_grad():
                 log_rho = logp.detach() - actor
@@ -1078,6 +1087,11 @@ def train(args):
             sums['rho'] += rho.sum().item()
             sums['rho_capped'] += (rho > args.rho_cap).sum().item()
             sums['abs_log_rho'] += log_rho.abs().sum().item()
+            if chain.get('imports'):    # learner-actor agreement on calls that read imported Neuralese state
+                consumer = torch.from_numpy(np.concatenate([np.full(n, bool(row.get('imports')))
+                                                            for _, n, row in chain['segs']])).cuda()
+                sums['consumer_tokens'] += int(consumer.sum())
+                sums['consumer_abs_log_rho'] += log_rho.abs()[consumer].sum().item()
             sums['logp'] += logp.detach().sum().item()
             rho_pre_max = max(rho_pre_max, rho.max().item())
             rho_post_max = max(rho_post_max, weight.max().item())
@@ -1094,10 +1108,11 @@ def train(args):
         # Sampled decisions: log pi(chosen) = log_softmax(s / T)[chosen], s_o the summed log-probability of option o's
         # continuation after the exact prompt (as the actor scored it); TIS and k3 on the chosen option as for a token.
         for batch in decision_batches(decisions, args.decision_batch_tokens):
-            ids, lengths, positions, targets, owner, counts = decision_tensors(batch, 'cuda')
+            ids, lengths, positions, targets, owner, counts, spans = decision_tensors(batch, 'cuda')
+            imports = lfm3_fast_train.import_tensors(model, [(start, collector.states(block_id)) for start, block_id in spans])
             options = sum(counts)
             def scores_of(net):
-                token = -exp0_sft.token_nll(net, forward(net, ids, lengths), positions, targets)
+                token = -exp0_sft.token_nll(net, forward(net, ids, lengths, imports), positions, targets)
                 return torch.zeros(options, device='cuda', dtype=token.dtype).index_add(0, owner, token)
             t = time.time()
             ref_scores = None
@@ -1141,6 +1156,7 @@ def train(args):
             del scores, terms
             torch.cuda.synchronize()
             phase['decision_forward_backward'] = phase.get('decision_forward_backward', 0.) + time.time() - t
+        collector.states.cache.clear()    # this step's imported states (lowering loads them, the learner reuses them)
         t = time.time()
         saver.wait()                      # a state save in flight must finish before the masters change
         phase['wait_state_save'] = time.time() - t
@@ -1210,6 +1226,8 @@ def train(args):
             rho_mean=round(sums['rho'] / max(1, loss_tokens), 4), rho_pre_cap_max=round(rho_pre_max, 3),
             rho_post_cap_max=round(rho_post_max, 3), rho_capped_fraction=round(sums['rho_capped'] / max(1, loss_tokens), 5),
             abs_log_rho_mean=round(sums['abs_log_rho'] / max(1, loss_tokens), 5),
+            consumer_tokens=sums['consumer_tokens'],
+            consumer_abs_log_rho_mean=round(sums['consumer_abs_log_rho'] / max(1, sums['consumer_tokens']), 5),
             learner_tokens_per_s=round(forward_tokens / max(1e-6, learner_seconds)),
             actor_generated_tokens=collector.generated, actor_episodes=collector.episodes,
             actor_generated_tokens_per_s=round(collector.generated / max(1., elapsed)),
@@ -1245,6 +1263,8 @@ def main():
     t.add_argument('--actor-port', type=int, default=8460, help='port of the child actor (its SGLang server: +1000)')
     t.add_argument('--actor-arg', action='append', default=[], help='extra serve_native_checkpoint.py argument')
     t.add_argument('--sglang', help='its SGLang server (default: actor port + 1000)')
+    t.add_argument('--actor-store', help="the actor's native block store (--store-dir; default WORK/actor): consumer calls "
+                   'read their imported Neuralese state from it')
     t.add_argument('--actor-export', help="the actor's HF export dir (layout and frozen tables; default WORK/actor/sglang-hf)")
     t.add_argument('--pool', action='append', help='task pool cases.jsonl (repeatable; default: POOLS)')
     t.add_argument('--held-manifest', default=HELD)

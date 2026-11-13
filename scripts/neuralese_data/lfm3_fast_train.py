@@ -6,6 +6,7 @@ linear cross-entropy and a no-grad log-prob pass.
     h = hidden(model, ids, lengths=[n1, n2, ...])  # several documents packed into one row, each attending only itself
     nll = linear_nll(h[positions], model.lm_head.weight, targets)        # fp32 per-token NLL, logits never stored
     logp = token_logprobs(model, ids, positions, targets, lengths=...)   # no grad (GRPO old-policy / reference pass)
+    h = hidden(model, ids, imports=import_tensors(model, [(start, block)], device))   # imported native state spliced in
 
 The HF decoder layer is replaced by two functions over explicit tensors, one per layer kind (conv, attention), each
 `torch.compile`d (fullgraph, dynamic sequence length) and shared by every layer of its kind, with no HF mask/cache
@@ -17,6 +18,11 @@ and packed documents are separate sequences (`cu_seqlens`). The conv reads only 
 Rounding points follow HF: RMSNorm in fp32 rounded before its bf16 weight, RoPE in fp32 with bf16 cos/sin, the conv
 accumulated in fp32 from bf16 inputs and rounded once. Layers whose `gradient_checkpointing` flag is set (see
 `exp0_sft.set_checkpointing`) are recomputed in backward.
+
+Imported native Neuralese state (a consumer call's prompt as the SGLang actor fed it, `import_tensors`): at the imported
+rows every attention layer's keys (after the K norm, before RoPE) and values and every conv layer's input B*x are the
+stored block's, exactly the fork's `NatlangImport`; the rows' own outputs reach nothing. The state is a constant (no
+gradient into the producer); `exp0_sft.hidden` does the same on the stock HF modules through forward hooks.
 
 The vendored HF sources are hash-pinned (`third_party/lfm3`), so everything here reads instances, never patches files.
 """
@@ -73,15 +79,17 @@ def _ffn(x, ffn_norm, w1, w3, w2, post_ffn_norm, eps):
 
 
 def conv_layer(x, pos, operator_norm, in_proj, conv_weight, out_proj, post_operator_norm,
-               ffn_norm, w1, w3, w2, post_ffn_norm, eps: float):
+               ffn_norm, w1, w3, w2, post_ffn_norm, eps: float, import_rows=None, import_bx=None):
     """`Lfm3DecoderLayer` with `Lfm3ShortConv` on (T, D): the depthwise width-7 causal conv as seven shifted fp32
     multiply-adds (as the inference kernel accumulates), each tap only inside the token's document (``pos``: position
-    within the document)."""
+    within the document; ``import_rows``: rows whose B*x is the imported ``import_bx``)."""
     length = x.shape[0]
     taps = conv_weight.shape[-1]
     h = _rms(x, operator_norm, eps)
     b, c, xx = F.linear(h, in_proj).chunk(3, dim=-1)
     bx = b * xx
+    if import_rows is not None:
+        bx = bx.index_put((import_rows,), import_bx)
     weight = conv_weight.reshape(conv_weight.shape[0], taps).float()
     padded = F.pad(bx.float(), (0, 0, taps - 1, 0))
     acc = padded[taps - 1:taps - 1 + length] * weight[:, taps - 1]
@@ -95,13 +103,18 @@ def conv_layer(x, pos, operator_norm, in_proj, conv_weight, out_proj, post_opera
 
 
 def attention_layer(x, cos, sin, cu, max_len: int, doc, pos, operator_norm, wq, wk, wv, wo, wg, q_norm, k_norm,
-                    post_operator_norm, ffn_norm, w1, w3, w2, post_ffn_norm, eps: float, head_dim: int, window: int):
-    """`Lfm3DecoderLayer` with `Lfm3Attention` on (T, D): QK-norm, fp32 RoPE, flash attention, sigmoid head gate."""
+                    post_operator_norm, ffn_norm, w1, w3, w2, post_ffn_norm, eps: float, head_dim: int, window: int,
+                    import_rows=None, import_k=None, import_v=None):
+    """`Lfm3DecoderLayer` with `Lfm3Attention` on (T, D): QK-norm, fp32 RoPE, flash attention, sigmoid head gate
+    (``import_rows``: rows whose normed pre-RoPE keys and values are the imported ``import_k``/``import_v``)."""
     length = x.shape[0]
     h = _rms(x, operator_norm, eps)
     q = _rms(F.linear(h, wq).view(length, -1, head_dim), q_norm, eps)
     k = _rms(F.linear(h, wk).view(length, -1, head_dim), k_norm, eps)
     v = F.linear(h, wv).view(length, -1, head_dim)
+    if import_rows is not None:
+        k = k.index_put((import_rows,), import_k)
+        v = v.index_put((import_rows,), import_v)
     q, k = _rope(q, cos, sin), _rope(k, cos, sin)
     o = _attend(q, k, v, (cu, max_len, doc, pos), window)
     o = (o * torch.sigmoid(F.linear(h, wg))[..., None]).reshape(length, -1)
@@ -188,9 +201,35 @@ def _rope_tables(model, pos, dtype):
     return tables
 
 
-def hidden(model, ids, lengths=None):
+def import_tensors(model, spans, device=None):
+    """Imported native state of one (packed) sequence for ``hidden``: ``spans`` [(row start, NativeStateBlock)] ->
+    {'rows': int64 (n,), 'layers': [per layer (k, v) for attention, (bx,) for conv, in the model's dtype]}, or None when
+    nothing is imported. The block's tensors are what the SGLang actor imports (``sglang_actor._sglang_import_file``)."""
+    layers = model.model.layers
+    device = device or model.model.embed_tokens.weight.device
+    dtype = model.model.embed_tokens.weight.dtype
+    rows, parts = [], [[] for _ in layers]
+    for start, block in spans:
+        count = len(block.token_ids)
+        if len(block.layers) != len(layers):
+            raise ValueError(f'native state has {len(block.layers)} layers, the model {len(layers)}')
+        for index, (layer, state) in enumerate(zip(layers, block.layers)):
+            kind = 'attention' if layer.is_attention_layer else 'finite_convolution'
+            if state['kind'] != kind:
+                raise ValueError(f'native state layer {index} is {state["kind"]}, the model has {kind}')
+            parts[index].append((state['raw_k'], state['v']) if kind == 'attention' else (state['gated_inputs'],))
+        rows.extend(range(start, start + count))
+    if not rows:
+        return None
+    return {'rows': torch.tensor(rows, dtype=torch.long, device=device),
+            'layers': [tuple(torch.cat([p[field] for p in part]).to(device=device, dtype=dtype)
+                             for field in range(len(part[0]))) for part in parts]}
+
+
+def hidden(model, ids, lengths=None, imports=None):
     """Final hidden states (T, D) of ``ids`` (1-D): one causal document, or ``lengths`` documents packed back to back
-    (each attends and convolves only within itself, positions restart at 0)."""
+    (each attends and convolves only within itself, positions restart at 0). ``imports``: ``import_tensors`` (rows are
+    indices into ``ids``)."""
     config = model.model.config
     fast = getattr(model, '_lfm3_fast', None)
     compiled = fast is not None and fast['compile']
@@ -206,6 +245,8 @@ def hidden(model, ids, lengths=None):
         else:
             cos, sin = tables[config.layer_types[index]]
             args = (x, cos, sin, cu, max_len, doc, pos) + static
+        if imports is not None:
+            args = args + (imports['rows'],) + imports['layers'][index]
         if grad and getattr(layer, 'gradient_checkpointing', False):
             x = torch_checkpoint(function, *args, use_reentrant=False)
         else:
@@ -285,8 +326,8 @@ def linear_nll(h, weight, target, chunk=LOGIT_CHUNK):
 
 
 @torch.no_grad()
-def token_logprobs(model, ids, positions, targets, lengths=None, chunk=LOGIT_CHUNK):
+def token_logprobs(model, ids, positions, targets, lengths=None, chunk=LOGIT_CHUNK, imports=None):
     """Log-probabilities (fp32) of ``targets`` predicted at rows ``positions`` of the packed ``ids`` (no grad: the
     GRPO behaviour / reference recompute). Pack many sequences per call (``lengths``) for throughput."""
-    h = hidden(model, ids, lengths)
+    h = hidden(model, ids, lengths, imports)
     return -linear_nll(h[positions], model.lm_head.weight, targets, chunk)

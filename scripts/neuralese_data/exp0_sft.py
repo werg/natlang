@@ -51,8 +51,9 @@ MAX_LEN = 32000
 
 
 def chains_of(episodes, max_len=MAX_LEN):
-    """Sequences: [{'ids': int32[], 'segs': [(start, length, row)], 'task', 'round'}]; calls of one invocation whose prompt
-    extends the previous call's full text share a sequence."""
+    """Sequences: [{'ids': int32[], 'segs': [(start, length, row)], 'imports': [(start, block_id)], 'task', 'round'}];
+    calls of one invocation whose prompt extends the previous call's full text, with the same imported native state at
+    the same positions (``row['imports']``), share a sequence."""
     chains = []
     for episode in episodes:
         by_invocation = collections.defaultdict(list)
@@ -68,15 +69,18 @@ def chains_of(episodes, max_len=MAX_LEN):
                         chains.append(current)
                     current = None
                     continue
+                imports = [tuple(i) for i in row.get('imports') or ()]
                 if current is not None:
                     full = current['ids']
-                    if len(ids) >= len(full) and np.array_equal(ids[:len(full)], full):
+                    if (len(ids) >= len(full) and np.array_equal(ids[:len(full)], full)
+                            and [i for i in imports if i[0] < len(full)] == current['imports']):
                         current['ids'] = np.concatenate([ids, sample])
                         current['segs'].append((len(ids), len(sample), row))
+                        current['imports'] = imports
                         continue
                     chains.append(current)
                 current = {'ids': np.concatenate([ids, sample]), 'segs': [(len(ids), len(sample), row)],
-                           'task': episode['task_id'], 'round': episode['round']}
+                           'imports': imports, 'task': episode['task_id'], 'round': episode['round']}
             if current is not None:
                 chains.append(current)
     return chains
@@ -115,8 +119,38 @@ def load_model(checkpoint, base, device='cuda', dtype=torch.float32):
     return model, state, special
 
 
-def hidden(model, ids):
-    return model.model(input_ids=ids[None], use_cache=False).last_hidden_state[0]
+def hidden(model, ids, imports=None):
+    """Final hidden states (T, D) through the stock HF modules. ``imports`` (``lfm3_fast_train.import_tensors``): at those
+    rows each attention layer's normed pre-RoPE keys and values and each conv layer's B*x are the imported state (hooks
+    on ``k_norm``/``v_proj`` and on ``in_proj``, where B = 1 and x = the state, as the SGLang fork splices it)."""
+    if imports is None:
+        return model.model(input_ids=ids[None], use_cache=False).last_hidden_state[0]
+    if torch.is_grad_enabled() and getattr(model, 'is_gradient_checkpointing', False):
+        raise ValueError('stock-path imports are hooks removed after the forward: no layer recompute (use lfm3_fast_train)')
+    rows, handles = imports['rows'], []
+
+    def put(value, last):
+        def hook(module, args, output):
+            output = output.clone()
+            output[0, rows] = value(output).to(output.dtype) if callable(value) else value.reshape(len(rows), *last).to(output.dtype)
+            return output
+        return hook
+    try:
+        for layer, state in zip(model.model.layers, imports['layers']):
+            if layer.is_attention_layer:
+                k, v = state
+                handles.append(layer.self_attn.k_norm.register_forward_hook(put(k, k.shape[1:])))
+                handles.append(layer.self_attn.v_proj.register_forward_hook(put(v, (v[0].numel(),))))
+            else:
+                (bx,) = state
+                width = bx.shape[-1]
+                ones = torch.ones_like(bx)
+                handles.append(layer.conv.in_proj.register_forward_hook(
+                    put(lambda output, bx=bx, ones=ones: torch.cat([ones, output[0, rows, width:2 * width], bx], -1), None)))
+        return model.model(input_ids=ids[None], use_cache=False).last_hidden_state[0]
+    finally:
+        for handle in handles:
+            handle.remove()
 
 
 ACTIVATION_BYTES_PER_TOKEN_LAYER = 88e3   # measured 84.8 KB of saved activations per token per layer with lfm3_fast_train (2026-11-12)
@@ -179,6 +213,8 @@ def packed_rows(chains, max_tokens):
     alone; ``max_tokens`` 0: one chain per row). Returns lists of chains."""
     rows, row, size = [], [], 0
     for chain in chains:
+        if chain.get('imports'):
+            raise ValueError('exp0_sft trains no imported native state (lower without a NativeStates reader)')
         n = len(chain['ids'])
         if row and (not max_tokens or size + n > max_tokens):
             rows.append(row)
