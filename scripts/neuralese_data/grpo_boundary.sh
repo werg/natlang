@@ -55,7 +55,9 @@ switch)
   fi
   $LEDGER cancel --unit $OLD >/dev/null 2>&1 || true
   for u in $(systemctl --user list-units --plain --no-legend "$OLD-*" | awk '{print $1}'); do systemctl --user stop "$u"; done
-  E="/usr/bin/env NATLANG_REPO=$PIN PYTHONPATH=$PIN/training/neuralese:$PIN HF_HUB_OFFLINE=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True"
+  E="/usr/bin/env NATLANG_REPO=$PIN PYTHONPATH=$PIN/training/neuralese:$PIN HF_HUB_OFFLINE=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True MALLOC_ARENA_MAX=4"
+  # MALLOC_ARENA_MAX: the actor front serves from a 512-thread pool; glibc gave it 104 per-thread arenas (1.6 GB) in its
+  # first 15 min, growing toward 8 x cores x 64 MB, the front RSS that swapped grpo-v1-run2.
   # grpo.py's defaults are the experiment (LR 1e-5, 24-48 groups, per-episode norm, graded reward, top-p 0.95, tail
   # guard, decisions as calls, errata excluded, 40 calls, explore 0.4); below: memory sizing measured on grpo-v1-run2,
   # Pop held evals, ext_codebase families back (e9a7360cc binds their repo snapshots).
