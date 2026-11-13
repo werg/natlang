@@ -332,28 +332,67 @@ def linear_nll(h, weight, target, chunk=LOGIT_CHUNK):
 
 
 NUCLEUS_TOP_K = 1024
+NUCLEUS_WIDE_K = 16384   # second top-k for rows whose nucleus reaches past NUCLEUS_TOP_K (before a full sort)
 NUCLEUS_CHUNK = 2048    # rows per head chunk of the nucleus NLL: it holds about twice the fp32 temporaries of the plain CE
 
 
-def _nucleus_cut(lf, lse, top_p, top_k):
-    """Per row of fp32 logits ``lf`` (log-sum-exp ``lse``), the logit of the last token of the top-p nucleus: tokens by
-    decreasing probability, a token kept while the mass before it is <= ``top_p`` (SGLang's rule,
-    ``top_k_top_p_min_p_sampling_from_probs_torch``). The nucleus is every token with a logit >= this cut (ties with
-    the last kept token are in). Only the ``top_k`` largest logits are sorted; a row whose nucleus may reach past them
-    is sorted in full."""
-    k = min(top_k, lf.shape[-1])
+def _cut_of(values, row_lse, top_p):
+    """The cut logit of rows whose ``values`` are sorted descending and hold the whole nucleus."""
+    p = torch.exp(values - row_lse[:, None])
+    count = ((torch.cumsum(p, -1) - p) <= top_p).sum(-1).clamp(min=1)
+    return values.gather(1, (count - 1)[:, None])[:, 0]
 
-    def cut_of(values, row_lse):
-        p = torch.exp(values - row_lse[:, None])
-        count = ((torch.cumsum(p, -1) - p) <= top_p).sum(-1).clamp(min=1)
-        return values.gather(1, (count - 1)[:, None])[:, 0]
-    values = lf.topk(k, dim=-1).values
-    cut = cut_of(values, lse)
-    if k < lf.shape[-1]:
-        wide = cut <= values[:, -1]
-        if wide.any():
-            cut[wide] = cut_of(lf[wide].sort(dim=-1, descending=True).values, lse[wide])
-    return cut
+
+def _nucleus_cut_lse(lf, lse, top_p, top_k, wide_k=None):
+    """Per row of fp32 logits ``lf`` (log-sum-exp ``lse``): the logit of the last token of the top-p nucleus (tokens by
+    decreasing probability, a token kept while the mass before it is <= ``top_p``: SGLang's rule,
+    ``top_k_top_p_min_p_sampling_from_probs_torch``; the nucleus is every token with a logit >= this cut, ties with the
+    last kept token included) and the log-sum-exp over that nucleus. Only the ``top_k`` largest logits are sorted and
+    summed; a row whose nucleus may reach past them takes the ``wide_k`` largest, and past those the full sort. A full
+    128k sort costs ~10x a top-k and a masked full-vocab log-sum-exp ~2x (GB10, 2026-11-13), so both run only on rows
+    that need them."""
+    vocab = lf.shape[-1]
+    values = lf.topk(min(top_k, vocab), dim=-1).values
+    cut = _cut_of(values, lse, top_p)
+    inside = torch.logsumexp(values.masked_fill(values < cut[:, None], float('-inf')), dim=-1)
+    if values.shape[-1] < vocab:
+        wide = (cut <= values[:, -1]).nonzero()[:, 0]       # the nucleus (or a tie at its edge) may reach past top_k
+        if wide.numel():
+            rows, row_lse = lf[wide], lse[wide]
+            more = rows.topk(min(wide_k or NUCLEUS_WIDE_K, vocab), dim=-1).values
+            wide_cut = _cut_of(more, row_lse, top_p)
+            if more.shape[-1] < vocab:
+                wider = (wide_cut <= more[:, -1]).nonzero()[:, 0]
+                if wider.numel():
+                    wide_cut[wider] = _cut_of(rows[wider].sort(dim=-1, descending=True).values, row_lse[wider], top_p)
+            cut[wide] = wide_cut
+            inside[wide] = torch.logsumexp(rows.masked_fill(rows < wide_cut[:, None], float('-inf')), dim=-1)
+    return cut, inside
+
+
+def _nucleus_cut(lf, lse, top_p, top_k):
+    """The cut logit of ``_nucleus_cut_lse``."""
+    return _nucleus_cut_lse(lf, lse, top_p, top_k)[0]
+
+
+def _nucleus_logit_grad(lf, target, lse, set_lse, cut, grad, grad_nucleus):
+    """d loss / d logits of one chunk: grad * (softmax - onehot) + grad_nucleus * (softmax over the set - onehot)."""
+    onehot = torch.arange(lf.shape[-1], device=lf.device)[None, :] == target[:, None]
+    kept = (lf >= cut[:, None]) | onehot
+    d = torch.exp(lf - lse[:, None]) * grad[:, None] + torch.where(kept, torch.exp(lf - set_lse[:, None]), 0.) * grad_nucleus[:, None]
+    return d - onehot * (grad + grad_nucleus)[:, None]
+
+
+_NUCLEUS_GRAD = {}
+
+
+def _nucleus_grad_kernel(device_type):
+    """``_nucleus_logit_grad`` compiled (one fused pass over the chunk's logits instead of about eight)."""
+    if device_type != 'cuda':
+        return _nucleus_logit_grad
+    if 'cuda' not in _NUCLEUS_GRAD:
+        _NUCLEUS_GRAD['cuda'] = torch.compile(_nucleus_logit_grad, dynamic=True)
+    return _NUCLEUS_GRAD['cuda']
 
 
 class _LinearNLLNucleus(torch.autograd.Function):
@@ -373,8 +412,7 @@ class _LinearNLLNucleus(torch.autograd.Function):
             lf = F.linear(h[start:stop], weight).float()
             own = lf.gather(-1, target[start:stop, None])[:, 0]
             lse[start:stop] = torch.logsumexp(lf, dim=-1)
-            cut[start:stop] = _nucleus_cut(lf, lse[start:stop], top_p, top_k)
-            inside = torch.logsumexp(lf.masked_fill(lf < cut[start:stop, None], float('-inf')), dim=-1)
+            cut[start:stop], inside = _nucleus_cut_lse(lf, lse[start:stop], top_p, top_k)
             outside[start:stop] = own < cut[start:stop]
             set_lse[start:stop] = torch.where(outside[start:stop], torch.logaddexp(inside, own), inside)
             nll[start:stop] = lse[start:stop] - own
@@ -396,10 +434,8 @@ class _LinearNLLNucleus(torch.autograd.Function):
             stop = min(h.shape[0], start + ctx.chunk)
             rows = h[start:stop]
             lf = F.linear(rows, weight).float()
-            onehot = torch.arange(lf.shape[-1], device=lf.device)[None, :] == target[start:stop, None]
-            d = (torch.exp(lf - lse[start:stop, None]) - onehot.float()) * grad[start:stop, None]
-            kept = (lf >= cut[start:stop, None]) | onehot
-            d = d + (torch.exp(lf - set_lse[start:stop, None]) * kept - onehot.float()) * grad_nucleus[start:stop, None]
+            d = _nucleus_grad_kernel(lf.device.type)(lf, target[start:stop], lse[start:stop], set_lse[start:stop],
+                                                     cut[start:stop], grad[start:stop], grad_nucleus[start:stop])
             d = d.to(rows.dtype)
             if need_h:
                 dh[start:stop] = d @ weight
