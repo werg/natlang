@@ -52,3 +52,18 @@ for (const [family, partial] of [
     assert.equal(outcome.accepted, false);
   });
 }
+
+// A plain loop over the program's real step function is evidence equivalent to an iterateOn step marker when the run's
+// own calls produced the marked (revisited) state at least twice (2026-11-13, held-v2 row 30/1).
+test('iterate_schedule_repair: a bounded loop over resolve that sees the state recur counts as the decisive observation', async () => {
+  const record = FAMILIES.iterate_schedule_repair.build(7, 0, 'train').find(item => item.semantics.operation === 'blocked');
+  const loop = (steps) => ['eval', { code: `let cur = schedule;\nfor (let i = 0; i < ${steps}; i++) { if (conflicts(cur) === 0) break; cur = resolve(cur); }\nconflicts(cur)` }];
+  const looped = structuredClone(record);
+  looped.curriculum.reference.root = [loop(40), record.curriculum.reference.root.at(-1)];
+  const outcome = (await replayReference(looped, TOOLS_PROMPT)).run.outcome;
+  assert.equal(outcome.checks.stop_evidence, true, JSON.stringify(outcome.rejection_reasons));
+  assert.equal(outcome.accepted, true);
+  const short = structuredClone(record);
+  short.curriculum.reference.root = [loop(2), record.curriculum.reference.root.at(-1)];
+  assert.equal((await replayReference(short, TOOLS_PROMPT)).run.outcome.checks.stop_evidence, false);
+});

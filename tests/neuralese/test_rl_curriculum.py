@@ -386,6 +386,40 @@ def test_a_larger_held_set_keeps_the_smaller_one_and_exposes_its_exclusion_ids(t
         held_eval.build_manifest(pool,avoid=kept,tasks=24,include=kept)
 
 
+def test_a_successor_held_set_replaces_bad_tasks_in_kind_and_keeps_its_predecessor_out_of_training(tmp_path):
+    from natlang_neuralese.rl import held_eval
+    rows=held_pool()
+    rows[5]['source_groups']=['shared-article']          # f0-5 shares a source with an exposed row of another pool
+    pool=write_pool(tmp_path,rows)
+    old,old_rows=held_eval.build_manifest(pool,avoid=set(),tasks=12)
+    held_eval.write_manifest(tmp_path/'v2',old,old_rows)
+    kept=[t['id'] for t in old['tasks']]
+    bad=kept[0]
+    meta={t['id']:t for t in old['tasks']}[bad]
+    reject={row['id'] for row in rows if row['family']==meta['family'] and row['id'] not in kept}
+    # A rejected row is never picked, but its split-group sibling stays eligible; the replacement keeps family and level.
+    allowed=sorted(reject)[:1]
+    new,new_rows=held_eval.build_manifest(pool,avoid=set(),tasks=12,include=kept,replace=[bad],reject=reject-set(allowed))
+    ids={t['id'] for t in new['tasks']}
+    assert len(ids)==12 and bad not in ids and set(kept)-{bad}<=ids
+    [swap]=new['replaced']
+    assert swap['id']==bad and (swap['by'] is None or (swap['by'] in allowed or swap['by'] not in reject))
+    assert sum(1 for t in new['tasks'] if t.get('mix_class')=='effect_state')==old['effect_state']
+    # Exposure by group name (rows outside the pool): no candidate shares a split or source group with it.
+    exposed,_=held_eval.build_manifest(pool,avoid=set(),tasks=12,avoid_groups={'shared-article','g1-0'})
+    assert not {t['id'] for t in exposed['tasks']}&{'f0-5','f1-0','f1-1'}
+    with pytest.raises(ValueError,match='no longer eligible'):
+        held_eval.build_manifest(pool,avoid=set(),tasks=12,include=kept,avoid_groups={meta['split_group']})
+    # The successor's exclusion covers the predecessor's held tasks and siblings.
+    new['also_excludes']=[{'path':str(tmp_path/'v2'/'manifest.json'),'sha256':held_eval._sha256(tmp_path/'v2'/'manifest.json')}]
+    held_eval.write_manifest(tmp_path/'v3',new,new_rows)
+    assert held_eval.exclusion_ids(tmp_path/'v2'/'manifest.json')<=held_eval.exclusion_ids(tmp_path/'v3'/'manifest.json')
+    assert bad in held_eval.exclusion_ids(tmp_path/'v3'/'manifest.json')
+    report=held_eval.verify(tmp_path/'v3'/'manifest.json',{kept[1]})
+    assert report['overlap_ids']==[kept[1]] and kept[1] in report['overlap_groups']
+    assert held_eval.verify(tmp_path/'v3'/'manifest.json',set(),{'no-such-group'})['overlap_groups']==[]
+
+
 def held_result(policy,started,outcomes,key='s1'):
     return {'schema':held_eval.RESULT_SCHEMA,'policy_id':policy,'started_at':started,'series':{'key':key},'complete':True,
             'ran':len(outcomes),'scored':sum(o is not None for o in outcomes.values()),

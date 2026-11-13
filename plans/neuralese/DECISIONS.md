@@ -2125,3 +2125,26 @@ held eval. The design is an A/B from the same grpo-v2 checkpoint:
 
 Engine changes (hybrid-SWA KV, a DGX-engine re-pin) are not additions. They enter at a boundary with a fresh base
 measurement and no claim of a gain.
+
+## 2026-11-13: held-v3 replaces held-v2 from the next boundary; scorer false negatives fixed (held-set agent)
+
+**Decision.** grpo-v2-run1 launched at 16:12 on pin c06a50581 and stays on held-v2 throughout its run. Experiments pinned after it are judged on held-v3 (`ops/held-v3/manifest.json`, sha 45471060).
+It is `grpo.py`'s default `HELD`; `--held-manifest .../held-v2/manifest.json` opts out. Held-v3 keeps 242 held-v2 tasks
+and replaces 14. Eight had a wrong or ambiguous gold (BASE_FAILURES_20261113). Six shared a source group with tasks
+Exp1 trained on. The replacements were reviewed against their inputs; 5 ambiguous candidates were rejected. Held-v3's
+exclusion covers held-v2's ids and siblings (`also_excludes`), and `held_eval verify` finds no overlap with any recorded
+training exposure (9,427 ids, 1,389 groups). Details: `plans/neuralese/HELD_V3_20261113.md`.
+
+**Scorer changes (enter with the boundary pin, new series):**
+- the core of a span-QA answer (a possessor or a question echo dropped; hedges never pass);
+- a terminal newline ignored in `content` compares when the task never mentions one;
+- iterateOn step markers also met by a bounded loop over the real step function that saw the state recur.
+
+Re-scoring all 512 base episodes flips exactly the 4 intended verdicts.
+
+**At the boundary.**
+1. Rerun `ops/held-v3/exposure/collect_exposure.py` and `held_eval verify`. grpo-v2-run1 excludes only held-v2 and can
+   draw any of the 14 new tasks; collection globs `ops/grpo-v*/run*/groups`. If its groups hit a held-v3 task,
+   re-pin with `--include-manifest held-v3 --replace-ids <hits>` before an experiment that starts from a grpo-v2
+   checkpoint relies on held-v3.
+2. Run `ops/held-v3/runs/run-aa.sh PIN` (base x2, 2 samples, one DGX engine) for the noise floor.

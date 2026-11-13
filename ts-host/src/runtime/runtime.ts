@@ -129,6 +129,12 @@ export type NatlangRuntimeOptions = {
    * unless configured; no model-visible context or execution state changes.
    */
   exactHostTraceCapture?: { definitionSources: string[]; inputArguments: string[]; captureOutput?: boolean; captureAllOutputs?: boolean; maxBytes: number };
+  /**
+   * Host-only scoring evidence: each call of a program's TypeScript function records the `stableHash` of its result as a
+   * `step_state` trace event (no node, so not part of the execution graph), so a plain loop over a step function shows
+   * the states an `iterateOn` trace would. Off unless a scorer asks (the collector, for iteration stop markers).
+   */
+  traceStepStates?: boolean;
   limits?: NatlangLimits;
   seed?: { mode: 'derived' | 'backend'; root?: number };
   /**

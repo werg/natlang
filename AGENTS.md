@@ -96,6 +96,15 @@ cgroup, 0.3-0.7 GB per slot; shared collectors save about 0.25 GB a slot), plus 
 weight file lives on /dev/shm (the shared NVMe wrote at 60-230 MB/s under load); pruned checkpoints go to /mnt/external
 (last 2 plus held-evaluated ones), the single FP32 training state (20.7 GB, temp file renamed over the previous) to NVMe.
 
+## Held-v3: the experiments' held-out set for experiments pinned after grpo-v2-run1 (engineering, 2026-11-13)
+
+`ops/held-v3/manifest.json` (sha 45471060; `plans/neuralese/HELD_V3_20261113.md`) is held-v2 with 14 tasks replaced:
+wrong or ambiguous gold, and source groups shared with Exp1 training. It uses the same engine.json and is
+`grpo.HELD`. Its `exclusion_ids()` also covers held-v2 (`also_excludes`), so neither set's tasks or siblings ever
+enter training. Before relying on it, rerun `held_eval verify` against `ops/held-v3/exposure/collect_exposure.py`.
+Results on it use the 2026-11-13 scorer (QA answer cores, terminal-newline policy, loop evidence for iterateOn
+markers): a new series. The held-v2 section below describes the predecessor and the shared tooling.
+
 ## Held-v2: the experiments' held-out set (engineering, 2026-11-12)
 
 `/home/werg/data/lfm3-rl-dgx-20261029/ops/held-v2/manifest.json` (sha dfe0a915): 256 pool tasks (the w5 pool b3fef4c7), 91

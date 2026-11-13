@@ -116,7 +116,9 @@ Tests: `ts-host/test/folder-shell.test.mjs`, `compaction.test.mjs`, `scope-compi
 `neuralese-read-contract.test.mjs`, `eval-field-check.test.mjs`, `tests/test_bonsai_queue.py`,
 `tests/rl_tasks/test_natcode_missing_child.py`. The model-facing ones are recorded in `plans/MODEL_FACING_CHANGES.md`.
 
-## Ours: scorer false negatives (documented, scorer unchanged) and held-v2 oracle errata
+## Ours: scorer false negatives and held-v2 oracle errata
+
+Update 2026-11-13: held-v3 replaces these 8 tasks and fixes the 3 clear false negatives plus row 30/1 in the scorer, from the next boundary (`HELD_V3_20261113.md`). Rows 223 and 189 stay as they are.
 
 Scorer false negatives. They are correctness issues and small in count: 3 clear episodes, 4 borderline.
 - **Span QA with a one-word gold (3 episodes).** The span oracle is token F1 >= 0.8 after SQuAD normalisation, so any

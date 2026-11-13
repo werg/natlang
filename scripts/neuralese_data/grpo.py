@@ -83,7 +83,9 @@ BASE = str(Path.home() / '.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/sna
 POOLS = [resolve_str('data_hdd', 'natlang-rl-composed-20261103', 'memetic-program-source-20261105', 'cases.jsonl'),
          # fallow K1: bgkit KR reader families, 4,734 rows verified by reference/negative/alias replay (verification.json)
          resolve_str('data_hdd', 'natlang-rl-bgkit-kr-20261103', 'natlang-rl-bgkit-kr-20261103', 'cases.jsonl')]
-HELD = resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'held-v2', 'manifest.json')
+# held-v3 (2026-11-13; plans/neuralese/HELD_V3_20261113.md): held-v2 with its wrong/ambiguous-oracle and exposed tasks
+# replaced; its exclusion also covers held-v2 (manifest `also_excludes`), so no v2 held task enters training either.
+HELD = resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'held-v3', 'manifest.json')
 # Pool rows known to be wrong (an oracle's expected answer, a garbled task): every *.jsonl here is excluded by default.
 ERRATA = resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'pool-errata')
 

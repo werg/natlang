@@ -111,34 +111,82 @@ def avoid_ids(state, directories=()):
     return ids
 
 
-def build_manifest(cases_path, *, avoid, tasks=DEFAULT_TASKS, include=(), seed=SEED):
+def _source_groups(row):
+    return set(row.get('source_groups') or ())
+
+
+def build_manifest(cases_path, *, avoid, tasks=DEFAULT_TASKS, include=(), seed=SEED, avoid_groups=(), replace=(), reject=()):
     """(manifest, held rows): ``tasks`` pool rows, family- and level-stratified, of which a third carry the effect-state class.
-    Deterministic in the pool and ``avoid``. Rows whose split group holds an avoided task are not candidates. ``include``:
-    task ids held already (an earlier, smaller manifest) that the new one keeps; the rest is chosen around them."""
+    Deterministic in the pool and the arguments. Rows whose split group or a source group is shared with an avoided task
+    (``avoid`` ids, resolved in the pool, and ``avoid_groups``: split/source group names of exposed rows outside it) are
+    not candidates. ``include``: task ids held already (an earlier manifest) that the new one keeps. ``replace``: ids of
+    ``include`` to drop (a wrong or ambiguous oracle); each gets a fresh task of its family and level, else of its family
+    at the nearest level, else the stratified fill. ``reject``: rows that are never candidates (pool errata), without
+    taking their split groups out."""
     from .curriculum import metadata
     cases = list(read_jsonl(cases_path))
-    include = set(include)
-    if include & set(avoid):
-        raise ValueError('an included held task is also to be avoided: ' + ', '.join(sorted(include & set(avoid))[:5]))
-    avoid_groups = {_split_group(row) for row in cases if row.get('id') in avoid}
+    replace = set(replace)
+    if replace - set(include):
+        raise ValueError('replaced held tasks are not in the included manifest: ' + ', '.join(sorted(replace - set(include))[:5]))
+    include = [i for i in include if i not in replace]
+    include_set = set(include)
+    if include_set & set(avoid):
+        raise ValueError('an included held task is also to be avoided: ' + ', '.join(sorted(include_set & set(avoid))[:5]))
+    avoid_groups = set(avoid_groups)
+    for row in cases:
+        if row.get('id') in avoid:
+            avoid_groups.add(_split_group(row))
+            avoid_groups |= _source_groups(row)
+    reject = set(reject)
     groups = {}
     for row in cases:
         groups[_split_group(row)] = groups.get(_split_group(row), 0) + 1
-    candidates = []
+    candidates, blocked = [], []
     for index, row in enumerate(cases):
         meta = metadata(row)
-        if (row.get('split') == 'train' and row['id'] not in avoid and _split_group(row) not in avoid_groups
+        exposed = _split_group(row) in avoid_groups or bool(_source_groups(row) & avoid_groups)
+        if (row.get('split') == 'train' and row['id'] not in avoid and not exposed and row['id'] not in reject
                 and groups[_split_group(row)] <= MAX_GROUP_ROWS):
-            candidates.append({'row': index, 'id': row['id'], 'group': _split_group(row), **meta})
+            candidates.append({'row': index, 'id': row['id'], 'group': _split_group(row), 'source_family': row.get('family'),
+                               **meta})
+        elif row.get('id') in include_set:
+            blocked.append(row['id'])
+    if blocked:
+        raise ValueError(f'{len(blocked)} included held tasks are no longer eligible (exposed group, rejected or not '
+                         'train): ' + ', '.join(sorted(blocked)[:20]))
     levels = sorted({c['level'] for c in candidates})
-    chosen = [c for c in candidates if c['id'] in include]
-    if len(chosen) != len(include):
-        raise ValueError(f'{len(include) - len(chosen)} included held tasks are not eligible pool rows')
-    used_groups = {c['group'] for c in chosen}
+    chosen = [c for c in candidates if c['id'] in include_set]
+    if len(chosen) != len(include_set):
+        raise ValueError(f'{len(include_set) - len(chosen)} included held tasks are not eligible pool rows')
+    by_id = {row['id']: (index, row) for index, row in enumerate(cases)}
+    # A replaced task's split group stays out too: a sibling would share its source (and often its defect).
+    used_groups = {c['group'] for c in chosen} | {_split_group(by_id[i][1]) for i in replace if i in by_id}
     family_count = {}
     for c in chosen:
         family_count[c['family']] = family_count.get(c['family'], 0) + 1
-    effect = max(0, round(tasks * EFFECT_STATE_SHARE) - sum(1 for c in chosen if c.get('mix_class') == 'effect_state'))
+    replaced = []
+    for old in sorted(replace, key=lambda i: _hash('replace', i, seed=seed)):
+        if old not in by_id:
+            raise ValueError(f'replaced held task {old} is not a pool row')
+        meta = metadata(by_id[old][1])
+        options = [c for c in candidates if c['family'] == meta['family'] and c['group'] not in used_groups
+                   and c['id'] not in include_set]
+        # Prefer the replaced task's class (effect-state or not, keeping the class share) and source family (e.g.
+        # multihiertt within table-text QA).
+        same_class = [c for c in options if c.get('mix_class') == meta.get('mix_class')] or options
+        options = [c for c in same_class if c['source_family'] == by_id[old][1].get('family')] or same_class
+        pick = None
+        if options:
+            level = min({c['level'] for c in options}, key=lambda lv: (abs(lv - meta['level']), lv))
+            pick = min((c for c in options if c['level'] == level), key=lambda c: _hash('row', c['id'], seed=seed))
+            chosen.append(pick)
+            used_groups.add(pick['group'])
+            family_count[pick['family']] = family_count.get(pick['family'], 0) + 1
+        replaced.append({'id': old, 'family': meta['family'], 'level': meta['level'],
+                         'by': pick['id'] if pick else None, 'by_level': pick['level'] if pick else None})
+    picked_ids = {c['id'] for c in chosen}
+    effect = min(max(0, round(tasks * EFFECT_STATE_SHARE) - sum(1 for c in chosen if c.get('mix_class') == 'effect_state')),
+                 max(0, tasks - len(chosen)))
 
     def take(pool, quota):
         by_family = {}
@@ -166,22 +214,23 @@ def build_manifest(cases_path, *, avoid, tasks=DEFAULT_TASKS, include=(), seed=S
                 break
         return picked
 
-    chosen += take([c for c in candidates if c.get('mix_class') == 'effect_state' and c['id'] not in include], effect)
-    chosen += take([c for c in candidates if c.get('mix_class') != 'effect_state' and c['id'] not in include],
+    chosen += take([c for c in candidates if c.get('mix_class') == 'effect_state' and c['id'] not in picked_ids], effect)
+    chosen += take([c for c in candidates if c.get('mix_class') != 'effect_state' and c['id'] not in picked_ids],
                    tasks - len(chosen))
     if len(chosen) < tasks:
         raise ValueError(f'the pool has only {len(chosen)} eligible held tasks (wanted {tasks})')
     chosen.sort(key=lambda c: c['row'])
     rows = [cases[c['row']] for c in chosen]
     manifest = {
-        'schema': MANIFEST_SCHEMA, 'seed': seed, 'included': len(include), 'tasks': [
+        'schema': MANIFEST_SCHEMA, 'seed': seed, 'included': len(include_set), 'tasks': [
             {'id': c['id'], 'pool_row': c['row'], 'family': c['family'], 'level': c['level'],
              **({'mix_class': c['mix_class']} if c.get('mix_class') else {}), 'split_group': c['group'],
              'row_sha256': hashlib.sha256(json.dumps(cases[c['row']], sort_keys=True).encode()).hexdigest()}
             for c in chosen],
         'excluded_split_groups': sorted({c['group'] for c in chosen}),
         'pool': {'path': str(cases_path), 'sha256': _sha256(cases_path), 'rows': len(cases)},
-        'avoided_task_ids': len(avoid), 'avoided_split_groups': len(avoid_groups),
+        'avoided_task_ids': len(avoid), 'avoided_groups': len(avoid_groups), 'rejected_rows': len(reject),
+        **({'replaced': replaced} if replace else {}),
         'by_level': {str(lv): sum(1 for c in chosen if c['level'] == lv) for lv in levels},
         'families': len({c['family'] for c in chosen}),
         'effect_state': sum(1 for c in chosen if c.get('mix_class') == 'effect_state')}
@@ -222,8 +271,10 @@ def load_manifest(path, sha256):
 # ---- selector exclusion and its transition ------------------------------------------------------------------------------
 def exclusion_ids(manifest, cases=None):
     """Ids of pool rows training must never take: the held tasks of ``manifest`` (a path or the loaded manifest) and every
-    row sharing a held ``split_group``. ``cases``: the pool rows (or a path); by default the manifest's pool, whose sha256
-    must match the pinned one. Experiments call this to exclude a held set (e.g. ``ops/held-v2/manifest.json``)."""
+    row sharing a held ``split_group``, plus the same for each earlier held manifest it lists in ``also_excludes`` (a
+    successor set keeps its predecessor's tasks out of training: held-v3 excludes held-v2). ``cases``: the pool rows (or
+    a path); by default the manifest's pool, whose sha256 must match the pinned one. Experiments call this to exclude a
+    held set (e.g. ``ops/held-v3/manifest.json``)."""
     if not isinstance(manifest, dict):
         manifest = json.loads(Path(manifest).read_text())
     if cases is None:
@@ -232,9 +283,14 @@ def exclusion_ids(manifest, cases=None):
             raise ValueError('the pool changed since the held manifest was pinned: ' + pool['path'])
         cases = pool['path']
     if isinstance(cases, (str, Path)):
-        cases = read_jsonl(cases)
+        cases = list(read_jsonl(cases))
     held, groups = {t['id'] for t in manifest['tasks']}, set(manifest['excluded_split_groups'])
-    return frozenset(row['id'] for row in cases if row.get('id') in held or _split_group(row) in groups)
+    excluded = {row['id'] for row in cases if row.get('id') in held or _split_group(row) in groups}
+    for earlier in manifest.get('also_excludes') or ():
+        if _sha256(earlier['path']) != earlier['sha256']:
+            raise ValueError('an excluded earlier held manifest changed: ' + earlier['path'])
+        excluded |= exclusion_ids(earlier['path'], cases)
+    return frozenset(excluded)
 
 
 # ---- series identity --------------------------------------------------------------------------------------------------
@@ -851,7 +907,20 @@ def main(argv=None):
                    help='JSON list of task ids (with their split groups) the held set must not contain (e.g. a training selection)')
     p.add_argument('--avoid-from', type=Path, action='append', default=[],
                    help='controller directories whose state and round-*-selection.json tasks to avoid')
+    p.add_argument('--avoid-groups', type=Path, action='append', default=[],
+                   help='JSON list of split/source group names of exposed rows (rows outside --cases, e.g. other pools)')
+    p.add_argument('--replace-ids', type=Path, action='append', default=[],
+                   help='JSONL ({"id": ...}) or JSON list of --include-manifest tasks to replace (wrong/ambiguous oracle)')
+    p.add_argument('--reject-ids', type=Path, action='append', default=[],
+                   help='JSONL or JSON list of pool rows that may never be held tasks (pool errata); groups stay eligible')
+    p.add_argument('--also-exclude', type=Path, action='append', default=[],
+                   help='an earlier held manifest whose exclusion this one carries (exclusion_ids covers both)')
     p.add_argument('--dry-run', action='store_true')
+    y = sub.add_parser('verify', help='check a pinned manifest against training exposure (ids and split/source groups)')
+    y.add_argument('--manifest', type=Path, required=True)
+    y.add_argument('--avoid-ids', type=Path, action='append', default=[])
+    y.add_argument('--avoid-groups', type=Path, action='append', default=[])
+    y.add_argument('--avoid-from', type=Path, action='append', default=[])
     m = sub.add_parser('measure', help='standalone: N samples per held task of a served actor or a checkpoint -> result.json')
     m.add_argument('--manifest', type=Path, required=True, help='e.g. ops/held-v2/manifest.json')
     m.add_argument('--out', type=Path, required=True, help='run directory (resumable)')
@@ -936,16 +1005,20 @@ def main(argv=None):
             if unit and not args.keep_actor:
                 subprocess.run(['systemctl', '--user', 'stop', unit])
     elif args.command == 'pin':
-        avoid = set()
-        for path in args.avoid_ids:
-            avoid |= set(json.loads(path.read_text()))
-        for directory in args.avoid_from:
-            state = json.loads((directory / 'state.json').read_text()) if (directory / 'state.json').exists() else {}
-            avoid |= avoid_ids(state, [directory])
+        avoid = _avoid_set(args)
         include = [t['id'] for t in json.loads(args.include_manifest.read_text())['tasks']] if args.include_manifest else ()
-        manifest, rows = build_manifest(args.cases, avoid=avoid, tasks=args.tasks, include=include, seed=args.seed)
+        manifest, rows = build_manifest(args.cases, avoid=avoid, tasks=args.tasks, include=include, seed=args.seed,
+                                        avoid_groups=_avoid_group_set(args), replace=read_ids(args.replace_ids),
+                                        reject=read_ids(args.reject_ids))
         if args.include_manifest:
             manifest['included_manifest'] = {'path': str(args.include_manifest), 'sha256': _sha256(args.include_manifest)}
+        inputs = [*args.avoid_ids, *args.avoid_groups, *args.replace_ids, *args.reject_ids]
+        if inputs:
+            manifest['pin_inputs'] = [{'path': str(path), 'sha256': _sha256(path)} for path in inputs]
+        if args.avoid_from:
+            manifest['avoided_from'] = [str(path) for path in args.avoid_from]
+        if args.also_exclude:
+            manifest['also_excludes'] = [{'path': str(path), 'sha256': _sha256(path)} for path in args.also_exclude]
         summary = {k: v for k, v in manifest.items() if k not in ('tasks', 'excluded_split_groups')}
         if args.dry_run:
             print(json.dumps(summary, indent=1))
@@ -954,6 +1027,39 @@ def main(argv=None):
         ids = sorted(exclusion_ids(args.dir / 'manifest.json'))
         (args.dir / 'exclusion-ids.json').write_text(json.dumps(ids, indent=0) + '\n')
         print(json.dumps({'manifest_sha256': sha, 'exclusion_ids': len(ids), **summary}, indent=1))
+    elif args.command == 'verify':
+        report = verify(args.manifest, _avoid_set(args), _avoid_group_set(args))
+        print(json.dumps(report, indent=1))
+        if report['overlap_ids'] or report['overlap_groups']:
+            raise SystemExit(1)
+
+
+def _avoid_set(args):
+    avoid = set(read_ids(args.avoid_ids))
+    for directory in args.avoid_from:
+        state = json.loads((directory / 'state.json').read_text()) if (directory / 'state.json').exists() else {}
+        avoid |= avoid_ids(state, [directory])
+    return avoid
+
+
+def _avoid_group_set(args):
+    return set(read_ids(args.avoid_groups))
+
+
+def verify(manifest_path, avoid, avoid_groups=()):
+    """Held tasks of a pinned manifest that training saw: ids in ``avoid``, or a split/source group shared with an avoided
+    pool row or listed in ``avoid_groups``."""
+    manifest = json.loads(Path(manifest_path).read_text())
+    rows = {row['id']: row for row in read_jsonl(Path(manifest_path).parent / manifest['cases']['path'])}
+    groups = set(avoid_groups)
+    for row in read_jsonl(manifest['pool']['path']):
+        if row.get('id') in avoid:
+            groups.add(_split_group(row))
+            groups |= _source_groups(row)
+    held = [t['id'] for t in manifest['tasks']]
+    overlap_groups = sorted(i for i in held if _split_group(rows[i]) in groups or _source_groups(rows[i]) & groups)
+    return {'manifest': str(manifest_path), 'held': len(held), 'avoid_ids': len(avoid), 'avoid_groups': len(groups),
+            'overlap_ids': sorted(set(held) & set(avoid)), 'overlap_groups': overlap_groups}
 
 if __name__ == '__main__':
     main()

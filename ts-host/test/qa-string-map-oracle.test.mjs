@@ -37,7 +37,7 @@ test('explicit scalar QA accepts answer aliases without weakening generic or num
   for (const [actual, expected] of [['the garden', 'garden'], ['Garden!', 'garden'], ['U.S. Army', 'us army']]) {
     const verdict = await checkOracle(actual, expected, qa);
     assert.equal(verdict.accepted, true);
-    assert.equal(verdict.comparison_version, 'qa-scalar-exact/1');
+    assert.equal(verdict.comparison_version, 'qa-scalar-exact/2');
   }
   for (const [actual, expected] of [['not garden', 'garden'], ['kitchen', 'garden'], ['-1', '1'], ['1.2', '12'], ['the', 'a'], [1, '1']])
     assert.equal((await checkOracle(actual, expected, qa)).accepted, false);
