@@ -10,7 +10,7 @@ import { COMPACTION_NOTE_CHARS, runSeedKey, type NativeResult, type NativeSessio
 import { undeclaredServiceType } from './introspection.js';
 import type { DecisionScorer, ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
 import { deriveSeed } from './trace.js';
-import { AUTOMATIC_NOTE, COMPACTION_NOTICE, LEAF_SYSTEM_PROMPT, directoryReducerPrompt, scopedFileToolNames, FUNCTION_TOOLS_PROMPT, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN,
+import { AUTOMATIC_NOTE, COMPACTION_NOTICE, directoryReducerPrompt, scopedFileToolNames, FUNCTION_TOOLS_PROMPT, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN,
   LAST_TURN_NOTICE, NL_DEPTH_LIMIT_NOTICE, SYSTEM_PROMPT, type FileToolSurface } from './prompt.js';
 import { canGenerateNl, runInFrame } from '../runtime/context.js';
 import { adoptImportedNativeArtifacts } from './nz-file.js';
@@ -154,31 +154,6 @@ const tool = (name: string, description: string, properties: Record<string, unkn
  * The call's arguments as its caller gave them, as the opening eval's result shows them (read_inputs() returns
  * the same values in eval). A long value is cut off, and its name holds all of it; an argument the caller left out is undefined.
  */
-/** A type whose values are plain data a model can read whole: no files, folders, blobs, functions, host objects or
- * Neuralese anywhere inside it. */
-function dataOnly(type: Type, env: TypeEnv, depth = 0): boolean {
-  if (depth > 32) return false;
-  const resolved = type.kind === 'name' ? env.resolve(type) : type;
-  switch (resolved.kind) {
-    case 'prim': return !['Blob', 'Folder', 'FileHandle'].includes(resolved.name);
-    case 'lit': return true;
-    case 'record': return resolved.fields.every(field => dataOnly(field.type, env, depth + 1));
-    case 'list': case 'dict': return dataOnly(resolved.element, env, depth + 1);
-    case 'union': case 'intersection': return resolved.members.every(member => dataOnly(member, env, depth + 1));
-    case 'refined': case 'untrusted': case 'index': return dataOnly(resolved.base, env, depth + 1);
-    default: return false;
-  }
-}
-
-/** A JSON-like value: strings, numbers, booleans, null, arrays and plain objects of them. */
-function plainData(value: unknown, depth = 0): boolean {
-  if (value === null || value === undefined || ['string', 'number', 'boolean'].includes(typeof value)) return true;
-  if (depth > 64 || typeof value !== 'object') return false;
-  if (Array.isArray(value)) return value.every(item => plainData(item, depth + 1));
-  const prototype = Object.getPrototypeOf(value);
-  return (prototype === Object.prototype || prototype === null) && Object.values(value).every(item => plainData(item, depth + 1));
-}
-
 export function inputsListing(session: NativeSession, views: Readonly<Record<string, string>> = {}): string {
   const lam = session.lam;
   if (lam.type.kind !== 'lambda') return '{}';
@@ -517,9 +492,6 @@ export class NativeToolAgent {
       callAddendum?: string;
       /** Which finite-typed calls answer by decision readout (native/decision.ts); default `declared`. */
       decisionReadout?: 'declared' | 'finite-returns';
-      /** `direct`: a leaf call (see `leafOpening`) answers from LEAF_SYSTEM_PROMPT and an opening that shows its arguments,
-       * with only return_result offered; `tools` (default): every call gets the full interpreter surface. */
-      leafCalls?: 'direct' | 'tools';
       /**
        * Guided generation on natlang's own servers (reference and llama.cpp fork; others never receive it): the reply
        * opens a tool call when one is required, call names are checked, and eval code is checked line by line for
@@ -1214,37 +1186,6 @@ export class NativeToolAgent {
     return { signature, scopeTypes, program };
   }
 
-  /**
-   * The opening of a leaf call, or undefined when the call needs the interpreter: a plain function call (no folder,
-   * handoff or skills, no escalation tool) with no callable functions or services, whose parameter and result types hold
-   * only data (no files, folders, blobs, functions, host objects or Neuralese), and whose arguments and read-only
-   * captures are plain data shown whole. Such a call has nothing to run code on, so it answers from the shown values.
-   */
-  private leafOpening(session: NativeSession, views: Readonly<Record<string, string>>): string | undefined {
-    const lam = session.lam;
-    if (lam.type.kind !== 'lambda' || lam.subtype !== 'function' || lam.projectTransaction || lam.handoff || lam.skills?.listing ||
-        this.options.fallbacks?.length || Object.keys(views).length || Object.keys(lam.codebase).length ||
-        Object.keys(session.availableServices()).length) return;
-    if ([...lam.type.params.fields.map(field => field.type), lam.type.returns].some(type => !dataOnly(type, session.env))) return;
-    if (!Object.values(lam.args).every(plainData)) return;
-    const context: string[] = [];
-    for (const cell of Object.values(lam.captures ?? {})) {
-      if (isAdapterValue(capturedValue(cell))) continue;
-      if (cell.mutable || cell.skill) return;
-      let value: Value;
-      try { value = cell.get() as Value; } catch { return; }
-      if (!plainData(value)) return;
-      context.push(`${cell.name}: ${cell.type} = ${renderValue(value, { holder: cell.name, budget: scopeValueChars(session),
-        liveIdentity: session.runtime.displayLiveId, untrusted: session.runtime.untrusted })}`);
-    }
-    const args = inputsListing(session, views);
-    if ([args, ...context].some(text => text.includes('cut off:'))) return;
-    const { signature, scopeTypes, program } = this.callHeading(session);
-    return [`You are inside this call: ${signature}`, ...scopeTypes, '', 'Instructions:', program,
-      ...(lam.type.params.fields.length ? ['', 'Arguments:', args] : []),
-      ...(context.length ? ['', 'Values from the calling code:', ...context] : [])].join('\n');
-  }
-
   /** The call's opening message: its signature and instructions, then the names eval can use (the call's notes follow,
    * withCallNotes). */
   private scopeOpening(session: NativeSession): string {
@@ -1601,22 +1542,16 @@ export class NativeToolAgent {
     const guidance = [renderAuthoredTextGuidance(this.options.authoredTextGuidance) +
       await this.runtimeProgramGuidance(guidanceForCall(this.options.programGuidance, session.lam.functionName)),
       this.options.callAddendum ?? ''].map(text => text.trim()).filter(Boolean).join('\n\n');
-    // A leaf call's opening (set below, once the views are known); undefined runs the full interpreter surface.
-    let leaf: string | undefined;
     // One system prompt for every call, so every call's opening shares one cached prefix. What differs between calls
     // (guidance, the function-tools and folder paragraphs, the nesting-limit notice) is in the call's opening message.
-    const systemPrompt = () => leaf !== undefined ? LEAF_SYSTEM_PROMPT :
+    const systemPrompt = () =>
       typeof this.options.systemPrompt === 'function' ? this.options.systemPrompt() : this.options.systemPrompt ?? SYSTEM_PROMPT;
     const notes = callNotes({ guidance, ownCode: Object.keys(session.lam.codebase).length > 0,
       folder: session.lam.projectTransaction ? { fileTools: this.options.fileTools,
         writable: session.lam.projectTransaction.folder.access !== 'read', withheld: session.lam.withheldTools } : undefined,
       allowAdHoc: canGenerateNl(session.runtime.frame), rendering: this.options.promptRendering });
     const views = await this.views(session);
-    leaf = this.options.leafCalls === 'direct' ? this.leafOpening(session, views) : undefined;
-    if (leaf !== undefined) session.runtime.trace.emit('leaf_call', { call_id: session.runtime.currentCallId ?? null });
     const openingMessages = (): Record<string, unknown>[] => {
-      if (leaf !== undefined) return [{ role: 'system', content: systemPrompt() },
-        { role: 'user', content: withCallNotes(leaf, notes) }];
       const reading = this.scopeReading(session, views);
       const scopeOpening = withCallNotes(this.scopeOpening(session), notes);
       if (session.lam.skills?.listing) for (const skill of session.lam.skills.inventory ?? [])
@@ -1761,9 +1696,7 @@ export class NativeToolAgent {
       // blocked or failed status, not by running out.
       const lastTurn = maxTurns !== undefined && maxTurns - turns === 1;
       const allTools = this.tools(session).filter(item => (fallbackIndex < (this.options.fallbacks?.length ?? 0) ||
-        (item as { function?: { name?: string } }).function?.name !== 'escalate') &&
-        // A leaf call has nothing to run code on: return_result is its only tool (for a blocked or failed status).
-        (leaf === undefined || (item as { function?: { name?: string } }).function?.name === 'return_result'));
+        (item as { function?: { name?: string } }).function?.name !== 'escalate'));
       session.rememberOfferedTools(allTools);
       const only = (name: string) => allTools.filter(tool => String((tool as { function?: { name?: string } }).function?.name) === name);
       const estimate = (tools: unknown[]) => requestChars(tools) * tokensPerChar;

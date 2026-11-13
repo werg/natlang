@@ -363,11 +363,13 @@ test('natlang calls an eval starts and never awaits fail without ending the proc
     // A call left in a variable by an eval that fails, and calls in async callbacks forEach drops.
     const failed = await session.applyAsync('eval', { code: 'const pending = inspect(value); throw new Error("first")' });
     const dropped = await session.applyAsync('eval', { code: '[1, 2].forEach(async v => { await inspect(v); }); 1' });
+    // A promise derived from a call (.then) and logged, never awaited.
+    const derived = await session.applyAsync('eval', { code: 'const result = inspect(value); console.log(result.then(r => r));' });
     await new Promise(resolve => setTimeout(resolve, 200));
-    console.log(JSON.stringify([failed.kind, dropped.kind]));`;
+    console.log(JSON.stringify([failed.kind, dropped.kind, derived.kind]));`;
   const output = await new Promise((resolve, reject) => execFile(process.execPath, ['--input-type=module', '-e', script],
     (error, stdout, stderr) => error ? reject(new Error(stderr || error.message)) : resolve(stdout)));
-  assert.deepEqual(JSON.parse(output.trim()), ['error', 'error']);
+  assert.deepEqual(JSON.parse(output.trim()), ['error', 'error', 'error']);
 });
 
 test('failed eval reports its console output and commits no partial locals', async () => {

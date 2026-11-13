@@ -75,7 +75,7 @@ A fresh install runs every natural-language call on the stock instruction model 
 on natlang's managed llama.cpp server. Our own LFM3 checkpoints replace it once they are trained.
 
 ```sh
-natlang setup --yes     # natlang's llama.cpp build (natlang-b12069) and the model, verified by SHA-256
+natlang setup --yes     # natlang's llama.cpp build (natlang-b12070) and the model, verified by SHA-256
 natlang doctor          # what would run, and whether it is ready
 ```
 
@@ -96,8 +96,9 @@ for a single command.
 A local profile's `request` refines the stock model's serving settings (greedy decoding, reasoning kept in the
 history) field by field. The stock model reasons before every action, which is slow on a CPU (about 10 generated tokens
 a second for Q4_K_M on four cores, and a turn often thinks for 1,500 tokens). `"request": { "thinking_budget_tokens":
-512 }` caps each turn's reasoning (0 turns it off); the dashboard's profile editor sets it as **Thinking**. Unlimited
-is how the model was evaluated, so a budget trades some accuracy for speed.
+256 }` caps each turn's reasoning (0 turns it off); the dashboard's profile editor sets it as **Thinking**. Unlimited
+is the default. On the triage example 256 kept every answer right and cut the urgency check's generated tokens by about
+40%, though classification took more turns; 0 made the model write broken code and take three to four times the turns.
 
 ## Running
 
@@ -175,7 +176,7 @@ changes what a run computes, only its wall time, since runs on one server share 
 ## llama.cpp
 
 The managed runtime is a release of natlang's llama.cpp fork
-[werg/llama.cpp-neuralese](https://github.com/werg/llama.cpp-neuralese), currently natlang-b12069 (llama.cpp 0.8.0):
+[werg/llama.cpp-neuralese](https://github.com/werg/llama.cpp-neuralese), currently natlang-b12070 (llama.cpp 0.8.0):
 prebuilt CPU builds for Linux and Windows (x64, arm64) and Metal builds for macOS, checked by SHA-256. The release also
 carries the Vulkan, ROCm and Windows CUDA builds that Vibestudio's local-models engine installs; natlang's pin selects
 the CPU or Metal archive of each platform from the release manifest's `os`, `arch` and `backends`. The fork adds

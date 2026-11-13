@@ -23,7 +23,8 @@ const evalProcess = new Proxy(process, {
 });
 
 /**
- * Rejections nothing handles of promises eval code made: its realm's Promise is theirs. Model code can drop a promise
+ * Rejections nothing handles of promises eval code made: its realm's Promise is theirs, and of promises derived from a
+ * natlang call (CallPromise), whose failure is reported already. Model code can drop a promise
  * (an async callback given to forEach) whose rejection would end the host as an unhandled rejection; it is recorded
  * as a host event of the eval's environment instead. Any other unhandled rejection is the host's own and, with no
  * other listener, still ends the process as it would without this one.
@@ -36,8 +37,11 @@ class RejectionRouter {
   private readonly owners = new WeakMap<object, (reason: unknown) => void>();
   private open = 0;
   private readonly listener = (reason: unknown, promise: Promise<unknown>) => {
-    const owner = this.owners.get((promise as { constructor?: object }).constructor ?? {});
+    const constructor = (promise as { constructor?: object }).constructor ?? {};
+    const owner = this.owners.get(constructor);
     if (owner) return owner(reason);
+    // A promise derived from a natlang call (runtime/callable.ts CallPromise): the call's failure is reported already.
+    if ((constructor as Record<symbol, unknown>)[Symbol.for('natlang.call-promise')]) return;
     if (process.listenerCount('unhandledRejection') === 1) throw reason;
   };
   /** Take a share of the routing until the returned release is called. */
