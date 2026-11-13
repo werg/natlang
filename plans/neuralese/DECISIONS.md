@@ -2009,3 +2009,119 @@ episodes and in the gradient, so collection, held eval and the learner move to o
   series therefore restarts: the base is re-measured at the next pin. `held-v2/engine.json` is unchanged.
 - **Not measured here:** the nucleus head on the GPU (memory beside the actor, tokens/s; it is plain torch, not
   compiled): the next pin's smoke.
+
+## 2026-11-13: grpo-v1, recorded retroactively (supervisor)
+
+grpo-v1 ran without the declaration AGENTS.md requires; this entry supplies it after the fact and says so.
+
+- **Change vs baseline.** Plain GRPO (`scripts/neuralese_data/grpo.py`) from base 5ff07638 against the untouched base:
+  group 8, per-call sequences, binary reward, token-sum loss, LR 3e-6 (warmup 2), 12-24 groups/step, KL 0.02 (k3),
+  rho cap 2, T=1 untruncated, 40-call training budget (held ran 64).
+- **Pins.** run1 784ab4cd5 (no training step). run2: 17f1866c2 and 8b04cb74c (series c33dee66a4b7; 8b04cb74c added
+  decision-call training), then 37c221bfe from the step-5 state (series e3a1066c7874: harness fixes and consumer-call
+  training). So the learner and harness changed mid-run twice, against the one-commit rule; the held comparison below
+  is valid only because base and step 5 were both measured on pin 37c221bfe.
+- **Success criterion (declared retroactively).** At a scheduled held-v2 eval, a positive paired change against the
+  base on the same series and engine with p < 0.05 (`held_eval compare`), and the ran-out/loop rate no worse.
+- **Result.** Step 5 (b319e947) 232/510 vs base 229/510, McNemar p = 0.91; loop rate 0.061 -> 0.025. **Not met.** The
+  run2 audit (entry "GRPO learner defaults after the run2 audit") explains the weak signal: mean |dlogp| against the
+  start policy was 0.014-0.023 over 5 updates, under the actor's FP8 noise (0.033). The updates had barely moved the
+  policy.
+- **End.** grpo-v1 ends at the grpo-v2 boundary below, with no further held eval. Its groups, held results and the
+  held-evaluated checkpoints stay. Its FP32 state (`ops/grpo-v1/run2-state`, 20.7 GB) is deleted once grpo-v2 has
+  saved its own step-2 state.
+
+## 2026-11-13: grpo-v2, a fresh GRPO run from base on the corrected stack (supervisor)
+
+**Decision: start fresh from base. Do not continue grpo-v1's weights.**
+- *Attribution.* The next pin changes the objective, not just the harness: LR 3e-6 -> 1e-5, per-episode
+  normalization, graded reward, top-p 0.95 with nucleus scoring, the tail guard and decision weighting. Continuing
+  would apply these to AdamW moments built under a different loss and scale. The resulting checkpoint would mix two
+  objectives, two sampling laws and three harness series, and no held result could be attributed to either. From
+  base, the experiment is one clean question: does the corrected GRPO stack beat base on one pin?
+- *Throughput.* Continuing would save about 5 steps (~6 h) of updates that measurably did not move the policy. It
+  would also cost a second start measurement, because both base and the grpo-v1 checkpoint would have to be
+  re-measured on the new series. Fresh needs only the base measurement, which the series change forces anyway.
+
+**Change vs baseline.** grpo.py's defaults at the pin against the untouched base 5ff07638, both measured on the same
+pin and the same Pop engine. The environment is identical for both arms: the harness/runtime fixes (be6194095,
+45f7c0ddb, c0b7ac776, 802e111bc, 0c6e59952, 9f13cce63, d12bdb5a1, 9d1406d32, 4ebd5edf7, e221b45f5, b4f482cc1,
+499c7b326), the scorer/oracle fixes (3bb470c41, f42a6a3db, ef79eb407) and the codebase asset path (e9a7360cc: 45 held
+episodes were ENOENT). They are therefore not the treatment: under the 2026-11-12 rule they are fixed directly. The
+treatment is the learner as it now stands on main: LR 1e-5, 24-48 groups, `--loss-norm episode`, `--reward graded`,
+top-p 0.95, tail floor -7, `--decision-weight call`, KL 0.02 and rho cap 2. Task supply: the pool errata are excluded
+by default, explore is 0.4, and the `ext_codebase-{py,natlang}` families return (~3.8k rows; their repos now
+resolve). Neuralese variants stay off.
+
+**Pin.** The newest `origin/main` commit at the boundary on which `scripts/check-main.sh` passes. Work that is in
+progress or unpushed is not waited for. That includes the SGLang fork's hybrid-SWA KV pool: it changes the engine
+identity on both machines, so it enters at the next boundary with its own base measurement. Run directory
+`ops/grpo-v2/run1`, pin `ops/grpo-v2/run1/pin-<c12>`. The series key is recorded in `pin-<c12>.series.json`. Memory
+sizing is the measured grpo-v1-run2 setting: slots 28, `--activation-gb 6`, actor KV 6 GB, budget 100 GB.
+
+**Base measurements.**
+- *Pop engine* (FP8 KV, 16 running, the pin's code export): required. grpo.py `--held-remote pop` measures it
+  automatically into `held/step-00000-pop`, 256 x 2, about 3.5-4 h, in parallel with training.
+- *DGX engine* (`held-v2/engine.json`): not measured up front. It would pause collection for about 3 h, and every v2
+  comparison is Pop vs Pop. It is measured only when a DGX-engine comparison is actually needed, with base and
+  candidate run back to back on one actor.
+
+**Success criterion (declared now, before the run).** All four must hold:
+1. A scheduled Pop held eval of checkpoint N shows a positive mean per-task pass-rate change against the Pop base
+   (`compare-vs-step0.json`, within-task permutation test) with p < 0.05.
+2. The next scheduled eval also shows a positive change with p < 0.05. This guards against repeated looks, and it is
+   the "two consecutive held gains" that unlocks controlled additions.
+3. `ran_out_rate` is not significantly worse (`ran_out_paired`, p < 0.05).
+4. The 2-sample noise band is ±3.5 pts and the MDE is 5 pts.
+
+**Failure.** Either of these ends the run as failed:
+- no step meets (1) by 48 h of training;
+- two consecutive evals fall below -3.5 pts.
+
+Degradation means a bug: diagnose it before anything else.
+
+**Early checks, steps 1-4.** Any of these stops the run as invalid for a fix and rerun, not a tuning change:
+- NaN;
+- step-1 KL above 1e-3, since the weights are identical then;
+- `outside_nucleus_fraction` above 1%;
+- `abs_log_rho_mean` above 0.1;
+- `grad_moment_cosine` within ±0.05 over steps 3-6. That means the gradient is still noise, and the next run grows
+  the batch first (audit entry).
+
+The nucleus head's GPU memory has not been measured yet. If the memory guard stops the run twice, lower `--slots`.
+That is a capacity change, not an experimental one.
+
+**Boundary trigger.** Switch as soon as the pin passes. Do not wait for a grpo-v1 plateau: its learner is the one the
+audit replaced, and every further v1 hour delays v2. The procedure is as follows.
+1. `scripts/neuralese_data/grpo_boundary.sh pin <commit>` creates the pin, records its series and runs the targeted
+   tests in it. It touches no running unit.
+2. `grpo_boundary.sh switch` waits for grpo-v1-run2's next step record and its state save. It then stops the unit
+   and its Pop/held child units, cancels any requeue, launches `grpo-v2-run1` from the pin and logs to
+   `ops/decisions.log`.
+3. The switch also ends any grpo-v1 Pop measurement in flight.
+
+**grpo-v2's own end.** It ends when it has passed and then shows three consecutive evals with no further gain (a
+plateau), or when it fails. Its best checkpoint is the start policy and baseline for the next experiment.
+
+**Controlled additions, in order.** Each one starts only after grpo-v2 passes, adds one thing and is judged by paired
+held eval. The design is an A/B from the same grpo-v2 checkpoint:
+- *Arm A:* plain continuation for N steps. This is also the main lineage, so it is not wasted.
+- *Arm B:* continuation with the addition for the same N steps.
+- *Judgement:* paired held eval of the two end checkpoints on one pin and engine, with the Neuralese use rate
+  reported beside it.
+- Each launch is `EXTRA=... grpo_boundary.sh switch`.
+
+1. **Neuralese-declaring task variants** (`--neuralese-variants`, 1,381 replay-qualified rows, share 0.5). These are
+   data, not machinery.
+2. **Whole-graph Neuralese gradients:** producer gradients through consumer imports, using the actual episode graph.
+   Today consumer calls train against fixed imported state.
+3. **Neuralese use bonus**, for correct episodes only.
+4. Then, one at a time and in this order:
+   - the JOLT+ teacher/privileged twin;
+   - memetic guidance programs;
+   - expert-iteration shares;
+   - interleaved SFT;
+   - QAT.
+
+Engine changes (hybrid-SWA KV, a DGX-engine re-pin) are not additions. They enter at a boundary with a fresh base
+measurement and no claim of a gain.
