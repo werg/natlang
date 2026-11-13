@@ -54,7 +54,11 @@ budget yet), wall clock 3600 s as a safety net only (unscored). Reward = task ou
 (`decision_turns`: log softmax of the learner's option scores over prompt + each captured continuation); Neuralese-state
 consumer calls train too, the imported state fixed context spliced from the actor's block store as the fork fed it (K/V
 pre-RoPE, conv B*x; `lfm3_fast_train.import_tensors`, no producer gradient; `plans/MODEL_FACING_CHANGES.md` 2026-11-13); loss on sampled tokens
-`-min(rho, 2) * A * logp + 0.02 * k3(start || policy)`, `A` group-normalized; FP32-master AdamW, LR 3e-6 (check 4), BF16 compute
+`-min(rho, 2) * A * logp + 0.02 * k3(start || policy)`, `A` group-normalized, averaged over each episode's units and then over the step's
+episodes (`--loss-norm episode`; `token` is the old sum over all tokens: failures are 1.7x longer and 97% of the mass was reasoning), a sampled
+decision counting as one average call of its episode (`--decision-weight call`), no policy term on a token the actor sampled below
+log-probability -7 when `A > 0` (`--tail-logp-floor`; 0.5% of tokens at untruncated T=1); FP32-master AdamW, LR 1e-5 (check 4; run2 at 3e-6:
+half of the BF16 flips reverted, DECISIONS 2026-11-13), BF16 compute
 (`exp0_sft.load_model`, `lfm3_fast_train`). Weight sync each step: BF16 weights -> pinned buffer -> actor's HF safetensors ->
 SGLang `pause_generation(retract)` / `update_weights_from_disk` / `continue_generation` in a background thread; a pruned
 native checkpoint every 2 steps and the FP32 state (masters + moments, `/mnt/external/natlang-grpo-v1`) every 4 (grpo-v1 runs `--state-every 1`: a guard stop loses no step), also in
@@ -72,12 +76,13 @@ longer (`pop_rl_actor.py serve-checkpoint`: rsync of the pruned checkpoint, the 
 commit on Pop, Pop keeps 2 checkpoints), measured by this run's pinned harness from the DGX against Pop's endpoint
 (`--held-remote-slots` 14, `held-pop.log`). Pop's engine is KV-pool bound (2026-11-13): BF16 KV held 94.7k tokens, so 7.5 of 10 sequences ran, waiting requests evicted the prefixes of episodes between calls (prefix hit 41% vs 94% on the DGX) and decode tokens/s scale with running sequences (~20 ms a step at any batch); hence FP8 KV and 16 running (`--pop-kv-cache-dtype`, `--pop-max-running`; FP8 is part of the attested engine, so a start-policy result of another setting moves to `step-00000-pop-<time>-other-engine` and is re-measured). Step sizing (smoke): ~27k forward tokens per episode (chaining already merges 282 of 329
 consecutive calls; 38 diverge inside the sampled reply, 9 in the prompt), learner 600-800 tok/s while sharing the GPU with
-decode at `--activation-gb 4`; defaults now 12-24 groups per step, `--activation-gb 12`, 8 collector slots during the learner phase
+decode at `--activation-gb 4`; defaults now 24-48 groups per step (12 gave about 75 informative episodes a step), `--activation-gb 12`, 8 collector slots during the learner phase
 (`--learner-phase-slots`: check 4 measured the learner 3x faster with actor decode at 32 slots than at 48-64; the run logs
 actor tok/s per phase). The KL
 reference runs the policy's own training graph (a no_grad pass compiles other kernels: KL 5e-4 at identical weights). After each in-place update the front attests what it serves (`POST /v1/neuralese/rebind-policy`:
 the step's checkpoint sha, else the served weights' sha; the native engine keeps the start checkpoint). `train.jsonl` logs per step: reward
-mean, spread fraction, KL, rho (mean, pre/post-cap max, capped fraction, |log rho|), learner and actor tokens/s, phase seconds.
+mean, spread fraction, KL, rho (mean, pre/post-cap max, capped fraction, |log rho|), the cosine of the step's gradient with AdamW's first moment
+(`grad_moment_cosine`), the gradient-mass share of reasoning, reply and decision terms, the tail-masked fraction, learner and actor tokens/s, phase seconds.
 Memory (smoke 2026-11-12): on the GB10 the unit's MemoryMax (= ledger budget) also bounds its CUDA allocations, so the
 budget must cover GPU + host: learner CUDA 19.3 GB before AdamW state, 32 GB peak at step 1, about 36 GB with the FP32 moments
 (FP32 masters + moments + FP32 gradients alone are 27 GB), host about 5 GB plus the collector node processes (in the same

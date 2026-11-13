@@ -17,7 +17,10 @@ One process runs the whole loop; nothing else (no controller, custody or transit
   no gradient reaches the producer, whose own sampled tokens train as its own calls. Loss on sampled tokens only:
   ``-min(rho, C) * A * logp + beta * k3(ref || policy)``, ``rho = exp(logp_learner - logp_actor)`` (truncated importance
   sampling against the actor's own sampling logprobs), ``A`` the group-normalized episode reward on every call of the
-  episode, the reference the start policy. Summed over tokens, divided by the step's loss tokens.
+  episode, the reference the start policy. Each trained episode weighs the same: its terms are averaged over its units
+  (sampled tokens; a sampled decision counts as one average call of its episode), then over the step's episodes
+  (``--loss-norm token``: one sum over all tokens). A tail token the actor sampled below ``--tail-logp-floor`` gets no
+  policy term in an episode with a positive advantage.
 * weight sync: after each step the BF16 weights are copied once into a pinned host buffer, written as the actor's HF
   safetensors (same layout as ``export/native_hf``; frozen rows and producer table kept) and loaded in place
   (SGLang ``pause_generation`` retract -> ``update_weights_from_disk`` -> ``continue_generation``), in a background thread.
@@ -792,6 +795,77 @@ def group_advantages(rewards):
     return [(r - mean) / (std + 1e-6) for r in rewards]
 
 
+def decision_unit(tokens, calls, mode):
+    """Units one sampled decision counts in its episode's normalization. ``call``: the episode's mean sampled tokens per
+    trained call (a decision is one model call whose whole reply is one categorical action; 1 when the episode trains
+    no token call); ``token``: 1, one sampled token's weight."""
+    if mode == 'token' or not calls:
+        return 1.
+    return max(1., tokens / calls)
+
+
+def loss_scales(episodes, norm, decision_weight):
+    """Per-episode loss scale factors: ``episodes`` {key: (trained tokens, trained calls, trained decisions)} ->
+    {key: (factor of each token term, factor of each decision term)}. An episode's units are its tokens plus its
+    decisions times ``decision_unit``. ``episode``: every episode with units weighs 1 / episodes and its terms share
+    that weight by units (A_i times the mean over its units, averaged over episodes; a chain's factor is
+    1 / (episode units * episodes), so accumulating chain by chain is exact). ``token``: one factor 1 / all units."""
+    units = {key: (tokens + decisions * decision_unit(tokens, calls, decision_weight),
+                   decision_unit(tokens, calls, decision_weight))
+             for key, (tokens, calls, decisions) in episodes.items()}
+    trained = sum(1 for total, _ in units.values() if total > 0)
+    total_units = sum(total for total, _ in units.values())
+    scales = {}
+    for key, (total, unit) in units.items():
+        if total <= 0:
+            scales[key] = (0., 0.)
+        elif norm == 'episode':
+            scales[key] = (1. / (total * trained), unit / (total * trained))
+        else:
+            scales[key] = (1. / total_units, unit / total_units)
+    return scales
+
+
+def policy_weight(rho, actor_logp, advantage, rho_cap, tail_floor):
+    """(weight of the policy term, tail mask): the truncated importance ratio, zero where the actor sampled a tail token
+    (its sampling logp below ``tail_floor``) in an episode with a positive advantage. Untruncated T=1 sampling draws
+    such tokens about once in 200 (p < e^-7: 0.5% of sampled tokens); raising them is the largest-norm part of a
+    positive episode's gradient and never the reason it succeeded. The token stays context and keeps its KL term; a
+    negative advantage still pushes it down. ``tail_floor`` 0 or None: no mask."""
+    import torch
+    weight = rho.clamp(max=rho_cap)
+    if not tail_floor or advantage <= 0:
+        return weight, torch.zeros_like(weight, dtype=torch.bool)
+    masked = actor_logp < tail_floor
+    return weight.masked_fill(masked, 0.), masked
+
+
+def think_mask(sample, close_id):
+    """True for a sampled reply's reasoning tokens: up to and including the first ``</think>`` (all, when it has none)."""
+    mask = np.ones(len(sample), dtype=bool)
+    if close_id is not None:
+        found = np.flatnonzero(np.asarray(sample) == close_id)
+        if len(found):
+            mask[found[0] + 1:] = False
+    return mask
+
+
+def moment_cosine(parameters, optimizer):
+    """Cosine between the step's accumulated gradient and AdamW's first moment before the update (None before the first
+    update): near 0 when consecutive steps are unrelated noise, positive when they share a direction."""
+    import torch
+    dot = gg = mm = 0.
+    for p in parameters:
+        state = optimizer.state.get(p)
+        if not state or 'exp_avg' not in state:
+            return None
+        g, m = p.grad.reshape(-1), state['exp_avg'].reshape(-1)
+        dot += torch.dot(g, m).item()
+        gg += torch.dot(g, g).item()
+        mm += torch.dot(m, m).item()
+    return dot / math.sqrt(gg * mm) if gg > 0 and mm > 0 else None
+
+
 def synthetic_reward(spec, episode):
     """Learning sanity check 4 (plans/neuralese/LEARNING_SANITY_20261112.md): a trivially learnable reward replacing the task
     outcome. ``short-calls:N``: 1 if the episode's model calls sample fewer than N tokens on average, else 0;
@@ -1067,6 +1141,12 @@ def train(args):
     (work / 'sampling-config.json').write_text(json.dumps({'guidance': False, 'x_natlang_rl_capture': True, 'x_natlang_rl_top_k': 0}) + '\n')
     versions_live = {'actor': step}
     probes = probe_chains(args) if args.probe_turns else []
+    think_close = None   # the reasoning-close token id: splits the logged gradient mass into reasoning and reply tokens
+    try:
+        from tokenizers import Tokenizer
+        think_close = Tokenizer.from_file(str(Path(args.base) / 'tokenizer.json')).token_to_id('</think>')
+    except Exception as error:
+        log_line(log, {'event': 'no </think> id: grad_mass_share is not logged', 'error': repr(error)[:200]})
 
     def probe_learner_nll():
         from sanity_logprob_paths import targets_of
@@ -1348,6 +1428,7 @@ def train(args):
         t = time.time()
         stats = collections.Counter()
         chains, decisions, rewards, spread, dropped_stale, staleness, task_rewards = [], [], [], 0, 0, [], []
+        episode_units = {}   # trained episode -> [sampled tokens, calls, decisions] (loss_scales)
         for group in groups:
             try:
                 task_id, episodes, versions = load_group(collector, group, stats)
@@ -1376,8 +1457,11 @@ def train(args):
             for episode, advantage in zip(episodes, advantages):
                 kept = exp0_sft.chains_of([episode], max_len=args.max_sequence_tokens)
                 stats['calls_too_long_dropped'] += len(episode['rows']) - sum(len(c['segs']) for c in kept)
+                key = len(episode_units)
+                episode_units[key] = [sum(n for c in kept for _, n, _ in c['segs']), sum(len(c['segs']) for c in kept), 0]
                 for chain in kept:
                     chain['advantage'] = advantage
+                    chain['episode'] = key
                     chains.append(chain)
                 for d in episode['decisions']:
                     # every option is scored as its own copy of the prompt, so a decision is one forward of K prompts:
@@ -1385,17 +1469,22 @@ def train(args):
                     if decision_tokens(d) > args.max_sequence_tokens:
                         stats['decisions_too_long_dropped'] += 1
                     else:
+                        episode_units[key][2] += 1
                         decisions.append({'row': d, 'advantage': advantage, 'group': group, 'task_id': task_id,
-                                          'stale': stale, 'actor_version': step - stale})
-        # A sampled decision is one action (one categorical sample), so it counts as one unit beside the sampled tokens.
+                                          'stale': stale, 'actor_version': step - stale, 'episode': key})
+        # Loss normalization (loss_scales): by default every trained episode weighs the same and a sampled decision (one
+        # categorical action) counts as one call of its episode. `units` only normalizes the logged token means.
         loss_tokens = sum(length for c in chains for _, length, _ in c['segs'])
         units = loss_tokens + len(decisions)
+        scales = loss_scales(episode_units, args.loss_norm, args.decision_weight)
+        episodes_trained = sum(1 for token_scale, decision_scale in scales.values() if token_scale or decision_scale)
         phase['lower'] = time.time() - t
         record = {'step': step + 1, 'groups': len(groups), 'groups_with_spread': spread,
                   'spread_fraction': round(spread / max(1, len(groups)), 3), 'dropped_stale_groups': dropped_stale,
                   'staleness': dict(collections.Counter(staleness)), 'episodes': len(rewards),
                   'reward_mean': round(sum(rewards) / max(1, len(rewards)), 4), 'sequences': len(chains),
                   'loss_tokens': loss_tokens, 'decisions': len(decisions), 'lowering': dict(stats),
+                  'loss_norm': args.loss_norm, 'decision_weight': args.decision_weight, 'episodes_trained': episodes_trained,
                   'rollouts_archive_free_gb': round(shutil.disk_usage(rollouts_archive).free / 2**30, 1)
                   if rollouts_archive is not None and rollouts_archive.exists() else None,
                   'actor_version': versions_live['actor']}
@@ -1427,6 +1516,7 @@ def train(args):
             imports = lfm3_fast_train.import_tensors(model, [(start, collector.states(block_id))
                                                              for start, block_id in chain.get('imports') or ()])
             actor = torch.from_numpy(np.concatenate([row['logp'] for _, _, row in chain['segs']])).cuda().float()
+            token_scale = scales[chain['episode']][0]
             t = time.time()
             ref = None
             if reference is not None:
@@ -1444,7 +1534,15 @@ def train(args):
             with torch.no_grad():
                 log_rho = logp.detach() - actor
                 rho = log_rho.clamp(max=20).exp()
-                weight = rho.clamp(max=args.rho_cap)
+                weight, tail = policy_weight(rho, actor, chain['advantage'], args.rho_cap, args.tail_logp_floor)
+                # gradient mass of the policy term per token (its factor times the logit-gradient norm scale 1 - p),
+                # split into reasoning and post-</think> tokens
+                mass = token_scale * abs(chain['advantage']) * weight * (1 - logp.detach().exp())
+                thinking = torch.from_numpy(np.concatenate([think_mask(row['sample'], think_close)
+                                                            for _, _, row in chain['segs']])).cuda()
+                sums['mass_think'] += mass[thinking].sum().item()
+                sums['mass_post_think'] += mass[~thinking].sum().item()
+                sums['tail_masked'] += int(tail.sum())
             loss_terms = -(weight * chain['advantage'] * logp)
             if ref is not None:
                 d = ref - logp
@@ -1452,7 +1550,7 @@ def train(args):
                 loss_terms = loss_terms + args.kl_beta * kl
                 sums['kl'] += kl.detach().sum().item()
                 sums['ref_abs_dlogp'] += d.detach().abs().sum().item()
-            (loss_terms.sum() / units).backward()
+            (loss_terms.sum() * token_scale).backward()
             sums['rho'] += rho.sum().item()
             sums['rho_capped'] += (rho > args.rho_cap).sum().item()
             sums['abs_log_rho'] += log_rho.abs().sum().item()
@@ -1504,7 +1602,12 @@ def train(args):
                 with torch.no_grad():
                     log_rho = logpi.detach() - row['behavior_logq']
                     rho = log_rho.clamp(max=20).exp()
-                    weight = rho.clamp(max=args.rho_cap)
+                    weight, tail = policy_weight(rho, torch.as_tensor(row['behavior_logq'], device='cuda'),
+                                                 item['advantage'], args.rho_cap, args.tail_logp_floor)
+                    decision_scale = scales[item['episode']][1]
+                    sums['mass_decision'] += (decision_scale * abs(item['advantage']) * weight
+                                              * (1 - logpi.detach().exp())).item()
+                    sums['tail_masked_decisions'] += int(tail)
                     actor_scores = torch.from_numpy(row['scores']).cuda()
                     sums['decision_abs_dscore'] += (scores[start:start + k].detach() - actor_scores).abs().mean().item()
                     decision_records.append(decision_record(
@@ -1517,14 +1620,14 @@ def train(args):
                     term = term + args.kl_beta * kl
                     sums['kl'] += kl.item()
                     sums['ref_abs_dlogp'] += d.detach().abs().item()
-                terms.append(term)
+                terms.append(term * decision_scale)
                 sums['decision_rho'] += rho.item()
                 sums['decision_abs_log_rho'] += log_rho.abs().item()
                 sums['decision_logpi'] += logpi.item()
                 rho_pre_max = max(rho_pre_max, rho.item())
                 rho_post_max = max(rho_post_max, weight.item())
                 start += k
-            (torch.stack(terms).sum() / units).backward()
+            torch.stack(terms).sum().backward()
             forward_tokens += len(ids)
             del scores, terms
             torch.cuda.synchronize()
@@ -1550,6 +1653,7 @@ def train(args):
             log_line(log, {**record, 'event': 'non-finite gradient: update skipped', 'grad_norm': repr(grad_norm),
                            'loss_sums': {k: v for k, v in sums.items() if isinstance(v, float)}})
             continue
+        cosine = moment_cosine(parameters, optimizer)   # this step's gradient against the previous steps' momentum
         lr = args.lr * min(1., (step + 1) / args.warmup)
         for g in optimizer.param_groups:
             g['lr'] = lr
@@ -1602,11 +1706,17 @@ def train(args):
         learner_seconds = sum(v for k, v in phase.items()
                               if k in ('reference_forward', 'policy_forward_backward', 'decision_forward_backward', 'optimizer'))
         n_dec = max(1, len(decisions))
+        mass_total = sums['mass_think'] + sums['mass_post_think'] + sums['mass_decision']
         elapsed = time.time() - run['started']
         record.update(
             loss_tokens=loss_tokens, forward_tokens=forward_tokens, lr=lr, grad_norm=round(grad_norm, 4),
             kl_mean=round(sums['kl'] / units, 7), ref_abs_dlogp_mean=round(sums['ref_abs_dlogp'] / units, 6),
             mean_logp=round(sums['logp'] / max(1, loss_tokens), 4),
+            grad_moment_cosine=None if cosine is None else round(cosine, 5),
+            tail_logp_floor=args.tail_logp_floor, tail_masked_fraction=round(sums['tail_masked'] / max(1, loss_tokens), 6),
+            tail_masked_decisions=sums['tail_masked_decisions'],
+            grad_mass_share={k: round(sums['mass_' + k] / mass_total, 4) for k in ('think', 'post_think', 'decision')}
+            if think_close is not None and mass_total > 0 else None,
             decision_rho_mean=round(sums['decision_rho'] / n_dec, 4), decision_abs_log_rho_mean=round(sums['decision_abs_log_rho'] / n_dec, 5),
             decision_mean_logpi=round(sums['decision_logpi'] / n_dec, 4),
             decision_abs_dscore_mean=round(sums['decision_abs_dscore'] / n_dec, 4),
@@ -1667,12 +1777,14 @@ def main():
     t.add_argument('--task-ids', help='JSON list: train only on these pool ids (smoke)')
     t.add_argument('--group', type=int, default=8)
     t.add_argument('--slots', type=int, default=96, help='concurrent episodes on the actor (its default runs 128 sequences)')
-    t.add_argument('--min-groups', type=int, default=12)
+    t.add_argument('--min-groups', type=int, default=24,
+                   help='groups per step at least (run2 at 12: about 75 episodes with a nonzero advantage per step, '
+                        'consecutive updates did not add up; DECISIONS 2026-11-13)')
     t.add_argument('--learner-phase-slots', type=int, default=8,
                    help='collector slots that take new episodes while the learner computes (actor decode and the learner '
                         'share the GB10; in-flight episodes always finish)')
-    t.add_argument('--max-groups', type=int, default=24,
-                   help='groups per step at most: about 27k forward tokens per episode (smoke), so 24 groups is ~30-45 min of learner')
+    t.add_argument('--max-groups', type=int, default=48,
+                   help='groups per step at most: about 27k forward tokens per episode (smoke), so 48 groups is ~60-90 min of learner')
     t.add_argument('--max-outstanding', type=int, default=0, help='groups in flight or waiting (default max-groups + slots/group)')
     t.add_argument('--max-staleness', type=int, default=2)
     t.add_argument('--case-seconds', type=int, default=3600, help='wall-clock safety net only (a wall stop is unscored)')
@@ -1704,12 +1816,27 @@ def main():
     t.add_argument('--context-tokens', type=int, default=131072, help="call budget; follows the actor's served window when smaller")
     t.add_argument('--seed', type=int, default=20261112)
     t.add_argument('--seed-base', type=int, default=30_000_000)
-    t.add_argument('--lr', type=float, default=3e-6, help='check 4 (LEARNING_SANITY): 1e-6 barely moves BF16 weights, 1e-5 reaches KL 0.59 in 10 steps')
+    t.add_argument('--lr', type=float, default=1e-5,
+                   help='check 4 (LEARNING_SANITY) learned at 1e-5; run2 at 3e-6: half of the BF16 flips reverted (8.0%% changed '
+                        'vs start after 5 steps, 16%% summed) and mean |dlogp| vs start stayed at 0.014-0.023, under the '
+                        "actor's FP8 noise (0.033)")
     t.add_argument('--warmup', type=int, default=2)
     t.add_argument('--weight-decay', type=float, default=0.)
     t.add_argument('--clip', type=float, default=1.0)
     t.add_argument('--kl-beta', type=float, default=0.02)
     t.add_argument('--rho-cap', type=float, default=2.0)
+    t.add_argument('--loss-norm', choices=('episode', 'token'), default='episode',
+                   help='episode: each trained episode contributes A_i * (mean over its trained units of w * logp), averaged '
+                        'over the step\'s episodes, the KL term the same way; token: one sum over all units / all units (until '
+                        '2026-11-13: an episode weighed by its length, failures are 1.7x longer, 97%% of the mass on reasoning)')
+    t.add_argument('--tail-logp-floor', type=float, default=-7.,
+                   help='where the actor sampled a token (or decision option) with log-probability below this and the '
+                        "episode's advantage is positive, the policy term has zero weight (the KL term stays); 0: off")
+    t.add_argument('--decision-weight', choices=('call', 'token'), default='call',
+                   help="units of one sampled decision in its episode's normalization. call: the episode's mean sampled "
+                        'tokens per trained call (a decision is one model call whose reply is one categorical action, so it '
+                        'weighs like an average call of its episode; 1 if the episode trains no token call); token: 1 (until '
+                        '2026-11-13: one decision in ~10k tokens)')
     t.add_argument('--activation-gb', type=float, default=12., help='saved activations per sequence; layers beyond are recomputed')
     t.add_argument('--max-steps', type=int, default=0)
     t.add_argument('--save-every', type=int, default=2)

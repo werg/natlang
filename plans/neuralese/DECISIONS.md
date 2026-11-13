@@ -1894,3 +1894,32 @@ per-call (prompt, completion) sequences weighted by the episode reward; whole-gr
 Neuralese bonus, memetic programs, expert-iteration shares, pre-collection, interleaved SFT windows and QAT return
 only as measured controlled additions. Evaluation gets real compute (dev16 is a smoke test at most); heartbeats check
 the pinned experiments and do not re-plan; the training stack uses standard tooling. Rules: AGENTS.md "How we train now".
+
+### 2026-11-13 — GRPO learner defaults after the run2 audit (engineering)
+
+Audit of the plain-GRPO learner on run2 (5 optimizer steps; step-5 held 231 vs 229 of 509 pairs, p=0.91; 9 groups of
+rollouts, 814k sampled tokens). No sign, advantage, alignment or resume bug. The signal was weak for measured reasons;
+these become the defaults of the next pin (`scripts/neuralese_data/grpo.py`), each with an opt-out:
+
+- **Per-episode loss normalization** (`--loss-norm episode`; `token` is the old behaviour). The token sum weighed an
+  episode by its length: failures run 16.5 model calls against 9.9 for successes (16% of failures hit the 40-call
+  budget), negative advantage mass exceeded positive by 36% (calls as the length proxy, 68 groups with spread), one
+  episode carried 34% of its group's |A| x length, and 90.6% of loss tokens (96.8% of logit-gradient mass) were
+  reasoning. Now each trained episode contributes A_i times the mean over its units, averaged over episodes; the KL
+  term the same way.
+- **Tail-token guard** (`--tail-logp-floor -7`; 0 off). Untruncated T=1 sampling: 1.8% of sampled tokens have actor
+  p < 0.0067, 0.36% p < 3.4e-4, 175 p < 8e-7; tokens with p < 0.1 are 10% of tokens and 34% of gradient mass. A token
+  sampled below the floor in an episode with A > 0 gets no policy term (KL stays; a negative advantage still pushes it
+  down). Truncated sampling (min-p/top-p with the same law in the learner) is a proposed experiment, not done here: it
+  changes held-v2's sampling config.
+- **A sampled decision weighs like an average call of its episode** (`--decision-weight call`; `token` = 1 unit). It
+  was 1 unit among about 855k per step.
+- **LR 1e-5, 24-48 groups per step** (were 3e-6, 12-24). At 3e-6 with about 75 informative episodes a step, mean
+  |dlogp| against the start policy went 0.014, 0.015, 0.016, 0.023 over 4 updates (the floor is exactly 0 at step 1),
+  under the actor's FP8 noise (0.033); 8.0% of BF16 elements differed from the start against 16% summed per-step flips.
+  Check 4 learned at 1e-5.
+- **Telemetry**: `grad_moment_cosine` (the step's gradient against AdamW's first moment, before the update),
+  `grad_mass_share` (reasoning / post-`</think>` / decisions), `tail_masked_fraction`.
+
+Success criterion for the next GRPO pin stays the paired held-v2 comparison; `grad_moment_cosine` near 0 over the first
+steps means the updates are still unrelated noise and the batch must grow before anything else.
