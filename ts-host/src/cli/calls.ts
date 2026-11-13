@@ -11,29 +11,106 @@ import { expandedRecord } from '../calls/expanded.js';
 import { machineStoreRoot, openMachineStore } from '../machine-store.js';
 import { exportSpecializationCorpus } from '../calls/corpus.js';
 import { renderEvidence, renderHistory, study } from '../calls/specializer.js';
+import { enclosingProgram } from '../calls/feedback.js';
+import { renderTrace } from '../calls/trace-view.js';
+import { TRACES_HELP } from './traces-help.js';
 import { emptyEvidence, foldEvent, newTierEvidence, setTierState, type Evidence, type EvidenceState, type TierEvidence } from '../calls/evidence.js';
 import type { CallRecord, CallStoreSettings, CaseRole, CaseTier } from '../calls/types.js';
 
+/** A mistake in how a command was called: printed as `natlang: MESSAGE` and exit code 2. */
+export class UsageError extends Error {}
+
 type Args = { words: string[]; options: Map<string, string | true> };
-function parse(argv: string[]): Args {
-  const words: string[] = [], options = new Map<string, string | true>();
-  const flags = new Set(['--json', '--events', '--values', '--all', '--dry-run']);
+/** The options an action takes: `values` take an argument, `flags` do not. Every action also takes --store DIR and --json. */
+type Spec = { values?: readonly string[]; flags?: readonly string[] };
+
+/** Levenshtein distance, for "did you mean". */
+function distance(a: string, b: string): number {
+  let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i++) {
+    const row = [i];
+    for (let j = 1; j <= b.length; j++) row[j] = Math.min(previous[j]! + 1, row[j - 1]! + 1, previous[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1));
+    previous = row;
+  }
+  return previous[b.length]!;
+}
+/** The candidate closest to `word`, when it is close enough to be a likely typo. */
+export function closest(word: string, candidates: readonly string[]): string | undefined {
+  const ranked = candidates.map(candidate => ({ candidate, d: distance(word, candidate) })).sort((x, y) => x.d - y.d)[0];
+  return ranked && ranked.d <= Math.max(2, Math.floor(word.length / 3)) ? ranked.candidate : undefined;
+}
+
+/** The first word of `argv` that is not an option or an option's value: the action. */
+function actionOf(argv: string[], valued: ReadonlySet<string>): string | undefined {
   for (let index = 0; index < argv.length; index++) {
     const item = argv[index]!;
-    if (item.startsWith('--')) {
-      if (flags.has(item) || index + 1 >= argv.length) options.set(item, true);
-      else options.set(item, argv[++index]!);
-    } else words.push(item);
+    if (!item.startsWith('-')) return item;
+    if (valued.has(item)) index++;
+  }
+  return undefined;
+}
+
+function parse(argv: string[], command: string, spec: Spec): Args {
+  const values = new Set(['--store', ...spec.values ?? []]), flags = new Set(['--json', ...spec.flags ?? []]);
+  const words: string[] = [], options = new Map<string, string | true>();
+  for (let index = 0; index < argv.length; index++) {
+    const item = argv[index]!;
+    if (item === '--') { words.push(...argv.slice(index + 1)); break; }
+    if (!item.startsWith('-') || item === '-' || /^-\d/.test(item)) { words.push(item); continue; }
+    const [name, inline] = item.includes('=') ? [item.slice(0, item.indexOf('=')), item.slice(item.indexOf('=') + 1)] : [item, undefined];
+    if (flags.has(name) && inline === undefined) { options.set(name, true); continue; }
+    if (values.has(name)) {
+      const value = inline ?? argv[++index];
+      if (value === undefined || (inline === undefined && value.startsWith('--'))) throw new UsageError(`${name} needs a value (natlang ${command} ${name} VALUE)`);
+      options.set(name, value); continue;
+    }
+    const known = [...values, ...flags];
+    const guess = closest(name, known);
+    throw new UsageError(`unknown option ${name} for natlang ${command}${guess ? ` (did you mean ${guess}?)` : ''}; it takes ${known.sort().join(', ')}`);
   }
   return { words, options };
 }
 const text = (args: Args, name: string) => { const value = args.options.get(name); return typeof value === 'string' ? value : undefined; };
-const number = (args: Args, name: string, fallback: number) => Number(text(args, name) ?? fallback);
+function number(args: Args, name: string, fallback: number): number {
+  const value = text(args, name);
+  if (value === undefined) return fallback;
+  if (!/^\d+$/.test(value) || Number(value) < 1) throw new UsageError(`${name} takes a positive whole number, not ${JSON.stringify(value)}`);
+  return Number(value);
+}
+/** `--since` as an ISO time: an ISO date or time, or an age (`30m`, `2h`, `7d`) back from now. */
+function since(args: Args): string | undefined {
+  const value = text(args, '--since');
+  if (value === undefined) return undefined;
+  const age = /^(\d+)([mhd])$/.exec(value);
+  if (age) return new Date(Date.now() - Number(age[1]) * { m: 60_000, h: 3_600_000, d: 86_400_000 }[age[2] as 'm' | 'h' | 'd']).toISOString();
+  if (/^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?)?$/.test(value) && !Number.isNaN(Date.parse(value)))
+    return new Date(value.length === 10 ? `${value}T00:00:00Z` : value).toISOString();
+  throw new UsageError(`--since takes an ISO date or time (2026-11-13, 2026-11-13T09:00Z) or an age (30m, 2h, 7d), not ${JSON.stringify(value)}`);
+}
+function choice<T extends string>(args: Args, name: string, allowed: readonly T[]): T | undefined {
+  const value = text(args, name);
+  if (value !== undefined && !allowed.includes(value as T)) throw new UsageError(`${name} is one of ${allowed.join(', ')}, not ${JSON.stringify(value)}`);
+  return value as T | undefined;
+}
 
 function openStore(args: Args): CallStore {
   const root = text(args, '--store') ?? machineStoreRoot();
   if (!root) throw new Error('the call store is off on this machine (NATLANG_CALL_STORE=off); pass --store DIR to read one');
   return openMachineStore(root);
+}
+
+/** The call a typed ID means: the exact ID, a unique prefix, or a unique short form (without `task-N-`). Among the
+ * calls of one task, the task's root call wins. */
+export function resolveCall(store: CallStore, word: string | undefined, usage: string): string {
+  if (!word) throw new UsageError(`usage: ${usage}`);
+  const matches = store.matchCalls(word, 1000);
+  if (matches.length === 1) return matches[0]!.call_id;
+  if (!matches.length) throw new UsageError(`no call matches ${word}; natlang traces list shows recent calls (--all for every program's)`);
+  const tasks = new Set(matches.map(row => row.call_id.split('/')[0]));
+  const roots = matches.filter(row => !row.parent_call_id);
+  if (tasks.size === 1 && roots.length === 1) return roots[0]!.call_id;
+  throw new UsageError(`${word} matches ${matches.length === 1000 ? '1000 or more' : matches.length} calls; give more of the ID:\n` +
+    matches.slice(0, 5).map(row => `  ${row.call_id}  ${row.definition_name} ${row.outcome} ${row.started_at}`).join('\n'));
 }
 const print = (value: unknown, json: boolean) => process.stdout.write(json ? `${JSON.stringify(value, null, 2)}\n` :
   `${String(value)}${String(value).endsWith('\n') ? '' : '\n'}`);
@@ -43,26 +120,6 @@ const table = (rows: Record<string, unknown>[], columns: string[]): string => {
   const widths = columns.map((_, index) => Math.min(60, Math.max(...cells.map(row => row[index]!.length))));
   return cells.map(row => row.map((cell, index) => cell.slice(0, 60).padEnd(widths[index]!)).join('  ').trimEnd()).join('\n');
 };
-const short = (value: unknown, limit = 200) => { const shown = JSON.stringify(value); return shown === undefined ? 'undefined' : shown.length > limit ? `${shown.slice(0, limit)}…` : shown; };
-
-function describeCall(store: CallStore, record: CallRecord): string {
-  const view = expandedRecord(store, record);
-  const cases = store.callCases(record.call_id);
-  return [`call ${record.call_id}${record.parent_call_id ? ` (in ${record.parent_call_id}, eval ${record.parent_action_index ?? '?'})` : ''}`,
-    `definition: ${record.definition.name} (${record.definition.source ?? record.definition.site}) key ${record.definition.key}`,
-    `executor: ${record.executor.kind}${record.executor.case_hash ? ` case ${record.executor.case_hash}` : ''}${record.executor.model_id ? ` model ${record.executor.model_id}` : ''}`,
-    ...(record.executor.case_error ? [`case stopped: ${record.executor.case_error}`] : []),
-    `outcome: ${record.outcome}${record.detail ? ` (${record.detail.slice(0, 200)})` : ''}`,
-    `started ${record.started_at}, ${record.cost.wall_ms} ms, ${record.cost.model_requests} model requests, ${record.cost.tokens_in}+${record.cost.tokens_out} tokens, ${record.cost.evals} evals`,
-    `inputs: ${short(view.inputs, 600)}`, ...(Object.keys(record.captures).length ? [`captures: ${short(view.captures, 400)}`] : []),
-    `output: ${short(view.output, 600)}`,
-    ...(record.effects.length ? ['effects:', ...(view.effects as { service: string; method: string; args: unknown; result?: unknown; error?: string; by: string }[])
-      .map(effect => `  ${effect.by} ${effect.service}.${effect.method}(${short(effect.args, 160).slice(1, -1)}) ${effect.error ? `failed: ${effect.error}` : `→ ${short(effect.result, 160)}`}`)] : []),
-    ...(record.approach.evals.length ? [`approach ${record.approach.hash ?? '-'}:`, ...record.approach.evals.map((code, index) => `  eval ${index + 1}: ${code.replace(/\s+/g, ' ').slice(0, 300)}`)] : []),
-    ...(cases.length ? ['cases:', ...cases.map(item => `  ${item.case_hash} ${item.role}${item.verdict ? ` ${item.verdict}` : ''}`)] : []),
-    ...(store.annotations(record.call_id).map(item => `annotation ${item.kind}: ${short(item.value)}`)),
-    ...(store.children(record.call_id).map(child => `child ${child.call_id} ${child.definition_name} ${child.executor} ${child.outcome}`))].join('\n');
-}
 
 /** The stored compilation's cases of one function, as the tier-3 row of the ladder: the same evidence, summed over its cases. */
 export type CaseTierRow = { function: string; served: number; ms_per_call: number; state: string; evidence: Evidence;
@@ -153,11 +210,52 @@ export function occupancyOf(events: readonly Record<string, unknown>[]) {
     queue_wait_ms_p50: round(at(0.5)), queue_wait_ms_p95: round(at(0.95)), running_turns: sent.filter(event => event.schedule_priority === 'running').length };
 }
 
+/** The options of each `natlang traces` action. */
+const TRACES: Record<string, Spec> = {
+  status: {}, help: {},
+  hot: { values: ['--program', '--since', '--by', '--limit'] },
+  list: { values: ['--program', '--definition', '--executor', '--outcome', '--case', '--since', '--limit', '--after'], flags: ['--all', '--audits'] },
+  show: { flags: ['--events', '--full'] },
+  occupancy: { values: ['--definition', '--executor', '--since', '--limit'], flags: ['--audits'] },
+  tiers: { values: ['--definition'] },
+  export: { values: ['--definition', '--executor', '--limit'], flags: ['--audits'] },
+  pin: {}, unpin: {}, annotate: {},
+  good: { values: ['--group', '--program'], flags: ['--dry-run'] },
+  bad: { values: ['--expected', '--group', '--program'], flags: ['--dry-run'] },
+  fix: { values: ['--expected', '--group', '--program'], flags: ['--dry-run'] },
+  config: {}, evict: { values: ['--bytes', '--work-limit'] },
+};
+const valuedOptions = (specs: Record<string, Spec>) => new Set(['--store', ...Object.values(specs).flatMap(spec => spec.values ?? [])]);
+
+/** Usage errors print one line and exit 2; other failures are the caller's (exit 1). */
+async function usageExit(run: () => Promise<number>): Promise<number> {
+  try { return await run(); }
+  catch (error) {
+    if (!(error instanceof UsageError)) throw error;
+    process.stderr.write(`natlang: ${error.message}\n`);
+    return 2;
+  }
+}
+
 /** `natlang traces ...` */
-export async function tracesCommand(argv: string[]): Promise<number> {
-  const args = parse(argv);
+export function tracesCommand(argv: string[]): Promise<number> {
+  return usageExit(async () => {
+    if (argv.includes('--help') || argv.includes('-h') || argv[0] === 'help') { print(TRACES_HELP, false); return 0; }
+    const action = actionOf(argv, valuedOptions(TRACES)) ?? 'status';
+    if (!TRACES[action]) {
+      const guess = closest(action, Object.keys(TRACES));
+      throw new UsageError(`unknown action natlang traces ${action}${guess ? ` (did you mean ${guess}?)` : ''}; natlang help traces lists them`);
+    }
+    const args = parse(argv, `traces ${action}`, TRACES[action]!);
+    const words = args.words.slice(1);
+    return traces(action, words, args);
+  });
+}
+
+async function traces(action: string, words: string[], args: Args): Promise<number> {
   const json = args.options.has('--json');
-  const [action = 'status', ...words] = args.words;
+  const extra = (count: number, usage: string) => { if (words.length > count) throw new UsageError(`unexpected argument ${words[count]}; usage: ${usage}`); };
+  if (['status', 'hot', 'list', 'occupancy', 'tiers', 'export', 'evict'].includes(action)) extra(0, `natlang traces ${action} [OPTIONS]`);
   const store = openStore(args);
   if (action === 'status') {
     const settings = store.settings();
@@ -170,38 +268,38 @@ export async function tracesCommand(argv: string[]): Promise<number> {
     return 0;
   }
   if (action === 'hot') {
-    const rows = store.hot({ program: text(args, '--program') ? resolve(text(args, '--program')!) : undefined, since: text(args, '--since'),
-      by: (text(args, '--by') as 'calls' | 'tokens' | 'wall_ms' | undefined) ?? 'calls', limit: number(args, '--limit', 20) });
+    const rows = store.hot({ program: text(args, '--program') ? resolve(text(args, '--program')!) : undefined, since: since(args),
+      by: choice(args, '--by', ['calls', 'tokens', 'wall_ms'] as const) ?? 'calls', limit: number(args, '--limit', 20) });
     print(json ? rows : table(rows, ['definition_name', 'calls', 'agent_calls', 'crisp_calls', 'tokens', 'wall_ms', 'definition_source', 'definition_key']), json);
     return 0;
   }
   if (action === 'list') {
+    if (args.options.has('--all') && text(args, '--program')) throw new UsageError('--all lists every program\'s calls and --program DIR one program\'s; pass one of them');
+    // Inside a program, its calls by default; --all for the machine.
+    const program = text(args, '--program') ? resolve(text(args, '--program')!) : args.options.has('--all') ? undefined : enclosingProgram();
+    if (text(args, '--program') && !existsSync(program!)) throw new UsageError(`--program ${text(args, '--program')}: no such directory`);
     const rows = store.calls({ definition: text(args, '--definition'), executor: text(args, '--executor'), outcome: text(args, '--outcome'),
-      caseHash: text(args, '--case'), since: text(args, '--since'), limit: number(args, '--limit', 30), after: text(args, '--after'),
-      audits: args.options.has('--all') });
-    print(json ? rows : table(rows, ['call_id', 'definition_name', 'executor', 'outcome', 'started_at', 'wall_ms', 'approach_hash']), json);
+      caseHash: text(args, '--case'), since: since(args), limit: number(args, '--limit', 30), after: text(args, '--after'),
+      audits: args.options.has('--audits'), program });
+    if (json) { print(rows, true); return 0; }
+    const scope = program ? `calls of ${program}${text(args, '--program') ? '' : ' (--all for every program\'s)'}` : 'calls on this machine';
+    print(rows.length ? `${table(rows, ['call_id', 'definition_name', 'executor', 'outcome', 'started_at', 'wall_ms'])}\n${scope}, newest first; ` +
+      `natlang traces show CALL (an ID prefix will do) shows one` : `no ${scope}`, false);
     return 0;
   }
   if (action === 'show') {
-    const record = words[0] && store.call(words[0]);
-    if (!record && words[0] && args.options.has('--events')) {
-      print((store.events(words[0]) ?? []).map(event => JSON.stringify(event)).join('\n'), false);
-      return 0;
-    }
-    if (!record) {
-      const running = words[0] ? store.db.prepare("SELECT * FROM calls WHERE call_id = ? AND outcome IN ('running', 'interrupted')").get(words[0]) as Record<string, unknown> | undefined : undefined;
-      if (!running) throw new Error(`usage: natlang traces show CALL (no call ${words[0] ?? ''})`);
-      print(json ? running : [`call ${running.call_id}: ${running.definition_name} ${running.outcome === 'running' ? 'is running' : 'was interrupted (its process ended)'} since ${running.started_at}`,
-        ...store.children(String(running.call_id)).map(child => `child ${child.call_id} ${child.definition_name} ${child.executor} ${child.outcome}`)].join('\n'), json);
-      return 0;
-    }
-    if (args.options.has('--events')) { print((store.events(record.call_id) ?? []).map(event => JSON.stringify(event)).join('\n'), false); return 0; }
-    print(json ? expandedRecord(store, record) : describeCall(store, record), json);
+    extra(1, 'natlang traces show CALL [--full] [--events] [--json]');
+    const id = resolveCall(store, words[0], 'natlang traces show CALL [--full] [--events] [--json]');
+    if (args.options.has('--events')) { print((store.events(id) ?? []).map(event => JSON.stringify(event)).join('\n'), false); return 0; }
+    const record = store.call(id);
+    if (record) { print(json ? expandedRecord(store, record) : renderTrace(store, { record }, { full: args.options.has('--full') }), json); return 0; }
+    const running = store.db.prepare('SELECT * FROM calls WHERE call_id = ?').get(id) as Record<string, unknown>;
+    print(json ? running : renderTrace(store, { running }, { full: args.options.has('--full') }), json);
     return 0;
   }
   if (action === 'occupancy') {
-    const rows = store.calls({ definition: text(args, '--definition'), executor: text(args, '--executor'), since: text(args, '--since'),
-      limit: number(args, '--limit', 200), audits: args.options.has('--all') });
+    const rows = store.calls({ definition: text(args, '--definition'), executor: text(args, '--executor'), since: since(args),
+      limit: number(args, '--limit', 200), audits: args.options.has('--audits') });
     const per = rows.map(row => ({ call_id: row.call_id, definition_name: row.definition_name, ...occupancyOf(store.events(row.call_id) ?? []) }))
       .filter(row => row.requests > 0);
     const total = occupancyOf(rows.flatMap(row => (store.events(row.call_id) ?? []).map(event => ({ ...event }))));
@@ -220,44 +318,47 @@ export async function tracesCommand(argv: string[]): Promise<number> {
   }
   if (action === 'export') {
     for (const row of store.calls({ definition: text(args, '--definition'), executor: text(args, '--executor'), limit: number(args, '--limit', 1000),
-      audits: args.options.has('--all') })) {
+      audits: args.options.has('--audits') })) {
       const record = store.call(row.call_id);
       if (record) process.stdout.write(`${JSON.stringify(expandedRecord(store, record))}\n`);
     }
     return 0;
   }
   if (action === 'pin' || action === 'unpin') {
-    if (!words[0]) throw new Error(`usage: natlang traces ${action} CALL`);
-    store.pin(words[0], action === 'pin'); print(`${action}ned ${words[0]}`, false); return 0;
+    extra(1, `natlang traces ${action} CALL`);
+    const id = resolveCall(store, words[0], `natlang traces ${action} CALL`);
+    store.pin(id, action === 'pin'); print(`${action}ned ${id}`, false); return 0;
   }
   if (action === 'annotate') {
     const [call, kind, ...value] = words;
-    if (!call || !kind || !value.length) throw new Error('usage: natlang traces annotate CALL KIND VALUE');
+    if (!call || !kind || !value.length) throw new UsageError('usage: natlang traces annotate CALL KIND VALUE');
+    const id = resolveCall(store, call, 'natlang traces annotate CALL KIND VALUE');
     let parsed: unknown = value.join(' ');
     try { parsed = JSON.parse(String(parsed)); } catch { /* text */ }
-    store.annotate(call, kind, parsed, 'cli'); print(`annotated ${call}`, false); return 0;
+    store.annotate(id, kind, parsed, 'cli'); print(`annotated ${id}`, false); return 0;
   }
   if (action === 'good' || action === 'bad' || action === 'fix') {
-    if (!words[0]) throw new Error(`usage: natlang traces ${action} CALL${action === 'fix' ? ' --expected JSON' : action === 'bad' ? ' [--expected JSON]' : ''} [--group G] [--program DIR] [--dry-run]`);
+    const usage = `natlang traces ${action} CALL${action === 'fix' ? ' --expected JSON' : action === 'bad' ? ' [--expected JSON]' : ''} [--group G] [--program DIR] [--dry-run]`;
+    extra(1, usage);
+    const id = resolveCall(store, words[0], usage);
+    if (action === 'fix' && text(args, '--expected') === undefined) throw new UsageError(`natlang traces fix needs the right answer: ${usage} (quote strings: '"billing"')`);
     const { recordFeedback } = await import('../calls/feedback.js');
-    print(recordFeedback(store, { verdict: action, call: words[0], expected: text(args, '--expected'), group: text(args, '--group') || process.env.NATLANG_FEEDBACK_GROUP || undefined,
+    print(recordFeedback(store, { verdict: action, call: id, expected: text(args, '--expected'), group: text(args, '--group') || process.env.NATLANG_FEEDBACK_GROUP || undefined,
       program: text(args, '--program'), dryRun: args.options.has('--dry-run'), authorizedProducers: await authorizedProducers() }), false); return 0;
   }
   if (action === 'config') {
     const changes: Partial<CallStoreSettings> = {};
     for (const pair of words) {
       const [key, value] = pair.split('=');
-      if (!key || value === undefined) throw new Error('usage: natlang traces config [KEY=VALUE...]');
+      if (!key || value === undefined) throw new UsageError('usage: natlang traces config [KEY=VALUE...]');
       (changes as Record<string, unknown>)[key] = ['specialization', 'promotionPolicy', 'targetPolicy', 'declinePolicy'].includes(key) ? value : Number(value);
     }
     print(Object.keys(changes).length ? store.writeSettings(changes) : store.settings(), true);
     return 0;
   }
-  if (action === 'evict') {
-    print(`freed ${store.evict(text(args, '--bytes') ? Number(text(args, '--bytes')) : undefined,
-      text(args, '--work-limit') ? Number(text(args, '--work-limit')) : undefined)} bytes`, false); return 0;
-  }
-  throw new Error('usage: natlang traces status|hot|list|show|occupancy|tiers|export|pin|unpin|annotate|good|bad|fix|config|evict');
+  // evict
+  print(`freed ${store.evict(text(args, '--bytes') ? number(args, '--bytes', 0) : undefined,
+    text(args, '--work-limit') ? number(args, '--work-limit', 0) : undefined)} bytes`, false); return 0;
 }
 
 /** The compilation a word names: an ID, a definition key, name or source. */
@@ -267,10 +368,16 @@ function findCompilation(store: CallStore, word: string) {
 }
 
 /** `natlang compilations ...` */
-export async function compilationsCommand(argv: string[]): Promise<number> {
-  const args = parse(argv);
+export function compilationsCommand(argv: string[]): Promise<number> {
+  return usageExit(async () => {
+    const args = parse(argv, 'compilations', { values: ['--program', '--limit', '--role', '--definition', '--out'], flags: ['--all'] });
+    const [action = 'list', ...words] = args.words;
+    return compilations(action, words, args);
+  });
+}
+
+async function compilations(action: string, words: string[], args: Args): Promise<number> {
   const json = args.options.has('--json');
-  const [action = 'list', ...words] = args.words;
   const store = openStore(args);
   if (action === 'list') {
     const rows = store.compilations({ program: text(args, '--program') ? resolve(text(args, '--program')!) : undefined,
@@ -301,8 +408,8 @@ export async function compilationsCommand(argv: string[]): Promise<number> {
     return 0;
   }
   if (action === 'why') {
-    const record = words[0] && store.call(words[0]);
-    if (!record) throw new Error('usage: natlang compilations why CALL');
+    const record = store.call(resolveCall(store, words[0], 'natlang compilations why CALL'));
+    if (!record) throw new Error(`call ${words[0]} has not finished; natlang traces show ${words[0]} shows it`);
     const compilation = store.currentCompilation(record.definition.key);
     const lines = [`${record.definition.name}: ${record.executor.kind}`];
     if (record.executor.case_hash) lines.push(`served by case ${record.executor.case_hash}${record.executor.case_error ? `, which stopped (${record.executor.case_error}); the agent finished the call` : ''}`);
@@ -387,7 +494,7 @@ export async function compilationsCommand(argv: string[]): Promise<number> {
     print(json ? summary : `wrote ${summary.cases} cases, ${summary.declines} declines and ${summary.findings} findings (${summary.calls} calls) to ${resolve(out)}`, json);
     return 0;
   }
-  throw new Error('usage: natlang compilations list|show|why|calls|history|export|disable|enable|declines|savings|findings|acknowledge|export-corpus');
+  throw new UsageError('usage: natlang compilations list|show|why|calls|history|export|disable|enable|declines|savings|findings|acknowledge|export-corpus');
 }
 
 /** The specializer application in this checkout. */

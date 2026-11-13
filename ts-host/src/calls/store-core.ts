@@ -42,7 +42,7 @@ export const byteLength = (text: string): number => new TextEncoder().encode(tex
 export type CallSummary = { call_id: string; parent_call_id: string | null; definition_id: string; definition_name: string;
   definition_key: string; definition_source: string | null; executor: string; case_hash: string | null; outcome: string;
   started_at: string; wall_ms: number; tokens_in: number; tokens_out: number; approach_hash: string | null;
-  program_root: string | null; audit_of: string | null };
+  program_root: string | null; audit_of: string | null; parent_action_index?: number | null };
 export type CallFilter = { definition?: string; key?: string; source?: string; outcome?: string; executor?: string;
   caseHash?: string; since?: string; program?: string; limit?: number; after?: string; audits?: boolean };
 export type HotDefinition = { definition_key: string; definition_id: string; definition_name: string; definition_source: string | null;
@@ -312,8 +312,21 @@ export class CallStore {
   /** Calls started by a call, oldest first. */
   children(callId: string): CallSummary[] {
     return this.db.prepare(`SELECT call_id, parent_call_id, definition_id, definition_name, definition_key, definition_source, executor,
-      case_hash, outcome, started_at, wall_ms, tokens_in, tokens_out, approach_hash, program_root, audit_of FROM calls
+      case_hash, outcome, started_at, wall_ms, tokens_in, tokens_out, approach_hash, program_root, audit_of, parent_action_index FROM calls
       WHERE parent_call_id = ? ORDER BY started_at ASC`).all(callId) as CallSummary[];
+  }
+  /**
+   * Calls a typed ID may mean, newest first: the exact ID, else every ID starting with `prefix`, or whose short form
+   * (the ID without its task name and ordinal, `task-3-`) does.
+   */
+  matchCalls(prefix: string, limit = 20): Pick<CallSummary, 'call_id' | 'parent_call_id' | 'definition_name' | 'outcome' | 'started_at'>[] {
+    const columns = 'call_id, parent_call_id, definition_name, outcome, started_at';
+    const exact = this.db.prepare(`SELECT ${columns} FROM calls WHERE call_id = ?`).all(prefix) as ReturnType<CallStore['matchCalls']>;
+    if (exact.length || !prefix) return exact;
+    const like = prefix.replace(/[\\%_]/g, character => `\\${character}`);
+    const rows = this.db.prepare(`SELECT ${columns} FROM calls WHERE call_id LIKE ? ESCAPE '\\' OR call_id LIKE ? ESCAPE '\\'
+      ORDER BY started_at DESC, call_id DESC`).all(`${like}%`, `%-${like}%`) as ReturnType<CallStore['matchCalls']>;
+    return rows.filter(row => row.call_id.startsWith(prefix) || row.call_id.replace(/^[^/]*?-\d+-/, '').startsWith(prefix)).slice(0, limit);
   }
   countCalls(definitionKey: string): number {
     return Number((this.db.prepare("SELECT COUNT(*) AS n FROM calls WHERE definition_key = ? AND audit_of IS NULL AND executor != 'crisp'")
