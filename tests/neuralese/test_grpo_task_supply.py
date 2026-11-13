@@ -51,3 +51,8 @@ def test_training_and_held_eval_share_one_episode_budget(monkeypatch):
     monkeypatch.setattr(held_eval, 'measure', lambda *a, **k: seen.update(k))
     held_eval.main(['measure', '--manifest', 'm.json', '--out', 'o', '--endpoint', 'http://x=1', '--policy-id', 'p'])
     assert seen['max_model_requests'] == held_eval.EPISODE_MODEL_CALLS
+
+
+def test_reward_defaults_to_graded_with_a_binary_opt_out(monkeypatch):
+    assert parsed(monkeypatch).reward == 'graded'
+    assert parsed(monkeypatch, '--reward', 'binary').reward == 'binary'

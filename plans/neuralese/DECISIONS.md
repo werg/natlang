@@ -1939,3 +1939,23 @@ steps means the updates are still unrelated noise and the batch must grow before
   or `--no-default-errata` is given; run2 drew none of the 380 wrong-oracle rows in 113 groups, but explore 0.4 would.
 - **One episode budget (4578d6404, 8d0dcf296).** Training and held eval both stop at 40 model calls
   (`held_eval.EPISODE_MODEL_CALLS`); held ran 64, so the start policy is re-measured at the next pin.
+
+## 2026-11-13: graded reward with file-effect credit (owner decision; engineering design)
+
+`task_rollouts.graded_reward` (rewards.jsonl `graded_reward`, rollout `reward.graded`): 1.0 for an accepted episode;
+None when unscored; 0 for every outcome but `semantic_mismatch` and for any failed check other than `answer` and
+`files`. Otherwise the mean of the answer (one exact check) and `effect_fraction`: over the files the episode had to
+write (expected present and different from the start; passes when it ends equal), plus the files it had to remove but
+left and the files it changed, created or removed that should have stayed (failures). A correct removal earns nothing
+on its own: the first version counted emptied sources, and held row 50/1 (slips moved into a wrong folder) scored 0.66
+for it. An effect fraction of 0 gives 0 whatever the answer (a constant answer such as "repair complete" is no work);
+a task without a folder effect stays binary. Modes whose `files_check` is already over changed paths use its
+passed/items; other modes count as one check.
+GRPO trains on it by default (`--reward graded`; `binary` opts out); selection pass rates stay on acceptance; held eval
+stays binary and reports `mean_graded_reward` beside it.
+Real episodes (run2 held/step-00000, 512): all 229 accepted score 1.0; of 281 scored failures 231 score 0, 50 partial
+(8 in (0, .5), 20 in [.5, .75), 22 in [.75, 1)), all in authored effect-state families. Hand-checked 10: 2/0 (8 of 9
+writes, payments.md wrong, 0.94), 9/0 (copied instead of moved: 5 writes right, 4 sources left, 0.75), 17/1 (5 of 29,
+0.59), 24/0 (1 of 43, right answer, 0.51), 51/0 (both files right, wrong answer, 0.5), 109/0 (1 of 4, wrong answer,
+0.125), 136/0 (1 of 21, 0.05), 148/1 (2 of 3, wrong answer, 0.33), 50/1 and 55/0 (wrong-folder moves, 0). Note:
+the answer half dominates when the files are mostly wrong (24/0); revisit if graded GRPO favours answer-only episodes.

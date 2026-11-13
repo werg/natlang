@@ -125,6 +125,107 @@ def reward_of(outcome: str, finish: dict[str, Any] | None = None) -> float | Non
     return 1.0 if outcome == "task_success" else 0.0
 
 
+# Checks that a graded reward may give partial credit for; any other failed check (status, honest stop, stop evidence,
+# world, required actions, ...) leaves the episode at 0.
+GRADED_CHECKS = frozenset({"answer", "files"})
+# File compares whose checkFiles score is already over the paths the episode had to change or did change
+# (``oracles.ts`` default branch: ``expected != input or actual != input``), one exact item per path or record key.
+CHANGED_PATH_COMPARES = frozenset({"exact", "moves", "rewrite", "csv", "counts", "json-string-record", "qa-string-map"})
+
+
+def _json_canonical(text: str) -> str | None:
+    def pairs(items):
+        keys = [key for key, _ in items]
+        if len(keys) != len(set(keys)):
+            raise ValueError("duplicate key")
+        return dict(items)
+
+    def plain(value):
+        if isinstance(value, float) and value.is_integer() and abs(value) < 2 ** 53:
+            return int(value)
+        if isinstance(value, list):
+            return [plain(item) for item in value]
+        if isinstance(value, dict):
+            return {key: plain(item) for key, item in value.items()}
+        return value
+    try:
+        return json.dumps(plain(json.loads(text, object_pairs_hook=pairs)), sort_keys=True, ensure_ascii=False)
+    except (ValueError, TypeError):
+        return None
+
+
+def file_content_equal(path: str, actual: str | None, expected: str | None) -> bool:
+    """``oracles.ts`` ``fileContentEqual``: exact text, JSON files equal as data."""
+    if actual is None or expected is None:
+        return actual is expected
+    if not path.lower().endswith(".json"):
+        return actual == expected
+    left = _json_canonical(actual)
+    return left is not None and left == _json_canonical(expected)
+
+
+def effect_fraction(outcome: dict[str, Any], semantics: dict[str, Any]) -> float | None:
+    """The share of the file items the episode had to change or did change that end equal to the expected state: only
+    paths where the expected or the final file differs from the starting one count, so a file that already matched and
+    was left alone earns nothing. None when the task has no checked folder effect (no ``files_check`` or nothing to
+    write)."""
+    check = outcome.get("files_check")
+    if not isinstance(check, dict):
+        return None
+    spec = semantics.get("files_oracle") or {"compare": "content"}
+    compare = spec.get("compare") or "exact"
+    if compare == "content":
+        before = semantics.get("folder_files")
+        after = outcome.get("files")
+        if not isinstance(before, dict) or not isinstance(after, dict):
+            return None
+        want = semantics.get("expected_files")
+        want = before if want is None else want
+        # Items: every file the episode had to write (expected present and different from the start), which passes
+        # when it ends equal; every file it had to remove but left, and every file it changed, created or removed that
+        # should have stayed as it was, which fail. A correct removal earns nothing on its own (the source half of a
+        # move): moving files into the wrong folder must not score the emptied sources.
+        passed = items = 0
+        for path in sorted(set(before) | set(want) | set(after)):
+            start, goal, end = before.get(path), want.get(path), after.get(path)
+            if not file_content_equal(path, goal, start):
+                if goal is not None:
+                    items += 1
+                    passed += file_content_equal(path, end, goal)
+                elif end is not None:
+                    items += 1
+            elif not file_content_equal(path, end, start):
+                items += 1
+        return passed / items if items else None
+    if compare in CHANGED_PATH_COMPARES:
+        items = check.get("items")
+        return check.get("passed", 0) / items if items else None
+    return 1.0 if check.get("accepted") else 0.0
+
+
+def graded_reward(outcome_class: str, reward: float | None, result: dict[str, Any] | None,
+                  semantics: dict[str, Any] | None) -> float | None:
+    """The episode's reward in [0, 1] with partial credit for file effects (owner decision 2026-11-13): 1 for an accepted
+    episode, None when unscored, and for a finished episode the oracle rejected (``semantic_mismatch``) whose only failed
+    checks are the answer and the files, the mean of the answer (one exact check) and ``effect_fraction``. An episode
+    that achieved none of the effects it had to make earns 0 whatever it returned (a constant answer such as
+    "repair complete" is no work), and a task without a checked folder effect stays binary. Budget stops, other outcomes
+    and any other failed check are 0."""
+    if reward is None or reward == 1.0:
+        return reward
+    if outcome_class != "semantic_mismatch" or not result:
+        return 0.0
+    outcome = result.get("outcome") if isinstance(result.get("outcome"), dict) else {}
+    checks = outcome.get("checks") or {}
+    failed = {name for name, passed in checks.items() if not passed}
+    if not checks or not failed or not failed <= GRADED_CHECKS:
+        return 0.0
+    effects = effect_fraction(outcome, semantics or {})
+    if not effects:
+        return 0.0
+    return round((float(bool(checks.get("answer"))) + effects) / 2, 6)
+
+
 def expand_captures(trajectory: list[Any]) -> list[Any]:
     """The trajectory with every compact RL capture (`trajectory.ts` `compactCaptures`) rebuilt exactly as the actor
     returned it: a `tokens_delta` prompt is the first `keep` tokens and `producing` flags of turn `turn`'s (expanded)
@@ -662,6 +763,7 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0,
             if result is None and outcome == "budget_exhaustion" and \
             (finishes.get(entry["key"]) or {}).get("resource_limit_reason") == "model_request_budget" else None
         task = packet[entry["index"]]
+        graded = graded_reward(outcome, reward, result, task.get("semantics"))
         if emit is not None and (entry.get("task_id") != task.get("id") or
                                  entry.get("packet_sha256") != packet_sha256):
             raise ValueError(f"queue entry {entry.get('key')} is not bound to its exact task packet row")
@@ -701,6 +803,7 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0,
                             "turns": turns, "execution_graph": execution_graph,
                             "outcome": outcome,
                             "reward": None if training_reward is None else {"quality": training_reward,
+                                "graded": graded,
                                 **({"neuralese_bonus": episode_bonus} if episode_bonus else {}),
                                 "execution_efficiency": efficiency},
                             "unscored": ("budget_prefix_capture_unavailable" if result is None and reward is not None and
@@ -708,7 +811,8 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0,
                             **({"budget_termination_evidence": budget_prefix["evidence"]} if budget_prefix else {})})
         rollouts.append({"task_id": task["id"], "family": task.get("family"), "group": entry["group"],
                          "sample": entry["sample"], "seed": entry["seed"], "outcome": outcome,
-                         "reward": reward, "detail": detail if isinstance(detail, str) else None,
+                         "reward": reward, "graded_reward": graded,
+                         "detail": detail if isinstance(detail, str) else None,
                          "finish_status": (finishes.get(entry["key"]) or {}).get("status"),
                          "neuralese_exchanges": exchanges,
                          "execution_efficiency": efficiency,

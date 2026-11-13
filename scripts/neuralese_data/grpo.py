@@ -405,7 +405,11 @@ def load_group(collector, group, stats):
         if reward is None or row.get('unscored'):
             stats['episodes_unscored'] += 1
             continue
-        episodes.append({'reward': float(reward['quality']), 'rows': rows, 'decisions': decisions,
+        quality = float(reward['quality'])
+        graded = reward.get('graded')
+        binary = getattr(getattr(collector, 'args', None), 'reward', 'graded') == 'binary'
+        episodes.append({'reward': quality if binary or graded is None else float(graded),
+                         'quality': quality, 'rows': rows, 'decisions': decisions,
                          'task_id': row['task_id'], 'round': group,
                          'outcome': row.get('outcome')})
     return info['task_id'], episodes, info['versions']
@@ -1820,6 +1824,10 @@ def main():
                    'scripts/rl_tasks/neuralese_variants.py; off by default: a controlled addition)')
     t.add_argument('--neuralese-variant-share', type=float, default=0.5,
                    help='share of the groups of a task with a variant that run the variant')
+    t.add_argument('--reward', choices=('graded', 'binary'), default='graded',
+                   help='advantage reward: graded (task_rollouts.graded_reward: partial credit for the file effects an '
+                        'episode with only answer/file checks failed achieved; owner 2026-11-13) or binary acceptance. '
+                        'Task pass rates for selection stay binary')
     t.add_argument('--exclude-ids', action='append', default=[],
                    help='JSONL of pool rows never selected ({"id": ...} per line; wrong oracles, garbled tasks); '
                         'default: every ops/pool-errata/*.jsonl')

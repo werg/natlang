@@ -418,6 +418,7 @@ def finalize(directory, spec, started, *, complete):
         efficiency = row.get('execution_efficiency') or {}
         samples.append({'task_id': row['task_id'], 'family': row.get('family'), 'level': _level(packet[row['group']]),
                         'sample': row['sample'], 'outcome': row['outcome'], 'reward': row['reward'],
+                        'graded_reward': row.get('graded_reward'),
                         'ran': key in finishes, 'finish_status': row.get('finish_status'), 'timed_out': _timed_out(finish),
                         'elapsed_seconds': (finish or {}).get('elapsed_seconds'),
                         'completion_tokens': (finish or {}).get('completion_tokens'),
@@ -441,6 +442,9 @@ def finalize(directory, spec, started, *, complete):
               'started_at': started, 'finished_at': time.time(), 'elapsed_seconds': elapsed,
               'complete': bool(complete and len(ran) == len(samples)), 'ran': len(ran), 'scored': len(scored),
               'successes': successes, 'success_rate': round(successes / len(scored), 4) if scored else None,
+              # Secondary: the training reward with partial file-effect credit (held is judged on acceptance).
+              'mean_graded_reward': (round(sum(s['graded_reward'] for s in scored) / len(scored), 4)
+                                     if scored and all(s.get('graded_reward') is not None for s in scored) else None),
               'timeouts': timeouts, 'timeout_rate': round(timeouts / len(ran), 4) if ran else None,
               'unscored_other': len(ran) - len(scored) - sum(s['timed_out'] and s['reward'] is None for s in ran),
               'outcome_counts': counts,
@@ -593,6 +597,7 @@ def compare(first, second, *, resamples=2000, trained_families=None, ignore_ids=
                 'series': result['series']['key'], 'seed_base': result.get('seed_base', SEED_BASE), 'ran': result['ran'],
                 'scored': result['scored'], 'successes': result['successes'],
                 'success_rate': round(result['successes'] / result['scored'], 4) if result['scored'] else None,
+                'mean_graded_reward': result.get('mean_graded_reward'),
                 'timeouts': sum(timed_out(s) for s in result['samples'] if s['ran']),
                 'loop_rate': result['loop_rate'], 'ran_out_rate': ran_out_rate(result),
                 'repeated_action_rate': result.get('repeated_action_rate'), 'elapsed_seconds': result.get('elapsed_seconds'), 'complete': result.get('complete')}
