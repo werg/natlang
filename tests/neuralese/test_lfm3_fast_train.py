@@ -205,8 +205,12 @@ def test_nucleus_nll_matches_brute_force_and_dense_autograd():
         want = _dense_nucleus(h, weight, target, top_p)
         want_grads = torch.autograd.grad((want[0] * scale).sum() + (want[1] * scale_nucleus).sum(), (h, weight))
         assert want[2][:6].all() and not want[2].all()
-        for top_k in (4, 1024):                                # 4: most rows take the full-sort path
-            got = lfm3_fast_train.linear_nll_nucleus(h, weight, target, top_p, chunk=16, top_k=top_k)
+        for top_k, wide_k in ((4, 8), (4, 16384), (1024, 16384)):   # 4: most rows take the wide paths (8: the full sort)
+            lfm3_fast_train.NUCLEUS_WIDE_K, saved = wide_k, lfm3_fast_train.NUCLEUS_WIDE_K
+            try:
+                got = lfm3_fast_train.linear_nll_nucleus(h, weight, target, top_p, chunk=16, top_k=top_k)
+            finally:
+                lfm3_fast_train.NUCLEUS_WIDE_K = saved
             assert torch.allclose(got[0], want[0], atol=1e-5) and torch.allclose(got[1], want[1], atol=1e-5)
             assert torch.equal(got[2], want[2]) and not got[2].requires_grad
             grads = torch.autograd.grad((got[0] * scale).sum() + (got[1] * scale_nucleus).sum(), (h, weight))
