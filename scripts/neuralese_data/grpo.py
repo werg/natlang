@@ -331,7 +331,14 @@ class Collector:
                         os.killpg(process.pid, signal.SIGTERM)
                         process.wait()
                         return
+            if process.returncode < 0 or self.stop.is_set():
+                self._abandon(group, key, process.returncode)
+                if self.stop.is_set():
+                    return
+                continue
             with self.lock:
+                if info.get('abandoned'):   # a sibling was interrupted: this group is never scored
+                    continue
                 info['done'] += 1
                 info['versions'].append(started)
                 complete = info['done'] == info['size']
@@ -345,6 +352,24 @@ class Collector:
                         self.outstanding -= 1
                         # no longer outstanding: its creation time must not pin the block GC's cutoff for the whole run
                         self.groups.pop(group, None)
+
+    def _abandon(self, group, key, returncode):
+        """An episode killed by a signal (a unit stop signals every process of the cgroup, so the episodes die before this
+        process's SIGTERM handler runs while the learner holds the main thread; or the kernel's OOM killer) has no verdict.
+        Counting it as done scored its group with the killed episodes as ``unresolved`` and the finished ones as the group:
+        a subset biased to short episodes that the stopping learner could still train on and that fed the pass band
+        (127 of run2's 131 unresolved episodes were such restart casualties; none had reached the wall clock). Its group
+        is dropped whole: never scored, its unstarted entries withdrawn, running siblings discarded when they end."""
+        with self.lock:
+            info = self.groups.get(group)
+            if info is None or info.get('abandoned'):
+                return
+            info['abandoned'] = True
+            self.pending = collections.deque(item for item in self.pending if item[0] != group)
+            self.groups.pop(group, None)
+            self.outstanding -= 1
+        print(json.dumps({'event': 'group abandoned', 'group': group, 'episode': key, 'returncode': returncode,
+                          'stopping': self.stop.is_set()}), flush=True)
 
     def _score(self, group):
         from natlang_neuralese.rl import task_rollouts

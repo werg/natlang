@@ -2,7 +2,8 @@
 """One screen of health for a pinned GRPO run, for heartbeat checks: `scripts/run_status.py RUNDIR [--unit UNIT]`.
 
 Prints the run unit's state, the last learner step and its age, steps per hour, the latest held results, the pin it runs,
-GPU, memory and disk, then one line per problem. Exits 1 when anything is red. Read-only; host python, no repo imports.
+GPU, memory and disk, then one line per problem. Exits 1 when anything is red. Read-only; host python, no repo package
+imports (the machine roots come from common/paths.py, loaded by file).
 """
 from __future__ import annotations
 
@@ -13,6 +14,17 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+
+
+def machine_root(name: str) -> Path:
+    """A logical machine root (``common/paths.py``, stdlib-only, loaded by file so host python needs no repo path)."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        'natlang_paths', Path(__file__).resolve().parents[1] / 'training/neuralese/natlang_neuralese/common/paths.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.root(name)
+
 
 STEP_STALE_H = 2.0       # no learner step for this long while the unit runs: red
 DISK_RED = 0.95          # filesystem use fraction
@@ -108,7 +120,7 @@ def main() -> int:
            if k in ('MemAvailable', 'SwapTotal', 'SwapFree')}
     swap_used = (mem.get('SwapTotal', 0) - mem.get('SwapFree', 0)) / 2**20
     print(f"machine  GPU {gpu or '-'}  MemAvailable {mem.get('MemAvailable', 0) / 2**20:.0f}G  swap used {swap_used:.1f}G")
-    for mount in ('/', '/mnt/external', '/dev/shm'):
+    for mount in ('/', str(machine_root('data_hdd')), '/dev/shm'):
         try:
             usage = shutil.disk_usage(mount)
         except OSError:
