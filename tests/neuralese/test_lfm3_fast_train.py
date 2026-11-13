@@ -235,3 +235,82 @@ def test_nucleus_ties_and_top_p_one_identity():
     for bad in (1., 0., 1.5):
         with pytest.raises(ValueError):
             lfm3_fast_train.linear_nll_nucleus(h, weight, target, bad)
+
+
+def test_continuation_after_a_past_equals_the_whole_document():
+    _, fast = _pair()
+    ids = torch.randint(0, 60, (17,))
+    whole = lfm3_fast_train.hidden(fast, ids)
+    for cuts in ((5,), (1, 9), (2, 3, 4), (12, 13)):  # pieces shorter and longer than the conv width and the window
+        past, pieces, start = None, [], 0
+        for end in (*cuts, len(ids)):
+            h, past = lfm3_fast_train.hidden(fast, ids[start:end], past=past, keep_past=True)
+            pieces.append(h)
+            start = end
+        torch.testing.assert_close(torch.cat(pieces), whole, rtol=1e-4, atol=1e-5)
+
+
+def _shared_sequences():
+    import numpy as np
+    rng = np.random.default_rng(0)
+    system, task = rng.integers(0, 60, 7), rng.integers(0, 60, 5)
+    seqs = [np.concatenate([system, task, rng.integers(0, 60, n)]) for n in (4, 6, 3)]   # one group's prompt
+    seqs.append(np.concatenate([seqs[0][:14], rng.integers(0, 60, 5)]))                  # a later chain of episode 0
+    seqs.append(np.concatenate([system, rng.integers(0, 60, 8)]))                         # another task, same system
+    seqs.append(rng.integers(0, 60, 9))                                                   # nothing shared
+    caps = [12, 12, 12, 15, 9, 3]       # the first row each sequence's targets read
+    return seqs, caps
+
+
+def test_prefix_tree_covers_every_sequence_once_within_caps():
+    seqs, caps = _shared_sequences()
+    nodes = lfm3_fast_train.prefix_tree(seqs, caps, 2)
+    seen = []
+
+    def walk(node, start):
+        assert node['start'] == start
+        if 'index' in node:
+            seen.append(node['index'])
+            assert start <= caps[node['index']]
+            return
+        assert node['end'] - node['start'] >= 2 and len(node['children']) >= 2
+        for child in node['children']:
+            walk(child, node['end'])
+    for node in nodes:
+        walk(node, 0)
+    assert sorted(seen) == list(range(len(seqs)))
+    lengths = [len(s) for s in seqs]
+    assert lfm3_fast_train.tree_tokens(nodes, lengths) < sum(lengths)
+    assert lfm3_fast_train.tree_tokens(lfm3_fast_train.prefix_tree(seqs, caps, 0), lengths) == sum(lengths)
+
+
+def test_prefix_tree_gradients_equal_separate_sequences():
+    seqs, caps = _shared_sequences()
+    _, flat = _pair()
+    _, tree = _pair()
+    tree.load_state_dict(flat.state_dict())
+    weights = [torch.randn(len(s) - c, flat.config.hidden_size) for s, c in zip(seqs, caps)]
+    expected = {}
+    for index, seq in enumerate(seqs):
+        h = lfm3_fast_train.hidden(flat, torch.from_numpy(seq).long())
+        expected[index] = h[caps[index]:].detach()
+        (h[caps[index]:] * weights[index]).sum().backward()
+    actual = {}
+
+    def leaf(index, start, past):
+        h = lfm3_fast_train.hidden(tree, torch.from_numpy(seqs[index][start:]).long(), past=past)
+        actual[index] = h[caps[index] - start:].detach()
+        (h[caps[index] - start:] * weights[index]).sum().backward()
+    nodes = lfm3_fast_train.prefix_tree(seqs, caps, 2)
+    assert any('children' in n and any('children' in c for c in n['children']) for n in nodes)   # two levels shared
+    lfm3_fast_train.run_prefix_tree(tree, nodes, lambda i, a, b: torch.from_numpy(seqs[i][a:b]).long(), leaf)
+    for index in expected:
+        torch.testing.assert_close(actual[index], expected[index], rtol=1e-4, atol=1e-5)
+    _grads_close(flat, tree, 'prefix tree')
+    without = {}                         # the no-backward walk (the KL reference pass) gives the same states
+    lfm3_fast_train.run_prefix_tree(tree, nodes, lambda i, a, b: torch.from_numpy(seqs[i][a:b]).long(),
+                                    lambda i, s, p: without.__setitem__(i, lfm3_fast_train.hidden(
+                                        tree, torch.from_numpy(seqs[i][s:]).long(), past=p)[caps[i] - s:].detach()),
+                                    backward=False)
+    for index in expected:
+        torch.testing.assert_close(without[index], expected[index], rtol=1e-4, atol=1e-5)

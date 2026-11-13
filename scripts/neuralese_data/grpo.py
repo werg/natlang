@@ -848,6 +848,17 @@ def decision_tensors(batch, device):
     return as_long(ids), lengths, as_long(positions), as_long(targets), as_long(owner), counts, imports
 
 
+def remap_tree(nodes, indices):
+    """A ``prefix_tree`` built over a subset, with its sequence numbers mapped back (``indices[i]``)."""
+    out = []
+    for node in nodes:
+        if 'index' in node:
+            out.append({'start': node['start'], 'index': indices[node['index']]})
+        else:
+            out.append({**node, 'first': indices[node['first']], 'children': remap_tree(node['children'], indices)})
+    return out
+
+
 def group_advantages(rewards):
     mean = sum(rewards) / len(rewards)
     std = math.sqrt(sum((r - mean) ** 2 for r in rewards) / len(rewards))
@@ -1581,26 +1592,69 @@ def train(args):
         rho_pre_max, rho_post_max, forward_tokens = 0., 0., 0
         rng = random.Random(args.seed + step)
         rng.shuffle(chains)
-        for chain in chains:
+        # Shared prefixes (the system prompt across groups, a group's opening prompt, an episode's earlier calls) are
+        # computed once per pass: a prefix tree over the step's chains (`--share-prefix-tokens`; chains reading imported
+        # native state stay whole), exact gradients (lfm3_fast_train.run_prefix_tree).
+        shareable = [i for i, c in enumerate(chains) if not c.get('imports')]
+        nodes = remap_tree(lfm3_fast_train.prefix_tree([chains[i]['ids'] for i in shareable],
+                                                       [chains[i]['segs'][0][0] - 1 for i in shareable],
+                                                       args.share_prefix_tokens), shareable)
+        nodes += [{'start': 0, 'index': i} for i, c in enumerate(chains) if c.get('imports')]
+        chain_tokens = sum(len(c['ids']) for c in chains)
+        computed_tokens = lfm3_fast_train.tree_tokens(nodes, [len(c['ids']) for c in chains])
+        cuda_ids = {}
+
+        def ids_of(index, start, end):
+            if index not in cuda_ids:
+                cuda_ids[index] = torch.from_numpy(chains[index]['ids'].astype(np.int64)).cuda()
+            return cuda_ids[index][start:end]
+
+        def chain_inputs(net, index, start):
+            """(ids, positions, targets, imports) of chain ``index`` from ``start`` (its rows before are a past)."""
+            chain = chains[index]
             ids, positions, targets = exp0_sft.chain_tensors(chain, 'cuda')
             # a consumer call's imported native state: fixed context exactly as the actor fed it (no producer gradient)
-            imports = lfm3_fast_train.import_tensors(model, [(start, collector.states(block_id))
-                                                             for start, block_id in chain.get('imports') or ()])
+            imports = lfm3_fast_train.import_tensors(net, [(row, collector.states(block_id))
+                                                           for row, block_id in chain.get('imports') or ()])
+            return ids[start:], positions - start, targets, imports
+
+        def all_checkpointed(net):
+            return lambda tokens: exp0_sft.set_checkpointing(net, tokens, 0)
+
+        # a leaf after ``start`` prefix tokens: the prefixes' graphs (every layer recomputed: its input saved) stay alive
+        # until their last child, so they come out of the leaf's activation budget
+        prefix_gb_per_token = len(model.model.layers) * model.config.hidden_size * 2 / 2**30
+
+        def leaf_budget(start):
+            return max(0., args.activation_gb - start * prefix_gb_per_token)
+
+        refs = {}
+        if reference is not None:
+            t = time.time()
+
+            def reference_chain(index, start, past):
+                ids, positions, targets, imports = chain_inputs(reference, index, start)
+                exp0_sft.set_checkpointing(reference, len(ids), leaf_budget(start))
+                refs[index] = -exp0_sft.token_nll(reference, forward(reference, ids, None, imports, past=past),
+                                                  positions, targets).detach()
+            with torch.enable_grad():
+                lfm3_fast_train.run_prefix_tree(reference, nodes, ids_of, reference_chain,
+                                                all_checkpointed(reference), backward=False)
+            for p in reference.parameters():
+                p.grad = None
+            torch.cuda.synchronize()
+            phase['reference_forward'] = phase.get('reference_forward', 0.) + time.time() - t
+        policy_started = time.time()
+
+        def train_chain(index, start, past):
+            nonlocal rho_pre_max, rho_post_max, forward_tokens, progress_mark
+            chain = chains[index]
+            ids, positions, targets, imports = chain_inputs(model, index, start)
             actor = torch.from_numpy(np.concatenate([row['logp'] for _, _, row in chain['segs']])).cuda().float()
             token_scale = scales[chain['episode']][0]
-            t = time.time()
-            ref = None
-            if reference is not None:
-                exp0_sft.set_checkpointing(reference, len(ids), args.activation_gb)
-                with torch.enable_grad():
-                    ref = -exp0_sft.token_nll(reference, forward(reference, ids, None, imports), positions, targets).detach()
-                for p in reference.parameters():
-                    p.grad = None
-                torch.cuda.synchronize()
-                phase['reference_forward'] = phase.get('reference_forward', 0.) + time.time() - t
-                t = time.time()
-            exp0_sft.set_checkpointing(model, len(ids), args.activation_gb)
-            h = forward(model, ids, None, imports)
+            ref = refs.pop(index, None)
+            exp0_sft.set_checkpointing(model, len(ids), leaf_budget(start))
+            h = forward(model, ids, None, imports, past=past)
             if args.top_p < 1:
                 # Top-p: the policy is the learner's distribution on its own nucleus (a constant set that always holds
                 # the sampled token), so the policy term's log-probability is logp - log(nucleus mass); the KL term
@@ -1645,14 +1699,17 @@ def train(args):
             rho_post_max = max(rho_post_max, weight.max().item())
             forward_tokens += len(ids)
             del h, logp, policy_logp, loss_terms
-            torch.cuda.synchronize()
-            phase['policy_forward_backward'] = phase.get('policy_forward_backward', 0.) + time.time() - t
             if time.time() - progress_mark > 300:
                 progress_mark = time.time()
-                busy = phase.get('reference_forward', 0.) + phase['policy_forward_backward']
-                log_line(log, {'event': 'learner progress', 'step': step + 1, 'forward_tokens': forward_tokens,
-                               'tokens_per_s': round(forward_tokens / busy), 'meminfo_gb': meminfo(),
+                log_line(log, {'event': 'learner progress', 'step': step + 1, 'leaf_tokens': forward_tokens,
+                               'policy_s': round(time.time() - policy_started), 'meminfo_gb': meminfo(),
                                'swap_pages': {k: v - swap0[k] for k, v in vmstat().items()}})
+        lfm3_fast_train.run_prefix_tree(model, nodes, ids_of, train_chain, all_checkpointed(model))
+        torch.cuda.synchronize()
+        phase['policy_forward_backward'] = time.time() - policy_started
+        forward_tokens = computed_tokens
+        cuda_ids.clear()
+        record.update(chain_tokens=chain_tokens, shared_prefix_tokens_saved=chain_tokens - computed_tokens)
         # Sampled decisions: log pi(chosen) = log_softmax(s / T)[chosen], s_o the summed log-probability of option o's
         # continuation after the exact prompt (as the actor scored it); TIS and k3 on the chosen option as for a token.
         decision_records = []
@@ -1898,6 +1955,9 @@ def main():
     t.add_argument('--exclude-family-regex', default=r'^ext_codebase-(py|natlang)_codebase_',
                    help='families never selected (default: codebase families whose repos are missing on the DGX)')
     t.add_argument('--max-turns', type=int, default=128)
+    t.add_argument('--share-prefix-tokens', type=int, default=256,
+                   help='a prompt prefix this long or longer that several of a step\'s chains share is computed once per '
+                        'pass, exact gradients (lfm3_fast_train.prefix_tree); 0: every chain whole')
     t.add_argument('--decision-batch-tokens', type=int, default=16384,
                    help='sampled decisions are scored in packed batches of about this many tokens (all options of each)')
     t.add_argument('--max-sequence-tokens', type=int, default=65536,

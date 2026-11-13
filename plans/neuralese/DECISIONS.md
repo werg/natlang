@@ -2155,3 +2155,19 @@ Re-scoring all 512 base episodes flips exactly the 4 intended verdicts.
    re-pin with `--include-manifest held-v3 --replace-ids <hits>` before an experiment that starts from a grpo-v2
    checkpoint relies on held-v3.
 2. Run `ops/held-v3/runs/run-aa.sh PIN` (base x2, 2 samples, one DGX engine) for the noise floor.
+
+## 2026-11-13: learner computes shared prompt prefixes once (supervisor)
+
+The learner was learner-bound (run2: policy fwd+bwd 51% and the KL reference pass 12% of a step) and ran every chain from
+token 0, although a group's 8 episodes open with the same prompt, every call carries the same system prompt and an
+episode's later chains repeat its earlier calls. Measured on run2's 12 saved groups (181 chains, 2.38M forward tokens):
+one shared prefix per group would save 35.5%, a full prefix trie 50.4%. Implemented the trie, in both the policy and
+the reference pass (`--share-prefix-tokens 256`, 0 off): a prefix is computed once, its per-layer keys/values (sliding
+layers: the last window) and conv tail feed its continuations, the continuations' gradients collect on detached copies
+and backpropagate through the prefix once, so the gradient is the unshared one. CPU tests on the tiny LFM3 twin: pieces
+after a past equal the whole document; a two-level tree's per-token states and parameter gradients equal per-chain ones.
+Not run on GPU before the pin (the DGX is reserved by grpo-v2): flash `varlen_attn` aligns queries to the end of a longer
+key set (FlashAttention's documented causal rule); a misalignment would show at once as `abs_log_rho_mean` against the
+actor at the next pin's first step. The KL term is kept as declared (subsampling or dropping it was the alternative);
+it gets the same saving. Swapping in run2 (learner 1.8k -> 0.96k tok/s) was addressed at the grpo-v2 launch (block-store
+LRU, MALLOC_ARENA_MAX=4, smaller KV); check `learner_swap_pages` at its first steps.

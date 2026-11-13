@@ -181,3 +181,23 @@ def test_think_mask_and_moment_cosine():
     assert grpo.moment_cosine([a, b], optimizer) is None
     optimizer.state = {a: {"exp_avg": torch.tensor([1., 0.])}, b: {"exp_avg": torch.tensor([[0., -1.]])}}
     assert grpo.moment_cosine([a, b], optimizer) == pytest.approx((3 - 4) / (5 * 2 ** .5))
+
+
+def test_prefix_tree_over_a_subset_maps_back_to_the_steps_chains():
+    import lfm3_fast_train
+    system = np.arange(10)
+    chains = [np.concatenate([system, [50 + i] * 4]) for i in range(3)] + [np.arange(30, 40)]
+    keep = [0, 2, 3]                      # chain 1 reads imported state: it stays whole
+    nodes = grpo.remap_tree(lfm3_fast_train.prefix_tree([chains[i] for i in keep], [11, 11, 3], 4), keep)
+    leaves = []
+
+    def walk(node):
+        if 'index' in node:
+            leaves.append((node['index'], node['start']))
+        else:
+            assert node['first'] in keep
+            for child in node['children']:
+                walk(child)
+    for node in nodes:
+        walk(node)
+    assert sorted(leaves) == [(0, 10), (2, 10), (3, 0)]
