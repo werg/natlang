@@ -10,10 +10,11 @@ from pathlib import Path
 
 import pytest
 
+from natlang_neuralese.common.paths import resolve
 from natlang_neuralese.serve.append_only import TokenHistory
 from natlang_neuralese.serve.chat import bind_history_reasoning, build_message
 
-SOURCES = [Path('/home/werg/data/lfm3-rl-dgx-20261029/ops/grpo-v1/run2/actor/sglang-hf'),
+SOURCES = [resolve('data_nvme', 'lfm3-rl-dgx-20261029/ops/grpo-v1/run2/actor/sglang-hf'),
            Path.home() / '.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd']
 ORDER = {'type': 'object', 'properties': {'action': {'type': 'string'}, 'customer': {'type': 'string'},
                                            'pence': {'type': 'integer'}}, 'required': ['action', 'customer', 'pence']}
