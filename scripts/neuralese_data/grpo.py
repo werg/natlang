@@ -850,7 +850,10 @@ def load_tasks(args, work=None):
         rows = [r for r in rows if r['id'] in wanted]
     import re
     broken = re.compile(args.exclude_family_regex) if args.exclude_family_regex else None
-    eligible = [r for r in rows if r['id'] not in excluded and r.get('split', 'train') == 'train'
+    errata = set()   # pool rows known to be wrong (e.g. an oracle's expected answer): never selected
+    for path in args.exclude_ids:
+        errata |= {row['id'] for row in read_jsonl(path)}
+    eligible = [r for r in rows if r['id'] not in excluded and r['id'] not in errata and r.get('split', 'train') == 'train'
                 and not (broken and broken.search(str(r.get('family') or '')))]
     random.Random(args.seed).shuffle(eligible)
     if work is not None:
@@ -860,6 +863,8 @@ def load_tasks(args, work=None):
                   'eligible_ids_sha256': hashlib.sha256('\n'.join(sorted(r['id'] for r in eligible)).encode()).hexdigest(),
                   'families': len({r.get('family') for r in eligible}),
                   'excluded_family_regex': args.exclude_family_regex,
+                  'excluded_errata': [{'path': str(p), 'sha256': sha256_file_hex_cached(Path(p))} for p in args.exclude_ids],
+                  'excluded_errata_ids': len(errata & {r['id'] for r in rows}),
                   'selection': {'pass_rates': args.pass_rates, 'band': args.pass_band, 'min_scored': args.pass_min_scored,
                                 'explore': args.explore, 'own_outcomes': 'latest scored group per task replaces its rate'},
                   'episode_budget': {'max_model_requests': args.max_model_requests, 'case_seconds': args.case_seconds,
@@ -1686,6 +1691,8 @@ def main():
                    'scripts/rl_tasks/neuralese_variants.py; off by default: a controlled addition)')
     t.add_argument('--neuralese-variant-share', type=float, default=0.5,
                    help='share of the groups of a task with a variant that run the variant')
+    t.add_argument('--exclude-ids', action='append', default=[],
+                   help='JSONL of pool rows never selected ({"id": ...} per line; e.g. ops/pool-errata/*.jsonl: wrong oracles)')
     t.add_argument('--exclude-family-regex', default=r'^ext_codebase-(py|natlang)_codebase_',
                    help='families never selected (default: codebase families whose repos are missing on the DGX)')
     t.add_argument('--max-turns', type=int, default=128)
