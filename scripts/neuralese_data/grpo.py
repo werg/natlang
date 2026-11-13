@@ -339,6 +339,26 @@ def load_group(collector, group, stats):
     return info['task_id'], episodes, info['versions']
 
 
+def collect_blocks(store_dir, cutoff):
+    """Delete the actor store's native-state block files last used before ``cutoff`` (epoch s); (files, bytes) removed.
+
+    The learner reads a block only while lowering a group whose episodes imported it, and the actor touches a block file
+    whenever it stores or reads that block (``serve/store.py``), so a block untouched since before the oldest group still
+    outstanding (created, in flight or scored and not yet taken) was used only by episodes already trained, dropped or
+    measured. The actor's store forgets a row whose file is gone and rewrites the file if the block recurs."""
+    removed = freed = 0
+    for path in Path(store_dir, 'blocks').glob('*/nzs1_*.safetensors'):   # native states only, never tensor artifacts
+        try:
+            stat = path.stat()
+            if stat.st_mtime < cutoff:
+                path.unlink()
+                removed += 1
+                freed += stat.st_size
+        except FileNotFoundError:
+            pass
+    return removed, freed
+
+
 def prune_group(collector, group, keep):
     directory = collector.groups.pop(group)['dir']
     if keep:
@@ -880,6 +900,16 @@ def train(args):
     if probes:
         log_probe(step, 'learner')
         log_probe(step, 'actor')
+    step0 = work / 'held' / 'step-00000'
+    if (step0 / 'result.json').exists() and not args.held_baseline:
+        # A resume on a pin whose harness differs (another held series) cannot compare with the old step 0: that result
+        # moves aside (it stays the record of its series) and the start policy is measured again on this pin below.
+        old = (json.loads((step0 / 'result.json').read_text()).get('series') or {}).get('key')
+        if old != run['series']['key']:
+            aside = work / 'held' / f'step-00000-series-{old}'
+            step0.rename(aside)
+            log_line(log, {'event': 'held series changed', 'old_series': old, 'series': run['series']['key'],
+                           'moved_to': str(aside)})
     if step:   # a resumed run first serves its own weights
         sync.snapshot()
         sync.publish(step, on_published)
@@ -953,7 +983,27 @@ def train(args):
 
     if args.held_every_hours > 0 and not (work / 'held' / 'step-00000' / 'result.json').exists() \
             and not args.skip_base_held and not args.held_baseline:
-        held(0, args.held_samples_start)
+        if not step:
+            held(0, args.held_samples_start)
+        else:
+            # A resumed run measures the start policy on this pin in place (as --held-extra does), restores its own
+            # weights and measures the current step at once: that result anchors the step's series beside the new step 0.
+            collector.paused.set()
+            try:
+                sync.load_native(args.checkpoint, special)
+                sync.publish(0, lambda *_: None, policy=source_sha)
+                sync.wait()
+                if not sync.last.get('ok'):
+                    raise RuntimeError(f'loading the start policy into the actor failed: {sync.last}')
+                held(0, args.held_samples_start, policy=source_sha)
+                collector.paused.set()
+            finally:
+                sync.snapshot()
+                sync.publish(step, on_published, also=lambda s=step: write_native(s))
+                sync.wait()
+            if not sync.last.get('ok'):
+                raise RuntimeError(f'restoring the learner weights on the actor failed: {sync.last}')
+            held(step, args.held_samples)
     if args.held_extra and step == 0:
         # Other policies measured on this actor in place (one engine, one code pin), each against step 0; then the start
         # policy is loaded back before training.
@@ -1238,6 +1288,14 @@ def train(args):
             learner_swap_pages={k: v - swap0[k] for k, v in vmstat().items()}, meminfo_learn_start_gb=mem0,
             previous_state_save=saver.last, cuda_peak_gb=round(torch.cuda.max_memory_allocated() / 2**30, 1),
             outstanding_groups=collector.outstanding, elapsed_s=round(elapsed))
+        if not args.keep_rollouts and args.block_gc_grace >= 0:
+            # the actor's block store: keep what an outstanding group's episodes may still import (see collect_blocks)
+            t = time.time()
+            with collector.lock:
+                oldest = min([info['created'] for info in collector.groups.values()], default=time.time())
+            files, freed = collect_blocks(collector.states.directory, oldest - args.block_gc_grace)
+            record.update(blocks_removed=files, blocks_freed_mb=round(freed / 2**20, 1),
+                          block_gc_s=round(time.time() - t, 2))
         log_line(log, record)
         if save_native and args.held_every_hours > 0 and time.time() - last_held > args.held_every_hours * 3600:
             sync.wait()                   # the actor now serves (and attests) this step's checkpoint
@@ -1312,7 +1370,10 @@ def main():
     t.add_argument('--state-dir', default=resolve_str('data_hdd', 'natlang-grpo-v1'))
     t.add_argument('--checkpoint-dir', help='pruned native checkpoints (default STATE_DIR/checkpoints)')
     t.add_argument('--resume', action='store_true')
-    t.add_argument('--keep-rollouts', action='store_true')
+    t.add_argument('--keep-rollouts', action='store_true', help='keep group directories (and every actor store block)')
+    t.add_argument('--block-gc-grace', type=float, default=600.,
+                   help='after each step delete actor store blocks unused since this many seconds before the oldest '
+                   'outstanding group was created (negative: never)')
     t.add_argument('--no-actor-sync', action='store_true',
                    help='never update the actor (smoke against a shared actor of the start policy; versions advance nominally)')
     t.add_argument('--unpinned', action='store_true',

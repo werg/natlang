@@ -60,7 +60,7 @@ native checkpoint every 2 steps and the FP32 state (masters + moments, `/mnt/ext
 background threads. The whole run executes from its pinned copy (`scripts/pin_checkout.py create COMMIT
 WORK/pin-<c12>`: detached worktree, ts-host rebuilt there; launch that copy's grpo.py with it as workdir; grpo.py refuses a
 live checkout unless `--unpinned`), and every child (actor, episodes, held_eval measure/compare) gets its PYTHONPATH, so
-held results record the pin's commit and series; adopting newer code is a new pin (held step 0 is re-measured when the series changes). Held evals run on the training actor itself (it serves the
+held results record the pin's commit and series; adopting newer code is a new pin and `--resume` (when the series changes, grpo.py moves `held/step-00000` to `step-00000-series-<old>`, measures the start policy in place on the actor, restores its weights and measures the current step at once). After each step it deletes actor-store state blocks untouched since 10 min before the oldest outstanding group was created (`collect_blocks`; the store touches a block on every read and repeated write; `--keep-rollouts` keeps all). Held evals run on the training actor itself (it serves the
 current policy with the held-v2 engine pin): new collection pauses, `held_eval measure` (held-v2; 4 samples for the start
 policy before the first step, then 2 samples every 4 h on that step's checkpoint) and `held_eval compare` with step 0
 (`WORK/held/step-N/`); `--held-extra CKPT,...` measures other native checkpoints the same way after step 0 (loaded into the

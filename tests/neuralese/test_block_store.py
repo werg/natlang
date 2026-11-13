@@ -295,3 +295,28 @@ def test_grad_execution_failure_remains_internal(monkeypatch):
         httpd.server_close()
         thread.join()
         store.close()
+
+
+def test_trainer_block_collection_keeps_blocks_the_actor_used_since_the_cutoff(tmp_path):
+    """grpo.collect_blocks deletes state files unused before a cutoff; the store's reads and repeated writes count as use,
+    and a block collected while resident is written again when it recurs."""
+    import os
+    import sys
+    import time
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts/neuralese_data"))
+    import grpo
+    store = TensorStore(tmp_path)
+    old, read, rewritten, fresh = (store.put_native_state(_state(float(i))) for i in range(1, 5))
+    artifact = store.put_native_tensor_artifact(_artifact(1.))
+    past = time.time() - 3600
+    for record in (old, read, rewritten, artifact):
+        os.utime(store._path(record.id), (past, past))
+    store.get_native_state(read.id)                 # an import reads it: used now
+    store.put_native_state(_state(3.))              # the same block stored again: used now
+    files, freed = grpo.collect_blocks(tmp_path, time.time() - 600)
+    assert files == 1 and freed > 0
+    assert not store._path(old.id).exists()
+    assert all(store._path(r.id).exists() for r in (read, rewritten, fresh, artifact))   # artifacts are never collected
+    assert store.get_native_state(old.id) is not None and store._path(old.id).exists()     # resident: written again
+    store.close()

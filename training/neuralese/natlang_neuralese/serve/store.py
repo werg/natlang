@@ -232,6 +232,17 @@ class TensorStore:
     def _known(self, block_id: str) -> bool:
         return self._db.execute("SELECT 1 FROM blocks WHERE id = ?", (block_id,)).fetchone() is not None
 
+    def _touch(self, record) -> None:
+        """Mark a stored block as used now (its file's mtime): a trainer that reads this store's files collects those
+        unused since its oldest live episode (scripts/neuralese_data/grpo.py collect_blocks). A file deleted that way
+        while the block stays resident is written again."""
+        if self.directory is None:
+            return
+        try:
+            os.utime(self._path(record.id))
+        except FileNotFoundError:
+            self._write(record)
+
     def _load(self, block_id: str):
         found = self._resident.get(block_id)
         if found is not None:
@@ -534,6 +545,7 @@ class TensorStore:
                 if not isinstance(found, NativeStateRecord) or encode_native_state(found.block) != encode_native_state(block):
                     raise ValueError("native state content ID collision")
                 stored = found
+                self._touch(found)
             else:
                 if self.directory is not None:
                     self._write(record)
@@ -551,6 +563,7 @@ class TensorStore:
                 return None
             if not isinstance(block, NativeStateRecord):
                 raise ValueError(f"{block_id} is a native tensor artifact, not native state")
+            self._touch(block)
             return block
 
     def put_native_tensor_artifact(self, artifact, owner: str | None = None) -> NativeTensorRecord:
