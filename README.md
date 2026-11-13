@@ -11,9 +11,9 @@ import classify from './classify.nl';          // a named natural-language funct
 
 export async function triage(tickets: string[], rubric: string): Promise<Report> {
   const labels = await Promise.all(tickets.map(ticket => classify(ticket, rubric)));
-  const urgent = tickets.filter((_, i) => labels[i] === 'technical');
-  const summary: string = await nl`Summarize what is going wrong across urgent, most severe first.`(urgent);
-  return { urgent: urgent.length, summary };
+  const technical = tickets.filter((_, i) => labels[i] === 'technical');
+  const summary: string = await nl`Summarize what is going wrong across technical, most severe first.`(technical);
+  return { technical: technical.length, summary };
 }
 ```
 
@@ -32,54 +32,91 @@ introduction in nine chapters; its source is in [`website/`](website/).
 [Try natlang in your browser](https://werg.github.io/natlang/play/): the example
 gallery, an editor and a small model that runs in the page, with nothing to install.
 
-To install the `natlang` command (it needs Node.js 22.13 or newer):
+### Install
+
+natlang needs Node.js 22.13 or newer. Install the `natlang` command from a clone:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/werg/natlang/main/scripts/install.sh | sh
-natlang init my-program && cd my-program
-natlang setup                          # the managed local model, once (a 1.8 GB download)
-natlang run
+git clone https://github.com/werg/natlang.git && cd natlang
+scripts/setup_dev.sh --node-only
 ```
 
-The script installs the `@natlang/node` and `@natlang/cli` packages of the newest
-release with npm, into npm's global prefix or `~/.local`. `natlang setup` is
-optional: for a hosted model, configure a profile on the dashboard's Models page
-(`natlang dashboard --open`) or pass `--provider`. To work on natlang itself, or to
-run the bundled examples (`natlang run examples/hello`, `natlang run examples/triage`),
-clone this repository and run `scripts/setup_dev.sh --node-only`
-([development setup](DEV_SETUP.md)).
+The script installs the dependencies, builds the runtime and links `~/.local/bin/natlang` to the clone's
+`scripts/natlang` (`--command-dir DIR` chooses another directory). If that directory is not on your `PATH`, the
+script prints the `export PATH=...` line to add. `natlang doctor` checks the installation.
 
-Inside a program:
+Once a release is published, `curl -fsSL https://raw.githubusercontent.com/werg/natlang/main/scripts/install.sh | sh`
+installs the `@natlang/node` and `@natlang/cli` packages instead, with no clone.
+
+### Your first program
+
+Work in an empty directory outside the clone:
 
 ```sh
+natlang init my-program && cd my-program
+natlang setup                          # the managed local model, once (a 1.8 GB download)
 natlang run                            # answer.nl on the sample input
 natlang call answer.nl "Your text"     # one call with your own input
 natlang dev                            # reruns after source or input edits; Ctrl+C stops
-natlang test                           # compares saved examples with real model results
+natlang test                           # runs the saved examples on the model
+natlang check                          # checks the source without a model
 ```
 
-A new program is one function (`answer.nl`), its manifest (`natlang.json`, whose
-`main` target runs `answer.nl` with the sample as the default input), saved tests
-(`examples.json`) and an `AGENTS.md` for coding agents. Edit `answer.nl` to change
-instructions and `examples.json` to save expected results. `natlang check` checks source without
-contacting a model. With a coding agent, run `natlang skills install` once to add the
-natlang skills to Claude Code or Codex; every command an agent needs is
-non-interactive (`natlang check --json`, `natlang call ... --json`,
-`natlang test --json`, `natlang setup --yes`). The dashboard can create programs, edit function source,
-save tests, and turn a Playground experiment into a program. See the
-[user-testing guide](docs/USER_TESTING.md) for a short walkthrough.
+`natlang init` writes `answer.nl` (the function), `natlang.json` (the manifest; its `main` target runs `answer.nl`
+with the sample as the default input), `examples.json` (saved tests), `README.md`, `AGENTS.md` and `CLAUDE.md` for
+coding agents, `.gitignore` and `package.json`. `answer.nl` is a classifier with `readout: decision`: the model
+scores the three labels instead of writing an answer, which takes seconds rather than minutes on a CPU. Edit its instructions to change
+behaviour and `examples.json` to save expected results.
 
-`natlang setup` prepares the selected model backend. The CLI can use its managed
-local model (by default the stock `LiquidAI/LFM3-1.7B`), an OpenAI-compatible endpoint,
-or a Pi provider with an API key or supported subscription login; the dashboard's
-Models page configures all three. While natural-language calls run, `natlang run`
-shows which function is working, its turn and token counts; a call that fails is
-always reported. See
-[model configuration](NATIVE_PACKAGES.md#authority-and-the-model-runtime)
-for profiles, overrides, and provider options; see
-[development setup](DEV_SETUP.md) for the browser build and tests.
+`natlang setup` is optional: for a hosted model, configure a profile on the dashboard's Models page
+(`natlang dashboard --open`) or pass `--provider ID --model ID`. The CLI can use its managed local model (by default
+the stock `LiquidAI/LFM3-1.7B`), an OpenAI-compatible endpoint, or a Pi provider with an API key or supported
+subscription login. While calls run, the terminal shows which function is working, its turn and token counts; a call
+that fails is always reported. See [model configuration](NATIVE_PACKAGES.md#authority-and-the-model-runtime) for
+profiles and overrides.
+
+### A second program
+
+[`examples/review`](examples/review/) in the clone is the next step up: a named function whose callable folder holds
+a natural-language helper (`.nl`) and an exact TypeScript one (`.ts`), with its manifest, saved examples and a README.
+
+```sh
+natlang run examples/review            # from the clone
+```
+
+### When a result is wrong
+
+Every model call gets an ID; `natlang call` prints it on stderr (`natlang: call CALL_ID (natlang traces show CALL_ID)`),
+and `natlang test --json` reports one per example.
+
+```sh
+natlang traces show CALL_ID                              # inputs, each turn, code, output
+natlang traces fix CALL_ID --expected '"technical"'     # saves the right answer into examples.json
+natlang test                                             # now checks that case too
+```
+
+Then edit the instructions until `natlang test` passes. A unique prefix of a call ID is enough.
+
+### With a coding agent
+
+Run `natlang skills install` once to add the natlang skills to Claude Code or Codex; a new program's `AGENTS.md`
+points the agent to them. Every command an agent needs is non-interactive: `natlang check --json`,
+`natlang call ... --json` (the bare result on stdout), `natlang test --json` and `natlang setup --yes`. `check`, `call`,
+`test` and `run` exit with:
+
+| Code | Meaning |
+|---|---|
+| 0 | Success |
+| 1 | The program is wrong: diagnostics, failed examples, or a call that failed for model-work reasons |
+| 2 | Usage error: bad flags, arguments or paths |
+| 3 | The model or runtime is unavailable: not installed, endpoint unreachable, missing credentials |
+
+The dashboard (`natlang dashboard --open`) creates programs, edits function source, saves tests, and turns a
+Playground experiment into a program. The [user-testing guide](docs/USER_TESTING.md) is a short walkthrough.
 
 ## Read next
+
+### Using natlang
 
 | Guide | Contents |
 |---|---|
@@ -88,14 +125,21 @@ for profiles, overrides, and provider options; see
 | [Skills](skills/README.md) | Authoring and integration guidance for coding agents |
 | [Native packages](NATIVE_PACKAGES.md) | `@natlang/node`, `@natlang/browser`, the CLI, and distribution packages |
 | [TypeScript runtime](ts-host/README.md) | Building and using the runtime and compiler |
-| [Our trained models](docs/NATIVE_MODELS.md) | Pin a trained checkpoint, native server or GGUF, prefix reuse, escalation, feedback to tuning |
+| [Development setup](DEV_SETUP.md) | Working on natlang itself: the browser build and the tests |
+| [Tuning](docs/TUNING.md) | Specializing a student model to one program |
 | [Adaptation](docs/ADAPTATION.md) | Evaluation suites, native GEPA/reflection, resumable runs, artifact deployment and rollback |
-| [Applications](applications/) | Wiki, notebook, evidence, logs, terminal, publisher, games, and more |
-| [Training](docs/research/TRAINING.md), [teacher setup](docs/research/TEACHER_SETUP.md), [program IR](docs/research/PROGRAM_IR_PIPELINE.md) | Teacher data, student training, and evaluation |
+| [Applications](applications/) | Wiki, notebook, evidence, logs, terminal, publisher, games, and more (run them from a clone) |
 
-The design notes behind the TypeScript-native runtime are in
-[`docs/research/TS_INLINE_HOST_INTEGRATION_PLAN.md`](docs/research/TS_INLINE_HOST_INTEGRATION_PLAN.md),
-[`docs/research/inline-natlang-lambdas.md`](docs/research/inline-natlang-lambdas.md), and
-[`docs/research/ITERATE_ON_PLAN.md`](docs/research/ITERATE_ON_PLAN.md). `docs/research/PLAN.md` and `plans/`
-hold research history; the specification and the source are the active
-contract.
+### Research and training
+
+| Guide | Contents |
+|---|---|
+| [Our trained models](docs/NATIVE_MODELS.md) | Pin a trained checkpoint, native server or GGUF, prefix reuse, escalation, feedback to tuning |
+| [Research notes](docs/research/) | Design plans, experiment reports and the historical training pipeline |
+| [Training](docs/research/TRAINING.md), [teacher setup](docs/research/TEACHER_SETUP.md), [program IR](docs/research/PROGRAM_IR_PIPELINE.md) | Teacher data, student training, and evaluation |
+| [`plans/`](plans/) | Current research plans; `plans/neuralese/` holds the model training work |
+
+The design notes behind the TypeScript-native runtime are
+[the integration plan](docs/research/TS_INLINE_HOST_INTEGRATION_PLAN.md),
+[inline lambdas](docs/research/inline-natlang-lambdas.md) and
+[`iterateOn`](docs/research/ITERATE_ON_PLAN.md). The specification and the source are the active contract.
