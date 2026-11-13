@@ -112,16 +112,17 @@ test('a reply that is only one tool\'s JSON arguments is that call; prose and am
   } finally { await server.close(); }
 });
 
-test('tool-call markup left in the text is retried once with the malformed-call notice, then returned empty', async () => {
+test('tool-call markup left in the text is returned as sampled, marked malformed and never retried', async () => {
   const server = await mock(({ res }) => json(res, { choices: [{ finish_reason: 'stop', message: { content: '<tool_call>{"name":"eval"}</tool_call>' } }] }));
   try {
     const exchanges = [];
     const turn = await openAICompatibleModelTurn({ endpoint: server.endpoint, model: 'm', onExchange: exchange => exchanges.push(exchange) })(request());
     assert.deepEqual(turn.calls, []);
-    assert.equal(turn.text, '', 'markup never reads as the answer');
-    assert.equal(server.seen.length, 2);
-    assert.match(server.seen[1].body.messages.at(-1).content, /last tool call was malformed/);
-    assert.equal(exchanges.length, 2);
+    assert.equal(turn.text, '<tool_call>{"name":"eval"}</tool_call>', 'the reply stays as sampled');
+    assert.match(turn.malformed_call, /^The tool call in your last reply .*, so nothing ran; send the call again, complete\.$/,
+      'malformed_call marks it, so the markup never reads as the answer');
+    assert.equal(server.seen.length, 1);
+    assert.equal(exchanges.length, 1);
   } finally { await server.close(); }
 });
 

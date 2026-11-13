@@ -127,7 +127,7 @@ function evalDidNotStageResult(trajectory: Turn[], index: number, rootName: stri
   const observation = next?.context.at(-1);
   if (observation?.role !== 'tool') return false;
   const output = text(observation.content);
-  return output.includes('Nothing else from this eval was kept.') ||
+  return output.includes('Nothing else from this eval was kept') ||
     /^This is not a valid [^\n]+, so it is not the result: /m.test(output) ||
     /^return_result: this is not a valid /m.test(output);
 }

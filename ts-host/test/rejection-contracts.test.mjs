@@ -67,7 +67,7 @@ test('failed eval distinguishes discarded bindings from mutations to callable mo
   } });
   const failed = await session.applyAsync('eval', { code: 'const count = counter.next(); throw new Error("view failed");' });
   assert.equal(failed.kind, 'error');
-  assert.match(failed.text, /state changes.*callable modules.*not undone/);
+  assert.match(failed.text, /Nothing else from this eval was kept; writes to files, services or live values stay done/);
   assert.equal(Object.hasOwn(lam.let, 'count'), false);
   const inspected = await session.applyAsync('eval', { code: 'counter.next()' });
   assert.equal(inspected.value, 2);

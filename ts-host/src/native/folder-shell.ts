@@ -3,7 +3,8 @@ import { Bash, InMemoryFs, MountableFs, defineCommand, getCommandNames,
   type IFileSystem, type FsStat, type FileContent, type BufferEncoding,
   type RmOptions, type CpOptions, type MkdirOptions } from 'just-bash';
 import { Folder } from './scoped-fs.js';
-import { folderContents, pathsChangedSince, runFolderPython, type PythonHost } from './folder-python.js';
+import { folderContents, pathsChangedSince } from './folder-changes.js';
+import { runFolderPython, type PythonHost } from './folder-python.js';
 import { executeNatlangAsk, executeNatlangCall, parseAskArgs, type AskHost, type CallHost } from './natlang-command.js';
 
 const ROOT = '/workspace';
