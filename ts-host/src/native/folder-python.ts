@@ -2,29 +2,13 @@
 import { folderFS, folderView } from './python-folderfs.js';
 import { PYTHON_NATLANG, PYTHON_POLICY } from './python-sources.js';
 import { Folder } from './scoped-fs.js';
+import { folderContents, pathsChangedSince } from './folder-changes.js';
 import type { PythonWatchdog } from './python-watchdog.js';
 
 /** What a Python cell can reach: the platform's watchdog for its timeout, and `nl` and `iterateOn` over the calling task. */
 export type PythonHost = { watchdog?: PythonWatchdog; nl?: (instructions: string, returns: string) => (...args: unknown[]) => Promise<unknown>;
   iterateOn?: (step: unknown, initial: unknown, ...fixed: unknown[]) => unknown };
 export type PythonResult = { value: unknown; stdout: string; stderr: string; changedPaths: string[]; removedPaths?: string[] };
-
-/** The folder's file contents before a command, for `pathsChangedSince`. */
-export const folderContents = (folder: Folder) => new Map(folder.diffSync().changes.map(change => [change.path, change.after]));
-/**
- * What a command did to the folder: `changedPaths` are the files it created or rewrote (all exist afterwards), and
- * `removedPaths` the files it removed (present only when there are some). A move reports its new path as changed and
- * its old path as removed.
- */
-export function pathsChangedSince(folder: Folder, before: Map<string, Uint8Array | undefined>): { changedPaths: string[]; removedPaths?: string[] } {
-  const changedPaths: string[] = [], removedPaths: string[] = [];
-  for (const change of folder.diffSync().changes) {
-    const prior = before.get(change.path), after = change.after;
-    if (before.has(change.path) && prior?.length === after?.length && !prior?.some((byte, i) => byte !== after?.[i])) continue;
-    (after === undefined ? removedPaths : changedPaths).push(change.path);
-  }
-  return { changedPaths, ...(removedPaths.length ? { removedPaths } : {}) };
-}
 
 const RUNNER = `
 import ast as __ast, builtins as __builtins, inspect as __inspect

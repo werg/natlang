@@ -161,6 +161,8 @@ if [ $ts = 1 ]; then
     # A checkout with a browser build keeps it current (rebuilt only when stale: browser-build-freshness.mjs), so the
     # browser tests run against these sources; without one they skip as before.
     step ts-build-browser sh -c 'cd ts-host && if [ -e dist/browser/natlang.js ]; then node scripts/browser-build-freshness.mjs --rebuild; fi'
+    # The workerd tests bundle dist/core: build it from these sources (a stale or missing core reads as their failure).
+    step ts-build-core sh -c 'cd ts-host && npm run --silent build:core'
     step ts-build-apps sh -c 'cd ts-host && npm run --silent build:applications'
     step ts-browser-types sh -c 'cd ts-host && npm run --silent check:browser-types'
     step ts-layering sh -c 'cd ts-host && npm run --silent check:layering'
