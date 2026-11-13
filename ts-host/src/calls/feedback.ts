@@ -5,9 +5,10 @@
  * `natlang tune` learns from it.
  */
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { hostname, userInfo } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import { saveExample, type SavedExample } from '../package/authoring.js';
 import type { CallStore } from './store.js';
 import type { CallRecord } from './types.js';
 
@@ -16,10 +17,6 @@ export type FeedbackOptions = { verdict: Verdict; call: string; expected?: strin
   /** Models whose recorded outputs may become expected results (tuning's teachers and our own students); a `good`
    * verdict on another model's output is refused. Absent: every producer is accepted. */
   authorizedProducers?: ReadonlySet<string> };
-
-/** Key-sorted JSON: equal inputs compare equal whatever order their keys were recorded in. */
-const stable = (value: unknown): string => JSON.stringify(value, (_, v) => v && typeof v === 'object' && !Array.isArray(v) ?
-  Object.fromEntries(Object.keys(v).sort().map(key => [key, (v as Record<string, unknown>)[key]])) : v);
 
 /** The explicit group (the CLI's `--group`, else `NATLANG_FEEDBACK_GROUP`), else one group per tester and day: `feedback-<YYYYMMDD>-<hash of host and user>`. */
 export function feedbackGroup(record: CallRecord, explicit?: string, prefix = 'feedback'): string {
@@ -84,37 +81,7 @@ function exampleOf(store: CallStore, record: CallRecord, options: Pick<FeedbackO
   return { root, example: { ...base, expected: expected.value, group: feedbackGroup(record, options.group), producer: 'tester' } };
 }
 
-/** One entry of a program's examples.json (the file `natlang test` checks and `natlang tune` learns from). */
-export type Example = { name?: string; function: string; inputs: Record<string, unknown>; expected?: unknown; group?: string;
-  producer?: string; protected?: boolean; [key: string]: unknown };
-
-function readExampleFile(path: string): Example[] {
-  if (!existsSync(path)) return [];
-  let parsed: unknown;
-  try { parsed = JSON.parse(readFileSync(path, 'utf8')); } catch (error) { throw new Error(`${path} is not valid JSON (${(error as Error).message}); fix it before adding examples`); }
-  if (!Array.isArray(parsed)) throw new Error(`${path} must be an array of { name, function, inputs, expected } examples; fix it before adding examples`);
-  return parsed as Example[];
-}
-
-/** Add `example` to the examples file, or replace the expected result of the entry with the same function and inputs; atomic rewrite. */
-export function upsertExample(path: string, example: Example): 'added' | 'updated' | 'unchanged' {
-  const examples = readExampleFile(path);
-  const key = stable([example.function, example.inputs]);
-  const index = examples.findIndex(item => item && stable([item.function, item.inputs]) === key);
-  const found = index >= 0 ? examples[index]! : undefined;
-  if (found) {
-    // An input alone never changes a listed example.
-    if (!('expected' in example)) return 'unchanged';
-    // Protected examples are held for final reporting; feedback never changes them.
-    if (found.protected === true) throw new Error(`${path} holds this input as a protected example; it is kept unchanged`);
-    if ('expected' in found && stable(found.expected) === stable(example.expected)) return 'unchanged';
-    examples[index] = { ...found, expected: example.expected, ...('producer' in example ? { producer: example.producer } : {}) };
-  } else examples.push(example);
-  mkdirSync(dirname(path), { recursive: true });
-  const temporary = `${path}.${process.pid}.tmp`;
-  writeFileSync(temporary, `${JSON.stringify(examples, null, 2)}\n`); renameSync(temporary, path);
-  return found ? 'updated' : 'added';
-}
+export type Example = SavedExample;
 
 /** Returns what to print; throws (after annotating) when the call cannot become an example. */
 export function recordFeedback(store: CallStore, options: FeedbackOptions): string {
@@ -130,7 +97,7 @@ export function recordFeedback(store: CallStore, options: FeedbackOptions): stri
   catch (error) { throw new Error(`${said}; not added as an example: ${(error as Error).message}`); }
   const path = join(found.root, 'examples.json');
   if (options.dryRun) return `${said}\n${path}: ${JSON.stringify(found.example)}`;
-  const status = upsertExample(path, found.example);
+  const status = saveExample(found.root, found.example);
   return `${said}; ${status === 'added' ? 'added to' : status === 'updated' ? 'updated the expected result in' : 'already in'} ${path} ` +
     `(group ${found.example.group}); natlang test checks it`;
 }
@@ -147,6 +114,6 @@ export function recordEscalation(store: CallStore, callId: string, program?: str
   let found: ReturnType<typeof exampleOf>;
   try { found = exampleOf(store, record, { ...(program ? { program } : {}) }, null, 'escalations'); } catch { return undefined; }
   const path = join(found.root, 'examples.json');
-  if (upsertExample(path, { ...found.example, escalated: callId }) !== 'added') return undefined;
+  if (saveExample(found.root, { ...found.example, escalated: callId }) !== 'added') return undefined;
   return `${record.definition.name}: its inputs join ${path} as an example without an expected result (group ${found.example.group}); natlang tune ${found.root} learns it`;
 }
