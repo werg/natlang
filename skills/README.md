@@ -19,8 +19,10 @@ prints where the skills of this installation live. Programs created with `natlan
 points to the authoring skill.
 
 The skills describe the TypeScript runtime, compiler and CLI. `@natlang/node` and `@natlang/browser` are built from
-this repository; see [native packages and executables](../NATIVE_PACKAGES.md). Links from the skills into `spec/` and
-`docs/` resolve in a repository checkout; an installed copy works without them.
+this repository; see [native packages and executables](../NATIVE_PACKAGES.md). `natlang skills install` copies only
+the two skill folders, so a link from a skill to the specification or a guide is an absolute GitHub URL
+(`https://github.com/werg/natlang/blob/main/...`); links between the two skills are relative and work because they
+install side by side.
 
 ## Use
 

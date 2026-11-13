@@ -2,8 +2,8 @@
 
 `natlang tune DIR` fits per-definition adapters (and soft instruction states) so a program's calls run well on a
 small trained student. Each call runs its own definition's adapter stack; source, call sites and types are unchanged.
-Engine details are in [docs/TUNING.md](../../../docs/TUNING.md); models and profiles in
-[docs/NATIVE_MODELS.md](../../../docs/NATIVE_MODELS.md).
+Engine details are in [docs/TUNING.md](https://github.com/werg/natlang/blob/main/docs/TUNING.md); models and profiles in
+[docs/NATIVE_MODELS.md](https://github.com/werg/natlang/blob/main/docs/NATIVE_MODELS.md).
 
 ## When tuning pays off
 

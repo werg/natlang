@@ -1,6 +1,6 @@
 ---
 name: natlang-integration
-description: Embed natlang in Node/TypeScript and browser applications. Use when wiring the runtime, model drivers, host services, compiled `nl` calls, event loops, terminal or browser interfaces, directory reducers, packages, persistence, traces, call records and compilations, native Neuralese model servers, tuned weight releases, or application evaluations.
+description: Embed natlang in Node/TypeScript and browser applications. Use when wiring the runtime and model drivers into an application, exposing host services, compiling `nl` calls, persisting state, or reading traces and call records.
 ---
 
 # Integrate natlang applications
@@ -34,19 +34,16 @@ Read [hosts and model drivers](references/hosts.md) for the runtime, compilation
 - A program declares its model in `natlang.json` (`"model": { "stock": "lfm3-1.7b-q8_0" }`, or `profile`, `provider`+`model`, `endpoint`, `request`, `contextTokens`); a command's `--profile`/`--provider`/`--model` or `NATLANG_PROFILE`/`SERVER`/`PROVIDER` still win. Give it `"warmup": [{ "function": "classify.nl", "inputs": { ... } }]` and ship it built with `natlang build --warm`: the lock (`.natlang/build/natlang.lock.json`) binds the model file, llama.cpp build, tuning release and functions, the warm-up calls are traced, and their prompt openings (the long system prompt and tools every call starts with) are prefilled and saved, so `natlang run` starts warm; the managed server also saves any opening it meets for later runs (`NATLANG_WARM_PREFIXES=off` disables it). `natlang dashboard` runs, traces and configures all of this in a browser.
 - A call whose model repeats the same failing action four times in a row ends as `model_incomplete: repeated_failed_action` instead of running on silently; give it a better model, clearer instructions or an escalation profile.
 - Seeds and pinned sources support reproducibility; they do not make native state replayable or decisions identical across inference backends.
-- Native input and scope listings show at least 4,096 characters per value. A cut-off listing names the complete live eval variable; use ordinary code such as `value.slice(start, end)` to inspect omitted ranges. Tool-result text is sized from the call's context budget (`contextTokens`; `shownCharsFor` in `ts-host/src/native/cutoff.ts`: an eighth of the budget at 3.5 characters per token, at least 2,000), and only output longer than that is paged with `read_page`. A host that sets a larger `contextTokens` therefore shows longer outputs whole; `contextTokens: null` keeps the 2,000-character floor.
-- If no tool output was cut off in the call, `read_page` directs the agent to inspect the in-scope value with `eval`; only an actual cut-off tool output creates a page ID.
-- Eval exposes `inputs` and `read_inputs()` only for calls with formal input fields, unless those names are shadowed. A zero-argument call has no implicit caller-input object; ordinary local declarations may use those names.
 - Verify live-model quality separately from fixture wiring and rendering, and name the remaining empirical gates.
 - A call that ends `model_incomplete: terminated_without_result` (two empty replies after the recovery prompt) or `truncated_without_action` (replies cut off before any action) is an incomplete model answer, not a transport failure; keep the two apart in retries and reports.
 - For a folder reducer, keep item-file and task-file contracts distinct: bind each value from the file that owns it before constructing per-item calls, and keep explicit empty lists empty.
-- Service methods that can reject arguments should say why in one sentence with the correct positional call and its declared types; the model recovers from that sentence. Error text a model reads is model-facing: measure a change to it on the live executor.
+- Service methods that can reject arguments should say why in one sentence with the correct positional call and its declared types; the model recovers from that sentence.
 
 Pair with `natlang-authoring` for substantial natural-language algorithms when that skill is available; this skill is independently usable.
 
 ## Tuned weight releases
 
-`natlangRuntime({ programRoot })` serves a program's active release on the checkpoint it was tuned on and loads it into the server; prefer it in hosts (see [hosts](references/hosts.md)). Hosts that build the runtime themselves pass `weights: activeWeights(programRoot, { program })` to `createNatlangRuntime`; each new task pins the release active at its creation, so activation never changes a running task. The model driver must serve the release: the managed llama.cpp session takes the release's GGUF exports through `loraAdapters` and every request carries its own call's stack; other backends report the release `degraded` and run the base. Do not pass adapter IDs or wrap calls to select a stack; resolution is per callee. Use strict `WeightBinding` resolution in evaluation so missing artifacts throw (`weights-unavailable`, `weights-incompatible`, `weights-stale`) instead of producing base results labelled as tuned. See [docs/TUNING.md](../../docs/TUNING.md).
+`natlangRuntime({ programRoot })` serves a program's active release on the checkpoint it was tuned on and loads it into the server; prefer it in hosts (see [hosts](references/hosts.md)). Hosts that build the runtime themselves pass `weights: activeWeights(programRoot, { program })` to `createNatlangRuntime`; each new task pins the release active at its creation, so activation never changes a running task. The model driver must serve the release: the managed llama.cpp session takes the release's GGUF exports through `loraAdapters` and every request carries its own call's stack; other backends report the release `degraded` and run the base. Do not pass adapter IDs or wrap calls to select a stack; resolution is per callee. Use strict `WeightBinding` resolution in evaluation so missing artifacts throw (`weights-unavailable`, `weights-incompatible`, `weights-stale`) instead of producing base results labelled as tuned. See [docs/TUNING.md](https://github.com/werg/natlang/blob/main/docs/TUNING.md).
 
 ## Trained native models
 
@@ -59,7 +56,7 @@ calls into roots; `good` refuses outputs of models that are neither a tuning tea
 (recovery: `natlang traces fix CALL --expected JSON` with the answer you checked). `natlang tune DIR` needs no
 configuration with a native profile: student, trainer and teacher (`escalate`) come from it. `natlang doctor
 [--program DIR]` shows the pin, newer checkpoints, the server, the tuning setup and pending examples. See
-[docs/NATIVE_MODELS.md](../../docs/NATIVE_MODELS.md).
+[docs/NATIVE_MODELS.md](https://github.com/werg/natlang/blob/main/docs/NATIVE_MODELS.md).
 
 ## Decision readouts in tuning
 
