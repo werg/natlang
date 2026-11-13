@@ -1923,3 +1923,19 @@ these become the defaults of the next pin (`scripts/neuralese_data/grpo.py`), ea
 
 Success criterion for the next GRPO pin stays the paired held-v2 comparison; `grad_moment_cosine` near 0 over the first
 steps means the updates are still unrelated noise and the batch must grow before anything else.
+
+## 2026-11-13: held comparison, series and episode budget after the run2 validity audit (engineering)
+
+- **Held comparison statistic (4578d6404).** Primary: mean per-task pass-rate change, within-task permutation test,
+  task-bootstrap CI, a wall-clock timeout counted as a failure. Dropping timeouts biased the A/A (base-a1 vs base-a2:
+  -6.4 pts, p=0.036; as failures -4.4 pts, p=0.12). Noise floor from the base runs on disk (mean per-task p(1-p) 0.083):
+  95% band +-3.5 pts at 2 vs 2 samples, MDE (80% power) 5.0 pts; +-2.5 / 3.6 pts at 4 vs 4. run2's two step-0
+  measurements: +1.2 pts, CI [-2.5, +4.7], p=0.60. Of 256 held tasks, 65 always pass and 99 never pass for the base
+  (23 of them ENOENT codebase tasks before e9a7360cc, 6 wrong-oracle); `--ignore-ids ops/held-v2/ignore-ids-*.jsonl`
+  reports the change without them.
+- **Series covers scoring (4578d6404).** The series key hashes the ts-host tree plus the Python sources that run and
+  score episodes; before, a scorer/collector fix (e9a7360cc) kept the series.
+- **Pool errata on by default (8d0dcf296).** GRPO excludes every `ops/pool-errata/*.jsonl` row unless `--exclude-ids`
+  or `--no-default-errata` is given; run2 drew none of the 380 wrong-oracle rows in 113 groups, but explore 0.4 would.
+- **One episode budget (4578d6404, 8d0dcf296).** Training and held eval both stop at 40 model calls
+  (`held_eval.EPISODE_MODEL_CALLS`); held ran 64, so the start policy is re-measured at the next pin.
