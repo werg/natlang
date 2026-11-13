@@ -58,7 +58,12 @@ pre-RoPE, conv B*x; `lfm3_fast_train.import_tensors`, no producer gradient; `pla
 `-min(rho, 2) * A * logp + 0.02 * k3(start || policy)`, `A` group-normalized, averaged over each episode's units and then over the step's
 episodes (`--loss-norm episode`; `token` is the old sum over all tokens: failures are 1.7x longer and 97% of the mass was reasoning), a sampled
 decision counting as one average call of its episode (`--decision-weight call`), no policy term on a token the actor sampled below
-log-probability -7 when `A > 0` (`--tail-logp-floor`; 0.5% of tokens at untruncated T=1); FP32-master AdamW, LR 1e-5 (check 4; run2 at 3e-6:
+log-probability -7 when `A > 0` (`--tail-logp-floor`; 0.5% of tokens at untruncated T=1). Sampling law (owner 2026-11-13): temperature 1 with
+top-p 0.95 for collection, held eval and the learner alike (`common/sampling.py` `RL_TOP_P`, `--top-p`, 1.0 off; it travels as `top_p` in
+`sampling-config.json` and each capture's `sampling_law`; the front refuses a reply it did not sample that way). The actor records the
+untruncated logp; the policy term scores the token under the learner's own nucleus (`lfm3_fast_train.linear_nll_nucleus`, the sampled token always
+in the set), `rho` and the KL term use untruncated logps (`rho` takes the actor's nucleus mass as the learner's: |d log rho| <= 0.051); calls of
+another law are refused (`skip_other_sampling_law`); decisions keep their full option softmax; FP32-master AdamW, LR 1e-5 (check 4; run2 at 3e-6:
 half of the BF16 flips reverted, DECISIONS 2026-11-13), BF16 compute
 (`exp0_sft.load_model`, `lfm3_fast_train`). Weight sync each step: BF16 weights -> pinned buffer -> actor's HF safetensors ->
 SGLang `pause_generation(retract)` / `update_weights_from_disk` / `continue_generation` in a background thread; a pruned
@@ -105,7 +110,8 @@ mean per-task pass-rate change, within-task permutation p, task-bootstrap CI, a 
 beside it the drop-timeouts sensitivity, McNemar on matched samples, task sign test, loop rate; subsets without the
 `held-v2/ignore-ids-*.jsonl` tasks and by trained family). A timed-out episode stays unscored in `result.json`
 (`timeouts`); compare only results with one code commit and series (`same_code`, `same_series`; the series covers the
-ts-host tree and the Python scoring sources). Training and held eval share one call budget (`EPISODE_MODEL_CALLS`, 40). Baselines and the A/A noise floor: `ops/held-v2/runs/`. The eval engine is
+ts-host tree and the Python scoring sources) and one sampling law (`result.json` `sampling`: temperature 1, top-p 0.95 from 2026-11-13,
+`measure --top-p`; `compare` refuses to pair laws, so the start policy is re-measured at the next pin). Training and held eval share one call budget (`EPISODE_MODEL_CALLS`, 40). Baselines and the A/A noise floor: `ops/held-v2/runs/`. The eval engine is
 pinned in `held-v2/engine.json` (SGLang, vendor projection, FP8 KV, `--sglang-kv-gb 16`, 128 running; one engine per
 checkpoint): `measure` refuses another actor (`--allow-other-engine`), `serve` launches exactly it, and `compare` refuses to
 pair results with different attested engines (`serving_engine`, export format). Interim A/A (base twice, independent seeds,

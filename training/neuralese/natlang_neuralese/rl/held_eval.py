@@ -373,7 +373,9 @@ def run(directory):
         entries = _entries(spec)
         queue.write_text(''.join(json.dumps(entry, sort_keys=True) + '\n' for entry in entries))
     entries = list(read_jsonl(queue))
-    (directory / 'sampling-config.json').write_text(json.dumps({'guidance': False}) + '\n')
+    from ..common.sampling import rl_sampling_controls
+    (directory / 'sampling-config.json').write_text(json.dumps(
+        rl_sampling_controls(spec.get('sampling', LEGACY_SAMPLING)['top_p'])) + '\n')
     stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     signal.signal(signal.SIGINT, lambda *_: stop.set())
@@ -439,6 +441,7 @@ def finalize(directory, spec, started, *, complete):
               'endpoint': spec['endpoint'], 'actor': spec.get('actor'), 'engine': spec.get('engine'), 'tasks': spec['tasks'], 'samples_per_task': spec['samples'],
               'seed_base': spec.get('seed_base', SEED_BASE), 'case_seconds': spec.get('case_seconds'),
               'context_tokens': spec.get('context_tokens', LEGACY_CONTEXT_TOKENS),
+              'sampling': spec.get('sampling', LEGACY_SAMPLING),
               'started_at': started, 'finished_at': time.time(), 'elapsed_seconds': elapsed,
               'complete': bool(complete and len(ran) == len(samples)), 'ran': len(ran), 'scored': len(scored),
               'successes': successes, 'success_rate': round(successes / len(scored), 4) if scored else None,
@@ -506,6 +509,8 @@ def paired(first, second):
 # The call budget of a held measurement (the harness compacts near it); results measured before it was recorded ran at 32768.
 CONTEXT_TOKENS = 131072
 LEGACY_CONTEXT_TOKENS = 32768
+# Results measured before the sampling law was recorded (2026-11-13) sampled the untruncated distribution at T=1.
+LEGACY_SAMPLING = {'temperature': 1., 'top_p': 1.}
 
 
 def task_counts(result, *, timeouts='failure'):
@@ -579,6 +584,9 @@ def compare(first, second, *, resamples=2000, trained_families=None, ignore_ids=
     budgets = [result.get('context_tokens', LEGACY_CONTEXT_TOKENS) for result in (first, second)]
     if budgets[0] != budgets[1]:
         raise ValueError(f'results measured with different context budgets are not paired: {budgets[0]} vs {budgets[1]}')
+    laws = [result.get('sampling', LEGACY_SAMPLING) for result in (first, second)]
+    if laws[0] != laws[1]:
+        raise ValueError(f'results sampled under different laws are not paired: {laws[0]} vs {laws[1]}')
     engines = result_engine(first), result_engine(second)
     if None not in engines and engines[0] != engines[1]:
         raise ValueError('results served by different engine settings are not paired: '
@@ -766,9 +774,13 @@ def serve(checkpoint, sha256, store, *, unit, budget_gb, extra=(), base=BASE_SNA
 
 
 def measure(out, manifest, endpoints, policy_id, *, samples=4, seed_base=SEED_BASE, case_seconds=3600,
-            max_model_requests=EPISODE_MODEL_CALLS, max_turns=128, context_tokens=CONTEXT_TOKENS, label=None, allow_other_engine=False, log=print):
+            max_model_requests=EPISODE_MODEL_CALLS, max_turns=128, context_tokens=CONTEXT_TOKENS, label=None, allow_other_engine=False, log=print,
+            top_p=None):
     """Measure the policy served at ``endpoints`` ([(url, slots)]) on every task of ``manifest`` x ``samples`` into
-    ``out/result.json`` (resumable: an existing ``run.json`` must name the same manifest, policy and sampling)."""
+    ``out/result.json`` (resumable: an existing ``run.json`` must name the same manifest, policy and sampling).
+    ``top_p``: the nucleus of the sampling law (default ``common.sampling.RL_TOP_P``; 1.0: untruncated), recorded as
+    the result's ``sampling``; ``compare`` refuses results of different laws."""
+    from ..common.sampling import RL_TOP_P, sampling_law_of
     from .actor_client import NativeActorClient
     from ..common.code_provenance import code_provenance, repository_root
     out, manifest = Path(out), Path(manifest)
@@ -786,7 +798,8 @@ def measure(out, manifest, endpoints, policy_id, *, samples=4, seed_base=SEED_BA
             'case_seconds': case_seconds, 'max_model_requests': max_model_requests, 'max_turns': max_turns,
             'context_tokens': context_tokens, 'runtime': str(repo / 'ts-host'), 'repo': str(repo),
             'series': series(), 'code': code_provenance(), 'actor': {'info': info.get('rl_policy_binding')},
-            'engine': engine_of(info.get('rl_policy_binding'))}
+            'engine': engine_of(info.get('rl_policy_binding')),
+            'sampling': sampling_law_of(RL_TOP_P if top_p is None else top_p)}
     pin = pinned_engine(manifest)
     if pin and not allow_other_engine:
         attested = spec['engine'] or {}
@@ -806,8 +819,9 @@ def measure(out, manifest, endpoints, policy_id, *, samples=4, seed_base=SEED_BA
     if (out / 'run.json').exists():
         previous = json.loads((out / 'run.json').read_text())
         previous.setdefault('context_tokens', LEGACY_CONTEXT_TOKENS)
+        previous.setdefault('sampling', LEGACY_SAMPLING)
         for key in ('policy_id', 'manifest_sha256', 'samples', 'seed_base', 'case_seconds', 'max_model_requests', 'max_turns',
-                    'context_tokens'):
+                    'context_tokens', 'sampling'):
             if previous[key] != spec[key]:
                 raise ValueError(f'{out} holds a run with another {key}: {previous[key]!r}')
         # A resumed run must keep its engine: the result attests the first one, so episodes of a relaunched actor with
@@ -855,6 +869,8 @@ def main(argv=None):
     m.add_argument('--context-tokens', type=int, default=CONTEXT_TOKENS,
                    help='call budget (the pinned engine.json harness may require one; compare refuses other pairings)')
     m.add_argument('--label')
+    m.add_argument('--top-p', type=float, help='nucleus of the sampling law at temperature 1 (default: common.sampling.'
+                   'RL_TOP_P, 0.95; 1.0: untruncated). Recorded in the result; compare refuses pairs of different laws')
     m.add_argument('--actor-unit', help='ledger unit name of the actor (default heldv2-actor-<sha8>)')
     m.add_argument('--actor-budget-gb', type=int, default=ACTOR_BUDGET_GB, help='ledger claim: --sglang-kv-gb + 24')
     m.add_argument('--allow-other-engine', action='store_true', help='measure an actor that is not the pinned eval engine')
@@ -914,7 +930,8 @@ def main(argv=None):
         try:
             measure(args.out, args.manifest, endpoints, policy, samples=args.samples, seed_base=args.seed_base,
                     case_seconds=args.case_seconds, max_model_requests=args.max_model_requests, max_turns=args.max_turns,
-                    context_tokens=args.context_tokens, label=args.label, allow_other_engine=args.allow_other_engine)
+                    context_tokens=args.context_tokens, label=args.label, allow_other_engine=args.allow_other_engine,
+                    top_p=args.top_p)
         finally:
             if unit and not args.keep_actor:
                 subprocess.run(['systemctl', '--user', 'stop', unit])

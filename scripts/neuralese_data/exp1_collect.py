@@ -23,6 +23,7 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(REPO / 'training/neuralese'), str(REPO)]
 
 from natlang_neuralese.common.jsonio import read_jsonl  # noqa: E402
+from natlang_neuralese.common.sampling import RL_TOP_P  # noqa: E402
 from natlang_neuralese.rl import task_rollouts  # noqa: E402
 from natlang_neuralese.rl.actor_client import NativeActorClient  # noqa: E402
 from natlang_neuralese.rl.held_eval import SEED_BASE, series  # noqa: E402
@@ -54,6 +55,7 @@ def main():
     ap.add_argument('--endpoint', action='append', required=True, help='URL=SLOTS')
     ap.add_argument('--samples', type=int, default=8)
     ap.add_argument('--temperature', type=float, default=1.0, help='sampling temperature (0: greedy; sanity checks)')
+    ap.add_argument('--top-p', type=float, default=RL_TOP_P, help='nucleus of the sampling law (1.0: untruncated)')
     ap.add_argument('--case-seconds', type=int, default=3600)
     ap.add_argument('--max-model-requests', type=int, default=64)
     ap.add_argument('--max-turns', type=int, default=128)
@@ -82,8 +84,10 @@ def main():
         entries.sort(key=lambda e: (e['sample'], e['index']))   # sample-major: a cut-short run stays balanced
         (out / 'queue.jsonl').write_text(''.join(json.dumps(e, sort_keys=True) + '\n' for e in entries))
     entries = list(read_jsonl(out / 'queue.jsonl'))
-    (out / 'sampling-config.json').write_text(json.dumps({'guidance': False, 'x_natlang_rl_capture': True, 'x_natlang_rl_top_k': 0}) + '\n')
+    from natlang_neuralese.common.sampling import rl_sampling_controls, sampling_law_of
+    (out / 'sampling-config.json').write_text(json.dumps(rl_sampling_controls(args.top_p, capture=True)) + '\n')
     spec = {'series': series(), 'endpoints': endpoints, 'policy_id': args.policy_id, 'samples': args.samples,
+            'sampling': {**sampling_law_of(args.top_p), 'temperature': args.temperature},
             'started': time.time()}
     (out / 'collect-run.json').write_text(json.dumps(spec, indent=1) + '\n')
     work = out / 'workers'

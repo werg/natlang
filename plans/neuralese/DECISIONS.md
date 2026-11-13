@@ -1965,3 +1965,47 @@ mean of answer and effects. Under the mean a right answer with 1 of 43 files sco
 that ranks "return the value, skip the work" above honest wrong attempts, and that is already the base model's commonest
 failure (4 of 7 model-caused failures read on 2026-11-13 had the right value and missing effects). Now that episode
 scores 0.02 and a right answer with 0.85 of the effects scores 0.85.
+
+### 2026-11-13 — the sampling law is top-p 0.95; the learner scores its own nucleus (owner, engineering)
+
+Owner: top-p sampling now, from first principles. Measured on run2 (814k sampled tokens at untruncated T=1): 1.8% of
+sampled tokens had actor p < 0.0067, 0.36% p < 3.4e-4, 175 p < 8e-7; tokens with p < 0.1 were 10% of tokens and 34% of
+the policy-gradient mass; 86 of 509 held pairs flipped between two near-identical policies. The tail is noise in the
+episodes and in the gradient, so collection, held eval and the learner move to one law: temperature 1, top-p 0.95
+(`common/sampling.py` `RL_TOP_P`; `--top-p 1.0` opts out everywhere).
+
+- **What SGLang returns** (fork 70b1991e66, `python/sglang/srt/layers/sampler.py`): the natlang record's logp is the
+  untruncated post-temperature log-softmax (`natlang_post_temperature_logprobs` :769, taken at :191-197 before the
+  sampling ops, gathered in `natlang_capture_top_k` :798); the draw is truncated (`_sample_from_probs` :419-455,
+  flashinfer `top_k_top_p_sampling_from_probs`; the torch rule :905-911 keeps a token while the mass before it is
+  <= top_p). The nucleus mass is not returned. Decision scoring sends no top_p (`serve/sglang_actor.py`
+  `_sglang_score_bound`): raw summed input logprobs, and the collector samples the option from the full softmax over
+  the finite option set (no tail to cut), unchanged.
+- **Estimator.** Behaviour mu' = the actor's distribution on its nucleus, renormalized. Policy pi' = the learner's
+  distribution on its own nucleus S (a constant set, the sampled token always in it): log pi'(a) = logp(a) -
+  log(mass of S), gradient onehot - softmax over S, through both terms (`lfm3_fast_train.linear_nll_nucleus`: per
+  2048-row head chunk the cut logit from the 1024 largest logits, full sort only for wider rows, three scalars kept per
+  row, logits recomputed once in backward; ties with the last kept token are in the set). The policy term is
+  -min(rho, C) * A * log pi'(a).
+- **Residual approximation (rho).** rho' = pi'(a)/mu'(a) = exp(logp_learner - logp_actor) * Z_actor / Z_learner. The
+  actor's nucleus mass Z_actor is not in the fork record, so it is taken as the learner's own: rho is the ratio of
+  the untruncated logps. Both masses lie in [top_p, 1], so |d log rho| <= -log(0.95) = 0.051, usually far less (the
+  two nuclei differ by boundary tokens), under the FP8 noise of log rho (0.033 mean) and the cap. Removing it needs
+  either a fork record field (a fork release: not started) or a wide top-k record per token (128x the record, a top-k
+  of that width in the actor's decode step, unmeasured): not cheap, so not done.
+- **A sampled token outside the learner's nucleus** (the actor's nucleus held it, the learner's does not) is kept in
+  the learner's set rather than given probability 0: it keeps a gradient. Logged as `outside_nucleus_fraction`.
+- **KL to the start policy stays on untruncated logps.** With a ~ pi' on S, the k3 estimator of d = log ref(a) -
+  log pi(a) has expectation KL(pi' || ref renormalized on S) + k3(ref(S)/pi(S)): non-negative, zero only when the two
+  agree on S and in the nucleus mass, so it also holds the tail mass in place. The truncated variant (each side's own
+  nucleus) is not a k3 argument: ref' has mass outside S, and pi' can have mass outside ref's nucleus.
+- **Tail guard** (`--tail-logp-floor -7`) stays; it reads the actor's untruncated logp and only zeroes the policy
+  weight, so it composes with the nucleus term (nothing is masked twice). Under top-p it rarely fires.
+- **Law custody.** `sampling-config.json` carries `top_p`; `serve/http.py` reads it (it was dropped before), both
+  engines apply it, the capture's `sampling_law` records `top_p` and `probabilities: post-temperature-untruncated`,
+  and a sampled reply whose path did not apply the requested top_p is refused. The learner refuses calls of another
+  top_p (`skip_other_sampling_law`); `held_eval` records `sampling` in `run.json`/`result.json`, a resumed measure and
+  `compare` refuse another law, and GRPO moves a start-policy result of another law aside and measures again. The held
+  series therefore restarts: the base is re-measured at the next pin. `held-v2/engine.json` is unchanged.
+- **Not measured here:** the nucleus head on the GPU (memory beside the actor, tokens/s; it is plain torch, not
+  compiled): the next pin's smoke.

@@ -115,7 +115,9 @@ def episode_turns(row, stats, states=None):
         law = sampling.get('sampling_law') or {}
         rows.append({'invocation': turn['invocation_id'], 'index': index, 'prompt': prompt, 'sample': sample, 'logp': logp,
                      'imports': imports, 'policy': sampling['policy']['checkpoint_sha256'],
-                     'temperature': law.get('temperature'), 'guidance': bool(law.get('guidance'))})
+                     'temperature': law.get('temperature'), 'guidance': bool(law.get('guidance')),
+                     # the draw's nucleus (1.0: untruncated); `logp` is the untruncated law either way
+                     'top_p': float(law.get('top_p', 1.)), 'probabilities': law.get('probabilities')})
     return rows
 
 

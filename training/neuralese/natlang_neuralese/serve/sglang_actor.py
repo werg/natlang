@@ -581,7 +581,12 @@ class SglangEngine(Engine):
                          if template_prefix is not None else None)
         sampling = request.temperature is not None and request.temperature > 0
         k = request.rl_top_k if sampling and request.rl_top_k is not None else 0
+        if sampling and request.top_p < 1:
+            # top-p: SGLang draws from the nucleus; its natlang record stays the untruncated post-temperature logp
+            # (fork `natlang_post_temperature_logprobs`), which the capture's sampling law declares.
+            seq.nucleus_applied = float(request.top_p)
         params = {'temperature': float(request.temperature) if sampling else 0.0,
+                  **({'top_p': seq.nucleus_applied} if seq.nucleus_applied is not None else {}),
                   'stop_token_ids': sorted(self.stop_ids), 'skip_special_tokens': False,
                   'no_stop_trim': True, 'custom_params': {TOP_K_KEY: max(k, 1),
                                                           **({TOP_K_MASS_KEY: True} if k else {}),

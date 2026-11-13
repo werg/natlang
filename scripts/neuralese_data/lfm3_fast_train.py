@@ -327,6 +327,7 @@ def linear_nll(h, weight, target, chunk=LOGIT_CHUNK):
 
 
 NUCLEUS_TOP_K = 1024
+NUCLEUS_CHUNK = 2048    # rows per head chunk of the nucleus NLL: it holds about twice the fp32 temporaries of the plain CE
 
 
 def _nucleus_cut(lf, lse, top_p, top_k):
@@ -405,7 +406,7 @@ class _LinearNLLNucleus(torch.autograd.Function):
         return dh, None if dw is None else dw.to(weight.dtype), None, None, None, None
 
 
-def linear_nll_nucleus(h, weight, target, top_p, chunk=LOGIT_CHUNK, top_k=NUCLEUS_TOP_K):
+def linear_nll_nucleus(h, weight, target, top_p, chunk=NUCLEUS_CHUNK, top_k=NUCLEUS_TOP_K):
     """(nll, nucleus nll, outside): ``linear_nll`` and the NLL of ``target`` under the row's distribution truncated to
     its own top-p nucleus and renormalized (the set is a constant; the gradient flows through the target logit and the
     set's mass), with the target kept in the set even when it lies outside (``outside`` marks those rows).
@@ -423,5 +424,5 @@ def token_logprobs(model, ids, positions, targets, lengths=None, chunk=LOGIT_CHU
     h = hidden(model, ids, lengths, imports)
     if top_p >= 1.:
         return -linear_nll(h[positions], model.lm_head.weight, targets, chunk)
-    nll, nucleus, outside = linear_nll_nucleus(h[positions], model.lm_head.weight, targets, top_p, chunk)
+    nll, nucleus, outside = linear_nll_nucleus(h[positions], model.lm_head.weight, targets, top_p)
     return -nll, -nucleus, outside

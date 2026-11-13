@@ -2403,3 +2403,16 @@ Data: the garbled HybridQA row (g000011) is pool errata `ops/pool-errata/hybridq
 the 8 wrong-oracle held-v2 tasks and the 23 ENOENT codebase tasks are `ops/held-v2/ignore-ids-*-20261113.jsonl` for
 `held_eval compare --ignore-ids` (held manifest unchanged). Changes the held series: re-measure the start policy at the
 next pin. Tests: `ts-host/test/oracle.test.mjs`.
+
+## 2026-11-13: sampling law is top-p 0.95 at temperature 1 (owner)
+
+RL collection (`grpo.py`, `exp1_collect.py`) and held evaluation sample from the top-p nucleus (`common/sampling.py`
+`RL_TOP_P = 0.95`; `--top-p 1.0` restores the untruncated law). Reason: at untruncated T=1 the model drew a token of
+probability < 0.0067 once in 55 samples (about 150 per episode, 0.36% below 3.4e-4), visible as derailing words inside
+its reasoning; no deployment samples that way. What the model sees is unchanged (prompts, tools, history); what changes
+is which continuations it produces. The front honours the request's `top_p` on both engines (it was silently dropped
+before: `serve/http.py` never read it), records it in the capture's `sampling_law` (`top_p`, `probabilities:
+post-temperature-untruncated`) and refuses a sampled reply whose path did not apply it. Decisions still sample from the
+full softmax over their finite option set. Changes the held series: `result.json` records `sampling`, `held_eval
+compare` refuses pairs of different laws, and the start policy is re-measured at the next pin. Tests:
+`tests/neuralese/test_top_p_sampling_law.py`, `test_sglang_actor.py` (top-p forwarded and declared).

@@ -20,7 +20,10 @@ One process runs the whole loop; nothing else (no controller, custody or transit
   episode, the reference the start policy. Each trained episode weighs the same: its terms are averaged over its units
   (sampled tokens; a sampled decision counts as one average call of its episode), then over the step's episodes
   (``--loss-norm token``: one sum over all tokens). A tail token the actor sampled below ``--tail-logp-floor`` gets no
-  policy term in an episode with a positive advantage.
+  policy term in an episode with a positive advantage. Sampling is top-p (``--top-p``, ``common.sampling.RL_TOP_P``): the
+  policy term's ``logp`` is the sampled token's log-probability under the learner's own nucleus
+  (``lfm3_fast_train.linear_nll_nucleus``; the sampled token always in the set), while ``rho`` and the KL term use the
+  untruncated log-probabilities (the actor records the untruncated one; DECISIONS 2026-11-13 for the reasoning).
 * weight sync: after each step the BF16 weights are copied once into a pinned host buffer, written as the actor's HF
   safetensors (same layout as ``export/native_hf``; frozen rows and producer table kept) and loaded in place
   (SGLang ``pause_generation`` retract -> ``update_weights_from_disk`` -> ``continue_generation``), in a background thread.
@@ -73,7 +76,8 @@ REPO = HERE.parents[1]
 sys.path[:0] = [str(REPO / 'training/neuralese'), str(REPO), str(HERE)]
 
 from natlang_neuralese.common.paths import resolve_str  # noqa: E402
-from natlang_neuralese.rl.held_eval import EPISODE_MODEL_CALLS  # noqa: E402
+from natlang_neuralese.common.sampling import RL_TOP_P, check_top_p, sampling_law_of  # noqa: E402
+from natlang_neuralese.rl.held_eval import EPISODE_MODEL_CALLS, LEGACY_SAMPLING  # noqa: E402
 
 BASE = str(Path.home() / '.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd')
 POOLS = [resolve_str('data_hdd', 'natlang-rl-composed-20261103', 'memetic-program-source-20261105', 'cases.jsonl'),
@@ -374,15 +378,18 @@ class Collector:
         return taken
 
 
-def trainable_rows(rows, stats):
+def trainable_rows(rows, stats, top_p=1.):
     """The calls whose actor log-probabilities are the law the learner scores: every sampled token has a finite logp
     (a call captured without sampling records None, which would turn rho, the loss and then every FP32 master into NaN)
-    and the call sampled at temperature 1 without guidance (the learner's logp is the plain T=1 softmax)."""
+    and the call sampled at temperature 1 without guidance from the learner's own nucleus (``top_p``, the run's
+    ``--top-p``; the capture's sampling law names the draw's; 1.0 on both sides: untruncated). A call of another law is
+    refused and counted (``skip_other_sampling_law``)."""
     kept = []
     for row in rows:
         if not np.isfinite(row['logp']).all():
             stats['skip_nonfinite_actor_logp'] += 1
-        elif row.get('temperature') not in (None, 1, 1.0) or row.get('guidance'):
+        elif (row.get('temperature') not in (None, 1, 1.0) or row.get('guidance')
+              or abs(float(row.get('top_p', 1.)) - top_p) > 1e-9):
             stats['skip_other_sampling_law'] += 1
         else:
             kept.append(row)
@@ -397,7 +404,8 @@ def load_group(collector, group, stats):
     episodes = []
     for row in read_jsonl(info['dir'] / 'rollouts.jsonl'):
         reward = row.get('reward')
-        rows = trainable_rows(episode_turns(row, stats, collector.states), stats) if row.get('turns') else []
+        rows = (trainable_rows(episode_turns(row, stats, collector.states), stats, collector.args.top_p)
+                if row.get('turns') else [])
         decisions = decision_turns(row, stats, collector.states) if row.get('turns') else []
         sampled = sum(len(r['sample']) for r in rows)
         collector.generated += sampled
@@ -1156,7 +1164,8 @@ def train(args):
     collector = Collector(args, tasks, work, source_sha, runtime, first_group=first_group, cursor=cursor)
     collector.variants = load_variants(args, tasks, work)
     collector.version = step
-    (work / 'sampling-config.json').write_text(json.dumps({'guidance': False, 'x_natlang_rl_capture': True, 'x_natlang_rl_top_k': 0}) + '\n')
+    from natlang_neuralese.common.sampling import rl_sampling_controls
+    (work / 'sampling-config.json').write_text(json.dumps(rl_sampling_controls(args.top_p, capture=True)) + '\n')
     versions_live = {'actor': step}
     probes = probe_chains(args) if args.probe_turns else []
     think_close = None   # the reasoning-close token id: splits the logged gradient mass into reasoning and reply tokens
@@ -1198,12 +1207,15 @@ def train(args):
     if (step0 / 'result.json').exists() and not args.held_baseline:
         # A resume on a pin whose harness differs (another held series) cannot compare with the old step 0: that result
         # moves aside (it stays the record of its series) and the start policy is measured again on this pin below.
-        old = (json.loads((step0 / 'result.json').read_text()).get('series') or {}).get('key')
-        if old != run['series']['key']:
-            aside = work / 'held' / f'step-00000-series-{old}'
+        measured = json.loads((step0 / 'result.json').read_text())
+        old = (measured.get('series') or {}).get('key')
+        law = measured.get('sampling') or LEGACY_SAMPLING     # the same for another sampling law (--top-p)
+        if old != run['series']['key'] or law != sampling_law_of(args.top_p):
+            aside = work / 'held' / (f'step-00000-series-{old}' if old != run['series']['key'] else
+                                     f'step-00000-top-p-{law["top_p"]}')
             step0.rename(aside)
             log_line(log, {'event': 'held series changed', 'old_series': old, 'series': run['series']['key'],
-                           'moved_to': str(aside)})
+                           'old_sampling': law, 'sampling': sampling_law_of(args.top_p), 'moved_to': str(aside)})
     if step:   # a resumed run first serves its own weights
         sync.snapshot()
         sync.publish(step, on_published)
@@ -1265,7 +1277,7 @@ def train(args):
         try:
             with (work / 'held.log').open('a') as handle:
                 code = subprocess.run([*python, 'measure', '--manifest', args.held_manifest, '--endpoint',
-                                       f'{args.actor}={args.held_workers}', '--policy-id', policy, '--samples', str(samples),
+                                       f'{args.actor}={args.held_workers}', '--policy-id', policy, '--top-p', str(args.top_p), '--samples', str(samples),
                                        '--out', str(out), '--label', f'grpo-{name or f"step-{step_number}"}',
                                        '--max-model-requests', str(args.max_model_requests)],
                                       cwd=REPO, env=pinned_env(), stdout=handle, stderr=subprocess.STDOUT).returncode
@@ -1355,8 +1367,11 @@ def train(args):
             step-00000-pop-<time>-other-engine and the start policy is measured again (its steps would not pair with it)."""
             for name in ('result.json', 'run.json'):
                 if (base_out / name).exists():
-                    measured = ((json.loads((base_out / name).read_text()).get('engine') or {}).get('export_format'))
-                    return measured in (None, pop_format)
+                    record = json.loads((base_out / name).read_text())
+                    measured = (record.get('engine') or {}).get('export_format')
+                    # ... or under another sampling law (--top-p): compare refuses such pairs
+                    return measured in (None, pop_format) and \
+                        (record.get('sampling') or LEGACY_SAMPLING) == sampling_law_of(args.top_p)
             return True
 
         def pop_endpoint(policy):
@@ -1382,7 +1397,7 @@ def train(args):
                     raise RuntimeError(f'Pop does not serve {policy[:12]} (see {work}/held-pop.log)')
                 serving = time.time() - started
                 code = subprocess.run([*python, 'measure', '--manifest', args.held_manifest, '--endpoint',
-                                       f'{endpoint}={args.held_remote_slots}', '--policy-id', policy, '--samples',
+                                       f'{endpoint}={args.held_remote_slots}', '--policy-id', policy, '--top-p', str(args.top_p), '--samples',
                                        str(args.held_samples), '--out', str(out), '--label', f'grpo-pop-step-{step_number}',
                                        '--allow-other-engine', '--max-model-requests', str(args.max_model_requests)],
                                       cwd=REPO, env=pinned_env(), stdout=handle,
@@ -1550,20 +1565,30 @@ def train(args):
                 t = time.time()
             exp0_sft.set_checkpointing(model, len(ids), args.activation_gb)
             h = forward(model, ids, None, imports)
-            logp = -exp0_sft.token_nll(model, h, positions, targets)
+            if args.top_p < 1:
+                # Top-p: the policy is the learner's distribution on its own nucleus (a constant set that always holds
+                # the sampled token), so the policy term's log-probability is logp - log(nucleus mass); the KL term
+                # and rho keep the untruncated logp (the actor's record is untruncated too: rho is the ratio of the two
+                # truncated laws with the actor's nucleus mass taken as the learner's, |d log rho| <= -log(top_p)).
+                nll, nucleus_nll, outside = exp0_sft.token_nll_nucleus(model, h, positions, targets, args.top_p)
+                logp, policy_logp = -nll, -nucleus_nll
+                sums['outside_nucleus'] += int(outside.sum())
+                sums['nucleus_log_mass'] += (logp.detach() - policy_logp.detach()).sum().item()
+            else:
+                logp = policy_logp = -exp0_sft.token_nll(model, h, positions, targets)
             with torch.no_grad():
                 log_rho = logp.detach() - actor
                 rho = log_rho.clamp(max=20).exp()
                 weight, tail = policy_weight(rho, actor, chain['advantage'], args.rho_cap, args.tail_logp_floor)
                 # gradient mass of the policy term per token (its factor times the logit-gradient norm scale 1 - p),
                 # split into reasoning and post-</think> tokens
-                mass = token_scale * abs(chain['advantage']) * weight * (1 - logp.detach().exp())
+                mass = token_scale * abs(chain['advantage']) * weight * (1 - policy_logp.detach().exp())
                 thinking = torch.from_numpy(np.concatenate([think_mask(row['sample'], think_close)
                                                             for _, _, row in chain['segs']])).cuda()
                 sums['mass_think'] += mass[thinking].sum().item()
                 sums['mass_post_think'] += mass[~thinking].sum().item()
                 sums['tail_masked'] += int(tail.sum())
-            loss_terms = -(weight * chain['advantage'] * logp)
+            loss_terms = -(weight * chain['advantage'] * policy_logp)
             if ref is not None:
                 d = ref - logp
                 kl = d.exp() - d - 1
@@ -1583,7 +1608,7 @@ def train(args):
             rho_pre_max = max(rho_pre_max, rho.max().item())
             rho_post_max = max(rho_post_max, weight.max().item())
             forward_tokens += len(ids)
-            del h, logp, loss_terms
+            del h, logp, policy_logp, loss_terms
             torch.cuda.synchronize()
             phase['policy_forward_backward'] = phase.get('policy_forward_backward', 0.) + time.time() - t
             if time.time() - progress_mark > 300:
@@ -1733,6 +1758,8 @@ def train(args):
             kl_mean=round(sums['kl'] / units, 7), ref_abs_dlogp_mean=round(sums['ref_abs_dlogp'] / units, 6),
             mean_logp=round(sums['logp'] / max(1, loss_tokens), 4),
             grad_moment_cosine=None if cosine is None else round(cosine, 5),
+            top_p=args.top_p, outside_nucleus_fraction=round(sums['outside_nucleus'] / max(1, loss_tokens), 6),
+            nucleus_mass_mean=round(math.exp(sums['nucleus_log_mass'] / max(1, loss_tokens)), 5),
             tail_logp_floor=args.tail_logp_floor, tail_masked_fraction=round(sums['tail_masked'] / max(1, loss_tokens), 6),
             tail_masked_decisions=sums['tail_masked_decisions'],
             grad_mass_share={k: round(sums['mass_' + k] / mass_total, 4) for k in ('think', 'post_think', 'decision')}
@@ -1856,6 +1883,11 @@ def main():
                    help='episode: each trained episode contributes A_i * (mean over its trained units of w * logp), averaged '
                         'over the step\'s episodes, the KL term the same way; token: one sum over all units / all units (until '
                         '2026-11-13: an episode weighed by its length, failures are 1.7x longer, 97%% of the mass on reasoning)')
+    t.add_argument('--top-p', type=float, default=RL_TOP_P,
+                   help='nucleus of the sampling law at temperature 1, for collection, the held evals and the learner alike '
+                        '(common.sampling.RL_TOP_P; 1.0: untruncated). The policy term scores the sampled token under the '
+                        "learner's own nucleus (lfm3_fast_train.linear_nll_nucleus); calls sampled under another top_p are "
+                        'refused (skip_other_sampling_law)')
     t.add_argument('--tail-logp-floor', type=float, default=-7.,
                    help='where the actor sampled a token (or decision option) with log-probability below this and the '
                         "episode's advantage is positive, the policy term has zero weight (the KL term stays); 0: off")
@@ -1911,6 +1943,7 @@ def main():
     t.add_argument('--probe-max-tokens', type=int, default=8000)
     args = parser.parse_args()
     if args.command == 'train':
+        args.top_p = check_top_p(args.top_p)
         from natlang_neuralese.common.cuda_context import ensure_context
         ensure_context()   # GB10: a context can fail to create under host-memory fragmentation; retried
         args.pool = args.pool or POOLS

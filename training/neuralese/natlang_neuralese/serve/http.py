@@ -451,6 +451,14 @@ def make_handler(engine: Engine):
                     raise RequestError('bad-request', f'x_natlang_rl_top_k must be 0 or an integer in [1, {MAX_BEHAVIOR_TOP_K}]')
                 if body.get('x_natlang_rl_capture') is not True:
                     raise RequestError('bad-request', 'x_natlang_rl_top_k records sampler top-k log-probs inside x_natlang_rl_capture; request both')
+            from ..common.sampling import check_top_p
+            try:
+                top_p = check_top_p(body.get('top_p'))
+            except ValueError as error:
+                raise RequestError('bad-request', str(error)) from error
+            if top_p < 1 and rl_top_k is not None:
+                raise RequestError('bad-request', 'x_natlang_rl_top_k receipts describe the untruncated sampler; '
+                                   'with top_p < 1 send x_natlang_rl_top_k: 0')
             privileged_context=body.get('x_natlang_privileged_context')
             if privileged_context is not None and body.get('x_natlang_rl_capture') is not True:
                 raise RequestError('bad-request', 'x_natlang_privileged_context renders captured training guidance; '
@@ -465,7 +473,7 @@ def make_handler(engine: Engine):
             request = GenerationRequest(
                 messages=body.get("messages") or [], tools=body.get("tools"),
                 max_tokens=completion_limit(body),
-                temperature=float(body.get("temperature") or 0.0), seed=body.get("seed"),
+                temperature=float(body.get("temperature") or 0.0), top_p=top_p, seed=body.get("seed"),
                 template=body.get("neuralese_template"),
                 forced_message=body.get('x_natlang_forced_message'),
                 native_protocol_recovery=body.get('x_natlang_native_protocol_recovery') is True,
