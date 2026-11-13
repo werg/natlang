@@ -4,10 +4,10 @@
  * NATLANG_MODEL_FACING overrides for a measurement arm: a comma list of variant names, `combined` (all variants) or
  * `none` (the texts as they were before any variant).
  */
-export const MODEL_FACING_VARIANTS = ['effect-receipt', 'read-file-binding', 'reply-text-with-calls'] as const;
+export const MODEL_FACING_VARIANTS = ['effect-receipt', 'reply-text-with-calls'] as const;
 export type ModelFacingVariant = typeof MODEL_FACING_VARIANTS[number];
 /** Measured 2026-11-10 (plans/MODEL_FACING_CHANGES.md): neutral task success, target behaviour moved. */
-const ADOPTED: readonly ModelFacingVariant[] = ['effect-receipt', 'read-file-binding'];
+const ADOPTED: readonly ModelFacingVariant[] = ['effect-receipt'];
 
 function enabled(): ReadonlySet<string> {
   // The browser bundle has no process.

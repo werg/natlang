@@ -30,13 +30,13 @@ test('an eval that calls no service has no receipt', async () => {
   assert.doesNotMatch(results[0], /Service calls completed/);
 });
 
-test('read_file says how the file is bound in eval', async () => {
+test('a read_file result is the file text and nothing else', async () => {
   const folder = Folder.fromFiles({ 'tickets/a.md': 'Status: open\n' });
   const opened = open({ type: '() => string', subtype: 'directory-reducer', instructions: 'Read the ticket.' }, {});
   opened.lam.projectTransaction = await folder.beginTransaction(false);
   const read = await opened.session.applyAsync('read_file', { path: 'tickets/a.md' });
   assert.equal(read.kind, 'ok', read.text);
-  assert.ok(read.text.endsWith('\n(in eval: const text = await folder.file("tickets/a.md").readText())'), read.text);
+  assert.equal(read.text, 'Status: open\n');
   assert.equal(read.value, 'Status: open\n');
   opened.lam.projectTransaction.abort();
 });

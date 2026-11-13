@@ -15,7 +15,7 @@ import { AUTOMATIC_NOTE, COMPACTION_NOTICE, directoryReducerPrompt, scopedFileTo
 import { canGenerateNl, runInFrame } from '../runtime/context.js';
 import { adoptImportedNativeArtifacts } from './nz-file.js';
 import { FileHandle, FolderHandle, fileListingText, type Folder } from './scoped-fs.js';
-import { SHOWN_CHARS, SCOPE_VALUE_CHARS, shownCharsFor, note as cutNote } from './cutoff.js';
+import { SHOWN_CHARS, SCOPE_VALUE_CHARS, SMALL_VALUE_CHARS, literalFits, shownCharsFor, note as cutNote } from './cutoff.js';
 import type { TrainingGuidance } from './training-guidance.js';
 
 /** Scope and input values show at least SCOPE_VALUE_CHARS, and never less than a tool output of the call may. */
@@ -361,13 +361,16 @@ const isPlainRecord = (value: object) => Object.prototype.toString.call(value) =
 /**
  * TypeScript that evaluates to a scope value: a literal for data, `folder.file(...)` for a handle into the
  * reducer's folder, `new Date(...)`/`new Map(...)`/`new Set(...)`/`new Uint8Array(...)` for those built-ins.
- * A value beyond the budget is cut off with a comment saying `holder` (the variable) holds all of it.
+ * A value beyond the budget is cut off with a note saying `holder` (the variable) holds the complete value; a value whose
+ * whole literal is small (SMALL_VALUE_CHARS) is never cut.
  * Undefined when no expression produces the value (an opaque host object).
  */
 function scopeExpression(value: unknown, root: Folder | undefined, holder?: string, budget = SHOWN_CHARS,
   state: { nodes: number; depth: number; untrusted?: UntrustedRegistry } = { nodes: 0, depth: 0 }): string | undefined {
   if (++state.nodes > 8192 || state.depth >= 64)
     return cutNote('inspection limit reached', { holder });
+  // A small value is shown whole, whatever share of the budget is left for it.
+  if (budget < SMALL_VALUE_CHARS && literalFits(value, SMALL_VALUE_CHARS)) budget = SMALL_VALUE_CHARS;
   state.depth++;
   try {
   const sequence = <T,>(items: Iterable<T>, count: number, open: string, close: string, noun: string,
@@ -1133,7 +1136,7 @@ export class NativeToolAgent {
         { path: { type: 'string' }, pattern: { type: 'string' } }, []),
       tool('search_files', 'Search text files in the current folder and return matching file, line, and context.',
         { query: { type: 'string' }, path: { type: 'string' }, pattern: { type: 'string' }, regex: { type: 'boolean' } }, ['query']),
-      tool('read_file', 'Read a file in the current folder, optionally by one-based inclusive line range.',
+      tool('read_file', 'Read a file in the current folder, optionally by one-based inclusive line range. The result is the file\'s text; eval reads the same text with await folder.file(path).readText().',
         { path: { type: 'string' }, start_line: { type: 'integer' }, end_line: { type: 'integer' } }, ['path']),
       tool('write_file', 'Create or replace a text file in the current folder.',
         { path: { type: 'string' }, content: { type: 'string' } }, ['path', 'content']),
@@ -1142,9 +1145,9 @@ export class NativeToolAgent {
         ['path', 'find', 'replace_with']),
       tool('diff_files', 'Inspect changes in the current folder.',
         { path: { type: 'string' } }, []),
-      tool('bash', 'Run bash over the current folder. Returns exit code, stdout, stderr and changed paths. Use finite for loops; while, until, C-style for and recursive functions are refused.',
+      tool('bash', 'Run bash over the current folder. Returns exit code, stdout, stderr, changedPaths (files created or rewritten) and, when files were removed or moved away, removedPaths. Use finite for loops; while, until, C-style for and recursive functions are refused.',
         { command: { type: 'string' } }, ['command']),
-      tool('python', 'Run a Python cell over the current folder with pathlib, pandas and sqlite3. Returns its last expression, stdout, stderr and changed paths. Use finite for loops; while and recursion are refused.',
+      tool('python', 'Run a Python cell over the current folder with pathlib, pandas and sqlite3. Returns its last expression, stdout, stderr, changedPaths (files created or rewritten) and, when files were removed or moved away, removedPaths. Use finite for loops; while and recursion are refused.',
         { code: { type: 'string' }, finish: { type: 'boolean', description: 'Finish this function using the fresh typed final expression or explicit return computed in this eval. Omit finish or set false for inspection or staging; true needs a fresh typed final result and cannot reuse an older staged value.' }, timeout_ms: { type: 'integer', minimum: 1 } }, ['code']),
       tool('delegate', 'Give one subfolder to a directory reducer child with its own context. Its successful file changes are merged into this folder.',
         { path: { type: 'string', description: 'Relative subfolder path.' },

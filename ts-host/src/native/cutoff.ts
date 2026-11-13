@@ -15,6 +15,40 @@ export const SHOWN_CHARS = 2000;
 export const SCOPE_VALUE_CHARS = 4096;
 
 /**
+ * A value whose whole literal fits in this many characters is never shortened, whatever budget is left for it (a
+ * `Stored local …` line, a late field of a long record): a small record shown as its field names, or a short string cut
+ * after 17 characters, read as missing data.
+ */
+export const SMALL_VALUE_CHARS = 300;
+
+/** Whether plain data (strings, numbers, booleans, null, arrays, plain records) has a literal of at most `limit` characters; bounded work. */
+export function literalFits(value: unknown, limit: number): boolean {
+  let left = limit;
+  const visit = (item: unknown, depth: number): boolean => {
+    if (item === null || typeof item === 'boolean' || typeof item === 'number') { left -= String(item).length; return left >= 0; }
+    if (typeof item === 'string') {
+      if (item.length > left) return false;
+      left -= JSON.stringify(item).length; return left >= 0;
+    }
+    if (typeof item !== 'object' || depth > 8) return false;
+    if (Array.isArray(item)) {
+      left -= 2;
+      for (const element of item) { left -= 2; if (left < 0 || !visit(element, depth + 1)) return false; }
+      return left >= 0;
+    }
+    const proto = Object.getPrototypeOf(item);
+    if (Object.prototype.toString.call(item) !== '[object Object]' || (proto !== null && Object.getPrototypeOf(proto) !== null)) return false;
+    left -= 4;
+    for (const key of Object.keys(item)) {
+      left -= key.length + 4;
+      if (left < 0 || !visit((item as Record<string, unknown>)[key], depth + 1)) return false;
+    }
+    return left >= 0;
+  };
+  return visit(value, 0);
+}
+
+/**
  * The share of the context budget one tool output may fill. Compaction starts past three quarters of the budget and
  * brings the prompt back under half, so an eighth leaves room for the opening, several reads and the reply.
  */
@@ -32,15 +66,18 @@ export function shownCharsFor(contextTokens: number | null | undefined): number 
   return Math.max(SHOWN_CHARS, Math.floor(contextTokens * OUTPUT_CONTEXT_SHARE * PAGE_CHARS_PER_TOKEN));
 }
 
-/** Parts of a note: `holder` is the scope expression that holds all of it; `next` a call that shows the next part. */
+/** Parts of a note: `holder` is the scope expression that holds the complete value; `next` a call that shows the next part. */
 export type Where = { holder?: string; next?: string };
 
-/** The words of a note: `cut off: …; holder holds all of it; next shows the next part`. */
+/**
+ * The words of a note: `cut off: …; only this display is shortened, holder holds the complete value; next shows the
+ * next part`. It says that the value is whole: models read the earlier `holder holds all of it` as data that was lost.
+ */
 export function noteText(what: string, where: Where = {}): string {
-  return [what, ...(where.holder ? [`${where.holder} holds all of it`] : []),
+  return [what, ...(where.holder ? [`only this display is shortened, ${where.holder} holds the complete value`] : []),
     ...(where.next ? [`${where.next} shows the next part`] : [])].join('; ');
 }
-/** The note, the same in text and in code: `<<cut off: …; customers holds all of it>>`. */
+/** The note, the same in text and in code: `<<cut off: …; only this display is shortened, customers holds the complete value>>`. */
 export const note = (what: string, where: Where = {}) => `<<${noteText(what, where)}>>`;
 
 /**

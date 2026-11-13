@@ -78,7 +78,7 @@ Reworked against live Bonsai 27B runs (`ts-host/scripts/live-probe/`):
   `return_result(value, status, reason)` in eval; the old `blocked` and `failed` tools are rejected with that hint. `mark_lines`, line
   listings, the `result` variable, the final-expression result rule, and `commit` are removed.
 - `read_page(id, page)` reads the next part of a cut-off tool output by a short word ID; `read_value` is removed.
-- Cut-offs (`native/cutoff.ts`): one note form, `<<cut off: …; customers holds all of it; read_page("amber", 2)
+- Cut-offs (`native/cutoff.ts`): one note form, `<<cut off: …; only this display is shortened, customers holds the complete value; read_page("amber", 2)
   shows the next part>>`, not TypeScript. Values are cut at item and field boundaries by `renderValue`; text
   output keeps its head and tail. Every tool call's full output is in `transcript`, which evals can read.
 - Conversation length: rollover and checkpoint notes are removed. Past three quarters of `contextTokens` (default

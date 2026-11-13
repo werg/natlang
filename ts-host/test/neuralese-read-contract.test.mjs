@@ -132,3 +132,19 @@ test('eval read(value) without a standard library reads the value with the execu
   assert.equal(reads[0].lam.type.params.fields[0].name, 'value');
   assert.match(String(reads[0].lam.instructions ?? reads[0].lam.body ?? ''), /Read the supplied Neuralese value/);
 });
+
+test('a Neuralese value printed or stored in eval reads as one plain line', async () => {
+  const { session } = open({ type: '() => string', instructions: 'Return the text read from the child.' }, {
+    agent: child => { child.lam.return = neuraleseRef('Neuralese<string>', 'nzs1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'); },
+  });
+  const result = await session.applyAsync('eval', { code: `
+    const child = nl<Neuralese<string>>\`Return the answer as a soft string.\`;
+    const note = await child({});
+    console.log(note); console.log('note:', note); console.log({ notes: [note] });
+  ` });
+  assert.equal(result.kind, 'ok', result.text);
+  const line = '[Neuralese<string> value: opaque here; pass it on as is, or read it with read(value)]';
+  assert.ok(result.text.includes(`console:\n${line}\nnote: ${line}\n{"notes":["${line}"]}\n`), result.text);
+  assert.doesNotMatch(result.text.split('Stored local')[0], /\$neuralese|nzs1_/);
+  assert.match(result.text, /local note = \S+ \(Neuralese<string>: pass it on as is, or read it with read\(note\)\)/);
+});

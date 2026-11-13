@@ -461,7 +461,7 @@ test('in eval, return_result stages its value and blocked ends the call, after t
 test('long text logs and safely sized values retain their read_page route', async () => {
   const { session } = open({ type: '(text: string) => number', instructions: 'Inspect.', args: { text: 'x'.repeat(4500) } });
   const logged = await session.applyAsync('eval', { code: 'console.log("a".repeat(1400) + "b".repeat(2000) + "c".repeat(1100))' });
-  assert.match(logged.text, /^console:\na{1400}b{100}\n<<cut off: 2500 of 4500 characters not shown; transcript\.entry\(0\)\.output holds all of it; read_page\("amber", 2\) shows the next part>>\nc{500}\n/);
+  assert.match(logged.text, /^console:\na{1400}b{100}\n<<cut off: 2500 of 4500 characters not shown; only this display is shortened, transcript\.entry\(0\)\.output holds the complete value; read_page\("amber", 2\) shows the next part>>\nc{500}\n/);
   assert.match(session.transcript[0].output, /a{1400}b{2000}c{1100}/, 'the transcript entry holds all of it');
   const second = session.apply('read_page', { id: 'amber', page: 2 });
   assert.equal(second.kind, 'ok');
@@ -1672,13 +1672,26 @@ test('large record previews retain later fields and direct paths to clipped valu
  const {renderValue}=await import('../dist/native/agent.js');
  const value={source:'x'.repeat(10000),evidence:[{trace:'y'.repeat(10000),passed:true}],opportunity:'efficiency',status:'ready',history:[]};
  const shown=renderValue(value,{holder:'context'});
- assert.match(shown,/opportunity: "efficiency"/);assert.match(shown,/status: "ready"/);assert.match(shown,/context\.source holds all of it/);assert.match(shown,/history: \[\]/);assert.ok(shown.length<4000);
+ assert.match(shown,/opportunity: "efficiency"/);assert.match(shown,/status: "ready"/);assert.match(shown,/only this display is shortened, context\.source holds the complete value/);assert.match(shown,/history: \[\]/);assert.ok(shown.length<4000);
  const fits={source:'x'.repeat(1100),status:'ready'};assert.equal(renderValue(fits,{holder:'context'}),renderValue(fits,{holder:'context',budget:Infinity}));
  const full=renderValue(value,{budget:Infinity});assert.doesNotMatch(full,/cut off|not shown/);assert.match(full,/x{10000}/);
  const combinatorial=Array.from({length:1_000_000},(_,index)=>[index]);
  const bounded=renderValue(combinatorial,{holder:'allSubsets'});
  assert.ok(bounded.length<5000,`bounded diagnostic was ${bounded.length} characters`);
- assert.match(bounded,/allSubsets holds all of it/);
+ assert.match(bounded,/allSubsets holds the complete value/);
+});
+
+test('a small value is shown whole whatever budget is left for it', async () => {
+  const { renderValue } = await import('../dist/native/agent.js');
+  const record = { ticket: 'T-104', destination: 'billing queue for refunds', handler: 'refund-desk' };
+  assert.equal(renderValue(record, { holder: 'dispatchResult', budget: 80 }),
+    '{ ticket: "T-104", destination: "billing queue for refunds", handler: "refund-desk" }');
+  const results = ['a'.repeat(900), 'b'.repeat(900), `rendered ${'c'.repeat(71)}`];
+  const shown = renderValue(results, { holder: 'results', budget: 1830 });
+  assert.ok(shown.endsWith(`${JSON.stringify(results[2])}]`), shown.slice(-200));
+  assert.doesNotMatch(shown, /cut off|not shown/);
+  const long = renderValue({ ticket: 'T-104', body: 'x'.repeat(1000), handler: 'refund-desk' }, { holder: 'row', budget: 80 });
+  assert.match(long, /only this display is shortened, row(\.body)? holds the complete value/);
 });
 
 test('large persistent bindings stay computationally intact while durable capture stays bounded', async () => {

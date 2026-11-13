@@ -7,6 +7,7 @@
 import { EvalFailure, consoleWriter, withinTimeout, type EnvironmentMode, type EvalEnvironment, type EvalRequest,
   type EvalResult, type HostEvent } from './evaluator.js';
 import { compileEval, evalRealmBody } from './eval-compile.js';
+import { isNeuraleseRef, neuraleseDisplayText } from './neuralese.js';
 
 /** Where compiled eval code runs: a JavaScript realm's global environment. */
 export interface Realm {
@@ -147,7 +148,14 @@ export class RealmEnvironment implements EvalEnvironment {
     const compiled = compileEval(request.code, { body: request.body, asyncBody, imports: imports?.validate.bind(imports),
       restoreAfterAwait: !!this.options.bindAwait });
     const realm = this.realm();
-    const write = consoleWriter(logs, value => { try { return JSON.stringify(portable(value)); } catch { return String(value); } });
+    // A Neuralese value prints as one plain line, at any depth, never as its reference JSON.
+    const write = consoleWriter(logs, value => {
+      try {
+        const data = portable(value);
+        return isNeuraleseRef(data) ? neuraleseDisplayText(data) :
+          JSON.stringify(data, (_key, item) => isNeuraleseRef(item) ? neuraleseDisplayText(item) : item);
+      } catch { return String(value); }
+    });
     const logger = Object.freeze({ log: write, info: write, warn: write, error: write });
     const bound = { self: snapshot(request.scope), __live: request.live ?? {}, __natlang_import: (specifier: string) => {
       if (!imports) throw new Error(`cannot import ${specifier}: eval has no package imports here`);

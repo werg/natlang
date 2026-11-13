@@ -2022,10 +2022,8 @@ export class NativeSession {
     else value = folder.diffSync(path);
     const text = name === 'diff_files' ? fileDiffPreview(value as ReturnType<Folder['diffSync']>) :
       name === 'list_files' ? fileListingText(value as EntryStat[]) : typeof value === 'string' ? value : JSON.stringify(value, null, 1);
-    // Variant read-file-binding: say how the file is bound in eval, so its text is read from the file, not retyped.
-    const binding = name === 'read_file' && modelFacing('read-file-binding') ?
-      `\n(in eval: const text = await folder.file(${JSON.stringify(path)}).readText())` : '';
-    return { kind: 'ok', text: this.show(text) + binding, value: value as Value };
+    // A read_file result is the file's text and nothing else: an appended hint read as file content (and was written into files).
+    return { kind: 'ok', text: this.show(text), value: value as Value };
   }
 
   private inferScopeType(value: unknown): string { return inferValueType(value); }
@@ -2493,7 +2491,9 @@ export class NativeSession {
         raw.valueless === true && !isHandle(output.result) ? 'undefined' : this.showValue(output.result ?? null);
       const status = functionResult !== undefined ?
         stagedMessage(functionResult, this.runtime.displayLiveId, this.runtime.untrusted) : notResult;
-      const stored = changed.map(([name, , value]) => `local ${name} = ${oneLine(value, name, this.runtime.displayLiveId, this.runtime.untrusted)}`);
+      const stored = changed.map(([name, , value]) => `local ${name} = ${oneLine(value, name, this.runtime.displayLiveId, this.runtime.untrusted)}` +
+        // A Neuralese value is shown as its state; the words beside it say what it is and how to use it.
+        (isNeuraleseRef(value) ? ` (${value.$neuralese.type}: pass it on as is, or read it with read(${name}))` : ''));
       // Variant effect-receipt: a successful eval lists the service calls it completed, as a failed one does, so a model
       // does not rerun an effectful eval that already succeeded.
       const performed = new Map<string, number>();
