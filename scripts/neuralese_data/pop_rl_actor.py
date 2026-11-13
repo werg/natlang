@@ -2,6 +2,7 @@
 """Serve a policy checkpoint from the Pop laptop as an extra rollout actor.
 
     pop_rl_actor.py start --checkpoint CK --policy-id SHA [--port 18531] [--bind-host IP]
+    pop_rl_actor.py serve-checkpoint --checkpoint CK --policy-id SHA --commit C [--step N]
     pop_rl_actor.py stop
     pop_rl_actor.py status
 
@@ -12,6 +13,12 @@ launches pop_actor_driver.py under Pop's memory ledger: a container bound to Pop
 checkpoint with a block store, so a collector fetches its stored blocks over HTTP. The actor attests the training
 checkpoint SHA (the transport receipt binds it) and binds ``actor_export`` in every capture (arithmetic on another GPU
 differs from the learner's). stop removes the container and keeps the block store.
+
+serve-checkpoint serves a pruned native checkpoint (``exp0_sft.write_checkpoint`` / GRPO's ``step-N/checkpoint.pt``:
+already model-only BF16, so no view or transport is prepared) with the same SGLang engine and export format: the file
+goes to Pop as is (rsync, sha256-checked by the driver), and the actor runs an exported copy of commit C on Pop
+(``git archive``, no worktree), so a pinned experiment's held evaluations on Pop serve its own code. Pop keeps the
+newest ``POP_KEEP`` such checkpoints, actor work dirs and code copies.
 """
 import argparse
 import json
@@ -384,6 +391,100 @@ def start(args):
     raise RuntimeError(f'Pop RL actor did not attest {source[:12]} at {endpoint} within {args.ready_seconds} s')
 
 
+POP_CHECKPOINTS = POP_RECOVERY + '/policy-checkpoints'   # pruned native checkpoints served directly
+POP_KEEP = 2
+
+
+def pop_actor_units():
+    out = ssh("systemctl --user list-units 'poprl-*' 'popheld-*' --state=active,activating --plain --no-legend", check=False)
+    return [line.split()[0].removesuffix('.service') for line in out.splitlines() if line.strip()]
+
+
+def stop_pop_actors():
+    """Stop every Pop actor unit and wait until the GPU has no compute process (the driver refuses a busy GPU)."""
+    for unit in pop_actor_units():
+        stop_unit({'unit': unit})
+    for _ in range(45):
+        if not ssh('nvidia-smi --query-compute-apps=pid --format=csv,noheader', check=False).strip():
+            return
+        time.sleep(2)
+    raise RuntimeError('the Pop GPU still has a compute process after stopping its actors')
+
+
+def pop_code(commit):
+    """An exported copy of ``commit`` on Pop (``git archive`` of Pop's checkout after a fetch): the actor's runtime."""
+    dest = f'{POP_EVAL_ROOT}/code-{commit[:12]}'
+    q = shlex.quote
+    ssh(f'test -f {q(dest)}/.natlang-code.json || (git -C {q(POP_REPO)} fetch -q origin && rm -rf {q(dest)}.partial '
+        f'&& mkdir -p {q(dest)}.partial && git -C {q(POP_REPO)} archive {q(commit)} | tar -x -C {q(dest)}.partial '
+        f'&& echo {q(json.dumps({"commit": commit}))} > {q(dest)}.partial/.natlang-code.json && mv {q(dest)}.partial {q(dest)})',
+        timeout=900)
+    return dest
+
+
+def prune_pop_newest(pattern, keep, protect=()):
+    """Keep ``keep`` Pop paths matching ``pattern``: those in ``protect`` (present or about to be), then the newest."""
+    paths = ssh(f'ls -dt {pattern} 2>/dev/null || true', check=False).split()
+    old = [path for path in paths if path not in protect][max(0, keep - len(protect)):]
+    if old:
+        ssh(shlex.join(['rm', '-rf', '--', *old]), timeout=600)
+    return old
+
+
+def serve_checkpoint(args):
+    """Serve a pruned native checkpoint on Pop's GPU (replacing whatever Pop's actor serves) and wait until it attests."""
+    sha, commit = args.policy_id, args.commit
+    previous = read_json(STATE)
+    if previous and previous['policy_id'] == sha and previous.get('code') == commit and attested(previous['endpoint'], sha):
+        log(event='Pop actor already serves the checkpoint', endpoint=previous['endpoint'])
+        return previous
+    host = args.bind_host or pop_host_address()
+    endpoint = f'http://{host}:{args.port}'
+    started = time.time()
+    target = f'{POP_CHECKPOINTS}/{sha}.pt'
+    work = f'{POP_EVAL_ROOT}/held-actor-{sha[:12]}'
+    stop_pop_actors()
+    ssh(shlex.join(['mkdir', '-p', POP_CHECKPOINTS, work]))
+    prune_pop_newest(f'{POP_CHECKPOINTS}/*.pt', POP_KEEP, protect=(target,))
+    prune_pop_newest(f'{POP_EVAL_ROOT}/held-actor-*', POP_KEEP, protect=(work,))
+    if not ssh(shlex.join(['test', '-f', target]) + ' && echo ok', check=False).strip():
+        subprocess.run(['rsync', '-a', '--partial', str(args.checkpoint), f'{POP}:{target}.partial'], check=True, timeout=7200)
+        ssh(shlex.join(['mv', f'{target}.partial', target]))
+    copied = time.time()
+    runtime = pop_code(commit)
+    prune_pop_newest(f'{POP_EVAL_ROOT}/code-*', POP_KEEP, protect=(runtime,))
+    name = f'popheld-{sha[:12]}'
+    job = {'mode': 'held-eval', 'arm': 'held', 'name': name, 'port': args.port, 'host': host, 'runtime': runtime,
+           'code': {'schema': 'natlang.code-provenance/1', 'git_commit': commit, 'dirty': False}, 'base': POP_BASE,
+           'image': IMAGE, 'step': args.step, 'source_sha256': sha, 'stage': POP_CHECKPOINTS, 'view': f'{sha}.pt',
+           'view_sha256': sha, 'work': work, 'min_free_bytes': 4 * 2**30, 'actor_export_format': SGLANG_EXPORT_FORMAT,
+           'memory': f'{RL_MEMORY_GB}g', 'engine': 'sglang'}
+    ssh(shlex.join(['rm', '-f', f'{work}/driver.py']))
+    subprocess.run(['scp', '-q', str(REPO / 'scripts/neuralese_data/pop_actor_driver.py'), f'{POP}:{work}/driver.py'],
+                   check=True, timeout=120)
+    _pop_upload_json(job, f'{work}/job.json')
+    unit = f'{name}-{int(time.time())}'
+    # Pop's 15 GB leave 11.4-11.5 GiB admissible: 11 GiB + the 0.5 GiB reserve was refused right after the rsync
+    ssh(shlex.join(['/usr/bin/python3', POP_REPO + '/scripts/memory_ledger.py', 'run', '--unit', unit,
+                    '--budget-gb', str(SGLANG_MEMORY_GB - .5), '--reserve-gb', str(POP_RESERVE_GB), '--class', 'experiment',
+                    '--no-resumable', '--wait', '900', '--workdir', work, '--', '/usr/bin/python3', f'{work}/driver.py', f'{work}/job.json']))
+    result = {'endpoint': endpoint, 'unit': unit, 'container': name, 'policy_id': sha, 'work': work, 'runtime': runtime,
+              'code': commit, 'engine': 'sglang', 'copy_seconds': round(copied - started, 1)}
+    write_json(STATE, result)
+    deadline = time.monotonic() + args.ready_seconds
+    while time.monotonic() < deadline:
+        if pop_unit_state(unit).get('ActiveState') in ('inactive', 'failed'):
+            tail = ssh(shlex.join(['journalctl', '--user', '-u', unit + '.service', '-n', '20', '--no-pager']), check=False)
+            raise RuntimeError('Pop actor unit exited before readiness: ' + tail[-1200:])
+        if attested(endpoint, sha):
+            result['ready_seconds'] = round(time.time() - started, 1)
+            write_json(STATE, result)
+            log(event='Pop actor ready', **result)
+            return result
+        time.sleep(5)
+    raise RuntimeError(f'Pop actor did not attest {sha[:12]} at {endpoint} within {args.ready_seconds} s')
+
+
 def stop(_args=None):
     state = read_json(STATE)
     if state:
@@ -413,6 +514,14 @@ def main(argv=None):
                    help="Pop's serving engine: the SGLang fork (host venv, see pop_actor_driver.serve_sglang) or the "
                         'native engine in its container')
     s.add_argument('--prepare-wait', type=int, default=900, help='ledger admission bound of the DGX view preparation')
+    c = commands.add_parser('serve-checkpoint', help='serve a pruned native checkpoint on Pop (exits once it attests)')
+    c.add_argument('--checkpoint', required=True)
+    c.add_argument('--policy-id', required=True, help="the checkpoint file's sha256")
+    c.add_argument('--commit', required=True, help='code commit the actor runs (exported on Pop)')
+    c.add_argument('--step', type=int, default=0)
+    c.add_argument('--port', type=int, default=RL_PORT)
+    c.add_argument('--bind-host')
+    c.add_argument('--ready-seconds', type=int, default=1800)
     commands.add_parser('stop')
     commands.add_parser('status')
     p = commands.add_parser('prepare-view', help=argparse.SUPPRESS)
@@ -425,6 +534,9 @@ def main(argv=None):
         return 0
     if args.action == 'prepare-view':
         prepare_view(args)
+        return 0
+    if args.action == 'serve-checkpoint':   # fails loudly: its caller (grpo --held-remote) retries later
+        print(json.dumps(serve_checkpoint(args)), flush=True)
         return 0
     try:
         if args.action == 'start':

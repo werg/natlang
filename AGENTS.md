@@ -46,7 +46,8 @@ shuffled stream of task groups (8 samples; pools: the w5 pool plus the verified 
 with its split groups and every row sharing a source group; `WORK/pool.json` records the pool shas). The learner trains on
 whatever groups finished since its last step (16-128; stragglers join a later step, groups more than 2 versions stale are
 dropped). Tasks (EPISODE_COST_20261112): 85% from tasks whose measured base pass rate is in [0.1, 0.9] (exp1-rft
-`base-pass-rates.json`, re-read every 10 min), 15% unmeasured pool tasks; `ext_codebase-{py,natlang}_codebase_*` excluded
+`base-pass-rates.json`, re-read every 10 min; a task's own latest scored GRPO group replaces its rate, so tasks the policy
+solves 0/8 or 8/8 leave the band and explored ones enter it; exp1's pass-rate collection stopped 2026-11-13), 15% unmeasured pool tasks; `ext_codebase-{py,natlang}_codebase_*` excluded
 (repos missing on the DGX). Episode budget 40 model calls (a budget stop scores 0; the collector has no generated-token
 budget yet), wall clock 3600 s as a safety net only (unscored). Reward = task outcome only. Per-call sequences with the actor's exact prompt and sampled ids
 (`lower_rollout_turns.episode_turns`, chained as in `exp0_sft.chains_of`); sampled decision calls train as one action each
@@ -64,7 +65,12 @@ held results record the pin's commit and series; adopting newer code is a new pi
 current policy with the held-v2 engine pin): new collection pauses, `held_eval measure` (held-v2; 4 samples for the start
 policy before the first step, then 2 samples every 4 h on that step's checkpoint) and `held_eval compare` with step 0
 (`WORK/held/step-N/`); `--held-extra CKPT,...` measures other native checkpoints the same way after step 0 (loaded into the
-actor in place, `held/extra-<sha12>/` with a compare against step 0, 2 samples by default), then restores the start policy. Step sizing (smoke): ~27k forward tokens per episode (chaining already merges 282 of 329
+actor in place, `held/extra-<sha12>/` with a compare against step 0, 2 samples by default), then restores the start policy. `--held-remote pop` (owner throughput decision 2026-11-13; run2 uses it) moves the
+held evals to Pop's GPU and the DGX never pauses: the start policy once as `held/step-00000-pop` on Pop's engine (compare
+pairs only one engine), then the newest native checkpoint every `--held-every-hours` or back to back if an eval takes
+longer (`pop_rl_actor.py serve-checkpoint`: rsync of the pruned checkpoint, the actor runs a `git archive` of the run's
+commit on Pop, Pop keeps 2 checkpoints), measured by this run's pinned harness from the DGX against Pop's endpoint
+(`--held-remote-slots` 20, `held-pop.log`). Step sizing (smoke): ~27k forward tokens per episode (chaining already merges 282 of 329
 consecutive calls; 38 diverge inside the sampled reply, 9 in the prompt), learner 600-800 tok/s while sharing the GPU with
 decode at `--activation-gb 4`; defaults now 12-24 groups per step, `--activation-gb 12`, 8 collector slots during the learner phase
 (`--learner-phase-slots`: check 4 measured the learner 3x faster with actor decode at 32 slots than at 48-64; the run logs

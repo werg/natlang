@@ -28,7 +28,12 @@ One process runs the whole loop; nothing else (no controller, custody or transit
   every held-evaluated one, and the last training state.
 * held evaluation: the start policy first, then every ``--held-every-hours`` the newest native checkpoint is measured on
   the held set (``python -m natlang_neuralese.rl.held_eval measure`` on the training actor, collection paused) and
-  compared with the start policy (``held_eval compare`` -> ``held/step-N/compare-vs-step0.json``).
+  compared with the start policy (``held_eval compare`` -> ``held/step-N/compare-vs-step0.json``). With ``--held-remote pop``
+  the measurements run on Pop's GPU instead, in parallel with training (``pop_held_loop``; the start policy as
+  ``held/step-00000-pop``), and collection never pauses.
+* task selection: ``--explore`` of groups from unmeasured pool tasks, the rest cycling tasks whose pass rate lies in
+  ``--pass-band``: the run's own latest scored group of a task where it has one (current policy), else the measured base
+  rate (``--pass-rates``).
 
 * pin: the run executes from its own pinned copy of one commit (``scripts/pin_checkout.py create COMMIT W/pin-<c12>``,
   then launch ``W/pin-<c12>/scripts/neuralese_data/grpo.py`` with that copy as workdir); every child (actor, episodes,
@@ -166,6 +171,9 @@ class Collector:
         self.version = 0                            # the policy version the actor serves now
         self.by_id = {row['id']: row for row in tasks}
         self.learnable_ids, self.learnable_order, self.measured, self.rates_read = [], [], set(), 0.
+        self.base_rates, self.own, self.rates_changed = {}, {}, True
+        for directory in sorted((work / 'groups').glob('g*')):   # a resumed run keeps its own measurements
+            self._record_outcome(directory)
         self.rng = random.Random(args.seed + first_group)
         self.stop = threading.Event()
         self.paused = threading.Event()             # set during a held measurement on the training actor
@@ -202,25 +210,49 @@ class Collector:
         self.outstanding += 1
         self.pending.extend((group, entry) for entry in entries)
 
-    def _learnable(self):
-        """Pool rows whose measured base pass rate (``--pass-rates``, re-read every 10 min: it grows while Experiment 1
-        collects) lies in ``--pass-band`` with at least ``--pass-min-scored`` scored samples, shuffled."""
-        a = self.args
-        if not a.pass_rates or time.time() - self.rates_read < 600:
-            return
-        self.rates_read = time.time()
+    def _record_outcome(self, directory):
+        """The task's latest scored group (``--group`` samples of the policy then served) replaces any earlier measurement
+        of it: the selection follows the current policy's own outcomes, so a task it solves 0/8 or 8/8 leaves the band and
+        an explored task it solves sometimes enters it."""
+        from natlang_neuralese.common.jsonio import read_jsonl
         try:
-            rates = json.loads(Path(a.pass_rates).read_text())
-        except (OSError, ValueError):
+            rows = list(read_jsonl(directory / 'rewards.jsonl'))
+        except OSError:
             return
+        scored = [row for row in rows if row.get('reward') is not None]
+        if scored:
+            self.own[scored[0]['task_id']] = (sum(row['reward'] == 1.0 for row in scored), len(scored))
+            self.rates_changed = True
+
+    def _learnable(self):
+        """Pool rows whose pass rate lies in ``--pass-band`` with at least ``--pass-min-scored`` scored samples, shuffled:
+        the run's own latest group of a task (``_record_outcome``) where it has one, else the measured base rate
+        (``--pass-rates``, re-read every 10 min)."""
+        a = self.args
+        if a.pass_rates and time.time() - self.rates_read >= 600:
+            self.rates_read = time.time()
+            try:
+                self.base_rates = json.loads(Path(a.pass_rates).read_text())
+                self.rates_changed = True
+            except (OSError, ValueError):
+                pass
+        if not self.rates_changed:
+            return
+        self.rates_changed = False
+        rates = {k: (v['successes'], v['scored']) for k, v in self.base_rates.items() if v.get('scored')}
+        rates.update(self.own)
         low, high = a.pass_band
-        ids = sorted(k for k, v in rates.items() if k in self.by_id and v.get('scored', 0) >= a.pass_min_scored
-                     and low <= v['successes'] / v['scored'] <= high)
-        self.measured = set(rates)
-        if set(ids) != set(self.learnable_ids):
-            self.learnable_ids = ids
-            self.learnable_order = []
-            print(json.dumps({'event': 'learnable tasks', 'count': len(ids), 'measured': len(rates)}), flush=True)
+        ids = {k for k, (successes, scored) in rates.items()
+               if k in self.by_id and scored >= a.pass_min_scored and low <= successes / scored <= high}
+        self.measured = set(self.base_rates) | set(self.own)
+        old = set(self.learnable_ids)
+        if ids != old:
+            self.learnable_ids = sorted(ids)
+            self.learnable_order = [k for k in self.learnable_order if k in ids]
+            for k in sorted(ids - old):
+                self.learnable_order.insert(self.rng.randint(0, len(self.learnable_order)), k)
+            print(json.dumps({'event': 'learnable tasks', 'count': len(ids), 'measured': len(self.measured),
+                              'own_measured': len(self.own), 'own_in_band': len(ids & set(self.own))}), flush=True)
 
     def _pick(self):
         """A learnable task (``1 - explore`` of groups, cycling a reshuffled list), else the next unmeasured pool task."""
@@ -296,6 +328,8 @@ class Collector:
                 merged.write(path.read_text())
         task_rollouts.score(directory, directory / 'rollouts.jsonl', neuralese_bonus=0., efficiency_weight=0.)
         (directory / 'versions.json').write_text(json.dumps(info['versions']) + '\n')
+        with self.lock:
+            self._record_outcome(directory)
         self.ready.put(group)
 
     def take_groups(self, minimum, maximum, stop=None):
@@ -696,7 +730,7 @@ def load_tasks(args, work=None):
                   'families': len({r.get('family') for r in eligible}),
                   'excluded_family_regex': args.exclude_family_regex,
                   'selection': {'pass_rates': args.pass_rates, 'band': args.pass_band, 'min_scored': args.pass_min_scored,
-                                'explore': args.explore},
+                                'explore': args.explore, 'own_outcomes': 'latest scored group per task replaces its rate'},
                   'episode_budget': {'max_model_requests': args.max_model_requests, 'case_seconds': args.case_seconds,
                                      'generated_tokens': None}}
         (Path(work) / 'pool.json').write_text(json.dumps(record, indent=1) + '\n')
@@ -920,7 +954,7 @@ def train(args):
                    'cuda_allocated_gb': round(torch.cuda.memory_allocated() / 2**30, 1),
                    'cuda_reserved_gb': round(torch.cuda.memory_reserved() / 2**30, 1)})
     if args.held_every_hours > 0 and not (work / 'held' / 'step-00000' / 'result.json').exists() \
-            and not args.skip_base_held and not args.held_baseline:
+            and not args.skip_base_held and not args.held_baseline and not args.held_remote:
         collector.paused.set()            # the start policy's held measurement goes first (held() resumes collection)
     slots = [threading.Thread(target=collector.slot, args=(index,), daemon=True) for index in range(args.slots)]
     for thread in slots:
@@ -982,7 +1016,7 @@ def train(args):
                        'seconds': round(time.time() - started), **summary})
 
     if args.held_every_hours > 0 and not (work / 'held' / 'step-00000' / 'result.json').exists() \
-            and not args.skip_base_held and not args.held_baseline:
+            and not args.skip_base_held and not args.held_baseline and not args.held_remote:
         if not step:
             held(0, args.held_samples_start)
         else:
@@ -1032,6 +1066,86 @@ def train(args):
         if not sync.last.get('ok'):
             raise RuntimeError(f'restoring the start policy on the actor failed: {sync.last}')
     last_held = time.time()
+
+    def pop_held_loop():
+        """``--held-remote pop``: held evaluations run on Pop's GPU while the DGX trains. The start policy is measured
+        once on Pop (``held/step-00000-pop``: compare pairs only results of one engine); then, every ``--held-every-hours``
+        or as soon as the previous evaluation ends if it took longer, the newest native checkpoint is served on Pop
+        (``pop_rl_actor.py serve-checkpoint``: rsync, the run's commit) and measured with this run's pinned harness (the
+        collector processes run here, against Pop's endpoint) into ``held/step-N`` with ``compare-vs-step0.json``."""
+        held_root, tool = work / 'held', [sys.executable, str(HERE / 'pop_rl_actor.py')]
+        base_out = held_root / 'step-00000-pop'
+        python = [sys.executable, '-m', 'natlang_neuralese.rl.held_eval']
+
+        def pop_endpoint(policy):
+            state = json.loads(subprocess.run([*tool, 'status'], capture_output=True, text=True, cwd=REPO,
+                                              env=pinned_env()).stdout or '{}').get('state') or {}
+            try:
+                with urllib.request.urlopen(state['endpoint'] + '/v1/neuralese/info', timeout=10) as response:
+                    served = (json.loads(response.read()).get('rl_policy_binding') or {}).get('checkpoint_sha256')
+            except (KeyError, OSError, ValueError):
+                return None
+            return state['endpoint'] if served == policy else None
+
+        def evaluate(step_number, out, policy, serve):
+            started = time.time()
+            with (work / 'held-pop.log').open('a') as handle:
+                endpoint = pop_endpoint(policy)
+                if endpoint is None:
+                    subprocess.run([*tool, *serve], cwd=REPO, env=pinned_env(), stdout=handle, stderr=subprocess.STDOUT,
+                                   timeout=4 * 3600)
+                    endpoint = pop_endpoint(policy)
+                if endpoint is None:
+                    raise RuntimeError(f'Pop does not serve {policy[:12]} (see {work}/held-pop.log)')
+                serving = time.time() - started
+                code = subprocess.run([*python, 'measure', '--manifest', args.held_manifest, '--endpoint',
+                                       f'{endpoint}={args.held_remote_slots}', '--policy-id', policy, '--samples',
+                                       str(args.held_samples), '--out', str(out), '--label', f'grpo-pop-step-{step_number}',
+                                       '--allow-other-engine'], cwd=REPO, env=pinned_env(), stdout=handle,
+                                      stderr=subprocess.STDOUT).returncode
+                if step_number and code == 0 and (base_out / 'result.json').exists():
+                    subprocess.run([*python, 'compare', str(base_out / 'result.json'), str(out / 'result.json'), '--out',
+                                    str(out / 'compare-vs-step0.json')], cwd=REPO, env=pinned_env(), stdout=handle,
+                                   stderr=subprocess.STDOUT)
+            summary = {}
+            if (out / 'result.json').exists():
+                result = json.loads((out / 'result.json').read_text())
+                summary = {k: result.get(k) for k in ('ran', 'scored', 'successes', 'loop_rate', 'complete')}
+            if (out / 'compare-vs-step0.json').exists():
+                summary['compare'] = json.loads((out / 'compare-vs-step0.json').read_text())
+            log_line(log, {'event': 'held eval', 'remote': 'pop', 'step': step_number, 'policy': policy, 'returncode': code,
+                           'seconds': round(time.time() - started), 'serve_seconds': round(serving), **summary})
+
+        def measured_steps():
+            return {int(d.name.split('-')[1]) for d in held_root.glob('step-*') if d.name.split('-')[1].isdigit()
+                    and (d / 'result.json').exists()}
+
+        last_start, last_step = 0., max(measured_steps() - {0}, default=0)
+        while not stop.is_set():
+            try:
+                if not (base_out / 'result.json').exists():
+                    evaluate(0, base_out, source_sha, ['start', '--checkpoint', args.checkpoint, '--policy-id', source_sha])
+                    if not (base_out / 'result.json').exists():
+                        raise RuntimeError(f'the start policy measurement ended without a result (see {work}/held-pop.log)')
+                ready = sorted(d for d in checkpoint_root.glob('step-*') if (d / 'sha256.txt').exists()
+                               and int(d.name.split('-')[1]) > last_step)
+                if ready and time.time() - last_start >= args.held_every_hours * 3600:
+                    directory = ready[-1]
+                    step_number = int(directory.name.split('-')[1])
+                    held_steps.add(step_number)          # kept by write_native's pruning from now on
+                    (work / 'held-steps.json').write_text(json.dumps(sorted(held_steps)) + '\n')
+                    if (directory / 'checkpoint.pt').exists():
+                        sha = (directory / 'sha256.txt').read_text().strip()
+                        last_start, last_step = time.time(), step_number
+                        evaluate(step_number, held_root / f'step-{step_number:05d}', sha,
+                                 ['serve-checkpoint', '--checkpoint', str(directory / 'checkpoint.pt'), '--policy-id', sha,
+                                  '--commit', run['code']['git_commit'], '--step', str(step_number)])
+            except Exception as error:   # Pop or the network failed: the run trains on, the evaluation retries later
+                log_line(log, {'event': 'held eval failed', 'remote': 'pop', 'error': repr(error)[:500]})
+                stop.wait(540)
+            stop.wait(60)
+    if args.held_remote:
+        threading.Thread(target=pop_held_loop, daemon=True).start()
 
     # actor tokens/s while the learner computes (learner-phase slots) and while it waits (all slots), cumulative
     phase_totals = collections.Counter()
@@ -1249,7 +1363,7 @@ def train(args):
         phase['snapshot'] = time.time() - t
         if sync.last and not sync.last.get('ok'):
             raise RuntimeError(f'actor weight update failed: {sync.last}')
-        held_due = args.held_every_hours > 0 and time.time() - last_held > args.held_every_hours * 3600
+        held_due = args.held_every_hours > 0 and not args.held_remote and time.time() - last_held > args.held_every_hours * 3600
         save_native = step % args.save_every == 0 or (args.max_steps and step == args.max_steps) or held_due
         sync.publish(step, on_published, also=(lambda s=step: write_native(s)) if save_native else None)
         if args.state_every and step % args.state_every == 0:
@@ -1297,7 +1411,7 @@ def train(args):
             record.update(blocks_removed=files, blocks_freed_mb=round(freed / 2**20, 1),
                           block_gc_s=round(time.time() - t, 2))
         log_line(log, record)
-        if save_native and args.held_every_hours > 0 and time.time() - last_held > args.held_every_hours * 3600:
+        if save_native and held_due:
             sync.wait()                   # the actor now serves (and attests) this step's checkpoint
             held(step, args.held_samples)
             last_held = time.time()
@@ -1342,7 +1456,8 @@ def main():
     t.add_argument('--max-model-requests', type=int, default=40,
                    help='episode budget in model calls; a budget stop scores as a failure (EPISODE_COST_20261112)')
     t.add_argument('--pass-rates', default=resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'exp1-rft', 'base-pass-rates.json'),
-                   help='measured base pass rates per task (re-read every 10 min); empty: plain shuffled pool')
+                   help='measured base pass rates per task (re-read every 10 min; a task's own latest group replaces its '
+                   'rate); empty: own outcomes only')
     t.add_argument('--pass-band', type=float, nargs=2, default=(0.1, 0.9))
     t.add_argument('--pass-min-scored', type=int, default=2)
     t.add_argument('--explore', type=float, default=0.15, help='share of groups from unmeasured pool tasks')
@@ -1388,6 +1503,9 @@ def main():
                    'each compared with step 0, before training starts')
     t.add_argument('--held-samples-extra', type=int, default=2)
     t.add_argument('--held-workers', type=int, default=96, help='collector slots of a held measurement on the training actor')
+    t.add_argument('--held-remote', choices=('pop',), help="measure held on Pop's GPU in parallel with training instead of "
+                   'pausing collection on the training actor (pop_held_loop)')
+    t.add_argument('--held-remote-slots', type=int, default=20, help="episodes in flight against Pop's actor (it runs 10)")
     t.add_argument('--unit-prefix', default='grpo')
     t.add_argument('--synthetic-reward', help='sanity check: replace the task outcome by a trivially learnable reward '
                    '(short-calls:N = mean sampled tokens per model call under N; short-calls = minus that mean / 1000); the task '
