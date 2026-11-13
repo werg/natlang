@@ -3,6 +3,75 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-13 — Decision readout on a stock model: the reply is `{"result": VALUE}`, not the bare JSON value
+
+Finding: a `readout: decision` function on LFM3-1.7B Q8_0 (the managed stock model, CPU) answered by the order its options were
+listed in. `classifyDefect` (four classes) measured 0.50 on validation and 0.25 on the locked test split; `accessLevelFor` and
+`briefServerLog` sat just below their gates. Probe on `classifyDefect/todo-map-undefined` (a `TypeError` in a panel the agent wrote;
+expected `user-code`), the option list rotated in the prompt (the shared server, bare replies; `scripts/probe-decision-order.mjs` reproduces the probe):
+platform first → `platform` 0.9999 (log-probs -47.3 / -60.4 / -66.0 / -57.0); user-code first → `user-code` 0.986; refusal first →
+`platform` 0.88; transient first → `transient` 0.98; the reverse order → `transient` 0.9997. With the evidence blanked, the same prompt scored within 4 nats of
+the real case on three options and within 8 on the fourth, while rotating the options moved an option by up to 12.
+
+Not the pipeline. The score of each option was computed a second way, teacher-forced through the server's `/completion` (token by token
+over the same rendered, tokenized prompt): `platform` -46.62 against natlang's -47.34, `transient` -57.09 against -57.04. Scoring the
+options in the reverse continuation order returned the same four numbers to three decimals (the shared-prefix checkpoint is exact), and the
+warm opening is keyed by the exact system prompt. The reply is the template's closed assistant message after the open `<think>` the generation
+prompt ends with (`</think>`, the value, `<|im_end|>`, `\n`); letters or labels are not scored, the sums are not length-normalized, and a
+continuation's tokenization is the one the chat endpoint would give (`"` + `platform`, but `"user` + `-code`).
+
+The model. After the closed reasoning the stock model does not answer with a bare JSON string: its first token is `<tool_call>` (-0.06)
+or `{"` (-3.6), and `"` is about e^-15; the shared `</think>` costs -22. A bare reply, in the plain layout and greedy, is
+`{"result": "refusal"}`. natlang's trained models answer the bare value (the decision trainer's rows are written so;
+`training/neuralese/natlang_neuralese/data/decision_graph.py`), so for them it is the right form. For the stock model the readout
+compared options at a position where all of them were about e^-35 improbable, and what separated them was where each was listed and
+whether its first token merged with the quote (`"` + `platform` against `"user`), not the evidence. Permuting the options and averaging
+(cyclic rotations), or subtracting a content-free score, removes the position effect but leaves the prior: on the four classifyDefect train
+cases scored in all four rotations the averaged bare readout chose `platform` for every case (2 of 4 right, as the single order was), so
+neither is adopted. Each rotation is also a new prompt tail that the server prefilled in full (24-26 s each on this CPU, the same as a cold
+prompt), K times the cost of one readout.
+
+Change. A model natlang did not train is asked for, and scored on, `{"result": VALUE}`: `decisionReply: 'result-object'` of a model
+profile (default for the managed stock models; `value` for anything else, so natlang's own models and every endpoint keep the bare
+value), applied to a readout request by `framedDecision` (ts-host/src/decision-frame.ts: the last message becomes
+`Answer this call now, without tools. Reply with exactly one JSON object {"result": VALUE} and nothing else, where VALUE is one of these JSON
+values: ...`, and each option `{"result": <json>}`). The runtime and the trace are unchanged: the readout still asks for bare values and
+records `"user-code"`, not the object. The frame is part of the executor identity (`decisionReply` in `executorIdentityForChoice`), so an
+adaptation artifact tuned against the bare-value readout does not bind to the stock model's new one. The Vibestudio gateway driver
+(`@workspace/natlang` `gatewayDriver`) applies the same function to local models and lists it in its identity.
+
+Measurement (`pnpm natlang:eval`, LFM3-1.7B Q8_0 on the fork b12069, CPU). The change was chosen on four classifyDefect train cases
+(`wrong-sort`, `return-image-silent`, `todo-map-undefined`, `push-denied`); no validation or test case was probed before it. Each split ran
+once with the change:
+
+| function (suite) | split | bare reply (before) | `{"result": VALUE}` (after) | gate |
+|---|---|---|---|---|
+| `classifyDefect` (problem-reporting-v1, 4 classes) | validation (4) | 0.50 | **1.00**, no false `platform` | 0.85, no false `platform`: met |
+| | test (4) | 0.25 | **0.75** (`path-escape`, a refusal, read as `platform` 0.88) | not met |
+| `accessLevelFor` (github-v1, 6 levels) | validation (4) | 4 of 4 | 4 of 4 | 0.85: met |
+| | test (5) | 0.80 | 0.80 (the same `pull-upstream` miss: `collaborate` 0.94, `read-only` 0.03) | not met |
+| github-v1, all three functions | validation (12), test (14) | 12 of 12, 13 of 14 | 12 of 12, 13 of 14 | |
+
+`accessLevelFor` was already at 4 of 4 on validation before the change because its instruction had been rewritten against its train split
+(personal `1c54f7f`); the change did not move its test split. `classifyDefect` was the position-driven one.
+`classifyDefect` and github-v1 ran at natlang `ceb346744` (this commit's code before its rebase onto `17f1866c2`); `briefServerLog` (server-logs-v1; validation 1.00 and test 0.77 before, gate 0.8 and at most one wrong status) was **not re-measured**: at the
+vendored commit its run waited two hours and was stopped, because the shared server's five slots were held by other sessions'
+generations (0.5-3 tokens/s each) and the fork starts a score group (a parent and its continuations) only when all of its slots are free at once,
+which a stream of single-slot requests never allows. Its debt stands: re-run `pnpm natlang:eval -- --template system --suite skills/server-logs/suite.ts
+--split validation` and `--split test` on an idle server. The vendored commit (`ee9bb0b22`) differs from `ceb346744` by the constant-opening
+changes (d17a253fc, f5aa37b68), which change the opening text of every call but not the reply frame; `classifyDefect` was not re-run on it.
+
+Order probe after the change (`scripts/probe-decision-order.mjs --frame result-object`, rotations of the option list):
+`wrong-sort` (expected `platform`) `platform` 1.00 in all four orders; `push-denied` (`refusal`) 1.00 in all four; `todo-map-undefined`
+(`user-code`) 1.00, 1.00, 0.29, 0.57 (user-code listed second, first, fourth, third: the answer is read from the evidence in three
+orders and tied in the fourth); the winner follows the listing in 1 of 4 orders on the exact prompt of the case. Blank evidence is
+flat (0.1-0.8 across orders, within 2 nats). Order sensitivity of the scores fell from about 12 nats to 2-3.
+
+Not measured: other stock models (the frame is applied to every Vibestudio local model, which natlang's fork serves, on the argument that
+none of them is trained on the bare-value reply; only LFM3-1.7B was measured), a model natlang trained (unchanged: it keeps `value`),
+greater n than four options (the four-class case is the widest measured), and the effect on `decide(fn, ...)` distributions' calibration
+(the probabilities are as extreme as before: 0.98 to 1.0 on most cases).
+
 ### 2026-11-11 — dev16 A/B of the adopted variants on step 99: the variants did not cause the step-102/110 dev16 failures
 
 Question: were folder_criteria_reducer (invalid_action / budget_exhaustion), iterate_schedule_repair (semantic_mismatch / repetition) and
