@@ -113,7 +113,7 @@ def test_provider_context_binds_preconversion_messages_not_rewritten_neuralese_p
         authenticated_recurrence_context_view([altered], {})
 
 
-def test_assemble_requires_restoration_of_archived_sources_before_creating_output(tmp_path):
+def test_assemble_requires_restoration_of_archived_sources_before_creating_output(tmp_path, protected_worlds_available):
     from types import SimpleNamespace
     spec = importlib.util.spec_from_file_location('e2e_archived_source', Path(__file__).parents[1] / 'scripts/neuralese_data/e2e_mine.py')
     module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)

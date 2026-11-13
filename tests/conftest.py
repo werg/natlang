@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
 
+import pytest
+
 # Runtime inventories, task collectors and exact source bindings in tests must
 # describe the checkout under test. The logical ``repo`` root otherwise falls
 # back to the DGX machine default, which does not exist on CI runners and is a
@@ -28,3 +30,14 @@ os.environ["PYTHONPATH"] = os.pathsep.join(dict.fromkeys([
 # its first BLAS call, so it is set before any test imports torch, and child
 # processes inherit it. It has no effect on non-MKL builds (aarch64/DGX).
 os.environ.setdefault("MKL_CBWR", "AUTO,STRICT")
+
+
+@pytest.fixture
+def protected_worlds_available():
+    """Skip a test that reads the real ProtectedWorlds registry where its sources are not on this machine (the held
+    data lives on the DGX); custody itself still fails closed."""
+    from natlang_neuralese.common.custody import CustodyError, ProtectedWorlds
+    try:
+        ProtectedWorlds.load()
+    except CustodyError as error:
+        pytest.skip(f'protected-worlds sources are not available: {error}')
