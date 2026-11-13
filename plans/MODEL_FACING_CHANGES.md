@@ -41,7 +41,7 @@ chain. The run measures it itself from its first step after adoption: `consumer_
 (|learner - actor| logp on consumer-call tokens) beside `abs_log_rho_mean` (all tokens; ordinary calls run about
 0.02-0.05 at staleness 0). A consumer mean well above the ordinary one means the splice differs from the fork's.
 
-### 2026-11-13 — GRPO trains sampled decision calls (Neuralese-state consumer calls: corrected below, they train too)
+### 2026-11-13 — GRPO trains sampled decision calls (Neuralese-state consumer calls: corrected above, they train too)
 
 Finding (grpo-v1 run2 step 1): the per-call lowering (`lower_rollout_turns.episode_turns`) kept only calls with a sampled
 token stream, so every sampled `decide` readout was dropped (117 calls against 111 trained sequences) and a task whose
@@ -62,7 +62,7 @@ shared offset, about 0.05 per token: the BF16/FP8 floor) and log q(chosen) withi
 log q(chosen), one unit in the token normalisation. Telemetry: `decisions`, `decision_rho_mean`,
 `decision_abs_dscore_mean`.
 
-Native-state consumer calls (this paragraph's original reasoning was wrong; see the next entry): they were skipped as
+Native-state consumer calls (this paragraph's original reasoning was wrong; see the entry above): they were skipped as
 `skip_native_state_prompt` on the grounds that training the consumer against a fixed state detaches the producer.
 
 ### 2026-11-13 — Decision readout on a stock model: the reply is `{"result": VALUE}`, not the bare JSON value
