@@ -127,8 +127,9 @@ def test_typed_values_reasoning_and_several_calls(tokenizer):
     # Undeclared types: only the template's canonical JSON rendering reads as JSON.
     assert xml_value('{"a": 1}') == {'a': 1} and xml_value('{"a":1}') == '{"a":1}'
     assert xml_value('"quoted"') == 'quoted' and xml_value('42') == 42 and xml_value('42', {'type': 'string'}) == '42'
-    with pytest.raises(ValueError):
-        xml_value('not json', {'type': 'integer'})
+    # Text that is not a value of the declared type is the string the model wrote: the runtime reports the type.
+    assert xml_value('not json', {'type': 'integer'}) == 'not json' and xml_value('"7"', {'type': 'integer'}) == '"7"'
+    assert xml_value('{ a: 1 }', {'type': 'object'}) == '{ a: 1 }' and xml_value('NaN', {'type': 'number'}) == 'NaN'
 
 
 @needs_lfm3
@@ -641,7 +642,7 @@ def test_approved_embedded_think_projection_is_source_bound_and_generation_prefi
     text, ids, boundary = native_gold_packet(tokenizer, history, target, EVAL_TOOLS)
     assert '</think>' in text
     assert 'The evidence supports the requested intent.' in tokenizer.decode(ids[boundary:])
-    assert '"intent"' in tokenizer.decode(ids[boundary:])
+    assert '<parameter=value>\nintent\n</parameter>' in tokenizer.decode(ids[boundary:])  # a bare string, as models write it
 
     # The normalizer refuses rows without approval, ambiguous terminators,
     # preexisting reasoning fields, or non-whitespace post-marker content.
