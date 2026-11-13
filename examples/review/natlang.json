@@ -1,0 +1,47 @@
+{
+  "schema": "natlang.package/v2",
+  "name": "review",
+  "version": "0.1.0",
+  "description": "Assess observations against a criterion, with a reason for each and exact counts.",
+  "include": [
+    "examples.json",
+    "package.json",
+    "review",
+    "review.nl",
+    "types.ts"
+  ],
+  "targets": {
+    "main": {
+      "entry": "review.nl",
+      "description": "Review observations against a criterion; leave both blank for the sample.",
+      "arguments": [
+        {
+          "name": "observations",
+          "type": "string[]",
+          "description": "The observations to assess, one per entry.",
+          "default": [
+            "The nightly backup finished in 42 minutes on Monday.",
+            "Tuesday's backup log shows it completed after 3 hours 10 minutes.",
+            "The backup server was moved to a new rack on Wednesday."
+          ]
+        },
+        {
+          "name": "criterion",
+          "type": "string",
+          "description": "The claim each observation supports, contradicts or leaves uncertain.",
+          "default": "Nightly backups finish within one hour."
+        }
+      ]
+    }
+  },
+  "warmup": [
+    {
+      "name": "one observation",
+      "function": "review/assess.nl",
+      "inputs": {
+        "observation": "The nightly backup finished in 42 minutes on Monday.",
+        "criterion": "Nightly backups finish within one hour."
+      }
+    }
+  ]
+}

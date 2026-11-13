@@ -3,6 +3,7 @@ import { applicationSource, createLivePreview } from './live.mjs';
 import { mountInputForm } from './input-form.mjs';
 import { storage } from './storage.mjs';
 import { examples, exampleCategories } from './examples.mjs';
+import { programFiles, zipFiles } from './program-zip.mjs';
 
 const { BROWSER_MODEL_CATALOG, loadBrowserModelCatalog, loadBrowserLocalModel, checkModelStorage, createNatlangRuntime,
   probeBrowserGpu, newPlaygroundProject, assertPlaygroundProject, editPlaygroundProject, validProjectPath,
@@ -854,6 +855,11 @@ function bind() {
     try { await readImport(file); } catch (error) { message(`Import failed: ${error.message}`, true); }
     $('importInput').value = ''; };
   $('exportProject').onclick = () => download(`${project.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.json`, pretty(project));
+  $('downloadProgram').onclick = () => {
+    const { name, files } = programFiles(project), url = URL.createObjectURL(zipFiles(name, files));
+    const link = document.createElement('a'); link.href = url; link.download = `${name}.zip`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    message(`Downloaded ${name}.zip. Unzip it, then: cd ${name} && natlang check && natlang run${project.expected !== undefined && project.root.endsWith('.nl') ? ' && natlang test' : ''}`);
+  };
   $('modelButton').onclick = async () => { pendingExecution = null; $('modelDialog').showModal(); await refreshModelDiagnostics(); };
   $('modelDialog').addEventListener('close', () => { pendingExecution = null; });
   $('modelSelect').onchange = () => { modelSelectionExplicit = true; void refreshModelDiagnostics(); };

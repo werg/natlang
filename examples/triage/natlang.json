@@ -4,10 +4,12 @@
   "version": "0.1.0",
   "description": "Triage a JSON list of support tickets into a report.",
   "include": [
+    "README.md",
     "classify.nl",
     "examples.json",
     "is_urgent.nl",
     "main.ts",
+    "package.json",
     "tickets.json",
     "triage.ts",
     "tsconfig.json",
@@ -28,7 +30,7 @@
           "name": "rubric",
           "type": "string",
           "default": "billing: charges, invoices and payments; technical: anything in the product that is broken or not working as expected, such as outages, errors and bugs; spam: advertising",
-          "description": "The categories and what belongs in each."
+          "description": "What belongs in each of the labels billing, technical and spam. The labels themselves are fixed by Label in types.ts."
         },
         {
           "name": "tickets",

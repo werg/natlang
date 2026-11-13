@@ -27,7 +27,7 @@ try {
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(dashboard.url);
   await page.goto(new URL(`/#runs-${id}`, dashboard.url).href);
-  await page.getByRole('heading', { name: 'Live execution', exact: true }).waitFor();
+  await page.getByRole('heading', { name: 'Execution', exact: true }).waitFor();
   assert.equal(await page.getByRole('button', { name: 'Follow output', exact: true }).count(), 0, 'following output needs no extra control until the reader scrolls back');
   assert.match(await page.locator('.execution-headline').innerText(), /Preparing the program/);
   emit('parent', { type: 'call_start' }); trace('parent', { kind: 'model_request', phase: 'start', turn: 1 });
@@ -115,7 +115,7 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'live view fits a narrow screen');
   assert.deepEqual(errors, []);
-  process.stdout.write('Live execution browser smoke passed: incremental text/code/output, nested lambdas, preserved focus/disclosure/scroll, pause, reconnect, completion and mobile layout.\n');
+  process.stdout.write('Execution browser smoke passed: incremental text/code/output, nested lambdas, preserved focus/disclosure/scroll, pause, reconnect, completion and mobile layout.\n');
 } finally {
   await browser?.close(); await dashboard?.close(); rmSync(root, { recursive: true, force: true });
 }

@@ -15,7 +15,7 @@ import type { CallStore } from '../calls/store.js';
 import { machineStoreRoot, openMachineStore } from '../machine-store.js';
 import { expandedRecord } from '../calls/expanded.js';
 import { programFunctions, readProgramManifest } from '../build-lock.js';
-import { createProgram, readExamples, saveExample, type SavedExample } from '../package/authoring.js';
+import { createFunction, createProgram, readExamples, saveExample, type SavedExample } from '../package/authoring.js';
 import { currentRelease } from '../adaptation/weights/release.js';
 import { loadModelConfiguration, resolveModelChoice, type ModelProfile } from '../model/config.js';
 import { recommendedProviderModel } from '../model/provider-recommendations.js';
@@ -35,7 +35,8 @@ import { JobSupervisor, type JobSpec } from './jobs.js';
 export type DashboardOptions = { host?: string; port?: number; root?: string; version: string; environment?: NodeJS.ProcessEnv;
   log?: NodeJS.WritableStream };
 type Handler = (request: IncomingMessage, params: Record<string, string>, query: URLSearchParams, body: unknown) => Promise<unknown> | unknown;
-class HttpError extends Error { constructor(readonly status: number, message: string) { super(message); } }
+/** An API failure: its status, its message and, for the page to act on, `detail` fields sent beside `error`. */
+class HttpError extends Error { constructor(readonly status: number, message: string, readonly detail?: Record<string, unknown>) { super(message); } }
 
 const STATIC = fileURLToPath(new URL('../../dashboard/', import.meta.url));
 const TYPES: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
@@ -86,6 +87,33 @@ export async function startDashboard(options: DashboardOptions): Promise<{ url: 
   const string = (value: unknown, label: string): string => {
     if (typeof value !== 'string' || !value.trim()) throw new HttpError(400, `${label} is required`);
     return value;
+  };
+  const text = (value: unknown) => typeof value === 'string' && value ? value : undefined;
+  /**
+   * The model a run with this selection would use (the program's model unless the selection names one) and, for the
+   * managed local model, what its first run would install: `setup` is null once the runtime and model are present.
+   */
+  const localSetup = (body: Record<string, unknown>, directory?: string) => {
+    let program;
+    try { program = directory ? readProgramManifest(directory)?.model : undefined; } catch { program = undefined; }
+    const { choice } = loadModelConfiguration(text(body.profile), { provider: text(body.provider), model: text(body.model) }, environment, program);
+    if (choice.kind !== 'managed-local') return { choice, local: null, setup: null };
+    const local = localModelPrerequisites(profileEnvironment(choice, environment), choice.release);
+    const setup = local.executable && local.modelPath ? null : { bytes: local.modelPath ? 0 : local.downloadBytes ?? 0, runtime: !local.executable };
+    return { choice, local, setup };
+  };
+  const gigabytes = (bytes: number) => `${(Math.floor(bytes / 1e8) / 10).toFixed(1)} GB`;
+  /**
+   * `--yes` for a job only after the person confirmed the download (`download: true`); otherwise a job whose model is
+   * not installed is refused with what it would install, so the page can ask first (`setup` in the response).
+   */
+  const confirmed = (input: Record<string, unknown>, directory?: string): string[] => {
+    if (input.download === true) return ['--yes'];
+    const { setup } = localSetup(input, directory);
+    if (setup) throw new HttpError(409, setup.bytes ?
+      `This run downloads the local model (${gigabytes(setup.bytes)}) first. Confirm the download, or choose a hosted model on the Models page.` :
+      'This run installs the local llama.cpp runtime first. Confirm the install, or choose a hosted model on the Models page.', { setup });
+    return [];
   };
 
   const routes: [string, RegExp, Handler][] = [];
@@ -319,11 +347,9 @@ export async function startDashboard(options: DashboardOptions): Promise<{ url: 
     return { directory: relative(root, directory) };
   });
   route('GET', '/api/programs/model', (_request, _params, query) => {
-    const directory = inside(string(query.get('path'), 'path')), manifest = readProgramManifest(directory);
-    const { choice } = loadModelConfiguration(query.get('profile') || undefined, {}, environment, manifest?.model);
-    const local = choice.kind === 'managed-local' ? localModelPrerequisites(profileEnvironment(choice, environment), choice.release) : null;
-    return { model: choice.model, kind: choice.kind, detail: choice.kind === 'managed-local' ?
-      `${local?.modelPath ? 'model downloaded' : `first run downloads ${Math.ceil((choice.release?.bytes ?? 0) / 1_000_000)} MB`}; ${local?.executable ? 'runtime installed' : 'runtime setup required'}. First runs on a CPU may take several minutes.` :
+    const { choice, local, setup } = localSetup({ profile: query.get('profile') }, inside(string(query.get('path'), 'path')));
+    return { model: choice.model, kind: choice.kind, setup, detail: local ?
+      `${local.modelPath ? 'model downloaded' : `first run downloads ${gigabytes(setup!.bytes)}`}; ${local.executable ? 'runtime installed' : 'runtime setup required'}. First runs on a CPU may take several minutes.` :
       'Uses the selected endpoint or provider. Use Models → Test to verify an actual request.' };
   });
   route('GET', '/api/programs', () => discoverLocalApplications(root, { libraries: true }).map(item => {
@@ -394,6 +420,14 @@ export async function startDashboard(options: DashboardOptions): Promise<{ url: 
     writeFileSync(temporary, input.text); renameSync(temporary, path);
     return { path: relative(root, path) };
   });
+  route('POST', '/api/programs/function', (_request, _params, _query, body) => {
+    const input = (body ?? {}) as Record<string, unknown>, directory = inside(string(input.path, 'program path'));
+    if (!readProgramManifest(directory)) throw new HttpError(400, 'Choose a program with natlang.json first.');
+    const file = string(input.file, 'file name');
+    inside(join(directory, file));
+    try { return { path: relative(root, createFunction(directory, file)) }; }
+    catch (error) { throw new HttpError(existsSync(join(directory, file)) ? 409 : 400, (error as Error).message); }
+  });
   route('POST', '/api/programs/example', (_request, _params, _query, body) => {
     const input = (body ?? {}) as Record<string, unknown>, directory = inside(string(input.path, 'program path'));
     if (!readProgramManifest(directory)) throw new HttpError(400, 'Choose a program with natlang.json first.');
@@ -415,26 +449,26 @@ export async function startDashboard(options: DashboardOptions): Promise<{ url: 
       const args = Array.isArray(input.args) ? input.args.map(String) : [];
       spec = { kind, title: `run ${relative(root, path) || '.'}${input.target ? `#${input.target}` : ''}${args.length ? ' ' + args.join(' ') : ''}`, cwd: root,
         argv: ['run', path, '--plain', ...(typeof input.target === 'string' && input.target ? ['--target', input.target] : []), ...selection(input),
-          '--yes', ...(args.length ? ['--', ...args] : [])], interactive: input.interactive !== false,
+          ...confirmed(input, path), ...(args.length ? ['--', ...args] : [])], interactive: input.interactive !== false,
         ...(typeof input.stdin === 'string' ? { stdin: input.stdin } : {}), meta: { path: relative(root, path) || '.', target: input.target ?? '', args, profile: input.profile } };
     } else if (kind === 'call') {
       const path = inside(string(input.function, 'function'));
       if (!path.endsWith('.nl')) throw new HttpError(400, 'function must be a .nl file');
       const inputs = input.inputs && typeof input.inputs === 'object' ? input.inputs : {};
-      spec = { kind, title: `call ${relative(root, path)}`, cwd: dirname(path), argv: ['call', path, ...selection(input), '--yes', '--json'],
+      spec = { kind, title: `call ${relative(root, path)}`, cwd: dirname(path), argv: ['call', path, ...selection(input), ...confirmed(input, typeof input.program === 'string' ? inside(input.program) : dirname(path)), '--json'],
         stdin: JSON.stringify(inputs), meta: { path: relative(root, path), inputs, profile: input.profile, program: typeof input.program === 'string' ? relative(root, inside(input.program)) || '.' : undefined } };
     } else if (kind === 'ask') {
       const instruction = string(input.instruction, 'instruction');
       spec = { kind, title: `ask ${instruction.slice(0, 60)}`, cwd: typeof input.cwd === 'string' ? inside(input.cwd) : root,
-        argv: ['ask', instruction, ...(typeof input.returns === 'string' && input.returns ? ['--returns', input.returns] : []), ...selection(input), '--yes'],
+        argv: ['ask', instruction, ...(typeof input.returns === 'string' && input.returns ? ['--returns', input.returns] : []), ...selection(input), ...confirmed(input)],
         stdin: typeof input.input === 'string' ? input.input : '', meta: { instruction, input: input.input ?? '', returns: input.returns ?? null, profile: input.profile } };
     } else if (kind === 'test') {
       const path = inside(string(input.path, 'path'));
-      spec = { kind, title: `test ${relative(root, path) || '.'}`, cwd: root, argv: ['test', path, ...selection(input), '--yes'], meta: { path: relative(root, path) || '.' } };
+      spec = { kind, title: `test ${relative(root, path) || '.'}`, cwd: root, argv: ['test', path, ...selection(input), ...confirmed(input, path)], meta: { path: relative(root, path) || '.' } };
     } else if (kind === 'build') {
       const path = inside(string(input.path, 'path'));
       spec = { kind, title: `build ${relative(root, path) || '.'}${input.warm ? ' --warm' : ''}`, cwd: root,
-        argv: ['build', path, ...(input.warm ? ['--warm'] : []), ...selection(input), '--yes'], meta: { path: relative(root, path) } };
+        argv: ['build', path, ...(input.warm ? ['--warm', ...confirmed(input, path)] : []), ...selection(input)], meta: { path: relative(root, path) } };
     } else if (kind === 'setup') {
       spec = { kind, title: 'setup', cwd: root, argv: ['setup', '--yes', ...selection(input)] };
     } else if (kind === 'runtime-build') {
@@ -533,7 +567,7 @@ export async function startDashboard(options: DashboardOptions): Promise<{ url: 
       response.end(text);
     } catch (error) {
       const status = error instanceof HttpError ? error.status : error instanceof SyntaxError ? 400 : 500;
-      send(response, status, { error: (error as Error).message });
+      send(response, status, { error: (error as Error).message, ...(error instanceof HttpError ? error.detail : {}) });
     }
   });
   const authorizedCookie = (request: IncomingMessage) => (/(?:^|;\s*)natlang_dashboard=([^;]+)/.exec(request.headers.cookie ?? '')?.[1] ?? '') === token;

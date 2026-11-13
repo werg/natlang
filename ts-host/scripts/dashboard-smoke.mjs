@@ -36,7 +36,7 @@ try {
   const manifestPath = join(root, 'hello', 'natlang.json'), manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
   manifest.targets.main.arguments.push({ name: 'count', type: 'number' }, { name: 'enabled', type: 'boolean' }, { name: 'settings', type: 'unknown' });
   writeFileSync(manifestPath, JSON.stringify(manifest)); await page.reload();
-  const input = page.getByLabel('input', { exact: false }).first();
+  const input = page.getByLabel('message', { exact: false }).first();
   await input.fill('My browser test input');
   await page.getByLabel('count', { exact: true }).fill('not a number');
   await page.getByRole('button', { name: 'Run', exact: true }).click();
@@ -57,7 +57,7 @@ try {
   assert.match(await page.locator('.program-output').innerText(), /billing/);
   await page.getByRole('link', { name: 'Programs', exact: true }).click();
   await page.getByText('Inputs restored from the last successful run.').waitFor();
-  assert.equal(await page.getByLabel('input', { exact: false }).first().inputValue(), 'My browser test input');
+  assert.equal(await page.getByLabel('message', { exact: false }).first().inputValue(), 'My browser test input');
   assert.equal(await page.getByLabel('enabled', { exact: true }).isChecked(), true);
   assert.equal(await settings.locator('.dict-key').inputValue(), 'mode');
   assert.equal(await settings.locator('.dict-row').getByRole('textbox').last().inputValue(), 'test');
@@ -75,6 +75,12 @@ try {
   await page.getByRole('button', { name: 'Run tests', exact: true }).click();
   await page.getByText('The run failed.', { exact: true }).waitFor({ timeout: 30000 });
   assert.match(await page.locator('.program-output').innerText(), /FAIL.*duplicate charge/s);
+  await page.getByRole('link', { name: 'Programs', exact: true }).click();
+  await page.getByRole('button', { name: 'New function', exact: true }).click();
+  await page.getByRole('dialog').getByRole('textbox').fill('answer/lookup.nl');
+  await page.getByRole('dialog').getByRole('button', { name: 'Create function' }).click();
+  await page.locator('summary').filter({ hasText: 'lookup' }).waitFor();
+  assert.match(readFileSync(join(root, 'hello', 'answer', 'lookup.nl'), 'utf8'), /returns: string/);
   await page.getByRole('link', { name: 'Playground', exact: true }).click();
   await page.getByRole('button', { name: 'Save as program', exact: true }).click();
   await page.getByRole('dialog').getByRole('textbox').fill('playground-copy');
@@ -84,7 +90,7 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'mobile view must not overflow');
   assert.deepEqual(errors, []);
-  process.stdout.write('Dashboard browser smoke passed: create, run, restore inputs, edit, test failure, Playground export, mobile layout.\n');
+  process.stdout.write('Dashboard browser smoke passed: create, run, restore inputs, edit, test failure, new function, Playground export, mobile layout.\n');
 } finally {
   await browser?.close(); await dashboard?.close(); await new Promise(resolve => model.close(resolve));
   rmSync(root, { recursive: true, force: true });
