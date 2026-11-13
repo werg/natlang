@@ -5,14 +5,11 @@ import { ensureNodeBuild } from './dev-bootstrap.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const entry = join(root, 'ts-host', 'dist', 'cli', 'main.js');
-try { ensureNodeBuild(root); }
+try { await ensureNodeBuild(root); }
 catch (error) { process.stderr.write(`natlang: ${error instanceof Error ? error.message : String(error)}\n`); process.exit(1); }
+// Packages and program state stay in the checkout; the model cache and llama.cpp runtimes are content-addressed and shared
+// with an installed natlang (~/.cache/natlang and the platform's data directory), so the model is downloaded once.
 process.env.NATLANG_HOME ??= join(root, '.natlang', 'packages');
 process.env.NATLANG_STATE_HOME ??= join(root, '.natlang', 'state');
-process.env.NATLANG_CACHE_HOME ??= join(root, '.natlang', 'cache');
-process.env.NATLANG_RUNTIME_HOME ??= join(root, '.natlang', 'runtime');
 const { main } = await import(pathToFileURL(entry).href);
-main(process.argv.slice(2)).then(code => { process.exitCode = code; }, error => {
-  process.stderr.write(`natlang: ${error instanceof Error ? error.message : String(error)}\n`);
-  process.exitCode = 1;
-});
+process.exitCode = await main(process.argv.slice(2));

@@ -61,5 +61,5 @@ export async function modelStatus(selected: LoadedModelConfiguration, profiles: 
 }
 
 /** A program root to report on: the explicit one, else the current directory when it holds tuning state. */
-export const programForStatus = (explicit?: string) => explicit ?? (existsSync(join(process.cwd(), 'tune.examples.jsonl'))
+export const programForStatus = (explicit?: string) => explicit ?? (existsSync(join(process.cwd(), 'examples.json'))
   || existsSync(join(process.cwd(), '.natlang', 'tune')) ? process.cwd() : undefined);

@@ -161,7 +161,7 @@ test('a crisp result used where Neuralese is expected is reported with the gener
   assert.ok(hint, JSON.stringify(compiled.diagnostics));
   assert.equal(hint.line, 3);
   assert.match(hint.message, /plain returns string, and this call's result is used as Neuralese<string>\. Declare plain's result representation-generic \(`generic: \{ R: string \| Neuralese<string> \}` with `returns: R`\)/);
-  assert.ok(compiled.diagnostics.some(item => item.code === 'typescript'), 'the type error itself stays');
+  assert.ok(compiled.diagnostics.some(item => /^TS\d+$/.test(item.code)), 'the type error itself stays');
 });
 
 test('eval code instantiates generic results from its own expected types', async () => {

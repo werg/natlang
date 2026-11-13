@@ -1,7 +1,8 @@
 /**
  * What `natlang run|call|ask` shows while natural-language calls work (live events, runtime.ts `LiveEvent`): on a
  * terminal one status line that is cleared when no call is running; otherwise a line every 15 s while calls run.
- * A call that fails is always reported in one line, whether or not the program catches its error.
+ * A call that fails is reported in one line, whether or not the program catches its error; the request error it failed
+ * on is not repeated, nor is the error when the command then reports it.
  * NATLANG_PROGRESS=off|line|auto (default auto) or `--progress` chooses.
  */
 import { appendFileSync } from 'node:fs';
@@ -22,12 +23,23 @@ export function parseProgressMode(value: string | undefined): ProgressMode {
   throw new Error('progress must be auto, line or off');
 }
 
-export function progressReporter(stream: NodeJS.WritableStream & { isTTY?: boolean }, mode: ProgressMode = 'auto'):
-  { live: LiveSink | undefined; close(): void } {
+/** Failures the display has printed (first lines), so the command's own error report does not repeat one. */
+const reported = new Set<string>();
+/** Whether `message` (an error the command is about to print) repeats a failure the progress display already printed. */
+export const reportedFailure = (message: string) => [...reported].some(detail => message.includes(detail));
+
+/**
+ * `roots: false` leaves root-call failures to the command (natlang test prints each example's outcome). Generated
+ * tokens are estimated from the streamed characters (about 4 per token) while a request runs, and counted exactly
+ * when it ends; a terminal gets a one-line summary when the display closes.
+ */
+export function progressReporter(stream: NodeJS.WritableStream & { isTTY?: boolean }, mode: ProgressMode = 'auto',
+  options: { roots?: boolean } = {}): { live: LiveSink | undefined; close(): void } {
   if (mode === 'off') return { live: undefined, close() {} };
   const terminal = mode === 'auto' && stream.isTTY === true;
   const active = new Map<string, Active>();
-  let promptTokens = 0, completionTokens = 0, cachedTokens = 0, timedTokens = 0, generationMs = 0, finished = 0, frame = 0, shown = false, since = 0, lastLine = 0;
+  let promptTokens = 0, completionTokens = 0, cachedTokens = 0, timedTokens = 0, generationMs = 0, finished = 0, frame = 0, shown = false, since = 0,
+    lastLine = 0, first = 0;
   const describe = () => {
     const calls = [...active.values()];
     const now = Date.now(), oldest = calls.reduce((first, call) => Math.min(first, call.started), now);
@@ -36,8 +48,13 @@ export function progressReporter(stream: NodeJS.WritableStream & { isTTY?: boole
     const doing = !focus.requesting ? '' : focus.written ? ` (writing, ${tokens(focus.written)} chars)` :
       focus.thought ? ` (thinking, ${tokens(focus.thought)} chars)` : ' (reading the prompt)';
     const stuck = focus.rejected >= 2 ? ` · last ${focus.rejected} actions rejected${focus.rejection ? ` (${focus.rejection})` : ''}` : '';
-    return `${focus.name} · turn ${Math.max(1, focus.turn)}${doing}${stuck}${others} · ` +
-      `${finished} done · ${tokens(promptTokens)} prompt${cachedTokens ? ` (${tokens(cachedTokens)} cached)` : ''} + ${tokens(completionTokens)} generated tokens${generationMs > 0 ? ` (${(timedTokens * 1000 / generationMs).toFixed(1)}/s)` : ''} · ${seconds(now - (since || oldest))}`;
+    const streaming = Math.round(calls.reduce((sum, call) => sum + (call.requesting ? call.thought + call.written : 0), 0) / 4);
+    const generated = completionTokens + streaming;
+    // Counters appear once known: prompt tokens when a request ends, generated ones (estimated) as soon as text streams.
+    const counts = [promptTokens ? `${tokens(promptTokens)} prompt${cachedTokens ? ` (${tokens(cachedTokens)} cached)` : ''}` : '',
+      generated ? `${streaming ? '~' : ''}${tokens(generated)} generated` : ''].filter(Boolean).join(' + ');
+    return `${focus.name} · turn ${Math.max(1, focus.turn)}${doing}${stuck}${others} · ${finished} done` +
+      `${counts ? ` · ${counts} tokens${generationMs > 0 ? ` (${(timedTokens * 1000 / generationMs).toFixed(1)}/s)` : ''}` : ''} · ${seconds(now - (since || oldest))}`;
   };
   const clear = () => { if (shown) { stream.write('\r\x1b[2K'); shown = false; } };
   const render = () => {
@@ -53,11 +70,16 @@ export function progressReporter(stream: NodeJS.WritableStream & { isTTY?: boole
   const live: LiveSink = (event: LiveEvent) => {
     if (event.type === 'call_start') {
       if (!active.size) { since = Date.now(); lastLine = Date.now(); }
+      first ||= Date.now();
       active.set(event.callId, { name: event.name, turn: 0, started: Date.now(), requesting: false, thought: 0, written: 0, rejected: 0, rejection: '' });
     } else if (event.type === 'call_end') {
       active.delete(event.callId); finished++;
-      if (event.outcome !== 'done')
-        persistent(`natlang: ${event.name} ${event.outcome === 'quiesced' ? 'stopped' : event.outcome}: ${event.detail.split('\n')[0]!.slice(0, 300)}`);
+      // A failed request that the call then fails on is reported once, as the call's failure.
+      if (event.outcome !== 'done' && (event.parentCallId !== null || options.roots !== false)) {
+        const detail = event.detail.split('\n')[0]!.slice(0, 300);
+        reported.add(detail);
+        persistent(`natlang: ${event.name} ${event.outcome === 'quiesced' ? 'stopped' : event.outcome}: ${detail}`);
+      }
       if (!active.size) clear();
     } else if (event.type === 'model_delta') {
       const call = active.get(event.callId);
@@ -78,11 +100,15 @@ export function progressReporter(stream: NodeJS.WritableStream & { isTTY?: boole
         call.requesting = false;
         promptTokens += Number(data.prompt_tokens ?? 0); completionTokens += Number(data.completion_tokens ?? 0); cachedTokens += Number(data.cached_tokens ?? 0);
         if (typeof data.generation_ms === 'number' && data.generation_ms > 0) { generationMs += data.generation_ms; timedTokens += Number(data.completion_tokens ?? 0); }
-        if (data.phase === 'error') persistent(`natlang: ${event.name} model request failed: ${String(data.error ?? '').split('\n')[0]!.slice(0, 300)}`);
       }
     }
   };
-  return { live, close() { clearInterval(timer); clear(); } };
+  return { live, close() {
+    clearInterval(timer); clear();
+    if (terminal && finished) stream.write(`natlang: ${finished} call${finished === 1 ? '' : 's'}` +
+      `${promptTokens || completionTokens ? ` · ${tokens(promptTokens)} prompt + ${tokens(completionTokens)} generated tokens` : ''} · ` +
+      `${((Date.now() - first) / 1000).toFixed(1)} s\n`);
+  } };
 }
 
 /**
@@ -113,8 +139,8 @@ export function liveFileSink(path: string): { live: LiveSink; close(): void } {
 
 /** The progress display and, under a supervisor (NATLANG_LIVE_FILE), the live event file, as one sink. */
 export function commandProgress(stream: NodeJS.WritableStream & { isTTY?: boolean }, mode: ProgressMode,
-  environment: NodeJS.ProcessEnv = process.env): { live: LiveSink | undefined; close(): void } {
-  const display = progressReporter(stream, mode);
+  environment: NodeJS.ProcessEnv = process.env, options: { roots?: boolean } = {}): { live: LiveSink | undefined; close(): void } {
+  const display = progressReporter(stream, mode, options);
   const file = environment.NATLANG_LIVE_FILE ? liveFileSink(environment.NATLANG_LIVE_FILE) : undefined;
   if (!file) return display;
   return { live: event => { display.live?.(event); file.live(event); }, close() { display.close(); file.close(); } };
