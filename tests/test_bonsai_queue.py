@@ -945,3 +945,15 @@ def test_shared_collector_heap_stays_bounded_and_recycles(tmp_path, monkeypatch)
     finally:
         server.shutdown()
         shutil.rmtree(short, ignore_errors=True)
+
+
+def test_task_asset_root_defaults_to_build_tree_when_present(tmp_path, monkeypatch):
+    # The v3 repo/sql snapshots live in the build tree; the services' checkout default was never populated on the DGX.
+    build = tmp_path / 'broad-rl-tasks-20261031' / 'assets-v3'
+    monkeypatch.setenv('NATLANG_DATA_NVME', str(tmp_path))
+    env = {}
+    assert queue_module.bind_task_assets(env) == {}
+    build.mkdir(parents=True)
+    assert queue_module.bind_task_assets(env) == {'NATLANG_RL_TASK_ASSETS_V3': str(build)}
+    explicit = {'NATLANG_RL_TASK_ASSETS_V3': '/elsewhere'}
+    assert queue_module.bind_task_assets(explicit) == {'NATLANG_RL_TASK_ASSETS_V3': '/elsewhere'}
