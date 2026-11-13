@@ -28,11 +28,29 @@ function literal(node: ts.Expression): unknown {
       if (key === undefined) return NO_VALUE;
       const value = literal(property.initializer);
       if (value === NO_VALUE) return NO_VALUE;
-      out[key] = value;
+      // An own property even for `__proto__`, as JSON.parse makes it: a literal never sets a prototype.
+      Object.defineProperty(out, key, { value, enumerable: true, writable: true, configurable: true });
     }
     return out;
   }
   return NO_VALUE;
+}
+
+/**
+ * The data a text spells out as JSON or as a JS literal (object, array, string, number, boolean, null; quoted or bare
+ * keys, trailing commas), or undefined when it is anything else. Parsed, never run.
+ */
+export function literalText(text: string): { value: unknown } | undefined {
+  try { return { value: JSON.parse(text) }; } catch { /* not JSON; try a JS literal */ }
+  const trimmed = text.trim();
+  if (!trimmed || trimmed.length > 200_000) return undefined;
+  const source = ts.createSourceFile('value.ts', `(${trimmed}\n)`, ts.ScriptTarget.ES2022, false, ts.ScriptKind.TS);
+  if (((source as unknown as { parseDiagnostics?: readonly unknown[] }).parseDiagnostics ?? []).length) return undefined;
+  if (source.statements.length !== 1) return undefined;
+  const statement = source.statements[0]!;
+  if (!ts.isExpressionStatement(statement)) return undefined;
+  const value = literal(statement.expression);
+  return value === NO_VALUE ? undefined : { value };
 }
 
 /** The request a reply writes out as `return_result({...})`, or undefined when the reply is anything else. */

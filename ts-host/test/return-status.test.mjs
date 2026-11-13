@@ -99,3 +99,40 @@ test('return_result value rejections render in each wording; the sentence wordin
     if (previous === undefined) delete process.env.NATLANG_RETURN_ERROR_TEXT; else process.env.NATLANG_RETURN_ERROR_TEXT = previous;
   }
 });
+
+test('a structured result sent as JSON or JS-literal text is read as the data it spells out', async () => {
+  const returns = '{ facts: string[], count: number }';
+  const json = await script([['return_result', { status: 'success', value: '{"facts": ["a", "b"], "count": 2}' }]], returns);
+  assert.deepEqual(json.value, { facts: ['a', 'b'], count: 2 });
+  const js = await script([['return_result', { status: 'success', value: "{ facts: ['a', \"b\",], count: -2, }" }]], returns);
+  assert.deepEqual(js.value, { facts: ['a', 'b'], count: -2 });
+  const list = await script([['return_result', { status: 'success', value: "[{ id: 'x' }]" }]], '{ id: string }[]');
+  assert.deepEqual(list.value, [{ id: 'x' }]);
+});
+
+test('structured-result text that does not check names the fix in one sentence, never running it', async () => {
+  const returns = '{ facts: string[] }';
+  globalThis.__ranLiteral = false;
+  const { results, value } = await script([
+    ['return_result', { status: 'success', value: '{ facts: [x] }' }],
+    ['return_result', { status: 'success', value: '{ facts: [(() => { globalThis.__ranLiteral = true; return "a"; })()] }' }],
+    ['return_result', { status: 'success', value: 'The facts are a and b.' }],
+    ['return_result', { status: 'success', value: '{ facts: [1] }' }],
+    ['return_result', { status: 'success', value: '{ facts: ["a"], extra: 1 }' }],
+    ['return_result', { status: 'success', value: '{ "__proto__": { "facts": ["p"] } }' }],
+    ['return_result', { status: 'success', value: { facts: ['a'] } }],
+  ], returns);
+  const sentence = /return_result needs the \{ facts: string\[\] \} itself as its value argument, written as an object in the arguments rather than as text\./;
+  for (const i of [0, 1, 2]) assert.match(results[i], sentence);
+  assert.equal(globalThis.__ranLiteral, false);
+  assert.match(results[3], /return\/facts\/0: type-mismatch, expected string, got 1/);
+  assert.match(results[4], /return\/extra: unknown-field/);
+  assert.doesNotMatch(results[5], /Returned/);
+  assert.deepEqual(value, { facts: ['a'] });
+  delete globalThis.__ranLiteral;
+});
+
+test('a string result is still text, even when it reads as a literal', async () => {
+  const { value } = await script([['return_result', { status: 'success', value: '{ facts: [1] }' }]], 'string');
+  assert.equal(value, '{ facts: [1] }');
+});

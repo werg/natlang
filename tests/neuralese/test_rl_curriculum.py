@@ -431,6 +431,23 @@ def test_held_standalone_comparison_counts_timeouts_apart_and_bounds_the_change(
     assert held_eval.compare({**first,'context_tokens':131072},{**second,'context_tokens':131072})['paired']
 
 
+
+def test_held_ran_out_counts_call_budget_repetition_and_wall_clock_stops_together():
+    tasks=[(f't{i}',0) for i in range(8)]
+    first,second=held_result('a',1,{k:0.0 for k in tasks}),held_result('b',2,{k:0.0 for k in tasks})
+    for s,outcome in zip(first['samples'],['budget_exhaustion','repetition','budget_exhaustion','unresolved','wrong','wrong','wrong','wrong']):
+        s['outcome']=outcome
+    first['samples'][3]['timed_out']=True
+    for s,outcome in zip(second['samples'],['budget_exhaustion','wrong','unresolved','unresolved','wrong','budget_exhaustion','wrong','wrong']):
+        s['outcome']=outcome
+    second['samples'][2]['finish_status']='timeout'   # a result written before the timed_out flag
+    second['samples'][3]['timed_out']=True
+    assert held_eval.ran_out_rate(first)==0.5 and held_eval.ran_out_rate(second)==0.5
+    report=held_eval.compare(first,second)
+    assert report['first']['ran_out_rate']==0.5 and report['ran_out_rate_delta']==0
+    assert report['ran_out_paired']=={'pairs':8,'first':4,'second':4,'only_first':1,'only_second':1,'mcnemar_exact_p':1.0}
+    assert report['loop_rate_delta']==0 and report['first']['loop_rate']==.1   # loop_rate stays as recorded
+
 def test_held_trend_pairs_with_previous_and_first_within_one_series(tmp_path):
     tasks=[(f't{i}',s) for i in range(6) for s in (0,1)]
     def write(policy,started,successes,key='s1'):

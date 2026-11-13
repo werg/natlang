@@ -39,6 +39,23 @@ SEED_BASE = 4200000
 LOOP = ('budget_exhaustion', 'repetition')
 
 
+def sample_timed_out(sample):
+    """A wall-clock stop (unscored): the sample's flag, or its finish status in results written before the flag."""
+    return bool(sample.get('timed_out') or sample.get('finish_status') == 'timeout')
+
+
+def ran_out(sample):
+    """The episode ran out of budget rather than ending: a loop outcome (call budget, repetition) or a wall-clock stop.
+    Throughput moves episodes between the two (a slower run cuts at the wall clock what a faster one ends at the call
+    budget), so this rate, unlike ``loop_rate``, does not move with the actor's speed."""
+    return sample.get('outcome') in LOOP or sample_timed_out(sample)
+
+
+def ran_out_rate(result):
+    ran = [s for s in result['samples'] if s['ran']]
+    return round(sum(map(ran_out, ran)) / len(ran), 4) if ran else None
+
+
 def settings(config):
     """None when opted out, else the option object with defaults."""
     value = config.get('held_eval')
@@ -413,6 +430,7 @@ def finalize(directory, spec, started, *, complete):
               'unscored_other': len(ran) - len(scored) - sum(s['timed_out'] and s['reward'] is None for s in ran),
               'outcome_counts': counts,
               'loop_rate': (sum(counts.get(k, 0) for k in LOOP) / len(ran)) if ran else None,
+              'ran_out_rate': ran_out_rate({'samples': samples}),
               'repeated_action_rate': (sum(s['repeated_actions'] or 0 for s in scored) / calls) if calls else None,
               'neuralese_use_rate': (sum(s['neuralese_exchanges'] > 0 for s in scored) / len(scored)) if scored else None,
               'completion_tokens': tokens, 'tokens_per_second': round(tokens / elapsed, 1) if elapsed else None,
@@ -486,8 +504,7 @@ def compare(first, second, *, resamples=2000):
                          + json.dumps({k: [engines[0].get(k), engines[1].get(k)] for k in engines[0]
                                        if engines[0].get(k) != engines[1].get(k)}))
 
-    def timed_out(sample):
-        return bool(sample.get('timed_out') or sample.get('finish_status') == 'timeout')
+    timed_out = sample_timed_out
 
     def table(result):
         return {(s['task_id'], s['sample']): s for s in result['samples'] if s['ran']}
@@ -512,9 +529,12 @@ def compare(first, second, *, resamples=2000):
                 'scored': result['scored'], 'successes': result['successes'],
                 'success_rate': round(result['successes'] / result['scored'], 4) if result['scored'] else None,
                 'timeouts': sum(timed_out(s) for s in result['samples'] if s['ran']),
-                'loop_rate': result['loop_rate'], 'repeated_action_rate': result.get('repeated_action_rate'),
-                'elapsed_seconds': result.get('elapsed_seconds'), 'complete': result.get('complete')}
+                'loop_rate': result['loop_rate'], 'ran_out_rate': ran_out_rate(result),
+                'repeated_action_rate': result.get('repeated_action_rate'), 'elapsed_seconds': result.get('elapsed_seconds'), 'complete': result.get('complete')}
     n = sum(len(v) for v in by_task.values())
+    out_first = sum(ran_out(a[k]) and not ran_out(b[k]) for k in common)
+    out_second = sum(ran_out(b[k]) and not ran_out(a[k]) for k in common)
+    rates = ran_out_rate(first), ran_out_rate(second)
     return {'first': side(first), 'second': side(second), 'engine': engines[0] or engines[1],
             'engine_attested': None not in engines, 'same_code': side(first)['code'] == side(second)['code'],
             'same_series': side(first)['series'] == side(second)['series'],
@@ -526,7 +546,13 @@ def compare(first, second, *, resamples=2000):
             'delta_ci95_task_bootstrap': [round(deltas[int(.025 * len(deltas))], 4),
                                           round(deltas[int(.975 * len(deltas)) - 1], 4)] if deltas else None,
             'loop_rate_delta': (round(second['loop_rate'] - first['loop_rate'], 4)
-                                if first['loop_rate'] is not None and second['loop_rate'] is not None else None)}
+                                if first['loop_rate'] is not None and second['loop_rate'] is not None else None),
+            'ran_out_rate_delta': round(rates[1] - rates[0], 4) if None not in rates else None,
+            # Over every matched pair that ran, timeouts included (they are part of the measure).
+            'ran_out_paired': {'pairs': len(common), 'first': sum(ran_out(a[k]) for k in common),
+                               'second': sum(ran_out(b[k]) for k in common), 'only_first': out_first,
+                               'only_second': out_second,
+                               'mcnemar_exact_p': round(binomial_two_sided(out_first, out_second), 4)}}
 
 
 def trend(out):

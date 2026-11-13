@@ -38,6 +38,7 @@ import { readNeuraleseForCurrentTask } from '../neuralese/combinators.js';
 import { undeclaredServiceType } from './introspection.js';
 import { NATIVE_TOOL_SCHEMA } from './tool-surface.js';
 import { returnErrorText, returnValueRejection, type ReturnErrorText } from './return-errors.js';
+import { literalText } from './pseudo-call.js';
 import { STAGED_RESULT_NOTICE } from './staged-result.js';
 import { modelFacing } from '../runtime/model-facing.js';
 import { TOOL_MARKUP } from './tool-markup.js';
@@ -327,6 +328,18 @@ function rejected(error: Reject): NativeResult {
     error.diagnostics.map(diagnostic => DIAGNOSTIC_HINTS[diagnostic.code]).find(Boolean);
   return { kind: 'rejected', text: `rejected\n${error.message}${hint ? `\nhint: ${hint}` : ''}`,
     codes: error.diagnostics.map(diagnostic => diagnostic.code) };
+}
+
+/** How a value of a structured type is written ('an object', 'an array'), or undefined when the type can be text. */
+function structuredShape(type: Type, env: TypeEnv): string | undefined {
+  const resolved = env.resolve(type);
+  if (resolved.kind === 'refined' || resolved.kind === 'untrusted') return structuredShape(resolved.base, env);
+  if (resolved.kind === 'record' || resolved.kind === 'dict') return 'an object';
+  if (resolved.kind === 'list') return 'an array';
+  if (resolved.kind !== 'union' || !resolved.members.length) return undefined;
+  const shapes = new Set(resolved.members.map(member => structuredShape(member, env)));
+  if (shapes.has(undefined)) return undefined;
+  return shapes.size === 1 ? [...shapes][0] : 'an object or an array';
 }
 
 /** A type whose values have an unambiguous JSON representation (excluding opaque and recursively aliased shapes). */
@@ -1507,20 +1520,21 @@ export class NativeSession {
         catch (directError) {
           if (!(directError instanceof Reject)) throw directError;
           if (!parseJsonFallback || typeof value !== 'string') throw directError;
-          let parsed: unknown;
-          try { parsed = JSON.parse(value); } catch { throw directError; }
-          typedValue = coerceCompleteJson(parsed, element, this.env, 'return');
+          const parsed = literalText(value);
+          if (!parsed) throw directError;
+          typedValue = coerceCompleteJson(parsed.value, element, this.env, 'return');
         }
         const text = typedJsonSource(typedValue);
         if (text === undefined) throw first;
         return this.writeNeuraleseResult(text, wanted, source, 'typed-json-result');
       }
-      let candidate = value;
-      if (parseJsonFallback && typeof value === 'string') {
-        try { candidate = JSON.parse(value); } catch { candidate = value; }
-      }
+      // A structured result sent as its JSON or JS-literal text is read as the data it spells out (never run).
+      const spelled = parseJsonFallback && typeof value === 'string' ? literalText(value) : undefined;
+      const candidate = spelled ? spelled.value : value;
+      let second: unknown;
       try { return coerce(candidate, resultType, this.env, 'return'); }
-      catch {
+      catch (error) {
+        second = error;
         const plans: PlannedTypedText[] = [];
         const preflightType = typedTextPreflightType(candidate, resultType, this.env, [], plans);
         if (plans.length) {
@@ -1534,6 +1548,13 @@ export class NativeSession {
             'typed-text-result-field', plan.path));
           return applyTypedTextRefs(preflightValue, plans, refs);
         }
+      }
+      const shape = parseJsonFallback && typeof value === 'string' ? structuredShape(resultType, this.env) : undefined;
+      if (shape) {
+        // Text that spells out an object or array: what is wrong inside it is the fix (the text itself is accepted).
+        if (spelled && second instanceof Reject && spelled.value !== null && typeof spelled.value === 'object') throw second;
+        throw new Reject([{ path: 'value', code: 'type-mismatch', text:
+          `return_result needs the ${formatType(resultType)} itself as its value argument, written as ${shape} in the arguments rather than as text.` }]);
       }
       throw first;
     }
@@ -1767,9 +1788,10 @@ export class NativeSession {
       } else {
         try { value = coerce(args.value, this.lam.type.returns, this.env, 'return'); }
         catch (first) {
-          // Some models send structured values as JSON text.
-          if (typeof args.value !== 'string') throw first;
-          try { value = coerce(JSON.parse(args.value), this.lam.type.returns, this.env, 'return'); } catch { throw first; }
+          // Some models send structured values as JSON or JS-literal text.
+          const spelled = typeof args.value === 'string' ? literalText(args.value) : undefined;
+          if (!spelled) throw first;
+          try { value = coerce(spelled.value, this.lam.type.returns, this.env, 'return'); } catch { throw first; }
         }
       }
       this.lam.return = value;

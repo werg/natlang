@@ -3,6 +3,21 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-13 — structured return_result value sent as text is read as its data
+
+In held-v2 budget-exhausted episodes LFM3 returned records as JS object-literal **strings**
+(`value: "{ facts: [...] }"` for `{ facts: string[] }`), got `return: type-mismatch ... got "{ facts: ..."` and resent
+the same text (28 of 44 type-mismatch rejections in the new series, plans/neuralese/LOOP_RATE_20261113.md). JSON text
+was already parsed; JS-literal text was not. Now, when the declared result is a record, array or dictionary (or a union
+of them) and `return_result.value` is a string, it is read as JSON, else as a JS literal (`literalText`,
+native/pseudo-call.ts: the literal reader the written-out `return_result(...)` reply already used; objects, arrays,
+strings, numbers, booleans, null, bare or quoted keys, trailing commas; nothing runs, `__proto__` stays an own key) and
+the data is checked against the type. If it spells out an object or array that does not check, the rejection is that
+data's own diagnostic (`return/facts/0: type-mismatch, expected string, got 1`); if it is not a literal, one sentence:
+`return_result needs the <T> itself as its value argument, written as an object in the arguments rather than as text.`
+A `string` result is unchanged (text stays text). First principles, not A/B (owner, 2026-11-12); held-v2 on the next
+experiment shows any regression, and `ran_out_rate` (held_eval) tracks budget stops beside loop_rate.
+
 ### 2026-11-13 — copied prompt example refused in eval (`prompt-example`)
 
 The stock LFM3 1.7B with a thinking budget copied TOOLS_PROMPT's inline-nl example into triage calls: 9 of 42 calls at

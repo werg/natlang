@@ -121,7 +121,9 @@ projects with `natlang build` (or `natlang run`) so `nl` is lowered. Inline call
 The model receives the function's signature, types, instructions and inputs, then either answers directly (a text
 or simple result) or works in a persistent TypeScript eval scope where parameters, captures, callable items and
 services are bindings, and finishes with `return_result` (`success`, `blocked` or `failed`). The result is checked
-against the declared type; a mismatch goes back to the model to repair. In host code a failed call rejects with
+against the declared type; a mismatch goes back to the model to repair. A record or array result that `return_result`
+receives as text (JSON or a JS object/array literal, read as data, never run) is accepted when the data it spells out
+checks; otherwise the error names the field to fix or asks for the value written as an object or array. In host code a failed call rejects with
 `NatlangCallError` (`outcome`, `detail`, `trace`). Service calls and live-object writes are not rolled back; a
 captured `let` is written back only after a successful eval. Every call is recorded in the machine's call store
 (`natlang traces`); keep sensitive values out with `"recording": { "exclude": [...] }` in `natlang.json`.

@@ -1009,7 +1009,7 @@ def train(args):
         summary = {}
         if (out / 'result.json').exists():
             result = json.loads((out / 'result.json').read_text())
-            summary = {k: result.get(k) for k in ('ran', 'scored', 'successes', 'loop_rate', 'complete')}
+            summary = {k: result.get(k) for k in ('ran', 'scored', 'successes', 'loop_rate', 'ran_out_rate', 'complete')}
         if (out / 'compare-vs-step0.json').exists():
             summary['compare'] = json.loads((out / 'compare-vs-step0.json').read_text())
         log_line(log, {'event': 'held eval', 'step': step_number, 'arm': name, 'policy': policy, 'returncode': code,
@@ -1110,7 +1110,7 @@ def train(args):
             summary = {}
             if (out / 'result.json').exists():
                 result = json.loads((out / 'result.json').read_text())
-                summary = {k: result.get(k) for k in ('ran', 'scored', 'successes', 'loop_rate', 'complete')}
+                summary = {k: result.get(k) for k in ('ran', 'scored', 'successes', 'loop_rate', 'ran_out_rate', 'complete')}
             if (out / 'compare-vs-step0.json').exists():
                 summary['compare'] = json.loads((out / 'compare-vs-step0.json').read_text())
             log_line(log, {'event': 'held eval', 'remote': 'pop', 'step': step_number, 'policy': policy, 'returncode': code,

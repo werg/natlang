@@ -450,7 +450,10 @@ coerced when the declared type is unambiguous. A value eval computed and returns
 (`return value;`, a final expression with `finish: true`) is assignable as in
 TypeScript: fields its declared record does not list are kept, so a service's or a
 callee's result is returned as it is; a literal written into `return_result` is
-checked exactly. A value that misses a union of records is reported at the field
+checked exactly. When the declared result is a record, array or dictionary and
+`return_result` receives a string, the string is read as JSON or as a JS
+object/array literal (parsed, never run) and its data is checked instead; a
+string that is neither is refused with the shape to write. A value that misses a union of records is reported at the field
 of the variant it matches (`checkpoint/cutoff: expected number`), not as the
 whole union. Recursive function types are
 rejected (see Iteration and termination). The refinement and trust types
