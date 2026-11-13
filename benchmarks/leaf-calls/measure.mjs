@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * Live measurement of the leaf-call surfaces (benchmarks/leaf-calls/README.md).
+ * Live measurement of leaf calls on the interpreter surface (benchmarks/leaf-calls/README.md).
  *
- *   node benchmarks/leaf-calls/measure.mjs --variant tools|direct|decision --samples 2 --jobs 4 --out results/tools.json
- *   node benchmarks/leaf-calls/measure.mjs --compare results/tools.json results/direct.json
+ *   node benchmarks/leaf-calls/measure.mjs --variant tools|decision --samples 2 --jobs 4 --out results/tools.json
+ *   node benchmarks/leaf-calls/measure.mjs --compare results/tools.json results/decision.json
  *
  * --label NAME names the run (default: the variant), for comparing profiles (NATLANG_PROFILE) under one variant.
  *
@@ -19,9 +19,8 @@ import { isDeepStrictEqual } from 'node:util';
 const here = dirname(fileURLToPath(import.meta.url));
 const dist = join(here, '..', '..', 'ts-host', 'dist');
 const VARIANTS = {
-  tools: { leafCalls: 'tools', decisionReadout: 'declared' },
-  direct: { leafCalls: 'direct', decisionReadout: 'declared' },
-  decision: { leafCalls: 'direct', decisionReadout: 'finite-returns' },
+  tools: { decisionReadout: 'declared' },
+  decision: { decisionReadout: 'finite-returns' },
 };
 
 const args = process.argv.slice(2);
@@ -31,7 +30,7 @@ if (args[0] === '--compare') compare(args[1], args[2]);
 else await measure(flag('--variant'), Number(flag('--samples', '2')), flag('--out'), Number(flag('--jobs', '1')), flag('--label'));
 
 async function measure(variant, samples, out, jobs, label = variant) {
-  if (!VARIANTS[variant] || !out) throw new Error('usage: measure.mjs --variant tools|direct|decision --samples N --out FILE');
+  if (!VARIANTS[variant] || !out) throw new Error('usage: measure.mjs --variant tools|decision --samples N --out FILE');
   const { natlangRuntime, loadVirtualNatlang } = await import(join(dist, 'index.js'));
   const { callableMeta } = await import(join(dist, 'runtime', 'callable.js'));
   const suite = JSON.parse(readFileSync(join(here, 'suite.json'), 'utf8'));

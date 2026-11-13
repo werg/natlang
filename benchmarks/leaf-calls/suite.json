@@ -1,5 +1,5 @@
 {
-  "description": "Leaf natural-language calls with exact answers: no callable functions, services, files or Neuralese. Measures the leafCalls / decisionReadout surfaces against the full interpreter surface.",
+  "description": "Leaf natural-language calls with exact answers: no callable functions, services, files or Neuralese. Measures accuracy and generation length on the interpreter surface, with and without the decision readout.",
   "functions": {
     "ticket.nl": "---\nargs:\n  ticket: string\nreturns: \"\\\"billing\\\" | \\\"technical\\\" | \\\"other\\\"\"\n---\nClassify ticket as billing (charges, invoices or payments), technical (errors or bugs), or other. Return only the matching label.\n",
     "sentiment.nl": "---\nargs:\n  review: string\nreturns: \"\\\"positive\\\" | \\\"negative\\\" | \\\"neutral\\\"\"\n---\nJudge the sentiment the writer of review expresses. A statement of fact without an opinion is neutral.\n",

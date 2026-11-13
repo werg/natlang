@@ -14,7 +14,7 @@
 import { DECISION_SYSTEM_PROMPT } from './decision.js';
 import { isNeuraleseRef, neuraleseSentinel, type NeuraleseRef } from './neuralese.js';
 import { APPROACH_PROMPT, AUTOMATIC_NOTE, COMPACTED_RESULT, COMPACTION_NOTICE, directoryReducerPrompt, DIRECTORY_REDUCER_DECLARATION, FILE_TOOL_SURFACES, FUNCTION_TOOLS_PROMPT,
-  GENERATION_GUIDANCE, LEAF_SYSTEM_PROMPT, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN, LAST_TURN_NOTICE, NL_DEPTH_LIMIT_NOTICE, promptAtNlDepthLimit,
+  GENERATION_GUIDANCE, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN, LAST_TURN_NOTICE, NL_DEPTH_LIMIT_NOTICE, promptAtNlDepthLimit,
   SEMANTIC_RESULT_PROMPT, TOOLS_PROMPT } from './prompt.js';
 import { VIEW_PROMPT } from '../builtin/index.js';
 import { DEFAULT_JUDGE_INSTRUCTIONS, predicatePrompt } from '../runtime/iterate.js';
@@ -49,7 +49,6 @@ export function promptPieces(): PromptPiece[] {
     { id: 'generation-guidance', text: GENERATION_GUIDANCE, scope: 'generic' },
     { id: 'approach', text: APPROACH_PROMPT, scope: 'generic' },
     { id: 'decision', text: DECISION_SYSTEM_PROMPT, scope: 'generic' },
-    { id: 'leaf', text: LEAF_SYSTEM_PROMPT, scope: 'generic' },
     ...predicatePieces(),
     { id: 'compaction-notice', text: COMPACTION_NOTICE, scope: 'generic' },
     { id: 'automatic-note', text: AUTOMATIC_NOTE, scope: 'generic' },
