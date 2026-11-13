@@ -4,13 +4,12 @@ Rehearse and run each session on a clean machine, container or VM with only Node
 developer machine hides installation problems. Install the way a new user would:
 
 ```sh
-git clone https://github.com/werg/natlang.git ~/natlang && ~/natlang/scripts/setup_dev.sh --node-only
+curl -fsSL https://raw.githubusercontent.com/werg/natlang/main/scripts/install.sh | sh
 ```
 
-(Once a release is published, use `curl -fsSL https://raw.githubusercontent.com/werg/natlang/main/scripts/install.sh | sh`
-instead; it needs no clone.) Participants then work in an empty directory outside the clone, for example
-`mkdir ~/natlang-session && cd ~/natlang-session`, so the repository's examples stay unchanged and nothing in the
-checkout guides them.
+(To test unreleased changes, install from a clone instead: `git clone https://github.com/werg/natlang.git ~/natlang &&
+~/natlang/scripts/setup_dev.sh --node-only`.) Participants then work in an empty directory, for example
+`mkdir ~/natlang-session && cd ~/natlang-session`, outside any clone, so nothing in a checkout guides them.
 
 If the clean install itself fails and the session must go on, fall back to the development path: from the clone's
 root, `natlang dashboard --root examples --open`, choose **hello** under Programs and click **Run**. Output shows the

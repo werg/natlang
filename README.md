@@ -34,19 +34,25 @@ gallery, an editor and a small model that runs in the page, with nothing to inst
 
 ### Install
 
-natlang needs Node.js 22.13 or newer. Install the `natlang` command from a clone:
+natlang needs Node.js 22.13 or newer. Install the `natlang` command:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/werg/natlang/main/scripts/install.sh | sh
+```
+
+The script installs the `@natlang/node` and `@natlang/cli` packages of the newest release into npm's global prefix
+(`~/.local` when that is not writable; `NATLANG_PREFIX` chooses another) and prints the `export PATH=...` line if the
+command is not on your `PATH`. `natlang doctor` checks the installation.
+
+To work on natlang itself, or to run the applications in this repository, install from a clone instead:
 
 ```sh
 git clone https://github.com/werg/natlang.git && cd natlang
 scripts/setup_dev.sh --node-only
 ```
 
-The script installs the dependencies, builds the runtime and links `~/.local/bin/natlang` to the clone's
-`scripts/natlang` (`--command-dir DIR` chooses another directory). If that directory is not on your `PATH`, the
-script prints the `export PATH=...` line to add. `natlang doctor` checks the installation.
-
-Once a release is published, `curl -fsSL https://raw.githubusercontent.com/werg/natlang/main/scripts/install.sh | sh`
-installs the `@natlang/node` and `@natlang/cli` packages instead, with no clone.
+This builds the runtime and links `~/.local/bin/natlang` to the clone's `scripts/natlang` (`--command-dir DIR`
+chooses another directory).
 
 ### Your first program
 

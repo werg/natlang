@@ -714,10 +714,9 @@ const choose = pluggable(
     <div style="flex: 1 1 340px">
       <h2>Try it</h2>
       <p style="margin: 0 0 12px"><a class="btn primary" href="play/">Open the playground</a> runs the examples in your browser, with nothing to install: edit a program, load a small model into the page (about 1.1 GB, kept by the browser) and inspect each run's trace.</p>
-      <p style="margin: 0">To run natlang on your machine, install the <code>natlang</code> command from a clone (it needs Node.js 22.13 or newer; <code>setup_dev.sh</code> links the command into <code>~/.local/bin</code>) and create a program in an empty directory. <code>natlang setup</code> prepares the local model once; the dashboard lets you choose an API provider or another backend instead. Once a release is published, <code>curl -fsSL https://raw.githubusercontent.com/werg/natlang/main/scripts/install.sh | sh</code> installs it without a clone.</p>
+      <p style="margin: 0">To run natlang on your machine, install the <code>natlang</code> command (it needs Node.js 22.13 or newer) and create a program in an empty directory. <code>natlang setup</code> prepares the local model once; the dashboard lets you choose an API provider or another backend instead. To run the applications in the repository, install from a clone with <code>scripts/setup_dev.sh --node-only</code>.</p>
     </div>
-    <div class="copywrap"><button class="btn copy" id="copy-cmds" type="button">Copy</button><pre class="code" data-hl="sh" id="cmds">git clone https://github.com/werg/natlang.git
-natlang/scripts/setup_dev.sh --node-only
+    <div class="copywrap"><button class="btn copy" id="copy-cmds" type="button">Copy</button><pre class="code" data-hl="sh" id="cmds">curl -fsSL https://raw.githubusercontent.com/werg/natlang/main/scripts/install.sh | sh
 natlang init my-program
 cd my-program
 natlang setup
