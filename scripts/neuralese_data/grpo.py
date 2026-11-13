@@ -395,6 +395,37 @@ class Collector:
             self._record_outcome(directory)
         self.ready.put(group)
 
+    def reuse_scored(self, step, max_staleness):
+        """Offer again the scored groups a stop left untrained (rollouts and versions on disk, not ``retired``) whose
+        episodes were all sampled by policies this resumed run has served (versions <= ``step``) within the staleness
+        the learner accepts. A group sampled by a version past the saved state (a policy that is gone) or too stale is
+        retired, so a later resume whose own steps reach that version number never takes it for its own.
+        Returns (reused, left out)."""
+        reused, skipped = [], []
+        for directory in sorted((self.work / 'groups').glob('g*')):
+            if not directory.name[1:].isdigit() or (directory / RETIRED).exists():
+                continue
+            if not all((directory / name).exists() for name in ('rollouts.jsonl', 'versions.json', 'score.json')):
+                continue
+            try:
+                versions = json.loads((directory / 'versions.json').read_text())
+                task_id = json.loads((directory / 'rewards.jsonl').read_text().splitlines()[0])['task_id']
+            except (OSError, ValueError, KeyError, IndexError):
+                skipped.append(directory.name)
+                continue
+            if not versions or max(versions) > step or step - min(versions) > max_staleness:
+                (directory / RETIRED).touch()
+                skipped.append(directory.name)
+                continue
+            group = int(directory.name[1:])
+            with self.lock:
+                self.groups[group] = {'dir': directory, 'size': len(versions), 'done': len(versions), 'versions': versions,
+                                      'task_id': task_id, 'created': directory.stat().st_mtime, 'reused': True}
+                self.outstanding += 1
+            self.ready.put(group)
+            reused.append(directory.name)
+        return reused, skipped
+
     def take_groups(self, minimum, maximum, stop=None):
         """At least ``minimum`` finished groups (waits, unless ``stop`` is set), at most ``maximum``."""
         taken = []
@@ -494,10 +525,14 @@ def archive_rollouts(directory, archive):
     return target.stat().st_size
 
 
+RETIRED = 'retired'   # a group that never trains again: lowered for the learner, or left out by a resume
+
+
 def prune_group(collector, group, keep, archive=None, stats=None):
     """Forget a lowered group and delete its bulky files, keeping its score/rewards/versions/cases; its rollouts are
     first kept compressed in ``archive`` (a group whose archiving fails keeps everything in place)."""
     directory = collector.groups.pop(group)['dir']
+    (directory / RETIRED).touch()     # handed to the learner: a resume never offers it again (reuse_scored)
     if keep:
         return
     if archive is not None and (directory / 'rollouts.jsonl').exists():
@@ -512,7 +547,7 @@ def prune_group(collector, group, keep, archive=None, stats=None):
             stats['rollouts_archived'] += 1
             stats['rollouts_archived_bytes'] += size
     for path in directory.iterdir():
-        if path.name not in ('score.json', 'rewards.jsonl', 'versions.json', 'cases.jsonl'):
+        if path.name not in ('score.json', 'rewards.jsonl', 'versions.json', 'cases.jsonl', RETIRED):
             shutil.rmtree(path) if path.is_dir() else path.unlink()
 
 
@@ -1187,8 +1222,8 @@ def train(args):
             for name, p in live.items():
                 p.copy_(masters[name])
         log_line(log, {'event': 'resumed', 'step': step, 'cursor': cursor, 'next_group': first_group})
-    # Group directories past the saved cursor (collected after the last state save, before a stop) are never reused:
-    # numbering continues after the highest existing one.
+    # New groups are numbered after the highest existing one; scored groups a stop left untrained are offered again
+    # (Collector.reuse_scored).
     existing = [int(d.name[1:]) for d in (work / 'groups').glob('g*') if d.name[1:].isdigit()]
     first_group = max([first_group, *(i + 1 for i in existing)])
 
@@ -1211,6 +1246,11 @@ def train(args):
     collector = Collector(args, tasks, work, source_sha, runtime, first_group=first_group, cursor=cursor)
     collector.variants = load_variants(args, tasks, work)
     collector.version = step
+    if args.resume:
+        reused, left_out = collector.reuse_scored(step, args.max_staleness)
+        if reused or left_out:
+            log_line(log, {'event': 'reused groups', 'reused': len(reused), 'left_out': left_out[:50],
+                           'left_out_count': len(left_out)})
     from natlang_neuralese.common.sampling import rl_sampling_controls
     (work / 'sampling-config.json').write_text(json.dumps(rl_sampling_controls(args.top_p, capture=True)) + '\n')
     versions_live = {'actor': step}
