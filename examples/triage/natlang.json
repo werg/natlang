@@ -27,7 +27,7 @@
         {
           "name": "rubric",
           "type": "string",
-          "default": "billing: charges, invoices and payments; technical: outages, errors and bugs; spam: advertising",
+          "default": "billing: charges, invoices and payments; technical: anything in the product that is broken or not working as expected, such as outages, errors and bugs; spam: advertising",
           "description": "The categories and what belongs in each."
         },
         {
@@ -47,7 +47,7 @@
       "function": "classify.nl",
       "inputs": {
         "ticket": "Checkout fails with a 500 error for every customer.",
-        "rubric": "billing: charges, invoices and payments; technical: outages, errors and bugs; spam: advertising"
+        "rubric": "billing: charges, invoices and payments; technical: anything in the product that is broken or not working as expected, such as outages, errors and bugs; spam: advertising"
       }
     },
     {

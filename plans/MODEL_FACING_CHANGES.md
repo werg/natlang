@@ -41,10 +41,10 @@ is the training and held-eval prompt; replacing the example was rejected 2026-11
 contains the example's policy literal or instruction text, in a call whose instructions, inputs and locals do not, is
 rejected before running: `prompt-example: "<text>" comes from the example in your system prompt, not from this call;
 work from this call's own instructions and inputs (<names>) instead.` (`PROMPT_EXAMPLE_TEXTS`, native/runtime.ts).
-Measured with the same-question refusal A/B's successor run (below, when it lands); trained policies do not copy the
-example (0 in 119 w5 episodes), so this only fires on models that do.
+Not A/B-measured (decided on first principles, like the entry below); trained policies do not copy the example (0 in
+119 w5 episodes), so this only fires on models that do.
 
-### 2026-11-13 — same-question refusal says the call answers it itself (measuring)
+### 2026-11-13 — same-question refusal says the call answers it itself
 
 An inline `nl` call with the same instructions and inputs as the call that made it is refused (kernel, since
 2026-10-28). In the thinking-budget runs above the stock LFM3 1.7B read the refusal as a failed child and retried
@@ -56,8 +56,8 @@ that question back; that call answers it itself", and the native runtime adds "T
 are the call that answers it. Any nl call with these instructions and inputs is refused the same way." plus the
 self-call advice (`SELF_CALL_ADVICE`). Copying the prompt example itself is not changed here (rejected 2026-11-10 for
 the trained policy, where it no longer occurs; it occurs on the stock model with a thinking budget, 0 with unlimited).
-**Measurement (running):** full triage suite at `thinking_budget_tokens` 256, old vs new text, refusals per
-refusing call, turns and correctness of those calls.
+Decided on first principles (the old text was misread, as quoted above); the planned triage A/B was stopped part-way
+for memory on tick and dropped. Held-out evaluation of the next checkpoint shows any regression.
 
 ### 2026-11-13 — GRPO trains Neuralese-state consumer calls; the imported state is fixed context
 
