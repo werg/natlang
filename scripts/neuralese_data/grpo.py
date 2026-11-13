@@ -33,7 +33,8 @@ One process runs the whole loop; nothing else (no controller, custody or transit
   ``held/step-00000-pop``), and collection never pauses.
 * task selection: ``--explore`` of groups from unmeasured pool tasks, the rest cycling tasks whose pass rate lies in
   ``--pass-band``: the run's own latest scored group of a task where it has one (current policy), else the measured base
-  rate (``--pass-rates``).
+  rate (``--pass-rates``). ``--neuralese-variants`` (off by default): a picked task that has a Neuralese-declaring variant
+  (``scripts/rl_tasks/neuralese_variants.py``) runs as that variant in ``--neuralese-variant-share`` of its groups.
 
 * pin: the run executes from its own pinned copy of one commit (``scripts/pin_checkout.py create COMMIT W/pin-<c12>``,
   then launch ``W/pin-<c12>/scripts/neuralese_data/grpo.py`` with that copy as workdir); every child (actor, episodes,
@@ -172,6 +173,7 @@ class Collector:
         self.by_id = {row['id']: row for row in tasks}
         self.learnable_ids, self.learnable_order, self.measured, self.rates_read = [], [], set(), 0.
         self.base_rates, self.own, self.rates_changed = {}, {}, True
+        self.variants = {}                          # original task id -> its Neuralese-declaring variant row
         for directory in sorted((work / 'groups').glob('g*')):   # a resumed run keeps its own measurements
             self._record_outcome(directory)
         self.rng = random.Random(args.seed + first_group)
@@ -190,6 +192,9 @@ class Collector:
         from natlang_neuralese.rl import task_rollouts
         from natlang_neuralese.common.jsonio import read_jsonl
         row = self._pick()
+        variant = self.variants.get(row['id'])
+        if variant is not None and self.rng.random() < self.args.neuralese_variant_share:
+            row = variant   # its outcomes are its own (never the original's band rate)
         group = self.next_group
         self.next_group += 1
         directory = self.work / 'groups' / f'g{group:06d}'
@@ -410,10 +415,38 @@ def collect_blocks(store_dir, cutoff):
     return removed, freed
 
 
-def prune_group(collector, group, keep):
+def archive_rollouts(directory, archive):
+    """``directory/rollouts.jsonl`` (every episode the learner lowered: turns with their exact sampling captures, decision
+    receipts with option ids and actor scores) zstd-compressed to ``archive/<group>.rollouts.jsonl.zst`` (temp file renamed).
+    Returns the compressed bytes."""
+    import zstandard
+    source = directory / 'rollouts.jsonl'
+    archive.mkdir(parents=True, exist_ok=True)
+    target = archive / f'{directory.name}.rollouts.jsonl.zst'
+    partial = target.with_suffix('.zst.partial')
+    with source.open('rb') as reader, partial.open('wb') as writer:
+        zstandard.ZstdCompressor(level=6).copy_stream(reader, writer)
+    os.replace(partial, target)
+    return target.stat().st_size
+
+
+def prune_group(collector, group, keep, archive=None, stats=None):
+    """Forget a lowered group and delete its bulky files, keeping its score/rewards/versions/cases; its rollouts are
+    first kept compressed in ``archive`` (a group whose archiving fails keeps everything in place)."""
     directory = collector.groups.pop(group)['dir']
     if keep:
         return
+    if archive is not None and (directory / 'rollouts.jsonl').exists():
+        try:
+            size = archive_rollouts(directory, archive)
+        except Exception as error:
+            print(json.dumps({'event': 'rollout archive failed', 'group': group, 'error': repr(error)[:300]}), flush=True)
+            if stats is not None:
+                stats['rollout_archive_failed'] += 1
+            return
+        if stats is not None:
+            stats['rollouts_archived'] += 1
+            stats['rollouts_archived_bytes'] += size
     for path in directory.iterdir():
         if path.name not in ('score.json', 'rewards.jsonl', 'versions.json', 'cases.jsonl'):
             shutil.rmtree(path) if path.is_dir() else path.unlink()
@@ -651,6 +684,70 @@ def decision_tokens(row):
     return sum(len(row['prompt']) + len(o) for o in row['options'])
 
 
+def decision_record(item, learner, actor, reference, log_rho):
+    """One trained decision's diagnostics (``WORK/decisions/step-N.jsonl``): the actor's captured option scores and ids
+    beside the learner's and the start policy's scores of the same options. ``dscore_centered`` (learner - actor per option,
+    minus its mean over the options) is what moves log pi(chosen); ``ref_log_rho`` (start policy vs behaviour) isolates
+    learner/actor numerics from training drift when the decision was sampled by the start policy (``stale == step``)."""
+    row = item['row']
+    temperature, chosen = row['temperature'], row['chosen']
+    learner, actor = np.asarray(learner, np.float64), np.asarray(actor, np.float64)
+
+    def log_pi(scores):
+        z = scores / temperature
+        z = z - z.max()
+        return float(z[chosen] - np.log(np.exp(z).sum()))
+    dscore = learner - actor
+    record = {'group': item.get('group'), 'task_id': item.get('task_id'), 'stale': item.get('stale'),
+              'actor_version': item.get('actor_version'), 'policy': row.get('policy'), 'invocation': row.get('invocation'),
+              'turn': row.get('index'), 'advantage': round(float(item['advantage']), 4), 'temperature': temperature,
+              'chosen': chosen, 'options': len(row['options']), 'prompt_tokens': len(row['prompt']),
+              'prompt_sha256': hashlib.sha256(np.asarray(row['prompt'], np.int32).tobytes()).hexdigest()[:16],
+              'imports': len(row.get('imports') or ()), 'option_tokens': [len(o) for o in row['options']],
+              'option_ids': [np.asarray(o).tolist() for o in row['options']],
+              'actor_scores': [round(float(v), 4) for v in actor], 'learner_scores': [round(float(v), 4) for v in learner],
+              'behavior_logq': round(float(row['behavior_logq']), 5), 'actor_logq_recomputed': round(log_pi(actor), 5),
+              'learner_logpi': round(log_pi(learner), 5), 'log_rho': round(float(log_rho), 5),
+              'dscore_abs_mean': round(float(np.abs(dscore).mean()), 4),
+              'dscore_centered_abs_max': round(float(np.abs(dscore - dscore.mean()).max()), 4)}
+    if reference is not None:
+        reference = np.asarray(reference, np.float64)
+        record.update(ref_scores=[round(float(v), 4) for v in reference], ref_logpi=round(log_pi(reference), 5),
+                      ref_log_rho=round(log_pi(reference) - float(row['behavior_logq']), 5))
+    return record
+
+
+def decision_summary(records):
+    """Per-step decision diagnostics for train.jsonl: |log rho| distribution (all, by staleness), learner/actor and start
+    policy/actor gaps, option counts and lengths."""
+    if not records:
+        return {}
+    abs_rho = np.abs([r['log_rho'] for r in records])
+    q = lambda values, p: round(float(np.quantile(values, p)), 4)
+    by_stale = collections.defaultdict(list)
+    for r, value in zip(records, abs_rho):
+        by_stale[r['stale']].append(value)
+    worst = max(records, key=lambda r: abs(r['log_rho']))
+    summary = {'n': len(records), 'abs_log_rho_max': round(float(abs_rho.max()), 4), 'abs_log_rho_p50': q(abs_rho, .5),
+               'abs_log_rho_p90': q(abs_rho, .9), 'abs_log_rho_p99': q(abs_rho, .99),
+               'abs_log_rho_over_0.5': int((abs_rho > .5).sum()),
+               'abs_log_rho_mean_by_stale': {str(k): round(float(np.mean(v)), 4) for k, v in sorted(by_stale.items())},
+               'dscore_centered_abs_max': round(max(r['dscore_centered_abs_max'] for r in records), 4),
+               'options_mean': round(float(np.mean([r['options'] for r in records])), 2),
+               'options_max': max(r['options'] for r in records),
+               'prompt_tokens_mean': round(float(np.mean([r['prompt_tokens'] for r in records]))),
+               'prompt_tokens_max': max(r['prompt_tokens'] for r in records),
+               'option_tokens_mean': round(float(np.mean([t for r in records for t in r['option_tokens']])), 1),
+               'option_tokens_max': max(t for r in records for t in r['option_tokens']),
+               'with_imports': sum(1 for r in records if r['imports']),
+               'worst': {k: worst.get(k) for k in ('group', 'task_id', 'stale', 'options', 'prompt_tokens', 'option_tokens',
+                                                   'log_rho', 'ref_log_rho', 'dscore_centered_abs_max')}}
+    if all('ref_log_rho' in r for r in records):
+        ref = np.abs([r['ref_log_rho'] for r in records])
+        summary.update(ref_abs_log_rho_mean=round(float(ref.mean()), 4), ref_abs_log_rho_max=round(float(ref.max()), 4))
+    return summary
+
+
 def decision_batches(items, max_tokens):
     """Pack sampled decisions (``lower_rollout_turns.decision_turns`` rows with their advantage) into forward batches: each
     option is one document (exact prompt + option continuation), so a decision of K options is K packed documents."""
@@ -769,6 +866,29 @@ def load_tasks(args, work=None):
                                      'generated_tokens': None}}
         (Path(work) / 'pool.json').write_text(json.dumps(record, indent=1) + '\n')
     return eligible, len(excluded)
+
+
+def load_variants(args, tasks, work):
+    """``--neuralese-variants`` rows whose original (``curriculum.external.variant_of``) is an eligible task, keyed by
+    that original; a variant shares its original's split group and source groups, so it is re-checked against the same
+    held closure. Records ``WORK/neuralese-variants.json``."""
+    if not args.neuralese_variants:
+        return {}
+    from natlang_neuralese.common.hashing import sha256_file_hex_cached
+    from natlang_neuralese.common.jsonio import read_jsonl
+    from natlang_neuralese.rl.held_eval import exclusion_ids
+    eligible = {r['id'] for r in tasks}
+    rows = list(read_jsonl(args.neuralese_variants))
+    excluded = set(exclusion_ids(args.held_manifest, rows))
+    variants = {}
+    for row in rows:
+        original = ((row.get('curriculum') or {}).get('external') or {}).get('variant_of')
+        if original in eligible and row['id'] not in excluded and row.get('split', 'train') == 'train':
+            variants[original] = row
+    record = {'path': args.neuralese_variants, 'sha256': sha256_file_hex_cached(Path(args.neuralese_variants)),
+              'rows': len(rows), 'usable': len(variants), 'share': args.neuralese_variant_share}
+    (Path(work) / 'neuralese-variants.json').write_text(json.dumps(record, indent=1) + '\n')
+    return variants
 
 
 def train(args):
@@ -937,6 +1057,7 @@ def train(args):
     drop_cache([Path(args.actor_export) / 'model.safetensors'])
     saver = StateSaver()
     collector = Collector(args, tasks, work, source_sha, runtime, first_group=first_group, cursor=cursor)
+    collector.variants = load_variants(args, tasks, work)
     collector.version = step
     (work / 'sampling-config.json').write_text(json.dumps({'guidance': False, 'x_natlang_rl_capture': True, 'x_natlang_rl_top_k': 0}) + '\n')
     versions_live = {'actor': step}
@@ -997,10 +1118,16 @@ def train(args):
         thread.start()
 
     checkpoint_root = Path(args.checkpoint_dir or Path(args.state_dir) / 'checkpoints')   # off the busy NVMe by default
+    # every trained episode is kept (compressed) beside the checkpoints: the w5 lesson (AGENTS.md: pruned bundles lost 85
+    # successful episodes); '-' keeps none
+    rollouts_archive = None if args.rollouts_dir == '-' else Path(args.rollouts_dir or checkpoint_root.parent / 'rollouts')
     checkpoints = sorted(checkpoint_root.glob('step-*'))
     held_steps = set(json.loads((work / 'held-steps.json').read_text())) if (work / 'held-steps.json').exists() else set()
     stop = threading.Event()
-    signal.signal(signal.SIGTERM, lambda *_: stop.set())
+    # A unit stop signals every process of the cgroup, so the child actor goes at once: slots stop starting episodes
+    # (each would fail in seconds on 'fetch failed' and burn its whole group as infrastructure errors, 97 episodes in
+    # the two run2 restarts of 2026-11-13); the learner finishes the step it is in.
+    signal.signal(signal.SIGTERM, lambda *_: (stop.set(), collector.stop.set()))
 
     def write_native(step_number):
         directory = checkpoint_root / f'step-{step_number:05d}'
@@ -1224,7 +1351,7 @@ def train(args):
                 log_line(log, {'event': 'group lowering failed', 'group': group, 'error': repr(error)[:400]})
                 prune_group(collector, group, keep=True)
                 continue
-            prune_group(collector, group, keep=args.keep_rollouts)
+            prune_group(collector, group, keep=args.keep_rollouts, archive=rollouts_archive, stats=stats)
             if not episodes:
                 continue
             if args.synthetic_reward:
@@ -1253,7 +1380,8 @@ def train(args):
                     if decision_tokens(d) > args.max_sequence_tokens:
                         stats['decisions_too_long_dropped'] += 1
                     else:
-                        decisions.append({'row': d, 'advantage': advantage})
+                        decisions.append({'row': d, 'advantage': advantage, 'group': group, 'task_id': task_id,
+                                          'stale': stale, 'actor_version': step - stale})
         # A sampled decision is one action (one categorical sample), so it counts as one unit beside the sampled tokens.
         loss_tokens = sum(length for c in chains for _, length, _ in c['segs'])
         units = loss_tokens + len(decisions)
@@ -1263,6 +1391,8 @@ def train(args):
                   'staleness': dict(collections.Counter(staleness)), 'episodes': len(rewards),
                   'reward_mean': round(sum(rewards) / max(1, len(rewards)), 4), 'sequences': len(chains),
                   'loss_tokens': loss_tokens, 'decisions': len(decisions), 'lowering': dict(stats),
+                  'rollouts_archive_free_gb': round(shutil.disk_usage(rollouts_archive).free / 2**30, 1)
+                  if rollouts_archive is not None and rollouts_archive.exists() else None,
                   'actor_version': versions_live['actor']}
         if args.synthetic_reward:
             record.update(synthetic_reward=args.synthetic_reward,
@@ -1341,6 +1471,7 @@ def train(args):
                                'swap_pages': {k: v - swap0[k] for k, v in vmstat().items()}})
         # Sampled decisions: log pi(chosen) = log_softmax(s / T)[chosen], s_o the summed log-probability of option o's
         # continuation after the exact prompt (as the actor scored it); TIS and k3 on the chosen option as for a token.
+        decision_records = []
         for batch in decision_batches(decisions, args.decision_batch_tokens):
             ids, lengths, positions, targets, owner, counts, spans = decision_tensors(batch, 'cuda')
             imports = lfm3_fast_train.import_tensors(model, [(start, collector.states(block_id)) for start, block_id in spans])
@@ -1371,6 +1502,9 @@ def train(args):
                     weight = rho.clamp(max=args.rho_cap)
                     actor_scores = torch.from_numpy(row['scores']).cuda()
                     sums['decision_abs_dscore'] += (scores[start:start + k].detach() - actor_scores).abs().mean().item()
+                    decision_records.append(decision_record(
+                        item, scores[start:start + k].detach().float().cpu().numpy(), row['scores'],
+                        None if ref_scores is None else ref_scores[start:start + k].float().cpu().numpy(), log_rho.item()))
                 term = -(weight * item['advantage'] * logpi)
                 if ref_scores is not None:
                     d = torch.log_softmax(ref_scores[start:start + k] / row['temperature'], 0)[row['chosen']] - logpi
@@ -1391,6 +1525,11 @@ def train(args):
             torch.cuda.synchronize()
             phase['decision_forward_backward'] = phase.get('decision_forward_backward', 0.) + time.time() - t
         collector.states.cache.clear()    # this step's imported states (lowering loads them, the learner reuses them)
+        if decision_records:
+            (work / 'decisions').mkdir(exist_ok=True)
+            with (work / 'decisions' / f'step-{step + 1:05d}.jsonl').open('w') as handle:
+                handle.writelines(json.dumps(r) + '\n' for r in decision_records)
+        record['decision_diagnostics'] = decision_summary(decision_records)
         t = time.time()
         saver.wait()                      # a state save in flight must finish before the masters change
         phase['wait_state_save'] = time.time() - t
@@ -1539,7 +1678,14 @@ def main():
                    'rate); empty: own outcomes only')
     t.add_argument('--pass-band', type=float, nargs=2, default=(0.1, 0.9))
     t.add_argument('--pass-min-scored', type=int, default=2)
-    t.add_argument('--explore', type=float, default=0.15, help='share of groups from unmeasured pool tasks')
+    t.add_argument('--explore', type=float, default=0.4,
+                   help='share of groups from unmeasured pool tasks (TASK_SUPPLY_20261113: a learnable-task group leaves '
+                        'the band at 0/8 or 8/8 about 22%% of the time and an explored group enters it about 44%%, so '
+                        'below ~1/3 the learnable set shrinks)')
+    t.add_argument('--neuralese-variants', help='Neuralese-declaring variants of pool tasks (cases.jsonl from '
+                   'scripts/rl_tasks/neuralese_variants.py; off by default: a controlled addition)')
+    t.add_argument('--neuralese-variant-share', type=float, default=0.5,
+                   help='share of the groups of a task with a variant that run the variant')
     t.add_argument('--exclude-family-regex', default=r'^ext_codebase-(py|natlang)_codebase_',
                    help='families never selected (default: codebase families whose repos are missing on the DGX)')
     t.add_argument('--max-turns', type=int, default=128)
@@ -1565,6 +1711,8 @@ def main():
     t.add_argument('--checkpoint-dir', help='pruned native checkpoints (default STATE_DIR/checkpoints)')
     t.add_argument('--resume', action='store_true')
     t.add_argument('--keep-rollouts', action='store_true', help='keep group directories (and every actor store block)')
+    t.add_argument('--rollouts-dir', help="each lowered group's rollouts.jsonl, zstd-compressed, before its directory is "
+                   "pruned (default: CHECKPOINT_DIR/../rollouts; '-': none)")
     t.add_argument('--block-gc-grace', type=float, default=600.,
                    help='after each step delete actor store blocks unused since this many seconds before the oldest '
                    'outstanding group was created (negative: never)')

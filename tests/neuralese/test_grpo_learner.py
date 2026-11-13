@@ -70,3 +70,55 @@ def test_a_publish_failure_is_this_versions_failure(tmp_path):
     sync.wait()
     assert done == [(4, False)] and sync.last['version'] == 4 and not sync.last['ok']
     assert 'publish failed' in sync.last['answer']
+
+
+def test_pruned_groups_keep_their_rollouts_compressed(tmp_path):
+    import types
+    import zstandard
+    directory = tmp_path / 'groups' / 'g000007'
+    (directory / 'workers').mkdir(parents=True)
+    rollouts = b''.join(b'{"task_id": "t", "turns": []}\n' for _ in range(100))
+    (directory / 'rollouts.jsonl').write_bytes(rollouts)
+    for name in ('score.json', 'rewards.jsonl', 'versions.json', 'cases.jsonl', 'journal.jsonl'):
+        (directory / name).write_text('{}\n')
+    collector = types.SimpleNamespace(groups={7: {'dir': directory}})
+    stats = collections.Counter()
+    grpo.prune_group(collector, 7, keep=False, archive=tmp_path / 'rollouts', stats=stats)
+    archived = tmp_path / 'rollouts' / 'g000007.rollouts.jsonl.zst'
+    assert zstandard.ZstdDecompressor().stream_reader(archived.open('rb')).read() == rollouts
+    assert stats['rollouts_archived'] == 1 and stats['rollouts_archived_bytes'] == archived.stat().st_size
+    assert sorted(p.name for p in directory.iterdir()) == ['cases.jsonl', 'rewards.jsonl', 'score.json', 'versions.json']
+
+
+def test_a_failed_archive_keeps_the_group_in_place(tmp_path):
+    import types
+    directory = tmp_path / 'g000008'
+    directory.mkdir()
+    (directory / 'rollouts.jsonl').write_text('{}\n')
+    (tmp_path / 'blocked').write_text('a file, not a directory')
+    stats = collections.Counter()
+    grpo.prune_group(types.SimpleNamespace(groups={8: {'dir': directory}}), 8, keep=False,
+                     archive=tmp_path / 'blocked', stats=stats)
+    assert (directory / 'rollouts.jsonl').exists() and stats['rollout_archive_failed'] == 1
+
+
+def test_decision_diagnostics_separate_numerics_from_drift():
+    import math
+    row = {'prompt': np.arange(50, dtype=np.int32), 'options': [np.array([1, 2]), np.array([3, 4, 5])], 'chosen': 1,
+           'temperature': 1.0, 'policy': 'p', 'index': 3, 'invocation': 'i', 'imports': []}
+    actor = np.array([-1.0, -2.0])
+    row['behavior_logq'] = -2.0 - math.log(math.exp(-1.0) + math.exp(-2.0))
+    item = {'row': row, 'advantage': 0.5, 'group': 4, 'task_id': 't', 'stale': 1, 'actor_version': 2}
+    learner = actor + 3.0                       # a shared offset: the categorical is unchanged
+    reference = actor + np.array([0.0, 0.4])    # the start policy prefers the chosen option more
+    record = grpo.decision_record(item, learner, actor, reference, 0.0)
+    assert record['actor_logq_recomputed'] == pytest.approx(row['behavior_logq'], abs=1e-5)
+    assert record['learner_logpi'] == pytest.approx(row['behavior_logq'], abs=1e-5)
+    assert record['dscore_abs_mean'] == pytest.approx(3.0) and record['dscore_centered_abs_max'] == pytest.approx(0.)
+    assert record['ref_log_rho'] > 0 and record['option_ids'] == [[1, 2], [3, 4, 5]]
+    other = dict(record, log_rho=-0.9, stale=0)
+    summary = grpo.decision_summary([record, other])
+    assert summary['n'] == 2 and summary['abs_log_rho_max'] == pytest.approx(0.9)
+    assert summary['abs_log_rho_mean_by_stale'] == {'0': 0.9, '1': 0.0} and summary['worst']['stale'] == 0
+    assert summary['option_tokens_max'] == 3 and summary['prompt_tokens_max'] == 50
+    assert grpo.decision_summary([]) == {}
