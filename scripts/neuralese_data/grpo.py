@@ -73,12 +73,25 @@ REPO = HERE.parents[1]
 sys.path[:0] = [str(REPO / 'training/neuralese'), str(REPO), str(HERE)]
 
 from natlang_neuralese.common.paths import resolve_str  # noqa: E402
+from natlang_neuralese.rl.held_eval import EPISODE_MODEL_CALLS  # noqa: E402
 
 BASE = str(Path.home() / '.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd')
 POOLS = [resolve_str('data_hdd', 'natlang-rl-composed-20261103', 'memetic-program-source-20261105', 'cases.jsonl'),
          # fallow K1: bgkit KR reader families, 4,734 rows verified by reference/negative/alias replay (verification.json)
          resolve_str('data_hdd', 'natlang-rl-bgkit-kr-20261103', 'natlang-rl-bgkit-kr-20261103', 'cases.jsonl')]
 HELD = resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'held-v2', 'manifest.json')
+# Pool rows known to be wrong (an oracle's expected answer, a garbled task): every *.jsonl here is excluded by default.
+ERRATA = resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'pool-errata')
+
+
+def errata_files(args):
+    """The errata JSONL files a run excludes: ``--exclude-ids`` when given, else every ``ERRATA/*.jsonl`` (none with
+    ``--no-default-errata``)."""
+    if args.exclude_ids:
+        return list(args.exclude_ids)
+    if getattr(args, 'no_default_errata', False) or not Path(ERRATA).is_dir():
+        return []
+    return [str(path) for path in sorted(Path(ERRATA).glob('*.jsonl'))]
 
 
 def drop_cache(paths):
@@ -925,7 +938,8 @@ def load_tasks(args, work=None):
     import re
     broken = re.compile(args.exclude_family_regex) if args.exclude_family_regex else None
     errata = set()   # pool rows known to be wrong (e.g. an oracle's expected answer): never selected
-    for path in args.exclude_ids:
+    errata_paths = errata_files(args)
+    for path in errata_paths:
         errata |= {row['id'] for row in read_jsonl(path)}
     eligible = [r for r in rows if r['id'] not in excluded and r['id'] not in errata and r.get('split', 'train') == 'train'
                 and not (broken and broken.search(str(r.get('family') or '')))]
@@ -937,7 +951,7 @@ def load_tasks(args, work=None):
                   'eligible_ids_sha256': hashlib.sha256('\n'.join(sorted(r['id'] for r in eligible)).encode()).hexdigest(),
                   'families': len({r.get('family') for r in eligible}),
                   'excluded_family_regex': args.exclude_family_regex,
-                  'excluded_errata': [{'path': str(p), 'sha256': sha256_file_hex_cached(Path(p))} for p in args.exclude_ids],
+                  'excluded_errata': [{'path': str(p), 'sha256': sha256_file_hex_cached(Path(p))} for p in errata_paths],
                   'excluded_errata_ids': len(errata & {r['id'] for r in rows}),
                   'selection': {'pass_rates': args.pass_rates, 'band': args.pass_band, 'min_scored': args.pass_min_scored,
                                 'explore': args.explore, 'own_outcomes': 'latest scored group per task replaces its rate'},
@@ -1248,7 +1262,8 @@ def train(args):
             with (work / 'held.log').open('a') as handle:
                 code = subprocess.run([*python, 'measure', '--manifest', args.held_manifest, '--endpoint',
                                        f'{args.actor}={args.held_workers}', '--policy-id', policy, '--samples', str(samples),
-                                       '--out', str(out), '--label', f'grpo-{name or f"step-{step_number}"}'],
+                                       '--out', str(out), '--label', f'grpo-{name or f"step-{step_number}"}',
+                                       '--max-model-requests', str(args.max_model_requests)],
                                       cwd=REPO, env=pinned_env(), stdout=handle, stderr=subprocess.STDOUT).returncode
                 base = Path(args.held_baseline) if args.held_baseline else work / 'held' / 'step-00000' / 'result.json'
                 if (step_number or name) and code == 0 and base.exists():
@@ -1365,7 +1380,8 @@ def train(args):
                 code = subprocess.run([*python, 'measure', '--manifest', args.held_manifest, '--endpoint',
                                        f'{endpoint}={args.held_remote_slots}', '--policy-id', policy, '--samples',
                                        str(args.held_samples), '--out', str(out), '--label', f'grpo-pop-step-{step_number}',
-                                       '--allow-other-engine'], cwd=REPO, env=pinned_env(), stdout=handle,
+                                       '--allow-other-engine', '--max-model-requests', str(args.max_model_requests)],
+                                      cwd=REPO, env=pinned_env(), stdout=handle,
                                       stderr=subprocess.STDOUT).returncode
                 if step_number and code == 0 and (base_out / 'result.json').exists():
                     subprocess.run([*python, 'compare', str(base_out / 'result.json'), str(out / 'result.json'), '--out',
@@ -1788,8 +1804,9 @@ def main():
     t.add_argument('--max-outstanding', type=int, default=0, help='groups in flight or waiting (default max-groups + slots/group)')
     t.add_argument('--max-staleness', type=int, default=2)
     t.add_argument('--case-seconds', type=int, default=3600, help='wall-clock safety net only (a wall stop is unscored)')
-    t.add_argument('--max-model-requests', type=int, default=40,
-                   help='episode budget in model calls; a budget stop scores as a failure (EPISODE_COST_20261112)')
+    t.add_argument('--max-model-requests', type=int, default=EPISODE_MODEL_CALLS,
+                   help='episode budget in model calls for training and the held evals alike; a budget stop scores as a '
+                        'failure (EPISODE_COST_20261112)')
     t.add_argument('--pass-rates', default=resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'exp1-rft', 'base-pass-rates.json'),
                    help="measured base pass rates per task (re-read every 10 min; a task's own latest group replaces its "
                    'rate); empty: own outcomes only')
@@ -1804,7 +1821,9 @@ def main():
     t.add_argument('--neuralese-variant-share', type=float, default=0.5,
                    help='share of the groups of a task with a variant that run the variant')
     t.add_argument('--exclude-ids', action='append', default=[],
-                   help='JSONL of pool rows never selected ({"id": ...} per line; e.g. ops/pool-errata/*.jsonl: wrong oracles)')
+                   help='JSONL of pool rows never selected ({"id": ...} per line; wrong oracles, garbled tasks); '
+                        'default: every ops/pool-errata/*.jsonl')
+    t.add_argument('--no-default-errata', action='store_true', help='do not exclude the ops/pool-errata rows by default')
     t.add_argument('--exclude-family-regex', default=r'^ext_codebase-(py|natlang)_codebase_',
                    help='families never selected (default: codebase families whose repos are missing on the DGX)')
     t.add_argument('--max-turns', type=int, default=128)
