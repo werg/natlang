@@ -25,7 +25,7 @@ function project() {
   writeFileSync(join(root, 'package.json'), '{"type":"module"}');
   const examples = words.map(value => ({ function: 'outer.nl', input: { value }, expected: value.toUpperCase() }));
   examples.push({ function: 'outer.nl', input: { value: 'held' }, expected: 'HELD', protected: true });
-  writeFileSync(join(root, 'tune.examples.jsonl'), examples.map(example => JSON.stringify(example)).join('\n') + '\n');
+  writeFileSync(join(root, 'examples.json'), JSON.stringify(examples.map(({ input, ...example }) => ({ ...example, inputs: input }))));
   // A trainer stand-in honouring the recipe's per-level ranks (0: no adapter) and removed (scale 0) nodes; it counts
   // its invocations so resumption can be checked.
   writeFileSync(join(root, 'trainer.mjs'), `import { readFileSync, writeFileSync, appendFileSync } from 'node:fs';

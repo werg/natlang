@@ -21,7 +21,7 @@ function project() {
   writeFileSync(join(root, 'outer', 'inner.nl'), named('Return value in uppercase.'));
   writeFileSync(join(root, 'package.json'), '{"type":"module"}');
   const examples = values.map(value => ({ function: 'outer.nl', input: { value }, expected: value.toUpperCase(), group: `w:${value}` }));
-  writeFileSync(join(root, 'tune.examples.jsonl'), examples.map(example => JSON.stringify(example)).join('\n') + '\n');
+  writeFileSync(join(root, 'examples.json'), JSON.stringify(examples.map(({ input, ...example }) => ({ ...example, inputs: input }))));
   return root;
 }
 const program = root => {
@@ -54,8 +54,8 @@ test('verified scored decisions become training turns without privileged prompts
   const root = project();
   try {
     writeFileSync(join(root, 'outer.nl'), '---\nargs: { value: string }\nreturns: "yes" | "no"\nreadout: decision\n---\nChoose yes.\n');
-    writeFileSync(join(root, 'tune.examples.jsonl'), values.map(value => JSON.stringify({function:'outer.nl',
-      input:{value},expected:'yes',group:`w:${value}`})).join('\n')+'\n');
+    writeFileSync(join(root, 'examples.json'), JSON.stringify(values.map(value => ({function:'outer.nl',
+      inputs:{value},expected:'yes',group:`w:${value}`}))));
     const examples = split(root);
     writeReferences(root, examples.filter(example => example.partition === 'train'));
     const seen = [];

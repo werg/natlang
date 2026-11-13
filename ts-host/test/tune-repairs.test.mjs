@@ -25,7 +25,7 @@ function project() {
   writeFileSync(join(root, 'package.json'), '{"type":"module"}');
   const examples = ['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'eta', 'theta'].map(value => ({ function: 'outer.nl', input: { value }, expected: value.toUpperCase() }));
   examples.push({ function: 'outer.nl', input: { value: 'held' }, expected: 'HELD', protected: true });
-  writeFileSync(join(root, 'tune.examples.jsonl'), examples.map(example => JSON.stringify(example)).join('\n') + '\n');
+  writeFileSync(join(root, 'examples.json'), JSON.stringify(examples.map(({ input, ...example }) => ({ ...example, inputs: input }))));
   writeFileSync(join(root, 'trainer.mjs'), `import { readFileSync, writeFileSync } from 'node:fs';
 import { writeNativeTuneTensor } from ${JSON.stringify(new URL('./fixtures/native-tune.mjs', import.meta.url).href)};
 const args = process.argv.slice(2), plan = JSON.parse(readFileSync(args[args.indexOf('--plan') + 1], 'utf8')), out = args[args.indexOf('--out') + 1];

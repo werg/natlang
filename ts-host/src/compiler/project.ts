@@ -503,6 +503,8 @@ export function compileProject(options: BuildOptions): BuildResult {
         }
         collectSources(path);
       }
+      // The program's examples.json is its test and tuning data, not a source: saving an example changes no build.
+      else if (dir === root && name === 'examples.json') continue;
       else if (fs.isFile(path) && /\.(?:[cm]?ts|[cm]?js|nl|json|yaml|yml)$/.test(name)) {
         let text = fs.read(path);
         // Portable artifacts may live at any declared relative path. Their

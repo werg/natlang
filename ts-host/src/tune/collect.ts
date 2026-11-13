@@ -60,14 +60,22 @@ export type CollectedTurn = {
 
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
-/** Read `tune.examples.jsonl` beside the program (or an explicit path). Each line is one root invocation. */
-export function readRootExamples(root: string, path = join(root, 'tune.examples.jsonl')): RootExample[] {
+/**
+ * Read the program's `examples.json` (or an explicit path), the one example store `natlang test` checks too: an array of
+ * `{ name?, function, inputs, expected?, group?, reference?, protected?, source? }`. Each entry is one root invocation;
+ * one without `expected` is an input the teacher's run (verified by the program's verifier) labels.
+ */
+export function readRootExamples(root: string, path = join(root, 'examples.json')): RootExample[] {
   if (!existsSync(path)) return [];
-  return readFileSync(path, 'utf8').split('\n').filter(line => line.trim()).map((line, index) => {
-    const value = JSON.parse(line) as RootExample;
-    if (typeof value.function !== 'string' || !value.function) throw new Error(`${path}:${index + 1}: each example names its root function`);
-    if (!('input' in value)) throw new Error(`${path}:${index + 1}: each example has an input`);
-    return value;
+  let parsed: unknown;
+  try { parsed = JSON.parse(readFileSync(path, 'utf8')); } catch (error) { throw new Error(`${path} is not valid JSON: ${(error as Error).message}`); }
+  if (!Array.isArray(parsed)) throw new Error(`${path} must be an array of { function, inputs, expected } examples`);
+  return parsed.map((value: Record<string, unknown>, index) => {
+    const at = `${path}: example ${index + 1}${typeof value?.name === 'string' ? ` (${value.name})` : ''}`;
+    if (!value || typeof value !== 'object' || typeof value.function !== 'string' || !value.function) throw new Error(`${at} names no root function; add "function": "FILE.nl"`);
+    if (!value.inputs || typeof value.inputs !== 'object' || Array.isArray(value.inputs)) throw new Error(`${at} has no inputs object; add "inputs": { PARAMETER: VALUE }`);
+    const { name: _name, inputs, ...rest } = value;
+    return { ...rest, input: inputs } as unknown as RootExample;
   });
 }
 

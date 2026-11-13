@@ -51,7 +51,7 @@ function project(name, stub) {
   writeFileSync(join(root, 'package.json'), JSON.stringify({ name, type: 'module' }));
   const examples = ['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'eta', 'theta'].map(value =>
     ({ function: 'outer.nl', input: { value: value + name }, expected: (value + name).toUpperCase() }));
-  writeFileSync(join(root, 'tune.examples.jsonl'), examples.map(example => JSON.stringify(example)).join('\n') + '\n');
+  writeFileSync(join(root, 'examples.json'), JSON.stringify(examples.map(({ input, ...example }) => ({ ...example, inputs: input }))));
   const built = host.buildProject({ project: root, emit: false, write: false });
   assert.equal(built.ok, true, host.formatDiagnostics(built.diagnostics));
   const settings = { student: 'lfm', students: {}, teacher: 'teacher', backend: 'managed-local', teacherRouting: { minSuccess: .5 },
