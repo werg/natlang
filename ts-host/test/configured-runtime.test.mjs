@@ -92,18 +92,18 @@ test('a root call the student fails and the teacher runs adds its input to the p
       const natlang = await natlangRuntime({ programRoot: directory, environment, log: log.stream });
       assert.equal(await natlang.runtime.run(() => answer('six times seven')), 42);
       await natlang.close();
-      const lines = readFileSync(join(directory, 'tune.examples.jsonl'), 'utf8').trim().split('\n').map(line => JSON.parse(line));
+      const lines = JSON.parse(readFileSync(join(directory, 'examples.json'), 'utf8'));
       assert.equal(lines.length, 1, 'the same input is listed once');
       assert.equal(lines[0].function, 'answer.nl');
-      assert.deepEqual(lines[0].input, { question: 'six times seven' });
+      assert.deepEqual(lines[0].inputs, { question: 'six times seven' });
       assert.ok(!('expected' in lines[0]), 'a teacher answer is not an oracle');
       assert.match(lines[0].group, /^escalations-\d{8}-[0-9a-f]{8}$/);
-      if (round === 0) assert.match(log.lines.join(''), /answer: its input joins .*tune\.examples\.jsonl/);
+      if (round === 0) assert.match(log.lines.join(''), /answer: its inputs join .*examples\.json/);
     }
     const off = await natlangRuntime({ programRoot: directory, environment: { ...environment, NATLANG_ESCALATION_EXAMPLES: 'off' }, log: collect().stream });
     await off.runtime.run(() => answer('two plus two'));
     await off.close();
-    assert.equal(readFileSync(join(directory, 'tune.examples.jsonl'), 'utf8').trim().split('\n').length, 1);
+    assert.equal(JSON.parse(readFileSync(join(directory, 'examples.json'), 'utf8')).length, 1);
   } finally { rmSync(directory, { recursive: true, force: true }); await student.close(); await teacher.close(); }
 });
 

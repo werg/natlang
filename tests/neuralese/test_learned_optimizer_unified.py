@@ -185,19 +185,19 @@ def test_meta_examples_label_the_optimizers_own_stages_exactly(tmp_path):
     assert stop_labels([3., 3.]) == [True, True]
     plan, _, _ = operation(tmp_path)
     spec = write(tmp_path / 'meta-spec.json', {'programs': [{'plan': plan}], 'work': str(tmp_path / 'meta'),
-                                               'out': str(tmp_path / 'meta' / 'tune.examples.jsonl'), 'steps': 2,
+                                               'out': str(tmp_path / 'meta' / 'examples.json'), 'steps': 2,
                                                'refine_steps': 1, 'fit': {'steps': 1, 'refine_steps': 1}})
     assert learned(['meta-examples', '--spec', spec]) == 0
-    rows = [json.loads(line) for line in (tmp_path / 'meta' / 'tune.examples.jsonl').read_text().splitlines()]
+    rows = json.loads((tmp_path / 'meta' / 'examples.json').read_text())
     functions = [row['function'] for row in rows]
     assert functions == ['adapt/chooseFocus.nl', 'adapt/chooseRevision.nl', 'adapt/chooseOperator.nl', 'adapt/chooseOperator.nl',
                          'adapt/shouldStop.nl', 'adapt/shouldStop.nl', 'adapt.nl']
     assert {row['group'] for row in rows} == {'meta:p'}
     focus, revision, operators, root = rows[0], rows[1], rows[2:4], rows[-1]
     assert focus['expected'] == sorted(focus['expected']) and set(focus['expected']) <= {'bx', 'by'}
-    receipts = [json.loads(line) for line in (tmp_path / 'meta' / 'tune.examples.jsonl.receipts.jsonl').read_text().splitlines()]
+    receipts = [json.loads(line) for line in (tmp_path / 'meta' / 'examples.json.receipts.jsonl').read_text().splitlines()]
     # The revision label: per focused binding, the single operation that lowers the support loss most, else "keep".
-    assert set(revision['expected']['operations']) == {'bx', 'by'} and revision['input']['focus'] == focus['expected']
+    assert set(revision['expected']['operations']) == {'bx', 'by'} and revision['inputs']['focus'] == focus['expected']
     for binding, chosen in revision['expected']['operations'].items():
         tried = revision['reference']['losses'].get(binding, {})
         if binding not in focus['expected']:
@@ -209,16 +209,16 @@ def test_meta_examples_label_the_optimizers_own_stages_exactly(tmp_path):
         losses = step['losses']
         best = min(losses, key=losses.get) if losses else None
         assert row['expected'] == (best if best and losses[best] < step['incumbentLoss'] else 'keep')
-        assert row['input']['plan']['operations'] == revision['expected']['operations']
+        assert row['inputs']['plan']['operations'] == revision['expected']['operations']
         assert set(losses) == (set() if set(revision['expected']['operations'].values()) == {'keep'}
                                else {'learned-proposal', 'local-refinement', 'retrieval'})
-    assert rows[-2]['expected'] is True and rows[-2]['input']['state']['remainingSteps'] == 0
+    assert rows[-2]['expected'] is True and rows[-2]['inputs']['state']['remainingSteps'] == 0
     # Graded rewards (applications/learned-optimizer/tune.reward.mjs) read these exact measurements.
     assert focus['reference'] == {'focus': focus['expected']}
     assert rows[-2]['reference'] == {'stop': True, 'remainingShare': 0.}
     # The whole episode is a root too, run against the live services of this program's context.
-    assert root['input'] == {'maxSteps': 2} and 'expected' not in root
+    assert root['inputs'] == {'maxSteps': 2} and 'expected' not in root
     assert root['reference']['plan'] == str(Path(plan).resolve()) and Path(root['reference']['out']).is_dir()
     assert root['reference']['bestLoss'] == receipts[0]['bestLosses'][-1] <= root['reference']['incomingLoss']
     assert learned(['meta-examples', '--spec', spec]) == 0  # finished programs are skipped
-    assert len((tmp_path / 'meta' / 'tune.examples.jsonl').read_text().splitlines()) == len(rows)
+    assert len(json.loads((tmp_path / 'meta' / 'examples.json').read_text())) == len(rows)

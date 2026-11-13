@@ -6,7 +6,7 @@
 SOURCE_DIR is an assembled composed task source (cases.jsonl, held/{dev,confirmation}.jsonl: verified, custody
 filtered). Each tune program is one reusable natlang program directory in the layout `natlang_neuralese.tune.supply`
 writes and `tune.structure` reads: `main.nl` with its callable folder `main/`, `types.ts`, `package.json` and
-`tune.examples.jsonl` (`{function, input, expected, group, reference}` rows, one invocation world per split unit). The
+`examples.json` (an array of `{function, inputs, expected, group, reference}`, one invocation world per split unit). The
 same program serves every world; the multi-operation kit has a second root function with its own examples.
 
 Oracles: the RL rows' own outcome oracles, applied by the program's crisp verifier `tune.reward.mjs` (span QA token F1
@@ -172,7 +172,7 @@ def main():
                 components[group] = PARTITION[split]
                 ref = r['curriculum']['reference']['root'][-1][1]['value']  # the verified accepted answer form
                 expected = r['semantics']['expected'] if not isinstance(r['semantics']['expected'], dict) else ref
-                examples.append({'function': f'{root}.nl', 'input': r['semantics']['inputs'], 'expected': expected,
+                examples.append({'function': f'{root}.nl', 'inputs': r['semantics']['inputs'], 'expected': expected,
                                  'group': group, 'reference': {'oracle': oracle_of(r), 'task': r['id'],
                                                                'source_ids': r['source_ids']}})
                 counts[f'{root}:{split}'] += 1
@@ -184,8 +184,8 @@ def main():
             path.write_text(text)
         (directory / 'package.json').write_text(json.dumps({'name': f'@natlang/tune-{name}', 'private': True, 'type': 'module'}) + '\n')
         (directory / 'tune.reward.mjs').write_text(VERIFIER)
-        payload = ''.join(json.dumps(e, sort_keys=True) + '\n' for e in examples)
-        (directory / 'tune.examples.jsonl').write_text(payload)
+        payload = json.dumps(examples, indent=1, sort_keys=True) + '\n'
+        (directory / 'examples.json').write_text(payload)
         (directory / '.natlang' / 'tune').mkdir(parents=True)
         (directory / '.natlang' / 'tune' / 'splits.json').write_text(json.dumps(
             {'schema': 'natlang.tune-split/v1', 'components': dict(sorted(components.items()))}, indent=1) + '\n')

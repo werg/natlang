@@ -216,7 +216,7 @@ def summary(op):
     state_path = Path(template.get('state', op / 'optimizer' / 'state.json'))
     state = json.loads(state_path.read_text()) if state_path.exists() else {}
     records = op / 'outer-rl' / 'records.jsonl'
-    meta = op / 'meta' / 'tune.examples.jsonl'
+    meta = op / 'meta' / 'examples.json'
     count = lambda path: sum(1 for line in path.read_text().splitlines() if line.strip()) if path.exists() else 0
     out = {'schema': 'natlang.lopt.lane-summary/1', 'operation': json.loads((op / 'operation.json').read_text()),
            'stages': status, 'tunes': tunes, 'failed_tunes': failed,
@@ -224,7 +224,7 @@ def summary(op):
            'outer': {'step': state.get('step'), 'bank': state.get('bank'), 'published': len(state.get('published', [])),
                      'adoptions': [{key: item[key] for key in ('step', 'from', 'to', 'bank_optimizer')} for item in state.get('adoptions', [])],
                      'labels_stale': state.get('labels_stale'), 'targets_seen': sum(state.get('exposure', {}).values())},
-           'outer_rl_records': count(records), 'meta_examples': count(meta),
+           'outer_rl_records': count(records), 'meta_examples': len(json.loads(meta.read_text())) if meta.exists() else 0,
            'note': 'saved artifacts and passing stages are not capability; lift needs development and confirmation outcomes'}
     print(json.dumps(out, indent=1, sort_keys=True))
     return out

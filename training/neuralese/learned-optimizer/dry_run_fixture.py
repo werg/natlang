@@ -40,7 +40,7 @@ def build(out):
         # The real lane's splits were persisted by the ts-host tuner (`currentSplit`); here: two of four worlds train.
         for item in json.loads((programs / 'programs-prepared.json').read_text())['programs']:
             directory = programs / item['program']
-            groups = sorted({json.loads(line)['group'] for line in (directory / 'tune.examples.jsonl').read_text().splitlines()})
+            groups = sorted({example['group'] for example in json.loads((directory / 'examples.json').read_text())})
             (directory / '.natlang' / 'tune').mkdir(parents=True, exist_ok=True)
             (directory / '.natlang' / 'tune' / 'splits.json').write_text(json.dumps({'schema': 'natlang.tune-split/v1', 'components': {
                 group: ('train', 'train', 'development', 'confirmation')[index % 4] for index, group in enumerate(groups)}}))

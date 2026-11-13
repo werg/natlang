@@ -42,7 +42,7 @@ function project() {
   writeFileSync(join(root, 'outer', 'inner.nl'), named('Look value up in the shop and return the name in uppercase.'));
   writeFileSync(join(root, 'package.json'), '{"type":"module"}');
   const examples = ['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'eta', 'theta'].map(value => ({ function: 'outer.nl', input: { value }, expected: value.toUpperCase() }));
-  writeFileSync(join(root, 'tune.examples.jsonl'), examples.map(example => JSON.stringify(example)).join('\n') + '\n');
+  writeFileSync(join(root, 'examples.json'), JSON.stringify(examples.map(({ input, ...example }) => ({ ...example, inputs: input }))));
   return root;
 }
 
