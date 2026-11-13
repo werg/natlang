@@ -191,6 +191,7 @@ def attention_layer_past(x, cos, sin, cu_q, cu_k, past_k, past_v, operator_norm,
 
 
 _COMPILED = {}
+RECOMPILE_LIMIT = 64
 
 
 def _kernel(name, compiled):
@@ -199,6 +200,10 @@ def _kernel(name, compiled):
     if not compiled:
         return function
     if name not in _COMPILED:
+        # One shared graph per layer kind specializes on window (full/sliding), grad mode, imported rows, packing and the
+        # prefix-tree passes: more than dynamo's default 8 variants, and fullgraph turns the 9th into a hard failure
+        # (grpo-v2-run1 died in step 1's KL reference pass on attention_layer, 2026-11-13).
+        torch._dynamo.config.recompile_limit = max(torch._dynamo.config.recompile_limit, RECOMPILE_LIMIT)
         _COMPILED[name] = torch.compile(function, dynamic=True, fullgraph=True)
     return _COMPILED[name]
 
