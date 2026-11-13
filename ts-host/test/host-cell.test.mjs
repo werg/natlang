@@ -194,7 +194,7 @@ test('syntax errors are reported with their position, not thrown', () => {
   assert.equal(result.usesNl, true);
   assert.ok(result.diagnostics.length > 0);
   assert.equal(result.diagnostics[0].severity, 'error');
-  assert.equal(result.diagnostics[0].code, 'typescript');
+  assert.match(result.diagnostics[0].code, /^TS\d+$/);
   assert.equal(result.diagnostics[0].line, 2);
   const brokenAmbient = lowerHostCell('await nl<string>`x`();', { ambientDeclarations: 'declare const (((' });
   assert.equal(brokenAmbient.diagnostics[0].file, 'ambient declarations');

@@ -13,6 +13,7 @@ import { readTypeAliases } from '../native/type-aliases.js';
 import { parseType, TypeEnv } from '../native/types.js';
 import { finiteValues } from '../native/decision.js';
 import { RESERVED_CALLABLE_PROPERTIES, invalidNameMessage, reservedNameMessage } from '../compiler/intrinsics.js';
+import { closestName } from '../compiler/suggest.js';
 import { checkConstrainedSource } from '../compiler/policy.js';
 import { loadNzSync, registerImportedNativeArtifacts } from '../native/nz-file.js';
 import { genericResult, type GenericResult } from '../native/representation.js';
@@ -74,10 +75,16 @@ export type ItemRecord = NatlangRecord | ModuleRecord | NamespaceRecord;
 
 /** A source file that is not a valid natlang item: `reason` says why, at `line` (1-based) when it is known. */
 export class NatlangSourceError extends Error {
-  constructor(readonly path: string, readonly reason: string, readonly line?: number) {
-    super(`${path}${line === undefined ? '' : `:${line}`}: ${reason}`); this.name = 'NatlangSourceError';
+  constructor(readonly path: string, readonly reason: string, readonly line?: number, readonly hint?: string) {
+    super(`${path}${line === undefined ? '' : `:${line}`}: ${reason}${hint ? ` (${hint})` : ''}`); this.name = 'NatlangSourceError';
   }
 }
+/** A frontmatter error at `line` (1-based, counted from the first frontmatter line). */
+const atLine = (message: string, line: number) => Object.assign(new Error(message), { line });
+const lineOf = (error: unknown): number | undefined => typeof (error as { line?: unknown }).line === 'number' ? (error as { line: number }).line :
+  (error as { linePos?: { line: number }[] }).linePos?.[0]?.line;
+/** The type names a signature can use, for "did you mean" on an unknown one. */
+const PLAIN_TYPES = ['string', 'number', 'boolean', 'null', 'undefined', 'unknown', 'Date', 'Map', 'Set', 'URL', 'Error', 'RegExp'];
 
 /**
  * The line (1-based, in the whole `.nl` file) of frontmatter key `key`, or of its member `member` (`args: note: Nope`, in
@@ -174,13 +181,16 @@ function typeLiteralMap(key: string, text: string): Record<string, string> {
  * in quotes is the quoted text, as in YAML. The other keys are YAML.
  */
 export function readNatlangFrontmatter(source: string): Record<string, unknown> {
-  const lines = source.split(/\r?\n/), yaml: string[] = [], typed: Record<string, unknown> = {};
+  const lines = source.split(/\r?\n/), yaml: string[] = [], yamlLines: number[] = [], typed: Record<string, unknown> = {};
   for (let index = 0; index < lines.length; index++) {
     const match = TYPE_KEYS.exec(lines[index]!);
-    if (!match) { yaml.push(lines[index]!); continue; }
-    const key = match[1]!, inline = match[2]!.trim(), block: string[] = [];
+    if (!match) { yaml.push(lines[index]!); yamlLines.push(index + 1); continue; }
+    const key = match[1]!, inline = match[2]!.trim(), block: string[] = [], keyLine = index + 1;
     while (index + 1 < lines.length && /^(\s|$)/.test(lines[index + 1]!)) block.push(lines[++index]!);
     const body = block.filter(line => line.trim() && !line.trim().startsWith('#'));
+    try { readTyped(key, inline, body); } catch (error) { throw lineOf(error) ? error : atLine((error as Error).message, keyLine); }
+  }
+  function readTyped(key: string, inline: string, body: string[]): void {
     if (key in typed) throw new Error(`frontmatter repeats ${key}`);
     if (key === 'returns') {
       const text = unquoteType([inline, ...body.map(line => line.trim())].join(' '));
@@ -207,8 +217,11 @@ export function readNatlangFrontmatter(source: string): Record<string, unknown> 
       typed[key] = map;
     }
   }
-  const meta = YAML.parse(yaml.join('\n')) ?? {};
-  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) throw new Error('frontmatter must be a mapping');
+  let meta: unknown;
+  // A YAML error's line is of the YAML lines alone; it is reported at its line in the frontmatter.
+  try { meta = YAML.parse(yaml.join('\n')) ?? {}; }
+  catch (error) { const line = lineOf(error); throw line ? atLine((error as Error).message.split('\n')[0]!.replace(/ at line \d+, column \d+:?$/, ''), yamlLines[line - 1] ?? line) : error; }
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) throw atLine('frontmatter must be a mapping', 1);
   return { ...meta, ...typed };
 }
 
@@ -222,7 +235,11 @@ function checkSignature(path: string, args: Record<string, string>, returns: str
   const env = new TypeEnv(Object.fromEntries(Object.entries(types).map(([name, text]) => [name, parseType(text)])));
   const check = (type: string, line: () => number | undefined) => {
     try { env.checkNames(parseType(type)); }
-    catch (error) { throw new NatlangSourceError(path, (error as Error).message, line()); }
+    catch (error) {
+      const unknown = /^unknown type name (\S+)/.exec((error as Error).message)?.[1];
+      const near = unknown && closestName(unknown, [...Object.keys(types), ...PLAIN_TYPES]);
+      throw new NatlangSourceError(path, (error as Error).message, line(), near ? `did you mean ${near}?` : undefined);
+    }
   };
   for (const [name, type] of Object.entries(args)) check(type, () => frontmatterLine(text, 'args', name.replace(/\?$/, '')));
   check(returns, () => frontmatterLine(text, 'returns'));
@@ -233,45 +250,52 @@ export function parseNatlang(path: string, text: string, inherited: Record<strin
   const match = FRONTMATTER.exec(text);
   if (!match) throw new NatlangSourceError(path, 'a natural-language function needs frontmatter between --- lines');
   let meta: Record<string, unknown>;
-  try { meta = readNatlangFrontmatter(match[1]!); } catch (error) { throw new NatlangSourceError(path, (error as Error).message); }
-  for (const key of Object.keys(meta)) if (!NL_KEYS.has(key))
+  // Frontmatter lines are counted from the line after the opening ---.
+  try { meta = readNatlangFrontmatter(match[1]!); }
+  catch (error) { const line = lineOf(error); throw new NatlangSourceError(path, (error as Error).message, line === undefined ? undefined : line + 1); }
+  for (const key of Object.keys(meta)) if (!NL_KEYS.has(key)) {
+    const near = closestName(key, NL_KEYS);
     throw new NatlangSourceError(path, `unknown frontmatter field ${JSON.stringify(key)}; allowed: ${[...NL_KEYS].join(', ')}`,
-      frontmatterLine(text, key));
-  if (typeof meta.returns !== 'string') throw new NatlangSourceError(path, 'frontmatter needs a returns type');
+      frontmatterLine(text, key), near ? `did you mean ${near}?` : undefined);
+  }
+  if (typeof meta.returns !== 'string') throw new NatlangSourceError(path, 'frontmatter needs a returns type', 2);
   const subtype = String(meta.kind ?? 'function');
   if (subtype !== 'function' && subtype !== 'directory-reducer')
-    throw new NatlangSourceError(path, 'kind must be function or directory-reducer');
+    throw new NatlangSourceError(path, 'kind must be function or directory-reducer', frontmatterLine(text, 'kind'));
   const name = files.basename(path, '.nl');
   checkName(path, name);
   const types = { ...inherited, ...(meta.types as Record<string, string> ?? {}) };
   const args = (meta.args ?? {}) as Record<string, string>;
   let generic: GenericResult | undefined;
   try { generic = genericResult(meta.generic as Record<string, string> | undefined, meta.returns); }
-  catch (error) { throw new NatlangSourceError(path, (error as Error).message); }
+  catch (error) { throw new NatlangSourceError(path, (error as Error).message, frontmatterLine(text, 'generic')); }
   if (generic && (Object.hasOwn(types, generic.name) || Object.values(args).some(type => new RegExp(`(?<![\\w$])${generic!.name}(?![\\w$])`).test(type))))
-    throw new NatlangSourceError(path, `${generic.name} is the generic result; name the parameter something no argument or type alias uses`);
+    throw new NatlangSourceError(path, `${generic.name} is the generic result; name the parameter something no argument or type alias uses`,
+      frontmatterLine(text, 'generic'));
   if (generic && meta.readout === 'decision')
-    throw new NatlangSourceError(path, `readout: decision scores a finite crisp result; declare returns: ${generic.crisp} for it`);
+    throw new NatlangSourceError(path, `readout: decision scores a finite crisp result; declare returns: ${generic.crisp} for it`, frontmatterLine(text, 'readout'));
   const returns = generic?.crisp ?? meta.returns;
   checkSignature(path, args, returns, types, text);
   if (generic) checkSignature(path, {}, generic.neuralese, types);
   if (meta.readout !== undefined) {
-    if (meta.readout !== 'decision' && meta.readout !== 'template') throw new NatlangSourceError(path, 'readout must be decision or template');
+    if (meta.readout !== 'decision' && meta.readout !== 'template') throw new NatlangSourceError(path, 'readout must be decision or template', frontmatterLine(text, 'readout'));
   }
   // A model name is a word (small) or, where the runtime names models by provider, a "provider:id" ref.
   if (meta.model !== undefined && (typeof meta.model !== 'string' || !/^[A-Za-z_][\w.:/-]*$/.test(meta.model)))
-    throw new NatlangSourceError(path, 'model must name one of the runtime\'s models, such as small');
+    throw new NatlangSourceError(path, 'model must name one of the runtime\'s models, such as small', frontmatterLine(text, 'model'));
   const budget = callBudget(path, meta.budget, frontmatterLine(text, 'budget'));
   if (meta.uses !== undefined && (!Array.isArray(meta.uses) || meta.uses.some(item => typeof item !== 'string' ||
       !/^[A-Za-z_$][\w$]*(\/[A-Za-z_$][\w$]*)*$/.test(item))))
-    throw new NatlangSourceError(path, 'uses must list package items by path from the package root, such as [harness/cut]');
+    throw new NatlangSourceError(path, 'uses must list package items by path from the package root, such as [harness/cut]', frontmatterLine(text, 'uses'));
   if (meta.withhold !== undefined && (!Array.isArray(meta.withhold) ||
       meta.withhold.some(item => typeof item !== 'string' || !WITHHOLDABLE_TOOLS.includes(item))))
-    throw new NatlangSourceError(path, `withhold lists tools this function's calls are not offered, from: ${WITHHOLDABLE_TOOLS.join(', ')}`);
+    throw new NatlangSourceError(path, `withhold lists tools this function's calls are not offered, from: ${WITHHOLDABLE_TOOLS.join(', ')}`,
+      frontmatterLine(text, 'withhold'));
   if (meta.readout === 'decision') {
     const env = new TypeEnv(Object.fromEntries(Object.entries(types).map(([name, text]) => [name, parseType(text)])));
     if ((finiteValues(parseType(returns), env)?.length ?? 0) < 2)
-      throw new NatlangSourceError(path, 'readout: decision needs a finite returns type with at least two values, such as "yes" | "no"');
+      throw new NatlangSourceError(path, 'readout: decision needs a finite returns type with at least two values, such as "yes" | "no"',
+        frontmatterLine(text, 'returns'));
   }
   const source = files.relative?.(path) ?? path;
   return { kind: 'natlang', id: `nl:${source}`, name, source, revision: revisionOf(text), text,

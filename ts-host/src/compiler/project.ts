@@ -14,7 +14,7 @@ import { RewriteGate, rewriteCombinators, type RewriteRecord } from './rewrites.
 import { describeProgram, namedDescriptor, inlineDescriptor } from '../adaptation/inventory.js';
 import type { ComponentDescriptor, ProgramDescriptor } from '../adaptation/types.js';
 import { declarationNamespace } from '../native/external.js';
-import { analyzeInlineLambdas, spanOf, type InlineLambdaPlan, type NatlangDiagnostic } from './inline.js';
+import { analyzeInlineLambdas, fromTypeScript, spanOf, type InlineLambdaPlan, type NatlangDiagnostic } from './inline.js';
 import { checkConstrainedSource } from './policy.js';
 import { fusionCallSites } from './call-flow.js';
 import { analysisLowering, natlangTransformer } from './lower.js';
@@ -345,11 +345,11 @@ export function compileProject(options: BuildOptions): BuildResult {
   const diagnostics: NatlangDiagnostic[] = [];
   const files = sourceFiles(fs, root);
   const rel = (path: string) => relative(root, path);
-  const problem = (file: string, message: string, code: NatlangDiagnostic['code'] = 'callable-scope', line = 1) =>
-    diagnostics.push({ file, start: 0, end: 0, line, column: 1, code, message, severity: 'error' });
+  const problem = (file: string, message: string, code: NatlangDiagnostic['code'] = 'callable-scope', line = 1, hint?: string) =>
+    diagnostics.push({ file, start: 0, end: 0, line, column: 1, code, message, severity: 'error', ...(hint ? { hint } : {}) });
   // A source error names its own file (a folder's item, not the folder) and, when it knows it, the line.
   const sourceProblem = (fallback: string, error: unknown) => error instanceof NatlangSourceError ?
-    problem(rel(error.path), error.reason, 'callable-scope', error.line) : problem(rel(fallback), String(error));
+    problem(rel(error.path), error.reason, 'callable-scope', error.line, error.hint) : problem(rel(fallback), String(error));
 
   // Callable folders and named functions.
   const layout = callableFolders(fs, root);
@@ -399,7 +399,7 @@ export function compileProject(options: BuildOptions): BuildResult {
     fileExists: path => fs.isFile(path), readFile: path => fs.isFile(path) ? fs.read(path) : undefined,
     readDirectory: (dir, extensions, excludes, includes, depth) => fs.compiler ?
       ts.sys.readDirectory(dir, extensions, excludes, includes, depth) : walkTs(fs, dir),
-    onUnRecoverableConfigFileDiagnostic: diagnostic => problem(rel(configPath!), ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'), 'typescript') };
+    onUnRecoverableConfigFileDiagnostic: diagnostic => diagnostics.push(fromTypeScript(diagnostic, rel(configPath!))) };
   const parsed = configPath ? ts.getParsedCommandLineOfConfigFile(configPath, {}, configHost) : undefined;
   const compilerOptions: ts.CompilerOptions = { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.NodeNext,
     moduleResolution: ts.ModuleResolutionKind.NodeNext, strict: true, skipLibCheck: true,
@@ -465,14 +465,8 @@ export function compileProject(options: BuildOptions): BuildResult {
   const program = ts.createProgram({ rootNames: [INTRINSICS_FILE, ...(hasServicesDeclaration ? [] : [SERVICES_FALLBACK]),
     ...(usesNeuraleseModules ? [NEURALESE_MODULES] : []), ...(usesGepa ? [GEPA_MODULE] : []), ...rootNames],
     options: compilerOptions, host });
-  for (const diagnostic of ts.getPreEmitDiagnostics(program)) {
-    if (diagnostic.category !== ts.DiagnosticCategory.Error) continue;
-    const file = diagnostic.file;
-    const position = file && diagnostic.start !== undefined ? file.getLineAndCharacterOfPosition(diagnostic.start) : { line: 0, character: 0 };
-    diagnostics.push({ file: file ? rel(file.fileName) : '', start: diagnostic.start ?? 0, end: (diagnostic.start ?? 0) + (diagnostic.length ?? 0),
-      line: position.line + 1, column: position.character + 1, code: 'typescript', severity: 'error',
-      message: ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n') });
-  }
+  for (const diagnostic of ts.getPreEmitDiagnostics(program))
+    if (diagnostic.category === ts.DiagnosticCategory.Error) diagnostics.push(fromTypeScript(diagnostic, diagnostic.file ? rel(diagnostic.file.fileName) : ''));
   const sources = rootNames.map(path => program.getSourceFile(path)).filter((file): file is ts.SourceFile => !!file);
   if (options.constrained) for (const file of sources) diagnostics.push(...checkConstrainedSource(file, { checker: program.getTypeChecker(), displayPath: source => rel(source.fileName) }));
   for (const file of sources) diagnostics.push(...checkSequentialNlLoops(file, source => rel(source.fileName)));
@@ -662,7 +656,7 @@ export function compileProject(options: BuildOptions): BuildResult {
         `import { __natlang } from ${specifier};\nconst __nz = ${load};\n` + names.map(name => `export const ${name} = __nz.${name};\n`).join(''));
     }
     for (const diagnostic of emitted.diagnostics) if (diagnostic.category === ts.DiagnosticCategory.Error)
-      problem(diagnostic.file ? rel(diagnostic.file.fileName) : '', ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'), 'typescript');
+      diagnostics.push(fromTypeScript(diagnostic, diagnostic.file ? rel(diagnostic.file.fileName) : ''));
     if (options.write !== false) fs.write?.(join(outDir, 'natlang-manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
   }
   diagnostics.sort((a, b) => a.file.localeCompare(b.file) || a.start - b.start);
@@ -708,6 +702,7 @@ function detectRuntimeSpecifier(fs: ProjectFiles, files: string[]): string | und
 
 /** Format diagnostics for a terminal. */
 export function formatDiagnostics(diagnostics: readonly NatlangDiagnostic[]): string {
-  return diagnostics.map(item => `${item.file}:${item.line}:${item.column} ${item.severity} ${item.code}: ${item.message}`).join('\n');
+  return diagnostics.map(item => `${item.file}:${item.line}:${item.column} ${item.severity} ${item.code}: ${item.message}` +
+    (item.detail ? `\n${item.detail.split('\n').map(line => `  ${line}`).join('\n')}` : '') + (item.hint ? `\n  hint: ${item.hint}` : '')).join('\n');
 }
 export { spanOf };

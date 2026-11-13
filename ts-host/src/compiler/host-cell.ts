@@ -13,7 +13,7 @@
  */
 import ts from 'typescript';
 import { createNatlangCompilerHost, EVAL_COMPILER_OPTIONS, type CompilerFiles, type LibProvider } from './host.js';
-import { analyzeInlineLambdas, resolveIntrinsic, type InlineLambdaPlan, type NatlangDiagnostic } from './inline.js';
+import { analyzeInlineLambdas, fromTypeScript, resolveIntrinsic, type InlineLambdaPlan, type NatlangDiagnostic } from './inline.js';
 import { analysisLowering, natlangTransformer } from './lower.js';
 import { applyNlCallEdits, nlCallEdits } from './nl-call.js';
 import { INTRINSICS_FILE } from './intrinsics.js';
@@ -98,11 +98,7 @@ export function lowerHostCell(source: string, options: HostCellOptions): HostCel
     const program = ts.createProgram({ rootNames: [INTRINSICS_FILE, AMBIENT_FILE, cellFile], options: CELL_COMPILER_OPTIONS, host });
     return { program, cell: program.getSourceFile(cellFile)!, checker: program.getTypeChecker() };
   };
-  const diagnosticOf = (file: ts.SourceFile, shown: string, diagnostic: ts.Diagnostic): NatlangDiagnostic => {
-    const start = diagnostic.start ?? 0, location = file.getLineAndCharacterOfPosition(start);
-    return { file: shown, start, end: start + (diagnostic.length ?? 0), line: location.line + 1, column: location.character + 1,
-      code: 'typescript', severity: 'error', message: ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n') };
-  };
+  const diagnosticOf = (_file: ts.SourceFile, shown: string, diagnostic: ts.Diagnostic): NatlangDiagnostic => fromTypeScript(diagnostic, shown);
 
   let { program, cell, checker } = build(source);
   const referencesNl = (file: ts.SourceFile, check: ts.TypeChecker): boolean => {
