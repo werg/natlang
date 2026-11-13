@@ -115,3 +115,14 @@ test('guided generation is on for natlang backends unless the profile says other
   assert.deepEqual((await runtimeModel({ kind: 'managed-local', model: 'm', runtime: { guidance: { repeat: 3 } } }, ours)).model.guidance, { repeat: 3 });
   assert.equal('guidance' in (await runtimeModel({ kind: 'external', endpoint: 'http://x', model: 'm', apiKeyEnv: 'K' }, other)).model, false);
 });
+
+test('a managed stock model reads its decisions as {"result": VALUE}; a model natlang trained, an endpoint, or a profile that says so keeps the bare value', async () => {
+  const { resolveModelChoice } = await import('../dist/model/config.js');
+  assert.equal(resolveModelChoice({}).decisionReply, 'result-object');
+  assert.equal(resolveModelChoice({ local: { stock: 'lfm3-1.7b-q4_k_m' } }).decisionReply, 'result-object');
+  assert.equal(resolveModelChoice({ decisionReply: 'value' }).decisionReply, 'value');
+  assert.equal('decisionReply' in resolveModelChoice({ local: { modelPath: '/models/natlang.gguf' } }), false);
+  assert.equal('decisionReply' in resolveModelChoice({ endpoint: 'http://x', model: 'm' }), false);
+  assert.equal(resolveModelChoice({ endpoint: 'http://x', model: 'm', decisionReply: 'result-object' }).decisionReply, 'result-object');
+  assert.throws(() => resolveModelChoice({ decisionReply: 'object' }), /decisionReply must be value or result-object/);
+});
