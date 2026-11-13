@@ -311,8 +311,19 @@ self-call, a re-declaration of a captured (not input) variable inside a nested n
 which leaked an internal TypeError (fixed in f26ca612d: it now applies the function the instructions make).
 The repair now covers captured variables too (`boundValues`), same rule, same unmeasured-in-isolation status.
 12 cases, not ~48: adopted on the size of the effect; the self-call and invalid-binding counts are the measure.
-**Measurement debt:** the thinking-budget variants (unlimited, 256, 0) on the full suite, before choosing a default
-thinking budget (stopped twice by host memory pressure from other jobs).
+Thinking budget (measured 2026-11-13, closes this entry's debt): the full suite under unlimited, 256 and 0
+`thinking_budget_tokens`, one variant at a time on a pinned copy of 0efbf8a1f, same model, greedy, CPU shared with
+other jobs (wall times not comparable). Unlimited finished 28/28 (27 correct: classify 10's rubric block, above);
+256 stopped at 25/28 when an unhandled rejection ended the test process (a runtime bug, fixed: a promise derived from
+a call with `.then` and never awaited); 0 hit its 4 h cap at 19/28. On the cases all three finished
+(classify 10, is_urgent 8), turns / generated tokens per call / rejected actions per call:
+classify unlimited 1.40 / 1,087 / 0.30, 256 2.30 / 1,026 / 0.70, 0 5.10 / 1,260 / 2.70 (17 typescript-syntax);
+is_urgent unlimited 2.50 / 1,261 / 1.12, 256 2.00 / 727 / 0.88, 0 3.25 / 445 / 1.62 (one wrong: quiesced).
+Every finished answer was correct except think0's one. Decision: the default stays unlimited. Turning thinking off
+makes the model write broken code and take three to four times the turns; 256 keeps answers right and cuts
+is_urgent's tokens 42%, but costs classify extra turns, so it is the documented speed option, not the default.
+18 matched cases, not ~48: the turn and syntax-error differences are large; the 256-vs-unlimited token trade is not
+settled at this size.
 
 ### 2026-10-30 — first-program classifier starter (unmeasured debt)
 

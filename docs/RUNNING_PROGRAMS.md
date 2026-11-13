@@ -96,8 +96,9 @@ for a single command.
 A local profile's `request` refines the stock model's serving settings (greedy decoding, reasoning kept in the
 history) field by field. The stock model reasons before every action, which is slow on a CPU (about 10 generated tokens
 a second for Q4_K_M on four cores, and a turn often thinks for 1,500 tokens). `"request": { "thinking_budget_tokens":
-512 }` caps each turn's reasoning (0 turns it off); the dashboard's profile editor sets it as **Thinking**. Unlimited
-is how the model was evaluated, so a budget trades some accuracy for speed.
+256 }` caps each turn's reasoning (0 turns it off); the dashboard's profile editor sets it as **Thinking**. Unlimited
+is the default. On the triage example 256 kept every answer right and cut the urgency check's generated tokens by about
+40%, though classification took more turns; 0 made the model write broken code and take three to four times the turns.
 
 ## Running
 

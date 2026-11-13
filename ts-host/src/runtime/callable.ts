@@ -82,11 +82,19 @@ export function defineChild(target: object, name: string, value: unknown): void 
   Object.defineProperty(target, name, { value, enumerable: true, writable: false, configurable: false });
 }
 
+/**
+ * The promise of a natlang call. Promises derived from it (`call.then(...)`) are of this class too, so the rejection
+ * router of eval environments (environment.ts) knows a dropped one: the call's failure already reaches whoever started
+ * it (an eval reports the calls it never awaited), and a copy of it must not end the host.
+ */
+class CallPromise<T> extends Promise<T> {}
+Object.defineProperty(CallPromise, Symbol.for('natlang.call-promise'), { value: true });
+
 /** Start one call of a callable in the frame it resolves to. */
 function startCall(meta: CallableMeta, args: unknown[], at?: Instantiation): Promise<unknown> {
   // A call model code starts and never awaits must not end the host as an unhandled rejection (see invokeDefinition).
   let started: unknown;
-  const call = (async () => {
+  const call = CallPromise.resolve((async () => {
     const bound = meta.bound ?? resolveFrame(meta.created);
     // Called from an eval of the invocation it is bound to: the call stops with that eval (spec: Eval), and reports
     // its decision readout to a decide(...) around it.
@@ -96,7 +104,7 @@ function startCall(meta: CallableMeta, args: unknown[], at?: Instantiation): Pro
     const readout = same && current.readout !== bound.readout ? current.readout : undefined;
     const frame = signal || readout ? { ...bound, ...(signal ? { signal } : {}), ...(readout ? { readout } : {}) } : bound;
     return started = meta.invoke(args, frame, at);
-  })();
+  })());
   if (started && typeof started === 'object') startedCalls.set(call, started);
   call.catch(() => {});
   return call;
