@@ -12,6 +12,7 @@ import json
 import queue
 import re
 import time
+import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .chat import RequestError, arguments_text
@@ -114,6 +115,7 @@ def make_handler(engine: Engine):
             except RequestError as error:
                 self._error(400, error.code, str(error))
             except Exception as error:  # noqa: BLE001
+                traceback.print_exc()   # the client sees only the message; the log keeps where it failed
                 self._error(500, "internal", f"{type(error).__name__}: {error}")
 
         def do_GET(self):
@@ -422,6 +424,7 @@ def make_handler(engine: Engine):
             except json.JSONDecodeError as error:
                 self._error(400, "bad-json", str(error))
             except Exception as error:  # noqa: BLE001 - every failure answers the error envelope, as the fork's
+                traceback.print_exc()
                 self._error(500, "internal", f"{type(error).__name__}: {error}")
 
         def _chat(self, body: dict):
@@ -597,6 +600,7 @@ def make_handler(engine: Engine):
             except RequestError as error:
                 self._event({"error": {"code": error.code, "message": str(error)}})
             except Exception as error:  # noqa: BLE001 - reported to the client, as every unexpected failure
+                traceback.print_exc()
                 self._event({"error": {"code": "internal", "message": f"{type(error).__name__}: {error}"}})
             self._event(b"[DONE]")
             self._chunk(b"")
