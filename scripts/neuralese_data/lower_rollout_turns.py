@@ -3,8 +3,8 @@
 
 Experiment 0 (plans/neuralese/APPROACH_REVIEW_20261111.md section 4): every model call of a successful episode is one
 (prompt token ids as zero-weight context, sampled output token ids as the loss target) row, read from the captured
-rollouts (`turns[*].sampling`), never re-rendered. Calls whose prompt carries native Neuralese state, and decision
-calls (no sampled token stream), are skipped and counted. Read-only on the rollout files.
+rollouts (`turns[*].sampling`), never re-rendered. Calls whose prompt carries native Neuralese state are skipped and
+counted; sampled decision calls (no token stream) are lowered separately by ``decision_turns`` (GRPO trains them). Read-only on the rollout files.
 
     lower_rollout_turns.py --out turns.pkl ROUNDDIR [ROUNDDIR ...]
 """
@@ -27,7 +27,7 @@ def episode_turns(row, stats):
     for index, turn in enumerate(row['turns']):
         sampling = turn.get('sampling') or {}
         if 'samples' not in sampling:
-            stats['skip_no_sample_stream'] += 1
+            stats['decision_calls' if sampling.get('decision_sample') else 'skip_no_sample_stream'] += 1
             continue
         segments = sampling['prompt']
         if any(segment['kind'] != 'tokens' for segment in segments):
@@ -57,6 +57,33 @@ def episode_turns(row, stats):
         logp = np.array([item['logp'] for item in sampling['samples']], dtype=np.float32)
         rows.append({'invocation': turn['invocation_id'], 'index': index, 'prompt': prompt, 'sample': sample, 'logp': logp,
                      'policy': sampling['policy']['checkpoint_sha256']})
+    return rows
+
+
+def decision_turns(row, stats):
+    """(rows of one episode's sampled decision calls). A decision readout scores every option (the closed continuation
+    after the prompt: ``</think>``, the JSON value, ``<|im_end|>``) by its summed log-probability s_o and samples its answer
+    from softmax(s / T) (``natlang.decision-sample/1``, ``rl/decision_policy.py``). A row: dict(invocation, index,
+    prompt int32[], options [int32[]], chosen, temperature, scores f32[] (the actor's s_o), behavior_logq (log q(chosen))).
+    The prompt is the exact captured token prompt; an argmax readout (no receipt) has no behaviour density and is skipped."""
+    from natlang_neuralese.rl.decision_policy import validate_decision_sample
+    rows = []
+    for index, turn in enumerate(row['turns']):
+        sampling = turn.get('sampling') or {}
+        if not sampling.get('decision_sample'):
+            continue
+        if any(segment['kind'] != 'tokens' for segment in sampling['prompt']):
+            stats['skip_decision_native_state_prompt'] += 1
+            continue
+        sample = validate_decision_sample(sampling)
+        rows.append({'invocation': turn['invocation_id'], 'index': index,
+                     'prompt': np.fromiter((i for segment in sampling['prompt'] for i in segment['token_ids']), dtype=np.int32),
+                     'options': [np.array(ids, dtype=np.int32) for ids in sample['continuations']],
+                     'chosen': sample['chosen'], 'temperature': sample['temperature'],
+                     'scores': np.array(sampling['decision_sample']['log_probs'], dtype=np.float32),
+                     'behavior_logq': float(sample['behavior_logps'][sample['chosen']]),
+                     'policy': sampling['policy']['checkpoint_sha256']})
+    stats['decision_rows'] += len(rows)
     return rows
 
 
