@@ -14,31 +14,17 @@ import { renderEvidence, renderHistory, study } from '../calls/specializer.js';
 import { enclosingProgram } from '../calls/feedback.js';
 import { renderTrace } from '../calls/trace-view.js';
 import { TRACES_HELP } from './traces-help.js';
+import { usageError } from './args.js';
+import { closestName } from '../compiler/suggest.js';
 import { emptyEvidence, foldEvent, newTierEvidence, setTierState, type Evidence, type EvidenceState, type TierEvidence } from '../calls/evidence.js';
 import type { CallRecord, CallStoreSettings, CaseRole, CaseTier } from '../calls/types.js';
 
 /** A mistake in how a command was called: printed as `natlang: MESSAGE` and exit code 2. */
-export class UsageError extends Error {}
 
 type Args = { words: string[]; options: Map<string, string | true> };
 /** The options an action takes: `values` take an argument, `flags` do not. Every action also takes --store DIR and --json. */
 type Spec = { values?: readonly string[]; flags?: readonly string[] };
 
-/** Levenshtein distance, for "did you mean". */
-function distance(a: string, b: string): number {
-  let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
-  for (let i = 1; i <= a.length; i++) {
-    const row = [i];
-    for (let j = 1; j <= b.length; j++) row[j] = Math.min(previous[j]! + 1, row[j - 1]! + 1, previous[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1));
-    previous = row;
-  }
-  return previous[b.length]!;
-}
-/** The candidate closest to `word`, when it is close enough to be a likely typo. */
-export function closest(word: string, candidates: readonly string[]): string | undefined {
-  const ranked = candidates.map(candidate => ({ candidate, d: distance(word, candidate) })).sort((x, y) => x.d - y.d)[0];
-  return ranked && ranked.d <= Math.max(2, Math.floor(word.length / 3)) ? ranked.candidate : undefined;
-}
 
 /** The first word of `argv` that is not an option or an option's value: the action. */
 function actionOf(argv: string[], valued: ReadonlySet<string>): string | undefined {
@@ -61,12 +47,12 @@ function parse(argv: string[], command: string, spec: Spec): Args {
     if (flags.has(name) && inline === undefined) { options.set(name, true); continue; }
     if (values.has(name)) {
       const value = inline ?? argv[++index];
-      if (value === undefined || (inline === undefined && value.startsWith('--'))) throw new UsageError(`${name} needs a value (natlang ${command} ${name} VALUE)`);
+      if (value === undefined || (inline === undefined && value.startsWith('--'))) throw usageError(`${name} needs a value (natlang ${command} ${name} VALUE)`);
       options.set(name, value); continue;
     }
     const known = [...values, ...flags];
-    const guess = closest(name, known);
-    throw new UsageError(`unknown option ${name} for natlang ${command}${guess ? ` (did you mean ${guess}?)` : ''}; it takes ${known.sort().join(', ')}`);
+    const guess = closestName(name, known);
+    throw usageError(`unknown option ${name} for natlang ${command}${guess ? ` (did you mean ${guess}?)` : ''}; it takes ${known.sort().join(', ')}`);
   }
   return { words, options };
 }
@@ -74,7 +60,7 @@ const text = (args: Args, name: string) => { const value = args.options.get(name
 function number(args: Args, name: string, fallback: number): number {
   const value = text(args, name);
   if (value === undefined) return fallback;
-  if (!/^\d+$/.test(value) || Number(value) < 1) throw new UsageError(`${name} takes a positive whole number, not ${JSON.stringify(value)}`);
+  if (!/^\d+$/.test(value) || Number(value) < 1) throw usageError(`${name} takes a positive whole number, not ${JSON.stringify(value)}`);
   return Number(value);
 }
 /** `--since` as an ISO time: an ISO date or time, or an age (`30m`, `2h`, `7d`) back from now. */
@@ -85,11 +71,11 @@ function since(args: Args): string | undefined {
   if (age) return new Date(Date.now() - Number(age[1]) * { m: 60_000, h: 3_600_000, d: 86_400_000 }[age[2] as 'm' | 'h' | 'd']).toISOString();
   if (/^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?)?$/.test(value) && !Number.isNaN(Date.parse(value)))
     return new Date(value.length === 10 ? `${value}T00:00:00Z` : value).toISOString();
-  throw new UsageError(`--since takes an ISO date or time (2026-11-13, 2026-11-13T09:00Z) or an age (30m, 2h, 7d), not ${JSON.stringify(value)}`);
+  throw usageError(`--since takes an ISO date or time (2026-11-13, 2026-11-13T09:00Z) or an age (30m, 2h, 7d), not ${JSON.stringify(value)}`);
 }
 function choice<T extends string>(args: Args, name: string, allowed: readonly T[]): T | undefined {
   const value = text(args, name);
-  if (value !== undefined && !allowed.includes(value as T)) throw new UsageError(`${name} is one of ${allowed.join(', ')}, not ${JSON.stringify(value)}`);
+  if (value !== undefined && !allowed.includes(value as T)) throw usageError(`${name} is one of ${allowed.join(', ')}, not ${JSON.stringify(value)}`);
   return value as T | undefined;
 }
 
@@ -102,14 +88,14 @@ function openStore(args: Args): CallStore {
 /** The call a typed ID means: the exact ID, a unique prefix, or a unique short form (without `task-N-`). Among the
  * calls of one task, the task's root call wins. */
 export function resolveCall(store: CallStore, word: string | undefined, usage: string): string {
-  if (!word) throw new UsageError(`usage: ${usage}`);
+  if (!word) throw usageError(`usage: ${usage}`);
   const matches = store.matchCalls(word, 1000);
   if (matches.length === 1) return matches[0]!.call_id;
-  if (!matches.length) throw new UsageError(`no call matches ${word}; natlang traces list shows recent calls (--all for every program's)`);
+  if (!matches.length) throw usageError(`no call matches ${word}; natlang traces list shows recent calls (--all for every program's)`);
   const tasks = new Set(matches.map(row => row.call_id.split('/')[0]));
   const roots = matches.filter(row => !row.parent_call_id);
   if (tasks.size === 1 && roots.length === 1) return roots[0]!.call_id;
-  throw new UsageError(`${word} matches ${matches.length === 1000 ? '1000 or more' : matches.length} calls; give more of the ID:\n` +
+  throw usageError(`${word} matches ${matches.length === 1000 ? '1000 or more' : matches.length} calls; give more of the ID:\n` +
     matches.slice(0, 5).map(row => `  ${row.call_id}  ${row.definition_name} ${row.outcome} ${row.started_at}`).join('\n'));
 }
 const print = (value: unknown, json: boolean) => process.stdout.write(json ? `${JSON.stringify(value, null, 2)}\n` :
@@ -227,34 +213,25 @@ const TRACES: Record<string, Spec> = {
 };
 const valuedOptions = (specs: Record<string, Spec>) => new Set(['--store', ...Object.values(specs).flatMap(spec => spec.values ?? [])]);
 
-/** Usage errors print one line and exit 2; other failures are the caller's (exit 1). */
-async function usageExit(run: () => Promise<number>): Promise<number> {
-  try { return await run(); }
-  catch (error) {
-    if (!(error instanceof UsageError)) throw error;
-    process.stderr.write(`natlang: ${error.message}\n`);
-    return 2;
-  }
-}
 
 /** `natlang traces ...` */
 export function tracesCommand(argv: string[]): Promise<number> {
-  return usageExit(async () => {
+  return (async () => {
     if (argv.includes('--help') || argv.includes('-h') || argv[0] === 'help') { print(TRACES_HELP, false); return 0; }
     const action = actionOf(argv, valuedOptions(TRACES)) ?? 'status';
     if (!TRACES[action]) {
-      const guess = closest(action, Object.keys(TRACES));
-      throw new UsageError(`unknown action natlang traces ${action}${guess ? ` (did you mean ${guess}?)` : ''}; natlang help traces lists them`);
+      const guess = closestName(action, Object.keys(TRACES));
+      throw usageError(`unknown action natlang traces ${action}${guess ? ` (did you mean ${guess}?)` : ''}; natlang help traces lists them`);
     }
     const args = parse(argv, `traces ${action}`, TRACES[action]!);
     const words = args.words.slice(1);
     return traces(action, words, args);
-  });
+  })();
 }
 
 async function traces(action: string, words: string[], args: Args): Promise<number> {
   const json = args.options.has('--json');
-  const extra = (count: number, usage: string) => { if (words.length > count) throw new UsageError(`unexpected argument ${words[count]}; usage: ${usage}`); };
+  const extra = (count: number, usage: string) => { if (words.length > count) throw usageError(`unexpected argument ${words[count]}; usage: ${usage}`); };
   if (['status', 'hot', 'list', 'occupancy', 'tiers', 'export', 'evict'].includes(action)) extra(0, `natlang traces ${action} [OPTIONS]`);
   const store = openStore(args);
   if (action === 'status') {
@@ -274,10 +251,10 @@ async function traces(action: string, words: string[], args: Args): Promise<numb
     return 0;
   }
   if (action === 'list') {
-    if (args.options.has('--all') && text(args, '--program')) throw new UsageError('--all lists every program\'s calls and --program DIR one program\'s; pass one of them');
+    if (args.options.has('--all') && text(args, '--program')) throw usageError('--all lists every program\'s calls and --program DIR one program\'s; pass one of them');
     // Inside a program, its calls by default; --all for the machine.
     const program = text(args, '--program') ? resolve(text(args, '--program')!) : args.options.has('--all') ? undefined : enclosingProgram();
-    if (text(args, '--program') && !existsSync(program!)) throw new UsageError(`--program ${text(args, '--program')}: no such directory`);
+    if (text(args, '--program') && !existsSync(program!)) throw usageError(`--program ${text(args, '--program')}: no such directory`);
     const rows = store.calls({ definition: text(args, '--definition'), executor: text(args, '--executor'), outcome: text(args, '--outcome'),
       caseHash: text(args, '--case'), since: since(args), limit: number(args, '--limit', 30), after: text(args, '--after'),
       audits: args.options.has('--audits'), program });
@@ -331,7 +308,7 @@ async function traces(action: string, words: string[], args: Args): Promise<numb
   }
   if (action === 'annotate') {
     const [call, kind, ...value] = words;
-    if (!call || !kind || !value.length) throw new UsageError('usage: natlang traces annotate CALL KIND VALUE');
+    if (!call || !kind || !value.length) throw usageError('usage: natlang traces annotate CALL KIND VALUE');
     const id = resolveCall(store, call, 'natlang traces annotate CALL KIND VALUE');
     let parsed: unknown = value.join(' ');
     try { parsed = JSON.parse(String(parsed)); } catch { /* text */ }
@@ -341,7 +318,7 @@ async function traces(action: string, words: string[], args: Args): Promise<numb
     const usage = `natlang traces ${action} CALL${action === 'fix' ? ' --expected JSON' : action === 'bad' ? ' [--expected JSON]' : ''} [--group G] [--program DIR] [--dry-run]`;
     extra(1, usage);
     const id = resolveCall(store, words[0], usage);
-    if (action === 'fix' && text(args, '--expected') === undefined) throw new UsageError(`natlang traces fix needs the right answer: ${usage} (quote strings: '"billing"')`);
+    if (action === 'fix' && text(args, '--expected') === undefined) throw usageError(`natlang traces fix needs the right answer: ${usage} (quote strings: '"billing"')`);
     const { recordFeedback } = await import('../calls/feedback.js');
     print(recordFeedback(store, { verdict: action, call: id, expected: text(args, '--expected'), group: text(args, '--group') || process.env.NATLANG_FEEDBACK_GROUP || undefined,
       program: text(args, '--program'), dryRun: args.options.has('--dry-run'), authorizedProducers: await authorizedProducers() }), false); return 0;
@@ -350,7 +327,7 @@ async function traces(action: string, words: string[], args: Args): Promise<numb
     const changes: Partial<CallStoreSettings> = {};
     for (const pair of words) {
       const [key, value] = pair.split('=');
-      if (!key || value === undefined) throw new UsageError('usage: natlang traces config [KEY=VALUE...]');
+      if (!key || value === undefined) throw usageError('usage: natlang traces config [KEY=VALUE...]');
       (changes as Record<string, unknown>)[key] = ['specialization', 'promotionPolicy', 'targetPolicy', 'declinePolicy'].includes(key) ? value : Number(value);
     }
     print(Object.keys(changes).length ? store.writeSettings(changes) : store.settings(), true);
@@ -369,11 +346,11 @@ function findCompilation(store: CallStore, word: string) {
 
 /** `natlang compilations ...` */
 export function compilationsCommand(argv: string[]): Promise<number> {
-  return usageExit(async () => {
+  return (async () => {
     const args = parse(argv, 'compilations', { values: ['--program', '--limit', '--role', '--definition', '--out'], flags: ['--all'] });
     const [action = 'list', ...words] = args.words;
     return compilations(action, words, args);
-  });
+  })();
 }
 
 async function compilations(action: string, words: string[], args: Args): Promise<number> {
@@ -494,7 +471,7 @@ async function compilations(action: string, words: string[], args: Args): Promis
     print(json ? summary : `wrote ${summary.cases} cases, ${summary.declines} declines and ${summary.findings} findings (${summary.calls} calls) to ${resolve(out)}`, json);
     return 0;
   }
-  throw new UsageError('usage: natlang compilations list|show|why|calls|history|export|disable|enable|declines|savings|findings|acknowledge|export-corpus');
+  throw usageError('usage: natlang compilations list|show|why|calls|history|export|disable|enable|declines|savings|findings|acknowledge|export-corpus');
 }
 
 /** The specializer application in this checkout. */

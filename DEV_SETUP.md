@@ -19,7 +19,9 @@ symlink to this checkout's source wrapper. If that directory is missing from
 
 This is the repository setup command. Full setup also checks an existing
 `llama-server` version. If there is no compatible server, it asks before
-downloading natlang's pinned, verified build into `.natlang/runtime`. The setup
+downloading natlang's pinned, verified build into the machine's runtime directory
+(`~/.local/share/natlang/runtimes`; the model goes to `~/.cache/natlang`, shared with an installed natlang;
+`natlang doctor` prints both). The setup
 does not modify a system installation. For unattended setup, `--yes` grants
 permission for that managed download:
 

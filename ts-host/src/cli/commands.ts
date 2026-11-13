@@ -1,4 +1,5 @@
 /** The implementations of the natlang commands main.ts dispatches to (help and argument parsing are in main.ts and args.ts). */
+import { enclosingProgram } from '../calls/feedback.js';
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { spawnSync } from 'node:child_process';
@@ -658,13 +659,6 @@ async function withModelRuntime<T>(parsed: Parsed, fn: (runtime: NatlangRuntime)
 }
 
 const tunedProject = (parsed: Parsed) => !parsed.options.has('--no-weights') && !!currentRelease(process.cwd());
-/** The nearest directory at or above `directory` holding natlang.json, if any. */
-function enclosingProgram(directory: string): string | undefined {
-  for (let at = directory; ; at = dirname(at)) {
-    if (existsSync(join(at, 'natlang.json'))) return at;
-    if (dirname(at) === at) return undefined;
-  }
-}
 
 /** `path`, which must exist (a usage error names it otherwise). */
 function existingPath(path: string, what?: string): string {
@@ -1002,8 +996,12 @@ export async function runCommand(command: string, words: string[], parsed: Parse
   if (command === 'test') {
     acceptOptions(parsed, ['--profile', '--provider', '--model', '--yes', '--progress', '--json']); noTrailingArguments(parsed);
     if (words.length > 1) throw usageError('usage: natlang test [DIRECTORY]');
-    const root = existingPath(words[0] ?? '.'), examples = readExamples(root);
-    if (!examples.length) throw new Error('No saved examples. Add { function, inputs, expected } cases to examples.json, or save a test in the dashboard function form.');
+    const root = existingPath(words[0] ?? '.'), saved = readExamples(root);
+    // An entry without `expected` is an input for natlang tune (an escalation, say): nothing to compare, so not a test.
+    const examples = saved.filter(example => Object.hasOwn(example, 'expected')), untested = saved.length - examples.length;
+    if (!examples.length) throw new Error(saved.length ? `examples.json has ${saved.length} inputs but no expected results; natlang traces fix CALL --expected JSON saves one`
+      : 'No saved examples. Add { function, inputs, expected } cases to examples.json, or save one with natlang traces fix CALL --expected JSON.');
+    if (untested && !json) process.stderr.write(`natlang: ${untested} example${untested === 1 ? '' : 's'} without an expected result not tested (inputs for natlang tune)\n`);
     const checked = buildProject({ project: root, emit: false, runtimeModule: RUNTIME_MODULE });
     if (!checked.ok) {
       if (json) { output({ ok: false, diagnostics: checked.diagnostics }, true); return EXIT.failed; }
@@ -1046,7 +1044,7 @@ export async function runCommand(command: string, words: string[], parsed: Parse
           return { ...base(), ok: isDeepStrictEqual(received, example.expected), seconds: (Date.now() - began) / 1000, received };
         } catch (error) { return { ...base(), ok: false, seconds: (Date.now() - began) / 1000, error: (error as Error).message }; }
       })())));
-      if (json) output({ ok: failed === 0, passed: examples.length - failed, failed, seconds: (Date.now() - started) / 1000, results }, true);
+      if (json) output({ ok: failed === 0, passed: examples.length - failed, failed, untested, seconds: (Date.now() - started) / 1000, results }, true);
       else output(`${examples.length - failed}/${examples.length} passed in ${((Date.now() - started) / 1000).toFixed(1)} s.`, false);
     } finally { progress.close(); await natlang.close(); }
     return failed ? EXIT.failed : 0;

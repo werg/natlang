@@ -7,6 +7,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { CliError, EXIT, NATLANG_CLI_VERSION, output, parseArgs, usageError } from './args.js';
 import { closestName } from '../compiler/suggest.js';
+import { TRACES_HELP } from './traces-help.js';
 import { reportedFailure } from './progress.js';
 
 export { NATLANG_CLI_VERSION } from './args.js';
@@ -255,27 +256,7 @@ changes are saved to DIR after the reducer completes.`,
 Without input, the instruction receives a read-only view of the current directory.
 Piped stdin is passed as a whole, or one line/JSON record at a time. --files calls
 once per matching file and prints path<TAB>result. --filter prints matching inputs.`,
-  traces: `The machine's record of natlang calls (NATLANG_CALL_STORE, default ~/.local/share/natlang/calls):
-  natlang traces status                      Store size, settings, pending shadow/audit jobs.
-  natlang traces hot [--program DIR] [--by calls|tokens|wall_ms]
-  natlang traces list [--definition NAME] [--executor agent|crisp|crisp-agent] [--outcome X] [--since ISO] [--all]
-  natlang traces show CALL [--events] [--json]
-  natlang traces occupancy [--definition NAME] [--limit N]   Batch occupancy: requests in flight, batch size, queue wait.
-  natlang traces tiers [--definition NAME]                   Tiered engine: calls per tier, deopt rate, cost per tier.
-  natlang traces export [--definition NAME] [--limit N]    One JSON record per line, values inlined.
-  natlang traces pin|unpin CALL              Keep a call when the store evicts.
-  natlang traces annotate CALL KIND VALUE    Attach feedback or a judgment to a call.
-  natlang traces good CALL                   Tester verdict: annotate, and add the call's input and output as a root example
-                                             in the program's tune.examples.jsonl (natlang tune reads it).
-  natlang traces bad CALL [--expected JSON]  Annotate; with --expected also add the example (plain bad adds none).
-  natlang traces fix CALL --expected JSON    Annotate and add the example with the right answer (replaces an earlier one).
-    good|bad|fix options: --group G (else NATLANG_FEEDBACK_GROUP, else feedback-<day>-<host/user hash>: one tester's calls
-    share a split side), --program DIR (program root; default the call's recorded root), --dry-run.
-    Only root calls of a program .nl function become examples; others keep the annotation and say why.
-  natlang traces config [KEY=VALUE...]       maxValueBytes, maxStoreBytes, specialization (off|shadow|on),
-                                             auditRate, acceptanceBound, promotionComparisons, minCalls.
-Every runtime records each call (exact inputs, output, service calls, eval code, cost) unless
-NATLANG_CALL_STORE=off. A program's natlang.json can exclude values: "recording": { "exclude": [...] }.`,
+  traces: TRACES_HELP,
   compilations: COMPILATIONS,
   specialize: COMPILATIONS,
   dashboard: `The local dashboard:
