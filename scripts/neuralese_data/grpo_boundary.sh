@@ -53,7 +53,7 @@ switch)
     fi
     systemctl --user stop $OLD
   fi
-  $LEDGER cancel $OLD 2>/dev/null || true
+  $LEDGER cancel --unit $OLD >/dev/null 2>&1 || true
   for u in $(systemctl --user list-units --plain --no-legend "$OLD-*" | awk '{print $1}'); do systemctl --user stop "$u"; done
   E="/usr/bin/env NATLANG_REPO=$PIN PYTHONPATH=$PIN/training/neuralese:$PIN HF_HUB_OFFLINE=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True"
   # grpo.py's defaults are the experiment (LR 1e-5, 24-48 groups, per-episode norm, graded reward, top-p 0.95, tail
