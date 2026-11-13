@@ -44,10 +44,14 @@ def create(commit, dest):
     ignored = git('ls-files', '-o', '-i', '--exclude-standard', '--directory').splitlines()
     for path in ignored:
         top = path.split('/', 1)[0].rstrip('/')
-        if top in LINKED or path.startswith(SKIPPED):
+        if path.startswith(SKIPPED):
             continue
         source, target = REPO / path, dest / path
         target.parent.mkdir(parents=True, exist_ok=True)
+        if top in LINKED:                  # data under a tracked data root (runs/, data/, models/): linked, never copied
+            if '/' in path.rstrip('/') and not target.exists():
+                target.symlink_to(source)
+            continue
         subprocess.run(['cp', '-a', '--no-target-directory', str(source).rstrip('/'), str(target).rstrip('/')], check=True)
     for name in LINKED:
         if (REPO / name).exists() and not (dest / name).exists():
