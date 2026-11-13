@@ -9,6 +9,16 @@ training controller (`foundation_ready`, adaptive `refresh_ready` publications, 
 dropped with it. The user-facing part (hosting a native server, passing `Neuralese<T>` values, student prompt
 rendering) is `skills/natlang-integration/references/native-state.md`.
 
+## Model-facing listings and tool output
+
+Moved from the natlang-integration skill on 2026-11-13: these describe what the executing model sees, not what an
+embedding host does.
+
+- Native input and scope listings show at least 4,096 characters per value. A cut-off listing names the complete live eval variable; use ordinary code such as `value.slice(start, end)` to inspect omitted ranges. Tool-result text is sized from the call's context budget (`contextTokens`; `shownCharsFor` in `ts-host/src/native/cutoff.ts`: an eighth of the budget at 3.5 characters per token, at least 2,000), and only output longer than that is paged with `read_page`. A host that sets a larger `contextTokens` therefore shows longer outputs whole; `contextTokens: null` keeps the 2,000-character floor.
+- If no tool output was cut off in the call, `read_page` directs the agent to inspect the in-scope value with `eval`; only an actual cut-off tool output creates a page ID.
+- Eval exposes `inputs` and `read_inputs()` only for calls with formal input fields, unless those names are shadowed. A zero-argument call has no implicit caller-input object; ordinary local declarations may use those names.
+- Error text a model reads is model-facing: measure a change to it on the live executor.
+
 ## Selected semantic executor
 
 When the host selects semantic execution, await callable-folder module entry

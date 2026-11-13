@@ -3,6 +3,17 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-13 — the `natlang init` starter answers by decision readout, with a specific signature
+
+`natlang init` (and `examples/hello`, now byte-identical to it) writes `answer.nl` as
+`description: Classify a customer message as billing, technical or other.`, parameter `message` (was `input`; the
+instruction says "Classify message as ..."), `returns: '"billing" | "technical" | "other"'` (YAML single-quoted, was
+JSON-escaped) and `readout: decision`. Measured on the local LFM3-1.7B before the change: the starter's one-word
+classification generated 365 reasoning tokens (136 s); the same call with `readout: decision` took 18.7 s and returned
+the same label. The model now sees the decision readout's prompt (short system turn, no tool manual) and scores the three
+labels instead of running the tool loop; a backend that cannot score replies (hosted providers, servers without
+`prompt_logprobs`) still runs the tool loop. Programs saved from the dashboard Playground keep `input` and no readout.
+
 ### 2026-11-13 — harness review of 512 base held-v2 episodes: history as sampled, tool-result texts, loop bound, folder bash
 
 From the review of `run2/held/step-00000` (base 5ff07638, pin 37c221bfe, 256 x 2) and the token captures of 7 run2 groups.

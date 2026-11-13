@@ -71,8 +71,8 @@ test('CLI setup never downloads without consent in a noninteractive process', ()
       NATLANG_CONFIG_HOME: join(root, 'config') },
     encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 10000,
   });
-  assert.equal(result.status, 1);
-  assert.match(result.stderr, /without a terminal natlang cannot ask before downloading it/);
+  assert.equal(result.status, 3, 'the runtime is unavailable');
+  assert.match(result.stderr, /without a terminal natlang cannot ask first/);
   assert.match(result.stderr, /natlang setup --yes/, 'the error names the command that proceeds');
   assert.equal(discoverLlamaRuntime({ ...process.env, PATH: '', NATLANG_RUNTIME_HOME: root }).selected, null);
 });

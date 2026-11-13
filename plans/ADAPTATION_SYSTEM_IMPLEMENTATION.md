@@ -2,7 +2,7 @@
 
 Status: implementation plan, 2026-09-29. No implementation is implied by the APIs below.
 
-This plan supersedes the Python-backend recommendation in [the research report](../docs/PROGRAM_OPTIMIZATION_RESEARCH.md). Deliver one integrated release: a natlang-owned adaptation system using a focused vendored adaptation of Ax GEPA. Implementation proceeds in dependency order, but stopping after the single-function prototype does not satisfy this plan.
+This plan supersedes the Python-backend recommendation in [the research report](../docs/research/PROGRAM_OPTIMIZATION_RESEARCH.md). Deliver one integrated release: a natlang-owned adaptation system using a focused vendored adaptation of Ax GEPA. Implementation proceeds in dependency order, but stopping after the single-function prototype does not satisfy this plan.
 
 ## 1. Release contract
 

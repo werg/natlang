@@ -3,8 +3,8 @@
 
 Each program is a reusable natlang program directory in the layout `natlang tune` and `tune.structure` read: several
 operations (root `.nl` functions, each with its own companion folder), `types.ts`, `package.json`, optional
-`tune.services.mjs` (host services built per example from its `reference`), and `tune.examples.jsonl` (one root
-invocation per line: function, input, exact expected value, world group). Worlds are grouped so the tuner's persisted
+`tune.services.mjs` (host services built per example from its `reference`), and `examples.json` (an array of root
+invocations: function, inputs, exact expected value, world group). Worlds are grouped so the tuner's persisted
 grouped split keeps related invocations on one side.
 
   codebase-<name>   a train-split repository codebase (codebases/<name>) with one operation per exact function of the
@@ -118,8 +118,8 @@ def write_program(out, name, files, examples, services=None):
     (directory / 'natlang.json').write_text('{"schema":"natlang.package/v2"}\n')
     if services:
         (directory / 'tune.services.mjs').write_text(services)
-    payload = ''.join(json.dumps(row, sort_keys=True) + '\n' for row in examples)
-    (directory / 'tune.examples.jsonl').write_text(payload)
+    payload = json.dumps(examples, indent=1, sort_keys=True) + '\n'
+    (directory / 'examples.json').write_text(payload)
     return {'program': name, 'path': str(directory), 'roots': len(examples),
             'operations': sorted({row['function'] for row in examples}),
             'examples_sha256': hashlib.sha256(payload.encode()).hexdigest()}
@@ -160,7 +160,7 @@ def codebase_programs(cases, out):
             for path, text in files.items():
                 program[f'{op}/{path}'] = text
             for case in members:
-                row = {'function': f'{op}.nl', 'input': case['semantics']['inputs'], 'expected': case['semantics']['expected'],
+                row = {'function': f'{op}.nl', 'inputs': case['semantics']['inputs'], 'expected': case['semantics']['expected'],
                        'group': f'tune:codebase-{name}:{case["id"]}'}
                 if shape.startswith('drive'):
                     svc = next(iter(case['semantics']['services']))
@@ -225,19 +225,19 @@ def decision_programs(out, seed=20261103, per_op=40):
             in_scope = rng.random() < 0.75
             item = take(rng.choice(candidates) if in_scope else rng.choice(others))
             if item:
-                examples.append({'function': 'main.nl', 'input': {'request': item['text'], 'routes': routes},
+                examples.append({'function': 'main.nl', 'inputs': {'request': item['text'], 'routes': routes},
                                  'expected': routes.get(item['label'], 'human_review'), 'group': f'tune:{dataset}:route:{i}'})
         for i in range(per_op):
             items = [x for x in (take(rng.choice(candidates)) for _ in range(rng.randint(4, 8))) if x]
             msgs = [{'id': f'm{j + 1}', 'text': x['text']} for j, x in enumerate(items)]
             counts = collections.Counter(x['label'] for x in items)
-            examples.append({'function': 'tally.nl', 'input': {'messages': msgs},
+            examples.append({'function': 'tally.nl', 'inputs': {'messages': msgs},
                              'expected': {c: counts.get(c, 0) for c in candidates}, 'group': f'tune:{dataset}:tally:{i}'})
         for i in range(per_op):
             items = [x for x in (take(rng.choice(candidates)) for _ in range(rng.randint(4, 8))) if x]
             msgs = [{'id': f'm{j + 1}', 'text': x['text']} for j, x in enumerate(items)]
             target = rng.choice([x['label'] for x in items])
-            examples.append({'function': 'select.nl', 'input': {'messages': msgs, 'target': target},
+            examples.append({'function': 'select.nl', 'inputs': {'messages': msgs, 'target': target},
                              'expected': [m['id'] for m, x in zip(msgs, items) if x['label'] == target],
                              'group': f'tune:{dataset}:select:{i}'})
         for i in range(per_op):
@@ -246,7 +246,7 @@ def decision_programs(out, seed=20261103, per_op=40):
             salt = hashlib.sha256(f'tune-desk|{dataset}|{i}'.encode()).hexdigest()[:24]
             state = [[t['id'], ('team:' + routes[x['label']]) if x['label'] in routes else 'human'] for t, x in zip(tickets, items)]
             code = 'desk-' + hashlib.sha256((salt + json.dumps(state, separators=(',', ':'), ensure_ascii=False)).encode()).hexdigest()[:16]
-            examples.append({'function': 'desk.nl', 'input': {'tickets': tickets, 'routes': routes}, 'expected': code,
+            examples.append({'function': 'desk.nl', 'inputs': {'tickets': tickets, 'routes': routes}, 'expected': code,
                              'group': f'tune:{dataset}:desk:{i}',
                              'reference': {'desk': {'tickets': [t['id'] for t in tickets], 'teams': teams, 'salt': salt}}})
         summaries.append(write_program(out, f'decisions-{dataset.replace("_", "-")}', program, examples, DESK_SERVICES))

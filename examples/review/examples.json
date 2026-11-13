@@ -1,0 +1,16 @@
+[
+  {
+    "name": "no observations",
+    "function": "review.nl",
+    "inputs": {
+      "observations": [],
+      "criterion": "Nightly backups finish within one hour."
+    },
+    "expected": {
+      "assessments": [],
+      "supported": 0,
+      "contradicted": 0,
+      "uncertain": 0
+    }
+  }
+]

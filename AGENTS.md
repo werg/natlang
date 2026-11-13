@@ -1,3 +1,9 @@
+> **Writing or running natlang programs?** None of the rules below apply to you: they govern the research
+> project's model training on its own machines. Work in your own directory outside this repository
+> (`natlang init my-program`), follow the `AGENTS.md` that `natlang init` writes, and use the natlang skills
+> (`natlang skills install`). The language and CLI are documented in `README.md`, `docs/RUNNING_PROGRAMS.md` and
+> `spec/SPEC.md`.
+
 # How we train now: bounded controlled experiments (owner, 2026-11-12)
 
 `plans/neuralese/APPROACH_REVIEW_20261111.md` is the plan; these are the standing rules for model training. No w5

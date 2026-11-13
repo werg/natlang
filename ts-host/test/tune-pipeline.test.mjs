@@ -55,7 +55,7 @@ function project() {
   writeFileSync(join(root, 'package.json'), '{"type":"module"}');
   const examples = ['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta'].map(value => ({ function: 'outer.nl', input: { value }, expected: value.toUpperCase() }));
   examples.push({ function: 'outer.nl', input: { value: 'held' }, expected: 'HELD', protected: true });
-  writeFileSync(join(root, 'tune.examples.jsonl'), examples.map(example => JSON.stringify(example)).join('\n') + '\n');
+  writeFileSync(join(root, 'examples.json'), JSON.stringify(examples.map(({ input, ...example }) => ({ ...example, inputs: input }))));
   // A trainer stand-in: one rank-2 artifact per lambda node, recorded exactly as the real trainer reports them.
   writeFileSync(join(root, 'trainer.mjs'), `import { readFileSync, writeFileSync } from 'node:fs';
 import { writeNativeTuneTensor } from ${JSON.stringify(new URL('./fixtures/native-tune.mjs', import.meta.url).href)};
@@ -246,9 +246,9 @@ test('an edit invalidates exactly its dependency closure and recollects only aff
     // A second root function in its own folder, untouched by the edit below.
     mkdirSync(join(root, 'other'));
     writeFileSync(join(root, 'other', 'echo.nl'), named('Return value in uppercase too.'));
-    const examples = readFileSync(join(root, 'tune.examples.jsonl'), 'utf8').trim().split('\n');
-    writeFileSync(join(root, 'tune.examples.jsonl'), [...examples, ...['one', 'two', 'three', 'four'].map(value =>
-      JSON.stringify({ function: 'other/echo.nl', input: { value }, expected: value.toUpperCase() }))].join('\n') + '\n');
+    const examples = JSON.parse(readFileSync(join(root, 'examples.json'), 'utf8'));
+    writeFileSync(join(root, 'examples.json'), JSON.stringify([...examples, ...['one', 'two', 'three', 'four'].map(value =>
+      ({ function: 'other/echo.nl', inputs: { value }, expected: value.toUpperCase() }))]));
     const asked = [];
     const teacher = scriptedModel(opening => { asked.push(opening); return opening.includes('Pass value') ? 'return await inner(value)' : 'return value.toUpperCase()'; });
     const options = { root, program: program(root), settings, student: student(root), teacher: teacher.driver, teacherId: 'teacher:test', serve: serve([]) };

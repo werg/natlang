@@ -27,16 +27,26 @@ export function parseAskArgs(args: string[]): { instruction: string; options: As
   return { instruction: words.join(' '), options };
 }
 
-function format(value: unknown): string {
-  return value === null || typeof value === 'object' ? JSON.stringify(value) : String(value);
+function format(value: unknown, json = false): string {
+  return json || value === null || typeof value === 'object' ? JSON.stringify(value) : String(value);
 }
 
-/** The same JSON/line input contract for the CLI and the folder shell. */
-export async function executeNatlangCall(name: string, stdin: string, mode: CallMode, call: CallHost): Promise<string> {
-  const inputs = mode === 'whole' ? [stdin.trim() ? JSON.parse(stdin) : {}] :
+/**
+ * The same JSON/line input contract for the CLI and the folder shell. With `text` (a function whose one parameter is a
+ * string), whole input that is not a JSON object is that text. `json` prints every result as JSON, strings quoted.
+ */
+export async function executeNatlangCall(name: string, stdin: string, mode: CallMode, call: CallHost,
+  options: { text?: boolean; json?: boolean } = {}): Promise<string> {
+  const whole = () => {
+    if (!options.text) return stdin.trim() ? JSON.parse(stdin) : {};
+    try { const parsed: unknown = JSON.parse(stdin); if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed; }
+    catch { /* text */ }
+    return stdin.replace(/\r?\n$/, '');
+  };
+  const inputs = mode === 'whole' ? [whole()] :
     stdin.split(/\r?\n/).filter(line => line.length).map(line => mode === 'jsonl' ? JSON.parse(line) : line);
   const values: string[] = [];
-  for (const input of inputs) values.push(format(await call(name, input, mode)));
+  for (const input of inputs) values.push(format(await call(name, input, mode), options.json));
   return values.length ? `${values.join('\n')}\n` : '';
 }
 

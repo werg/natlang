@@ -8,20 +8,58 @@ natlang is TypeScript with natural-language functions. A natural-language
 function is an asynchronous, typed function whose body is instructions; a model
 executes them in a persistent TypeScript scope. Everything else is ordinary
 TypeScript. The design rationale is in
-[`docs/TS_INLINE_HOST_INTEGRATION_PLAN.md`](../docs/TS_INLINE_HOST_INTEGRATION_PLAN.md),
-[`docs/inline-natlang-lambdas.md`](../docs/inline-natlang-lambdas.md), and
-[`docs/ITERATE_ON_PLAN.md`](../docs/ITERATE_ON_PLAN.md).
+[`docs/research/TS_INLINE_HOST_INTEGRATION_PLAN.md`](../docs/research/TS_INLINE_HOST_INTEGRATION_PLAN.md),
+[`docs/research/inline-natlang-lambdas.md`](../docs/research/inline-natlang-lambdas.md), and
+[`docs/research/ITERATE_ON_PLAN.md`](../docs/research/ITERATE_ON_PLAN.md).
+
+## The core in one screen
+
+`classify.nl`, a named natural-language function (YAML front matter, then instructions):
+
+```yaml
+---
+description: Label one ticket.
+args:
+  ticket: string
+returns: '"billing" | "technical" | "spam"'
+---
+Pick the label that fits ticket.
+```
+
+```ts
+import { nl } from '@natlang/node';
+import classify from './classify.nl';            // imported like a module; its type is (ticket: string) => Promise<Label>
+
+const ticket = 'Checkout fails with a 500 error for every customer.';
+const label = await classify(ticket);
+const summary: string = await nl`Summarize ticket in one sentence.`(ticket);   // an inline function
+```
+
+- **Named functions** are `.nl` files: typed `args`, a `returns` type, instructions. The compiler checks every call.
+- **Inline `nl`** is a tagged template whose signature the compiler infers from the call site; it captures the
+  variables its instructions mention by name.
+- **Callable folders.** `classify.nl` may call only what is in its companion folder `classify/`: other `.nl`
+  functions and exact TypeScript helpers (`.ts`). Calls go down the folder tree, so natural-language functions cannot
+  recurse (Contexts, Iteration and termination).
+- **Services** are host capabilities (files, network, databases) passed to the runtime as typed objects; the model
+  reaches the outside world only through them (Services and effects).
+- **Types** are TypeScript types. A result is checked against its declared type before it reaches your code; a
+  wrong-shaped answer goes back to the model as an error (Types, Completion).
+
+The model executes each call in a persistent TypeScript scope with a few tools (Model surface, Eval). Everything
+else in a program is ordinary TypeScript.
 
 ## Extensions
 
-This document is the stable core. The research surface lives in versioned
-extensions under [`spec/ext/`](ext/neuralese.md); each states its version and
-scope, and the core does not depend on any of them.
+This document is the stable core. The research surface (soft Neuralese values, learning, tuned weights) lives in
+versioned extensions under [`spec/ext/`](ext/); each states its version and scope, and the core does not depend on
+any of them.
 
 | Extension | Version | Covers |
 | --- | --- | --- |
 | [Neuralese](ext/neuralese.md) | 0.5-draft | `Neuralese<T, D>` soft values, literals, combinators, `.nz` files, backends |
 | [Learning](ext/learning.md) | 0.5-draft | `natlang:learning`: `grad`, objectives, optimisers, adapters |
+| [Tuned weights](ext/tuned-weights.md) | 0.5-draft | binding a program's tuned weight release to its calls |
 | [Refinements and trust](ext/refinements.md) | 0.5-draft | `Is<T, P>`, `refine`/`assume`, `Untrusted<T>`, `refinements` settings |
 | [Call records](ext/call-records.md) | 0.5-draft | recording, compilations, specialization |
 | [Directory reducers](ext/directory-reducers.md) | 0.5-draft | `Folder` reducers, `folder.apply`, context revisions |
@@ -35,8 +73,11 @@ Error codes, the rule behind each, and when it fires are indexed in
 
 A natural-language function has ordered typed parameters and one return type.
 Calling it returns a promise of a value checked against that type; a failure
-rejects with `NatlangCallError` carrying `outcome` (`quiesced` or `failed`),
-`detail`, the call ID, and its trace.
+rejects with `NatlangCallError` carrying `definition`, `outcome` (`quiesced` or `failed`), `detail`, the call ID
+(`callId`), its `trace`, and a typed `reason`: `blocked`, `failed`, `type-mismatch`, `repeated-failed-action`,
+`no-action`, `budget-exhausted`, `refinement`, `refused` or `incomplete` for the model's outcome, `cancelled` for a
+cancelled call, and `error` for a failure outside the model's work (driver, arguments, host), which keeps the original
+error as `cause`. `RefinementCallError` is the subclass for a result that fails a refined type.
 
 There are two source forms.
 
@@ -74,7 +115,7 @@ Assess every observation with assess, then summarize the assessments.
 ```
 
 Frontmatter keys are `description`, `args`, `returns`, `generic`, `types`, `kind`
-(`function` or `directory-reducer`), `readout` (see Decision readout), `model`, `uses` and `withhold`. `generic` declares a
+(`function` or `directory-reducer`), `readout` (see Decision readout), `model`, `uses`, `withhold` and `budget`. `generic` declares a
 representation-generic result ([Neuralese](ext/neuralese.md#generic-results)): `generic: { R: string | Neuralese<string> }`
 with `returns: R`. `model: NAME` runs every
 call of the function on the runtime's model of that name (the `models` runtime option), and on the default model
@@ -83,7 +124,10 @@ items the function may call besides its companion folder, by path from the packa
 joins its context under its base name, with its own companion folder. `withhold` lists optional tools the
 function's own calls are not offered (`withhold: [delegate]`): `edit_code`, `diff_code` and the folder tools; eval,
 return_result, read_page, compact_history and read_code are always offered. A withheld tool is absent from the call's
-tool schema and prompt, and calling it anyway is refused with a one-sentence error. `args`, `returns`, `generic` and `types` hold
+tool schema and prompt, and calling it anyway is refused with a one-sentence error. `budget` bounds the model work of each of
+the function's calls in place of its model's own bounds: a map of `maxTurns`, `turnTokens` (reply tokens of one turn),
+`maxTokens` and `contextTokens` to positive whole numbers (`budget: { maxTurns: 8, turnTokens: 1024 }`); a call that
+exhausts it fails with reason `budget-exhausted`. No budget applies by default: termination is structural. `args`, `returns`, `generic` and `types` hold
 TypeScript type text, read verbatim rather than as YAML, so types need no
 quoting: `rows: { title: string }[]`, `pick?: (x: string) => number`,
 `returns: "yes" | "no"`. `args` and `types` are one `name: type` per indented
@@ -137,20 +181,8 @@ the executable nodes of its own definition site's context.
 are supplied by the host (see Services and effects); rebinding cannot widen
 authority.
 
-**Tuned weights.** A program may carry a tuned weight release
-([docs/TUNING.md](../docs/TUNING.md)). Its binding manifest declares an adapter
-scope tree over the program's bound definitions, not over the context DAG: a
-program root, folder nodes along source directories, and one lambda node per
-named definition or persistent inline site. A call runs the stack of the
-callee's own binding (gated families, then its scope ancestry from the root to
-its lambda); it replaces the caller's stack and is never inherited from the
-caller. Aliases of one bound definition share its binding; a rebound function
-(`foo.in(context)`) has no tuned binding unless the release declares one for that
-context, and then runs the base. Explicit `withNativeAdapters` scopes append
-after the lexical stack in nesting order. A task pins one release for all its
-calls. A stack the backend cannot serve falls back to the base executor and is
-recorded as degraded, never as tuned execution; strict resolution throws
-`weights-unavailable`, `weights-incompatible` or `weights-stale` instead.
+A program may also carry a tuned weight release, bound per callee; see the
+[tuned weights extension](ext/tuned-weights.md).
 
 Item names are identifiers and must not collide with function properties
 (`call`, `apply`, `bind`, `name`, `length`, `prototype`, `constructor`, `then`,
@@ -329,8 +361,7 @@ whole reply to the call's opening (signature and arguments, under a short
 system prompt) and returns the most probable one. The normalised distribution
 is the call's trace event `decision_readout` and its note, so a decision is a
 probability vector that proper scoring rules (Brier, ranked probability score,
-log loss) can grade and, on a Neuralese server, differentiate
-(`objectives.decision` in `natlang:learning`, [learning.md](ext/learning.md)). Host code reads it with
+log loss) can grade (the [learning extension](ext/learning.md) also differentiates them). Host code reads it with
 `runtime.decide(fn, ...args)` and eval code with `decide(fn, ...args)`, which return
 `{ value, probabilities: [{ value, probability }], confidence, scored }`. A model config with
 `decisionReadout: 'finite-returns'` applies the readout to every finite-typed

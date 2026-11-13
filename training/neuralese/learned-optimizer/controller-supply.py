@@ -20,16 +20,13 @@ def main():
         raise ValueError('controller split must be persisted before preparing references')
     custody = ProtectedWorlds.load(root=args.root, registry=Path(args.root) / 'training/protected-worlds.json')
     rows, seen = [], {}
-    for line in Path(args.examples).read_text().splitlines():
-        if not line.strip():
-            continue
-        example = json.loads(line)
+    for example in json.loads(Path(args.examples).read_text()):
         group = example['group']
         if group not in split['components']:
             raise ValueError(f'no persisted partition for {group}')
         if split['components'][group] != 'train' or example.get('protected') or 'expected' not in example:
             continue
-        key = json.dumps([group, example['function'], example['input']], sort_keys=True)
+        key = json.dumps([group, example['function'], example['inputs']], sort_keys=True)
         if key in seen:
             if seen[key] != example['expected']:
                 raise ValueError('conflicting exact controller labels for the same invocation')
@@ -37,10 +34,10 @@ def main():
         seen[key] = example['expected']
         identity = hashlib.sha256(key.encode()).hexdigest()
         case = {'id': 'metalearner:' + identity, 'split': 'train', 'source_groups': [group],
-                'semantics': {'root': example['function'], 'inputs': example['input'], 'expected': example['expected']}}
+                'semantics': {'root': example['function'], 'inputs': example['inputs'], 'expected': example['expected']}}
         receipt, facts = case_facts(case, custody=custody)
         rows.append({'schema': 'natlang.tune-privileged/2', 'function': example['function'], 'group': group,
-                     'input': example['input'], 'result': example['expected'], 'case_id': case['id'], 'custody': receipt,
+                     'input': example['inputs'], 'result': example['expected'], 'case_id': case['id'], 'custody': receipt,
                      'facts': [{'id': fact.id, 'kind': fact.kind, 'text': fact.text, 'match': list(fact.match),
                                 'sha256': fact.digest} for fact in facts], 'source': 'measured counterfactual meta examples'})
     path = controller / 'tune.privileged.jsonl'

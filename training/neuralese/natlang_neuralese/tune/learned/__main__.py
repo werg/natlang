@@ -324,7 +324,7 @@ def controls(spec):
 
 def meta_examples(spec):
     """Examples for tuning the meta-learner itself (`meta.py`): one counterfactual-best, full-budget episode per
-    program plan (each an `apply` plan with ``learned`` settings), written in the tuner's ``tune.examples.jsonl``
+    program plan (each an `apply` plan with ``learned`` settings), written in the tuner's ``examples.json``
     format to ``out``; a rerun skips finished programs. Spec: ``{programs: [{plan, group?}], work, out, steps?,
     refine_steps?, focus?, fit?, learned?}``; ``learned`` (bank, state, store, scopes, ...) is added to plans that do
     not carry it, so corpus plans can be used directly. Tune the optimizer program with them: ``natlang tune <learned-optimizer copy>

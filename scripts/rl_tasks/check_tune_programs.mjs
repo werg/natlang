@@ -9,7 +9,7 @@ const { loadNamedFunction } = await import(runtime + '/dist/runtime/loader.js');
 const { nodeSourceFiles } = await import(runtime + '/dist/runtime/node-files.js');
 const { scoreRoot } = await import(runtime + '/dist/tune/reward.js');
 for (const dir of dirs) {
-  const rows = fs.readFileSync(path.join(dir, 'tune.examples.jsonl'), 'utf8').split('\n').filter(Boolean).map(JSON.parse);
+  const rows = JSON.parse(fs.readFileSync(path.join(dir, 'examples.json'), 'utf8'));
   const fns = fs.readdirSync(dir, { recursive: true }).filter(f => f.endsWith('.nl') && !f.startsWith('.natlang'));
   const loaded = {};
   for (const fn of fns) { try { const f = loadNamedFunction(path.join(dir, fn), nodeSourceFiles(dir)); loaded[fn] = f ? 'ok' : 'none'; } catch (e) { loaded[fn] = String(e).slice(0, 300); } }

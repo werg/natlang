@@ -2,7 +2,7 @@
 
 Research and architecture proposal, 2026-09-29. This is a source-based assessment, not an optimizer benchmark or implemented API. Local references describe the working tree inspected on this date. External implementation findings refer to the snapshots listed below; confirm published-package exports before adopting them.
 
-**Decision update:** The chosen direction is now entirely TypeScript, using a focused vendored adaptation of Ax GEPA. The [complete implementation plan](../plans/ADAPTATION_SYSTEM_IMPLEMENTATION.md) supersedes this report's initial Python-backend recommendation and staged scope. The comparisons below remain research background.
+**Decision update:** The chosen direction is now entirely TypeScript, using a focused vendored adaptation of Ax GEPA. The [complete implementation plan](../../plans/ADAPTATION_SYSTEM_IMPLEMENTATION.md) supersedes this report's initial Python-backend recommendation and staged scope. The comparisons below remain research background.
 
 ## Recommendation
 

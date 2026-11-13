@@ -256,7 +256,7 @@ intermediate as a Neuralese value instead of decoding it to text. This is kernel
 with Neuralese as the calling convention between functions. The compilers application (30 staged `.nl` files) is the
 benchmark. Gate: equal accuracy at lower token count and latency than the text pipeline.
 
-**E3. A batched interpreter.** PLAN.md §1's speed thesis needs the runtime to batch. The scheduler collects every
+**E3. A batched interpreter.** docs/research/PLAN.md §1's speed thesis needs the runtime to batch. The scheduler collects every
 pending `nl` call across the program into one forward batch per model: each `Promise.all`, each `iterateOn` frontier,
 each directory-reducer fan-out. `ModelBackend.capabilities.batching` (B3) exposes it. Gate: throughput on triage over
 10k tickets against sequential execution.
@@ -291,7 +291,7 @@ through E1–E3, gives one demonstrably faster and cheaper system as the headlin
 ## 9. Landed with this plan (2026-10-09)
 
 - de245db9: Pyodide on Node created a stray `file:/home/...` tree in the working directory. `packageCacheDir`
-  defaulted to the `file:` URL in `packageBaseUrl`. Fixed, and the duplicated PLAN.md paragraph was removed.
+  defaulted to the `file:` URL in `packageBaseUrl`. Fixed, and the duplicated docs/research/PLAN.md paragraph was removed.
 
 ## 10. Sequencing and ownership
 

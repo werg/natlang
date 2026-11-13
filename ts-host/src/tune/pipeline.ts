@@ -184,7 +184,7 @@ export async function prepareData(options: TuneOptions, timings: StageTiming[] =
   const all = readRootExamples(root, options.examplesPath);
   const examples = currentSplit(root, options.examplesPath);
   if (!examples.some(example => example.partition === 'train'))
-    throw new Error('no training roots: add root invocations to tune.examples.jsonl (one JSON object per line: {"function", "input", "expected"?, "group"?})');
+    throw new Error(`no training roots: add examples to ${options.examplesPath ?? join(root, 'examples.json')} ([{ "function": "FILE.nl", "inputs": {...}, "expected": ..., "group"?: ... }]), or save them with natlang traces good|fix`);
   // Per-root records: raw evidence survives edits; a root is recollected only when a binding it reached changed
   // semantics or the shared (non-instruction) sources changed (keys.ts).
   const shared = sharedSourceHash(program, root);

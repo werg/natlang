@@ -43,7 +43,7 @@ test('calibration measures each teacher once per identity and a changed actor ne
     writeFileSync(join(root, 'shout.nl'), named('Return value in uppercase.'));
     writeFileSync(join(root, 'package.json'), '{"type":"module"}');
     const examples = Array.from({ length: 12 }, (_, index) => ({ function: 'shout.nl', input: { value: `v${index}` }, expected: `V${index}`, group: `g${index}` }));
-    writeFileSync(join(root, 'tune.examples.jsonl'), examples.map(example => JSON.stringify(example)).join('\n') + '\n');
+    writeFileSync(join(root, 'examples.json'), JSON.stringify(examples.map(({ input, ...example }) => ({ ...example, inputs: input }))));
     const built = host.buildProject({ project: root, emit: false, write: false });
     assert.equal(built.ok, true, host.formatDiagnostics(built.diagnostics));
     const development = currentSplit(root).filter(example => example.partition === 'development');

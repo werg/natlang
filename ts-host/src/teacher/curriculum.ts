@@ -1,5 +1,5 @@
 /**
- * The inline-natlang and observation-driven curriculum (docs/INLINE_NATLANG_TRAINING_DATA_PLAN.md).
+ * The inline-natlang and observation-driven curriculum (docs/research/INLINE_NATLANG_TRAINING_DATA_PLAN.md).
  *
  * A curriculum case is an ordinary `natlang.program/2` record with a `curriculum` block. The block is
  * oracle metadata: the collector gives the model only `semantics`, so nothing here reaches the teacher.

@@ -1,6 +1,6 @@
 name: Website
 
-# Checks the website and its dev-server tooling on pull requests, and publishes website/ with the public playground
+# Checks the website and its dev-server tooling on pull requests (and smokes the playground they build), and publishes website/ with the public playground
 # (website/play/, ts-host/scripts/build-playground-site.mjs) to GitHub Pages when either changes on main. Pages must be
 # set to deploy from GitHub Actions (Settings → Pages → Source).
 on:
@@ -10,7 +10,9 @@ on:
       'ts-host/playground/**', 'ts-host/src/**', 'ts-host/scripts/build-*.mjs', 'ts-host/scripts/playground-site-smoke.mjs',
       'models/templates/**']
   pull_request:
-    paths: ['website/**', 'scripts/website-dev/**', 'tests/test_website_dev.mjs', '.github/workflows/pages.yml']
+    paths: ['website/**', 'scripts/website-dev/**', 'tests/test_website_dev.mjs', '.github/workflows/pages.yml',
+      'ts-host/playground/**', 'ts-host/src/**', 'ts-host/scripts/build-*.mjs', 'ts-host/scripts/playground-site-smoke.mjs',
+      'models/templates/**']
   workflow_dispatch:
 
 permissions:
@@ -31,6 +33,26 @@ jobs:
           node-version: '22'
       - name: Test the dev server and the page's editable regions
         run: node --test tests/test_website_dev.mjs
+
+  # The playground built from this pull request, smoked in Chromium without the network (no model download).
+  playground:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build the runtime
+        run: |
+          npm ci
+          npm --workspace @natlang/typescript-host run build
+      - name: Build and smoke the playground in Chromium
+        working-directory: ts-host
+        run: |
+          npx playwright-core install --with-deps chromium
+          node scripts/playground-site-smoke.mjs
 
   deploy:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'

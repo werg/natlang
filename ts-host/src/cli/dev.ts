@@ -1,8 +1,15 @@
-/** Watch authored inputs and run one CLI child at a time. Generated build/declaration files never trigger reruns. */
+/**
+ * Watch a program's sources and run one CLI child at a time. Sources are .nl, .nz, .ts, .mts and .js files, natlang.json
+ * and JSON inputs; documentation, examples.json and generated build/declaration files never trigger reruns.
+ */
 import { watch, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+
+/** A file whose change reruns the program: source, natlang.json, and JSON inputs other than saved examples and lockfiles. */
+const isSource = (name: string) => /\.(?:nl|nz|ts|mts|js|mjs)$/.test(name) ||
+  /\.json$/.test(name) && !/(?:^|[\\/])(?:examples|package-lock)\.json$/.test(name);
 
 export async function develop(source: string, runArguments: string[]): Promise<number> {
   const path = resolve(source), root = statSync(path).isDirectory() ? path : dirname(path);
@@ -10,16 +17,20 @@ export async function develop(source: string, runArguments: string[]): Promise<n
   const launch = () => {
     if (stopping) return;
     pending = false;
-    process.stderr.write('natlang: running; edit a source or input file to rerun (Ctrl+C to stop)\n');
+    process.stderr.write('natlang: running; edit a source file to rerun (Ctrl+C to stop)\n');
     child = spawn(process.execPath, [fileURLToPath(new URL('./main.js', import.meta.url)), 'run', ...runArguments], { stdio: 'inherit' });
     child.once('error', error => process.stderr.write(`natlang: ${error.message}\n`));
-    child.once('close', () => { child = undefined; if (pending) launch(); });
+    child.once('close', (code, signal) => {
+      child = undefined;
+      if (pending) { launch(); return; }
+      if (!stopping) process.stderr.write(`natlang: ${signal ? `stopped by ${signal}` : `exit ${code}`}; waiting for edits\n`);
+    });
   };
   return new Promise<number>((done, reject) => {
     const watcher = watch(root, { recursive: true }, (_event, filename) => {
       const name = String(filename ?? '');
       if (!name || name.split(/[\\/]/).some(part => ['.git', '.natlang', 'node_modules', 'dist'].includes(part)) ||
-          /(?:\.d\.nl\.ts|\.tmp|~|\.swp)$/.test(name) || !/\.(?:nl|nz|ts|mts|js|json|md)$/.test(name)) return;
+          /(?:\.d\.nl\.ts|\.tmp|~|\.swp)$/.test(name) || !isSource(name)) return;
       clearTimeout(timer);
       timer = setTimeout(() => {
         pending = true;

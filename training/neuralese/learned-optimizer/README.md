@@ -48,7 +48,7 @@ to its checkpoint, programs and parameters (`operation.json`).
 | `corpus` | each program's round-0 plan refit on the bank basis with update boundaries, free-tune and in-bank targets | `corpus/targets.jsonl` |
 | outer cycles | `lane outer-next`: `train` up to the next bank publication (`publish_every` 100 of 400 steps, `train_bank`/`train_basis`/`train_keys` on); `adopt-bank` (the trainer continues on the published snapshot; bank moments restart with a recorded transition when basis training changed coordinates); `corpus` refit of the labels against the published bank (`cycles/<k>/corpus`) | `optimizer/state.json`, `cycles/` |
 | `outer-rl` | `learned.stage.outer_rl`: proposals, `natlang tune ROOT --score-proposals` per program (real task outcomes), collect, policy update | `outer-rl/` |
-| `meta-examples` | exact labels for the optimizer's own stages over the final corpus plans | `meta/tune.examples.jsonl` |
+| `meta-examples` | exact labels for the optimizer's own stages over the final corpus plans | `meta/examples.json` |
 | `controller-split`, `controller-supply`, `controller-tune` | persist the program-family split, prepare protected-world-checked training references, and self-teach and train the controller with SFT and oracle-reward RL | `controller/`, including its recorded active release |
 | `held-learned-*`, `held-development-*`, `held-confirmation-*`, `held-baseline-*` | apply that exact controller release to held programs and measure the untuned, earlier tuned, and learned releases on development and confirmation roots | each held program's tune reports and evaluation arms |
 

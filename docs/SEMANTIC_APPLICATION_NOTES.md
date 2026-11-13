@@ -430,4 +430,4 @@ Traces (`runtime.run(fn, { trace })`, or `fileTraceSink(dir)`) record the presen
 
 A `:hinted` curriculum twin states a technique as required (`iterateOn`, inline natural-language calls); its oracle enforces it on the run (`teacher/required-technique.ts`: an iterateOn that took steps and finished, at least one inline `nl` child), so a hand-typed answer scores as a failure there and still passes the unhinted twin. A recreated (removed) function is held to its parameter types, order and optionality by position, not to parameter names that no instruction states (`codebase-check.ts`); a function repaired in place keeps its names. Give such a task negative controls (dropped or retyped parameter) and `alias_code` controls (other parameter names) that `scripts/rl_tasks/verify.mjs` replays.
 
-Anchors: `ts-host/src/teacher/`, `ts-host/scripts/teacher-collector.mjs`, `PROGRAM_IR_PIPELINE.md`, `TEACHER_SETUP.md`.
+Anchors: `ts-host/src/teacher/`, `ts-host/scripts/teacher-collector.mjs`, `docs/research/PROGRAM_IR_PIPELINE.md`, `docs/research/TEACHER_SETUP.md`.

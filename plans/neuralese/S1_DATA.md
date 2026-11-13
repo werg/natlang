@@ -61,7 +61,7 @@ Records do not carry budgets. Length is learned (README, "Length").
 
 ### 2.2 Natlang executable tasks
 
-Sources with a checkable result, state change or effect become `natlang.program/2` records (`PROGRAM_IR_PIPELINE.md`) through new adapters. They then go through the existing collector, materializer and exporter with teachers. These tasks are the raw material for S2 skill authoring, S5 soft conversion and S7 RL. Conversion is selective: only where typed decomposition and checked results add value (semantics document §6).
+Sources with a checkable result, state change or effect become `natlang.program/2` records (`docs/research/PROGRAM_IR_PIPELINE.md`) through new adapters. They then go through the existing collector, materializer and exporter with teachers. These tasks are the raw material for S2 skill authoring, S5 soft conversion and S7 RL. Conversion is selective: only where typed decomposition and checked results add value (semantics document §6).
 
 ### 2.3 From port records to rendered training examples
 
@@ -142,7 +142,7 @@ Location: `/mnt/external/sdkb-archive/corpora/` (episodes as `episodes-{train,va
 | v13 model-neutral corpus (111,301 rows: 105,869 train, 5,432 test) and its producers (synthetic IR, source-backed static adapters, inline curriculum, failure-repair, directory reducers, self-improvement and optimizer slates, code corpus) | Migrated through the eager-typing and explicit-capture rewrite (§7). Remains the crisp backbone of the mix and the replay set. |
 | `natlang.program/2` IR sources in `data/teacher/` | Unchanged as IR; re-collected only when runtime or prompts change. |
 | Retired Python-pipeline sources (SCONE, Schema-Guided Dialogue, FinQA, CLEVR, sales, support) | Queued for Natlang task adapters (they have checkable results). |
-| `data/external_pilot/` pre-IR traces | Excluded: not canonical (`PROGRAM_IR_PIPELINE.md`). |
+| `data/external_pilot/` pre-IR traces | Excluded: not canonical (`docs/research/PROGRAM_IR_PIPELINE.md`). |
 | Development data on `/mnt/external/natlang-development-data/` (code corpora, ref-v7/v8, weakness sets) | Inventoried by the existing natlang ledgers; no change of disposition. |
 
 ## 4. Removing source conventions

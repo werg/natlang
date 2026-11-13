@@ -15,7 +15,7 @@ The owner stopped this session for usage limits. Plans: [ARCHITECTURE_IMPROVEMEN
 
 | Commit | What |
 | --- | --- |
-| de245db9 | Pyodide on Node no longer creates a stray `file:/home/...` directory; duplicated PLAN.md paragraph removed |
+| de245db9 | Pyodide on Node no longer creates a stray `file:/home/...` directory; duplicated docs/research/PLAN.md paragraph removed |
 | a982f7ce, 338d6106 | `iteration-unbounded` error code as the spec says; `npm run check:layering` ratchet (68 cyclic directory edges frozen) |
 | 42bcb73c, dbc5ec3e | `scripts/coord.py` replaces `coordination_inbox.py` (see "Communication") |
 | 52aae5f1, 04417569 | Architecture plan; refinement-type and batching designs |

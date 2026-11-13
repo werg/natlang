@@ -52,7 +52,7 @@ test('install.sh installs the packed CLI, which creates, checks and runs a progr
     const called = await natlang(['call', 'answer.nl', 'I was charged twice'], program);
     assert.equal(called.code, 0, called.err); assert.equal(called.out, 'billing\n');
     const ran = await natlang(['run'], program);
-    assert.equal(ran.code, 0, ran.err); assert.equal(JSON.parse(ran.out), 'billing');
+    assert.equal(ran.code, 0, ran.err); assert.equal(ran.out, 'billing\n');
     const skills = await natlang(['skills', '--json']);
     assert.equal(skills.code, 0, skills.err);
     assert.ok(JSON.parse(skills.out).root.startsWith(prefix), 'the skills come from the installed package, not the checkout');

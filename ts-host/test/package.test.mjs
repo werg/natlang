@@ -186,5 +186,5 @@ test('CLI builds and runs TypeScript entries, packs and installs applications, a
   assert.match(execFileSync(process.execPath, [cli, 'packages', '--store', store], { encoding: 'utf8' }), /cli-fixture@1\.0\.0/);
   assert.equal(await natlang(['run', 'cli-fixture@1.0.0#hello', '--store', store, '--', 'Barbara']), 'hello Barbara');
   const bad = spawnSync(process.execPath, [cli, 'apps', root, '--store', store], { encoding: 'utf8' });
-  assert.equal(bad.status, 1); assert.match(bad.stderr, /option --store is not valid here/);
+  assert.equal(bad.status, 2); assert.match(bad.stderr, /unknown option --store for natlang apps/);
 });

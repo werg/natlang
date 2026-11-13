@@ -240,7 +240,7 @@ traces.
 | L6 | Data is not code: embedded instructions in inputs change nothing | unaffected behavior |
 
 K-skills are algorithmic and must reach the high nineties; they compound.
-L-skills are where existing datasets pour in. [`TYPES.md`](TYPES.md) summarizes
+L-skills are where existing datasets pour in. [`TYPES.md`](../../TYPES.md) summarizes
 the current type and validation contract.
 
 ## 3. Data sources

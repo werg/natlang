@@ -129,7 +129,7 @@ def episode_examples(context, *, steps, group, refine_steps=10, focus=True, fit=
     view = context.evidence
     chosen, focus_receipt = focus_label(context, fit=fit) if focus else (None, None)
     if focus:
-        examples.append({'function': 'adapt/chooseFocus.nl', 'input': {'view': view, 'history': []}, 'expected': chosen,
+        examples.append({'function': 'adapt/chooseFocus.nl', 'inputs': {'view': view, 'history': []}, 'expected': chosen,
                          'reference': {'focus': chosen}, 'group': group})
         receipt['focus'] = focus_receipt
     incoming_loss = context.evaluate(None)
@@ -140,7 +140,7 @@ def episode_examples(context, *, steps, group, refine_steps=10, focus=True, fit=
         revision, revision_losses = revision_label(context, chosen, refine_steps=refine_steps)
     operations = {binding['id']: revision.get(binding['id'], 'keep') for binding in context.manifest['bindings']}
     if focus:
-        examples.append({'function': 'adapt/chooseRevision.nl', 'input': {'focus': chosen, 'view': view, 'history': []},
+        examples.append({'function': 'adapt/chooseRevision.nl', 'inputs': {'focus': chosen, 'view': view, 'history': []},
                          'expected': {'operations': operations}, 'group': group,
                          'reference': {'losses': revision_losses, 'incomingLoss': incoming_loss}})
         receipt['revision'] = {'operations': operations, 'losses': revision_losses}
@@ -152,7 +152,7 @@ def episode_examples(context, *, steps, group, refine_steps=10, focus=True, fit=
                                      focus=chosen)
         operator = best_operator(outcomes, current_loss)
         examples.append({'function': 'adapt/chooseOperator.nl', 'expected': operator, 'group': group,
-                         'input': {'history': list(history), 'plan': plan, 'remainingSteps': remaining},
+                         'inputs': {'history': list(history), 'plan': plan, 'remainingSteps': remaining},
                          'reference': {'losses': {name: loss for name, (_, loss) in outcomes.items()}, 'incumbentLoss': current_loss}})
         receipt['steps'].append({'step': step, 'losses': {name: loss for name, (_, loss) in outcomes.items()},
                                  'incumbentLoss': current_loss, 'operator': operator})
@@ -169,19 +169,22 @@ def episode_examples(context, *, steps, group, refine_steps=10, focus=True, fit=
     total = incoming_loss - best_losses[-1]
     for state, stop, best in zip(states, stop_labels(best_losses), best_losses):
         remaining = (best - best_losses[-1]) / total if total > 0 else 0.
-        examples.append({'function': 'adapt/shouldStop.nl', 'input': {'state': state}, 'expected': stop, 'group': group,
+        examples.append({'function': 'adapt/shouldStop.nl', 'inputs': {'state': state}, 'expected': stop, 'group': group,
                          'reference': {'stop': stop, 'remainingShare': remaining}})
     receipt['bestLosses'] = best_losses
     # The whole episode as one root: the program's `adapt` run against the live services on this context, graded by
     # the share of this counterfactual episode's improvement its final bundle reaches (tune.reward.mjs).
-    examples.append({'function': 'adapt.nl', 'input': {'maxSteps': steps}, 'group': group,
+    examples.append({'function': 'adapt.nl', 'inputs': {'maxSteps': steps}, 'group': group,
                      'reference': {'plan': context.plan_path, 'out': str(Path(context.out).resolve()),
                                    'incomingLoss': incoming_loss, 'bestLoss': best_losses[-1]}})
     return examples, receipt
 
 
 def write_examples(path, examples):
-    """Append-only JSONL in the tuner's ``tune.examples.jsonl`` row format."""
-    with Path(path).open('a') as stream:
-        for row in examples:
-            stream.write(json.dumps(row, sort_keys=True) + '\n')
+    """Add ``examples`` to the examples file at ``path`` (the tuner's ``examples.json`` format: one JSON array of
+    ``{function, inputs, expected?, group, reference}``), rewritten atomically."""
+    path = Path(path)
+    current = json.loads(path.read_text()) if path.exists() else []
+    temporary = path.with_name(path.name + '.tmp')
+    temporary.write_text(json.dumps([*current, *examples], indent=1, sort_keys=True) + '\n')
+    temporary.replace(path)

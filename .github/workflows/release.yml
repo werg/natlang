@@ -29,6 +29,8 @@ jobs:
             version=$(node -p "require('./npm-packages/$package/package.json').version")
             [ "v$version" = "$GITHUB_REF_NAME" ] || { echo "npm-packages/$package is $version, the tag is $GITHUB_REF_NAME"; exit 1; }
           done
+          dependency=$(node -p "require('./npm-packages/cli/package.json').dependencies['@natlang/node']")
+          [ "v$dependency" = "$GITHUB_REF_NAME" ] || { echo "@natlang/cli depends on @natlang/node $dependency, the tag is $GITHUB_REF_NAME"; exit 1; }
       - name: Build and pack
         run: |
           npm ci
@@ -37,10 +39,16 @@ jobs:
           npm pack --ignore-scripts --workspace @natlang/node --workspace @natlang/cli --pack-destination release
           mv release/natlang-node-*.tgz release/natlang-node.tgz
           mv release/natlang-cli-*.tgz release/natlang-cli.tgz
-      - name: Install with scripts/install.sh and create a program
+      - name: Install with scripts/install.sh, check the command, and create a program
         run: |
           NATLANG_FROM=release NATLANG_PREFIX="$RUNNER_TEMP/natlang" sh scripts/install.sh
-          cd "$RUNNER_TEMP" && "$RUNNER_TEMP/natlang/bin/natlang" init smoke && cd smoke && "$RUNNER_TEMP/natlang/bin/natlang" check
+          natlang="$RUNNER_TEMP/natlang/bin/natlang"
+          # The CLI reports the version it was released as (read from @natlang/node's package.json).
+          [ "v$("$natlang" --version)" = "$GITHUB_REF_NAME" ] || { echo "natlang --version is $("$natlang" --version), the tag is $GITHUB_REF_NAME"; exit 1; }
+          "$natlang" help | grep -q "natlang help advanced"
+          "$natlang" help advanced >/dev/null
+          "$natlang" skills | grep -q natlang-authoring
+          cd "$RUNNER_TEMP" && "$natlang" init smoke && cd smoke && "$natlang" check
       - name: Create the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}

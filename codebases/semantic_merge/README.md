@@ -27,7 +27,7 @@ To regenerate the scenario inputs:
 The Python collector that ran these cases was removed with the Python runtime.
 Collecting them again needs a `natlang.program/2` adapter that turns each case
 into a project (the entry point's files plus inputs), after which the Node
-collector applies (see [PROGRAM_IR_PIPELINE.md](../../PROGRAM_IR_PIPELINE.md)).
+collector applies (see [docs/research/PROGRAM_IR_PIPELINE.md](../../docs/research/PROGRAM_IR_PIPELINE.md)).
 Mechanical checks cover typed completion, source-ID coverage, and conflict
 shape; `semantic_review` stays pending until a reviewer checks the case rubric
 and the merged meaning. No run is automatically admitted as a training reference.

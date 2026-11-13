@@ -102,9 +102,8 @@ if [[ "$COMMAND_ONLY" -eq 0 ]]; then
     echo "==> Checking the local model runtime"
     RUNTIME_ARGS=(setup)
     if [[ "$RUNTIME_YES" -eq 1 ]]; then RUNTIME_ARGS+=(--yes); fi
-    NATLANG_RUNTIME_HOME="${NATLANG_RUNTIME_HOME:-$ROOT/.natlang/runtime}" \
-      NATLANG_CACHE_HOME="${NATLANG_CACHE_HOME:-$ROOT/.natlang/cache}" \
-      node "$ROOT/ts-host/dist/cli/main.js" "${RUNTIME_ARGS[@]}"
+    # The model cache and runtimes are the machine's (shared with an installed natlang), as scripts/natlang uses them.
+    node "$ROOT/ts-host/dist/cli/main.js" "${RUNTIME_ARGS[@]}"
   else
     echo "==> Model setup deferred: use the dashboard to choose a model, or run natlang setup"
   fi

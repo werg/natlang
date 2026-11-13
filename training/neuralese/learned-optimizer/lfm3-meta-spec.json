@@ -1,6 +1,6 @@
 {
  "work": "{op}/meta",
- "out": "{op}/meta/tune.examples.jsonl",
+ "out": "{op}/meta/examples.json",
  "steps": 6,
  "refine_steps": 10,
  "fit": {

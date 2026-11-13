@@ -13,11 +13,11 @@ def test_supply_writes_grouped_programs_with_exact_oracles(tmp_path):
     for item in manifest['programs']:
         directory = tmp_path / item['program']
         assert (directory / 'main.nl').exists() and (directory / 'types.ts').exists()
-        rows = [json.loads(line) for line in (directory / 'tune.examples.jsonl').read_text().splitlines()]
+        rows = json.loads((directory / 'examples.json').read_text())
         assert len(rows) == 12 and len({row['group'] for row in rows}) == 6  # two invocations per world
         program = supply.variant(domains[item['family']], item['variant'])
         for row in rows:
-            record = {key: value for key, value in row['input'][program.arg].items() if key != program.note}
+            record = {key: value for key, value in row['inputs'][program.arg].items() if key != program.note}
             assert row['expected'] == supply.oracle(program, record)
     # A variant is a distinct program of the same family.
     assert (tmp_path / 'fraud-review' / 'main' / 'decidePayment.nl').read_text() != \
@@ -34,7 +34,7 @@ def test_rules_render_record_fields_and_arguments():
 
 
 def _persist_split(directory, partitions=('train', 'train', 'development', 'confirmation')):
-    groups = sorted({json.loads(line)['group'] for line in (directory / 'tune.examples.jsonl').read_text().splitlines()})
+    groups = sorted({row['group'] for row in json.loads((directory / 'examples.json').read_text())})
     (directory / '.natlang' / 'tune').mkdir(parents=True)
     (directory / '.natlang' / 'tune' / 'splits.json').write_text(json.dumps(
         {'schema': 'natlang.tune-split/v1', 'components': {group: partitions[i % len(partitions)] for i, group in enumerate(groups)}}))
@@ -65,8 +65,8 @@ def test_privileged_references_cover_training_roots_only_with_shared_facts(tmp_p
         assert {row['group'] for row in rows} == {group for group, partition in split.items() if partition == 'train'}
         program = domains[item['family']]
         files = supply.program_files(program)
-        examples = {json.dumps([row['group'], row['input']], sort_keys=True): row
-                    for row in map(json.loads, (directory / 'tune.examples.jsonl').read_text().splitlines())}
+        examples = {json.dumps([row['group'], row['inputs']], sort_keys=True): row
+                    for row in json.loads((directory / 'examples.json').read_text())}
         for row in rows:
             assert row['schema'] == 'natlang.tune-privileged/2' and row['custody']['split'] == 'train'
             assert row['custody']['protected_sha256'] == custody.digest
@@ -103,11 +103,11 @@ def test_privileged_references_refuse_an_example_whose_oracle_changed(tmp_path):
     supply.write_programs(tmp_path, domains=['access-request'], variants=1, worlds=4)
     directory = tmp_path / 'access-request'
     _persist_split(directory, ('train',))
-    lines = (directory / 'tune.examples.jsonl').read_text().splitlines()
-    first = json.loads(lines[0])
+    rows = json.loads((directory / 'examples.json').read_text())
+    first = rows[0]
     domain = next(domain for domain in supply.CATALOG if domain.name == 'access-request')
     first['expected'] = next(label for label in domain.labels if label != first['expected'])
-    (directory / 'tune.examples.jsonl').write_text('\n'.join([json.dumps(first, sort_keys=True), *lines[1:]]) + '\n')
+    (directory / 'examples.json').write_text(json.dumps(rows))
     with pytest.raises(ValueError, match='recomputed oracle'):
         supply.write_privileged(tmp_path, custody=_custody())
 

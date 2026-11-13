@@ -1,7 +1,8 @@
 ---
-description: Answer using the program instructions.
+description: Classify a customer message as billing, technical or other.
 args:
-  input: string
-returns: "\"billing\" | \"technical\" | \"other\""
+  message: string
+returns: '"billing" | "technical" | "other"'
+readout: decision
 ---
-Classify input as billing (charges, invoices or payments), technical (errors or bugs), or other. Return only the matching label.
+Classify message as billing (charges, invoices or payments), technical (errors or bugs), or other. Return only the matching label.

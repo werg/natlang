@@ -19,7 +19,9 @@ symlink to this checkout's source wrapper. If that directory is missing from
 
 This is the repository setup command. Full setup also checks an existing
 `llama-server` version. If there is no compatible server, it asks before
-downloading natlang's pinned, verified build into `.natlang/runtime`. The setup
+downloading natlang's pinned, verified build into the machine's runtime directory
+(`~/.local/share/natlang/runtimes`; the model goes to `~/.cache/natlang`, shared with an installed natlang;
+`natlang doctor` prints both). The setup
 does not modify a system installation. For unattended setup, `--yes` grants
 permission for that managed download:
 
@@ -271,7 +273,7 @@ the acquisition script to download and verify a source. The default cache is
 `vendor/datasets`; set `NATLANG_DATASETS` to use a shared or external cache.
 Each source keeps its pinned revision and checksum in the generated manifest.
 Some world adapters also need a source-specific Python environment; ALFWorld
-and ScienceWorld setup is described in [Inline curriculum](docs/INLINE_CURRICULUM.md).
+and ScienceWorld setup is described in [Inline curriculum](docs/research/INLINE_CURRICULUM.md).
 
 ```bash
 export NATLANG_DATASETS=/data/natlang/datasets  # optional; omit for vendor/datasets

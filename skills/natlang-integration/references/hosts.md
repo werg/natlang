@@ -17,7 +17,7 @@ It selects the profile (`profile`, `NATLANG_PROFILE` or the default), runs a tun
 checkpoint it was tuned on and loads the release into the server, starts a native profile's server (and stops it in
 `close()`), wires the profile's `escalate` teacher through the tiered engine, and writes one-line notices (tuned
 binding, newer checkpoints, escalations) to `log`. An escalated root call's input joins the program's
-`tune.examples.jsonl` when the runtime closes. `environment` replaces `process.env` for profiles and the call store.
+`examples.json` when the runtime closes. `environment` replaces `process.env` for profiles and the call store.
 The result also has `driver` (the selected model, for direct calls), `selection`, `executorIdentity`, `tuned` and
 `prepare()`. A server natlang started without a launcher also stops when the process exits.
 

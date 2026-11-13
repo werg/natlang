@@ -95,3 +95,41 @@ test('a dashboard job runs the CLI, records its output and writes the build lock
     assert.equal(lock.warm, null);
   } finally { await dashboard.close(); }
 });
+
+test('a run whose local model is not downloaded asks first; a confirmed run passes --yes; new functions come from a template', async () => {
+  const { root, environment } = workspace();
+  const dashboard = await startDashboard({ root, version: 'test', environment, port: 0, log: { write: () => true } });
+  try {
+    const base = new URL(dashboard.url), origin = `${base.protocol}//${base.host}`, token = base.searchParams.get('token');
+    const headers = { 'x-natlang-token': token, cookie: `natlang_dashboard=${token}`, 'content-type': 'application/json' };
+    const post = async (path, body) => { const response = await fetch(origin + path, { method: 'POST', headers, body: JSON.stringify(body) });
+      return { status: response.status, value: await response.json() }; };
+    const readiness = await (await fetch(`${origin}/api/programs/model?path=greeter&profile=`, { headers })).json();
+    assert.equal(readiness.kind, 'managed-local');
+    assert.equal(readiness.setup.bytes, 1099627808, 'the program model (Q4_K_M) is not downloaded');
+    const refused = await post('/api/jobs', { kind: 'run', path: 'greeter' });
+    assert.equal(refused.status, 409);
+    assert.match(refused.value.error, /downloads the local model \(1\.0 GB\) first/);
+    assert.deepEqual(refused.value.setup, readiness.setup);
+    assert.equal((await post('/api/jobs', { kind: 'call', function: 'greeter/greet.nl', inputs: { name: 'Ada' }, program: 'greeter' })).status, 409);
+    assert.equal((await post('/api/jobs', { kind: 'test', path: 'greeter' })).status, 409);
+    // Confirmed: the job carries --yes (greeter has no saved examples, so this test job ends before any model work).
+    const confirmed = await post('/api/jobs', { kind: 'test', path: 'greeter', download: true });
+    assert.equal(confirmed.status, 200); assert.ok(confirmed.value.argv.includes('--yes'));
+    assert.ok(!(await post('/api/jobs', { kind: 'build', path: 'greeter' })).value.argv.includes('--yes'), 'a build without warm-up downloads nothing');
+    // A hosted or external model needs no download, so nothing is asked.
+    const external = await startDashboard({ root, version: 'test', environment: { ...environment, NATLANG_SERVER: 'http://127.0.0.1:1', NATLANG_MODEL: 'x' }, port: 0, log: { write: () => true } });
+    try {
+      const url = new URL(external.url), externalToken = url.searchParams.get('token');
+      const response = await fetch(`${url.protocol}//${url.host}/api/programs/model?path=greeter`, { headers: { 'x-natlang-token': externalToken, cookie: `natlang_dashboard=${externalToken}` } });
+      assert.equal((await response.json()).setup, null);
+    } finally { await external.close(); }
+
+    const created = await post('/api/programs/function', { path: 'greeter', file: 'greet/polite.nl' });
+    assert.equal(created.status, 200); assert.equal(created.value.path, join('greeter', 'greet', 'polite.nl'));
+    assert.match(readFileSync(join(root, 'greeter', 'greet', 'polite.nl'), 'utf8'), /^---\ndescription: .*\nargs:\n  text: string\nreturns: string\n---\n/);
+    assert.equal((await post('/api/programs/function', { path: 'greeter', file: 'greet/polite.nl' })).status, 409, 'never overwrites');
+    assert.equal((await post('/api/programs/function', { path: 'greeter', file: 'bad name.nl' })).status, 400);
+    assert.equal((await post('/api/programs/function', { path: 'greeter', file: '../escape.nl' })).status, 400);
+  } finally { await dashboard.close(); }
+});

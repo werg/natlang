@@ -13,12 +13,27 @@ export type NatlangDiagnostic = SourceSpan & {
   code: 'nl-unknown-return' | 'nl-unknown-parameter' | 'nl-not-called' | 'nl-not-tag' | 'nl-shadowed' | 'nl-ambiguous-signature' | 'nl-sync-callback' |
     'nl-parameter-collision' | 'nl-unknown-name' | 'nl-spread' | 'nl-const-capture-write' |
     'forbidden-loop' | 'forbidden-dynamic-code' | 'recursion' | 'callable-scope' | 'reserved-property' |
-    'duplicate-site' | 'iterate-step' | 'iterate-predicate' | 'module-collision' | 'typescript' | 'nl-undeclared-type' |
+    'duplicate-site' | 'iterate-step' | 'iterate-predicate' | 'module-collision' | `TS${number}` | 'nl-undeclared-type' |
     'neuralese-opaque-access' | 'neuralese-condition' | 'neuralese-untyped-literal' |
     'neuralese-nested' | 'neuralese-readout-sync' | 'neuralese-crisp-result' | 'type-recursive-function' | 'neuralese-file' | 'nl-explicit-captures' | 'nl-type-arguments' | 'undeclared-field' | 'decision-compare' | 'untrusted-instruction';
+  /** One line: what is wrong. */
   message: string;
+  /** The explanation beneath it (TypeScript's elaboration chain), when there is one. */
+  detail?: string;
+  /** The likely fix, such as the name that was probably meant. */
+  hint?: string;
   severity: 'error' | 'warning';
 };
+
+/** A TypeScript error as a natlang diagnostic: code `TS<number>`, its first line as the message, the rest as detail. */
+export function fromTypeScript(diagnostic: ts.Diagnostic, file: string): NatlangDiagnostic {
+  const start = diagnostic.start ?? 0;
+  const position = diagnostic.file && diagnostic.start !== undefined ? diagnostic.file.getLineAndCharacterOfPosition(start) : { line: 0, character: 0 };
+  const [message = '', ...rest] = ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n').split('\n').map(line => line.trim());
+  const detail = rest.filter((line, index) => line && line !== message && rest.indexOf(line) === index).join('\n');
+  return { file, start, end: start + (diagnostic.length ?? 0), line: position.line + 1, column: position.character + 1,
+    code: `TS${diagnostic.code}`, severity: 'error', message, ...(detail ? { detail } : {}) };
+}
 
 export type CapturePlan = {
   name: string;

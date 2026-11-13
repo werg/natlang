@@ -126,7 +126,7 @@ hierarchical pipeline already exists.
 | Program discovery, normal run/call launch and runtime model driver | [CLI launch](../ts-host/src/cli/main.ts), [runtime](../ts-host/src/runtime/runtime.ts) | Automatic active weight-binding discovery and per-request stack dispatch on the existing inference path |
 | Source/world connected-component selector | [memetic_batch.py](../training/neuralese/natlang_neuralese/rl/memetic_batch.py) | Extend train-only development/confirmation selection; preserve external protected sets |
 | Explicit `same-base-adapter-state` imports and consumption receipts | [native_adapters.py](../training/neuralese/natlang_neuralese/model/native_adapters.py), [native_grad.py](../training/neuralese/natlang_neuralese/serve/native_grad.py) | Retain cross-stack producer/consumer identity and gradients; distinguish cache reuse |
-| Teacher configuration and current operating instructions | [TEACHER_SETUP.md](../TEACHER_SETUP.md), [AGENTS.md](../AGENTS.md) | Calibrated routing among currently authorized actors |
+| Teacher configuration and current operating instructions | [docs/research/TEACHER_SETUP.md](../docs/research/TEACHER_SETUP.md), [AGENTS.md](../AGENTS.md) | Calibrated routing among currently authorized actors |
 | Shared training recipes and line parity | [TRAINING_RECIPE.md](neuralese/TRAINING_RECIPE.md) | One shared hierarchical recipe with declared backbone differences |
 
 The existing split selector rejects non-train inputs and makes development and

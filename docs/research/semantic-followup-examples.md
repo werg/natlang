@@ -1,6 +1,6 @@
 # Semantic follow-up probe: sample problems
 
-These are 16 representative cases from the [96-case IR corpus](../data/teacher/semantic-followup-probe.ir.jsonl). The agent sees the instructions, typed inputs, and imported function signatures. It obtains the report or investigation note only by calling the imported lookup function (or reading its source). `expected` and `generation` metadata are oracle data and are not shown to the agent.
+These are 16 representative cases from the [96-case IR corpus](../../data/teacher/semantic-followup-probe.ir.jsonl). The agent sees the instructions, typed inputs, and imported function signatures. It obtains the report or investigation note only by calling the imported lookup function (or reading its source). `expected` and `generation` metadata are oracle data and are not shown to the agent.
 
 ## Pilot outcome
 
