@@ -245,7 +245,16 @@ test('constrained source accepts finite iteration and rejects open-ended forms',
   for (const source of ['while (x) {}', 'do {} while (x)', 'for (;;) {}', 'setInterval(tick, 5)', 'window.setInterval(tick, 5)',
     'const o = { [Symbol.iterator]: () => it }', 'Iterator.from(source)', 'class Forever extends Iterator {}',
     'function* g() {}', 'for (let i = 0; i < n; i--) {}', 'for (let i = 0; i < n; i++) { i++; }', 'for (let i = 0; i < xs.length; i++) { xs.push(1); }',
-    'for (let i = 0; i < count(); i++) {}', 'eval("1")', 'new Function("")', 'import("x")'])
+    'eval("1")', 'new Function("")', 'import("x")'])
+    assert.ok(policy(source).length, source);
+});
+
+test('a counted loop may call for its bound, and a nested loop may reuse the counter name', () => {
+  assert.deepEqual(policy(`for (let n = 1; n <= sf.page_count(); n++) {}
+    for (let i = 0; i < count(); i++) { for (let i = 0; i < 3; i++) {} }
+    for (let i = 0; i < 3; i++) { const run = (i) => { i = 0; }; { let i = 9; i--; } }`), []);
+  for (const source of ['for (let i = 0; i < 3; i++) { for (let j = 0; j < 3; j++) { i++; } }',
+    'for (let i = 0; i < 3; i++) { { let j = 0; i = j; } }'])
     assert.ok(policy(source).length, source);
 });
 

@@ -166,7 +166,9 @@ const __natlang_counted = (upward: boolean) => {
     at: (current: number) => { if (bound === undefined) return undefined; advance(current); return bound; },
     fix: (current: number, value: unknown) => {
       if (typeof value !== 'number' || value - value !== 0)
-        throw new RangeError('a counted for loop needs a finite number as its bound, but got ' + String(value) +
+        throw new RangeError(typeof (value as any)?.then === 'function' ?
+          'the bound of this counted for loop is a Promise; write await before the call in the bound' :
+          'a counted for loop needs a finite number as its bound, but got ' + String(value) +
           '; use iterateOn(step, initial) for an open-ended loop');
       bound = value; advance(current); return value;
     },

@@ -107,7 +107,8 @@ projects with `natlang build` (or `natlang run`) so `nl` is lowered. Inline call
    it from `natlang:services`, and calls are traced effects. A stuck model will rewrite a "helper" that refuses its
    move. Never let correctness depend on the model not reading source.
 6. **Loop structurally.** Callable-folder TypeScript and eval code have no `while`, `do`, open `for(;;)` or
-   generators: use `for...of`, `for...in` over a record's keys, counted `for` loops, array methods, recursion on a
+   generators: use `for...of`, `for...in` over a record's keys, counted `for` loops (the bound is read once when the loop starts and may be a call,
+   `p <= store.pages()`; a Promise bound fails with "write await before the call in the bound"), array methods, recursion on a
    smaller argument, or `iterateOn` for open-ended refinement
    (`iterateOn(step, initial).withMeasure(s => s.pending.length).until(s => s.pending.length === 0)`).
    Run independent calls together with `Promise.all(items.map(f))`.

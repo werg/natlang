@@ -32,6 +32,15 @@ test('a counted loop reads its bound once, when it starts', async () => {
   assert.equal(alias.ok, 'length 2');
 });
 
+test('a call in a counted loop bound runs once', async () => {
+  const called = await evalCase({ code: 'let k = 0; for (let p = 1; p <= counter.tick() + 3; p++) k++; return `k ${k}`;' });
+  assert.equal(called.ok, 'k 4'); assert.equal(called.ticksAtReturn, 1);
+  const promised = await evalCase({ code: 'const pages = async () => 3; let k = 0; for (let p = 1; p <= pages(); p++) k++; return `k ${k}`;' });
+  assert.match(promised.error, /bound of this counted for loop is a Promise; write await before the call/);
+  const awaited = await evalCase({ code: 'const pages = async () => 3; let k = 0; for (let p = 1; p <= await pages(); p++) k++; return `k ${k}`;' });
+  assert.equal(awaited.ok, 'k 3');
+});
+
 test('recursion through methods, properties and promise callbacks is refused', async () => {
   const cases = {
     objectMethod: 'const o = { w: async (f: any, n: number): Promise<number> => { await new Promise(r => setTimeout(r, 1)); counter.tick(); ' +
