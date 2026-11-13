@@ -181,3 +181,16 @@ def test_think_mask_and_moment_cosine():
     assert grpo.moment_cosine([a, b], optimizer) is None
     optimizer.state = {a: {"exp_avg": torch.tensor([1., 0.])}, b: {"exp_avg": torch.tensor([[0., -1.]])}}
     assert grpo.moment_cosine([a, b], optimizer) == pytest.approx((3 - 4) / (5 * 2 ** .5))
+
+
+def test_the_pop_loop_reads_held_complete_from_the_module():
+    """A local named like the module helper in train() made it a closure variable of the Pop loop (NameError at start)."""
+    import symtable
+    table = symtable.symtable(Path(grpo.__file__).read_text(), 'grpo.py', 'exec')
+    scopes = [table]
+    while scopes:
+        scope = scopes.pop()
+        scopes += scope.get_children()
+        names = scope.get_identifiers()
+        if 'held_complete' in names and scope.get_type() == 'function':
+            assert scope.lookup('held_complete').is_global(), scope.get_name()
