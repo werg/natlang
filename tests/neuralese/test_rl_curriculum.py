@@ -416,10 +416,15 @@ def test_held_standalone_comparison_counts_timeouts_apart_and_bounds_the_change(
     second['samples'][0]['timed_out']=True
     report=held_eval.compare(first,second)
     assert report['pairs_lost_to_timeout']==1 and report['second']['timeouts']==1 and report['first']['timeouts']==0
-    assert report['paired']['pairs']==19 and report['success_rate_delta']==round(8/19,4)
-    low,high=report['delta_ci95_task_bootstrap']
-    assert 0<low<=report['success_rate_delta']<=high and report['loop_rate_delta']==0
-    assert held_eval.compare(first,first)['success_rate_delta']==0
+    assert report['paired']['pairs']==19 and report['loop_rate_delta']==0
+    # primary: the timed-out success of t0 counts as a failure (t0 2/2 -> 1/2), t5..t8 0/2 -> 2/2
+    primary,dropped=report['primary'],report['sensitivity_drop_timeouts']
+    assert primary['timeouts']=='failure' and primary['tasks']==10 and primary['delta']==round((-.5+4*1.0)/10,4)
+    assert dropped['tasks']==10 and dropped['delta']==round((0+4*1.0)/10,4)
+    low,high=primary['ci95_task_bootstrap']
+    assert low<=primary['delta']<=high and primary['permutation_p']<.2
+    same=held_eval.compare(first,first)['primary']
+    assert same['delta']==0 and same['permutation_p']==1.0
     def served(result,kv):
         return {**result,'actor':{'info':{'serving_engine':{'engine':'sglang','dtype':'bfloat16','projection':'vendor',
                 'kv_cache_dtype':kv,'overlap_schedule':False,'fork':{'commit':'f'}},'actor_export':{'format':'x'}}}}
@@ -430,6 +435,45 @@ def test_held_standalone_comparison_counts_timeouts_apart_and_bounds_the_change(
         held_eval.compare({**first,'context_tokens':131072},second)
     assert held_eval.compare({**first,'context_tokens':131072},{**second,'context_tokens':131072})['paired']
 
+
+
+def test_held_rate_change_permutes_within_tasks_with_unequal_samples_and_reports_subsets():
+    four={(f't{i}',s):(1.0 if i<4 else 0.0) for i in range(8) for s in range(4)}
+    two={(f't{i}',s):(1.0 if i<4 or (i<6 and s==0) else 0.0) for i in range(8) for s in range(2)}
+    first,second=held_result('a',1,four),held_result('b',2,two)
+    for result in (first,second):
+        for sample in result['samples']:
+            sample['family']='trained' if sample['task_id'] in ('t4','t5','t6') else 'other'
+    report=held_eval.compare(first,second,trained_families=['trained'],ignore_ids={'t6','t7'})
+    assert report['paired']['pairs']==16                               # McNemar sees only the matched sample indices
+    primary=report['primary']
+    assert primary['tasks']==8 and primary['delta']==round(2*.5/8,4) and 0<primary['permutation_p']<=1
+    subsets=report['subsets']
+    assert subsets['without_ignored']['tasks']==6 and subsets['without_ignored']['ignored_tasks']==2
+    assert subsets['without_ignored']['delta']==round(2*.5/6,4)
+    assert subsets['trained_families']['tasks']==2 and subsets['trained_families']['delta']==.5
+    assert subsets['untrained_families']['tasks']==4 and subsets['untrained_families']['delta']==0
+    # all tasks all-pass or all-fail on both sides: nothing can move, p is 1
+    flat=held_eval.compare(first,first)['primary']
+    assert flat['delta']==0 and flat['permutation_p']==1.0
+    # a large consistent gain is detected
+    zero={(f't{i}',s):0.0 for i in range(40) for s in range(2)}
+    gain={(f't{i}',s):(1.0 if s==0 else 0.0) for i in range(40) for s in range(2)}
+    assert held_eval.compare(held_result('a',1,zero),held_result('b',2,gain))['primary']['permutation_p']<.01
+
+
+def test_held_ignore_ids_read_jsonl_and_json_lists(tmp_path):
+    (tmp_path/'a.jsonl').write_text('{"id": "x", "reason": "r"}\n{"id": "y"}\n')
+    (tmp_path/'b.json').write_text('["z"]')
+    assert held_eval.read_ids([tmp_path/'a.jsonl',tmp_path/'b.json'])=={'x','y','z'}
+
+
+def test_held_series_covers_scoring_sources():
+    found=held_eval.series()
+    assert set(found['scoring_sources'])==set(held_eval.SCORING_SOURCES)
+    assert all(found['scoring_sources'].values())                     # every listed source exists in HEAD
+    assert 'scripts/run_bonsai_queue.py' in held_eval.SCORING_SOURCES
+    assert 'training/neuralese/natlang_neuralese/eval/task_packet.py' in held_eval.SCORING_SOURCES
 
 
 def test_held_ran_out_counts_call_budget_repetition_and_wall_clock_stops_together():

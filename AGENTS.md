@@ -27,7 +27,8 @@ so w5 is retired (data kept, never resumed) and the base is the start policy.
   pre-collection, interleaved SFT windows and QAT. They come back one at a time, after two consecutive held gains
   from plain updates. Neuralese-declaring task variants come first, because they are data, not machinery.
 - **Evaluation gets real compute.** Paired held-out eval on a large pinned set decides every comparison (held-v2
-  below; McNemar exact on matched task-samples, task sign test, loop rate beside it). dev16 is a smoke test at most,
+  below; mean per-task pass-rate change with a within-task permutation test and task-bootstrap CI, timeouts as failures;
+  McNemar, task sign test and loop rate beside it). dev16 is a smoke test at most,
   never a gate.
 - **Heartbeats check, they do not re-plan.** A monitoring cycle checks that the pinned experiments run correctly and
   the machines are healthy, and fixes breakage. Plans change between experiments, from their results.
@@ -99,9 +100,12 @@ families, levels 63/64/64/65, 85 effect-state, keeping w5's 64 held tasks; disjo
 these ids. Built by `python -m natlang_neuralese.rl.held_eval pin` (`--include-manifest`, `--avoid-ids`, `--avoid-from`).
 Measure with `held_eval measure --manifest M --out DIR (--endpoint URL[=SLOTS] | --checkpoint CKPT) [--samples 4]`
 (work-stealing episodes, resumable, sample-major so a cut run stays balanced; `serve` launches/reuses a ledger SGLang actor) and
-compare with `held_eval compare A/result.json B/result.json` (McNemar on matched samples, task sign test, task-bootstrap CI,
-loop rate). A wall-clock timeout is unscored and reported as `timeouts`, never a failure; compare only results with one code
-commit and series (`same_code`, `same_series`). Baselines and the A/A noise floor: `ops/held-v2/runs/`. The eval engine is
+compare with `held_eval compare A/result.json B/result.json [--ignore-ids F.jsonl] [--trained-families F.json]` (primary:
+mean per-task pass-rate change, within-task permutation p, task-bootstrap CI, a wall-clock timeout counted as a failure;
+beside it the drop-timeouts sensitivity, McNemar on matched samples, task sign test, loop rate; subsets without the
+`held-v2/ignore-ids-*.jsonl` tasks and by trained family). A timed-out episode stays unscored in `result.json`
+(`timeouts`); compare only results with one code commit and series (`same_code`, `same_series`; the series covers the
+ts-host tree and the Python scoring sources). Training and held eval share one call budget (`EPISODE_MODEL_CALLS`, 40). Baselines and the A/A noise floor: `ops/held-v2/runs/`. The eval engine is
 pinned in `held-v2/engine.json` (SGLang, vendor projection, FP8 KV, `--sglang-kv-gb 16`, 128 running; one engine per
 checkpoint): `measure` refuses another actor (`--allow-other-engine`), `serve` launches exactly it, and `compare` refuses to
 pair results with different attested engines (`serving_engine`, export format). Interim A/A (base twice, independent seeds,

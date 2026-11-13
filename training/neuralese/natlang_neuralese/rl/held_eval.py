@@ -4,13 +4,16 @@ dev16 is 16 single-sample cases (about +-1.7 cases of noise). A held set pins po
 families and levels (``build_manifest``; ``pin`` writes a standalone one such as ops/held-v2 with its ``exclusion-ids.json``),
 and training code never selects them or their ``split_group`` siblings (``exclusion_ids``, ``curriculum.select_tasks``
 ``exclude_ids``). ``measure`` runs N samples per held task against a served actor (``serve`` launches one for a checkpoint)
-and writes ``result.json``; ``compare``/``paired`` pair two results on matched (task, sample) episodes (McNemar exact).
+and writes ``result.json``; ``compare`` tests the mean per-task pass-rate change (within-task permutation test, task
+bootstrap; a wall-clock timeout counts as a failure, dropping them is reported beside it), with McNemar on matched
+(task, sample) episodes (``paired``) as a secondary field.
 
 - ``manifest.json`` + ``cases.jsonl``: task ids and row digests, the pool's digest, and the excluded split groups.
 - ``run`` measures one policy directory; failures and a cut-short run are recorded, and a partial run is still a balanced
   one (sample-major order) and pairs on what it finished.
-- A comparison series is the collector runtime (ts-host tree) plus the resolved ``NATLANG_MODEL_FACING`` variants, recorded
-  in every result: only results of one series are compared, a change of either starts a new series with its own baseline.
+- A comparison series is the collector runtime (ts-host tree), the Python sources that run and score episodes
+  (``SCORING_SOURCES``) and the resolved ``NATLANG_MODEL_FACING`` variants, recorded in every result: only results of
+  one series are compared, a change of any starts a new series with its own baseline.
 """
 from __future__ import annotations
 
@@ -37,6 +40,14 @@ MAX_GROUP_ROWS = 24          # a held task whose split group is larger would shr
 SEED = 'held-eval-20261110'
 SEED_BASE = 4200000
 LOOP = ('budget_exhaustion', 'repetition')
+# One episode budget in model calls for training (grpo.py) and held measurement (EPISODE_COST_20261112: a budget stop
+# scores 0). Held results measured before 2026-11-13 ran at 64; they are another baseline.
+EPISODE_MODEL_CALLS = 40
+# The Python sources that run episodes and decide their outcome; a change of any is a new series (with the ts-host tree).
+SCORING_SOURCES = ('scripts/run_bonsai_queue.py', 'training/neuralese/natlang_neuralese/eval/task_packet.py',
+                   'training/neuralese/natlang_neuralese/rl/task_rollouts.py',
+                   'training/neuralese/natlang_neuralese/rl/rollout_math.py',
+                   'training/neuralese/natlang_neuralese/common/task_roots.py')
 
 
 def sample_timed_out(sample):
@@ -244,9 +255,13 @@ def series(config=None):
     root = repository_root()
     tree = _git(root, 'rev-parse', 'HEAD:ts-host')
     dirty = bool(_git(root, 'status', '--porcelain', '--untracked-files=no', '--', 'ts-host'))
+    scoring = {path: _git(root, 'rev-parse', f'HEAD:{path}') for path in SCORING_SOURCES}
+    scoring_dirty = bool(_git(root, 'status', '--porcelain', '--untracked-files=no', '--', *SCORING_SOURCES))
     variants = ','.join(sorted(model_facing(config).split(',')))
-    key = hashlib.sha256(f'{tree}|{variants}'.encode()).hexdigest()[:12]
-    return {'key': key, 'ts_host_tree': tree, 'ts_host_dirty': dirty, 'model_facing': variants}
+    scored_by = ','.join(f'{path}={blob}' for path, blob in sorted(scoring.items()))
+    key = hashlib.sha256(f'{tree}|{scored_by}|{variants}'.encode()).hexdigest()[:12]
+    return {'key': key, 'ts_host_tree': tree, 'ts_host_dirty': dirty, 'scoring_sources': scoring,
+            'scoring_dirty': scoring_dirty, 'model_facing': variants}
 
 
 # ---- the measurement ----------------------------------------------------------------------------------------------------
@@ -489,12 +504,74 @@ CONTEXT_TOKENS = 131072
 LEGACY_CONTEXT_TOKENS = 32768
 
 
-def compare(first, second, *, resamples=2000):
-    """The standalone comparison of two result.json files (``second`` against ``first``): the paired test (McNemar on
-    matched scored samples, task-level sign test), the task-clustered bootstrap 95% interval of the success-rate change
-    over the matched samples, each side's timeouts and loop rate, and whether the two ran under one code commit and series.
-    Pairs lost to a timeout on either side are counted, never scored."""
+def task_counts(result, *, timeouts='failure'):
+    """{task: [successes, counted]} over the episodes that ran. ``timeouts='failure'`` counts a wall-clock stop as a
+    failure (it falls on hard tasks, so dropping it biases the rate up for the side that times out more); ``'drop'``
+    leaves it out. Other unscored episodes (infrastructure) are left out either way."""
+    counts = {}
+    for s in result['samples']:
+        if not s['ran']:
+            continue
+        if s['reward'] is None and not (timeouts == 'failure' and sample_timed_out(s)):
+            continue
+        entry = counts.setdefault(s['task_id'], [0, 0])
+        entry[0] += s['reward'] == 1.0
+        entry[1] += 1
+    return counts
+
+
+def _rate_change(a, b, tasks, *, resamples, seed=0):
+    """The mean over ``tasks`` of the per-task pass-rate change b - a ({task: [successes, n]}; sample counts may differ),
+    its task-bootstrap 95% interval and the two-sided p of a within-task permutation test: under no change, a task's
+    pooled outcomes are exchangeable between the two sides, so each side's success count is hypergeometric given the
+    pooled count (Monte Carlo over all tasks at once; tasks that all pass or all fail contribute a constant)."""
+    import bisect
     import random
+    tasks = [t for t in tasks if t in a and t in b and a[t][1] and b[t][1]]
+    if not tasks:
+        return {'tasks': 0, 'first_rate': None, 'second_rate': None, 'delta': None, 'ci95_task_bootstrap': None,
+                'permutation_p': None}
+    diffs = {t: b[t][0] / b[t][1] - a[t][0] / a[t][1] for t in tasks}
+    observed = sum(diffs.values()) / len(tasks)
+    rng = random.Random(seed)
+    boot = sorted(sum(diffs[rng.choice(tasks)] for _ in tasks) / len(tasks) for _ in range(resamples))
+    constant, varying = 0.0, []
+    for t in tasks:
+        (sa, na), (sb, nb) = a[t], b[t]
+        k, n = sa + sb, na + nb
+        lo, hi = max(0, k - na), min(k, nb)
+        if lo == hi:
+            constant += lo / nb - (k - lo) / na
+            continue
+        support = list(range(lo, hi + 1))
+        weights = [math.comb(nb, x) * math.comb(na, k - x) for x in support]
+        total, cumulative, acc = sum(weights), [], 0
+        for w in weights:
+            acc += w
+            cumulative.append(acc / total)
+        varying.append(([x / nb - (k - x) / na for x in support], cumulative))
+    extreme = 0
+    for _ in range(resamples):
+        stat = constant
+        for values, cumulative in varying:
+            stat += values[min(bisect.bisect_left(cumulative, rng.random()), len(values) - 1)]
+        extreme += abs(stat / len(tasks)) >= abs(observed) - 1e-12
+    return {'tasks': len(tasks), 'first_rate': round(sum(a[t][0] / a[t][1] for t in tasks) / len(tasks), 4),
+            'second_rate': round(sum(b[t][0] / b[t][1] for t in tasks) / len(tasks), 4), 'delta': round(observed, 4),
+            'ci95_task_bootstrap': [round(boot[int(.025 * resamples)], 4), round(boot[int(.975 * resamples) - 1], 4)],
+            'permutation_p': round((1 + extreme) / (1 + resamples), 4)}
+
+
+def compare(first, second, *, resamples=2000, trained_families=None, ignore_ids=()):
+    """The standalone comparison of two result.json files (``second`` against first).
+
+    Primary: the mean per-task pass-rate change over the tasks both measured, with a within-task permutation test (valid
+    for unequal sample counts, no arbitrary pairing of independent samples) and a task-bootstrap 95% interval; a
+    wall-clock timeout counts as a failure. ``sensitivity_drop_timeouts`` is the same with timeouts left out. Subsets:
+    ``without_ignored`` drops ``ignore_ids`` (structurally-zero or wrong-oracle tasks), and with ``trained_families``
+    (families the second policy trained on) ``trained_families``/``untrained_families`` split the tasks. Secondary:
+    McNemar and the task sign test on matched scored (task, sample) episodes (``paired``), timeouts, loop and ran-out
+    rates, and whether the two ran under one code commit and series."""
     budgets = [result.get('context_tokens', LEGACY_CONTEXT_TOKENS) for result in (first, second)]
     if budgets[0] != budgets[1]:
         raise ValueError(f'results measured with different context budgets are not paired: {budgets[0]} vs {budgets[1]}')
@@ -510,18 +587,6 @@ def compare(first, second, *, resamples=2000):
         return {(s['task_id'], s['sample']): s for s in result['samples'] if s['ran']}
     a, b = table(first), table(second)
     common = set(a) & set(b)
-    scored = [k for k in common if a[k]['reward'] is not None and b[k]['reward'] is not None]
-    by_task = {}
-    for task, sample in scored:
-        by_task.setdefault(task, []).append((a[(task, sample)]['reward'] == 1.0, b[(task, sample)]['reward'] == 1.0))
-    tasks = sorted(by_task)
-    rng = random.Random(0)
-    deltas = []
-    for _ in range(resamples if tasks else 0):
-        pick = [by_task[rng.choice(tasks)] for _ in tasks]
-        n = sum(len(v) for v in pick)
-        deltas.append(sum(y - x for v in pick for x, y in v) / n)
-    deltas.sort()
 
     def side(result):
         return {'policy': result['policy_id'], 'code': (result.get('code') or {}).get('git_commit'),
@@ -531,7 +596,21 @@ def compare(first, second, *, resamples=2000):
                 'timeouts': sum(timed_out(s) for s in result['samples'] if s['ran']),
                 'loop_rate': result['loop_rate'], 'ran_out_rate': ran_out_rate(result),
                 'repeated_action_rate': result.get('repeated_action_rate'), 'elapsed_seconds': result.get('elapsed_seconds'), 'complete': result.get('complete')}
-    n = sum(len(v) for v in by_task.values())
+    counts = {mode: (task_counts(first, timeouts=mode), task_counts(second, timeouts=mode)) for mode in ('failure', 'drop')}
+    every = sorted(set(counts['failure'][0]) | set(counts['failure'][1]))
+    ignored = set(ignore_ids)
+    family = {s['task_id']: s.get('family') for result in (first, second) for s in result['samples']}
+
+    def change(tasks, mode='failure'):
+        return _rate_change(*counts[mode], tasks, resamples=resamples)
+    subsets = {}
+    if ignored:
+        subsets['without_ignored'] = {**change([t for t in every if t not in ignored]),
+                                      'ignored_tasks': len(ignored & set(every))}
+    if trained_families is not None:
+        trained = set(trained_families)
+        subsets['trained_families'] = change([t for t in every if family.get(t) in trained and t not in ignored])
+        subsets['untrained_families'] = change([t for t in every if family.get(t) not in trained and t not in ignored])
     out_first = sum(ran_out(a[k]) and not ran_out(b[k]) for k in common)
     out_second = sum(ran_out(b[k]) and not ran_out(a[k]) for k in common)
     rates = ran_out_rate(first), ran_out_rate(second)
@@ -539,12 +618,12 @@ def compare(first, second, *, resamples=2000):
             'engine_attested': None not in engines, 'same_code': side(first)['code'] == side(second)['code'],
             'same_series': side(first)['series'] == side(second)['series'],
             'same_manifest': first.get('manifest_sha256') == second.get('manifest_sha256'),
+            'primary': {**change(every), 'statistic': 'mean per-task pass-rate change', 'timeouts': 'failure'},
+            'sensitivity_drop_timeouts': {**change(every, 'drop'), 'timeouts': 'dropped'},
+            'subsets': subsets,
             'matched_pairs': len(common), 'pairs_lost_to_timeout': sum(
                 1 for k in common if timed_out(a[k]) or timed_out(b[k])),
             'paired': paired(first, second),
-            'success_rate_delta': round(sum(y - x for v in by_task.values() for x, y in v) / n, 4) if n else None,
-            'delta_ci95_task_bootstrap': [round(deltas[int(.025 * len(deltas))], 4),
-                                          round(deltas[int(.975 * len(deltas)) - 1], 4)] if deltas else None,
             'loop_rate_delta': (round(second['loop_rate'] - first['loop_rate'], 4)
                                 if first['loop_rate'] is not None and second['loop_rate'] is not None else None),
             'ran_out_rate_delta': round(rates[1] - rates[0], 4) if None not in rates else None,
@@ -553,6 +632,18 @@ def compare(first, second, *, resamples=2000):
                                'second': sum(ran_out(b[k]) for k in common), 'only_first': out_first,
                                'only_second': out_second,
                                'mcnemar_exact_p': round(binomial_two_sided(out_first, out_second), 4)}}
+
+
+def read_ids(paths):
+    """Task ids from JSONL files ({"id": ...} per line) or JSON lists."""
+    ids = set()
+    for path in paths:
+        text = Path(path).read_text()
+        if text.lstrip().startswith('['):
+            ids |= set(json.loads(text))
+        else:
+            ids |= {json.loads(line)['id'] for line in text.splitlines() if line.strip()}
+    return ids
 
 
 def trend(out):
@@ -670,7 +761,7 @@ def serve(checkpoint, sha256, store, *, unit, budget_gb, extra=(), base=BASE_SNA
 
 
 def measure(out, manifest, endpoints, policy_id, *, samples=4, seed_base=SEED_BASE, case_seconds=3600,
-            max_model_requests=64, max_turns=128, context_tokens=CONTEXT_TOKENS, label=None, allow_other_engine=False, log=print):
+            max_model_requests=EPISODE_MODEL_CALLS, max_turns=128, context_tokens=CONTEXT_TOKENS, label=None, allow_other_engine=False, log=print):
     """Measure the policy served at ``endpoints`` ([(url, slots)]) on every task of ``manifest`` x ``samples`` into
     ``out/result.json`` (resumable: an existing ``run.json`` must name the same manifest, policy and sampling)."""
     from .actor_client import NativeActorClient
@@ -704,7 +795,7 @@ def measure(out, manifest, endpoints, policy_id, *, samples=4, seed_base=SEED_BA
     if isinstance(served, int) and served < context_tokens and not allow_other_engine:
         raise ValueError(f'the actor serves {served} tokens per request, less than the call budget {context_tokens}; '
                          'relaunch it with --sglang-context >= the budget')
-    if spec['code'].get('dirty') or spec['series']['ts_host_dirty']:
+    if spec['code'].get('dirty') or spec['series']['ts_host_dirty'] or spec['series'].get('scoring_dirty'):
         log(json.dumps({'event': 'held eval warning', 'warning': 'the checkout is dirty; the result records it'}))
     out.mkdir(parents=True, exist_ok=True)
     if (out / 'run.json').exists():
@@ -753,7 +844,8 @@ def main(argv=None):
     m.add_argument('--workers', type=int, default=64, help='concurrent episodes per endpoint without =SLOTS')
     m.add_argument('--seed-base', type=int, default=SEED_BASE)
     m.add_argument('--case-seconds', type=int, default=3600)
-    m.add_argument('--max-model-requests', type=int, default=64)
+    m.add_argument('--max-model-requests', type=int, default=EPISODE_MODEL_CALLS,
+                   help='episode budget in model calls (default: the training budget, one for both)')
     m.add_argument('--max-turns', type=int, default=128)
     m.add_argument('--context-tokens', type=int, default=CONTEXT_TOKENS,
                    help='call budget (the pinned engine.json harness may require one; compare refuses other pairings)')
@@ -775,11 +867,19 @@ def main(argv=None):
     c.add_argument('first', type=Path)
     c.add_argument('second', type=Path)
     c.add_argument('--out', type=Path)
+    c.add_argument('--ignore-ids', type=Path, action='append', default=[],
+                   help='JSONL ({"id": ...}) or JSON list of held tasks to leave out of the without_ignored subset '
+                        '(structurally-zero or wrong-oracle tasks, e.g. ops/held-v2/ignore-ids-*.jsonl)')
+    c.add_argument('--trained-families', type=Path,
+                   help='JSON list of families the second policy trained on: splits the change into trained/untrained')
+    c.add_argument('--resamples', type=int, default=2000)
     args = parser.parse_args(argv)
     if args.command == 'run':
         run(args.dir)
     elif args.command == 'compare':
-        report = compare(json.loads(args.first.read_text()), json.loads(args.second.read_text()))
+        report = compare(json.loads(args.first.read_text()), json.loads(args.second.read_text()), resamples=args.resamples,
+                         trained_families=json.loads(args.trained_families.read_text()) if args.trained_families else None,
+                         ignore_ids=read_ids(args.ignore_ids))
         text = json.dumps(report, indent=1)
         if args.out:
             args.out.write_text(text + '\n')
