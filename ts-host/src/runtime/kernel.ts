@@ -55,6 +55,8 @@ export type CallableDefinition = {
   model?: string;
   /** Tools this definition's own calls are not offered (`withhold:` frontmatter; loader WITHHOLDABLE_TOOLS). */
   withhold?: readonly string[];
+  /** The model work one call may take (`budget:` frontmatter); each bound replaces its model's own. */
+  budget?: import('./loader.js').CallBudget;
   revision?: string;
   description?: string;
   /** Source path for named definitions. */
@@ -220,11 +222,53 @@ function rebaseCaptureCells(captures: Record<string, CaptureCell> | undefined,
   return changed ? result : captures;
 }
 
+/**
+ * Why a natlang call ended without a result, for code that branches on it (`detail` says it in words):
+ * - `blocked`, `failed`: the model returned that status, with its reason;
+ * - `type-mismatch`: the model kept returning a value that is not of the declared type;
+ * - `repeated-failed-action`: the model kept repeating an action that failed the same way;
+ * - `no-action`: the model kept replying without calling a tool or returning a result;
+ * - `budget-exhausted`: the call used up its turn, token, action or graph budget;
+ * - `refinement`: the result did not satisfy its refined type (`RefinementCallError`);
+ * - `refused`: natlang did not run the call (a nesting limit, or an ad hoc call asking its caller's own question);
+ * - `incomplete`: the call ended without a result for another reason;
+ * - `cancelled`: the call's task or caller was cancelled;
+ * - `error`: an error that is not the model's outcome ended it (the error's `cause`: its model driver, its arguments, the host).
+ */
+export type NatlangFailureReason = 'blocked' | 'failed' | 'type-mismatch' | 'repeated-failed-action' | 'no-action' |
+  'budget-exhausted' | 'refinement' | 'refused' | 'incomplete' | 'cancelled' | 'error';
+
+/**
+ * The reason a call that quiesced ended, read from its trace: the last `model_incomplete` the agent loop emitted (a
+ * repeated failure, a budget stop, replies without an action), or the model's own `return_result` status.
+ */
+export function callFailureReason(events: readonly Record<string, unknown>[]): NatlangFailureReason {
+  for (let index = events.length - 1; index >= 0; index--) {
+    const event = events[index]!;
+    if (event.kind === 'model_incomplete') {
+      if (event.reason === 'budget_exhausted') return 'budget-exhausted';
+      if (event.reason !== 'repeated_failed_action') return 'no-action';
+      const action = events.slice(0, index).reverse().find(item => item.kind === 'action');
+      return action?.name === 'return_result' && Array.isArray(action.diagnostics) && action.diagnostics.includes('type-mismatch') ?
+        'type-mismatch' : 'repeated-failed-action';
+    }
+    if (event.kind === 'action' && event.name === 'return_result' && event.outcome === 'blocked')
+      return (event.arguments as { status?: unknown } | undefined)?.status === 'blocked' ? 'blocked' : 'failed';
+  }
+  return 'incomplete';
+}
+
+/**
+ * A natlang call that ended without a result. Every failure of a call surfaces as one, naming the call (`callId`, its
+ * record); `reason` classifies it, and a failure that is not the model's outcome keeps the original error as `cause`.
+ */
 export class NatlangCallError extends Error {
+  readonly reason: NatlangFailureReason;
   constructor(readonly definition: string, readonly outcome: string, readonly detail: string,
-    readonly callId: string, readonly trace: Record<string, unknown>[]) {
-    super(`${definition}: ${outcome}: ${detail}`);
+    readonly callId: string, readonly trace: Record<string, unknown>[], reason?: NatlangFailureReason, options?: { cause?: unknown }) {
+    super(`${definition}: ${outcome}: ${detail}`, options);
     this.name = 'NatlangCallError';
+    this.reason = reason ?? callFailureReason(trace);
   }
 }
 
@@ -232,9 +276,14 @@ export class NatlangCallError extends Error {
 export class RefinementCallError extends NatlangCallError {
   constructor(readonly code: Exclude<RefinementCode, 'refinement-predicate-invalid'>, definition: string, outcome: string, detail: string,
     callId: string, trace: Record<string, unknown>[]) {
-    super(definition, outcome, detail, callId, trace);
+    super(definition, outcome, detail, callId, trace, 'refinement');
     this.name = 'RefinementCallError';
   }
+}
+
+/** Whether `error` is a call failure the model's work decided (not a cancellation or an error from outside the call). */
+export function isModelOutcomeFailure(error: unknown): error is NatlangCallError {
+  return error instanceof NatlangCallError && error.reason !== 'error' && error.reason !== 'cancelled';
 }
 
 /**
@@ -354,6 +403,8 @@ export function invokeDefinition(frame: Frame, definition: CallableDefinition, p
   options: InvokeOptions = {}): Promise<unknown> {
   if (definition.declaredParameters && !definition.openParameters)
     positional = positional.slice(0, definition.params.length);
+  // `fn.on({ model })` names the model of this one call, as `model:` frontmatter names the model of every call.
+  if (frame.model !== undefined) definition = { ...definition, model: frame.model };
   // Each call can be stopped on its own (its eval failed, or finished without awaiting it) and stops with its caller.
   const abort = new AbortController();
   const signal = AbortSignal.any([frame.signal ?? frame.task.signal, abort.signal]);
@@ -455,7 +506,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     definition = { ...definition, body: record.instructions, revision: record.revision,
       params: Object.entries(record.args).map(([name, type]) => ({ name: name.replace(/\?$/, ''), type, optional: name.endsWith('?') })),
       returns: definition.representation ? definition.returns : record.returns, types: record.types, codebase: record.codebase,
-      withhold: record.withhold };
+      withhold: record.withhold, budget: record.budget };
   } else if (replacement?.kind === 'lambda.instructions' && options.instructions === undefined)
     definition = { ...definition, body: replacement.template.segments[0]! };
   // Capture this call's source revision; later edits affect future calls only.
@@ -475,14 +526,14 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   const adHocDepth = fileRoot ? 0 : (frame.adHocDepth ?? 0) + (adHoc ? 1 : 0);
   if (adHocDepth > MAX_AD_HOC_NL_DEPTH)
     throw new NatlangCallError(definition.name, 'quiesced',
-      `ad hoc nl calls are limited to ${MAX_AD_HOC_NL_DEPTH} nested layers; solve this part here or call an existing named function`, '', []);
+      `ad hoc nl calls are limited to ${MAX_AD_HOC_NL_DEPTH} nested layers; solve this part here or call an existing named function`, '', [], 'refused');
   // An ad hoc nl call inside an ad hoc call with the same instructions hands the same question down again: the
   // enclosing call already has that responsibility (LFM3-1.7B on the dev packet copied a prompt example into nested
   // calls until the case budget ran out, plans/neuralese/LFM3_HARNESS_ERGONOMICS_20261028.md).
   // The same instructions on different inputs (recursion on a smaller argument) are a new question.
   const question = adHoc ? (options.instructions ?? definition.body).replace(/\s+/g, ' ').trim().toLowerCase() + '\u0000' + inputsKey(positional) : '';
   if (question && !fileRoot && (frame.adHocQuestions ?? []).includes(question))
-    throw new NatlangCallError(definition.name, 'quiesced', SAME_QUESTION_REFUSAL, '', []);
+    throw new NatlangCallError(definition.name, 'quiesced', SAME_QUESTION_REFUSAL, '', [], 'refused');
   const adHocQuestions = fileRoot ? [] : question ? [...(frame.adHocQuestions ?? []), question] : frame.adHocQuestions;
   // Definitions from separate programs may share the same relative source ID.
   // Ownership scopes recursion without changing persisted component identities.
@@ -494,7 +545,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   if (frame.chain.includes(callIdentity)) throw new NatlangRecursionError(definition.id, frame.chain, definition.name);
   const limits = task.runtime.options.limits ?? {};
   if (limits.maxDepth !== undefined && frame.chain.length >= limits.maxDepth)
-    throw new NatlangCallError(definition.name, 'quiesced', `natlang calls nested deeper than ${limits.maxDepth}`, '', []);
+    throw new NatlangCallError(definition.name, 'quiesced', `natlang calls nested deeper than ${limits.maxDepth}`, '', [], 'refused');
   let inputs = positional;
   let folder = options.folder;
   const extraTransactions: FolderTransaction[] = [];
@@ -704,8 +755,9 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     neuralese: budgetedNeuralese,
     programGuidance: selectedNativeGuidance,
     authoredTextGuidance: selectedAuthoredGuidance,
-    maxTurns: model.maxTurns, maxTokens: model.maxTokens, turnTokens: model.turnTokens, temperature: model.temperature,
-    maxSeconds: model.maxSeconds, contextTokens: model.contextTokens,
+    maxTurns: definition.budget?.maxTurns ?? model.maxTurns, maxTokens: definition.budget?.maxTokens ?? model.maxTokens,
+    turnTokens: definition.budget?.turnTokens ?? model.turnTokens, temperature: model.temperature,
+    maxSeconds: model.maxSeconds, contextTokens: definition.budget?.contextTokens ?? model.contextTokens,
     maxFailureRepairs: model.maxFailureRepairs, decisionReadout: model.decisionReadout,
     guidance: model.guidance, promptRendering: model.promptRendering,
     // Live events (plans/STREAMING.md §1.6): the call's model deltas, tagged with the call; nothing without a subscriber.
@@ -800,12 +852,19 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     fusion?.produced?.(hostValue);
     return hostValue;
   } catch (error) {
-    if (!(error instanceof NatlangCallError)) detail = error instanceof Error ? error.message : String(error);
+    const own = error instanceof NatlangCallError && error.callId === callId;
+    // Read before the abort below, which aborts this frame's own signal.
+    const cancelled = (frame.signal ?? task.signal).aborted;
+    if (!own) detail = error instanceof Error ? error.message : String(error);
     // A failed call stops the calls it started that are still running.
     frame.abort?.abort(new Error(`${definition.name} ended without a result`));
     if (folder?.transaction.open) folder.transaction.abort();
     for (const transaction of extraTransactions) if (transaction.open) transaction.abort();
-    throw error;
+    if (own) throw error;
+    // Whatever else ended the call (its model driver, its arguments, a cancellation) is this call's failure too, so its
+    // caller learns which call failed; the original error is the cause.
+    throw new NatlangCallError(definition.name, outcome, detail, callId, runtime.trace.events as Record<string, unknown>[],
+      cancelled ? 'cancelled' : 'error', { cause: error });
   } finally {
     await task.drainChildren(callId);
     releaseTrace(callId);

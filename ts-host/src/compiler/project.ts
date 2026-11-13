@@ -345,8 +345,11 @@ export function compileProject(options: BuildOptions): BuildResult {
   const diagnostics: NatlangDiagnostic[] = [];
   const files = sourceFiles(fs, root);
   const rel = (path: string) => relative(root, path);
-  const problem = (file: string, message: string, code: NatlangDiagnostic['code'] = 'callable-scope') =>
-    diagnostics.push({ file, start: 0, end: 0, line: 1, column: 1, code, message, severity: 'error' });
+  const problem = (file: string, message: string, code: NatlangDiagnostic['code'] = 'callable-scope', line = 1) =>
+    diagnostics.push({ file, start: 0, end: 0, line, column: 1, code, message, severity: 'error' });
+  // A source error names its own file (a folder's item, not the folder) and, when it knows it, the line.
+  const sourceProblem = (fallback: string, error: unknown) => error instanceof NatlangSourceError ?
+    problem(rel(error.path), error.reason, 'callable-scope', error.line) : problem(rel(fallback), String(error));
 
   // Callable folders and named functions.
   const layout = callableFolders(fs, root);
@@ -354,12 +357,12 @@ export function compileProject(options: BuildOptions): BuildResult {
   for (const path of layout.named) {
     if ([...layout.folders].some(folder => path.startsWith(folder + sep))) continue;
     try { namedRecords.set(path, loadNamedFunction(path, files)); }
-    catch (error) { problem(rel(path), error instanceof NatlangSourceError ? error.message : String(error)); }
+    catch (error) { sourceProblem(path, error); }
   }
   const contextRecords = new Map<string, Record<string, ItemRecord>>();
   for (const dir of layout.contexts) {
     try { contextRecords.set(dir, loadCallableFolder(dir, files)); }
-    catch (error) { problem(rel(dir), error instanceof NatlangSourceError ? error.message : String(error)); }
+    catch (error) { sourceProblem(dir, error); }
   }
   const optimizationComponents: ComponentDescriptor[] = [];
   const optimizationSources: Record<string, string> = {};

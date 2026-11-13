@@ -1628,7 +1628,7 @@ export class NativeToolAgent {
     const switchModel = (report: { reason: string; evidence: string; attempted_work: string; remaining_subproblem: string }): string | undefined => {
       const next = this.options.fallbacks?.[fallbackIndex];
       if (!next) return 'escalation unavailable: no configured fallback remains';
-      if (this.options.modelBudget && !this.options.modelBudget.hasRemaining()) return 'graph model request or token budget exhausted';
+      if (this.options.modelBudget && !this.options.modelBudget.hasRemaining()) return budgetStop('graph model request or token budget exhausted');
       if (adapterCells(session.lam).length || activeNativeAdapters().length || activeNativeStates().length ||
           session.runtime.frame?.weights?.effective.length || session.runtime.frame?.weights?.soft)
         return 'escalation unavailable: this invocation has model-specific adapters or implicit soft weights';
@@ -1678,6 +1678,17 @@ export class NativeToolAgent {
       messages.push({ role: 'user', content: `The previous actor made no progress. Continue this invocation from its existing scope and transcript. ${JSON.stringify(report)}` });
       return undefined;
     };
+    // A budget stop says so in the trace as well as in the detail, so whoever reads the call can tell it from the model's
+    // own outcome without parsing the text.
+    const budgetStop = (detail: string): string => {
+      session.runtime.trace.emit('model_incomplete', { call_id: session.runtime.currentCallId ?? null, turn: turns,
+        reason: 'budget_exhausted', evidence: detail });
+      return detail;
+    };
+    // Complete replies in a row that call no tool and do not end the call. A model that only ever answers in prose is told what to
+    // do after each one; without a bound, a model that never follows that (or a driver that cannot offer tools) runs
+    // without end, growing the conversation by a turn each time. The fourth such reply in a row ends the call.
+    let repliesWithoutAction = 0;
     const timedOut = () => deadline !== null && Date.now() >= deadline;
     const exhausted = () => (maxTurns !== undefined && turns >= maxTurns) ||
       (maxTokens !== undefined && tokens >= maxTokens) || timedOut();
@@ -1687,7 +1698,7 @@ export class NativeToolAgent {
       return remaining === null ? currentTurnTokens : Math.min(currentTurnTokens, remaining);
     };
     while (true) {
-      if (exhausted()) return 'episode turn, token, or wall-clock budget exhausted';
+      if (exhausted()) return budgetStop('episode turn, token, or wall-clock budget exhausted');
       messages[0]!.content = systemPrompt();
       // One turn may not take the window: without a limit a model can think for most of it in a single reply. The default
       // is the reply room the budget keeps free below.
@@ -1830,7 +1841,7 @@ export class NativeToolAgent {
         // Drivers read the invocation's tuned stack from the current frame when called; browsers keep no frame
         // across the awaits above, so the call starts inside its own frame on every platform.
         reservation = await this.options.modelBudget?.reserve(turnRequest.max_tokens ?? null, session.runtime.signal);
-        if (this.options.modelBudget && !reservation) return 'graph model request or token budget exhausted';
+        if (this.options.modelBudget && !reservation) return budgetStop('graph model request or token budget exhausted');
         if (reservation) turnRequest.max_tokens = reservation.limit;
         calledDriver = true;
         // model-call-kind: tool-loop-turn -- training/model-call-kinds.json
@@ -1902,7 +1913,7 @@ export class NativeToolAgent {
           fallbackIndex ? await currentDriver.neuraleseRuntime?.() : this.options.neuralese);
         const recorded = response.raw_response?.x_natlang_native_recorded_turn;
         if (turnNode && typeof recorded === 'string') activeRecorder()?.linkNativeTurn?.(recorded, turnNode);
-        return 'graph model token budget exceeded by model response';
+        return budgetStop('graph model token budget exceeded by model response');
       }
       if(response.protocol_failure){
         const failure=nativeProtocolFailure(response.raw_response);
@@ -1914,7 +1925,7 @@ export class NativeToolAgent {
         tokens+=response.completion_tokens===undefined?limit??0:Math.max(1,response.completion_tokens);
         session.runtime.trace.emit('model_protocol_failure',{call_id:callId,turn:turns,
           code:failure.code,failed_turn:turnNode,failure});
-        if(timedOut()||(maxTokens!==undefined&&tokens>maxTokens))return 'episode token or wall-clock budget exhausted';
+        if(timedOut()||(maxTokens!==undefined&&tokens>maxTokens))return budgetStop('episode token or wall-clock budget exhausted');
         // Record the actual non-executable reply before the same call repairs it.
         // Neither a parsed prefix call nor an unfinished block becomes a result.
         messages.push({role:'assistant',content:response.text??'',...thought(response.reasoning)},
@@ -1951,7 +1962,7 @@ export class NativeToolAgent {
         phase: 'generated', turn: turns, calls, text: response.text ?? '', ...(response.reasoning ? { reasoning: response.reasoning } : {}) });
       tokens += response.completion_tokens === undefined ? limit ?? 0 : Math.max(1, response.completion_tokens);
       if (timedOut() || (maxTokens !== undefined && tokens > maxTokens))
-        return 'episode token or wall-clock budget exhausted';
+        return budgetStop('episode token or wall-clock budget exhausted');
       if (!response.calls?.length && availableTools !== allTools && !lastTurn && !response.truncated) {
         // The compaction turn was answered without the tool: its text is not a result. Compact without a note.
         consecutiveEmptyEosWithoutResult = 0;
@@ -2010,9 +2021,19 @@ export class NativeToolAgent {
             failed_continuations: failureRepairs, repair_limit: this.options.maxFailureRepairs });
           return 'model_incomplete: truncated_without_action (configured repair limit reached)';
         }
+        // A reply cut off at its length limit is a decode still in progress, bounded by the turn budget and the repair
+        // limit; only complete replies count.
+        if (!response.truncated && ++repliesWithoutAction >= 4) {
+          const said = (response.text ?? '').replace(/\s+/g, ' ').trim();
+          session.runtime.trace.emit('model_incomplete', { call_id: callId, turn: turns,
+            reason: 'no_action', evidence: 'four_consecutive_replies_without_a_tool_call', replies: repliesWithoutAction });
+          return `model_incomplete: no_action (${repliesWithoutAction} replies in a row called no tool and returned no result` +
+            (said ? `; the last one said: ${JSON.stringify(said.length > 200 ? said.slice(0, 200) + '...' : said)})` : ')');
+        }
         messages.push({ role: 'assistant', content: response.text ?? '', ...thought(response.reasoning) }, { role: 'user', content: feedback });
         continue;
       }
+      repliesWithoutAction = 0;
       this.proposals.push({ calls, value_confidence: response.value_confidence ?? [], released: true, messages: [...messages] });
       session.runtime.trace.emit('proposal', { call_id: session.runtime.currentCallId ?? null,
         phase: 'released', turn: turns, calls });
@@ -2040,7 +2061,7 @@ export class NativeToolAgent {
         const failure = action.kind === 'ok' ? undefined : action.text;
         messages.push({ role: 'assistant', content: replyText(response), tool_calls: raw.slice(0, 1), ...thought(response.reasoning) },
           { role: 'tool', tool_call_id: String(raw[0]!.id), content: action.text });
-        if (action.kind === 'budget') return action.text;
+        if (action.kind === 'budget') return budgetStop(action.text);
         if (failure?.startsWith('escalation unavailable:') || failure?.startsWith('graph model ')) return failure;
         if (failure) {
           const repeated = stuck(`${JSON.stringify(calls)}\n${failure}`);
@@ -2081,7 +2102,7 @@ export class NativeToolAgent {
       // read), the others are answered in one sentence as not run (decided 2026-11-12, MODEL_FACING_CHANGES.md).
       let stoppedAt: number | undefined;
       for (const [index, [name, args]] of calls.entries()) {
-        if (timedOut()) return 'episode wall-clock budget exhausted';
+        if (timedOut()) return budgetStop('episode wall-clock budget exhausted');
         if (stoppedAt !== undefined) {
           if (READ_ONLY_TOOLS.has(name)) results.push(await session.applyAsync(name, args,
             typeof raw[index]!.id === 'string' ? raw[index]!.id as string : undefined));
@@ -2141,7 +2162,7 @@ export class NativeToolAgent {
         session.runtime.trace.emit('compaction', { call_id: session.runtime.currentCallId ?? null, turn: turns,
           elided, note, estimated_tokens: Math.round(compactedAt) });
       }
-      if (results.at(-1)?.kind === 'budget') return 'action or tool-call budget exhausted';
+      if (results.at(-1)?.kind === 'budget') return budgetStop('action or tool-call budget exhausted');
       const repairLimit = this.options.maxFailureRepairs;
       // A refinement rejected a proposed result: from the gate above, or from an eval that returned or finished one.
       const refinedResult = results.find(result => result.codes?.some(code => code === 'refinement-unsatisfied' || code === 'refinement-undecided'));

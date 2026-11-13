@@ -62,7 +62,7 @@ together. Then return summarize of the assessments, in the original order.
 `Untrusted<string>` marks outside text: the model sees it as quoted data, never as instructions. Types in front
 matter are TypeScript type text read verbatim, so no YAML comments after them. A complete version is in
 [assets/review/](assets/review/) (copy the whole directory). Front matter keys: `description`,
-`args`, `returns`, `types`, `generic`, `kind`, `readout`, `model`, `uses`, `withhold`; see
+`args`, `returns`, `types`, `generic`, `kind`, `readout`, `model`, `uses`, `withhold`, `budget`; see
 [language and source contracts](references/language.md).
 
 **Callable folders.** A function calls exactly the items in its companion folder (`foo/` beside `foo.nl`), and their
@@ -114,7 +114,8 @@ projects with `natlang build` (or `natlang run`) so `nl` is lowered. Inline call
 7. **Use `readout: decision`** for a finite result (a literal union, `boolean`) that gates an action: one scoring pass
    instead of a tool loop, and callers can act on the probabilities with `decide(fn, ...args)`.
 8. **Don't add arbitrary limits** (turns, tokens, depth) to make a run finish; long productive runs are intended, and
-   budgets are runtime options for deployment.
+   budgets are runtime options for deployment. Where a deployment bounds its model (a host's executor budget), a
+   function whose calls need more or less work than that declares it: `budget: { maxTurns: 8, turnTokens: 1024 }`.
 
 ## How a call executes
 
@@ -124,7 +125,11 @@ services are bindings, and finishes with `return_result` (`success`, `blocked` o
 against the declared type; a mismatch goes back to the model to repair. A record or array result that `return_result`
 receives as text (JSON or a JS object/array literal, read as data, never run) is accepted when the data it spells out
 checks; otherwise the error names the field to fix or asks for the value written as an object or array. In host code a failed call rejects with
-`NatlangCallError` (`outcome`, `detail`, `trace`). Service calls and live-object writes are not rolled back; a
+`NatlangCallError` (`callId`, `outcome`, `detail`, `trace`, and `reason`: `blocked`, `failed`, `type-mismatch`,
+`repeated-failed-action`, `no-action`, `budget-exhausted`, `refinement`, `refused`, `incomplete`, `cancelled`, or
+`error` when something other than the model's work ended it, which is then the error's `cause`).
+`fn.on({ model: NAME })` is the same function on another of the runtime's models (what `model:` names), for one retry
+on a stronger model without editing the source. Service calls and live-object writes are not rolled back; a
 captured `let` is written back only after a successful eval. Every call is recorded in the machine's call store
 (`natlang traces`); keep sensitive values out with `"recording": { "exclude": [...] }` in `natlang.json`.
 
@@ -143,6 +148,7 @@ captured `let` is written back only after a successful eval. Every call is recor
 | `type-mismatch` / `undeclared-field` | The value or field doesn't match the declared type: fix the type or the instruction that produces it. |
 | `iteration-measure-exhausted` | The measure hit 0 while `until` was false: make `until` true where the measure is 0. |
 | `model_incomplete: repeated_failed_action` | The model repeated one failing action four times: clarify the instruction, split the stage, or use a stronger model. |
+| `model_incomplete: no_action` | The model replied four times in a row without calling a tool or returning a result: say in the instructions exactly what to return, or use a stronger model. |
 | Correct type, wrong answer | Improve the instructions, the evidence the call can reach, or the decomposition. Every run failing the same way points at the program, not the model. |
 
 More diagnoses, and how to tell wiring evidence from model quality: [verification](references/verification.md).

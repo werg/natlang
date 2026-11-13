@@ -46,6 +46,7 @@ export async function mapBounded<T, R>(items: readonly T[], limit: number, fn: (
 }
 
 export function rethrowInfrastructureFailure(error: unknown): void {
-  if (error && typeof error === 'object' && ['neuralese-unsupported-backend', 'natlang-platform-unavailable']
-    .includes(String((error as { code?: unknown }).code))) throw error;
+  // A call that such a failure ended is a NatlangCallError whose cause is the failure.
+  for (let cause = error, depth = 0; cause && typeof cause === 'object' && depth < 8; cause = (cause as { cause?: unknown }).cause, depth++)
+    if (['neuralese-unsupported-backend', 'natlang-platform-unavailable'].includes(String((cause as { code?: unknown }).code))) throw cause;
 }

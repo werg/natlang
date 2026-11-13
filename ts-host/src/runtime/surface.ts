@@ -30,6 +30,8 @@ export type NatlangStepArgs<A extends unknown[]> = number extends A['length'] ? 
 /** Methods every compiled natlang callable provides. */
 export interface NatlangCallableMethods<A extends unknown[], R> {
   iterateOn(initial: NatlangStepState<A, R>, ...args: NatlangStepArgs<A>): Iteration<NatlangStepState<A, R>>;
+  /** The same function on another of the runtime's models (the name `model:` frontmatter takes); a new function. */
+  on(options: { model: string }): NatlangFunction<A, R>;
 }
 /** A compiled natural-language function: asynchronous, typed, and monitored. */
 export type NatlangFunction<A extends unknown[] = any[], R = any> = ((...args: A) => Promise<R>) & NatlangCallableMethods<A, R>;
@@ -42,6 +44,7 @@ export type NatlangGenericFunction<A extends unknown[], C, T extends C> = (<R ex
 /** An \`nl\` function without a type argument; the compiler infers its signature from its uses. */
 export type NatlangUntypedFunction = ((...args: any[]) => Promise<any>) & {
   iterateOn<S>(initial: S, ...args: any[]): Iteration<S>;
+  on(options: { model: string }): NatlangUntypedFunction;
 };
 export type NlResult<F> = [F] extends [NlUnspecified] ? NatlangUntypedFunction :
   [F] extends [(...args: infer A) => infer R] ? NatlangFunction<A, Awaited<R>> : NatlangFunction<any[], F>;

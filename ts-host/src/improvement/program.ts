@@ -9,7 +9,7 @@ import { AUTHORED_IMPROVER } from './authored-source.js';
 import { SourceEvaluator, sourceFiles,SOURCE_EVALUATION_VERSION } from './host.js';
 import { planService } from './services.js';
 import { IterationLimitError,IterationDivergedError } from '../runtime/iterate.js';
-import {NatlangCallError} from '../runtime/kernel.js';
+import {isModelOutcomeFailure} from '../runtime/kernel.js';
 import { BudgetExhausted, UsageGateway } from '../evaluation/usage.js';
 import type { BudgetLimits } from '../evaluation/types.js';
 import type { ImprovementCase, ProgramContract, TransformationSpec } from './types.js';
@@ -117,9 +117,11 @@ export async function improveProgram(options: ImproveProgramOptions) {
     const committed = journal?.checkpoint<{source:string;state:ImprovementState}>()?.value;
     const folder = committed ? restore(committed.source) : lastValid.folder;
     const state = committed?.state ?? lastValid.state;
-    const interrupted = options.signal?.aborted || error instanceof IterationLimitError || error instanceof BudgetExhausted || gateway.ledger.usage.modelCalls >= options.budget.maxModelCalls;
+    // A budget the gateway exhausted inside a natlang call is that call's failure's cause.
+    const budgetExhausted=(value:unknown,depth=0):boolean=>value instanceof BudgetExhausted||(depth<8&&value instanceof Error&&budgetExhausted(value.cause,depth+1));
+    const interrupted = options.signal?.aborted || error instanceof IterationLimitError || budgetExhausted(error) || gateway.ledger.usage.modelCalls >= options.budget.maxModelCalls;
     const boundName=(value:unknown)=>(value as {name?:string}|undefined)?.name==='PolicyBoundError';
-    const semanticFailure=error instanceof NatlangCallError||(error instanceof Error&&(error.cause instanceof NatlangCallError||boundName(error.cause)))||boundName(error);
+    const semanticFailure=isModelOutcomeFailure(error)||(error instanceof Error&&(isModelOutcomeFailure(error.cause)||boundName(error.cause)))||boundName(error);
     const files=sourceFiles(folder),baseFiles=sourceFiles(baselineSource);
     const sourceDiff=[...new Set([...Object.keys(baseFiles),...Object.keys(files)])].sort().filter(path=>baseFiles[path]!==files[path]).map(path=>({path,kind:baseFiles[path]===undefined?'added':files[path]===undefined?'deleted':'modified'}));
     return {folder,state,disposition:interrupted ? 'interrupted' : error instanceof IterationDivergedError||error instanceof InvalidImprovementState||semanticFailure?'incomplete-search':'infrastructure-failure',error:String(error),sourceDiff,baseline:null,validation:null,

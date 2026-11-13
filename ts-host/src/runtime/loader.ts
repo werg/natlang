@@ -57,6 +57,8 @@ export type NatlangRecord = { programId?: string; kind: 'natlang'; id: string; n
   uses?: string[];
   /** `withhold: [delegate]` in the frontmatter: tools this function's own calls are not offered (WITHHOLDABLE_TOOLS). */
   withhold?: string[];
+  /** `budget: { maxTurns: 8 }` in the frontmatter: the model work one call may take, instead of its model's own budget. */
+  budget?: CallBudget;
   /**
    * Data entries of the companion folder bound by default (S0 §7): each `.nz` file's exports under the file's name,
    * as loaded (Neuralese references, data, soft-function specs). Its blocks are registered as imported blocks.
@@ -70,8 +72,30 @@ export type ModuleRecord = { programId?: string; kind: 'module'; id: string; nam
 export type NamespaceRecord = { kind: 'namespace'; name: string; source: string; codebase: Record<string, ItemRecord> };
 export type ItemRecord = NatlangRecord | ModuleRecord | NamespaceRecord;
 
+/** A source file that is not a valid natlang item: `reason` says why, at `line` (1-based) when it is known. */
 export class NatlangSourceError extends Error {
-  constructor(readonly path: string, message: string) { super(`${path}: ${message}`); this.name = 'NatlangSourceError'; }
+  constructor(readonly path: string, readonly reason: string, readonly line?: number) {
+    super(`${path}${line === undefined ? '' : `:${line}`}: ${reason}`); this.name = 'NatlangSourceError';
+  }
+}
+
+/**
+ * The line (1-based, in the whole `.nl` file) of frontmatter key `key`, or of its member `member` (`args: note: Nope`, in
+ * block or inline form); the key's own line when the member is not found, undefined when neither is.
+ */
+function frontmatterLine(text: string, key: string, member?: string): number | undefined {
+  const lines = text.split(/\r?\n/);
+  const end = lines.indexOf('---', 1);
+  const start = lines.findIndex((line, index) => index > 0 && (end < 0 || index < end) && line.startsWith(`${key}:`));
+  if (start < 0) return undefined;
+  if (member === undefined) return start + 1;
+  const name = new RegExp(`(?:^\\s+|[{,;]\\s*)${member.replace(/[$?]/g, '\\$&')}\\??\\s*:`);
+  for (let index = start; index < (end < 0 ? lines.length : end); index++) {
+    if (index > start && !/^\s/.test(lines[index]!)) break;
+    const line = index === start ? lines[index]!.slice(key.length + 1) : lines[index]!;
+    if (name.test(line)) return index + 1;
+  }
+  return start + 1;
 }
 
 /**
@@ -98,7 +122,19 @@ export function isFileRecord(record: ItemRecord): boolean {
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
-const NL_KEYS = new Set(['description', 'args', 'returns', 'generic', 'types', 'kind', 'readout', 'model', 'uses', 'withhold']);
+const NL_KEYS = new Set(['description', 'args', 'returns', 'generic', 'types', 'kind', 'readout', 'model', 'uses', 'withhold', 'budget']);
+/** What a `budget:` frontmatter map may bound: a call's turns, the reply tokens of one turn, all its tokens, its context window. */
+export const CALL_BUDGET_KEYS = ['maxTurns', 'turnTokens', 'maxTokens', 'contextTokens'] as const;
+export type CallBudget = Partial<Record<typeof CALL_BUDGET_KEYS[number], number>>;
+function callBudget(path: string, value: unknown, line?: number): CallBudget | undefined {
+  if (value === undefined) return undefined;
+  const entries = value && typeof value === 'object' && !Array.isArray(value) ? Object.entries(value) : [];
+  if (!entries.length || entries.some(([key, limit]) => !(CALL_BUDGET_KEYS as readonly string[]).includes(key) ||
+      !Number.isSafeInteger(limit) || (limit as number) < 1))
+    throw new NatlangSourceError(path, `budget maps ${CALL_BUDGET_KEYS.join(', ')} to positive whole numbers, such as ` +
+      'budget: { maxTurns: 8, turnTokens: 1024 }', line);
+  return Object.fromEntries(entries) as CallBudget;
+}
 /** Optional tools a `.nl` function may withhold from its own calls (`withhold:` frontmatter). eval, return_result,
  * read_page, compact_history and read_code are the call protocol itself and always offered. */
 export const WITHHOLDABLE_TOOLS: readonly string[] = ['edit_code', 'diff_code', 'list_files', 'search_files', 'read_file',
@@ -181,12 +217,15 @@ function checkName(path: string, name: string): void {
   if (RESERVED_CALLABLE_PROPERTIES.has(name)) throw new NatlangSourceError(path, reservedNameMessage(name));
 }
 
-function checkSignature(path: string, args: Record<string, string>, returns: string, types: Record<string, string>): void {
+function checkSignature(path: string, args: Record<string, string>, returns: string, types: Record<string, string>,
+  text = ''): void {
   const env = new TypeEnv(Object.fromEntries(Object.entries(types).map(([name, text]) => [name, parseType(text)])));
-  try {
-    for (const type of Object.values(args)) env.checkNames(parseType(type));
-    env.checkNames(parseType(returns));
-  } catch (error) { throw new NatlangSourceError(path, (error as Error).message); }
+  const check = (type: string, line: () => number | undefined) => {
+    try { env.checkNames(parseType(type)); }
+    catch (error) { throw new NatlangSourceError(path, (error as Error).message, line()); }
+  };
+  for (const [name, type] of Object.entries(args)) check(type, () => frontmatterLine(text, 'args', name.replace(/\?$/, '')));
+  check(returns, () => frontmatterLine(text, 'returns'));
 }
 
 /** Parse a `.nl` file. */
@@ -196,7 +235,8 @@ export function parseNatlang(path: string, text: string, inherited: Record<strin
   let meta: Record<string, unknown>;
   try { meta = readNatlangFrontmatter(match[1]!); } catch (error) { throw new NatlangSourceError(path, (error as Error).message); }
   for (const key of Object.keys(meta)) if (!NL_KEYS.has(key))
-    throw new NatlangSourceError(path, `unknown frontmatter field ${JSON.stringify(key)}; allowed: ${[...NL_KEYS].join(', ')}`);
+    throw new NatlangSourceError(path, `unknown frontmatter field ${JSON.stringify(key)}; allowed: ${[...NL_KEYS].join(', ')}`,
+      frontmatterLine(text, key));
   if (typeof meta.returns !== 'string') throw new NatlangSourceError(path, 'frontmatter needs a returns type');
   const subtype = String(meta.kind ?? 'function');
   if (subtype !== 'function' && subtype !== 'directory-reducer')
@@ -213,13 +253,15 @@ export function parseNatlang(path: string, text: string, inherited: Record<strin
   if (generic && meta.readout === 'decision')
     throw new NatlangSourceError(path, `readout: decision scores a finite crisp result; declare returns: ${generic.crisp} for it`);
   const returns = generic?.crisp ?? meta.returns;
-  checkSignature(path, args, returns, types);
+  checkSignature(path, args, returns, types, text);
   if (generic) checkSignature(path, {}, generic.neuralese, types);
   if (meta.readout !== undefined) {
     if (meta.readout !== 'decision' && meta.readout !== 'template') throw new NatlangSourceError(path, 'readout must be decision or template');
   }
-  if (meta.model !== undefined && (typeof meta.model !== 'string' || !/^[A-Za-z_][\w-]*$/.test(meta.model)))
+  // A model name is a word (small) or, where the runtime names models by provider, a "provider:id" ref.
+  if (meta.model !== undefined && (typeof meta.model !== 'string' || !/^[A-Za-z_][\w.:/-]*$/.test(meta.model)))
     throw new NatlangSourceError(path, 'model must name one of the runtime\'s models, such as small');
+  const budget = callBudget(path, meta.budget, frontmatterLine(text, 'budget'));
   if (meta.uses !== undefined && (!Array.isArray(meta.uses) || meta.uses.some(item => typeof item !== 'string' ||
       !/^[A-Za-z_$][\w$]*(\/[A-Za-z_$][\w$]*)*$/.test(item))))
     throw new NatlangSourceError(path, 'uses must list package items by path from the package root, such as [harness/cut]');
@@ -238,7 +280,8 @@ export function parseNatlang(path: string, text: string, inherited: Record<strin
     ...(meta.readout === 'decision' || meta.readout === 'template' ? { readout: meta.readout as 'decision' | 'template' } : {}),
     ...(typeof meta.model === 'string' ? { model: meta.model } : {}),
     ...(Array.isArray(meta.uses) && meta.uses.length ? { uses: meta.uses as string[] } : {}),
-    ...(Array.isArray(meta.withhold) && meta.withhold.length ? { withhold: [...new Set(meta.withhold as string[])] } : {}) };
+    ...(Array.isArray(meta.withhold) && meta.withhold.length ? { withhold: [...new Set(meta.withhold as string[])] } : {}),
+    ...(budget ? { budget } : {}) };
 }
 
 /** The package root above `dir`: the nearest directory with `natlang.json` or `package.json`. */

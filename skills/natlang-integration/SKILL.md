@@ -23,6 +23,11 @@ Read [hosts and model drivers](references/hosts.md) for the runtime, compilation
 
 - Omit arbitrary run budgets unless deployment requires them; `limits` and model options exist for that. A call longer than the model's context (`contextTokens`) is compacted: the model writes a note, and its full history stays searchable from eval as `transcript`.
 - Set budgets (`maxTurns`, `maxTokens`, `maxSeconds`, `maxFailureRepairs`) explicitly for evaluations; none apply by default.
+  A `.nl` function's `budget:` frontmatter replaces the model's bounds for its own calls.
+- Every failure of a call rejects with `NatlangCallError` naming the call (`callId`) with a typed `reason`
+  (`callFailureReason`); a failure that is not the model's outcome (driver, arguments, host) has reason `error` and keeps
+  the original error as `cause`, and a cancelled call has reason `cancelled`. Classify infrastructure failures by walking
+  `cause`, not by the class of the rejection.
 - Services and live values are trusted native authority passed by reference. Eval is trusted code in the application's process, not a sandbox.
 - Service calls and live-object writes happen immediately and are traced as effects; they are not rolled back when a call fails. Captured `let` variables are written back only after a successful eval.
 - Every call is recorded in the machine's call store (exact values within bounds) and may be served by a compiled crisp case; a case that fails hands the call back to the function. Exclude sensitive values with `"recording": { "exclude": [...] }` in `natlang.json`, and give embedded runtimes `programRoot`. See [records](references/records.md).

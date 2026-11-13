@@ -122,6 +122,20 @@ export function invokeAt(fn: unknown, args: readonly unknown[], representation: 
   return startCall(meta, [...args], { representation: checkRepresentation(representation), ...(site ? { site } : {}) });
 }
 
+/**
+ * `fn.on({ model })`: the same function running on another of the runtime's models, the one `model:` frontmatter would
+ * name. A new callable; `fn` keeps its own model. Rebinding the new one (`with`) keeps the model.
+ */
+function onModel(meta: CallableMeta, options: { model: string }): NatlangCallable {
+  const model = options && typeof options === 'object' && typeof options.model === 'string' ? options.model.trim() : '';
+  if (!model || Object.keys(options).some(key => key !== 'model'))
+    throw new TypeError('on takes { model: NAME }, where NAME is a model of the runtime (as `model:` frontmatter names one)');
+  const rebind = meta.rebindInline;
+  return makeCallable({ ...meta, definition: { ...meta.definition, model },
+    invoke: (args, frame, at) => meta.invoke(args, { ...frame, model }, at),
+    ...(rebind ? { rebindInline: (...args: Parameters<typeof rebind>) => onModel(callableMeta(rebind(...args))!, { model }) } : {}) });
+}
+
 export function makeCallable(meta: CallableMeta): NatlangCallable {
   const fn = function (...args: unknown[]) { return startCall(meta, args); };
   Object.defineProperty(fn, 'name', { value: meta.definition.name });
@@ -130,6 +144,7 @@ export function makeCallable(meta: CallableMeta): NatlangCallable {
     iterateOn(fn as never, initial, ...fixed).inFrame(meta.bound) });
   if (meta.rebindInline) Object.defineProperty(fn, 'with', { value: (captures: Record<string, unknown>) =>
     meta.rebindInline!(captures) });
+  Object.defineProperty(fn, 'on', { value: (options: { model: string }) => onModel(meta, options) });
   Object.defineProperty(fn, 'in', { value: (context: unknown) => {
     const rebinder = (globalThis as Record<symbol, unknown>)[Symbol.for('natlang.rebinder')] as Rebinder | undefined;
     if (!rebinder) throw new Error('contexts are not available in this runtime build');
@@ -144,7 +159,7 @@ export function natlangDefinition(record: NatlangRecord): CallableDefinition {
     params: Object.entries(record.args).map(([raw, type]) => ({ name: raw.replace(/\?$/, ''), type, optional: raw.endsWith('?') })),
     returns: record.returns, ...(record.declaredParameters ? { declaredParameters: true as const } : {}), ...(record.generic ? { generic: record.generic } : {}), types: record.types, codebase: record.codebase as Record<string, unknown>,
     subtype: record.subtype, ...(record.readout ? { readout: record.readout } : {}), ...(record.model ? { model: record.model } : {}),
-    ...(record.withhold ? { withhold: record.withhold } : {}), description: record.description, source: record.source, revision: record.revision };
+    ...(record.withhold ? { withhold: record.withhold } : {}), ...(record.budget ? { budget: record.budget } : {}), description: record.description, source: record.source, revision: record.revision };
 }
 
 /**

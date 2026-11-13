@@ -16,7 +16,7 @@ export const ITERATE_ON_SIGNATURE = '<T, A extends unknown[]>(step: (state: T, .
 export const RESERVED_CALLABLE_PROPERTIES: ReadonlySet<string> = new Set([
   'call', 'apply', 'bind', 'name', 'length', 'prototype', 'constructor', '__proto__', 'caller', 'arguments',
   'toString', 'toLocaleString', 'valueOf', 'hasOwnProperty', 'isPrototypeOf', 'propertyIsEnumerable',
-  '__defineGetter__', '__defineSetter__', '__lookupGetter__', '__lookupSetter__', 'then', 'iterateOn', 'in', 'with',
+  '__defineGetter__', '__defineSetter__', '__lookupGetter__', '__lookupSetter__', 'then', 'iterateOn', 'in', 'with', 'on',
 ]);
 
 /** The camelCase identifier a file or function name with separators stands for: `read-limits` is `readLimits`. */
@@ -128,6 +128,8 @@ interface Iteration<T> {
 /** Methods every compiled natlang callable provides. */
 interface NatlangCallableMethods<A extends unknown[], R> {
   iterateOn(initial: NatlangStepState<A, R>, ...args: NatlangStepArgs<A>): Iteration<NatlangStepState<A, R>>;
+  /** The same function on another of the runtime's models (the name \`model:\` frontmatter takes); a new function. */
+  on(options: { model: string }): NatlangFunction<A, R>;
 }
 
 /** A compiled natural-language function: asynchronous, typed, and monitored. */
@@ -138,11 +140,13 @@ type NatlangGenericFunction<A extends unknown[], C, T extends C> = (<R extends C
 /** An inline \`nl\` value can be instantiated again with a fresh snapshot of the same named captures. */
 type InlineNatlangFunction<A extends unknown[] = any[], R = any> = NatlangFunction<A, R> & {
   with<C extends Record<string, unknown>>(captures: C): InlineNatlangFunction<A, R>;
+  on(options: { model: string }): InlineNatlangFunction<A, R>;
 };
 
 /** An nl function without a type argument; the compiler infers its signature from its uses. */
 type NatlangUntypedFunction = ((...args: any[]) => Promise<any>) & {
   iterateOn<S>(initial: S, ...args: any[]): Iteration<S>;
+  on(options: { model: string }): NatlangUntypedFunction;
 };
 type NlResult<F> = [F] extends [NlUnspecified] ? NatlangUntypedFunction :
   [F] extends [(...args: infer A) => infer R] ? InlineNatlangFunction<A, Awaited<R>> : InlineNatlangFunction<any[], F>;

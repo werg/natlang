@@ -3,6 +3,20 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-13 — a child call's driver or host failure reads as the child's failure; prose-only replies end the call
+
+Two changes from the Vibestudio agent-DX work (a failed call must name itself and end).
+- A natlang call that an error other than the model's outcome ends (its driver, its arguments, the host) now rejects
+  with `NatlangCallError` naming it, reason `error` and the original as `cause` (kernel). An eval that awaited such a
+  child sees `pick: failed: access denied: caller lacks model.use` where it saw `access denied: caller lacks model.use`:
+  the same text, prefixed with the child and outcome the way a child's model failure already reads. Not measured; it
+  changes only failures that are not the child model's own.
+- Four complete replies in a row that call no tool and return no result end the call as `model_incomplete: no_action`
+  (agent loop). Before, a model (or a driver that never produces tool calls) that answered in prose only was nudged
+  without end: unbounded turns and an unbounded conversation (a scripted text-only model reached 4 GB). Truncated replies
+  do not count (`truncated-continuation.test.mjs`: no new repair cap for a decode in progress). The model sees nothing
+  new; the call ends where it used to loop.
+
 ### 2026-11-13 — structured return_result value sent as text is read as its data
 
 In held-v2 budget-exhausted episodes LFM3 returned records as JS object-literal **strings**
