@@ -4,7 +4,7 @@
 One process runs the whole loop; nothing else (no controller, custody or transitions):
 
 * rollouts: ``--slots`` collector slots run episodes (one ``run_bonsai_queue`` process each, the RL sampling capture) against
-  one SGLang actor (``serve_native_checkpoint.py --engine sglang``, started separately). Tasks come shuffled from the pool
+  the run's SGLang actor (``serve_native_checkpoint.py --engine sglang``, a child of this process). Tasks come shuffled from the pool
   minus the held set (``held_eval.exclusion_ids``); each task is a group of ``--group`` samples. Reward = task outcome
   (no teacher, no privileged twin, no Neuralese bonus, no efficiency shaping).
 * overlap: collection never stops. The learner trains on the groups that finished since its last step (at least
@@ -25,10 +25,14 @@ One process runs the whole loop; nothing else (no controller, custody or transit
   from pinned host memory in background threads (training never waits on I/O). Keeps the last two native checkpoints plus
   every held-evaluated one, and the last training state.
 * held evaluation: the start policy first, then every ``--held-every-hours`` the newest native checkpoint is measured on
-  the held set (``python -m natlang_neuralese.rl.held_eval measure``: its own actor and ledger unit, same pinned code) and
+  the held set (``python -m natlang_neuralese.rl.held_eval measure`` on the training actor, collection paused) and
   compared with the start policy (``held_eval compare`` -> ``held/step-N/compare-vs-step0.json``).
 
-    grpo.py train --work W --checkpoint C --actor http://127.0.0.1:8310 [...]
+* pin: the run executes from its own pinned copy of one commit (``scripts/pin_checkout.py create COMMIT W/pin-<c12>``,
+  then launch ``W/pin-<c12>/scripts/neuralese_data/grpo.py`` with that copy as workdir); every child (actor, episodes,
+  held_eval measure/compare) gets the copy's PYTHONPATH/NATLANG_REPO, so all of them record one commit and series.
+
+    grpo.py train --work W --checkpoint C [...]
 """
 from __future__ import annotations
 
@@ -113,22 +117,25 @@ def git_pin():
     return code_provenance()
 
 
-def pin_runtime(work, commit):
-    """The run's own copy of the collector runtime (ts-host with its built dist), so episodes keep one harness while main
-    moves; every other top-level entry of the checkout is linked (dist resolves ../applications etc. there). The learner
-    and the collector's Python are pinned by being this one long-lived process."""
-    pin = Path(work) / f'pin-{commit[:12]}'
-    if not (pin / 'ts-host' / 'dist' / 'teacher' / 'cli.js').is_file():
-        partial = Path(work) / f'pin-{commit[:12]}.partial'
-        shutil.rmtree(partial, ignore_errors=True)
-        partial.mkdir(parents=True)
-        subprocess.run(['cp', '-a', str(REPO / 'ts-host'), str(partial / 'ts-host')], check=True)
-        for entry in REPO.iterdir():
-            if entry.name not in ('ts-host', '.git'):
-                (partial / entry.name).symlink_to(entry)
-        shutil.rmtree(pin, ignore_errors=True)
-        os.replace(partial, pin)
-    return pin / 'ts-host'
+def pinned_env():
+    """The environment every child of the run gets (collector episodes, the actor, held_eval measure/compare): this
+    process's own checkout (``REPO``: the run's pinned copy, ``scripts/pin_checkout.py``) on PYTHONPATH and NATLANG_REPO,
+    so their code, ts-host and recorded commit/series are the run's, whatever main does meanwhile."""
+    return {**os.environ, 'NATLANG_REPO': str(REPO), 'PYTHONPATH': f'{REPO}/training/neuralese:{REPO}'}
+
+
+def check_pin(work, commit, unpinned):
+    """A run executes from ``WORK/pin-<commit12>`` (a detached ``pin_checkout.py`` copy); ``--unpinned`` (smokes) runs
+    the live checkout."""
+    marker = REPO / '.natlang-pin.json'
+    if unpinned:
+        return None
+    if not marker.exists() or json.loads(marker.read_text())['commit'] != commit:
+        raise SystemExit(f'{REPO} is not a pinned copy of {commit[:12]}: launch from '
+                         f'`scripts/pin_checkout.py create <commit> {Path(work) / "pin-<commit12>"}` (or pass --unpinned)')
+    if REPO.resolve().parent != Path(work).resolve():
+        print(f'note: the pin {REPO} lives outside the work dir {work}', file=sys.stderr)
+    return str(REPO)
 
 
 # ---- rollouts --------------------------------------------------------------------------------------------------------
@@ -152,7 +159,7 @@ class Collector:
         self.active_slots = args.slots
         self.generated = 0                          # sampled tokens of finished episodes (throughput)
         self.episodes = 0
-        self.env = {**os.environ}
+        self.env = pinned_env()
         from natlang_neuralese.rl.held_eval import series
         self.env['NATLANG_MODEL_FACING'] = series()['model_facing']
 
@@ -634,9 +641,10 @@ def train(args):
     tasks, excluded = load_tasks(args, work)
     source_sha = args.checkpoint_sha256 or sha256_file_hex_cached(Path(args.checkpoint))
     code = git_pin()
-    runtime = pin_runtime(work, code['git_commit']) if args.pin_runtime else REPO / 'ts-host'
+    pin = check_pin(work, code['git_commit'], args.unpinned)
+    runtime = REPO / 'ts-host'
     from natlang_neuralese.rl.held_eval import series
-    run = {'started': time.time(), 'code': code, 'runtime': str(runtime), 'series': series(), 'argv': sys.argv, 'checkpoint': args.checkpoint,
+    run = {'started': time.time(), 'code': code, 'pin': pin, 'runtime': str(runtime), 'series': series(), 'argv': sys.argv, 'checkpoint': args.checkpoint,
            'checkpoint_sha256': source_sha, 'pool': args.pool, 'held_manifest': args.held_manifest,
            'excluded_ids': excluded, 'eligible_tasks': len(tasks), 'args': vars(args)}
     with (work / 'runs.jsonl').open('a') as handle:
@@ -661,7 +669,7 @@ def train(args):
                        '--port', str(args.actor_port), '--prompt-rendering', 'full', *engine,
                        '--hf-export-dir', str(store / 'sglang-hf'), *args.actor_arg]
             with (work / 'actor.log').open('a') as handle:
-                process = subprocess.Popen(command, cwd=REPO, stdout=handle, stderr=subprocess.STDOUT,
+                process = subprocess.Popen(command, cwd=REPO, env=pinned_env(), stdout=handle, stderr=subprocess.STDOUT,
                                            start_new_session=True)
             actor_process.append(process)
             deadline = time.time() + 3600
@@ -873,11 +881,11 @@ def train(args):
                 code = subprocess.run([*python, 'measure', '--manifest', args.held_manifest, '--endpoint',
                                        f'{args.actor}={args.held_workers}', '--policy-id', policy, '--samples', str(samples),
                                        '--out', str(out), '--label', f'grpo-{name or f"step-{step_number}"}'],
-                                      cwd=REPO, stdout=handle, stderr=subprocess.STDOUT).returncode
+                                      cwd=REPO, env=pinned_env(), stdout=handle, stderr=subprocess.STDOUT).returncode
                 base = Path(args.held_baseline) if args.held_baseline else work / 'held' / 'step-00000' / 'result.json'
                 if (step_number or name) and code == 0 and base.exists():
                     subprocess.run([*python, 'compare', str(base), str(out / 'result.json'), '--out',
-                                    str(out / 'compare-vs-step0.json')], cwd=REPO, stdout=handle, stderr=subprocess.STDOUT)
+                                    str(out / 'compare-vs-step0.json')], cwd=REPO, env=pinned_env(), stdout=handle, stderr=subprocess.STDOUT)
         finally:
             collector.paused.clear()
         summary = {}
@@ -1168,8 +1176,8 @@ def main():
     t.add_argument('--keep-rollouts', action='store_true')
     t.add_argument('--no-actor-sync', action='store_true',
                    help='never update the actor (smoke against a shared actor of the start policy; versions advance nominally)')
-    t.add_argument('--no-pin-runtime', dest='pin_runtime', action='store_false',
-                   help="episodes run the checkout's live ts-host instead of the run's pinned copy")
+    t.add_argument('--unpinned', action='store_true',
+                   help='run from a live checkout instead of a pinned copy (smokes only; see check_pin)')
     t.add_argument('--held-every-hours', type=float, default=4.)
     t.add_argument('--skip-base-held', action='store_true')
     t.add_argument('--held-baseline', help="a start-policy held result.json to compare with (e.g. held-v2's base run) instead "

@@ -54,8 +54,10 @@ budget yet), wall clock 3600 s as a safety net only (unscored). Reward = task ou
 (`exp0_sft.load_model`, `lfm3_fast_train`). Weight sync each step: BF16 weights -> pinned buffer -> actor's HF safetensors ->
 SGLang `pause_generation(retract)` / `update_weights_from_disk` / `continue_generation` in a background thread; a pruned
 native checkpoint every 2 steps and the FP32 state (masters + moments, `/mnt/external/natlang-grpo-v1`) every 4, also in
-background threads. Episodes run the run's pinned copy of ts-host (`WORK/pin-<commit>`), the run records its commit
-(`runs.jsonl`); restart (`--resume`) to adopt newer code. Held evals run on the training actor itself (it serves the
+background threads. The whole run executes from its pinned copy (`scripts/pin_checkout.py create COMMIT
+WORK/pin-<c12>`: detached worktree, ts-host rebuilt there; launch that copy's grpo.py with it as workdir; grpo.py refuses a
+live checkout unless `--unpinned`), and every child (actor, episodes, held_eval measure/compare) gets its PYTHONPATH, so
+held results record the pin's commit and series; adopting newer code is a new pin (held step 0 is re-measured when the series changes). Held evals run on the training actor itself (it serves the
 current policy with the held-v2 engine pin): new collection pauses, `held_eval measure` (held-v2; 4 samples for the start
 policy before the first step, then 2 samples every 4 h on that step's checkpoint) and `held_eval compare` with step 0
 (`WORK/held/step-N/`); `--held-extra CKPT,...` measures other native checkpoints the same way after step 0 (loaded into the
