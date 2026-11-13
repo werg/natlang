@@ -23,3 +23,14 @@ def test_missing_child_task_states_that_names_are_free():
     extras, contract = kinds['missing-child']
     assert extras['signatures'] == [{'path': 'op/child.nl', 'args': '{ request: Req, approvals: Page[] }', 'returns': 'Guard'}]
     assert 'approvals: Page[]' in contract
+
+
+def test_type_aliases_keep_the_last_member_before_the_closing_brace():
+    # held-v2 row 246: HistoricPlan's oracle lacked evidenceRef, the member written just before `}` without a `;`.
+    files = {'types.ts': 'export type HistoricPlan = { drawingId: ID; revision: string; areaId: ID; feature: string; '
+                         'sourceDate: string; evidenceRef: Ref };\n'
+                         'export type Note = {\n  text: string;\n  tags?: string[];\n};\n'}
+    aliases = natcode._type_aliases(files)
+    assert sorted(aliases['HistoricPlan']) == ['areaId', 'drawingId', 'evidenceRef', 'feature', 'revision', 'sourceDate']
+    assert aliases['HistoricPlan']['evidenceRef'] == (False, 'Ref')
+    assert aliases['Note'] == {'text': (False, 'string'), 'tags': (True, 'string[]')}
