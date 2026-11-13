@@ -2100,8 +2100,9 @@ audit replaced, and every further v1 hour delays v2. The procedure is as follows
    `ops/decisions.log`.
 3. The switch also ends any grpo-v1 Pop measurement in flight.
 
-**Launch (2026-11-13 17:00).** Pin a67973996 (`ops/grpo-v2/run1/pin-a67973996f74`, held series 914b411346ff), relaunched
-three times before step 1 without any change to the treatment: Pop's base actor needed a 10.5 GiB budget (a67973996),
+**Launch (2026-11-13 17:00; final 20:10).** Pin d24b62ec5 (branch `pin/grpo-v2-run1` = a67973996 + the dynamo
+recompile-limit fix + the exact faster nucleus head; `ops/grpo-v2/run1/pin-d24b62ec50fa`, held series 914b411346ff).
+It was relaunched before step 1 without any change to the treatment: Pop's base actor needed a 10.5 GiB budget (a67973996),
 held-v3's 1,204 exclusion ids join the two pool-errata files in `--exclude-ids` (task supply: v2 must not train on
 held-v3), and `MALLOC_ARENA_MAX=4` caps the actor front's glibc arenas. With c06a50581 (the front's block store is a
 2 GiB LRU), these two were the front's growth that swapped grpo-v1-run2. Capacity: `--slots 24`, `--activation-gb 6`,
