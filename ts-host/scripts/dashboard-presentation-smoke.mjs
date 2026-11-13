@@ -79,7 +79,7 @@ try {
   await page.locator('.event-details > summary').first().click();
   await page.getByRole('button', { name: 'Save correction', exact: true }).click();
   await page.getByText('Correction saved.', { exact: true }).waitFor();
-  const corrections = readFileSync(join(root, 'report', 'tune.examples.jsonl'), 'utf8').trim().split('\n').map(line => JSON.parse(line));
+  const corrections = JSON.parse(readFileSync(join(root, 'report', 'examples.json'), 'utf8'));
   assert.deepEqual(corrections[0].expected, report, 'typed trace corrections retain numbers, booleans, records and lists');
   await noDump(); await page.screenshot({ path: '/tmp/natlang-designed-trace.png', fullPage: true });
   // Corrections are native values; a text correction must never be parsed as JSON source or dropped when empty.
@@ -88,7 +88,7 @@ try {
       headers: { 'x-natlang-token': token, cookie: `natlang_dashboard=${token}`, 'content-type': 'application/json' },
       body: JSON.stringify({ verdict: 'fix', expected: expectedText }) });
     assert.equal(response.status, 200, await response.text());
-    assert.equal(JSON.parse(readFileSync(join(root, 'report', 'tune.examples.jsonl'), 'utf8').trim()).expected, expectedText);
+    assert.equal(JSON.parse(readFileSync(join(root, 'report', 'examples.json'), 'utf8'))[0].expected, expectedText);
   }
   const config = await request('/api/config');
   config.profiles['trained-model'] = { kind: 'native', model: 'Trained model', profile: { native: { source: 'Local checkpoint', checkpoint: '/models/checkpoint', contextTokens: 32768 } } };

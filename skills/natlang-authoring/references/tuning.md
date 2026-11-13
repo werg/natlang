@@ -18,14 +18,16 @@ at once, an ambiguous type, an instruction that names the wrong thing. Tuning le
 
 ## Examples
 
-`tune.examples.jsonl` beside the program holds root invocations, one object per line:
+`examples.json` beside the program (the file `natlang test` checks) holds root invocations:
 
 ```json
-{"function": "triage/route.nl", "input": {"ticket": "Refund for order 4411"}, "expected": "billing", "group": "customer-17"}
-{"function": "triage/route.nl", "input": {"ticket": "Login loops after reset"}, "group": "customer-17"}
+[
+  {"function": "triage/route.nl", "inputs": {"ticket": "Refund for order 4411"}, "expected": "billing", "group": "customer-17"},
+  {"function": "triage/route.nl", "inputs": {"ticket": "Login loops after reset"}, "group": "customer-17"}
+]
 ```
 
-- `function` is the root definition's source path; `input` its arguments by name.
+- `function` is the root definition's source path; `inputs` its arguments by name.
 - `expected` is optional. With it the root has a direct oracle; without it the teacher's executions are kept when
   they complete, and evaluation counts completions.
 - `group` names the source or world the example comes from. Examples of one group always land on the same side of

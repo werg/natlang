@@ -51,7 +51,7 @@ Pair with `natlang-authoring` for substantial natural-language algorithms when t
 starts its reference server on the first model call (`natlang serve` keeps it loaded), and `NAME-gguf` runs the same
 weights on managed llama.cpp for ordinary tokens. A profile's `escalate: PROFILE` (or `--escalate`) reruns a call the
 student fails on another profile through the tiered engine and says so on stderr; the escalated root call's input
-joins the program's `tune.examples.jsonl` without an expected result. `natlang traces good|bad|fix CALL` turns tested
+joins the program's `examples.json` without an expected result. `natlang traces good|bad|fix CALL` turns tested
 calls into roots; `good` refuses outputs of models that are neither a tuning teacher nor one of our native models
 (recovery: `natlang traces fix CALL --expected JSON` with the answer you checked). `natlang tune DIR` needs no
 configuration with a native profile: student, trainer and teacher (`escalate`) come from it. `natlang doctor

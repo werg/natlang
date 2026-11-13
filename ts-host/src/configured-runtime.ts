@@ -53,7 +53,7 @@ export type NatlangRuntimeConfiguration = {
   ensureRuntime?: (discovery: LlamaRuntimeDiscovery) => Promise<LlamaServerInspection | null>;
   environment?: NodeJS.ProcessEnv;
   /** A root program call the model fails and the escalation teacher runs adds its input to the program's
-   * tune.examples.jsonl when the runtime closes (recordEscalation); default true, NATLANG_ESCALATION_EXAMPLES=off. */
+   * examples.json when the runtime closes (recordEscalation); default true, NATLANG_ESCALATION_EXAMPLES=off. */
   escalationExamples?: boolean;
   /** One-line notices (tuned binding, newer checkpoints, escalations, server starts). Default: stderr. */
   log?: NodeJS.WritableStream;

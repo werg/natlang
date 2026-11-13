@@ -189,7 +189,7 @@ for diagnosis and verified teacher use, but cannot masquerade as same-policy RL.
 
 
 When the run ends, the input of each escalated root call of a program function joins that program's
-`tune.examples.jsonl`, without an expected result (the teacher's answer is not a verified oracle), in a group
+`examples.json`, without an expected result (the teacher's answer is not a verified oracle), in a group
 `escalations-<day>-<tester>`; an input already listed is left alone (`NATLANG_ESCALATION_EXAMPLES=off`, or
 `escalationExamples: false` in `natlangRuntime`, turns this off). The next `natlang tune` collects and verifies them
 like any other root.
@@ -197,7 +197,7 @@ like any other root.
 ## Turning test sessions into training data
 
 `natlang traces good CALL`, `natlang traces bad CALL [--expected JSON]` and `natlang traces fix CALL --expected JSON`
-annotate a recorded call and add it as a root example to its program's `tune.examples.jsonl`, grouped per tester
+annotate a recorded call and add it as a root example to its program's `examples.json`, grouped per tester
 and day so one session's calls stay on one side of every split (docs/TUNING.md "Examples from testing"). Protected
 examples are never rewritten. `natlang tune --incremental` then refits on them.
 

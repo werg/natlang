@@ -14,9 +14,9 @@ natlang run ./my-program      # ordinary execution uses the result
 ## What the author supplies
 
 - The ordinary typed program.
-- Root examples in `tune.examples.jsonl` beside it, one JSON object per line:
-  `{"function": "triage/label-ticket.nl", "input": {"ticket": "..."}, "expected": "billing", "group": "customer-17"}`.
-  `expected` is optional; with it the root has a direct oracle. `group` names the source/world component: examples
+- Root examples in `examples.json` beside it (the file `natlang test` checks), an array of
+  `{"name": "...", "function": "triage/label-ticket.nl", "inputs": {"ticket": "..."}, "expected": "billing", "group": "customer-17"}`.
+  `expected` is optional (`natlang test` skips entries without it); with it the root has a direct oracle. `group` names the source/world component: examples
   that share a world stay on one side of every split. `"protected": true` keeps an example out of all tuning; it is
   for final reporting only.
 - Optionally a verifier, `tune.reward.mjs` beside `natlang.json`: its default export `(value, example) => number |
@@ -50,10 +50,10 @@ natlang traces bad CALL [--expected JSON]      # annotation only, unless the rig
 ```
 
 Each records `{"kind": "feedback", "value": {"verdict": ..., "expected"?: ...}}` through `natlang traces annotate`'s
-store, then appends `{function, input, expected, group}` to `tune.examples.jsonl` in the call's recorded program root
-(`--program DIR` overrides it; `--dry-run` prints the line and changes nothing). `function` is the definition's `.nl`
-path relative to that root, `input` the call's exact recorded inputs. The same function and input is never added twice:
-a different `expected` replaces the earlier line's (the file is rewritten atomically). A call that ran inside another
+store, then adds `{name, function, inputs, expected, group}` to `examples.json` in the call's recorded program root (else the
+program of the current directory; `--program DIR` overrides both; `--dry-run` prints the entry and changes nothing).
+`function` is the definition's `.nl` path relative to that root, `inputs` the call's exact recorded inputs. The same function and input is never added twice:
+a different `expected` replaces the earlier entry's (the file is rewritten atomically). A call that ran inside another
 call, has no `.nl` source or program root, or recorded incomplete inputs keeps its annotation and fails with the reason.
 
 `group` is `--group G`, else `NATLANG_FEEDBACK_GROUP`, else `feedback-<YYYYMMDD>-<hash of host and user>`, so one tester's
