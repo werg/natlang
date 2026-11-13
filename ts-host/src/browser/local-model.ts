@@ -5,6 +5,7 @@ import { probeBrowserGpu, type BrowserGpuCapability } from './gpu.js';
 import { perRequestLora } from '../model/lora-scales.js';
 import { nativeStateMessages } from '../model/openai-compatible.js';
 import { coalescingScorer } from '../model/scoring.js';
+import { batchScoreItem, scoresFromBatchResult, type BatchScoreResult } from '../model/decision-scoring.js';
 
 type ModelMessage = { role: 'system' | 'user' | 'assistant' | 'tool'; content?: string | null;
   tool_calls?: unknown[]; tool_call_id?: string };
@@ -231,14 +232,14 @@ export class BrowserLocalModel {
     if (!this.loaded) throw new Error('load a local GGUF model before scoring a decision');
     if (!this.engine.createNatlangScore || !this.engine.capabilities?.natlangScore)
       throw new Error('decision-unsupported: this wllama build cannot score replies; use the vendored build (ts-host/vendor/wllama)');
-    const body = { items: items.map(item => ({ ...item.tuned, continuations: item.options,
-      messages: chatMessages(nativeStateMessages(item.messages, this.nativeStates)) })) };
+    // The same item and result codec as the managed server's endpoint (model/decision-scoring.ts), so every field the
+    // fork's /v1/natlang/score accepts or returns (cache_messages, adapters, prompt_tokens, ...) reaches the page too.
+    const body = { items: items.map(item => batchScoreItem(
+      { ...item, messages: chatMessages(nativeStateMessages(item.messages, this.nativeStates)) }, item.tuned)) };
     const response = await this.queued(async () => { signal?.throwIfAborted(); return this.engine.createNatlangScore!(body); });
     return items.map((item, index): PromiseSettledResult<DecisionScores> => {
-      const result = response.results[index];
-      if (!result || 'error' in result || result.log_probs.length !== item.options.length)
-        return { status: 'rejected', reason: new Error(result && 'error' in result ? result.error : 'batched scoring returned no scores for an item') };
-      return { status: 'fulfilled', value: { log_probs: result.log_probs, tokens: result.tokens } };
+      try { return { status: 'fulfilled', value: scoresFromBatchResult(response.results[index] as BatchScoreResult, item.options.length) }; }
+      catch (reason) { return { status: 'rejected', reason }; }
     });
   };
 

@@ -231,6 +231,8 @@ class SglangEngine(Engine):
     def progress_metrics(self):
         return {**super().progress_metrics(), 'natlang_sglang_requests_total': self.sglang_requests,
                 'natlang_sglang_generated_tokens_total': self.sglang_tokens,
+                'natlang_sglang_prompt_tokens_total': getattr(self, 'sglang_prompt_tokens', 0),
+                'natlang_sglang_cached_prompt_tokens_total': getattr(self, 'sglang_cached_tokens', 0),
                 'natlang_native_fallback_requests_total': self.native_fallbacks,
                 'natlang_sglang_native_state_writes_total': self.sglang_state_writes,
                 **{f'natlang_sglang_{key}_total': value for key, value in
@@ -506,6 +508,11 @@ class SglangEngine(Engine):
 
     def _sglang_generate(self, body):
         """One SGLang /generate call."""
+        result = self._sglang_post(body)
+        self._sglang_count_prompt(result.get('meta_info') if isinstance(result, dict) else None)
+        return result
+
+    def _sglang_post(self, body):
         try:
             with urllib.request.urlopen(urllib.request.Request(self.sglang_url + '/generate',
                     data=json.dumps(body).encode(), headers={'Content-Type': 'application/json'}),
@@ -513,6 +520,14 @@ class SglangEngine(Engine):
                 return json.loads(response.read())
         except urllib.error.HTTPError as error:
             raise RequestError('sglang-actor-backend', f'SGLang HTTP {error.code}: {error.read()[:400]!r}') from error
+
+    def _sglang_count_prompt(self, meta):
+        """Prompt tokens SGLang served and how many came from its radix cache (`/metrics`: the prefix hit rate)."""
+        if not isinstance(meta, dict) or not isinstance(meta.get('prompt_tokens'), int):
+            return
+        with self._sglang_lock:
+            self.sglang_prompt_tokens = getattr(self, 'sglang_prompt_tokens', 0) + meta['prompt_tokens']
+            self.sglang_cached_tokens = getattr(self, 'sglang_cached_tokens', 0) + int(meta.get('cached_tokens') or 0)
 
     def _sglang_prompt(self, seq):
         """The prompt ids and capture segments, as `_native_prefill_impl` records them for ordinary tokens."""
@@ -879,9 +894,8 @@ class SglangEngine(Engine):
             if len(logps) != len(continuation):
                 raise RequestError('sglang-actor-backend', 'SGLang returned the wrong number of continuation logprobs')
             return float(sum(logps)), len(continuation)
-        if continuations:
-            score(continuations[0])  # the shared prompt enters the radix cache once
-        results = list(self._pool.map(score, continuations))
+        # The first option puts the shared prompt into the radix cache; the others then score from it in parallel.
+        results = [score(continuations[0]), *self._pool.map(score, continuations[1:])] if continuations else []
         with self._sglang_lock:
             self.sglang_requests += 1
         return decision_response(item, seq, continuations, results)
@@ -1091,6 +1105,7 @@ class SglangEngine(Engine):
         """SGLang /generate as a stream of incremental chunks."""
         request = urllib.request.Request(self.sglang_url + '/generate', data=json.dumps({**body, 'stream': True}).encode(),
                                          headers={'Content-Type': 'application/json'})
+        meta = None
         try:
             with urllib.request.urlopen(request, timeout=3600) as response:
                 for line in response:
@@ -1103,6 +1118,9 @@ class SglangEngine(Engine):
                     chunk = json.loads(payload)
                     if 'error' in chunk:
                         raise RequestError('sglang-actor-backend', f"SGLang stream error: {str(chunk['error'])[:400]}")
+                    meta = chunk.get('meta_info') or meta
                     yield chunk
         except urllib.error.HTTPError as error:
             raise RequestError('sglang-actor-backend', f'SGLang HTTP {error.code}: {error.read()[:400]!r}') from error
+        finally:
+            self._sglang_count_prompt(meta)  # also when the consumer stops early (a guided rewind)

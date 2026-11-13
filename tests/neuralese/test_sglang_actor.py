@@ -496,9 +496,14 @@ def test_release_native_drops_the_checkpoint_training_state_until_a_native_path_
     assert front.__dict__['_native_model'] is not None and front.native_reloads == 1
 
 
-def test_decide_scores_on_sglang_with_the_native_decision_capture(tmp_path):
+def test_decide_scores_on_sglang_with_the_native_decision_capture(tmp_path, monkeypatch):
+    from natlang_neuralese.serve import native_learning
     from natlang_neuralese.serve.native_learning import decide_native
     native, front, roles, word, block, messages = _import_fixture(tmp_path)
+    # The fixture's chat template renders no assistant text, so each option's continuation is its own words here.
+    rendered = native_learning.decision_items
+    monkeypatch.setattr(native_learning, 'decision_items', lambda renderer, messages, tools, options: (
+        rendered(renderer, messages, tools, options)[0], [word(option) for option in options]))
     import concurrent.futures
     front._pool = concurrent.futures.ThreadPoolExecutor(4)
     body = {'messages': messages, 'options': ['t6', 't7 t8'], 'native_recording': True}
@@ -508,9 +513,11 @@ def test_decide_scores_on_sglang_with_the_native_decision_capture(tmp_path):
     def generate(request):
         sent.append(request)
         cont = request['input_ids'][request['logprob_start_len'] + 1:]
-        return {'meta_info': {'input_token_logprobs': [[None, request['input_ids'][request['logprob_start_len']], None]]
+        return {'meta_info': {'prompt_tokens': len(request['input_ids']), 'cached_tokens': request['logprob_start_len'],
+                              'input_token_logprobs': [[None, request['input_ids'][request['logprob_start_len']], None]]
                               + [[-0.25, t, None] for t in cont]}}
-    front._sglang_generate = generate
+    front._sglang_post = generate
+    front._sglang_generate = type(front)._sglang_generate.__get__(front)  # the fixture stubs the counted call
     front.sglang_actor_export = {'kind': 'exact', 'format': 'sglang-hf-bfloat16-vendor-projection', 'sha256': 'e' * 64}
     actual = decide_native(front, body)
     capture = dict(actual['native_decision_capture'])
@@ -520,6 +527,16 @@ def test_decide_scores_on_sglang_with_the_native_decision_capture(tmp_path):
     assert actual['tokens'] == expected['tokens'] and actual['native_state_imports'] == expected['native_state_imports']
     assert actual['log_probs'] == [-0.25 * n for n in expected['tokens']]
     assert all(r['sampling_params']['custom_params']['natlang_import'] for r in sent) and front.native_fallbacks == 0
+    assert len(sent) == 2, 'each option is scored once (the first warms the radix cache for the others)'
+    metrics = front.progress_metrics()  # the radix-cache hit rate is telemetry (docs/ENGINE_PARITY.md)
+    assert metrics['natlang_sglang_prompt_tokens_total'] == sum(len(r['input_ids']) for r in sent)
+    assert metrics['natlang_sglang_cached_prompt_tokens_total'] == sum(r['logprob_start_len'] for r in sent)
+    # A batch scores its items concurrently and keeps their order; an item's failure stays its own.
+    from natlang_neuralese.serve.native_learning import decide_many_native
+    sent.clear()
+    many = decide_many_native(front, {'items': [body, {**body, 'options': ['t7 t8']}, {'messages': messages, 'options': []}]})
+    assert many['results'][0]['log_probs'] == actual['log_probs'] and many['results'][1]['tokens'] == [expected['tokens'][1]]
+    assert 'error' in many['results'][2] and len(sent) == 3
 
 
 def _adapters(engine, names):

@@ -569,6 +569,11 @@ afterwards. The rules below are consequences of this one.
   error; native-training and training-application notes go to
   `docs/NATIVE_RUNTIME_NOTES.md` and `docs/SEMANTIC_APPLICATION_NOTES.md`, not the
   skills (`skills/README.md`).
+- **One serving feature, every engine** (owner, 2026-11-14). The managed llama-server, the in-page wllama build, the
+  Python native engine and the SGLang actor serve one protocol. A serving change (request field, cache, scoring,
+  sampling, capture) lands on every engine it applies to in the same push, or gets a row in `docs/ENGINE_PARITY.md`
+  with its next action. Fork pins move only through `scripts/update_llama_runtime.mjs --fork`, which vendors the
+  in-page build from the same release; never hand-build or hand-edit `ts-host/vendor/wllama`.
 - **No premature limits.** Termination is structural (no while loops; recursion
   on a smaller argument; `iterateOn` with a measure or a natural-language
   predicate), not budgets or default timeouts. Add a resource limit when a

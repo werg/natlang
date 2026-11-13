@@ -35,6 +35,21 @@ def _native_plan(engine, items):
     return plan
 
 
+# Every field natlang's client puts on a /v1/natlang/score item (ts-host/src/model/decision-scoring.ts batchScoreItem),
+# and what this server (native engine and SGLang actor) does with it. A field the llama.cpp fork serves and this server
+# does not is a parity gap recorded in docs/ENGINE_PARITY.md; tests/neuralese/test_engine_parity.py fails when the client
+# sends a field that is not listed here.
+SCORE_ITEM_FIELDS = {
+    'messages': 'served',
+    'continuations': 'served',
+    'adapters': 'served',
+    'native_state_modes': 'served',
+    'native_recording': 'served',
+    'cache_messages': 'hint, ignored: the native prefix cache reuses grid blocks of any prompt; SGLang relies on its '
+                      'radix cache (ENGINE_PARITY.md)',
+}
+
+
 def decision_items(renderer, messages, tools, options):
     """The decision prompt items and each option's complete closed continuation token IDs (end of message
     included). ``renderer`` is a serving engine or ``data.decision_graph.tokenizer_renderer`` (CPU conversion):
@@ -136,12 +151,17 @@ def decide_many_native(engine, body: dict) -> dict:
     items = body.get("items")
     if not isinstance(items, list):
         raise RequestError("neuralese-decision", "items must be a list")
-    results = []
-    for item in items:
+    def one(item):
         try:
-            results.append(_score_item(engine, {"native_state_modes": body.get("native_state_modes"), "native_recording":body.get("native_recording",False), **item}, body.get("adapters")))
+            return _score_item(engine, {"native_state_modes": body.get("native_state_modes"), "native_recording":body.get("native_recording",False), **item}, body.get("adapters"))
         except Exception as error:  # item failures are part of the shared score contract
             # A RequestError's text already starts with its code.
             message = str(error) if isinstance(error, RequestError) else f"internal: {error}"
-            results.append({"error": message[:500]})
-    return {"results": results}
+            return {"error": message[:500]}
+    # A batching engine (the SGLang actor) scores the items concurrently, as the llama.cpp fork does; the native engine
+    # serializes on its execution lock either way.
+    if len(items) > 1 and getattr(engine, 'sglang_score', None) is not None:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=min(len(items), 16), thread_name_prefix='decide-many') as pool:
+            return {"results": list(pool.map(one, items))}
+    return {"results": [one(item) for item in items]}

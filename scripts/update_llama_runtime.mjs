@@ -1,16 +1,19 @@
 #!/usr/bin/env node
 /** Resolve one stable llama.cpp release into natlang's checked runtime manifest. */
-import { randomUUID } from 'node:crypto';
-import { rename, writeFile } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { createHash, randomUUID } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { cp, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const destination = resolve(repository, 'ts-host/src/llama-runtime-release.ts');
+const vendor = resolve(repository, 'ts-host/vendor');
 const args = process.argv.slice(2), value = name => args.includes(name) ? args[args.indexOf(name) + 1] : undefined;
 const requested = value('--version'), forkTag = value('--fork');
 if (forkTag ? !/^natlang-b\d+$/.test(forkTag) : !requested || !/^\d+\.\d+\.\d+$/.test(requested))
-  throw new Error('usage: node scripts/update_llama_runtime.mjs --version X.Y.Z | --fork natlang-bNNNN [--repository OWNER/REPO]');
+  throw new Error('usage: node scripts/update_llama_runtime.mjs --version X.Y.Z | --fork natlang-bNNNN [--repository OWNER/REPO] [--wllama BUILT_WLLAMA_DIR]');
 
 const headers = { accept: 'application/vnd.github+json', 'user-agent': 'natlang-runtime-publisher' };
 async function getJson(url) {
@@ -59,9 +62,63 @@ if (forkTag) {
   }
   if (!artifacts.length) throw new Error(`${forkTag} publishes no natlang runtime archives`);
   const [major, minor] = release.version.split('.').map(Number);
+  // The in-page engine is the same fork commit compiled to WebAssembly (the release's wllama archive), so the browser
+  // never runs older server code than the managed runtime; ts-host/test/llama-runtime.test.mjs checks the pair.
+  await installWllama(release, base, repository);
   await writeManifest({ version: release.version, build: release.build, commit: release.commit,
     compatible: { minimumVersion: release.version, maximumVersionExclusive: `${major}.${minor + 1}.0`, minimumBuild: release.build }, artifacts });
   process.exit(0);
+}
+
+/**
+ * Vendor the release's wllama build into ts-host/vendor/wllama{,-compat} and record its provenance. `--wllama DIR`
+ * takes a local build of werg/wllama whose llama.cpp submodule is checked out at the release's commit instead.
+ */
+async function installWllama(release, base, repository) {
+  let built = value('--wllama') && resolve(value('--wllama')), wllama, temporary;
+  if (built) {
+    const commit = execFileSync('git', ['-C', join(built, 'llama.cpp'), 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+    if (!commit.startsWith(release.commit)) throw new Error(`${built}/llama.cpp is at ${commit}, the release is ${release.commit}`);
+    wllama = { repository: 'werg/wllama', commit: execFileSync('git', ['-C', built, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+      dirty: execFileSync('git', ['-C', built, 'status', '--porcelain', '--', '.', ':!llama.cpp'], { encoding: 'utf8' }).trim() !== '' };
+  } else {
+    const row = release.archives.find(archive => archive.role === 'wllama');
+    if (!row) throw new Error(`${release.tag} publishes no wllama archive; build werg/wllama on it and pass --wllama DIR`);
+    const response = await fetch(`${base}/${row.file}`, { headers });
+    if (!response.ok) throw new Error(`${base}/${row.file}: HTTP ${response.status}`);
+    const data = Buffer.from(await response.arrayBuffer());
+    if (createHash('sha256').update(data).digest('hex') !== row.sha256) throw new Error(`${row.file} does not match its manifest digest`);
+    temporary = await mkdtemp(join(tmpdir(), 'natlang-wllama-'));
+    await writeFile(join(temporary, row.file), data);
+    execFileSync('tar', ['-xzf', join(temporary, row.file), '-C', temporary]);
+    built = temporary;
+    wllama = row.wllama;
+  }
+  const files = { 'wllama/esm': 'esm', 'wllama-compat/index.js': 'compat/index.js', 'wllama-compat/wasm/wllama.js': 'compat/wasm/wllama.js',
+    'wllama-compat/wasm/wllama.wasm': 'compat/wasm/wllama.wasm' };
+  await rm(join(vendor, 'wllama/esm'), { recursive: true, force: true });
+  for (const [to, from] of Object.entries(files)) {
+    await mkdir(dirname(join(vendor, to)), { recursive: true });
+    await cp(join(built, from), join(vendor, to), { recursive: true, filter: source => !/\.(map|md)$/.test(source) && !source.endsWith('index.min.js') });
+  }
+  const sha256 = async path => createHash('sha256').update(await readFile(join(vendor, path))).digest('hex');
+  const provenancePath = join(vendor, 'wllama/provenance.json');
+  const previous = JSON.parse(await readFile(provenancePath, 'utf8'));
+  const provenance = { schema: 'natlang.wllama-vendor/2',
+    llama_cpp: { repository, release: release.tag, commit: release.commit },
+    wllama,
+    build: value('--wllama') ? `local build of ${built} (werg/wllama scripts/build_wasm.sh: emsdk docker, WebGPU JSPI main build and compat build; npm run build)`
+      : `${repository} .github/workflows/natlang-runtime.yml job wllama (werg/wllama scripts/build_wasm.sh; npm run build)`,
+    sha256: Object.fromEntries(await Promise.all(['wllama/esm/index.js', 'wllama/esm/wasm/wllama.wasm', 'wllama-compat/index.js',
+      'wllama-compat/wasm/wllama.js', 'wllama-compat/wasm/wllama.wasm'].map(async path => [path, await sha256(path)]))),
+    verify: previous.verify };
+  await writeFile(provenancePath, JSON.stringify(provenance, null, 1) + '\n');
+  for (const name of ['wllama', 'wllama-compat']) {
+    const path = join(vendor, name, 'package.json'), pkg = JSON.parse(await readFile(path, 'utf8'));
+    pkg.version = pkg.version.replace(/-natlang\..*$/, '') + `-natlang.${release.tag.replace(/^natlang-/, '')}`;
+    await writeFile(path, JSON.stringify(pkg, null, 2) + '\n');
+  }
+  if (temporary) await rm(temporary, { recursive: true, force: true });
 }
 
 const stable = await getJson(`https://api.github.com/repos/ggml-org/llama.cpp/releases/tags/v${requested}`);

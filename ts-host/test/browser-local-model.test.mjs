@@ -368,7 +368,7 @@ test('the in-page model scores decision readouts in one engine request and carri
     assert.equal(model.turn.decide, model.decide, 'a runtime given model.turn finds the scorer');
     const messages = [{ role: 'user', content: `Rules: ${nativeStateSentinel(state)}` }];
     const [first, second, failed] = await Promise.allSettled([model.decide({ messages, options: ['true', 'false'] }),
-      model.decide({ messages: [{ role: 'user', content: 'plain' }], options: ['"a"', '"b"', '"c"'] }),
+      model.decide({ messages: [{ role: 'user', content: 'plain' }], options: ['"a"', '"b"', '"c"'], cache_messages: 1 }),
       model.decide({ messages, options: ['bad'] })]);
     assert.equal(scored.length, 1, 'readouts arriving together are one engine request');
     assert.deepEqual(first.value, { log_probs: [-1, -2], tokens: [2, 2], batch: { batch_id: 'd1', batch_size: 3 } });
@@ -377,6 +377,7 @@ test('the in-page model scores decision readouts in one engine request and carri
     assert.deepEqual(scored[0].items[0].messages[0].content, [{ type: 'text', text: 'Rules: ' }, { type: 'native_state', id: state }]);
     assert.deepEqual(scored[0].items[0].continuations, ['true', 'false']);
     assert.equal(scored[0].items[0].lora, undefined, 'no tuned adapters are loaded');
+    assert.equal(scored[0].items[1].cache_messages, 1, 'the page sends the same score items as the managed server (decision-scoring.ts)');
   } finally { await model.close(); }
   // A wllama build without the scorer refuses with decision-unsupported, which the runtime treats as unscored.
   const stock = { ...fake, capabilities: { nativeStates: true } };
