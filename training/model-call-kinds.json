@@ -12,7 +12,7 @@
    "parity": {"status": "covered", "evidence": ["tests/neuralese/test_serving_prompt_rebuild.py", "tests/neuralese/test_lfm3_format.py", "ts-host/test/prompt-pieces-export.test.mjs"]}
   },
   "runtime-authored-call": {
-   "summary": "A natlang call whose instructions the runtime or a host tool writes: refinement:holds (no scoring driver), the iterateOn progress judge (builtin progressJudge), bash ask, natlang ask (CLI), nl@python, the delegate tool's directory reducer, the specializer's compareBehaviors judge. Each runs as tool-loop turns, so the generic mechanisms apply; their data coverage is measured in the audit.",
+   "summary": "A natlang call whose instructions the runtime or a host tool writes: refinement:holds (no scoring driver), the iterateOn progress judge (builtin progressJudge), bash ask, natlang ask (CLI), nl@python, the delegate tool's directory reducer, the specializer's compareBehaviors judge, read(value) of a Neuralese value when no standard library is configured (natlang.read). Each runs as tool-loop turns, so the generic mechanisms apply; their data coverage is measured in the audit.",
    "model_output": "generated",
    "endpoints": ["/v1/chat/completions"],
    "sft": {"status": "covered", "evidence": ["training/neuralese/natlang_neuralese/train/own_output_supervision.py"]},

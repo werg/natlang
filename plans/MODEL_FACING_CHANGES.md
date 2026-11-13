@@ -3,6 +3,26 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-13 — eval-scope names sent as tool calls, Python-in-eval hint, read(value) without a library (base failure taxonomy)
+
+From `plans/neuralese/BASE_FAILURES_20261113.md` (base 5ff07638, held-v2, 256 x 2); first-principles fixes, not A/B-gated.
+- A tool call whose name is in the call's eval scope (`transcript.search`, `transcript.entry`, `transcript`, an input, a
+  function of the call such as `read_function`, a service) was answered `X: bad-action, expected a scope-eval tool`
+  (80 actions in 46 episodes, 33 of them failed). It now says what it is and how to use it: `transcript.search:
+  bad-action, transcript.search is not a tool: transcript is in this call's eval scope. Use it in code, for example
+  eval with code: transcript.search("freight"); read_code("transcript") shows how to use it.` Unknown names keep the
+  old text (ts-host `native/runtime.ts` `notATool`).
+- The Python-in-eval recovery sentence told the model to "write judgment as `await nl(...)`", which the nl-not-tag
+  check then refuses; it now shows the tag form, `await nl\`instructions\`(value)`, and says Python is not available
+  *in eval* (the python tool exists).
+- `read(value)` on a Neuralese value in a task without `services.neuralese` failed with an operator-facing capability
+  error, although our own opaque-access error advises exactly `read(value)` (17 episodes, 11 failed). Without a
+  standard library it is now a typed `natlang.read` call of the executing model that takes the value as its argument,
+  as the teacher-text readout already was (ts-host `neuralese/combinators.ts`; model-call kind runtime-authored-call).
+- A helper whose code has a parse error no longer also gets `Saved helper "main" cannot persist because it refers to
+  unavailable ;` (an empty name from the broken parse).
+Tests: `compaction.test.mjs` (tool names), `scope-compiler.test.mjs`, `neuralese-read-contract.test.mjs`.
+
 ### 2026-11-13 — `bash -c 'literal'` runs; mkdir'd directories persist across bash calls (base failure taxonomy)
 
 From `plans/neuralese/BASE_FAILURES_20261113.md` (base 5ff07638, held-v2, 256 x 2). Both are first-principles fixes of

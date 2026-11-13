@@ -494,8 +494,8 @@ function foreignCodeHint(source: string): ScopeCompileDiagnostic | undefined {
   };
   const first = lines.findIndex(line => line.trim() !== '');
   if (first >= 0 && PYTHON_IMPORT_LINE.test(lines[first]!))
-    return at(first, TYPESCRIPT_ONLY + 'Python is not available: the inputs, services, functions and built-ins such as nl are already ' +
-      'in scope, so use them by name, and write judgment as `await nl(...)`.');
+    return at(first, TYPESCRIPT_ONLY + 'Python is not available in eval: the inputs, services, functions and built-ins such as nl are ' +
+      'already in scope, so use them by name, and write a judgment as await nl`instructions`(value).');
   const python = lines.findIndex(line => PYTHON_SYNTAX_LINES.some(pattern => pattern.test(line)));
   if (python >= 0)
     return at(python, TYPESCRIPT_ONLY + 'Declare with const or let, use braces for blocks and true/false/null, ' +
@@ -726,7 +726,8 @@ function compileScopeSnippetUnhinted(source: string, options: ScopeCompileOption
   for (const { statement, helper } of helperCandidates) {
     // A helper that calls itself refers to its own binding, which persists with it.
     const found = persistentHelperFreeNames(helper.fn, helperChecker!, file);
-    const free = { ...found, names: found.names.filter(name => name !== helper.name) };
+    // A parse error can leave an identifier without text; it is reported as syntax, not as an unavailable name.
+    const free = { ...found, names: found.names.filter(name => name && name !== helper.name) };
     const spanOfDeclaration = span(statement);
     const hidden = free.names.filter(name => !knownHelperNames.has(name) && !bindings.some(binding => binding.name === name));
     const ephemeral = free.names.filter(name => transientNames.has(name));

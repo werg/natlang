@@ -308,6 +308,29 @@ export async function readNeuraleseForCurrentTask(value: unknown): Promise<unkno
         producer_call_id: block.producer_call_id } } });
   }
   const library = (task?.services as Json | undefined)?.neuralese as StandardLibrary | undefined;
+  if (!library && frame) {
+    // No standard library: read the value with the executing model, as a natural-language call that takes it as its
+    // argument (the way any function with a Neuralese parameter consumes one). Our own opaque-access error advises
+    // read(value), and the base LFM3 followed it in 17 of 512 held-v2 episodes only to be told the library was missing.
+    let declared;
+    try { declared = parseType(ref.type); } catch {
+      throw new NeuraleseReadoutCapabilityError('the Neuralese reference has an invalid declared type');
+    }
+    if (declared.kind !== 'neuralese') throw new NeuraleseReadoutCapabilityError('the reference does not declare Neuralese<T>');
+    const elementType = formatType(declared.element);
+    graphNode(traceFor(frame.parentCallId), 'readout', { type: elementType, call_id: frame.parentCallId ?? null,
+      transport: 'model-read/1', block: ref.id }, valueInputs(value, 'args', producerScopeForTrace(traceFor(frame.parentCallId))));
+    const { invokeDefinition } = await import('../runtime/kernel.js');
+    // model-call-kind: runtime-authored-call (typed Neuralese readout without a standard library) -- training/model-call-kinds.json
+    return invokeDefinition(frame, {
+      id: 'natlang:model-read/1', name: 'natlang.read',
+      body: 'Read the supplied Neuralese value. Return exactly the value it contains in its declared element type. ' +
+        'Preserve its content and structure; do not summarize, add fields, or add commentary.',
+      params: [{ name: 'value', type: ref.type }], returns: elementType,
+      types: { ...(frame.typeAliases ?? {}) }, codebase: {}, subtype: 'function', readout: 'template',
+      revision: 'model-read/1',
+    }, [value], { manifest: { internal: true, adHoc: false } });
+  }
   if (!library?.bodies?.read) throw new NeuraleseReadoutCapabilityError('services.neuralese is missing or has no read body');
   const store = task?.runtime.options.neuralese?.store;
   if (!store || !await store.has(library.bodies.read))

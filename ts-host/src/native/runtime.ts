@@ -1565,7 +1565,7 @@ export class NativeSession {
     this.runtime.checkInterruption();
     if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
     if (!NATIVE_TOOLS.includes(name))
-      return this.record(name, args, rejected(new Reject([{ path: name, code: 'bad-action', expected: 'a scope-eval tool' }])));
+      return this.record(name, args, rejected(new Reject([this.notATool(name, args)])));
     if (this.lam.withheldTools?.includes(name))
       return this.record(name, args, rejected(new Reject([{ path: name, code: 'withheld-tool', text:
         `${name} is withheld from calls of ${this.lam.functionName || 'this function'} by its definition; do this step with the tools this call offers` }])));
@@ -1799,6 +1799,30 @@ export class NativeSession {
       return { kind: 'completed', text: `Returned ${oneLine(value, undefined, this.runtime.displayLiveId, this.runtime.untrusted)}.`, value };
     }
     throw new Reject([{ path: name, code: 'bad-action', expected: 'a scope-eval tool' }]);
+  }
+
+  /**
+   * A tool call whose name is something in the eval scope (transcript.search, an input, a function of this call, a
+   * service): the base LFM3 sent transcript.search/transcript.entry/read_function as tool calls in 46 of 512 held-v2
+   * episodes and got only "expected a scope-eval tool". Name the eval form instead.
+   */
+  private notATool(name: string, args: Record<string, unknown>): { path: string; code: string; text?: string; expected?: string } {
+    const root = name.split('.')[0]!;
+    const builtins = ['transcript', 'nl', 'iterateOn', 'decide', 'read'];
+    const inputs = this.lam.type.kind === 'lambda' ? this.lam.type.params.fields.map(field => field.name) : [];
+    const scope = new Set([...builtins, ...inputs, ...Object.keys(this.lam.captures ?? {}), ...Object.keys(this.lam.let),
+      ...this.persistentScopeHelpers.keys(), ...Object.keys(this.lam.codebase), ...Object.keys(this.availableServices())]);
+    if (!/^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/.test(name) || !scope.has(root))
+      return { path: name, code: 'bad-action', expected: 'a scope-eval tool' };
+    const first = Object.values(args).find(value => typeof value === 'string' || typeof value === 'number');
+    const shown = first === undefined ? '' : JSON.stringify(first);
+    const awaited = builtins.includes(root) && root !== 'transcript' || Object.hasOwn(this.lam.codebase, root) ||
+      this.persistentScopeHelpers.has(root);
+    const value = !awaited && root !== 'transcript' && !Object.hasOwn(this.availableServices(), root);
+    const example = name === 'transcript' ? 'transcript.search("…")' : value && name === root ? name :
+      `${awaited ? 'await ' : ''}${name}(${shown})`;
+    return { path: name, code: 'bad-action', text: `${name}: bad-action, ${name} is not a tool: ${root} is in this call's eval scope. ` +
+      `Use it in code, for example eval with code: ${example}${builtins.includes(root) ? `; read_code("${root}") shows how to use it` : ''}.` };
   }
 
   /** The services this call may use: all but those scoped to functions it is not running within. */
