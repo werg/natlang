@@ -8,7 +8,10 @@
  *
  * Needs playwright (npx playwright, or a wllama checkout's node_modules via NODE_PATH) and Chrome. Exits 1 when the
  * page ranks an item's options differently from the native server, differs by more than the tolerance (default 1 nat:
- * quantized matmuls in WebAssembly and AVX round differently), or scores a repeated item differently.
+ * quantized matmuls in WebAssembly and AVX round differently), or ranks a repeated item differently or moves it by more
+ * than the tolerance. A repeat is not bit-identical in the page: its KV cache is unified, so where a sequence's cells sit
+ * depends on what ran before, attention sums in that cell order, and the int8 activation rounding of the Q8 matmuls turns
+ * the last-bit differences into up to a few tenths of a nat (docs/ENGINE_PARITY.md, numerics).
  */
 import { spawn } from 'node:child_process';
 import { createReadStream, mkdtempSync, rmSync, statSync } from 'node:fs';
@@ -71,7 +74,7 @@ try {
   page = await tab.evaluate(async items => {
     const { Wllama } = await import('/esm/index.js');
     const engine = new Wllama({ default: '/esm/wasm/wllama.wasm' });
-    await engine.loadModelFromUrl(location.origin + '/model.gguf', { useCache: false, n_ctx: 4096, n_gpu_layers: 0, cache_idle_slots: false /* as ts-host/src/browser/local-model.ts loads it */ });
+    await engine.loadModelFromUrl(location.origin + '/model.gguf', { useCache: false, n_ctx: 4096, n_gpu_layers: 0 });
     const all = await engine.createNatlangScore({ items });
     const again = await engine.createNatlangScore({ items: [items[1]] });
     return { all: all.results.map(result => result.log_probs ?? result), again: again.results[0].log_probs ?? again.results[0],
@@ -88,6 +91,8 @@ expected.forEach((scores, index) => {
   const gap = Math.max(...mine.map((score, option) => Math.abs(score - scores[option])));
   if (gap > tolerance) failures.push(`item ${index}: page differs by ${gap.toFixed(3)} nats`);
 });
-if (JSON.stringify(page.again) !== JSON.stringify(page.all[1])) failures.push('a repeated item scored differently');
+if (rank(page.again) !== rank(page.all[1])) failures.push('a repeated item ranks its options differently');
+const drift = Math.max(...page.again.map((score, option) => Math.abs(score - page.all[1][option])));
+if (drift > tolerance) failures.push(`a repeated item moved by ${drift.toFixed(3)} nats`);
 console.log(JSON.stringify({ native: expected, page: page.all, repeated: page.again, capabilities: page.capabilities, failures }));
 process.exit(failures.length ? 1 : 0);
