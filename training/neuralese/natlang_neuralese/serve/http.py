@@ -563,7 +563,9 @@ def make_handler(engine: Engine):
                     break
                 if in_call:
                     continue
-                if "text" in item:
+                if "reasoning" in item:  # a guided reply's open reasoning (native_guidance.stream_reasoning)
+                    self._event(chunk({"reasoning_content": item["reasoning"]}))
+                elif "text" in item:
                     pending += item["text"]
                     at = min((i for i in (pending.find(m) for m in markers) if i >= 0), default=-1)
                     if at >= 0:

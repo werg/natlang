@@ -671,7 +671,8 @@ class SglangEngine(Engine):
                 self.sglang_requests += 1
                 self.sglang_tokens += state['index']
         if seq.guide is not None:
-            # Guided replies publish only committed output, as the native engine flushes them at the finish.
+            # Guided replies publish only committed output, as the native engine flushes them at the finish; their
+            # open reasoning has streamed already (native_guidance.stream_reasoning, run by each token's check).
             from .native_guidance import flush
             flush(self, seq)
             if request.on_delta is not None and seq.pending:
@@ -698,7 +699,8 @@ class SglangEngine(Engine):
         # Streamed replies: SGLang sends incremental token chunks (--incremental-streaming-output); the text
         # reaches the client as it is generated, the capture is completed from the same per-token records.
         # Leaving the stream early (a protocol error, a guidance rewind) closes the connection, which aborts the SGLang
-        # request. Guided replies always stream so that a rejection stops the draw.
+        # request. Guided replies always stream so that a rejection stops the draw, and so that the reasoning the
+        # generation prompt opened reaches a streaming client as it is generated.
         for chunk in self._sglang_stream(body):
             if request.cancelled:
                 raise RequestError('cancelled', 'the client went away')
