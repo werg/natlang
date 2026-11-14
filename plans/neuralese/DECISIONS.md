@@ -2270,3 +2270,26 @@ closes/1k reasoning tokens) but is LESS confident (logp -0.74 vs -0.65, entropy 
 drift from the base, not earlier closing. Base Pop held result checked (by me): its segments re-ran only unresolved or
 infrastructure-error rows, no scored outcome was replaced. Test running: the faithful replay keeps steps 2/4/6/8, then the
 same schedule without step 3; a step-4 shift that vanishes without step 3 confirms it.
+
+Result (2026-11-14, supervisor): **the close shift is run1's step 3.** The faithful replay (run1 batches and settings, pin
+d98482a65) reproduced run1 at steps 1-6 (KL 0.0016 / 0.0104 / 0.0347 / 0.052 vs run1 0.0016 / 0.0101 / 0.0355 / 0.0544;
+grad_norm within 0.15), then diverged at step 7 by a k3 blow-up on decisions (grad_norm 2.2e7, kl_mean 2237: the
+learner's decision log pi -18.9 vs the reference's ~0, e^d ~1.6e8; its decisions had left run1's at step 6, -6.9 vs -0.08),
+so steps 7-8 were not measured. The ablation (run1 steps 1, 2, 4, 5, 6: no step 3) on the v7 base traces (`</think>` logp
+where the base closed / expected closes; base -2.06 / 0.052):
+
+| updates | faithful | no step 3 |
+|---|---|---|
+| 2 | -1.97 / 0.051 (step 2) | -1.98 / 0.051 (step 2) |
+| 3 | -0.52 / 0.172 (step 4) | -1.64 / 0.064 (step 3) |
+| 5 | -0.26 / 0.264 (step 6) | -1.79 / 0.044 (step 5) |
+
+Without step 3 the expected closes stay at the base's; with it they are 3.3x after the next update and 5x two later
+(run1 step 8: 0.183). The KL still grows as fast without step 3 (0.0015 / 0.016 / 0.061) and decisions still diverge
+(-5.2 at its step 5), so step 3 explains the earlier-closing direction, not all movement. The next pin's defaults cover the
+mechanism: `lr_data_scale` (step 3's 2 groups with spread: 0.17x), token norm, k2 and the decision cap. Learner bench
+(6 short run1 groups a step, token norm, k2, LR 0.08-0.25x): shuffled advantages leave the probe flat (closes 1.00-1.03x,
+|logp change| <= 0.001), real advantages drift slowly toward closes (1.09x / 1.10x / 1.11x after steps 4-6, `</think>` logp
++0.14): a reward-correlated pull in these groups at a small rate, to watch through the probe in the next run. A branch
+resumed from the bench's step-5 state reproduced step 6 (grad_norm 5.230 vs 5.224, same KL, probe within 0.01). Pop runs
+the behaviour probe (57 s, 5.2 GB; run1 step 2 there +0.009 / -0.006 / 1.07x vs the DGX's +0.008 / -0.007 / 1.10x).

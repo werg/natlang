@@ -55,13 +55,26 @@ def _rope(x, cos, sin):
     return (xf * cos[:, None].float() + _rotate_half(xf) * sin[:, None].float()).to(x.dtype)
 
 
+def _varlen_gqa():
+    """torch >= 2.12 takes grouped-query heads only with ``enable_gqa=True`` (2.11 always did; Pop's SGLang venv runs 2.14)."""
+    try:
+        import inspect
+        from torch.nn.attention.varlen import varlen_attn
+        return {'enable_gqa': True} if 'enable_gqa' in inspect.signature(varlen_attn).parameters else {}
+    except ImportError:
+        return {}
+
+
+_GQA = _varlen_gqa()
+
+
 def _attend(q, k, v, docs, window):
     """Causal attention within each document, keys at most ``window`` positions back (-1: unbounded). (T, H, D) -> same."""
     scale = q.shape[-1] ** -0.5
     cu, max_len, doc, pos = docs
     if q.is_cuda:
         from torch.nn.attention.varlen import varlen_attn
-        return varlen_attn(q, k, v, cu, cu, max_len, max_len, scale=scale, window_size=(window, 0))
+        return varlen_attn(q, k, v, cu, cu, max_len, max_len, scale=scale, window_size=(window, 0), **_GQA)
     # reference path (CPU tests): the same key sets as an explicit mask
     i = torch.arange(q.shape[0], device=q.device)
     mask = (doc[:, None] == doc[None, :]) & (i[None, :] <= i[:, None])
@@ -134,7 +147,7 @@ def _attend_past(q, k, v, cu_q, cu_k, window):
     s, n = q.shape[0], k.shape[0]
     if q.is_cuda:
         from torch.nn.attention.varlen import varlen_attn
-        return varlen_attn(q, k, v, cu_q, cu_k, s, n, scale=scale, window_size=(window, 0))
+        return varlen_attn(q, k, v, cu_q, cu_k, s, n, scale=scale, window_size=(window, 0), **_GQA)
     i = torch.arange(s, device=q.device)[:, None] + (n - s)
     j = torch.arange(n, device=q.device)[None, :]
     mask = j <= i
