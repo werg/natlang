@@ -34,6 +34,10 @@ def test_attestation_records_the_actual_fork_commit_and_warns_never_refuses(tmp_
     dirty = serve.attest_sglang_source(str(python), {'commit': commit})
     assert dirty['dirty'] is True and dirty['commit'] == commit
     assert dirty['hybrid_swa_kv'] is False   # the fixture fork has no LFM3 model file
+    assert dirty['track_input_end'] is False  # nor the natlang_track_input_end marker
+    (package / 'srt/sampling').mkdir(parents=True)
+    (package / 'srt/sampling/natlang_params.py').write_text('NATLANG_TRACK_INPUT_END = True\n')
+    assert serve.attest_sglang_source(str(python), {'commit': commit})['track_input_end'] is True
 
 
 LFM3_KINDS = ['conv', 'conv', 'full_attention', 'conv', 'sliding_attention'] * 2 + ['full_attention']

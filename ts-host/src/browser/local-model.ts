@@ -11,7 +11,7 @@ import { opfsWarmStateStore, pageWarmOpenings, warmTag, type PageWarmOpening, ty
 type ModelMessage = { role: 'system' | 'user' | 'assistant' | 'tool'; content?: string | null;
   tool_calls?: unknown[]; tool_call_id?: string };
 type LoadParams = { n_ctx: number; n_parallel: number; n_gpu_layers?: number; n_threads?: number; jinja: boolean;
-  reasoning: boolean; chat_template?: string; cache_idle_slots?: boolean; swa_full?: boolean;
+  reasoning: boolean; chat_template?: string; swa_full?: boolean;
   lora_adapters?: { blob: Blob; scale: number }[]; lora_init_without_apply?: boolean;
   native_states?: { blob: Blob }[];
   progressCallback?: (progress: { loaded: number; total: number }) => void;
@@ -86,9 +86,6 @@ function loadParams(options: BrowserModelLoadOptions) {
     throw new RangeError('gpuLayers must be a nonnegative integer');
   return { n_ctx: options.contextTokens ?? 4096, n_parallel: PAGE_SLOTS, n_gpu_layers: options.gpuLayers ?? 99999,
     n_threads: options.threads, jinja: true, reasoning: false, chat_template: options.chatTemplate,
-    // The server's idle-slot prompt cache restores a slot's state inexactly on wasm32 (docs/ENGINE_PARITY.md open gaps);
-    // each slot still keeps its own prefix in the unified KV cache.
-    cache_idle_slots: false,
     swa_full: options.fullSlidingWindowCache ?? true,
     ...(options.loraAdapters?.length ? { lora_adapters: options.loraAdapters.map(adapter => ({ blob: adapter.blob, scale: 0 })),
       lora_init_without_apply: true } : {}),
