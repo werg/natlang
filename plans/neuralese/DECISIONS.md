@@ -2301,8 +2301,8 @@ the behaviour probe (57 s, 5.2 GB; run1 step 2 there +0.009 / -0.006 / 1.07x vs 
 `--loss-norm token`, k2 KL, decision weight capped at 8 token units, LR 1e-5 x `lr_data_scale` (groups with spread / 12,
 at most 1: run1's close shift came from its 2-group step 3), plus the per-step behaviour probe and branchable states
 (telemetry, not treatment). Held set: held-v3 (`held_eval verify` against fresh exposure 2026-11-14: 9,570 ids, 1,752
-groups, no overlap). Sizing: slots 24, `--activation-gb 6`, actor KV 6 GB, `--learner-phase-slots 0`, budget 88 GB
-(run1's 100 GB left no diagnostic headroom; the guard stopped it once at 105.9 GB with slots 28-32), every checkpoint
+groups, no overlap). Sizing: slots 24, `--activation-gb 6`, actor KV 6 GB, `--learner-phase-slots 0`, budget 80 GB
+(88 GB left the ledger 8 GB of headroom, so it was relaunched at 80 before its first step; run1's 100 GB left none; the guard stopped it once at 105.9 GB with slots 28-32), every checkpoint
 through step 8 kept, the last 2 FP32 states on /mnt/external for branching.
 
 **Success (declared before the run).** As grpo-v2-run1: two consecutive scheduled Pop held evals with a positive mean
