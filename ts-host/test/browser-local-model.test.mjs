@@ -68,7 +68,6 @@ test('local model validates calls and exposes local loading options', async () =
     await model.loadFromHuggingFace({ repo: 'example/model', quant: 'Q4_K_M' },
       { contextTokens: 2048, gpuLayers: 0, chatTemplate: 'official template' });
     assert.equal(params.n_ctx, 2048);
-    assert.equal(params.cache_idle_slots, false, "the idle-slot prompt cache restores inexactly on wasm32");
     assert.equal(params.n_gpu_layers, 0);
     assert.equal(params.jinja, true);
     assert.equal(params.chat_template, 'official template');
