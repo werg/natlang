@@ -965,6 +965,36 @@ def policy_weight(rho, actor_logp, advantage, rho_cap, tail_floor):
     return weight.masked_fill(masked, 0.), masked
 
 
+def reasoning_style(chains, close_id):
+    """Reasoning and reply tokens per trained call this step: a behaviour sentinel from masks the learner computes anyway.
+    grpo-v2-run1's reasoning halved from step 4 while the reward did not select it, three hours before a held eval
+    showed -8 pts (DECISIONS 2026-11-14)."""
+    calls = think = 0
+    for chain in chains:
+        for _, _, row in chain['segs']:
+            calls += 1
+            think += int(think_mask(row['sample'], close_id).sum())
+    tokens = sum(length for c in chains for _, length, _ in c['segs'])
+    return {'reasoning_tokens_per_call': round(think / max(1, calls), 1),
+            'reply_tokens_per_call': round((tokens - think) / max(1, calls), 1)}
+
+
+def style_shift(work, style, ratio=0.75):
+    """The ratio of this step's reasoning tokens per call to the run's first logged step, and whether it is outside
+    [ratio, 1/ratio]. A logged flag, never a stop."""
+    first = None
+    path = work / 'train.jsonl'
+    if path.exists():
+        for line in path.read_text().splitlines():
+            if '"reasoning_tokens_per_call"' in line:
+                first = json.loads(line).get('reasoning_tokens_per_call')
+                break
+    if not first:
+        return {}
+    r = style['reasoning_tokens_per_call'] / first
+    return {'reasoning_vs_first_step': round(r, 3), 'reasoning_shift': not ratio <= r <= 1 / ratio}
+
+
 def think_mask(sample, close_id):
     """True for a sampled reply's reasoning tokens: up to and including the first ``</think>`` (all, when it has none)."""
     mask = np.ones(len(sample), dtype=bool)
@@ -1631,6 +1661,11 @@ def train(args):
                   'rollouts_archive_free_gb': round(shutil.disk_usage(rollouts_archive).free / 2**30, 1)
                   if rollouts_archive is not None and rollouts_archive.exists() else None,
                   'actor_version': versions_live['actor']}
+        style = reasoning_style(chains, think_close)
+        record.update(style, **style_shift(work, style))
+        if record.get('reasoning_shift'):
+            print(f"reasoning shift: {style['reasoning_tokens_per_call']} reasoning tokens per call, "
+                  f"{record['reasoning_vs_first_step']}x the run's first step", flush=True)
         if args.synthetic_reward:
             record.update(synthetic_reward=args.synthetic_reward,
                           task_reward_mean=round(sum(task_rewards) / max(1, len(task_rewards)), 4),

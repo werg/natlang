@@ -231,3 +231,14 @@ def test_the_pop_loop_reads_held_complete_from_the_module():
         names = scope.get_identifiers()
         if 'held_complete' in names and scope.get_type() == 'function':
             assert scope.lookup('held_complete').is_global(), scope.get_name()
+
+
+def test_reasoning_style_sentinel_flags_a_halved_reasoning_length(tmp_path):
+    close = 9
+    chain = {'segs': [(0, 6, {'sample': [1, 2, 3, close, 4, 5]}), (6, 3, {'sample': [1, close, 4]})]}
+    style = grpo.reasoning_style([chain], close)
+    assert style == {'reasoning_tokens_per_call': 3.0, 'reply_tokens_per_call': 1.5}
+    assert grpo.style_shift(tmp_path, style) == {}                       # no first step logged yet
+    (tmp_path / 'train.jsonl').write_text('{"event": "x"}\n{"step": 1, "reasoning_tokens_per_call": 6.0}\n')
+    assert grpo.style_shift(tmp_path, style) == {'reasoning_vs_first_step': 0.5, 'reasoning_shift': True}
+    assert grpo.style_shift(tmp_path, {'reasoning_tokens_per_call': 5.0})['reasoning_shift'] is False
