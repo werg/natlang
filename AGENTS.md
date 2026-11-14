@@ -49,6 +49,25 @@ so w5 is retired (data kept, never resumed) and the base is the start policy.
   anything (diagnosis, the next run) waiting on memory or GPU it holds? Then stop it. Every run leaves >= 15 GB of DGX
   headroom for diagnostics and probes. A run's stop also stops its Pop eval actor. The heartbeat prompt names the
   experiments actually in flight; a stale list is fixed in the same cycle.
+- **Diagnostics are small, fast and branchable** (owner, 2026-11-14). Insight came from minute-scale checks (probes, offline
+  statistics on archived rollouts, grafting), while full-size replays took hours each to confirm them. Hence:
+  - Every run self-diagnoses: the behaviour probe runs after each step (`behaviour` in `train.jsonl`: sampled-token logp
+    change and entropy on 48 calls the start policy sampled, `</think>` hazard; `behaviour_shift` flags it; on run1's
+    checkpoints it stays quiet at step 2 and flags step 8 (8.9x the closes) and step 12 (entropy +0.075)). The held eval decides comparisons;
+    it is not how a drift is first seen.
+  - Runs are branchable: `--keep-checkpoints-until N` keeps every early checkpoint, `--branch-states N` the last N FP32
+    states (about 21 GB each, on the checkpoint disk); an ablation resumes from the step it questions (`--resume
+    --resume-state FILE`, with `--replay-schedule` for the batches after it) instead of re-running from the base.
+  - Learner questions go to the learner bench first, in minutes: `grpo.py train --replay ROLLOUTS --replay-max-group-tokens
+    16000 --min-groups 6 --max-groups 6 --max-steps 6 --keep-checkpoints-until 6` (short archived groups; with
+    `--advantage-control shuffle` a learner bias shows as a probe shift; `lr_data_scale` keeps small steps small). Offline
+    statistics of the estimator on archived groups come before any GPU run. Full-size runs answer only what the bench cannot
+    (on-policy feedback, held outcomes).
+  - Diagnostic units are small: one question per ledger unit, the fewest steps and groups that answer it, results after
+    each step rather than at the end.
+- **Pop runs held evals first and diagnostics when none is queued** (owner, 2026-11-14): a probe or check
+  may use Pop's idle GPU when it fits (RTX 4060, 8 GB; 14 GB host RAM: probes and forward-only checks of a 1.7B BF16
+  model, not the learner); a held eval of a pinned run preempts it.
 - **The training and RL stack uses standard tooling** (an HF training loop, the SGLang server) and minimal crisp
   code. Build infrastructure only when the next experiment needs it; no new transitions, qualification scopes,
   controllers or custody schemas.
@@ -76,14 +95,17 @@ pre-RoPE, conv B*x; `lfm3_fast_train.import_tensors`, no producer gradient; `pla
 `episode`, averaging over each episode's own units first, is the score-function estimator of E[A/T] with T sampled; successes
 make fewer calls, so it rewarded shorter reasoning in every call, which the task never selected: run1's groups z +8.8, a candidate
 cause of grpo-v2-run1's drift under replay test, DECISIONS 2026-11-14), a sampled
-decision counting as one average call of its episode (`--decision-weight call`), no policy term on a token the actor sampled below
+decision counting as one average call of its episode, at most 8 token units (`--decision-weight call`, `--decision-unit-cap`: at a
+whole call's ~1,000 units one step reversed templated inbox decisions by ~18 nats), no policy term on a token the actor sampled below
 log-probability -7 when `A > 0` (`--tail-logp-floor`; 0.5% of tokens at untruncated T=1). Sampling law (owner 2026-11-13): temperature 1 with
 top-p 0.95 for collection, held eval and the learner alike (`common/sampling.py` `RL_TOP_P`, `--top-p`, 1.0 off; it travels as `top_p` in
 `sampling-config.json` and each capture's `sampling_law`; the front refuses a reply it did not sample that way). The actor records the
 untruncated logp; the policy term scores the token under the learner's own nucleus (`lfm3_fast_train.linear_nll_nucleus`, the sampled token always
 in the set), `rho` and the KL term use untruncated logps (`rho` takes the actor's nucleus mass as the learner's: |d log rho| <= 0.051); calls of
 another law are refused (`skip_other_sampling_law`); decisions keep their full option softmax; FP32-master AdamW, LR 1e-5 (check 4; run2 at 3e-6:
-half of the BF16 flips reverted, DECISIONS 2026-11-13), BF16 compute
+half of the BF16 flips reverted, DECISIONS 2026-11-13) times the step's groups with reward spread over 12, at most 1
+(`lr_data_scale`, `--lr-reference-spread`: AdamW's step does not shrink with the data behind it; run1's 2-group stop step 3 took a
+full step and the drift entered after it), BF16 compute
 (`exp0_sft.load_model`, `lfm3_fast_train`). Weight sync each step: BF16 weights -> pinned buffer -> actor's HF safetensors ->
 SGLang `pause_generation(retract)` / `update_weights_from_disk` / `continue_generation` in a background thread; a pruned
 native checkpoint every 2 steps and the FP32 state (masters + moments, `/mnt/external/natlang-grpo-v1`) every 4 (grpo-v1 runs `--state-every 1`: a guard stop loses no step), also in
@@ -107,7 +129,9 @@ actor tok/s per phase). The KL
 reference runs the policy's own training graph (a no_grad pass compiles other kernels: KL 5e-4 at identical weights). Both passes compute a prompt prefix that several of the step's chains share (>= 256 tokens: the system prompt, a group's opening prompt, an episode's earlier calls) once, as a prefix tree (`lfm3_fast_train.prefix_tree`/`run_prefix_tree`: the prefix's keys/values and conv tail feed its continuations, whose gradients reach it through detached copies and flow back through it once, exact; prefixes are fully recomputed and come out of the leaves' `--activation-gb`; chains reading imported state stay whole; `--share-prefix-tokens`, 0 off). On run2's groups it removes 35-50% of forward tokens; `train.jsonl` logs `chain_tokens` and `shared_prefix_tokens_saved`. After each in-place update the front attests what it serves (`POST /v1/neuralese/rebind-policy`:
 the step's checkpoint sha, else the served weights' sha; the native engine keeps the start checkpoint). `train.jsonl` logs per step: reward
 mean, spread fraction, KL, rho (mean, pre/post-cap max, capped fraction, |log rho|), the cosine of the step's gradient with AdamW's first moment
-(`grad_moment_cosine`), the pre-clip grad_norm over the run's median (`grad_spike` above 5x, printed: grpo-v2-run1 step 7 was 11x), the gradient-mass share of reasoning, reply and decision terms, the tail-masked fraction, learner and actor tokens/s, phase seconds.
+(`grad_moment_cosine`), the pre-clip grad_norm over the run's median (`grad_spike` above 5x from the second step, printed: grpo-v2-run1 step 7 was 11x),
+the behaviour probe (`behaviour_probe.py`, `--behaviour-probe`, default `ops/grpo-v2/behaviour-probe-v0.json`: 48 calls the base
+sampled in run1, ~42 s a step), `--call-fraction` (default 1: a fraction of each episode's calls trained, the rest context), the gradient-mass share of reasoning, reply and decision terms, the tail-masked fraction, learner and actor tokens/s, phase seconds.
 Memory (smoke 2026-11-12): on the GB10 the unit's MemoryMax (= ledger budget) also bounds its CUDA allocations, so the
 budget must cover GPU + host: learner CUDA 19.3 GB before AdamW state, 32 GB peak at step 1, about 36 GB with the FP32 moments
 (FP32 masters + moments + FP32 gradients alone are 27 GB), host about 5 GB plus the collector node processes (in the same

@@ -87,6 +87,8 @@ POOLS = [resolve_str('data_hdd', 'natlang-rl-composed-20261103', 'memetic-progra
 # held-v3 (2026-11-13; plans/neuralese/HELD_V3_20261113.md): held-v2 with its wrong/ambiguous-oracle and exposed tasks
 # replaced; its exclusion also covers held-v2 (manifest `also_excludes`), so no v2 held task enters training either.
 HELD = resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'held-v3', 'manifest.json')
+# Start-policy calls scored after every step (behaviour_probe.py; built from grpo-v2-run1's version-0 groups)
+BEHAVIOUR_PROBE = resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'grpo-v2', 'behaviour-probe-v0.json')
 # Pool rows known to be wrong (an oracle's expected answer, a garbled task): every *.jsonl here is excluded by default.
 ERRATA = resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'pool-errata')
 
@@ -450,7 +452,8 @@ class ReplayCollector:
     """``--replay``: a finished run's archived groups (``ROLLOUTS/<group>.rollouts.jsonl.zst``) offered in group order,
     ``--min-groups`` a step, each as fresh (no staleness), for learner controls (``--advantage-control``): no actor, no
     collection, no held eval. Consumer calls read the old run's actor store (``--actor-store``), which is never pruned here.
-    ``--replay-schedule`` (a JSON list of group-number lists) offers exactly those batches, one a step: the old run's own
+    ``--replay-max-group-tokens`` keeps only short groups (the learner bench). ``--replay-schedule`` (a JSON list of
+    group-number lists) offers exactly those batches, one a step: the old run's own
     steps, for re-executing its learner on its data."""
 
     def __init__(self, args, work):
@@ -480,7 +483,13 @@ class ReplayCollector:
             with source.open('rb') as reader, (directory / 'rollouts.jsonl').open('wb') as writer:
                 zstandard.ZstdDecompressor().copy_stream(reader, writer)
             with (directory / 'rollouts.jsonl').open() as handle:
-                task_id = json.loads(handle.readline())['task_id']
+                rows = [json.loads(line) for line in handle]
+            limit = getattr(self.args, 'replay_max_group_tokens', 0)
+            if limit and self.schedule is None and sum((turn.get('usage') or {}).get('completion_tokens', 0)
+                                                       for row in rows for turn in row.get('turns') or ()) > limit:
+                shutil.rmtree(directory)          # the learner bench: short groups only
+                continue
+            task_id = rows[0]['task_id']
             self.groups[group] = {'dir': directory, 'task_id': task_id, 'versions': [self.version], 'created': time.time()}
             self.next_group = group + 1
             taken.append(group)
@@ -961,23 +970,26 @@ def group_advantages(rewards):
     return [(r - mean) / (std + 1e-6) for r in rewards]
 
 
-def decision_unit(tokens, calls, mode):
+def decision_unit(tokens, calls, mode, cap=8.):
     """Units one sampled decision counts in its episode's normalization. ``call``: the episode's mean sampled tokens per
     trained call (a decision is one model call whose whole reply is one categorical action; 1 when the episode trains
-    no token call); ``token``: 1, one sampled token's weight."""
+    no token call), at most ``cap``: a choice among a few options carries a few tokens' worth of information, and at a
+    whole call's weight (~1,000 units) one step reversed templated inbox decisions by ~18 nats (replay controls,
+    DECISIONS 2026-11-14); ``token``: 1, one sampled token's weight. ``cap`` 0: uncapped."""
     if mode == 'token' or not calls:
         return 1.
-    return max(1., tokens / calls)
+    unit = max(1., tokens / calls)
+    return min(unit, cap) if cap else unit
 
 
-def loss_scales(episodes, norm, decision_weight):
+def loss_scales(episodes, norm, decision_weight, decision_cap=8.):
     """Per-episode loss scale factors: ``episodes`` {key: (trained tokens, trained calls, trained decisions)} ->
     {key: (factor of each token term, factor of each decision term)}. An episode's units are its tokens plus its
     decisions times ``decision_unit``. ``episode``: every episode with units weighs 1 / episodes and its terms share
     that weight by units (A_i times the mean over its units, averaged over episodes; a chain's factor is
     1 / (episode units * episodes), so accumulating chain by chain is exact). ``token``: one factor 1 / all units."""
-    units = {key: (tokens + decisions * decision_unit(tokens, calls, decision_weight),
-                   decision_unit(tokens, calls, decision_weight))
+    units = {key: (tokens + decisions * decision_unit(tokens, calls, decision_weight, decision_cap),
+                   decision_unit(tokens, calls, decision_weight, decision_cap))
              for key, (tokens, calls, decisions) in episodes.items()}
     trained = sum(1 for total, _ in units.values() if total > 0)
     total_units = sum(total for total, _ in units.values())
@@ -1054,9 +1066,34 @@ def style_shift(work, style, ratio=0.75):
     return {'reasoning_vs_first_step': round(r, 3), 'reasoning_shift': not ratio <= r <= 1 / ratio}
 
 
-def grad_spike(work, grad_norm, factor=5., min_steps=3):
+def subsample_calls(episode, fraction, rng, stats=None):
+    """``--call-fraction``: the episode with each call's row kept for the policy and KL terms with probability ``fraction``
+    (at least one). A later call's prompt holds the earlier calls' text, so a dropped call stays context of the calls
+    after it (``chains_of`` chains across it) and a chain ends at its last kept call: the step forwards fewer tokens.
+    Under ``--loss-norm token`` the step's mean over kept units estimates the mean over all units."""
+    rows = episode['rows']
+    if not rows:
+        return episode
+    keep = [row for row in rows if rng.random() < fraction] or [rng.choice(rows)]
+    if stats is not None:
+        stats['calls_subsampled_out'] += len(rows) - len(keep)
+    return {**episode, 'rows': keep}
+
+
+def lr_data_scale(groups_with_spread, reference):
+    """The step's LR factor: groups with reward spread over ``reference``, at most 1. AdamW's step size does not shrink with
+    the data behind a gradient, so a step on few informative groups moves the policy as far as a full one along a
+    gradient that mostly reflects those few episodes: grpo-v2-run1's step 3 (2 groups with spread, a stop) took a full
+    step, and the KL to the start policy jumped after it (DECISIONS 2026-11-14). ``reference`` 0: always 1."""
+    if not reference:
+        return 1.
+    return min(1., groups_with_spread / reference)
+
+
+def grad_spike(work, grad_norm, factor=5., min_steps=1):
     """This step's pre-clip grad_norm over the median of the run's earlier logged steps, and whether it exceeds factor
-    (grpo-v2-run1: 6.09 at step 7 against ~0.5 was the k3 KL loss blowing up). A logged flag, never a stop."""
+    (grpo-v2-run1: 6.09 at step 7 against ~0.5 was the k3 KL loss blowing up). From the second step on: the replay
+    controls' step-3 spikes (20-60x) went unflagged at min_steps 3. A logged flag, never a stop."""
     path = work / 'train.jsonl'
     norms = [json.loads(line)['grad_norm'] for line in path.read_text().splitlines()
              if '"grad_norm"' in line] if path.exists() else []
@@ -1200,6 +1237,7 @@ def load_variants(args, tasks, work):
 
 def train(args):
     import torch
+    import behaviour_probe
     import exp0_sft
     import lfm3_fast_train
     from natlang_neuralese.common.hashing import sha256_file_hex_cached
@@ -1330,9 +1368,13 @@ def train(args):
 
     step, cursor, first_group = 0, 0, 0
     state_path = Path(args.state_dir) / 'training-state.safetensors'
-    if args.resume and state_path.exists():
+    branch_root = Path(args.checkpoint_dir or Path(args.state_dir) / 'checkpoints')
+    resume_path = Path(args.resume_state) if args.resume_state else state_path
+    if args.resume and not args.resume_state and not resume_path.exists() and args.branch_states:
+        resume_path = max(branch_root.glob('state-step-*.safetensors'), default=resume_path)
+    if args.resume and resume_path.exists():
         from safetensors import safe_open
-        with safe_open(str(state_path), 'pt', device='cuda') as handle:
+        with safe_open(str(resume_path), 'pt', device='cuda') as handle:
             meta = handle.metadata()
             # materialise AdamW state (zero grads) before the masters are restored: with weight decay this step moves
             # the parameters, and it must not move the restored ones
@@ -1348,7 +1390,8 @@ def train(args):
         with torch.no_grad():
             for name, p in live.items():
                 p.copy_(masters[name])
-        log_line(log, {'event': 'resumed', 'step': step, 'cursor': cursor, 'next_group': first_group})
+        log_line(log, {'event': 'resumed', 'step': step, 'cursor': cursor, 'next_group': first_group,
+                       'state': str(resume_path)})
     # New groups are numbered after the highest existing one; scored groups a stop left untrained are offered again
     # (Collector.reuse_scored).
     existing = [int(d.name[1:]) for d in (work / 'groups').glob('g*') if d.name[1:].isdigit()]
@@ -1391,6 +1434,14 @@ def train(args):
         think_close = Tokenizer.from_file(str(Path(args.base) / 'tokenizer.json')).token_to_id('</think>')
     except Exception as error:
         log_line(log, {'event': 'no </think> id: grad_mass_share is not logged', 'error': repr(error)[:200]})
+
+    behaviour = None
+    if args.behaviour_probe != '-':
+        if Path(args.behaviour_probe).exists():
+            behaviour = json.loads(Path(args.behaviour_probe).read_text())
+        else:
+            log_line(log, {'event': 'no behaviour probe', 'path': args.behaviour_probe})
+    behaviour_start_path = work / 'behaviour-start.json'
 
     def probe_learner_nll():
         from sanity_logprob_paths import targets_of
@@ -1439,6 +1490,16 @@ def train(args):
         sync.wait()
         if not sync.last.get('ok'):
             raise RuntimeError(f'actor weight update failed: {sync.last}')
+    if behaviour is not None and not behaviour_start_path.exists():
+        if step == 0:
+            t = time.time()
+            behaviour_start_path.write_text(json.dumps(behaviour_probe.measure(model, behaviour)) + '\n')
+            log_line(log, {'event': 'behaviour probe start', 'calls': len(behaviour['calls']),
+                           **behaviour_probe.summary(json.loads(behaviour_start_path.read_text())),
+                           'seconds': round(time.time() - t, 1)})
+        else:
+            log_line(log, {'event': 'behaviour probe: no start measurement (resumed); copy the start run\'s '
+                                    'behaviour-start.json to compare'})
     log_line(log, {'event': 'learner ready', 'init_s': round(time.time() - t0, 1), 'meminfo_gb': meminfo(),
                    'cuda_allocated_gb': round(torch.cuda.memory_allocated() / 2**30, 1),
                    'cuda_reserved_gb': round(torch.cuda.memory_reserved() / 2**30, 1)})
@@ -1474,7 +1535,8 @@ def train(args):
                                                          'source_sha256': source_sha, 'code': run['code']}) + '\n')
         checkpoints.append(directory)
         for old in checkpoints[:-2]:
-            if int(old.name.split('-')[1]) not in held_steps and old.exists():
+            number = int(old.name.split('-')[1])
+            if number not in held_steps and number > args.keep_checkpoints_until and old.exists():
                 shutil.rmtree(old)
         checkpoints[:] = [c for c in checkpoints if c.exists()]
         return {'checkpoint': str(path), 'checkpoint_sha256': sha}
@@ -1711,7 +1773,10 @@ def train(args):
             if advantages is None:
                 continue
             spread += 1
-            for episode, advantage in zip(episodes, advantages):
+            for index, (episode, advantage) in enumerate(zip(episodes, advantages)):
+                if args.call_fraction < 1:
+                    episode = subsample_calls(episode, args.call_fraction,
+                                              random.Random(f'{args.seed}:{step}:{group}:{index}'), stats)
                 kept = exp0_sft.chains_of([episode], max_len=args.max_sequence_tokens)
                 stats['calls_too_long_dropped'] += len(episode['rows']) - sum(len(c['segs']) for c in kept)
                 key = len(episode_units)
@@ -1737,7 +1802,7 @@ def train(args):
         # categorical action) counts as one call of its episode. `units` only normalizes the logged token means.
         loss_tokens = sum(length for c in chains for _, length, _ in c['segs'])
         units = loss_tokens + len(decisions)
-        scales = loss_scales(episode_units, args.loss_norm, args.decision_weight)
+        scales = loss_scales(episode_units, args.loss_norm, args.decision_weight, args.decision_unit_cap)
         episodes_trained = sum(1 for token_scale, decision_scale in scales.values() if token_scale or decision_scale)
         phase['lower'] = time.time() - t
         record = {'step': step + 1, 'groups': len(groups), 'groups_with_spread': spread,
@@ -1974,7 +2039,8 @@ def train(args):
                            'loss_sums': {k: v for k, v in sums.items() if isinstance(v, float)}})
             continue
         cosine = moment_cosine(parameters, optimizer)   # this step's gradient against the previous steps' momentum
-        lr = args.lr * min(1., (step + 1) / args.warmup)
+        data_scale = lr_data_scale(spread, args.lr_reference_spread)
+        lr = args.lr * min(1., (step + 1) / args.warmup) * data_scale
         for g in optimizer.param_groups:
             g['lr'] = lr
         optimizer.step()
@@ -2001,6 +2067,14 @@ def train(args):
                       bf16_changed_vs_start_fraction=round(changed_start / elements, 6) if reference is not None else None)
         if probes:
             record['probe_learner_nll'] = round(probe_learner_nll(), 5)
+        if behaviour is not None:
+            t = time.time()
+            start = json.loads(behaviour_start_path.read_text()) if behaviour_start_path.exists() else None
+            record['behaviour'] = behaviour_probe.summary(behaviour_probe.measure(model, behaviour), start)
+            record['behaviour_shift'] = behaviour_probe.shifted(record['behaviour'])
+            phase['behaviour_probe'] = time.time() - t
+            if record['behaviour_shift']:
+                print(f"behaviour shift at step {step + 1}: {record['behaviour']}", flush=True)
         step += 1
         collector.active_slots = args.slots
         learn_ended, learn_tokens1 = time.time(), actor_generated(args.actor)
@@ -2015,9 +2089,15 @@ def train(args):
         if sync.last and not sync.last.get('ok'):
             raise RuntimeError(f'actor weight update failed: {sync.last}')
         held_due = args.held_every_hours > 0 and not args.held_remote and time.time() - last_held > args.held_every_hours * 3600
-        save_native = step % args.save_every == 0 or (args.max_steps and step == args.max_steps) or held_due
+        save_native = (step % args.save_every == 0 or (args.max_steps and step == args.max_steps) or held_due
+                       or step <= args.keep_checkpoints_until)
         sync.publish(step, on_published, also=(lambda s=step: write_native(s)) if save_native else None)
-        if args.state_every and step % args.state_every == 0:
+        branch = branch_root / f'state-step-{step:05d}.safetensors' if args.branch_states else None
+        if branch is not None or (args.state_every and step % args.state_every == 0):
+            if branch is not None:     # each step's state, the last N kept: controls branch from any of them
+                saver.wait()
+                for old in sorted(branch_root.glob('state-step-*.safetensors'))[:-(args.branch_states - 1) or None]:
+                    old.unlink()
             tensors = {}
             for name in live:
                 st = optimizer.state[masters[name]]
@@ -2025,7 +2105,7 @@ def train(args):
                 tensors['exp_avg/' + name] = st['exp_avg']
                 tensors['exp_avg_sq/' + name] = st['exp_avg_sq']
             adam_step = optimizer.state[parameters[0]]['step'].item()
-            saver.save(state_path, tensors, {'step': step, 'adam_step': adam_step, 'cursor': collector.cursor,
+            saver.save(branch or state_path, tensors, {'step': step, 'adam_step': adam_step, 'cursor': collector.cursor,
                                              'next_group': collector.next_group, 'source_sha256': source_sha})
         learner_seconds = sum(v for k, v in phase.items()
                               if k in ('reference_forward', 'policy_forward_backward', 'decision_forward_backward', 'optimizer'))
@@ -2033,7 +2113,8 @@ def train(args):
         mass_total = sums['mass_think'] + sums['mass_post_think'] + sums['mass_decision']
         elapsed = time.time() - run['started']
         record.update(
-            loss_tokens=loss_tokens, forward_tokens=forward_tokens, lr=lr, grad_norm=round(grad_norm, 4),
+            loss_tokens=loss_tokens, forward_tokens=forward_tokens, lr=lr, lr_data_scale=round(data_scale, 4),
+            grad_norm=round(grad_norm, 4),
             kl_mean=round(sums['kl'] / units, 7), ref_abs_dlogp_mean=round(sums['ref_abs_dlogp'] / units, 6),
             ref_dlogp_max=round(sums['ref_dlogp_max'], 3), ref_dlogp_over_5=sums['ref_dlogp_over_5'], kl_estimator=args.kl_estimator,
             mean_logp=round(sums['logp'] / max(1, loss_tokens), 4),
@@ -2161,6 +2242,9 @@ def main():
                         'vs start after 5 steps, 16%% summed) and mean |dlogp| vs start stayed at 0.014-0.023, under the '
                         "actor's FP8 noise (0.033)")
     t.add_argument('--warmup', type=int, default=2)
+    t.add_argument('--lr-reference-spread', type=int, default=12,
+                   help='a step\'s LR is scaled by its groups with reward spread over this, at most 1 (lr_data_scale; '
+                        'grpo-v2-run1 step 3 trained 2 such groups at full LR); 0: off')
     t.add_argument('--weight-decay', type=float, default=0.)
     t.add_argument('--clip', type=float, default=1.0)
     t.add_argument('--kl-beta', type=float, default=0.02)
@@ -2185,6 +2269,22 @@ def main():
                         'tokens per trained call (a decision is one model call whose reply is one categorical action, so it '
                         'weighs like an average call of its episode; 1 if the episode trains no token call); token: 1 (until '
                         '2026-11-13: one decision in ~10k tokens)')
+    t.add_argument('--decision-unit-cap', type=float, default=8.,
+                   help='with --decision-weight call, a decision counts at most this many token units (decision_unit); 0: uncapped')
+    t.add_argument('--call-fraction', type=float, default=1.,
+                   help='train the policy and KL terms on this random fraction of each episode\'s calls (subsample_calls; '
+                        'the rest stay context): fewer forward tokens a step for some variance; 1: all')
+    t.add_argument('--behaviour-probe', default=BEHAVIOUR_PROBE,
+                   help='start-policy calls scored after every step (behaviour_probe.py): the policy on the start policy\'s own '
+                        'samples (sampled-token logp change), entropy, </think> hazard; logged as "behaviour", flagged as behaviour_shift; "-": off')
+    t.add_argument('--branch-states', type=int, default=0,
+                   help='keep the FP32 training state of each of the last N steps in CHECKPOINT_DIR/state-step-N.safetensors '
+                        '(about 21 GB each), so a control can --resume-state from any of them; 0: off')
+    t.add_argument('--resume-state', help='with --resume: start from this training state file (e.g. a --branch-states '
+                   'file of another run) instead of STATE_DIR/training-state.safetensors')
+    t.add_argument('--keep-checkpoints-until', type=int, default=0,
+                   help='save a native checkpoint after every step up to this step and never prune those (probes, '
+                        'grafting, held evals of early steps); 0: off')
     t.add_argument('--activation-gb', type=float, default=12., help='saved activations per sequence; layers beyond are recomputed')
     t.add_argument('--max-steps', type=int, default=0)
     t.add_argument('--save-every', type=int, default=2)
@@ -2226,6 +2326,9 @@ def main():
     t.add_argument('--replay', help="learner control: train on a finished run's archived groups (its ROLLOUTS dir of "
                    "<group>.rollouts.jsonl.zst, --min-groups a step in group order) instead of collecting; no actor, "
                    "no held eval; needs --actor-store and --actor-export of that run")
+    t.add_argument('--replay-max-group-tokens', type=int, default=0,
+                   help='with --replay: skip archived groups with more sampled tokens than this (a fast learner bench on '
+                        "short groups: 55 of run1's 349 groups are under 16k); 0: all")
     t.add_argument('--replay-schedule', help='with --replay: a JSON list of group-number lists, the batch of each step '
                    '(an old run\'s own steps, to re-execute its learner on its data)')
     t.add_argument('--advantage-control', choices=('none', 'zero', 'shuffle'), default='none',

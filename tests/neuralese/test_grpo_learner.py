@@ -315,3 +315,62 @@ def test_episode_normalization_rewards_short_reasoning_the_task_never_selected()
             assert abs(grad) < 1e-12
         else:
             assert grad > 0.002  # toward shorter reasoning in every call
+
+
+def test_a_decision_counts_at_most_the_cap_in_token_units():
+    assert grpo.decision_unit(6000, 6, "call") == 8.            # a 1,000-token average call: capped
+    assert grpo.decision_unit(6000, 6, "call", cap=0) == 1000.  # uncapped
+    assert grpo.decision_unit(6, 2, "call") == 3.               # under the cap: the episode's mean call
+
+
+def test_lr_scales_with_the_groups_that_carry_signal():
+    assert grpo.lr_data_scale(2, 12) == pytest.approx(1 / 6)    # grpo-v2-run1 step 3: 2 groups with spread
+    assert grpo.lr_data_scale(18, 12) == 1. and grpo.lr_data_scale(2, 0) == 1.
+
+
+def test_call_subsampling_keeps_dropped_calls_as_context():
+    import random
+    rows = []
+    prompt = np.array([1, 2, 3])
+    for i in range(6):
+        sample = np.array([10 + i, 20 + i])
+        rows.append({'invocation': 'a', 'index': i, 'prompt': prompt, 'sample': sample, 'imports': []})
+        prompt = np.concatenate([prompt, sample, [99]])
+    stats = collections.Counter()
+    kept = grpo.subsample_calls({'rows': rows, 'task_id': 't', 'round': 0}, 0.5, random.Random(3), stats)
+    assert 0 < len(kept['rows']) < 6 and stats['calls_subsampled_out'] == 6 - len(kept['rows'])
+    import exp0_sft
+    chains = exp0_sft.chains_of([kept])
+    assert len(chains) == 1                                      # chained across the dropped calls
+    last = kept['rows'][-1]
+    assert len(chains[0]['ids']) == len(last['prompt']) + len(last['sample'])   # ends at the last kept call
+    assert grpo.subsample_calls({'rows': rows}, 0.0, random.Random(0))['rows']   # at least one call
+
+
+def test_behaviour_summary_and_shift():
+    import behaviour_probe
+    start = {'sampled_logp': [-0.65, -0.65], 'entropy': [0.76, 0.76], 'close_per_1k': [0.2, 0.2], 'close_logp': [-0.3, -0.3]}
+    same = behaviour_probe.summary(start, start)
+    assert same['logp_change'] == 0 and same['close_ratio'] == 1 and not behaviour_probe.shifted(same)
+    step2 = {'sampled_logp': [-0.642, -0.642], 'entropy': [0.753, 0.753], 'close_per_1k': [0.22, 0.22], 'close_logp': [-0.2, -0.2]}
+    assert not behaviour_probe.shifted(behaviour_probe.summary(step2, start))
+    step8 = {'sampled_logp': [-0.57, -0.57], 'entropy': [0.75, 0.75], 'close_per_1k': [1.8, 1.8], 'close_logp': [-0.1, -0.1]}
+    moved = behaviour_probe.summary(step8, start)
+    assert moved['logp_change'] == pytest.approx(0.08) and moved['close_ratio'] == 9 and behaviour_probe.shifted(moved)
+    step12 = {'sampled_logp': [-0.61, -0.61], 'entropy': [0.835, 0.835], 'close_per_1k': [0.25, 0.25], 'close_logp': [-0.3, -0.3]}
+    assert behaviour_probe.shifted(behaviour_probe.summary(step12, start))   # entropy +0.075
+    assert not behaviour_probe.shifted(behaviour_probe.summary(step8))   # no start measurement: no flag
+
+
+def test_replay_bench_keeps_short_groups_only(tmp_path):
+    import zstandard
+    from types import SimpleNamespace
+    archive = tmp_path / 'rollouts'
+    archive.mkdir()
+    for g, tokens in ((1, 500), (2, 50_000), (3, 900)):
+        row = {'task_id': f't{g}', 'turns': [{'usage': {'completion_tokens': tokens}}]}
+        (archive / f'g{g:06d}.rollouts.jsonl.zst').write_bytes(zstandard.ZstdCompressor().compress(json.dumps(row).encode() + b'\n'))
+    collector = grpo.ReplayCollector(SimpleNamespace(replay=str(archive), actor_store=str(tmp_path / 'store'),
+                                                     replay_max_group_tokens=1000), tmp_path / 'work')
+    stop = threading.Event()
+    assert collector.take_groups(2, 2, stop) == [1, 3] and not (tmp_path / 'work' / 'groups' / 'g000002').exists()
