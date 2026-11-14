@@ -590,6 +590,7 @@ def test_decisions_warm_the_shared_opening_once_before_scoring(tmp_path, monkeyp
     openings = [[value for _, value in opening_items(front, opening, None)] for opening in (first, second)]
     assert sorted(r['input_ids'] for r in warmed()) == sorted(openings), 'one warm request per distinct opening'
     assert all(r['sampling_params']['max_new_tokens'] == 1 and 'return_logprob' not in r for r in warmed())
+    assert not any('custom_params' in r['sampling_params'] for r in warmed()), 'an older fork: grid-aligned state'
     for index, request in enumerate(sent):
         if 'logprob_start_len' in request:  # every option scored after its opening's warm request, from that prefix
             opening = next(o for o in openings if request['input_ids'][:len(o)] == o)
@@ -604,6 +605,15 @@ def test_decisions_warm_the_shared_opening_once_before_scoring(tmp_path, monkeyp
     front.sglang_opening_ttl = 0.0
     decide_many_native(front, {'items': items[:1]})
     assert [r['input_ids'] for r in warmed()] == openings[:1]
+    # A fork with the NATLANG_TRACK_INPUT_END marker is asked for the state at the opening's exact end.
+    sent.clear()
+    front.sglang_track_input_end = True
+    assert decide_many_native(front, {'items': items[:1]}) == {'results': many['results'][:1]}
+    assert [(r['input_ids'], r['sampling_params']['custom_params']) for r in warmed()] == [
+        (openings[0], {'natlang_track_input_end': True})]
+    assert all('natlang_track_input_end' not in r['sampling_params'].get('custom_params', {})
+               for r in sent if 'logprob_start_len' in r)
+    front.sglang_track_input_end = False
 
     # No hint, or opted out: no warm request, the same scores.
     for case in ('no-hint', 'opted-out'):

@@ -43,6 +43,7 @@ TOP_K_MASS_KEY = 'natlang_top_k_mass'
 CAPTURE_KEY = 'natlang_capture'
 IMPORT_KEY = 'natlang_import'
 ADAPTER_KEY = 'natlang_adapter'
+TRACK_INPUT_END_KEY = 'natlang_track_input_end'
 BAN_BIAS = -1e30
 
 
@@ -156,7 +157,7 @@ class SglangEngine(Engine):
 
     def bind_sglang(self, url, *, export_manifest, fork, workers=512, adapter_slots=0, adapter_rank=32,
                     projection='native', overlap_schedule=False, kv_cache_dtype='auto', kv_layout='full',
-                    warm_openings=None):
+                    warm_openings=None, track_input_end=False):
         self.sglang_url, self.sglang_workers = url.rstrip('/'), workers
         # Native adapters on SGLang (fork NatlangAdapters): `adapter_slots` resident stacks of summed rank
         # <= `adapter_rank` per module; the front assigns slots and never reassigns one while a request uses it.
@@ -195,6 +196,9 @@ class SglangEngine(Engine):
         # NATLANG_SGLANG_WARM_OPENINGS=0 (or warm_openings=False) opts out.
         self.sglang_warm_openings = (os.environ.get('NATLANG_SGLANG_WARM_OPENINGS', '1') != '0' if warm_openings is None
                                      else bool(warm_openings))
+        # The fork stores a request's conv state at its exact input end on request (NATLANG_TRACK_INPUT_END marker,
+        # serve_native_checkpoint.attest_sglang_source); older forks keep the grid-aligned state.
+        self.sglang_track_input_end = bool(track_input_end)
         # Bound in every SGLang-sampled capture (rl.actors ``actor_export``, kind exact: the checkpoint's own weights
         # in another engine). The learner recomputes those tokens under its own forward, guards the engine mismatch
         # per episode and corrects it with the loss's importance weights (rl.native_replay DEFAULT_ENGINE_GUARD).
@@ -929,8 +933,12 @@ class SglangEngine(Engine):
     # batch arrive together (FCFS admits them in one prefill batch), so every one of them prefills the whole opening.
     # A prefill request of exactly the opening, sent once before the items score their options, stores the state at
     # floor(n / G) * G of an n-token opening: every input then prefills at most G - 1 opening tokens plus its own.
-    # Landing exactly on the message boundary would need a fork parameter to track at a given position.
-    sglang_state_grid = 256    # G above; an opening shorter than G stores no state, so it is not warmed
+    # A fork with `custom_params.natlang_track_input_end` (NATLANG_TRACK_INPUT_END, sglang-natlang 33230160b) lands the
+    # state exactly on the boundary: its scheduler cuts the request's prefill so the last extend is a whole number of
+    # grids (`PrefillAdder._natlang_input_end_extend`), whose ordinary track point is then the input end; the warm
+    # request asks for it, and every input prefills only its own messages. Either way a state needs an extend of at
+    # least G tokens, so an opening shorter than G is never warmed.
+    sglang_state_grid = 256    # G above
     sglang_opening_ttl = 60.0  # seconds a warmed opening counts as cached; the next item after that warms it again
     sglang_opening_memo = 4096
 
@@ -972,9 +980,11 @@ class SglangEngine(Engine):
         if not owner:
             entry['event'].wait()
             return
+        custom = {**({ADAPTER_KEY: adapter} if adapter else {}),
+                  **({TRACK_INPUT_END_KEY: True} if getattr(self, 'sglang_track_input_end', False) else {})}
         try:
             self._sglang_generate({'input_ids': list(opening), 'sampling_params': {
-                'temperature': 0.0, 'max_new_tokens': 1, **({'custom_params': {ADAPTER_KEY: adapter}} if adapter else {})}})
+                'temperature': 0.0, 'max_new_tokens': 1, **({'custom_params': custom} if custom else {})}})
             with self._sglang_lock:
                 self.sglang_opening_warms = getattr(self, 'sglang_opening_warms', 0) + 1
         except Exception:  # an optimization only: the items score anyway and report a backend failure themselves
