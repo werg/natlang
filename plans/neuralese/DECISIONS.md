@@ -2186,7 +2186,11 @@ default, loss `d^2/2` (the on-policy reverse-KL gradient, linear in d); k3 stays
 `ref_dlogp_max`, `ref_dlogp_over_5`. grpo-v2-run1 adopts it at its next state-save restart (steps 1-8 trained with k3).
 Open: step 1's grad_norm 69.6 came from the policy term with no KL.
 
-## 2026-11-14: grpo-v2-run1 step 8 held -8.1 pts: reasoning-style drift, no bug (supervisor)
+## 2026-11-14: grpo-v2-run1 step 8 held -8.1 pts: reasoning-style drift, cause OPEN (supervisor)
+
+OPEN (amended 2026-11-14): the first investigation found no bug in eval, serving, export or leakage only. Its "noise updates"
+verdict does not explain a consistent direction the advantage did not select, so a learner-side bias is unchecked and under
+investigation (AGENTS.md: closing a degradation as not a bug). The text below is that first investigation.
 
 Pop held eval of step 8 vs the Pop base (241/498): 202/504, mean per-task -8.07 pts, CI [-12.8, -3.5], p 0.0005, McNemar
 82:38, tasks 59 down / 29 up, loop rate unchanged. Ruled out: harness/scorer/collector/ts-host (pins differ only in learner code,

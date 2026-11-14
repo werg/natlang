@@ -319,6 +319,20 @@ the owner. If something is sensible, do it, record why and keep going. Raise wit
   make sense, run a wide, varied dragnet: data and masking, rendering and templates, dtype and upcasts, caches and
   carried state, kernels, optimizer state and resume, gradient flow, loss weighting, evaluation code, and differences
   from a known-good path. Record what was ruled out.
+  Closing a degradation as "not a bug" (owner, 2026-11-14; grpo-v2-run1 step 8 was closed that way by one narrowly briefed
+  subagent while the policy drifted in a consistent direction the reward did not select):
+  - The explanation must be a mechanism that predicts the observed direction and size. "Noise", "learning dynamics" and
+    "drift" are descriptions, not explanations; a consistent direction the objective does not select points at a biased
+    gradient, i.e. a learner bug, until shown otherwise.
+  - Every dragnet item above is marked checked (with evidence), ruled out, or not checked. "Found nothing in scope X" is
+    recorded as exactly that, never as "no bug"; the entry stays open while any plausible item is unchecked.
+  - Brief an investigator with the observations, not a hypothesis, and never with a menu whose benign answer ends the hunt
+    ("bug vs learning dynamics"). Ask it to find the cause; it reports what it did not check.
+  - A "not a bug" verdict is confirmed by a second, independently briefed investigator trying to find the bug (the training
+    side for a training regression) before it is recorded or reported as a conclusion. Until then report it as "agent X
+    found no bug in scope Y".
+  - The supervisor checks a subagent's verdict against the observations before relaying it: does it explain every fact,
+    above all the direction of the change?
 - **Checks protect results.** Keep checks that protect task quality, numerics, held-data separation, data quality,
   recoverability and runtime function. Base-relative KL/agreement is telemetry, never a stop. Keep launch checks
   nonmutating: preflight once and let the real entry run its own checks. Never run an administrative entry in a run
