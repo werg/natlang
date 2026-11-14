@@ -281,6 +281,13 @@ def test_replay_collector_offers_archived_groups_in_order(tmp_path):
     assert collector.take_groups(2, 2, stop) == [1, 2]
     assert collector.groups[2]['task_id'] == 't2' and (work / 'groups' / 'g000002' / 'rollouts.jsonl').exists()
     assert collector.take_groups(2, 2, stop) == [3] and stop.is_set()    # used up: no short step afterwards
+    (tmp_path / 'schedule.json').write_text('[[3, 1], [2]]')
+    collector = grpo.ReplayCollector(SimpleNamespace(replay=str(archive), actor_store=str(tmp_path / 'store'),
+                                                     replay_schedule=str(tmp_path / 'schedule.json')), tmp_path / 'w2')
+    stop = threading.Event()
+    assert collector.take_groups(24, 24, stop) == [3, 1] and not stop.is_set()    # the old run's own batches
+    assert collector.take_groups(24, 24, stop) == [2] and not stop.is_set()
+    assert collector.take_groups(24, 24, stop) == [] and stop.is_set()
 
 
 def test_episode_normalization_rewards_short_reasoning_the_task_never_selected():

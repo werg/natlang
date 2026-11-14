@@ -449,12 +449,17 @@ class Collector:
 class ReplayCollector:
     """``--replay``: a finished run's archived groups (``ROLLOUTS/<group>.rollouts.jsonl.zst``) offered in group order,
     ``--min-groups`` a step, each as fresh (no staleness), for learner controls (``--advantage-control``): no actor, no
-    collection, no held eval. Consumer calls read the old run's actor store (``--actor-store``), which is never pruned here."""
+    collection, no held eval. Consumer calls read the old run's actor store (``--actor-store``), which is never pruned here.
+    ``--replay-schedule`` (a JSON list of group-number lists) offers exactly those batches, one a step: the old run's own
+    steps, for re-executing its learner on its data."""
 
     def __init__(self, args, work):
         from lower_rollout_turns import NativeStates
         self.args, self.work = args, work
         self.archives = sorted(Path(args.replay).glob('g*.rollouts.jsonl.zst'))
+        schedule = getattr(args, 'replay_schedule', None)
+        self.schedule = json.loads(Path(schedule).read_text()) if schedule else None
+        self.by_group = {int(a.name[1:].split('.')[0]): a for a in self.archives}
         self.groups, self.lock, self.stop, self.paused = {}, threading.Lock(), threading.Event(), threading.Event()
         self.version = self.generated = self.episodes = self.outstanding = self.cursor = self.next_group = 0
         self.active_slots, self.variants = 0, {}
@@ -463,6 +468,10 @@ class ReplayCollector:
     def take_groups(self, minimum, maximum, stop=None):
         import zstandard
         taken = []
+        if self.schedule is not None:
+            batch = self.schedule.pop(0) if self.schedule else []
+            self.archives = [self.by_group[g] for g in batch]
+            minimum = len(batch) or 1
         while self.archives and len(taken) < minimum:
             source = self.archives.pop(0)
             group = int(source.name[1:].split('.')[0])
@@ -2217,6 +2226,8 @@ def main():
     t.add_argument('--replay', help="learner control: train on a finished run's archived groups (its ROLLOUTS dir of "
                    "<group>.rollouts.jsonl.zst, --min-groups a step in group order) instead of collecting; no actor, "
                    "no held eval; needs --actor-store and --actor-export of that run")
+    t.add_argument('--replay-schedule', help='with --replay: a JSON list of group-number lists, the batch of each step '
+                   '(an old run\'s own steps, to re-execute its learner on its data)')
     t.add_argument('--advantage-control', choices=('none', 'zero', 'shuffle'), default='none',
                    help="learner control: 'zero' trains every episode at advantage 0 (KL only: the policy must stay put), "
                    "'shuffle' permutes each step's episode advantages across episodes (no consistent drift allowed)")
