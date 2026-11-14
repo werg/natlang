@@ -2159,7 +2159,7 @@ def main():
                    help='KL penalty as a loss: k2 = d^2/2 (gradient linear in d = logp_ref - logp), k3 = e^d - d - 1 '
                         '(unbounded gradient on rare tail tokens; grpo-v2-run1 step 7). The logged kl_mean is k3 either way')
     t.add_argument('--rho-cap', type=float, default=2.0)
-    t.add_argument('--loss-norm', choices=('episode', 'token'), default='episode',
+    t.add_argument('--loss-norm', choices=('episode', 'token'), default='token',
                    help='episode: each trained episode contributes A_i * (mean over its trained units of w * logp), averaged '
                         'over the step\'s episodes, the KL term the same way; token: one sum over all units / all units (until '
                         '2026-11-13: an episode weighed by its length, failures are 1.7x longer, 97%% of the mass on reasoning)')

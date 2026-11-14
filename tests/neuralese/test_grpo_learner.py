@@ -281,3 +281,30 @@ def test_replay_collector_offers_archived_groups_in_order(tmp_path):
     assert collector.take_groups(2, 2, stop) == [1, 2]
     assert collector.groups[2]['task_id'] == 't2' and (work / 'groups' / 'g000002' / 'rollouts.jsonl').exists()
     assert collector.take_groups(2, 2, stop) == [3] and stop.is_set()    # used up: no short step afterwards
+
+
+def test_episode_normalization_rewards_short_reasoning_the_task_never_selected():
+    """Exact expectation of the policy term on a reasoning-length knob the reward ignores: each call independently reasons
+    1 or 2 tokens (logit theta of 1), the answer is right with p 0.5 independently, and a wrong answer costs a second call
+    (grpo-v2-run1: failures 18.1 calls vs 8.9 for successes, reasoning per call 1,021 vs 1,106 tokens). The true gradient
+    on theta is 0. Per-episode normalization (`episode`: A_i times the mean over its own T_i tokens) is the
+    score-function estimator of E[A / T], whose T depends on every call's sampled length: short successes outweigh long
+    failures and it pushes every call toward shorter reasoning. One constant normalization (`token`) is unbiased."""
+    import itertools
+    pi = {1: 0.5, 2: 0.5}
+    score = {1: 1 - pi[1], 2: -pi[1]}       # d log pi(l) / d theta
+    outcomes = []                           # (lengths of the calls, correct, probability)
+    for c in (0, 1):
+        for lengths in itertools.product((1, 2), repeat=1 if c else 2):
+            outcomes.append((lengths, c, 0.5 * math.prod(pi[l] for l in lengths)))
+    episodes = {k: (sum(lengths), len(lengths), 0) for k, (lengths, _, _) in enumerate(outcomes)}
+    for norm in ('token', 'episode'):
+        scales = grpo.loss_scales(episodes, norm, 'token')
+        if norm == 'token':      # one constant for the whole step (the expectation, not this enumeration's total)
+            scales = {k: (1., 0.) for k in scales}
+        grad = sum(p * scales[k][0] * (c - 0.5) * sum(score[l] for l in lengths)
+                   for k, (lengths, c, p) in enumerate(outcomes))
+        if norm == 'token':
+            assert abs(grad) < 1e-12
+        else:
+            assert grad > 0.002  # toward shorter reasoning in every call

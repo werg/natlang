@@ -2222,3 +2222,18 @@ permuted advantages (z +0.03; low power, 3 groups), but raising the log-prob of 
 (mean q per reasoning token +2.2, reply +1.8, close +3.5): any net positive likelihood push on own samples shortens
 reasoning. Next: `grpo.py --replay` of run1's groups from the base with shuffled, then real advantages (k2), probing each
 checkpoint: a shift under shuffled advantages is a learner bias (bug).
+
+First-principles code analysis (forked investigator, briefed with observations only; 2026-11-14): candidate cause, a
+learner bias. `--loss-norm episode` (default since 2026-11-13, all of run1) weights each episode's tokens by A_i / T_i: the
+score-function estimator of E[A/T], with T the sampled length. Within groups successes make fewer calls (8.9 vs 18.1;
+7.8k vs 14.1k tokens) but reason about as long per call (1,106 vs 1,021 tokens), so the estimator pushes every call toward
+shorter reasoning the reward never selected. On run1's archived groups E[A * Tbar / T] = +0.24 vs a within-group permutation
+null ±0.028 (z +8.8; steps 1-3 z 4.6, 4-8 z 3.9, 9+ z 6.6): a consistent push every step, which Adam accumulates while the
+task directions cancel (cosine ±0.06), as the random-sign control requires. Exact-expectation test added. Secondary: the k3
+loss restrains upward moves only by β per token (k2 by β|d|), an amplifier under steps 1-8; decision-only episodes weigh a
+whole episode (step 1 grad_norm 69.6); step 3's 2-group step took a full Adam step. Not explained by it: sampled tokens
+more confident on base traces (-0.79 -> -0.61). Not checked: prefix-tree internals, import_tensors, export mapping, the
+pin-650bcaec stop path. Acted on: `--loss-norm token` (the unbiased constant normalization) is the default from now on.
+Test running: replay of run1's groups from the base, real advantages, episode vs token norm side by side (probe at steps
+2/4/6); the shuffled-advantage arm (which removes Cov(A, 1/T) and so is predicted null either way) tests other
+reward-independent biases. Cause stays OPEN until the pair separates.
