@@ -7,7 +7,7 @@ from __future__ import annotations
 from .chat import RequestError
 
 _CONTROL_FIELDS=('native_write_start_sample','native_write_close_sample','native_write_start_own','native_write_open_sample')
-_REASONING_START='<think>'
+REASONING_START,REASONING_END='<think>','</think>'
 
 
 def reasoning_opened(engine,seq):
@@ -18,7 +18,14 @@ def reasoning_opened(engine,seq):
     if not plan or plan[-1][0]!='tokens' or not plan[-1][1]:
         return False
     tail=engine.tokenizer.decode(list(plan[-1][1][-16:]),skip_special_tokens=False)
-    return tail.rstrip().endswith(_REASONING_START)
+    return tail.rstrip().endswith(REASONING_START)
+
+
+def announce_reasoning(engine,seq):
+    """An unguided streamed reply that continues open reasoning says so first: the HTTP stream then sends its text up
+    to `</think>` as `reasoning_content` (serve/http.py), the shape guided replies and the managed server stream."""
+    if seq.request.on_delta is not None and seq.request.guidance is None and reasoning_opened(engine,seq):
+        seq.request.on_delta({'reasoning_open':True})
 
 
 def initialize(engine,seq):

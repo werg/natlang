@@ -46,7 +46,7 @@ context between its slots.
 | Commit | Change | Other engines |
 |---|---|---|
 | a0c92ce36, 0da69f720, ff6e734e3, e51ca6d68 | decision scoring from a shared-prefix checkpoint, score batching with generating slots, `cache_messages` | rows above |
-| a6401bbd3 | streamed reasoning of a guided reply | every engine: the page from natlang-b12074; Python native and SGLang from 2026-11-14 (`serve/native_guidance.py`: guidance blanks the open reasoning, it streams as `reasoning_content`, the rest is held back until final) |
+| a6401bbd3 | streamed reasoning of a guided reply | every engine: the page from natlang-b12074; Python native and SGLang from 2026-11-14 (`serve/native_guidance.py`: guidance blanks the open reasoning, it streams as `reasoning_content`, the rest is held back until final). Unguided streams on both Python engines send open reasoning as `reasoning_content` too, the closing tag dropped (`serve/http.py`, 2026-11-14), as the managed server streams it |
 | 26a65db62 | the release builds the in-page engine; deepseek41 compiles on wasm32 | page only |
 | dc9410950 | RL capture under top-p | row above; native and SGLang already did it |
 

@@ -282,3 +282,72 @@ def test_streamed_guided_reply_sends_open_reasoning_as_reasoning_content(tmp_pat
     kinds=[('reasoning_content' in d) for d in deltas if 'reasoning_content' in d or d.get('content')]
     assert kinds==sorted(kinds,reverse=True)
     assert chunks[-1]['x_natlang_guidance']['rejections'][0]['reason']=='unknown-tool'
+
+
+def _stream_chunks(engine,body):
+    import json,threading,urllib.request
+    from natlang_neuralese.serve.http import serve
+    server=serve(engine,'127.0.0.1',0)
+    threading.Thread(target=server.serve_forever,daemon=True).start()
+    try:
+        request=urllib.request.Request(f'http://127.0.0.1:{server.server_address[1]}/v1/chat/completions',
+            data=json.dumps({**body,'stream':True}).encode(),headers={'content-type':'application/json'})
+        with urllib.request.urlopen(request,timeout=60) as response:
+            return [json.loads(line[5:]) for line in response.read().decode().splitlines()
+                    if line.startswith('data:') and line.strip()!='data: [DONE]']
+    finally:
+        server.shutdown()
+
+
+def _split(chunks):
+    deltas=[chunk['choices'][0]['delta'] for chunk in chunks if 'choices' in chunk]
+    return ([d['reasoning_content'] for d in deltas if 'reasoning_content' in d],
+            ''.join(d.get('content','') for d in deltas if isinstance(d.get('content'),str)))
+
+
+@pytest.mark.parametrize('opened',[True,False])
+def test_unguided_stream_sends_open_reasoning_as_reasoning_content(tmp_path,monkeypatch,opened):
+    """An unguided streamed reply continuing the reasoning its prompt opened streams it as `reasoning_content` and the
+    rest as content without the closing tag (the managed server's shape); without open reasoning all text is content."""
+    engine=actor(tmp_path,'lfm',lexical=True,words=LEXICAL+THINK)
+    engine._prompt_plan=lambda messages,tools:[('tokens',[9]+([6] if opened else []))]
+    script=iter([10,11,7,12,sorted(engine.stop_ids)[0]])
+    monkeypatch.setattr(engine,'_native_token',lambda s:chosen(engine,s,next(script)))
+    engine.start()
+    try:
+        chunks=_stream_chunks(engine,{'messages':[{'role':'user','content':'t9'}],'temperature':.8,'max_tokens':12})
+    finally:
+        engine.stop()
+    reasoning,content=_split(chunks)
+    if opened:
+        # (the fixture's word-level tokenizer decodes each streamed token without its separating space)
+        assert reasoning[0]=='t10' and ''.join(reasoning).replace(' ','')=='t10t11'
+        assert content.strip()=='t12' and '</think>' not in content
+    else:
+        assert not reasoning and content.replace(' ','')=='t10t11</think>t12'
+    assert chunks[-1]['x_natlang_message']['content'].strip()=='t12'
+
+
+def test_stream_holds_back_a_split_closing_tag_and_ends_inside_reasoning():
+    """The HTTP stream's split of announced reasoning: a closing tag split across deltas never leaks into either
+    channel, and a reply that ends inside its reasoning sends all of it as reasoning."""
+    import threading
+    from concurrent.futures import Future
+    def fake(items,message):
+        def submit(request):
+            future=Future()
+            def run():
+                for item in items:request.on_delta(item)
+                future.set_result({'choices':[{'message':message,'finish_reason':'stop'}],'usage':{}})
+            threading.Thread(target=run).start()
+            return future
+        return SimpleNamespace(model_name='m',tool_call_format='xml',submit=submit)
+    body={'messages':[{'role':'user','content':'q'}],'temperature':.8}
+    split=[{'reasoning_open':True},{'text':'a '},{'text':'b</thi'},{'text':'nk>\n\nAns'},{'text':'wer.'}]
+    chunks=_stream_chunks(fake(split,{'role':'assistant','content':'Answer.','reasoning_content':'a b'}),body)
+    reasoning,content=_split(chunks)
+    assert reasoning==['a ','b'] and content=='\n\nAnswer.'
+    unfinished=[{'reasoning_open':True},{'text':'x </th'}]
+    chunks=_stream_chunks(fake(unfinished,{'role':'assistant','content':'','reasoning_content':'x </th'}),body)
+    reasoning,content=_split(chunks)
+    assert ''.join(reasoning)=='x </th' and content==''

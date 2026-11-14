@@ -812,3 +812,51 @@ def test_guided_open_reasoning_streams_on_sglang_like_the_native_engine(tmp_path
     assert seen[3] == ([{'reasoning': 't10'}, {'reasoning': ' t11'}] if opened else [])  # before the reply is final
     assert seen[-1] == seen[3] and not any('[bad(' in str(delta) for delta in deltas['front'])
     assert any('reasoning' in delta for delta in deltas['front']) == opened
+
+
+@pytest.mark.parametrize('opened', [True, False])
+def test_unguided_stream_announces_open_reasoning_on_sglang_like_the_native_engine(tmp_path, opened):
+    """An unguided streamed reply on SGLang announces open reasoning as the native engine does, so the HTTP stream
+    sends its reasoning as `reasoning_content` and the rest as content without the closing tag."""
+    import threading
+    from concurrent.futures import Future
+    from types import SimpleNamespace
+    from test_native_guidance import LEXICAL, THINK, actor, _split, _stream_chunks
+    from natlang_neuralese.serve import load_native_engine
+    native = actor(tmp_path, 'lfm', lexical=True, words=LEXICAL + THINK)
+    front = load_native_engine(str(tmp_path / 'actor.pt'), dtype=native.backbone.embedding_weight.dtype,
+                               engine_class=SglangEngine)
+    front.sglang_banned = []
+    front._sglang_lock, front.sglang_requests, front.sglang_tokens, front.native_fallbacks = threading.Lock(), 0, 0, 0
+    front.native_fallback_reasons = {}
+    stop = sorted(front.stop_ids)[0]
+    for engine in (native, front):
+        engine._prompt_plan = lambda messages, tools: [('tokens', [9] + ([6] if opened else []))]
+    tokens = [10, 11, 7, 12, stop]
+    records = [record(-0.5, [t, t + 1], [-0.5, -1.5]) for t in tokens]
+    front._sglang_stream = lambda body: iter([{'output_ids': tokens[i:i + 2], 'meta_info': {'natlang_top_k': records[i:i + 2]}}
+                                              for i in range(0, len(tokens), 2)])
+    script = iter(tokens)
+    native._native_token = lambda seq: (next(script), -0.5)
+    deltas = {'native': [], 'front': []}
+    make = lambda name: GenerationRequest(messages=[{'role': 'user', 'content': 't9'}], temperature=1.0, max_tokens=16,
+                                          request_id='u', seed=1, on_delta=deltas[name].append)
+    expected, actual = native.generate(make('native')), front.generate(make('front'))
+    assert actual['choices'][0]['message'] == expected['choices'][0]['message']
+    for name in ('native', 'front'):
+        assert (deltas[name][0] == {'reasoning_open': True}) == opened
+        assert ''.join(d.get('text', '') for d in deltas[name]).replace(' ', '') == 't10t11</think>t12'
+
+    def submit(request):  # the front's deltas and reply through the HTTP stream
+        future = Future()
+        for item in deltas['front']:
+            request.on_delta(item)
+        future.set_result(actual)
+        return future
+    chunks = _stream_chunks(SimpleNamespace(model_name='m', tool_call_format='xml', submit=submit),
+                            {'messages': [{'role': 'user', 'content': 't9'}], 'temperature': 1.0})
+    reasoning, content = _split(chunks)
+    if opened:
+        assert ''.join(reasoning).strip() == 't10 t11' and content.strip() == 't12'
+    else:
+        assert not reasoning and content.strip() == 't10 t11 </think> t12'
