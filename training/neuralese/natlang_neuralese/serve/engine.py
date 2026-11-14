@@ -148,6 +148,9 @@ class Sequence:
     native_item_positions: list[int] = field(default_factory=list)
     native_guidance_anchor: dict | None = None
     native_guidance_flushing: bool = False
+    # Guided replies stream their open reasoning (native_guidance.stream_reasoning): reply items and text sent so far.
+    native_guidance_streamed: int = 0
+    native_guidance_streamed_text: int = 0
     native_guidance_receipt: dict | None = None
     # A non-native sampler of the same weights (serve/sglang_actor.py) binds its export in the capture
     # (rl.actors ``actor_export``); the learner then guards the engine mismatch instead of the exact native gate.

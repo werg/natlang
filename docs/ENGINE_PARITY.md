@@ -32,7 +32,7 @@ Mechanical guards:
 | Commit | Change | Other engines |
 |---|---|---|
 | a0c92ce36, 0da69f720, ff6e734e3, e51ca6d68 | decision scoring from a shared-prefix checkpoint, score batching with generating slots, `cache_messages` | rows above |
-| a6401bbd3 | streamed reasoning of a guided reply | row above |
+| a6401bbd3 | streamed reasoning of a guided reply | every engine: the page from natlang-b12074; Python native and SGLang from 2026-11-14 (`serve/native_guidance.py`: guidance blanks the open reasoning, it streams as `reasoning_content`, the rest is held back until final) |
 | 26a65db62 | the release builds the in-page engine; deepseek41 compiles on wasm32 | page only |
 | dc9410950 | RL capture under top-p | row above; native and SGLang already did it |
 
@@ -45,7 +45,6 @@ Mechanical guards:
 | Decision: one prefill shared by all options | yes (parent slot checkpoint) | yes | yes | yes: the first option warms the radix cache, the rest run in parallel (each option once since 2026-11-14) | none |
 | Score turns with generating slots (fork 0da69f720, ff6e734e3) | yes | n/a (one request at a time) | n/a | SGLang's scheduler; unmeasured | measure decision latency under collection load |
 | Prefix-cache hit telemetry | upstream counters | n/a | `natlang_prefix_cache_hits/misses` | `natlang_sglang_prompt_tokens_total` and `natlang_sglang_cached_prompt_tokens_total` (2026-11-14) | none |
-| Streaming the open reasoning of a guided reply (fork a6401bbd3) | yes | yes from natlang-b12074 | no (sent at the end) | no | low priority for RL; add when an interactive host serves from Python |
 | RL capture under the sampling law (temperature 1, top-p 0.95) | yes from natlang-b12074 (dc9410950: host-side nucleus draw, untruncated logp) | n/a | yes | yes (untruncated logp recorded) | run the fork's `test_natlang_rl_capture.py` with `LLAMA_NATLANG_GGUF` set to a natlang export before the fork collects RL data |
 | Idle-slot prompt cache (`cache_idle_slots`) exact on wasm32 | yes | off (`local-model.ts`): with it on and 4 slots, a decision scored after a batch differs by up to 0.5 nats from the same decision before it (native bit-identical under the same flags; exact with it off or with 1 slot; not the thread count, not `swa_full`) | n/a | n/a | find the wasm32 divergence in `server_prompt_cache` save/restore of the hybrid (conv + SWA) state with `scripts/wllama_smoke.mjs` and `cache_idle_slots: true`, then turn it back on |
 | Warm openings kept across restarts | yes (`--slot-save-path`) | no (page reload starts cold) | no | no | low priority: actors restart rarely |

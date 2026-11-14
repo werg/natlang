@@ -3,6 +3,15 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-14 — guided replies on the Python engines leave the open reasoning unchecked (fork a6401bbd3 parity)
+
+On the Python native engine and the SGLang actor, guidance (`serve/guidance.py`) no longer checks the reasoning that the
+generation prompt opened (`<think>` on LFM3): it is blanked before the checks, so a call name or code written inside
+the reasoning is never rejected and no rollback lands inside it. Checks of everything after `</think>` (envelope, call
+names, eval code) are unchanged. This is what the managed llama-server has done since fork a6401bbd3; it lets the
+reasoning stream as `reasoning_content` while the rest of a guided reply is held back. Guided replies only: unguided
+sampling (RL collection without `guidance`, held eval) is unchanged.
+
 ### 2026-11-13 — the `natlang init` starter answers by decision readout, with a specific signature
 
 `natlang init` (and `examples/hello`, now byte-identical to it) writes `answer.nl` as

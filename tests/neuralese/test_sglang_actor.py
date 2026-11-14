@@ -769,3 +769,46 @@ def test_top_p_is_forwarded_to_sglang_and_declared_in_the_sampling_law(tmp_path,
     monkeypatch.setattr(SglangEngine, '_sglang_consume', forgetful)
     with pytest.raises(RequestError, match='not sampled with the requested top_p'):
         front.generate(make(top_p=.95))
+
+
+@pytest.mark.parametrize('opened', [True, False])
+def test_guided_open_reasoning_streams_on_sglang_like_the_native_engine(tmp_path, opened):
+    """Fork a6401bbd3 on SGLang: reasoning the generation prompt opened reaches the client while SGLang still draws,
+    the rejected call never does, and the deltas, capture and reply equal the native engine's."""
+    import threading
+    from test_native_guidance import LEXICAL, THINK, actor
+    from natlang_neuralese.serve import load_native_engine
+    from natlang_neuralese.serve.guidance import Settings
+    native = actor(tmp_path, 'lfm', lexical=True, words=LEXICAL + THINK)
+    front = load_native_engine(str(tmp_path / 'actor.pt'), dtype=native.backbone.embedding_weight.dtype,
+                               engine_class=SglangEngine)
+    front.sglang_banned = []
+    front._sglang_lock, front.sglang_requests, front.sglang_tokens, front.native_fallbacks = threading.Lock(), 0, 0, 0
+    front.native_fallback_reasons = {}
+    stop = sorted(front.stop_ids)[0]
+    for engine in (native, front):
+        engine._prompt_plan = lambda messages, tools: [('tokens', [9] + ([6] if opened else []))]
+    deltas = {'native': [], 'front': []}
+    make = lambda name: GenerationRequest(messages=[{'role': 'user', 'content': 't9'}], temperature=1.0, max_tokens=16,
+                                          rl_capture=True, rl_top_k=2, native_recording=True, request_id='g', seed=1,
+                                          guidance=Settings(tools=['good'], syntax=False), on_delta=deltas[name].append)
+    script = iter([10, 11, 7, 4, 5, stop])
+    native._native_token = lambda seq: (next(script), -0.5)
+    expected = native.generate(make('native'))
+    replies, sent, seen = [[10, 11, 7, 4, 8], [5], [stop]], [], []
+
+    def stream(body):
+        sent.append(body)
+        for token in replies[len(sent) - 1]:
+            seen.append(list(deltas['front']))  # what the client had when SGLang drew this token
+            yield {'output_ids': [token], 'meta_info': {'natlang_top_k': [record(-0.5, [token, token + 1], [-0.5, -1.5])]}}
+    front._sglang_stream = stream
+    actual = front.generate(make('front'))
+    assert actual['x_natlang_guidance'] == expected['x_natlang_guidance']
+    assert actual['x_natlang_guidance']['rejections'][0]['reason'] == 'unknown-tool'
+    assert _protocol_view(actual['x_natlang_rl_capture']) == _protocol_view(expected['x_natlang_rl_capture'])
+    assert actual['choices'][0]['message'] == expected['choices'][0]['message']
+    assert deltas['front'] == deltas['native']
+    assert seen[3] == ([{'reasoning': 't10'}, {'reasoning': ' t11'}] if opened else [])  # before the reply is final
+    assert seen[-1] == seen[3] and not any('[bad(' in str(delta) for delta in deltas['front'])
+    assert any('reasoning' in delta for delta in deltas['front']) == opened
