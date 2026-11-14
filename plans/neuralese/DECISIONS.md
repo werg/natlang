@@ -2246,7 +2246,7 @@ step 4 -1.84 / 0.061 / -0.79, step 6 -3.03 / 0.032 / -0.90; shuffled advantages 
 quarter of run1's step-8 size and not growing; token norm drifts the other way by step 6. Neither arm reproduces run1's
 drift, so the episode-normalization bias is real but WEAKENED as the explanation of its size. Not identical to run1: group
 order and batches (24 a step by group number, not run1's batches), the k2 loss (run1 steps 1-8 ran k3), the prefix tree
-and nucleus head (b089fc960, 34f287780: landed after run1's pins), and replay is off-policy. Next: `--replay-schedule`
+(b089fc960: landed after run1's pins; the nucleus head of 34f287780 was in run1 as d24b62ec), and replay is off-policy. Next: `--replay-schedule`
 re-executes run1's own steps 1-8 (batches recovered from archive times, checked against run1's decision logs: 24, 24,
 6, 24 x5) with run1's settings (episode, k3, decision call, prefix tree off). Reproducing step 8 puts the cause in the
 learner on these data, and one-switch ablations on the same batches attribute it; not reproducing it points at what
@@ -2254,3 +2254,19 @@ differs (on-policy feedback, or code run1 ran that main no longer does). Separat
 reversed the template inbox-spam decisions (2 options of 5 tokens: about +8 nats for the base's choice to -10 at the next
 step; token arm grad_norm 60 at step 3 as the KL pulled 98 decisions back), so a sampled decision at
 `--decision-weight call` (about 1,000 token units) moves near-identical prompts too far per step.
+
+Second investigator (independently briefed with observations, dragnet; 2026-11-14): no code bug found in the learner path
+(learner vs actor at v0 per token class |d| 0.003-0.03; export names/tying/dtype correct; actor-learner |log rho| ~0.03 at
+every version; embedding, norms and frozen rows ruled out by grafting: step 8's change lives in layers 0-11, MLP > attention
+> conv; prefix tree not in run1). Lead, with a mechanism for timing and direction: run1's step 3 was the stop step at
+pin 650bcaec that trained 6 groups (2 with spread, 16 episodes, 48k tokens) with a full Adam step (pre-clip 1.56, clipped
+to 1.0 vs 0.4-0.6 elsewhere; beta1 carries ~0.26 of it into step 4); its successes were short (2-4 calls), and episode
+norm gave each success token ~7x a failure token, so step 3 was close to fine-tuning on 5 short successes. The logged KL to
+the start policy jumps after updates 3 and 4 (0.0016 -> 0.0101 -> 0.0355; mean |d| 0.026 -> 0.056 -> 0.106). The replay arms
+never had a 6-group step. Same pattern: any step a few terms dominate (decision-only episodes at step 1, k3 tail tokens at
+7-8, decisions) moves the function far. Also from it: on 41 base-sampled run1 chains, step 8 closes earlier (0.505 vs 0.199
+closes/1k reasoning tokens) but is LESS confident (logp -0.74 vs -0.65, entropy +7%); at step 12 the close shift has reversed
+(0.173) while likelihood of base reasoning stays -0.12 nats/token and entropy +16%: step 12's -7.7 matches a general
+drift from the base, not earlier closing. Base Pop held result checked (by me): its segments re-ran only unresolved or
+infrastructure-error rows, no scored outcome was replaced. Test running: the faithful replay keeps steps 2/4/6/8, then the
+same schedule without step 3; a step-4 shift that vanishes without step 3 confirms it.
