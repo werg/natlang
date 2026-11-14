@@ -242,3 +242,11 @@ def test_reasoning_style_sentinel_flags_a_halved_reasoning_length(tmp_path):
     (tmp_path / 'train.jsonl').write_text('{"event": "x"}\n{"step": 1, "reasoning_tokens_per_call": 6.0}\n')
     assert grpo.style_shift(tmp_path, style) == {'reasoning_vs_first_step': 0.5, 'reasoning_shift': True}
     assert grpo.style_shift(tmp_path, {'reasoning_tokens_per_call': 5.0})['reasoning_shift'] is False
+
+
+def test_grad_spike_sentinel_flags_five_times_the_median(tmp_path):
+    assert grpo.grad_spike(tmp_path, 6.0) == {}                           # no steps logged yet
+    (tmp_path / 'train.jsonl').write_text(''.join(f'{{"step": {i}, "grad_norm": {g}}}\n'
+                                                  for i, g in enumerate([0.58, 0.43, 0.76, 0.5], 1)))
+    assert grpo.grad_spike(tmp_path, 6.09) == {'grad_norm_vs_median': 11.28, 'grad_spike': True}
+    assert grpo.grad_spike(tmp_path, 0.66)['grad_spike'] is False

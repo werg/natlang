@@ -60,6 +60,7 @@ import queue
 import random
 import shutil
 import signal
+import statistics
 import struct
 import subprocess
 import sys
@@ -993,6 +994,19 @@ def style_shift(work, style, ratio=0.75):
         return {}
     r = style['reasoning_tokens_per_call'] / first
     return {'reasoning_vs_first_step': round(r, 3), 'reasoning_shift': not ratio <= r <= 1 / ratio}
+
+
+def grad_spike(work, grad_norm, factor=5., min_steps=3):
+    """This step's pre-clip grad_norm over the median of the run's earlier logged steps, and whether it exceeds factor
+    (grpo-v2-run1: 6.09 at step 7 against ~0.5 was the k3 KL loss blowing up). A logged flag, never a stop."""
+    path = work / 'train.jsonl'
+    norms = [json.loads(line)['grad_norm'] for line in path.read_text().splitlines()
+             if '"grad_norm"' in line] if path.exists() else []
+    norms = [n for n in norms if isinstance(n, (int, float))]
+    if len(norms) < min_steps:
+        return {}
+    r = grad_norm / statistics.median(norms)
+    return {'grad_norm_vs_median': round(r, 2), 'grad_spike': r > factor}
 
 
 def think_mask(sample, close_id):
@@ -1972,6 +1986,9 @@ def train(args):
             learner_swap_pages={k: v - swap0[k] for k, v in vmstat().items()}, meminfo_learn_start_gb=mem0,
             previous_state_save=saver.last, cuda_peak_gb=round(torch.cuda.max_memory_allocated() / 2**30, 1),
             outstanding_groups=collector.outstanding, elapsed_s=round(elapsed))
+        record.update(grad_spike(work, grad_norm))
+        if record.get('grad_spike'):
+            print(f"grad spike: grad_norm {grad_norm:.3g} is {record['grad_norm_vs_median']}x the run's median", flush=True)
         if not args.keep_rollouts and args.block_gc_grace >= 0:
             # the actor's block store: keep what an outstanding group's episodes may still import (see collect_blocks)
             t = time.time()
