@@ -2293,3 +2293,22 @@ mechanism: `lr_data_scale` (step 3's 2 groups with spread: 0.17x), token norm, k
 +0.14): a reward-correlated pull in these groups at a small rate, to watch through the probe in the next run. A branch
 resumed from the bench's step-5 state reproduced step 6 (grad_norm 5.230 vs 5.224, same KL, probe within 0.01). Pop runs
 the behaviour probe (57 s, 5.2 GB; run1 step 2 there +0.009 / -0.006 / 1.07x vs the DGX's +0.008 / -0.007 / 1.10x).
+
+## 2026-11-14: grpo-v2-run2, GRPO from base with the drift fixes (supervisor)
+
+**Change vs baseline.** grpo.py's defaults at the pin (52ed1f97a or the newest passing main) against the untouched base
+5ff07638, both measured on that pin and Pop's engine. The treatment is the learner as fixed after grpo-v2-run1:
+`--loss-norm token`, k2 KL, decision weight capped at 8 token units, LR 1e-5 x `lr_data_scale` (groups with spread / 12,
+at most 1: run1's close shift came from its 2-group step 3), plus the per-step behaviour probe and branchable states
+(telemetry, not treatment). Held set: held-v3 (`held_eval verify` against fresh exposure 2026-11-14: 9,570 ids, 1,752
+groups, no overlap). Sizing: slots 24, `--activation-gb 6`, actor KV 6 GB, `--learner-phase-slots 0`, budget 88 GB
+(run1's 100 GB left no diagnostic headroom; the guard stopped it once at 105.9 GB with slots 28-32), every checkpoint
+through step 8 kept, the last 2 FP32 states on /mnt/external for branching.
+
+**Success (declared before the run).** As grpo-v2-run1: two consecutive scheduled Pop held evals with a positive mean
+per-task pass-rate change vs the Pop base, p < 0.05 each, and `ran_out_rate` not significantly worse.
+
+**Failure and stops.** One held eval below -3.5 pts with p < 0.05 and no known cause stops the run at that eval (AGENTS.md
+2026-11-14), as does no gain by 48 h of training. A `behaviour_shift` or `grad_spike` is diagnosed at the step it fires
+(the probe's bounds: |logp change| 0.02, |entropy change| 0.03, closes outside 0.67-1.5x; run1 was at 3.3x after step 4).
+Early checks as run1 (step-1 KL < 1e-3, outside-nucleus < 1%, |log rho| < 0.1).
