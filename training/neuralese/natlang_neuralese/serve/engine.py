@@ -796,6 +796,9 @@ class Engine:
         if seq.request.guidance is not None:
             from .native_guidance import initialize
             initialize(self, seq)
+        else:
+            from .native_guidance import announce_reasoning
+            announce_reasoning(self, seq)
         if seq.request.forced_message is not None:
             if not capture_enabled(seq) or seq.request.native_recording is not True:
                 raise RequestError('forced-message','forced teacher replay requires native structural recording')

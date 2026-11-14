@@ -631,6 +631,9 @@ class SglangEngine(Engine):
                 if request.guidance is not None:
                     from .native_guidance import initialize
                     initialize(self, seq)
+                else:
+                    from .native_guidance import announce_reasoning
+                    announce_reasoning(self, seq)
                 for part in itertools.count():
                     if seq.native_forced_tokens:
                         self._sglang_feed_forced(seq, state)

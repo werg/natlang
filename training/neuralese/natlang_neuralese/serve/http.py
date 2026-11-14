@@ -18,6 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from .chat import RequestError, arguments_text
 from .engine import Engine, GenerationRequest
 from .guidance import Settings
+from .native_guidance import REASONING_END
 from .store import decode_native_state, encode_native_state
 
 _NATIVE_STATE = re.compile(r"^/v1/neuralese/native-states/(nzs1_[a-z2-7]+)(/meta|/pin|/unpin)?$")
@@ -552,6 +553,28 @@ def make_handler(engine: Engine):
             # Call markup is LFM2's Pythonic `<|tool_call_start|>` or `<tool_call>` (Qwen/Mellum JSON, LFM3/Qwen3.5 XML;
             # chat.build_message parses both forms after the stream ends).
             markers, streamed, pending, in_call = ("<|tool_call_start|>", "<tool_call>"), "", "", False
+            # A reply whose generation prompt opened reasoning (`<think>`, native_guidance.announce_reasoning) streams
+            # it as `reasoning_content` up to its closing tag, which is dropped, as the managed server streams it.
+            # Guided replies split it in the engine (native_guidance.stream_reasoning) and send `reasoning` items.
+            thinking, thought = False, ""
+
+            def reasoning(text):
+                if text:
+                    self._event(chunk({"reasoning_content": text}))
+
+            def content_text(text):
+                nonlocal pending, in_call, streamed
+                pending += text
+                at = min((i for i in (pending.find(m) for m in markers) if i >= 0), default=-1)
+                if at >= 0:
+                    out, pending, in_call = pending[:at], "", True
+                else:
+                    keep = max((n for m in markers for n in range(1, len(m)) if pending.endswith(m[:n])), default=0)
+                    out, pending = pending[:len(pending) - keep], pending[len(pending) - keep:]
+                if out:
+                    streamed += out
+                    self._event(chunk({"content": out}))
+
             while True:
                 try:
                     item = deltas.get(timeout=0.25)
@@ -560,23 +583,33 @@ def make_handler(engine: Engine):
                         raise BrokenPipeError("the client went away")
                     continue
                 if item is None:
+                    if thinking:
+                        reasoning(thought)  # the reply ended inside its reasoning
                     break
                 if in_call:
                     continue
-                if "reasoning" in item:  # a guided reply's open reasoning (native_guidance.stream_reasoning)
-                    self._event(chunk({"reasoning_content": item["reasoning"]}))
-                elif "text" in item:
-                    pending += item["text"]
-                    at = min((i for i in (pending.find(m) for m in markers) if i >= 0), default=-1)
+                if "reasoning_open" in item:
+                    thinking = True
+                elif "reasoning" in item:  # a guided reply's open reasoning (native_guidance.stream_reasoning)
+                    reasoning(item["reasoning"])
+                elif "text" in item and thinking:
+                    thought += item["text"]
+                    at = thought.find(REASONING_END)
                     if at >= 0:
-                        out, pending, in_call = pending[:at], "", True
+                        reasoning(thought[:at])
+                        rest, thinking, thought = thought[at + len(REASONING_END):], False, ""
+                        if rest:
+                            content_text(rest)
                     else:
-                        keep = max((n for m in markers for n in range(1, len(m)) if pending.endswith(m[:n])), default=0)
-                        out, pending = pending[:len(pending) - keep], pending[len(pending) - keep:]
-                    if out:
-                        streamed += out
-                        self._event(chunk({"content": out}))
+                        keep = max((n for n in range(1, len(REASONING_END)) if thought.endswith(REASONING_END[:n])), default=0)
+                        reasoning(thought[:len(thought) - keep])
+                        thought = thought[len(thought) - keep:]
+                elif "text" in item:
+                    content_text(item["text"])
                 else:
+                    if thinking:
+                        reasoning(thought)
+                        thought = ""
                     block = item["native_state"]
                     self._event(chunk({"content": [{"type": "native_state", "id": block["id"]}]},
                                       extra={"native_state": {"block": block}}))

@@ -46,9 +46,10 @@ context between its slots.
 | Commit | Change | Other engines |
 |---|---|---|
 | a0c92ce36, 0da69f720, ff6e734e3, e51ca6d68 | decision scoring from a shared-prefix checkpoint, score batching with generating slots, `cache_messages` | rows above |
-| a6401bbd3 | streamed reasoning of a guided reply | every engine: the page from natlang-b12074; Python native and SGLang from 2026-11-14 (`serve/native_guidance.py`: guidance blanks the open reasoning, it streams as `reasoning_content`, the rest is held back until final) |
+| a6401bbd3 | streamed reasoning of a guided reply | every engine: the page from natlang-b12074; Python native and SGLang from 2026-11-14 (`serve/native_guidance.py`: guidance blanks the open reasoning, it streams as `reasoning_content`, the rest is held back until final). Unguided streams on both Python engines send open reasoning as `reasoning_content` too, the closing tag dropped (`serve/http.py`, 2026-11-14), as the managed server streams it |
 | 26a65db62 | the release builds the in-page engine; deepseek41 compiles on wasm32 | page only |
 | dc9410950 | RL capture under top-p | row above; native and SGLang already did it |
+| 6d270f086 | top-p RL capture draws on the host (dc9410950's device default overrode it); omitted top_p is no nucleus | row above |
 
 ## Open gaps
 
@@ -59,6 +60,6 @@ context between its slots.
 | Decision: one prefill shared by all options | yes (parent slot checkpoint) | yes | yes | yes: the first option warms the radix cache, the rest run in parallel (each option once since 2026-11-14) | none |
 | Score turns with generating slots (fork 0da69f720, ff6e734e3) | yes | n/a (one request at a time) | n/a | SGLang's scheduler; unmeasured | measure decision latency under collection load |
 | Prefix-cache hit telemetry | upstream counters | n/a | `natlang_prefix_cache_hits/misses` | `natlang_sglang_prompt_tokens_total` and `natlang_sglang_cached_prompt_tokens_total` (2026-11-14) | none |
-| RL capture under the sampling law (temperature 1, top-p 0.95) | yes from natlang-b12074 (dc9410950: host-side nucleus draw, untruncated logp) | n/a | yes | yes (untruncated logp recorded) | run the fork's `test_natlang_rl_capture.py` with `LLAMA_NATLANG_GGUF` set to a natlang export before the fork collects RL data |
+| RL capture under the sampling law (temperature 1, top-p 0.95) | from fork 6d270f086 (not yet released): natlang-b12074 drew the nucleus on the device and recorded its renormalized logp, and an omitted top_p ran at the server default 0.95 | n/a | yes | yes (untruncated logp recorded) | release 6d270f086 and bump the pin before the fork collects RL data. Check (3 passed on 6d270f086, 2 of 3 fail on b12074): `python scripts/neuralese_data/tiny_lfm3_gguf.py OUT --llama-cpp ../llama.cpp-neuralese` (prints the GGUF), then in the fork's `tools/server/tests` `LLAMA_SERVER_BIN_PATH=BUILD/bin/llama-server LLAMA_NATLANG_GGUF=GGUF pytest unit/test_natlang_rl_capture.py` |
 | Warm openings kept across restarts | yes (`--slot-save-path`) | no (page reload starts cold) | no | no | low priority: actors restart rarely |
 | Hybrid SWA KV, FP8 KV, mixed adapters in one batch | partly | partly | n/a | yes | none needed for CPU hosts |
