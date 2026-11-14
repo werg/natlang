@@ -2212,3 +2212,13 @@ tasks 58 down / 26 up. Second consecutive eval below -3.5: grpo-v2-run1 FAILED b
 stop-and-diagnose trigger at that eval, not something to wait out until the failure rule fires. The run then held ~100 GB of the
 DGX for 8 h while the learner-side checks that needed ~10 GB waited. The random-sign control and gradient projection checks now
 run on the freed DGX; the cause stays OPEN until they and the dragnet record say otherwise.
+
+Checks on the freed DGX (2026-11-14 afternoon; checkpoint probe on fixed v7 base traces, `</think>` log-prob at the base's
+close points / expected closes per trace): base -2.06 / 0.052; step 8 -0.31 / 0.183; base + step 8's update with each
+element's sign randomized (same magnitudes) -2.06 / 0.052. A random update of step 8's size does nothing, so step 8's
+update is directed: the "noise updates" explanation is refuted. Gradient projection on 3 of run1's groups (direction that
+raises the close hazard, q per token): the advantage-weighted episode-normalized update is not aligned with it beyond
+permuted advantages (z +0.03; low power, 3 groups), but raising the log-prob of ANY sampled token raises the close hazard
+(mean q per reasoning token +2.2, reply +1.8, close +3.5): any net positive likelihood push on own samples shortens
+reasoning. Next: `grpo.py --replay` of run1's groups from the base with shuffled, then real advantages (k2), probing each
+checkpoint: a shift under shuffled advantages is a learner bias (bug).
