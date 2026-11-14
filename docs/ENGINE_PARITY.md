@@ -49,6 +49,7 @@ context between its slots.
 | a6401bbd3 | streamed reasoning of a guided reply | row above |
 | 26a65db62 | the release builds the in-page engine; deepseek41 compiles on wasm32 | page only |
 | dc9410950 | RL capture under top-p | row above; native and SGLang already did it |
+| 6d270f086 | top-p RL capture draws on the host (dc9410950's device default overrode it); omitted top_p is no nucleus | row above |
 
 ## Open gaps
 
@@ -60,6 +61,6 @@ context between its slots.
 | Score turns with generating slots (fork 0da69f720, ff6e734e3) | yes | n/a (one request at a time) | n/a | SGLang's scheduler; unmeasured | measure decision latency under collection load |
 | Prefix-cache hit telemetry | upstream counters | n/a | `natlang_prefix_cache_hits/misses` | `natlang_sglang_prompt_tokens_total` and `natlang_sglang_cached_prompt_tokens_total` (2026-11-14) | none |
 | Streaming the open reasoning of a guided reply (fork a6401bbd3) | yes | yes from natlang-b12074 | no (sent at the end) | no | low priority for RL; add when an interactive host serves from Python |
-| RL capture under the sampling law (temperature 1, top-p 0.95) | yes from natlang-b12074 (dc9410950: host-side nucleus draw, untruncated logp) | n/a | yes | yes (untruncated logp recorded) | run the fork's `test_natlang_rl_capture.py` with `LLAMA_NATLANG_GGUF` set to a natlang export before the fork collects RL data |
+| RL capture under the sampling law (temperature 1, top-p 0.95) | from fork 6d270f086 (not yet released): natlang-b12074 drew the nucleus on the device and recorded its renormalized logp, and an omitted top_p ran at the server default 0.95 | n/a | yes | yes (untruncated logp recorded) | release 6d270f086 and bump the pin before the fork collects RL data. Check (3 passed on 6d270f086, 2 of 3 fail on b12074): `python scripts/neuralese_data/tiny_lfm3_gguf.py OUT --llama-cpp ../llama.cpp-neuralese` (prints the GGUF), then in the fork's `tools/server/tests` `LLAMA_SERVER_BIN_PATH=BUILD/bin/llama-server LLAMA_NATLANG_GGUF=GGUF pytest unit/test_natlang_rl_capture.py` |
 | Warm openings kept across restarts | yes (`--slot-save-path`) | no (page reload starts cold) | no | no | low priority: actors restart rarely |
 | Hybrid SWA KV, FP8 KV, mixed adapters in one batch | partly | partly | n/a | yes | none needed for CPU hosts |
