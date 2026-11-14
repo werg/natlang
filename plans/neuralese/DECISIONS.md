@@ -2185,3 +2185,19 @@ and decisions, and the reference is the frozen start copy. Change (learner only,
 default, loss `d^2/2` (the on-policy reverse-KL gradient, linear in d); k3 stays the logged estimate; new telemetry
 `ref_dlogp_max`, `ref_dlogp_over_5`. grpo-v2-run1 adopts it at its next state-save restart (steps 1-8 trained with k3).
 Open: step 1's grad_norm 69.6 came from the policy term with no KL.
+
+## 2026-11-14: grpo-v2-run1 step 8 held -8.1 pts: reasoning-style drift, no bug (supervisor)
+
+Pop held eval of step 8 vs the Pop base (241/498): 202/504, mean per-task -8.07 pts, CI [-12.8, -3.5], p 0.0005, McNemar
+82:38, tasks 59 down / 29 up, loop rate unchanged. Ruled out: harness/scorer/collector/ts-host (pins differ only in learner code,
+`held_complete` and `lfm3_fast_train`), Pop actor code (only the held manifest builder), engine (same fork 70b1991e, FP8 KV, law),
+export path (step 2 on the same path paired +3.5 pts on 421 samples, CI [-1.2, 8.3]), leakage (no training task id in the held
+exclusion set), language drift (foreign-script episodes 9 -> 4). Cause: the weights moved into a terse reasoning style (reasoning
+chars/call 4,127 -> 2,008, completion tokens/episode 10.8k -> 6.6k, "Let me" 9.4 -> 22.9 per 10k chars), wrong answers 175 -> 231,
+broad across families (trained -6.8, untrained -9.5). The DGX actor shows the same drift from v4 (tokens/call vs family baseline
+0.99 -> 0.52-0.57 at v4-v8), and the advantage did not select it (advantage x log length ~0): noise updates at full Adam step size
+(grad_moment_cosine within +-0.06 throughout, ~10% BF16 weights flipped per step at LR 1e-5) with weak, then (k3, steps 7-8)
+misdirected KL. Under k2 the actor's rollouts recover (length ratio 0.68 -> 0.99 at v9-v11). The run continues under its
+declared rule (two consecutive evals below -3.5 pts fail it; next eval step 12). Next run: k2 from step 1, 64-128 groups per
+step or LR ~3e-6, reasoning tokens per call vs base as a logged early check, cap the weight of decision-only episodes (step 1's
+grad_norm 69.6 came with a group of 8 single-decision episodes).
