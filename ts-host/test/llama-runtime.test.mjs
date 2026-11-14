@@ -9,14 +9,14 @@ import { join } from 'node:path';
 import { discoverLlamaRuntime, inspectLlamaServer, installManagedLlamaRuntime,
   isCompatibleLlamaVersion } from '../dist/model/index.js';
 
-function fakeServer(path, version = '0.8.0', build = 12072) {
+function fakeServer(path, version = '0.8.0', build = 12074) {
   writeFileSync(path, `#!${process.execPath}\nconsole.log('version: ${version} (build ${build}, commit b29c606e2)');\n`);
   chmodSync(path, 0o755);
 }
 
 test('llama.cpp compatibility checks version and build boundaries', () => {
-  assert.equal(isCompatibleLlamaVersion('0.8.0', 12072), true);
-  assert.equal(isCompatibleLlamaVersion('0.8.0-dev', 12072), true);
+  assert.equal(isCompatibleLlamaVersion('0.8.0', 12074), true);
+  assert.equal(isCompatibleLlamaVersion('0.8.0-dev', 12074), true);
   assert.equal(isCompatibleLlamaVersion('0.8.0', 12068), false);
   assert.equal(isCompatibleLlamaVersion('0.5.0', 11146), false, 'llama.cpp before b11938 cannot load LFM3');
   assert.equal(isCompatibleLlamaVersion('0.9.0', 20000), false);
@@ -75,4 +75,19 @@ test('CLI setup never downloads without consent in a noninteractive process', ()
   assert.match(result.stderr, /without a terminal natlang cannot ask first/);
   assert.match(result.stderr, /natlang setup --yes/, 'the error names the command that proceeds');
   assert.equal(discoverLlamaRuntime({ ...process.env, PATH: '', NATLANG_RUNTIME_HOME: root }).selected, null);
+});
+
+test('the in-page engine is the managed runtime fork commit compiled to WebAssembly', async () => {
+  // scripts/update_llama_runtime.mjs --fork natlang-bNNNN vendors both from one release; a pin bump without the browser
+  // build fails here, so the page never runs older server code than the CLI (docs/ENGINE_PARITY.md).
+  const { LLAMA_RUNTIME_RELEASE } = await import('../dist/llama-runtime-release.js');
+  const { LLAMA_FORK_SOURCE } = await import('../dist/llama-fork-source.js');
+  const provenance = JSON.parse(readFileSync(new URL('../vendor/wllama/provenance.json', import.meta.url), 'utf8'));
+  assert.equal(provenance.schema, 'natlang.wllama-vendor/2');
+  assert.ok(LLAMA_FORK_SOURCE.commit.startsWith(LLAMA_RUNTIME_RELEASE.commit), 'source build and release pin one commit');
+  assert.equal(provenance.llama_cpp.release, `natlang-b${LLAMA_RUNTIME_RELEASE.build}`,
+    `vendored wllama is from ${provenance.llama_cpp.release}, the runtime pins natlang-b${LLAMA_RUNTIME_RELEASE.build}: rerun scripts/update_llama_runtime.mjs`);
+  assert.ok(LLAMA_FORK_SOURCE.commit.startsWith(provenance.llama_cpp.commit));
+  for (const [path, sha256] of Object.entries(provenance.sha256))
+    assert.equal(createHash('sha256').update(readFileSync(new URL(`../vendor/${path}`, import.meta.url))).digest('hex'), sha256, path);
 });

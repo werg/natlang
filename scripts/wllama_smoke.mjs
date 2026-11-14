@@ -71,7 +71,7 @@ try {
   page = await tab.evaluate(async items => {
     const { Wllama } = await import('/esm/index.js');
     const engine = new Wllama({ default: '/esm/wasm/wllama.wasm' });
-    await engine.loadModelFromUrl(location.origin + '/model.gguf', { useCache: false, n_ctx: 4096, n_gpu_layers: 0 });
+    await engine.loadModelFromUrl(location.origin + '/model.gguf', { useCache: false, n_ctx: 4096, n_gpu_layers: 0, cache_idle_slots: false /* as ts-host/src/browser/local-model.ts loads it */ });
     const all = await engine.createNatlangScore({ items });
     const again = await engine.createNatlangScore({ items: [items[1]] });
     return { all: all.results.map(result => result.log_probs ?? result), again: again.results[0].log_probs ?? again.results[0],

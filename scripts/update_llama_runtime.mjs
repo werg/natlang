@@ -118,7 +118,7 @@ async function installWllama(release, base, repository) {
   await rm(join(vendor, 'wllama/esm'), { recursive: true, force: true });
   for (const [to, from] of Object.entries(files)) {
     await mkdir(dirname(join(vendor, to)), { recursive: true });
-    await cp(join(built, from), join(vendor, to), { recursive: true, filter: source => !/\.(map|md)$/.test(source) && !source.endsWith('index.min.js') });
+    await cp(join(built, from), join(vendor, to), { recursive: true, filter: source => !/\.(map|md)$/.test(source) && !/index\.(min\.js|cjs)$/.test(source) });
   }
   const sha256 = async path => createHash('sha256').update(await readFile(join(vendor, path))).digest('hex');
   const provenancePath = join(vendor, 'wllama/provenance.json');

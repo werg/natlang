@@ -77,7 +77,7 @@ A fresh install runs every natural-language call on the stock instruction model 
 on natlang's managed llama.cpp server. Our own LFM3 checkpoints replace it once they are trained.
 
 ```sh
-natlang setup --yes     # natlang's llama.cpp build (natlang-b12072) and the model, verified by SHA-256
+natlang setup --yes     # natlang's llama.cpp build (natlang-b12074) and the model, verified by SHA-256
 natlang doctor          # what would run, and whether it is ready
 ```
 
@@ -191,7 +191,7 @@ changes what a run computes, only its wall time, since runs on one server share 
 ## llama.cpp
 
 The managed runtime is a release of natlang's llama.cpp fork
-[werg/llama.cpp-neuralese](https://github.com/werg/llama.cpp-neuralese), currently natlang-b12072 (llama.cpp 0.8.0):
+[werg/llama.cpp-neuralese](https://github.com/werg/llama.cpp-neuralese), currently natlang-b12074 (llama.cpp 0.8.0):
 prebuilt CPU builds for Linux and Windows (x64, arm64) and Metal builds for macOS, checked by SHA-256. The release also
 carries the Vulkan, ROCm and Windows CUDA builds that Vibestudio's local-models engine installs; natlang's pin selects
 the CPU or Metal archive of each platform from the release manifest's `os`, `arch` and `backends`. The fork adds

@@ -24,7 +24,8 @@ Mechanical guards:
   gap row or in the list below. It also vendors the page build from the same release, and
   `ts-host/test/llama-runtime.test.mjs` fails when the vendored build and the runtime pin come from different releases.
 - `node scripts/wllama_smoke.mjs --model M --server S` compares the page's decision scores with the native server's
-  (ranking, 1-nat tolerance, repeat identity); run it on every pin bump.
+  (ranking, 1-nat tolerance, a repeat after a batch bit-identical); run it on every pin bump. natlang-b12074: same ranking on
+  3 items, largest gap per item 0.58-0.67 nats from native, repeats identical.
 
 ## Fork commits reviewed for parity
 
@@ -46,5 +47,6 @@ Mechanical guards:
 | Prefix-cache hit telemetry | upstream counters | n/a | `natlang_prefix_cache_hits/misses` | `natlang_sglang_prompt_tokens_total` and `natlang_sglang_cached_prompt_tokens_total` (2026-11-14) | none |
 | Streaming the open reasoning of a guided reply (fork a6401bbd3) | yes | yes from natlang-b12074 | no (sent at the end) | no | low priority for RL; add when an interactive host serves from Python |
 | RL capture under the sampling law (temperature 1, top-p 0.95) | yes from natlang-b12074 (dc9410950: host-side nucleus draw, untruncated logp) | n/a | yes | yes (untruncated logp recorded) | run the fork's `test_natlang_rl_capture.py` with `LLAMA_NATLANG_GGUF` set to a natlang export before the fork collects RL data |
+| Idle-slot prompt cache (`cache_idle_slots`) exact on wasm32 | yes | off (`local-model.ts`): with it on and 4 slots, a decision scored after a batch differs by up to 0.5 nats from the same decision before it (native bit-identical under the same flags; exact with it off or with 1 slot; not the thread count, not `swa_full`) | n/a | n/a | find the wasm32 divergence in `server_prompt_cache` save/restore of the hybrid (conv + SWA) state with `scripts/wllama_smoke.mjs` and `cache_idle_slots: true`, then turn it back on |
 | Warm openings kept across restarts | yes (`--slot-save-path`) | no (page reload starts cold) | no | no | low priority: actors restart rarely |
 | Hybrid SWA KV, FP8 KV, mixed adapters in one batch | partly | partly | n/a | yes | none needed for CPU hosts |
