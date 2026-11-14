@@ -1902,6 +1902,10 @@ def train(args):
                 p.copy_(new)
         torch.cuda.synchronize()
         phase['optimizer'] = time.time() - t
+        # Hand the learner phase's cached activation blocks back for the collect phase: on unified memory PyTorch's cache is
+        # system RAM, and grpo-v2-run1 held ~56 GB of it while 32 slots collected (guard stop 2026-11-14 04:56, swap).
+        torch.cuda.empty_cache()
+        record['cuda_reserved_collect_gb'] = round(torch.cuda.memory_reserved() / 2**30, 1)
         elements = sum(p.numel() for p in live.values())
         record.update(bf16_changed_step_fraction=round(changed_step / elements, 6),
                       bf16_changed_vs_start_fraction=round(changed_start / elements, 6) if reference is not None else None)
