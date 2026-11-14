@@ -446,6 +446,55 @@ class Collector:
         return taken
 
 
+class ReplayCollector:
+    """``--replay``: a finished run's archived groups (``ROLLOUTS/<group>.rollouts.jsonl.zst``) offered in group order,
+    ``--min-groups`` a step, each as fresh (no staleness), for learner controls (``--advantage-control``): no actor, no
+    collection, no held eval. Consumer calls read the old run's actor store (``--actor-store``), which is never pruned here."""
+
+    def __init__(self, args, work):
+        from lower_rollout_turns import NativeStates
+        self.args, self.work = args, work
+        self.archives = sorted(Path(args.replay).glob('g*.rollouts.jsonl.zst'))
+        self.groups, self.lock, self.stop, self.paused = {}, threading.Lock(), threading.Event(), threading.Event()
+        self.version = self.generated = self.episodes = self.outstanding = self.cursor = self.next_group = 0
+        self.active_slots, self.variants = 0, {}
+        self.states = NativeStates(args.actor_store)
+
+    def take_groups(self, minimum, maximum, stop=None):
+        import zstandard
+        taken = []
+        while self.archives and len(taken) < minimum:
+            source = self.archives.pop(0)
+            group = int(source.name[1:].split('.')[0])
+            directory = self.work / 'groups' / source.name.split('.')[0]
+            directory.mkdir(parents=True, exist_ok=True)
+            with source.open('rb') as reader, (directory / 'rollouts.jsonl').open('wb') as writer:
+                zstandard.ZstdDecompressor().copy_stream(reader, writer)
+            with (directory / 'rollouts.jsonl').open() as handle:
+                task_id = json.loads(handle.readline())['task_id']
+            self.groups[group] = {'dir': directory, 'task_id': task_id, 'versions': [self.version], 'created': time.time()}
+            self.next_group = group + 1
+            taken.append(group)
+        if len(taken) < minimum and stop is not None:
+            stop.set()                     # the archive is used up: no short step
+        return taken
+
+
+def control_advantages(items, episode_advantage, mode, rng):
+    """``--advantage-control``: 'zero' gives every trained episode advantage 0 (only the KL term remains: the policy must
+    stay put), 'shuffle' permutes the step's episode advantages across episodes (the update keeps its size but no longer
+    follows the reward: it must not move the policy in a consistent direction). ``items`` are the step's chains and
+    decisions, each with its 'episode' key. Returns the episode -> advantage map used."""
+    keys = sorted(episode_advantage)
+    values = [0. if mode == 'zero' else episode_advantage[k] for k in keys]
+    if mode == 'shuffle':
+        rng.shuffle(values)
+    new = dict(zip(keys, values))
+    for item in items:
+        item['advantage'] = new[item['episode']]
+    return new
+
+
 def trainable_rows(rows, stats, top_p=1.):
     """The calls whose actor log-probabilities are the law the learner scores: every sampled token has a finite logp
     (a call captured without sampling records None, which would turn rho, the loss and then every FP32 master into NaN)
@@ -1206,7 +1255,14 @@ def train(args):
     import atexit
     atexit.register(stop_actor)
     actor_thread = None
-    if not args.actor:
+    if args.replay:
+        # learner controls on a finished run's groups: no actor (its counters read None), no weight sync, no held eval,
+        # and the old run's actor store is never pruned
+        if not (args.actor_store and args.actor_export):
+            raise SystemExit('--replay needs --actor-store and --actor-export (the replayed run\'s WORK/actor, WORK/actor/sglang-hf)')
+        args.actor, args.no_actor_sync, args.keep_rollouts = 'http://127.0.0.1:9', True, True
+        args.held_every_hours, args.held_remote, args.held_extra = 0, None, None
+    elif not args.actor:
         actor_thread = threading.Thread(target=launch_actor, daemon=True)
         actor_thread.start()
     # Loaded on the host, then the checkpoint's page cache is dropped before the GPU copy: on the GB10 a CUDA allocation
@@ -1305,8 +1361,11 @@ def train(args):
     atexit.register(shutil.rmtree, weights_dir, True)
     drop_cache([Path(args.actor_export) / 'model.safetensors'])
     saver = StateSaver()
-    collector = Collector(args, tasks, work, source_sha, runtime, first_group=first_group, cursor=cursor)
-    collector.variants = load_variants(args, tasks, work)
+    if args.replay:
+        collector = ReplayCollector(args, work)
+    else:
+        collector = Collector(args, tasks, work, source_sha, runtime, first_group=first_group, cursor=cursor)
+        collector.variants = load_variants(args, tasks, work)
     collector.version = step
     if args.resume:
         reused, left_out = collector.reuse_scored(step, args.max_staleness)
@@ -1377,7 +1436,8 @@ def train(args):
     if args.held_every_hours > 0 and not (work / 'held' / 'step-00000' / 'result.json').exists() \
             and not args.skip_base_held and not args.held_baseline and not args.held_remote:
         collector.paused.set()            # the start policy's held measurement goes first (held() resumes collection)
-    slots = [threading.Thread(target=collector.slot, args=(index,), daemon=True) for index in range(args.slots)]
+    slots = [threading.Thread(target=collector.slot, args=(index,), daemon=True)
+             for index in range(0 if args.replay else args.slots)]
     for thread in slots:
         thread.start()
 
@@ -1616,6 +1676,7 @@ def train(args):
         stats = collections.Counter()
         chains, decisions, rewards, spread, dropped_stale, staleness, task_rewards = [], [], [], 0, 0, [], []
         episode_units = {}   # trained episode -> [sampled tokens, calls, decisions] (loss_scales)
+        episode_advantage = {}
         for group in groups:
             try:
                 task_id, episodes, versions = load_group(collector, group, stats)
@@ -1645,6 +1706,7 @@ def train(args):
                 kept = exp0_sft.chains_of([episode], max_len=args.max_sequence_tokens)
                 stats['calls_too_long_dropped'] += len(episode['rows']) - sum(len(c['segs']) for c in kept)
                 key = len(episode_units)
+                episode_advantage[key] = advantage
                 episode_units[key] = [sum(n for c in kept for _, n, _ in c['segs']), sum(len(c['segs']) for c in kept), 0]
                 for chain in kept:
                     chain['advantage'] = advantage
@@ -1659,6 +1721,9 @@ def train(args):
                         episode_units[key][2] += 1
                         decisions.append({'row': d, 'advantage': advantage, 'group': group, 'task_id': task_id,
                                           'stale': stale, 'actor_version': step - stale, 'episode': key})
+        if args.advantage_control != 'none':
+            control_advantages([*chains, *decisions], episode_advantage, args.advantage_control,
+                               random.Random(args.seed + step))
         # Loss normalization (loss_scales): by default every trained episode weighs the same and a sampled decision (one
         # categorical action) counts as one call of its episode. `units` only normalizes the logged token means.
         loss_tokens = sum(length for c in chains for _, length, _ in c['segs'])
@@ -1667,6 +1732,8 @@ def train(args):
         episodes_trained = sum(1 for token_scale, decision_scale in scales.values() if token_scale or decision_scale)
         phase['lower'] = time.time() - t
         record = {'step': step + 1, 'groups': len(groups), 'groups_with_spread': spread,
+                  'advantage_control': args.advantage_control if args.advantage_control != 'none' else None,
+                  'replay_groups': [min(groups), max(groups)] if args.replay and groups else None,
                   'spread_fraction': round(spread / max(1, len(groups)), 3), 'dropped_stale_groups': dropped_stale,
                   'staleness': dict(collections.Counter(staleness)), 'episodes': len(rewards),
                   'reward_mean': round(sum(rewards) / max(1, len(rewards)), 4), 'sequences': len(chains),
@@ -2147,6 +2214,12 @@ def main():
                         'a start-policy result of another setting is moved aside and re-measured')
     t.add_argument('--pop-max-running', type=int, default=16, help="Pop actor's concurrent sequences (capacity)")
     t.add_argument('--unit-prefix', default='grpo')
+    t.add_argument('--replay', help="learner control: train on a finished run's archived groups (its ROLLOUTS dir of "
+                   "<group>.rollouts.jsonl.zst, --min-groups a step in group order) instead of collecting; no actor, "
+                   "no held eval; needs --actor-store and --actor-export of that run")
+    t.add_argument('--advantage-control', choices=('none', 'zero', 'shuffle'), default='none',
+                   help="learner control: 'zero' trains every episode at advantage 0 (KL only: the policy must stay put), "
+                   "'shuffle' permutes each step's episode advantages across episodes (no consistent drift allowed)")
     t.add_argument('--synthetic-reward', help='sanity check: replace the task outcome by a trivially learnable reward '
                    '(short-calls:N = mean sampled tokens per model call under N; short-calls = minus that mean / 1000); the task '
                    'outcome is logged beside it')

@@ -1,5 +1,6 @@
 """CPU checks of the GRPO learner's host-side pieces (scripts/neuralese_data/grpo.py)."""
 import collections
+import json
 import math
 import sys
 import threading
@@ -250,3 +251,33 @@ def test_grad_spike_sentinel_flags_five_times_the_median(tmp_path):
                                                   for i, g in enumerate([0.58, 0.43, 0.76, 0.5], 1)))
     assert grpo.grad_spike(tmp_path, 6.09) == {'grad_norm_vs_median': 11.28, 'grad_spike': True}
     assert grpo.grad_spike(tmp_path, 0.66)['grad_spike'] is False
+
+
+def test_advantage_controls_zero_and_shuffle_keep_the_episodes():
+    import random
+    items = [{'episode': 0, 'advantage': 1.}, {'episode': 0, 'advantage': 1.}, {'episode': 1, 'advantage': -1.},
+             {'episode': 2, 'advantage': 0.5}]
+    advantages = {0: 1., 1: -1., 2: 0.5}
+    zero = [dict(i) for i in items]
+    assert grpo.control_advantages(zero, advantages, 'zero', random.Random(0)) == {0: 0., 1: 0., 2: 0.}
+    assert all(i['advantage'] == 0. for i in zero)
+    shuffled = [dict(i) for i in items]
+    new = grpo.control_advantages(shuffled, advantages, 'shuffle', random.Random(3))
+    assert sorted(new.values()) == sorted(advantages.values())          # same magnitudes, permuted
+    assert shuffled[0]['advantage'] == shuffled[1]['advantage'] == new[0]  # one episode, one advantage
+
+
+def test_replay_collector_offers_archived_groups_in_order(tmp_path):
+    import zstandard
+    from types import SimpleNamespace
+    archive = tmp_path / 'rollouts'
+    archive.mkdir()
+    for g in (3, 1, 2):
+        (archive / f'g{g:06d}.rollouts.jsonl.zst').write_bytes(
+            zstandard.ZstdCompressor().compress(json.dumps({'task_id': f't{g}'}).encode() + b'\n'))
+    work = tmp_path / 'work'
+    collector = grpo.ReplayCollector(SimpleNamespace(replay=str(archive), actor_store=str(tmp_path / 'store')), work)
+    stop = threading.Event()
+    assert collector.take_groups(2, 2, stop) == [1, 2]
+    assert collector.groups[2]['task_id'] == 't2' and (work / 'groups' / 'g000002' / 'rollouts.jsonl').exists()
+    assert collector.take_groups(2, 2, stop) == [3] and stop.is_set()    # used up: no short step afterwards
