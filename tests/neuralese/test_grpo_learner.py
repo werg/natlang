@@ -1,5 +1,6 @@
 """CPU checks of the GRPO learner's host-side pieces (scripts/neuralese_data/grpo.py)."""
 import collections
+import json
 import math
 import sys
 import threading
@@ -242,3 +243,68 @@ def test_reasoning_style_sentinel_flags_a_halved_reasoning_length(tmp_path):
     (tmp_path / 'train.jsonl').write_text('{"event": "x"}\n{"step": 1, "reasoning_tokens_per_call": 6.0}\n')
     assert grpo.style_shift(tmp_path, style) == {'reasoning_vs_first_step': 0.5, 'reasoning_shift': True}
     assert grpo.style_shift(tmp_path, {'reasoning_tokens_per_call': 5.0})['reasoning_shift'] is False
+
+
+def test_grad_spike_sentinel_flags_five_times_the_median(tmp_path):
+    assert grpo.grad_spike(tmp_path, 6.0) == {}                           # no steps logged yet
+    (tmp_path / 'train.jsonl').write_text(''.join(f'{{"step": {i}, "grad_norm": {g}}}\n'
+                                                  for i, g in enumerate([0.58, 0.43, 0.76, 0.5], 1)))
+    assert grpo.grad_spike(tmp_path, 6.09) == {'grad_norm_vs_median': 11.28, 'grad_spike': True}
+    assert grpo.grad_spike(tmp_path, 0.66)['grad_spike'] is False
+
+
+def test_advantage_controls_zero_and_shuffle_keep_the_episodes():
+    import random
+    items = [{'episode': 0, 'advantage': 1.}, {'episode': 0, 'advantage': 1.}, {'episode': 1, 'advantage': -1.},
+             {'episode': 2, 'advantage': 0.5}]
+    advantages = {0: 1., 1: -1., 2: 0.5}
+    zero = [dict(i) for i in items]
+    assert grpo.control_advantages(zero, advantages, 'zero', random.Random(0)) == {0: 0., 1: 0., 2: 0.}
+    assert all(i['advantage'] == 0. for i in zero)
+    shuffled = [dict(i) for i in items]
+    new = grpo.control_advantages(shuffled, advantages, 'shuffle', random.Random(3))
+    assert sorted(new.values()) == sorted(advantages.values())          # same magnitudes, permuted
+    assert shuffled[0]['advantage'] == shuffled[1]['advantage'] == new[0]  # one episode, one advantage
+
+
+def test_replay_collector_offers_archived_groups_in_order(tmp_path):
+    import zstandard
+    from types import SimpleNamespace
+    archive = tmp_path / 'rollouts'
+    archive.mkdir()
+    for g in (3, 1, 2):
+        (archive / f'g{g:06d}.rollouts.jsonl.zst').write_bytes(
+            zstandard.ZstdCompressor().compress(json.dumps({'task_id': f't{g}'}).encode() + b'\n'))
+    work = tmp_path / 'work'
+    collector = grpo.ReplayCollector(SimpleNamespace(replay=str(archive), actor_store=str(tmp_path / 'store')), work)
+    stop = threading.Event()
+    assert collector.take_groups(2, 2, stop) == [1, 2]
+    assert collector.groups[2]['task_id'] == 't2' and (work / 'groups' / 'g000002' / 'rollouts.jsonl').exists()
+    assert collector.take_groups(2, 2, stop) == [3] and stop.is_set()    # used up: no short step afterwards
+
+
+def test_episode_normalization_rewards_short_reasoning_the_task_never_selected():
+    """Exact expectation of the policy term on a reasoning-length knob the reward ignores: each call independently reasons
+    1 or 2 tokens (logit theta of 1), the answer is right with p 0.5 independently, and a wrong answer costs a second call
+    (grpo-v2-run1: failures 18.1 calls vs 8.9 for successes, reasoning per call 1,021 vs 1,106 tokens). The true gradient
+    on theta is 0. Per-episode normalization (`episode`: A_i times the mean over its own T_i tokens) is the
+    score-function estimator of E[A / T], whose T depends on every call's sampled length: short successes outweigh long
+    failures and it pushes every call toward shorter reasoning. One constant normalization (`token`) is unbiased."""
+    import itertools
+    pi = {1: 0.5, 2: 0.5}
+    score = {1: 1 - pi[1], 2: -pi[1]}       # d log pi(l) / d theta
+    outcomes = []                           # (lengths of the calls, correct, probability)
+    for c in (0, 1):
+        for lengths in itertools.product((1, 2), repeat=1 if c else 2):
+            outcomes.append((lengths, c, 0.5 * math.prod(pi[l] for l in lengths)))
+    episodes = {k: (sum(lengths), len(lengths), 0) for k, (lengths, _, _) in enumerate(outcomes)}
+    for norm in ('token', 'episode'):
+        scales = grpo.loss_scales(episodes, norm, 'token')
+        if norm == 'token':      # one constant for the whole step (the expectation, not this enumeration's total)
+            scales = {k: (1., 0.) for k in scales}
+        grad = sum(p * scales[k][0] * (c - 0.5) * sum(score[l] for l in lengths)
+                   for k, (lengths, c, p) in enumerate(outcomes))
+        if norm == 'token':
+            assert abs(grad) < 1e-12
+        else:
+            assert grad > 0.002  # toward shorter reasoning in every call

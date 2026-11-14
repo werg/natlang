@@ -38,6 +38,17 @@ so w5 is retired (data kept, never resumed) and the base is the start policy.
   never a gate.
 - **Heartbeats check, they do not re-plan.** A monitoring cycle checks that the pinned experiments run correctly and
   the machines are healthy, and fixes breakage. Plans change between experiments, from their results.
+- **A significant unexplained held regression ends the experiment at that eval** (owner, 2026-11-14). A paired held
+  result below the declared failure threshold with p < 0.05 whose cause is not known stops the run and starts the bug hunt
+  on the freed machine. The declared failure rule is a last resort, not permission to continue: grpo-v2-run1 ran 7 more steps
+  (8 h, ~100 GB of the DGX) after step 8's -8.1 pts until step 12 confirmed it, while learner checks needing ~10 GB waited.
+  Likewise, a learner sentinel firing (grad_norm >5x the run's median, a reasoning-length shift, KL jump) is diagnosed at
+  that step, not watched. "Don't touch a pinned experiment mid-measurement" protects valid measurements; a regressing run
+  with a suspected bug is not one.
+- **Each heartbeat asks what the machines are worth.** Is any running job's result already decided or uninformative, and is
+  anything (diagnosis, the next run) waiting on memory or GPU it holds? Then stop it. Every run leaves >= 15 GB of DGX
+  headroom for diagnostics and probes. A run's stop also stops its Pop eval actor. The heartbeat prompt names the
+  experiments actually in flight; a stale list is fixed in the same cycle.
 - **The training and RL stack uses standard tooling** (an HF training loop, the SGLang server) and minimal crisp
   code. Build infrastructure only when the next experiment needs it; no new transitions, qualification scopes,
   controllers or custody schemas.
@@ -61,8 +72,10 @@ budget yet), wall clock 3600 s as a safety net only (unscored; run2: 4 of 1,100 
 (`decision_turns`: log softmax of the learner's option scores over prompt + each captured continuation); Neuralese-state
 consumer calls train too, the imported state fixed context spliced from the actor's block store as the fork fed it (K/V
 pre-RoPE, conv B*x; `lfm3_fast_train.import_tensors`, no producer gradient; `plans/MODEL_FACING_CHANGES.md` 2026-11-13); loss on sampled tokens
-`-min(rho, 2) * A * logp + 0.02 * k2(start || policy)` (k2 = d²/2 with d = logp_start - logp, `--kl-estimator k2`; the k3 loss e^d - d - 1 gave a few T=1 tail tokens at d ≈ 10-12 ~90% of grpo-v2-run1 step 7's clipped update; k3 stays the logged `kl_mean`, beside `ref_dlogp_max` and `ref_dlogp_over_5`), `A` group-normalized, averaged over each episode's units and then over the step's
-episodes (`--loss-norm episode`; `token` is the old sum over all tokens: failures are 1.7x longer and 97% of the mass was reasoning), a sampled
+`-min(rho, 2) * A * logp + 0.02 * k2(start || policy)` (k2 = d²/2 with d = logp_start - logp, `--kl-estimator k2`; the k3 loss e^d - d - 1 gave a few T=1 tail tokens at d ≈ 10-12 ~90% of grpo-v2-run1 step 7's clipped update; k3 stays the logged `kl_mean`, beside `ref_dlogp_max` and `ref_dlogp_over_5`), `A` group-normalized, summed over all the step's units and divided by their count (`--loss-norm token`, from 2026-11-14:
+`episode`, averaging over each episode's own units first, is the score-function estimator of E[A/T] with T sampled; successes
+make fewer calls, so it rewarded shorter reasoning in every call, which the task never selected: run1's groups z +8.8, a candidate
+cause of grpo-v2-run1's drift under replay test, DECISIONS 2026-11-14), a sampled
 decision counting as one average call of its episode (`--decision-weight call`), no policy term on a token the actor sampled below
 log-probability -7 when `A > 0` (`--tail-logp-floor`; 0.5% of tokens at untruncated T=1). Sampling law (owner 2026-11-13): temperature 1 with
 top-p 0.95 for collection, held eval and the learner alike (`common/sampling.py` `RL_TOP_P`, `--top-p`, 1.0 off; it travels as `top_p` in
@@ -94,7 +107,7 @@ actor tok/s per phase). The KL
 reference runs the policy's own training graph (a no_grad pass compiles other kernels: KL 5e-4 at identical weights). Both passes compute a prompt prefix that several of the step's chains share (>= 256 tokens: the system prompt, a group's opening prompt, an episode's earlier calls) once, as a prefix tree (`lfm3_fast_train.prefix_tree`/`run_prefix_tree`: the prefix's keys/values and conv tail feed its continuations, whose gradients reach it through detached copies and flow back through it once, exact; prefixes are fully recomputed and come out of the leaves' `--activation-gb`; chains reading imported state stay whole; `--share-prefix-tokens`, 0 off). On run2's groups it removes 35-50% of forward tokens; `train.jsonl` logs `chain_tokens` and `shared_prefix_tokens_saved`. After each in-place update the front attests what it serves (`POST /v1/neuralese/rebind-policy`:
 the step's checkpoint sha, else the served weights' sha; the native engine keeps the start checkpoint). `train.jsonl` logs per step: reward
 mean, spread fraction, KL, rho (mean, pre/post-cap max, capped fraction, |log rho|), the cosine of the step's gradient with AdamW's first moment
-(`grad_moment_cosine`), the gradient-mass share of reasoning, reply and decision terms, the tail-masked fraction, learner and actor tokens/s, phase seconds.
+(`grad_moment_cosine`), the pre-clip grad_norm over the run's median (`grad_spike` above 5x, printed: grpo-v2-run1 step 7 was 11x), the gradient-mass share of reasoning, reply and decision terms, the tail-masked fraction, learner and actor tokens/s, phase seconds.
 Memory (smoke 2026-11-12): on the GB10 the unit's MemoryMax (= ledger budget) also bounds its CUDA allocations, so the
 budget must cover GPU + host: learner CUDA 19.3 GB before AdamW state, 32 GB peak at step 1, about 36 GB with the FP32 moments
 (FP32 masters + moments + FP32 gradients alone are 27 GB), host about 5 GB plus the collector node processes (in the same

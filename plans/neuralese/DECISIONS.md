@@ -2205,3 +2205,35 @@ misdirected KL. Under k2 the actor's rollouts recover (length ratio 0.68 -> 0.99
 declared rule (two consecutive evals below -3.5 pts fail it; next eval step 12). Next run: k2 from step 1, 64-128 groups per
 step or LR ~3e-6, reasoning tokens per call vs base as a logged early check, cap the weight of decision-only episodes (step 1's
 grad_norm 69.6 came with a group of 8 single-decision episodes).
+
+Step 12 (Pop, 2026-11-14 13:39): 199/488 vs the base's 241/498, primary -7.7 pts, CI [-12.4, -2.8], p 0.0005, McNemar 82:41,
+tasks 58 down / 26 up. Second consecutive eval below -3.5: grpo-v2-run1 FAILED by its declared rule and was stopped at step 15
+(the step-14 Pop eval was cut at 41/512). It should have stopped at step 8: an unexplained significant held regression is a
+stop-and-diagnose trigger at that eval, not something to wait out until the failure rule fires. The run then held ~100 GB of the
+DGX for 8 h while the learner-side checks that needed ~10 GB waited. The random-sign control and gradient projection checks now
+run on the freed DGX; the cause stays OPEN until they and the dragnet record say otherwise.
+
+Checks on the freed DGX (2026-11-14 afternoon; checkpoint probe on fixed v7 base traces, `</think>` log-prob at the base's
+close points / expected closes per trace): base -2.06 / 0.052; step 8 -0.31 / 0.183; base + step 8's update with each
+element's sign randomized (same magnitudes) -2.06 / 0.052. A random update of step 8's size does nothing, so step 8's
+update is directed: the "noise updates" explanation is refuted. Gradient projection on 3 of run1's groups (direction that
+raises the close hazard, q per token): the advantage-weighted episode-normalized update is not aligned with it beyond
+permuted advantages (z +0.03; low power, 3 groups), but raising the log-prob of ANY sampled token raises the close hazard
+(mean q per reasoning token +2.2, reply +1.8, close +3.5): any net positive likelihood push on own samples shortens
+reasoning. Next: `grpo.py --replay` of run1's groups from the base with shuffled, then real advantages (k2), probing each
+checkpoint: a shift under shuffled advantages is a learner bias (bug).
+
+First-principles code analysis (forked investigator, briefed with observations only; 2026-11-14): candidate cause, a
+learner bias. `--loss-norm episode` (default since 2026-11-13, all of run1) weights each episode's tokens by A_i / T_i: the
+score-function estimator of E[A/T], with T the sampled length. Within groups successes make fewer calls (8.9 vs 18.1;
+7.8k vs 14.1k tokens) but reason about as long per call (1,106 vs 1,021 tokens), so the estimator pushes every call toward
+shorter reasoning the reward never selected. On run1's archived groups E[A * Tbar / T] = +0.24 vs a within-group permutation
+null ±0.028 (z +8.8; steps 1-3 z 4.6, 4-8 z 3.9, 9+ z 6.6): a consistent push every step, which Adam accumulates while the
+task directions cancel (cosine ±0.06), as the random-sign control requires. Exact-expectation test added. Secondary: the k3
+loss restrains upward moves only by β per token (k2 by β|d|), an amplifier under steps 1-8; decision-only episodes weigh a
+whole episode (step 1 grad_norm 69.6); step 3's 2-group step took a full Adam step. Not explained by it: sampled tokens
+more confident on base traces (-0.79 -> -0.61). Not checked: prefix-tree internals, import_tensors, export mapping, the
+pin-650bcaec stop path. Acted on: `--loss-norm token` (the unbiased constant normalization) is the default from now on.
+Test running: replay of run1's groups from the base, real advantages, episode vs token norm side by side (probe at steps
+2/4/6); the shuffled-advantage arm (which removes Cov(A, 1/T) and so is predicted null either way) tests other
+reward-independent biases. Cause stays OPEN until the pair separates.
