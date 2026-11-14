@@ -155,7 +155,8 @@ class SglangEngine(Engine):
             self.native_reloads = getattr(self, 'native_reloads', 0) + 1
 
     def bind_sglang(self, url, *, export_manifest, fork, workers=512, adapter_slots=0, adapter_rank=32,
-                    projection='native', overlap_schedule=False, kv_cache_dtype='auto', kv_layout='full'):
+                    projection='native', overlap_schedule=False, kv_cache_dtype='auto', kv_layout='full',
+                    warm_openings=None):
         self.sglang_url, self.sglang_workers = url.rstrip('/'), workers
         # Native adapters on SGLang (fork NatlangAdapters): `adapter_slots` resident stacks of summed rank
         # <= `adapter_rank` per module; the front assigns slots and never reassigns one while a request uses it.
@@ -190,6 +191,10 @@ class SglangEngine(Engine):
         self.native_fallback_reasons = {}
         self.native_endpoint_metrics = {}
         self._sglang_lock = threading.Lock()
+        # Decision openings warmed into SGLang's radix cache (`_sglang_warm_opening`): on by default,
+        # NATLANG_SGLANG_WARM_OPENINGS=0 (or warm_openings=False) opts out.
+        self.sglang_warm_openings = (os.environ.get('NATLANG_SGLANG_WARM_OPENINGS', '1') != '0' if warm_openings is None
+                                     else bool(warm_openings))
         # Bound in every SGLang-sampled capture (rl.actors ``actor_export``, kind exact: the checkpoint's own weights
         # in another engine). The learner recomputes those tokens under its own forward, guards the engine mismatch
         # per episode and corrects it with the loss's importance weights (rl.native_replay DEFAULT_ENGINE_GUARD).
@@ -226,6 +231,8 @@ class SglangEngine(Engine):
                 binding['actor_export'] = dict(self.sglang_actor_export)
             binding['in_place_update'] = {'version': version, 'policy_id': policy_id, 'weights_sha256': weights_sha256,
                                           'native_engine': 'start checkpoint (not updated in place)'}
+            # New weights: the radix cache holds none of the old policy's openings (update_weights_from_disk flushes it).
+            self.__dict__.pop('_sglang_openings', None)
         return dict(binding['in_place_update'])
 
     def progress_metrics(self):
@@ -233,6 +240,8 @@ class SglangEngine(Engine):
                 'natlang_sglang_generated_tokens_total': self.sglang_tokens,
                 'natlang_sglang_prompt_tokens_total': getattr(self, 'sglang_prompt_tokens', 0),
                 'natlang_sglang_cached_prompt_tokens_total': getattr(self, 'sglang_cached_tokens', 0),
+                'natlang_sglang_opening_warms_total': getattr(self, 'sglang_opening_warms', 0),
+                'natlang_sglang_opening_warm_failures_total': getattr(self, 'sglang_opening_warm_failures', 0),
                 'natlang_native_fallback_requests_total': self.native_fallbacks,
                 'natlang_sglang_native_state_writes_total': self.sglang_state_writes,
                 **{f'natlang_sglang_{key}_total': value for key, value in
@@ -889,6 +898,10 @@ class SglangEngine(Engine):
         ids = self._sglang_prompt(seq)
         custom = {**({IMPORT_KEY: seq.sglang_imports} if seq.sglang_imports else {}), **({ADAPTER_KEY: adapter} if adapter else {})}
         params = {'temperature': 0.0, 'max_new_tokens': 1, **({'custom_params': custom} if custom else {})}
+        if continuations and getattr(self, 'sglang_warm_openings', True):
+            opening = self._sglang_opening(item, ids)
+            if opening is not None:
+                self._sglang_warm_opening(ids[:opening], adapter)
 
         def score(continuation):
             if not continuation:
@@ -904,6 +917,77 @@ class SglangEngine(Engine):
         with self._sglang_lock:
             self.sglang_requests += 1
         return decision_response(item, seq, continuations, results)
+
+    # Opening reuse across inputs (`cache_messages` k: the first k messages are the function's opening, shared by all of
+    # its inputs; the llama.cpp fork checkpoints its state at that message boundary, e51ca6d68). The pinned SGLang fork
+    # (ace8d6868, `--mamba-radix-cache-strategy extra_buffer`) keeps LFM3's conv state in the radix tree only at track
+    # points: a prefill of tokens [p, e) snapshots it once, at p + floor((e - p) / G) * G
+    # (`ScheduleBatch._mamba_radix_cache_v2_req_prepare_for_extend`; G = lcm(LFM3's mamba_chunk_size 256, page size) =
+    # 256), and a finished request inserts its tokens only up to that snapshot (`MambaComponent.prepare_for_caching_req`
+    # and `_select_finished_checkpoint` cap the key `UnifiedRadixCache.checkpoint_into_tree` inserts). A request resumes
+    # only from a stored state on its own path. So the inputs of one function do not share the opening by themselves:
+    # each input stores its state past the opening, inside its own input; a later input that finds the opening's KV
+    # without a state prefills it all and tracks a branching state there (`MambaComponent.
+    # finalize_match_result_in_tree_core`, `Req.mamba_branching_seqlen`) for the inputs after it; and the items of one
+    # batch arrive together (FCFS admits them in one prefill batch), so every one of them prefills the whole opening.
+    # A prefill request of exactly the opening, sent once before the items score their options, stores the state at
+    # floor(n / G) * G of an n-token opening: every input then prefills at most G - 1 opening tokens plus its own.
+    # Landing exactly on the message boundary would need a fork parameter to track at a given position.
+    sglang_state_grid = 256    # G above; an opening shorter than G stores no state, so it is not warmed
+    sglang_opening_ttl = 60.0  # seconds a warmed opening counts as cached; the next item after that warms it again
+    sglang_opening_memo = 4096
+
+    def _sglang_opening(self, item, ids):
+        """The token length of the item's `cache_messages` opening in its prompt ids (None: no usable opening)."""
+        count = item.get('cache_messages')
+        messages = item.get('messages') or []
+        if isinstance(count, bool) or not isinstance(count, int) or not 0 < count < len(messages):
+            return None
+        from .targets import opening_items
+        try:
+            items = opening_items(self, messages[:count], item.get('tools'))
+        except RequestError:
+            return None
+        # An opening holding native state (imported by placeholder, not a plain token prefix) is left to the radix cache.
+        if any(kind != 'tok' for kind, _ in items):
+            return None
+        tokens = [int(value) for _, value in items]
+        # The prompt must continue the opening's rendering token for token (privileged guidance or a template that
+        # renders the opening differently once more messages follow leaves nothing to warm).
+        if len(tokens) < self.sglang_state_grid or len(tokens) >= len(ids) or ids[:len(tokens)] != tokens:
+            return None
+        return len(tokens)
+
+    def _sglang_warm_opening(self, opening, adapter):
+        """Prefill `opening` once, so SGLang's radix cache holds its KV and conv state before the items that share it
+        score their options; concurrent items with the same opening wait for that one request."""
+        key = hashlib.sha256(json.dumps([list(opening), adapter], sort_keys=True, default=str).encode()).hexdigest()
+        now = time.monotonic()
+        with self._sglang_lock:
+            memo = self.__dict__.setdefault('_sglang_openings', {})
+            entry = memo.get(key)
+            owner = entry is None or (entry['done'] is not None and now - entry['done'] > self.sglang_opening_ttl)
+            if owner:
+                memo.pop(key, None)
+                entry = memo[key] = {'event': threading.Event(), 'done': None}
+                while len(memo) > self.sglang_opening_memo:
+                    memo.pop(next(iter(memo)))
+        if not owner:
+            entry['event'].wait()
+            return
+        try:
+            self._sglang_generate({'input_ids': list(opening), 'sampling_params': {
+                'temperature': 0.0, 'max_new_tokens': 1, **({'custom_params': {ADAPTER_KEY: adapter}} if adapter else {})}})
+            with self._sglang_lock:
+                self.sglang_opening_warms = getattr(self, 'sglang_opening_warms', 0) + 1
+        except Exception:  # an optimization only: the items score anyway and report a backend failure themselves
+            with self._sglang_lock:
+                self.sglang_opening_warm_failures = getattr(self, 'sglang_opening_warm_failures', 0) + 1
+                if memo.get(key) is entry:
+                    del memo[key]
+        finally:
+            entry['done'] = time.monotonic()
+            entry['event'].set()
 
     def _sglang_import(self, seq, ids, block_id, *, stop_gradient, source_occurrence):
         """An imported native-state part, as the native engine's `_native_consume_impl` builds it.
