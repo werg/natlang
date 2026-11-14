@@ -45,8 +45,11 @@ SCORE_ITEM_FIELDS = {
     'adapters': 'served',
     'native_state_modes': 'served',
     'native_recording': 'served',
-    'cache_messages': 'hint, ignored: the native prefix cache reuses grid blocks of any prompt; SGLang relies on its '
-                      'radix cache (ENGINE_PARITY.md)',
+    'cache_messages': 'cache hint: the native engine ignores it (its prefix cache reuses grid blocks of any prompt); the '
+                      'SGLang actor prefills the opening once before scoring, so its radix cache stores the conv state '
+                      'at the boundary (fork 33230160b, natlang_track_input_end) or within 255 tokens of it (older forks) '
+                      'for every input (sglang_actor._sglang_warm_opening; '
+                      'NATLANG_SGLANG_WARM_OPENINGS=0 opts out; ENGINE_PARITY.md)',
 }
 
 

@@ -616,7 +616,7 @@ async function loadModel() {
     await model?.close(); model = null;
     const { model: loaded, status } = await loadBrowserLocalModel(file ? { kind: 'files', files: [file], id: `file:${file.name}`,
       templateUrl: spec?.templateUrl } : { kind: 'url', url: spec.url, id: spec.id,
-      templateUrl: spec.templateUrl }, options);
+      templateUrl: spec.templateUrl, sha256: spec.sha256 || undefined }, options);
     model = loaded;
     modelSpec = file ? { id: `file:${file.name}`, label: file.name } : spec;
     $('modelButton').classList.add('loaded'); $('modelLabel').textContent = modelSpec.label;

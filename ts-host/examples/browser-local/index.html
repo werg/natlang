@@ -80,7 +80,7 @@
       status(`Loading ${file?.name ?? chosen().label}…`);
       await model?.close();
       const loaded = await loadBrowserLocalModel(file ? { kind: 'files', files: [file], id: file.name, templateUrl: chosen().templateUrl } :
-        { kind: 'url', id: chosen().id, url: chosen().url, templateUrl: chosen().templateUrl }, options);
+        { kind: 'url', id: chosen().id, url: chosen().url, templateUrl: chosen().templateUrl, sha256: chosen().sha256 }, options);
       model = loaded.model;
       $('cpu').disabled = true; $('run').disabled = false; $('suite').disabled = false;
       await inspect();

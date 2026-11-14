@@ -24,29 +24,43 @@ Mechanical guards:
   gap row or in the list below. It also vendors the page build from the same release, and
   `ts-host/test/llama-runtime.test.mjs` fails when the vendored build and the runtime pin come from different releases.
 - `node scripts/wllama_smoke.mjs --model M --server S` compares the page's decision scores with the native server's
-  (ranking, 1-nat tolerance, a repeat after a batch bit-identical); run it on every pin bump. natlang-b12074: same ranking on
-  3 items, largest gap per item 0.58-0.67 nats from native, repeats identical.
+  (ranking and a 1-nat tolerance, for the items and for a repeat after a batch); run it on every pin bump. natlang-b12074:
+  same ranking on 3 items, largest gap per item 0.58-0.67 nats from native, a repeat within 0.16 nats.
+
+## Numerics: a score is reproducible only under a fixed cache layout
+
+A score is bit-reproducible when the sequence's KV cells sit in the same order every time. The managed server runs one KV
+stream per slot (no `--kv-unified`), so a prompt always fills its stream from cell 0 in position order and a repeat is
+bit-identical. The page runs wllama's unified KV cache (all slots share one context), so a sequence's cells land wherever
+earlier requests left room. The attention sums run in cell order, and the order changes the last bits; the int8 rounding of
+the activations in the Q8 matmuls usually absorbs that, but a value that sits on a rounding boundary flips by one int8 step
+and the change grows through the later layers. Measured on LFM3 Q8 (fork dc9410950, 2026-11-14): the attention output of a
+layer differs by at most 6e-8 between the two layouts, with the same softmax weights; most option tokens score
+bit-identically, a few by 0.001-0.14 nats, an option sum by up to 0.5 nats. The idle-slot prompt cache, decision
+checkpoints and the scheduler are exact: identical serialized state before every decode. The smoke test therefore compares
+page repeats by ranking and tolerance. Bit-exact page repeats would need one stream per slot, which divides the page's
+context between its slots.
 
 ## Fork commits reviewed for parity
 
 | Commit | Change | Other engines |
 |---|---|---|
 | a0c92ce36, 0da69f720, ff6e734e3, e51ca6d68 | decision scoring from a shared-prefix checkpoint, score batching with generating slots, `cache_messages` | rows above |
-| a6401bbd3 | streamed reasoning of a guided reply | row above |
+| a6401bbd3 | streamed reasoning of a guided reply | every engine: the page from natlang-b12074; Python native and SGLang from 2026-11-14 (`serve/native_guidance.py`: guidance blanks the open reasoning, it streams as `reasoning_content`, the rest is held back until final). Unguided streams on both Python engines send open reasoning as `reasoning_content` too, the closing tag dropped (`serve/http.py`, 2026-11-14), as the managed server streams it |
 | 26a65db62 | the release builds the in-page engine; deepseek41 compiles on wasm32 | page only |
 | dc9410950 | RL capture under top-p | row above; native and SGLang already did it |
+| 6d270f086 | top-p RL capture draws on the host (dc9410950's device default overrode it); omitted top_p is no nucleus | row above |
 
 ## Open gaps
 
 | Feature | Fork | Page | Python native | SGLang | Next action |
 |---|---|---|---|---|---|
-| Decision: reuse the function's opening across inputs (`cache_messages`, fork e51ca6d68) | yes | yes from natlang-b12074 | equivalent: the prefix cache resumes from any stored grid block | unknown: the radix cache keeps conv state only at its `extra_buffer` track points | at the next pin on the DGX, read `natlang_sglang_cached_prompt_tokens_total` / `natlang_sglang_prompt_tokens_total` over decision calls of one function with different inputs; if the opening is not reused, warm a request that ends at the hinted boundary |
+| Decision: reuse the function's opening across inputs (`cache_messages`, fork e51ca6d68) | yes | yes from natlang-b12074 | equivalent: the prefix cache resumes from any stored grid block | yes, to within 255 tokens (2026-11-14, `sglang_actor._sglang_warm_opening`, on by default, `NATLANG_SGLANG_WARM_OPENINGS=0` opts out): with `extra_buffer` the fork (ace8d6868) snapshots conv state once per prefill, at `prefix + floor(extend / 256) * 256` (`ScheduleBatch._mamba_radix_cache_v2_req_prepare_for_extend`; grid lcm(LFM3 `mamba_chunk_size` 256, page size)), and a finished request inserts its tokens only up to that snapshot (`MambaComponent.prepare_for_caching_req`); a request resumes only from a state on its own path, so each input's state lies inside its own input, the second input re-prefills the opening (only it tracks a branching state there, `finalize_match_result_in_tree_core`), and concurrent items of a batch all do. The actor therefore renders the first `cache_messages` messages, checks they are a token prefix of the prompt, and sends one prefill request of exactly those tokens per distinct opening (concurrent items wait for it; re-sent after 60 s or a weight update) before any option is scored: each input then prefills at most 255 opening tokens plus its own. Exact from the next pin, fork 33230160b (`training/neuralese/sglang-fork.json`): the warm request sets `custom_params.natlang_track_input_end`, the fork's scheduler cuts its prefill so the last extend is a whole number of grids and the state lands on the boundary (`PrefillAdder._natlang_input_end_extend`), and every input prefills only its own messages; the front detects the fork's `NATLANG_TRACK_INPUT_END` marker and keeps the grid-aligned warm against older pins. An opening shorter than 256 tokens stores no state on either | at the next pin on the DGX, read `natlang_sglang_cached_prompt_tokens_total` / `natlang_sglang_prompt_tokens_total` (and `natlang_sglang_opening_warms_total`) over decision calls of one function with different inputs (on fork 33230160b, cached tokens should reach the full opening) |
 | Decision: score items of one batch concurrently | yes | yes (one engine request) | serial (one execution lock) | yes (2026-11-14) | none |
 | Decision: one prefill shared by all options | yes (parent slot checkpoint) | yes | yes | yes: the first option warms the radix cache, the rest run in parallel (each option once since 2026-11-14) | none |
 | Score turns with generating slots (fork 0da69f720, ff6e734e3) | yes | n/a (one request at a time) | n/a | SGLang's scheduler; unmeasured | measure decision latency under collection load |
 | Prefix-cache hit telemetry | upstream counters | n/a | `natlang_prefix_cache_hits/misses` | `natlang_sglang_prompt_tokens_total` and `natlang_sglang_cached_prompt_tokens_total` (2026-11-14) | none |
-| Streaming the open reasoning of a guided reply (fork a6401bbd3) | yes | yes from natlang-b12074 | no (sent at the end) | no | low priority for RL; add when an interactive host serves from Python |
-| RL capture under the sampling law (temperature 1, top-p 0.95) | yes from natlang-b12074 (dc9410950: host-side nucleus draw, untruncated logp) | n/a | yes | yes (untruncated logp recorded) | run the fork's `test_natlang_rl_capture.py` with `LLAMA_NATLANG_GGUF` set to a natlang export before the fork collects RL data |
-| Idle-slot prompt cache (`cache_idle_slots`) exact on wasm32 | yes | off (`local-model.ts`): with it on and 4 slots, a decision scored after a batch differs by up to 0.5 nats from the same decision before it (native bit-identical under the same flags; exact with it off or with 1 slot; not the thread count, not `swa_full`) | n/a | n/a | find the wasm32 divergence in `server_prompt_cache` save/restore of the hybrid (conv + SWA) state with `scripts/wllama_smoke.mjs` and `cache_idle_slots: true`, then turn it back on |
-| Warm openings kept across restarts | yes (`--slot-save-path`) | no (page reload starts cold) | no | no | low priority: actors restart rarely |
+| RL capture under the sampling law (temperature 1, top-p 0.95) | from fork 6d270f086 (not yet released): natlang-b12074 drew the nucleus on the device and recorded its renormalized logp, and an omitted top_p ran at the server default 0.95 | n/a | yes | yes (untruncated logp recorded) | release 6d270f086 and bump the pin before the fork collects RL data. Check (3 passed on 6d270f086, 2 of 3 fail on b12074): `python scripts/neuralese_data/tiny_lfm3_gguf.py OUT --llama-cpp ../llama.cpp-neuralese` (prints the GGUF), then in the fork's `tools/server/tests` `LLAMA_SERVER_BIN_PATH=BUILD/bin/llama-server LLAMA_NATLANG_GGUF=GGUF pytest unit/test_natlang_rl_capture.py` |
+| Warm openings kept across restarts | yes (`--slot-save-path`) | from the next fork release (`browser/warm-openings.ts`, on by default for a model loaded with its `sha256`): the opening is prefilled once, its slot state saved to OPFS and restored after a reload, keyed by model, engine build, context, slots, GPU/CPU, `swa_full` and template; needs werg/wllama 0095d0f (`capabilities.slotState`) in the fork's `.github/natlang-wllama.json`. Local build of 0095d0f, LFM3 Q8_0 CPU: 678-token opening, 17 MB state, first call after a reload 5.5 s instead of 98 s, decision scores bit-identical to the saving load | no | no | pin werg/wllama 0095d0f in the fork and release; then run `scripts/wllama_smoke.mjs`; Python native and SGLang: low priority, actors restart rarely |
+| Page serves the stock model with the full sliding-window cache (`swa_full`, as the managed server's `--swa-full`) | yes | yes (`local-model.ts`, 2026-11-14) | n/a | n/a | none. Without it the page continued no earlier prompt past a ~170-token checkpoint, and a decision with a prompt beyond the sliding window aborted the engine (`failed to restore context checkpoint`, a `GGML_ABORT` in `server-context.cpp` when a checkpoint does not fit the SWA cache; also in the vendored natlang-b12074 build): make that restore fail soft in the fork |
 | Hybrid SWA KV, FP8 KV, mixed adapters in one batch | partly | partly | n/a | yes | none needed for CPU hosts |

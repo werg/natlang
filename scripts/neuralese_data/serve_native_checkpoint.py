@@ -309,9 +309,12 @@ def attest_sglang_source(python, fork, pythonpath=''):
     dirty = bool(git('status', '--porcelain', '--untracked-files=all', '--', 'python/sglang')) if actual else None
     declared = fork.get('commit')
     lfm3 = package.parent / 'srt/models/lfm3.py'
+    params = package.parent / 'srt/sampling/natlang_params.py'
     record = {'commit': actual, 'declared_commit': declared, 'matches_declared': actual == declared, 'dirty': dirty,
               'package': str(package), 'python': str(Path(python).resolve()),
-              'hybrid_swa_kv': lfm3.is_file() and 'NATLANG_HYBRID_SWA_KV = True' in lfm3.read_text()}
+              'hybrid_swa_kv': lfm3.is_file() and 'NATLANG_HYBRID_SWA_KV = True' in lfm3.read_text(),
+              # custom_params.natlang_track_input_end: the scheduler stores a request's conv state at its input end
+              'track_input_end': params.is_file() and 'NATLANG_TRACK_INPUT_END = True' in params.read_text()}
     if actual != declared or dirty:
         print(json.dumps({'event': 'sglang_fork_differs_from_declared', **record}), file=sys.stderr, flush=True)
     return record
@@ -440,7 +443,8 @@ def launch_sglang(engine, args, checkpoint, release=None):
                              'declared_commit': source['declared_commit'], 'dirty': source['dirty']},
                        adapter_slots=args.sglang_adapter_slots, adapter_rank=args.sglang_adapter_rank,
                        projection=args.sglang_projection, overlap_schedule=args.sglang_overlap_schedule,
-                       kv_cache_dtype=args.sglang_kv_cache_dtype, kv_layout=layout)
+                       kv_cache_dtype=args.sglang_kv_cache_dtype, kv_layout=layout,
+                       track_input_end=bool(source.get('track_input_end')))
     return process
 
 

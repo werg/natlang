@@ -59,3 +59,22 @@ def test_call_names_inside_quoted_code_are_not_transport_tools():
     reply = "<|tool_call_start|>[eval(code='const s = \"[bogus()]\"; return s;'), evaluate()]"
     verdict, _ = _first_rejection(Guide(Settings(tools=["eval"])), reply)
     assert verdict == ("unknown-tool", reply.index("evaluate"))
+
+
+def test_open_reasoning_is_not_checked_and_verdicts_stay_after_it():
+    """Reasoning the generation prompt opened is not an action (fork a6401bbd3): a call written inside it is not
+    checked, and every verdict after it is a reply offset past its closing tag."""
+    thought = "Maybe <tool_call>\n<function=bogus>\n<parameter=code>\nconst a = 1;\nconst a = 2;\n"
+    reply = thought + "</think>\n\n<tool_call>\n<function=nope>\n"
+    settings = dict(tools=["eval"], call_format="xml", require_call=True)
+    verdict, _ = _first_rejection(Guide(Settings(**settings, reasoning_open=True)), reply)
+    assert verdict == ("unknown-tool", reply.index("nope"))
+    closed = Guide(Settings(**settings, reasoning_open=True))
+    assert closed.action_start(thought) is None and closed.action_start(reply) == reply.index("</think>") + 8
+    # Not opened by the prompt: the same text is checked from its first character.
+    verdict, _ = _first_rejection(Guide(Settings(**settings)), reply)
+    assert verdict == ("unknown-tool", reply.index("bogus"))
+    # The envelope still requires a call right after the reasoning.
+    prose = thought + "</think>\n\nDone."
+    verdict, _ = _first_rejection(Guide(Settings(**settings, reasoning_open=True)), prose)
+    assert verdict == ("no-call", prose.index("</think>") + 8)
