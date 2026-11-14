@@ -1,5 +1,6 @@
 """CPU checks of the GRPO learner's host-side pieces (scripts/neuralese_data/grpo.py)."""
 import collections
+import math
 import sys
 import threading
 from pathlib import Path
@@ -153,6 +154,22 @@ def test_token_loss_scales_are_the_old_sum_over_all_units():
     assert scales[0] == pytest.approx((1 / 37, 1 / 37)) and scales[1] == pytest.approx((1 / 37, 1 / 37))
     scales = grpo.loss_scales({0: [6, 2, 1], 1: [30, 3, 0]}, "token", "call")
     assert scales[0] == pytest.approx((1 / 39, 3 / 39))
+
+
+def test_k2_kl_gradient_stays_linear_on_tail_tokens():
+    import torch
+    logp = torch.tensor([-.5, -11., -1.], requires_grad=True)
+    ref = torch.tensor([-.5, -.5, -1.2])
+    grpo.kl_term(ref - logp, 'k2').sum().backward()
+    assert logp.grad.tolist() == pytest.approx([0., -10.5, .2])
+    logp.grad = None
+    grpo.kl_term(ref - logp, 'k3').sum().backward()
+    assert logp.grad[1].item() < -3e4                      # 1 - e^10.5: why k3 is not the loss
+    sums = collections.Counter()
+    grpo.kl_stats(sums, ref - logp)
+    grpo.kl_stats(sums, torch.tensor(.1))                 # a decision (0-dim)
+    assert sums['ref_dlogp_over_5'] == 1 and sums['ref_dlogp_max'] == pytest.approx(10.5)
+    assert sums['kl'] == pytest.approx(float(sum(math.exp(x) - x - 1 for x in (0., 10.5, -.2, .1))), rel=1e-5)
 
 
 def test_tail_guard_masks_only_tail_tokens_of_positive_episodes():
