@@ -61,7 +61,7 @@ budget yet), wall clock 3600 s as a safety net only (unscored; run2: 4 of 1,100 
 (`decision_turns`: log softmax of the learner's option scores over prompt + each captured continuation); Neuralese-state
 consumer calls train too, the imported state fixed context spliced from the actor's block store as the fork fed it (K/V
 pre-RoPE, conv B*x; `lfm3_fast_train.import_tensors`, no producer gradient; `plans/MODEL_FACING_CHANGES.md` 2026-11-13); loss on sampled tokens
-`-min(rho, 2) * A * logp + 0.02 * k3(start || policy)`, `A` group-normalized, averaged over each episode's units and then over the step's
+`-min(rho, 2) * A * logp + 0.02 * k2(start || policy)` (k2 = d²/2 with d = logp_start - logp, `--kl-estimator k2`; the k3 loss e^d - d - 1 gave a few T=1 tail tokens at d ≈ 10-12 ~90% of grpo-v2-run1 step 7's clipped update; k3 stays the logged `kl_mean`, beside `ref_dlogp_max` and `ref_dlogp_over_5`), `A` group-normalized, averaged over each episode's units and then over the step's
 episodes (`--loss-norm episode`; `token` is the old sum over all tokens: failures are 1.7x longer and 97% of the mass was reasoning), a sampled
 decision counting as one average call of its episode (`--decision-weight call`), no policy term on a token the actor sampled below
 log-probability -7 when `A > 0` (`--tail-logp-floor`; 0.5% of tokens at untruncated T=1). Sampling law (owner 2026-11-13): temperature 1 with

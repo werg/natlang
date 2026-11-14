@@ -15,7 +15,7 @@ One process runs the whole loop; nothing else (no controller, custody or transit
   into one sequence as in ``exp0_sft.chains_of``). A consumer call's imported Neuralese state is fixed context read from the
   actor's block store and spliced into every layer as the actor's SGLang fork did (``lfm3_fast_train.import_tensors``);
   no gradient reaches the producer, whose own sampled tokens train as its own calls. Loss on sampled tokens only:
-  ``-min(rho, C) * A * logp + beta * k3(ref || policy)``, ``rho = exp(logp_learner - logp_actor)`` (truncated importance
+  ``-min(rho, C) * A * logp + beta * k2(ref || policy)``, ``rho = exp(logp_learner - logp_actor)`` (truncated importance
   sampling against the actor's own sampling logprobs), ``A`` the group-normalized episode reward on every call of the
   episode, the reference the start policy. Each trained episode weighs the same: its terms are averaged over its units
   (sampled tokens; a sampled decision counts as one average call of its episode), then over the step's episodes
@@ -933,6 +933,24 @@ def loss_scales(episodes, norm, decision_weight):
     return scales
 
 
+def kl_term(d, estimator):
+    """The KL penalty per sampled unit for ``d = logp_ref - logp_policy`` (the actor sampled from the policy). ``k2`` =
+    ``d^2 / 2``: its gradient ``-d`` per token is the on-policy reverse-KL gradient and grows linearly. ``k3`` =
+    ``e^d - d - 1`` is an unbiased KL estimate, but as a loss its gradient ``1 - e^d`` is unbounded: grpo-v2-run1 step 7
+    had a few T=1 tail tokens with ``d`` about 10-12 carry ~90% of the clipped update (grad norm 6.1 vs ~0.6, k3 mean
+    0.33 while mean |d| was 0.14; DECISIONS 2026-11-14). k3 stays the logged KL estimate either way."""
+    return 0.5 * d * d if estimator == 'k2' else d.exp() - d - 1
+
+
+def kl_stats(sums, d):
+    """Telemetry of one batch of ``d``: the k3 KL estimate, |d|, its max and the units past 5 nats."""
+    d = d.detach()
+    sums['kl'] += (d.exp() - d - 1).sum().item()
+    sums['ref_abs_dlogp'] += d.abs().sum().item()
+    sums['ref_dlogp_over_5'] += int((d.abs() > 5).sum())
+    sums['ref_dlogp_max'] = max(sums['ref_dlogp_max'], d.abs().max().item() if d.numel() else 0.)
+
+
 def policy_weight(rho, actor_logp, advantage, rho_cap, tail_floor):
     """(weight of the policy term, tail mask): the truncated importance ratio, zero where the actor sampled a tail token
     (its sampling logp below ``tail_floor``) in an episode with a positive advantage. Untruncated T=1 sampling draws
@@ -1724,10 +1742,8 @@ def train(args):
             loss_terms = -(weight * chain['advantage'] * policy_logp)
             if ref is not None:
                 d = ref - logp
-                kl = d.exp() - d - 1
-                loss_terms = loss_terms + args.kl_beta * kl
-                sums['kl'] += kl.detach().sum().item()
-                sums['ref_abs_dlogp'] += d.detach().abs().sum().item()
+                loss_terms = loss_terms + args.kl_beta * kl_term(d, args.kl_estimator)
+                kl_stats(sums, d)
             (loss_terms.sum() * token_scale).backward()
             sums['rho'] += rho.sum().item()
             sums['rho_capped'] += (rho > args.rho_cap).sum().item()
@@ -1754,7 +1770,7 @@ def train(args):
         cuda_ids.clear()
         record.update(chain_tokens=chain_tokens, shared_prefix_tokens_saved=chain_tokens - computed_tokens)
         # Sampled decisions: log pi(chosen) = log_softmax(s / T)[chosen], s_o the summed log-probability of option o's
-        # continuation after the exact prompt (as the actor scored it); TIS and k3 on the chosen option as for a token.
+        # continuation after the exact prompt (as the actor scored it); TIS and the KL term on the chosen option as for a token.
         decision_records = []
         for batch in decision_batches(decisions, args.decision_batch_tokens):
             ids, lengths, positions, targets, owner, counts, spans = decision_tensors(batch, 'cuda')
@@ -1797,10 +1813,8 @@ def train(args):
                 term = -(weight * item['advantage'] * logpi)
                 if ref_scores is not None:
                     d = torch.log_softmax(ref_scores[start:start + k] / row['temperature'], 0)[row['chosen']] - logpi
-                    kl = d.exp() - d - 1
-                    term = term + args.kl_beta * kl
-                    sums['kl'] += kl.item()
-                    sums['ref_abs_dlogp'] += d.detach().abs().item()
+                    term = term + args.kl_beta * kl_term(d, args.kl_estimator)
+                    kl_stats(sums, d)
                 terms.append(term * decision_scale)
                 sums['decision_rho'] += rho.item()
                 sums['decision_abs_log_rho'] += log_rho.abs().item()
@@ -1892,6 +1906,7 @@ def train(args):
         record.update(
             loss_tokens=loss_tokens, forward_tokens=forward_tokens, lr=lr, grad_norm=round(grad_norm, 4),
             kl_mean=round(sums['kl'] / units, 7), ref_abs_dlogp_mean=round(sums['ref_abs_dlogp'] / units, 6),
+            ref_dlogp_max=round(sums['ref_dlogp_max'], 3), ref_dlogp_over_5=sums['ref_dlogp_over_5'], kl_estimator=args.kl_estimator,
             mean_logp=round(sums['logp'] / max(1, loss_tokens), 4),
             grad_moment_cosine=None if cosine is None else round(cosine, 5),
             top_p=args.top_p, outside_nucleus_fraction=round(sums['outside_nucleus'] / max(1, loss_tokens), 6),
@@ -2017,6 +2032,9 @@ def main():
     t.add_argument('--weight-decay', type=float, default=0.)
     t.add_argument('--clip', type=float, default=1.0)
     t.add_argument('--kl-beta', type=float, default=0.02)
+    t.add_argument('--kl-estimator', choices=('k2', 'k3'), default='k2',
+                   help='KL penalty as a loss: k2 = d^2/2 (gradient linear in d = logp_ref - logp), k3 = e^d - d - 1 '
+                        '(unbounded gradient on rare tail tokens; grpo-v2-run1 step 7). The logged kl_mean is k3 either way')
     t.add_argument('--rho-cap', type=float, default=2.0)
     t.add_argument('--loss-norm', choices=('episode', 'token'), default='episode',
                    help='episode: each trained episode contributes A_i * (mean over its trained units of w * logp), averaged '

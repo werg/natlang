@@ -2172,3 +2172,16 @@ key set (FlashAttention's documented causal rule); a misalignment would show at 
 actor at the next pin's first step. The KL term is kept as declared (subsampling or dropping it was the alternative);
 it gets the same saving. Swapping in run2 (learner 1.8k -> 0.96k tok/s) was addressed at the grpo-v2 launch (block-store
 LRU, MALLOC_ARENA_MAX=4, smaller KV); check `learner_swap_pages` at its first steps.
+
+## 2026-11-14: the KL penalty is k2, not k3, as a loss (supervisor)
+
+grpo-v2-run1's k3 term `e^d - d - 1` (d = logp_start - logp) logged kl_mean 0.010 / 0.035 / 0.054 / 0.325 / 0.118 at steps 4-8
+while mean |d| grew smoothly (0.056 -> 0.186), and grad_norm went 0.58 / 0.43 / 0.76 / 6.09 / 24.4 against clip 1.0. The step-7 KL
+sum (242k) needs a handful of tokens at d ~ 10-12 (the bulk explains ~15k): T=1 tail tokens the actor sampled below logp -8 (22 in
+step 7's trained calls, mostly reasoning, many in negative-advantage episodes; `--tail-logp-floor` masks only their policy term).
+Their k3 gradient `1 - e^d` is ~10^3 a normal token's, so after clipping ~90% of steps 7-8 went to pulling those tokens back, the
+policy term scaled down 6-24x. No bug in d: step 1 (identical weights) had kl 0 and |d| 0 over 2.16M tokens incl. consumer calls
+and decisions, and the reference is the frozen start copy. Change (learner only, held series unchanged): `--kl-estimator k2`
+default, loss `d^2/2` (the on-policy reverse-KL gradient, linear in d); k3 stays the logged estimate; new telemetry
+`ref_dlogp_max`, `ref_dlogp_over_5`. grpo-v2-run1 adopts it at its next state-save restart (steps 1-8 trained with k3).
+Open: step 1's grad_norm 69.6 came from the policy term with no KL.
