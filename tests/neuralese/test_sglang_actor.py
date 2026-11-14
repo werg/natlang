@@ -539,6 +539,97 @@ def test_decide_scores_on_sglang_with_the_native_decision_capture(tmp_path, monk
     assert 'error' in many['results'][2] and len(sent) == 3
 
 
+def test_decisions_warm_the_shared_opening_once_before_scoring(tmp_path, monkeypatch):
+    """`cache_messages`: one prefill request of exactly the opening's tokens per distinct opening, sent before any item
+    scores an option (concurrent items wait for it), skipped without the hint or when opted out; scores unchanged."""
+    import concurrent.futures
+    import threading
+    import time
+    from natlang_neuralese.serve import native_learning
+    from natlang_neuralese.serve.native_learning import decide_many_native
+    from natlang_neuralese.serve.targets import _items, opening_items
+    native, front, roles, word, stored = _span_fixture(tmp_path)
+
+    def decision_items(renderer, messages, tools, options):  # the prompt as served; each option its own words
+        prompt = renderer.render_request(messages, tools)
+        return _items(renderer, prompt.segments, prompt.blocks, prompt.escape_nonce), [word(o) for o in options]
+    monkeypatch.setattr(native_learning, 'decision_items', decision_items)
+    front._pool = concurrent.futures.ThreadPoolExecutor(4)
+    front.sglang_state_grid = 4  # the fixture's openings are a few tokens; LFM3's grid is 256
+    sent, lock = [], threading.Lock()
+
+    def generate(request):
+        warm = 'logprob_start_len' not in request
+        if warm:
+            time.sleep(0.05)  # items that do not wait for the warm request would score meanwhile
+        with lock:
+            sent.append(request)
+        if warm:
+            return {'meta_info': {'prompt_tokens': len(request['input_ids']), 'cached_tokens': 0}}
+        cont = request['input_ids'][request['logprob_start_len'] + 1:]
+        return {'meta_info': {'prompt_tokens': len(request['input_ids']), 'cached_tokens': 0,
+                              'input_token_logprobs': [[None, request['input_ids'][request['logprob_start_len']], None]]
+                              + [[-0.25 * (1 + t % 3), t, None] for t in cont]}}
+    front._sglang_post = generate
+    front._sglang_generate = type(front)._sglang_generate.__get__(front)
+    first, second = ([{'role': 'system', 'content': text}] for text in ('t1 t2 t3 t1 t2 ', 't3 t2 t1 t3 t2 '))
+    item = lambda opening, text, **extra: {'messages': opening + [{'role': 'user', 'content': text}],
+                                           'continuations': ['t6', 't7 t8'], 'cache_messages': 1, **extra}
+    items = [item(first, 't4 t5'), item(first, 't5 t4'), item(second, 't4'), item(first, 't4 t4 t5')]
+    warmed = lambda: [r for r in sent if 'logprob_start_len' not in r]
+
+    # The fixture's template appends its generation prompt after any messages, so the opening's rendering is not a
+    # token prefix of the prompt: nothing to warm.
+    assert all('error' not in result for result in decide_many_native(front, {'items': items})['results'])
+    assert not warmed() and len(sent) == 2 * len(items)
+    sent.clear()
+    front.tokenizer.chat_template = ("{% for message in messages %}{{ message['content'] }}{% endfor %}"
+                                     "{% if add_generation_prompt %}assistant:{% endif %}")
+    many = decide_many_native(front, {'items': items})
+    assert all('error' not in result for result in many['results']), many
+    openings = [[value for _, value in opening_items(front, opening, None)] for opening in (first, second)]
+    assert sorted(r['input_ids'] for r in warmed()) == sorted(openings), 'one warm request per distinct opening'
+    assert all(r['sampling_params']['max_new_tokens'] == 1 and 'return_logprob' not in r for r in warmed())
+    for index, request in enumerate(sent):
+        if 'logprob_start_len' in request:  # every option scored after its opening's warm request, from that prefix
+            opening = next(o for o in openings if request['input_ids'][:len(o)] == o)
+            assert any(r['input_ids'] == opening for r in sent[:index] if 'logprob_start_len' not in r)
+            assert len(opening) <= request['logprob_start_len']  # the opening is shorter than the prompt
+    assert front.progress_metrics()['natlang_sglang_opening_warms_total'] == 2
+
+    # Within the memo's lifetime the same opening is not warmed again; once it lapses it is.
+    sent.clear()
+    again = decide_many_native(front, {'items': items[:2]})
+    assert again == {'results': many['results'][:2]} and not warmed()
+    front.sglang_opening_ttl = 0.0
+    decide_many_native(front, {'items': items[:1]})
+    assert [r['input_ids'] for r in warmed()] == openings[:1]
+
+    # No hint, or opted out: no warm request, the same scores.
+    for case in ('no-hint', 'opted-out'):
+        sent.clear()
+        front.sglang_warm_openings = case != 'opted-out'
+        plain = [{key: value for key, value in i.items() if key != 'cache_messages'} if case == 'no-hint' else i
+                 for i in items]
+        assert decide_many_native(front, {'items': plain}) == many and not warmed(), case
+        assert len(sent) == 2 * len(items)
+    front.sglang_warm_openings = True
+
+    # An opening shorter than the state grid stores no state on SGLang: nothing to warm.
+    sent.clear()
+    front.sglang_state_grid = 256
+    decide_many_native(front, {'items': items[:1]})
+    assert not warmed()
+
+    # A failed warm request is telemetry; the item still scores.
+    front.sglang_state_grid, front.sglang_opening_ttl = 4, 60.0
+    front.__dict__.pop('_sglang_openings')
+    front._sglang_post = lambda request: (_ for _ in ()).throw(RequestError('sglang-actor-backend', 'down')) \
+        if 'logprob_start_len' not in request else generate(request)
+    assert decide_many_native(front, {'items': items[:1]}) == {'results': many['results'][:1]}
+    assert front.progress_metrics()['natlang_sglang_opening_warm_failures_total'] == 1
+
+
 def _adapters(engine, names):
     """An xs adapter and a free-lora adapter with nonzero factors on `names`."""
     from dataclasses import replace
@@ -769,3 +860,46 @@ def test_top_p_is_forwarded_to_sglang_and_declared_in_the_sampling_law(tmp_path,
     monkeypatch.setattr(SglangEngine, '_sglang_consume', forgetful)
     with pytest.raises(RequestError, match='not sampled with the requested top_p'):
         front.generate(make(top_p=.95))
+
+
+@pytest.mark.parametrize('opened', [True, False])
+def test_guided_open_reasoning_streams_on_sglang_like_the_native_engine(tmp_path, opened):
+    """Fork a6401bbd3 on SGLang: reasoning the generation prompt opened reaches the client while SGLang still draws,
+    the rejected call never does, and the deltas, capture and reply equal the native engine's."""
+    import threading
+    from test_native_guidance import LEXICAL, THINK, actor
+    from natlang_neuralese.serve import load_native_engine
+    from natlang_neuralese.serve.guidance import Settings
+    native = actor(tmp_path, 'lfm', lexical=True, words=LEXICAL + THINK)
+    front = load_native_engine(str(tmp_path / 'actor.pt'), dtype=native.backbone.embedding_weight.dtype,
+                               engine_class=SglangEngine)
+    front.sglang_banned = []
+    front._sglang_lock, front.sglang_requests, front.sglang_tokens, front.native_fallbacks = threading.Lock(), 0, 0, 0
+    front.native_fallback_reasons = {}
+    stop = sorted(front.stop_ids)[0]
+    for engine in (native, front):
+        engine._prompt_plan = lambda messages, tools: [('tokens', [9] + ([6] if opened else []))]
+    deltas = {'native': [], 'front': []}
+    make = lambda name: GenerationRequest(messages=[{'role': 'user', 'content': 't9'}], temperature=1.0, max_tokens=16,
+                                          rl_capture=True, rl_top_k=2, native_recording=True, request_id='g', seed=1,
+                                          guidance=Settings(tools=['good'], syntax=False), on_delta=deltas[name].append)
+    script = iter([10, 11, 7, 4, 5, stop])
+    native._native_token = lambda seq: (next(script), -0.5)
+    expected = native.generate(make('native'))
+    replies, sent, seen = [[10, 11, 7, 4, 8], [5], [stop]], [], []
+
+    def stream(body):
+        sent.append(body)
+        for token in replies[len(sent) - 1]:
+            seen.append(list(deltas['front']))  # what the client had when SGLang drew this token
+            yield {'output_ids': [token], 'meta_info': {'natlang_top_k': [record(-0.5, [token, token + 1], [-0.5, -1.5])]}}
+    front._sglang_stream = stream
+    actual = front.generate(make('front'))
+    assert actual['x_natlang_guidance'] == expected['x_natlang_guidance']
+    assert actual['x_natlang_guidance']['rejections'][0]['reason'] == 'unknown-tool'
+    assert _protocol_view(actual['x_natlang_rl_capture']) == _protocol_view(expected['x_natlang_rl_capture'])
+    assert actual['choices'][0]['message'] == expected['choices'][0]['message']
+    assert deltas['front'] == deltas['native']
+    assert seen[3] == ([{'reasoning': 't10'}, {'reasoning': ' t11'}] if opened else [])  # before the reply is final
+    assert seen[-1] == seen[3] and not any('[bad(' in str(delta) for delta in deltas['front'])
+    assert any('reasoning' in delta for delta in deltas['front']) == opened

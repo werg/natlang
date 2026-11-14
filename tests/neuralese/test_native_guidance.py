@@ -19,7 +19,11 @@ from natlang_neuralese.rl.native_replay import compile_replay, replay_logps
 from test_native_full_updates import source
 
 
-def actor(tmp_path,family,*,lexical=False):
+LEXICAL=[(4,'[bad('),(5,'[good(')]
+THINK=[(6,'<think>'),(7,'</think>')]
+
+
+def actor(tmp_path,family,*,lexical=False,words=LEXICAL):
     dtype=source(tmp_path/'base',family)
     if lexical:
         import json
@@ -28,7 +32,7 @@ def actor(tmp_path,family,*,lexical=False):
         tokenizer=AutoTokenizer.from_pretrained(tmp_path/'base')
         state=json.loads(tokenizer.backend_tokenizer.to_str())
         vocab=state['model']['vocab']
-        for token,text in [(4,'[bad('),(5,'[good(')]:
+        for token,text in words:
             del vocab[f't{token}'];vocab[text]=token
         tokenizer._tokenizer=Tokenizer.from_str(json.dumps(state))
         tokenizer.save_pretrained(tmp_path/'base')
@@ -211,3 +215,70 @@ def test_actual_guide_tool_policy_uses_native_rollback_and_teaches_forced_confli
         error=forced.future.exception()
         assert error.code=='neuralese-guidance-template-conflict'
         assert 'compatible call template' in str(error)
+
+
+@pytest.mark.parametrize('opened',[True,False])
+def test_open_reasoning_streams_before_the_guided_reply_is_final(tmp_path,monkeypatch,opened):
+    """Fork a6401bbd3: reasoning the generation prompt opened streams as it is generated, a rejection after it never
+    reaches the stream, and the rest of the reply is held back until it is final. Without open reasoning the whole
+    reply is held back as before."""
+    engine=actor(tmp_path,'lfm',lexical=True,words=LEXICAL+THINK)
+    deltas=[]
+    request=GenerationRequest(messages=[],temperature=.8,rl_capture=True,
+        guidance=Settings(tools=['good'],syntax=False),on_delta=deltas.append,max_tokens=20)
+    seq=Sequence(request,Future(),prompt_plan=[('tokens',[9]+([6] if opened else []))])
+    script=iter([10,11,7,4,5])
+    with torch.no_grad():
+        engine._native_prefill(seq)
+        assert seq.guide.settings.reasoning_open is opened
+        monkeypatch.setattr(engine,'_native_token',lambda s:chosen(engine,s,next(script)))
+        for _ in range(2):engine._native_round([seq])
+        assert deltas==([{'reasoning':'t10'},{'reasoning':' t11'}] if opened else [])
+        engine._native_round([seq])  # the closing tag is held back with the reply
+        engine._native_round([seq])  # `[bad(` is rejected and rolled back
+        assert seq.guide.rejections==[{'reason':'unknown-tool','offset':len('t10 t11 </think> [')}]
+        assert seq.bans[seq.native_own_position]=={4}
+        assert deltas==([{'reasoning':'t10'},{'reasoning':' t11'}] if opened else [])
+        engine._native_round([seq])
+        engine._finish(seq,'length')
+    assert not any('[bad(' in str(delta) for delta in deltas)
+    reasoning=''.join(d.get('reasoning','') for d in deltas)
+    text=''.join(d.get('text','') for d in deltas)
+    if opened:
+        assert reasoning.strip()=='t10 t11' and '</think>' not in reasoning+text and text.strip()=='[good('
+    else:
+        assert not reasoning and text.replace(' ','')=='t10t11</think>[good('
+    assert seq.future.result()['x_natlang_guidance']['rejections'][0]['reason']=='unknown-tool'
+
+
+def test_streamed_guided_reply_sends_open_reasoning_as_reasoning_content(tmp_path,monkeypatch):
+    """The server's stream: the open reasoning arrives as `reasoning_content` deltas (as the managed server sends it),
+    the rest of the reply as content after it is final, without the closing tag."""
+    import json,threading,urllib.request
+    from natlang_neuralese.serve.http import serve
+    engine=actor(tmp_path,'lfm',lexical=True,words=LEXICAL+THINK)
+    engine._prompt_plan=lambda messages,tools:[('tokens',[9,6])]
+    script=iter([10,11,7,4,5,sorted(engine.stop_ids)[0]])
+    monkeypatch.setattr(engine,'_native_token',lambda s:chosen(engine,s,next(script)))
+    engine.start()
+    server=serve(engine,'127.0.0.1',0)
+    threading.Thread(target=server.serve_forever,daemon=True).start()
+    try:
+        body={'messages':[{'role':'user','content':'t9'}],'temperature':.8,'max_tokens':12,'stream':True,
+              'guidance':{'tools':['good'],'syntax':False}}
+        request=urllib.request.Request(f'http://127.0.0.1:{server.server_address[1]}/v1/chat/completions',
+            data=json.dumps(body).encode(),headers={'content-type':'application/json'})
+        with urllib.request.urlopen(request,timeout=60) as response:
+            chunks=[json.loads(line[5:]) for line in response.read().decode().splitlines()
+                    if line.startswith('data:') and line.strip()!='data: [DONE]']
+    finally:
+        server.shutdown();engine.stop()
+    deltas=[chunk['choices'][0]['delta'] for chunk in chunks if 'choices' in chunk]
+    reasoning=[d['reasoning_content'] for d in deltas if 'reasoning_content' in d]
+    content=''.join(d.get('content','') for d in deltas if isinstance(d.get('content'),str))
+    assert reasoning[:2]==['t10',' t11'] and ''.join(reasoning).strip()=='t10 t11'
+    assert content.strip()=='[good(' and '</think>' not in content
+    # reasoning deltas precede every content delta
+    kinds=[('reasoning_content' in d) for d in deltas if 'reasoning_content' in d or d.get('content')]
+    assert kinds==sorted(kinds,reverse=True)
+    assert chunks[-1]['x_natlang_guidance']['rejections'][0]['reason']=='unknown-tool'

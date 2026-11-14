@@ -23,7 +23,9 @@ Guidance is off unless a request asks for it (`"guidance": true` or an object of
 A rejection names the reply offset where the offending line (or call name) starts. The server rolls back to its
 snapshot there, bans the token it chose first at that point and samples again, at most `retries` times per point;
 then the line is accepted as it is. Masking every invalid token would force the model into tokens it finds unlikely;
-rejection keeps its own distribution except where it is definitely wrong. Neuralese blocks inside code are read as
+rejection keeps its own distribution except where it is definitely wrong. Reasoning the generation prompt opened
+(`<think>`) is not an action: it is neither checked nor rolled back, so a streamed guided reply sends it as it is
+generated and holds back only the rest until it is final (`native_guidance`, fork a6401bbd3). Neuralese blocks inside code are read as
 the identifier `__nz` (the engine renders them so in the reply it checks).
 """
 
@@ -78,6 +80,12 @@ class Settings:
     # The backbone's declared tool-call format (serve.chat.TOOL_CALL_FORMATS). `pythonic` keeps the original checks;
     # `xml` (LFM3) reads `<function=NAME>` names and the verbatim `<parameter=code>` value of eval calls.
     call_format: str = "pythonic"
+
+    # The generation prompt opened a reasoning block (`<think>`), which the first of `reasoning_end` closes. Reasoning is
+    # not an action: it is neither checked nor rolled back (blanked, keeping reply offsets), so it can stream while the
+    # rest of the reply is held back (fork a6401bbd3). The engine sets these from the rendered prompt.
+    reasoning_open: bool = False
+    reasoning_end: tuple = ("</think>",)
 
     @staticmethod
     def of(body: dict | None, tools: list | None, tool_choice=None, call_format: str | None = None) -> "Settings | None":
@@ -174,9 +182,27 @@ class Guide:
             return ""
         return _CALL_START + "[" if self.settings.require_call else ""
 
-    def check(self, reply: str) -> tuple[str, int] | None:
-        """None, or (reason, reply offset to roll back to)."""
-        verdict = self._envelope(reply) or self._names(reply)
+    def reasoning_end(self, reply: str) -> tuple[int, int] | None:
+        """(start, end) of the tag that closes the open reasoning, or None while the reply is still reasoning."""
+        found = [(at, at + len(tag)) for tag in self.settings.reasoning_end if tag for at in [reply.find(tag)] if at >= 0]
+        return min(found, key=lambda span: span[1]) if found else None
+
+    def action_start(self, reply: str) -> int | None:
+        """The reply offset where the action begins: 0 without open reasoning, just after its closing tag, or None
+        while the reply is still reasoning."""
+        if not self.settings.reasoning_open:
+            return 0
+        end = self.reasoning_end(reply)
+        return None if end is None else end[1]
+
+    def check(self, whole: str) -> tuple[str, int] | None:
+        """None, or (reason, reply offset to roll back to). Open reasoning is blanked rather than cut, so that every
+        offset stays a reply offset and no verdict falls inside it."""
+        start = self.action_start(whole)
+        if start is None:
+            return None
+        reply = "".join(c if c == "\n" else " " for c in whole[:start]) + whole[start:] if start else whole
+        verdict = self._envelope(whole, start) or self._names(reply)
         if verdict:
             return verdict
         for code in code_strings(reply, self.settings.call_format):
@@ -194,14 +220,15 @@ class Guide:
         """Retries at `at` are exhausted: what is there stands."""
         self.checked.add(("at", at))
 
-    def _envelope(self, reply: str):
+    def _envelope(self, reply: str, start: int = 0):
         """XML with `require_call`: what follows the closed reasoning (`</think>`) opens a tool call."""
         if self.settings.call_format != "xml" or not self.settings.require_call:
             return None
-        at = reply.find("</think>")
-        if at < 0:
-            return None
-        start = at + len("</think>")
+        if not start:
+            at = reply.find("</think>")
+            if at < 0:
+                return None
+            start = at + len("</think>")
         after = reply[start:]
         body = after.lstrip(" \t\r\n")
         if body.startswith("<tool_call>") or "<tool_call>".startswith(body):

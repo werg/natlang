@@ -32,17 +32,29 @@ def _split_boundary(engine, prefix, after):
     return None
 
 
-def target_items(engine, messages, tools, target, *, response_tools=None):
-    """Return (prompt items, target continuation items) under the runtime's exact chat rendering."""
-    prompt = engine.render_request(messages, tools, **({'response_tools':response_tools} if response_tools is not None else {}))
+def _closed_template(engine):
+    """The chat template without a generation prompt: complete messages, as a later prompt renders them."""
     thinking = opens_thinking(engine._template([{"role": "user", "content": "x"}], None))
 
     def full_template(msgs, tls):
         render = lambda values: engine.tokenizer.apply_chat_template(
             values, tools=tls or None, tokenize=False, add_generation_prompt=False)
         return render_with_empty_thought(render, msgs) if thinking else render(msgs)
+    return full_template
 
-    full = engine.render_request(list(messages) + [target], tools, template=full_template,
+
+def opening_items(engine, messages, tools):
+    """The items of `messages` rendered as the opening of a longer prompt (no generation prompt): the token prefix a
+    prompt that continues these messages starts with, when the template renders append-only (callers check)."""
+    rendered = engine.render_request(list(messages), tools, template=_closed_template(engine))
+    return _items(engine, rendered.segments, rendered.blocks, rendered.escape_nonce,
+                  rendered.block_stop_gradients, rendered.block_source_occurrences)
+
+
+def target_items(engine, messages, tools, target, *, response_tools=None):
+    """Return (prompt items, target continuation items) under the runtime's exact chat rendering."""
+    prompt = engine.render_request(messages, tools, **({'response_tools':response_tools} if response_tools is not None else {}))
+    full = engine.render_request(list(messages) + [target], tools, template=_closed_template(engine),
                                  **({'response_tools':response_tools} if response_tools is not None else {}))
     before = _items(engine, prompt.segments, prompt.blocks, prompt.escape_nonce,
                     prompt.block_stop_gradients, prompt.block_source_occurrences)
