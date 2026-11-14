@@ -2205,3 +2205,10 @@ misdirected KL. Under k2 the actor's rollouts recover (length ratio 0.68 -> 0.99
 declared rule (two consecutive evals below -3.5 pts fail it; next eval step 12). Next run: k2 from step 1, 64-128 groups per
 step or LR ~3e-6, reasoning tokens per call vs base as a logged early check, cap the weight of decision-only episodes (step 1's
 grad_norm 69.6 came with a group of 8 single-decision episodes).
+
+Step 12 (Pop, 2026-11-14 13:39): 199/488 vs the base's 241/498, primary -7.7 pts, CI [-12.4, -2.8], p 0.0005, McNemar 82:41,
+tasks 58 down / 26 up. Second consecutive eval below -3.5: grpo-v2-run1 FAILED by its declared rule and was stopped at step 15
+(the step-14 Pop eval was cut at 41/512). It should have stopped at step 8: an unexplained significant held regression is a
+stop-and-diagnose trigger at that eval, not something to wait out until the failure rule fires. The run then held ~100 GB of the
+DGX for 8 h while the learner-side checks that needed ~10 GB waited. The random-sign control and gradient projection checks now
+run on the freed DGX; the cause stays OPEN until they and the dragnet record say otherwise.
