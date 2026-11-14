@@ -96,6 +96,8 @@ export type ChatCompletionParams = {
     user?: string;
     chat_template_kwargs?: Record<string, any>;
     cache_prompt?: boolean;
+    /** the slot that serves the request (default: any idle slot) */
+    id_slot?: number;
     return_tokens?: boolean;
     timings_per_token?: boolean;
     return_progress?: boolean;
@@ -212,6 +214,9 @@ export type RawCompletionParams = {
     seed?: number;
     user?: string;
     return_progress?: boolean;
+    cache_prompt?: boolean;
+    /** the slot that serves the request (default: any idle slot) */
+    id_slot?: number;
 } & SamplingParams;
 export interface RawCompletionChoice {
     text: string;

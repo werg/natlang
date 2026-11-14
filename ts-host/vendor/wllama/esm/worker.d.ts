@@ -18,7 +18,7 @@ interface Logger {
     error: typeof console.error;
 }
 interface TaskParam {
-    verb: 'module.init' | 'fs.alloc' | 'fs.write' | 'fs.read_res' | 'wllama.start' | 'wllama.action' | 'wllama.exit' | 'wllama.debug';
+    verb: 'module.init' | 'fs.alloc' | 'fs.write' | 'fs.read_res' | 'fs.slot_read' | 'fs.slot_write' | 'fs.slot_remove' | 'wllama.start' | 'wllama.action' | 'wllama.exit' | 'wllama.debug';
     args: any[];
     callbackId: number;
 }
@@ -57,6 +57,11 @@ export declare class ProxyToWorker {
     }[]): Promise<void>;
     wllamaStart(): Promise<number>;
     wllamaAction<T extends GlueMsg>(name: string, body: GlueMsg): Promise<T>;
+    /** Take a slot save file out of the worker's in-memory FS (the file is removed) */
+    slotFileRead(fileName: string): Promise<Uint8Array>;
+    /** Put a slot save file into the worker's in-memory FS */
+    slotFileWrite(fileName: string, data: Uint8Array): Promise<void>;
+    slotFileRemove(fileName: string): Promise<void>;
     wllamaExit(): Promise<void>;
     wllamaDebug(): Promise<any>;
     /**

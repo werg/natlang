@@ -1,6 +1,6 @@
 {
   "name": "@wllama/wllama-compat",
-  "version": "3.12.0-natlang.b12074",
+  "version": "3.12.0-natlang.b12076",
   "description": "Compatibility build (no JSPI, wasm32) of the patched wllama in ../wllama",
   "type": "module",
   "main": "index.js",

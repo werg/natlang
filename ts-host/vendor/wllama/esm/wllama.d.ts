@@ -142,12 +142,14 @@ export interface WllamaCompat {
 export declare class Wllama {
     cacheManager: CacheManager;
     modelManager: ModelManager;
-    /** Feature detection: `loraBlobs` means `lora_adapters` accepts GGUF blobs, `nativeStates` means `native_states` loads natlang native state spans, `natlangScore` means `createNatlangScore` is available. */
+    /** Feature detection: `loraBlobs` means `lora_adapters` accepts GGUF blobs, `nativeStates` means `native_states` loads natlang native state spans, `natlangScore` means `createNatlangScore` is available, `slotState` means `saveSlot` / `restoreSlot` / `eraseSlot` / `applyTemplate` are available and completions accept `id_slot`. */
     readonly capabilities: {
         readonly loraBlobs: true;
         readonly nativeStates: true;
         readonly natlangScore: true;
+        readonly slotState: true;
     };
+    private slotFileId;
     private compat;
     private proxy;
     private config;
@@ -345,6 +347,40 @@ export declare class Wllama {
      * @returns Per item, the log-probability and token count of each reply, or the error of an item that could not be rendered
      */
     createNatlangScore(options: NatlangScoreParams): Promise<NatlangScoreResponse>;
+    /**
+     * Render chat messages (and tools) with the chat template, as the server's POST /apply-template does.
+     * @param options OAI-compatible chat completion options (messages, tools, add_generation_prompt, ...)
+     * @returns The prompt text
+     */
+    applyTemplate(options: Record<string, unknown>): Promise<string>;
+    /**
+     * Save the state of a slot (its KV cache, tokens and context checkpoints), as the server's POST /slots/:id?action=save does. The slot must be idle.
+     * @param idSlot The slot
+     * @returns The saved state, to give to `restoreSlot` of an engine with the same model, build and context settings
+     */
+    saveSlot(idSlot: number): Promise<{
+        state: Uint8Array;
+        n_saved: number;
+        n_written: number;
+    }>;
+    /**
+     * Restore a slot from a state of `saveSlot`, as the server's POST /slots/:id?action=restore does. A state that does not fit leaves the slot empty and throws.
+     * @param idSlot The slot
+     * @param state The saved state
+     * @returns The number of restored tokens and bytes read
+     */
+    restoreSlot(idSlot: number, state: Uint8Array | Blob): Promise<{
+        n_restored: number;
+        n_read: number;
+    }>;
+    /**
+     * Clear the cached prompt of a slot, as the server's POST /slots/:id?action=erase does.
+     * @param idSlot The slot
+     */
+    eraseSlot(idSlot: number): Promise<{
+        n_erased: number;
+    }>;
+    private slotAction;
     /**
      * Make chat completion for a given chat messages.
      * @param options OAI-compatible chat completion options

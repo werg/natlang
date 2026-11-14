@@ -407,7 +407,7 @@ test('an in-page model without loaded states refuses native sentinels before inf
 });
 
 /** A wllama stand-in with the slot calls (`capabilities.slotState`): a slot holds the text it prefilled. */
-function slotEngine(log, { build = 'b12074-dc94109', refuseRestore = false } = {}) {
+function slotEngine(log, { build = 'b12076-cab27bf', refuseRestore = false } = {}) {
   class Engine {
     static getLibllamaVersion() { return build; }
     capabilities = { natlangScore: true, slotState: true };
@@ -487,7 +487,7 @@ test('the in-page model keeps warm openings across reloads, keyed by model, engi
   } finally { await reloaded.close(); }
 
   // Any key difference (model, context size, sliding-window cache, engine build) is another state: the opening is prefilled, never restored.
-  for (const [options, engineOptions] of [[{ modelSha256: 'e'.repeat(64) }, {}], [{ contextTokens: 8192 }, {}], [{ fullSlidingWindowCache: false }, {}], [{}, { build: 'b12075-0000000' }]]) {
+  for (const [options, engineOptions] of [[{ modelSha256: 'e'.repeat(64) }, {}], [{ contextTokens: 8192 }, {}], [{ fullSlidingWindowCache: false }, {}], [{}, { build: 'b12077-0000000' }]]) {
     const log = [], other = await load(log, options, engineOptions);
     try { await other.decide(item('four')); await other.warmStatesWritten(); }
     finally { await other.close(); }
