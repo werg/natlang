@@ -20,7 +20,7 @@ export class StudioModel {
     async load(entry, options) {
         await this.current?.close();
         this.current = null; this.status = null;
-        const loaded = await loadBrowserLocalModel({ kind: 'url', id: entry.id, url: entry.url, templateUrl: entry.templateUrl },
+        const loaded = await loadBrowserLocalModel({ kind: 'url', id: entry.id, url: entry.url, templateUrl: entry.templateUrl, sha256: entry.sha256 },
             { ...options, engine: MODEL_ASSETS });
         this.current = loaded.model; this.status = loaded.status;
         return loaded.status;

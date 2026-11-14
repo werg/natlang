@@ -6,11 +6,12 @@ import { perRequestLora } from '../model/lora-scales.js';
 import { nativeStateMessages } from '../model/openai-compatible.js';
 import { coalescingScorer } from '../model/scoring.js';
 import { batchScoreItem, scoresFromBatchResult, type BatchScoreResult } from '../model/decision-scoring.js';
+import { opfsWarmStateStore, pageWarmOpenings, warmTag, type PageWarmOpening, type WarmSlotEngine, type WarmStateStore } from './warm-openings.js';
 
 type ModelMessage = { role: 'system' | 'user' | 'assistant' | 'tool'; content?: string | null;
   tool_calls?: unknown[]; tool_call_id?: string };
-type LoadParams = { n_ctx: number; n_gpu_layers?: number; n_threads?: number; jinja: boolean;
-  reasoning: boolean; chat_template?: string; cache_idle_slots?: boolean;
+type LoadParams = { n_ctx: number; n_parallel: number; n_gpu_layers?: number; n_threads?: number; jinja: boolean;
+  reasoning: boolean; chat_template?: string; cache_idle_slots?: boolean; swa_full?: boolean;
   lora_adapters?: { blob: Blob; scale: number }[]; lora_init_without_apply?: boolean;
   native_states?: { blob: Blob }[];
   progressCallback?: (progress: { loaded: number; total: number }) => void;
@@ -31,10 +32,12 @@ export type BrowserInferenceEngine = {
   getLoadedContextInfo?(): { n_ctx: number; n_layer: number };
   getModelMetadata?(): Record<string, unknown>;
   getWorkerResources?(): { compat: boolean; noWebGPU?: boolean };
-  /** Feature detection of the vendored wllama build (ts-host/vendor/wllama). */
-  readonly capabilities?: { readonly loraBlobs?: boolean; readonly nativeStates?: boolean; readonly natlangScore?: boolean };
+  /** Feature detection of the vendored wllama build (ts-host/vendor/wllama). `slotState`: the slot save/restore calls of
+   * `WarmSlotEngine` (browser/warm-openings.ts) and `id_slot` on completions. */
+  readonly capabilities?: { readonly loraBlobs?: boolean; readonly nativeStates?: boolean; readonly natlangScore?: boolean;
+    readonly slotState?: boolean };
   exit(): Promise<void>;
-};
+} & Partial<WarmSlotEngine>;
 
 const Wllama = (wllamaRuntime as unknown as { Wllama: new (paths: { default: string },
   options: { allowOffline: boolean }) => BrowserInferenceEngine }).Wllama;
@@ -52,9 +55,22 @@ export type BrowserModelLoadOptions = {
   /** Tuned soft instruction/skill states (a release's `.state.gguf` exports, `loadBrowserRelease`): exact native state
    * spans the model consumes wherever a message carries the state's sentinel (ts-host/vendor/wllama). */
   nativeStates?: readonly { readonly id: string; readonly blob: Blob }[];
+  /** The model file's SHA-256 (a catalog entry's `sha256`). Warm openings are kept across reloads only for a model
+   * known by its content. */
+  modelSha256?: string;
+  /** Where warm openings are kept across reloads (browser/warm-openings.ts): the page's OPFS by default; `false` turns
+   * it off. Needs `modelSha256` and an engine with `capabilities.slotState`; off with tuned adapters or states. */
+  warmOpenings?: WarmStateStore | false;
+  /** Keep the whole context in the sliding-window layers' cache (llama.cpp `swa_full`; default true, as the managed server
+   * serves the stock model with `--swa-full`): without it a hybrid model reuses a cached prompt only from an early
+   * checkpoint, so neither a warm opening nor an earlier call's prefix is continued. */
+  fullSlidingWindowCache?: boolean;
   onProgress?: (progress: { loaded: number; total: number }) => void;
   signal?: AbortSignal;
 };
+
+/** Slots of the in-page server (wllama's unified KV cache: every slot can use the whole context). */
+const PAGE_SLOTS = 4;
 
 export type BrowserModelDiagnostics = {
   loaded: boolean; supportsWebGPU: boolean; requestedGpuLayers: number | null;
@@ -68,11 +84,12 @@ export type BrowserModelDiagnostics = {
 function loadParams(options: BrowserModelLoadOptions) {
   if (options.gpuLayers !== undefined && (!Number.isInteger(options.gpuLayers) || options.gpuLayers < 0))
     throw new RangeError('gpuLayers must be a nonnegative integer');
-  return { n_ctx: options.contextTokens ?? 4096, n_gpu_layers: options.gpuLayers ?? 99999,
+  return { n_ctx: options.contextTokens ?? 4096, n_parallel: PAGE_SLOTS, n_gpu_layers: options.gpuLayers ?? 99999,
     n_threads: options.threads, jinja: true, reasoning: false, chat_template: options.chatTemplate,
     // The server's idle-slot prompt cache restores a slot's state inexactly on wasm32 (docs/ENGINE_PARITY.md open gaps);
     // each slot still keeps its own prefix in the unified KV cache.
     cache_idle_slots: false,
+    swa_full: options.fullSlidingWindowCache ?? true,
     ...(options.loraAdapters?.length ? { lora_adapters: options.loraAdapters.map(adapter => ({ blob: adapter.blob, scale: 0 })),
       lora_init_without_apply: true } : {}),
     ...(options.nativeStates?.length ? { native_states: options.nativeStates.map(state => ({ blob: state.blob })) } : {}),
@@ -112,13 +129,14 @@ export const compileBrowserTools = modelTools;
  * (llama-server does this conversion on its side).
  */
 export function wllamaChatTransport(engine: BrowserInferenceEngine, tuned?: Record<string, unknown>,
-  nativeStates?: ReadonlySet<string>): ChatTransport {
+  nativeStates?: ReadonlySet<string>, beforeRequest?: (request: Record<string, unknown>) => Promise<void>): ChatTransport {
   return async (body, signal) => {
     const messages = body.messages as unknown[];
     try {
-      return await engine.createChatCompletion({ ...body, ...tuned,
-        messages: chatMessages(nativeStateMessages(messages, nativeStates ?? new Set())),
-        cache_prompt: true, stream: true, abortSignal: signal });
+      const request = { ...body, ...tuned, messages: chatMessages(nativeStateMessages(messages, nativeStates ?? new Set())) };
+      await beforeRequest?.(request);
+      signal?.throwIfAborted();
+      return await engine.createChatCompletion({ ...request, cache_prompt: true, stream: true, abortSignal: signal });
     } catch (error) {
       if (String(error).includes('kv_cache_full'))
         throw new Error('model context is full; reduce prompt or tool schemas, or reload with a larger context', { cause: error });
@@ -205,6 +223,32 @@ export class BrowserLocalModel {
     for (const adapter of options.loraAdapters ?? []) this.loraIndex.set(adapter.id, this.loraIndex.size);
     for (const state of options.nativeStates ?? []) this.nativeStates.add(state.id);
     this.lastLoadMs = Math.round(performance.now() - started);
+    this.warm = await this.warmOpeningsFor(options, params).catch(() => null);
+  }
+
+  /** The openings this load restored or prefilled (and whether each was saved for the next load). */
+  readonly warmOpenings: PageWarmOpening[] = [];
+  private warm: ReturnType<typeof pageWarmOpenings> | null = null;
+  /** Resolves once the warm states saved so far are written to storage. */
+  warmStatesWritten(): Promise<void> { return this.warm?.flushed() ?? Promise.resolve(); }
+
+  /** Warm openings kept across reloads, when the model is known by content, the engine can save and restore slot
+   * states and no tuned adapters or states change what a slot holds (llama/server.ts makes the same exclusion). */
+  private async warmOpeningsFor(options: BrowserModelLoadOptions, params: LoadParams): Promise<ReturnType<typeof pageWarmOpenings> | null> {
+    const engine = this.engine;
+    const engineBuild = (engine.constructor as { getLibllamaVersion?(): string }).getLibllamaVersion?.();
+    if (options.warmOpenings === false || !engine.capabilities?.slotState || !engineBuild || !/^[a-f0-9]{64}$/.test(options.modelSha256 ?? '') ||
+        options.loraAdapters?.length || options.nativeStates?.length || !engine.applyTemplate || !engine.createCompletion ||
+        !engine.saveSlot || !engine.restoreSlot || !engine.eraseSlot) return null;
+    const store = options.warmOpenings ?? opfsWarmStateStore();
+    if (!store) return null;
+    const tag = await warmTag({ modelSha256: options.modelSha256!, engineBuild, compat: engine.getWorkerResources?.().compat ?? false,
+      contextTokens: engine.getLoadedContextInfo?.().n_ctx ?? params.n_ctx, slots: params.n_parallel, gpu: (params.n_gpu_layers ?? 0) > 0,
+      fullSlidingWindowCache: params.swa_full === true, chatTemplate: params.chat_template ?? null });
+    return pageWarmOpenings(engine as WarmSlotEngine, store, tag, params.n_parallel, warm => {
+      const index = this.warmOpenings.findIndex(entry => entry.sha256 === warm.sha256);
+      if (index >= 0) this.warmOpenings[index] = warm; else this.warmOpenings.push(warm);
+    });
   }
 
   async loadFromHuggingFace(model: { repo: string; file?: string; quant?: string },
@@ -239,7 +283,11 @@ export class BrowserLocalModel {
     // fork's /v1/natlang/score accepts or returns (cache_messages, adapters, prompt_tokens, ...) reaches the page too.
     const body = { items: items.map(item => batchScoreItem(
       { ...item, messages: chatMessages(nativeStateMessages(item.messages, this.nativeStates)) }, item.tuned)) };
-    const response = await this.queued(async () => { signal?.throwIfAborted(); return this.engine.createNatlangScore!(body); });
+    const response = await this.queued(async () => {
+      for (const item of body.items) await this.warm?.before(item);
+      signal?.throwIfAborted();
+      return this.engine.createNatlangScore!(body);
+    });
     return items.map((item, index): PromiseSettledResult<DecisionScores> => {
       try { return { status: 'fulfilled', value: scoresFromBatchResult(response.results[index] as BatchScoreResult, item.options.length) }; }
       catch (reason) { return { status: 'rejected', reason }; }
@@ -272,7 +320,8 @@ export class BrowserLocalModel {
     return this.queued(async () => {
       const toolSchemaBytes = new TextEncoder().encode(JSON.stringify(modelTools(request.tools))).length;
       let stats: ChatTurnStats | undefined;
-      const turn = await chatCompletionModelTurn(wllamaChatTransport(this.engine, tuned, this.nativeStates),
+      const turn = await chatCompletionModelTurn(wllamaChatTransport(this.engine, tuned, this.nativeStates,
+        this.warm ? request => this.warm!.before(request) : undefined),
         { onTurn: value => { stats = value; } })(request, signal);
       if (stats) {
         this.lastTurn = { ...stats, toolSchemaBytes, tokensPerSecond: stats.completionTokens !== null && stats.durationMs > 0 ?
@@ -290,10 +339,12 @@ export class BrowserLocalModel {
   }
 }
 
+/** `sha256`: the model file's SHA-256 (a catalog entry's), which keeps warm openings across reloads (`modelSha256`). */
+type SourceCommon = { id?: string; templateUrl?: string; chatTemplate?: string; sha256?: string };
 export type BrowserModelSource =
-  | { kind: 'url'; url: string; id?: string; templateUrl?: string; chatTemplate?: string }
-  | { kind: 'files'; files: Blob[]; id?: string; templateUrl?: string; chatTemplate?: string }
-  | { kind: 'huggingface'; repo: string; file?: string; quant?: string; id?: string; templateUrl?: string; chatTemplate?: string };
+  | { kind: 'url'; url: string } & SourceCommon
+  | { kind: 'files'; files: Blob[] } & SourceCommon
+  | { kind: 'huggingface'; repo: string; file?: string; quant?: string } & SourceCommon;
 export type BrowserModelStatus = { id: string; diagnostics: BrowserModelDiagnostics; loadMs: number | null; gpuFallbackReason: string | null };
 export type LoadedBrowserModel = { model: BrowserLocalModel; status: BrowserModelStatus };
 
@@ -311,6 +362,7 @@ export async function loadBrowserLocalModel(source: BrowserModelSource,
   }) : undefined);
   const { cpuFallback = true, engine, ...given } = options;
   const loadOptions: BrowserModelLoadOptions = { ...given, ...(template ? { chatTemplate: template } : {}),
+    ...(given.modelSha256 ?? source.sha256 ? { modelSha256: given.modelSha256 ?? source.sha256 } : {}),
     ...(globalThis.crossOriginIsolated ? {} : { threads: given.threads ?? 1 }) };
   if (!Number.isInteger(loadOptions.contextTokens ?? 4096) || (loadOptions.contextTokens ?? 4096) < 512)
     throw new RangeError('contextTokens must be an integer of at least 512');

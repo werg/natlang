@@ -23,30 +23,16 @@ import { existsSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, wr
 import { join } from 'node:path';
 import type { WarmPrefix } from '../package/warm.js';
 import type { LlamaHost } from './host.js';
+import { OPENING_PROBES, openingParts, sharedPrefix } from '../model/warm-opening.js';
 
 export type { WarmPrefix } from '../package/warm.js';
+export { sharedPrefix } from '../model/warm-opening.js';
 
 export type Opening = { system: { role: 'system'; content: string }; tools: unknown[]; key: string };
-/** A request's opening: its system prompt and tools, keyed by their exact content. */
+/** A request's opening: its system prompt and tools, keyed by their exact content (model/warm-opening.ts). */
 export function openingOf(request: { messages: readonly unknown[]; tools?: readonly unknown[] }): Opening | undefined {
-  const system = request.messages[0] as { role?: unknown; content?: unknown } | undefined;
-  if (system?.role !== 'system' || typeof system.content !== 'string' || system.content.length < 256) return undefined;
-  const tools = [...(request.tools ?? [])];
-  return { system: { role: 'system', content: system.content }, tools,
-    key: createHash('sha256').update(JSON.stringify([system.content, tools])).digest('hex') };
-}
-
-/**
- * The longest text every conversation with this opening starts with, cut just after a special token so that the rest
- * of any prompt tokenizes on from it.
- */
-export function sharedPrefix(first: string, second: string): string {
-  let length = 0;
-  while (length < first.length && length < second.length && first[length] === second[length]) length++;
-  const common = first.slice(0, length);
-  let cut = 0;
-  for (const match of common.matchAll(/<\|[^|<>\s]{1,40}\|>|<\/?[a-z_]{2,24}>/g)) cut = match.index! + match[0].length;
-  return common.slice(0, cut);
+  const parts = openingParts(request);
+  return parts && { system: parts.system, tools: parts.tools, key: createHash('sha256').update(parts.text).digest('hex') };
 }
 
 /** The rendered opening up to its last tool line (the shared base of openings that differ only there), if it has two
@@ -104,7 +90,7 @@ export async function warmOpening(host: LlamaHost, server: { endpoint: string; h
   if (!info) {
     const render = async (content: string) => String((await post(host, endpoint, headers, '/apply-template',
       { messages: [opening.system, { role: 'user', content }], ...(opening.tools.length ? { tools: opening.tools } : {}) })).prompt ?? '');
-    const prefix = sharedPrefix(await render('⁣A'), await render('⁣B'));
+    const prefix = sharedPrefix(await render(OPENING_PROBES[0]), await render(OPENING_PROBES[1]));
     if (prefix.length < 256) return undefined;
     const tokens = await tokenize(prefix);
     await post(host, endpoint, headers, '/slots/0?action=erase', {}).catch(() => undefined);

@@ -69,6 +69,7 @@ test('local model validates calls and exposes local loading options', async () =
       { contextTokens: 2048, gpuLayers: 0, chatTemplate: 'official template' });
     assert.equal(params.n_ctx, 2048);
     assert.equal(params.cache_idle_slots, false, "the idle-slot prompt cache restores inexactly on wasm32");
+    assert.equal(params.swa_full, true, 'a hybrid model continues a cached prompt only with the full sliding-window cache, as the managed server serves it');
     assert.equal(params.n_gpu_layers, 0);
     assert.equal(params.jinja, true);
     assert.equal(params.chat_template, 'official template');
@@ -404,4 +405,139 @@ test('an in-page model without loaded states refuses native sentinels before inf
     await assert.rejects(model.decide.scoreMany([item]), /weights-unavailable: native state/);
     assert.equal(calls, 0);
   } finally { await model.close(); }
+});
+
+/** A wllama stand-in with the slot calls (`capabilities.slotState`): a slot holds the text it prefilled. */
+function slotEngine(log, { build = 'b12074-dc94109', refuseRestore = false } = {}) {
+  class Engine {
+    static getLibllamaVersion() { return build; }
+    capabilities = { natlangScore: true, slotState: true };
+    slots = ['', '', '', ''];
+    loaded = false;
+    isSupportWebGPU() { return false; } isModelLoaded() { return this.loaded; }
+    async loadModelFromUrl(_url, params) { this.loaded = true; this.params = params; }
+    async loadModelFromHF() {} async loadModel() {} async exit() {}
+    getLoadedContextInfo() { return { n_ctx: this.params.n_ctx, n_layer: 2 }; }
+    async applyTemplate({ messages, tools }) {
+      log.push(['template']);
+      return `<|startoftext|><|im_start|>system\n${messages[0].content}${tools ? `\n<tools>${JSON.stringify(tools)}</tools>` : ''}<|im_end|>\n` +
+        `<|im_start|>user\n${messages[1].content}<|im_end|>\n<|im_start|>assistant\n`;
+    }
+    async createCompletion(request) { log.push(['prefill', request.id_slot, request.n_predict]); this.slots[request.id_slot] = request.prompt; return {}; }
+    async saveSlot(id) { log.push(['save', id]); return { state: new TextEncoder().encode(this.slots[id]), n_saved: this.slots[id].length }; }
+    async restoreSlot(id, state) {
+      log.push(['restore', id]);
+      if (refuseRestore) throw new Error('No available space in KV cache or invalid slot save file');
+      this.slots[id] = new TextDecoder().decode(state); return { n_restored: this.slots[id].length };
+    }
+    async eraseSlot(id) { log.push(['erase', id]); this.slots[id] = ''; return {}; }
+    async createNatlangScore(request) {
+      const system = request.items[0].messages[0].content;
+      log.push(['score', this.slots.some(slot => slot.includes(system))]);
+      return { results: request.items.map(item => ({ log_probs: item.continuations.map((_, index) => -index - 1) })) };
+    }
+    async createChatCompletion(request) {
+      log.push(['chat', this.slots.some(slot => slot.includes(request.messages[0].content))]);
+      return { choices: [{ finish_reason: 'stop', message: { content: 'done' } }], usage: { completion_tokens: 1 } };
+    }
+  }
+  return new Engine();
+}
+
+function memoryWarmStore() {
+  const files = new Map();
+  let clock = 0;
+  return { files,
+    async read(name) { return files.get(name)?.blob; },
+    async write(name, blob) { files.set(name, { blob: new Blob([await blob.arrayBuffer()]), lastModified: ++clock }); },
+    async remove(name) { files.delete(name); },
+    async list() { return [...files].map(([name, file]) => ({ name, lastModified: file.lastModified })); } };
+}
+
+test('the in-page model keeps warm openings across reloads, keyed by model, engine build and settings', async () => {
+  const api = await browserApi();
+  const { openingOf } = await import('../dist/llama/warm.js');
+  const system = { role: 'system', content: 'Classify the ticket. '.repeat(20) };
+  const item = content => ({ messages: [system, { role: 'user', content }], options: ['"a"', '"b"'], cache_messages: 1 });
+  const store = memoryWarmStore(), sha = 'f'.repeat(64);
+  const load = async (log, options = {}, engineOptions = {}) => (await api.loadBrowserLocalModel({ kind: 'url', url: 'https://example.test/m.gguf', sha256: sha },
+    { engine: { engine: slotEngine(log, engineOptions), gpuProbe: async () => ({ usable: false, reason: 'test' }) }, gpuLayers: 0,
+      warmOpenings: store, ...options })).model;
+
+  // First load: the opening is prefilled on its own in a slot and saved; the decisions continue from it.
+  const first = [], model = await load(first);
+  try {
+    await model.decide(item('one'));
+    await model.decide(item('two'));
+    await model.warmStatesWritten();
+    assert.deepEqual(first, [['template'], ['template'], ['erase', 0], ['prefill', 0, 0], ['save', 0], ['score', true], ['score', true]],
+      'one warm-up per opening and load');
+    assert.equal(model.engine.slots[0], `<|startoftext|><|im_start|>system\n${system.content}<|im_end|>\n<|im_start|>`, 'the shared prefix of the opening');
+    assert.equal(store.files.size, 1);
+    assert.equal(model.warmOpenings.length, 1);
+    assert.equal(model.warmOpenings[0].restored, false); assert.equal(model.warmOpenings[0].saved, true);
+    assert.equal(model.warmOpenings[0].sha256, openingOf({ messages: [system], tools: [] }).key, 'keyed like the managed server');
+  } finally { await model.close(); }
+
+  // Reload: restored, not prefilled.
+  const second = [], reloaded = await load(second);
+  try {
+    await reloaded.decide(item('three'));
+    assert.deepEqual(second, [['restore', 0], ['score', true]]);
+    assert.equal(reloaded.warmOpenings[0].restored, true);
+  } finally { await reloaded.close(); }
+
+  // Any key difference (model, context size, sliding-window cache, engine build) is another state: the opening is prefilled, never restored.
+  for (const [options, engineOptions] of [[{ modelSha256: 'e'.repeat(64) }, {}], [{ contextTokens: 8192 }, {}], [{ fullSlidingWindowCache: false }, {}], [{}, { build: 'b12075-0000000' }]]) {
+    const log = [], other = await load(log, options, engineOptions);
+    try { await other.decide(item('four')); await other.warmStatesWritten(); }
+    finally { await other.close(); }
+    assert.equal(log.some(([kind]) => kind === 'restore'), false, JSON.stringify([options, engineOptions]));
+    assert.ok(log.some(([kind]) => kind === 'prefill'));
+  }
+
+  // A stored file that does not verify (truncated, corrupted) is removed and the opening prefilled again.
+  const original = [...store.files].find(([, file]) => file.lastModified === 1);
+  const bytes = new Uint8Array(await original[1].blob.arrayBuffer()); bytes[bytes.length - 1] ^= 1;
+  store.files.set(original[0], { blob: new Blob([bytes]), lastModified: 1 });
+  const corrupt = [], afterCorruption = await load(corrupt);
+  try { await afterCorruption.decide(item('five')); await afterCorruption.warmStatesWritten(); }
+  finally { await afterCorruption.close(); }
+  assert.deepEqual(corrupt.slice(0, 4), [['template'], ['template'], ['erase', 0], ['prefill', 0, 0]]);
+
+  // A state the engine refuses leaves the slot empty: it is dropped and the opening prefilled.
+  const refused = [], refusing = await load(refused, {}, { refuseRestore: true });
+  try { await refusing.decide(item('six')); }
+  finally { await refusing.close(); }
+  assert.deepEqual(refused.slice(0, 3), [['restore', 0], ['erase', 0], ['template']]);
+  assert.ok(refused.some(([kind]) => kind === 'prefill'));
+});
+
+test('warm openings fall back to a cold start when storage fails, and stay off without a model hash or the engine calls', async () => {
+  const api = await browserApi();
+  const system = { role: 'system', content: 'Use the tools. '.repeat(30) };
+  const failing = { async read() { throw new DOMException('denied', 'SecurityError'); }, async write() { throw new DOMException('quota', 'QuotaExceededError'); },
+    async remove() { throw new Error('x'); }, async list() { throw new Error('x'); } };
+  const log = [];
+  const { model } = await api.loadBrowserLocalModel({ kind: 'url', url: 'https://example.test/m.gguf', sha256: 'f'.repeat(64) },
+    { engine: { engine: slotEngine(log), gpuProbe: async () => ({ usable: false, reason: 'test' }) }, gpuLayers: 0, warmOpenings: failing });
+  try {
+    const tools = [{ type: 'function', function: { name: 'eval', description: 'Run code', parameters: { type: 'object', properties: {} } } }];
+    await model.turn({ messages: [system, { role: 'user', content: 'go' }], tools, temperature: 0, seed: null, max_tokens: 4 });
+    await model.warmStatesWritten();
+    assert.deepEqual(log.map(([kind]) => kind), ['template', 'template', 'erase', 'prefill', 'save', 'chat']);
+    assert.equal(log.at(-1)[1], true, 'the turn continues from the warm opening');
+    assert.equal(model.warmOpenings[0].saved, false);
+  } finally { await model.close(); }
+  // No model hash (a file the user picked), or an engine without the slot calls: the engine is used as before.
+  for (const [source, engine] of [[{ kind: 'url', url: 'https://example.test/m.gguf' }, slotEngine([])],
+    [{ kind: 'url', url: 'https://example.test/m.gguf', sha256: 'f'.repeat(64) }, Object.assign(slotEngine([]), { capabilities: { natlangScore: true } })]]) {
+    const calls = [];
+    engine.applyTemplate = async () => { calls.push('template'); return ''; };
+    const { model: plain } = await api.loadBrowserLocalModel(source, { engine: { engine, gpuProbe: async () => ({ usable: false, reason: 'test' }) },
+      gpuLayers: 0, warmOpenings: memoryWarmStore() });
+    try { await plain.decide({ messages: [system, { role: 'user', content: 'x' }], options: ['1', '2'] }); }
+    finally { await plain.close(); }
+    assert.deepEqual(calls, []);
+  }
 });

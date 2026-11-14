@@ -79,6 +79,7 @@ export { BROWSER_MODEL_CATALOG, loadBrowserModelCatalog, checkModelStorage } fro
 export type { BrowserModelManifest, BrowserModelCatalog, BrowserStorageStatus } from './models.js';
 export { probeBrowserGpu } from './gpu.js';
 export { cachedModelFile, removeCachedModelFiles, type ModelFileRef } from './model-files.js';
+export { opfsWarmStateStore, type WarmStateStore, type PageWarmOpening } from './warm-openings.js';
 export { neuraleseServerModelTurn, HttpNeuraleseStore, restoreNativeArtifacts, withRestoredNativeArtifacts, OWNER_HEADER } from '../model/neuralese-server.js';
 export { MemoryNeuraleseStore } from '../native/neuralese-store.js';
 export { OpfsNeuraleseStore, openBrowserNeuraleseStore, opfsAvailable, type OpfsNeuraleseStoreOptions, type OpfsStorage,
