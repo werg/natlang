@@ -2237,3 +2237,20 @@ pin-650bcaec stop path. Acted on: `--loss-norm token` (the unbiased constant nor
 Test running: replay of run1's groups from the base, real advantages, episode vs token norm side by side (probe at steps
 2/4/6); the shuffled-advantage arm (which removes Cov(A, 1/T) and so is predicted null either way) tests other
 reward-independent biases. Cause stays OPEN until the pair separates.
+
+Replay result (2026-11-14 evening; 6 steps of 24 archived groups in group order, k2, LR 1e-5, from the base; probe close
+logp / expected closes / sampled-token logp on v7 base traces; base -2.06 / 0.052 / -0.79, run1 step 2 -1.99 / 0.051,
+run1 step 8 -0.31 / 0.183 / -0.61): episode norm step 4 -1.56 / 0.069 / -0.76, step 6 -1.72 / 0.056 / -0.74; token norm
+step 4 -1.84 / 0.061 / -0.79, step 6 -3.03 / 0.032 / -0.90; shuffled advantages step 4 -2.29 / 0.049, step 6 -2.53 /
+0.044. Episode norm leans toward earlier closing and more confident sampled tokens, the predicted direction, but at about a
+quarter of run1's step-8 size and not growing; token norm drifts the other way by step 6. Neither arm reproduces run1's
+drift, so the episode-normalization bias is real but WEAKENED as the explanation of its size. Not identical to run1: group
+order and batches (24 a step by group number, not run1's batches), the k2 loss (run1 steps 1-8 ran k3), the prefix tree
+and nucleus head (b089fc960, 34f287780: landed after run1's pins), and replay is off-policy. Next: `--replay-schedule`
+re-executes run1's own steps 1-8 (batches recovered from archive times, checked against run1's decision logs: 24, 24,
+6, 24 x5) with run1's settings (episode, k3, decision call, prefix tree off). Reproducing step 8 puts the cause in the
+learner on these data, and one-switch ablations on the same batches attribute it; not reproducing it points at what
+differs (on-policy feedback, or code run1 ran that main no longer does). Separately, decisions: in every arm one step
+reversed the template inbox-spam decisions (2 options of 5 tokens: about +8 nats for the base's choice to -10 at the next
+step; token arm grad_norm 60 at step 3 as the KL pulled 98 decisions back), so a sampled decision at
+`--decision-weight call` (about 1,000 token units) moves near-identical prompts too far per step.
