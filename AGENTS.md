@@ -38,6 +38,17 @@ so w5 is retired (data kept, never resumed) and the base is the start policy.
   never a gate.
 - **Heartbeats check, they do not re-plan.** A monitoring cycle checks that the pinned experiments run correctly and
   the machines are healthy, and fixes breakage. Plans change between experiments, from their results.
+- **A significant unexplained held regression ends the experiment at that eval** (owner, 2026-11-14). A paired held
+  result below the declared failure threshold with p < 0.05 whose cause is not known stops the run and starts the bug hunt
+  on the freed machine. The declared failure rule is a last resort, not permission to continue: grpo-v2-run1 ran 7 more steps
+  (8 h, ~100 GB of the DGX) after step 8's -8.1 pts until step 12 confirmed it, while learner checks needing ~10 GB waited.
+  Likewise, a learner sentinel firing (grad_norm >5x the run's median, a reasoning-length shift, KL jump) is diagnosed at
+  that step, not watched. "Don't touch a pinned experiment mid-measurement" protects valid measurements; a regressing run
+  with a suspected bug is not one.
+- **Each heartbeat asks what the machines are worth.** Is any running job's result already decided or uninformative, and is
+  anything (diagnosis, the next run) waiting on memory or GPU it holds? Then stop it. Every run leaves >= 15 GB of DGX
+  headroom for diagnostics and probes. A run's stop also stops its Pop eval actor. The heartbeat prompt names the
+  experiments actually in flight; a stale list is fixed in the same cycle.
 - **The training and RL stack uses standard tooling** (an HF training loop, the SGLang server) and minimal crisp
   code. Build infrastructure only when the next experiment needs it; no new transitions, qualification scopes,
   controllers or custody schemas.
