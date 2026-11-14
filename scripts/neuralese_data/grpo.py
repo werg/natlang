@@ -454,15 +454,17 @@ class ReplayCollector:
     collection, no held eval. Consumer calls read the old run's actor store (``--actor-store``), which is never pruned here.
     ``--replay-max-group-tokens`` keeps only short groups (the learner bench). ``--replay-schedule`` (a JSON list of
     group-number lists) offers exactly those batches, one a step: the old run's own
-    steps, for re-executing its learner on its data."""
+    steps, for re-executing its learner on its data. A resumed replay (a branch) continues the stream after the groups its
+    state's run had taken (``first_group``)."""
 
-    def __init__(self, args, work):
+    def __init__(self, args, work, first_group=0):
         from lower_rollout_turns import NativeStates
         self.args, self.work = args, work
         self.archives = sorted(Path(args.replay).glob('g*.rollouts.jsonl.zst'))
+        self.by_group = {int(a.name[1:].split('.')[0]): a for a in self.archives}
+        self.archives = [a for g, a in sorted(self.by_group.items()) if g >= first_group]
         schedule = getattr(args, 'replay_schedule', None)
         self.schedule = json.loads(Path(schedule).read_text()) if schedule else None
-        self.by_group = {int(a.name[1:].split('.')[0]): a for a in self.archives}
         self.groups, self.lock, self.stop, self.paused = {}, threading.Lock(), threading.Event(), threading.Event()
         self.version = self.generated = self.episodes = self.outstanding = self.cursor = self.next_group = 0
         self.active_slots, self.variants = 0, {}
@@ -1414,12 +1416,12 @@ def train(args):
     drop_cache([Path(args.actor_export) / 'model.safetensors'])
     saver = StateSaver()
     if args.replay:
-        collector = ReplayCollector(args, work)
+        collector = ReplayCollector(args, work, first_group=first_group)
     else:
         collector = Collector(args, tasks, work, source_sha, runtime, first_group=first_group, cursor=cursor)
         collector.variants = load_variants(args, tasks, work)
     collector.version = step
-    if args.resume:
+    if args.resume and not args.replay:      # a replay offers archived groups, never this run's own
         reused, left_out = collector.reuse_scored(step, args.max_staleness)
         if reused or left_out:
             log_line(log, {'event': 'reused groups', 'reused': len(reused), 'left_out': left_out[:50],
@@ -1817,7 +1819,7 @@ def train(args):
                   if rollouts_archive is not None and rollouts_archive.exists() else None,
                   'actor_version': versions_live['actor']}
         style = reasoning_style(chains, think_close)
-        record.update(style, **style_shift(work, style))
+        record.update(style, **({} if args.replay else style_shift(work, style)))   # replayed reasoning is not the policy's
         if record.get('reasoning_shift'):
             print(f"reasoning shift: {style['reasoning_tokens_per_call']} reasoning tokens per call, "
                   f"{record['reasoning_vs_first_step']}x the run's first step", flush=True)

@@ -10,6 +10,7 @@ entropy, the expected ``</think>``
 closes per 1,000 reasoning tokens and the log-probability of ``</think>`` where the start policy closed.
 
     python behaviour_probe.py build --rollouts DIR --policy SHA --out probe.json [--calls 48]
+    python behaviour_probe.py measure --probe probe.json --out probe.jsonl BASE_CKPT CKPT...   # Pop's 8 GB GPU fits it
 """
 import argparse
 import io
@@ -147,9 +148,46 @@ def main(argv=None):
     b.add_argument('--out', required=True)
     b.add_argument('--calls', type=int, default=48)
     b.add_argument('--seed', type=int, default=0)
+    m = sub.add_parser('measure', help='probe native checkpoints, one JSON line each (forward only: fits an 8 GB GPU)')
+    m.add_argument('--probe', required=True)
+    m.add_argument('--start', help="``measure`` JSON of the start policy (else the first checkpoint's)")
+    m.add_argument('--out', required=True, help='JSONL, appended; checkpoints already in it are skipped')
+    m.add_argument('checkpoints', nargs='+')
     args = parser.parse_args(argv)
+    if args.command == 'measure':
+        return measure_checkpoints(args)
     calls, tokens = build(args.rollouts, args.policy, args.out, calls=args.calls, seed=args.seed)
     print(json.dumps({'calls': calls, 'tokens': tokens, 'out': args.out}))
+
+
+def measure_checkpoints(args):
+    import time
+    import torch
+    import exp0_sft
+    import lfm3_fast_train
+    from grpo import BASE
+    probe = json.loads(Path(args.probe).read_text())
+    out = Path(args.out)
+    done = {json.loads(l)['checkpoint']: json.loads(l) for l in out.read_text().splitlines()} if out.exists() else {}
+    start = json.loads(Path(args.start).read_text()) if args.start else None
+    for checkpoint in args.checkpoints:
+        if checkpoint in done:
+            start = start or done[checkpoint]['measure']
+            continue
+        t = time.time()
+        model, _, _ = exp0_sft.load_model(checkpoint, BASE, device='cpu', dtype=torch.bfloat16)
+        model.to('cuda').eval()
+        lfm3_fast_train.prepare(model)
+        now = measure(model, probe, pack_tokens=8000)
+        record = summary(now, start)
+        start = start or now
+        line = {'checkpoint': checkpoint, 'summary': record, 'shifted': shifted(record), 'measure': now,
+                'seconds': round(time.time() - t, 1), 'cuda_peak_gb': round(torch.cuda.max_memory_allocated() / 2**30, 2)}
+        with out.open('a') as handle:
+            handle.write(json.dumps(line) + '\n')
+        print(json.dumps({k: line[k] for k in ('checkpoint', 'summary', 'shifted', 'seconds', 'cuda_peak_gb')}), flush=True)
+        del model
+        torch.cuda.empty_cache()
 
 
 if __name__ == '__main__':

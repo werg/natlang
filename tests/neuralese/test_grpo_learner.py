@@ -374,3 +374,6 @@ def test_replay_bench_keeps_short_groups_only(tmp_path):
                                                      replay_max_group_tokens=1000), tmp_path / 'work')
     stop = threading.Event()
     assert collector.take_groups(2, 2, stop) == [1, 3] and not (tmp_path / 'work' / 'groups' / 'g000002').exists()
+    branch = grpo.ReplayCollector(SimpleNamespace(replay=str(archive), actor_store=str(tmp_path / 'store'),
+                                                  replay_max_group_tokens=0), tmp_path / 'branch', first_group=2)
+    assert branch.take_groups(2, 2, stop) == [2, 3]           # a resumed replay continues after its state's groups
