@@ -71,6 +71,15 @@ so w5 is retired (data kept, never resumed) and the base is the start policy.
     independently briefed second investigation. Brief it with the observations, not a hypothesis, and pass it each new
     experimental result as it lands. On grpo-v2-run2 the analysis started only after hours of experiments had narrowed the
     defect to the learner.
+  - Cost and answerability before launch (owner, 2026-11-15): before any diagnostic or sweep starts, its brief states the
+    question, the wall time it will take (steps x seconds per step x arms), and why its design can answer the question in
+    that time (it reaches the regime it tests: warmup, LR, step count, sample size). Then ask whether a cheaper method
+    answers it, in this order: offline statistics on archived data; forward-only evaluation of weights that already exist
+    (scaling an update `base + a*(theta_k - base)` as a stand-in for a learning rate, grafting parts of an update,
+    interpolating between checkpoints, sign-randomized nulls); a short learner-bench replay; a full-size run last. The
+    supervisor checks this for every design it writes or approves. On 2026-11-15 an LR sweep of five 2 h full-size arms
+    was launched whose warmup-10 arms could not reach their learning rate in 5 steps; a forward-only scan along an
+    existing update answered the same question in about an hour.
 - **Pop runs held evals first and diagnostics when none is queued** (owner, 2026-11-14): a probe or check
   may use Pop's idle GPU when it fits (RTX 4060, 8 GB; 14 GB host RAM: probes and forward-only checks of a 1.7B BF16
   model, not the learner); a held eval of a pinned run preempts it.
