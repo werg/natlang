@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Live ops dashboard exporter: every 30 s append machine, run, process and event records as JSONL.
 
-Contract: /home/werg/data/lfm3-rl-dgx-20261029/ops/dashboard/CONTRACT.md. Stdlib only, Python 3.10+.
-The same file runs on Pop (`ssh pop-os python3 - --host-json CFG < export.py`) to collect that host's metrics,
+Contract: <data_dir>/ops/dashboard/CONTRACT.md (data_dir, floors and the Pop ssh host are in config.json). Stdlib only, Python 3.10+.
+The same file runs on Pop (`ssh POP python3 - --host-json CFG < export.py`) to collect that host's metrics,
 memory ledger and systemd units in one ssh call.
 """
 import argparse
@@ -20,16 +20,20 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-DATA = '/home/werg/data/lfm3-rl-dgx-20261029'
+try:     # absent when the file runs from stdin on Pop (collect_host only)
+    CONFIG = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config.json')))
+except (OSError, NameError):
+    CONFIG = {}
+DATA = os.path.expanduser(CONFIG.get('data_dir', ''))
 OPS = DATA + '/ops'
 DASH = OPS + '/dashboard'
-FALLOW = '/home/werg/natlang/plans/neuralese/FALLOW_REGISTER.md'
-LEDGER = '/home/werg/natlang/scripts/memory_ledger.py'
-POP_LEDGER = '~/natlang/scripts/memory_ledger.py'
+FALLOW = os.path.expanduser(CONFIG.get('repo', '')) + '/plans/neuralese/FALLOW_REGISTER.md'
+LEDGER = os.path.expanduser(CONFIG.get('repo', '')) + '/scripts/memory_ledger.py'
+POP_LEDGER = '~/natlang/scripts/memory_ledger.py'     # Pop's checkout, expanded on Pop
 LIMIT = 28000          # bytes per line; the contract's hard limit is 30 KiB
 KEEP_S = 6 * 3600      # finished/failed units stay listed this long
 SLOW_S = 600           # queue/investigations/alerts/fallow are re-emitted at most this often unless changed
-FLOORS = {'dgx': {'/': 40, '/mnt/external': 50}, 'pop': {'/': None}}
+FLOORS = CONFIG.get('floors_gb', {})
 DEFAULT_PATTERNS = ['hunt-*', 'grpo-*', 'popsoak-*', 'front-*', 'checkmain-*', 'test-*', 'trlref-*', 'perf-*', 'exp*',
                     'held-*', 'opsdash*', 'ops-dashboard-*', 'probe-*', 'bench-*', 'sft-*', 'natlang-gb10-compactor*']
 SKIP_DIRS = {'actor', 'groups', 'held', 'rollouts', 'decisions', 'code', 'workers', '__pycache__', 'dashboard'}
@@ -176,7 +180,7 @@ def collect_host(cfg):
 
 
 def collect_pop(cfg, timeout=45):
-    cmd = ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', 'pop-os', '/usr/bin/python3', '-', '--host-json',
+    cmd = ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', CONFIG['pop_ssh_host'], '/usr/bin/python3', '-', '--host-json',
            shlex.quote(json.dumps(cfg))]
     r = subprocess.run(cmd, input=open(__file__).read(), capture_output=True, text=True, timeout=timeout)
     if r.returncode:
@@ -615,8 +619,8 @@ def cycle(out, ops, ann_path, state, once=False, use_pop=True):
                 'known': [k.split(':', 1)[1] for k, r in store.items() if r['machine'] == machine and r['state'] == 'running'],
                 'have_log': [k.split(':', 1)[1] for k, r in store.items() if r['machine'] == machine and r.get('last_log')]}
     with ThreadPoolExecutor(2) as ex:
-        fl = ex.submit(collect_host, cfg('dgx', ['/', '/mnt/external'], LEDGER))
-        fp = ex.submit(collect_pop, cfg('pop', ['/'], POP_LEDGER)) if use_pop else None
+        fl = ex.submit(collect_host, cfg('dgx', list(FLOORS['dgx']), LEDGER))
+        fp = ex.submit(collect_pop, cfg('pop', list(FLOORS['pop']), POP_LEDGER)) if use_pop else None
         hosts = {'dgx': fl.result()}
         if fp:
             try:

@@ -163,14 +163,15 @@ def test_unit_lifecycle_and_alerts(tmp_path):
     assert items == [] and state['units'] == {}
 
 
-def test_alerts_disk_and_ledger():
+def test_alerts_disk_and_ledger(monkeypatch):
+    monkeypatch.setattr(export, 'FLOORS', {'dgx': {'/': 40, '/big': 50}, 'pop': {'/': None}})
     host = {'dgx': {'disks': [{'mount': '/', 'size_gb': 900, 'free_gb': 50, 'floor_gb': 40},
-                              {'mount': '/mnt/external', 'size_gb': 3600, 'free_gb': 40}]},
+                              {'mount': '/big', 'size_gb': 3600, 'free_gb': 40}]},
             'pop': {'disks': [{'mount': '/', 'size_gb': 900, 'free_gb': 5}]}}
     alerts = export.build_alerts(host, {'dgx': {'headroom_gb': 9.0}}, [], ['Pop unreachable: x'])
     texts = [(a['level'], a['text']) for a in alerts]
     assert ('warn', '/ has 50 GB free (floor 40 GB)') in texts
-    assert ('crit', '/mnt/external has 40 GB free (floor 50 GB)') in texts
+    assert ('crit', '/big has 40 GB free (floor 50 GB)') in texts
     assert any('headroom 9.0' in t for _, t in texts) and any('Pop unreachable' in t for _, t in texts)
     assert not any(a['machine'] == 'pop' for a in alerts)                        # Pop's / has no floor
 
