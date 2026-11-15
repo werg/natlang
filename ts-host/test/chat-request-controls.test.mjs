@@ -12,6 +12,11 @@ test('chat request controls carry validated adapter references for S7 rollouts',
 });
 
 
+test('a hosted teacher may omit the seed field', () => {
+  assert.deepEqual(chatRequestControls({ x_natlang_omit_seed: true }), { x_natlang_omit_seed: true });
+  assert.throws(() => chatRequestControls({ x_natlang_omit_seed: false }), /only be true/);
+});
+
 test('RL collection explicitly captures behavior and disables guided sampling', () => {
   assert.deepEqual(chatRequestControls({x_natlang_rl_capture:true, guidance:false}),
     {x_natlang_rl_capture:true, guidance:false});

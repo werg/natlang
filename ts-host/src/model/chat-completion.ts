@@ -309,7 +309,10 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
         const template = request.template;
         wireRequest.neuralese_template = { ...template, call: forward[template.call] ?? template.call };
       }
-      if (request.seed !== null) wireRequest.seed = request.seed;
+      // Hosted servers that reject a `seed` field (Gemini's OpenAI endpoint) opt out with the x_natlang_omit_seed control.
+      const omitSeed = wireRequest.x_natlang_omit_seed === true;
+      delete wireRequest.x_natlang_omit_seed;
+      if (request.seed !== null && !omitSeed) wireRequest.seed = request.seed;
       // The configured collection cap and the runtime's remaining allowance
       // both apply. A per-turn allowance must not erase a smaller explicit cap.
       const configuredMax = options.request?.max_tokens;

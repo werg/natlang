@@ -103,6 +103,17 @@ test('streamed deltas assemble into the response a non-streaming request returns
   assert.equal(body.id, 'c1');
 });
 
+test('x_natlang_omit_seed keeps the seed and itself off the wire', async () => {
+  const model = await server(() => [
+    delta({ tool_calls: [{ index: 0, id: 'x', type: 'function', function: { name: 'eval', arguments: '{"code":"return 7"}' } }] }, 'tool_calls')]);
+  try {
+    await chatCompletionModelTurn(httpChatTransport({ endpoint: model.endpoint, model: 'm' }),
+      { request: { top_p: 0.95, x_natlang_omit_seed: true } })(request());
+    const sent = model.bodies[0];
+    assert.equal('seed' in sent, false); assert.equal('x_natlang_omit_seed' in sent, false); assert.equal(sent.top_p, 0.95);
+  } finally { await model.close(); }
+});
+
 test('the HTTP transport streams, strips private schema keys, and decodes tool calls', async () => {
   const model = await server(() => [
     delta({ role: 'assistant', content: '' }),
