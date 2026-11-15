@@ -2382,3 +2382,20 @@ comparison against TRL's GRPO loss. Context: published GRPO recipes run LR ~1e-6
 ran 1e-5 on 192 (about 120 in groups with spread). The 1e-5 choice rested on BF16 flips reverting at 3e-6, which FP32
 masters make moot. Kept regardless (each stands on its own evidence): k2 KL, token normalization, the decision cap,
 `lr_data_scale`, the behaviour probe and sentinels, the memory and Pop-engine fixes.
+
+**Hunt result, 2026-11-15 evening (bench, independently briefed from the static analysis).** No advantage-independent
+learner bias with a fixed close direction: two reward-free controls go opposite ways (within-group shuffle closes 1.07 /
+1.45 / 3.24 / 4.76x, cross-episode shuffle 0.90 / 0.68 / 0.46 / 0.48x and seed 2 0.94 / 0.73 / 0.53x), and run2's drift
+(replayed: 1.01 / 1.03 / 1.15 / 1.19x) sits inside that scatter. Negated advantages flip the close direction (0.96 /
+0.98 / 0.82x); (A+N)/2 at step 3 is closes ~0.98, logp −0.021: the close direction follows the realized update, the
+base-sample logp loss is a displacement (KL-like) cost on either sign. Step-4 AdamW decomposition (exact from run2's
+states 3 and 4): the momentum part alone gives closes 1.36, step 4's fresh gradient alone 1.13: the rise was carried from
+steps 1-3. A line scan along θ4 − base is odd in α (closes 1.33 / 0.43 at ±1, 1.63 / 0.19 at ±2) while the same
+magnitudes with random signs or permuted do nothing; grafts put it in layers 0-11 (MLP > attention > conv), not the
+embedding, the `</think>` row or the norms. With the static analysis (step-4 |m̂/√v̂| at the pure-noise value), two
+independent investigations converge: at ~24 groups/step and LR 1e-5 a freshly started AdamW takes near-full-LR steps in
+directions the noise sets, momentum carries them, and held success degrades with the displacement. Not a fixed-sign
+learner bias in the scope checked; still unchecked: arms C (binary reward), D (KL 0), F (no prefix tree), the grpo-v1
+code at 1e-5, import (consumer) calls (missing from the replay), the d ≈ ±16-18 tail tokens, the inbox-n7 decision
+reversals at A < 0, BF16-vs-FP32 masters. Not established: that the reward signal wins at any LR. Next: the LR sweep
+(gain proxy on 8 untouched groups vs drift; arms at warmup 10 and 2) chooses grpo-v3's step size.
