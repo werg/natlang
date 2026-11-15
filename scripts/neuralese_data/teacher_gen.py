@@ -72,6 +72,10 @@ def order_tasks(rows, rates, band, seed):
     return ordered, rank
 
 
+# decide() collection needs the actor's exact native capture, which a hosted teacher endpoint does not give
+UNSUPPORTED_DECIDE = 'decision collection needs its exact native capture'
+
+
 class Generator:
     def __init__(self, args):
         self.args, self.work = args, Path(args.work)
@@ -93,7 +97,7 @@ class Generator:
     def _no_verdict(self, record):
         """Every episode ended unresolved before its first model turn: the provider failed (rate limit, outage), not the
         teacher. Such a record is no teacher verdict; it goes to deferred.jsonl and the task is retried."""
-        return all(e['outcome'] == 'unresolved' and e['turns'] == 0 for e in record['episodes'])
+        return 'unsupported' not in record and all(e['outcome'] == 'unresolved' and e['turns'] == 0 for e in record['episodes'])
 
     def _take(self):
         while time.time() < self.cool_until and not self.stop.is_set():
@@ -164,6 +168,9 @@ class Generator:
                                 'completion_tokens': sum((t.get('usage') or {}).get('completion_tokens') or 0
                                                          for t in r['turns'])} for r in rollouts],
                   'rollouts': str(directory / 'rollouts.jsonl')}
+        logs = ''.join(path.read_text(errors='replace') for path in directory.glob('*.log'))
+        if UNSUPPORTED_DECIDE in logs:   # a deterministic harness limit, not a provider failure: recorded, never retried
+            record['unsupported'] = 'decide-native-capture'
         with self.lock:
             if self._no_verdict(record):
                 self.attempts[index] = self.attempts.get(index, 0) + 1
