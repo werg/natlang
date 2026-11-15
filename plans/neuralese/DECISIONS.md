@@ -2366,3 +2366,19 @@ Pop actor stopped), and the bug hunt starts on the freed DGX. Each memory stop a
 for its unfinished step (g18-g55, g106-g129, about 48 groups, never trained): data loss, not bias. Kept for the hunt: the
 pin, branch states 3 and 4, checkpoints 1-4, rollouts. Memory fixes for the next pin: 5ae700243. Also retired: the w5
 checkpoint-offload owner, whose only job pointed at a deleted bf95-lowlr-1105 checkpoint.
+
+**Hunt, 2026-11-15 afternoon: candidate mechanism, Adam noise steps (under test, not yet a conclusion).** Learner-bench
+replays of run2's own batches from the base (`ops/grpo-v2/hunt/`): real advantages reproduce run2 (closes 1.01 / 1.03 /
+1.15 / 1.19x, sampled logp −0.045 at step 4), so on-policy feedback is not needed; cross-group shuffled advantages move as
+far (closes 0.90 / 0.68 / 0.46 / 0.48x, logp −0.053), within-group shuffled further (closes 4.76x at step 4). Static
+analysis (independently briefed): run2's step-4 AdamW update has mean |m̂/√v̂| 0.427 in every block, the pure-noise value
+for step 4 at betas 0.9/0.99 to three digits (a 0.1-sigma signal would give 0.432); real and shuffled gradient norms are
+equal. So per-weight gradient SNR is below ~0.1 and fresh-state bias-corrected AdamW takes ~full-LR steps in noise-set
+directions: displacement is set by LR and step count, not by signal. Predicted and seen: base-sample logp falls in every
+arm (−KL, sign-definite); the close ratio's sign is a per-realization draw (0.48x / 1.19x / 4.76x), so run1's "step 3
+caused the close shift" is one draw, not a cause; at 0.08-0.25x LR (run1 bench) the probe stays flat. The size of the held
+drop is not derived. Being tested: more shuffle seeds, negated advantages, the same replay at LR 2.5e-6, a loss/gradient
+comparison against TRL's GRPO loss. Context: published GRPO recipes run LR ~1e-6 on thousands of episodes per update; we
+ran 1e-5 on 192 (about 120 in groups with spread). The 1e-5 choice rested on BF16 flips reverting at 3e-6, which FP32
+masters make moot. Kept regardless (each stands on its own evidence): k2 KL, token normalization, the decision cap,
+`lr_data_scale`, the behaviour probe and sentinels, the memory and Pop-engine fixes.
