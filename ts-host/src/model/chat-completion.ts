@@ -259,7 +259,14 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
     const messages = structuredClone(request.messages) as Array<Json & { tool_calls?: Array<{ function?: { name?: string } }> }>;
     // This marker is internal provenance used by adapters that need to render host-supplied context differently.
     // It is never part of the chat-completions wire schema.
-    for (const message of messages) delete message.natlang_host_generated;
+    // `x_natlang_host_call_fields` (a collection control) are provider fields for the calls the runtime wrote itself: Gemini
+    // rejects a history whose function calls carry no thought signature, and a call the model never sampled has none.
+    const hostCallFields = options.request?.x_natlang_host_call_fields;
+    for (const message of messages) {
+      if (hostCallFields && message.natlang_host_generated)
+        for (const call of message.tool_calls ?? []) Object.assign(call, structuredClone(hostCallFields));
+      delete message.natlang_host_generated;
+    }
     // Modern vLLM reads `reasoning`; older compatible servers use `reasoning_content`.
     // Carry both exact aliases so interleaved history is retained by either parser.
     for (const message of messages) {
@@ -318,6 +325,7 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
       // Hosted servers that reject a `seed` field (Gemini's OpenAI endpoint) opt out with the x_natlang_omit_seed control.
       const omitSeed = wireRequest.x_natlang_omit_seed === true;
       delete wireRequest.x_natlang_omit_seed;
+      delete wireRequest.x_natlang_host_call_fields;
       if (request.seed !== null && !omitSeed) wireRequest.seed = request.seed;
       // The configured collection cap and the runtime's remaining allowance
       // both apply. A per-turn allowance must not erase a smaller explicit cap.

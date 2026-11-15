@@ -17,6 +17,12 @@ test('a hosted teacher may omit the seed field', () => {
   assert.throws(() => chatRequestControls({ x_natlang_omit_seed: false }), /only be true/);
 });
 
+test('host call fields for a hosted teacher are an object', () => {
+  const fields = { extra_content: { google: { thought_signature: 'x' } } };
+  assert.deepEqual(chatRequestControls({ x_natlang_host_call_fields: fields }), { x_natlang_host_call_fields: fields });
+  assert.throws(() => chatRequestControls({ x_natlang_host_call_fields: 'x' }), /object of tool-call fields/);
+});
+
 test('RL collection explicitly captures behavior and disables guided sampling', () => {
   assert.deepEqual(chatRequestControls({x_natlang_rl_capture:true, guidance:false}),
     {x_natlang_rl_capture:true, guidance:false});

@@ -73,9 +73,14 @@ def order_tasks(rows, rates, band, seed):
     return ordered, rank
 
 
+GEMINI_HOST_CALL_FIELDS = {'extra_content': {'google': {'thought_signature': 'skip_thought_signature_validator'}}}
+
+
 def default_chat_config(url):
-    """Request controls when none are given: top-p, and no `seed` field for Gemini's OpenAI endpoint (it rejects it)."""
-    return {'top_p': 0.95, **({'x_natlang_omit_seed': True} if 'generativelanguage.googleapis.com' in url else {})}
+    """Request controls when none are given: top-p; for Gemini's OpenAI endpoint also no `seed` field (it rejects it) and
+    Google's documented bypass signature on the function calls the runtime wrote itself (it rejects unsigned ones)."""
+    gemini = 'generativelanguage.googleapis.com' in url
+    return {'top_p': 0.95, **({'x_natlang_omit_seed': True, 'x_natlang_host_call_fields': GEMINI_HOST_CALL_FIELDS} if gemini else {})}
 
 
 def completions_url(endpoint):
