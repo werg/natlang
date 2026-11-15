@@ -2312,3 +2312,15 @@ per-task pass-rate change vs the Pop base, p < 0.05 each, and `ran_out_rate` not
 2026-11-14), as does no gain by 48 h of training. A `behaviour_shift` or `grad_spike` is diagnosed at the step it fires
 (the probe's bounds: |logp change| 0.02, |entropy change| 0.03, closes outside 0.67-1.5x; run1 was at 3.3x after step 4).
 Early checks as run1 (step-1 KL < 1e-3, outside-nucleus < 1%, |log rho| < 0.1).
+
+**Step 1 and the step-2 memory stop (2026-11-15).** Step 1 (24 groups, reward 0.558) passed the early checks: KL 0,
+outside-nucleus 0.12%, |log rho| 0.029, probe flat (+0.002 logp, 0.99x closes, +0.002 entropy), grad_norm 0.213. At step 2's
+lowering the reasoning-shift sentinel fired (1,214 reasoning tokens per call, 1.52x step 1). That is batch composition, not
+the policy: the step-2 groups were sampled almost entirely by policy version 0 (`versions.json`), the start policy measured
+for step 1, and per-group reasoning ranges from 300 to 2,000+ tokens per call, weighted by call count (g18: 38 calls per
+episode at 1,894). Step 1 trained on the first 24 groups to finish, the short ones. The v0-sampled groups that finished
+later average 1,318 tokens per call (8 groups). Then the guard stopped the run when the step-2 learner reached 92.6 GB
+(budget 80 x 1.15 overshoot, under memory pressure). Longer chains raise the learner's memory past `--activation-gb`
+(prefixes recompute outside it). The run resumed from the step-1 branch state (`state-step-00001`, next group 32) as
+`grpo-v2-run2-r2`, with budget 84 and `--activation-gb 4`. Ledger headroom is 16.5 GB. Recompute is exact, so the
+treatment is unchanged. The Pop base measurement (231 of 508 episodes) resumes from its journal.
