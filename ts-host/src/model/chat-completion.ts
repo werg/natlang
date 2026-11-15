@@ -109,6 +109,9 @@ function leakedCallFeedback(text: string, tools: Array<{ function: { name: strin
   return `The tool call in your last reply ${problem}, so nothing ran; send the call again, complete.`;
 }
 
+/** The fields of a streamed tool call that natlang itself assembles; any other field is provider-opaque and kept as sent. */
+const TOOL_CALL_FIELDS = new Set(['index', 'id', 'type', 'function']);
+
 /** Whether a transport answered with streamed chunks rather than one whole body. */
 export function isStream(value: AsyncIterable<Json> | Json): value is AsyncIterable<Json> {
   return typeof (value as AsyncIterable<Json>)[Symbol.asyncIterator] === 'function';
@@ -130,7 +133,7 @@ export async function assembleChatCompletion(chunks: AsyncIterable<Json>, onDelt
   let final: Json | undefined;
   const parts: ModelContentPart[] = [];
   let partsOnly = true;
-  const calls: Array<{ id?: string; type: string; function: { name: string; arguments: string } }> = [];
+  const calls: Array<{ id?: string; type: string; function: { name: string; arguments: string }; [field: string]: unknown }> = [];
   const extra: Json = {};
   const emit = (delta: ModelTurnDelta) => { try { onDelta?.(delta); } catch { /* observers never affect the turn */ } };
   const addText = (text: string) => {
@@ -182,6 +185,9 @@ export async function assembleChatCompletion(chunks: AsyncIterable<Json>, onDelt
       const fn = (part.function ?? {}) as Json;
       if (typeof fn.name === 'string') call.function.name += fn.name;
       if (typeof fn.arguments === 'string') call.function.arguments += fn.arguments;
+      // Provider-opaque fields of a call (Gemini's `extra_content.google.thought_signature`) are part of the call: the
+      // provider rejects the next turn when the history sends the call back without them.
+      for (const [key, value] of Object.entries(part)) if (!TOOL_CALL_FIELDS.has(key)) call[key] = value;
       const fragment = { ...(typeof part.id === 'string' ? { id: part.id } : {}),
         ...(typeof fn.name === 'string' && fn.name ? { name: fn.name } : {}),
         ...(typeof fn.arguments === 'string' && fn.arguments ? { arguments: fn.arguments } : {}) };
