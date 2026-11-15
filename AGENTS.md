@@ -65,6 +65,12 @@ so w5 is retired (data kept, never resumed) and the base is the start policy.
     (on-policy feedback, held outcomes).
   - Diagnostic units are small: one question per ledger unit, the fewest steps and groups that answer it, results after
     each step rather than at the end.
+  - Code analysis starts early, in parallel (owner, 2026-11-15): as soon as a defect is suspected (a sentinel fires, a
+    held regression, a surprising number), start a static analysis of the code path in parallel with the experiments,
+    without waiting for them to localize it. It needs no GPU, so it costs no machine time, and it serves as the
+    independently briefed second investigation. Brief it with the observations, not a hypothesis, and pass it each new
+    experimental result as it lands. On grpo-v2-run2 the analysis started only after hours of experiments had narrowed the
+    defect to the learner.
 - **Pop runs held evals first and diagnostics when none is queued** (owner, 2026-11-14): a probe or check
   may use Pop's idle GPU when it fits (RTX 4060, 8 GB; 14 GB host RAM: probes and forward-only checks of a 1.7B BF16
   model, not the learner); a held eval of a pinned run preempts it.
