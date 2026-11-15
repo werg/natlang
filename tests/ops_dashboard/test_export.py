@@ -56,7 +56,7 @@ def test_tail_incremental_and_records(tmp_path):
     m, e = export.scan_runs(str(ops), state, __import__('time').time())
     assert len(m) == 1 and m[0]['type'] == 'train'
     d = m[0]['data']
-    assert (d['run'], d['group'], d['kind'], d['step'], d['wall_s']) == ('grpo-v2.hunt.bisA', 'grpo-v2.hunt', 'bench', 2, 200)
+    assert (d['run_id'], d['group'], d['kind'], d['step'], d['wall_s']) == ('grpo-v2.hunt.bisA', 'grpo-v2.hunt', 'bench', 2, 200)
     assert e and e[0]['data']['flags'] == ['behaviour_shift']
     assert export.scan_runs(str(ops), state, 0)[0] == []                         # nothing new
     with open(path, 'a') as f:
@@ -81,7 +81,7 @@ def test_held_record(tmp_path):
     state = {}
     m, e = export.scan_runs(str(ops), state, __import__('time').time())
     d = m[0]['data']
-    assert m[0]['type'] == 'held' and d['run'] == 'grpo-v2.run2' and d['step'] == 3 and d['policy'] == 'bbb'
+    assert m[0]['type'] == 'held' and d['run_id'] == 'grpo-v2.run2' and d['step'] == 3 and d['policy'] == 'bbb'
     assert d['delta_pts'] == -9.6 and d['p'] == 0.001 and d['ran'] == 336 and d['of'] == 512 and d['complete'] is False
     assert e[0]['data']['kind'] == 'held'
     assert export.scan_runs(str(ops), state, 0)[0] == []                         # unchanged: no repeat

@@ -278,17 +278,19 @@ def step_records(run, st, steps, mtime, now):
         st['max_step'] = max(st.get('max_step', 0), int(s['step']))
         st.setdefault('recent', []).append([int(s['step']), el])
         st['recent'] = st['recent'][-6:]
-        data = {'run': run, 'group': group, 'kind': run_kind(run, s), 'step': int(s['step']),
+        data = {'run_id': run, 'group': group, 'kind': run_kind(run, s), 'step': int(s['step']),
                 'wall_s': el if isinstance(el, (int, float)) else None, 'metrics': select_metrics(s)}
         out.append({'ts': ms(ts), 'type': 'train', 'data': data})
         flags = [f for f in FLAGS if s.get(f)]
         if flags and now - ts < KEEP_S:
             events.append({'ts': ms(ts), 'type': 'event', 'data': {
-                'kind': 'flag', 'level': 'warn', 'run': run, 'step': data['step'], 'flags': flags,
+                'kind': 'flag', 'level': 'warn', 'run_id': run, 'step': data['step'], 'flags': flags,
                 'text': f'{run} step {data["step"]}: {", ".join(flags)}'}})
     return out, events
 
 
+# Top-level data.run / data.source are overwritten by the Tendriller collector (stream-sources/records.mjs): runs
+# travel as run_id.
 def held_record(run, path):
     d = read_json(path, None)
     if not d or 'primary' not in d:
@@ -296,7 +298,7 @@ def held_record(run, path):
     name = os.path.basename(os.path.dirname(path))
     m = re.match(r'step-(\d+)$', name)
     first, second, prim, paired = d.get('first', {}), d.get('second', {}), d['primary'], d.get('paired', {})
-    return {'run': run, 'step': int(m.group(1)) if m else None, 'held_dir': name, 'policy': second.get('policy'),
+    return {'run_id': run, 'step': int(m.group(1)) if m else None, 'held_dir': name, 'policy': second.get('policy'),
             'delta_pts': round(100 * prim['delta'], 2), 'p': prim.get('permutation_p'),
             'first_rate': prim.get('first_rate'), 'second_rate': prim.get('second_rate'), 'tasks': prim.get('tasks'),
             'ran': second.get('ran'), 'of': first.get('ran'), 'complete': bool(second.get('complete')),
@@ -331,7 +333,7 @@ def scan_runs(ops, state, now):
             metrics.append({'ts': ts, 'type': 'held', 'data': h})
             if not fresh or now - ts / 1000 < 24 * 3600:
                 events.append({'ts': ts, 'type': 'event', 'data': {
-                    'kind': 'held', 'level': 'info', 'run': run, 'step': h['step'],
+                    'kind': 'held', 'level': 'info', 'run_id': run, 'step': h['step'],
                     'text': f'Held {h["held_dir"]} on {run}: {h["delta_pts"]:+.1f} pts (p={h["p"]}), {h["ran"]}/{h["of"]} ran'}})
     return metrics, events
 
