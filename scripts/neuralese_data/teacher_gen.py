@@ -11,7 +11,7 @@ successes are the distillation set, failures keep their scores.
 Tasks are the GRPO pools minus the held closure (`grpo.load_tasks`: held-v3 `exclusion_ids` incl. held-v2, shared source
 groups, `ops/pool-errata`, the missing ext_codebase repos), ordered once into `WORK/tasks.jsonl`: tasks in the base's pass band
 first, then tasks the base fails, then unmeasured ones, then those it solves, each tier round-robin over families.
-Several teachers share one WORK with disjoint `--shard K N`.
+Several teachers share one WORK: each claims a task before running it (WORK/claims), so faster teachers take more.
 
   pause:   touch WORK/PAUSE   (running episodes finish, no new ones start; remove the file to continue)
   stop:    systemctl --user stop <unit>   (killed episodes are redone on the next launch)
@@ -22,6 +22,7 @@ import argparse
 import json
 import os
 import random
+import re
 import shutil
 import signal
 import subprocess
@@ -72,6 +73,11 @@ def order_tasks(rows, rates, band, seed):
     return ordered, rank
 
 
+def chat_config_path(work, model_id):
+    """Each teacher sharing WORK keeps its own request controls."""
+    return Path(work) / f"chat-config.{re.sub(r'[^A-Za-z0-9._-]+', '_', model_id)}.json"
+
+
 # decide() collection needs the actor's exact native capture, which a hosted teacher endpoint does not give
 UNSUPPORTED_DECIDE = 'decision collection needs its exact native capture'
 
@@ -90,6 +96,8 @@ class Generator:
         self.done = set()
         if self.manifest.exists():
             self.done = {json.loads(line)['index'] for line in self.manifest.open() if line.strip()}
+        self.chat_config = chat_config_path(self.work, args.model_id)
+        (self.work / 'claims').mkdir(exist_ok=True)
         self.retry = []           # tasks whose episodes the provider failed (no verdict), retried after the cursor
         self.attempts = {}
         self.cool_until = 0.
@@ -99,16 +107,58 @@ class Generator:
         teacher. Such a record is no teacher verdict; it goes to deferred.jsonl and the task is retried."""
         return 'unsupported' not in record and all(e['outcome'] == 'unresolved' and e['turns'] == 0 for e in record['episodes'])
 
+    def _claim(self, index):
+        """Several teachers share one WORK and steal tasks from one ordered list: WORK/claims/tINDEX names the process
+        running a task (state running) or the one that recorded it (state done). A dead process's claim is taken over."""
+        path = self.work / 'claims' / f't{index:06d}'
+        mine = json.dumps({'pid': os.getpid(), 'teacher': self.args.model_id, 'state': 'running'})
+        try:
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+        except FileExistsError:
+            try:
+                held = json.loads(path.read_text() or '{}')
+            except (OSError, ValueError):
+                return False   # being written by its claimant
+            if held.get('state') == 'done':
+                self.done.add(index)
+                return False
+            try:
+                os.kill(int(held.get('pid', 0)), 0)
+                return False   # its claimant is alive
+            except (ProcessLookupError, ValueError):
+                pass
+            except PermissionError:
+                return False
+            tmp = path.with_suffix(f'.{os.getpid()}')
+            tmp.write_text(mine)
+            os.replace(tmp, path)
+            time.sleep(0.2)
+            return json.loads(path.read_text() or '{}').get('pid') == os.getpid()
+        with os.fdopen(fd, 'w') as handle:
+            handle.write(mine)
+        return True
+
+    def _release(self, index, state):
+        path = self.work / 'claims' / f't{index:06d}'
+        if state == 'done':
+            tmp = path.with_suffix(f'.{os.getpid()}')
+            tmp.write_text(json.dumps({'pid': os.getpid(), 'teacher': self.args.model_id, 'state': 'done'}))
+            os.replace(tmp, path)
+        else:
+            path.unlink(missing_ok=True)
+
     def _take(self):
         while time.time() < self.cool_until and not self.stop.is_set():
             self.stop.wait(5)
         with self.lock:
-            if self.retry and (self.retry[0][0] <= time.time() or self.cursor >= len(self.tasks)):
-                return self.retry.pop(0)[1]
+            while self.retry and (self.retry[0][0] <= time.time() or self.cursor >= len(self.tasks)):
+                index = self.retry.pop(0)[1]
+                if index not in self.done and self._claim(index):
+                    return index
             while self.cursor < min(len(self.tasks), self.args.limit or len(self.tasks)):
                 index = self.cursor
                 self.cursor += 1
-                if index not in self.done and index % self.args.shard[1] == self.args.shard[0]:
+                if index not in self.done and index % self.args.shard[1] == self.args.shard[0] and self._claim(index):
                     return index
             return None
 
@@ -140,7 +190,7 @@ class Generator:
                        str(directory / f'{key}.journal.jsonl'), '--runtime', str(REPO / 'ts-host'),
                        '--server', a.endpoint, '--chat-completions-url', a.chat_completions_url or a.endpoint + '/v1/chat/completions',
                        '--model-id', a.model_id, '--model-concurrency', '1',
-                       '--chat-request-config', str(self.work / 'chat-config.json')]
+                       '--chat-request-config', str(self.chat_config)]
             if a.api_key_env:
                 command += ['--api-key-env', a.api_key_env]
             with (directory / f'{key}.log').open('a') as handle:
@@ -179,11 +229,13 @@ class Generator:
                 self.cool_until = max(self.cool_until, time.time() + self.args.provider_cooldown)
                 if self.attempts[index] < 3:
                     self.retry.append((time.time() + 600, index))
+                self._release(index, 'deferred')
                 print(json.dumps({'event': 'task deferred', 'index': index, 'attempt': self.attempts[index]}), flush=True)
                 return report
             with self.manifest.open('a') as handle:
                 handle.write(json.dumps(record) + '\n')
             self.done.add(index)
+            self._release(index, 'done')
         print(json.dumps({'event': 'task scored', **{k: record[k] for k in ('index', 'task_id', 'seconds', 'episodes')}}),
               flush=True)
         return report
@@ -199,6 +251,7 @@ class Generator:
             try:
                 self.run_task(index)
             except Exception as error:   # one task's failure never stops the generation
+                self._release(index, 'failed')
                 print(json.dumps({'event': 'task failed', 'index': index, 'error': repr(error)[:400]}), flush=True)
 
 
@@ -249,7 +302,7 @@ def main():
                 handle.write(json.dumps({'row': row, 'base_rank': ['band', 'base_fails', 'unmeasured', 'base_solves'][rank(row)]}) + '\n')
         os.replace(work / 'tasks.jsonl.tmp', work / 'tasks.jsonl')
     chat_config = json.loads(args.chat_config)
-    (work / 'chat-config.json').write_text(json.dumps(chat_config) + '\n')
+    chat_config_path(work, args.model_id).write_text(json.dumps(chat_config) + '\n')
     with (work / 'launches.jsonl').open('a') as handle:
         handle.write(json.dumps({'time': time.strftime('%Y-%m-%dT%H:%M:%S%z'), 'argv': sys.argv,
                                  'code': code_provenance(), 'chat_config': chat_config,
