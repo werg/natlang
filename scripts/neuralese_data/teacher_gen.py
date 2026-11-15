@@ -116,9 +116,11 @@ class Generator:
         self.attempts = {}
 
     def _no_verdict(self, record):
-        """Every episode ended unresolved before its first model turn: the provider failed (rate limit, outage), not the
-        teacher. Such a record is no teacher verdict; it goes to deferred.jsonl and the task is retried."""
-        return 'unsupported' not in record and all(e['outcome'] == 'unresolved' and e['turns'] == 0 for e in record['episodes'])
+        """Every episode ended unresolved before its first model turn or as an infrastructure error (e.g. a 429 mid-episode):
+        the provider failed (rate limit, outage), not the teacher. Such a record is no teacher verdict; it goes to deferred.jsonl and the task is retried."""
+        return 'unsupported' not in record and all(
+            e['outcome'] == 'infrastructure_error' or (e['outcome'] == 'unresolved' and e['turns'] == 0)
+            for e in record['episodes'])
 
     def _claim(self, index, teacher):
         """Several teachers share one WORK and steal tasks from one ordered list: WORK/claims/tINDEX names the process
