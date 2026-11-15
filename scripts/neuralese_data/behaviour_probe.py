@@ -9,7 +9,7 @@ are selected (reasoning closed within 3k tokens) and were sampled under top-p; r
 entropy, the expected ``</think>``
 closes per 1,000 reasoning tokens and the log-probability of ``</think>`` where the start policy closed.
 
-    python behaviour_probe.py build --rollouts DIR --policy SHA --out probe.json [--calls 48]
+    python behaviour_probe.py build --rollouts DIR --policy SHA --served EXPORT_SHA --out probe.json [--calls 48]
     python behaviour_probe.py measure --probe probe.json --out probe.jsonl BASE_CKPT CKPT...   # Pop's 8 GB GPU fits it
 """
 import argparse
@@ -24,9 +24,12 @@ import numpy as np
 SCHEMA = 'natlang.behaviour-probe/1'
 
 
-def build(rollouts, policy, out, calls=48, max_prompt_tokens=8000, max_think_tokens=3000, per_group=2, seed=0):
+def build(rollouts, policy, out, calls=48, max_prompt_tokens=8000, max_think_tokens=3000, per_group=2, seed=0, served=None):
     """Up to ``calls`` start-policy calls without imported state whose reasoning closes within ``max_think_tokens``, at
-    most ``per_group`` from one archived group (groups in a seeded order)."""
+    most ``per_group`` from one archived group (groups in a seeded order). A call's ``policy`` names the run's start
+    checkpoint even after in-place weight updates, so the calls the start policy itself sampled are selected by the
+    served weights' sha (``served``: the start policy's ``actor_export`` sha256); behaviour-probe-v0 was built without it
+    and 44 of its 48 calls came from updated policies (2026-11-15)."""
     import collections
     import zstandard
     from lower_rollout_turns import episode_turns
@@ -44,7 +47,8 @@ def build(rollouts, policy, out, calls=48, max_prompt_tokens=8000, max_think_tok
                 if not row.get('turns') or taken >= per_group:
                     continue
                 for call in episode_turns(row, stats, None):
-                    if call['imports'] or call['policy'] != policy or len(call['prompt']) > max_prompt_tokens:
+                    if call['imports'] or call['policy'] != policy or len(call['prompt']) > max_prompt_tokens \
+                            or (served is not None and call['served'] != served):
                         continue
                     if close is None:
                         close = close_id()
@@ -59,7 +63,8 @@ def build(rollouts, policy, out, calls=48, max_prompt_tokens=8000, max_think_tok
                     break
                 if len(kept) >= calls:
                     break
-    Path(out).write_text(json.dumps({'schema': SCHEMA, 'policy': policy, 'close_id': close, 'calls': kept}) + '\n')
+    Path(out).write_text(json.dumps({'schema': SCHEMA, 'policy': policy, 'served': served, 'close_id': close,
+                                     'calls': kept}) + '\n')
     return len(kept), sum(len(c['prompt']) + len(c['think']) for c in kept)
 
 
@@ -145,6 +150,7 @@ def main(argv=None):
     b = sub.add_parser('build')
     b.add_argument('--rollouts', required=True)
     b.add_argument('--policy', required=True, help='sha256 of the start policy whose calls are kept')
+    b.add_argument('--served', required=True, help="sha256 of the start policy's served export (capture actor_export)")
     b.add_argument('--out', required=True)
     b.add_argument('--calls', type=int, default=48)
     b.add_argument('--seed', type=int, default=0)
@@ -156,7 +162,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.command == 'measure':
         return measure_checkpoints(args)
-    calls, tokens = build(args.rollouts, args.policy, args.out, calls=args.calls, seed=args.seed)
+    calls, tokens = build(args.rollouts, args.policy, args.out, calls=args.calls, seed=args.seed, served=args.served)
     print(json.dumps({'calls': calls, 'tokens': tokens, 'out': args.out}))
 
 

@@ -136,8 +136,9 @@ reference runs the policy's own training graph (a no_grad pass compiles other ke
 the step's checkpoint sha, else the served weights' sha; the native engine keeps the start checkpoint). `train.jsonl` logs per step: reward
 mean, spread fraction, KL, rho (mean, pre/post-cap max, capped fraction, |log rho|), the cosine of the step's gradient with AdamW's first moment
 (`grad_moment_cosine`), the pre-clip grad_norm over the run's median (`grad_spike` above 5x from the second step, printed: grpo-v2-run1 step 7 was 11x),
-the behaviour probe (`behaviour_probe.py`, `--behaviour-probe`, default `ops/grpo-v2/behaviour-probe-v0.json`: 48 calls the base
-sampled in run1, ~42 s a step), `--call-fraction` (default 1: a fraction of each episode's calls trained, the rest context), the gradient-mass share of reasoning, reply and decision terms, the tail-masked fraction, learner and actor tokens/s, phase seconds.
+the behaviour probe (`behaviour_probe.py`, `--behaviour-probe`, default `ops/grpo-v2/behaviour-probe-v1.json`: 48 calls the base
+sampled in run2, selected by the served export's sha because a capture's `policy` keeps naming the start checkpoint after
+in-place updates (v0, 44 of its 48 calls from updated policies, is what grpo-v2-run1/run2 and the hunt measured); ~42 s a step), `--call-fraction` (default 1: a fraction of each episode's calls trained, the rest context), the gradient-mass share of reasoning, reply and decision terms, the tail-masked fraction, learner and actor tokens/s, phase seconds.
 Memory (smoke 2026-11-12): on the GB10 the unit's MemoryMax (= ledger budget) also bounds its CUDA allocations, so the
 budget must cover GPU + host: learner CUDA 19.3 GB before AdamW state, 32 GB peak at step 1, about 36 GB with the FP32 moments
 (FP32 masters + moments + FP32 gradients alone are 27 GB), host about 5 GB plus the collector node processes (in the same

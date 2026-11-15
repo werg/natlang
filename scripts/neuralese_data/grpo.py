@@ -92,7 +92,7 @@ POOLS = [resolve_str('data_hdd', 'natlang-rl-composed-20261103', 'memetic-progra
 # replaced; its exclusion also covers held-v2 (manifest `also_excludes`), so no v2 held task enters training either.
 HELD = resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'held-v3', 'manifest.json')
 # Start-policy calls scored after every step (behaviour_probe.py; built from grpo-v2-run1's version-0 groups)
-BEHAVIOUR_PROBE = resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'grpo-v2', 'behaviour-probe-v0.json')
+BEHAVIOUR_PROBE = resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'grpo-v2', 'behaviour-probe-v1.json')
 # Pool rows known to be wrong (an oracle's expected answer, a garbled task): every *.jsonl here is excluded by default.
 ERRATA = resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'pool-errata')
 
