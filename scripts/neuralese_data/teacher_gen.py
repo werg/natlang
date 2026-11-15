@@ -73,6 +73,11 @@ def order_tasks(rows, rates, band, seed):
     return ordered, rank
 
 
+def completions_url(endpoint):
+    endpoint = endpoint.rstrip('/')
+    return endpoint + ('/chat/completions' if endpoint.endswith('/v1') else '/v1/chat/completions')
+
+
 def chat_config_path(work, model_id):
     """Each teacher sharing WORK keeps its own request controls."""
     return Path(work) / f"chat-config.{re.sub(r'[^A-Za-z0-9._-]+', '_', model_id)}.json"
@@ -96,22 +101,20 @@ class Generator:
         self.done = set()
         if self.manifest.exists():
             self.done = {json.loads(line)['index'] for line in self.manifest.open() if line.strip()}
-        self.chat_config = chat_config_path(self.work, args.model_id)
         (self.work / 'claims').mkdir(exist_ok=True)
         self.retry = []           # tasks whose episodes the provider failed (no verdict), retried after the cursor
         self.attempts = {}
-        self.cool_until = 0.
 
     def _no_verdict(self, record):
         """Every episode ended unresolved before its first model turn: the provider failed (rate limit, outage), not the
         teacher. Such a record is no teacher verdict; it goes to deferred.jsonl and the task is retried."""
         return 'unsupported' not in record and all(e['outcome'] == 'unresolved' and e['turns'] == 0 for e in record['episodes'])
 
-    def _claim(self, index):
+    def _claim(self, index, teacher):
         """Several teachers share one WORK and steal tasks from one ordered list: WORK/claims/tINDEX names the process
         running a task (state running) or the one that recorded it (state done). A dead process's claim is taken over."""
         path = self.work / 'claims' / f't{index:06d}'
-        mine = json.dumps({'pid': os.getpid(), 'teacher': self.args.model_id, 'state': 'running'})
+        mine = json.dumps({'pid': os.getpid(), 'teacher': teacher.model_id, 'state': 'running'})
         try:
             fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
         except FileExistsError:
@@ -138,31 +141,31 @@ class Generator:
             handle.write(mine)
         return True
 
-    def _release(self, index, state):
+    def _release(self, index, state, teacher):
         path = self.work / 'claims' / f't{index:06d}'
         if state == 'done':
             tmp = path.with_suffix(f'.{os.getpid()}')
-            tmp.write_text(json.dumps({'pid': os.getpid(), 'teacher': self.args.model_id, 'state': 'done'}))
+            tmp.write_text(json.dumps({'pid': os.getpid(), 'teacher': teacher.model_id, 'state': 'done'}))
             os.replace(tmp, path)
         else:
             path.unlink(missing_ok=True)
 
-    def _take(self):
-        while time.time() < self.cool_until and not self.stop.is_set():
+    def _take(self, teacher):
+        while time.time() < teacher.cool_until and not self.stop.is_set():
             self.stop.wait(5)
         with self.lock:
             while self.retry and (self.retry[0][0] <= time.time() or self.cursor >= len(self.tasks)):
                 index = self.retry.pop(0)[1]
-                if index not in self.done and self._claim(index):
+                if index not in self.done and self._claim(index, teacher):
                     return index
             while self.cursor < min(len(self.tasks), self.args.limit or len(self.tasks)):
                 index = self.cursor
                 self.cursor += 1
-                if index not in self.done and index % self.args.shard[1] == self.args.shard[0] and self._claim(index):
+                if index not in self.done and index % self.args.shard[1] == self.args.shard[0] and self._claim(index, teacher):
                     return index
             return None
 
-    def run_task(self, index):
+    def run_task(self, index, teacher):
         from natlang_neuralese.common.jsonio import read_jsonl
         from natlang_neuralese.rl import task_rollouts
         a, task = self.args, self.tasks[index]
@@ -188,11 +191,11 @@ class Generator:
             queue_file.write_text(json.dumps(entry, sort_keys=True) + '\n')
             command = [sys.executable, str(REPO / 'scripts/run_bonsai_queue.py'), str(queue_file),
                        str(directory / f'{key}.journal.jsonl'), '--runtime', str(REPO / 'ts-host'),
-                       '--server', a.endpoint, '--chat-completions-url', a.chat_completions_url or a.endpoint + '/v1/chat/completions',
-                       '--model-id', a.model_id, '--model-concurrency', '1',
-                       '--chat-request-config', str(self.chat_config)]
-            if a.api_key_env:
-                command += ['--api-key-env', a.api_key_env]
+                       '--server', teacher.endpoint, '--chat-completions-url', teacher.chat_completions_url,
+                       '--model-id', teacher.model_id, '--model-concurrency', '1',
+                       '--chat-request-config', str(chat_config_path(self.work, teacher.model_id))]
+            if teacher.api_key_env:
+                command += ['--api-key-env', teacher.api_key_env]
             with (directory / f'{key}.log').open('a') as handle:
                 process = subprocess.Popen(command, cwd=REPO, env=self.env, stdout=handle, stderr=subprocess.STDOUT,
                                            start_new_session=True)
@@ -210,7 +213,7 @@ class Generator:
         report = task_rollouts.score(directory, directory / 'rollouts.jsonl', neuralese_bonus=0., efficiency_weight=0.)
         rollouts = list(read_jsonl(directory / 'rollouts.jsonl'))
         record = {'index': index, 'task_id': row['id'], 'family': row.get('family'), 'base_rank': task['base_rank'],
-                  'teacher': {'model_id': a.model_id, 'endpoint': a.endpoint},
+                  'teacher': {'model_id': teacher.model_id, 'endpoint': teacher.endpoint},
                   'seconds': round(time.time() - started, 1),
                   'episodes': [{'sample': r['sample'], 'outcome': r['outcome'],
                                 'reward': (r.get('reward') or {}).get('quality'),
@@ -226,41 +229,45 @@ class Generator:
                 self.attempts[index] = self.attempts.get(index, 0) + 1
                 with (self.work / 'deferred.jsonl').open('a') as handle:
                     handle.write(json.dumps({**record, 'attempt': self.attempts[index]}) + '\n')
-                self.cool_until = max(self.cool_until, time.time() + self.args.provider_cooldown)
+                teacher.cool_until = max(teacher.cool_until, time.time() + self.args.provider_cooldown)
                 if self.attempts[index] < 3:
                     self.retry.append((time.time() + 600, index))
-                self._release(index, 'deferred')
+                self._release(index, 'deferred', teacher)
                 print(json.dumps({'event': 'task deferred', 'index': index, 'attempt': self.attempts[index]}), flush=True)
                 return report
             with self.manifest.open('a') as handle:
                 handle.write(json.dumps(record) + '\n')
             self.done.add(index)
-            self._release(index, 'done')
+            self._release(index, 'done', teacher)
         print(json.dumps({'event': 'task scored', **{k: record[k] for k in ('index', 'task_id', 'seconds', 'episodes')}}),
               flush=True)
         return report
 
-    def slot(self):
+    def slot(self, teacher):
         while not self.stop.is_set():
             if (self.work / 'PAUSE').exists():
                 self.stop.wait(10)
                 continue
-            index = self._take()
+            index = self._take(teacher)
             if index is None:
                 return
             try:
-                self.run_task(index)
+                self.run_task(index, teacher)
             except Exception as error:   # one task's failure never stops the generation
-                self._release(index, 'failed')
+                self._release(index, 'failed', teacher)
                 print(json.dumps({'event': 'task failed', 'index': index, 'error': repr(error)[:400]}), flush=True)
 
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('--work', required=True)
-    p.add_argument('--endpoint', required=True, help='teacher server base URL (OpenAI-compatible)')
+    p.add_argument('--teacher', action='append', default=[], type=json.loads, metavar='JSON',
+                   help='one teacher of several in this process (the task list is loaded once): {"model_id", "endpoint", '
+                        '"chat_completions_url", "api_key_env", "slots", "chat_config"}; repeatable. Without it the '
+                        'single-teacher flags below describe the one teacher')
+    p.add_argument('--endpoint', help='teacher server base URL (OpenAI-compatible)')
     p.add_argument('--chat-completions-url', help='exact completion URL (default ENDPOINT/v1/chat/completions)')
-    p.add_argument('--model-id', required=True)
+    p.add_argument('--model-id')
     p.add_argument('--api-key-env', help='environment variable holding the API key (name only)')
     p.add_argument('--chat-config', default='{"top_p": 0.95}', help='JSON request controls passed unchanged')
     p.add_argument('--temperature', type=float, default=1.0)
@@ -268,7 +275,7 @@ def main():
     p.add_argument('--request-retries', type=int, default=8,
                    help='same-request retries after a provider failure (429, 5xx), with backoff honouring Retry-After')
     p.add_argument('--provider-cooldown', type=float, default=120,
-                   help='seconds all slots wait before taking a new task after an episode the provider failed')
+                   help='seconds all of a teacher\'s slots wait before taking a new task after an episode the provider failed')
     p.add_argument('--samples', type=int, default=1, help='episodes per task')
     p.add_argument('--limit', type=int, default=0, help='stop after the first N ordered tasks (0: all)')
     p.add_argument('--shard', type=int, nargs=2, default=(0, 1), metavar=('K', 'N'),
@@ -301,18 +308,30 @@ def main():
             for row in ordered:
                 handle.write(json.dumps({'row': row, 'base_rank': ['band', 'base_fails', 'unmeasured', 'base_solves'][rank(row)]}) + '\n')
         os.replace(work / 'tasks.jsonl.tmp', work / 'tasks.jsonl')
-    chat_config = json.loads(args.chat_config)
-    chat_config_path(work, args.model_id).write_text(json.dumps(chat_config) + '\n')
+    specs = args.teacher or [{'model_id': args.model_id, 'endpoint': args.endpoint, 'api_key_env': args.api_key_env,
+                              'chat_completions_url': args.chat_completions_url, 'slots': args.slots,
+                              'chat_config': json.loads(args.chat_config)}]
+    teachers = []
+    for spec in specs:
+        if not spec.get('model_id') or not spec.get('endpoint'):
+            p.error('each teacher needs model_id and endpoint')
+        teacher = SimpleNamespace(model_id=spec['model_id'], endpoint=spec['endpoint'].rstrip('/'),
+                                  chat_completions_url=spec.get('chat_completions_url') or completions_url(spec['endpoint']),
+                                  api_key_env=spec.get('api_key_env'), slots=int(spec.get('slots', 2)),
+                                  chat_config=spec.get('chat_config', {'top_p': 0.95}), cool_until=0.)
+        chat_config_path(work, teacher.model_id).write_text(json.dumps(teacher.chat_config) + '\n')
+        teachers.append(teacher)
     with (work / 'launches.jsonl').open('a') as handle:
         handle.write(json.dumps({'time': time.strftime('%Y-%m-%dT%H:%M:%S%z'), 'argv': sys.argv,
-                                 'code': code_provenance(), 'chat_config': chat_config,
-                                 'teacher': {'model_id': args.model_id, 'endpoint': args.endpoint}}) + '\n')
+                                 'code': code_provenance(),
+                                 'teachers': [{k: v for k, v in vars(t).items() if k != 'cool_until'} for t in teachers]}) + '\n')
     generator = Generator(args)
 
     def stop(signum, frame):
         generator.stop.set()
     signal.signal(signal.SIGTERM, stop)
-    threads = [threading.Thread(target=generator.slot, daemon=True) for _ in range(args.slots)]
+    threads = [threading.Thread(target=generator.slot, args=(teacher,), daemon=True)
+               for teacher in teachers for _ in range(teacher.slots)]
     for thread in threads:
         thread.start()
     for thread in threads:
