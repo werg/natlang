@@ -2324,3 +2324,13 @@ later average 1,318 tokens per call (8 groups). Then the guard stopped the run w
 (prefixes recompute outside it). The run resumed from the step-1 branch state (`state-step-00001`, next group 32) as
 `grpo-v2-run2-r2`, with budget 84 and `--activation-gb 4`. Ledger headroom is 16.5 GB. Recompute is exact, so the
 treatment is unchanged. The Pop base measurement (231 of 508 episodes) resumes from its journal.
+
+**Base held-v3 on Pop, and the Pop engine crash (2026-11-15).** `held/step-00000-pop`: 235 successes out of 449 scored
+(52.3%), 512 ran, loop and ran-out rate 9.8%, mean graded reward 0.572. The 63 unscored episodes are `unresolved` (run1's Pop
+base had 14). Pop's SGLang engine was OOM-killed 3 times (23:35, 00:21, 01:49; exit 70, then relaunched by the driver),
+and the episodes in flight failed with ECONNREFUSED. The cause is the fork's `NatlangImport.files`, a device-side cache of
+up to 64 whole Neuralese state files: it filled the ~0.8 GB beside the KV pool and CUDA graphs. Pairs drop unscored
+episodes on either side (`held_eval.paired`), so run2's comparisons stay valid, with less power. Fixed in the fork
+(dd2430793: host cache bounded in bytes, only gathered rows reach the device). The fix enters at the next pin with the
+fork's other pending commits. The Pop and DGX checkouts stay at 70b1991e6 while run2 runs, because a crash relaunch on a new
+fork commit would change the attested engine mid-series.
