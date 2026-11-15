@@ -75,11 +75,16 @@ class TokenHistory:
     takes the one whose bytes the new prompt continues furthest).
 
     Only the hash identifies the prompt: a collision can only change the tokenization of an identical text, because a
-    splice is accepted only when its bytes equal the rendered prompt's bytes."""
+    splice is accepted only when its bytes equal the rendered prompt's bytes.
 
-    def __init__(self, tokenizer, max_entries=32768, max_replies=16):
+    The LRU is bounded in entries and in the bytes of its stored ids (`max_bytes`): a spliced prompt keeps the whole
+    prompt it sent (~46 KB at RL's 11.5k tokens, up to 0.5 MB at full context), so 32768 entries alone allowed GBs. A
+    continuation needs only its own episode's latest entry, minutes old."""
+
+    def __init__(self, tokenizer, max_entries=32768, max_replies=16, max_bytes=256 << 20):
         self.table = token_bytes_table(tokenizer)
-        self.max_entries, self.max_replies = max_entries, max_replies
+        self.max_entries, self.max_replies, self.max_bytes = max_entries, max_replies, max_bytes
+        self.bytes = 0
         # (length, hash) -> [(array('i') of generated ids, time it was stored, the ids actually sent for this prompt
         # when they differ from these (a spliced prompt, stored also under its re-tokenized key), else None)], newest last
         self.entries = OrderedDict()
@@ -96,13 +101,20 @@ class TokenHistory:
     def enabled(self):
         return self.table is not None
 
+    @staticmethod
+    def _size(replies):
+        return sum(len(generated) * generated.itemsize + (len(sent) * sent.itemsize if sent is not None else 0)
+                   for generated, _, sent in replies)
+
     def _put(self, key, value):
         replies = self.entries.pop(key, None)
         if replies is None:
             replies = []
             self.lengths[key[0]] = self.lengths.get(key[0], 0) + 1
-        replies = [reply for reply in replies if reply[0] != value[0]] + [value]
-        self.entries[key] = replies[-self.max_replies:]
+        self.bytes -= self._size(replies)
+        replies = ([reply for reply in replies if reply[0] != value[0]] + [value])[-self.max_replies:]
+        self.entries[key] = replies
+        self.bytes += self._size(replies)
 
     def store(self, prompt, generated):
         if not self.enabled or not len(generated):
@@ -114,8 +126,9 @@ class TokenHistory:
             raw = self.spliced_from.pop(key, None)
             if raw is not None:
                 self._put(raw, (generated, now, array('i', (int(t) for t in prompt))))
-            while len(self.entries) > self.max_entries:
-                (length, _), _ = self.entries.popitem(last=False)
+            while len(self.entries) > self.max_entries or (self.bytes > self.max_bytes and len(self.entries) > 1):
+                (length, _), replies = self.entries.popitem(last=False)
+                self.bytes -= self._size(replies)
                 self.lengths[length] -= 1
                 if not self.lengths[length]:
                     del self.lengths[length]
