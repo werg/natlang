@@ -73,6 +73,11 @@ def order_tasks(rows, rates, band, seed):
     return ordered, rank
 
 
+def default_chat_config(url):
+    """Request controls when none are given: top-p, and no `seed` field for Gemini's OpenAI endpoint (it rejects it)."""
+    return {'top_p': 0.95, **({'x_natlang_omit_seed': True} if 'generativelanguage.googleapis.com' in url else {})}
+
+
 def completions_url(endpoint):
     endpoint = endpoint.rstrip('/')
     return endpoint + ('/chat/completions' if endpoint.endswith('/v1') else '/v1/chat/completions')
@@ -269,7 +274,7 @@ def main():
     p.add_argument('--chat-completions-url', help='exact completion URL (default ENDPOINT/v1/chat/completions)')
     p.add_argument('--model-id')
     p.add_argument('--api-key-env', help='environment variable holding the API key (name only)')
-    p.add_argument('--chat-config', default='{"top_p": 0.95}', help='JSON request controls passed unchanged')
+    p.add_argument('--chat-config', type=json.loads, help='JSON request controls passed unchanged (default: top_p 0.95)')
     p.add_argument('--temperature', type=float, default=1.0)
     p.add_argument('--slots', type=int, default=2)
     p.add_argument('--request-retries', type=int, default=8,
@@ -310,15 +315,16 @@ def main():
         os.replace(work / 'tasks.jsonl.tmp', work / 'tasks.jsonl')
     specs = args.teacher or [{'model_id': args.model_id, 'endpoint': args.endpoint, 'api_key_env': args.api_key_env,
                               'chat_completions_url': args.chat_completions_url, 'slots': args.slots,
-                              'chat_config': json.loads(args.chat_config)}]
+                              'chat_config': args.chat_config}]
     teachers = []
     for spec in specs:
         if not spec.get('model_id') or not spec.get('endpoint'):
             p.error('each teacher needs model_id and endpoint')
-        teacher = SimpleNamespace(model_id=spec['model_id'], endpoint=spec['endpoint'].rstrip('/'),
-                                  chat_completions_url=spec.get('chat_completions_url') or completions_url(spec['endpoint']),
+        url = spec.get('chat_completions_url') or completions_url(spec['endpoint'])
+        teacher = SimpleNamespace(model_id=spec['model_id'], endpoint=spec['endpoint'].rstrip('/'), chat_completions_url=url,
                                   api_key_env=spec.get('api_key_env'), slots=int(spec.get('slots', 2)),
-                                  chat_config=spec.get('chat_config', {'top_p': 0.95}), cool_until=0.)
+                                  chat_config=default_chat_config(url) if spec.get('chat_config') is None else spec['chat_config'],
+                                  cool_until=0.)
         chat_config_path(work, teacher.model_id).write_text(json.dumps(teacher.chat_config) + '\n')
         teachers.append(teacher)
     with (work / 'launches.jsonl').open('a') as handle:
