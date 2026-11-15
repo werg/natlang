@@ -2334,3 +2334,14 @@ episodes on either side (`held_eval.paired`), so run2's comparisons stay valid, 
 (dd2430793: host cache bounded in bytes, only gathered rows reach the device). The fix enters at the next pin with the
 fork's other pending commits. The Pop and DGX checkouts stay at 70b1991e6 while run2 runs, because a crash relaunch on a new
 fork commit would change the attested engine mid-series.
+
+**Step 3 and the second memory stop (2026-11-15).** Step 3: reward 0.679, KL 0.0027, grad_norm 0.296, probe −0.007 logp,
+1.18x closes, +0.007 entropy (inside the bounds; closes rising, watched). The guard stopped `grpo-v2-run2-r2` at 96.7 GB in
+step 4's learner phase (budget 84 x 1.15, under pressure, swap active). The learner's CUDA peak grows with each step's
+chains (39.1 / 44.4 / 45.2 GB at steps 1-3), and `--activation-gb` does not bound that growth. At the peak: the learner held
+about 50 GB GPU and 13 GB host, the actor 15.3 GB plus a 4.2 GB front, and 24 collector slots about 10 GB. Resumed from
+`state-step-00003` (next group 113) as `grpo-v2-run2-r3`: `--slots 16` and actor `--sglang-max-running 32` (its CUDA
+graphs for up to 128 sequences took 1.85 GB, while 16 slots run at most about 20). Budget 86 GB, ledger headroom 15.3 GB.
+These are sizing changes only: the sampling law, objective and data selection are unchanged, and collection runs about a
+third slower per step. The step-2 held eval (194 of 512 ran, 85 of 180 scored successes, partial) continues on the resumed
+run.
