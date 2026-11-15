@@ -961,3 +961,17 @@ def test_unguided_stream_announces_open_reasoning_on_sglang_like_the_native_engi
         assert ''.join(reasoning).strip() == 't10 t11' and content.strip() == 't12'
     else:
         assert not reasoning and content.strip() == 't10 t11 </think> t12'
+
+
+def test_in_place_update_is_named_in_every_capture():
+    # The capture's ``policy`` names the native engine's start checkpoint; an in-place update (grpo.py) is the served policy.
+    import threading
+    front = object.__new__(SglangEngine)
+    front._sglang_lock = threading.Lock()
+    front.sglang_actor_export = {'kind': 'exact', 'format': 'sglang-hf', 'sha256': 'a' * 64}
+    front.rl_policy_binding = {'checkpoint_sha256': 'b' * 64, 'serving_engine': {}, 'actor_export': {}}
+    assert front._served_policy() is None
+    front.rebind_in_place('c' * 64, 'd' * 64, version=3)
+    assert front._served_policy() == {'version': 3, 'policy_id': 'c' * 64, 'weights_sha256': 'd' * 64,
+                                      'native_engine': 'start checkpoint (not updated in place)'}
+    assert front.sglang_actor_export['sha256'] == 'd' * 64 and front.rl_policy_binding['start_checkpoint_sha256'] == 'b' * 64

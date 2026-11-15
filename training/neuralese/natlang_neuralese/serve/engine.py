@@ -155,6 +155,9 @@ class Sequence:
     # A non-native sampler of the same weights (serve/sglang_actor.py) binds its export in the capture
     # (rl.actors ``actor_export``); the learner then guards the engine mismatch instead of the exact native gate.
     native_actor_export: dict | None = None
+    # The policy the trainer loaded into that sampler in place (sglang_actor.rebind_in_place: policy id, version, weights);
+    # ``policy`` keeps naming the native engine's start checkpoint, which in-place updates do not change.
+    native_served_policy: dict | None = None
     cuda_memory_start_allocated_bytes: int | None = None
     cuda_memory_measurement_scope: str | None = None
 
@@ -1631,6 +1634,7 @@ class Engine:
                 **({'privileged': seq.native_guidance_receipt} if seq.native_guidance_receipt is not None else {}),
                 **({'guidance_policy': seq.request.guidance_policy} if seq.request.guidance_policy is not None else {}),
                 **({'actor_export': dict(seq.native_actor_export)} if seq.native_actor_export else {}),
+                **({'served_policy': dict(seq.native_served_policy)} if seq.native_served_policy else {}),
                 "prompt": seq.native_rl_prompt, "samples": seq.rl_samples,
                 "generated_inputs": seq.native_rl_inputs, "writes": seq.native_rl_writes,
                 "finish_reason": seq.finish_reason,

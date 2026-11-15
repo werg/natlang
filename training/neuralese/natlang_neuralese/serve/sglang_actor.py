@@ -239,6 +239,11 @@ class SglangEngine(Engine):
             self.__dict__.pop('_sglang_openings', None)
         return dict(binding['in_place_update'])
 
+    def _served_policy(self):
+        """The in-place update this sampler serves (``rebind_in_place``), else None (the start checkpoint)."""
+        update = (getattr(self, 'rl_policy_binding', None) or {}).get('in_place_update')
+        return None if update is None else dict(update)
+
     def progress_metrics(self):
         return {**super().progress_metrics(), 'natlang_sglang_requests_total': self.sglang_requests,
                 'natlang_sglang_generated_tokens_total': self.sglang_tokens,
@@ -603,6 +608,7 @@ class SglangEngine(Engine):
     def _sglang_run_bound(self, seq, adapter):
         request = seq.request
         seq.native_actor_export = getattr(self, 'sglang_actor_export', None)
+        seq.native_served_policy = self._served_policy()
         ids = self._sglang_prompt(seq)
         template_prefix, template_suffix = self._native_template_plan(seq)
         open_position = (self._sglang_template_prefix(seq, ids, template_prefix, template_suffix)
@@ -899,6 +905,7 @@ class SglangEngine(Engine):
         from .native_learning import decision_response
         seq = Sequence(request, None, prompt_plan=plan)
         seq.native_actor_export = getattr(self, 'sglang_actor_export', None)  # option scores come from the export
+        seq.native_served_policy = self._served_policy()
         ids = self._sglang_prompt(seq)
         custom = {**({IMPORT_KEY: seq.sglang_imports} if seq.sglang_imports else {}), **({ADAPTER_KEY: adapter} if adapter else {})}
         params = {'temperature': 0.0, 'max_new_tokens': 1, **({'custom_params': custom} if custom else {})}
