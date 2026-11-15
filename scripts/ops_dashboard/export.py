@@ -558,7 +558,7 @@ def build_alerts(machines, ledgers, unit_alerts, errors):
                 alerts.append({'level': 'crit' if d['free_gb'] < floor else 'warn', 'machine': machine,
                                'text': f'{d["mount"]} has {d["free_gb"]} GB free (floor {floor} GB)'})
         head = (ledgers.get(machine) or {}).get('headroom_gb')
-        if head is not None and head < 15:
+        if machine == 'dgx' and head is not None and head < 15:   # AGENTS.md: the DGX keeps 15 GB for probes
             alerts.append({'level': 'warn', 'machine': machine, 'text': f'memory ledger headroom {head} GB (< 15 GB)'})
     return alerts
 
