@@ -16,6 +16,7 @@ Several teachers share one WORK with disjoint `--shard K N`.
   pause:   touch WORK/PAUSE   (running episodes finish, no new ones start; remove the file to continue)
   stop:    systemctl --user stop <unit>   (killed episodes are redone on the next launch)
   resume:  launch the same command again (finished tasks are skipped)
+  provider failures (an episode ending before its first model turn) are no verdict: deferred.jsonl, retried twice
 """
 import argparse
 import json
@@ -85,9 +86,21 @@ class Generator:
         self.done = set()
         if self.manifest.exists():
             self.done = {json.loads(line)['index'] for line in self.manifest.open() if line.strip()}
+        self.retry = []           # tasks whose episodes the provider failed (no verdict), retried after the cursor
+        self.attempts = {}
+        self.cool_until = 0.
+
+    def _no_verdict(self, record):
+        """Every episode ended unresolved before its first model turn: the provider failed (rate limit, outage), not the
+        teacher. Such a record is no teacher verdict; it goes to deferred.jsonl and the task is retried."""
+        return all(e['outcome'] == 'unresolved' and e['turns'] == 0 for e in record['episodes'])
 
     def _take(self):
+        while time.time() < self.cool_until and not self.stop.is_set():
+            self.stop.wait(5)
         with self.lock:
+            if self.retry and (self.retry[0][0] <= time.time() or self.cursor >= len(self.tasks)):
+                return self.retry.pop(0)[1]
             while self.cursor < min(len(self.tasks), self.args.limit or len(self.tasks)):
                 index = self.cursor
                 self.cursor += 1
@@ -115,7 +128,7 @@ class Generator:
         (directory / 'queue.jsonl').write_text(''.join(json.dumps(e, sort_keys=True) + '\n' for e in entries))
         started = time.time()
         for entry in entries:
-            entry.update(prompt_rendering='full', context_tokens=a.context_tokens)
+            entry.update(prompt_rendering='full', context_tokens=a.context_tokens, request_retries=a.request_retries)
             key = entry['key']
             queue_file = directory / f'{key}.queue.jsonl'
             queue_file.write_text(json.dumps(entry, sort_keys=True) + '\n')
@@ -152,6 +165,15 @@ class Generator:
                                                          for t in r['turns'])} for r in rollouts],
                   'rollouts': str(directory / 'rollouts.jsonl')}
         with self.lock:
+            if self._no_verdict(record):
+                self.attempts[index] = self.attempts.get(index, 0) + 1
+                with (self.work / 'deferred.jsonl').open('a') as handle:
+                    handle.write(json.dumps({**record, 'attempt': self.attempts[index]}) + '\n')
+                self.cool_until = max(self.cool_until, time.time() + self.args.provider_cooldown)
+                if self.attempts[index] < 3:
+                    self.retry.append((time.time() + 600, index))
+                print(json.dumps({'event': 'task deferred', 'index': index, 'attempt': self.attempts[index]}), flush=True)
+                return report
             with self.manifest.open('a') as handle:
                 handle.write(json.dumps(record) + '\n')
             self.done.add(index)
@@ -183,6 +205,10 @@ def main():
     p.add_argument('--chat-config', default='{"top_p": 0.95}', help='JSON request controls passed unchanged')
     p.add_argument('--temperature', type=float, default=1.0)
     p.add_argument('--slots', type=int, default=2)
+    p.add_argument('--request-retries', type=int, default=8,
+                   help='same-request retries after a provider failure (429, 5xx), with backoff honouring Retry-After')
+    p.add_argument('--provider-cooldown', type=float, default=120,
+                   help='seconds all slots wait before taking a new task after an episode the provider failed')
     p.add_argument('--samples', type=int, default=1, help='episodes per task')
     p.add_argument('--limit', type=int, default=0, help='stop after the first N ordered tasks (0: all)')
     p.add_argument('--shard', type=int, nargs=2, default=(0, 1), metavar=('K', 'N'),
