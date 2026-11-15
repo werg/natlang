@@ -115,3 +115,38 @@ def test_a_cuda_context_failure_reexecutes_the_process_after_a_nudge(monkeypatch
         cuda_context.ensure_context()
     assert cuda_context.context_failure('Returning 2 (CUDA_ERROR_OUT_OF_MEMORY) from cuDevicePrimaryCtxRetain')
     assert not cuda_context.context_failure('torch.OutOfMemoryError: tried to allocate 2 GiB')
+
+
+def _arenas_after_threads(tmp_path, bound):
+    """malloc arenas in use after 16 threads allocated at once (glibc malloc_stats lists one `Arena N:` per arena)."""
+    script = tmp_path / f'heap-{bound}.py'
+    script.write_text(textwrap.dedent(f'''
+        import ctypes, importlib.util, threading, time
+        spec = importlib.util.spec_from_file_location('actor_cli', {str(ROOT / 'scripts/neuralese_data/serve_native_checkpoint.py')!r})
+        cli = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cli)
+        trim = cli.bound_host_heap(trim_seconds=0.05) if {bound!r} else None
+        barrier = threading.Barrier(16)
+        def work():
+            barrier.wait()
+            held = [bytes(4096) for _ in range(256)]
+            barrier.wait()
+        threads = [threading.Thread(target=work) for _ in range(16)]
+        for t in threads: t.start()
+        for t in threads: t.join()
+        time.sleep(0.2)
+        assert trim is None or trim.is_alive()
+        ctypes.CDLL('libc.so.6').malloc_stats()
+    '''))
+    env = {key: value for key, value in __import__('os').environ.items() if key != 'MALLOC_ARENA_MAX'}
+    run = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, timeout=120, env=env)
+    assert run.returncode == 0, run.stderr[-2000:]
+    return sum(line.startswith('Arena ') for line in run.stderr.splitlines())
+
+
+def test_the_front_bounds_its_malloc_arenas_and_trims_them(tmp_path):
+    """Request threads would each get a glibc arena that keeps its peak (Pop's front: +1 GB RSS an hour); the front caps
+    them at 2 and trims (bound_host_heap)."""
+    assert _arenas_after_threads(tmp_path, True) <= 2
+    if (__import__('os').cpu_count() or 1) >= 4:
+        assert _arenas_after_threads(tmp_path, False) > 2   # the threads do spread over arenas without the bound

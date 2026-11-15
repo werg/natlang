@@ -192,6 +192,9 @@ def serve_sglang(job, checkpoint, transport, stage, work):
     # default 2048-row chunks: 860 rows x 128k vocab = 420 MiB) and OOMed the 8 GB GPU's 0.87 GB of headroom
     # (2026-11-12 18:08 and 11-13 02:49, both while writing a capture). 256 rows: about 130 MiB.
     env.setdefault('SGLANG_LOGPROB_CHUNK_SIZE', '256')
+    # The scheduler's host cache of imported state files (fork NatlangImport, 4 GiB by default) on Pop's 14 GB host, where
+    # the actor unit has 10.5 GB: an evicted file is read again from the page cache (fork 1839b5071).
+    env.setdefault('NATLANG_IMPORT_CACHE_GB', '0.5')
     lease = stage / f"{job['name']}.consumer.json"
     lease.write_text(json.dumps({'role': 'rl-rollout-actor', 'checkpoint_sha256': job['source_sha256'],
                                  'consumer': job['name'], 'started': time.time(), 'engine': 'sglang',

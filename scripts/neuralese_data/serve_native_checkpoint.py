@@ -15,7 +15,38 @@ from natlang_neuralese.serve import load_native_engine
 from natlang_neuralese.serve.http import serve
 
 
+def bound_host_heap(arenas=2, trim_seconds=60.0):
+    """Keep the front's freed host heap from accumulating.
+
+    The HTTP server answers every connection on a new thread, and glibc gives threads their own malloc arenas (up to
+    8 x cores). Each arena grows to the peak of the request bodies, prompts and captures that passed through it and keeps
+    that memory after they are freed: on Pop (12 cores, held-eval load of 14 episodes) the front's malloc heap grew
+    ~15 MB a minute while its live allocations stayed at ~220 MB (RSS 0.82 -> 1.83 GB an hour, then the ledger killed the
+    actor). Few arenas reuse one another's free memory, and a periodic malloc_trim hands free pages back. A launcher's
+    MALLOC_ARENA_MAX takes precedence. Returns the trim thread (None without glibc)."""
+    import ctypes
+    import os
+    import threading
+    import time
+    try:
+        libc = ctypes.CDLL('libc.so.6')
+        mallopt, malloc_trim = libc.mallopt, libc.malloc_trim
+    except (OSError, AttributeError):
+        return None
+    if 'MALLOC_ARENA_MAX' not in os.environ:
+        mallopt(-8, int(arenas))   # M_ARENA_MAX: applies to the arenas threads attach to from now on
+
+    def trim():
+        while True:
+            time.sleep(trim_seconds)
+            malloc_trim(0)
+    thread = threading.Thread(target=trim, name='host-heap-trim', daemon=True)
+    thread.start()
+    return thread
+
+
 def main() -> None:
+    bound_host_heap()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--checkpoint', type=Path, required=True)
     parser.add_argument('--checkpoint-sha256', required=True)
