@@ -2399,3 +2399,42 @@ learner bias in the scope checked; still unchecked: arms C (binary reward), D (K
 code at 1e-5, import (consumer) calls (missing from the replay), the d ≈ ±16-18 tail tokens, the inbox-n7 decision
 reversals at A < 0, BF16-vs-FP32 masters. Not established: that the reward signal wins at any LR. Next: the LR sweep
 (gain proxy on 8 untouched groups vs drift; arms at warmup 10 and 2) chooses grpo-v3's step size.
+
+## 2026-11-15: grpo-v3-run1, GRPO from base at a smaller step size (supervisor)
+
+**Change vs baseline (one: step size).** Baseline is grpo-v2-run2's treatment (k2 KL, `--loss-norm token`, decision cap
+8 units, `lr_data_scale`, graded reward, explore 0.4, codebase families included) from the untouched base 5ff07638. The
+change is the Adam step size: `--lr 3e-6` (was 1e-5), `--warmup 10` (was 2), `--min-groups 48 --max-groups 96` (was
+24-48). Reason: the 2026-11-15 hunt (two independent investigations) found run2's step-4 update at the pure-noise
+|m̂/√v̂| (per-weight SNR < 0.1): fresh bias-corrected AdamW took near-full-LR steps in directions the noise set, momentum
+carried them, and held success fell with the displacement, while the in-batch gain stayed positive (the learner is sound
+in the scope checked). A 3.3x smaller LR, a 10-step ramp over AdamW's bias-corrected start and twice the groups per step
+(SNR per update about 1.4x) cut the noise displacement per step by roughly 5x at the start and 3x after warmup. The
+hunt's open items (binary reward, KL 0, prefix tree off, consumer calls, tail tokens, BF16 vs FP32) stay open; this run
+does not close them.
+
+**Pin.** 7e929f2ea (origin/main, `check-main.sh --quick` exit 0), `ops/grpo-v3/run1/pin-7e929f2ea36c`. Since run2's pin
+ba9fa02d7 it adds the learner memory cuts (5ae700243: reference weights from a file, FP32 grads only for the policy pass,
+memory-mapped weight sync; same arithmetic), behaviour probe v1 (start-policy calls selected by served export sha),
+`served_policy` in captures, the front's glibc arena cap and byte-bounded token history, and the SGLang fork at 1839b5071
+(hybrid SWA KV ace8d6868, `natlang_track_input_end` 33230160b, NatlangImport host cache dd2430793 and its bound
+1839b5071) on the DGX (checkout moved from 70b1991e6 by fast-forward; editable install) and on Pop. New fork commit and
+new pin: a new attested engine and series, so the base is re-measured on Pop's engine (`held/step-00000-pop`, 4 samples)
+and every compare pairs within this run. Held set held-v3 (sha 45471060); same pools as run2, so no new exposure check.
+
+**Success (declared before the run).** As grpo-v2: two consecutive scheduled Pop held evals with a positive mean per-task
+pass-rate change vs the Pop base, p < 0.05 each, and `ran_out_rate`/loop rate not significantly worse.
+
+**Failure and stops.** One held eval below -3.5 pts with p < 0.05 and no known cause stops the run at that eval and starts
+the bug hunt on the freed DGX; no gain by 48 h of training also ends it. A sentinel (`grad_spike`, `behaviour_shift`,
+`reasoning_shift`, a KL jump) is diagnosed at the step it fires. Early checks: step-1 KL < 1e-3, outside-nucleus < 1%,
+|log rho| < 0.1, `cuda_peak_by_phase_gb` present and within budget, probe flat through warmup (|logp change| < 0.02,
+closes 0.67-1.5x); expected drift is small at these LRs, so a probe shift during warmup is itself a bug signal.
+
+**Sizing (not treatment).** `--slots 32`, `--learner-phase-slots 8`, actor `--sglang-kv-gb 6 --sglang-max-running 48`
+(32 slots run ~40 sequences), `--activation-gb 4`, ledger budget 88 GB (>= 15 GB headroom on 106 GB available). run2
+peaked at 96.7 GB with 24 slots before 5ae700243 (learner ~63 GB GPU+host, actor 19.5, slots ~10); the cuts remove
+~9-15 GB, so 32 slots fit at 88. State: every step a branch state (`--branch-states 2`, /mnt/external), checkpoints kept
+through step 8, held evals on Pop (`--held-remote pop`, every 4 h, 2 samples). Steps take about 2.5-3 h at 48 groups
+(run2: 24 groups in ~1.7 h at 16-24 slots), so the first scheduled held eval reads step 2-3 at an effective LR still in
+warmup.
