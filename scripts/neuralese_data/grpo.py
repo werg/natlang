@@ -24,14 +24,18 @@ One process runs the whole loop; nothing else (no controller, custody or transit
   policy term's ``logp`` is the sampled token's log-probability under the learner's own nucleus
   (``lfm3_fast_train.linear_nll_nucleus``; the sampled token always in the set), while ``rho`` and the KL term use the
   untruncated log-probabilities (the actor records the untruncated one; DECISIONS 2026-11-13 for the reasoning).
-* weight sync: after each step the BF16 weights are copied once into a pinned host buffer, written as the actor's HF
-  safetensors (same layout as ``export/native_hf``; frozen rows and producer table kept) and loaded in place
+* weight sync: after each step the BF16 weights are copied once into the actor's HF safetensors on tmpfs, memory-mapped
+  and page-locked (``WeightSync``; same layout as ``export/native_hf``; frozen rows and producer table kept), loaded in place
   (SGLang ``pause_generation`` retract -> ``update_weights_from_disk`` -> ``continue_generation``), in a background thread.
   Episodes keep running across a sync; each token's actor logprob is from the weights that sampled it.
 * checkpoints: a pruned native checkpoint (``exp0_sft.write_checkpoint``, servable by ``serve_native_checkpoint``) every
   ``--save-every`` steps and the FP32 training state (masters + AdamW moments) every ``--state-every`` steps, both written
-  from pinned host memory in background threads (training never waits on I/O). Keeps the last two native checkpoints plus
+  from host memory in background threads (training never waits on I/O). Keeps the last two native checkpoints plus
   every held-evaluated one, and the last training state.
+* memory (the unit's budget covers GPU and host alike on the GB10): the KL reference is a file loaded into the policy's
+  own parameters for the reference pass (``ReferenceWeights``), the FP32 gradients exist only from the policy pass to the
+  optimizer step, imported states are read per sequence, and ``train.jsonl`` logs each learner phase's CUDA peak and
+  this process's host memory (``cuda_peak_by_phase_gb``).
 * held evaluation: the start policy first, then every ``--held-every-hours`` the newest native checkpoint is measured on
   the held set (``python -m natlang_neuralese.rl.held_eval measure`` on the training actor, collection paused) and
   compared with the start policy (``held_eval compare`` -> ``held/step-N/compare-vs-step0.json``). With ``--held-remote pop``
@@ -637,10 +641,15 @@ def safetensors_header(layout, metadata=None):
 
 
 class WeightSync:
-    """The actor's HF export in one pinned host buffer: snapshot (GPU -> pinned, the only synchronous part), then in a
-    background thread write it, load it into SGLang in place, and optionally write a native checkpoint."""
+    """The actor's HF export as one memory-mapped file on tmpfs: snapshot (GPU -> the mapped file, the only synchronous
+    part; the mapping is page-locked with cudaHostRegister), then in a background thread load it into SGLang in place and
+    optionally write a native checkpoint. The file is the only host copy of the weights: a separate pinned buffer that
+    each publish wrote out to the file held another 4 GiB of the unit's memory (grpo-v2-run2, 2026-11-15). The file is
+    rewritten only by ``snapshot``/``load_native``, which first wait for the publish thread (SGLang's load and the
+    checkpoint write read it there)."""
 
     def __init__(self, model, export_dir, sglang_url, weights_dir, front_url=None):
+        import mmap
         import torch
         from safetensors import safe_open
         self.export_dir, self.sglang_url = Path(export_dir), sglang_url
@@ -652,32 +661,52 @@ class WeightSync:
                 shutil.copyfile(path, self.weights_dir / path.name)
         params = dict(model.named_parameters())
         layout, sources = [], []
+        path = self.weights_dir / 'model.safetensors'
+        partial = path.with_name(path.name + '.partial')
         with safe_open(str(self.export_dir / 'model.safetensors'), 'pt') as handle:
-            fixed = {}
-            for name in handle.keys():
-                tensor = handle.get_tensor(name)
-                if tensor.dtype != torch.bfloat16:
-                    raise ValueError(f'export tensor {name} is {tensor.dtype}, expected bf16')
+            names = list(handle.keys())
+            for name in names:
+                info = handle.get_slice(name)
+                shape = tuple(info.get_shape())
+                if info.get_dtype() != 'BF16':
+                    raise ValueError(f'export tensor {name} is {info.get_dtype()}, expected bf16')
                 if name in params:
-                    if tuple(params[name].shape) != tuple(tensor.shape):
+                    if tuple(params[name].shape) != shape:
                         raise ValueError(f'export/learner shape mismatch {name}')
                     sources.append(name)
                 else:
-                    fixed[name] = tensor            # the producer table and anything else the learner does not train
-                    sources.append(None)
-                layout.append((name, 'BF16', tuple(tensor.shape), tensor.numel() * 2))
-        missing = set(params) - {name for name in sources if name} - {'lm_head.weight'}
-        if missing:
-            raise ValueError(f'learner parameters absent from the export: {sorted(missing)[:5]}')
-        self.header, offsets, total = safetensors_header(layout, {'format': 'pt'})
-        self.buffer = torch.empty(total, dtype=torch.uint8, pin_memory=True)
-        self.views = {}
-        for (name, _, shape, nbytes), offset, source in zip(layout, offsets, sources):
-            view = self.buffer[offset:offset + nbytes].view(torch.bfloat16).view(shape)
-            if source is None:
-                view.copy_(fixed[name])
-            else:
-                self.views[name] = view
+                    sources.append(None)    # the producer table and anything else the learner does not train
+                layout.append((name, 'BF16', shape, math.prod(shape) * 2))
+            missing = set(params) - {name for name in sources if name} - {'lm_head.weight'}
+            if missing:
+                raise ValueError(f'learner parameters absent from the export: {sorted(missing)[:5]}')
+            self.header, offsets, total = safetensors_header(layout, {'format': 'pt'})
+            # every page is written once here (fixed tensors as exported, trained ones zero until the first snapshot):
+            # a GPU copy into freshly faulted pageable memory runs at 0.05-0.1 GB/s on the GB10
+            zeros = bytes(64 << 20)
+            with partial.open('wb') as out:
+                out.write(self.header)
+                for (name, _, _, nbytes), source in zip(layout, sources):
+                    if source is None:
+                        out.write(memoryview(handle.get_tensor(name).contiguous().reshape(-1).view(torch.uint8).numpy()))
+                    else:
+                        for start in range(0, nbytes, len(zeros)):
+                            out.write(zeros[:min(len(zeros), nbytes - start)])
+        os.replace(partial, path)
+        self.file = path.open('r+b')
+        self.map = mmap.mmap(self.file.fileno(), 0)
+        base = len(self.header)
+        whole = torch.frombuffer(self.map, dtype=torch.uint8)
+        self.pinned = False      # page-locked: GPU copies run async at ~35 GB/s (pageable, after the first touch: ~33)
+        if torch.cuda.is_available():
+            try:
+                self.pinned = int(torch.cuda.cudart().cudaHostRegister(whole.data_ptr(), whole.numel(), 0).value) == 0
+            except Exception:
+                pass
+        self.buffer = torch.frombuffer(self.map, dtype=torch.uint8, count=total, offset=base)
+        # one tensor (its own storage) per trained weight, so that a native checkpoint saves them as separate clones did
+        self.views = {name: torch.frombuffer(self.map, dtype=torch.bfloat16, count=nbytes // 2, offset=base + offset).view(shape)
+                      for (name, _, shape, nbytes), offset, source in zip(layout, offsets, sources) if source is not None}
         self.params = params
         self.thread = None
         self.last = {}
@@ -686,8 +715,9 @@ class WeightSync:
         import torch
         self.wait()
         for name, view in self.views.items():
-            view.copy_(self.params[name].detach(), non_blocking=True)
-        torch.cuda.synchronize()
+            view.copy_(self.params[name].detach(), non_blocking=self.pinned)
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
 
     def wait(self):
         if self.thread is not None:
@@ -718,8 +748,10 @@ class WeightSync:
         del state
 
     def backbone(self):
-        """{name: host bf16 tensor} of the snapshot in native backbone naming (copies, safe to keep)."""
-        return {name: view.clone() for name, view in self.views.items()}
+        """{name: host bf16 tensor} of the snapshot in native backbone naming: views of the mapped file, valid until the
+        next ``snapshot``/``load_native`` (both wait for the publish thread, where ``write_native`` reads them). Not copies:
+        cloning them put another 4 GB on the unit during every checkpoint write."""
+        return dict(self.views)
 
     def publish(self, version, on_done, also=None, policy=None):
         def run():
@@ -732,14 +764,7 @@ class WeightSync:
                 on_done(version, False)
 
         def body():
-            timing = {}
-            started = time.time()
-            partial = self.weights_dir / 'model.safetensors.partial'
-            with partial.open('wb') as handle:
-                handle.write(self.header)
-                handle.write(memoryview(self.buffer.numpy()))
-            os.replace(partial, self.weights_dir / 'model.safetensors')
-            timing['export_write_s'] = round(time.time() - started, 2)
+            timing = {}         # the export file already holds the snapshot (the mapping)
             t = time.time()
             if self.sglang_url is None:   # --no-actor-sync (a smoke against a shared actor): nothing to update
                 answer, ok = 'no actor sync', True
@@ -789,7 +814,7 @@ class StateSaver:
     """FP32 masters and AdamW moments streamed GPU -> pinned staging -> file in a background thread. The caller waits
     (``wait``) before the next optimizer step changes them."""
 
-    def __init__(self, staging_mb=512):
+    def __init__(self, staging_mb=64):     # the file write, not the copy, bounds the save: 512 MB staging bought nothing
         import torch
         self.staging = torch.empty(staging_mb << 20, dtype=torch.uint8, pin_memory=True)
         self.stream = torch.cuda.Stream()
@@ -829,13 +854,109 @@ class StateSaver:
         self.thread.start()
 
 
+class ReferenceWeights:
+    """The KL reference (the start policy's BF16 parameters) as a safetensors file instead of a second model resident on
+    the GPU (3.5 GB through every phase, grpo-v2-run2 2026-11-15). The reference pass loads it into the policy's own
+    parameters (``load_into``: the same module, kernels and training graph as the policy), and ``restore`` puts the
+    policy back from its FP32 masters, which is exact: the policy's BF16 parameters are always their masters rounded
+    (init, resume and every optimizer step set them so). Page cache of each read is dropped (``drop_cache``)."""
+
+    def __init__(self, path, params, metadata):
+        """Write ``params`` ({name: BF16 tensor}, the start policy) to ``path``, unless the file there already holds them
+        for the same ``metadata`` (a resume of the same run and start checkpoint)."""
+        import torch
+        from safetensors import safe_open
+        self.path = Path(path)
+        metadata = {k: str(v) for k, v in metadata.items()}
+        layout = [(name, 'BF16', tuple(p.shape), p.numel() * 2) for name, p in params.items()]
+        if self.path.exists():
+            try:
+                with safe_open(str(self.path), 'pt') as handle:
+                    same = handle.metadata() == {**metadata, 'format': 'pt'} and sorted(handle.keys()) == sorted(params) \
+                        and all(tuple(handle.get_slice(n).get_shape()) == tuple(p.shape) for n, p in params.items())
+            except Exception:
+                same = False
+            if same:
+                return
+        if any(p.dtype != torch.bfloat16 for p in params.values()):
+            raise ValueError('the reference parameters must be BF16')
+        header, _, _ = safetensors_header(layout, {**metadata, 'format': 'pt'})
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        partial = self.path.with_name(self.path.name + '.partial')
+        with partial.open('wb') as handle:
+            handle.write(header)
+            for p in params.values():
+                handle.write(memoryview(p.detach().reshape(-1).view(torch.uint8).cpu().numpy()))
+        os.replace(partial, self.path)
+        drop_cache([self.path])
+
+    def tensors(self):
+        """(name, host BF16 tensor) of the reference, one at a time."""
+        from safetensors import safe_open
+        try:
+            with safe_open(str(self.path), 'pt') as handle:
+                for name in handle.keys():
+                    yield name, handle.get_tensor(name)
+        finally:
+            drop_cache([self.path])
+
+    def load_into(self, params):
+        import torch
+        with torch.no_grad():
+            for name, tensor in self.tensors():
+                params[name].copy_(tensor)
+
+    @staticmethod
+    def restore(params, masters):
+        import torch
+        with torch.no_grad():
+            for name, p in params.items():
+                p.copy_(masters[name])
+
+
+def release_host_memory():
+    """Hand freed host memory back to the system: glibc keeps freed heap (the step's lowered rollouts, decoded states)
+    mapped until trimmed, and on unified memory that is memory the GPU allocations then lack."""
+    import gc
+    gc.collect()
+    try:
+        import ctypes
+        ctypes.CDLL('libc.so.6').malloc_trim(0)
+    except Exception:
+        pass
+
+
+def host_pinned_gb():
+    """Pinned host memory PyTorch's caching host allocator owns (GB, active and cached blocks)."""
+    try:
+        import torch
+        stats = torch.cuda.host_memory_stats()
+        return round(stats.get('allocated_bytes.current', 0) / 2**30, 2)   # active + cached blocks
+    except Exception:
+        return None
+
+
+def process_memory_gb():
+    """This process's resident host memory by kind (/proc/self/status), GB."""
+    out = {}
+    try:
+        for line in open('/proc/self/status'):
+            key, _, value = line.partition(':')
+            if key in ('RssAnon', 'RssShmem', 'RssFile'):
+                out[key[3:].lower()] = round(int(value.split()[0]) / 2**20, 2)
+    except OSError:
+        pass
+    return out
+
+
 # ---- learner ---------------------------------------------------------------------------------------------------------
 def write_pruned_checkpoint(state, native_rows, special, path, source_sha256, trained):
     """``exp0_sft.write_checkpoint``'s pruned native checkpoint from a host snapshot, without holding the source backbone:
     the trained backbone (BF16), the source's native embedding rows at the interface ids, the source's interface."""
     import torch
     backbone = {name: trained[name].contiguous() for name in native_rows['names']}
-    embedding = backbone['model.embed_tokens.weight']
+    # ``trained`` may be the actor's served weights (``WeightSync.backbone`` views): the interface rows go into a copy
+    embedding = backbone['model.embed_tokens.weight'] = backbone['model.embed_tokens.weight'].clone()
     embedding[torch.tensor(special)] = native_rows['embedding_rows'].to(embedding.dtype)
     if native_rows['tied_head']:
         backbone['lm_head.weight'] = embedding
@@ -1331,26 +1452,31 @@ def train(args):
     model.to('cuda')
     masters = {name: p.detach().clone().float() for name, p in model.named_parameters()}
     model.to(torch.bfloat16)
-    reference = None
-    if args.kl_beta > 0:          # the start policy, BF16, frozen (a copy: no second checkpoint load)
-        import copy
-        # The reference runs exactly the policy's training graph (train mode, parameters requiring grad, the same partial
-        # checkpointing; its outputs are detached and never backpropagated): a no_grad pass compiles other kernels, whose
-        # BF16 rounding alone put KL at 5e-4 (|dlogp| ~0.03) with identical weights (smoke 2026-11-12).
-        reference = copy.deepcopy(model)
-        reference.gradient_checkpointing_enable()
-        reference.config.use_cache = False
-        reference.train()
-        lfm3_fast_train.prepare(reference)
     model.gradient_checkpointing_enable()
     model.config.use_cache = False
     model.train()
     lfm3_fast_train.prepare(model)
     forward = lfm3_fast_train.hidden
     live = dict(model.named_parameters())
+    reference = None
+    if args.kl_beta > 0:          # the start policy, BF16, frozen: a file, loaded into the policy for the reference pass
+        # The reference runs exactly the policy's training graph (train mode, parameters requiring grad, the same partial
+        # checkpointing; its outputs are detached and never backpropagated): a no_grad pass compiles other kernels, whose
+        # BF16 rounding alone put KL at 5e-4 (|dlogp| ~0.03) with identical weights (smoke 2026-11-12). It is the policy
+        # module itself with the reference weights loaded (ReferenceWeights), written now, before a resume moves them.
+        reference = ReferenceWeights(Path(args.state_dir) / 'reference-bf16.safetensors', live,
+                                     {'source_sha256': source_sha, 'base': args.base})
     parameters = [masters[name] for name in live]
-    for master in parameters:
-        master.grad = torch.zeros_like(master)
+
+    # FP32 master gradients exist only while the policy pass and the optimizer need them (6.5 GB): collection and the
+    # reference pass run without them. Zeros, then the same accumulation as ever: the step's arithmetic is unchanged.
+    def allocate_grads():
+        for master in parameters:
+            master.grad = torch.zeros_like(master)
+
+    def release_grads():
+        for master in parameters:
+            master.grad = None
     # Each BF16 gradient is added into its FP32 master gradient as soon as autograd finishes it, then freed: a full set of
     # BF16 gradients never exists at once.
     def into_master(master):
@@ -1380,7 +1506,9 @@ def train(args):
             meta = handle.metadata()
             # materialise AdamW state (zero grads) before the masters are restored: with weight decay this step moves
             # the parameters, and it must not move the restored ones
+            allocate_grads()
             optimizer.step()
+            release_grads()
             for name in live:
                 masters[name].copy_(handle.get_tensor('master/' + name))
             for name in live:
@@ -1807,6 +1935,12 @@ def train(args):
         scales = loss_scales(episode_units, args.loss_norm, args.decision_weight, args.decision_unit_cap)
         episodes_trained = sum(1 for token_scale, decision_scale in scales.values() if token_scale or decision_scale)
         phase['lower'] = time.time() - t
+        # The decoded imported states of the step's calls (lowering read them for their token ids) are not held through
+        # the learner phase (up to the step's whole set of blocks, GBs of host memory): the learner reads each chain's
+        # blocks again when it computes that chain (``chain_states``).
+        imported_state_mb = sum(t.numel() * t.element_size() for block in collector.states.cache.values()
+                                for layer in block.layers for t in layer.values() if hasattr(t, 'numel')) / 2**20
+        collector.states.cache.clear()
         record = {'step': step + 1, 'groups': len(groups), 'groups_with_spread': spread,
                   'advantage_control': args.advantage_control if args.advantage_control != 'none' else None,
                   'replay_groups': [min(groups), max(groups)] if args.replay and groups else None,
@@ -1817,7 +1951,7 @@ def train(args):
                   'loss_norm': args.loss_norm, 'decision_weight': args.decision_weight, 'episodes_trained': episodes_trained,
                   'rollouts_archive_free_gb': round(shutil.disk_usage(rollouts_archive).free / 2**30, 1)
                   if rollouts_archive is not None and rollouts_archive.exists() else None,
-                  'actor_version': versions_live['actor']}
+                  'actor_version': versions_live['actor'], 'imported_state_mb': round(imported_state_mb, 1)}
         style = reasoning_style(chains, think_close)
         record.update(style, **({} if args.replay else style_shift(work, style)))   # replayed reasoning is not the policy's
         if record.get('reasoning_shift'):
@@ -1834,6 +1968,12 @@ def train(args):
             continue
         # learner
         torch.cuda.reset_peak_memory_stats()
+        cuda_peaks = {}                   # per learner phase: allocated / reserved peak (GB) and this process's host memory
+
+        def phase_peak(name):
+            cuda_peaks[name] = {'allocated': round(torch.cuda.max_memory_allocated() / 2**30, 1),
+                                'reserved': round(torch.cuda.max_memory_reserved() / 2**30, 1), **process_memory_gb()}
+            torch.cuda.reset_peak_memory_stats()
         collector.active_slots = args.learner_phase_slots
         learn_started, learn_tokens0 = time.time(), actor_generated(args.actor)
         swap0, mem0 = vmstat(), meminfo()
@@ -1862,13 +2002,20 @@ def train(args):
                 cuda_ids[index] = torch.from_numpy(chains[index]['ids'].astype(np.int64)).cuda()
             return cuda_ids[index][start:end]
 
+        def chain_states(spans):
+            """[(row, decoded block)] of one sequence's imports, each block read once (not kept past the sequence)."""
+            blocks = {}
+            for _, block_id in spans:
+                if block_id not in blocks:
+                    blocks[block_id] = collector.states.load(block_id)
+            return [(row, blocks[block_id]) for row, block_id in spans]
+
         def chain_inputs(net, index, start):
             """(ids, positions, targets, imports) of chain ``index`` from ``start`` (its rows before are a past)."""
             chain = chains[index]
             ids, positions, targets = exp0_sft.chain_tensors(chain, 'cuda')
             # a consumer call's imported native state: fixed context exactly as the actor fed it (no producer gradient)
-            imports = lfm3_fast_train.import_tensors(net, [(row, collector.states(block_id))
-                                                           for row, block_id in chain.get('imports') or ()])
+            imports = lfm3_fast_train.import_tensors(net, chain_states(chain.get('imports') or ()))
             return ids[start:], positions - start, targets, imports
 
         def all_checkpointed(net):
@@ -1882,21 +2029,48 @@ def train(args):
             return max(0., args.activation_gb - start * prefix_gb_per_token)
 
         refs = {}
-        if reference is not None:
-            t = time.time()
+        # Sampled decisions: log pi(chosen) = log_softmax(s / T)[chosen], s_o the summed log-probability of option o's
+        # continuation after the exact prompt (as the actor scored it); TIS and the KL term on the chosen option as for a token.
+        batches = list(decision_batches(decisions, args.decision_batch_tokens))
 
-            def reference_chain(index, start, past):
-                ids, positions, targets, imports = chain_inputs(reference, index, start)
-                exp0_sft.set_checkpointing(reference, len(ids), leaf_budget(start))
-                refs[index] = -exp0_sft.token_nll(reference, forward(reference, ids, None, imports, past=past),
-                                                  positions, targets).detach()
-            with torch.enable_grad():
-                lfm3_fast_train.run_prefix_tree(reference, nodes, ids_of, reference_chain,
-                                                all_checkpointed(reference), backward=False)
-            for p in reference.parameters():
-                p.grad = None
+        def decision_inputs(batch):
+            ids, lengths, positions, targets, owner, counts, spans = decision_tensors(batch, 'cuda')
+            imports = lfm3_fast_train.import_tensors(model, chain_states(spans))
+            options = sum(counts)
+
+            def scores_of(net):
+                token = -exp0_sft.token_nll(net, forward(net, ids, lengths, imports), positions, targets)
+                return torch.zeros(options, device='cuda', dtype=token.dtype).index_add(0, owner, token)
+            return ids, counts, scores_of
+
+        ref_scores_of = []                # per decision batch: the start policy's option scores
+        if reference is not None:
+            # the reference pass: the policy module with the start policy's weights (ReferenceWeights), chains and
+            # decisions, before any gradient exists; then the policy's own weights back from its masters
+            t = time.time()
+            reference.load_into(live)
+            try:
+                def reference_chain(index, start, past):
+                    ids, positions, targets, imports = chain_inputs(model, index, start)
+                    exp0_sft.set_checkpointing(model, len(ids), leaf_budget(start))
+                    refs[index] = -exp0_sft.token_nll(model, forward(model, ids, None, imports, past=past),
+                                                      positions, targets).detach()
+                with torch.enable_grad():
+                    lfm3_fast_train.run_prefix_tree(model, nodes, ids_of, reference_chain,
+                                                    all_checkpointed(model), backward=False)
+                for batch in batches:
+                    ids, _, scores_of = decision_inputs(batch)
+                    exp0_sft.set_checkpointing(model, len(ids), args.activation_gb)
+                    with torch.enable_grad():
+                        ref_scores_of.append(scores_of(model).detach())
+                for p in live.values():
+                    p.grad = None
+            finally:
+                ReferenceWeights.restore(live, masters)
             torch.cuda.synchronize()
             phase['reference_forward'] = phase.get('reference_forward', 0.) + time.time() - t
+            phase_peak('reference')
+        allocate_grads()
         policy_started = time.time()
 
         def train_chain(index, start, past):
@@ -1961,27 +2135,12 @@ def train(args):
         forward_tokens = computed_tokens
         cuda_ids.clear()
         record.update(chain_tokens=chain_tokens, shared_prefix_tokens_saved=chain_tokens - computed_tokens)
-        # Sampled decisions: log pi(chosen) = log_softmax(s / T)[chosen], s_o the summed log-probability of option o's
-        # continuation after the exact prompt (as the actor scored it); TIS and the KL term on the chosen option as for a token.
+        phase_peak('policy')
         decision_records = []
-        for batch in decision_batches(decisions, args.decision_batch_tokens):
-            ids, lengths, positions, targets, owner, counts, spans = decision_tensors(batch, 'cuda')
-            imports = lfm3_fast_train.import_tensors(model, [(start, collector.states(block_id)) for start, block_id in spans])
-            options = sum(counts)
-            def scores_of(net):
-                token = -exp0_sft.token_nll(net, forward(net, ids, lengths, imports), positions, targets)
-                return torch.zeros(options, device='cuda', dtype=token.dtype).index_add(0, owner, token)
+        for batch_index, batch in enumerate(batches):
+            ids, counts, scores_of = decision_inputs(batch)
             t = time.time()
-            ref_scores = None
-            if reference is not None:
-                exp0_sft.set_checkpointing(reference, len(ids), args.activation_gb)
-                with torch.enable_grad():
-                    ref_scores = scores_of(reference).detach()
-                for p in reference.parameters():
-                    p.grad = None
-                torch.cuda.synchronize()
-                phase['reference_forward'] = phase.get('reference_forward', 0.) + time.time() - t
-                t = time.time()
+            ref_scores = ref_scores_of[batch_index] if reference is not None else None
             exp0_sft.set_checkpointing(model, len(ids), args.activation_gb)
             scores = scores_of(model)
             terms, start = [], 0
@@ -2019,7 +2178,8 @@ def train(args):
             del scores, terms
             torch.cuda.synchronize()
             phase['decision_forward_backward'] = phase.get('decision_forward_backward', 0.) + time.time() - t
-        collector.states.cache.clear()    # this step's imported states (lowering loads them, the learner reuses them)
+        if batches:
+            phase_peak('decisions')
         if decision_records:
             (work / 'decisions').mkdir(exist_ok=True)
             with (work / 'decisions' / f'step-{step + 1:05d}.jsonl').open('w') as handle:
@@ -2034,8 +2194,7 @@ def train(args):
         if not math.isfinite(grad_norm):
             # a NaN/inf gradient would make every FP32 master and AdamW moment NaN, and the next state save would
             # overwrite the only training state with it: drop this step's update, keep the weights
-            for p in parameters:
-                p.grad.zero_()
+            release_grads()
             collector.active_slots = args.slots
             log_line(log, {**record, 'event': 'non-finite gradient: update skipped', 'grad_norm': repr(grad_norm),
                            'loss_sums': {k: v for k, v in sums.items() if isinstance(v, float)}})
@@ -2046,23 +2205,24 @@ def train(args):
         for g in optimizer.param_groups:
             g['lr'] = lr
         optimizer.step()
-        for p in parameters:
-            p.grad.zero_()
+        release_grads()
         changed_step = changed_start = 0
         with torch.no_grad():
             embedding_master[special_index] = saved_rows
-            reference_params = dict(reference.named_parameters()) if reference is not None else {}
             for name, p in live.items():
                 new = masters[name].to(torch.bfloat16)
                 changed_step += int((new != p).sum())
-                if name in reference_params:
-                    changed_start += int((new != reference_params[name]).sum())
                 p.copy_(new)
+            if reference is not None:      # the start policy read back from its file, one tensor at a time
+                for name, start_weights in reference.tensors():
+                    changed_start += int((live[name] != start_weights.to(live[name].device)).sum())
         torch.cuda.synchronize()
         phase['optimizer'] = time.time() - t
+        phase_peak('optimizer')
         # Hand the learner phase's cached activation blocks back for the collect phase: on unified memory PyTorch's cache is
         # system RAM, and grpo-v2-run1 held ~56 GB of it while 32 slots collected (guard stop 2026-11-14 04:56, swap).
         torch.cuda.empty_cache()
+        release_host_memory()
         record['cuda_reserved_collect_gb'] = round(torch.cuda.memory_reserved() / 2**30, 1)
         elements = sum(p.numel() for p in live.values())
         record.update(bf16_changed_step_fraction=round(changed_step / elements, 6),
@@ -2075,6 +2235,7 @@ def train(args):
             record['behaviour'] = behaviour_probe.summary(behaviour_probe.measure(model, behaviour), start)
             record['behaviour_shift'] = behaviour_probe.shifted(record['behaviour'])
             phase['behaviour_probe'] = time.time() - t
+            phase_peak('behaviour_probe')
             if record['behaviour_shift']:
                 print(f"behaviour shift at step {step + 1}: {record['behaviour']}", flush=True)
         step += 1
@@ -2143,7 +2304,8 @@ def train(args):
             actor_tokens_per_s_collect_phase=round(phase_totals['collect_tokens'] / phase_totals['collect_s']) if phase_totals['collect_s'] else None,
             learner_phase_slots=args.learner_phase_slots,
             learner_swap_pages={k: v - swap0[k] for k, v in vmstat().items()}, meminfo_learn_start_gb=mem0,
-            previous_state_save=saver.last, cuda_peak_gb=round(torch.cuda.max_memory_allocated() / 2**30, 1),
+            previous_state_save=saver.last, cuda_peak_gb=max([v['allocated'] for v in cuda_peaks.values()], default=None),
+            cuda_peak_by_phase_gb=cuda_peaks, host_pinned_gb=host_pinned_gb(),
             outstanding_groups=collector.outstanding, elapsed_s=round(elapsed))
         record.update(grad_spike(work, grad_norm))
         if record.get('grad_spike'):

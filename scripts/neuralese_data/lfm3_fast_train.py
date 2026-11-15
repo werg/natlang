@@ -585,12 +585,16 @@ def _nucleus_cut(lf, lse, top_p, top_k):
     return _nucleus_cut_lse(lf, lse, top_p, top_k)[0]
 
 
-def _nucleus_logit_grad(lf, target, lse, set_lse, cut, grad, grad_nucleus):
-    """d loss / d logits of one chunk: grad * (softmax - onehot) + grad_nucleus * (softmax over the set - onehot)."""
+def _nucleus_logit_grad(logits, target, lse, set_lse, cut, grad, grad_nucleus):
+    """d loss / d logits of one chunk: grad * (softmax - onehot) + grad_nucleus * (softmax over the set - onehot), in fp32
+    from the upcast logits and returned in the logits' dtype. Upcast and downcast are inside the (compiled) kernel: done
+    outside, a chunk's fp32 logits and fp32 gradient (1 GB each at 2048 rows of a 128k vocabulary) were both live at the
+    learner's activation peak (grpo-v2-run2, 2026-11-15). The values are the same: both casts are exact or round once."""
+    lf = logits.float()
     onehot = torch.arange(lf.shape[-1], device=lf.device)[None, :] == target[:, None]
     kept = (lf >= cut[:, None]) | onehot
     d = torch.exp(lf - lse[:, None]) * grad[:, None] + torch.where(kept, torch.exp(lf - set_lse[:, None]), 0.) * grad_nucleus[:, None]
-    return d - onehot * (grad + grad_nucleus)[:, None]
+    return (d - onehot * (grad + grad_nucleus)[:, None]).to(logits.dtype)
 
 
 _NUCLEUS_GRAD = {}
@@ -643,10 +647,9 @@ class _LinearNLLNucleus(torch.autograd.Function):
         for start in range(0, h.shape[0], ctx.chunk):
             stop = min(h.shape[0], start + ctx.chunk)
             rows = h[start:stop]
-            lf = F.linear(rows, weight).float()
-            d = _nucleus_grad_kernel(lf.device.type)(lf, target[start:stop], lse[start:stop], set_lse[start:stop],
-                                                     cut[start:stop], grad[start:stop], grad_nucleus[start:stop])
-            d = d.to(rows.dtype)
+            d = _nucleus_grad_kernel(rows.device.type)(F.linear(rows, weight), target[start:stop], lse[start:stop],
+                                                       set_lse[start:stop], cut[start:stop], grad[start:stop],
+                                                       grad_nucleus[start:stop])
             if need_h:
                 dh[start:stop] = d @ weight
             if need_w:

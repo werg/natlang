@@ -41,12 +41,16 @@ class NativeStates:
 
     def __call__(self, block_id):
         if block_id not in self.cache:
-            from natlang_neuralese.serve.store import decode_native_state
-            block, actual = decode_native_state(self.path(block_id).read_bytes())
-            if actual != block_id:
-                raise ValueError(f'{self.path(block_id)} holds {actual}, not {block_id}')
-            self.cache[block_id] = block
+            self.cache[block_id] = self.load(block_id)
         return self.cache[block_id]
+
+    def load(self, block_id):
+        """The decoded, verified block, not cached (a reader that needs each block briefly, e.g. the GRPO learner)."""
+        from natlang_neuralese.serve.store import decode_native_state
+        block, actual = decode_native_state(self.path(block_id).read_bytes())
+        if actual != block_id:
+            raise ValueError(f'{self.path(block_id)} holds {actual}, not {block_id}')
+        return block
 
 
 def prompt_imports(segments, states, stats):

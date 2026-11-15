@@ -223,6 +223,28 @@ def test_nucleus_nll_matches_brute_force_and_dense_autograd():
                           torch.autograd.grad(_dense_nucleus(h, weight, target, .95)[1].sum(), h)[0], atol=1e-5)
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA kernel check')
+def test_nucleus_gradient_kernel_casts_inside_bitwise():
+    """The compiled gradient kernel takes the BF16 logits and returns the BF16 gradient: bitwise what the fp32 kernel
+    followed by an eager cast gave (the casts moved inside only to keep the chunk's fp32 tensors off the peak)."""
+    def fp32_kernel(lf, target, lse, set_lse, cut, grad, grad_nucleus):
+        onehot = torch.arange(lf.shape[-1], device=lf.device)[None, :] == target[:, None]
+        kept = (lf >= cut[:, None]) | onehot
+        d = torch.exp(lf - lse[:, None]) * grad[:, None] + torch.where(kept, torch.exp(lf - set_lse[:, None]), 0.) * grad_nucleus[:, None]
+        return d - onehot * (grad + grad_nucleus)[:, None]
+    torch.manual_seed(0)
+    rows, vocab = 300, 5000
+    logits = (torch.randn(rows, vocab, device='cuda') * 4).to(torch.bfloat16)
+    lf = logits.float()
+    lse = torch.logsumexp(lf, -1)
+    cut, set_lse = lfm3_fast_train._nucleus_cut_lse(lf, lse, .95, 1024)
+    target = torch.randint(0, vocab, (rows,), device='cuda')
+    grad, grad_nucleus = torch.randn(rows, device='cuda'), torch.randn(rows, device='cuda')
+    old = torch.compile(fp32_kernel, dynamic=True)(lf, target, lse, set_lse, cut, grad, grad_nucleus).to(torch.bfloat16)
+    new = lfm3_fast_train._nucleus_grad_kernel('cuda')(logits, target, lse, set_lse, cut, grad, grad_nucleus)
+    assert new.dtype == torch.bfloat16 and torch.equal(new, old)
+
+
 def test_nucleus_ties_and_top_p_one_identity():
     weight = torch.eye(6)
     h = torch.tensor([[2., 1., 1., 1., -9., -9.]])            # three tied tokens straddle the cut: all are in

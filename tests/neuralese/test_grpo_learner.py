@@ -67,11 +67,91 @@ def test_a_checkpoint_write_failure_keeps_the_actor_update(tmp_path):
 def test_a_publish_failure_is_this_versions_failure(tmp_path):
     """An exception in the publish thread used to leave the previous version's ok in ``last`` (the loop went on)."""
     sync, done = _sync(tmp_path), []
-    sync.weights_dir = tmp_path / 'missing'          # the export write fails
+    sync.buffer, sync.front_url = None, 'http://127.0.0.1:9'    # the served weights' digest fails
     sync.publish(4, lambda version, ok: done.append((version, ok)))
     sync.wait()
     assert done == [(4, False)] and sync.last['version'] == 4 and not sync.last['ok']
     assert 'publish failed' in sync.last['answer']
+
+
+def _export(tmp_path, model, extra):
+    torch = pytest.importorskip('torch')
+    from safetensors.torch import save_file
+    export = tmp_path / 'export'
+    export.mkdir()
+    tensors = {name: torch.zeros_like(p) for name, p in model.named_parameters()}
+    tensors.update(extra)
+    save_file(tensors, str(export / 'model.safetensors'), metadata={'format': 'pt'})
+    (export / 'config.json').write_text('{}')
+    return export
+
+
+def _tiny_model(torch):
+    model = torch.nn.Module()
+    model.model = torch.nn.Module()
+    model.model.embed_tokens = torch.nn.Embedding(6, 4).to(torch.bfloat16)
+    model.layer = torch.nn.Linear(4, 3, bias=False).to(torch.bfloat16)
+    return model
+
+
+def test_weight_sync_serves_the_snapshot_from_the_mapped_export_file(tmp_path):
+    """One host copy: the snapshot lands in the actor's export file itself (no pinned buffer written out per publish),
+    the producer table keeps its exported values, and the native checkpoint's views leave the served weights alone."""
+    torch = pytest.importorskip('torch')
+    from safetensors import safe_open
+    model = _tiny_model(torch)
+    producer = torch.arange(10, dtype=torch.float32).reshape(2, 5).to(torch.bfloat16)
+    export = _export(tmp_path, model, {'producer.weight': producer})
+    sync = grpo.WeightSync(model, export, None, tmp_path / 'weights')
+    assert (tmp_path / 'weights' / 'config.json').exists()
+    embed, layer = 'model.embed_tokens.weight', 'layer.weight'
+    live = dict(model.named_parameters())
+    with torch.no_grad():
+        live[layer].add_(1)
+    sync.snapshot()
+    with safe_open(str(tmp_path / 'weights' / 'model.safetensors'), 'pt') as handle:
+        assert torch.equal(handle.get_tensor(layer), live[layer].detach())
+        assert torch.equal(handle.get_tensor(embed), live[embed].detach())
+        assert torch.equal(handle.get_tensor('producer.weight'), producer)
+    backbone = sync.backbone()
+    assert backbone[layer].untyped_storage().nbytes() == live[layer].numel() * 2      # its own storage, as a clone's
+    served = backbone[embed].clone()
+    path = tmp_path / 'checkpoint.pt'
+    native_rows = {'embedding_rows': torch.full((1, 4), 7.).to(torch.bfloat16), 'tied_head': True, 'names': [embed, layer]}
+    state = {'schema': 's', 'model_config': {}, 'interface_state': {}, 'step': 1}
+    grpo.write_pruned_checkpoint(state, native_rows, [2], path, 'sha', backbone)
+    assert torch.equal(sync.backbone()[embed], served)            # the served weights untouched
+    saved = torch.load(path, weights_only=False)['backbone_state']
+    assert torch.equal(saved[embed][2], native_rows['embedding_rows'][0]) and torch.equal(saved[layer], live[layer].detach())
+    assert saved['lm_head.weight'] is saved[embed]
+    done = []
+    sync.publish(1, lambda version, ok: done.append((version, ok)))
+    sync.wait()
+    assert done == [(1, True)]
+
+
+def test_reference_weights_load_into_the_policy_and_restore_it_exactly(tmp_path):
+    torch = pytest.importorskip('torch')
+    model = _tiny_model(torch)
+    live = dict(model.named_parameters())
+    start = {name: p.detach().clone() for name, p in live.items()}
+    path = tmp_path / 'reference.safetensors'
+    reference = grpo.ReferenceWeights(path, live, {'source_sha256': 'a'})
+    written = path.stat().st_mtime_ns
+    grpo.ReferenceWeights(path, live, {'source_sha256': 'a'})          # the same start policy: reused as it is
+    assert path.stat().st_mtime_ns == written
+    masters = {name: (p.float() + torch.randn(p.shape) * 0.3) for name, p in live.items()}   # the policy moved on
+    with torch.no_grad():
+        for name, p in live.items():
+            p.copy_(masters[name])
+    policy = {name: p.detach().clone() for name, p in live.items()}
+    reference.load_into(live)
+    assert all(torch.equal(live[name], start[name]) for name in live)
+    grpo.ReferenceWeights.restore(live, masters)
+    assert all(torch.equal(live[name], policy[name]) for name in live)
+    assert dict(reference.tensors()).keys() == live.keys()
+    grpo.ReferenceWeights(path, live, {'source_sha256': 'b'})          # another start policy: rewritten
+    assert torch.equal(dict(reference.tensors())['layer.weight'], policy['layer.weight'])
 
 
 def test_pruned_groups_keep_their_rollouts_compressed(tmp_path):

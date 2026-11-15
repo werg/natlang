@@ -106,7 +106,7 @@ another law are refused (`skip_other_sampling_law`); decisions keep their full o
 half of the BF16 flips reverted, DECISIONS 2026-11-13) times the step's groups with reward spread over 12, at most 1
 (`lr_data_scale`, `--lr-reference-spread`: AdamW's step does not shrink with the data behind it; run1's 2-group stop step 3 took a
 full step and the drift entered after it), BF16 compute
-(`exp0_sft.load_model`, `lfm3_fast_train`). Weight sync each step: BF16 weights -> pinned buffer -> actor's HF safetensors ->
+(`exp0_sft.load_model`, `lfm3_fast_train`). Weight sync each step: BF16 weights -> actor's HF safetensors on /dev/shm (memory-mapped and page-locked: the only host copy) ->
 SGLang `pause_generation(retract)` / `update_weights_from_disk` / `continue_generation` in a background thread; a pruned
 native checkpoint every 2 steps and the FP32 state (masters + moments, `/mnt/external/natlang-grpo-v1`) every 4 (grpo-v1 runs `--state-every 1`: a guard stop loses no step), also in
 background threads. The whole run executes from its pinned copy (`scripts/pin_checkout.py create COMMIT
@@ -135,7 +135,12 @@ sampled in run1, ~42 s a step), `--call-fraction` (default 1: a fraction of each
 Memory (smoke 2026-11-12): on the GB10 the unit's MemoryMax (= ledger budget) also bounds its CUDA allocations, so the
 budget must cover GPU + host: learner CUDA 19.3 GB before AdamW state, 32 GB peak at step 1, about 36 GB with the FP32 moments
 (FP32 masters + moments + FP32 gradients alone are 27 GB), host about 5 GB plus the collector node processes (in the same
-cgroup, 0.3-0.7 GB per slot; shared collectors save about 0.25 GB a slot), plus the child actor (kv-gb + 24). The actor's
+cgroup, 0.3-0.7 GB per slot; shared collectors save about 0.25 GB a slot), plus the child actor (kv-gb + 24). From 2026-11-15 (after run2's guard stops at 92.6 and 96.7 GB): the KL reference is a file
+(`ReferenceWeights`, state dir) loaded into the policy's own parameters for the reference pass instead of a resident copy
+(-3.5 GB), FP32 gradients exist only from the policy pass to the optimizer step (-6.5 GB outside it), imported states are
+read per sequence instead of cached through the learner phase, the nucleus loss casts inside its kernel (-1 GB at the loss),
+no pinned weight buffer or checkpoint clones (-4 GB, -4 GB transient); `train.jsonl` `cuda_peak_by_phase_gb` gives each
+learner phase's CUDA peak with this process's host memory. The actor's
 weight file lives on /dev/shm (the shared NVMe wrote at 60-230 MB/s under load); pruned checkpoints go to /mnt/external
 (last 2 plus held-evaluated ones), the single FP32 training state (20.7 GB, temp file renamed over the previous) to NVMe.
 
