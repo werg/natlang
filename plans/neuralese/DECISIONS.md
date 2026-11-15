@@ -2345,3 +2345,24 @@ graphs for up to 128 sequences took 1.85 GB, while 16 slots run at most about 20
 These are sizing changes only: the sampling law, objective and data selection are unchanged, and collection runs about a
 third slower per step. The step-2 held eval (194 of 512 ran, 85 of 180 scored successes, partial) continues on the resumed
 run.
+
+**Step 4 sentinel, step-3 held regression: run2 stopped (2026-11-15 09:23).** Step 4 (reward 0.498, grad_norm 0.24, no
+spike) fired the behaviour probe: logp −0.033, closes 1.31x (0.99 / 0.96 / 1.18 / 1.31 over steps 1-4), close logp +0.33;
+k3 KL 0.0006 / 0.0027 / 0.0274. A forward-only check on step 4's own groups (680 calls, 602k tokens, base and steps 2-4
+on identical tokens) found: k3's jump is about one token (actor −0.16, HF learner at the same step-3 weights −7.63; 4 of
+602k tokens disagree by more than 3 nats, cause unknown); the robust drift (d²/2 with |d| < 5: 0.0032 / 0.0140 / 0.0278,
+mean |d| 0.031 / 0.065 / 0.092) is broad (all 24 groups, reasoning tokens, first 50 reasoning positions most) and its
+function-space direction persists across updates (per-token corr 0.60, 0.35) while parameter-space gradient-momentum
+cosines are about 0; the `</think>` rise is global (positive- and negative-advantage episodes and never-trained groups
+alike); the inbox-n7 decisions reversed by about 10 nats in two updates. The reward does not select it: within groups,
+successes reason as long per call as failures (corr(A, tokens/call) 0 to +0.14) and make fewer calls (corr(A, calls)
+−0.2 to −0.3). Ruled out: the resume (masters = exported checkpoints, AdamW continuity), the export path, decisions as the
+step-4 KL source. Unchecked: imported-state calls, a learner backward decomposition, BF16 directionality, the tail mask,
+the actor-learner outlier tokens. The stop also cut the step-3 held eval at 336 of 512 (sample-major: every task once,
+80 twice): **step 3 vs base −9.6 pts per-task pass rate (52.9 → 43.3%, 224 tasks, permutation p = 0.001), McNemar 37:16
+(p = 0.0055), tasks 32 down / 13 up (p = 0.0066), budget run-outs 9.8 → 19.3% (p = 0.0008)**. A significant regression
+whose direction (more calls, earlier closing) the objective selects against: grpo-v2-run2 ends at this eval (unit and
+Pop actor stopped), and the bug hunt starts on the freed DGX. Each memory stop also retired the groups already lowered
+for its unfinished step (g18-g55, g106-g129, about 48 groups, never trained): data loss, not bias. Kept for the hunt: the
+pin, branch states 3 and 4, checkpoints 1-4, rollouts. Memory fixes for the next pin: 5ae700243. Also retired: the w5
+checkpoint-offload owner, whose only job pointed at a deleted bf95-lowlr-1105 checkpoint.
