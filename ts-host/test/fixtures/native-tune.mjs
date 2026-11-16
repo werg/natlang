@@ -17,24 +17,18 @@ export function writeNativeTuneTensor(directory, base, tag) {
   return id;
 }
 
-export function nativeTuneStateExport(base) {
+export function nativeTuneState(base) {
   const source = nativeStateFixture(base.architecture);
   const artifact = { ...source, metadata: { ...source.metadata, ...base } };
   const id = nativeStateContentId(artifact.metadata, artifact.tensors);
-  const key = Buffer.from('natlang.state.id'), length = Buffer.alloc(8), descriptor = Buffer.alloc(12);
-  length.writeBigUInt64LE(BigInt(key.length)); descriptor.writeUInt32LE(8); descriptor.writeBigUInt64LE(BigInt(id.length), 4);
-  const header = Buffer.alloc(24); header.write('GGUF'); header.writeUInt32LE(3, 4); header.writeBigUInt64LE(1n, 16);
-  const gguf = Buffer.concat([header, length, key, descriptor, Buffer.from(id), Buffer.from('span')]);
-  return { id, artifact, gguf, sha256: createHash('sha256').update(gguf).digest('hex') };
+  return { id, artifact, wire: encodeNativeState(artifact) };
 }
 
+/** A soft state as tune/build.py writes it: its store file, served as it is by every engine. */
 export function writeNativeTuneState(directory, base, binding) {
-  const { id, artifact, gguf, sha256 } = nativeTuneStateExport(base);
+  const { id, artifact, wire } = nativeTuneState(base);
   mkdirSync(join(directory, 'states'), { recursive: true });
-  mkdirSync(join(directory, 'exports'), { recursive: true });
-  writeFileSync(join(directory, 'states', `${id}.nzs`), encodeNativeState(artifact));
-  writeFileSync(join(directory, 'exports', `${id}.state.gguf`), gguf);
+  writeFileSync(join(directory, 'states', `${id}.nzs`), wire);
   return { binding, kind: 'instructions', target: null, state: id,
-    textSha256: createHash('sha256').update(artifact.metadata.text).digest('hex'), tokens: 2,
-    exports: { gguf: { file: `exports/${id}.state.gguf`, sha256, baseGgufSha256: 'f'.repeat(64) } } };
+    textSha256: createHash('sha256').update(artifact.metadata.text).digest('hex'), tokens: 2 };
 }

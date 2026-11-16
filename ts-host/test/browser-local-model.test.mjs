@@ -303,22 +303,24 @@ test('a tuned release\'s soft states load into the in-page model as native state
   const project = api.compileVirtualProject({ files: { 'echo.nl': named('Return value.'), 'main.ts': "import echo from './echo.nl'; export default echo;" } }, api);
   const program = project.manifest.adaptation;
   const base = { architecture: 'lfm2', checkpoint_sha256: 'c'.repeat(64), tokenizer_fingerprint: 't', embedding_weight_sha256: 'e'.repeat(64) };
-  const baseGguf = 'b'.repeat(64), state = 'nzs1_' + 'a'.repeat(52);
+  const baseGguf = 'b'.repeat(64);
   const { tree, bindings } = host.compileScopeTree(program);
-  const files = new Map([[`exports/${state}.state.gguf`, new TextEncoder().encode('span')]]);
-  const gguf = (file, bind = baseGguf) => ({ file, sha256: hexDigest(files.get(file)), baseGgufSha256: bind });
+  const { nativeStateFixture } = await import('./fixtures/native-state.mjs');
+  const { encodeNativeStateWire } = await import('../dist/native/neuralese-store.js');
+  const stateFile = encodeNativeStateWire(nativeStateFixture('lfm2'));
+  const state = stateFile.id;
+  const files = new Map([[`states/${state}.nzs`, stateFile.wire]]);
   const binding = bindings.find(item => item.component.endsWith('echo.nl::instructions'));
   const sealed = bind => host.sealManifest({ schema: 'natlang.adapters/v1', program: { id: program.id, buildHash: program.buildHash }, base, tree, bindings,
     artifacts: [], families: [], memberships: [], scales: {}, validatedReductions: [], fallback: 'base', receipts: {},
-    softStates: [{ binding: binding.id, kind: 'instructions', target: null, state, textSha256: hexDigest('Return value.\n'), tokens: 3,
-      exports: { gguf: gguf(`exports/${state}.state.gguf`, bind) } }] });
-  let manifest = sealed(baseGguf);
+    softStates: [{ binding: binding.id, kind: 'instructions', target: null, state, textSha256: hexDigest('Return value.\n'), tokens: 3 }] });
+  let manifest = sealed();
   const fetch = async url => { const path = new URL(url).pathname.replace('/release/', '');
     const bytes = path === 'natlang.adapters.json' ? new TextEncoder().encode(JSON.stringify(manifest)) : files.get(path);
     return bytes ? new Response(bytes) : new Response('missing', { status: 404 }); };
   const release = await api.loadBrowserRelease('https://example.test/release', { fetch, baseGgufSha256: baseGguf, executor: base, storage: null });
   assert.deepEqual(release.nativeStates.map(item => item.id), [state]);
-  assert.equal(await release.nativeStates[0].blob.text(), 'span');
+  assert.deepEqual(new Uint8Array(await release.nativeStates[0].blob.arrayBuffer()), stateFile.wire, 'the store file, as fetched');
   assert.equal(release.weights[0].resolve('', binding.component, null).soft.instructions.state, state, 'the binding is served with its state');
 
   let params; const requests = [];
@@ -339,14 +341,13 @@ test('a tuned release\'s soft states load into the in-page model as native state
       tools: [], temperature: 0, seed: null, max_tokens: 4 }), /weights-unavailable: native state/);
   } finally { await model.close(); }
 
-  // A wllama build without native-state import refuses the states; a release whose states bind another base runs degraded.
+  // A wllama build without native-state import refuses the states; a file that does not hold its named state is refused.
   await assert.rejects(api.loadBrowserLocalModel({ kind: 'url', url: 'https://example.test/base.gguf' },
     { engine: { ...engine, engine: { ...fake, capabilities: { loraBlobs: true }, isModelLoaded: () => false } }, gpuLayers: 0, nativeStates: release.nativeStates }),
   /weights-unavailable: this wllama build cannot load native states/);
-  manifest = sealed('d'.repeat(64));
-  const other = await api.loadBrowserRelease('https://example.test/release', { fetch, baseGgufSha256: baseGguf, executor: base, storage: null });
-  assert.equal(other.nativeStates.length, 0);
-  assert.equal(other.weights[0].resolve('', binding.component, null).status, 'degraded');
+  const corrupt = stateFile.wire.slice(); corrupt[corrupt.length - 1] ^= 1; files.set(`states/${state}.nzs`, corrupt);
+  await assert.rejects(api.loadBrowserRelease('https://example.test/release', { fetch, baseGgufSha256: baseGguf, executor: base, storage: null }),
+    /content ID mismatch|does not hold/);
 });
 
 test('the in-page model scores decision readouts in one engine request and carries decide on turn', async () => {

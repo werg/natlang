@@ -7,25 +7,11 @@ import { join } from 'node:path';
 import { uploadRelease } from '../dist/tuned-serving.js';
 import { MemoryNeuraleseStore, nativeStateContentId, encodeNativeState } from '../dist/native/neuralese-store.js';
 import { nativeStateFixture } from './fixtures/native-state.mjs';
-import { copyNativeReleaseClosure, installNativeReleaseObject, materializeNativeInferenceState, materializeNativeStateGguf, verifyNativeInferenceMaterialization,
+import { copyNativeReleaseClosure, installNativeReleaseObject, materializeNativeInferenceState, verifyNativeInferenceMaterialization,
   verifyNativeInferenceSnapshotReceipt, nativeReleaseObjectClosure } from '../dist/native/release-artifact-closure.js';
 import { materializeExistingInferenceRelease } from '../dist/tune/pipeline.js';
 import { sealManifest } from '../dist/adaptation/weights/manifest.js';
 import { storeRelease } from '../dist/adaptation/weights/release.js';
-
-test('managed state export binds the compact identity without changing its payload', () => {
-  const source = `nzs1_${'a'.repeat(52)}`, target = `nzs1_${'b'.repeat(52)}`;
-  const key = Buffer.from('natlang.state.id'), length = Buffer.alloc(8), descriptor = Buffer.alloc(12);
-  length.writeBigUInt64LE(BigInt(key.length)); descriptor.writeUInt32LE(8); descriptor.writeBigUInt64LE(BigInt(source.length), 4);
-  const header = Buffer.alloc(24); header.write('GGUF'); header.writeUInt32LE(3, 4); header.writeBigUInt64LE(1n, 16);
-  const bytes = Buffer.concat([header, length, key, descriptor, Buffer.from(source), Buffer.from('payload')]);
-  const hash = createHash('sha256').update(bytes).digest('hex');
-  const result = materializeNativeStateGguf(bytes, hash, source, target);
-  assert.equal(Buffer.from(result.bytes).toString('hex'), Buffer.from(bytes.toString('latin1').replace(source, target), 'latin1').toString('hex'));
-  assert.equal(result.sha256, createHash('sha256').update(result.bytes).digest('hex'));
-  assert.throws(() => materializeNativeStateGguf(bytes, '0'.repeat(64), source, target), /receipt/);
-  assert.throws(() => materializeNativeStateGguf(bytes, hash, target, source), /missing or ambiguous/);
-});
 
 test('inference materialization preserves the complete current state payload and leaves optimizer history in source', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'tune-release-materialized-state-'));
@@ -118,23 +104,15 @@ test('an already completed release gets a separately sealed compact serving succ
         python_version: '3.12.3', torch_build_sha256: '5'.repeat(64), torch_git_version: 'test', torch_version: '2.11.0' } };
     const source = { metadata: { ...parent.metadata, derivation }, tensors: parent.tensors };
     const state = nativeStateContentId(source.metadata, source.tensors), binding = 'binding:test';
-    const key = Buffer.from('natlang.state.id'), keyLength = Buffer.alloc(8), descriptor = Buffer.alloc(12);
-    keyLength.writeBigUInt64LE(BigInt(key.length)); descriptor.writeUInt32LE(8); descriptor.writeBigUInt64LE(BigInt(state.length), 4);
-    const header = Buffer.alloc(24); header.write('GGUF'); header.writeUInt32LE(3, 4); header.writeBigUInt64LE(1n, 16);
-    const gguf = Buffer.concat([header, keyLength, key, descriptor, Buffer.from(state), Buffer.from('payload')]);
-    const ggufSha = createHash('sha256').update(gguf).digest('hex');
     const manifest = sealManifest({ schema: 'natlang.adapters/v1', program: { id: 'test', buildHash: 'b'.repeat(64) }, base: identity,
       tree: [{ id: 'tree:', level: 'tree', path: '', parent: null }, { id: 'lambda:test', level: 'lambda', path: 'test.nl', parent: 'tree:' }],
       bindings: [{ id: binding, component: 'test.nl', definitionId: null, contextId: null, origin: 'named',
         ancestry: ['tree:', 'lambda:test'], semanticHash: 's'.repeat(64) }], artifacts: [], families: [], memberships: [],
-      softStates: [{ binding, kind: 'instructions', target: null, state, textSha256: 'e'.repeat(64), tokens: 1,
-        exports: { gguf: { file: 'exports/state.gguf', sha256: ggufSha, baseGgufSha256: 'f'.repeat(64) } } }], scales: {},
+      softStates: [{ binding, kind: 'instructions', target: null, state, textSha256: 'e'.repeat(64), tokens: 1 }], scales: {},
       validatedReductions: [], fallback: 'base', receipts: { training: { fit: 'full-history' } } });
     storeRelease(root, manifest);
     const sourceDir = join(root, '.natlang', 'tune', 'releases', manifest.digest);
     mkdirSync(join(sourceDir, 'states'), { recursive: true });
-    mkdirSync(join(sourceDir, 'exports'), { recursive: true });
-    writeFileSync(join(sourceDir, 'exports/state.gguf'), gguf);
     writeFileSync(join(sourceDir, 'states', `${state}.nzs`), encodeNativeState({ ...source, id: state }));
     const compact = materializeExistingInferenceRelease(root, manifest, sourceDir);
     assert.notEqual(compact.manifest.digest, manifest.digest);
@@ -144,9 +122,6 @@ test('an already completed release gets a separately sealed compact serving succ
     assert.ok(existsSync(join(sourceDir, 'states', `${state}.nzs`)), 'full source state remains available');
     assert.ok(existsSync(join(compact.directory, 'states', `${compact.manifest.softStates[0].state}.nzs`)));
     assert.equal(compact.manifest.receipts.inferenceStateMaterializations[0].sourceState, state);
-    const compactGguf = readFileSync(join(compact.directory, 'exports/state.gguf'));
-    assert.ok(compactGguf.includes(Buffer.from(compact.manifest.softStates[0].state)));
-    assert.equal(createHash('sha256').update(compactGguf).digest('hex'), compact.manifest.softStates[0].exports.gguf.sha256);
     assert.equal(compact.manifest.receipts.trainingHistoryRelease, manifest.digest);
     unlinkSync(join(compact.directory, 'states', `${compact.manifest.softStates[0].state}.nzs`));
     assert.throws(() => materializeExistingInferenceRelease(root, compact.manifest, compact.directory), /absent/);

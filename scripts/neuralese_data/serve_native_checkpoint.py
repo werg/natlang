@@ -188,6 +188,10 @@ def main() -> None:
             'checkpoint': str(checkpoint), 'base': str(args.base) if args.base else None, 'device': args.device,
             'participant': args.native_participant,
             **{key: view_options[key] for key in ('actor_view', 'transported_actor') if key in view_options}})
+    if args.store_dir is None and args.engine == 'sglang':
+        # The SGLang front hands native state to the fork as store files: without --store-dir, a store for this run.
+        import tempfile
+        args.store_dir = Path(tempfile.mkdtemp(prefix='sglang-actor-store-'))
     if args.store_dir is not None:
         from natlang_neuralese.serve.store import TensorStore
         engine.store = TensorStore(args.store_dir)

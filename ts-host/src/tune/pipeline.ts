@@ -22,9 +22,9 @@ import { evaluateRoots, type ArmResult } from './evaluate.js';
 import { isSelfTeacher, leaksPrivileged, privilegedDriver, privilegedRoots, readPrivileged, recordedTeachers } from './selfteach.js';
 import type { ScopeOptions } from '../adaptation/weights/scopes.js';
 import type { StudentSettings, TuneSettings } from './settings.js';
-import { copyNativeReleaseClosure, installNativeReleaseObject, installReleaseExport, materializeNativeInferenceState, materializeNativeStateGguf, nativeReleaseObjectClosure, verifyNativeInferenceMaterialization, verifyNativeInferenceSnapshotReceipt, type NativeInferenceMaterializationReceipt } from '../native/release-artifact-closure.js';
+import { copyNativeReleaseClosure, installNativeReleaseObject, installReleaseExport, materializeNativeInferenceState, nativeReleaseObjectClosure, verifyNativeInferenceMaterialization, verifyNativeInferenceSnapshotReceipt, type NativeInferenceMaterializationReceipt } from '../native/release-artifact-closure.js';
 import { decodeNativeState, encodeNativeState } from '../native/neuralese-store.js';
-import { materializeExistingInferenceRelease, remapSoftStateExport } from '../adaptation/weights/inference-release.js';
+import { materializeExistingInferenceRelease, remapSoftState } from '../adaptation/weights/inference-release.js';
 export { materializeExistingInferenceRelease };
 
 export type StageTiming = { stage: string; ms: number; reused?: boolean };
@@ -316,7 +316,6 @@ export function releaseFromBuild(options: TuneOptions, data: Pick<TuneData, 'dat
   const resultSha256 = sha(resultText);
   const { digest: _digest, ...base } = variant.manifest;
   const materialized: { id: string; bytes: Uint8Array }[] = [];
-  const stateExports: { file: string; bytes: Uint8Array; sha256: string }[] = [];
   const carryIds = new Set((variant.carrySoftStates?.states ?? []).map(state => state.state));
   const stateReceipts: Record<string, unknown>[] = (variant.carrySoftStates?.receipts ?? []).filter((receipt): receipt is Record<string, unknown> =>
     !!receipt && typeof receipt === 'object' && typeof (receipt as Record<string, unknown>).inferenceState === 'string' &&
@@ -337,7 +336,7 @@ export function releaseFromBuild(options: TuneOptions, data: Pick<TuneData, 'dat
           resultSha256 } }
           : { historyDirectory: variant.carrySoftStates!.directory }) });
     }
-    return remapSoftStateExport(state, output.artifact.id, sourcePath === original ? out : variant.carrySoftStates!.directory, stateExports);
+    return remapSoftState(state, output.artifact.id);
   });
   const sealed = sealManifest({ ...base, artifacts: result.artifacts, families: result.families ?? [], memberships: result.memberships ?? [],
     softStates,
@@ -346,7 +345,6 @@ export function releaseFromBuild(options: TuneOptions, data: Pick<TuneData, 'dat
       trainingFitOutput: { jobKey: fitKey, resultSha256 },
       ...(stateReceipts.length ? { inferenceStateMaterializations: stateReceipts } : {}) } } as Omit<WeightManifest, 'digest'>);
   const directory = dirname(releaseFile(root, sealed.digest));
-  for (const item of stateExports) installReleaseExport(join(directory, item.file), item.bytes, item.sha256);
   // A release carries only serving roots and their exact executable ancestry. Optimizer/RNG/history stay in the
   // immutable fit output and remain available for continuation; they are not inference dependencies by default.
   const nativeRoots = [...sealed.artifacts.map(item => item.artifact), ...sealed.families.map(item => item.artifact),
@@ -361,14 +359,6 @@ export function releaseFromBuild(options: TuneOptions, data: Pick<TuneData, 'dat
   for (const artifact of [...sealed.artifacts, ...sealed.families]) if (artifact.exports?.gguf) {
     const target = join(directory, artifact.exports.gguf.file);
     installReleaseExport(target, readFileSync(join(out, artifact.exports.gguf.file)), artifact.exports.gguf.sha256);
-  }
-  // Soft states exported as llama.cpp native state spans: from this build, or a carried state's earlier release.
-  for (const state of sealed.softStates) if (state.exports?.gguf) {
-    const target = join(directory, state.exports.gguf.file);
-    const source = existsSync(join(out, state.exports.gguf.file)) ? join(out, state.exports.gguf.file)
-      : variant.carrySoftStates ? join(variant.carrySoftStates.directory, state.exports.gguf.file) : join(out, state.exports.gguf.file);
-    if (!stateExports.some(value => value.file === state.exports!.gguf!.file))
-      installReleaseExport(target, readFileSync(source), state.exports.gguf.sha256);
   }
   storeRelease(root, sealed);
   return sealed;

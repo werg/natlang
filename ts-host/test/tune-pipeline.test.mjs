@@ -11,7 +11,7 @@ import { prepareData, tuneProgram } from '../dist/tune/pipeline.js';
 import { collect, splitExamples, protectedExamples, scaffoldManifest, readRootExamples } from '../dist/tune/collect.js';
 import { openAICompatibleModelTurn } from '../dist/model/openai-compatible.js';
 import { scriptedModel } from './support/natlang.mjs';
-import { nativeTuneStateExport } from './fixtures/native-tune.mjs';
+import { nativeTuneState } from './fixtures/native-tune.mjs';
 
 const base = { architecture: 'lfm2', checkpoint_sha256: 'c'.repeat(64), tokenizer_fingerprint: 'd'.repeat(64), embedding_weight_sha256: 'e'.repeat(64) };
 
@@ -333,8 +333,8 @@ test('managed llama.cpp releases train soft states only when declared and carry 
   assert.equal(softStatesServed({ backend: 'vllm', softStates: true }), false);
   const root = project();
   try {
-    const { id: state, gguf } = nativeTuneStateExport(base);
-    // A stand-in trainer that reports one soft state with its llama.cpp export, as tune/build.py does.
+    const { id: state, wire } = nativeTuneState(base);
+    // A stand-in trainer that reports one soft state with its store file, as tune/build.py does.
     writeFileSync(join(root, 'soft-trainer.mjs'), `import { readFileSync, writeFileSync } from 'node:fs';
 import { writeNativeTuneState } from ${JSON.stringify(new URL('./fixtures/native-tune.mjs', import.meta.url).href)};
 const args = process.argv.slice(2), plan = JSON.parse(readFileSync(args[args.indexOf('--plan') + 1], 'utf8')), out = args[args.indexOf('--out') + 1];
@@ -345,8 +345,9 @@ writeFileSync(out + '/result.json', JSON.stringify({ artifacts: [], receipt: {},
       teacher: scriptedModel(respond).driver, teacherId: 'teacher:test', serve: serve([]) };
     const data = await prepareData(options);
     const { manifest } = await trainRelease(options, data, { manifest: data.scaffold });
-    assert.equal(manifest.softStates[0].exports.gguf.file, `exports/${state}.state.gguf`);
-    assert.deepEqual(readFileSync(join(root, '.natlang/tune/releases', manifest.digest, manifest.softStates[0].exports.gguf.file)), gguf);
+    // Every engine loads the release's store file as it is (no per-engine re-export).
+    assert.equal(manifest.softStates[0].exports, undefined);
+    assert.deepEqual(new Uint8Array(readFileSync(join(root, '.natlang/tune/releases', manifest.digest, 'states', `${manifest.softStates[0].state}.nzs`))), wire);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

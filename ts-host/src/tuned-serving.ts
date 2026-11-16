@@ -10,6 +10,7 @@ import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import type { ProgramDescriptor } from './adaptation/types.js';
 import { WeightBinding } from './adaptation/weights/binding.js';
+import { softStateFile } from './adaptation/weights/manifest.js';
 import { currentRelease } from './adaptation/weights/release.js';
 import { managedModelSha256, profileEnvironment, supportsNativeStates } from './model/local-server.js';
 import { discoverLlamaRuntime } from './model/llama-runtime.js';
@@ -37,12 +38,12 @@ async function fileSha256(path: string): Promise<string> {
 }
 
 /**
- * Whether the selected managed llama.cpp profile serves this release as tuned: every adapter (and soft state) has a
- * GGUF export bound to exactly the profile's base GGUF, and soft states need the fork's `--native-state`.
+ * Whether the selected managed llama.cpp profile serves this release as tuned: every adapter has a GGUF export bound to
+ * exactly the profile's base GGUF, and soft states (their store files) need the fork's `--native-state`.
  */
 type Exported = { exports?: { gguf?: { baseGgufSha256?: string } } };
 export async function llamaServesRelease(manifest: { artifacts: readonly Exported[]; families?: readonly Exported[];
-  softStates: readonly Exported[] }, choice: ResolvedModelChoice,
+  softStates: readonly unknown[] }, choice: ResolvedModelChoice,
   environment: NodeJS.ProcessEnv = process.env): Promise<boolean> {
   if (choice.kind !== 'managed-local' || !manifest.artifacts.length) return false;
   environment = profileEnvironment(choice, environment);
@@ -50,7 +51,7 @@ export async function llamaServesRelease(manifest: { artifacts: readonly Exporte
   try { base = await managedModelSha256(environment, choice.release); } catch { return false; }
   const bound = (item: { exports?: { gguf?: { baseGgufSha256?: string } } }) => item.exports?.gguf?.baseGgufSha256 === base;
   // Families without members in this program are not exported; every exported one must bind the same base.
-  if (!manifest.artifacts.every(bound) || !manifest.softStates.every(bound)
+  if (!manifest.artifacts.every(bound)
     || !(manifest.families ?? []).filter(item => item.exports?.gguf).every(bound)) return false;
   const executable = discoverLlamaRuntime(environment).selected?.path;
   return !manifest.softStates.length || (!!executable && supportsNativeStates(executable));
@@ -97,16 +98,15 @@ export async function tunedServing(root: string, program: ProgramDescriptor | un
       loaded.push({ id: item.artifact, path });
     }
   }
-  // Soft states: exact native state spans on the llama.cpp fork (`--native-state`); the upstream llama-server has no
+  // Soft states: their store files (`states/<id>.nzs`) as exact native state spans on the llama.cpp fork
+  // (`--native-state`, which verifies each file's content ID and identity at load); the upstream llama-server has no
   // native-state import, so there soft-state bindings run degraded.
   const states: { id: string; path: string }[] = [];
   const executable = choice.kind === 'managed-local' ? discoverLlamaRuntime(environment).selected?.path : undefined;
-  const nativeState = !incompatible && manifest.softStates.length > 0 && !!executable && supportsNativeStates(executable)
-    && manifest.softStates.every(item => item.exports?.gguf?.baseGgufSha256 === base);
+  const nativeState = !incompatible && manifest.softStates.length > 0 && !!executable && supportsNativeStates(executable);
   if (nativeState) for (const item of manifest.softStates) {
-    const path = join(directory, item.exports!.gguf!.file);
-    if (await fileSha256(path).catch(() => '') !== item.exports!.gguf!.sha256)
-      throw new Error(`tuned soft state ${item.exports!.gguf!.file} is missing or differs from its release receipt; rerun natlang tune`);
+    const path = join(directory, softStateFile(item));
+    if (!existsSync(path)) throw new Error(`tuned soft state ${softStateFile(item)} is missing from its release; rerun natlang tune`);
     states.push({ id: item.state, path });
   }
   const binding = new WeightBinding(manifest, { ...(program ? { program } : {}), available: new Set([...loaded, ...states].map(item => item.id)),

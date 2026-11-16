@@ -8,18 +8,15 @@ import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { sealManifest, type SoftState, type WeightManifest } from './manifest.js';
 import { releaseFile, storeRelease } from './release.js';
-import { copyNativeReleaseClosure, installNativeReleaseObject, installReleaseExport, materializeNativeInferenceState, materializeNativeStateGguf,
+import { copyNativeReleaseClosure, installNativeReleaseObject, installReleaseExport, materializeNativeInferenceState,
   nativeReleaseObjectClosure, verifyNativeInferenceMaterialization, verifyNativeInferenceSnapshotReceipt,
   type NativeInferenceMaterializationReceipt } from '../../native/release-artifact-closure.js';
 import { decodeNativeState, encodeNativeState } from '../../native/neuralese-store.js';
 
-export function remapSoftStateExport(state: SoftState, targetId: string, sourceDirectory: string,
-    outputs: { file: string; bytes: Uint8Array; sha256: string }[]): SoftState {
-  if (targetId === state.state || !state.exports?.gguf) return { ...state, state: targetId };
-  const exportInfo = state.exports.gguf;
-  const result = materializeNativeStateGguf(readFileSync(join(sourceDirectory, exportInfo.file)), exportInfo.sha256, state.state, targetId);
-  outputs.push({ file: exportInfo.file, ...result });
-  return { ...state, state: targetId, exports: { ...state.exports, gguf: { ...exportInfo, sha256: result.sha256 } } };
+/** A soft state bound to its materialized inference state (served from `states/<id>.nzs`). */
+export function remapSoftState(state: SoftState, targetId: string): SoftState {
+  const { exports: _retired, ...rest } = state as SoftState & { exports?: unknown };
+  return { ...rest, state: targetId };
 }
 
 /** Derive a compact, separately sealed serving release from an already completed release. */
@@ -54,20 +51,18 @@ export function materializeExistingInferenceRelease(root: string, sourceManifest
   if (!changed) {
     nativeReleaseObjectClosure([sourceDirectory], [...sourceManifest.artifacts.map(item => item.artifact),
       ...sourceManifest.families.map(item => item.artifact), ...sourceManifest.softStates.map(item => item.state)]);
-    for (const item of [...sourceManifest.artifacts, ...sourceManifest.families, ...sourceManifest.softStates]) if (item.exports?.gguf) {
+    for (const item of [...sourceManifest.artifacts, ...sourceManifest.families]) if (item.exports?.gguf) {
       const bytes = readFileSync(join(sourceDirectory, item.exports.gguf.file));
       if (createHash('sha256').update(bytes).digest('hex') !== item.exports.gguf.sha256)
         throw new Error(`release export ${item.exports.gguf.file} does not match its receipt`);
     }
     return { manifest: sourceManifest, directory: sourceDirectory };
   }
-  const exports: { file: string; bytes: Uint8Array; sha256: string }[] = [];
   const { digest: _digest, ...unsigned } = sourceManifest;
   const manifest = sealManifest({ ...unsigned, softStates: sourceManifest.softStates.map(item =>
-    remapSoftStateExport(item, replacements.get(item.state)!, sourceDirectory, exports)), receipts: { ...sourceManifest.receipts, inferenceStateMaterializations: receipts,
+    remapSoftState(item, replacements.get(item.state)!)), receipts: { ...sourceManifest.receipts, inferenceStateMaterializations: receipts,
       trainingHistoryRelease: sourceManifest.digest } });
   const directory = dirname(releaseFile(root, manifest.digest));
-  for (const item of exports) installReleaseExport(join(directory, item.file), item.bytes, item.sha256);
   for (const item of compacted) if (item.receipt) {
     const target = join(directory, 'states', `${item.artifact.id}.nzs`);
     mkdirSync(dirname(target), { recursive: true });
@@ -76,11 +71,8 @@ export function materializeExistingInferenceRelease(root: string, sourceManifest
   const roots = [...manifest.artifacts.map(item => item.artifact), ...manifest.families.map(item => item.artifact),
     ...manifest.softStates.map(item => item.state)];
   copyNativeReleaseClosure([sourceDirectory, directory], directory, roots);
-  for (const item of [...manifest.artifacts, ...manifest.families, ...manifest.softStates]) if (item.exports?.gguf) {
-    const target = join(directory, item.exports.gguf.file), source = join(sourceDirectory, item.exports.gguf.file);
-    if (!exports.some(value => value.file === item.exports!.gguf!.file))
-      installReleaseExport(target, readFileSync(source), item.exports.gguf.sha256);
-  }
+  for (const item of [...manifest.artifacts, ...manifest.families]) if (item.exports?.gguf)
+    installReleaseExport(join(directory, item.exports.gguf.file), readFileSync(join(sourceDirectory, item.exports.gguf.file)), item.exports.gguf.sha256);
   storeRelease(root, manifest);
   return { manifest, directory };
 }

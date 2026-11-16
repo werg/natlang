@@ -4,7 +4,10 @@ llama-server's native-state protocol on a natlang GGUF export (natlang_neuralese
 declares the export's native identity; a grammar forces a producer span (produce-open, text, produce-close) and the
 reply carries it as a native_state part; the stored artifact decodes with the reference codec (serve/store.py) to the
 same content ID and re-encodes byte for byte; a re-upload is accepted, a wrong ID refused; consuming the state answers an
-exact-native-state receipt; an unknown state fails with neuralese-unknown-native-state.
+exact-native-state receipt; an unknown state fails with neuralese-unknown-native-state. Native-state file handoff: a
+PUT of {"path": FILE} stores a local store file as read (GET answers its bytes), a state with a non-finite value is
+refused, and a second server started with --native-state FILE (the produced state's store file, as a release's
+states/<id>.nzs) consumes it exactly.
 """
 import base64, json, math, os, struct, subprocess, sys, time, urllib.request
 from pathlib import Path
@@ -19,10 +22,18 @@ def call(path, body=None, method=None, raw=False, ctype='application/json'):
             out = r.read(); return r.status, (out if raw else json.loads(out))
     except urllib.error.HTTPError as e:
         return e.code, e.read().decode()[:400]
-proc = subprocess.Popen([server, '-m', gguf, '--port', str(port), '-c', '2048', '-np', '1', '--no-warmup', '--jinja',
-                         *(['-ngl', '0'] if '--cpu' in sys.argv else [])],
-                        env={**os.environ, **({'CUDA_VISIBLE_DEVICES': ''} if '--cpu' in sys.argv else {})},
-                        stdout=open(sys.argv[3], 'w'), stderr=subprocess.STDOUT)
+def start(*extra, log=sys.argv[3]):
+    return subprocess.Popen([server, '-m', gguf, '--port', str(port), '-c', '2048', '-np', '1', '--no-warmup', '--jinja',
+                             *(['-ngl', '0'] if '--cpu' in sys.argv else []), *extra],
+                            env={**os.environ, **({'CUDA_VISIBLE_DEVICES': ''} if '--cpu' in sys.argv else {})},
+                            stdout=open(log, 'w'), stderr=subprocess.STDOUT)
+def ready(proc):
+    for _ in range(300):
+        if proc.poll() is not None:
+            raise RuntimeError(f'llama-server exited before readiness: {proc.returncode}; see {sys.argv[3]}')
+        try: urllib.request.urlopen(base + '/health', timeout=1); return
+        except Exception: time.sleep(0.5)
+proc = start()
 try:
     for _ in range(300):
         if proc.poll() is not None:
@@ -87,5 +98,34 @@ try:
     st, unknown = call('/v1/chat/completions', {'messages': [{'role': 'user', 'content': [{'type': 'native_state', 'id': 'nzs1_' + 'b' * 52}]}], 'max_tokens': 5})
     print('unknown', st, str(unknown)[:200])
     assert st == 400
+    # Native-state file handoff: a store file named by path is stored as read; non-finite state is refused.
+    import dataclasses, tempfile, torch
+    from natlang_neuralese.serve.store import write_native_state_file
+    work = Path(tempfile.mkdtemp(prefix='llama-native-files-'))
+    nudged = dataclasses.replace(block, layers=tuple({k: (v * 1.5 if k != 'kind' else v) for k, v in layer.items()} for layer in block.layers))
+    other = write_native_state_file(work / 'other.nzs', nudged.metadata(), nudged.tensors())
+    st, put = call(f'/v1/neuralese/native-states/{other}', {'path': str(work / 'other.nzs')}, method='PUT'); print('put by path', st, str(put)[:160])
+    assert st == 201, put
+    st, got = call(f'/v1/neuralese/native-states/{other}', raw=True)
+    assert st == 200 and got == (work / 'other.nzs').read_bytes(), 'GET answers the stored file bytes'
+    bad_layers = list(nudged.layers); first = dict(bad_layers[0]); key = next(k for k in first if k != 'kind')
+    first[key] = first[key].clone(); first[key].view(-1)[0] = float('nan'); bad_layers[0] = first
+    bad = dataclasses.replace(nudged, layers=tuple(bad_layers))
+    bad_id = write_native_state_file(work / 'bad.nzs', bad.metadata(), bad.tensors())
+    st, refused = call(f'/v1/neuralese/native-states/{bad_id}', (work / 'bad.nzs').read_bytes(), method='PUT', ctype='application/octet-stream')
+    print('non-finite', st, str(refused)[:160]); assert st == 400 and 'non-finite' in str(refused)
+    (work / f'{sid}.nzs').write_bytes(body)
+finally:
+    proc.terminate(); proc.wait(30)
+# A release's soft state: the store file loaded at startup (--native-state), consumed exactly.
+proc = start('--native-state', str(work / f'{sid}.nzs'), log=sys.argv[3] + '.startup')
+try:
+    ready(proc)
+    st, reply3 = call('/v1/chat/completions', {'messages': [{'role': 'user', 'content': [{'type': 'text', 'text': 'Which order is this about? '},
+        {'type': 'native_state', 'id': sid}]}], 'max_tokens': 20, 'temperature': 0})
+    print('startup state', st, json.dumps(reply3.get('native_state') if st == 200 else reply3)[:300])
+    assert st == 200 and any(item['id'] == sid and item['mode'] == 'exact-native-state' for item in reply3['native_state']['imports'])
+    assert reply3['choices'][0]['message']['content'] == reply2['choices'][0]['message']['content'], 'the same exact consumption as a PUT state'
+    print('native-state file handoff: ok')
 finally:
     proc.terminate(); proc.wait(30)

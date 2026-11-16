@@ -1073,9 +1073,13 @@ ran 16-38 slots, 30 running sequences, pool 93% full with queued requests, 8-14 
   is verified once per process (`NativeStateFile`, keyed by device, inode and size; store files are only ever renamed
   into place). Computing consumers (native engine splices, learner `NativeStates`, derivation checks, same-base adapter
   receipts) `load()` the block with one copy from the mapping. The front refuses a fork without the
-  `NATLANG_NATIVE_STATE_FILES` marker and needs a directory store (`--store-dir`). ts-host hashes native state
-  incrementally and decodes tensors as views (it had joined the whole payload once per hash and sliced each tensor);
-  its archive still keeps a copy per block in the collector's memory (docs/ENGINE_PARITY.md "Native state").
+  `NATLANG_NATIVE_STATE_FILES` marker and needs a directory store (`--store-dir`). The same handoff on every other
+  engine and store (docs/ENGINE_PARITY.md "Native state: one format, handed over as files"): ts-host stores keep the
+  wire as received (`putNativeStateWire`/`getNativeStateWire`; tensors are views; hashing is incremental, it had joined
+  the whole payload per hash and sliced each tensor, ~5 transient copies per archived block in the collector), the
+  collector archives the actor's GET bytes as they are; the llama.cpp fork (b704a8b2f) loads `--native-state` and the
+  page's `native_states` from natlang's store files (a release's `states/<id>.nzs`; the separate GGUF state format and
+  the tune GGUF re-export of soft states are gone) and accepts PUT `{"path"}`; every reader refuses non-finite state.
 
 ### HF-path fine-tuning speed: elementwise and dense sliding attention, not matmul (engineering, 2026-11-12)
 

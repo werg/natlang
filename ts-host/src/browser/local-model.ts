@@ -52,7 +52,7 @@ export type BrowserModelLoadOptions = {
   /** Tuned LoRA adapters (a release's GGUF exports, `loadBrowserRelease`), loaded at scale 0 with the model; each
    * request applies only its own call's stack (ts-host/vendor/wllama). */
   loraAdapters?: readonly { readonly id: string; readonly blob: Blob }[];
-  /** Tuned soft instruction/skill states (a release's `.state.gguf` exports, `loadBrowserRelease`): exact native state
+  /** Tuned soft instruction/skill states (a release's `states/<id>.nzs` store files as Blobs, `loadBrowserRelease`): exact native state
    * spans the model consumes wherever a message carries the state's sentinel (ts-host/vendor/wllama). */
   nativeStates?: readonly { readonly id: string; readonly blob: Blob }[];
   /** The model file's SHA-256 (a catalog entry's `sha256`). Warm openings are kept across reloads only for a model

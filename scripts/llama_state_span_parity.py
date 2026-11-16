@@ -6,7 +6,7 @@
 
 On the real LFM2.5-350M (CPU, F32): the Python engine forwards a prefix and the consume-open marker, splices a
 perturbed soft state (not reproducible from text), and forwards the consume-close marker and a suffix;
-llama-state-span-dump imports the exported state (common/native-state.h) for the same sequence, as one batch and in
+llama-state-span-dump imports the state's store file (serve/store.py format, as --native-state) for the same sequence, as one batch and in
 7-token chunks. Prints max/mean |dlogit| and top-1 agreement next to the plain-text backend baseline, and a negative
 control (the unperturbed state against the perturbed reference). Results of 2026-10-26: plain text 0.075 max,
 state span 0.043 max (both batchings), top-1 1.000; control 2.68.
@@ -31,7 +31,7 @@ def main():
     S.mkdir(parents=True, exist_ok=True)
     from test_tune_rows import SNAPSHOTS, real_engine
     from natlang_neuralese.model.shared_state import splice_block
-    from natlang_neuralese.tune.soft_export import export_state_gguf
+    from natlang_neuralese.serve.store import write_native_state_file
     engine, _ = real_engine(S)
     model_gguf = S / 'lfm-f32.gguf'
     if not model_gguf.exists():
@@ -54,15 +54,16 @@ def main():
         plain = prefix + encode(text) + suffix
         plain_reference = engine.shared_model.logits(engine._native_forward(plain, None)['h_final'][0]).float().numpy()
     for name, value in (('state', state), ('state-text', block)):
-        export_state_gguf(value, S / f'{name}.gguf', state_id='nzs1_' + name, text_sha256='0' * 64, role_tokens=roles)
-    (S / 'seq-state.json').write_text(json.dumps(prefix + [str(S / 'state.gguf')] + suffix))
-    (S / 'seq-text.json').write_text(json.dumps(prefix + [str(S / 'state-text.gguf')] + suffix))
+        write_native_state_file(S / f'{name}.nzs', value.metadata(), value.tensors())
+    (S / 'seq-state.json').write_text(json.dumps(prefix + [str(S / 'state.nzs')] + suffix))
+    (S / 'seq-text.json').write_text(json.dumps(prefix + [str(S / 'state-text.nzs')] + suffix))
     (S / 'seq-plain.json').write_text(json.dumps(plain))
     start = len(prefix) + 1 + len(block.token_ids)
 
     def run(sequence, first, out, *extra):
         subprocess.run([str(LCPP / 'build-cpu/bin/llama-state-span-dump'), '-m', str(model_gguf), '--input', str(S / sequence),
-                        '--from', str(first), '--out', str(S / out), '--f32-cache', *extra], check=True, capture_output=True)
+                        '--from', str(first), '--out', str(S / out), '--f32-cache',
+                        '--consume', str(roles.consume_open), str(roles.consume_close), *extra], check=True, capture_output=True)
         return np.fromfile(S / out, dtype=np.float32)
 
     def compare(name, got, want):
