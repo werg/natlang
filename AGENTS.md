@@ -27,7 +27,8 @@ with the owner only what is truly theirs. Waiting for an OK on a technical cours
   implement or consume that mechanism (all engines: managed llama-server, in-page wllama, Python native engine, SGLang
   actor; ts-host runtime; learner, held eval, probes, collectors). Before editing or briefing, write that inventory
   (`git grep` the concept, `docs/ENGINE_PARITY.md`), scope the change to all of it, and list each component left out
-  with its reason and next action (an ENGINE_PARITY row for engines). A subagent brief carries the inventory or makes
+  with its reason and next action (an ENGINE_PARITY row for engines). A "not applicable" cites the code (file and
+  lines) showing the component does not use the mechanism; the supervisor checks those citations before accepting. A subagent brief carries the inventory or makes
   building it the first step; a brief naming only the component where the symptom appeared is incomplete.
 - **Orphaned work.** Work whose author shows no activity in the last 24 h is orphaned. The supervising agent reviews it
   and integrates or deliberately discards it.
