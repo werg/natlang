@@ -2476,3 +2476,16 @@ skip atexit) had also been holding RAM until removed at 12:45 (fix 9bc8fcb7f: ow
 state-step-00004 as `grpo-v3-run1-r1` (same pin and treatment; sizing only: `--learner-phase-slots 4`, ledger budget 98
 GB). Step 5 is recollected from the step-4 policy. The front leak is a correctness-of-operations bug to fix before the
 next pin (the earlier arena cap / byte bound did not stop it); until then a resume every ~10 h restarts the front.
+
+**2026-11-16 16:10, next-pin queue: native-state handoff without tensor materialization (supervisor).** Owner-approved
+design change after the front leak (c62f8659c, per-request threads): native state crosses the SGLang front and fork as
+files in the block store's own format (795131dc9; fork `natlang-path-handoff` b6b2319c7, declared in
+`training/neuralese/sglang-fork.json`). Capture: the fork writes the store file, the store verifies it from its header
+plus one streaming hash/finiteness pass and renames it in; import: the fork reads the stored file's path; GET serves the
+file as stored. Content ids unchanged. Synthetic 0.48 GB block, front: peak heap growth 2.06 -> 0.045 GB, retained 1.05
+-> 0.013 GB, 4.5 -> 0.47 s, no extra import copy on disk. Inventory across engines/consumers in the commit and
+`docs/ENGINE_PARITY.md` (llama-server row: next action recorded; wllama not applicable; Python native engine, learner
+`NativeStates`, ts-host collector archive updated). The next pin moves both fork checkouts (DGX, Pop) to b6b2319c7 with
+this natlang commit (the front refuses an older fork), runs `check_sglang_producer_parity.py` on the GPU before launch,
+and re-measures the start policy on the new attested engine. Also queued for that pin: 9bc8fcb7f (stale /dev/shm weights
+sweep), --learner-phase-slots 4.
