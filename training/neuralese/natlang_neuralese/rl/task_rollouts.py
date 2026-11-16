@@ -18,6 +18,7 @@ import argparse
 import copy
 import hashlib
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -25,6 +26,7 @@ from typing import Any
 from ..eval.task_packet import classify_case, classification_binding, read_jsonl
 from .rollout_math import (DEFAULT_EXECUTION_EFFICIENCY_WEIGHT, group_advantages,
                            execution_efficiency_cost, execution_efficiency_counters, grounded_failure_report_credit, reporting_spread)
+from ..common.code_provenance import code_provenance
 from ..common.task_roots import student_root_row, authored_root_row
 
 UNSCORED_OUTCOMES = {"infrastructure_error", "unresolved"}
@@ -801,6 +803,9 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0,
                             "policy": {"temperature": entry.get("temperature"),
                                 "checkpoint_sha256": preparation.get("policy_checkpoint_sha256"),
                                 "endpoint": entry.get("rl_endpoint")},
+                            # the runtime that produced the turns: a later re-render or replay knows what it changes
+                            "code": code_provenance(),
+                            "model_facing": os.environ.get("NATLANG_MODEL_FACING") or None,
                             "turns": turns, "execution_graph": execution_graph,
                             "outcome": outcome,
                             "reward": None if training_reward is None else {"quality": training_reward,

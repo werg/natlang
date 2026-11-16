@@ -258,6 +258,8 @@ def test_scored_model_budget_prefix_reconstructs_exact_whole_graph(tmp_path):
     assert row["source_revisions"] == ["fixture/v1"]
     assert row["source_custody"]["packet_sha256"] == hashlib.sha256((tmp_path / "packet.jsonl").read_bytes()).hexdigest()
     assert row["source_custody"]["packet_row_sha256"] == hashlib.sha256((tmp_path / "packet.jsonl").read_bytes()).hexdigest()
+    # the runtime that produced the turns travels with them (a later replay or re-render knows what changed)
+    assert row["code"]["schema"] == "natlang.code-provenance/1" and "git_commit" in row["code"]
 
 
 def _emit_budget_rollout(tmp_path, **options):
