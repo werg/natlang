@@ -2517,3 +2517,12 @@ loop and ran-out rates flat (-0.6 pts). Series so far: step 1 +4.7 (an A/A: 0.39
 step 4 +2.5, step 5 +3.7; no sentinel through step 7 (grad_norm 0.145-0.177, KL ~5e-4, LR still warming to 3e-6). No
 stop; the run continues. Ops: the memory guard's floor stopped teacher generation (requeued, restarted) and the 66 MB
 dashboard collector (not requeued; page stale 1 h) at 21:36; the guard no longer stops units under 0.5 GiB (58f40939e).
+
+**2026-11-16 23:30, grpo-v3-run1 decision rule amended before further results (supervisor).** The declared success rule
+(two consecutive 2-sample Pop held evals each p < 0.05) is underpowered: at 2 samples the task-bootstrap 95% CI is about
++/-4 pts, so the largest effect seen so far (+3.7) reaches only p 0.086, and a true gain of ~3-4 pts would be judged "no
+gain" at the 48 h limit. Amended: the run's verdict is one 4-sample Pop held eval (~9 h) of its final checkpoint vs the
+4-sample Pop base, success = positive mean per-task change with permutation p < 0.05 and ran-out/loop rates not
+significantly worse. The 2-sample intermediate evals continue back to back (Pop would otherwise idle) as the regression
+guard only: one below -3.5 pts with p < 0.05 still stops the run. At the 48 h training limit (about 2026-11-18 00:00)
+the run stops, the running intermediate eval is preempted, and the final eval starts. The training treatment is unchanged.
