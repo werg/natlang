@@ -2510,3 +2510,10 @@ in grpo-v3-run1 is a different cause: `ReferenceWeights` slices of one mapping o
 private pages on GPU copy and stayed alive through a loop variable (+3.4 GB), and safetensors' pinned CUDA staging cache
 after a resume (+1.0 GB). Fixed in 12509988a (per-tensor reads, cache emptied in `release_host_memory` and after
 resume); targeted suites 69/69. Enter at the next pin with the front, conv and handoff changes.
+
+**2026-11-16 23:00, grpo-v3-run1 held step 5 (Pop, 2 samples vs the Pop base at 4; supervisor).** Per-task pass rate
+47.5% -> 51.2%, +3.7 pts, permutation p 0.086, task-bootstrap 95% CI [-0.4, +8.0]; 45 tasks up, 35 down (sign p 0.31);
+loop and ran-out rates flat (-0.6 pts). Series so far: step 1 +4.7 (an A/A: 0.39% of weights changed), step 3 +1.2,
+step 4 +2.5, step 5 +3.7; no sentinel through step 7 (grad_norm 0.145-0.177, KL ~5e-4, LR still warming to 3e-6). No
+stop; the run continues. Ops: the memory guard's floor stopped teacher generation (requeued, restarted) and the 66 MB
+dashboard collector (not requeued; page stale 1 h) at 21:36; the guard no longer stops units under 0.5 GiB (58f40939e).
