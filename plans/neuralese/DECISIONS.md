@@ -2489,3 +2489,15 @@ file as stored. Content ids unchanged. Synthetic 0.48 GB block, front: peak heap
 this natlang commit (the front refuses an older fork), runs `check_sglang_producer_parity.py` on the GPU before launch,
 and re-measures the start policy on the new attested engine. Also queued for that pin: 9bc8fcb7f (stale /dev/shm weights
 sweep), --learner-phase-slots 4.
+
+**2026-11-16 17:20, next-pin queue: bounded short-convolution transients on every engine (supervisor).** Pop's held
+SGLang engine OOMed in the fork's `natlang_conv_prefill` (two FP32 T x 7 x 2048 temporaries per request over the whole
+prefill chunk, up to 2 x 117 MB). Fork `natlang-conv-bounded` dbc51ddb72 (on `natlang-path-handoff` b6b2319c7) computes
+the same per-row expression in 256-row blocks; natlang 302617680 gathers the Python native engine's no-grad graph
+convolution histories per 1024-row block (`_convolve_eager`). Both bitwise equal to the previous outputs on the DGX
+(sm121; block edges, odd lengths, empty requests). Inventory with code citations in the agent report: SGLang decode,
+Python `native_step`/`native_decode_batch`, `lfm2_port` (conv1d), llama.cpp `ggml_ssm_conv` (managed llama-server and
+wllama) already bounded; training autograd paths K-fold by design. Pop SGLang mem-fraction 0.8 -> 0.77 (FP8 pool ~318k
+-> ~280k tokens, ~0.23 GB more headroom; pool size only). At the pin: merge dbc51ddb72 into the fork's `natlang`, update
+`training/neuralese/sglang-fork.json`, run the fork's bitwise conv test on Pop (sm89, unverified) and
+`check_sglang_producer_parity.py`, re-measure the start policy on Pop's new engine config.
