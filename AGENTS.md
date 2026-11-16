@@ -22,8 +22,7 @@ with the owner only what is truly theirs. Waiting for an OK on a technical cours
   experiment. A recommendation or a list of "proposed experiments" is unfinished work. Changes that are sound from
   first principles (harness and model-facing bug fixes, sampling, reward and loss-weighting fixes) ship as the new
   default with an opt-out and targeted tests. The next held eval shows any regression.
-- **Verify, don't assume.** Claims about state, ownership or other agents come from a check made now: processes, units,
-  files, logs, git. Work whose author shows no activity in the last 24 h is orphaned. The supervising agent reviews it
+- **Orphaned work.** Work whose author shows no activity in the last 24 h is orphaned. The supervising agent reviews it
   and integrates or deliberately discards it.
 - **Diagnose surprises immediately.** An unexpected number, failure or regression gets a root-cause investigation in
   the same session.
