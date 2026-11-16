@@ -50,7 +50,8 @@ def capture_case(native, backend, text):
     try:
         _, backend_seconds = request(backend + '/generate', {'input_ids': ids[:end], 'return_logprob': True,
             'logprob_start_len': max(start - 1, 0), 'sampling_params': {'temperature': 0.0, 'max_new_tokens': 1,
-                'custom_params': {'natlang_capture': {'path': path, 'start': start, 'end': end}}}})
+                'custom_params': {'natlang_capture': {'path': path, 'start': start, 'end': end,
+                                                      'native_state': block.metadata()}}}})
         data = load_file(path)
     finally:
         if os.path.exists(path):

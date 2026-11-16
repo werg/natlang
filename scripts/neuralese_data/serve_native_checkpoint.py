@@ -345,7 +345,9 @@ def attest_sglang_source(python, fork, pythonpath=''):
               'package': str(package), 'python': str(Path(python).resolve()),
               'hybrid_swa_kv': lfm3.is_file() and 'NATLANG_HYBRID_SWA_KV = True' in lfm3.read_text(),
               # custom_params.natlang_track_input_end: the scheduler stores a request's conv state at its input end
-              'track_input_end': params.is_file() and 'NATLANG_TRACK_INPUT_END = True' in params.read_text()}
+              'track_input_end': params.is_file() and 'NATLANG_TRACK_INPUT_END = True' in params.read_text(),
+              # natlang_capture writes / natlang_import reads native-state files of the store's format (path handoff)
+              'native_state_files': params.is_file() and 'NATLANG_NATIVE_STATE_FILES = True' in params.read_text()}
     if actual != declared or dirty:
         print(json.dumps({'event': 'sglang_fork_differs_from_declared', **record}), file=sys.stderr, flush=True)
     return record
@@ -428,6 +430,11 @@ def launch_sglang(engine, args, checkpoint, release=None):
     backend_pythonpath = os.pathsep.join(filter(None, [str(root / 'training/neuralese'),
         os.environ.get('NATLANG_SGLANG_PYTHONPATH', '')]))
     source = attest_sglang_source(python, fork, backend_pythonpath)
+    if not source['native_state_files']:
+        # The front hands native state to the fork as store files (serve/sglang_actor.py); an older fork writes captures
+        # the store refuses. Not a commit gate: a missing capability.
+        raise RuntimeError(f"the SGLang fork at {source['package']} predates native-state file handoff "
+                           f"(NATLANG_NATIVE_STATE_FILES): move it to the declared commit {fork.get('commit')}")
     # A transported model-only view (Pop) exports under the training checkpoint's identity, which the front attests.
     export_dir = args.hf_export_dir or ((args.store_dir or checkpoint.parent) / 'sglang-hf' / engine.checkpoint_sha256[:16])
     manifest = export_loaded(engine.shared_model, engine.tokenizer, engine.role_tokens, engine.model_config,

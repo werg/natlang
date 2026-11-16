@@ -1038,6 +1038,27 @@ ran 16-38 slots, 30 running sequences, pool 93% full with queued requests, 8-14 
   task flat at 0.7 GB, glibc/numpy allocations with 128 workers flat at 2 GB. Each request now runs on its own
   thread that ends with it (`SglangEngine._spawn`; score fan-out `_map_threads`). `MIMALLOC_PURGE_DELAY=0` does not
   help. Any long-lived thread pool that allocates torch CPU tensors has this growth.
+- Native state crosses front <-> fork as store files (2026-11-16; natlang main + fork b6b2319c7, both from the next
+  pin). Before, the front round-tripped every produce span and import through torch CPU tensors it never computes on:
+  a capture was `load_file` of the fork's FP32 safetensors, a `NativeStateBlock`, `put_native_state` (clone, id over
+  `tobytes` copies, `encode_native_state` bytes) and residency in the 2 GiB LRU; an import rebuilt `import-<id>
+  .safetensors` with `.cpu()` + `save_file` from the decoded block; an HTTP GET (the collector archives every written
+  and imported block of every reply, `archiveNeuraleseReplyArtifacts`) decoded the block and encoded it again. A
+  synthetic 0.48 GB block cost the front +2.06 GB peak anonymous heap (4.4x the payload), 1.05 GB retained, 4.5 s and a
+  second 0.47 GB file (by that ratio a 5.2 GB block seen in a run would peak near 23 GB: extrapolated). Now one format serves all three: `serve.store.
+  write_native_state_file` writes the store's encoding (the same bytes as `encode_native_state`; ids unchanged) and the
+  fork's `NatlangCapture` calls it with the front's metadata (`natlang_capture.native_state`); `TensorStore.
+  adopt_native_state_file` verifies the file from a mapping (`read_native_state_file`: header layout via
+  `validate_native_layout`, token ids and positions, one streaming pass hashing the content id and checking floats are
+  finite, the requested metadata and token ids) and renames it into `blocks/`; an import hands the fork the stored file
+  (`natlang_import.path`), whose `NatlangImport` reads only `layers.*`; HTTP GET `sendfile`s the stored file and PUT
+  streams the body to a file and adopts it. The same block: +0.045 GB peak, 0.013 GB retained, 0.47 s, no copy. A file
+  is verified once per process (`NativeStateFile`, keyed by device, inode and size; store files are only ever renamed
+  into place). Computing consumers (native engine splices, learner `NativeStates`, derivation checks, same-base adapter
+  receipts) `load()` the block with one copy from the mapping. The front refuses a fork without the
+  `NATLANG_NATIVE_STATE_FILES` marker and needs a directory store (`--store-dir`). ts-host hashes native state
+  incrementally and decodes tensors as views (it had joined the whole payload once per hash and sliced each tensor);
+  its archive still keeps a copy per block in the collector's memory (docs/ENGINE_PARITY.md "Native state").
 
 ### HF-path fine-tuning speed: elementwise and dense sliding attention, not matmul (engineering, 2026-11-12)
 

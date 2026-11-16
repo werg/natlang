@@ -7,6 +7,7 @@ import { verifyNativeStateDerivation } from './native-state-derivation.js';
  * opaque references (`{ $neuralese: { type, id } }` or `{ $nativeAdapter: { id } }`); exact bytes move between this
  * archive, `.nz` files and native model servers.
  */
+import { sha256 } from '@noble/hashes/sha2.js';
 import { digest, hexDigest } from './hash.js';
 import { validateNativeStateDerivation, nativeStateDerivationDependencies, validateNativeDerivativeArtifact, validateNativeDerivativeTarget, validateNativeFunctionalActor, nativeQueryReadoutDependencies, type NativeStateDerivation } from './native-derivative-contract.js';
 
@@ -594,7 +595,9 @@ export function decodeNativeTensorArtifact(bytes: Uint8Array): NativeTensorArtif
 export function nativeStateContentId(metadata: NativeStateMetadata, tensors: Record<string, NativeStateTensor>): string {
   validateNativeState(metadata, tensors);
   const metaBytes = new TextEncoder().encode(nativeCanonicalJson(metadata));
-  const parts: Uint8Array[] = [new TextEncoder().encode('natlang.native-state/1\0'), u64(metaBytes.length), metaBytes];
+  // Hashed incrementally: the tensors are never joined into one more copy of the state.
+  const hash = sha256.create();
+  for (const part of [new TextEncoder().encode('natlang.native-state/1\0'), u64(metaBytes.length), metaBytes]) hash.update(part);
   for (const name of Object.keys(tensors).sort()) {
     const tensor = tensors[name]!;
     const elements = tensor.shape.reduce((product, size) => product * size, 1);
@@ -602,9 +605,10 @@ export function nativeStateContentId(metadata: NativeStateMetadata, tensors: Rec
         tensor.data.length !== elements * NATIVE_DTYPE_BYTES[tensor.dtype]) throw new RangeError(`invalid native tensor ${name}`);
     const nameBytes = new TextEncoder().encode(name);
     const descriptor = new TextEncoder().encode(nativeCanonicalJson({ dtype: tensor.dtype, shape: tensor.shape }));
-    parts.push(u32(nameBytes.length), nameBytes, u32(descriptor.length), descriptor, u64(tensor.data.length), tensor.data);
+    for (const part of [u32(nameBytes.length), nameBytes, u32(descriptor.length), descriptor, u64(tensor.data.length), tensor.data])
+      hash.update(part);
   }
-  return `nzs1_${base32(digest(joinBytes(parts)))}`;
+  return `nzs1_${base32(hash.digest())}`;
 }
 
 /** Multi-tensor safetensors body matching Python `encode_native_state`. */
@@ -658,7 +662,7 @@ export function decodeNativeState(bytes: Uint8Array): NativeStateArtifact {
     if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end - start !== count * NATIVE_DTYPE_BYTES[entry.dtype] || end > payload.length)
       throw new RangeError(`invalid native tensor byte range ${name}`);
     spans.push([start, end]);
-    tensors[name] = { dtype: entry.dtype, shape: [...entry.shape], data: payload.slice(start, end) };
+    tensors[name] = { dtype: entry.dtype, shape: [...entry.shape], data: payload.subarray(start, end) };  // views of the immutable body, no copy
   }
   spans.sort((a, b) => a[0] - b[0]);
   if (!spans.length || spans[0]![0] !== 0 || spans.at(-1)![1] !== payload.length ||

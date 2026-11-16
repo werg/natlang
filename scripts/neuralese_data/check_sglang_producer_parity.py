@@ -29,6 +29,11 @@ SEED = 20261030
 CLOSE_BIAS = (10.0, 14.0, 18.0, 22.0)  # an untrained close row is far below; one of these lands mid-range
 
 
+
+# The fork writes a capture as a native-state file of the metadata it is given (natlang_capture.native_state); a
+# probe reads only the tensors.
+PROBE_STATE = {'schema': 'neuralese.native-state/1', 'text': 'parity probe capture (never stored)'}
+
 def producing_mask(ids, opening, closing):
     inside, mask = False, []
     for token in ids:
@@ -127,7 +132,8 @@ def sglang_phase(a):
                 os.unlink(path)
             eng.generate(input_ids=ids[:max(hi, lo)], return_logprob=True, logprob_start_len=lo - 1,
                          sampling_params={'temperature': 0.0, 'max_new_tokens': 1,
-                                          'custom_params': {'natlang_capture': {'path': path, 'start': lo, 'end': hi}}})
+                                          'custom_params': {'natlang_capture': {'path': path, 'start': lo, 'end': hi,
+                                                                                'native_state': PROBE_STATE}}})
     decode = []
     prompts = [case['prompt'] for case in cases['decode']]
     outs = [] if a.import_only else eng.generate(input_ids=prompts, sampling_params=[{'temperature': 1.0, 'max_new_tokens': a.gen,

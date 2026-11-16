@@ -289,7 +289,7 @@ def _rope_tables(model, pos, dtype):
 def import_tensors(model, spans, device=None):
     """Imported native state of one (packed) sequence for ``hidden``: ``spans`` [(row start, NativeStateBlock)] ->
     {'rows': int64 (n,), 'layers': [per layer (k, v) for attention, (bx,) for conv, in the model's dtype]}, or None when
-    nothing is imported. The block's tensors are what the SGLang actor imports (``sglang_actor._sglang_import_file``)."""
+    nothing is imported. The block's file is what the SGLang actor imports (``sglang_actor._sglang_import``)."""
     layers = model.model.layers
     device = device or model.model.embed_tokens.weight.device
     dtype = model.model.embed_tokens.weight.dtype

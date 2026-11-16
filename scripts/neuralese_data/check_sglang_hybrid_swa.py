@@ -40,6 +40,11 @@ TURNS = ROOT / 'runs/lfm3-engine-bench-20261028/out/capture.jsonl'
 LENGTHS = (300, 1200, 5000, 14000)
 
 
+
+# The fork writes a capture as a native-state file of the metadata it is given (natlang_capture.native_state); a
+# probe reads only the tensors.
+PROBE_STATE = {'schema': 'neuralese.native-state/1', 'text': 'parity probe capture (never stored)'}
+
 def post(url, body, timeout=600):
     req = urllib.request.Request(url, json.dumps(body).encode(), {'Content-Type': 'application/json'})
     with urllib.request.urlopen(req, timeout=timeout) as r:
@@ -168,7 +173,8 @@ def run(a):
                 os.unlink(path)
             flush()
             generate(url, source[:hi], return_logprob=True, logprob_start_len=lo - 1,
-                     params={'custom_params': {'natlang_capture': {'path': path, 'start': lo, 'end': hi}}})
+                     params={'custom_params': {'natlang_capture': {'path': path, 'start': lo, 'end': hi,
+                                                                   'native_state': PROBE_STATE}}})
             prefix = ps[2][:1500]
             ids = prefix + [roles['consume_open']] + placeholders(path, length, vocab) + [roles['consume_close']] + after
             spec = {'path': path, 'start': len(prefix) + 1, 'count': length}

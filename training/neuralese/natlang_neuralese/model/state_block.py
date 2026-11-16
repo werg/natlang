@@ -28,6 +28,82 @@ def native_state_dependencies(block):
     return sorted(set(dependencies))
 
 
+def layer_fields(kind) -> tuple[str, ...]:
+    """The state tensors one layer kind carries (`layers.<index>.<field>`)."""
+    if kind == 'attention':
+        return ('raw_k', 'v')
+    if kind == 'finite_convolution':
+        return ('gated_inputs',)
+    if kind == 'gated_delta':
+        return tuple(PAYLOAD_FIELDS)
+    raise ValueError(f'unsupported native shared layer state: {kind!r}')
+
+
+def native_state_metadata(*, text, architecture, tokenizer_fingerprint, checkpoint_sha256, embedding_weight_sha256,
+                          layer_kinds, adapter_binding=None, derivation=None) -> dict[str, Any]:
+    """The canonical metadata of a native state (hashed into its id, stored in its file header)."""
+    return {'schema': SCHEMA, 'text': text, 'architecture': architecture,
+            'tokenizer_fingerprint': tokenizer_fingerprint, 'checkpoint_sha256': checkpoint_sha256,
+            'embedding_weight_sha256': embedding_weight_sha256, 'layer_kinds': list(layer_kinds),
+            **({'adapter_binding': adapter_binding} if adapter_binding is not None else {}),
+            **({'derivation': derivation} if derivation is not None else {})}
+
+
+def validate_native_layout(metadata, descriptors) -> int:
+    """Check a native state's metadata and tensor inventory, dtypes and shapes without reading a tensor value: the one
+    layout check of in-memory blocks (`NativeStateBlock.validate`) and native-state files (`serve.store`). Returns the
+    token count. `descriptors`: name -> (torch dtype, shape)."""
+    from .native_derivative_contract import validate_derivation
+    if not isinstance(metadata, dict) or metadata.get('schema') != SCHEMA:
+        raise ValueError('unsupported native state schema')
+    validate_derivation(metadata.get('derivation'))
+    if not isinstance(metadata.get('text'), str) or not isinstance(metadata.get('architecture'), str) or not metadata['architecture']:
+        raise ValueError('native state needs text and an architecture identity')
+    for name in ('tokenizer_fingerprint', 'checkpoint_sha256', 'embedding_weight_sha256'):
+        if not isinstance(metadata.get(name), str) or not re.fullmatch('[0-9a-f]{64}', metadata[name]):
+            raise ValueError(f'native state {name} must be a SHA-256 digest')
+    kinds = metadata.get('layer_kinds')
+    if not isinstance(kinds, list) or not kinds:
+        raise ValueError('native state must contain every backbone layer state')
+    expected = {'token_ids', 'positions', 'embeddings'}
+    for index, kind in enumerate(kinds):
+        expected.update(f'layers.{index}.{field}' for field in layer_fields(kind))
+    if set(descriptors) != expected:
+        raise ValueError('native state tensor inventory differs from its layer layout')
+    dtype, shape = descriptors['token_ids']
+    if dtype != torch.int64 or len(shape) != 1:
+        raise ValueError('native state token_ids must be int64 [tokens]')
+    count = shape[0]
+    if descriptors['positions'] != (torch.int64, (count,)):
+        raise ValueError('native state positions must be nonnegative int64 [tokens]')
+
+    def floating(name, dimensions):
+        dtype, shape = descriptors[name]
+        if (len(shape) != dimensions or shape[0] != count or any(size <= 0 for size in shape[1:])
+                or dtype not in FLOAT_DTYPES):
+            raise ValueError(f'native state {name} must have token-first floating dimensions')
+
+    floating('embeddings', 2)
+    for index, kind in enumerate(kinds):
+        for field in layer_fields(kind):
+            floating(f'layers.{index}.{field}', 3 if kind == 'attention' else 2)
+        if kind == 'attention' and descriptors[f'layers.{index}.raw_k'] != descriptors[f'layers.{index}.v']:
+            raise ValueError('attention raw keys and values must have identical shape and dtype')
+        if kind == 'gated_delta' and descriptors[f'layers.{index}.b'][1] != descriptors[f'layers.{index}.a'][1]:
+            raise ValueError('gated delta beta and decay projections must have identical shapes')
+    return count
+
+
+def check_token_values(token_ids, positions) -> None:
+    """Value checks of the two small index tensors: nonnegative ids, one contiguous span of nonnegative positions."""
+    if bool((token_ids < 0).any()):
+        raise ValueError('native state token IDs must be nonnegative')
+    if bool((positions < 0).any()):
+        raise ValueError('native state positions must be nonnegative int64 [tokens]')
+    if len(positions) > 1 and not bool((positions[1:] == positions[:-1] + 1).all()):
+        raise ValueError('native state positions must form a contiguous span')
+
+
 @dataclass
 class NativeStateBlock:
     text: str
@@ -42,70 +118,27 @@ class NativeStateBlock:
     adapter_binding: dict | None = field(default=None, kw_only=True)
     derivation: dict | None = field(default=None,kw_only=True)
 
-    def _validate_token_fields(self):
-        from .native_derivative_contract import validate_derivation
-        validate_derivation(self.derivation)
-        if not isinstance(self.text, str) or not isinstance(self.architecture, str) or not self.architecture:
-            raise ValueError('native state needs text and an architecture identity')
-        for name in ('tokenizer_fingerprint', 'checkpoint_sha256', 'embedding_weight_sha256'):
-            if not isinstance(getattr(self, name), str) or not re.fullmatch('[0-9a-f]{64}', getattr(self, name)):
-                raise ValueError(f'native state {name} must be a SHA-256 digest')
-        if (not isinstance(self.token_ids, torch.Tensor) or self.token_ids.dtype != torch.int64
-                or self.token_ids.ndim != 1):
-            raise ValueError('native state token_ids must be int64 [tokens]')
+    def descriptors(self) -> dict[str, tuple[torch.dtype, tuple[int, ...]]]:
+        """name -> (dtype, shape) of every tensor, as a native-state file header declares them."""
+        for name, value in self.tensors().items():
+            if not isinstance(value, torch.Tensor):
+                raise ValueError(f'native state {name} must be a tensor')
+        return {name: (value.dtype, tuple(value.shape)) for name, value in self.tensors().items()}
+
+    def validate(self) -> NativeStateBlock:
+        """The layout (`validate_native_layout`, shared with file headers) and the values: nonnegative token ids, one
+        contiguous span of nonnegative positions, finite floating state."""
+        if not isinstance(self.layers, tuple) or not all(isinstance(layer, dict) for layer in self.layers):
+            raise ValueError('native state layers must be objects')
+        validate_native_layout(self.metadata(), self.descriptors())
         if self.adapter_binding is not None:
             from .native_adapters import validate_state_binding
             validate_state_binding(self.adapter_binding, self)
-        count = len(self.token_ids)
-        if bool((self.token_ids < 0).any()):
-            raise ValueError('native state token IDs must be nonnegative')
-        if (not isinstance(self.positions, torch.Tensor) or self.positions.dtype != torch.int64
-                or self.positions.shape != (count,)
-                or bool((self.positions < 0).any())):
-            raise ValueError('native state positions must be nonnegative int64 [tokens]')
-        if count > 1 and not bool((self.positions[1:] == self.positions[:-1] + 1).all()):
-            raise ValueError('native state positions must form a contiguous span')
-        self._float_tensor('embeddings', self.embeddings, count, 2)
-        return count
-
-    def validate(self) -> NativeStateBlock:
-        count = self._validate_token_fields()
-        if not self.layers:
-            raise ValueError('native state must contain every backbone layer state')
-        for index, layer in enumerate(self.layers):
-            if not isinstance(layer, dict):
-                raise ValueError(f'native state layer {index} must be an object')
-            kind = layer.get('kind')
-            if kind == 'attention':
-                if set(layer) != {'kind', 'raw_k', 'v'}:
-                    raise ValueError('attention state contains exactly kind, raw_k and v')
-                for name in ('raw_k', 'v'):
-                    self._float_tensor(f'layer {index} {name}', layer[name], count, 3)
-                if layer['raw_k'].shape != layer['v'].shape or layer['raw_k'].dtype != layer['v'].dtype:
-                    raise ValueError('attention raw keys and values must have identical shape and dtype')
-            elif kind == 'finite_convolution':
-                if set(layer) != {'kind', 'gated_inputs'}:
-                    raise ValueError('finite convolution contains exactly kind and gated_inputs')
-                self._float_tensor(f'layer {index} gated_inputs', layer['gated_inputs'], count, 2)
-            elif kind == 'gated_delta':
-                expected = {'kind', *PAYLOAD_FIELDS}
-                if set(layer) != expected:
-                    raise ValueError('gated delta state contains exactly kind and projected token-local inputs')
-                for name in PAYLOAD_FIELDS:
-                    self._float_tensor(f'layer {index} {name}', layer[name], count, 2)
-                if layer['b'].shape != layer['a'].shape:
-                    raise ValueError('gated delta beta and decay projections must have identical shapes')
-            else:
-                raise ValueError(f'unsupported native shared layer state: {kind!r}')
+        check_token_values(self.token_ids, self.positions)
+        for name, value in self.tensors().items():
+            if value.dtype in FLOAT_DTYPES and not bool(torch.isfinite(value).all()):
+                raise ValueError(f'native state {name} contains non-finite values')
         return self
-
-    @staticmethod
-    def _float_tensor(name, value, count, dimensions):
-        if (not isinstance(value, torch.Tensor) or value.ndim != dimensions or value.shape[0] != count
-                or any(size <= 0 for size in value.shape[1:]) or value.dtype not in FLOAT_DTYPES):
-            raise ValueError(f'native state {name} must have token-first floating dimensions')
-        if not bool(torch.isfinite(value).all()):
-            raise ValueError(f'native state {name} contains non-finite values')
 
     def require_native(self, *, checkpoint_sha256, tokenizer_fingerprint, embedding_weight_sha256,
                        architecture, layer_kinds=None) -> None:
@@ -121,13 +154,12 @@ class NativeStateBlock:
             raise ValueError('native state layer layout differs from the consuming backbone')
 
     def metadata(self) -> dict[str, Any]:
-        return {'schema': SCHEMA, 'text': self.text, 'architecture': self.architecture,
-                'tokenizer_fingerprint': self.tokenizer_fingerprint,
-                'checkpoint_sha256': self.checkpoint_sha256,
-                'embedding_weight_sha256': self.embedding_weight_sha256,
-                'layer_kinds': [layer['kind'] for layer in self.layers],
-                **({'adapter_binding': self.adapter_binding} if self.adapter_binding is not None else {}),
-                **({'derivation':self.derivation} if self.derivation is not None else {})}
+        return native_state_metadata(text=self.text, architecture=self.architecture,
+                                     tokenizer_fingerprint=self.tokenizer_fingerprint,
+                                     checkpoint_sha256=self.checkpoint_sha256,
+                                     embedding_weight_sha256=self.embedding_weight_sha256,
+                                     layer_kinds=[layer.get('kind') for layer in self.layers],
+                                     adapter_binding=self.adapter_binding, derivation=self.derivation)
 
     def tensors(self) -> dict[str, torch.Tensor]:
         return {'token_ids': self.token_ids, 'positions': self.positions, 'embeddings': self.embeddings,
@@ -144,10 +176,7 @@ class NativeStateBlock:
         layers = []
         expected = {'token_ids', 'positions', 'embeddings'}
         for index, kind in enumerate(kinds):
-            names = (('raw_k', 'v') if kind == 'attention' else ('gated_inputs',) if kind == 'finite_convolution'
-                     else PAYLOAD_FIELDS if kind == 'gated_delta' else ())
-            if not names:
-                raise ValueError(f'unsupported native shared layer state: {kind!r}')
+            names = layer_fields(kind)
             keys = {name: f'layers.{index}.{name}' for name in names}
             expected.update(keys.values())
             layers.append({'kind': kind, **{name: tensors[key] for name, key in keys.items()}})
