@@ -31,14 +31,17 @@ for (const path of [...Object.keys(stamp.outputs), ...Object.keys(stamp.assets)]
 const play = resolve(site, 'play');
 rmSync(play, { recursive: true, force: true });
 cpSync(resolve(root, 'playground'), play, { recursive: true, filter: path => !path.endsWith('README.md') });
-// The page's default is natlang's published GGUF (ts-host/src/model-default.ts, scripts/publish_browser_model.mjs): its
-// native identity and producer adapter let the page produce and import native states.
-const { BROWSER_MODEL_RELEASE: model } = await import(pathToFileURL(resolve(root, 'dist/model-default.js')).href);
+// The public page loads its model cross-origin, so only from a host that answers with CORS headers: the stock LFM3 from
+// Hugging Face. natlang's own GGUF (ts-host/src/model-default.ts, the local page's default) is published as a GitHub
+// release asset, which browsers cannot fetch from another origin (no Access-Control-Allow-Origin on the release download
+// or its redirect target), so the public page keeps the stock model until that GGUF has a CORS-capable host.
+const { STOCK_MODELS } = await import(pathToFileURL(resolve(root, 'dist/model-catalog.js')).href);
+const model = STOCK_MODELS.find(item => item.quant === 'Q4_K_M');
 mkdirSync(resolve(play, 'models/templates'), { recursive: true });
 cpSync(resolve(root, '../models/templates', model.template), resolve(play, 'models/templates', model.template));
 writeFileSync(resolve(play, 'models/browser-catalog.json'), `${JSON.stringify({
   schema: 'natlang.browser-model-catalog/1', defaultId: model.id, models: [{ id: model.id, label: model.label,
-    trainingRun: model.trainingRun, file: model.file, quant: model.quant,
+    trainingRun: `${model.source.repository}@${model.source.revision}`, file: model.file, quant: model.quant,
     bytes: model.bytes, sha256: model.sha256, contextTokens: model.contextTokens, url: model.downloadUrl,
     templateUrl: `./models/templates/${model.template}` }],
 }, null, 2)}\n`);

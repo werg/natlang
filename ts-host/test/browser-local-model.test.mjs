@@ -403,7 +403,7 @@ test('the in-page model archives the states it produces and puts archived states
     'natlang.identity.tokenizer_fingerprint': '1'.repeat(64), 'natlang.identity.embedding_weight_sha256': '3'.repeat(64) };
   const fake = { isSupportWebGPU: () => false, isModelLoaded: () => !!params, capabilities: { nativeStates: true, nativeStateStore: true },
     async loadModelFromHF() {}, async loadModelFromUrl(_url, received) { params = received; }, async loadModel() {}, async exit() {},
-    getModelMetadata: () => identity,
+    getModelMetadata: () => ({ hparams: {}, meta: identity }),
     // the fork's PUT/GET /v1/neuralese/native-states/:id: verified, kept as received, read back as stored
     async putNativeState(state, id) {
       const bytes = new Uint8Array(state); const decoded = decodeNativeState(bytes);
@@ -445,7 +445,7 @@ test('the in-page model archives the states it produces and puts archived states
 
   // A model without a native identity has no native runtime; a build without the store calls refuses the archive.
   const { model: stock } = await api.loadBrowserLocalModel({ kind: 'url', url: 'https://example.test/stock.gguf' },
-    { engine: { ...engine, engine: { ...fake, getModelMetadata: () => ({}) } }, gpuLayers: 0, nativeStateStore: store });
+    { engine: { ...engine, engine: { ...fake, getModelMetadata: () => ({ hparams: {}, meta: {} }) } }, gpuLayers: 0, nativeStateStore: store });
   try { assert.equal(stock.neuraleseRuntime(), undefined); } finally { await stock.close(); }
   params = undefined;
   await assert.rejects(api.loadBrowserLocalModel({ kind: 'url', url: 'https://example.test/natlang.gguf' },

@@ -35,7 +35,8 @@ export type BrowserInferenceEngine = {
    * `/v1/natlang/score`, in the vendored wllama). */
   createNatlangScore?(request: { items: Record<string, unknown>[] }): Promise<{ results: ({ log_probs: number[]; tokens: number[] } | { error: string })[] }>;
   getLoadedContextInfo?(): { n_ctx: number; n_layer: number };
-  getModelMetadata?(): Record<string, unknown>;
+  /** The GGUF's metadata as strings (`meta`), e.g. `natlang.identity.*`. */
+  getModelMetadata?(): { meta: Record<string, string> };
   getWorkerResources?(): { compat: boolean; noWebGPU?: boolean };
   /** The engine's native-state store after load (llama.cpp fork PUT/GET /v1/neuralese/native-states/:id): a state's
    * bytes (natlang's store-file format) are verified, kept as received and registered; produced states read back as
@@ -310,7 +311,7 @@ export class BrowserLocalModel {
    * `natlang.identity.*`. Undefined for a model without one or a load without `nativeStateStore`.
    */
   neuraleseRuntime(): NeuraleseRuntimeOptions | undefined {
-    const store = this.nativeStateStore, metadata = this.loaded ? this.engine.getModelMetadata?.() : undefined;
+    const store = this.nativeStateStore, metadata = this.loaded ? this.engine.getModelMetadata?.().meta : undefined;
     const identity = Object.fromEntries(['architecture', 'checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256']
       .map(key => [key, metadata?.[`natlang.identity.${key}`]]));
     if (!store || Object.values(identity).some(value => typeof value !== 'string' || !value)) return undefined;

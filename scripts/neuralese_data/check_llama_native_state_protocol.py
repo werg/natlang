@@ -2,7 +2,7 @@
 
 llama-server's native-state protocol on a natlang GGUF export (natlang_neuralese.export.native_gguf): /v1/neuralese/info
 declares the export's native identity; a grammar forces a producer span (produce-open, text, produce-close) and the
-reply carries it as a native_state part; the stored artifact decodes with the reference codec (serve/store.py) to the
+reply carries it as a native_state part (streamed too: the last chunk carries the blocks and the message with its parts); the stored artifact decodes with the reference codec (serve/store.py) to the
 same content ID and re-encodes byte for byte; a re-upload is accepted, a wrong ID refused; consuming the state answers an
 exact-native-state receipt; an unknown state fails with neuralese-unknown-native-state. Native-state file handoff: a
 PUT of {"path": FILE} stores a local store file as read (GET answers its bytes), a state with a non-finite value is
@@ -80,6 +80,18 @@ try:
     print('produce', st, json.dumps(reply)[:900] if st == 200 else reply)
     blocks = reply['native_state']['blocks']; sid = blocks[0]['id']
     msg = reply['choices'][0]['message']; print('content', msg['content'])
+    # Streamed, the reply's text carries the state's placeholder; the last chunk carries the blocks and the whole message
+    # with the state as a native_state part (x_natlang_message), as the final non-streamed reply does.
+    st, sse = call('/v1/chat/completions', {'messages': [{'role': 'user', 'content': 'Summarize the ticket.'}],
+        'max_tokens': 40, 'temperature': 0, 'grammar': grammar, 'stream': True, 'reasoning_format': 'none'}, raw=True)
+    assert st == 200, sse
+    chunks = [json.loads(line[6:]) for line in sse.decode().splitlines() if line.startswith('data: {')]
+    last = [chunk for chunk in chunks if 'native_state' in chunk]
+    assert last and last[-1]['native_state']['blocks'][0]['id'] == sid, chunks[-2:]
+    parts = last[-1]['x_natlang_message']
+    assert any(part.get('type') == 'native_state' and part.get('id') == sid
+               for value in (parts.get('content'), parts.get('reasoning_content')) if isinstance(value, list) for part in value), parts
+    print('stream: last chunk carries the produced state as a part')
     st, body = call(f'/v1/neuralese/native-states/{sid}', raw=True); print('get', st, len(body))
     assert st == 200
     block, pid = decode_native_state(body); print('python decode id matches', pid == sid, 'text', repr(block.text), 'tokens', len(block.token_ids))
