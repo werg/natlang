@@ -2458,3 +2458,11 @@ to within BF16 rounding, so this is a base-vs-base comparison that landed at p 0
 positive rate in mind, and judge success only by the declared rule (two consecutive positive evals, p < 0.05 each).
 During warmup most of each FP32 update is below half a BF16 ULP in the export, so the actor samples near-base weights
 until the master accumulates; that is expected, not a defect (learner ratios use the sampled probabilities).
+
+**2026-11-16 10:40, grpo-v3-run1 sizing (supervisor, accounting only).** Steps 1-4 clean (KL ~4e-4, probe flat, no
+sentinel; LR 1.2e-6 at step 4). The learner's CUDA peak is flat at ~48 GB reserved from step 2 (AdamW moments added
+~13.6 GB after step 1), but the unit's measured peak reached 102.4 GB (actor + weight sync + slots), past the guard's
+1.15 x 88 GB stop line under pressure. Ledger budget raised to 92 GB (`adopt --hold-budget`, MemoryMax unchanged), which
+leaves ~13-14 GB headroom during collection: below the 15 GB rule until the next resume, where the fix is
+`--learner-phase-slots` 8 -> 4 or fewer collection slots (sizing, not treatment). Step-1 held result stays an A/A
+(f2b1bba85); next held compare reads step 3 or 4.
