@@ -150,3 +150,49 @@ test('evaluated code cannot reach native process bindings or end the process', (
   assert.equal(environment.execute(request('return process.hrtime.bigint() > 0n')).result, true);
   environment.close();
 });
+
+test('an eval whose data explodes fails alone with the memory teaching error; its sibling completes', async () => {
+  // Sokoban BFS/A* solvers in eval grew a shared collector to OOM, killing every co-hosted episode (2026-11-16).
+  const sibling = new TypeScriptEnvironment({ memoryLimitMb: 64 });
+  const runaway = new TypeScriptEnvironment({ memoryLimitMb: 64 });
+  const pending = sibling.executeAsync(evalRequest('const rows = Array.from({ length: 1000 }, (_, i) => ({ i })); ' +
+    'await new Promise(resolve => setTimeout(resolve, 20)); return rows.length;'));
+  const limit = /eval stopped: its data grew past the 64 MB memory limit of one eval; use a bounded or more memory-efficient approach/;
+  // An unbounded search, a callback that fills, and code that catches the error and keeps growing all fail.
+  assert.throws(() => runaway.execute(evalRequest('const seen = new Map();\nfor (let i = 0; ; i++) seen.set("s" + i, [i, i + 1]);')), limit);
+  assert.throws(() => runaway.execute(evalRequest('return Array.from({ length: 2e7 }, (_, i) => ({ i, key: "k" + i })).length;')), limit);
+  assert.throws(() => runaway.execute(evalRequest('const keep = [];\ntry { for (;;) keep.push(new Array(256).fill(1)); } catch {}\n' +
+    'for (;;) keep.push(new Array(256).fill(2));')), limit);
+  await assert.rejects(runaway.executeAsync(evalRequest('const keep = [];\nawait null;\nwhile (true) keep.push({ at: keep.length });')), limit);
+  assert.equal((await pending).result, 1000);
+  // Garbage is not growth: a loop that allocates many times the bound but keeps little passes, and the environment lives on.
+  assert.equal(runaway.execute(evalRequest('let total = 0;\nfor (let i = 0; i < 300000; i++) total += new Array(128).fill(i).length;\nreturn total;')).result, 300000 * 128);
+  assert.equal(runaway.execute(evalRequest('return 1 + 1;')).result, 2);
+  sibling.close(); runaway.close();
+});
+
+test('memory checks keep eval semantics and line numbers; the bound is a setting', async () => {
+  const { instrumentMemoryChecks } = await import('../dist/native/eval-memory.js');
+  const { evalMemoryLimitMb } = await import('../dist/environment.js');
+  const code = [
+    'class Walker extends Array { constructor(n: number) { super(); for (let i = 0; i < n; i++) this.push(i); }',
+    '  get total() { return this.reduce((a, b) => a + b, 0); } }',
+    'const pairs = [1, 2].map(x => ({ x }));',
+    'let skipped = 0; outer: for (const a of [1, 2, 3]) for (const b of [1, 2]) { if (b === 2) { skipped++; continue outer; } }',
+    'let n = 0; do n++; while (n < 5)',
+    'function* count(k: number) { for (let i = 0; i < k; i++) yield i; }',
+    'return [new Walker(4).total, pairs[1].x, skipped, n, [...count(3)].length, (() => { "use strict"; return 7; })()];'].join('\n');
+  const instrumented = instrumentMemoryChecks(`function f() {\n${code}\n}`);
+  assert.equal(instrumented.split('\n').length, code.split('\n').length + 2, 'insertions stay on their lines');
+  assert.match(instrumented, /do \{__natlang_memory\(\);n\+\+;\} while/);
+  for (const memoryLimitMb of [64, 0]) {
+    const environment = new TypeScriptEnvironment({ memoryLimitMb });
+    assert.equal(JSON.stringify(environment.execute(evalRequest(code)).result), "[6,2,3,5,3,7]");
+    environment.close();
+  }
+  assert.equal(new TypeScriptEnvironment({ memoryLimitMb: 0 }).memoryLimitMb, undefined);
+  assert.equal(evalMemoryLimitMb({}), 256);
+  assert.equal(evalMemoryLimitMb({ NATLANG_EVAL_MEMORY_MB: '0' }), 0);
+  assert.equal(evalMemoryLimitMb({ NATLANG_EVAL_MEMORY_MB: '512' }), 512);
+  assert.throws(() => evalMemoryLimitMb({ NATLANG_EVAL_MEMORY_MB: 'lots' }), /NATLANG_EVAL_MEMORY_MB/);
+});

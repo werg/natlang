@@ -409,6 +409,12 @@ started are still running stops them and fails, saying so, except for calls that
 lost a `Promise.race` or `Promise.any`, which are stopped without failing it.
 `Promise.all` keeps JavaScript semantics: when one call rejects, the others keep
 running. A call that fails stops the calls it started.
+An eval's memory is bounded where the host can measure it (Node: 256 MB of heap
+growth that survives a full collection, the setting `NATLANG_EVAL_MEMORY_MB`, 0
+for none). An eval past its bound fails like any failed eval with "eval stopped:
+its data grew past the N MB memory limit of one eval; use a bounded or more
+memory-efficient approach (prune the search, keep compact state, or process the
+data in parts)"; the host and other evals keep running.
 A top-level `return value` stages the value as the call's result if it has the
 declared type; a later valid return replaces it. Values that are not portable
 data (functions, class instances, handles) are passed by reference as live

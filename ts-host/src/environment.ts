@@ -1,9 +1,11 @@
-import { createContext, runInContext, runInThisContext, type Context } from 'node:vm';
+import { getHeapStatistics, setFlagsFromString } from 'node:v8';
+import { createContext, runInContext, runInNewContext, runInThisContext, type Context } from 'node:vm';
 import { WorkspaceModules, findPackageWorkspace, packageDeclaration } from './workspace-modules.js';
 import { packageNameFromSpecifier } from './package-specifier.js';
 import { markRaces } from './runtime/context.js';
 import type { EnvironmentMode, HostEvent } from './native/evaluator.js';
 import { RealmEnvironment, type EvalImports, type Realm } from './native/realm.js';
+import { DEFAULT_EVAL_MEMORY_MB, type HeapProbe } from './native/eval-memory.js';
 export { EvalFailure } from './native/evaluator.js';
 export type { EnvironmentMode, EvalEnvironment, EvalRequest, EvalResult, HostEvent } from './native/evaluator.js';
 
@@ -76,8 +78,32 @@ const hostRealm: Realm = {
     { displayErrors: true }) as (...values: unknown[]) => unknown)(...args),
 };
 
+/** This isolate's heap as the eval memory bound reads it; the full collection is V8's own `gc`, exposed on first use. */
+let collect: (() => void) | undefined;
+export const nodeHeap: HeapProbe = {
+  used: () => getHeapStatistics().used_heap_size,
+  collect: () => {
+    if (!collect) {
+      if (typeof globalThis.gc !== 'function') setFlagsFromString('--expose-gc');
+      collect = typeof globalThis.gc === 'function' ? globalThis.gc as () => void : runInNewContext('gc') as () => void;
+    }
+    collect();
+  },
+};
+
+/** The eval memory bound: `NATLANG_EVAL_MEMORY_MB` (0 turns it off), else `DEFAULT_EVAL_MEMORY_MB`. */
+export function evalMemoryLimitMb(env: Record<string, string | undefined> = process.env): number {
+  const text = env.NATLANG_EVAL_MEMORY_MB?.trim();
+  if (!text) return DEFAULT_EVAL_MEMORY_MB;
+  const value = Number(text);
+  if (!Number.isFinite(value) || value < 0) throw new RangeError(`NATLANG_EVAL_MEMORY_MB must be a number of MB >= 0 (0: unbounded), got ${text}`);
+  return value;
+}
+
 export type TypeScriptEnvironmentOptions = { mode?: EnvironmentMode; timeoutMs?: number; observe?: (event: HostEvent) => void;
-  workspace?: string; network?: boolean };
+  workspace?: string; network?: boolean;
+  /** Heap growth in MB one eval may keep before it fails (native/eval-memory.ts); default `evalMemoryLimitMb()`, 0: unbounded. */
+  memoryLimitMb?: number };
 
 /**
  * Node evaluator: a `vm` context in this process, under the shared realm evaluator. Eval sees Node's host globals as
@@ -93,10 +119,12 @@ export class TypeScriptEnvironment extends RealmEnvironment {
 
   constructor(options: TypeScriptEnvironmentOptions = {}) {
     const workspace = options.workspace ?? findPackageWorkspace(process.cwd());
+    const memoryLimitMb = options.memoryLimitMb ?? evalMemoryLimitMb();
     super({ authority: 'shared-node-host', mode: options.mode, timeoutMs: options.timeoutMs, observe: options.observe,
       scopeCapabilities: { allowModules: true, allowNetwork: options.network ?? true },
+      memory: { limitMb: memoryLimitMb, probe: nodeHeap },
       fork: () => new TypeScriptEnvironment({ mode: 'fresh', timeoutMs: options.timeoutMs, observe: options.observe,
-        workspace, network: options.network }) });
+        workspace, network: options.network, memoryLimitMb }) });
     this.workspace = workspace;
     if (workspace) this.modules = new WorkspaceModules(workspace, event => this.packageEvents.push(event));
   }

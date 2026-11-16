@@ -3,6 +3,25 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-16 — one eval's memory is bounded (256 MB), failing that eval alone with a teaching error
+
+Eval code runs in its host's heap (a `node:vm` context of the shared collector process, up to 8 RL/teacher episodes per
+process). Sokoban BFS/A* solvers written in eval grew a teacher-generation collector to 2.4 GB in minutes and OOM-killed
+the generator unit four times, taking every co-hosted episode with it. Compiled eval code now calls a guard at the top of
+every loop iteration and function body (constructors excepted; insertions stay on their lines, so line numbers do not
+move); every 128 calls it reads the heap, and when growth since the eval started passes the bound it runs a full
+collection and, if the growth that survives is still over, throws: "eval stopped: its data grew past the 256 MB memory
+limit of one eval; use a bounded or more memory-efficient approach (prune the search, keep compact state, or process the
+data in parts)". It stays tripped for the rest of that eval (catching it does not help); the environment and sibling
+evals continue. Bound: 256 MB, from 20,582 shared-collector `invocation_end` records (whole-process heap median 147 MB,
+p99 323 MB with up to 8 episodes): an order of magnitude above a legitimate eval, and 8 evals at the bound fit a 4 GB
+collector heap. Setting `NATLANG_EVAL_MEMORY_MB` (0: off) or `TypeScriptEnvironment({ memoryLimitMb })`. The same guard
+bounds the function-effect oracle's calls of a model-repaired function (`teacher/function-effects.ts`). Code:
+`ts-host/src/native/eval-memory.ts`, `native/realm.ts`, `native/eval-compile.ts`, `environment.ts`. Not bounded: the
+browser realm (no synchronous heap reading), single built-in calls that allocate past the bound before the next check
+(`new Array(n).fill(0)`), the folder `python` (Pyodide WASM memory) and `bash` (just-bash) tools, selected semantic
+drivers. Tests: `ts-host/test/environment.test.mjs`. Enters RL at the next pin; changes the held series (ts-host tree).
+
 ### 2026-11-14 — guided replies on the Python engines leave the open reasoning unchecked (fork a6401bbd3 parity)
 
 On the Python native engine and the SGLang actor, guidance (`serve/guidance.py`) no longer checks the reasoning that the

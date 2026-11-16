@@ -3,13 +3,15 @@
  * that breaks its documented contract, or leave a correct one alone) is judged on that function as the run left it,
  * not only on the returned value. 2026-10-26 audit: a held contract_diagnosis case accepted a hard-coded total
  * returned without the required repair. The function's final source is compiled and called on hidden checks in a
- * fresh V8 context (no require, no host globals, bounded time); the returned value must agree with what the final
+ * fresh V8 context (no require, no host globals, bounded time and memory); the returned value must agree with what the final
  * function computes over the case's inputs.
  */
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import vm from 'node:vm';
 import ts from 'typescript';
+import { MEMORY_CHECK, instrumentMemoryChecks, memoryGuard } from '../native/eval-memory.js';
+import { evalMemoryLimitMb, nodeHeap } from '../environment.js';
 
 export type FunctionEffectSpec = { schema: 'natlang.function-effect-oracle/1';
   /** The function's name in the program's codebase (a module with a default export). */
@@ -24,13 +26,18 @@ export type FunctionEffectResult = { ok: boolean; problems: string[]; changed: b
   original_sha256: string | null; final_sha256: string | null; comparison_version: 'function-effects/1' };
 
 const CALL_TIMEOUT_MS = 1000;
+/** The model-written function runs in this process: bound its heap growth per load and per call like an eval's. */
+const MEMORY_MB = evalMemoryLimitMb();
+const guarded = (source: string) => MEMORY_MB ? instrumentMemoryChecks(source) : source;
+const arm = (context: vm.Context) => { context[MEMORY_CHECK] = MEMORY_MB ? memoryGuard(MEMORY_MB, nodeHeap) : () => {}; };
 const sha = (text: string) => createHash('sha256').update(text).digest('hex');
 
 /** Compile a module's TypeScript source in a fresh context and return its default export (or an error message). */
 function loadDefault(source: string): { fn?: (...args: unknown[]) => unknown; context?: vm.Context; error?: string } {
   try {
-    const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+    const js = ts.transpileModule(guarded(source), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
     const context = vm.createContext({ module: { exports: {} as Record<string, unknown> } });
+    arm(context);
     vm.runInContext(`(function (module, exports) {\n${js}\n})(module, module.exports);`, context, { timeout: CALL_TIMEOUT_MS });
     const exports = (context.module as { exports: Record<string, unknown> }).exports;
     const fn = exports.default ?? (typeof exports === 'function' ? exports : undefined);
@@ -42,7 +49,7 @@ function loadDefault(source: string): { fn?: (...args: unknown[]) => unknown; co
 /** Call the loaded function inside its own context so the time bound covers the call. */
 function call(context: vm.Context, fn: (...args: unknown[]) => unknown, args: unknown[]): { value?: unknown; error?: string } {
   try {
-    context.__fn = fn; context.__args = JSON.stringify(args);
+    context.__fn = fn; context.__args = JSON.stringify(args); arm(context);
     const value = vm.runInContext('__fn(...JSON.parse(__args))', context, { timeout: CALL_TIMEOUT_MS });
     // Results cross the context boundary as JSON values (numbers, strings, plain records).
     return { value: value === undefined ? undefined : JSON.parse(JSON.stringify(value)) };

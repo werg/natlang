@@ -4,6 +4,7 @@
  */
 import ts from 'typescript';
 import { PRELUDE } from './prelude.generated.js';
+import { instrumentMemoryChecks } from './eval-memory.js';
 
 export type EvalCompileOptions = {
   /** The code is the body of a function (it may `return`) rather than a program whose completion value is its result. */
@@ -20,6 +21,11 @@ export type EvalCompileOptions = {
    * whose context store cannot follow promises (browsers); the realm must bind `__natlang_bindAwait`.
    */
   restoreAfterAwait?: boolean;
+  /**
+   * Every loop iteration and function body calls `__natlang_memory()`, the evaluation's memory guard
+   * (native/eval-memory.ts); the realm must bind it.
+   */
+  memoryChecks?: boolean;
 };
 
 /** The name a compiled body function has; the realm body calls it. */
@@ -80,6 +86,7 @@ export function compileEval(code: string, options: EvalCompileOptions): string {
   let source = options.body ? `${options.asyncBody ? 'async ' : ''}function ${BODY_FUNCTION}() {\n${code}\n}` : code;
   // Reparse lowered imports before TS binding; otherwise TS rewrites uses to removed import aliases.
   if (options.imports) source = lowerStaticImports(source, options.imports);
+  if (options.memoryChecks) source = instrumentMemoryChecks(source);
   const result = ts.transpileModule(source, {
     fileName: 'natlang-eval.ts', reportDiagnostics: true,
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None, isolatedModules: true, removeComments: false },
@@ -93,7 +100,7 @@ export function compileEval(code: string, options: EvalCompileOptions): string {
 /**
  * The strict-mode function body a realm runs for compiled eval code: the prelude, the code, and its result (the body
  * function's, or the program's completion value). The names a realm binds around it are `self`, `__live`,
- * `__natlang_import`, `console` and, with `restoreAfterAwait`, `__natlang_bindAwait` (see `EVAL_PARAMETERS`).
+ * `__natlang_import`, `console`, with `restoreAfterAwait` `__natlang_bindAwait`, and with `memoryChecks` `__natlang_memory`.
  */
 export function evalRealmBody(compiled: string, body: boolean): string {
   return body ? `${PRELUDE}\n${compiled}\nreturn ${BODY_FUNCTION}();` : `${PRELUDE}\nreturn eval(${JSON.stringify(`"use strict";\n${compiled}`)});`;
