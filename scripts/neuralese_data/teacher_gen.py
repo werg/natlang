@@ -102,6 +102,8 @@ def chat_config_path(work, model_id):
     return Path(work) / f"chat-config.{re.sub(r'[^A-Za-z0-9._-]+', '_', model_id)}.json"
 
 
+# the collector's message when a provider kept failing a request (429, 5xx, transport) through every retry
+PROVIDER_FAILURE = 'provider request retry exhausted'
 # decide() collection needs the actor's exact native capture, which a hosted teacher endpoint does not give
 UNSUPPORTED_DECIDE = 'decision collection needs its exact native capture'
 
@@ -125,10 +127,11 @@ class Generator:
         self.attempts = {}
 
     def _no_verdict(self, record):
-        """Every episode ended unresolved before its first model turn or as an infrastructure error (e.g. a 429 mid-episode):
-        the provider failed (rate limit, outage), not the teacher. Such a record is no teacher verdict; it goes to deferred.jsonl and the task is retried."""
+        """Every episode ended unresolved before its first model turn or as an infrastructure error from exhausted provider
+        retries (e.g. a 429 mid-episode; a model-call budget stop is the teacher's own verdict): the provider failed (rate limit, outage), not the teacher. Such a record is no teacher verdict; it goes to deferred.jsonl and the task is retried."""
         return 'unsupported' not in record and all(
-            e['outcome'] == 'infrastructure_error' or (e['outcome'] == 'unresolved' and e['turns'] == 0)
+            (e['outcome'] == 'infrastructure_error' and record.get('provider_failure')) or
+            (e['outcome'] == 'unresolved' and e['turns'] == 0)
             for e in record['episodes'])
 
     def _claim(self, index, teacher):
@@ -243,6 +246,7 @@ class Generator:
                                                          for t in r['turns'])} for r in rollouts],
                   'rollouts': str(directory / 'rollouts.jsonl')}
         logs = ''.join(path.read_text(errors='replace') for path in directory.glob('*.log'))
+        record['provider_failure'] = PROVIDER_FAILURE in logs
         if UNSUPPORTED_DECIDE in logs:   # a deterministic harness limit, not a provider failure: recorded, never retried
             record['unsupported'] = 'decide-native-capture'
         with self.lock:
