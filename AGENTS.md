@@ -27,7 +27,7 @@ with the owner only what is truly theirs. Waiting for an OK on a technical cours
   implement or consume that mechanism (all engines: managed llama-server, in-page wllama, Python native engine, SGLang
   actor; ts-host runtime; learner, held eval, probes, collectors). Before editing or briefing, write that inventory
   (`git grep` the concept, `docs/ENGINE_PARITY.md`), scope the change to all of it, and list each component left out
-  with its reason and next action (an ENGINE_PARITY row for engines). A "not applicable" cites the code (file and
+  with its reason (for engines only a current blocker counts: parity is the goal, see "One serving feature"). A "not applicable" cites the code (file and
   lines) showing the component does not use the mechanism; the supervisor checks those citations before accepting. A subagent brief carries the inventory or makes
   building it the first step; a brief naming only the component where the symptom appeared is incomplete.
 - **Orphaned work.** Work whose author shows no activity in the last 24 h is orphaned. The supervising agent reviews it
@@ -328,8 +328,10 @@ conventional code and add natlang afterwards. The rules below follow from this o
   each new error. Native-training and training-application notes go to `docs/NATIVE_RUNTIME_NOTES.md` and
   `docs/SEMANTIC_APPLICATION_NOTES.md`, not the skills (`skills/README.md`).
 - **One serving feature, every engine.** The managed llama-server, the in-page wllama build, the Python native engine
-  and the SGLang actor serve one protocol. A serving change (request field, cache, scoring, sampling, capture) lands on
-  every engine it applies to in the same push, or gets a row in `docs/ENGINE_PARITY.md` with its next action. Fork pins
+  and the SGLang actor serve one protocol, and parity is the goal. A serving change (request field, cache, scoring,
+  sampling, capture, state handoff) lands on every engine in the same work stream, fork changes and releases included.
+  A wider parity gap found along the way is closed too, not labelled "not applicable". A row in
+  `docs/ENGINE_PARITY.md` records only a gap blocked right now, with the blocker named; it is never a deferral. Fork pins
   move only through `scripts/update_llama_runtime.mjs --fork`, which vendors the in-page build from the same release;
   never hand-build or hand-edit `ts-host/vendor/wllama`.
 - **No premature limits.** Termination is structural (no while loops; recursion on a smaller argument; `iterateOn`
