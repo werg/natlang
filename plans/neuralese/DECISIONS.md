@@ -2448,3 +2448,13 @@ on the 8 GB card with ~0.1 GB free). The held loop retries and `measure` resumes
 pin, not this run (the fork is an editable install on both machines; changing it mid-run changes the attested engine at
 the next actor restart): accumulate the kernel taps in place (`sum_k history[:, k:k+T] * w[:, k]`, same FP32 order)
 instead of the unfolded product, and leave ~0.5 GB of the Pop pool for transient kernels.
+
+**2026-11-16 08:10, grpo-v3-run1 step-1 held eval is an effective A/A (supervisor).** Pop held-v3, step 1 (ce1326a2) vs
+the Pop base (4 samples base, 2 step): +4.7 pts mean per-task pass rate (0.475 -> 0.522), permutation p 0.047, CI
+[0.0, 9.2], McNemar p 0.043, tasks up/down 48/31 (sign p 0.071), ran-out -2.3 pts (n.s.). Not a gain: one AdamW step
+at LR 3e-7 changed 0.39% of the served BF16 elements (7.8M of 1.99B; median relative change of changed tensors 1.4e-6;
+`bfdiff` of fresh-init vs step-00001 checkpoint.pt), and the behaviour probe moved -3e-5. The served policy is the base
+to within BF16 rounding, so this is a base-vs-base comparison that landed at p 0.047: read later evals with that false-
+positive rate in mind, and judge success only by the declared rule (two consecutive positive evals, p < 0.05 each).
+During warmup most of each FP32 update is below half a BF16 ULP in the export, so the actor samples near-base weights
+until the master accumulates; that is expected, not a defect (learner ratios use the sampled probabilities).
