@@ -2438,3 +2438,13 @@ peaked at 96.7 GB with 24 slots before 5ae700243 (learner ~63 GB GPU+host, actor
 through step 8, held evals on Pop (`--held-remote pop`, every 4 h, 2 samples). Steps take about 2.5-3 h at 48 groups
 (run2: 24 groups in ~1.7 h at 16-24 slots), so the first scheduled held eval reads step 2-3 at an effective LR still in
 warmup.
+
+**2026-11-16 01:40, grpo-v3-run1 step 1 and Pop base eval (supervisor).** Step 1 (48 groups, 34 with spread, reward
+0.479) passed every declared early check: KL 3e-7, outside-nucleus 0.11%, mean |log rho| 0.029, probe logp change -3e-5,
+close ratio 1.01, CUDA peak 34 GB reserved (unit peak 80 of 88 GB). Step wall ~3 h (1.8 h collection, 1.2 h learner),
+as declared. The Pop base measurement (step-00000-pop) stopped at 423/512 episodes: the Pop SGLang actor died at 01:29
+with CUDA OOM (88 MiB) in `natlang_conv_prefill` (fork `lfm3.py:188` materializes the FP32 `windows * weight` product
+on the 8 GB card with ~0.1 GB free). The held loop retries and `measure` resumes, so no data is lost. Fix for the NEXT
+pin, not this run (the fork is an editable install on both machines; changing it mid-run changes the attested engine at
+the next actor restart): accumulate the kernel taps in place (`sum_k history[:, k:k+T] * w[:, k]`, same FP32 order)
+instead of the unfolded product, and leave ~0.5 GB of the Pop pool for transient kernels.
