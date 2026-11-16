@@ -390,6 +390,69 @@ test('the in-page model scores decision readouts in one engine request and carri
 });
 
 
+test('the in-page model archives the states it produces and puts archived states a request names into the engine', async () => {
+  const api = await browserApi();
+  const { nativeStateSentinel } = await import('../dist/native/neuralese.js');
+  const { encodeNativeStateWire, decodeNativeState } = await import('../dist/native/neuralese-store.js');
+  const { nativeStateFixture } = await import('./fixtures/native-state.mjs');
+  const fixture = text => { const value = nativeStateFixture('lfm3'); value.metadata.text = text; return encodeNativeStateWire(value); };
+  const produced = fixture('produced in the page'), archived = fixture('archived earlier');
+  const held = new Map([[produced.id, produced.wire]]), puts = [], requests = [];
+  let params;
+  const identity = { 'natlang.identity.architecture': 'lfm3', 'natlang.identity.checkpoint_sha256': '2'.repeat(64),
+    'natlang.identity.tokenizer_fingerprint': '1'.repeat(64), 'natlang.identity.embedding_weight_sha256': '3'.repeat(64) };
+  const fake = { isSupportWebGPU: () => false, isModelLoaded: () => !!params, capabilities: { nativeStates: true, nativeStateStore: true },
+    async loadModelFromHF() {}, async loadModelFromUrl(_url, received) { params = received; }, async loadModel() {}, async exit() {},
+    getModelMetadata: () => identity,
+    // the fork's PUT/GET /v1/neuralese/native-states/:id: verified, kept as received, read back as stored
+    async putNativeState(state, id) {
+      const bytes = new Uint8Array(state); const decoded = decodeNativeState(bytes);
+      if (id && decoded.id !== id) throw new Error('neuralese-id-mismatch');
+      puts.push(bytes); held.set(decoded.id, bytes); return { mode: 'exact-native-state', meta: { id: decoded.id } };
+    },
+    async getNativeState(id) {
+      if (!held.has(id)) throw new Error(`neuralese-unknown-native-state: ${id}`);
+      return { state: held.get(id).slice(), meta: { id } };
+    },
+    async createChatCompletion(request) {
+      requests.push(request);
+      return requests.length === 1 ?
+        { choices: [{ finish_reason: 'stop', message: { content: [{ type: 'text', text: 'Noted: ' }, { type: 'native_state', id: produced.id }] } }] } :
+        { choices: [{ finish_reason: 'stop', message: { content: 'ok' } }] };
+    } };
+  const store = new api.MemoryNeuraleseStore();
+  const engine = { engine: fake, gpuProbe: async () => ({ usable: false, reason: 'test' }) };
+  const { model } = await api.loadBrowserLocalModel({ kind: 'url', url: 'https://example.test/natlang.gguf' },
+    { engine, gpuLayers: 0, nativeStateStore: store });
+  const ask = content => model.turn({ messages: [{ role: 'user', content }], tools: [], temperature: 0, seed: null, max_tokens: 4 });
+  try {
+    await ask('summarize');
+    assert.deepEqual(await store.getNativeStateWire(produced.id), produced.wire, 'the produced state, archived as the engine stored it');
+    assert.equal(puts.length, 0);
+
+    await store.putNativeStateWire(archived.wire);
+    await ask(`Use ${nativeStateSentinel(archived.id)} and ${nativeStateSentinel(produced.id)}`);
+    assert.deepEqual(puts, [archived.wire], 'only the state the engine lacks is put, as archived');
+    assert.deepEqual(requests[1].messages[0].content.filter(part => part.type === 'native_state').map(part => part.id), [archived.id, produced.id]);
+    await ask(`Again ${nativeStateSentinel(archived.id)}`);
+    assert.equal(puts.length, 1, 'a state put once stays in the engine');
+    await assert.rejects(ask(nativeStateSentinel('nzs1_' + 'b'.repeat(52))), /neuralese-unknown-native-state/);
+
+    assert.deepEqual(model.neuraleseRuntime(), { store, dialect: 'native-state/lfm3', nativeStateConsumer: { architecture: 'lfm3',
+      checkpoint_sha256: '2'.repeat(64), tokenizer_fingerprint: '1'.repeat(64), embedding_weight_sha256: '3'.repeat(64),
+      consumption_modes: ['exact-native-state', 'best-effort-text-retokenization'] } });
+  } finally { await model.close(); }
+
+  // A model without a native identity has no native runtime; a build without the store calls refuses the archive.
+  const { model: stock } = await api.loadBrowserLocalModel({ kind: 'url', url: 'https://example.test/stock.gguf' },
+    { engine: { ...engine, engine: { ...fake, getModelMetadata: () => ({}) } }, gpuLayers: 0, nativeStateStore: store });
+  try { assert.equal(stock.neuraleseRuntime(), undefined); } finally { await stock.close(); }
+  params = undefined;
+  await assert.rejects(api.loadBrowserLocalModel({ kind: 'url', url: 'https://example.test/natlang.gguf' },
+    { engine: { ...engine, engine: { ...fake, capabilities: { nativeStates: true } } }, gpuLayers: 0, nativeStateStore: store }),
+  /cannot store native states after load/);
+});
+
 test('an in-page model without loaded states refuses native sentinels before inference', async () => {
   const { BrowserLocalModel } = await browserApi();
   const { nativeStateSentinel } = await import('../dist/native/neuralese.js');

@@ -60,7 +60,7 @@ try {
   assert.match(await page.locator('#runButton').textContent(), /Load model to run/);
   await page.locator('#runButton').click();
   assert.equal(await page.locator('#modelDialog').isVisible(), true);
-  assert.match(await page.locator('#modelSelect').textContent(), /LFM3 1\.7B · Q4_K_M/);
+  assert.match(await page.locator('#modelSelect').textContent(), /natlang lfm3 · step 0 · Q8_0/);
   await page.locator('#modelDialog button[value=cancel]').last().click();
   // The runtime executes in the page: a TypeScript fixture runs to its expected value and records a run.
   await page.evaluate(async () => {

@@ -164,7 +164,10 @@ export function nativeStateArtifactDependencies(artifact: Pick<NativeStateArtifa
 }
 
 /** Archive either typed native family through one exact dependency mechanism. */
-export async function archiveNativeArtifactFrom(remote: NeuraleseStore, archive: NeuraleseStore,
+/** Where archival reads native artifacts from: another store, a server's HTTP store or the page's engine. */
+export type NativeArtifactSource = Partial<Pick<NeuraleseStore, 'getNativeState' | 'getNativeStateWire' | 'getNativeTensorArtifact'>>;
+
+export async function archiveNativeArtifactFrom(remote: NativeArtifactSource, archive: NeuraleseStore,
     id: string, active = new Set<string>()): Promise<NativeStateArtifact | NativeTensorArtifact> {
   if (active.has(id)) throw new Error('neuralese-native-artifact-cycle: exact native dependencies must form a DAG');
   const nested=new Set(active);nested.add(id);
@@ -193,7 +196,7 @@ export async function archiveNativeArtifactFrom(remote: NeuraleseStore, archive:
   if(saved.id!==id)throw new Error('neuralese-block-integrity: native artifact changed during archival');
   return saved;
 }
-export async function archiveNativeTensorFrom(remote: NeuraleseStore, archive: NeuraleseStore,id:string):Promise<NativeTensorArtifact> {
+export async function archiveNativeTensorFrom(remote: NativeArtifactSource, archive: NeuraleseStore,id:string):Promise<NativeTensorArtifact> {
   if(!id.startsWith('nnt1_'))throw new RangeError('native tensor archive requires a named tensor ID');
   return await archiveNativeArtifactFrom(remote,archive,id) as NativeTensorArtifact;
 }

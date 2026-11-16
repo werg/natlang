@@ -2494,3 +2494,14 @@ From the held-v2 base episode read (run2 `held/step-00000`, 512 episodes, 1,190 
 Not changed: computed records keep their extra fields (bda8fb9f1, 2026-10-08: a refusal sent executors back to retyping
 provider values); one held episode (101/1) failed with an extra field, too little to reverse that. Tests:
 `ts-host/test/scope-compiler.test.mjs`, `eval-guidance.test.mjs`. Changes the held series (ts-host tree).
+
+## 2026-11-16: natlang GGUF exports no longer ban the produce marker (first principles)
+
+`export/native_gguf.py` wrote `serving.logit_bias = {produce_open: -100}` into every export manifest, with the reason
+"the producer marker would start a span whose adapter llama.cpp does not apply". The fork's llama-server has applied the
+producer adapter carried in the GGUF since its native-state production (`llama_model_has_producer_adapter`,
+`native_production` in `server-context.cpp`), so the ban only erased a sampled action the model was trained to take: a
+managed llama-server or the page serving a natlang export could never produce a native state. An export with the
+producer adapter now serves with `logit_bias {}`; one without it still bans the marker. Applies to the page's new default
+GGUF (natlang-lfm3-5ff07638, `ts-host/src/model-default.ts`) and to every later `natlang setup --native` export.
+The SGLang actor's HF export (`serving.banned_token_ids`) is separate and unchanged, so the held series is not affected.

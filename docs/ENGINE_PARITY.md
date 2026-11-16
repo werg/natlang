@@ -25,7 +25,14 @@ Mechanical guards:
   `ts-host/test/llama-runtime.test.mjs` fails when the vendored build and the runtime pin come from different releases.
 - `node scripts/wllama_smoke.mjs --model M --server S` compares the page's decision scores with the native server's
   (ranking and a 1-nat tolerance, for the items and for a repeat after a batch); run it on every pin bump. natlang-b12074:
-  same ranking on 3 items, largest gap per item 0.58-0.67 nats from native, a repeat within 0.16 nats.
+  same ranking on 3 items, largest gap per item 0.58-0.67 nats from native, a repeat within 0.16 nats. With a natlang GGUF it
+  also checks native states both ways. natlang-b12080 on natlang-lfm3-5ff07638 (Q8_0, CPU, against a local arm64 CPU
+  build of the same fork commit): the server's state put into the page is consumed exactly and a decision on it ranks
+  like the server's (largest gap 0.81 nats); the page's grammar-forced state has the server's text and identity (its
+  tokenization differs at one near tie, so its ID differs), reads back as stored, and the server accepts it and consumes
+  it exactly. The decision check fails on item 1 by 1.11 nats (same ranking; repeat within 0.27). The page scores are
+  bit-identical with the vendored natlang-b12077 build and with the stock LFM3 Q8_0 GGUF, so this predates the change;
+  its cause (the b12074 run measured 0.58-0.67 against a different native build) is not diagnosed.
 
 ## Numerics: a score is reproducible only under a fixed cache layout
 
@@ -51,6 +58,9 @@ context between its slots.
 | dc9410950 | RL capture under top-p | row above; native and SGLang already did it |
 | 6d270f086 | top-p RL capture draws on the host (dc9410950's device default overrode it); omitted top_p is no nucleus | row above |
 | cab27bfbe | a context checkpoint that does not load falls back to re-processing the prompt instead of aborting; the in-page build gains slot save/restore (werg/wllama 0095d0f) | page warm openings row; RL capture under top-p (dc9410950, 6d270f086) now released on every engine |
+| 69cba25d9 | native-state put after startup is one main-loop task (`SERVER_TASK_TYPE_NATIVE_STATE_REGISTER` with the bytes: verify, store, register) for the HTTP PUT and embedders; `server_context::get_native_state` | page: werg/wllama 5b0dcd3 `putNativeState` / `getNativeState`; section "Native state" |
+| 623fd10c8 | the release builds werg/wllama 5b0dcd3 | page only |
+| 401f8ad5e | the RL actor binding (GGUF and executable hashes) is computed on first use, not at load: a natlang GGUF failed to load in the page (`cannot hash actor executable`), and every load read the whole model file to hash it | managed server: `/v1/neuralese/info` and RL captures unchanged (`check_llama_native_state_protocol.py --expect-rl` passes); Python native and SGLang bind their actors separately |
 | b704a8b2f | native-state files: `--native-state` and the page's `native_states` load natlang's store files (a release's `states/<id>.nzs`) through the PUT path (verified once, stored as read); PUT `{"path"}`; non-finite values refused; GGUF state-span format removed | every engine: section "Native state: one format, handed over as files" |
 
 ## Native state: one format, handed over as files
@@ -61,8 +71,8 @@ finite values, content ID in one pass) and decodes a state only where it compute
 
 | Engine or store | Produces | Imports | Moves without decoding |
 |---|---|---|---|
-| Managed llama-server (fork b704a8b2f, natlang-b12077) | produce spans, encoded once into the store file | PUT body or `{"path": FILE}`, `--native-state FILE` (a release's `states/<id>.nzs`); one decode for span registration | GET answers the stored bytes |
-| In-page engine (natlang-b12077 wllama build, vendored) | none (no producer in the page) | `native_states` Blobs: a release's `states/<id>.nzs` as fetched (`browser/tuned-release.ts` checks the content ID), loaded through the server's `--native-state` path | the Blob is written to the wasm FS as is |
+| Managed llama-server (fork 401f8ad5e, natlang-b12080) | produce spans, encoded once into the store file | PUT body or `{"path": FILE}`, `--native-state FILE` (a release's `states/<id>.nzs`); every put after startup is one main-loop task (verify, store, register); one decode for span registration | GET answers the stored bytes |
+| In-page engine (natlang-b12080 wllama build, werg/wllama 5b0dcd3, vendored) | produce spans of the page's default model, natlang's own GGUF (natlang-lfm3-5ff07638: producer adapter and native identity), through the server's code; `BrowserLocalModel` archives each produced state into the page's store after the turn (`getNativeState`, the bytes as stored) | `native_states` Blobs at load (a release's `states/<id>.nzs`), and after load `putNativeState` (the server's put task): a request naming a state the engine lacks gets it from the page's store (`restoreNativeStates`, as with a server) | the wire moves between the OPFS store and the engine as bytes; only the engine decodes |
 | Python native engine | produce spans (`put_native_state`, `write_native_state_file`) | splices `load()`ed blocks (one copy from a file mapping) | HTTP GET `sendfile`s the stored file, PUT streams to a file and adopts it, metadata from the header (`NativeStateFile`) |
 | SGLang actor (fork b6b2319c7) | the fork writes the store file; the store adopts it by rename | the fork reads the stored file by path (`layers.*` only) | the front never decodes |
 | Python block store / learner `NativeStates` | | `read_native_state_file` + `load()` | adopt by rename, verify from a mapping |
@@ -80,4 +90,3 @@ finite values, content ID in one pass) and decodes a state only where it compute
 | Warm openings kept across restarts | yes (`--slot-save-path`) | yes from natlang-b12076 (`browser/warm-openings.ts`, on by default for a model loaded with its `sha256`; werg/wllama 0095d0f, `capabilities.slotState`): the opening is prefilled once, its slot state saved to OPFS and restored after a reload, keyed by model, engine build, context, slots, GPU/CPU, `swa_full` and template. LFM3 Q8_0 CPU, 678-token opening, 17 MB state: first call after a reload 5.5 s instead of 98 s, decision scores bit-identical to the saving load | no | no | Python native and SGLang: deliberately not built; the actors restart rarely and their in-process caches already reuse the opening |
 | Page serves the stock model with the full sliding-window cache (`swa_full`, as the managed server's `--swa-full`) | yes | yes (`local-model.ts`, 2026-11-14) | n/a | n/a | none. Without it the page continued no earlier prompt past a ~170-token checkpoint, and a decision with a prompt beyond the sliding window aborted the engine (`failed to restore context checkpoint`, a `GGML_ABORT` in `server-context.cpp` when a checkpoint does not fit the SWA cache; also in the vendored natlang-b12074 build): from natlang-b12076 a checkpoint that does not load falls back to re-processing the prompt (fork cab27bfbe) |
 | Hybrid SWA KV, FP8 KV, mixed adapters in one batch | partly | partly | n/a | yes | none needed for CPU hosts |
-| Native-state production and runtime import in the page | yes | no: the page loads states only with the model (`native_states`); werg/wllama 0095d0f exposes no runtime PUT/GET of stored states, and the page serves the stock LFM3 GGUF, which has no producer adapter or `natlang.identity.*` (row above), so it cannot produce states at all | yes | yes | blocked on the page's model: publish a natlang GGUF export (with producer adapter, identity and markers) for the page; then add wllama glue actions that PUT a stored state's bytes (an OPFS `getNativeStateWire` Blob) and GET a produced state's stored bytes through the fork's existing store, pinned in `.github/natlang-wllama.json` and released with `update_llama_runtime.mjs --fork` |

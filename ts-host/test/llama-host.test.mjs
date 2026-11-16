@@ -23,7 +23,7 @@ function fixtureHost(root, { fetch, spawn } = {}) {
       return spawn?.(command, args, options) ?? { pid: 4242, hasExited: () => false, exited: new Promise(() => {}), kill() {} };
     },
     run(command, args) {
-      if (args.includes('--version')) return { status: 0, stdout: 'version: 0.8.0 (build 12077, commit b704a8b2f)\n', stderr: '' };
+      if (args.includes('--version')) return { status: 0, stdout: 'version: 0.8.0 (build 12080, commit 401f8ad5e)\n', stderr: '' };
       if (args.includes('--help')) return { status: 0, stdout: '--lora-per-sequence\n--native-state FNAME', stderr: '' };
       return { status: 1, stdout: '', stderr: `unexpected command ${command}` };
     },

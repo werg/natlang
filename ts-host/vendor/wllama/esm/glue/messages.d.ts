@@ -157,6 +157,18 @@ export interface GlueMsgSlotsRes {
     success: boolean;
     req_id: number;
 }
+export interface GlueMsgNativeStateReq {
+    _name: "nsta_req";
+    action: string;
+    id: string;
+    filename: string;
+}
+export interface GlueMsgNativeStateRes {
+    _name: "nsta_res";
+    success: boolean;
+    req_id: number;
+    meta_json: string;
+}
 export interface GlueMsgApplyTemplateReq {
     _name: "tmpl_req";
     data_json: string;
@@ -194,4 +206,4 @@ export interface GlueMsgTestBackendOpsRes {
     retcode: number;
     success: boolean;
 }
-export type GlueMsg = GlueMsgError | GlueMsgLoadReq | GlueMsgLoadRes | GlueMsgCompletionReq | GlueMsgCompletionRes | GlueMsgEmbeddingReq | GlueMsgEmbeddingRes | GlueMsgRerankReq | GlueMsgRerankRes | GlueMsgSystemoneReq | GlueMsgSystemoneRes | GlueMsgScoreReq | GlueMsgScoreRes | GlueMsgSlotsReq | GlueMsgSlotsRes | GlueMsgApplyTemplateReq | GlueMsgApplyTemplateRes | GlueMsgGetResultReq | GlueMsgGetResultRes | GlueMsgCancelReq | GlueMsgCancelRes | GlueMsgTestBackendOpsReq | GlueMsgTestBackendOpsRes;
+export type GlueMsg = GlueMsgError | GlueMsgLoadReq | GlueMsgLoadRes | GlueMsgCompletionReq | GlueMsgCompletionRes | GlueMsgEmbeddingReq | GlueMsgEmbeddingRes | GlueMsgRerankReq | GlueMsgRerankRes | GlueMsgSystemoneReq | GlueMsgSystemoneRes | GlueMsgScoreReq | GlueMsgScoreRes | GlueMsgSlotsReq | GlueMsgSlotsRes | GlueMsgNativeStateReq | GlueMsgNativeStateRes | GlueMsgApplyTemplateReq | GlueMsgApplyTemplateRes | GlueMsgGetResultReq | GlueMsgGetResultRes | GlueMsgCancelReq | GlueMsgCancelRes | GlueMsgTestBackendOpsReq | GlueMsgTestBackendOpsRes;

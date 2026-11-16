@@ -30,7 +30,7 @@ import { nativeStateConsumerFromInfo } from '../native/neuralese.js';
 import { decodeNativeState, encodeNativeState, nativeStateContentId, nativeStateBlockMeta,
   decodeNativeTensorArtifact, encodeNativeTensorArtifact, nativeTensorArtifactContentId, nativeTensorArtifactDependencies, nativeStateArtifactDependencies, archiveNativeArtifactFrom, archiveNativeTensorFrom,
   nativeTensorArtifactBlockMeta, nativeModelIdentityEqual, type NeuraleseBlockMeta,
-  type NativeStateArtifact, type NativeTensorArtifact, type NeuraleseStore } from '../native/neuralese-store.js';
+  type NativeStateArtifact, type NativeTensorArtifact, type NeuraleseStore, type NativeArtifactSource } from '../native/neuralese-store.js';
 
 type Json = Record<string, unknown>;
 
@@ -346,14 +346,22 @@ function materializeNativeStateSentinels(value: unknown, key?: string): unknown 
   return value;
 }
 
-export async function restoreNativeStates(remote: HttpNeuraleseStore, archive: NeuraleseStore | undefined,
+/** An engine's native-state store as the restore side sees it: a server's HTTP store or the page's in-page engine. */
+export type NativeStateEngineStore = Pick<NeuraleseStore, 'hasNativeState' | 'putNativeState'> &
+  Required<Pick<NeuraleseStore, 'putNativeStateWire'>> & Partial<NeuraleseStore>;
+
+export async function restoreNativeStates(remote: NativeStateEngineStore, archive: NeuraleseStore | undefined,
     ids: readonly string[], known?: Set<string>, all = false): Promise<void> {
   if (all) for (const id of ids) known?.delete(id);
   const missing: string[] = [];
   for (const id of ids) {
     const local = await archive?.getNativeState?.(id);
-    if (local) {
-      const absent = await restoreNativeArtifacts(remote, archive, nativeStateArtifactDependencies(local));
+    const dependencies = local ? nativeStateArtifactDependencies(local) : [];
+    if (dependencies.length) {
+      // adapter coefficients and bases a state was produced with: a store of named tensor artifacts (a server's)
+      if (!remote.putNativeTensorArtifact || !remote.meta)
+        throw new Error(`neuralese-native-archive-unavailable: native state ${id} depends on adapter artifacts this engine cannot hold`);
+      const absent = await restoreNativeArtifacts(remote as NeuraleseStore, archive, dependencies);
       if (absent.length) throw new Error(`neuralese-unknown-native-artifact: restore source adapter coefficients and bases ${absent.join(', ')}`);
     }
     if (known?.has(id)) continue;
@@ -398,7 +406,7 @@ function normalizeReply(body: Json): Json {
 }
 
 /** Archive the same exact reply closure for live turns and saved-turn replay. */
-export async function archiveNeuraleseReplyArtifacts(reply: Json, remote: NeuraleseStore,
+export async function archiveNeuraleseReplyArtifacts(reply: Json, remote: NativeArtifactSource,
     store: NeuraleseStore | undefined, references: readonly unknown[] = []):
     Promise<{ native: Set<string> }> {
   const projectedBlocks = (reply.neuralese as { blocks?: unknown } | undefined)?.blocks;

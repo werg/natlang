@@ -98,16 +98,20 @@ def export(checkpoint, out_dir, *, outtypes=('bf16',), llama_cpp=LLAMA_CPP, pyth
     from ..model.native_model import load_native_checkpoint, native_tensor_identity
     checkpoint, out_dir = Path(checkpoint).resolve(strict=True), Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    model, tokenizer, roles, config, state = load_native_checkpoint(str(checkpoint), base=base, device='cpu', dtype=torch.float32,
+    # The native identity states carry (natlang.identity.* in the GGUF; llama-server declares it and stamps produced
+    # states with it). It names the embedding path's dtype: an f32 file serves the float32 identity, the others the
+    # bfloat16 one the native server uses on CUDA, so states exchange with that server. The model is loaded once in
+    # the dtype the files need (float32 only for an f32 file): files other than f32 are converted from the bfloat16
+    # weights their identity names, and a 1.7B export without f32 fits in about half the memory.
+    dtype = torch.float32 if 'f32' in outtypes else torch.bfloat16
+    model, tokenizer, roles, config, state = load_native_checkpoint(str(checkpoint), base=base, device='cpu', dtype=dtype,
                                                                     allow_weights_only=True)
     if config['architecture'] not in ARCHITECTURES:
         raise ValueError(f"GGUF export supports HF backbones only, not {config['architecture']!r}")
     checkpoint_sha256 = sha256_file_hex_cached(checkpoint)
-    # The native identity states carry (natlang.identity.* in the GGUF; llama-server declares it and stamps produced
-    # states with it). It names the embedding path's dtype: an f32 file serves the float32 identity, the others the
-    # bfloat16 one the native server uses on CUDA, so states exchange with that server.
-    identities = {'float32': native_tensor_identity(model, config, checkpoint_sha256=checkpoint_sha256)}
-    if any(outtype != 'f32' for outtype in outtypes):
+    identities = {'float32' if dtype == torch.float32 else 'bfloat16':
+                  native_tensor_identity(model, config, checkpoint_sha256=checkpoint_sha256)}
+    if dtype == torch.float32 and any(outtype != 'f32' for outtype in outtypes):
         reduced = load_native_checkpoint(str(checkpoint), base=base, device='cpu', dtype=torch.bfloat16, allow_weights_only=True)
         identities['bfloat16'] = native_tensor_identity(reduced[0], reduced[3], checkpoint_sha256=checkpoint_sha256)
         del reduced
@@ -172,8 +176,10 @@ def export(checkpoint, out_dir, *, outtypes=('bf16',), llama_cpp=LLAMA_CPP, pyth
         'role_markers': markers,
         'serving': {'chat_template': 'chat-template.jinja', 'chat_template_sha256': sha256_file_hex(out_dir / 'chat-template.jinja'),
                     'chat_template_kwargs': kwargs, 'history_reasoning': reasoning.get('policy'),
-                    # The producer marker would start a span whose adapter llama.cpp does not apply.
-                    'logit_bias': {str(produce_open): -100}},
+                    # With the producer adapter in the GGUF, llama-server (and the page's wllama, the same server code)
+                    # produces native states when the model samples the produce marker; without it the marker would
+                    # start a span no adapter decodes, so it is banned.
+                    'logit_bias': {} if producer is not None else {str(produce_open): -100}},
         'files': files,
         'hf_config': 'hf-config',
         'converter': {'llama_cpp': str(llama_cpp), 'replication': _replication(llama_cpp)},

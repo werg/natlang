@@ -31,13 +31,14 @@ for (const path of [...Object.keys(stamp.outputs), ...Object.keys(stamp.assets)]
 const play = resolve(site, 'play');
 rmSync(play, { recursive: true, force: true });
 cpSync(resolve(root, 'playground'), play, { recursive: true, filter: path => !path.endsWith('README.md') });
-const { STOCK_MODELS } = await import(pathToFileURL(resolve(root, 'dist/model-catalog.js')).href);
-const model = STOCK_MODELS.find(item => item.quant === 'Q4_K_M');
+// The page's default is natlang's published GGUF (ts-host/src/model-default.ts, scripts/publish_browser_model.mjs): its
+// native identity and producer adapter let the page produce and import native states.
+const { BROWSER_MODEL_RELEASE: model } = await import(pathToFileURL(resolve(root, 'dist/model-default.js')).href);
 mkdirSync(resolve(play, 'models/templates'), { recursive: true });
 cpSync(resolve(root, '../models/templates', model.template), resolve(play, 'models/templates', model.template));
 writeFileSync(resolve(play, 'models/browser-catalog.json'), `${JSON.stringify({
   schema: 'natlang.browser-model-catalog/1', defaultId: model.id, models: [{ id: model.id, label: model.label,
-    trainingRun: `${model.source.repository}@${model.source.revision}`, file: model.file, quant: model.quant,
+    trainingRun: model.trainingRun, file: model.file, quant: model.quant,
     bytes: model.bytes, sha256: model.sha256, contextTokens: model.contextTokens, url: model.downloadUrl,
     templateUrl: `./models/templates/${model.template}` }],
 }, null, 2)}\n`);
