@@ -2,7 +2,9 @@
 """Teacher episodes on the GRPO task pool, for distillation (SFT) into the LFM3 actor.
 
 Any OpenAI-compatible chat endpoint is the teacher (a local llama-server, a hosted free tier, a paid API): `--endpoint`
-and `--model-id` (plus `--api-key-env` for hosted ones). Episodes run through the GRPO path itself: `task_rollouts.prepare`
+and `--model-id` (plus `--api-key-env` for hosted ones). A natlang provider profile is one too: a teacher spec with
+`"provider"` (e.g. `{"model_id": "gpt-6-luna", "provider": "openai-codex", "reasoning_effort": "low"}`) runs the collector's
+Pi provider transport with natlang's stored credentials (`natlang auth`), the transport natlang programs use. Episodes run through the GRPO path itself: `task_rollouts.prepare`
 (student root, full prompt rendering, the shared `EPISODE_MODEL_CALLS` budget), `run_bonsai_queue.py` (the frozen
 collector, without the RL capture: the teacher's tokens are not the student's) and `task_rollouts.score` (the task's exact
 oracle). Each scored episode's `natlang.rollout/1` record (turns = {messages, tools, target}) is the SFT material; the
@@ -17,7 +19,9 @@ Several teachers share one WORK: each claims a task before running it (WORK/clai
            --pause-below-available-gb N does the same while host MemAvailable is below N GB
   stop:    systemctl --user stop <unit>   (killed episodes are redone on the next launch)
   resume:  launch the same command again (finished tasks are skipped)
-  provider failures (an episode ending before its first model turn) are no verdict: deferred.jsonl, retried twice
+  provider failures (an episode ending before its first model turn, or with exhausted provider retries: 429s, quota windows,
+  refused or expired credentials) are no verdict: deferred.jsonl, retried twice; a teacher whose provider keeps failing
+  backs off (--provider-cooldown, doubling per consecutive failure up to an hour)
 """
 import argparse
 import json
@@ -106,6 +110,42 @@ def chat_config_path(work, model_id):
 PROVIDER_FAILURE = 'provider request retry exhausted'
 # decide() collection needs the actor's exact native capture, which a hosted teacher endpoint does not give
 UNSUPPORTED_DECIDE = 'decision collection needs its exact native capture'
+
+
+def teacher_identity(teacher):
+    """What a manifest record names as its teacher: the model and its transport (HTTP endpoint or natlang provider)."""
+    if teacher.provider:
+        return {'model_id': teacher.model_id, 'provider': teacher.provider, 'reasoning_effort': teacher.reasoning_effort}
+    return {'model_id': teacher.model_id, 'endpoint': teacher.endpoint}
+
+
+def queue_command(teacher, work, queue_file, journal):
+    """The frozen collector's queue runner for one episode of `teacher`."""
+    command = [sys.executable, str(REPO / 'scripts/run_bonsai_queue.py'), str(queue_file), str(journal),
+               '--runtime', str(REPO / 'ts-host'), '--model-id', teacher.model_id, '--model-concurrency', '1']
+    if teacher.provider:   # Pi provider transport: credentials from natlang's store, request controls are the provider's
+        return command + ['--provider', teacher.provider, '--reasoning-effort', teacher.reasoning_effort]
+    command += ['--server', teacher.endpoint, '--chat-completions-url', teacher.chat_completions_url,
+                '--chat-request-config', str(chat_config_path(work, teacher.model_id))]
+    return command + (['--api-key-env', teacher.api_key_env] if teacher.api_key_env else [])
+
+
+def make_teacher(spec):
+    """A teacher from its --teacher spec: an OpenAI-compatible endpoint, or a natlang Pi provider (`provider`)."""
+    if not spec.get('model_id') or bool(spec.get('endpoint')) == bool(spec.get('provider')):
+        raise ValueError('each teacher needs model_id and exactly one of endpoint or provider')
+    if spec.get('provider'):
+        extra = set(spec) & {'chat_completions_url', 'api_key_env', 'chat_config'}
+        if extra:
+            raise ValueError(f'a provider teacher takes no HTTP controls: {sorted(extra)}')
+        return SimpleNamespace(model_id=spec['model_id'], provider=spec['provider'], endpoint=None,
+                               reasoning_effort=spec.get('reasoning_effort', 'low'), slots=int(spec.get('slots', 2)),
+                               cool_until=0., failures=0)
+    url = spec.get('chat_completions_url') or completions_url(spec['endpoint'])
+    return SimpleNamespace(model_id=spec['model_id'], provider=None, endpoint=spec['endpoint'].rstrip('/'),
+                           chat_completions_url=url, api_key_env=spec.get('api_key_env'), slots=int(spec.get('slots', 2)),
+                           chat_config=default_chat_config(url) if spec.get('chat_config') is None else spec['chat_config'],
+                           cool_until=0., failures=0)
 
 
 class Generator:
@@ -213,13 +253,7 @@ class Generator:
             key = entry['key']
             queue_file = directory / f'{key}.queue.jsonl'
             queue_file.write_text(json.dumps(entry, sort_keys=True) + '\n')
-            command = [sys.executable, str(REPO / 'scripts/run_bonsai_queue.py'), str(queue_file),
-                       str(directory / f'{key}.journal.jsonl'), '--runtime', str(REPO / 'ts-host'),
-                       '--server', teacher.endpoint, '--chat-completions-url', teacher.chat_completions_url,
-                       '--model-id', teacher.model_id, '--model-concurrency', '1',
-                       '--chat-request-config', str(chat_config_path(self.work, teacher.model_id))]
-            if teacher.api_key_env:
-                command += ['--api-key-env', teacher.api_key_env]
+            command = queue_command(teacher, self.work, queue_file, directory / f'{key}.journal.jsonl')
             with (directory / f'{key}.log').open('a') as handle:
                 process = subprocess.Popen(command, cwd=REPO, env=self.env, stdout=handle, stderr=subprocess.STDOUT,
                                            start_new_session=True)
@@ -237,7 +271,7 @@ class Generator:
         report = task_rollouts.score(directory, directory / 'rollouts.jsonl', neuralese_bonus=0., efficiency_weight=0.)
         rollouts = list(read_jsonl(directory / 'rollouts.jsonl'))
         record = {'index': index, 'task_id': row['id'], 'family': row.get('family'), 'base_rank': task['base_rank'],
-                  'teacher': {'model_id': teacher.model_id, 'endpoint': teacher.endpoint},
+                  'teacher': teacher_identity(teacher),
                   'seconds': round(time.time() - started, 1),
                   'episodes': [{'sample': r['sample'], 'outcome': r['outcome'],
                                 'reward': (r.get('reward') or {}).get('quality'),
@@ -254,12 +288,15 @@ class Generator:
                 self.attempts[index] = self.attempts.get(index, 0) + 1
                 with (self.work / 'deferred.jsonl').open('a') as handle:
                     handle.write(json.dumps({**record, 'attempt': self.attempts[index]}) + '\n')
-                teacher.cool_until = max(teacher.cool_until, time.time() + self.args.provider_cooldown)
+                teacher.failures += 1
+                teacher.cool_until = max(teacher.cool_until, time.time() + min(
+                    3600., self.args.provider_cooldown * 2 ** (teacher.failures - 1)))
                 if self.attempts[index] < 3:
                     self.retry.append((time.time() + 600, index))
                 self._release(index, 'deferred', teacher)
                 print(json.dumps({'event': 'task deferred', 'index': index, 'attempt': self.attempts[index]}), flush=True)
                 return report
+            teacher.failures = 0
             with self.manifest.open('a') as handle:
                 handle.write(json.dumps(record) + '\n')
             self.done.add(index)
@@ -288,7 +325,8 @@ def main():
     p.add_argument('--work', required=True)
     p.add_argument('--teacher', action='append', default=[], type=json.loads, metavar='JSON',
                    help='one teacher of several in this process (the task list is loaded once): {"model_id", "endpoint", '
-                        '"chat_completions_url", "api_key_env", "slots", "chat_config"}; repeatable. Without it the '
+                        '"chat_completions_url", "api_key_env", "slots", "chat_config"} or {"model_id", "provider", '
+                        '"reasoning_effort", "slots"} (a natlang Pi provider, e.g. openai-codex); repeatable. Without it the '
                         'single-teacher flags below describe the one teacher')
     p.add_argument('--endpoint', help='teacher server base URL (OpenAI-compatible)')
     p.add_argument('--chat-completions-url', help='exact completion URL (default ENDPOINT/v1/chat/completions)')
@@ -300,7 +338,8 @@ def main():
     p.add_argument('--request-retries', type=int, default=8,
                    help='same-request retries after a provider failure (429, 5xx), with backoff honouring Retry-After')
     p.add_argument('--provider-cooldown', type=float, default=120,
-                   help='seconds all of a teacher\'s slots wait before taking a new task after an episode the provider failed')
+                   help='seconds all of a teacher\'s slots wait before taking a new task after an episode the provider failed '
+                        '(doubling per consecutive failure, at most an hour)')
     p.add_argument('--pause-below-available-gb', type=float, default=0,
                    help='take no new task while MemAvailable is below this (a co-located learner phase needs the memory)')
     p.add_argument('--samples', type=int, default=1, help='episodes per task')
@@ -340,19 +379,17 @@ def main():
                               'chat_config': args.chat_config}]
     teachers = []
     for spec in specs:
-        if not spec.get('model_id') or not spec.get('endpoint'):
-            p.error('each teacher needs model_id and endpoint')
-        url = spec.get('chat_completions_url') or completions_url(spec['endpoint'])
-        teacher = SimpleNamespace(model_id=spec['model_id'], endpoint=spec['endpoint'].rstrip('/'), chat_completions_url=url,
-                                  api_key_env=spec.get('api_key_env'), slots=int(spec.get('slots', 2)),
-                                  chat_config=default_chat_config(url) if spec.get('chat_config') is None else spec['chat_config'],
-                                  cool_until=0.)
-        chat_config_path(work, teacher.model_id).write_text(json.dumps(teacher.chat_config) + '\n')
+        try:
+            teacher = make_teacher({k: v for k, v in spec.items() if v is not None})
+        except ValueError as error:
+            p.error(str(error))
+        if not teacher.provider:
+            chat_config_path(work, teacher.model_id).write_text(json.dumps(teacher.chat_config) + '\n')
         teachers.append(teacher)
     with (work / 'launches.jsonl').open('a') as handle:
         handle.write(json.dumps({'time': time.strftime('%Y-%m-%dT%H:%M:%S%z'), 'argv': sys.argv,
                                  'code': code_provenance(),
-                                 'teachers': [{k: v for k, v in vars(t).items() if k != 'cool_until'} for t in teachers]}) + '\n')
+                                 'teachers': [{k: v for k, v in vars(t).items() if k not in ('cool_until', 'failures')} for t in teachers]}) + '\n')
     generator = Generator(args)
 
     def stop(signum, frame):
