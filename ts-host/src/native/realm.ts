@@ -8,7 +8,7 @@ import { EvalFailure, consoleWriter, withinTimeout, type EnvironmentMode, type E
   type EvalResult, type HostEvent } from './evaluator.js';
 import { compileEval, evalRealmBody } from './eval-compile.js';
 import { isNeuraleseRef, neuraleseDisplayText } from './neuralese.js';
-import { MEMORY_CHECK, memoryGuard, type HeapProbe } from './eval-memory.js';
+import { MEMORY_CHECK, instrumentMemoryChecks, memoryGuard, segmentGuard, type HeapProbe } from './eval-memory.js';
 
 /** Where compiled eval code runs: a JavaScript realm's global environment. */
 export interface Realm {
@@ -200,6 +200,9 @@ export class RealmEnvironment implements EvalEnvironment {
   /** Evaluate a callable-folder module body; bindings are passed by reference. */
   evaluateModule(code: string, bindings: Record<string, unknown>): unknown {
     if (this.disposed) throw new Error('TypeScript environment is disposed');
+    // Module functions run for many callers at unknown times: each synchronous run of them is bounded (segmentGuard).
+    const memory = this.memoryLimitMb ? this.options.memory : undefined;
+    if (memory) { code = instrumentMemoryChecks(code, MEMORY_CHECK, 'js'); bindings = { ...bindings, [MEMORY_CHECK]: segmentGuard(memory.limitMb, memory.probe) }; }
     return this.moduleRealm().call(code, Object.keys(bindings), Object.values(bindings));
   }
 

@@ -3,6 +3,27 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-16 — the same memory bound for folder `python`, folder `bash` and callable-folder module code
+
+The other in-process hosts of model-written code in the shared collectors now take the eval bound's one setting
+(`NATLANG_EVAL_MEMORY_MB`, default 256 MB, 0: off; `native/eval-memory.ts`):
+- **Folder `python`** (one Pyodide interpreter per process, cells run one at a time): the WASM memory may grow at most
+  the bound during a cell; growth past it is refused, Python raises `MemoryError` in the cell, and the cell fails with
+  "python stopped: its data grew past the 256 MB memory limit of one python run; use a bounded or more memory-efficient
+  approach (prune the search, keep compact state, or process the data in parts)". A cell that catches `MemoryError`
+  keeps its own result; the interpreter serves later cells (`native/folder-python.ts`).
+- **Folder `bash`** (just-bash in-process): its byte limits (`maxLiveBytes`, `maxInputBytes`, `maxOutputSize`,
+  file-system, database and archive bytes) are the bound, strings and heredocs at most 64 MB, `/tmp` holds at most the
+  bound, and the bytes one command adds to the folder are budgeted. When the shell reports a byte limit ("cat: aggregate
+  input size limit exceeded (...)", "total output size exceeded"), "bash stopped: ... of one bash command; ..." follows
+  it in stderr (`native/folder-shell.ts`).
+- **Callable-folder module code** (`evaluateModule`): instrumented like eval code; each synchronous run of module code
+  (up to the next microtask checkpoint) has its own base, failing with "callable-folder code stopped: ... of one
+  synchronous run of callable-folder code; ..." (`segmentGuard`). Growth spread across awaits is not summed.
+The browser eval realm stays unbounded (no synchronous precise heap reading; a runaway ends only the user's own tab);
+the folder `python` and `bash` bounds apply in the browser too. Tests: `ts-host/test/folder-python.test.mjs`,
+`folder-shell.test.mjs`, `environment.test.mjs`. Enters RL at the next pin; changes the held series (ts-host tree).
+
 ### 2026-11-16 — one eval's memory is bounded (256 MB), failing that eval alone with a teaching error
 
 Eval code runs in its host's heap (a `node:vm` context of the shared collector process, up to 8 RL/teacher episodes per
@@ -18,9 +39,9 @@ p99 323 MB with up to 8 episodes): an order of magnitude above a legitimate eval
 collector heap. Setting `NATLANG_EVAL_MEMORY_MB` (0: off) or `TypeScriptEnvironment({ memoryLimitMb })`. The same guard
 bounds the function-effect oracle's calls of a model-repaired function (`teacher/function-effects.ts`). Code:
 `ts-host/src/native/eval-memory.ts`, `native/realm.ts`, `native/eval-compile.ts`, `environment.ts`. Not bounded: the
-browser realm (no synchronous heap reading), single built-in calls that allocate past the bound before the next check
-(`new Array(n).fill(0)`), the folder `python` (Pyodide WASM memory) and `bash` (just-bash) tools, selected semantic
-drivers. Tests: `ts-host/test/environment.test.mjs`. Enters RL at the next pin; changes the held series (ts-host tree).
+browser realm (no synchronous heap reading; a runaway ends only the user's own tab), single built-in calls that allocate
+past the bound before the next check (`new Array(n).fill(0)`), selected semantic drivers. Folder `python`, `bash` and
+callable-folder module code: entry above. Tests: `ts-host/test/environment.test.mjs`. Enters RL at the next pin; changes the held series (ts-host tree).
 
 ### 2026-11-14 — guided replies on the Python engines leave the open reasoning unchecked (fork a6401bbd3 parity)
 

@@ -5,7 +5,7 @@ import { packageNameFromSpecifier } from './package-specifier.js';
 import { markRaces } from './runtime/context.js';
 import type { EnvironmentMode, HostEvent } from './native/evaluator.js';
 import { RealmEnvironment, type EvalImports, type Realm } from './native/realm.js';
-import { DEFAULT_EVAL_MEMORY_MB, type HeapProbe } from './native/eval-memory.js';
+import { evalMemoryLimitMb, type HeapProbe } from './native/eval-memory.js';
 export { EvalFailure } from './native/evaluator.js';
 export type { EnvironmentMode, EvalEnvironment, EvalRequest, EvalResult, HostEvent } from './native/evaluator.js';
 
@@ -91,14 +91,7 @@ export const nodeHeap: HeapProbe = {
   },
 };
 
-/** The eval memory bound: `NATLANG_EVAL_MEMORY_MB` (0 turns it off), else `DEFAULT_EVAL_MEMORY_MB`. */
-export function evalMemoryLimitMb(env: Record<string, string | undefined> = process.env): number {
-  const text = env.NATLANG_EVAL_MEMORY_MB?.trim();
-  if (!text) return DEFAULT_EVAL_MEMORY_MB;
-  const value = Number(text);
-  if (!Number.isFinite(value) || value < 0) throw new RangeError(`NATLANG_EVAL_MEMORY_MB must be a number of MB >= 0 (0: unbounded), got ${text}`);
-  return value;
-}
+export { evalMemoryLimitMb };
 
 export type TypeScriptEnvironmentOptions = { mode?: EnvironmentMode; timeoutMs?: number; observe?: (event: HostEvent) => void;
   workspace?: string; network?: boolean;

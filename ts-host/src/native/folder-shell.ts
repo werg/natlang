@@ -6,6 +6,7 @@ import { Folder } from './scoped-fs.js';
 import { folderContents, pathsChangedSince } from './folder-changes.js';
 import { runFolderPython, type PythonHost } from './folder-python.js';
 import { executeNatlangAsk, executeNatlangCall, parseAskArgs, type AskHost, type CallHost } from './natlang-command.js';
+import { evalMemoryLimitMb, memoryLimitMessage } from './eval-memory.js';
 
 const ROOT = '/workspace';
 const BINARIES = new Set(getCommandNames());
@@ -24,7 +25,10 @@ const EMPTY_DIRS = new WeakMap<Folder, Set<string>>();
 
 export class FolderFs implements IFileSystem {
   private readonly emptyDirs: Set<string>;
-  constructor(readonly folder: Folder) {
+  /** Net bytes this shell's writes added to the folder, against `writeBudget` (the memory bound of one bash command). */
+  private grown = 0;
+  /** `writeBudget`: bytes one bash command may add to the folder (it lives in this process's memory); absent: unbounded. */
+  constructor(readonly folder: Folder, private readonly writeBudget?: { bytes: number; message: string }) {
     let dirs = EMPTY_DIRS.get(folder);
     if (!dirs) EMPTY_DIRS.set(folder, dirs = new Set());
     this.emptyDirs = dirs;
@@ -64,7 +68,13 @@ export class FolderFs implements IFileSystem {
     return new TextDecoder(encoding === 'ascii' ? 'ascii' : 'utf-8').decode(data);
   }
   async writeFile(path: string, content: FileContent, _options?: { encoding?: BufferEncoding } | BufferEncoding): Promise<void> {
-    this.folder.writeBytes(this.relative(path), asBytes(content));
+    const relative = this.relative(path), data = asBytes(content);
+    if (this.writeBudget) {
+      const growth = data.length - (this.folder.isFile(relative) ? (await this.folder.stat(relative)).bytes : 0);
+      if (this.grown + growth > this.writeBudget.bytes) throw new Error(this.writeBudget.message);
+      this.grown += growth;
+    }
+    this.folder.writeBytes(relative, data);
   }
   async appendFile(path: string, content: FileContent, options?: { encoding?: BufferEncoding } | BufferEncoding): Promise<void> {
     const old = await this.exists(path) ? await this.readFileBuffer(path) : new Uint8Array();
@@ -151,10 +161,28 @@ class DeviceFs extends InMemoryFs {
   }
 }
 
+/**
+ * The memory bound of one bash command (native/eval-memory.ts, the one setting): the shell runs in this process, so its
+ * strings, pipes, inputs and outputs (just-bash's byte limits), the files it writes to the folder and to `/tmp` are each
+ * held to the bound. Undefined: unbounded (just-bash's own defaults).
+ */
+function bashMemory(): { bytes: number; message: string } | undefined {
+  const limitMb = evalMemoryLimitMb();
+  return limitMb ? { bytes: Math.floor(limitMb * 1024 * 1024), message: memoryLimitMessage('bash', 'bash command', limitMb) } : undefined;
+}
+function memoryLimits(memory: { bytes: number } | undefined) {
+  if (!memory) return {};
+  const bytes = memory.bytes, small = Math.min(bytes, 64 * 1024 * 1024);
+  return { maxLiveBytes: bytes, maxInputBytes: bytes, maxOutputSize: bytes, maxFileSystemBytes: bytes, maxDatabaseBytes: bytes,
+    maxDatabaseResultBytes: bytes, maxArchiveBytes: bytes, maxArchiveCompressedBytes: bytes, maxArchiveEntryBytes: bytes,
+    maxStringLength: small, maxHeredocSize: small };
+}
+
 /** The folder, with `/dev` and a scratch `/tmp` (kept in memory for this shell, never part of the folder's changes). */
-function shellFs(folder: Folder): IFileSystem {
-  return new MountableFs({ base: new FolderFs(folder), mounts: [
-    { mountPoint: '/dev', filesystem: new DeviceFs() }, { mountPoint: '/tmp', filesystem: new InMemoryFs() }] });
+function shellFs(folder: Folder, memory?: { bytes: number; message: string }): IFileSystem {
+  return new MountableFs({ base: new FolderFs(folder, memory), mounts: [
+    { mountPoint: '/dev', filesystem: new DeviceFs() },
+    { mountPoint: '/tmp', filesystem: new InMemoryFs({}, memory ? { maxTotalBytes: memory.bytes } : {}) }] });
 }
 
 /** Refuse open-ended shell loops and function recursion before any command runs. */
@@ -312,13 +340,18 @@ export async function runFolderBash(folder: Folder, command: string, options: Fo
     } catch (error) { return { stdout: '', stderr: String(error), exitCode: 1 }; }
   });
   // The folder is the home directory too: `~`, `cd` and $HOME stay inside it.
-  const bash = new Bash({ fs: shellFs(folder), cwd: ROOT, env: { HOME: ROOT }, python: false, javascript: false,
+  const memory = bashMemory();
+  const bash = new Bash({ fs: shellFs(folder, memory), cwd: ROOT, env: { HOME: ROOT }, python: false, javascript: false,
     ...(options.network === false ? {} : { network: { dangerouslyAllowFullInternetAccess: true } }),
     customCommands: [changes, pythonCommand('python'), pythonCommand('python3'), sqlite, natlang],
-    executionLimits: { maxCommandCount: 1000, maxLoopIterations: 10000 } });
+    executionLimits: { maxCommandCount: 1000, maxLoopIterations: 10000, ...memoryLimits(memory) } });
   checkBashAst(bash.transform(command).ast);
   const result = await bash.exec(command, { ...(options.cwd === undefined ? {} : { cwd: bash.fs.resolvePath(ROOT, options.cwd) }),
     ...(options.env ? { env: options.env } : {}), ...(options.signal ? { signal: options.signal } : {}),
     ...(options.args ? { args: options.args } : {}) });
-  return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr, ...pathsChangedSince(folder, before) };
+  // just-bash names the byte limit it hit ("cat: aggregate input size limit exceeded (268435456 bytes)"); the
+  // teaching sentence says what to do about it, once.
+  const stderr = memory && /\b(size|byte|string|length|output) limit exceeded|\boutput size exceeded/.test(result.stderr) &&
+    !result.stderr.includes(memory.message) ? `${result.stderr.replace(/\n?$/, '\n')}${memory.message}\n` : result.stderr;
+  return { exitCode: result.exitCode, stdout: result.stdout, stderr, ...pathsChangedSince(folder, before) };
 }

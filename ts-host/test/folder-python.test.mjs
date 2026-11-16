@@ -102,3 +102,16 @@ open(scratch + '/n', 'w').write('t')
   assert.deepEqual(env.value, ['/workspace', '', 't', ['a.txt']]);
   assert.deepEqual(env.changedPaths, []);
 });
+
+test('a Python cell whose data explodes fails alone with the memory teaching error', async () => {
+  const previous = process.env.NATLANG_EVAL_MEMORY_MB;
+  process.env.NATLANG_EVAL_MEMORY_MB = '64';
+  try {
+    const folder = Folder.fromFiles({});
+    await assert.rejects(runFolderPython(folder, 'xs = []\nfor i in range(10**8): xs.append(str(i) * 4)\nlen(xs)', {}, 120000),
+      /python stopped: its data grew past the 64 MB memory limit of one python run; use a bounded or more memory-efficient approach/);
+    // The interpreter lives on, and a cell that handles the refusal itself keeps its own result.
+    assert.equal((await runFolderPython(folder, 'try:\n    b = bytearray(1024**3)\nexcept MemoryError:\n    b = b""\nlen(b)')).value, 0);
+    assert.equal((await runFolderPython(folder, 'len(bytearray(32 * 1024**2))')).value, 32 * 1024 ** 2);
+  } finally { if (previous === undefined) delete process.env.NATLANG_EVAL_MEMORY_MB; else process.env.NATLANG_EVAL_MEMORY_MB = previous; }
+});

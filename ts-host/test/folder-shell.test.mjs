@@ -100,3 +100,26 @@ test('python3 in bash starts in the shell directory and sees the same folder (H4
   const root = await runFolderBash(folder, 'python3 -c "import os; print(sorted(os.listdir(\'.\')))"');
   assert.equal(root.stdout, "['sourcingDesk', 'types.ts']\n");
 });
+
+test('a bash command whose data explodes fails alone with the memory teaching error', async () => {
+  const previous = process.env.NATLANG_EVAL_MEMORY_MB;
+  process.env.NATLANG_EVAL_MEMORY_MB = '16';
+  try {
+    const teaching = /bash stopped: its data grew past the 16 MB memory limit of one bash command; use a bounded or more memory-efficient approach/;
+    const doubling = await runFolderBash(Folder.fromFiles({ 'a.txt': 'x'.repeat(1024 * 1024) }),
+      `for i in ${Array.from({ length: 30 }, (_, i) => i).join(' ')}; do cat a.txt a.txt > b.txt; cat b.txt b.txt > a.txt; done`);
+    assert.notEqual(doubling.exitCode, 0);
+    assert.match(doubling.stderr, teaching);
+    // Output written by redirection counts against the output bound; copies add up against the folder write budget.
+    const many = Array.from({ length: 40 }, (_, i) => i).join(' ');
+    const written = await runFolderBash(Folder.fromFiles({}), `for i in ${many}; do printf '%01000000d' 0 > f$i; done`);
+    assert.notEqual(written.exitCode, 0);
+    assert.match(written.stderr, teaching);
+    const copies = await runFolderBash(Folder.fromFiles({ 'a.txt': 'x'.repeat(1024 * 1024) }), `for i in ${many}; do cp a.txt c$i; done`);
+    assert.notEqual(copies.exitCode, 0);
+    assert.match(copies.stderr, teaching);
+    const fine = await runFolderBash(Folder.fromFiles({ 'n.txt': 'ok\n' }), 'cat n.txt; seq 1 5 | wc -l');
+    assert.equal(fine.exitCode, 0, fine.stderr);
+    assert.equal(fine.stdout.trim().split('\n').join(' '), 'ok 5');
+  } finally { if (previous === undefined) delete process.env.NATLANG_EVAL_MEMORY_MB; else process.env.NATLANG_EVAL_MEMORY_MB = previous; }
+});

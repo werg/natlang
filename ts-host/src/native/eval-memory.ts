@@ -19,7 +19,11 @@ export const MEMORY_CHECK = '__natlang_memory';
  * Default bound in MB. Data (2026-11-16, 20,582 `invocation_end` records of shared collector processes serving up to
  * 8 RL/teacher episodes each): the whole process heap had a median of 147 MB and p99 323 MB, i.e. episodes need tens of
  * MB. 256 MB is an order of magnitude above a legitimate evaluation, and 8 evaluations at the bound still fit a 4 GB
- * collector heap. Setting: `NATLANG_EVAL_MEMORY_MB` (0 turns the bound off) or the environment's `memoryLimitMb`.
+ * collector heap. Setting: `NATLANG_EVAL_MEMORY_MB` (0 turns the bound off) or the environment's `memoryLimitMb`. The same
+ * bound covers callable-folder module code (`segmentGuard`), the folder `python` tool (WASM memory growth per cell,
+ * native/folder-python.ts) and the folder `bash` tool (just-bash byte limits and a write budget, native/folder-shell.ts).
+ * Browser evals stay unbounded: a page has no synchronous, precise heap reading (`performance.memory` is coarse and
+ * Chrome-only, `measureUserAgentSpecificMemory` is asynchronous), and a runaway there ends only the user's own tab.
  */
 export const DEFAULT_EVAL_MEMORY_MB = 256;
 /** Guard calls between heap readings: a reading costs ~0.35 us on Node, so a check costs a few ns per call. */
@@ -29,17 +33,31 @@ const MB = 1024 * 1024;
 /** How a platform reads its heap: bytes in use, and a full collection (absent: growth is judged without one). */
 export type HeapProbe = { used(): number; collect?(): void };
 
-/** The one-sentence teaching error of an evaluation that exceeded its bound. */
-export function evalMemoryMessage(limitMb: number): string {
-  return `eval stopped: its data grew past the ${limitMb} MB memory limit of one eval; use a bounded or more ` +
-    'memory-efficient approach (prune the search, keep compact state, or process the data in parts)';
+/** The bound in MB: `NATLANG_EVAL_MEMORY_MB` (0 turns it off), else `DEFAULT_EVAL_MEMORY_MB`. One setting for eval, folder
+ * Python, folder bash and callable-folder module code. */
+export function evalMemoryLimitMb(env: Record<string, string | undefined> =
+    (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {}): number {
+  const text = env.NATLANG_EVAL_MEMORY_MB?.trim();
+  if (!text) return DEFAULT_EVAL_MEMORY_MB;
+  const value = Number(text);
+  if (!Number.isFinite(value) || value < 0) throw new RangeError(`NATLANG_EVAL_MEMORY_MB must be a number of MB >= 0 (0: unbounded), got ${text}`);
+  return value;
 }
 
+/** The one-sentence teaching error of a run that exceeded its bound: `eval`, `python`, `bash`, callable-folder code. */
+export function memoryLimitMessage(subject: string, unit: string, limitMb: number): string {
+  return `${subject} stopped: its data grew past the ${limitMb} MB memory limit of one ${unit}; use a bounded or more ` +
+    'memory-efficient approach (prune the search, keep compact state, or process the data in parts)';
+}
+export const evalMemoryMessage = (limitMb: number) => memoryLimitMessage('eval', 'eval', limitMb);
+export const moduleMemoryMessage = (limitMb: number) =>
+  memoryLimitMessage('callable-folder code', 'synchronous run of callable-folder code', limitMb);
+
 /** The guard of one evaluation: call it from the evaluation's code; it throws once the evaluation's growth is over. */
-export function memoryGuard(limitMb: number, probe: HeapProbe): () => void {
+export function memoryGuard(limitMb: number, probe: HeapProbe, message = evalMemoryMessage(limitMb)): () => void {
   const limit = limitMb * MB, base = probe.used();
   let ticks = 0, next = base + limit, tripped = false;
-  const fail = () => { tripped = true; throw new RangeError(evalMemoryMessage(limitMb)); };
+  const fail = () => { tripped = true; throw new RangeError(message); };
   return () => {
     if (tripped) fail();
     if (++ticks < CHECK_EVERY) return;
@@ -55,12 +73,29 @@ export function memoryGuard(limitMb: number, probe: HeapProbe): () => void {
 }
 
 /**
+ * The guard of code that runs on behalf of many callers at unknown times (callable-folder module functions): each
+ * synchronous run (up to the next microtask checkpoint) is one bounded run with its own base. Growth spread over
+ * several runs (across awaits) is not summed.
+ */
+export function segmentGuard(limitMb: number, probe: HeapProbe, message = moduleMemoryMessage(limitMb)): () => void {
+  let current: (() => void) | undefined;
+  return () => {
+    if (!current) {
+      current = memoryGuard(limitMb, probe, message);
+      queueMicrotask(() => { current = undefined; });
+    }
+    current();
+  };
+}
+
+/**
  * `source` with a guard call at the top of every loop iteration and of every function body except constructors
  * (their loops are instrumented). Edits are insertions on the lines they belong to, so line numbers do not move.
  * Source that does not parse is returned as it is: compilation reports its errors.
  */
-export function instrumentMemoryChecks(source: string, check = MEMORY_CHECK): string {
-  const file = ts.createSourceFile('natlang-eval.ts', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+export function instrumentMemoryChecks(source: string, check = MEMORY_CHECK, kind: 'ts' | 'js' = 'ts'): string {
+  const file = ts.createSourceFile(kind === 'ts' ? 'natlang-eval.ts' : 'natlang-module.js', source, ts.ScriptTarget.Latest, true,
+    kind === 'ts' ? ts.ScriptKind.TS : ts.ScriptKind.JS);
   if ((file as unknown as { parseDiagnostics?: unknown[] }).parseDiagnostics?.length) return source;
   const call = `${check}();`;
   // [position, order at that position (ends before starts in the text), text]

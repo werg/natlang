@@ -196,3 +196,14 @@ test('memory checks keep eval semantics and line numbers; the bound is a setting
   assert.equal(evalMemoryLimitMb({ NATLANG_EVAL_MEMORY_MB: '512' }), 512);
   assert.throws(() => evalMemoryLimitMb({ NATLANG_EVAL_MEMORY_MB: 'lots' }), /NATLANG_EVAL_MEMORY_MB/);
 });
+
+test('callable-folder module code is bounded per synchronous run', async () => {
+  const environment = new TypeScriptEnvironment({ mode: 'retained', memoryLimitMb: 64 });
+  const module = { exports: {} };
+  environment.evaluateModule('module.exports.grow = function () { const keep = []; for (;;) keep.push({ at: keep.length }); };\n' +
+    'module.exports.sum = n => { let total = 0; for (let i = 0; i < n; i++) total += i; return total; };', { module, exports: module.exports });
+  assert.throws(() => module.exports.grow(), /callable-folder code stopped: its data grew past the 64 MB memory limit of one synchronous run of callable-folder code; use a bounded/);
+  await null;
+  assert.equal(module.exports.sum(1000), 499500);
+  environment.close();
+});
