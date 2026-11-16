@@ -33,7 +33,11 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 sys.path[:0] = [str(REPO / 'training/neuralese'), str(REPO), str(HERE)]
 
+from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file  # noqa: E402
+from natlang_neuralese.common.paths import resolve_str  # noqa: E402
+
 SUCCESS = 'task_success'
+OPS = ('data_nvme', 'lfm3-rl-dgx-20261029', 'ops')
 
 
 def zstd_lines(path):
@@ -67,14 +71,6 @@ class ZstdWriter:
     def close(self):
         self.writer.close()   # ends the frame and closes the file
         os.replace(self.partial, self.path)
-
-
-def sha256_file(path):
-    digest = hashlib.sha256()
-    with open(path, 'rb') as handle:
-        for block in iter(lambda: handle.read(1 << 20), b''):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 # ---- extract ---------------------------------------------------------------------------------------------------------
@@ -839,8 +835,8 @@ def main():
     b.add_argument('--work', required=True)
     b.add_argument('--out', required=True)
     b.add_argument('--tokenizer', required=True)
-    b.add_argument('--held-manifest', default='/home/werg/data/lfm3-rl-dgx-20261029/ops/held-v3/manifest.json')
-    b.add_argument('--base-rates', default='/home/werg/data/lfm3-rl-dgx-20261029/ops/exp1-rft/base-pass-rates.json')
+    b.add_argument('--held-manifest', default=resolve_str(*OPS, 'held-v3', 'manifest.json'))
+    b.add_argument('--base-rates', default=resolve_str(*OPS, 'exp1-rft', 'base-pass-rates.json'))
     b.add_argument('--max-per-task', type=int, default=4,
                    help='episodes of a task the start policy never solves; a task it always solves keeps 1')
     b.add_argument('--max-family-share', type=float, default=0.05)
