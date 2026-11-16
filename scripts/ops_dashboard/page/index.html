@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>natlang ops</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#view">Skip to content</a>
+<header class="top">
+  <div class="brand"><span class="logo" aria-hidden="true"></span><h1>natlang ops</h1></div>
+  <button id="health" class="pill" type="button" aria-live="polite" aria-controls="alerts"><span class="dot"></span><span id="health-text">Connecting…</span></button>
+  <nav id="tabs" class="tabs" role="tablist" aria-label="Sections"></nav>
+  <div class="meta"><span id="updated" class="muted" role="status"></span><button id="theme" class="ghost" type="button" aria-label="Theme">Auto</button></div>
+</header>
+<main id="view" tabindex="-1"></main>
+<footer class="foot"><span id="notices"></span></footer>
+
+<dialog id="ask">
+  <form method="dialog" id="ask-form">
+    <h2 id="ask-title">Ask</h2>
+    <p id="ask-sub" class="muted"></p>
+    <label for="ask-text" id="ask-label">Your message</label>
+    <textarea id="ask-text" rows="4" maxlength="2000" required></textarea>
+    <p id="ask-note" class="muted"></p>
+    <div class="row end">
+      <span id="ask-status" role="status" class="muted"></span>
+      <button type="button" id="ask-cancel" class="btn">Cancel</button>
+      <button type="submit" id="ask-send" class="btn primary">Send</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="assets/components/stream-view.js"></script>
+<script src="assets/components/chart.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>

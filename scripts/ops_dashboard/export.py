@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Live ops dashboard exporter: every 30 s append machine, run, process and event records as JSONL.
+"""Live ops dashboard exporter: every 30 s write the current snapshot (latest.json) and append metric, machine and event JSONL.
 
 Contract: <data_dir>/ops/dashboard/CONTRACT.md (data_dir, floors and the Pop ssh host are in config.json). Stdlib only, Python 3.10+.
 The same file runs on Pop (`ssh POP python3 - --host-json CFG < export.py`) to collect that host's metrics,
@@ -8,7 +8,6 @@ memory ledger and systemd units in one ssh call.
 import argparse
 import fnmatch
 import glob
-import hashlib
 import json
 import math
 import os
@@ -30,9 +29,12 @@ DASH = OPS + '/dashboard'
 FALLOW = os.path.expanduser(CONFIG.get('repo', '')) + '/plans/neuralese/FALLOW_REGISTER.md'
 LEDGER = os.path.expanduser(CONFIG.get('repo', '')) + '/scripts/memory_ledger.py'
 POP_LEDGER = '~/natlang/scripts/memory_ledger.py'     # Pop's checkout, expanded on Pop
-LIMIT = 28000          # bytes per line; the contract's hard limit is 30 KiB
+LIMIT = 28000          # bytes per JSONL line (the collector's default line limit is 32 KiB)
+SNAP_LIMIT = 180000    # latest.json: one retained stream record, at most 192 KiB with its envelope
 KEEP_S = 6 * 3600      # finished/failed units stay listed this long
-SLOW_S = 600           # queue/investigations/alerts/fallow are re-emitted at most this often unless changed
+WINDOW_S = CONFIG.get('runs_window_days', 3) * 86400     # runs untouched for longer are not exported
+MACHINE_EVERY_S = CONFIG.get('machine_history_s', 120) - 5
+TEACHER_POOL = os.path.join(DATA, CONFIG['teacher_pool']) if CONFIG.get('teacher_pool') else None
 FLOORS = CONFIG.get('floors_gb', {})
 DEFAULT_PATTERNS = ['hunt-*', 'grpo-*', 'popsoak-*', 'front-*', 'checkmain-*', 'test-*', 'trlref-*', 'perf-*', 'exp*',
                     'held-*', 'opsdash*', 'ops-dashboard-*', 'probe-*', 'bench-*', 'sft-*', 'natlang-gb10-compactor*']
@@ -46,6 +48,8 @@ ALWAYS = ['reward_mean', 'kl_mean', 'grad_norm', 'grad_norm_vs_median', 'lr', 'l
 ALWAYS_PREFIX = ('behaviour.', 'grad_mass_share.', 'phase_s.', 'gain.')   # nested hunt gain object: always kept
 SKIP_PREFIX = ('meminfo', 'swap', 'learner_swap', 'staleness.', 'decision_diagnostics.worst', 'lowering.')
 FLAGS = ('grad_spike', 'reasoning_shift', 'behaviour_shift')
+SPARK = ('reward_mean', 'kl_mean', 'grad_norm')       # last SPARK_N values of each travel in the snapshot
+SPARK_N = 24
 FALLOW_COLUMNS = {'#': 'id', 'id': 'id', 'piece': 'piece', 'capability': 'piece', 'code now': 'code_now',
                   'built where': 'code_now', 'blocker': 'blocker', 'fix before it returns': 'blocker',
                   'next action': 'next_action'}
@@ -267,6 +271,11 @@ def tail_run(st, path):
     return steps, os.path.getmtime(path)
 
 
+def data_metric(rec, key):
+    flat = flatten(rec)
+    return flat.get(key)
+
+
 def step_records(run, st, steps, mtime, now):
     """Metric records and sentinel events; a step's ts is estimated from the file mtime and elapsed_s."""
     out, events = [], []
@@ -278,7 +287,13 @@ def step_records(run, st, steps, mtime, now):
         st['max_step'] = max(st.get('max_step', 0), int(s['step']))
         st.setdefault('recent', []).append([int(s['step']), el])
         st['recent'] = st['recent'][-6:]
-        data = {'run_id': run, 'group': group, 'kind': run_kind(run, s), 'step': int(s['step']),
+        for k in SPARK:
+            v = data_metric(s, k)
+            if v is not None:
+                st.setdefault('spark', {}).setdefault(k, []).append(v)
+                st['spark'][k] = st['spark'][k][-SPARK_N:]
+        st['kind'] = run_kind(run, s)
+        data = {'run_id': run, 'group': group, 'kind': st['kind'], 'step': int(s['step']),
                 'wall_s': el if isinstance(el, (int, float)) else None, 'metrics': select_metrics(s)}
         out.append({'ts': ms(ts), 'type': 'train', 'data': data})
         flags = [f for f in FLAGS if s.get(f)]
@@ -311,6 +326,11 @@ def held_record(run, path):
 def scan_runs(ops, state, now):
     metrics, events = [], []
     for run, d in discover_runs(ops):
+        try:
+            if now - os.path.getmtime(d + '/train.jsonl') > WINDOW_S and run not in state.get('runs', {}):
+                continue        # an old run never exported stays out; one already followed keeps going
+        except OSError:
+            continue
         st = state.setdefault('runs', {}).setdefault(run, {})
         steps, mtime = tail_run(st, d + '/train.jsonl')
         if steps:
@@ -329,6 +349,7 @@ def scan_runs(ops, state, now):
             h = held_record(run, p)
             if not h:
                 continue
+            state.setdefault('held_rec', {})[key] = h
             ts = ms(os.path.getmtime(p))
             metrics.append({'ts': ts, 'type': 'held', 'data': h})
             if not fresh or now - ts / 1000 < 24 * 3600:
@@ -336,6 +357,93 @@ def scan_runs(ops, state, now):
                     'kind': 'held', 'level': 'info', 'run_id': run, 'step': h['step'],
                     'text': f'Held {h["held_dir"]} on {run}: {h["delta_pts"]:+.1f} pts (p={h["p"]}), {h["ran"]}/{h["of"]} ran'}})
     return metrics, events
+
+
+def runs_summary(state, active_runs, now):
+    """One row per followed run: step count, last activity, headline sparklines, latest held comparison."""
+    rows = []
+    held = state.get('held_rec', {})
+    for run, st in state.get('runs', {}).items():
+        if 'max_step' not in st:
+            continue
+        mine = sorted((h for k, h in held.items() if h['run_id'] == run), key=lambda h: h.get('step') or 0)
+        rows.append({'id': run, 'group': run.rsplit('.', 1)[0] if '.' in run else run, 'kind': st.get('kind'), 'steps': st['max_step'],
+                     'last_ts': ms(st['mtime']) if st.get('mtime') else None, 'active': run in active_runs,
+                     'spark': st.get('spark', {}), 'held': mine})
+    rows.sort(key=lambda r: (not r['active'], -(r['last_ts'] or 0)))
+    return rows
+
+
+# ---------- teacher generation ----------
+
+_JSONL_CACHE = {}
+
+
+def read_jsonl_cached(path):
+    """Rows of a JSONL file that only grows; re-read when its size or mtime changes."""
+    try:
+        sig = (os.path.getsize(path), os.path.getmtime(path))
+    except OSError:
+        return []
+    hit = _JSONL_CACHE.get(path)
+    if not hit or hit[0] != sig:
+        rows = []
+        for line in open(path, errors='replace'):
+            try:
+                rows.append(json.loads(line))
+            except ValueError:
+                pass
+        hit = _JSONL_CACHE[path] = (sig, rows)
+    return hit[1]
+
+
+def teacher_summary(pool, state, now):
+    """Teacher-generation progress: per teacher outcome counts, deferred (retry) rows, family coverage, a success history."""
+    if not pool:
+        return None
+    rows = read_jsonl_cached(pool + '/manifest.jsonl')
+    deferred = read_jsonl_cached(pool + '/deferred.jsonl')
+    pool_info = read_json(pool + '/pool.json', {})
+    per, fam = {}, {}
+    for r in rows:
+        t = per.setdefault(r['teacher']['model_id'], {'id': r['teacher']['model_id'], 'tasks': 0, 'episodes': 0, 'success': 0, 'outcomes': {},
+                                                        'seconds': 0.0, 'tokens': 0, 'deferred': {}})
+        t['tasks'] += 1
+        t['seconds'] += r.get('seconds') or 0
+        won = False
+        for e in r.get('episodes', []):
+            t['episodes'] += 1
+            t['outcomes'][e['outcome']] = t['outcomes'].get(e['outcome'], 0) + 1
+            t['tokens'] += e.get('completion_tokens') or 0
+            won |= e['outcome'] == 'task_success'
+        t['success'] += sum(e['outcome'] == 'task_success' for e in r.get('episodes', []))
+        f = fam.setdefault(r.get('family') or '?', {'family': r.get('family') or '?', 'tasks': 0, 'success': 0})
+        f['tasks'] += 1
+        f['success'] += won
+    for r in deferred:
+        t = per.setdefault(r['teacher']['model_id'], {'id': r['teacher']['model_id'], 'tasks': 0, 'episodes': 0, 'success': 0, 'outcomes': {},
+                                                        'seconds': 0.0, 'tokens': 0, 'deferred': {}})
+        o = (r.get('episodes') or [{}])[0].get('outcome', 'unknown')
+        t['deferred'][o] = t['deferred'].get(o, 0) + 1
+    for t in per.values():
+        t['success_rate'] = round(t['success'] / t['episodes'], 3) if t['episodes'] else None
+        t['seconds_mean'] = round(t['seconds'] / t['tasks'], 1) if t['tasks'] else None
+        t['tokens_mean'] = round(t['tokens'] / t['episodes']) if t['episodes'] else None
+        del t['seconds'], t['tokens']
+    total_ok = sum(t['success'] for t in per.values())
+    done = len({r['task_id'] for r in rows})
+    hist = state.setdefault('teacher_hist', [])
+    if not hist or hist[-1][1:] != [done, total_ok]:
+        hist.append([ms(now), done, total_ok])
+        del hist[:-300]
+    hour = [h for h in hist if h[0] >= ms(now) - 3600_000]
+    per_hour = (hist[-1][2] - (hour[0][2] if len(hour) > 1 else hist[-1][2])) if hist else 0
+    mt = max([os.path.getmtime(f) for f in (pool + '/manifest.jsonl', pool + '/deferred.jsonl') if os.path.exists(f)] or [0])
+    return {'pool': os.path.basename(pool), 'eligible': pool_info.get('eligible'), 'tasks_done': done, 'success': total_ok,
+            'deferred': len(deferred), 'success_last_hour': per_hour, 'last_activity_ts': ms(mt),
+            'teachers': sorted(per.values(), key=lambda t: -t['success']),
+            'families': sorted(fam.values(), key=lambda f: (-f['success'], -f['tasks']))[:12], 'families_total': len(fam),
+            'families_with_success': sum(1 for f in fam.values() if f['success']), 'history': hist[-120:]}
 
 
 # ---------- fallow register ----------
@@ -472,7 +580,7 @@ def update_units(state, machine, data, now, ann):
             state['cpu'][key] = [u['cpu_ns'], now]
         store[key] = rec
         if status == 'failed' and rec.get('ended') and now - rec['ended'] < 3600:
-            alerts.append({'level': 'warn', 'machine': machine,
+            alerts.append({'level': 'warn', 'machine': machine, 'unit': name,
                            'text': f'{name} failed {int((now - rec["ended"]) / 60)} min ago ({rec["result"] or "failed"})'})
     for key in [k for k, r in store.items() if r['machine'] == machine and r['state'] != 'running' and now - (r.get('ended') or 0) > KEEP_S]:
         del store[key]
@@ -552,37 +660,22 @@ def build_queue(ann, ledgers, hunt, active_units):
 
 
 def build_alerts(machines, ledgers, unit_alerts, errors):
-    alerts = list(unit_alerts) + [{'level': 'warn', 'machine': None, 'text': e} for e in errors]
+    """Alerts with a stable `id` (the page acknowledges by id); `crit` when a floor is already crossed."""
+    alerts = [{**a, 'id': f'unit:{a["machine"]}:{a["unit"]}'} for a in unit_alerts]
+    alerts += [{'id': f'error:{i}', 'level': 'warn', 'machine': None, 'text': e} for i, e in enumerate(errors)]
     for machine, host in machines.items():
         for d in host['disks']:
             floor = (FLOORS.get(machine) or {}).get(d['mount'])
             if floor is not None and d['free_gb'] < floor + 20:
-                alerts.append({'level': 'crit' if d['free_gb'] < floor else 'warn', 'machine': machine,
+                alerts.append({'id': f'disk:{machine}:{d["mount"]}', 'level': 'crit' if d['free_gb'] < floor else 'warn', 'machine': machine,
                                'text': f'{d["mount"]} has {d["free_gb"]} GB free (floor {floor} GB)'})
         head = (ledgers.get(machine) or {}).get('headroom_gb')
         if machine == 'dgx' and head is not None and head < 15:   # AGENTS.md: the DGX keeps 15 GB for probes
-            alerts.append({'level': 'warn', 'machine': machine, 'text': f'memory ledger headroom {head} GB (< 15 GB)'})
+            alerts.append({'id': f'ledger:{machine}', 'level': 'warn', 'machine': machine, 'text': f'memory ledger headroom {head} GB (< 15 GB)'})
     return alerts
 
 
 # ---------- output ----------
-
-def shrink(item):
-    return {k: clip(v, 200) if isinstance(v, str) else v for k, v in item.items()}
-
-
-def snapshot_records(type_, items, ts, cap=None):
-    """Lines for one snapshot type: items split over parts so every line stays under LIMIT."""
-    items = items[:cap] if cap else items
-    chunks, cur = [], []
-    for it in items:
-        if line_size({'ts': ts, 'type': type_, 'data': {'items': cur + [it], 'part': 99, 'parts': 99}}) > LIMIT and cur:
-            chunks.append(cur)
-            cur = []
-        cur.append(it if line_size({'ts': ts, 'type': type_, 'data': {'items': [it]}}) < LIMIT else shrink(it))
-    chunks.append(cur)
-    return [{'ts': ts, 'type': type_, 'data': {'items': c, 'part': i + 1, 'parts': len(chunks)}} for i, c in enumerate(chunks)]
-
 
 def append_lines(out, name, recs):
     if recs:
@@ -591,16 +684,8 @@ def append_lines(out, name, recs):
             f.flush()
 
 
-def slow_due(state, key, payload, now, force=False):
-    h = hashlib.sha1(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()
-    last = state.setdefault('slow', {}).get(key)
-    if force or not last or last[0] != h or now - last[1] >= SLOW_S:
-        state['slow'][key] = [h, now]
-        return True
-    return False
-
-
 def machine_record(machine, d, now):
+    """History row (ops.machines): compact, one per machine every MACHINE_EVERY_S."""
     ledger = d.get('ledger') or {}
     disks = [{**k, 'floor_gb': (FLOORS.get(machine) or {}).get(k['mount'])} for k in d['host']['disks']]
     host = {k: v for k, v in d['host'].items() if k != 'disks'}
@@ -608,6 +693,37 @@ def machine_record(machine, d, now):
         'machine': machine, **host,
         'ledger': {'available_gb': ledger.get('available_gb'), 'headroom_gb': ledger.get('headroom_gb'),
                    'claims': len(ledger.get('claims', {})), 'waiting': len(ledger.get('waiting', []))}, 'disks': disks}}
+
+
+def machine_now(machine, d, now):
+    """Current state of a machine for the snapshot: the history row plus the ledger's claims."""
+    rec = machine_record(machine, d, now)['data']
+    claims = (d.get('ledger') or {}).get('claims', {})
+    rec['ledger']['claim_list'] = sorted(
+        ({'unit': u, 'class': c.get('class'), 'priority': c.get('priority'), 'budget_gb': c.get('budget_gb'), 'used_gb': c.get('used_gb'),
+          'peak_gb': c.get('peak_gb'), 'gpu': bool(c.get('gpu'))} for u, c in claims.items()), key=lambda c: -(c['used_gb'] or 0))
+    return rec
+
+
+def snapshot_record(snap):
+    """latest.json line: shrink the bulkiest parts until the record fits one retained stream record."""
+    rec = {'ts': snap['ts'], 'type': 'snapshot', 'data': snap}
+    steps = [lambda: snap.update(teachers={**snap['teachers'], 'history': snap['teachers']['history'][-40:]}) if snap.get('teachers') else None,
+             lambda: snap.update(fallow=[{k: v for k, v in r.items() if k != 'fields'} for r in snap['fallow']]),
+             lambda: snap.update(processes=[p for p in snap['processes'] if p['state'] == 'running'] + [p for p in snap['processes'] if p['state'] != 'running'][:15]),
+             lambda: snap.update(processes=[{**p, 'description': clip(p['description'], 100), 'rationale': ''} for p in snap['processes']]),
+             lambda: snap.update(fallow=snap['fallow'][:40])]
+    for step in steps:
+        if line_size(rec) <= SNAP_LIMIT:
+            break
+        step()
+    return rec
+
+
+def write_atomic(path, text):
+    with open(path + '.tmp', 'w') as f:
+        f.write(text)
+    os.replace(path + '.tmp', path)
 
 
 def cycle(out, ops, ann_path, state, once=False, use_pop=True):
@@ -644,30 +760,31 @@ def cycle(out, ops, ann_path, state, once=False, use_pop=True):
     items.sort(key=lambda x: (order[x['state']], -(x['started_ts'] or 0)))
     ledgers = {m: d.get('ledger') for m, d in hosts.items()}
     active = {i['unit'] for i in items if i['state'] == 'running'}
-    ts = ms(now)
-    snap = snapshot_records('processes', items, ts, cap=60)
     queue = build_queue(ann, ledgers, ops + '/grpo-v2/hunt', active)
     invs = [{**i, 'updated_ts': ms(os.path.getmtime(ann_path))} for i in ann.get('investigations', [])] if os.path.exists(ann_path) else []
     alerts = build_alerts({m: d['host'] for m, d in hosts.items()}, ledgers, unit_alerts, errors)
-    for type_, payload, cap in (('queue', queue, None), ('investigations', invs, None), ('alerts', alerts, None)):
-        if slow_due(state, type_, payload, now, once):
-            snap += snapshot_records(type_, payload, ts, cap)
     try:
-        mt = os.path.getmtime(FALLOW)
-        if slow_due(state, 'fallow', mt, now, once):
-            snap += snapshot_records('fallow', parse_fallow(open(FALLOW).read()), ts, cap=80)
+        fallow = parse_fallow(open(FALLOW).read())[:80]
     except OSError:
-        pass
+        fallow = []
+    try:
+        teachers = teacher_summary(TEACHER_POOL, state, now)
+    except Exception as e:
+        teachers = None
+        errors.append(f'exporter: teacher summary failed: {clip(e, 120)}')
+    snap = {'v': 2, 'ts': ms(now), 'machines': {m: machine_now(m, d, now) for m, d in hosts.items()}, 'processes': items[:60],
+            'queue': queue, 'investigations': invs, 'fallow': fallow, 'alerts': alerts, 'teachers': teachers,
+            'runs': runs_summary(state, {i['run'] for i in items if i['state'] == 'running' and i['run']}, now)}
     mach = []
     for m, d in hosts.items():
-        if once or now - state.setdefault('machine_ts', {}).get(m, 0) >= 55:
+        if once or now - state.setdefault('machine_ts', {}).get(m, 0) >= MACHINE_EVERY_S:
             state.setdefault('machine_ts', {})[m] = now
             mach.append(machine_record(m, d, now))
+    write_atomic(os.path.join(out, 'latest.json'), json.dumps(snapshot_record(snap), ensure_ascii=False, separators=(',', ':')) + '\n')
     append_lines(out, 'metrics.jsonl', metrics)
     append_lines(out, 'machines.jsonl', mach)
-    append_lines(out, 'snapshot.jsonl', snap)
     append_lines(out, 'events.jsonl', sorted(events, key=lambda r: r['ts']))
-    return {'metrics': len(metrics), 'machines': len(mach), 'snapshot': len(snap), 'events': len(events), 'errors': errors}
+    return {'metrics': len(metrics), 'machines': len(mach), 'processes': len(items), 'events': len(events), 'errors': errors}
 
 
 def load_state(path):

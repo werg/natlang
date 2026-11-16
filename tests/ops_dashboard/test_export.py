@@ -117,16 +117,53 @@ def test_parse_fallow():
     assert rows[2]['fields'] == {'Status': 'Qualified', 'Impact': 'H'}
 
 
-def test_snapshot_split_and_size_limit():
-    items = [{'unit': f'u{i}', 'description': 'x' * 400, 'rationale': 'y' * 400} for i in range(200)]
-    recs = export.snapshot_records('processes', items, 1, cap=None)
-    assert len(recs) > 1 and all(r['data']['parts'] == len(recs) for r in recs)
-    assert [r['data']['part'] for r in recs] == list(range(1, len(recs) + 1))
-    assert all(export.line_size(r) < 30 * 1024 for r in recs)
-    assert sum(len(r['data']['items']) for r in recs) == 200
-    assert sum(len(r['data']['items']) for r in export.snapshot_records('processes', items, 1, cap=60)) == 60
-    huge = [{'description': 'z' * 50000}]
-    assert all(export.line_size(r) < 30 * 1024 for r in export.snapshot_records('processes', huge, 1))
+def test_snapshot_record_fits_one_stream_record():
+    snap = {'ts': 1, 'machines': {}, 'queue': [], 'investigations': [], 'alerts': [], 'runs': [],
+            'processes': [{'unit': f'u{i}', 'state': 'running' if i < 5 else 'finished', 'description': 'x' * 400, 'rationale': 'y' * 400}
+                          for i in range(400)],
+            'fallow': [{'id': f'F{i}', 'piece': 'p' * 300, 'fields': {'a': 'b' * 200}} for i in range(80)],
+            'teachers': {'history': [[i, i, i] for i in range(300)]}}
+    rec = export.snapshot_record(snap)
+    assert export.line_size(rec) <= export.SNAP_LIMIT and rec['type'] == 'snapshot'
+    assert sum(p['state'] == 'running' for p in rec['data']['processes']) == 5          # running units survive the shrink
+    small = {'ts': 1, 'processes': [{'unit': 'a', 'state': 'running', 'description': 'd', 'rationale': 'r'}], 'fallow': [], 'teachers': None}
+    assert export.snapshot_record(small)['data']['processes'][0]['rationale'] == 'r'    # nothing is cut when it already fits
+
+
+def test_teacher_summary(tmp_path):
+    pool = tmp_path / 'pool'
+    pool.mkdir()
+    ep = lambda o, tok=100: {'sample': 0, 'outcome': o, 'completion_tokens': tok}
+    row = lambda i, model, outcomes, fam='f1': {'index': i, 'task_id': f't{i}', 'family': fam, 'teacher': {'model_id': model},
+                                                 'seconds': 10.0, 'episodes': [ep(o) for o in outcomes]}
+    write_lines(pool / 'manifest.jsonl', [row(1, 'm/a', ['task_success']), row(2, 'm/a', ['semantic_mismatch'], 'f2'),
+                                          row(3, 'm/b', ['budget_exhaustion', 'task_success'])])
+    write_lines(pool / 'deferred.jsonl', [{**row(4, 'm/a', ['unresolved']), 'attempt': 1}])
+    (pool / 'pool.json').write_text(json.dumps({'eligible': 100}))
+    state = {}
+    t = export.teacher_summary(str(pool), state, 1000.0)
+    assert (t['eligible'], t['tasks_done'], t['success'], t['deferred']) == (100, 3, 2, 1)
+    a = next(x for x in t['teachers'] if x['id'] == 'm/a')
+    assert (a['tasks'], a['episodes'], a['success'], a['success_rate'], a['deferred']) == (2, 2, 1, 0.5, {'unresolved': 1})
+    assert t['families_total'] == 2 and t['families_with_success'] == 1 and t['history'][-1][1:] == [3, 2]
+    export.teacher_summary(str(pool), state, 1001.0)
+    assert len(state['teacher_hist']) == 1                                               # unchanged counts add no history point
+    assert export.teacher_summary(None, state, 0) is None
+
+
+def test_runs_window_and_summary(tmp_path):
+    ops = tmp_path / 'ops'
+    old = ops / 'old' / 'train.jsonl'
+    write_lines(old, [STEP])
+    write_lines(ops / 'grpo-v3' / 'run1' / 'train.jsonl', [STEP, {**STEP, 'step': 3, 'reward_mean': 0.7}])
+    now = os.path.getmtime(old) + export.WINDOW_S + 10
+    os.utime(ops / 'grpo-v3' / 'run1' / 'train.jsonl', (now, now))
+    state = {}
+    m, _ = export.scan_runs(str(ops), state, now)
+    assert {r['data']['run_id'] for r in m} == {'grpo-v3.run1'}                          # the stale run was never exported
+    rows = export.runs_summary(state, {'grpo-v3.run1'}, now)
+    assert rows[0]['id'] == 'grpo-v3.run1' and rows[0]['steps'] == 3 and rows[0]['active'] and rows[0]['kind'] == 'grpo'
+    assert rows[0]['spark']['reward_mean'] == [0.5, 0.7]
 
 
 def test_progress_and_helpers():
@@ -157,7 +194,7 @@ def test_unit_lifecycle_and_alerts(tmp_path):
     # the unit fails
     data['units']['hunt-a.service'] = {**unit, 'active': 'failed', 'result': 'timeout', 'end': now}
     items, events, alerts = export.update_units(state, 'dgx', data, now + 30, ann)
-    assert items[0]['state'] == 'failed' and events[0]['data']['kind'] == 'unit_failed' and alerts[0]['level'] == 'warn'
+    assert items[0]['state'] == 'failed' and events[0]['data']['kind'] == 'unit_failed' and alerts[0]['level'] == 'warn' and alerts[0]['unit'] == 'hunt-a.service'
     # it disappears much later: dropped after 6 h
     items, events, alerts = export.update_units(state, 'dgx', {'units': {}, 'ledger': None, 'journal': {}}, now + 7 * 3600, ann)
     assert items == [] and state['units'] == {}
@@ -174,6 +211,7 @@ def test_alerts_disk_and_ledger(monkeypatch):
     assert ('crit', '/big has 40 GB free (floor 50 GB)') in texts
     assert any('headroom 9.0' in t for _, t in texts) and any('Pop unreachable' in t for _, t in texts)
     assert not any(a['machine'] == 'pop' for a in alerts)                        # Pop's / has no floor
+    assert {a['id'] for a in alerts} >= {'disk:dgx:/', 'disk:dgx:/big', 'ledger:dgx', 'error:0'}
 
 
 def test_queue_from_annotations_and_bench_queue(tmp_path):
