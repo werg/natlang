@@ -183,6 +183,9 @@ if __name__ == '__main__':
         # FlashInfer JIT-compiles kernels: the fork venv's ninja and the CUDA toolkit's nvcc on PATH.
         cuda = os.environ.get('CUDA_HOME', '/usr/local/cuda')
         path = os.pathsep.join([str(Path(python).parent), cuda + '/bin', os.environ.get('PATH', '')])
+        # The fork's native projection imports natlang_neuralese (model.shared_state), as serve_native_checkpoint.py's
+        # backend path has it.
+        root = Path(__file__).resolve().parents[2]
         subprocess.run([python, __file__, '--phase', 'sglang', '--engine-out', a.engine_out, *argv], check=True,
-                       env={**os.environ, 'PYTHONPATH': '', 'PATH': path, 'CUDA_HOME': cuda})
+                       env={**os.environ, 'PYTHONPATH': str(root / 'training/neuralese'), 'PATH': path, 'CUDA_HOME': cuda})
     sys.exit(1 if hf_phase(a)['failures'] else 0)

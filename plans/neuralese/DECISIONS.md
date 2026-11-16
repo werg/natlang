@@ -2526,3 +2526,26 @@ gain" at the 48 h limit. Amended: the run's verdict is one 4-sample Pop held eva
 significantly worse. The 2-sample intermediate evals continue back to back (Pop would otherwise idle) as the regression
 guard only: one below -3.5 pts with p < 0.05 still stops the run. At the 48 h training limit (about 2026-11-18 00:00)
 the run stops, the running intermediate eval is preempted, and the final eval starts. The training treatment is unchanged.
+
+**2026-11-17 00:30, next-pin prep: fork merged, launchers ready (supervisor's prep agent).** The fork branch `natlang`
+already held `natlang-path-handoff` (b6b2319c7). `natlang-conv-bounded` (dbc51ddb72) was one commit on top of it, so
+`natlang` was fast-forwarded to dbc51ddb72 and pushed. The merge ran in a separate clone; the live DGX and Pop
+checkouts stay at 1839b5071, run1's engine. `training/neuralese/sglang-fork.json` now names dbc51ddb72.
+
+Fork tests against dbc51ddb72 on the DGX (sm121, ledgered, from the clone): 39/39, including the bitwise row-block conv
+test. Producer parity did not run, because its SGLang phase takes ~36 GB and ~9 GB was free beside run1-r1. It is a
+launch step, as is the Pop sm89 conv test.
+
+Defect fixed: the fork imports `natlang_neuralese` (capture files, native projection), but
+`check_sglang_producer_parity.py` and `check_sglang_lfm3_parity.py` started their SGLang phase with PYTHONPATH `''`.
+Both now put `training/neuralese` first, as `serve_native_checkpoint.py` does. Every other SGLang launcher already did
+(hybrid-SWA check, `sglang_bench`, adapter and decide parity through `launch_sglang`, `pop_actor_driver`).
+
+Launch prep is in `ops/grpo-v4/` under the data root: PREP.md with the steps, `fork-checks.sh`, `launch-sft.sh` with
+`sft_preflight.py`, `launch-grpo.sh` and `pop-held.sh`. The SFT launcher checks the chains' and checkpoint's sha256,
+the task ids against held-v3/v2 exclusion, size and wall time before the unit starts. SFT and grpo-v4-run1 share one
+pin, so one 4-sample Pop base re-measure pairs with both. The draft SFT decision entry is in PREP.md.
+
+GRPO sizing from run1-r1's measured peak of 107.4 GiB: minus the learner host fix (4.4), the front leak (~4.2) and 4
+fewer slots gives ~97 GiB. Budget 97, slots 28, LPS 4. Open point for the run1 verdict: run1's Pop base
+(`held/step-00000-pop`) has 2 samples per task, not 4.

@@ -434,7 +434,10 @@ if __name__ == '__main__':
         python = fork['python']
         cuda = os.environ.get('CUDA_HOME', '/usr/local/cuda')
         path = os.pathsep.join([str(Path(python).parent), cuda + '/bin', os.environ.get('PATH', '')])
+        # The fork imports natlang_neuralese (capture files: serve.store; native projection: model.shared_state), as
+        # serve_native_checkpoint.py's backend path has it: natlang first, then the fork worktree under test.
+        pythonpath = os.pathsep.join(filter(None, [str(ROOT / 'training/neuralese'), a.sglang_pythonpath]))
         subprocess.run([python, __file__, '--phase', 'sglang', '--work', a.work, *argv], check=True,
-                       env={**os.environ, 'PYTHONPATH': a.sglang_pythonpath, 'PATH': path, 'CUDA_HOME': cuda})
+                       env={**os.environ, 'PYTHONPATH': pythonpath, 'PATH': path, 'CUDA_HOME': cuda})
     if a.phase in ('all', 'reference'):
         sys.exit(1 if reference_phase(a)['failures'] else 0)
