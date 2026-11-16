@@ -2466,3 +2466,13 @@ sentinel; LR 1.2e-6 at step 4). The learner's CUDA peak is flat at ~48 GB reserv
 leaves ~13-14 GB headroom during collection: below the 15 GB rule until the next resume, where the fix is
 `--learner-phase-slots` 8 -> 4 or fewer collection slots (sizing, not treatment). Step-1 held result stays an A/A
 (f2b1bba85); next held compare reads step 3 or 4.
+
+**2026-11-16 13:40, grpo-v3-run1 stopped by the memory guard and resumed (supervisor).** Held step 3 (Pop, 2 samples)
+vs base: +1.2 pts (0.475 -> 0.486), p 0.61, CI [-2.9, 5.1], tasks up/down 44/42: neutral, as expected at LR 9e-7.
+At 12:57, in step 5's learner phase, the guard stopped the unit "over budget under memory pressure" at 105.8 GB
+(1.15 x 92). Cause: the actor front (`serve_native_checkpoint.py`) leaks host memory, 4.6 GB RSS at 00:00 -> 12.4 GB at
+12:30 (~0.8 GB/h, anon), on top of the learner's flat ~48 GB peak; 8 GB of stale /dev/shm hunt weights (killed units
+skip atexit) had also been holding RAM until removed at 12:45 (fix 9bc8fcb7f: owner.pid sweep, next pin). Resumed from
+state-step-00004 as `grpo-v3-run1-r1` (same pin and treatment; sizing only: `--learner-phase-slots 4`, ledger budget 98
+GB). Step 5 is recollected from the step-4 policy. The front leak is a correctness-of-operations bug to fix before the
+next pin (the earlier arena cap / byte bound did not stop it); until then a resume every ~10 h restarts the front.
