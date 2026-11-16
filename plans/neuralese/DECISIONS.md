@@ -2549,3 +2549,9 @@ pin, so one 4-sample Pop base re-measure pairs with both. The draft SFT decision
 GRPO sizing from run1-r1's measured peak of 107.4 GiB: minus the learner host fix (4.4), the front leak (~4.2) and 4
 fewer slots gives ~97 GiB. Budget 97, slots 28, LPS 4. Open point for the run1 verdict: run1's Pop base
 (`held/step-00000-pop`) has 2 samples per task, not 4.
+
+**2026-11-17 00:40, correction to the 23:30 amendment (supervisor).** run1's Pop base (`held/step-00000-pop`) has 2
+samples per task, not 4 (the amendment misstated it). At the stop, Pop first extends the base to 4 samples (sample-major
+`held_eval measure` resumed with `--samples 4` on the same directory and engine, about 4.5 h), then measures the final
+checkpoint at 4; the verdict pairs 4 vs 4 (SE about 30% below 2 vs 2). The extra Pop time is accepted: the verdict is
+the decision this run exists for.
