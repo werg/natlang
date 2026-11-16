@@ -2501,3 +2501,12 @@ wllama) already bounded; training autograd paths K-fold by design. Pop SGLang me
 -> ~280k tokens, ~0.23 GB more headroom; pool size only). At the pin: merge dbc51ddb72 into the fork's `natlang`, update
 `training/neuralese/sglang-fork.json`, run the fork's bitwise conv test on Pop (sm89, unverified) and
 `check_sglang_producer_parity.py`, re-measure the start policy on Pop's new engine config.
+
+**2026-11-16 17:30, next-pin queue: host memory of the learner and the shared HTTP server (supervisor).** Inventory of
+the torch-mimalloc per-thread-heap mechanism (front fixed in c62f8659c) across the stack: one more affected component,
+`serve/http.py` (ThreadingHTTPServer keep-alive connection threads allocate native-state tensors; used by the front and
+the Python native engine): each request now runs on a thread that ends with it. The learner's 10.4 -> 17 GB host growth
+in grpo-v3-run1 is a different cause: `ReferenceWeights` slices of one mapping of the 3.4 GB KL-reference file became
+private pages on GPU copy and stayed alive through a loop variable (+3.4 GB), and safetensors' pinned CUDA staging cache
+after a resume (+1.0 GB). Fixed in 12509988a (per-tensor reads, cache emptied in `release_host_memory` and after
+resume); targeted suites 69/69. Enter at the next pin with the front, conv and handoff changes.
