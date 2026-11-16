@@ -29,7 +29,7 @@ import time
 import uuid
 import urllib.error
 import urllib.request
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import Future
 
 import numpy as np
 
@@ -80,7 +80,6 @@ class SglangEngine(Engine):
     native identity) the first time a native turn or endpoint needs it."""
 
     sglang_url: str = ''
-    sglang_workers: int = 512
 
     @property
     def shared_model(self):
@@ -155,10 +154,10 @@ class SglangEngine(Engine):
             self.__dict__['_native_training_state'] = _state.get('training') or _state.get('shared_training') or {}
             self.native_reloads = getattr(self, 'native_reloads', 0) + 1
 
-    def bind_sglang(self, url, *, export_manifest, fork, workers=512, adapter_slots=0, adapter_rank=32,
+    def bind_sglang(self, url, *, export_manifest, fork, adapter_slots=0, adapter_rank=32,
                     projection='native', overlap_schedule=False, kv_cache_dtype='auto', kv_layout='full',
                     warm_openings=None, track_input_end=False):
-        self.sglang_url, self.sglang_workers = url.rstrip('/'), workers
+        self.sglang_url = url.rstrip('/')
         # Native adapters on SGLang (fork NatlangAdapters): `adapter_slots` resident stacks of summed rank
         # <= `adapter_rank` per module; the front assigns slots and never reassigns one while a request uses it.
         self.sglang_adapter_slots, self.sglang_adapter_rank = int(adapter_slots), int(adapter_rank)
@@ -324,15 +323,37 @@ class SglangEngine(Engine):
         return self._measure_native_endpoint('init_body', lambda: super(SglangEngine, self).native_init_body(
             messages, tools, placeholder, text, **kwargs))
 
-    def start(self):
-        super().start()
-        self._pool = ThreadPoolExecutor(max_workers=self.sglang_workers, thread_name_prefix='sglang-actor')
+    # Each SGLang-served request runs on its own thread, which ends with the request (`_spawn`), never on a long-lived
+    # pool. torch's CPU allocator on aarch64 is mimalloc (linked into libc10), whose heaps are per thread: an idle thread
+    # keeps the pages of the tensors it allocated (native-state imports, produce-span captures) until it allocates again,
+    # including those another thread freed (the store's LRU evicts blocks on other threads). The 512-worker pool had
+    # ~180 workers for 32 open connections half an hour into grpo-v3-run1-r1 (work spreads over every idle worker), and
+    # 85% of the front's host growth was torch's arena (front RSS +0.8 GB/h, 2026-11-16). A thread that exits hands its
+    # heap back: 128 round-robin workers kept > 3.7 GB for a 0.25 GB tensor LRU, a thread per task 0.7 GB.
+    @staticmethod
+    def _spawn(work, name='sglang-actor'):
+        thread = threading.Thread(target=work, name=name, daemon=True)
+        thread.start()
+        return thread
 
-    def stop(self):
-        pool = getattr(self, '_pool', None)
-        if pool is not None:
-            pool.shutdown(wait=False, cancel_futures=True)
-        super().stop()
+    @classmethod
+    def _map_threads(cls, function, items):
+        """`[function(item) for item in items]`, each on its own short-lived thread (`_spawn`)."""
+        results, errors = [None] * len(items), [None] * len(items)
+
+        def run(index, item):
+            try:
+                results[index] = function(item)
+            except BaseException as error:  # re-raised on the caller's thread, as Executor.map does
+                errors[index] = error
+        threads = [cls._spawn(lambda index=index, item=item: run(index, item), 'sglang-actor-map')
+                   for index, item in enumerate(items)]
+        for thread in threads:
+            thread.join()
+        for error in errors:
+            if error is not None:
+                raise error
+        return results
 
     @staticmethod
     def sglang_unsupported(request, plan):
@@ -474,7 +495,7 @@ class SglangEngine(Engine):
                 future.set_result(self._sglang_run(sequence))
             except Exception as error:
                 future.set_exception(error)
-        self._pool.submit(run)
+        self._spawn(run)
         return future
 
     def generate(self, request):
@@ -924,7 +945,7 @@ class SglangEngine(Engine):
                 raise RequestError('sglang-actor-backend', 'SGLang returned the wrong number of continuation logprobs')
             return float(sum(logps)), len(continuation)
         # The first option puts the shared prompt into the radix cache; the others then score from it in parallel.
-        results = [score(continuations[0]), *self._pool.map(score, continuations[1:])] if continuations else []
+        results = [score(continuations[0]), *self._map_threads(score, continuations[1:])] if continuations else []
         with self._sglang_lock:
             self.sglang_requests += 1
         return decision_response(item, seq, continuations, results)

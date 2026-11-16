@@ -1026,6 +1026,18 @@ ran 16-38 slots, 30 running sequences, pool 93% full with queued requests, 8-14 
 - Collector slots >= 64 per DGX actor; measure with `held_eval measure`. A slot costs ~250 MB of host memory in its own
   node + python processes; episodes share node processes, 8 each, by default (`cli.js --serve`; `NATLANG_COLLECTOR_SHARED=0` opts out).
   Details and numbers: `plans/neuralese/ACTOR_THROUGHPUT_20261112.md`.
+- Front host memory (2026-11-15/16). Three growths of `serve_native_checkpoint.py`'s front, each bounded in turn: the
+  block store keeps a 2 GiB resident LRU (c06a50581); glibc arenas are capped and trimmed every minute and the
+  append-only token history is byte-bounded (ef5e09be7, 3d3f00c45); and torch's CPU tensors no longer pile up in idle
+  threads. torch on aarch64 allocates CPU tensors with mimalloc (static in libc10; its arena is the 1-2 GiB
+  `MAP_NORESERVE` + `MADV_HUGEPAGE` mapping in `/proc/PID/smaps`), whose heaps are per thread: an idle thread keeps
+  the pages of tensors it allocated, including those freed by other threads, until it allocates again. The front ran
+  SGLang requests on a 512-worker `ThreadPoolExecutor` that spreads work over every idle worker: grpo-v3-run1 front
+  4.6 -> 12.4 GB in 12.5 h (~0.8 GB/h); in r1, ~180 workers for 32 connections after 30 min with 85% of anon growth in
+  torch's arena. Synthetic: 128 round-robin workers > 3.7 GB (killed at 4 GB) for a 0.25 GB tensor LRU, a thread per
+  task flat at 0.7 GB, glibc/numpy allocations with 128 workers flat at 2 GB. Each request now runs on its own
+  thread that ends with it (`SglangEngine._spawn`; score fan-out `_map_threads`). `MIMALLOC_PURGE_DELAY=0` does not
+  help. Any long-lived thread pool that allocates torch CPU tensors has this growth.
 
 ### HF-path fine-tuning speed: elementwise and dense sliding attention, not matmul (engineering, 2026-11-12)
 

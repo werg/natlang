@@ -504,8 +504,6 @@ def test_decide_scores_on_sglang_with_the_native_decision_capture(tmp_path, monk
     rendered = native_learning.decision_items
     monkeypatch.setattr(native_learning, 'decision_items', lambda renderer, messages, tools, options: (
         rendered(renderer, messages, tools, options)[0], [word(option) for option in options]))
-    import concurrent.futures
-    front._pool = concurrent.futures.ThreadPoolExecutor(4)
     body = {'messages': messages, 'options': ['t6', 't7 t8'], 'native_recording': True}
     expected = decide_native(native, body)
     sent = []
@@ -542,7 +540,6 @@ def test_decide_scores_on_sglang_with_the_native_decision_capture(tmp_path, monk
 def test_decisions_warm_the_shared_opening_once_before_scoring(tmp_path, monkeypatch):
     """`cache_messages`: one prefill request of exactly the opening's tokens per distinct opening, sent before any item
     scores an option (concurrent items wait for it), skipped without the hint or when opted out; scores unchanged."""
-    import concurrent.futures
     import threading
     import time
     from natlang_neuralese.serve import native_learning
@@ -554,7 +551,6 @@ def test_decisions_warm_the_shared_opening_once_before_scoring(tmp_path, monkeyp
         prompt = renderer.render_request(messages, tools)
         return _items(renderer, prompt.segments, prompt.blocks, prompt.escape_nonce), [word(o) for o in options]
     monkeypatch.setattr(native_learning, 'decision_items', decision_items)
-    front._pool = concurrent.futures.ThreadPoolExecutor(4)
     front.sglang_state_grid = 4  # the fixture's openings are a few tokens; LFM3's grid is 256
     sent, lock = [], threading.Lock()
 
@@ -975,3 +971,32 @@ def test_in_place_update_is_named_in_every_capture():
     assert front._served_policy() == {'version': 3, 'policy_id': 'c' * 64, 'weights_sha256': 'd' * 64,
                                       'native_engine': 'start checkpoint (not updated in place)'}
     assert front.sglang_actor_export['sha256'] == 'd' * 64 and front.rl_policy_binding['start_checkpoint_sha256'] == 'b' * 64
+
+
+def test_sglang_requests_run_on_threads_that_end_with_them():
+    """No long-lived worker pool: torch's CPU allocator (mimalloc on aarch64) keeps each idle thread's freed tensor pages,
+    so a pool that spread requests over hundreds of idle workers grew the front ~0.8 GB/h. Every request's thread (and a
+    score's fan-out threads) ends with the request; a fan-out failure reaches the caller."""
+    import threading
+    front = object.__new__(SglangEngine)
+    front._ids = iter(range(100))
+    front._prompt_plan = lambda messages, tools: [('tokens', [1, 2])]
+    front._routes_native = lambda request, plan: False
+    front._append_only = lambda request, plan: plan
+    seen = []
+
+    def run(seq):
+        seen.append(threading.current_thread())
+        return {'id': seq.request.request_id}
+    front._sglang_run = run
+    futures = [front.submit(GenerationRequest(messages=[])) for _ in range(8)]
+    assert sorted(future.result(timeout=10)['id'] for future in futures) == sorted(f'chatcmpl-{i}' for i in range(8))
+    assert len(seen) == 8 and threading.main_thread() not in seen
+    for thread in seen:
+        thread.join(timeout=10)
+        assert not thread.is_alive()
+    assert not [t for t in threading.enumerate() if t.name.startswith('sglang-actor')]
+    assert SglangEngine._map_threads(lambda x: x * x, [1, 2, 3]) == [1, 4, 9]
+    with pytest.raises(ValueError, match='bad option'):
+        SglangEngine._map_threads(lambda x: (_ for _ in ()).throw(ValueError('bad option')) if x == 2 else x, [1, 2, 3])
+    assert not [t for t in threading.enumerate() if t.name.startswith('sglang-actor')]
