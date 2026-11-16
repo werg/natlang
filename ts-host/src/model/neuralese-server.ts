@@ -126,11 +126,25 @@ export class HttpNeuraleseStore implements NeuraleseStore {
     return { ...structuredClone(artifact), id };
   }
   async getNativeState(id: string): Promise<NativeStateArtifact | undefined> {
+    const wire = await this.getNativeStateWire(id);
+    return wire && decodeNativeState(wire, id);
+  }
+  /** The server's stored bytes, verified once here (header, finite values, content ID); kept as received. */
+  async getNativeStateWire(id: string): Promise<Uint8Array | undefined> {
     const response = await this.request(`/native-states/${id}`);
     if (response.status === 404) return undefined;
     if (!response.ok) throw new Error(`native-state fetch failed (${response.status})`);
-    const artifact = decodeNativeState(new Uint8Array(await response.arrayBuffer()));
+    const wire = new Uint8Array(await response.arrayBuffer());
+    const artifact = decodeNativeState(wire);
     if (artifact.id !== id) throw new Error(`native-state identity mismatch: requested ${id}, received ${artifact.id}`);
+    return wire;
+  }
+  /** Upload stored bytes as they are. */
+  async putNativeStateWire(wire: Uint8Array, verifiedId?: string): Promise<NativeStateArtifact> {
+    const artifact = decodeNativeState(wire, verifiedId);
+    const response = await this.request(`/native-states/${artifact.id}`, { method: 'PUT',
+      body: wire as BodyInit, headers: { 'content-type': 'application/octet-stream' } });
+    if (!response.ok) throw new Error(`native-state upload failed (${response.status}): ${(await response.text()).slice(0, 500)}`);
     return artifact;
   }
   async hasNativeState(id: string): Promise<boolean> {
@@ -346,8 +360,9 @@ export async function restoreNativeStates(remote: HttpNeuraleseStore, archive: N
     if (await remote.hasNativeState(id)) { known?.add(id); continue; }
     const artifact = local;
     if (!artifact) { missing.push(id); continue; }
+    const wire = await archive?.getNativeStateWire?.(id);   // the archived bytes as they are
     const { id: _, ...input } = artifact;
-    const restored = await remote.putNativeState(input);
+    const restored = wire ? await remote.putNativeStateWire(wire, id) : await remote.putNativeState(input);
     if (restored.id !== id) throw new Error(`native-state identity mismatch while restoring ${id}`);
     known?.add(id);
   }

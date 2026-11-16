@@ -19,7 +19,7 @@ import { verifyNativeStateDerivation } from '../native/native-state-derivation.j
  */
 import { mkdir, open, readFile, readdir, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { nativeArtifactDependencyClosure, decodeNativeState, encodeNativeState, nativeStateBlockMeta,
+import { nativeArtifactDependencyClosure, decodeNativeState, encodeNativeStateWire, nativeStateBlockMeta,
   decodeNativeTensorArtifact, encodeNativeTensorArtifact, nativeTensorArtifactBlockMeta,
   type NativeStateArtifact, type NativeTensorArtifact,
   type NeuraleseBlockMeta, type NeuraleseStore } from '../native/neuralese-store.js';
@@ -141,9 +141,14 @@ export class FileNeuraleseStore implements NeuraleseStore {
   }
 
   async putNativeState(input: Omit<NativeStateArtifact, 'id'>): Promise<NativeStateArtifact> {
-    if(input.metadata.derivation)await verifyNativeStateDerivation(this,input);
-    const wire = encodeNativeState(input);
-    const artifact = decodeNativeState(wire);
+    const { id, wire } = encodeNativeStateWire(input);
+    return this.putNativeStateWire(wire, id);
+  }
+
+  /** Store a native state's wire as received (verified: header, finite values, content ID). */
+  async putNativeStateWire(wire: Uint8Array, verifiedId?: string): Promise<NativeStateArtifact> {
+    const artifact = decodeNativeState(wire, verifiedId);
+    if (artifact.metadata.derivation) await verifyNativeStateDerivation(this, artifact);
     return this.serialized(artifact.id, async () => {
       // Validate an existing file before accepting its immutable identity.
       if (await this.has(artifact.id)) {
@@ -154,20 +159,30 @@ export class FileNeuraleseStore implements NeuraleseStore {
       this.index.set(artifact.id, nativeStateBlockMeta(artifact));
       this.noted.delete(artifact.id);
       this.remember(artifact.id, wire);
-      return structuredClone(artifact);
+      return artifact;
     });
   }
 
   async getNativeState(id: string): Promise<NativeStateArtifact | undefined> {
+    return (await this.readNativeState(id))?.[0];
+  }
+
+  /** The stored file's bytes as they are (verified when read from the file). */
+  async getNativeStateWire(id: string): Promise<Uint8Array | undefined> {
+    return (await this.readNativeState(id))?.[1];
+  }
+
+  private async readNativeState(id: string): Promise<[NativeStateArtifact, Uint8Array] | undefined> {
     if (!/^nzs1_[a-z2-7]{52}$/.test(id) || !(await this.has(id))) return undefined;
     let wire = this.resident.get(id);
+    const resident = wire !== undefined;   // resident bytes were verified when they entered; a file is read anew
     if (!wire) try { wire = await readFile(this.path(id)); }
     catch (error) { if (missing(error)) { this.forget(id); return undefined; } throw error; }
     try {
-      const artifact = decodeNativeState(wire);
+      const artifact = decodeNativeState(wire, resident ? id : undefined);
       if (artifact.id !== id) throw new Error('content address differs');
       this.remember(id, wire);
-      return artifact;
+      return [artifact, wire];
     } catch (error) {
       this.forget(id);
       await rm(this.path(id), { force: true });

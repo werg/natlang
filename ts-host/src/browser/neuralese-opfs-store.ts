@@ -6,15 +6,16 @@ import { verifyNativeStateDerivation } from '../native/native-state-derivation.j
  * reloads and backs native restore when the serving model loses them (a server restart).
  *
  * Metadata of every artifact is read from the files' headers when the store opens and kept in memory, so `peek`, `meta`
- * and `has` need no I/O. Payloads are read on demand, checked against their ID (an artifact whose bytes do not hash to its
- * name is removed and reported as `neuralese-block-integrity`), and kept resident within a byte budget, least recently
- * used first out. Native artifacts move between the store and `.nz` files by ID (`importNz`, `exportNz`).
+ * and `has` need no I/O. A native state is stored as its wire, the bytes as received (`putNativeStateWire`), and read
+ * back as views of those bytes: payloads are read on demand, verified against their ID when read from OPFS (an
+ * artifact whose bytes do not hash to its name is removed and reported as `neuralese-block-integrity`), and kept
+ * resident within a byte budget, least recently used first out. Native artifacts move between the store and `.nz` files by ID (`importNz`, `exportNz`).
  *
  * The directory is per origin: tabs of one origin share it. Writes are safe to share (equal IDs are equal bytes; a
  * file is replaced only when its write closes); an artifact another tab wrote is found on a lookup miss. Pins are this
  * store object's own, and `collect` deletes files for the whole origin: collect only with every runtime's references.
  */
-import { nativeArtifactDependencyClosure, importNativeArtifactBundle, decodeNativeTensorArtifact, encodeNativeTensorArtifact, nativeTensorArtifactBlockMeta, type NativeTensorArtifact, MemoryNeuraleseStore, decodeNativeState, encodeNativeState, nativeStateBlockMeta, type NativeStateArtifact, type NeuraleseBlockMeta,
+import { nativeArtifactDependencyClosure, importNativeArtifactBundle, decodeNativeTensorArtifact, encodeNativeTensorArtifact, nativeTensorArtifactBlockMeta, type NativeTensorArtifact, MemoryNeuraleseStore, decodeNativeState, encodeNativeStateWire, nativeStateView, nativeStateBlockMeta, type NativeStateArtifact, type NeuraleseBlockMeta,
   type NeuraleseStore } from '../native/neuralese-store.js';
 import { decodeNz, encodeNz, NZ_FORMAT, NzFileError, type NzHeader } from '../native/nz-file.js';
 
@@ -149,27 +150,39 @@ export class OpfsNeuraleseStore implements NeuraleseStore {
     return this.serialized(artifact.id,async()=>{
       if(await this.has(artifact.id)){const found=await read();if(found)return found;}
       await this.writeWire(artifact.id,wire);this.index.set(artifact.id,meta);this.remember(artifact.id,wire);
-      return structuredClone(artifact);
+      return artifact.id.startsWith('nzs1_')?nativeStateView(artifact as unknown as NativeStateArtifact) as unknown as T:structuredClone(artifact);
     });
   }
-  private async readNativeArtifact<T extends {id:string}>(id:string,decode:(wire:Uint8Array)=>T):Promise<T|undefined>{
+  private async readNativeArtifact<T extends {id:string}>(id:string,decode:(wire:Uint8Array,resident:boolean)=>T):Promise<[T,Uint8Array]|undefined>{
     if(!(await this.has(id)))return undefined;
-    let wire=this.resident.get(id);
+    let wire=this.resident.get(id);const resident=wire!==undefined;
     if(!wire)try{wire=await bytesOf(await(await this.directory.getFileHandle(id)).getFile());}
     catch{this.forget(id);return undefined;}
     try{
-      const artifact=decode(wire);if(artifact.id!==id)throw new Error('content address differs');
-      this.remember(id,wire);return artifact;
+      const artifact=decode(wire,resident);if(artifact.id!==id)throw new Error('content address differs');
+      this.remember(id,wire);return [artifact,wire];
     }catch(error){this.forget(id);await this.directory.removeEntry(id).catch(()=>undefined);
       throw new NzFileError('neuralese-block-integrity',`native artifact ${id}: ${String(error)}`);}
   }
+  private readNativeState(id:string){
+    // Resident bytes were verified when they entered; a file is read and verified anew.
+    return /^nzs1_[a-z2-7]{52}$/.test(id)?this.readNativeArtifact(id,(wire,resident)=>decodeNativeState(wire,resident?id:undefined)):undefined;
+  }
   async putNativeState(input:Omit<NativeStateArtifact,'id'>):Promise<NativeStateArtifact>{
-    if(input.metadata.derivation)await verifyNativeStateDerivation(this,input);
-    const wire=encodeNativeState(input),artifact=decodeNativeState(wire);
+    const {id,wire}=encodeNativeStateWire(input);
+    return this.putNativeStateWire(wire,id);
+  }
+  async putNativeStateWire(wire:Uint8Array,verifiedId?:string):Promise<NativeStateArtifact>{
+    const artifact=decodeNativeState(wire,verifiedId);
+    if(artifact.metadata.derivation)await verifyNativeStateDerivation(this,artifact);
     return this.writeNativeArtifact(artifact,wire,nativeStateBlockMeta(artifact),()=>this.getNativeState(artifact.id));
   }
   async getNativeState(id:string):Promise<NativeStateArtifact|undefined>{
-    return /^nzs1_[a-z2-7]{52}$/.test(id)?this.readNativeArtifact(id,decodeNativeState):undefined;
+    return (await this.readNativeState(id))?.[0];
+  }
+  /** The stored file's bytes as they are. */
+  async getNativeStateWire(id:string):Promise<Uint8Array|undefined>{
+    return (await this.readNativeState(id))?.[1];
   }
   async putNativeTensorArtifact(input:Omit<NativeTensorArtifact,'id'>):Promise<NativeTensorArtifact>{
     await verifyNativeDerivativeGradientOrigin(this,input);
@@ -177,7 +190,7 @@ export class OpfsNeuraleseStore implements NeuraleseStore {
     return this.writeNativeArtifact(artifact,wire,nativeTensorArtifactBlockMeta(artifact),()=>this.getNativeTensorArtifact(artifact.id));
   }
   async getNativeTensorArtifact(id:string):Promise<NativeTensorArtifact|undefined>{
-    return /^nnt1_[a-z2-7]{52}$/.test(id)?this.readNativeArtifact(id,decodeNativeTensorArtifact):undefined;
+    return /^nnt1_[a-z2-7]{52}$/.test(id)?(await this.readNativeArtifact(id,decodeNativeTensorArtifact))?.[0]:undefined;
   }
   async hasNativeTensorArtifact(id:string):Promise<boolean>{return /^nnt1_[a-z2-7]{52}$/.test(id)&&await this.has(id);}
 
@@ -249,9 +262,9 @@ export class OpfsNeuraleseStore implements NeuraleseStore {
         nativeDialect??=nativeTensorArtifactBlockMeta(artifact).dialect;continue;
       }
       if (id.startsWith('nzs1_')) {
-        const artifact = await this.getNativeState(id);
-        if (!artifact) throw new NzFileError('neuralese-unknown-block', `native state ${id} is not in the browser store`);
-        const wire = encodeNativeState(artifact);
+        const found = await this.readNativeState(id);
+        if (!found) throw new NzFileError('neuralese-unknown-block', `native state ${id} is not in the browser store`);
+        const [artifact, wire] = found;   // the stored bytes as they are
         nativeHeaders[id] = { bytes: wire.length };
         data.set(id, wire);
         nativeDialect ??= nativeStateBlockMeta(artifact).dialect;
