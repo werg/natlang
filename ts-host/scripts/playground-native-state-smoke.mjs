@@ -60,6 +60,7 @@ try {
       null, { timeout: 15 * 60_000 });
     assert.equal(await page.evaluate(() => !!window.natlangPlayground.model?.loaded), true, await page.locator('#modelProgress').textContent());
     if (await page.locator('#modelDialog').isVisible()) await page.locator('#modelDialog button[value=cancel]').last().click();
+    assert.equal(await page.evaluate(() => window.natlangPlayground.model.diagnostics.contextTokens), release.contextTokens);
     const consumer = await page.evaluate(() => window.natlangPlayground.model.neuraleseRuntime()?.nativeStateConsumer);
     log('model loaded', JSON.stringify(consumer));
     assert.equal(consumer?.checkpoint_sha256, release.trainingRun.split(' ').at(-1), 'the runtime gets the model\'s native identity');
@@ -103,6 +104,7 @@ try {
     return { outcome: run.outcome, value: run.value, turns: run.trace?.length ?? 0 }; });
   log('program run', JSON.stringify(run).slice(0, 600));
   assert.ok(!/native|neuralese/i.test(JSON.stringify(run.outcome)), 'the program run fails on no native-state error');
+  assert.ok(!/context size|kv_cache_full|model context is full/i.test(JSON.stringify(run.outcome)), 'the page loads the model with its catalog context');
 
   // After a reload the engine is new: a turn naming the state gets it from OPFS and consumes it exactly.
   await loadModel();

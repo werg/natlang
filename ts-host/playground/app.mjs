@@ -44,7 +44,7 @@ const runtime = () => {
 let cursor = 0, importMode = 'project', busy = false, editingCase = null, caseFromRun = false, playTimer = null;
 let jobToken = null, jobs = [], selectedJobId = null, jobCatalog = null, jobTimer = null;
 let modelCatalog = { defaultId: BROWSER_MODEL_CATALOG[0].id, models: [...BROWSER_MODEL_CATALOG] };
-let modelChoices = [...modelCatalog.models], modelSelectionExplicit = false;
+let modelChoices = [...modelCatalog.models], modelSelectionExplicit = false, contextEdited = false;
 window.natlangPlayground = { get project() { return project; }, get runs() { return runs; },
   get selectedRun() { return selectedRun; }, get model() { return model; } };
 
@@ -379,6 +379,13 @@ function renderModelChoices(selectedId = modelCatalog.defaultId) {
   if (!modelChoices.length) $('modelDialog').querySelector('.model-options').open = true;
   const index = modelChoices.findIndex(spec => spec.id === selectedId);
   $('modelSelect').selectedIndex = index >= 0 ? index : 0;
+  syncModelContext();
+}
+/** The context follows the chosen model's (its catalog `contextTokens`) until the user sets one: a natlang turn may use a
+ * quarter of the window for its reply, so a 4,096-token default overflowed on the first longer program. */
+function syncModelContext() {
+  const spec = modelChoices[Number($('modelSelect').value)];
+  if (!contextEdited && spec?.contextTokens) $('modelContext').value = String(spec.contextTokens);
 }
 function renderJobCatalog() {
   if (!jobCatalog) return;
@@ -869,7 +876,8 @@ function bind() {
   };
   $('modelButton').onclick = async () => { pendingExecution = null; $('modelDialog').showModal(); await refreshModelDiagnostics(); };
   $('modelDialog').addEventListener('close', () => { pendingExecution = null; });
-  $('modelSelect').onchange = () => { modelSelectionExplicit = true; void refreshModelDiagnostics(); };
+  $('modelSelect').onchange = () => { modelSelectionExplicit = true; syncModelContext(); void refreshModelDiagnostics(); };
+  $('modelContext').oninput = () => { contextEdited = true; };
   $('modelFile').onchange = () => void refreshModelDiagnostics();
   $('loadModel').onclick = loadModel;
   $('closeExamples').onclick = () => $('examplesDialog').close();
