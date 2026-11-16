@@ -33,7 +33,19 @@ def test_flatten_and_select_metrics():
 
 def test_select_metrics_cap():
     rec = {'step': 1, 'cuda_peak_gb': 1, **{f'x{i}': i for i in range(300)}}
-    assert len(export.select_metrics(rec)) <= 80 + len(export.FLAGS)
+    assert len(export.select_metrics(rec)) <= 60 + len(export.FLAGS)
+
+
+def test_bench_runs_keep_only_chart_metrics():
+    rec = {**STEP, 'learner_tokens_per_s': 1600, 'cuda_peak_gb': 40, 'decision_diagnostics': {'n': 3}}
+    m = export.select_metrics(rec, 'bench')
+    assert 'behaviour.close_ratio' in m and 'gain.gain' in m and 'kl_mean' in m
+    assert 'learner_tokens_per_s' not in m and 'phase_s.wait_groups' not in m and 'grad_mass_share.think' not in m
+    assert 'decision_diagnostics.n' not in export.select_metrics(rec)
+
+
+def test_pop_held_unit_is_a_held_eval():
+    assert export.kind_of('popheld-abc-1.service', '/usr/bin/python3 driver.py job.json') == 'held-eval'
 
 
 def test_run_ids_and_discovery(tmp_path):

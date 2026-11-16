@@ -46,7 +46,8 @@ ALWAYS = ['reward_mean', 'kl_mean', 'grad_norm', 'grad_norm_vs_median', 'lr', 'l
           'actor_tokens_per_s_collect_phase', 'actor_tokens_per_s_learn_phase', 'cuda_peak_gb', 'bf16_changed_step_fraction',
           'bf16_changed_vs_start_fraction', 'grad_moment_cosine']
 ALWAYS_PREFIX = ('behaviour.', 'grad_mass_share.', 'phase_s.', 'gain.')   # nested hunt gain object: always kept
-SKIP_PREFIX = ('meminfo', 'swap', 'learner_swap', 'staleness.', 'decision_diagnostics.worst', 'lowering.')
+SKIP_PREFIX = ('meminfo', 'swap', 'learner_swap', 'staleness.', 'decision_diagnostics.', 'lowering.')
+BENCH_KEEP = ('reward_mean', 'kl_mean', 'grad_norm', 'lr', 'ref_dlogp_max', 'mean_logp')
 FLAGS = ('grad_spike', 'reasoning_shift', 'behaviour_shift')
 SPARK = ('reward_mean', 'kl_mean', 'grad_norm')       # last SPARK_N values of each travel in the snapshot
 SPARK_N = 24
@@ -206,14 +207,19 @@ def flatten(obj, prefix='', out=None):
     return out
 
 
-def select_metrics(rec, cap=80):
+def select_metrics(rec, kind='grpo', cap=60):
+    """Flat numeric metrics of one step. Training runs keep the ALWAYS set plus others up to `cap`; bench arms (many, short) keep
+    only what the investigation charts read, so the retained stream stays small."""
     flat = flatten({k: v for k, v in rec.items() if k != 'step'})
     chosen = {k: v for k, v in flat.items() if k in ALWAYS or k.startswith(ALWAYS_PREFIX) or 'gain' in k}
-    for k, v in flat.items():
-        if len(chosen) >= cap:
-            break
-        if k not in chosen and not k.startswith(SKIP_PREFIX):
-            chosen[k] = v
+    if kind == 'bench':
+        chosen = {k: v for k, v in chosen.items() if k in BENCH_KEEP or k.startswith(('behaviour.', 'gain.'))}
+    else:
+        for k, v in flat.items():
+            if len(chosen) >= cap:
+                break
+            if k not in chosen and not k.startswith(SKIP_PREFIX):
+                chosen[k] = v
     for f in FLAGS:
         chosen[f] = int(bool(rec.get(f)))
     return chosen
@@ -294,7 +300,7 @@ def step_records(run, st, steps, mtime, now):
                 st['spark'][k] = st['spark'][k][-SPARK_N:]
         st['kind'] = run_kind(run, s)
         data = {'run_id': run, 'group': group, 'kind': st['kind'], 'step': int(s['step']),
-                'wall_s': el if isinstance(el, (int, float)) else None, 'metrics': select_metrics(s)}
+                'wall_s': el if isinstance(el, (int, float)) else None, 'metrics': select_metrics(s, st['kind'])}
         out.append({'ts': ms(ts), 'type': 'train', 'data': data})
         flags = [f for f in FLAGS if s.get(f)]
         if flags and now - ts < KEEP_S:
@@ -489,7 +495,7 @@ def annotation_for(ann, name):
 def kind_of(name, cmd):
     if 'grpo.py' in cmd and ' train' in cmd:
         return 'bench' if '--replay' in cmd or name.startswith('hunt-') else 'grpo'
-    if 'held_eval' in cmd and 'measure' in cmd:
+    if ('held_eval' in cmd and 'measure' in cmd) or name.startswith('popheld-'):
         return 'held-eval'
     if 'pytest' in cmd or 'check-main' in cmd:
         return 'test'
@@ -538,6 +544,9 @@ def progress_of(rec, state, lines, now):
     if kind_of(rec['unit'], cmd) == 'held-eval':      # progress line in the unit journal, else WORK/held-pop.log (out = WORK/held/step-N)
         out = last_arg(cmd, '--out')
         hp = held_progress(lines) or (held_progress(read_tail(os.path.join(out, '..', '..', 'held-pop.log'))) if out else None)
+        if not hp and rec['unit'].startswith('popheld-') and rec['state'] == 'running':    # Pop evals log into the run's held-pop.log
+            logs = sorted(glob.glob(OPS + '/*/*/held-pop.log'), key=os.path.getmtime)
+            hp = held_progress(read_tail(logs[-1])) if logs and now - os.path.getmtime(logs[-1]) < 900 else None
     if hp:
         done, of, minutes = hp
         eta = (of - done) * minutes * 60 / done if done and minutes and rec['state'] == 'running' else None
@@ -772,7 +781,14 @@ def cycle(out, ops, ann_path, state, once=False, use_pop=True):
     except Exception as e:
         teachers = None
         errors.append(f'exporter: teacher summary failed: {clip(e, 120)}')
-    snap = {'v': 2, 'ts': ms(now), 'machines': {m: machine_now(m, d, now) for m, d in hosts.items()}, 'processes': items[:60],
+    for it in items:       # teacher-generation units report the pool's progress; ETA from the exporter's own history
+        if teachers and it['unit'].startswith('tgen-') and it['state'] == 'running' and teachers.get('eligible'):
+            it['progress'] = {'done': teachers['tasks_done'], 'total': teachers['eligible'], 'unit': 'tasks'}
+            old = [h for h in teachers['history'] if h[0] >= ms(now) - 6 * 3600_000]
+            if len(old) > 1 and old[-1][1] > old[0][1]:
+                rate = (old[-1][1] - old[0][1]) / ((old[-1][0] - old[0][0]) / 1000)
+                it['eta_s'] = round((teachers['eligible'] - teachers['tasks_done']) / rate)
+    snap = {'v': 3, 'ts': ms(now), 'machines': {m: machine_now(m, d, now) for m, d in hosts.items()}, 'processes': items[:60],
             'queue': queue, 'investigations': invs, 'fallow': fallow, 'alerts': alerts, 'teachers': teachers,
             'runs': runs_summary(state, {i['run'] for i in items if i['state'] == 'running' and i['run']}, now)}
     mach = []

@@ -1,7 +1,0 @@
-{
-  "format": "tendriller-page",
-  "version": 1,
-  "requires": {"contract": 2, "workflows": {}},
-  "components": ["chart", "stream-view"],
-  "workflows": []
-}
