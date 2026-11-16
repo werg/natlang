@@ -22,6 +22,13 @@ with the owner only what is truly theirs. Waiting for an OK on a technical cours
   experiment. A recommendation or a list of "proposed experiments" is unfinished work. Changes that are sound from
   first principles (harness and model-facing bug fixes, sampling, reward and loss-weighting fixes) ship as the new
   default with an opt-out and targeted tests. The next held eval shows any regression.
+- **Fix the mechanism everywhere it lives.** A defect or design change found in one place is first generalised: what
+  shared mechanism (format, protocol, allocator pattern, loss term, serving feature) produced it, and which components
+  implement or consume that mechanism (all engines: managed llama-server, in-page wllama, Python native engine, SGLang
+  actor; ts-host runtime; learner, held eval, probes, collectors). Before editing or briefing, write that inventory
+  (`git grep` the concept, `docs/ENGINE_PARITY.md`), scope the change to all of it, and list each component left out
+  with its reason and next action (an ENGINE_PARITY row for engines). A subagent brief carries the inventory or makes
+  building it the first step; a brief naming only the component where the symptom appeared is incomplete.
 - **Orphaned work.** Work whose author shows no activity in the last 24 h is orphaned. The supervising agent reviews it
   and integrates or deliberately discards it.
 - **Diagnose surprises immediately.** An unexpected number, failure or regression gets a root-cause investigation in
