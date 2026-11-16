@@ -52,6 +52,14 @@ def test_floor_breach_stops_the_lowest_priority_newest_unit():
     assert ledger.victim(live, False, 1.15) == (None, None)
 
 
+def test_floor_breach_never_stops_a_unit_too_small_to_relieve_it():
+    live = {'trainer.service': dict(claim('experiment', 98, 97, 1), priority='high'),
+            'collector.service': dict(claim('service', 0.3, 0.07, 9), priority='medium')}
+    assert ledger.victim(live, True, 1.15) == (None, None)  # the sole real candidate is within budget x overshoot
+    live['gen.service'] = dict(claim('collection', 4.5, 0.9, 5), priority='low')
+    assert ledger.victim(live, True, 1.15)[0] == 'gen.service'
+
+
 def test_outstanding_demand_is_unspent_budget(monkeypatch):
     monkeypatch.setattr(ledger, 'mem_available', lambda: 40 * GIB)
     monkeypatch.setattr(ledger, 'unit_usage', lambda unit, gpu, command=None, containers=(), cuda_separate=False: {'a.service': 2 * GIB, 'b.service': 12 * GIB}[unit])
@@ -777,7 +785,7 @@ def test_a_unit_backfills_only_behind_a_head_that_preemption_cannot_help():
 
 def test_a_backfilled_unit_is_not_preempted_for_the_same_head_within_its_hold():
     now = 10000.0
-    fresh = dict(running('collection', 8, 0, priority='low'), admitted=now - 10, backfilled_behind='bench.service')
+    fresh = dict(running('collection', 8, 2, priority='low'), admitted=now - 10, backfilled_behind='bench.service')
     head = {'priority': 'medium', 'budget': 12 * GIB, 'reserve': 8 * GIB}
     live = {'render.service': fresh}
     assert ledger.preemption_plan(live, 18 * GIB, head, head='bench.service', now=now) == []  # held for its head

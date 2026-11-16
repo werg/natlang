@@ -83,6 +83,7 @@ EMERGENCY_GB = 3
 CHECKPOINT_WRITES = os.path.expanduser(os.environ.get('NATLANG_CHECKPOINT_WRITES',
                                                       '~/.local/state/natlang/checkpoint-writes.jsonl'))
 GRACE_MIN, GRACE_MARGIN, GRACE_SLACK = 5.0, 2.0, 15.0
+STOP_MIN_RELIEF = GIB // 2   # bytes a floor stop must free at least
 # A training container may set HOME=/tmp and write its checkpoint timing log
 # there, outside the host guard's namespace.  Until a shared timing sample is
 # available, still give high-priority experiments time to finish an atomic
@@ -981,6 +982,9 @@ def victim(live, floor_breached, overshoot, pressure=None, grace=None, emergency
     over = [(c['used'] / c['budget'], u) for u, c in live.items() if c['used'] > c['budget'] * overshoot]
     if over and (pressure or floor_breached):
         return max(over)[1], 'over budget under memory pressure'
+    # A unit using under STOP_MIN_RELIEF frees nothing a floor breach needs (2026-11-16: the floor stopped the 66 MB
+    # dashboard collector, which is not requeued, and the page went stale for an hour); it is never a floor victim.
+    live = {u: c for u, c in live.items() if c['used'] >= STOP_MIN_RELIEF}
     if floor_breached and not emergency and len(live) == 1 and all(c['used'] <= c['budget'] * overshoot for c in live.values()):
         return None, None
     if floor_breached and live:

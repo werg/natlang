@@ -12,7 +12,7 @@ Annotations (titles, queue, investigations) are re-read from `../annotations.jso
 Run (ledger units, low priority, ~0.3 GB each; use a fresh numeric suffix, journals of old unit names persist):
 
     memory_ledger.py run --unit ops-dashboard-export-N --budget-gb 0.3 --class service --priority low --wait 120 --detach -- /usr/bin/python3 ~/natlang/scripts/ops_dashboard/export.py
-    memory_ledger.py run --unit ops-dashboard-collector-N --budget-gb 0.3 --class service --priority low --wait 120 --detach -- NODE ~/.local/share/tendriller/natlang-ops-v3/tools/bin/tendril-stream.mjs ~/.local/share/tendriller/natlang-ops-v3/collector.json
+    memory_ledger.py run --unit ops-dashboard-collector-N --budget-gb 0.3 --class service --priority medium --wait 120 --detach -- NODE ~/.local/share/tendriller/natlang-ops-v3/tools/bin/tendril-stream.mjs ~/.local/share/tendriller/natlang-ops-v3/collector.json
 
 Collector provisioning (once per page, from the creation response saved as `create.json`): write `streams.json` (streams and sources together) and
 `tendril-stream.mjs init --page create.json --streams streams.json --out collector.json`.
