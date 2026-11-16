@@ -1538,6 +1538,18 @@ def train(args):
     # The actor's weights live on tmpfs: the shared NVMe wrote at 60-230 MB/s under other jobs' load (2026-11-12 bench),
     # which put 20-60 s of file write in front of every actor update.
     weights_dir = Path('/dev/shm') / f'natlang-{args.unit_prefix}-actor-weights'
+    # atexit never runs for a killed unit: a dead run's tmpfs weights (4 GB each) held RAM until removed by hand
+    # (2026-11-16: two hunt copies, 8 GB). Each run records its pid; a new run removes copies whose run is gone.
+    for stale in Path('/dev/shm').glob('natlang-*-actor-weights'):
+        try:
+            os.kill(int((stale / 'owner.pid').read_text()), 0)
+        except ProcessLookupError:   # recorded owner is dead (a copy without owner.pid is never touched)
+            if stale != weights_dir:
+                shutil.rmtree(stale, True)
+        except (OSError, ValueError):
+            pass
+    weights_dir.mkdir(parents=True, exist_ok=True)
+    (weights_dir / 'owner.pid').write_text(str(os.getpid()))
     sync = WeightSync(model, args.actor_export, None if args.no_actor_sync else sglang_url, weights_dir,
                       front_url=None if args.no_actor_sync else args.actor)
     atexit.register(shutil.rmtree, weights_dir, True)
