@@ -1038,6 +1038,23 @@ ran 16-38 slots, 30 running sequences, pool 93% full with queued requests, 8-14 
   task flat at 0.7 GB, glibc/numpy allocations with 128 workers flat at 2 GB. Each request now runs on its own
   thread that ends with it (`SglangEngine._spawn`; score fan-out `_map_threads`). `MIMALLOC_PURGE_DELAY=0` does not
   help. Any long-lived thread pool that allocates torch CPU tensors has this growth.
+  Inventory of the rest of the stack (2026-11-16): the HTTP server (`serve/http.py`, the front's and the Python native
+  engine's) ran each keep-alive connection's requests on that connection's thread, and native endpoints (state
+  writes, init-body, operator, decide, grad, store PUT/GET) allocate CPU tensors there: each request now runs on its
+  own short-lived thread (`Handler.handle_one_request`). Not affected (their threads never allocate torch CPU tensors
+  or end with their task): the GRPO learner's collector slots, Pop held loop and actor launcher (subprocess, JSON
+  scoring), WeightSync publish and StateSaver threads (one per publish/save; the snapshot is a mapped file, the
+  staging is preallocated), `NativeStates` (main thread only, cleared per step), the native engine's single scheduler
+  thread, `decide_many`'s per-request 16-thread pool, held_eval/teacher_gen/pop_rl_actor (subprocesses). The learner's
+  RSS growth in grpo-v3-run1 (10.4 -> 14.9 GB over steps 1-2, ~15 through step 4, 17 GB after the r1 resume, CUDA flat)
+  was not this mechanism: per-phase anon is flat from step 2 on. It was (1) the KL reference: `ReferenceWeights.tensors`
+  yielded views of `safe_open`'s one private mapping of the 3.4 GB file, the GPU copy made its pages anonymous, and
+  the optimizer phase's loop variable kept the whole mapping alive between steps (+3.4 GB from the first optimizer
+  phase; smaps: `reference-bf16.safetensors` rw-p, 3.38 GB Anonymous); tensors are now read one at a time into their
+  own buffers; (2) +1.0 GB of cached pinned host blocks after a resume (safetensors 0.8 loads `device='cuda'` through
+  pinned staging; `host_pinned_gb` 1.33 vs 0.31), now released (`torch._C._host_emptyCache` in
+  `release_host_memory`, also right after the resume). The rest is fixed: the actor export on /dev/shm (3.9 GB shmem),
+  ~3.5 GiB of torch's arena and ~2.2 GB glibc heap from the main thread's lowering (flat across steps).
 - Native state crosses front <-> fork as store files (2026-11-16; natlang main + fork b6b2319c7, both from the next
   pin). Before, the front round-tripped every produce span and import through torch CPU tensors it never computes on:
   a capture was `load_file` of the fork's FP32 safetensors, a `NativeStateBlock`, `put_native_state` (clone, id over

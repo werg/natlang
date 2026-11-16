@@ -83,6 +83,26 @@ def make_handler(engine: Engine):
         def log_message(self, format, *args):  # quiet by default
             pass
 
+        def handle_one_request(self):
+            """Each request on a thread that ends with it, not on the connection's thread. torch's CPU allocator on
+            aarch64 is mimalloc, whose heaps are per thread: an idle thread keeps the pages of the tensors it allocated
+            (and those other threads freed) until it allocates again. A keep-alive connection's thread lives as long as
+            its client, and native endpoints (state writes, imports, decisions, gradients, the store's PUT/GET) run on
+            it, so a server with many open connections held up to connections x their largest request's tensors (the
+            same growth as the SGLang front's worker pool, plans/neuralese/ENGINEERING_FINDINGS.md, 2026-11-16)."""
+            failure = []
+
+            def run():
+                try:
+                    BaseHTTPRequestHandler.handle_one_request(self)
+                except BaseException as error:  # re-raised on the connection's thread, which socketserver reports
+                    failure.append(error)
+            thread = threading.Thread(target=run, name='natlang-http-request', daemon=True)
+            thread.start()
+            thread.join()
+            if failure:
+                raise failure[0]
+
         def _send_file(self, path, content_type: str):
             with open(path, "rb") as stream:
                 self.send_response(200)

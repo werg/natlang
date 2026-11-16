@@ -891,12 +891,35 @@ class ReferenceWeights:
         drop_cache([self.path])
 
     def tensors(self):
-        """(name, host BF16 tensor) of the reference, one at a time."""
-        from safetensors import safe_open
+        """(name, host BF16 tensor) of the reference, one at a time, each read into its own buffer.
+
+        Not ``safe_open(...).get_tensor``: those tensors are views of one private (copy-on-write) mapping of the whole
+        file, which the GPU copy turns into 3.4 GB of anonymous memory, and any one of them kept alive keeps all of it.
+        The optimizer phase's loop variable did, so the learner held the whole reference between steps (grpo-v3-run1:
+        learner RSS +3.4 GB from the first optimizer phase on, its ``reference-bf16.safetensors`` mapping fully anon in
+        smaps, 2026-11-16). Now only the tensor in hand is resident."""
+        import torch
         try:
-            with safe_open(str(self.path), 'pt') as handle:
-                for name in handle.keys():
-                    yield name, handle.get_tensor(name)
+            with open(self.path, 'rb', buffering=0) as handle:
+                size = struct.unpack('<Q', handle.read(8))[0]
+                header = json.loads(handle.read(size))
+                base = 8 + size
+                for name, info in header.items():
+                    if name == '__metadata__':
+                        continue
+                    if info['dtype'] != 'BF16':
+                        raise ValueError(f'reference tensor {name} is {info["dtype"]}, expected BF16')
+                    start, end = info['data_offsets']
+                    data = torch.empty(end - start, dtype=torch.uint8)
+                    view = memoryview(data.numpy())
+                    handle.seek(base + start)
+                    read = 0
+                    while read < len(view):
+                        count = handle.readinto(view[read:])
+                        if not count:
+                            raise ValueError(f'{self.path} ends inside tensor {name}')
+                        read += count
+                    yield name, data.view(torch.bfloat16).view(info['shape'])
         finally:
             drop_cache([self.path])
 
@@ -922,6 +945,14 @@ def release_host_memory():
     try:
         import ctypes
         ctypes.CDLL('libc.so.6').malloc_trim(0)
+    except Exception:
+        pass
+    # Unused page-locked blocks of PyTorch's caching host allocator: a resume's safetensors load to CUDA stages through
+    # pinned buffers that stayed cached for the whole run (grpo-v3-run1-r1: host_pinned_gb 1.33 after the resume, 0.31
+    # fresh). Blocks in use (StateSaver's staging) are kept.
+    try:
+        import torch
+        torch._C._host_emptyCache()
     except Exception:
         pass
 
@@ -1520,6 +1551,8 @@ def train(args):
         with torch.no_grad():
             for name, p in live.items():
                 p.copy_(masters[name])
+        torch.cuda.synchronize()
+        release_host_memory()             # the load's pinned staging buffers
         log_line(log, {'event': 'resumed', 'step': step, 'cursor': cursor, 'next_group': first_group,
                        'state': str(resume_path)})
     # New groups are numbered after the highest existing one; scored groups a stop left untrained are offered again
@@ -2225,9 +2258,9 @@ def train(args):
                 new = masters[name].to(torch.bfloat16)
                 changed_step += int((new != p).sum())
                 p.copy_(new)
-            if reference is not None:      # the start policy read back from its file, one tensor at a time
-                for name, start_weights in reference.tensors():
-                    changed_start += int((live[name] != start_weights.to(live[name].device)).sum())
+            if reference is not None:      # the start policy read back from its file, one tensor at a time (none kept)
+                changed_start = sum(int((live[name] != start_weights.to(live[name].device)).sum())
+                                    for name, start_weights in reference.tensors())
         torch.cuda.synchronize()
         phase['optimizer'] = time.time() - t
         phase_peak('optimizer')

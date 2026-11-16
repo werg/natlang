@@ -457,3 +457,21 @@ def test_replay_bench_keeps_short_groups_only(tmp_path):
     branch = grpo.ReplayCollector(SimpleNamespace(replay=str(archive), actor_store=str(tmp_path / 'store'),
                                                   replay_max_group_tokens=0), tmp_path / 'branch', first_group=2)
     assert branch.take_groups(2, 2, stop) == [2, 3]           # a resumed replay continues after its state's groups
+
+
+def test_reference_tensors_hold_no_mapping_of_the_file(tmp_path):
+    """Each reference tensor is its own buffer: a kept tensor must not keep a mapping of the whole file (a private
+    mapping the GPU copy made anonymous held 3.4 GB in grpo-v3-run1's learner between steps)."""
+    torch = pytest.importorskip('torch')
+    live = dict(_tiny_model(torch).named_parameters())
+    path = tmp_path / 'reference.safetensors'
+    reference = grpo.ReferenceWeights(path, live, {'source_sha256': 'a'})
+    kept = list(reference.tensors())
+    assert [name for name, _ in kept] == list(live)
+    for name, tensor in kept:
+        assert tensor.dtype == torch.bfloat16 and torch.equal(tensor, live[name].detach())
+        assert tensor.untyped_storage().nbytes() == tensor.numel() * 2      # not a view of a whole-file storage
+    assert str(path) not in Path('/proc/self/maps').read_text()
+    path.write_bytes(path.read_bytes()[:-2])                                # a truncated file is refused
+    with pytest.raises(ValueError, match='ends inside tensor'):
+        list(reference.tensors())
