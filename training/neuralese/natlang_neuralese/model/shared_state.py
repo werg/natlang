@@ -309,6 +309,20 @@ def _convolve_eager(layer, gated, c, plan, rows, *, index=None, noise=None):
     elif plan.slot_stops:
         stop_mask=_convolution_stops(plan,kernel.weight.shape[-1],rows,gated.device)
     padded = torch.cat([gated, gated.new_zeros(1, 1, gated.shape[-1])], dim=1)
+    from .native_weight_carrier import _FINITE_CONV_INFERENCE_QUERY_CHUNK as block
+    if not torch.is_grad_enabled() and padded.dtype!=torch.float64 and index.shape[0]>block:
+        # Inference gathers [B, block, W, C] histories at a time instead of the K-fold whole graph; each block is the
+        # row block stored_finite_convolution reduces anyway, so every output row is the same expression.
+        if noise is not None and not complete:
+            raise ValueError('the import channel applies to the complete graph convolution')
+        pieces=[]
+        for start in range(0,index.shape[0],block):
+            stop=min(start+block,index.shape[0])
+            part=padded[:,index[start:stop]]
+            if stop_mask is not None:part=torch.where(stop_mask[None,start:stop,:,None],part.detach(),part)
+            if noise is not None:part=part+noise[None,start:stop].to(part.dtype)
+            pieces.append(_finite_convolution(kernel,part,c[:,start:stop]))
+        return torch.cat(pieces,dim=1)
     if padded.dtype==torch.float64:
         from .state_gather import gather_convolution_state
         gathered=gather_convolution_state(padded,index)

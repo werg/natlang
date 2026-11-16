@@ -67,14 +67,20 @@ SGLANG_EXPORT_FORMAT = 'sglang-pop-rtx4060-bf16-vendor-projection'
 # kv_cache_dtype and the export format suffix): held results pair only within one setting.
 POP_KV_CACHE_DTYPE = 'fp8_e4m3'
 POP_MAX_RUNNING = 16
+# SGLang mem-fraction-static on Pop: weights + KV pool fill this share of the 7.62 GiB GPU. At 0.8 the engine kept
+# 0.81 GB after CUDA-graph capture and its prefill transients took the rest: on 2026-11-16 01:3x an 88 MiB allocation
+# in the fork's natlang_conv_prefill OOMed with 99 MiB free. 0.77 moves ~0.23 GB from the FP8 pool (318k -> ~280k
+# tokens, still over 2x the 131072 context) to that headroom. Pool size only: per-token arithmetic is unchanged.
+POP_MEM_FRACTION = 0.77
 
 
 def pop_sglang(kv_cache_dtype=POP_KV_CACHE_DTYPE, max_running=POP_MAX_RUNNING):
     """(job['sglang'] settings, actor export format) of Pop's SGLang engine. max_total_tokens is only a cap: SGLang
-    sizes the pool from what mem-fraction 0.8 leaves (BF16 94.7k, FP8 about 180k tokens; a fork with hybrid SWA KV keeps
-    the 5 sliding layers at their window, about 1.7x the tokens, so the caps leave room for that)."""
+    sizes the pool from what POP_MEM_FRACTION leaves (at 0.8: BF16 94.7k, FP8 about 180k tokens; a fork with hybrid
+    SWA KV keeps the 5 sliding layers at their window, about 1.7x the tokens, so the caps leave room for that)."""
     fp8 = kv_cache_dtype != 'auto'
-    settings = {'kv_cache_dtype': kv_cache_dtype, 'max_running': max_running, 'max_total_tokens': 524288 if fp8 else 262144}
+    settings = {'kv_cache_dtype': kv_cache_dtype, 'max_running': max_running, 'mem_fraction': POP_MEM_FRACTION,
+                'max_total_tokens': 524288 if fp8 else 262144}
     return settings, SGLANG_EXPORT_FORMAT + (f'-kv-{kv_cache_dtype}' if fp8 else '')
 
 
