@@ -7,9 +7,14 @@
  *   node scripts/wllama_smoke.mjs --model MODEL.gguf --server LLAMA_SERVER [--chrome PATH] [--tolerance NATS] [--wllama DIR]
  *
  * Needs playwright (npx playwright, or a wllama checkout's node_modules via NODE_PATH) and Chrome. Exits 1 when the
- * page ranks an item's options differently from the native server, differs by more than the tolerance (default 1 nat:
- * quantized matmuls in WebAssembly and AVX round differently), or ranks a repeated item differently or moves it by more
- * than the tolerance. A repeat is not bit-identical in the page: its KV cache is unified, so where a sequence's cells sit
+ * page renders or tokenizes an item differently from the native server (its prompt and reply token counts), ranks its
+ * options differently, differs by more than the tolerance, or ranks a repeated item differently or moves it by more than
+ * the tolerance. The default tolerance, 2.5 nats, is three standard deviations of the difference between two Q8_0 engines:
+ * a Q8_0 matmul quantizes its activations to int8 blocks, so any change upstream (a build's kernels, flash attention, the
+ * KV type, WebAssembly vs NEON) redraws that rounding error. Measured on LFM3-1.7B Q8_0 against the same weights
+ * dequantized to F32 (where flash attention and the KV type move a score by at most 0.03 nats), six engine
+ * configurations, the page among them, deviate by 0.58 nats RMS per score; pairs differed by 0.5-1.75 nats at most over
+ * the 9 scores (docs/ENGINE_PARITY.md, numerics). A repeat is not bit-identical in the page: its KV cache is unified, so where a sequence's cells sit
  * depends on what ran before, attention sums in that cell order, and the int8 activation rounding of the Q8 matmuls turns
  * the last-bit differences into up to a few tenths of a nat (docs/ENGINE_PARITY.md, numerics).
  *
@@ -32,7 +37,7 @@ const failures = [];
 
 const args = process.argv.slice(2), value = name => args.includes(name) ? args[args.indexOf(name) + 1] : undefined;
 const model = value('--model'), server = value('--server'), chrome = value('--chrome') ?? '/usr/bin/google-chrome';
-const tolerance = Number(value('--tolerance') ?? 1);
+const tolerance = Number(value('--tolerance') ?? 2.5);
 if (!model || !server) throw new Error('usage: node scripts/wllama_smoke.mjs --model MODEL.gguf --server LLAMA_SERVER [--chrome PATH]');
 // `--wllama DIR`: a candidate build (a release's llama-natlang-wllama.tar.gz unpacked) before it is vendored
 const vendor = resolve(value('--wllama') ?? resolve(dirname(fileURLToPath(import.meta.url)), '../ts-host/vendor/wllama'));
@@ -64,16 +69,17 @@ const native = spawn(server, ['-m', model, '--port', String(port), '-c', '4096',
 const post = async (path, body, init = {}) => fetch(base + path, { method: 'POST', headers: { 'content-type': 'application/json' },
   body: JSON.stringify(body), ...init });
 const score = async scored => (await (await post('/v1/natlang/score', { items: scored })).json()).results.map(result => result.log_probs ?? result);
-let expected, states = null;
+let expected, nativeResults, states = null;
 try {
-  for (let attempt = 0; attempt < 300 && !expected; attempt++) {
+  for (let attempt = 0; attempt < 300 && !nativeResults; attempt++) {
     await new Promise(done => setTimeout(done, 1000));
     try {
       const response = await post('/v1/natlang/score', { items });
-      if (response.ok) expected = (await response.json()).results.map(result => result.log_probs);
+      if (response.ok) nativeResults = (await response.json()).results;
     } catch { /* still loading */ }
   }
-  if (!expected) throw new Error('the native server did not answer');
+  if (!nativeResults) throw new Error('the native server did not answer');
+  expected = nativeResults.map(result => result.log_probs);
   const info = await (await fetch(base + '/v1/neuralese/info')).json();
   if (info.native_state?.enabled && info.native_state.production) {
     const [open, close] = info.native_state.role_marker_ids;
@@ -104,7 +110,8 @@ async function runPage() {
       await engine.loadModelFromUrl(location.origin + '/model.gguf', { useCache: false, n_ctx: 4096, n_gpu_layers: 0 });
       const all = await engine.createNatlangScore({ items });
       const again = await engine.createNatlangScore({ items: [items[1]] });
-      const result = { all: all.results.map(result => result.log_probs ?? result), again: again.results[0].log_probs ?? again.results[0],
+      const result = { shapes: all.results.map(result => ({ tokens: result.tokens, prompt_tokens: result.prompt_tokens })),
+        all: all.results.map(result => result.log_probs ?? result), again: again.results[0].log_probs ?? again.results[0],
         capabilities: engine.capabilities };
       if (!states || !engine.capabilities.nativeStateStore) return result;
       // the server's state, put after load
@@ -153,6 +160,9 @@ async function crossCheck() {
 expected.forEach((scores, index) => {
   const mine = page.all[index];
   if (!Array.isArray(mine)) return failures.push(`item ${index}: ${JSON.stringify(mine)}`);
+  const shape = result => JSON.stringify([result.tokens, result.prompt_tokens]);
+  if (shape(page.shapes[index]) !== shape(nativeResults[index]))
+    failures.push(`item ${index}: page renders or tokenizes differently: ${shape(page.shapes[index])}, native ${shape(nativeResults[index])}`);
   if (rank(mine) !== rank(scores)) failures.push(`item ${index}: page ranks ${rank(mine)}, native ${rank(scores)}`);
   const gap = Math.max(...mine.map((score, option) => Math.abs(score - scores[option])));
   if (gap > tolerance) failures.push(`item ${index}: page differs by ${gap.toFixed(3)} nats`);

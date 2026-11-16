@@ -26,15 +26,27 @@ Mechanical guards:
 - `node scripts/wllama_smoke.mjs --model M --server S` compares the page's decision scores with the native server's
   (ranking and a 1-nat tolerance, for the items and for a repeat after a batch); run it on every pin bump. natlang-b12074:
   same ranking on 3 items, largest gap per item 0.58-0.67 nats from native, a repeat within 0.16 nats. With a natlang GGUF it
-  also checks native states both ways. natlang-b12080 on natlang-lfm3-5ff07638 (Q8_0, CPU, against a local arm64 CPU
-  build of the same fork commit): the server's state put into the page is consumed exactly and a decision on it ranks
-  like the server's (largest gap 0.81 nats); the page's grammar-forced state has the server's text and identity (its
-  tokenization differs at one near tie, so its ID differs), reads back as stored, and the server accepts it and consumes
-  it exactly. The decision check fails on item 1 by 1.11 nats (same ranking; repeat within 0.27). The page scores are
-  bit-identical with the vendored natlang-b12077 build and with the stock LFM3 Q8_0 GGUF, so this predates the change;
-  its cause (the b12074 run measured 0.58-0.67 against a different native build) is not diagnosed.
+  also checks native states both ways, and that both engines render and tokenize every item alike (prompt and reply
+  token counts). natlang-b12080 on natlang-lfm3-5ff07638 (Q8_0, CPU, against the release's linux-arm64 server): passes;
+  the server's state put into the page is consumed exactly and a decision on it ranks like the server's (largest gap 0.27
+  nats); the page's grammar-forced state has the server's text, tokens and identity, reads back as stored, and the
+  server accepts it and consumes it exactly. Its default tolerance is 2.5 nats (next section).
 
 ## Numerics: a score is reproducible only under a fixed cache layout
+
+**Q8_0 engines differ by up to ~2 nats per decision score, and that is the int8 rounding of the activations.** On the
+smoke items (LFM3-1.7B Q8_0, 6-7 reply tokens, scores -50 to -71 nats), six configurations (the page; a local
+`-mcpu=native` build; the b12080 release with flash attention auto, off, off with F32 KV, and BF16 KV) deviate from the
+same weights dequantized to F32 (`llama-quantize --allow-requantize ... F32`) by 0.36-0.76 nats RMS per score, 0.58
+pooled, and pairs differ by 0.51-1.75 nats at most over the 9 scores. With the F32 copy, flash attention and the KV type
+move a score by at most 0.03 nats, and thread count changes nothing. The weights are bit-identical between the two
+models, so what remains is the Q8_0 matmul quantizing its activations to int8 blocks: any upstream change (kernels, flash
+attention, KV type, WebAssembly vs NEON) redraws that rounding error. The scatter predicts the gaps (difference sd 0.82,
+expected largest of 9 about 1.7 nats), and it predicts the direction: the rounding noise flattens the distribution, so
+improbable replies score higher than in F32 (mean +0.27 to +0.61 nats in five of the six). The page is not an outlier
+(RMS 0.53, the third closest to F32). The b12074 smoke's 0.58-0.67 and this one's 1.11 are two draws of the same scatter.
+It is not reducible without unquantized activations (an F16/BF16 GGUF); the Python native engine and SGLang serve BF16
+weights and do not have it. `wllama_smoke.mjs` therefore allows 2.5 nats, three sd of the difference.
 
 A score is bit-reproducible when the sequence's KV cells sit in the same order every time. The managed server runs one KV
 stream per slot (no `--kv-unified`), so a prompt always fills its stream from cell 0 in position order and a repeat is
