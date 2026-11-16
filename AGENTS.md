@@ -101,6 +101,9 @@ Diagnostics take the fastest route to a trustworthy answer:
 - Before launch, the brief states the question, each candidate design's wall time (steps x seconds per step x arms)
   and whether it reaches the regime it tests (warmup vs step count, the LR actually reached, sample size). A design
   that cannot answer is not run.
+- It also states the expected result and what would change if it came out otherwise. A check whose answer is
+  already near-certain (stock library code used the standard way, a property earlier measurements imply) or whose
+  outcome changes no decision is not run: answer from the evidence and say so. A question is not a request to measure.
 - Choose by time to a trustworthy answer, not by cost: offline statistics on archived rollouts; forward-only
   evaluation of existing weights (scaling an update `base + a*(theta_k - base)` as an LR stand-in, grafting,
   interpolation, sign-randomized nulls); short learner-bench replays; full-size runs. Run the slow method when it is
