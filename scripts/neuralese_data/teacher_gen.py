@@ -13,7 +13,8 @@ groups, `ops/pool-errata`, the missing ext_codebase repos), ordered once into `W
 first, then tasks the base fails, then unmeasured ones, then those it solves, each tier round-robin over families.
 Several teachers share one WORK: each claims a task before running it (WORK/claims), so faster teachers take more.
 
-  pause:   touch WORK/PAUSE   (running episodes finish, no new ones start; remove the file to continue)
+  pause:   touch WORK/PAUSE   (running episodes finish, no new ones start; remove the file to continue);
+           --pause-below-available-gb N does the same while host MemAvailable is below N GB
   stop:    systemctl --user stop <unit>   (killed episodes are redone on the next launch)
   resume:  launch the same command again (finished tasks are skipped)
   provider failures (an episode ending before its first model turn) are no verdict: deferred.jsonl, retried twice
@@ -81,6 +82,14 @@ def default_chat_config(url):
     Google's documented bypass signature on the function calls the runtime wrote itself (it rejects unsigned ones)."""
     gemini = 'generativelanguage.googleapis.com' in url
     return {'top_p': 0.95, **({'x_natlang_omit_seed': True, 'x_natlang_host_call_fields': GEMINI_HOST_CALL_FIELDS} if gemini else {})}
+
+
+def mem_available_gb():
+    with open('/proc/meminfo') as handle:
+        for line in handle:
+            if line.startswith('MemAvailable:'):
+                return int(line.split()[1]) / 2**20
+    return float('inf')
 
 
 def completions_url(endpoint):
@@ -257,7 +266,7 @@ class Generator:
 
     def slot(self, teacher):
         while not self.stop.is_set():
-            if (self.work / 'PAUSE').exists():
+            if (self.work / 'PAUSE').exists() or mem_available_gb() < self.args.pause_below_available_gb:
                 self.stop.wait(10)
                 continue
             index = self._take(teacher)
@@ -288,6 +297,8 @@ def main():
                    help='same-request retries after a provider failure (429, 5xx), with backoff honouring Retry-After')
     p.add_argument('--provider-cooldown', type=float, default=120,
                    help='seconds all of a teacher\'s slots wait before taking a new task after an episode the provider failed')
+    p.add_argument('--pause-below-available-gb', type=float, default=0,
+                   help='take no new task while MemAvailable is below this (a co-located learner phase needs the memory)')
     p.add_argument('--samples', type=int, default=1, help='episodes per task')
     p.add_argument('--limit', type=int, default=0, help='stop after the first N ordered tasks (0: all)')
     p.add_argument('--shard', type=int, nargs=2, default=(0, 1), metavar=('K', 'N'),
