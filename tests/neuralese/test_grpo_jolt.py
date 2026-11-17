@@ -235,3 +235,19 @@ def test_teacher_rho_summary_reads_the_student_form_ratio():
     summary = grpo.teacher_rho_summary([np.array([math.log(.01), 0., math.log(3.)])], 2.)
     assert summary['tokens'] == 3 and summary['rho_below_0.1'] == pytest.approx(1 / 3, abs=1e-3)
     assert summary['rho_capped'] == pytest.approx(1 / 3, abs=1e-3) and summary['log_rho_p50'] == 0.
+
+
+def test_self_distillation_replays_rare_successes_in_later_steps():
+    args = SimpleNamespace(sd_max_success=0.25, sd_window=2, sd_episodes=2)
+    stats = collections.Counter()
+    ok = lambda q, role='student', imports=(): {'quality': q, 'reward': q, 'role': role, 'decisions': [{'d': 1}],
+                                               'rows': [{'imports': list(imports)}]}
+    buffer = []
+    grpo.sd_add(buffer, [ok(1.), ok(0.), ok(0.), ok(0.), ok(1., 'teacher')], 0, args, stats)    # 1/4: rare
+    grpo.sd_add(buffer, [ok(1.), ok(1.), ok(0.), ok(0.)], 0, args, stats)                       # 2/4: not rare
+    grpo.sd_add(buffer, [ok(1., imports=[(0, 'b')]), ok(0.), ok(0.), ok(0.), ok(0.)], 0, args, stats)
+    assert stats['sd_added'] == 2 and stats['sd_skip_imports'] == 1
+    assert grpo.sd_take(buffer, 0, args, stats) == []                     # never in the step that sampled it
+    first = grpo.sd_take(buffer, 1, args, stats)
+    assert len(first) == 2 and all(e['decisions'] == [] for e in first)
+    assert len(grpo.sd_take(buffer, 2, args, stats)) == 2 and grpo.sd_take(buffer, 3, args, stats) == []   # window

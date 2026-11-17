@@ -1383,6 +1383,36 @@ def decision_tensors(batch, device):
     return as_long(ids), lengths, as_long(positions), as_long(targets), as_long(owner), counts, imports, sources
 
 
+def sd_add(buffer, episodes, step, args, stats):
+    """Self-distillation (RESTORE_MEMETIC_JOLT_HINDSIGHT_20261117.md section 4): keep the verified successes of a group
+    whose students succeeded at most --sd-max-success of the time (rare successes; JOLT+ teacher successes in student
+    form count too) for replay in the next --sd-window steps. Episodes whose calls import Neuralese state are left out
+    (their blocks may be collected before the replay)."""
+    students = [e for e in episodes if e.get('role', 'student') == 'student']
+    if not students or sum(e['quality'] == 1.0 for e in students) / len(students) > args.sd_max_success:
+        return
+    for episode in episodes:
+        if episode['quality'] != 1.0 or episode.get('role') == 'sd':
+            continue
+        if any(row.get('imports') for row in episode['rows']):
+            stats['sd_skip_imports'] += 1
+            continue
+        buffer.append({'episode': {**episode, 'decisions': []}, 'version': step, 'uses': 0})
+        stats['sd_added'] += 1
+
+
+def sd_take(buffer, step, args, stats):
+    """The episodes replayed at ``step``: those added before it within --sd-window steps, least replayed and newest
+    first, at most --sd-episodes. Older ones leave the buffer."""
+    buffer[:] = [item for item in buffer if step - item['version'] <= args.sd_window]
+    stats['sd_buffer'] = len(buffer)
+    chosen = sorted((item for item in buffer if item['version'] < step), key=lambda item: (item['uses'], -item['version']))
+    chosen = chosen[:args.sd_episodes]
+    for item in chosen:
+        item['uses'] += 1
+    return [item['episode'] for item in chosen]
+
+
 def teacher_rho_summary(parts, cap):
     """Distribution of rho over the step's teacher tokens in student form (JOLT+): how much of the guided run the unguided
     policy finds plausible. None without teacher tokens."""
@@ -2231,6 +2261,7 @@ def train(args):
     # actor tokens/s while the learner computes (learner-phase slots) and while it waits (all slots), cumulative
     phase_totals = collections.Counter()
     phase_mark = {'time': time.time(), 'tokens': actor_generated(args.actor)}
+    sd_buffer = []   # self-distillation replay of recent rare successes (``sd_add``/``sd_take``; --sd-weight)
     while not stop.is_set() and (not args.max_steps or step < args.max_steps):
         phase = collections.OrderedDict()
         t = time.time()
@@ -2265,6 +2296,8 @@ def train(args):
                 dropped_stale += 1
                 continue
             staleness.append(stale)
+            if args.sd_weight > 0:
+                sd_add(sd_buffer, episodes, step, args, stats)
             advantages = episode_advantages(episodes, stats)
             if advantages is None:
                 continue
@@ -2294,6 +2327,21 @@ def train(args):
                         episode_units[key][2] += 1
                         decisions.append({'row': d, 'advantage': advantage, 'group': group, 'task_id': task_id,
                                           'stale': stale, 'actor_version': step - stale, 'episode': key})
+        if args.sd_weight > 0:
+            # self-distillation: verified rare successes of the last --sd-window steps again, as a positive-advantage
+            # (truncated-IS cross-entropy) term of weight --sd-weight on their own exact actor calls
+            for episode in sd_take(sd_buffer, step, args, stats):
+                kept = exp0_sft.chains_of([episode], max_len=args.max_sequence_tokens)
+                if not kept:
+                    continue
+                key = len(episode_units)
+                episode_advantage[key] = args.sd_weight
+                episode_units[key] = [sum(n for c in kept for _, n, _ in c['segs']), sum(len(c['segs']) for c in kept), 0]
+                stats['sd_episodes'] += 1
+                stats['sd_tokens'] += episode_units[key][0]
+                for chain in kept:
+                    chain.update(advantage=args.sd_weight, episode=key, role='sd')
+                    chains.append(chain)
         if args.advantage_control != 'none':
             control_advantages([*chains, *decisions], episode_advantage, args.advantage_control,
                                random.Random(args.seed + step))
@@ -2798,6 +2846,13 @@ def main():
                    help='attempts per group: crisp (--teacher-attempts each) or the NL planTeacherAttempts')
     t.add_argument('--hindsight-trajectories', help='hindsight index (rl/hindsight.py index): a teacher attempt of a task '
                    'with a verified run is guided by writeHint over that run')
+    t.add_argument('--sd-weight', type=float, default=0.,
+                   help='self-distillation: replay recent rare verified successes as a positive-advantage term of this '
+                        'weight (0: off; design 0.1)')
+    t.add_argument('--sd-window', type=int, default=4, help='steps a rare success stays replayable')
+    t.add_argument('--sd-episodes', type=int, default=16, help='replayed episodes per step at most')
+    t.add_argument('--sd-max-success', type=float, default=0.25,
+                   help="a group's successes are rare when its students' success share is at most this")
     t.add_argument('--memetic-tasks', help='memetic "improve program P" rows (python -m natlang_neuralese.rl.memetic_tasks '
                    'build: DIR/cases.jsonl); RESTORE_MEMETIC_JOLT_HINDSIGHT_20261117.md section 3')
     t.add_argument('--memetic-share', type=float, default=0.,
