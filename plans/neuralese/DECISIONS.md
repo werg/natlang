@@ -2607,3 +2607,18 @@ final eval (00:40 entry).
 (grad_norm 0.80-1.02x the median, KL up to 1.4e-3 at LR 3e-6). The memory guard stopped teacher generation in learner
 phases and the ledger relaunched it every 2-4 min; requeues now back off (f208ffa29). The run continues to its 4 vs 4
 final eval; step 10 is on Pop.
+
+**2026-11-17 09:20, plan for the next pin (supervisor).** Run1's clearest held effect is behavioural: episodes
+running out of model calls fell 85 -> 56 -> 46 of 512 at steps 7-8 (paired p 0.002, < 0.001), after flat 73-82
+through step 5. The pass-rate series (+1.2 to +4.1) is within the step-1 A/A (+4.7), so run1's verdict stays its 4 vs
+4 final eval. The binding cost is time: ~3 h per step (collection ~1.5 h; reference forward ~0.3 h; policy
+forward/backward ~1.3 h at ~1,400 learner tokens/s), and ~4.7 h per 2-sample Pop eval. Decisions:
+- **Throughput work for the grpo-v4 pin** (not changing what is trained): learner efficiency, reference forward,
+  collection rate, and collect/learn overlap (GRPO_STEP_THROUGHPUT_20261117.md); Pop held-eval throughput, entering
+  with the base re-measure the pin requires anyway (POP_HELD_THROUGHPUT_20261117.md).
+- **grpo-v4-run1 treatment: peak LR 5e-6** (warmup 10, everything else run1's; `LR=3e-6` opts out). The behaviour
+  change appeared once run1's LR passed ~2e-6; grpo-v2's regression was at 1e-5 with ~24 groups and fresh AdamW. If
+  run1's final eval is a significant regression, v4 launches at 3e-6 and the hunt opens instead.
+- **SFT first** (sft-v3-run1, unchanged plan); GRPO from the SFT checkpoint follows its verdict.
+- **Task supply:** new qualified task families for thinly covered natlang behaviours (TASK_SUPPLY_20261117.md), into
+  the v4 pool when ready by the pin, else the next one.
