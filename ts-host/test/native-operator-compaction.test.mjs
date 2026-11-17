@@ -72,7 +72,7 @@ test('the grammar capture forces the exact reply ids around produce markers and 
     const body = init?.body ? JSON.parse(init.body) : undefined;
     requests.push({ url: String(url), body });
     if (String(url).endsWith('/tokenize'))
-      return new Response(JSON.stringify({ tokens: body.content === '</think>' ? [7] : body.content === '<|im_end|>' ? [2] : [50, 51] }));
+      return new Response(JSON.stringify({ tokens: body.content === '<think>' ? [6] : body.content === '</think>' ? [7] : body.content === '<|im_end|>' ? [2] : [50, 51] }));
     return new Response(JSON.stringify({ error: 'stop here' }), { status: 500 });
   };
   try {
