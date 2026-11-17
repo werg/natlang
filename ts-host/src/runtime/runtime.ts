@@ -27,7 +27,7 @@ const MODE_RANK: Record<SpecializationMode, number> = { off: 0, shadow: 1, on: 2
 export type ModelDriver = ((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => Promise<ModelTurn> | ModelTurn) & {
   /**
    * Optional decision readout (`DecisionScorer`, contracts.ts): score a finite set of replies instead of generating one.
-   * Any driver may carry it; without it, or when it fails with `decision-unsupported`, the call runs the tool loop.
+   * Any driver may carry it; without it, or when it fails with `decision-unsupported`, a finite readout generates one offered JSON value on the same short decision prompt.
    */
   decide?: DecisionScorer;
   /** The backend's complete native store, reader identity and available writer; wrappers retain this binding. */

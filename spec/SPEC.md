@@ -365,8 +365,11 @@ log loss) can grade (the [learning extension](ext/learning.md) also differentiat
 `runtime.decide(fn, ...args)` and eval code with `decide(fn, ...args)`, which return
 `{ value, probabilities: [{ value, probability }], confidence, scored }`. A model config with
 `decisionReadout: 'finite-returns'` applies the readout to every finite-typed
-call. A backend that cannot score replies falls back to the ordinary tool loop;
-the loader rejects `readout: decision` on a type that is not finite.
+call. A backend that cannot score replies generates one offered JSON value on the same short decision messages,
+without tools. This is a sampled choice with `scored: false`, not a score distribution. A missing, truncated, malformed
+or unoffered choice fails with `decision-generation-invalid`; return one complete offered JSON value. The model setting
+`decisionGeneration: 'tool-loop'` explicitly restores the prior unscored tool loop for controlled diagnosis.
+The loader rejects `readout: decision` on a type that is not finite.
 
 ## Eval
 
