@@ -1955,7 +1955,7 @@ def train(args):
         collector processes run here, against Pop's endpoint) into ``held/step-N`` with ``compare-vs-step0.json``."""
         from pop_rl_actor import pop_sglang
         held_root, tool = work / 'held', [sys.executable, str(HERE / 'pop_rl_actor.py')]
-        base_out = held_root / 'step-00000-pop'
+        base_out = Path(args.held_base) if args.held_base else held_root / 'step-00000-pop'
         python = [sys.executable, '-m', 'natlang_neuralese.rl.held_eval']
         # Pop's engine settings: the KV dtype is part of the attested engine (export format), so the start policy's
         # result is kept only if it was measured with the same one and the same attested max running sequences.
@@ -2027,6 +2027,13 @@ def train(args):
         last_start, last_step = 0., max(measured_steps() - {0}, default=0)
         while not stop.is_set():
             try:
+                if args.held_base and not held_complete(base_out):
+                    # measured by its own job (e.g. the pin's base on Pop while this run starts): wait, never serve
+                    # another policy on Pop meanwhile; checkpoints keep being kept for their evaluations
+                    stop.wait(300)
+                    continue
+                if args.held_base and not base_engine_matches():
+                    raise RuntimeError(f'--held-base {base_out} was measured on another engine or sampling law than {pop_format}')
                 if not base_engine_matches():
                     aside = held_root / f'step-00000-pop-{time.strftime("%Y%m%d%H%M")}-other-engine'
                     base_out.rename(aside)
@@ -2702,6 +2709,9 @@ def main():
     t.add_argument('--pop-kv-cache-dtype', choices=('fp8_e4m3', 'auto'), default='fp8_e4m3',
                    help="Pop actor's KV dtype (auto = BF16, its engine until 2026-11-13); part of the attested engine: "
                         'a start-policy result of another setting is moved aside and re-measured')
+    t.add_argument('--held-base', type=Path, help="with --held-remote: the base's held result directory (a result measured by "
+                   'its own job, e.g. the pin base on Pop); the loop waits for it to complete instead of measuring the start '
+                   'policy, and compares every checkpoint against it')
     t.add_argument('--pop-max-running', type=int, default=16, help="Pop actor's concurrent sequences (capacity)")
     t.add_argument('--unit-prefix', default='grpo')
     t.add_argument('--replay', help="learner control: train on a finished run's archived groups (its ROLLOUTS dir of "
