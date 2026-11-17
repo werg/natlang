@@ -128,6 +128,31 @@ def test_weight_sync_serves_the_snapshot_from_the_mapped_export_file(tmp_path):
     sync.publish(1, lambda version, ok: done.append((version, ok)))
     sync.wait()
     assert done == [(1, True)]
+    sync.close()     # a registration left behind makes a later test's cudaHostRegister of the reused range fail
+
+
+def test_weight_sync_publishes_the_producer_table_from_the_trained_embedding(tmp_path):
+    """The producer table is the embedding (no producer adapter): kept at the export's start values it served stale rows
+    to every Neuralese text write after step 1. It follows the embedding, stays out of the native checkpoint's backbone,
+    and ``producer_from_embedding=False`` keeps the exported table."""
+    torch = pytest.importorskip('torch')
+    from safetensors import safe_open
+    model = _tiny_model(torch)
+    start = torch.full((6, 4), 3.).to(torch.bfloat16)
+    export = _export(tmp_path, model, {grpo.PRODUCER_TABLE: start})
+    live = dict(model.named_parameters())
+    with torch.no_grad():
+        live[grpo.EMBEDDING].add_(1)
+    for follow, directory in ((True, 'follow'), (False, 'frozen')):
+        sync = grpo.WeightSync(model, export, None, tmp_path / directory, producer_from_embedding=follow)
+        sync.snapshot()
+        with safe_open(str(tmp_path / directory / 'model.safetensors'), 'pt') as handle:
+            table = handle.get_tensor(grpo.PRODUCER_TABLE)
+            assert torch.equal(handle.get_tensor(grpo.EMBEDDING), live[grpo.EMBEDDING].detach())
+        assert torch.equal(table, live[grpo.EMBEDDING].detach() if follow else start)
+        assert grpo.PRODUCER_TABLE not in sync.backbone() and grpo.EMBEDDING in sync.backbone()
+        sync.close()
+    assert grpo.producer_adapter_keys({'input_rows': 0, 'adapter.up.weight': 0}) == ['adapter.up.weight']
 
 
 def test_reference_weights_load_into_the_policy_and_restore_it_exactly(tmp_path):

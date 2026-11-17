@@ -650,15 +650,31 @@ def safetensors_header(layout, metadata=None):
     return struct.pack('<Q', len(raw)) + raw, offsets, offset
 
 
+EMBEDDING = 'model.embed_tokens.weight'
+PRODUCER_TABLE = 'model.natlang_producer_embed'     # export.native_hf: the producing input embedding of every token
+
+
+def producer_adapter_keys(interface_state):
+    """A checkpoint's producer-adapter tensors (``SharedStateModel.adapter``): with one the producer table is not the
+    embedding, and neither WeightSync nor the learner models it."""
+    return sorted(k for k in interface_state if k.startswith('adapter.'))
+
+
 class WeightSync:
     """The actor's HF export as one memory-mapped file on tmpfs: snapshot (GPU -> the mapped file, the only synchronous
     part; the mapping is page-locked with cudaHostRegister), then in a background thread load it into SGLang in place and
     optionally write a native checkpoint. The file is the only host copy of the weights: a separate pinned buffer that
     each publish wrote out to the file held another 4 GiB of the unit's memory (grpo-v2-run2, 2026-11-15). The file is
     rewritten only by ``snapshot``/``load_native``, which first wait for the publish thread (SGLang's load and the
-    checkpoint write read it there)."""
+    checkpoint write read it there).
 
-    def __init__(self, model, export_dir, sglang_url, weights_dir, front_url=None):
+    The producer table (``PRODUCER_TABLE``, the export's producing input embedding of every token,
+    ``export.native_hf.producer_embeddings``: ``adapter(embed(t), producing)``) is published from the trained input
+    embedding (``producer_from_embedding``; the checkpoints served here carry no producer adapter, so the table IS the
+    embedding): kept at the export's start values it served stale rows to every Neuralese text write from step 1 on,
+    while ordinary tokens read the trained ones (found 2026-11-17, NEURALESE_PASSTHROUGH_20261117.md)."""
+
+    def __init__(self, model, export_dir, sglang_url, weights_dir, front_url=None, producer_from_embedding=True):
         import mmap
         import torch
         from safetensors import safe_open
@@ -684,6 +700,10 @@ class WeightSync:
                     if tuple(params[name].shape) != shape:
                         raise ValueError(f'export/learner shape mismatch {name}')
                     sources.append(name)
+                elif name == PRODUCER_TABLE and producer_from_embedding:
+                    if tuple(params[EMBEDDING].shape) != shape:
+                        raise ValueError(f'producer table {shape} differs from the embedding {tuple(params[EMBEDDING].shape)}')
+                    sources.append(EMBEDDING)
                 else:
                     sources.append(None)    # the producer table and anything else the learner does not train
                 layout.append((name, 'BF16', shape, math.prod(shape) * 2))
@@ -717,6 +737,7 @@ class WeightSync:
         # one tensor (its own storage) per trained weight, so that a native checkpoint saves them as separate clones did
         self.views = {name: torch.frombuffer(self.map, dtype=torch.bfloat16, count=nbytes // 2, offset=base + offset).view(shape)
                       for (name, _, shape, nbytes), offset, source in zip(layout, offsets, sources) if source is not None}
+        self.sources = {name: source for (name, *_), source in zip(layout, sources) if source is not None}
         self.params = params
         self.thread = None
         self.last = {}
@@ -725,7 +746,7 @@ class WeightSync:
         import torch
         self.wait()
         for name, view in self.views.items():
-            view.copy_(self.params[name].detach(), non_blocking=self.pinned)
+            view.copy_(self.params[self.sources[name]].detach(), non_blocking=self.pinned)
         if torch.cuda.is_available():
             torch.cuda.synchronize()
 
@@ -733,6 +754,16 @@ class WeightSync:
         if self.thread is not None:
             self.thread.join()
             self.thread = None
+
+    def close(self):
+        """Unregister the page-locked mapping (a registration outliving its mapping makes a later cudaHostRegister
+        of the reused address range fail) and drop the views; the file stays."""
+        import torch
+        self.wait()
+        if self.pinned:
+            torch.cuda.cudart().cudaHostUnregister(torch.frombuffer(self.map, dtype=torch.uint8).data_ptr())
+            self.pinned = False
+        self.views = self.buffer = None
 
     def load_native(self, path, special):
         """Put another native checkpoint's backbone in the pinned buffer (its interface rows merged into the embedding
@@ -749,11 +780,11 @@ class WeightSync:
             rows.append((config['token_override_ids'], interface['extra_input_rows']))
         for ids, values in rows:
             embedding[torch.tensor(list(ids))] = values.to(embedding.dtype)
-        merged = self.views['model.embed_tokens.weight'][torch.tensor(special)]
+        merged = self.views[EMBEDDING][torch.tensor(special)]
         if not torch.equal(embedding[torch.tensor(special)].to(merged.dtype), merged):
             raise ValueError(f'{path} has other interface rows than the served policy')
         for name, view in self.views.items():
-            source = embedding if name == 'model.embed_tokens.weight' else backbone[name]
+            source = embedding if self.sources[name] == EMBEDDING else backbone[name]
             view.copy_(source.to(view.dtype))
         del state
 
@@ -761,7 +792,7 @@ class WeightSync:
         """{name: host bf16 tensor} of the snapshot in native backbone naming: views of the mapped file, valid until the
         next ``snapshot``/``load_native`` (both wait for the publish thread, where ``write_native`` reads them). Not copies:
         cloning them put another 4 GB on the unit during every checkpoint write."""
-        return dict(self.views)
+        return {name: view for name, view in self.views.items() if self.sources[name] == name}
 
     def publish(self, version, on_done, also=None, policy=None):
         def run():
@@ -1726,8 +1757,12 @@ def train(args):
             pass
     weights_dir.mkdir(parents=True, exist_ok=True)
     (weights_dir / 'owner.pid').write_text(str(os.getpid()))
+    if not args.frozen_producer_table and producer_adapter_keys(state['interface_state']):
+        raise SystemExit(f'the checkpoint has a producer adapter {producer_adapter_keys(state["interface_state"])}: '
+                         'the producer table is not the embedding (use --frozen-producer-table)')
     sync = WeightSync(model, args.actor_export, None if args.no_actor_sync else sglang_url, weights_dir,
-                      front_url=None if args.no_actor_sync else args.actor)
+                      front_url=None if args.no_actor_sync else args.actor,
+                      producer_from_embedding=not args.frozen_producer_table)
     atexit.register(shutil.rmtree, weights_dir, True)
     drop_cache([Path(args.actor_export) / 'model.safetensors'])
     saver = StateSaver()
@@ -2226,12 +2261,8 @@ def train(args):
         def all_checkpointed(net):
             return lambda tokens: exp0_sft.set_checkpointing(net, tokens, 0)
 
-        # a leaf after ``start`` prefix tokens: the prefixes' graphs (every layer recomputed: its input saved) stay alive
-        # until their last child, so they come out of the leaf's activation budget
-        prefix_gb_per_token = len(model.model.layers) * model.config.hidden_size * 2 / 2**30
-
         def leaf_budget(start):
-            return max(0., args.activation_gb - start * prefix_gb_per_token)
+            return exp0_sft.leaf_activation_gb(model, args.activation_gb, start)
 
         refs = {}
         # Sampled decisions: log pi(chosen) = log_softmax(s / T)[chosen], s_o the summed log-probability of option o's
@@ -2688,6 +2719,9 @@ def main():
                    'outstanding group was created (negative: never)')
     t.add_argument('--no-actor-sync', action='store_true',
                    help='never update the actor (smoke against a shared actor of the start policy; versions advance nominally)')
+    t.add_argument('--frozen-producer-table', action='store_true',
+                   help="keep the actor's producer table (the producing input embedding of Neuralese text writes) at "
+                   'the export\'s start values instead of publishing it from the trained embedding each step (WeightSync)')
     t.add_argument('--unpinned', action='store_true',
                    help='run from a live checkout instead of a pinned copy (smokes only; see check_pin)')
     t.add_argument('--held-every-hours', type=float, default=4.)
