@@ -3,9 +3,10 @@
  *
  * Instead of the tool loop, the runtime asks the model's driver to score every allowed result as the reply to the
  * call's opening, and returns the most probable one. The full distribution is kept in the trace, so a decision is a
- * calibrated probability vector, not one sample: it can be scored with proper scoring rules (Brier, ranked
- * probability score) and, on a Neuralese server, differentiated. A call opts in with `readout: decision` in its
- * frontmatter, or every finite-typed call does when the model config sets `decisionReadout: 'finite-returns'`.
+ * scored probability vector: it can be scored with proper scoring rules (Brier, ranked
+ * probability score) and, on a Neuralese server, differentiated. A call declares `readout: decision`.
+ * Without scoring, the same prompt generates one actual JSON choice, with no inferred probabilities.
+ * A call opts in through frontmatter, or every finite-typed call does when the model config sets `decisionReadout: 'finite-returns'`.
  */
 import type { DecisionRequest, DecisionScorer, DecisionScores } from '../contracts.js';
 import type { Type, TypeEnv } from './types.js';

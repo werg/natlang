@@ -7,6 +7,7 @@ acting on the owner's recorded answer, moves an entry to "Done" with the date an
 
 | Since | Item | What to review | Status meanwhile |
 | --- | --- | --- | --- |
+| 2026-11-17 | plans/VIBESTUDIO_FIXTURE_IR_DECOMPOSITION.md; ~/vibestudio/docs/natlang-teacher-coverage.md | Portable original-program/fixture IR, actual entry binding, generated decision replies on the student surface, and explicit scope of the 18 skill suites | Implemented; three live Luna families qualified, 39 training chains built. Review after the fact; no learner exposure. |
 | 2026-10-12 | applications/ops-retention/DECOMPOSITION.md (review rec. 7) | Storage-retention classification as a pluggable: crisp `crisp_verdict` (default) and `classifyRetention.nl` over the same `retention_facts`; shadow log of disagreements; exact bound refuses an nl delete of protected files | Implemented on main 65bf7108; review after the fact. One-week shadow run (`--classifier shadow`) per the DECOMPOSITION |
 
 | 2026-10-14 | applications/dialogue-perspective-ledger/DECOMPOSITION.md | Connected29NL application: quote and episode frontiers, actual scoped meaning/claim/availability/adoption/fulfillment deltas, NL scope/audit findings; TS declarations only | Source implemented with native loader/type checks; independent source review, full typed canonical/checker and live0/48 debt pending. No training admission. |

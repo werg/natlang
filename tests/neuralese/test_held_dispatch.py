@@ -117,6 +117,25 @@ def test_pop_actor_start_reuses_a_served_policy_only_with_the_same_engine_settin
         pop_rl_actor.start(SimpleNamespace(**{**vars(args), 'max_running': 16}))
 
 
+def test_pop_actor_helper_import_preserves_pinned_checkout_and_pythonpath():
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    repo = Path(__file__).resolve().parents[2]
+    pythonpath = os.pathsep.join([str(repo / 'training/neuralese'), str(repo)])
+    environment = {**os.environ, 'NATLANG_REPO': str(repo), 'PYTHONPATH': pythonpath}
+    script = (
+        'import json, os; '
+        'from scripts.neuralese_data.pop_rl_actor import pop_sglang; '
+        'print(json.dumps({key: os.environ.get(key) for key in ("NATLANG_REPO", "PYTHONPATH")}))'
+    )
+    result = subprocess.run([sys.executable, '-c', script], cwd=repo, env=environment,
+                            text=True, capture_output=True, check=True)
+    assert json.loads(result.stdout) == {'NATLANG_REPO': str(repo), 'PYTHONPATH': pythonpath}
+
+
 def _fake_repo(tmp_path, body):
     (tmp_path / 'scripts').mkdir()
     (tmp_path / 'scripts/run_bonsai_queue.py').write_text(body)

@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { loadEvaluationSuite, evaluate, preflightEvaluation, validateCases, validateMetrics } from '../dist/evaluation/index.js';
 import { optimize, resumeOptimization, revalidateAdaptation } from '../dist/optimization/index.js';
 import { candidateArtifact } from '../dist/evaluation/runner.js';
@@ -77,6 +77,63 @@ test('suite split leakage and malformed independent metrics are rejected', () =>
   assert.throws(() => validateMetrics({ quality: NaN }), /quality/);
   assert.throws(() => validateMetrics({ quality: 1, gates: { safe: 'yes' } }), /boolean/);
   assert.throws(() => validateMetrics({ quality: 1, metrics: { latency: Infinity } }), /finite/);
+});
+
+test('fixture assets resolve from the authored program root through preflight and emitted worker execution', async () => {
+  const fixture = fixtureSuite();
+  writeFileSync(join(fixture.root, 'fixture.json'), JSON.stringify({ train: 'urgent help', valid: 'ordinary task', test: 'held-out text' }));
+  const emitted = join(fixture.root, '.natlang', 'relocated-suite');
+  mkdirSync(emitted, { recursive: true });
+  const relocatedSuite = join(emitted, 'suite.mjs');
+  writeFileSync(relocatedSuite, `import { readFileSync } from 'node:fs'; import { join } from 'node:path';\n` +
+    readFileSync(fixture.path, 'utf8')
+      .replace("program: { root: '.'", `program: { root: ${JSON.stringify(fixture.root)}`)
+      .replace('const app = await context.loadFreshProgram();',
+        'if(context.programRoot.includes(".natlang"))throw new Error("fixture root is an emitted directory"); const inputs=JSON.parse(readFileSync(join(context.programRoot,"fixture.json"),"utf8")); const app = await context.loadFreshProgram();')
+      .replace('app.run(testCase.input)', 'app.run(inputs[testCase.id])'));
+  const prepared = await loadEvaluationSuite(relocatedSuite);
+  assert.equal(prepared.programRoot, fixture.root);
+  assert.deepEqual(await preflightEvaluation(prepared), { cases: 3, suiteHash: prepared.suiteHash });
+  const batch = await evaluate(prepared, { split: 'validation', driver: scriptedModel(() => 'return value.split(" ")[0]').driver });
+  assert.equal(batch.quality, 1);
+});
+
+test('evaluation discovers application source without neighboring conventional tests, including tsconfig globs', async () => {
+  const fixture = fixtureSuite();
+  mkdirSync(join(fixture.root, '__tests__'));
+  mkdirSync(join(fixture.root, 'classify'));
+  const missing = 'import { missing } from "@uninstalled/test-host"; export const value = missing;';
+  for (const name of ['contract.test.ts', 'contract.spec.ts', '__tests__/contract.ts', 'classify/contract.test.ts'])
+    writeFileSync(join(fixture.root, name), missing);
+  const suitePath = join(fixture.root, 'suite.ts');
+  writeFileSync(suitePath, `import { defineEvaluationSuite } from ${JSON.stringify(fileURLToPath(new URL('../dist/evaluation/index.js', import.meta.url)))};
+export default defineEvaluationSuite<string, string>({
+  id: 'without-host-tests', program: { root: '.', id: 'fixture', entry: 'main.ts' }, components: 'lambda-only',
+  executorIdentity: { id: 'scripted', configuration: {} }, budget: { maxRollouts: 3, maxProposals: 0, maxModelCalls: 10 },
+  cases: [{ id: 'one', group: 'one', split: 'train', input: 'ordinary task', expected: 'ordinary' }],
+  fixture: { async create(testCase, context) { const app = await context.loadFreshProgram() as {run(value: string): Promise<string>};
+    return { execute: () => context.runtime.run(() => app.run(testCase.input)) }; } },
+  score(testCase, observation) { return { quality: (observation as {result?: unknown}).result === testCase.expected ? 1 : 0 }; }
+});`);
+  const first = await loadEvaluationSuite(suitePath);
+  assert.ok(Object.keys(first.program.sources).every(path => !path.includes('.test.') && !path.includes('.spec.') && !path.includes('__tests__')));
+  writeFileSync(join(fixture.root, 'tsconfig.json'), JSON.stringify({
+    compilerOptions: { target: 'ES2022', module: 'NodeNext', moduleResolution: 'NodeNext', strict: true, skipLibCheck: true },
+    include: ['**/*.ts'],
+  }));
+  const configured = await loadEvaluationSuite(suitePath);
+  const batch = await evaluate(configured, { split: 'train', driver: scriptedModel(() => 'return value.split(" ")[0]').driver });
+  assert.equal(batch.quality, 1);
+  // Exclusion is discovery only: an actual dependency on the same test file remains a checked application import.
+  writeFileSync(join(fixture.root, 'main.ts'), 'import "./contract.test.js";\n' + readFileSync(join(fixture.root, 'main.ts'), 'utf8'));
+  await assert.rejects(loadEvaluationSuite(suitePath), /Cannot find module '@uninstalled\/test-host'/);
+  writeFileSync(join(fixture.root, 'contract.test.ts'), 'import { nl } from "@natlang/node"; export async function helper(value: string): Promise<string> { return nl<string>`Return the first word of value.`(value); }');
+  writeFileSync(join(fixture.root, 'main.ts'), 'import classify from "./classify.nl"; import { helper } from "./contract.test.js"; export async function run(value: string): Promise<string> { return classify(await helper(value)); }');
+  const imported = await loadEvaluationSuite(suitePath);
+  assert.ok(imported.program.sources['contract.test.ts'], 'an explicit application import is bound into source provenance');
+  const result = await evaluate(imported, { split: 'train', driver: scriptedModel(() => 'return value.split(" ")[0]').driver });
+  assert.equal(result.quality, 1, 'the imported inline nl was lowered and executed');
+  assert.equal(result.results[0].traces.length, 2);
 });
 
 test('evaluation imports application state afresh, scores real runtime execution, and observes coverage/unknown tokens', async () => {
@@ -189,18 +246,18 @@ test('the CLI evaluation driver of a model session scores decision readouts in t
   assert.deepEqual(scored, [['"ordinary"', '"urgent"']]);
 });
 
-test('a driver that declines to score leaves the evaluation worker running the tool loop, charged for the turn only', async () => {
+test('a driver that declines to score generates a JSON decision, charged for the actual request only', async () => {
   const fixture = fixtureSuite();
   writeFileSync(join(fixture.root, 'classify.nl'), '---\nreadout: decision\nargs: { value: string }\nreturns: \'"ordinary" | "urgent"\'\n---\nAnswer urgent when value asks for help, otherwise ordinary.\n');
   const suite = await loadEvaluationSuite(fixture.path);
   const model = scriptedModel(() => 'return "ordinary"');
   let turns = 0;
-  const driver = Object.assign((...args) => { turns++; return model.driver(...args); },
+  const driver = Object.assign((...args) => { turns++; return args[0].tools.length ? model.driver(...args) : {text:'"ordinary"',calls:[],prompt_tokens:10,completion_tokens:3}; },
     { decide: async () => { throw new Error('decision-unsupported: this backend cannot score replies'); } });
   const gateway = new UsageGateway(limits({ maxModelCalls: 20 }));
   const batch = await evaluate(suite, { split: 'validation', driver, gateway });
   assert.equal(batch.results[0].status, 'scored');
-  assert.ok(turns > 0, 'the call ran its tool loop');
+  assert.ok(turns > 0, 'the call generated its actual choice');
   assert.equal(batch.results[0].usage.modelCalls, turns, 'only the turns were requests');
   assert.equal(gateway.ledger.usage.modelCalls, turns);
 });

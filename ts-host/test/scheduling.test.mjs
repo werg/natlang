@@ -4,7 +4,7 @@ import { createNatlangRuntime } from '../dist/index.js';
 import { ScheduleWorkspace, plan } from '../../applications/dist/scheduling/index.js';
 import order, { topologicalOrder } from '../../applications/dist/scheduling/scheduler/order.js';
 import { readFileSync } from 'node:fs';
-import { appCrisp, scriptedModel, withJudge } from './support/natlang.mjs';
+import { appCrisp, scriptedModel, withJudge, withGeneratedDecisions } from './support/natlang.mjs';
 
 const CRISP = await appCrisp('scheduling');
 /** A runtime whose refinements are decided by the application's crisp checkers; the judge, if asked, accepts. */
@@ -159,14 +159,17 @@ function plannerModel({ construct = null, corrupt = false } = {}) {
       case 'readLimits': return call('readLimits', 'request, view');
       case 'readPreferences': return call('readPreferences', 'request');
       case 'domains': return call('domains', 'view, hard');
-      case 'assess': return call('assess', 'schedule');
-      case 'tiebreak': return call('tiebreak', '');
       case 'explain': return call('explain', 'request, schedule');
       case 'diagnose': return call('diagnose', '');
       default: return null;
     }
   });
-  return { ...model, seen };
+  return { ...model, seen, driver: withGeneratedDecisions(model.driver, (inputs, opening) => {
+    const stage = opening.includes('Decide how well the plan meets it') ? 'assess' : opening.includes('Both meet the request') ? 'tiebreak' : null;
+    assert.ok(stage, 'a generated decision must name a fixture stage'); seen.push(stage);
+    if (stage === 'assess') { assert.ok(Array.isArray(inputs.schedule)); return impl.assess(inputs.schedule); }
+    assert.ok(Array.isArray(inputs.first) && Array.isArray(inputs.second)); return impl.tiebreak();
+  }) };
 }
 
 test('the scheduler reads the request, builds candidates, ranks them by the wish and the workspace commits', async () => {

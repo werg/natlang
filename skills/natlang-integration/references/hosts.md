@@ -146,7 +146,7 @@ A driver is an ordinary function, so it composes: wrap one to limit requests in 
 
 ### Decision capability of any driver
 
-A driver may carry `decide: DecisionScorer` (`Object.assign(driver, { decide })`, contracts.ts `DecisionRequest`): score a finite list of replies (`options`, each the JSON text of an allowed value) after `messages` and return `{ log_probs, tokens? }`, optionally with `scoreMany(items)` to batch. The runtime uses it for `readout: decision` functions, `decisionReadout: 'finite-returns'`, refinement judges and `decide(fn, ...)`; a driver without it, or whose scorer throws an error starting `decision-unsupported`, gets the ordinary tool loop for that call (the trace records `decision_readout` `phase: 'unavailable'`). Any other scorer error fails the call. A gateway driver implements it by asking the service that owns the model; endpoint drivers use `prompt_logprobs` or the llama.cpp fork's score endpoint. Wrappers copy it with the driver (`wrapDriver`); `DecisionScores.prompt_tokens`, when the scorer reports it, is the usage the evaluation `UsageGateway` charges. The readout's prompt is the call's opening with a short system turn (`DECISION_SYSTEM_PROMPT` plus the program's guidance), not the tool manual: the readout offers no tools. Wrap a scorer in `coalescingScorer` (`@natlang/node/model`) so readouts of concurrent calls reach `scoreMany` together. The readout asks for each value as one bare JSON value, the form natlang's own models are trained on. A scorer for an instruction model natlang did not train should score the form that model answers in: `framedDecision(request, 'result-object')` (the Pi target exports it; managed stock models and the `decisionReply` profile setting use it) rewrites the request's last message and options to `{"result": VALUE}` and leaves any request that is not a readout alone; scores come back in the options' order.
+A driver may carry `decide: DecisionScorer` (`Object.assign(driver, { decide })`, contracts.ts `DecisionRequest`): score a finite list of replies (`options`, each the JSON text of an allowed value) after `messages` and return `{ log_probs, tokens? }`, optionally with `scoreMany(items)` to batch. The runtime uses it for `readout: decision` functions, `decisionReadout: 'finite-returns'`, refinement judges and `decide(fn, ...)`; a driver without it, or whose scorer throws an error starting `decision-unsupported`, generates one offered JSON value on the same short decision prompt (a declined scorer first records `decision_readout` `phase: 'unavailable'`; a valid generated choice records `phase: 'generated'`, without option probabilities). Any other scorer error fails the call. A gateway driver implements it by asking the service that owns the model; endpoint drivers use `prompt_logprobs` or the llama.cpp fork's score endpoint. Wrappers copy it with the driver (`wrapDriver`); `DecisionScores.prompt_tokens`, when the scorer reports it, is the usage the evaluation `UsageGateway` charges. The readout's prompt is the call's opening with a short system turn (`DECISION_SYSTEM_PROMPT` plus the program's guidance), not the tool manual: the readout offers no tools. Wrap a scorer in `coalescingScorer` (`@natlang/node/model`) so readouts of concurrent calls reach `scoreMany` together. The readout asks for each value as one bare JSON value, the form natlang's own models are trained on. A scorer for an instruction model natlang did not train should score the form that model answers in: `framedDecision(request, 'result-object')` (the Pi target exports it; managed stock models and the `decisionReply` profile setting use it) rewrites the request's last message and options to `{"result": VALUE}` and leaves any request that is not a readout alone; scores come back in the options' order.
 
 ### Pi as an injected dependency
 
@@ -156,10 +156,20 @@ For a teacher running an evaluation suite, `evaluate(prepared, { driver, executo
 actual executor identity without changing the suite's declared student identity. Each result's `modelTurns` contains
 the exact executor `request` and `reply`, `invocation_id`, `parent_call_id` and per-invocation `turn`; independent judge
 requests are excluded. Capture snapshots the request before dispatch and records replies before scoring. A generated-turn
-collection uses a driver without `decide`, so finite readouts run the ordinary tool loop. If a scored decision is attempted
+collection uses a driver without `decide`, so finite readouts generate one JSON value on the same short decision prompt used by scoring. If a scored decision is attempted
 during capture, evaluation fails explicitly; remove the scorer from the collection driver rather than treating missing
 generation as a demonstration. An executor identity override cannot accompany an adaptation candidate: evaluate the
 candidate on its bound executor. Ordinary evaluation keeps its existing behavior and omits `modelTurns`.
+
+Evaluation fixtures read source assets relative to `context.programRoot`, the absolute authored program directory
+also available as `PreparedSuite.programRoot`. Preflight, normal evaluation and source optimization pass the same
+root to fresh workers. Use it for JSON, documentation and other fixture files; `import.meta.url` identifies the
+emitted suite module and can point into `.natlang/`, where source assets are not copied.
+
+Evaluation and source-optimization builds discover application files while excluding neighboring `*.test.*`,
+`*.spec.*` and `__tests__/` sources, including tsconfig glob discovery and callable folders. Those tests run in their
+own host's test lane. An application that explicitly imports one still reads and checks it normally; a missing
+dependency in an actual imported source must be installed or removed from that application dependency graph.
 
 ### The managed llama.cpp package
 
@@ -178,3 +188,18 @@ A reducer call is a transaction: open the folder with `'overlay'` access (writes
 Services, live values, and packages available to eval run with the application's authority. `workspace` selects the `package.json` whose dependencies eval and callable-folder code may import; `network` allows `fetch` in eval. A timeout or failed validation cannot undo an effect that already happened.
 
 To initialize a soft body from text (a soft function, a soft skill, a system-prompt piece, or a standard-library body), use `initBodyInContext({ endpoint, store, text, type, render })` from the runtime package. `render(placeholder, driver)` captures the actual model request with the native-state placeholder; the native server initializes the body in that context and returns an `nzs1` artifact with source-token provenance and exact positional import receipts. The supplied archive retains the native state, and `.nz` files carry native `nzs1` and `nnt1` artifacts. The server must advertise the native text-write and contextual init-body capabilities. A missing producer capability or a render that omits the exact placeholder fails the operation; there is no text-emulation or projected-block fallback.
+
+For a portable fixture teacher task, canonical program IR can declare an `evaluation_fixture` host frontend. The host
+bundle and selected case stay outside model-owned sources; `entry.export_path` identifies the actual application
+callable, whose JSON arguments must match the declared task inputs. A mismatch fails before executing that callable;
+correct the input mapping or original fixture. A TypeScript wrapper may use a real NL semantic anchor without forcing
+that anchor to execute. Keep source-root assets explicit with `FixtureContext.programRoot`. Schema and training-facing
+evidence details are in `docs/NATIVE_RUNTIME_NOTES.md` and `plans/VIBESTUDIO_FIXTURE_IR_DECOMPOSITION.md`.
+
+
+When a finite decision driver lacks scoring (or declines with `decision-unsupported`), the runtime generates one offered
+JSON value with no tools, on exactly the scored decision messages. Trace phase `generated` means a sampled choice,
+without a score distribution. `decision-generation-invalid` means the generated reply was incomplete, malformed or
+outside the offered values: return one complete offered JSON value. A tool call cannot replace that reply. For
+controlled diagnosis, `model.decisionGeneration: 'tool-loop'` restores the prior unscored tool loop. Graph request/token
+budgets apply to generated choices; actual token use and generation captures remain actual generation evidence.

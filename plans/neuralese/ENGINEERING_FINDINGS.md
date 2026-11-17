@@ -2,6 +2,22 @@
 
 Moved from AGENTS.md on 2026-11-09 (owner). Still binding for the code they describe; read the relevant section before changing it.
 
+## Pop actor helper imports preserve pinned caller bindings (2026-11-17)
+
+The full check on detached `9cd48a60d` exposed two historical-dispatch attestation failures: the verifier resolved
+`/home/werg/natlang` while the test artifact belonged to the detached checkout. The cause was
+`scripts/neuralese_data/pop_rl_actor.py` clearing `NATLANG_REPO` and `PYTHONPATH` at import. Both
+`tests/neuralese/test_held_dispatch.py` and the production GRPO `pop_held_loop` import its `pop_sglang` helper.
+Cleanup now runs only for direct CLI execution; helper imports preserve the caller's environment. This is subprocess
+and provenance plumbing, with no serving protocol, model input or training objective change.
+
+Static scope checked: GRPO's `pinned_env()` explicitly restores both bindings, and Pop status/serve/held measure/compare
+children receive it (`grpo.py`, `pop_held_loop`). No wrong live policy or held outcome was demonstrated. Live process
+environments and active run artifacts were not audited in this integration task; no live job was stopped or changed.
+A fresh history-attestation-only run passed before the fix, identifying order dependence; the combined held-dispatch
+and provider-source files pass after the fix, including a fresh-process import-preservation regression. Full-check
+failure evidence remains distinct from the targeted correction checks.
+
 ## Digest-cache maintenance stays bounded and off the source filesystem (engineering, 2026-11-02)
 
 The shared append-only digest cache reached606.5MB and2.30million entries;
@@ -1480,3 +1496,70 @@ data curation, quantization codecs and evaluation packets are in `plans/neurales
 trained now is the top section of this file and `plans/neuralese/APPROACH_REVIEW_20261111.md`. A resume restores its
 run's exact checkpoint and optimizer/RNG state; never substitute base weights into a resume. Qualification is actual
 task behaviour, numerics and recoverable state, not similarity to the base.
+
+### 2026-11-17: hosted decision teachers must match the deployed readout surface
+
+Inspection of `native/agent.ts:decisionReadout` found that a driver without `decide` took the ordinary tool loop,
+whereas scored finite readouts use `DECISION_SYSTEM_PROMPT` and `decisionPrompt` with no tools. Such teacher tool-call
+targets train a different prompt/answer surface. The shared default now generates one real offered JSON value on the
+identical encoded messages; malformed, truncated, unoffered and tool-call replies fail explicitly. Graph budgets use
+actual reservations and reported usage; native captures remain generation nodes, never fabricated option probabilities.
+A diagnostic `decisionGeneration: tool-loop` opt-out preserves the old path. Existing explicit multi-model fallback/
+handoff loops retain their established tool-loop semantics; this fixture campaign has no fallback chain. Inventory and
+excluded live-state boundary are in `plans/VIBESTUDIO_FIXTURE_IR_DECOMPOSITION.md`. Both TS configs and32 targeted
+readout/onboarding/canonical-collector tests passed under a2GB ledger unit after correcting two scripted test fixtures.
+An additional80/82 multi-file regression run passed all other selected evaluator/generic/tuning consumers; its two
+fixture failures are included in the corrected32. No live training run was modified by this fix.
+
+### 2026-11-17: canonical fixture full-gate guard corrections
+
+The immutable67a3eb693 full check exposed three guard defects: teacher admission duplicated strict canonical JSON
+helpers (fixed5eae67caf with43 targeted golden/strictness/admission/ratchet checks); the generated-decision kind omitted
+the reverse chat-completion route listing; and the fixture frontend imported adaptation identity across a new directory
+cycle. The route map is corrected, and the unchanged fingerprint implementation now lives with shared native canonical
+data, re-exported through the existing adaptation API. Both TypeScript configs, layering,5 model-call-kind guards and10
+canonical fixture tests passed. Two packed CLI fixture servers and the distributed review wiring fixture also needed
+actual JSON replies on tool-free decision requests; their old scripted tool-call replies now correctly fail at runtime.
+Fresh packed CLI plus adaptation checks passed23 tests; the distributed skill fixture passed3. These corrections change registry plumbing, code location and
+scripted tests, preserving production prompt/reply/outcome behavior from67a3eb693. The pinned full remainder continues;
+these targeted corrections must be reported alongside its exact result, never as an entirely green run of that old pin.
+
+The full TS scan also reached NLDB/scheduling application wiring fixtures whose decision mocks still emitted eval code.
+An initial test-only diagnostic opt-out was rejected as inadequate default-path coverage and replaced. NLDB, scheduling
+and workflow now retain the production default: tool-free decisions parse the actual displayed argument data and use
+the existing fixture's pure verdict functions to return raw JSON. The former eval-code answer branches for those
+finite stages are removed, so an unexpected tool-loop path fails instead of masking the new surface. All30 application
+wiring cases pass with unchanged stage/effect assertions and no diagnostic opt-out. No production runtime change was
+needed for these fixture corrections.
+
+### 2026-11-17: incoming operator generation bypassed graph budgets
+
+The merged `native/agent.ts:operatorWrite` directly dispatched its real model call from `views` before the ordinary loop
+or decision generator reserved the task allowance. It could issue a request at maxModelRequests0 and ignore the graph
+token limit. The fix uses existing ModelBudget.reserve/finish, caps the actual request, charges reported usage, and
+refuses successful capture on an overrun. Inventory: compact-value/compact-params reach this one sampled helper;
+compact-history reuses its already sampled note through noteRef/capturedRef. HTTP serverCapture and grammarCapture are
+deterministic state materialization, not extra policy decisions; their sampling/serving protocols are unchanged.
+Both TS configs,23 decision/operator checks and5 model-call-kind guards pass under a2GB ledger unit. Existing unbounded
+operator/capture tests stay unchanged; new cases exercise zero requests,3-token allowance and an overrun.
+
+Read-only DGX ledger/process inspection (2026-11-17 around20:20) found SFT-v3 running pinned2734e2c44ddb exp0_sft,
+without learned-compaction or compaction environment flags, and Pop held collectors pinned383bd4ed3651 explicitly using
+NATLANG_MODEL_FACING=effect-receipt. No live learned-compaction runtime measurement was found among the active inspected
+units; packtree/progtune units had no live processes by the follow-up check. Operator-row generation/check units were
+queued, not live experiments. No GPU job was launched and no unrelated run was stopped. The optional compaction path
+is crisp by default; this fix belongs in the next affected pin. Direct program options of unrelated processes were not
+exhaustively reconstructed; no claim about uninspected jobs or earlier archives follows from this check.
+
+### 2026-11-17: preserve the dependency-free Pi bundle after shared identity relocation
+
+The merged6d921fca4 full gate passed1629 general Python,2229 Neuralese,2618 TS and22 conformance checks, plus all build,
+type and layering stages; its only failure was the Pi bundle's no-import contract. Relocating fingerprint into the
+otherwise pure native/canonical-data module had added @noble/hashes to a pure JSON consumer's transitive module graph.
+This was a real dependency leak, not a lexical test false positive. Canonical JSON is pure again; one separate
+native/content-identity module holds the unchanged hash implementation, adaptation re-exports its existing API, and
+the teacher frontend imports that lower-layer module directly. Inventory: pure canonical consumers (including Pi),
+adaptation identity exports and teacher binding hashes all retain one implementation and their old bytes. Both TS
+configs, layering and28 real Pi-bundle/canonical-fixture/adaptation tests pass under a2GB ledger unit. The Pi test builds
+and imports its actual bundle without package imports, then exercises scoring and framing. No prompt or task outcome
+changed; this correction pairs with the fully checked remainder of the merged pin.

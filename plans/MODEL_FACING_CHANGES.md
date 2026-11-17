@@ -2538,6 +2538,51 @@ of silently marking their outcomes unverified (`tune-pipeline.test.mjs`).
 is run only inside training collections (JOLT+ teacher attempts with a verified run, `grpo.py
 --hindsight-trajectories`); it has no live sample yet, and its first teacher attempts are its first measurement.
 
+
+### 2026-11-17: Vibestudio teacher fixture root execution and explicit observation times
+
+The teacher campaign executes the actual named `.nl` roots instead of bypassing them through crisp callable children
+in nine skill suites (claims, documentation, VCS summaries, research, GitHub troubleshooting, memory, local-model
+readiness, server logs and system-test triage). Helper-specific recovery/proposal cases retain their distinct entry.
+Research citation time and memory staleness now consume one host-selected snapshot timestamp, fixed explicitly in
+fixtures, instead of reading the live clock inside a child. Inventory: roots, helpers, public wrapper defaults,
+suite inputs, generated `.d.nl.ts`, skill docs and decomposition notes in the Base and Personal templates.
+The public wrappers retain current-time defaults. This removes nonreplayable fixture behavior; source identities
+and outcomes are retained with each teacher episode. No serving protocol or engine sampling change.
+
+### 2026-11-17: preserve actual local imports through evaluation source discovery
+
+Standalone evaluation builds omit neighboring conventional tests/specs and `__tests__` from source discovery, rather
+than compiling host-only validators as application code. Explicit imports remain readable and typechecked. The
+project compiler now lowers and hashes actual local TypeScript imports omitted from root discovery; previously an
+excluded imported helper could emit an unlowered inline `nl` and escape the program source hash. Existing discovered
+source order is retained. The targeted fixture proves both a missing imported dependency still fails and a valid
+explicit test-named helper executes its inline natlang call with its source bound into the program descriptor.
+No serving request or sampling law changes; held checkpoint effects are not measured by these compiler checks.
+
+### 2026-11-17: canonical fixture teacher programs preserve actual source and input bindings
+
+Portable application fixtures now execute through canonical program IR and the existing evaluator, instead of a
+parallel direct-suite teacher protocol. Original model sources are isolated from oracle/world source and labels.
+The actual loaded entry is checked against declared JSON inputs before execution, and generated executor traces bind
+to original model-source definitions. Authored typed branches retain their real entry and an explicitly marked NL
+semantic anchor; no synthetic NL facade or invented invocation is added. Hosted finite-result teachers use genuine
+generated tool-loop actions, preserving their actual model identity, rather than substituting decision scores. This
+changes no serving protocol. Inventory/decomposition: `plans/VIBESTUDIO_FIXTURE_IR_DECOMPOSITION.md`; downstream
+training exposure remains conditional on exact replay, split separation and independent semantic admission.
+
+### 2026-11-17: generated finite decisions use the student's actual decision surface
+
+A hosted teacher without option scoring previously fell back to the full tool loop, producing tool-call targets on a
+prompt the scored student never uses for that function. It now generates the actual JSON choice on exactly the same
+encoded short system/opening/decision messages, with no tools. Actual text is validated against the finite offered
+values; malformed, truncated or unoffered choices fail with a targeted error rather than invented probabilities or
+synthetic actions. Generation receipts remain generation graph nodes. Existing option scores are unchanged;
+`decisionGeneration: tool-loop` is the explicit diagnostic opt-out. Request/token reservations and usage remain exact.
+Canonical native-collector/SFT evidence covers the plain JSON target and original transported prompt. Shared authored
+`.nl`/`.nz` barrels also retain their real source functions through module re-exports (5511776be), replacing broken
+runtime `.nl` imports without NL facades or prompt rewrites.
+
 **2026-11-17, learned compaction operators v3 (OPERATORS_RESTORE_20261117.md).** Behind the model-facing variant
 `learned-compaction` (off by default; it enters the held series key). With it, a cut-off tool output or argument
 listing of at least 800 characters gets one extra model call:
@@ -2548,3 +2593,14 @@ listing of at least 800 characters gets one extra model call:
 
 compact-value and compact-params now share view's body and site, replacing their own prompts (registry v3). Without
 the variant nothing changes. The variant is measured by held success on vs off before it becomes the default.
+
+### 2026-11-17: operator generation obeys the shared task model budget
+
+Merge review found the new learned-compaction operator's real sampled call dispatched before the ordinary loop's
+reservation, allowing a request with a zero graph-request allowance. `operatorWrite` now uses the same
+`ModelBudget.reserve/finish` contract as other generation: the actual request gets its reserved token cap, reported
+usage consumes that reservation, and an overrun cannot be captured as a successful operator result. Deterministic
+capture of an already sampled reply is not counted as another sampled decision. Without an allowance the operator
+retains its established text-cut fallback; the ordinary caller then observes the same exhausted graph budget.
+Unbounded operator request content and capture remain unchanged. This is shared TypeScript runtime plumbing across
+all engines, not a new sampling protocol. Zero-request, token-limit and overrun regressions cover the exact boundary.

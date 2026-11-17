@@ -2802,6 +2802,82 @@ lowers. compact-value and compact-params are `view` at the runtime's sites (one 
 compact-history is the model's own `compact_history` note captured in context; the arm is the model-facing variant
 `learned-compaction` (enters the held series key). The v1 slot smoke's null (actual ≈ shuffled): two independent investigators found no implementation bug in capture, import or ablation. The cause is v1's design: the slots held one constant phrase, about 95% of the slot state is row-invariant (CPU probe), and the design is already gone. Cases (about 118k train, text port records) render byte-identically today but were never filtered against held-v3; the row lowering filters them. Next: cases -> exp0_sft rows, the v3 write on every engine, ablation, then SFT and GRPO on the pass-through.
 
+
+**2026-11-17, Vibestudio teacher collection bridge (owner requested implementation).**
+The initial collection inventory is 18 executable skill suites / 38 `.nl` files / 450 cases (186 train, 128 validation,
+136 test). Existing small-executor adoption gates do not block teacher generation. A hosted Luna teacher executes the
+actual natlang calls; collection retains full per-call requests/replies, root/child identity and outcome evidence.
+Admission requires full suite quality, every gate, exact-request fixture replay, nonempty executor turns, clean source
+pins and a separate accepted semantic review. Judge calls are not training targets; native RL probabilities are not
+fabricated. Initial admission excludes failed actions/children even if a root recovered. The shared existing SFT
+renderer/think-prefix mask/prefix chains are reused by `vibestudio_sft.py`; immutable raw snapshots, held closure,
+full protected split inventories, deduplication and corpus publication are enforced. No live learner is modified.
+Nine suite roots formerly bypassed their `.nl` wrapper. Corrected them; research/memory now receive explicit snapshot
+times. Fixture asset access is bound to the original source root instead of the emitted module directory. Inventory,
+limitations and commands: `~/vibestudio/docs/natlang-teacher-coverage.md` and `VIBESTUDIO_SFT_20261117.md`.
+Validation and live pilot results will be recorded after completion; this entry does not assert collection readiness
+or learner exposure. Existing authored/previously inspected test cases remain protected regression sets; unseen
+transfer claims need new source-group-separated scenarios. Broad catalog-app conversion remains separate work.
+
+**2026-11-17, integration check: preserve the caller's pin when importing Pop actor helpers.** The full isolated
+`9cd48a60d` check found two provider-campaign history-attestation failures after the held-dispatch tests imported
+`pop_rl_actor`: its module bootstrap deleted `NATLANG_REPO` and `PYTHONPATH`, so subsequent source verification used
+canonical main instead of the detached checkout. The same helper is imported by GRPO's remote-held loop. Scope the
+existing cleanup to direct CLI execution; imports must preserve their caller. Add a fresh-process environment
+regression and run held-dispatch then provider-source checks together. Static review finds the GRPO child launches
+explicitly rebuild both bindings through `pinned_env()`; no wrong live policy, training exposure or held result has
+been demonstrated, and live process environments/artifacts were not checked here. Leave live training unchanged.
+Details and checked scope: `ENGINEERING_FINDINGS.md`, "Pop actor helper imports preserve pinned caller bindings".
+
+**2026-11-17, correction: Vibestudio training keeps canonical program IR (owner asked explicitly).**
+The initial standalone suite-episode bridge was the wrong durable boundary. Removed its converter and episode
+protocol; no live sample from that path was published or trained. The implemented path is original suite/case ->
+`natlang.program/2` (`evaluation_fixture`) -> standard `teacher_gen`/native collector -> canonical native trajectory
+and `natlang.rollout/1` -> shared `sft_sources` extract/replay/build. Host fixture source, selected-case labels and
+service assets remain outside model files. Original typed wrappers retain their real entries and explicit semantic
+anchors; an exact verifier checks invoked export paths/inputs. Supplemental admission receipts bind original scores,
+actual result/rollout bytes, full protected inventories, exact replay and isolated semantic review. They are not a
+second trajectory format or additional targets. Wrong-case reviews and changed native targets are refused.
+
+Actual Luna pilot on clean Natlang `67a3eb693` produced two accepted episodes (GitHub access and server-log briefing),
+25 actual calls: 2 root and 23 child, with zero unknown attribution. Each passed its suite, independent semantic review
+and exact replay. Shared SFT build with the real LFM3 tokenizer produced 25 ordinary `exp0_sft --chains` sequences,
+28,849 forward tokens, 175 target / 150 weighted target tokens. The failed documentation episode was excluded. Receipt:
+`/home/werg/data/vibestudio-teacher-pilot-20261117/pilot-build-result.json`; build unit
+`vibe-teacher-real-sft-build-20261117` exited zero, peak 772 MB. Canonical source/admission/build evidence was transferred
+as data only to the same DGX paths and all 149 files independently SHA256-verified; no DGX job or learner was launched.
+This is pipeline qualification, not a measured model improvement or whole-application conversion claim.
+
+Two findings became fixes rather than data laundering. No-scorer finite functions now generate their actual JSON
+reply on the exact scored-student decision prompt, rather than teaching tool calls on a different prompt; no scores
+or probabilities are invented. A live documentation failure exposed truncated lexical retrieval and then semantic
+query-focus loss; the Base program is being corrected and recollected, with failures retained outside training.
+
+Full immutable `67a3eb693` checks completed (1627 general Python, 2205 Neuralese and 2601 TS tests passed; 22 conformance).
+The full run also exposed duplicate-helper, endpoint-inventory, layering and stale scripted-model failures. These were
+fixed on main and their targeted checks passed: shared JSON/hash/ratchet 43, both TS configurations and layering,
+5 model-call-kind guards, 10 canonical fixtures, 23 CLI/adaptation, 3 distributed skills and 30 application wiring.
+Scripted finite-stage models now return JSON from actual visible inputs on the production default; diagnostic
+opt-outs do not hide application coverage. Latest main quick gate at `638b05b9c` passed. Full run log:
+`/home/werg/.cache/natlang/vibe-teacher-checks/full-check-canonical-67a3eb693.log` (peak 7.26 GB/10 GB cap). The old full
+run's overall failure is retained; targeted corrections qualify the changed scopes without rerunning unchanged phases.
+
+### 2026-11-17: collect application teachers as canonical programs on their actual decision surface
+
+Portable suite tasks now use `natlang.program/2`, kind `evaluation_fixture`, with separate host fixture/world/oracle
+files, original model source, actual entry inputs and one selected original case. The same native collector emits
+canonical program rows and shared rollout/replay/SFT tooling consumes them. Actual invoked entry arguments are checked
+before execution. Typed wrapper branches keep their real source and explicit NL semantic anchor, with no invented
+model invocation. Admission still requires nonzero real target turns, source-family split custody, exact replay and
+independent semantic acceptance; collection alone does not expose data to the learner.
+
+Before a hosted Luna pilot, static inspection found the no-scorer finite-call tool-loop fallback mismatched the scored
+student's short JSON readout surface. Ship shared JSON generation on the exact scored messages as the default, retaining
+a controlled tool-loop opt-out. Invalid generation is a recorded failure; no probabilities/native decision receipts are
+invented. The corrected32 readout/onboarding/canonical tests pass with both TS configurations. Next measurement is the
+pinned hosted fixture pilot and source-bound admission, followed by a bounded collect/train/paired held cycle; no claim
+of model gain follows from these mechanism checks. The full final gate runs on the combined immutable core commit.
+
 **2026-11-17 18:30, Neuralese pass-through in the learners (pass-through agent; NEURALESE_PASSTHROUGH_20261117.md).**
 - **What every state is today.** It is a text write: the producer returns text, and the host runs `[produce_open] +
   text` from position 0 through the actor. Each rollout's `execution_graph` `block_write` keeps that exact
@@ -2952,6 +3028,30 @@ GPQA-D 0.429 -> 0.465, IFEval strict 0.725 -> 0.721, loose 0.778 -> 0.756.
 - **The real fit** (`progtune-fit3`, attention+conv, exact path) reached step 18/30 before the coordinator stopped it
   (time-slicing slowed SFT 47 -> 74 s/step); its state is resumable but the rerun will be a fresh all-target factored
   fit in a GPU window.
+
+
+**2026-11-17, final canonical Vibestudio pilot qualifies collection and SFT input (no learner exposure).**
+All three live Luna families now pass: GitHub access, server-log briefing and documentation lookup. The docs fix
+ports query intent to the 39th NL function and corrects exact search mechanics; the final episode has 14 real calls,
+zero errors, grounded actionable checkPanel quotes, exact replay and accepted isolated semantic review. Existing
+18 suites/450 cases retain their protected splits. The development failures remain unadmitted evidence, not an
+acceptance-rate estimate or additional independent tasks.
+
+Standard shared extract/replay/build on merged pin efdecc9fe accepts only 3 episodes/39 calls (3 root, 36 child,
+0 unknown), producing 39 LFM3 chains, 55,947 forward / 308 target / 269 weighted target tokens. All three replay
+exactly from original collect pin 67a3eb693; the source identity is never relabeled as the newer build pin. Receipt
+and hashes: /home/werg/data/vibestudio-teacher-pilot-20261117/pilot-build-v2-result.json. Data-only owner transfer
+verified all 337 selected files / 139,355,613 bytes on DGX at identical paths; proposed corpus id
+vibestudio-teacher-pilot-20261117-v2. Only build-v2/chains.pkl is learner input; failed/review/partial records are
+evidence. No optimizer or active training run was changed. Full qualification and exact scope: VIBESTUDIO_SFT_20261117.md.
+
+Concurrent upstream operator/learner work was integrated by normal merge f577c13a8. Full merged 6d921fca4 checks
+passed 1,629 general Python, 2,229 Neuralese, 2,618 other TS tests and 22 conformance; their sole Pi bundle import failure
+was corrected by separating fingerprint identity from pure canonical JSON (36ca3a313; 28 real bundle/fixture checks,
+both TypeScript configurations and layering pass). Operator-budget bypass efdecc9fe passed 23 focused checks; no active affected compaction
+experiment was found. Main quick36ca3a313 passed. The archived full log retains its pre-correction failure; all
+observed failures are acted on and targeted-green. The page capture ABI release blocker is recorded with source
+citations rather than a fake capture implementation. None blocks this hosted text-teacher corpus.
 
 **2026-11-17 21:30, tuning: teacher support rows replayed; replay bug that also hit the SFT v3 corpus (tuning agent).**
 - `sft_sources.py replay` answered a decision readout's scoring requests (`prompt_logprobs`, finite-typed calls with

@@ -3,11 +3,14 @@ import type { AdaptationArtifact, ExecutorIdentity, ProgramDescriptor } from '..
 import type { ModelDriver } from '../runtime/runtime.js';
 import type { DecisionRequest, DecisionScores, ModelTurn, ModelTurnRequest } from '../contracts.js';
 import type { DriverCall } from '../runtime/driver.js';
-import type { EvaluationCase, EvaluationResult } from './types.js';
+import type { EvaluationCase, EvaluationResult, FixtureEntryBinding } from './types.js';
 import { UsageGateway, decisionDeclined, decisionUsage, type ModelRole } from './usage.js';
 export type WorkerInput = { moduleURL: string; compiledEntry: string; testCase: EvaluationCase; program: ProgramDescriptor;
   artifact: AdaptationArtifact | null; seed: number; replicate: number; id: string; preflight?: boolean;
+  programRoot?: string;
   capture?: boolean; executorIdentity?: ExecutorIdentity;
+  fixtureEntry?: FixtureEntryBinding;
+  calls?: false;
   /** Set by `runWorker`: the executor driver scores decision readouts, so the worker's driver does too (model/driver.ts `remoteDriver`). */
   decisions?: boolean;
   /** Set by `runWorker`: the executor driver continues cut-off replies, so the worker's driver does too. */

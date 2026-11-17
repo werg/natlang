@@ -36,9 +36,9 @@ def sha256_file_hex(path: str | os.PathLike[str], chunk_size: int = FILE_CHUNK_B
     return digest.hexdigest()
 
 
-def canonical_json_sha256_hex(value: Any) -> str:
+def canonical_json_sha256_hex(value: Any, *, allow_nan: bool = True) -> str:
     """Hex SHA-256 of `canonical_json_bytes(value)`."""
-    return sha256_hex(canonical_json_bytes(value))
+    return sha256_hex(canonical_json_bytes(value, allow_nan=allow_nan))
 
 
 def sha256_reference(value: Any) -> str | None:

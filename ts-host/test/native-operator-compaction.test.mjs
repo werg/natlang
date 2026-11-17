@@ -113,3 +113,27 @@ test('a compact_history note carries the state of the note captured in place in 
   assert.deepEqual([call.prompt, call.reply], [[1, 2], [30, 31]]);
   assert.ok(call.messages.length >= 1);
 });
+
+
+test('operator generation respects zero graph requests before dispatching long-argument compaction', async()=>{
+ let generated=0,captured=0;
+ const driver=Object.assign(async()=>{generated++;return {text:'summary',completion_tokens:1};},{neuralese:true});
+ const runtime=createNatlangRuntime({calls:false,model:driver,limits:{maxModelRequests:0},
+ neuralese:{store:new MemoryNeuraleseStore(),dialect:'native-state/test',compaction:'nl',capture:async()=>{captured++;throw Error('no capture expected');}}});
+ const fn=loadVirtualNatlang({'run.nl':'---\nargs: {value: string}\nreturns: number\n---\nCount the lines of value.\n'},'run.nl');
+ await assert.rejects(runtime.run(()=>fn('line of data\n'.repeat(20000))),/budget/);
+ assert.equal(generated,0);assert.equal(captured,0);
+});
+
+test('operator generation uses the shared token reservation and never captures an overrun', async()=>{
+ for(const overrun of [false,true]){
+ const requests=[];let captured=0;
+ const driver=Object.assign(async request=>{requests.push(request);return {text:'summary',completion_tokens:overrun?4:3};},{neuralese:true});
+ const runtime=createNatlangRuntime({calls:false,model:driver,limits:{maxModelRequests:2,maxModelTokens:3},
+ neuralese:{store:new MemoryNeuraleseStore(),dialect:'native-state/test',compaction:'nl',capture:async()=>{captured++;throw Error('fixture does not archive states');}}});
+ const fn=loadVirtualNatlang({'run.nl':'---\nargs: {value: string}\nreturns: number\n---\nCount the lines of value.\n'},'run.nl');
+ await assert.rejects(runtime.run(()=>fn('line of data\n'.repeat(20000))),/budget/);
+ assert.equal(requests.length,1);assert.equal(requests[0].max_tokens,3);
+ assert.match(requests[0].invocation_id,/#operator-1$/);assert.equal(captured,overrun?0:1);
+ }
+});

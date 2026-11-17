@@ -1,8 +1,11 @@
 import { parentPort, workerData } from 'node:worker_threads';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createNatlangRuntime, NatlangCallError } from '../index.js';
 import { bindAdaptation } from '../adaptation/compatibility.js';
 import { validateMetrics } from './metrics.js';
 import { cloneData } from '../adaptation/identity.js';
+import { fixtureEntryFacade } from './fixture-entry.js';
 import { FixtureObservationStore } from './fixtures.js';
 import type { EvaluationSuite, EvaluationResult } from './types.js';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
@@ -23,6 +26,7 @@ async function run(): Promise<void> {
   const modelTurns: NonNullable<EvaluationResult['modelTurns']>[number][] = [];
   const counters = new Map<string, number>();
   let captureError: Error | undefined;
+  let fixtureEntryCalls = 0;
   const requestModel = async (role: 'executor' | 'judge', call: DriverCall): Promise<unknown> => {
     if (input.capture && role === 'executor' && call.kind !== 'turn') {
       captureError = new Error('teacher capture needs generated executor turns; use a teacher driver without decision scoring');
@@ -43,7 +47,7 @@ async function run(): Promise<void> {
   };
   const executorIdentity = input.executorIdentity ?? suite.executorIdentity;
   const runtime = createNatlangRuntime({ program: input.program, adaptation: input.artifact ? bindAdaptation(input.artifact, input.program, suite.executorIdentity) : null,
-    limits: suite.policy?.limits, systemPrompt: suite.systemPrompt,
+    ...(input.calls === false ? { calls: false } : {}), limits: suite.policy?.limits, systemPrompt: suite.systemPrompt,
     evaluation: { id: input.id, caseId: input.testCase.id, replicate: input.replicate },
     executorIdentity, serviceDeclarations: suite.services?.declarations,
     serviceScopes: suite.services?.scopes as Record<string, string[]> | undefined,
@@ -54,9 +58,14 @@ async function run(): Promise<void> {
   let result: unknown; const start = Date.now();
   const observations = new FixtureObservationStore();
   try {
-    fixture = await suite.fixture.create(input.testCase, { runtime, program: input.program, seed: input.seed, signal: abort.signal, observations,
+    fixture = await suite.fixture.create(input.testCase, { runtime, program: input.program,
+      programRoot: input.programRoot ?? resolve(dirname(fileURLToPath(input.moduleURL)), suite.program.root),
+      seed: input.seed, signal: abort.signal, observations,
       judge: request => requestModel('judge', { kind: 'turn', request }) as Promise<ModelTurn>,
-      loadFreshProgram: () => import(input.compiledEntry) });
+      loadFreshProgram: async () => {
+        const exports = await import(input.compiledEntry);
+        return input.fixtureEntry ? fixtureEntryFacade(exports, input.fixtureEntry, () => fixtureEntryCalls++) : exports;
+      } });
     if (input.preflight) {
       if (typeof fixture?.execute !== 'function') throw new Error('fixture must provide execute()');
       parentPort!.postMessage({ type: 'result', result: { id: input.id, caseId: input.testCase.id, split: input.testCase.split,
@@ -96,6 +105,7 @@ async function run(): Promise<void> {
       status: 'scored', quality: metric.quality, gates: { ...(metric.gates ?? {}), ...(metric.judge ? { judge: metric.judge === 'accepted' } : {}) },
       metrics: metric.metrics ?? {}, feedback: metric.feedback ?? '', outcome: portableOutcome, observation: captured,
       observations: observations.snapshot(), coverage, latencyMs: Date.now() - start, traces,
+      ...(input.fixtureEntry ? { fixtureEntry: { calls: fixtureEntryCalls, inputs: input.fixtureEntry.inputs, service_inputs: input.fixtureEntry.service_inputs } } : {}),
       ...(input.capture ? { modelTurns } : {}) } });
   } finally { await fixture?.dispose?.(); runtime.close(); }
 }

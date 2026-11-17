@@ -27,7 +27,7 @@ const MODE_RANK: Record<SpecializationMode, number> = { off: 0, shadow: 1, on: 2
 export type ModelDriver = ((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => Promise<ModelTurn> | ModelTurn) & {
   /**
    * Optional decision readout (`DecisionScorer`, contracts.ts): score a finite set of replies instead of generating one.
-   * Any driver may carry it; without it, or when it fails with `decision-unsupported`, the call runs the tool loop.
+   * Any driver may carry it; without it, or when it fails with `decision-unsupported`, a finite readout generates one offered JSON value on the same short decision prompt.
    */
   decide?: DecisionScorer;
   /** The backend's complete native store, reader identity and available writer; wrappers retain this binding. */
@@ -51,6 +51,8 @@ export type ModelConfig = { driver: ModelDriver;
   /** `finite-returns`: every call with a finite result type uses the decision readout when the driver can score
    * replies; `declared` (default): only functions whose frontmatter says `readout: decision`. */
   decisionReadout?: 'declared' | 'finite-returns';
+  /** Explicit diagnostic opt-out from JSON generation when scoring is unavailable. */
+  decisionGeneration?: 'json' | 'tool-loop';
   /** Guided generation (the `guidance` request field) on natlang's reference server and the llama.cpp fork (managed and in
    * the page). A configured runtime (`natlang run`, natlangRuntime()) turns it on for those backends unless the profile's
    * `runtime.guidance` says otherwise; set directly, it is off unless given. Other backends ignore the field. */

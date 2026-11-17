@@ -8,7 +8,7 @@ export type RequestReservation = Partial<Record<'modelCalls' | 'inputTokens' | '
 export type BudgetLedger = { rollouts: number; proposals: number; usage: Usage; elapsedMs: number; unknownRequests: number; overrun: readonly string[];
   roles?: Partial<Record<ModelRole, Usage>>;
   reserved?: { modelCalls: number; inputTokens: number; outputTokens: number; cost: number } };
-/** A backend that cannot score replies declines with this error before doing any work; the call runs the tool loop instead. */
+/** A backend that cannot score replies declines with this error before doing any work; the runtime can generate the decision without charging a declined score request. */
 export const decisionDeclined = (error: unknown): boolean => String((error as Error)?.message).startsWith('decision-unsupported');
 /** What a decision readout used: its prompt tokens as the scorer reports them, and no generated tokens. */
 export const decisionUsage = (scores: DecisionScores): { prompt_tokens?: number; completion_tokens: number } =>

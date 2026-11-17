@@ -49,7 +49,7 @@ execution quality; do not start training to fill an unfinished runtime seam.
 
 - With learned compaction selected (a native Neuralese server and the `compaction` setting `nl`), a cut-off tool output is followed by `Compacted value: ` and a Neuralese state of all of it, and a cut-off argument's listing shows its compacted state; a `compact_history` note also carries `Earlier steps of this session, compacted: ` with the state of the replaced conversation. These states are summaries for orientation: exact details still come from the variable, `read_page` or `transcript`, as above.
 
-- Learned compaction (plans/neuralese/OPERATORS_RESTORE_20261117.md): the native agent's pluggable `compaction` setting (agent option, `neuralese.compaction`, env `NATLANG_NEURALESE_COMPACTION`, or the model-facing variant `learned-compaction`) selects `crisp` (text cut only, the default) or `nl`. Under `nl`, a cut-off tool output or argument listing of at least 800 characters gets one extra model call at the builtin `view`'s site (its own invocation `<call>#operator-<n>`); that reply's content is captured in its own context as a native state, framed beside the unchanged text cut (`Compacted value: ` / `Compacted argument: `). A `compact_history` note is captured in place in the reply that wrote it and framed after the note. The capture is `neuralese.capture`: `POST /v1/neuralese/native-states/capture` (`native.capture`) on the Python engine and the SGLang actor, and a grammar-forced produce span of the same ids on the managed llama-server and the page (`model/native-operator.ts` `grammarCapture`). A failed capture keeps the text and is traced as an `operator` event; the full value always stays reachable.
+- Learned compaction (plans/neuralese/OPERATORS_RESTORE_20261117.md): the native agent's pluggable `compaction` setting (agent option, `neuralese.compaction`, env `NATLANG_NEURALESE_COMPACTION`, or the model-facing variant `learned-compaction`) selects `crisp` (text cut only, the default) or `nl`. Under `nl`, a cut-off tool output or argument listing of at least 800 characters gets one extra model call at the builtin `view`'s site (its own invocation `<call>#operator-<n>`); that reply's content is captured in its own context as a native state, framed beside the unchanged text cut (`Compacted value: ` / `Compacted argument: `). A `compact_history` note is captured in place in the reply that wrote it and framed after the note. The capture is `neuralese.capture`: `POST /v1/neuralese/native-states/capture` (`native.capture`) on the Python engine and the SGLang actor, and a grammar-forced produce span of the same ids through the managed HTTP llama-server client (`model/native-operator.ts` `grammarCapture`). The in-page engine has produce primitives but natlang-b12081 / wllama `5b0dcd35` has no public tokenize/detokenize or native role-marker-ID query (`vendor/wllama/esm/wllama.d.ts:180-439`), required by the exact grammar client (`model/native-operator.ts:27-65`). Its runtime therefore does not bind `capture`; the HTTP implementation is not evidence of page integration. The active operators restoration needs those fork/page primitives released through `update_llama_runtime.mjs --fork`, rather than assumed token IDs or hand-edited vendor code. A failed capture keeps the text and is traced as an `operator` event; the full value always stays reachable.
 
 ## Native state, learning and capture (authoring-side notes)
 
@@ -575,3 +575,50 @@ suite. Combining the override with an adaptation candidate is refused. Capture r
 the owned evaluation; use a generation-only teacher driver to exercise the ordinary finite-result tool loop. Default
 evaluation and all serving protocols are unchanged. Captured turns are evidence, not training admission: retain root
 score/gates and per-call outcomes, replay the actual actions, and preserve source-family split custody before training.
+
+Fixture asset paths use `FixtureContext.programRoot`, populated by suite preparation from the authored program root
+and passed through preflight, evaluation and `improvement/suite-execution.ts`. This is fixture-only filesystem plumbing:
+the model receives no new binding or authority. Workers import emitted suite JavaScript from `.natlang/`; the original
+asset directory remains explicit, without copying assets or rewriting `import.meta.url`.
+
+Evaluation source discovery uses `evaluation/project-files.ts` for both suite and program compilation and for source
+optimization. It filters conventional test/spec files and `__tests__` directories from listing and tsconfig glob
+discovery, not from explicit file reads or imports. The compiler's config parser honors its injected
+`CompilerFiles.readDirectory`; Node's default remains `ts.sys`. Ordinary CLI builds and explicit teacher-IR program
+files retain their existing source boundary. This prevents host-only validator/test dependencies from entering a
+standalone teacher application without hiding a dependency the application actually imports.
+
+The compiler lowers and hashes checked local imports even when root discovery omitted them. Existing discovered
+source order is retained; only actual imported project modules are appended (declarations, node_modules and callable
+folders retain their own handling). A valid imported test-named helper can therefore contain inline `nl` and is bound
+into the program's source provenance; a missing dependency in that helper remains a compile error.
+
+Canonical `natlang.program/2` also admits `kind: evaluation_fixture` with
+`semantics.evaluation_fixture.schema: natlang.evaluation-fixture/1`. Model-owned `files`, actual JSON `inputs` and the
+real `.nl` root remain separate from portable host fixture source/assets and the one selected original case. A real
+authored TypeScript helper can be the entry with the NL root marked `semantic-anchor`; this does not fabricate an NL
+invocation for a typed branch. The existing evaluation frontend executes the original fixture and scorer. Its
+`outcome.evaluation` retains original outcome, quality, gates, metrics and observations; invocation ledgers retain real
+source identities. Actual `entry.export_path` calls are checked against JSON inputs before dispatch, with live host
+arguments explicitly named in `service_inputs`. Wrong inputs fail before model execution; missing or unsupported
+contracts require correcting the descriptor/source, never constructing a forwarding root.
+
+Hosted fixture teachers use generated turns even when a provider exposes decision scoring. The collector driver
+carries the actual configured model identity through this wrapper. Absent collection overrides preserve authored
+prompt/settings; supplied overrides and their system-prompt hash are applied together. The output remains the existing
+canonical program row and rollout, consumed by shared replay/SFT tooling. This is not native on-policy receipt evidence,
+and collection does not itself admit data into training. Live native state/guidance and module-valued call stores are
+explicitly unsupported across this evaluation worker boundary; ordinary generation teachers and `calls: false` work.
+
+Finite teacher decisions without a scorer now generate one actual JSON choice on the student's same encoded short
+decision messages, with no tools. They retain real text/generation captures and graph request/token reservations.
+`decision_readout` phase `generated` carries `scored: false`, never inferred option probabilities; the associated model
+turn remains a generation node so native generation receipts link correctly. Invalid/missing/truncated/unoffered replies
+fail explicitly with `decision-generation-invalid`. The diagnostic opt-out is `model.decisionGeneration: 'tool-loop'`.
+The existing explicit multi-model handoff/fallback loop retains its prior behavior. No new serving fields are needed on
+managed llama-server, wllama, Python native or SGLang: all use the existing tool-free generation request protocol.
+
+Learned compaction's sampled operator call uses the task's shared model request/token reservation. A zero allowance
+prevents dispatch; token caps and reported completion usage follow the same contract as ordinary generation. A response
+over its reservation is not captured as a successful operator result. Capture of that existing reply remains deterministic
+state materialization, without another sampled decision or fabricated probabilities. Operator failure keeps the text cut.

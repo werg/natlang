@@ -80,8 +80,8 @@ test('a call store counts a scored readout as one model request with the prompt 
   } finally { store.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
-test('without a scorer the call falls back to the tool loop; finite-returns applies the readout to every finite call', async () => {
-  const plain = async () => ({ calls: [['return_result', { status: 'success', value: 'knight' }]] });
+test('without a scorer the call generates a JSON decision; finite-returns applies the readout to every finite call', async () => {
+  const plain = async () => ({ text: JSON.stringify('knight'), calls: [] });
   const fn = loadVirtualNatlang({ 'verdict.nl': VERDICT }, 'verdict.nl');
   assert.equal(await createNatlangRuntime({ model: plain, seed: { mode: 'backend' } }).run(() => fn('x')), 'knight');
   const open = loadVirtualNatlang({ 'yes.nl': '---\nargs: { q: string }\nreturns: boolean\n---\nAnswer q.\n' }, 'yes.nl');
@@ -145,7 +145,7 @@ test('decide(fn, ...args) in eval gives a function the distribution of a decisio
   // A driver that cannot score: the sampled answer, with probability 1.
   const plain = scriptedModel(opening => opening.includes('Refuse statement') ?
     'const d = await decide(verdict, statement); return `${d.value} ${d.confidence} ${d.scored}`;' : 'return "knight";');
-  assert.equal(await createNatlangRuntime({ model: plain.driver }).run(() => loadVirtualNatlang(files, 'gate.nl')('x')), 'knight 1 false');
+  assert.equal(await createNatlangRuntime({ model: request => request.tools.length ? plain.driver(request) : {text:'"knight"',calls:[]} }).run(() => loadVirtualNatlang(files, 'gate.nl')('x')), 'knight 1 false');
 });
 
 test('decide rejects a non-callable with direct callable guidance', async () => {
@@ -156,11 +156,11 @@ test('decide rejects a non-callable with direct callable guidance', async () => 
   });
 });
 
-test('any driver may carry the decision capability: a driver whose scorer is unsupported falls back to the tool loop for that call', async () => {
+test('any driver may carry the decision capability: a driver whose scorer is unsupported generates the same JSON choice for that call', async () => {
   const fn = loadVirtualNatlang({ 'verdict.nl': VERDICT }, 'verdict.nl');
   // A gateway-style driver: its scorer asks a service that may not serve this model (`decision-unsupported`).
   let scored = 0, turns = 0;
-  const driver = Object.assign(async () => { turns++; return { calls: [['return_result', { status: 'success', value: 'knight' }]] }; },
+  const driver = Object.assign(async () => { turns++; return { text: '"knight"', calls: [] }; },
     { decide: async () => { scored++; throw new Error('decision-unsupported: the gateway model has no logprobs'); } });
   const traces = [];
   const runtime = createNatlangRuntime({ model: { driver }, seed: { mode: 'backend' }, trace: trace => traces.push(trace) });
@@ -226,4 +226,40 @@ test('framedDecision asks for and scores {"result": VALUE} on a readout request 
   assert.equal(request.options[0], '"knight"', 'the request is not modified');
   const judge = { messages: [{ role: 'user', content: 'Is this acceptable? Reply "yes" or "no".' }], options: ['"yes"', '"no"'] };
   assert.equal(framedDecision(judge, 'result-object'), judge, 'a request that is not a readout carries its own instructions');
+});
+
+
+test('generated decisions use the exact scored decision prompt and record a generation without a distribution', async()=>{
+ const fn=loadVirtualNatlang({'verdict.nl':VERDICT},'verdict.nl');let scoredRequest,generatedRequest;const traces=[];
+ await createNatlangRuntime({model:{driver:Object.assign(async()=>{throw Error('no generation');},{decide:async request=>{
+ scoredRequest=request;return {log_probs:[-0.1,-2]};}})},calls:false}).run(()=>fn('Same input.'));
+ const runtime=createNatlangRuntime({model:{driver:async request=>{generatedRequest=request;return {text:'"knight"',calls:[],prompt_tokens:42,completion_tokens:3};}},
+ calls:false,trace:trace=>traces.push(trace)});
+ assert.equal(await runtime.run(()=>fn('Same input.')),'knight');
+ assert.deepEqual(generatedRequest.messages,scoredRequest.messages);assert.deepEqual(generatedRequest.tools,[]);
+ const events=traces.flatMap(trace=>trace.events),event=events.find(e=>e.kind==='decision_readout'&&e.phase==='generated');
+ assert.equal(event.scored,false);assert.equal(event.probabilities,undefined);assert.equal(event.log_probs,undefined);
+ const turn=events.find(e=>e.kind==='model_turn');assert.equal(turn.readout,undefined);assert.equal(turn.completion_tokens,3);
+ assert.equal(events.filter(e=>e.kind==='model_request'&&e.phase==='end').length,1);
+});
+
+test('generated decisions reject malformed, unoffered, tool-call and truncated replies without fabricating a choice',async()=>{
+ for(const reply of [{text:'not json'},{text:'"outsider"'},{text:'"knight"',calls:[['return_result',{value:'knight'}]]},{text:'"knight"',truncated:true}]){
+ const traces=[],fn=loadVirtualNatlang({'verdict.nl':VERDICT},'verdict.nl');
+ const runtime=createNatlangRuntime({model:{driver:async()=>reply},calls:false,trace:trace=>traces.push(trace)});
+ await assert.rejects(runtime.run(()=>fn('x')),/decision-generation-invalid/);
+ assert.ok(traces.flatMap(t=>t.events).some(e=>e.kind==='decision_readout'&&e.phase==='rejected'));
+ assert.ok(!traces.flatMap(t=>t.events).some(e=>e.kind==='decision_readout'&&['generated','scored'].includes(e.phase)));
+ }
+});
+
+test('decision JSON generation respects graph reservations and the explicit tool-loop opt-out',async()=>{
+ const fn=loadVirtualNatlang({'verdict.nl':VERDICT},'verdict.nl');let calls=0;
+ const driver=async()=>{calls++;return {text:'"knight"',completion_tokens:3};};
+ await assert.rejects(createNatlangRuntime({model:{driver},limits:{maxModelRequests:0},calls:false}).run(()=>fn('x')),/budget/);
+ assert.equal(calls,0);
+ const generated=await createNatlangRuntime({model:{driver},limits:{maxModelRequests:1,maxModelTokens:5},calls:false}).run(()=>fn('x'));
+ assert.equal(generated,'knight');assert.equal(calls,1);
+ const toolDriver=async request=>{assert.ok(request.tools.length);return {calls:[['return_result',{status:'success',value:'knight'}]]};};
+ assert.equal(await createNatlangRuntime({model:{driver:toolDriver,decisionGeneration:'tool-loop'},calls:false}).run(()=>fn('x')),'knight');
 });

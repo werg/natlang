@@ -17,12 +17,13 @@ from typing import Any
 from pathlib import Path
 
 
-def canonical_json_str(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+def canonical_json_str(value: Any, *, allow_nan: bool = True) -> str:
+    """Canonical text; strict artifact boundaries can reject nonfinite numbers."""
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=allow_nan)
 
 
-def canonical_json_bytes(value: Any) -> bytes:
-    return canonical_json_str(value).encode("utf-8")
+def canonical_json_bytes(value: Any, *, allow_nan: bool = True) -> bytes:
+    return canonical_json_str(value, allow_nan=allow_nan).encode("utf-8")
 
 
 def utc_now_iso() -> str:

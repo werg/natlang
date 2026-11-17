@@ -35,6 +35,35 @@
    "rl": {"status": "covered", "evidence": ["training/neuralese/natlang_neuralese/rl/decision_policy.py", "training/neuralese/natlang_neuralese/rl/native_replay.py", "ts-host/src/tune/rollouts.ts", "tests/neuralese/test_decision_supervision.py"]},
    "parity": {"status": "covered", "evidence": ["tests/neuralese/test_decision_supervision.py"]}
   },
+  "decision-generation": {
+   "summary": "A finite decision generated as one actual JSON choice on the same short decision prompt as scored readouts, when scoring is unavailable or a graph reservation requires generation. No option probabilities are inferred.",
+   "model_output": "generated",
+   "endpoints": [
+    "/v1/chat/completions"
+   ],
+   "sft": {
+    "status": "covered",
+    "evidence": [
+     "ts-host/test/teacher-evaluation-fixture.test.mjs",
+     "tests/neuralese/test_generated_decision_sft.py",
+     "scripts/neuralese_data/sft_sources.py"
+    ]
+   },
+   "rl": {
+    "status": "covered",
+    "evidence": [
+     "training/neuralese/natlang_neuralese/rl/native_replay.py",
+     "ts-host/test/decision-readout.test.mjs"
+    ]
+   },
+   "parity": {
+    "status": "covered",
+    "evidence": [
+     "ts-host/test/decision-readout.test.mjs",
+     "tests/neuralese/test_generated_decision_sft.py"
+    ]
+   }
+  },
   "refinement-judge-scored": {
    "summary": "A refinement predicate (Is<T, P>, refine) judged by one scoring pass over true/false with JUDGE_SYSTEM_PROMPT (native/refinement.ts decisionJudge), when the driver can score.",
    "model_output": "scored-options",
@@ -52,9 +81,9 @@
    "parity": {"status": "not-applicable", "reason": "the server renders the view site itself (view.py); nothing in ts-host constructs serverViewer"}
   },
   "native-forced-write": {
-   "summary": "Forced producers: write-text materializes a string as native state (Neuralese<string> arguments, soft-body placeholders); init-body encodes a soft body in its real rendered call context.",
+   "summary": "Forced producers: write-text materializes a string as native state (Neuralese<string> arguments, soft-body placeholders); init-body encodes a soft body in its real rendered call context; capture encodes an already sampled reply in context, through native.capture or a grammar-forced span on the chat route.",
    "model_output": "forced",
-   "endpoints": ["/v1/neuralese/native-states/write-text", "/v1/neuralese/native-states/init-body"],
+   "endpoints": ["/v1/neuralese/native-states/write-text", "/v1/neuralese/native-states/init-body", "/v1/neuralese/native-states/capture", "/v1/chat/completions"],
    "sft": {"status": "not-applicable", "reason": "forced text has no sampled target; its state is trained through the consumers that import it"},
    "rl": {"status": "gap", "owner": "rl", "section": "native-forced-write"},
    "parity": {"status": "covered", "evidence": ["tests/neuralese/test_lfm3_format.py"]}
@@ -81,7 +110,7 @@
   }
  },
  "endpoints": {
-  "/v1/chat/completions": {"kinds": ["tool-loop-turn", "runtime-authored-call", "operator-call"]},
+  "/v1/chat/completions": {"kinds": ["tool-loop-turn", "runtime-authored-call", "operator-call", "decision-generation", "native-forced-write"]},
   "/v1/neuralese/decide": {"kinds": ["decision-readout", "refinement-judge-scored"]},
   "/v1/neuralese/decide_many": {"kinds": ["decision-readout", "refinement-judge-scored"]},
   "/v1/natlang/score": {"kinds": ["decision-readout", "refinement-judge-scored"]},

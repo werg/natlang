@@ -138,3 +138,29 @@ test('a virtual project compiles and runs in-process through the same compiler',
   const runtime = createNatlangRuntime({ model: model.driver });
   assert.equal(await runtime.run(() => compiled.require('main.ts').main({ mood: 'calm' })), 'TEAL');
 });
+
+test('Node ESM barrels re-export the actual named natlang callable and bind runtime exports', async () => {
+  const root = project({ ...APP,
+    'src/barrel.ts': "export { default as triage } from './triage.nl';\nexport * as triageModule from './triage.nl';\nexport { createNatlangRuntime } from '@natlang/node';\n",
+  });
+  const built = buildProject({ project: root, runtimeModule: RUNTIME });
+  assert.equal(built.ok, true, JSON.stringify(built.diagnostics));
+  const barrel = await import(pathToFileURL(join(root, 'dist/barrel.js')).href);
+  assert.equal(barrel.createNatlangRuntime, createNatlangRuntime);
+  const model = scriptedModel(opening => opening.includes('Decide whether ticket is urgent') ? 'return "urgent"' : null);
+  const runtime = createNatlangRuntime({ model: model.driver });
+  assert.equal(await runtime.run(() => barrel.triage({ id: 'a', text: 'outage' })), 'urgent');
+  assert.equal(barrel.triageModule.default, barrel.triage);
+});
+
+for (const target of ['node', 'browser']) test(`virtual ${target} barrels keep authored .nl function identity`, async () => {
+  const compiled = compileVirtualProject({ files: {
+    'choose.nl': '---\nargs:\n  mood: string\nreturns: string\n---\nName a color for mood.\n',
+    'barrel.ts': "export { default as choose } from './choose.nl';\nexport * as choices from './choose.nl';\n",
+    'main.ts': "import { choose, choices } from './barrel.js';\nexport function main(): Promise<string> { return Promise.all([choose('calm'), choices.default('bright')]).then(colors => colors.join(':')); }\n",
+  } }, runtimeNamespace, { target });
+  assert.equal(compiled.ok, true, JSON.stringify(compiled.diagnostics));
+  const model = scriptedModel(opening => opening.includes('Name a color') ? 'return mood === "calm" ? "teal" : "gold"' : null);
+  const runtime = createNatlangRuntime({ model: model.driver });
+  assert.equal(await runtime.run(() => compiled.require('main.ts').main()), 'teal:gold');
+});

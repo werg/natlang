@@ -16,7 +16,20 @@ plus its evaluation contract:
 - `root` and `files` are exactly what an author writes: a root `.nl` function, its callable folder, and `types.ts`. The runtime loads them with the same loader as applications (`ts-host/src/teacher/program.ts`).
 - `inputs` bind the root's parameters by name; `expected` is the checked result; `operation: "blocked"` expects a reported blocker instead.
 - `effects` describe service contracts the harness provides and checks (`record_args`, `deliver_once_ack_loss`); `folder_files` and `expected_files` give a directory reducer's input folder and required result; `failure_seed` injects a failing first eval to collect repair behavior.
-- IR contains no tool schema, system prompt, assistant turn, chat template, or tokens. Traces and SFT pairs are rebuilt from it when the runtime, prompts, or template change.
+- IR stores authored source and execution contracts, rather than rendered tool schemas, model conversations, chat templates or tokens. Traces and SFT pairs are rebuilt from it when the runtime, prompts, or template change.
+
+Authored evaluation suites use the same IR with `kind: "evaluation_fixture"`. Model source stays in
+`semantics.files`; the original evaluator, selected case and fixture assets live in a separate host bundle under
+`semantics.evaluation_fixture`. The entry contract names the actual exported function and its arguments. A
+TypeScript wrapper keeps its authored entry point and explicitly labels its `.nl` root as a semantic anchor;
+the adapter does not invent a forwarding Natlang function. The runtime checks the invoked entry and inputs.
+Fixture source may declare application prompt policy, but rendered model messages and targets remain derived data.
+
+The Vibestudio producer exports selected training cases plus the complete protected split inventory. Standard
+`scripts/neuralese_data/teacher_gen.py --pool POOL --root-mode authored` executes those records, including hosted
+teachers. Its canonical native trajectories and rollouts enter the shared `sft_sources.py` extraction, exact replay
+and tokenizer build. Supplemental admission receipts bind original suite evidence and isolated semantic reviews;
+reviews are not training targets. See [VIBESTUDIO_SFT_20261117.md](../../plans/neuralese/VIBESTUDIO_SFT_20261117.md).
 
 ## Producers
 
