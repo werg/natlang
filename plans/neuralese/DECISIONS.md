@@ -3209,3 +3209,23 @@ scoring series changed: the Pop base was restarted on the new pin (`popheld-base
 base was 23% done and is kept aside as `held-base-pop-pinc57-stopped`), and voltron-1-mini's eval follows it on the same
 pin. grpo-v4 launches without held evals (`HELD_ARGS="--held-every-hours 0"`); they start at the resume after voltron
 releases Pop. Success/failure rules are unchanged from the grpo-v4 PREP entry.
+
+## 2026-11-18: the training guidance turn is one runtime-built system message (operators agent)
+
+- **Decision (supervisor-approved route).** ts-host builds the guidance turn once, as an ordinary system message
+  (`training-guidance.ts` `guidanceMessage`), and sends it in `natlang.guidance-request/2`:
+  - a writer's state follows `Guidance for this call (training only):`;
+  - text guidance is `Verified reference for this call (training only):` and the facts, packed whole into the token
+    budget at 3.5 characters per token, with the rest listed as `omitted`.
+- **Engines.** An engine renders the request's messages with that message after the leading system message, using its
+  own chat template. It marks the inserted span as the guidance turn (rl/privileged_context `guidance_messages`,
+  `message_span`). Receipts, capture flags and the learner's `verify_captured_block` are unchanged.
+- **Equivalence.** On the LFM3 template the message tokenizes to exactly `PrivilegedRendering.turn`
+  (`test_the_runtime_guidance_message_renders_to_the_declared_turn_on_the_lfm3_template`). So v1 and v2 captures verify
+  alike, and v1 requests (the running grpo-v4 pin) keep their path until that pin is retired.
+- **Engines that cannot honour it refuse.** The managed llama-server and the page refuse training guidance
+  (`training-guidance-unavailable`; capability `training-guidance`) until a fork release marks the message's span
+  (ENGINE_PARITY row).
+- **Operator rows v2.** Rebuilt at the 8,000-character threshold: 18,924 train and 1,565 test cases from 94,477 read,
+  764 held drops. Most extract and short-value cases are no longer compacted by the runtime. The stage merge uses
+  these rows.

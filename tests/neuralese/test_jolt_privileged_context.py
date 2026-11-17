@@ -595,3 +595,51 @@ def test_a_verified_null_child_answer_is_an_answer():
     assert _child_text({'match': ['read_passage('], 'value': None}) == ANSWER_PREFIX + 'null.'
     with pytest.raises(ValueError):
         _child_text({'match': ['read_passage(']})
+
+
+@pytest.mark.parametrize('mode', ['import', 'write-only', 'text', 'text-twin'])
+def test_v2_guidance_message_span_equals_the_declared_rendering(mode):
+    # v2: the runtime's guidance message rendered by the engine's template (here the toy template the rendering
+    # declares) gives exactly the pieces and receipt the v1 rendering gives.
+    from natlang_neuralese.rl.privileged_context import REQUEST_SCHEMA_V2, message_span
+    spec = rendering()
+    prompt = [BOS, *turn('system', 'You count.'), *turn('user', 'program')]
+    at = 1 + len(turn('system', 'You count.'))
+    name = 'root#turn1'
+    v1 = request(name, mode, 'nzs1_state' if mode in ('import', 'write-only') else None)
+    if mode in ('text', 'text-twin'):
+        inserted = [('tokens', spec.turn([fact.text for fact in visible(name)]))]
+    else:
+        head, tail = spec.state_parts()
+        inserted = [('tokens', head), ('native_state', 'nzs1_state'), ('tokens', tail)]
+    guided = [('tokens', prompt[:at]), *inserted, ('tokens', prompt[at:])]
+    span = message_span([('tokens', prompt)], guided, spec.insertion_point(prompt)[0])
+    assert span[0] == at
+    v2 = {**v1, 'schema': REQUEST_SCHEMA_V2, 'message': {'role': 'system', 'content': 'rendered by the engine'}}
+    assert guidance_plan(spec, v2, token_ids=prompt, text='program', message_span=span) == \
+        guidance_plan(spec, v1, token_ids=prompt, text='program')
+    with pytest.raises(ValueError, match='contiguous'):
+        message_span([('tokens', prompt)], [('tokens', [*prompt[:-1], 99, *inserted[0][1]])], at)
+
+
+def test_the_runtime_guidance_message_renders_to_the_declared_turn_on_the_lfm3_template():
+    import glob
+    from pathlib import Path
+    snapshots = glob.glob(str(Path.home() / '.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/*'))
+    if not snapshots:
+        pytest.skip('LFM3 tokenizer not cached')
+    from transformers import AutoTokenizer
+    from natlang_neuralese.rl.privileged_context import guidance_messages
+    tokenizer = AutoTokenizer.from_pretrained(sorted(snapshots)[-1], local_files_only=True)
+    encode = lambda text: tokenizer(text, add_special_tokens=False)['input_ids']
+    start, end = tokenizer.convert_tokens_to_ids(['<|im_start|>', '<|im_end|>'])
+    spec = PrivilegedRendering('lfm3', tokenizer.bos_token_id, start, end, 0, 0, 'f' * 64, encode)
+    base = [{'role': 'system', 'content': 'You are a natlang executor.'}, {'role': 'user', 'content': 'Do the task.'}]
+    for facts in (['The verified answer of this call is 42.', 'Expected files: src/a.py'], ['  {"json": 1}\nline2\n']):
+        message = {'role': 'system', 'content': '\n\n'.join([spec.text_header, *facts])}
+        plain = encode(tokenizer.apply_chat_template(base, tokenize=False, add_generation_prompt=True))
+        guided = encode(tokenizer.apply_chat_template(guidance_messages(base, message), tokenize=False,
+                                                      add_generation_prompt=True))
+        at, placement = spec.insertion_point(plain)
+        assert placement == 'after_leading_system_turn'
+        assert guided == plain[:at] + spec.turn(facts) + plain[at:]

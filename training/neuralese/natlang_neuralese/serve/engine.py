@@ -381,12 +381,21 @@ class Engine:
 
     def _guidance(self, request, plan):
         """This turn's guidance (rl.privileged_context.guidance_plan): (insert_at, pieces, receipt)."""
-        from ..rl.privileged_context import guidance_plan
+        from ..rl.privileged_context import REQUEST_SCHEMA_V2, guidance_messages, guidance_plan, message_span
         own = [token for kind, value in plan if kind == 'tokens' for token in value]
         text = '\n'.join(message['content'] for message in request.messages or []
                          if isinstance(message, dict) and isinstance(message.get('content'), str))
+        context = request.privileged_context
         try:
-            return guidance_plan(self._privileged_rendering(), request.privileged_context, token_ids=own, text=text)
+            span = None
+            if isinstance(context, dict) and context.get('schema') == REQUEST_SCHEMA_V2:
+                # The runtime's guidance message, rendered by this engine's template; its span is the guidance turn.
+                if not isinstance(context.get('message'), dict):
+                    raise ValueError('v2 guidance requests carry the guidance turn as one system message')
+                span = message_span(plan, self._prompt_plan(guidance_messages(request.messages, context['message']),
+                                                            request.tools),
+                                    self._privileged_rendering().insertion_point(own)[0])
+            return guidance_plan(self._privileged_rendering(), context, token_ids=own, text=text, message_span=span)
         except ValueError as error:
             raise RequestError('bad-request', f'x_natlang_privileged_context: {error}') from error
 

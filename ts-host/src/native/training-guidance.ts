@@ -3,7 +3,7 @@
  * (`x_natlang_guidance`, `natlang.guidance-run/1`); for each consumer call, on its first model turn, the agent keeps the
  * facts the call may see, selects them with `selectGuidanceFacts` (the pluggable's crisp or natural-language side) and
  * runs `writeGuidance` in-process as a child call of the consumer, on the same runtime, model and recorder. Every turn of
- * the consumer then carries the `natlang.guidance-request/1` the engine renders (rl/privileged_context `guidance_plan`,
+ * the consumer then carries the `natlang.guidance-request/2` whose guidance message the engine renders and marks (rl/privileged_context `guidance_plan`,
  * whose `_request_parts` is the exact contract), and every turn of the policy calls carries `x_natlang_guidance_policy`.
  *
  * The package's crisp parts and definitions are loaded by the host (runtime/node-guidance-writer.ts, Node); this module is the
@@ -13,12 +13,41 @@ import type { CallableDefinition } from '../runtime/kernel.js';
 import { runInFrame } from '../runtime/context.js';
 import type { PluggableMode } from '../runtime/pluggable.js';
 import { isNeuraleseRef } from './neuralese.js';
+import { PAGE_CHARS_PER_TOKEN } from './cutoff.js';
 import { parseType } from './types.js';
 import type { LambdaNode } from './values.js';
 import type { NativeSession } from './runtime.js';
 
 export const GUIDANCE_RUN_SCHEMA = 'natlang.guidance-run/1';
-export const GUIDANCE_REQUEST_SCHEMA = 'natlang.guidance-request/1';
+export const GUIDANCE_REQUEST_SCHEMA = 'natlang.guidance-request/2';
+/** The guidance turn's first line: a writer's state follows it; the facts as text follow `GUIDANCE_TEXT_HEADER`. */
+export const GUIDANCE_HEADER = 'Guidance for this call (training only):';
+export const GUIDANCE_TEXT_HEADER = 'Verified reference for this call (training only):';
+
+type GuidanceMessage = { role: 'system'; content: string | ({ type: 'text'; text: string } |
+  { type: 'native_state'; id: string; source_occurrence?: string })[] };
+
+/**
+ * The guidance turn as one ordinary system message, the only definition of its form (plans/neuralese/DECISIONS.md
+ * 2026-11-18): every engine renders it with its chat template after the leading system message and marks its span;
+ * the learner re-verifies the captured tokens (rl/privileged_context `verify_captured_block`). A writer's state follows
+ * the header; text guidance is the header and the facts, packed whole into `budgetTokens` (estimated at
+ * PAGE_CHARS_PER_TOKEN characters per token), the rest `omitted`.
+ */
+export function guidanceMessage(facts: readonly GuidanceFact[], state?: { id: string; source_occurrence?: string },
+    budgetTokens = DEFAULT_GUIDANCE_BUDGET_TOKENS): { message: GuidanceMessage; included: GuidanceFact[];
+      omitted: { id: string; reason: 'token_budget' }[] } {
+  if (state) return { message: { role: 'system', content: [{ type: 'text', text: GUIDANCE_HEADER + '\n' },
+    { type: 'native_state', ...state }] }, included: [...facts], omitted: [] };
+  const included: GuidanceFact[] = [], omitted: { id: string; reason: 'token_budget' }[] = [];
+  for (const fact of facts) {
+    const body = [GUIDANCE_TEXT_HEADER, ...[...included, fact].map(item => item.text)].join('\n\n');
+    if (body.length <= budgetTokens * PAGE_CHARS_PER_TOKEN) included.push(fact);
+    else omitted.push({ id: fact.id, reason: 'token_budget' });
+  }
+  return { message: { role: 'system', content: [GUIDANCE_TEXT_HEADER, ...included.map(fact => fact.text)].join('\n\n') },
+    included, omitted };
+}
 export const GUIDANCE_FACT_KINDS = ['expected_result', 'expected_stop', 'expected_files', 'expected_effects',
   'reference_failure', 'reference_solution', 'child_value', 'minimum_sequence', 'decisive', 'teacher_trajectory',
   'attempt_feedback', 'fit_hindsight'] as const;
@@ -164,7 +193,7 @@ export class TrainingGuidance {
   }
 
   /**
-   * The `natlang.guidance-request/1` of a consumer call, computed once on its first model turn from that turn's request
+   * The `natlang.guidance-request/2` of a consumer call, computed once on its first model turn from that turn's request
    * messages and reused by its later turns; undefined when the call gets no guidance.
    */
   requestFor(session: NativeSession, callId: string, messages: readonly unknown[]): Promise<Record<string, unknown> | undefined> {
@@ -249,12 +278,15 @@ export class TrainingGuidance {
     if (state) {
       const mode = this.run.role === 'teacher' ? 'import' : 'write-only';
       emit('written', { mode, state: state.id, facts: ids, selection: implementation, writer: writer.function });
-      return { ...base, mode, writer, state };
+      return { ...base, mode, writer, state, message: guidanceMessage(facts, state).message };
     }
     // Text fallback: a teacher gets the selected facts as a text turn; a student's engine renders the same turn and only
     // records it (`text-twin`: token ids and insertion point in the capture receipt) for the learner's OPSD twin.
     const mode = this.run.role === 'teacher' ? 'text' : 'text-twin';
     emit('text_fallback', { mode, reason: failure, facts: ids, selection: implementation });
-    return { ...base, mode, fallback: failure };
+    const packed = guidanceMessage(facts, undefined, budget);
+    if (!packed.included.length) { emit('none', { reason: 'no fact fits the token budget', selection: implementation }); return undefined; }
+    return { ...base, facts: packed.included.map(fact => structuredClone(fact)), mode, fallback: failure,
+      message: packed.message, ...(packed.omitted.length ? { omitted: packed.omitted } : {}) };
   }
 }

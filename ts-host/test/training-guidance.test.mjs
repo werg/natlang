@@ -234,9 +234,11 @@ test('each consumer\'s first turn runs selection then the writer; every consumer
   const blockWrite = [...recorder.graphNodes.values()].find(node => node.kind === 'block_write' &&
     node.source_kind === 'typed-text-result' && node.turn.startsWith(writeTurn.invocation_id));
   assert.ok(blockWrite, 'the recorder holds the writer\'s producer write');
-  const rootRequest = { schema: 'natlang.guidance-request/1', invocation: { name: 'run-1', role: 'root' }, mode: 'import',
+  const state = { id: blockWrite.block, source_occurrence: blockWrite.node };
+  const rootRequest = { schema: 'natlang.guidance-request/2', invocation: { name: 'run-1', role: 'root' }, mode: 'import',
     custody, facts: [FACTS[0], FACTS[1], FACTS[3]], selection: { implementation: 'nl', sha256: SELECT_SHA },
-    writer: { function: 'writeGuidance', sha256: WRITE_SHA }, state: { id: blockWrite.block, source_occurrence: blockWrite.node } };
+    writer: { function: 'writeGuidance', sha256: WRITE_SHA }, state,
+    message: { role: 'system', content: [{ type: 'text', text: 'Guidance for this call (training only):\n' }, { type: 'native_state', ...state }] } };
   for (const request of root) assert.deepEqual(request.privileged_context, rootRequest);
   assert.deepEqual(child[0].privileged_context.invocation, { name: child[0].invocation_id, role: 'child' });
   assert.deepEqual(child[0].privileged_context.facts, [FACTS[2]]);
@@ -283,6 +285,9 @@ test('a failed writer gives a teacher the selected facts as text and records the
   assert.equal(teacher.result.outcome.kind, 'done', teacher.result.outcome.detail);
   const root = consumerTurns(teacher.requests).find(request => request.invocation_id === 'run-1').privileged_context;
   assert.equal(root.mode, 'text');
+  // The guidance turn is one system message: the text header and the packed facts.
+  assert.deepEqual(root.message, { role: 'system',
+    content: ['Verified reference for this call (training only):', ...root.facts.map(fact => fact.text)].join('\n\n') });
   assert.match(root.fallback, /^writeGuidance failed: /);
   assert.equal(root.writer, undefined);
   assert.equal(root.state, undefined);
