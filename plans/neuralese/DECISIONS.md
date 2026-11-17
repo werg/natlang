@@ -2769,3 +2769,14 @@ the memetic world have not run since 11-12), then on in the next bundle.
   smoke: `lowering.teacher_*` counters and the step's rho statistics.
 - **Next.** A smoke on the next DGX gap (medium, <= 15 GB): `grpo.py train --max-steps 1` on a small task list with
   `--teacher-attempts 2 --hindsight-trajectories ... --memetic-tasks ... --memetic-share 0.2`, then the grpo-v5 bundle.
+
+**2026-11-17 17:30, in-loop self-distillation and the restore smoke (restore agent).** `grpo.py --sd-weight` (default 0;
+7321761d4): verified successes of groups whose students succeeded at most 25% of the time (teacher successes in student
+form included; Neuralese-importing calls left out) are replayed for 4 steps, at most 16 a step, as a positive-advantage
+term of weight `--sd-weight` with the usual truncated IS, tail floor and KL. `train.jsonl` now records `teacher_rho`
+(690f7f142). Smoke queued under the ledger (`ops/restore-smoke/launch.sh`, unit `restore-smoke-run1`, medium, 80 GB,
+waits up to 4 h for memory): pin 7321761d4, base 5ff07638, 12 low-pass tasks (6 with a hindsight tau*), 2 steps,
+`--teacher-attempts 2 --hindsight-trajectories ... --memetic-share 0.2 --memetic-group 2 --sd-weight 0.1`.
+`ops/restore-smoke/report.py` prints the teacher rho distribution, teacher advantage counts, memetic wall times and
+guidance bindings, and the writeHint hints with their overlap with their own vs other tasks' prompts. Its result
+decides entry into grpo-v5.
