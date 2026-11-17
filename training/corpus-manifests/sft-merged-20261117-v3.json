@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "sft-merged-20261117-v3",
+  "owner": "dgx",
+  "path": "runs/sft-merged-20261117-v3",
+  "files": [
+    {
+      "path": "chains.pkl",
+      "bytes": 1712099547,
+      "sha256": "15594ebf1842946fa801ca7ec38378f6efdd9dd9129307b4dec442a586ed21ad"
+    },
+    {
+      "path": "merge.json",
+      "bytes": 326,
+      "sha256": "9d32a7187f19eb4c9112e169684302f71e0444e7269f6f0eb9bdb75c4bddec8a"
+    }
+  ],
+  "bytes": 1712099873
+}
