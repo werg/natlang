@@ -1660,6 +1660,61 @@ def sd_teacher_tasks(collector, band):
     return sorted(k for k, (s, n) in rates.items() if n and (s == 0 or low <= s / n <= high))
 
 
+class ReplayCorpus:
+    """A fixed corpus of per-call chains trained in every step beside the rollouts (``--replay-corpus``): the operator
+    rows (scripts/neuralese_data/operator_rows.py merge) or the whole-graph Neuralese episodes (sft_sources
+    neuralese-graph). A unit is all chains of one ``task`` key (an operator case: its operator calls and the consumer
+    importing them through pass-through producer documents; or one Neuralese episode). Step ``n`` takes units
+    ``[n*K, n*K+K)`` of an endless sequence of seeded per-epoch shuffles, so a resume continues without saved state.
+    The chains are ratio-free (role ``replay``: no actor log-probabilities, rho = 1) at the corpus weight; their rows'
+    own weights (the operator seed weight) multiply the term, and the KL term applies as to every chain."""
+
+    def __init__(self, spec, held, seed, log=print):
+        import pickle
+        name, _, rest = spec.partition('=')
+        path, *options = rest.split(',')
+        if not name or not path:
+            raise SystemExit(f'--replay-corpus is NAME=PKL[,weight=W][,units=K], not {spec!r}')
+        self.name, self.path, self.weight, self.units = name, path, 0.05, 8
+        for option in options:
+            key, _, value = option.partition('=')
+            if key == 'weight':
+                self.weight = float(value)
+            elif key == 'units':
+                self.units = int(value)
+            else:
+                raise SystemExit(f'--replay-corpus option {key!r}: weight or units')
+        with open(path, 'rb') as handle:
+            chains = pickle.load(handle)['chains']
+        self.sha256 = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+        groups = collections.defaultdict(list)
+        for chain in chains:
+            groups[str(chain['task'])].append(chain)
+        dropped = [key for key in groups if key in held]
+        for key in dropped:
+            del groups[key]
+        self.keys = sorted(groups)
+        self.groups = groups
+        self.seed = seed
+        if not self.keys or self.weight <= 0 or self.units <= 0:
+            raise SystemExit(f'--replay-corpus {name}: no units, or weight/units not positive')
+        log({'event': 'replay corpus', 'name': name, 'path': path, 'sha256': self.sha256, 'units': len(self.keys),
+             'chains': sum(len(v) for v in groups.values()), 'held_dropped': len(dropped), 'weight': self.weight,
+             'units_per_step': self.units})
+
+    def take(self, step):
+        """The units of ``step``: [(key, [chains])], each chain a fresh copy of its corpus chain's fields."""
+        import random as _random
+        out, count = [], len(self.keys)
+        for position in range(step * self.units, (step + 1) * self.units):
+            epoch, index = divmod(position, count)
+            order = list(self.keys)
+            _random.Random(f'{self.seed}:{self.name}:{epoch}').shuffle(order)
+            key = order[index]
+            out.append((key, [dict(chain) for chain in self.groups[key]]))
+        return out
+
+
 TEACHER_FIELDS = ('groups', 'episodes', 'successes', 'episodes_trained', 'calls_student_form',
                   'privileged_tokens_removed', 'policy_calls_removed')
 SD_FIELDS = ('added', 'episodes', 'tokens', 'buffer', 'skip_imports', 'own_episodes', 'own_tokens', 'teacher_episodes',
@@ -1857,13 +1912,16 @@ def policy_weight(rho, actor_logp, advantage, rho_cap, tail_floor):
     return weight.masked_fill(masked, 0.), masked
 
 
+RATIO_FREE_ROLES = ('sd_teacher', 'replay')   # chains without actor log-probabilities (rho = 1)
+
+
 def behaviour_logp(chain, logp):
     """(log-probabilities of the law that produced the chain's tokens, per-token row weights or None) for the policy
     term. An actor sample: the actor's recorded logp. A teacher demonstration (role ``sd_teacher``) has none: the
     learner's own (detached) logp stands in, so rho = 1 (a ratio-free cross-entropy at its advantage) and the tail floor
     reads the learner's probability; its rows' weights (an empty think block at 0) multiply the term."""
     import torch
-    if chain.get('role') != 'sd_teacher':
+    if chain.get('role') not in RATIO_FREE_ROLES:
         return torch.from_numpy(np.concatenate([row['logp'] for _, _, row in chain['segs']])).to(logp.device).float(), None
     import exp0_sft
     weights = (exp0_sft.chain_weights(chain, logp.device) if any('weight' in row for _, _, row in chain['segs'])
@@ -2367,6 +2425,13 @@ def train(args):
         teacher_demos = TeacherDemos(args.sd_teacher_source or SD_TEACHER_SOURCES, collector.by_id, args.held_manifest,
                                      renderer_tokenizer(args.actor_export, work / 'sd-teacher-tokenizer'),
                                      args.sd_teacher_max_per_task, args.seed, log=lambda r: log_line(log, r))
+    replay_corpora = []
+    if args.replay_corpus and args.no_neuralese_passthrough:
+        raise SystemExit('--replay-corpus consumers import their producer documents: drop --no-neuralese-passthrough')
+    if args.replay_corpus:
+        from natlang_neuralese.rl.held_eval import exclusion_ids
+        held = set(exclusion_ids(args.held_manifest))
+        replay_corpora = [ReplayCorpus(spec, held, args.seed, log=lambda r: log_line(log, r)) for spec in args.replay_corpus]
     collector.version = step
     if args.resume and not args.replay:      # a replay offers archived groups, never this run's own
         reused, left_out = collector.reuse_scored(step, args.max_staleness, args.memetic_max_staleness)
@@ -2797,6 +2862,26 @@ def train(args):
             for chain in kept:
                 chain.update(advantage=weight, episode=key, role=role)
                 chains.append(chain)
+        replay_record = {}
+        for corpus in replay_corpora:
+            entry = replay_record.setdefault(corpus.name, collections.Counter())
+            for _, unit in corpus.take(step):
+                kept = [c for c in unit if len(c['ids']) + exp0_sft.source_tokens(c) <= args.max_sequence_tokens]
+                if len(kept) < len(unit):
+                    entry['chains_too_long'] += len(unit) - len(kept)
+                if not kept:
+                    continue
+                key = len(episode_units)
+                episode_advantage[key] = corpus.weight
+                episode_units[key] = [sum(n for c in kept for _, n, _ in c['segs']), sum(len(c['segs']) for c in kept), 0]
+                entry['units'] += 1
+                entry['chains'] += len(kept)
+                entry['imports'] += sum(len(c.get('imports') or ()) for c in kept)
+                entry['loss_tokens'] += episode_units[key][0]
+                entry['forward_tokens'] += sum(len(c['ids']) + exp0_sft.source_tokens(c) for c in kept)
+                for chain in kept:
+                    chain.update(advantage=corpus.weight, episode=key, role='replay', replay_corpus=corpus.name)
+                    chains.append(chain)
         if args.advantage_control != 'none':
             control_advantages([*chains, *decisions], episode_advantage, args.advantage_control,
                                random.Random(args.seed + step))
@@ -2826,11 +2911,13 @@ def train(args):
                   'actor_version': versions_live['actor'], 'imported_state_mb': round(imported_state_mb, 1),
                   'neuralese_passthrough': not args.no_neuralese_passthrough,
                   'producer_document_tokens': sum(exp0_sft.source_tokens(c) for c in chains),
+                  **({'replay_corpora': {name: dict(entry) for name, entry in replay_record.items()}}
+                     if replay_corpora else {}),
                   **({'memetic_groups': memetic_groups, 'memetic': memetic_step_record(memetic_groups, memetic_history)}
                      if memetic_groups or args.memetic_share > 0 else {}),
                   'dynamic_sampling': dict(getattr(collector, 'dynamic', {})) or None,   # cumulative since this process started
                   **restore_telemetry(stats, args)}
-        style = reasoning_style(chains, think_close)
+        style = reasoning_style([c for c in chains if c.get('role') != 'replay'], think_close)   # rollouts only: replay chains are fixed data
         record.update(style, **({} if args.replay else style_shift(work, style)))   # replayed reasoning is not the policy's
         if record.get('reasoning_shift'):
             print(f"reasoning shift: {style['reasoning_tokens_per_call']} reasoning tokens per call, "
@@ -2987,7 +3074,9 @@ def train(args):
                 with torch.no_grad():
                     log_rho = logp.detach() - actor
                     rho = log_rho.clamp(max=20).exp()
-                    weight, tail = policy_weight(rho, actor, chain['advantage'], args.rho_cap, args.tail_logp_floor)
+                    # A corpus target is data, not a sampled tail: its unlikely tokens are what it teaches (no tail floor).
+                    weight, tail = policy_weight(rho, actor, chain['advantage'], args.rho_cap,
+                                                 None if chain.get('role') == 'replay' else args.tail_logp_floor)
                     if row_weight is not None:
                         weight = weight * row_weight
                     # gradient mass of the policy term per token (its factor times the logit-gradient norm scale 1 - p),
@@ -3004,6 +3093,9 @@ def train(args):
                     loss_terms = loss_terms + args.kl_beta * kl_term(d, args.kl_estimator)
                     kl_stats(sums, d)
                 loss = loss + loss_terms.sum() * token_scale
+                if chain.get('role') == 'replay':   # the corpus's learning curve: its mean target logp
+                    sums[f"replay_logp:{chain['replay_corpus']}"] += logp.detach().sum().item()
+                    sums[f"replay_tokens:{chain['replay_corpus']}"] += logp.numel()
                 sums['rho'] += rho.sum().item()
                 if chain.get('role') == 'teacher':   # JOLT+ student form: pi(a|s) / mu(a|s, guidance) of the teacher's tokens
                     teacher_log_rho.append(log_rho.float().cpu().numpy())
@@ -3194,6 +3286,8 @@ def train(args):
             decision_mean_logpi=round(sums['decision_logpi'] / n_dec, 4),
             decision_abs_dscore_mean=round(sums['decision_abs_dscore'] / n_dec, 4),
             teacher_rho=teacher_rho_summary(teacher_log_rho, args.rho_cap),
+            replay_mean_logp={key.split(':', 1)[1]: round(sums[key] / max(1, sums['replay_tokens:' + key.split(':', 1)[1]]), 4)
+                              for key in list(sums) if key.startswith('replay_logp:')} or None,
             rho_mean=round(sums['rho'] / max(1, loss_tokens), 4), rho_pre_cap_max=round(rho_pre_max, 3),
             rho_post_cap_max=round(rho_post_max, 3), rho_capped_fraction=round(sums['rho_capped'] / max(1, loss_tokens), 5),
             abs_log_rho_mean=round(sums['abs_log_rho'] / max(1, loss_tokens), 5),
@@ -3337,6 +3431,12 @@ def main():
     t.add_argument('--sd-teacher-source', action='append', default=None,
                    help='sft_sources WORK whose extracted, replayed teacher successes are the demonstrations (repeatable; '
                         'default SD_TEACHER_SOURCES)')
+    t.add_argument('--replay-corpus', action='append', default=None, metavar='NAME=PKL[,weight=W][,units=K]',
+                   help='a fixed corpus of per-call chains (exp0_sft format: operator rows from operator_rows.py merge, '
+                        'whole-graph Neuralese episodes from sft_sources neuralese-graph) trained in every step as a '
+                        'ratio-free cross-entropy term of weight W (default 0.05), K units per step (default 8; a unit '
+                        'is the chains of one task key, consumers with their pass-through producer documents); '
+                        'repeatable; held tasks are dropped')
     t.add_argument('--memetic-tasks', default=MEMETIC_TASKS,
                    help='memetic "improve program P" rows (python -m natlang_neuralese.rl.memetic_tasks build: '
                         'DIR/cases.jsonl; default: every program, support 4); RESTORE_MEMETIC_JOLT_HINDSIGHT_20261117.md '

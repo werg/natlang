@@ -3253,3 +3253,27 @@ demonstrations, dynamic sampling, construct-weighted exploration), and training 
 entering at a resume, instead of in a separate SFT stage; (2) LoRA fits run beside grpo-v4 or on Pop between held evals
 instead of waiting for a free window; (3) task authoring is continuous again (the last batch was 2026-11-17), with new
 batches entering at resumes.
+
+## 2026-11-18: operator rows and whole-graph Neuralese chains train inside the GRPO learner (operators agent)
+
+- grpo-v4 holds the DGX continuously, so a separate operator SFT stage would rarely get a window. The fixed corpora
+  now train in every GRPO step instead (supervisor-approved design).
+- **Flag.** `grpo.py --replay-corpus NAME=PKL[,weight=W][,units=K]` (repeatable, off by default):
+  - K units per step, where a unit is all chains of one `task` key: an operator case, i.e. its operator calls plus
+    the consumer reading their states through pass-through producer documents, or one Neuralese episode;
+  - the units come from seeded per-epoch shuffles indexed by step, so a resume continues without saved state;
+  - held tasks are dropped.
+- **Training term.** The chains are ratio-free (role `replay`, rho = 1) at weight W. Rows' own weights apply, and the
+  KL term applies as to every chain. There is no tail floor: a corpus target is data, so its unlikely tokens are
+  what it teaches. Each unit counts as one episode under the loss normalization.
+- **Telemetry and sentinels.** `train.jsonl` records `replay_corpora` (units, chains, imports, tokens) and
+  `replay_mean_logp` per corpus, the learning curve to watch. Replay chains are excluded from the reasoning-style
+  sentinel. The flag is refused with `--no-neuralese-passthrough`.
+- **Entry.** It enters grpo-v4 at a resume as a learner-only change:
+  - `operators=ops/operators-v1/merged/chains.pkl,weight=0.05,units=8`
+  - `neuralese-graph=…/sft-neuralese-graph-20261117-v1/chains.pkl,weight=0.05,units=2`
+- **The variant.** `learned-compaction` switches on at a later resume, once operators have trained for a while: when
+  `replay_mean_logp` for `operators` has flattened, or after about 50 steps. Held comparison pairs across series
+  with a warning (4d47aeb36).
+- **Not run.** A GPU learner bench of the replay path: the ledger had no headroom beside grpo-v4. The pass-through on
+  these chains was checked by the 2026-11-17 SFT smoke.
