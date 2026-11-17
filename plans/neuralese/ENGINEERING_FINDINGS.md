@@ -1510,3 +1510,16 @@ excluded live-state boundary are in `plans/VIBESTUDIO_FIXTURE_IR_DECOMPOSITION.m
 readout/onboarding/canonical-collector tests passed under a2GB ledger unit after correcting two scripted test fixtures.
 An additional80/82 multi-file regression run passed all other selected evaluator/generic/tuning consumers; its two
 fixture failures are included in the corrected32. No live training run was modified by this fix.
+
+### 2026-11-17: canonical fixture full-gate guard corrections
+
+The immutable67a3eb693 full check exposed three guard defects: teacher admission duplicated strict canonical JSON
+helpers (fixed5eae67caf with43 targeted golden/strictness/admission/ratchet checks); the generated-decision kind omitted
+the reverse chat-completion route listing; and the fixture frontend imported adaptation identity across a new directory
+cycle. The route map is corrected, and the unchanged fingerprint implementation now lives with shared native canonical
+data, re-exported through the existing adaptation API. Both TypeScript configs, layering,5 model-call-kind guards and10
+canonical fixture tests passed. Two packed CLI fixture servers and the distributed review wiring fixture also needed
+actual JSON replies on tool-free decision requests; their old scripted tool-call replies now correctly fail at runtime.
+Fresh packed CLI plus adaptation checks passed23 tests; the distributed skill fixture passed3. These corrections change registry plumbing, code location and
+scripted tests, preserving production prompt/reply/outcome behavior from67a3eb693. The pinned full remainder continues;
+these targeted corrections must be reported alongside its exact result, never as an entirely green run of that old pin.

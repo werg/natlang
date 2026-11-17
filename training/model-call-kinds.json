@@ -110,7 +110,7 @@
   }
  },
  "endpoints": {
-  "/v1/chat/completions": {"kinds": ["tool-loop-turn", "runtime-authored-call"]},
+  "/v1/chat/completions": {"kinds": ["tool-loop-turn", "runtime-authored-call", "decision-generation"]},
   "/v1/neuralese/decide": {"kinds": ["decision-readout", "refinement-judge-scored"]},
   "/v1/neuralese/decide_many": {"kinds": ["decision-readout", "refinement-judge-scored"]},
   "/v1/natlang/score": {"kinds": ["decision-readout", "refinement-judge-scored"]},

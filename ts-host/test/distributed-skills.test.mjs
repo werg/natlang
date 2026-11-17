@@ -9,13 +9,21 @@ const decisions = { one: 'supported', two: 'contradicted', three: 'uncertain' };
 
 for (const observations of [[], ['one', 'two', 'three']]) {
   test(`distributed authoring example: ${observations.length} inputs, scripted semantics`, async () => {
-    // Without a scorer the verdict decision runs as an ordinary call, so the script answers it too.
+    // Ordinary stages use scripted eval; the finite verdict uses the actual tool-free JSON decision surface.
     const model = scriptedModel(opening => opening.includes('Assess every observation') ?
       'const assessments = await Promise.all(observations.map(observation => assess(observation, criterion)));\nreturn await summarize(assessments)' :
       opening.includes('Decide the verdict with verdict') ? 'return { verdict: await verdict(observation, criterion), reason: "Scripted wiring fixture" }' :
       `return ${JSON.stringify(decisions)}[observation]`);
     const review = loadNatlang(path);
-    const report = await createNatlangRuntime({ model: model.driver }).run(() => review(observations, 'Fixture criterion'));
+    const driver = request => {
+      if (request.tools.length) return model.driver(request);
+      const wire = request.messages.filter(message => message.role === 'tool').map(message =>
+        typeof message.content === 'string' ? message.content : JSON.stringify(message.content)).join('\n');
+      const observation = Object.keys(decisions).find(value => new RegExp('\\b' + value + '\\b').test(wire));
+      assert.ok(observation, `the decision opening must carry its actual observation: ${wire}`);
+      return { text: JSON.stringify(decisions[observation]), calls: [] };
+    };
+    const report = await createNatlangRuntime({ model: driver }).run(() => review(observations, 'Fixture criterion'));
     assert.equal(report.assessments.length, observations.length);
     assert.deepEqual(['supported', 'contradicted', 'uncertain'].map(key => report[key]), observations.length ? [1, 1, 1] : [0, 0, 0]);
   });
