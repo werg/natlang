@@ -23,6 +23,7 @@ from pathlib import Path
 import torch
 
 from . import LearnedOptimizerError
+from .. import engine_dtype
 from . import mixture as M
 from ..build import export_release_nodes, load_plan, persist_artifacts, _write
 
@@ -46,7 +47,7 @@ class Context:
         config = self.plan.get('engine') or {'checkpoint': self.plan['student']['checkpoint'], **self.plan['student'].get('engine', {})}
         self.config = config
         self.engine = load_native_engine(config['checkpoint'], base=config.get('base'), device=config.get('device', 'cpu'),
-                                         dtype=getattr(torch, config.get('dtype', 'float32')))
+                                         dtype=engine_dtype(config))
         self.engine.store.close()
         self.engine.store = TensorStore(self.learned['store'])
         self.out = Path(out)

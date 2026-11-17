@@ -26,6 +26,7 @@ import os
 from pathlib import Path
 
 from . import LearnedOptimizerError
+from .. import engine_dtype
 
 
 def _write(path, value):
@@ -56,7 +57,7 @@ def _engine(spec):
     from ...serve import load_native_engine
     from ...serve.store import TensorStore
     engine = load_native_engine(spec['checkpoint'], base=spec.get('base'), device=spec.get('device', 'cpu'),
-                                dtype=getattr(torch, spec.get('dtype', 'float32')))
+                                dtype=engine_dtype(spec))
     from .checkpointing import configure_adaptation_checkpointing
     configure_adaptation_checkpointing(engine, group)
     if spec.get('store'):

@@ -23,6 +23,7 @@ from pathlib import Path
 import torch
 
 from .trainer import JointTrainer, Recipe
+from . import engine_dtype
 
 
 def _write(path, value):
@@ -182,7 +183,7 @@ def main(argv=None):
     config = plan.get('engine') or {'checkpoint': plan['student']['checkpoint'], **plan['student'].get('engine', {})}
     with fit_store_context(config) as store:
         engine = load_native_engine(config['checkpoint'], base=config.get('base'), device=config.get('device', 'cpu'),
-                                    dtype=getattr(torch, config.get('dtype', 'float32')), store=store)
+                                    dtype=engine_dtype(config), store=store)
         out = Path(args.out)
         out.mkdir(parents=True, exist_ok=True)
         import_archive(engine,
@@ -237,7 +238,7 @@ def main(argv=None):
                 with (out / 'boundaries.jsonl').open('a') as stream:
                     stream.write(json.dumps(tuner_boundary(trainer, before_state=before, label=plan.get('label', 'fit')),
                                             sort_keys=True) + '\n')
-            print(json.dumps({'step': record['step'], 'objective': record['objective'], 'lr_factor': record['lr_factor'],
+            print('progress: ' + json.dumps({'step': record['step'], 'objective': record['objective'], 'lr_factor': record['lr_factor'],
                               'mean_row_loss': sum(record['row_losses']) / max(len(record['row_losses']), 1)}), flush=True)
         fragment = trainer.manifest_fragment()
         families = [dict(item) for item in manifest.get('families', [])]

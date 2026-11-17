@@ -323,7 +323,8 @@ def series(config=None):
 
 # ---- the measurement ----------------------------------------------------------------------------------------------------
 def policy_directory(out, policy_id):
-    return directory_of(out) / f'policy-{policy_id[:16]}'
+    checkpoint, _, adapters = policy_id.partition('+')
+    return directory_of(out) / (f'policy-{checkpoint[:16]}' + (f'-{adapters[:16]}' if adapters else ''))
 
 
 def _entries(spec):
@@ -335,7 +336,7 @@ def _entries(spec):
         cases=Path(spec['cases']), out=directory, rows=spec['tasks'], offset=0, group=spec['samples'], temperature=1.,
         case_seconds=spec['case_seconds'], max_model_requests=spec['max_model_requests'], max_turns=spec['max_turns'],
         seed_base=spec.get('seed_base', SEED_BASE), root_mode='student', match_seeds_from=None,
-        policy_checkpoint_sha256=spec['policy_id']))
+        policy_checkpoint_sha256=spec['policy_id'].split('+')[0]))   # an adapted policy: its checkpoint
     entries = list(read_jsonl(directory / 'queue.jsonl'))
     for entry in entries:
         entry.update(prompt_rendering='full', context_tokens=spec['context_tokens'])
@@ -979,6 +980,18 @@ def serve(checkpoint, sha256, store, *, unit, budget_gb, extra=(), base=BASE_SNA
     raise TimeoutError(f'actor {unit} did not attest {sha256[:12]}')
 
 
+def policy_id_of(binding):
+    """The policy an actor serves: its checkpoint's sha256, plus ``+`` and the digest of the default adapter stack it
+    applies to every request (``serve_native_checkpoint.py --adapter-release``), so an adapted policy never pairs as or
+    resumes into its base."""
+    sha = binding.get('checkpoint_sha256')
+    adapters = binding.get('adapters')
+    if not sha or not adapters:
+        return sha
+    from ..common.hashing import canonical_json_sha256_hex
+    return f'{sha}+{canonical_json_sha256_hex(adapters["stack"])}'
+
+
 def measure(out, manifest, endpoints, policy_id, *, samples=4, seed_base=SEED_BASE, case_seconds=3600,
             max_model_requests=EPISODE_MODEL_CALLS, max_turns=128, context_tokens=CONTEXT_TOKENS, label=None, allow_other_engine=False, log=print,
             top_p=None, order='longest-first', duration_priors=()):
@@ -994,8 +1007,8 @@ def measure(out, manifest, endpoints, policy_id, *, samples=4, seed_base=SEED_BA
     for url, _ in endpoints:
         info = json.loads(NativeActorClient(url, timeout=10).get_bytes('/v1/neuralese/info'))
         binding = info.get('rl_policy_binding') or {}
-        if binding.get('checkpoint_sha256') != policy_id:
-            raise ValueError(f'{url} serves {str(binding.get("checkpoint_sha256"))[:12]}, not {policy_id[:12]}')
+        if policy_id_of(binding) != policy_id:
+            raise ValueError(f'{url} serves {str(policy_id_of(binding))[:80]}, not {policy_id[:80]}')
     pinned = json.loads(manifest.read_text())
     repo = repository_root()
     spec = {'policy_id': policy_id, 'label': label, 'endpoint': endpoints[0][0], 'endpoints': [list(e) for e in endpoints],
@@ -1156,11 +1169,9 @@ def main(argv=None):
             url = serve(args.checkpoint, sha, args.out / 'actor', unit=unit, budget_gb=args.actor_budget_gb,
                         extra=args.actor_arg, actor_args=(pinned_engine(args.manifest) or {}).get('serve_args', ACTOR_ARGS))
             endpoints.append((url, args.workers))
-            policy = sha
-        else:
-            from .actor_client import NativeActorClient
-            policy = args.policy_id or (json.loads(NativeActorClient(endpoints[0][0], timeout=10).get_bytes(
-                '/v1/neuralese/info')).get('rl_policy_binding') or {}).get('checkpoint_sha256')
+        from .actor_client import NativeActorClient
+        policy = args.policy_id or policy_id_of(json.loads(NativeActorClient(endpoints[0][0], timeout=10).get_bytes(
+            '/v1/neuralese/info')).get('rl_policy_binding') or {})
         if not endpoints or not policy:
             raise SystemExit('give --endpoint or --checkpoint')
         try:

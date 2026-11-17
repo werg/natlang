@@ -26,7 +26,7 @@ from pathlib import Path
 
 import torch
 
-from . import TuneMathError
+from . import TuneMathError, engine_dtype
 from .gates import family_norm
 from .similarity import delta_cosine
 from .stack import stack_factors
@@ -173,7 +173,7 @@ def fit(plan, out):
     config = plan.get('engine') or {'checkpoint': plan['student']['checkpoint'], **plan['student'].get('engine', {})}
     with fit_store_context(config) as store:
         engine = load_native_engine(config['checkpoint'], base=config.get('base'), device=config.get('device', 'cpu'),
-                                    dtype=getattr(torch, config.get('dtype', 'float32')), store=store)
+                                    dtype=engine_dtype(config), store=store)
         members = sorted(set(plan['members']))
         turns = [json.loads(line) for line in Path(plan['rows']).read_text().splitlines() if line.strip()]
         if {turn['binding'] for turn in turns} - set(members):
@@ -204,7 +204,7 @@ def fit(plan, out):
         while trainer.state['step'] < trainer.total_steps:
             record = trainer.step()
             save()
-            print(json.dumps({'step': record['step'], 'mean_row_loss': sum(record['row_losses']) / max(len(record['row_losses']), 1)}),
+            print('progress: ' + json.dumps({'step': record['step'], 'mean_row_loss': sum(record['row_losses']) / max(len(record['row_losses']), 1)}),
                   flush=True)
         rho = plan.get('rho')
         artifact, rho = normalized_family(trainer, rho=float.fromhex(rho) if isinstance(rho, str) else rho)

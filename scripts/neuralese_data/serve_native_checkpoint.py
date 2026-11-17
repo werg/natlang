@@ -74,6 +74,11 @@ def main() -> None:
     parser.add_argument('--sdpa-backend', choices=['default', 'flash', 'math'], default='default')
     parser.add_argument('--threads', type=int, default=4)
     parser.add_argument('--store-dir', type=Path, help='durable actor block store retained across interrupted leases')
+    parser.add_argument('--adapter-release', type=Path,
+                        help='a program fit (`tune.build` output: result.json, artifacts/, states/): its adapter stack is '
+                             'imported into the store and applied to every request that names no adapters; the policy '
+                             'binding records it (held_eval policy id CHECKPOINT+ADAPTERS)')
+    parser.add_argument('--adapter-scale', type=float, default=1.0, help='scale of the --adapter-release stack')
     parser.add_argument('--engine', choices=('native', 'sglang'), default='native',
                         help='sglang: ordinary-token turns generate on the SGLang fork, the rest on the native engine (serve/sglang_actor.py)')
     parser.add_argument('--sglang-python', help="the fork's Python (default: training/neuralese/sglang-fork.json python)")
@@ -195,6 +200,8 @@ def main() -> None:
     if args.store_dir is not None:
         from natlang_neuralese.serve.store import TensorStore
         engine.store = TensorStore(args.store_dir)
+    if args.adapter_release is not None:
+        bind_adapter_release(engine, args.adapter_release, args.adapter_scale)
     if args.actor_export_format:
         engine.set_actor_export({'kind': 'exact', 'format': args.actor_export_format, 'sha256': args.checkpoint_sha256})
     engine.start()
@@ -214,6 +221,23 @@ def main() -> None:
     finally:
         server.server_close()
         engine.stop()
+
+
+def bind_adapter_release(engine, release, scale=1.0):
+    """Serve a program fit's adapter stack by default: import its artifacts (and states) into the engine's store, set
+    the engine's default stack (requests naming `x_natlang_adapters` keep their own) and record the stack in the policy
+    binding, whose held_eval policy id becomes the checkpoint's plus the stack's digest (rl/held_eval.policy_id_of)."""
+    from natlang_neuralese.tune.build import import_archive
+    release = Path(release)
+    result = json.loads((release / 'result.json').read_text())
+    entries = [{'id': item['artifact'], 'scale': float(scale)} for item in result['artifacts']]
+    if not entries:
+        raise ValueError(f'{release} holds no adapter artifacts')
+    import_archive(engine, [release / 'artifacts'], [release / 'states'] if (release / 'states').is_dir() else [])
+    engine.native_default_adapters = entries
+    engine.rl_policy_binding['adapters'] = {'stack': entries, 'release': str(release.resolve()),
+                                            'result_sha256': sha256_file_hex_cached(release / 'result.json')}
+    return entries
 
 
 ENGINE_DIED_EXIT = 70   # the SGLang engine exited under a live actor (2026-11-10: the wrapper kept answering /v1/models)
