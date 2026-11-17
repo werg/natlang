@@ -147,3 +147,51 @@ Fallback if the step-1/2 ledger peak passes 97 GiB: `SLOTS=48` (sizing only). `e
 - Objective-side cases (not changed here): none argued for; the KL reference pass (~20% of the learner) is required by
   the k2 term as defined.
 
+
+## SGLang overlap scheduler defect: investigation (open, 2026-11-17)
+
+Observation (LFM3_RL_ACTOR_ENGINE_20261028.md, 2026-11-03): on the DGX GB10 with the overlapped scheduler, CUDA-graph
+decode with padding and the flashinfer backend, 2-6% of real RL turns held single tokens whose recorded probability
+was high (e.g. 0.53) while the learner gave them -24 nats, and the continuation returned to the learner's law (a
+one-step mixup). Each of these alone removed it on 64 turns: no CUDA graphs, `--disable-overlap-schedule`, the triton
+attention backend, `--disable-cuda-graph-padding`. The cloud RTX PRO 6000 (flashinfer, overlap, padding) had 0/424.
+Since then the fork moved (a06adeda40 padded-row conv slot fix was already in; hybrid SWA KV, conv-state tracking at
+input end, extra_buffer mamba radix default 2026-11-12, path handoff, bounded conv prefill), so whether the defect
+still reproduces at dbc51ddb72 is itself unmeasured.
+
+Inventory of the mechanism (the sampled token and its recorded law):
+- Engines: the SGLang actor (training actor, DGX held engine, Pop held engine; all through
+  `serve_native_checkpoint.py --engine sglang`, overlap off by default, attested as `overlap_schedule` in the engine
+  format and in `held_eval.ENGINE_FIELDS`); other SGLang launchers (`serve/sglang_bench.py`, which runs upstream's
+  default, overlap on; the parity checks, `check_sglang_hybrid_swa.py` with overlap off). The managed llama-server,
+  the in-page wllama build and the Python native engine have no overlapped scheduler (their decode loops sample and
+  then build the next step synchronously), so the mechanism does not exist there; their sampled-law capture is
+  separate code.
+- Consumers: `lower_rollout_turns.episode_turns` (capture -> sampled ids and logps), the GRPO learner (`rho`, the
+  tail floor and the nucleus law use the recorded logp), `held_eval` (outcomes only), `native_replay.actor_engine_guard`
+  (the older guard that rejected such episodes).
+
+Ruled out (checked): **flashinfer's decode plan staging buffer.** `DecodePlan` writes the split-KV plan (request
+indices, KV tile indices, output indptr) into a page-locked host buffer and enqueues `cudaMemcpyAsync` with no host
+fence, and SGLang's CUDA-graph wrappers plan through `fast_decode_plan` with a host indptr (no implicit sync), so a
+next plan written before the previous copy ran would give a batch another batch's tile map: exactly a one-step
+wrong-context distribution, and split-KV is common on the GB10's 48 SMs. Repro (`scratchpad ovl/plan_race.py`, fork
+venv flashinfer 0.7.2, sm_121): plan A queued behind a 50M-cycle `_sleep` on the stream, plan B written at once,
+then A run: 0 wrong outputs in 20 trials, both CUDA-core and tensor-core decode, while the positive control (A's
+device tables with B's host plan) differs by 0.16 from the reference. The plan copy is small and the driver evidently
+captures it at enqueue, so this race does not occur on this stack.
+Checked, not a cause by construction: padded rows' request slot (ReqToTokenPool reserves row 0 for CUDA-graph padding,
+so the fork's per-request-slot producer flags and adapter indices written by padded rows land in the reserved row);
+padded rows' conv state (a06adeda40: slot 0, the reserved padding slot).
+Not checked yet: the mamba extra_buffer tracking under overlap (`track_mamba_states_if_needed` after the fork's own
+`natlang_conv_decode`, which replaced the CuTe kernel the upstream overlap path was validated with); the future-token
+map with padded batches; the natlang sampler capture (it can only mislabel the recorded logp, not change the drawn
+token, so it does not explain the observation); request-slot and mamba-slot reuse across the one-batch overlap lag
+for requests that finish (upstream delays frees under overlap; the fork's conv-state tracking at input end,
+33230160ba, adds a write the delay may not cover).
+Next (needs the GPU, after the verdict): rerun the 2026-11-03 detection at dbc51ddb72 (`serve/sglang_bench.py
+serve-measure` with overlap on, c=32 and 64, then `rescore` with the learner arithmetic; count turns with
+|dlogp| > 5) against `--disable-overlap-schedule`. If it reproduces, bisect with one switch per run: CuTe conv decode
+instead of `natlang_conv_decode`, `--mamba-radix-cache-strategy no_buffer` (upstream refuses overlap there),
+flashinfer CUDA-core vs tensor-core decode, adapters/producer features absent. Overlap stays off until the cause is
+found and fixed.
