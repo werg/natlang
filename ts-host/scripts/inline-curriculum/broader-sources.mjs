@@ -161,7 +161,7 @@ export function buildBroaderSources(sources, limit, sourceCase) {
             files: {}, treeInputs: inputs, expected: turn.target_dialog_state,
             oracle: { level: 'normalized', normalization: 'named-tree' },
             actions: [evalCall('const updated = JSON.parse(JSON.stringify(state));\n' +
-              edits.map(edit => edit.code.replace(/^state/, 'updated')).join('\n') + '\nreturn updated;'), ['reply', { text: 'done' }]],
+              edits.map(edit => edit.code.replace(/^state/, 'updated')).join('\n') + '\nreturn updated;'), ['return_result', { status: 'success' }]],
             adaptation: 'original train existing-tree transition; bounded structural patch; explicit new leaf values; full preceding context; no file-tree wrapper' });
           record.source_groups.push(`treedst:input:${hash(turn.input_dialog_state)}`);
           return record;

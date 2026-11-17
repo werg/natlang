@@ -256,9 +256,9 @@ test('folder.apply pseudo-return linkage rejects ambiguous or inconsistent evide
   }
 });
 
-for (const notice of ['recorded', 'current']) test(`status-only success requires a same-invocation linked staged typed result (${notice} notice) unless the return type is void`, () => {
+test('status-only success requires a same-invocation linked staged typed result unless the return type is void', () => {
   const stageCallId = 'stage-return';
-  const stagedText = notice === 'current' ? `Staged { answer: "ready" }${STAGED_RESULT_NOTICE}` : 'Staged { answer: "ready" } as the result. If this is the result of the task you were given and you are satisfied with it, reply done to return exactly this value without a tool call, or call return_result with status "success" and omit value to finish using this exact stored result. You can keep working and return a different value later.';
+  const stagedText = `Staged { answer: "ready" }${STAGED_RESULT_NOTICE}`;
   const stageCall = { id: stageCallId, type: 'function', function: { name: 'eval', arguments: '{"code":"draft"}' } };
   const make = ({ withStage = true, linked = true, stageInvocation = 'same-invocation', returnType = '{ answer: string }',
     resultArgs = { status: 'success' }, stageOutput = stagedText, ledgerToolCallId = true, sampledToolCallId = stageCallId } = {}) => {
@@ -359,7 +359,7 @@ test('status-only success accepts only the exact runtime rewrite of a staged inl
   const sentinel = `${blockId}`;
   const rawArgs = { code: `const note: Neuralese<string> = <|neuralese|>${body}<|/neuralese|>; return note;` };
   const runtimeArgs = { code: `const note: Neuralese<string> = ${sentinel}; return note;` };
-  const stagedNotice = `Staged ${sentinel} as the result. If this is the result of the task you were given and you are satisfied with it, reply done to return exactly this value without a tool call, or call return_result with status "success" and omit value to finish using this exact stored result. You can keep working and return a different value later.`;
+  const stagedNotice = `Staged ${sentinel}${STAGED_RESULT_NOTICE}`;
   const user = { role: 'user', content: 'You are inside this call: root(): Neuralese<string>\n\nReturn the staged note.' };
   const evalCall = { id: callId, type: 'function', function: { name: 'eval', arguments: JSON.stringify(rawArgs) } };
   const finishArgs = { status: 'success' };
@@ -438,7 +438,7 @@ test('eval-return typed writer is attached to its source action only when later 
   const evalCallId = 'eval-result-call';
   const evalArgs = { code: 'return notes;' };
   const finishArgs = { status: 'success' };
-  const stagedNotice = `Staged ${blockId} as the result. If this is the result of the task you were given and you are satisfied with it, reply done to return exactly this value without a tool call, or call return_result with status "success" and omit value to finish using this exact stored result. You can keep working and return a different value later.`;
+  const stagedNotice = `Staged ${blockId}${STAGED_RESULT_NOTICE}`;
   const returnType = 'Neuralese<string>';
   const user = { role: 'user', content: `You are inside this call: revise(): ${returnType}\n\nReturn the current notes.` };
   const modelEvalCall = { id: evalCallId, type: 'function', function: { name: 'eval', arguments: JSON.stringify(evalArgs) } };

@@ -7,5 +7,6 @@ export function sessionDriver(session: ManagedModelSession): ModelDriver {
   return Object.assign((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => session.turn(request, signal, options),
     { decide: (request: DecisionRequest, signal?: AbortSignal) => session.decide(request, signal), contextWindow: () => session.contextWindow(),
       ...(session.guidance ? { guidance: true as const } : {}),
+      ...(session.continuesReplies ? { continuesReplies: true as const } : {}),
       ...(session.neuralese ? { neuralese: true as const, neuraleseRuntime: () => session.neuraleseRuntime!() } : {}) });
 }

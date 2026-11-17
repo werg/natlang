@@ -358,7 +358,7 @@ checkpoint/tokenizer binding rather than forcing a different template switch.
 The opt-in profile remains unmeasured until its live executor comparison is
 recorded.
 
-For a function declared to return `Neuralese<string>`, a final assistant text reply is the exact text value. The runtime writes it through the configured Neuralese writer and returns the resulting typed reference. Intermediate text that leaves the invocation without a result is incomplete; finish the same invocation with a typed value instead of treating that text as success.
+For a function declared to return `Neuralese<string>`, the text supplied as the value of `return_result` is written through the configured Neuralese writer and returned as a typed reference. A plain assistant reply does not complete the call. Intermediate text that leaves the invocation without a result is incomplete; finish the same invocation with a typed value instead of treating that text as success.
 
 ## Native state, learning and capture (host-side notes)
 
@@ -528,7 +528,7 @@ restore the original checkpoint profile; do not override the template locally.
 The opt-in profile changes model-visible history and needs its live executor
 comparison before production adoption.
 
-When the declared result is `Neuralese<string>`, route a terminal plain-text assistant reply through the existing typed Neuralese writer before completing the invocation. Keep the target as the original assistant text and bind the writer receipt to that exact model turn, body hash, and captured invocation result. A no-call reply followed by another turn in the same invocation is not a completed result.
+When the declared result is `Neuralese<string>`, route the text value supplied to `return_result` through the typed Neuralese writer before completing the invocation. Keep the target as that exact supplied text and bind the writer receipt to its model turn, body hash, and captured invocation result. A no-call reply followed by another turn in the same invocation is not a completed result.
 
 Native `eval` rejects code that is not TypeScript before running it, with the scope compiler's `typescript-syntax`
 diagnostics. For Python-shaped code or prose inside the `code` argument the first diagnostic is a recovery sentence

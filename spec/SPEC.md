@@ -466,18 +466,19 @@ are elided without a note.
 
 ## Completion
 
-A call finishes in one of three ways:
+A call finishes with `return_result` and status `success`, supplying a value of the declared type, or
+omitting `value` to use the complete result staged by an earlier eval. An eval with `finish: true` completes the
+call with its fresh typed final expression or explicit return. `return_result` with status `blocked` or `failed`
+ends the call without a result.
 
-- `return_result` with status `success` and a value of the declared type;
-- a reply without a tool call, which returns the staged result, or, for a call
-  whose declared type accepts the reply's text as a string, that text (a bare
-  "done" is never the text result);
-- `return_result` with status `blocked` or `failed`, which ends the call without a result.
+A reply without a tool call does not complete the call, even when its text is a valid value or a result is staged.
+The runtime tells the model to call `return_result` and continues. A directory reducer keeps the folder changes
+that exist when it finishes. Turn, token, time, and repair limits apply only when the caller sets them.
 
-A reply without a tool call and without a result is answered with what is
-missing, and the call continues. A directory reducer keeps the folder changes
-that exist when it finishes. Turn, token, time, and repair limits apply only
-when the caller sets them.
+A reply cut off at the request's token limit before any tool call can continue as the same turn when the backend
+supports assistant prefill (the managed llama.cpp server). The continuation preserves the reply's text and reasoning;
+it consumes the call's token budget and must fit in the context window. Other backends receive the cut-off reply
+and a request to take the next step with a tool call in a new turn.
 
 ## Types
 

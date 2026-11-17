@@ -65,7 +65,7 @@ writeFileSync(out + '/result.json', JSON.stringify({ artifacts, receipt: { rows:
   return root;
 }
 
-/** A chat-completions stand-in answering exactly as `scriptedModel` does: first own turn evals, then replies done. */
+/** A chat-completions stand-in answering exactly as `scriptedModel` does: first own turn evals, then confirms the result. */
 function scriptedServer() {
   const server = createServer((request, response) => {
     let body = ''; request.on('data', chunk => body += chunk); request.on('end', () => {
@@ -76,7 +76,7 @@ function scriptedServer() {
       const own = messages.filter(message => message.role === 'assistant' && !(message.tool_calls ?? []).some(call => String(call.id).startsWith('scope_')));
       const message = own.length === 0
         ? { role: 'assistant', content: '', tool_calls: [{ id: `c${messages.length}`, type: 'function', function: { name: 'eval', arguments: JSON.stringify({ code: respond(String(messages[1].content)) }) } }] }
-        : { role: 'assistant', content: 'done' };
+        : { role: 'assistant', content: '', tool_calls: [{ id: 'finish', type: 'function', function: { name: 'return_result', arguments: '{"status":"success"}' } }] };
       response.end(JSON.stringify({ id: 'x', object: 'chat.completion', model: 'scripted-luna',
         choices: [{ index: 0, message, finish_reason: message.tool_calls ? 'tool_calls' : 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 3 } }));
     });

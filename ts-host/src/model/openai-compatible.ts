@@ -37,6 +37,8 @@ export type OpenAICompatibleOptions = HttpChatOptions & {
    * a sentinel naming a state the server has not loaded is `weights-unavailable`.
    */
   nativeStates?: () => ReadonlySet<string>;
+  /** The server continues a cut-off reply (chat-completion.ts `continuesReplies`; llama.cpp's assistant prefill). */
+  continuesReplies?: boolean;
 };
 
 /** Messages whose text carries native state sentinels, as content-part arrays the llama.cpp fork consumes exactly. */
@@ -60,7 +62,8 @@ const isScheduler = (value: unknown): value is Scheduler => typeof (value as Sch
  * the server how many tokens the model's context holds (undefined when the server does not say).
  */
 export function openAICompatibleModelTurn(options: OpenAICompatibleOptions) {
-  const { toolAliases, request, onExchange, onRequestStart, concurrency, scoreEndpoint, scoreCoalesceMs, scoreAll, tunedRequest, nativeStates, ...http } = options;
+  const { toolAliases, request, onExchange, onRequestStart, concurrency, scoreEndpoint, scoreCoalesceMs, scoreAll, tunedRequest, nativeStates,
+    continuesReplies, ...http } = options;
   // A bare number keeps its plain FIFO limit; a scheduler adds priority, adjacency and batch records.
   const scheduler = isScheduler(concurrency) ? concurrency : undefined;
   const limit: RequestLimit | undefined = typeof concurrency === 'number' ? requestLimit(concurrency) : scheduler ? undefined : concurrency as RequestLimit | undefined;
@@ -102,8 +105,8 @@ export function openAICompatibleModelTurn(options: OpenAICompatibleOptions) {
     const states = withStates(body as { messages?: unknown }) as typeof body;
     return turns(tuned ? { ...states, ...tuned } : states, signal, meta);
   };
-  return Object.assign(chatCompletionModelTurn(tunedTurns, { toolAliases, request, onExchange, onRequestStart }),
-    { model: http.model, decide, contextWindow: () => window ??= serverContextWindow(http) });
+  return Object.assign(chatCompletionModelTurn(tunedTurns, { toolAliases, request, onExchange, onRequestStart, continuesReplies }),
+    { model: http.model, decide, contextWindow: () => window ??= serverContextWindow(http), ...(continuesReplies ? { continuesReplies: true as const } : {}) });
 }
 
 const tokens = (value: unknown) => typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined;

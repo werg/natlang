@@ -117,7 +117,7 @@ test('a final expression is only shown; a top-level return stages a value of the
   assert.equal(wrong.kind, 'ok'); assert.match(wrong.text, /This is not a valid number, so it is not the result/);
   assert.equal(lam.return, MISSING);
   const right = await session.applyAsync('eval', { code: 'return 9' });
-  assert.equal(right.kind, 'ok'); assert.equal(lam.return, 9); assert.match(right.text, /Staged 9 as the result\..*reply done/);
+  assert.equal(right.kind, 'ok'); assert.equal(lam.return, 9); assert.match(right.text, /Staged 9 as the result\..*call return_result/);
   const callback = await session.applyAsync('eval', { code: 'const tens = [1, 2].map(value => { return value * 10; }); tens' });
   assert.equal(callback.kind, 'ok'); assert.equal(lam.return, 9, 'a return inside a callback is ordinary JavaScript');
 });
@@ -205,19 +205,25 @@ test('return_result finishes with a typed value; an eval return only stages one'
   assert.equal(doubled.lam.return, 14); assert.equal(doubled.session.completed, false);
 });
 
-test('a final text reply is the result: text for a string, a JSON value for any other type; prose and done are not', async () => {
-  const replies = (texts, type) => { let turn = 0;
-    return run({ type, instructions: 'Answer.' }, { agent: session => new NativeToolAgent(() => ({ text: texts[turn++] ?? 'done' }), { maxTurns: 3 }).run(session) }); };
-  const label = await replies(['positive'], '() => "positive" | "negative"');
-  assert.equal(label.outcome.kind, 'done'); assert.equal(label.value, 'positive');
-  const summary = await replies(['The rollout is on track.'], '() => string');
-  assert.equal(summary.value, 'The rollout is on track.');
-  const number = await replies(['7'], '() => number');
-  assert.equal(number.outcome.kind, 'done'); assert.equal(number.value, 7);
-  const prose = await replies(['Seven.', 'Seven.', 'Seven.'], '() => number');
-  assert.equal(prose.outcome.kind, 'quiesced');
-  const early = await replies(['done', 'done', 'done'], '() => string');
-  assert.equal(early.outcome.kind, 'quiesced', 'done is not an answer');
+test('plain text and JSON replies require an explicit result tool call', async () => {
+  for (const [type, text, value] of [
+    ['() => "positive" | "negative"', 'positive', 'positive'],
+    ['() => string', 'The rollout is on track.', 'The rollout is on track.'],
+    ['() => number', '7', 7],
+    ['() => { verdict: "unknown" }', '{"verdict":"unknown"}', { verdict: 'unknown' }],
+    ['() => number[]', '```json\n[1, 2]\n```', [1, 2]],
+  ]) {
+    const requests = [];
+    const agent = new NativeToolAgent(request => {
+      requests.push(structuredClone(request));
+      return requests.length === 1 ? { text } : { calls: [['return_result', { status: 'success', value }]] };
+    }, { maxTurns: 3 });
+    const result = await run({ type, instructions: 'Answer.' }, { agent: session => agent.run(session) });
+    assert.equal(result.outcome.kind, 'done', result.outcome.detail);
+    assert.deepEqual(result.value, value);
+    assert.equal(requests.length, 2);
+    assert.match(requests[1].messages.at(-1).content, /Answer with return_result/);
+  }
 });
 
 test('two provider-confirmed empty EOS replies end an absent result as model-incomplete after one recovery prompt', async () => {
@@ -411,7 +417,7 @@ test('model repairs an eval failure under an unchanged system prompt', async () 
     ['eval', { code: 'return String(items[0].value)' }]];
   const agent = new NativeToolAgent(request => {
     requests.push(structuredClone(request));
-    return requests.length > script.length ? { text: 'done' } : { calls: [script[requests.length - 1]], completion_tokens: 1 };
+    return requests.length > script.length ? { calls: [['return_result', { status: 'success' }]] } : { calls: [script[requests.length - 1]], completion_tokens: 1 };
   }, { maxTurns: 5 });
   const result = await run({ type: '(items: { value: number }[]) => string', instructions: 'Return the first value as text.',
     args: { items: [{ value: 7 }] } }, { agent: session => agent.run(session) });
@@ -488,14 +494,14 @@ test('a failed eval reports the service calls it already made, whoever built the
 });
 
 test('tool-call markup in a reply is never taken as a string result', async () => {
-  const { session, lam } = open({ type: '() => string', instructions: 'Say something.' });
-  assert.equal(await session.acceptTextResult('</parameter>\n</function>\n</tool_call>'), false);
-  assert.equal(await session.acceptTextResult('<|tool_call_start|>[return_result()]<|tool_call_end|>'), false,
-    'LFM tool-call markup must not be accepted as plain result text');
-  assert.equal(await session.acceptTextResult('A plain answer.'), true); assert.equal(lam.return, 'A plain answer.');
+  for (const text of ['</parameter>\n</function>\n</tool_call>', '<|tool_call_start|>[return_result()]<|tool_call_end|>']) {
+    const agent = new NativeToolAgent(() => ({ text }), { maxTurns: 2 });
+    const result = await run({ type: '() => string', instructions: 'Say something.' }, { agent: session => agent.run(session) });
+    assert.equal(result.outcome.kind, 'quiesced');
+  }
 });
 
-test('a plain final reply is materialized at a declared Neuralese<string> boundary', async () => {
+test('return_result materializes text at a declared Neuralese<string> boundary', async () => {
   const block = 'nzs1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
   const writes = [];
   const meta = { id: block, type: 'Neuralese<string>', dialect: 'test', length: 2, truncated: false };
@@ -505,12 +511,12 @@ test('a plain final reply is materialized at a declared Neuralese<string> bounda
       port: { dialect: 'test', write: async (text, options) => { writes.push({ text, options }); return meta; } },
     },
   });
-  assert.equal(await session.acceptTextResult('\n\nsilver maple\n'), true);
+  assert.equal((await session.applyAsync('return_result', { status: 'success', value: 'silver maple' })).kind, 'completed');
   assert.equal(lam.return.$neuralese.id, block);
   assert.equal(session.finish(), true);
   assert.deepEqual(writes.map(write => write.text), ['silver maple']);
   const event = session.runtime.trace.events.find(item => item.kind === 'block_write');
-  assert.equal(event.source, 'assistant-text-return');
+  assert.equal(event.source, 'return_result');
   assert.equal(event.source_kind, 'typed-text-result');
   assert.equal(event.text_body_sha256, 'c5c97c8bcbe9a5816b6c7481c60ed95f8ba1191e09b90043e26dcf34634cdd58');
 });
@@ -1172,14 +1178,16 @@ test('editor views numbered lines and applies exact edits to the folder', async 
   lam.projectTransaction.abort();
 });
 
-test('a returned value is staged and a reply without a tool call returns it', async () => {
+test('a staged result survives a plain reply and needs return_result to finish', async () => {
   let turn = 0;
   const requests = [];
   const agent = new NativeToolAgent(request => { requests.push(structuredClone(request));
-    return ++turn === 1 ? { calls: [['eval', { code: 'return 11' }]], completion_tokens: 3 } : { text: 'done', completion_tokens: 1 }; });
+    return ++turn === 1 ? { calls: [['eval', { code: 'return 11' }]], completion_tokens: 3 } : turn === 2 ?
+      { text: 'done', completion_tokens: 1 } : { calls: [['return_result', { status: 'success' }]], completion_tokens: 1 }; });
   const result = await run({ type: '() => number', instructions: 'Return eleven.' }, { agent: session => agent.run(session) });
-  assert.equal(result.outcome.kind, 'done'); assert.equal(result.value, 11); assert.equal(turn, 2);
-  assert.match(requests[1].messages.at(-1).content, /Staged 11 as the result\..*reply done/);
+  assert.equal(result.outcome.kind, 'done'); assert.equal(result.value, 11); assert.equal(turn, 3);
+  assert.match(requests[2].messages.at(-1).content, /A complete typed result is staged/);
+  assert.match(requests[1].messages.at(-1).content, /Staged 11 as the result\..*call return_result/);
 });
 
 test('saying done before returning a value is answered, and only budgets the caller sets end a stuck call', async () => {
@@ -1188,10 +1196,10 @@ test('saying done before returning a value is answered, and only budgets the cal
     { maxTurns: 3 });
   const stuck = await run({ type: '() => number', instructions: 'Write a number.' }, { agent: session => chatty.run(session) });
   assert.equal(stuck.outcome.kind, 'quiesced'); assert.match(stuck.outcome.detail, /budget exhausted/);
-  assert.match(requests[1].messages.at(-1).content, /There is no result yet\. Call return_result with status "success" and a number/);
+  assert.match(requests[1].messages.at(-1).content, /There is no result yet\. Answer with return_result: status "success" and a number/);
   let turns = 0;
   const recovering = new NativeToolAgent(() => ++turns === 1 ? { calls: [], text: 'Seven.', completion_tokens: 1 } :
-    turns === 2 ? { calls: [['eval', { code: 'return 7' }]], completion_tokens: 1 } : { text: 'done', completion_tokens: 1 });
+    turns === 2 ? { calls: [['eval', { code: 'return 7' }]], completion_tokens: 1 } : { calls: [['return_result', { status: 'success' }]], completion_tokens: 1 });
   const second = await run({ type: '() => number', instructions: 'Write a number.' }, { agent: session => recovering.run(session) });
   assert.equal(second.outcome.kind, 'done'); assert.equal(second.value, 7); assert.equal(turns, 3);
 });
@@ -1210,7 +1218,7 @@ test('model seeds follow the derivation vectors', async () => {
   const seen = [];
   const agent = new NativeToolAgent(request => {
     seen.push(request.seed);
-    return seen.length === 1 ? { calls: [['eval', { code: 'return true' }]], completion_tokens: 1 } : { text: 'done', completion_tokens: 1 };
+    return seen.length === 1 ? { calls: [['eval', { code: 'return true' }]], completion_tokens: 1 } : { calls: [['return_result', { status: 'success' }]], completion_tokens: 1 };
   });
   const runtime = interpreter({ agent: session => agent.run(session), seedPolicy: { mode: 'derived', root: 43 }, runId: 'seed-run' });
   await runtime.run(lambda({ type: '() => boolean', instructions: 'Return true.' }));
@@ -1363,7 +1371,7 @@ test('undeclared service openings show metadata as data and preserve callable fu
   });
   const agent = new NativeToolAgent(request => {
     requests.push(structuredClone(request));
-    return turns++ === 0 ? { calls: [['eval', { code: 'const ignored: unknown = catalog.lookup("A-1"); return 1' }]] } : { text: 'done' };
+    return turns++ === 0 ? { calls: [['eval', { code: 'const ignored: unknown = catalog.lookup("A-1"); return 1' }]] } : { calls: [['return_result', { status: 'success' }]] };
   }, { maxTurns: 3 });
   await agent.run(session);
   const openingCall = requests[0].messages.flatMap(message => message.tool_calls ?? []).find(call => call.id === 'scope_0');
@@ -1582,19 +1590,6 @@ test('a service scoped to a function is usable in its calls only, and named else
   assert.match(seen.root, /tables is not defined|Cannot find name 'tables'/, 'the root call cannot use it');
   assert.match(seen.expert, /Gigabut threw 60\.4/, 'the expert call can');
   assert.match(seen.asked, /60\.4/);
-});
-
-test('a reply that is only a JSON value of the declared type is the result; prose is not', async () => {
-  const record = open({ type: '() => { verdict: "entailed" | "unknown" }', instructions: 'Judge.' });
-  assert.equal(await record.session.acceptTextResult('\n\n{\n  "verdict": "unknown"\n}'), true);
-  assert.deepEqual(record.lam.return, { verdict: 'unknown' });
-  const fenced = open({ type: '() => number[]', instructions: 'List.' });
-  assert.equal(await fenced.session.acceptTextResult('```json\n[1, 2]\n```'), true); assert.deepEqual(fenced.lam.return, [1, 2]);
-  const number = open({ type: '() => number', instructions: 'Count.' });
-  assert.equal(await number.session.acceptTextResult('The total is 1523.'), false, 'prose is a reply');
-  assert.equal(await number.session.acceptTextResult('1523'), true); assert.equal(number.lam.return, 1523);
-  const wrong = open({ type: '() => { verdict: "entailed" | "unknown" }', instructions: 'Judge.' });
-  assert.equal(await wrong.session.acceptTextResult('{"verdict": "maybe"}'), false, 'a value of another type is not the result');
 });
 
 

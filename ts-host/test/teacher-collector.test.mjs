@@ -308,7 +308,7 @@ test('native collector journals model replies and replays them after an interrup
   let requests = 0, interrupted = false;
   const replies = [
     ['eval', { code: 'const answer: number = 1; return answer' }],
-    null,
+    ['return_result', { status: 'success' }],
   ];
   const server = createServer((request, response) => {
     let body = '';
@@ -412,11 +412,11 @@ test('the native collector records the actions of child nl calls in the ledger, 
     request.setEncoding('utf8'); request.on('data', chunk => { body += chunk; });
     request.on('end', () => {
       const { messages } = JSON.parse(body);
-      // The root evaluates once, which stages its result, and then replies done.
+      // The root evaluates once, which stages its result, and then confirms that result.
       const child = String(messages[1].content).includes('nl@');
       const started = messages.some(message => message.role === 'tool' && String(message.content).includes('Staged'));
       const reply = child ? ['return_result', { status: 'success', value: true }] :
-        started ? null : ['eval', { code: 'const odd = await nl<boolean>`Is value odd?`(1); return odd ? 1 : 0;' }];
+        started ? ['return_result', { status: 'success' }] : ['eval', { code: 'const odd = await nl<boolean>`Is value odd?`(1); return odd ? 1 : 0;' }];
       const message = reply ? { role: 'assistant', content: '', tool_calls: [{ id: 'c1', type: 'function',
         function: { name: reply[0], arguments: JSON.stringify(reply[1]) } }] } : { role: 'assistant', content: '' };
       response.writeHead(200, { 'content-type': 'application/json' });

@@ -418,7 +418,7 @@ for (const format of ['native_state']) for (const channel of ['tool', 'assistant
       const parts = [{ type: 'native_state', id: artifact.id }];
       const value = requests.length !== 1 ? 'actual HTTP answer' : replyMode === 'literal' ?
         neuraleseSentinel(artifact.id) : replyMode === 'mixed' ? [{ type: 'text', text: '<|neuralese|>literal text<|/neuralese|> ' }, ...parts] : parts;
-      const message = channel === 'assistant' ? { role: 'assistant', content: value } :
+      const message = channel === 'assistant' && requests.length === 1 ? { role: 'assistant', content: value } :
         { role: 'assistant', content: '', tool_calls: [{ id: 'reply-' + requests.length, type: 'function',
           function: { name: 'return_result', arguments: JSON.stringify({ status: 'success', value }) } }] };
       response.end(JSON.stringify({ choices: [{ message, finish_reason: requests.length === 1 && replyMode === 'truncated' ? 'length' : 'stop' }], ...(requests.length !== 1 ? {} :
@@ -444,9 +444,9 @@ for (const format of ['native_state']) for (const channel of ['tool', 'assistant
           const target = open({ type: '() => string', instructions: 'Return actual answer text.' }, { neuralese }).session;
           await new NativeToolAgent(driver, { maxTurns: 2, neuralese }).run(target);
           const mixedNativeText = replyMode === 'mixed';
-          assert.equal(target.lam.return, replyMode === 'literal' ? neuraleseSentinel(artifact.id) : mixedNativeText ?
+          assert.equal(target.lam.return, mixedNativeText ?
             '<|neuralese|>literal text<|/neuralese|> the balance is 42' : 'actual HTTP answer');
-          assert.equal(requests.length, replyMode === 'literal' || mixedNativeText ? 1 : 2);
+          assert.equal(requests.length, mixedNativeText ? 1 : 2);
           if (replyMode === 'mixed' && !mixedNativeText) assert.match(JSON.stringify(requests[1].messages), /type-mismatch/);
         }
       }

@@ -433,9 +433,6 @@ export function referenceDriver(record: CurriculumRecord, reasoningFor?: Reasoni
       calls = [['eval', { code: record.semantics.failure_seed!.code }]];
     } else if (name === rootName) {
       const call = record.curriculum.reference.root[step++];
-      // Reference-only directive: finish a computed, staged value through the ordinary reply path.
-      // This is not a runtime tool and must never be emitted as a tool call.
-      if (call?.[0] === 'reply') return { text: String(call[1].text ?? ''), reasoning: 'Finish the staged result.' };
       calls = [call ? [call[0], call[1]] :
         ['return_result', { status: 'failed', reason: 'The reference solution ended without finishing the call.' }]];
     } else {

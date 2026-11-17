@@ -263,9 +263,9 @@ test('a reply that only writes out return_result({...}) is carried out as the to
   assert.deepEqual(await run('return_result({ "status": "success", "value": "Hello, Ada" });'), { value: 'Hello, Ada' });
   const blocked = await run('return_result({ status: "blocked", reason: "No greeting style is given." })');
   assert.match(String(blocked.error?.message), /No greeting style is given/);
-  // Anything that is not a literal request stays text.
-  assert.deepEqual(await run('return_result({ status: "success", value: name })'), { value: 'return_result({ status: "success", value: name })' });
-  assert.deepEqual(await run('Hello, Ada'), { value: 'Hello, Ada' });
+  // Nonliteral requests and plain replies leave the call incomplete.
+  assert.match(String((await run('return_result({ status: "success", value: name })')).error?.message), /no_action/);
+  assert.match(String((await run('Hello, Ada')).error?.message), /no_action/);
 });
 
 test('read_code names the executing call, scope values and source file names for what they are', async () => {

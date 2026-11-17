@@ -118,13 +118,14 @@ projects with `natlang build` (or `natlang run`) so `nl` is lowered. Inline call
    instead of a tool loop, and callers can act on the probabilities with `decide(fn, ...args)`.
 8. **Don't add arbitrary limits** (turns, tokens, depth) to make a run finish; long productive runs are intended, and
    budgets are runtime options for deployment. Where a deployment bounds its model (a host's executor budget), a
-   function whose calls need more or less work than that declares it: `budget: { maxTurns: 8, turnTokens: 1024 }`.
+   function whose calls need more or less work than that declares it: `budget: { maxTurns: 4, maxTokens: 6144 }`.
 
 ## How a call executes
 
 The model receives the function's signature, types, instructions and inputs, then either answers directly (a text
 or simple result) or works in a persistent TypeScript eval scope where parameters, captures, callable items and
-services are bindings, and finishes with `return_result` (`success`, `blocked` or `failed`). The result is checked
+services are bindings. Either way it answers with `return_result` (`success`, `blocked` or `failed`): a reply without a
+tool call is not an answer. The result is checked
 against the declared type; a mismatch goes back to the model to repair. A record or array result that `return_result`
 receives as text (JSON or a JS object/array literal, read as data, never run) is accepted when the data it spells out
 checks; otherwise the error names the field to fix or asks for the value written as an object or array. In host code a failed call rejects with

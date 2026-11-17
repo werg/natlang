@@ -101,7 +101,7 @@ test('call prints text results as text, reads piped text for a text parameter, a
     request.resume(); request.on('end', () => {
       response.setHeader('content-type', 'application/json');
       if (request.url.endsWith('/models')) return response.end(JSON.stringify({ data: [{ id: 'fixture' }] }));
-      response.end(JSON.stringify({ choices: [{ message: { content: '"billing"', tool_calls: [] }, finish_reason: 'stop' }], usage: { completion_tokens: 1 } }));
+      response.end(JSON.stringify({ choices: [{ message: { content: '', tool_calls: [{ id: 'answer', type: 'function', function: { name: 'return_result', arguments: JSON.stringify({ status: 'success', value: 'billing' }) } }] }, finish_reason: 'stop' }], usage: { completion_tokens: 1 } }));
     });
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));

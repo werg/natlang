@@ -5,6 +5,12 @@ export type ModelTurnRequest = { invocation_id?: string; messages: unknown[]; to
   /** Exact allowed tools for parsing native XML replies, never included in the model-facing prompt. */
   response_tools?: unknown[];
   seed: number | null; max_tokens: number | null;
+  /**
+   * The assistant reply so far, cut off at the previous request's `max_tokens` before it called a tool: the server
+   * continues this message (its reasoning, then its text) instead of starting a new one, and the turn it returns is the
+   * whole message. Only drivers marked `continuesReplies` receive it.
+   */
+  continue?: { text: string; reasoning?: string };
   /** "required": the reply must be a tool call (a turn that offers exactly the tool it must use). Default "auto". */
   tool_choice?: 'auto' | 'required';
   /** Weight adapters bound in the calling function's context (Neuralese servers only; others refuse the call). */

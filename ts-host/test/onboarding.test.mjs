@@ -30,7 +30,7 @@ test('a newly scaffolded program checks, runs, and checks saved expected results
       response.setHeader('content-type', 'application/json');
       if (request.url.endsWith('/models')) return response.end(JSON.stringify({ data: [{ id: 'fixture' }] }));
       requests++;
-      response.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(answer), tool_calls: [] }, finish_reason: 'stop' }], usage: { completion_tokens: 1 } }));
+      response.end(JSON.stringify({ choices: [{ message: { content: '', tool_calls: [{ id: 'answer', type: 'function', function: { name: 'return_result', arguments: JSON.stringify({ status: 'success', value: answer }) } }] }, finish_reason: 'stop' }], usage: { completion_tokens: 1 } }));
     });
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));

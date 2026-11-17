@@ -50,10 +50,9 @@ test('native collector sends judged oracle outcomes to the separate model', asyn
       const staged = call.messages.some(message => message.role === 'tool' &&
         String(message.content).includes('Staged'));
       const answer = judge ? ['grade', { accepted: true, verdict: 'The answer meets the rubric.' }] :
-        staged ? null : ['eval', { code: 'return 1;' }];
-      const message = answer ? { role: 'assistant', content: '', tool_calls: [{ id: 'c1', type: 'function',
-        function: { name: answer[0], arguments: JSON.stringify(answer[1]) } }] } :
-        { role: 'assistant', content: '' };
+        staged ? ['return_result', { status: 'success' }] : ['eval', { code: 'return 1;' }];
+      const message = { role: 'assistant', content: '', tool_calls: [{ id: 'c1', type: 'function',
+        function: { name: answer[0], arguments: JSON.stringify(answer[1]) } }] };
       response.writeHead(200, { 'content-type': 'application/json' });
       response.end(JSON.stringify({ choices: [{ message }], usage: { prompt_tokens: 10, completion_tokens: 4 } }));
     });

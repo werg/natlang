@@ -36,7 +36,7 @@ function scriptedModel(respond) {
     const last = messages.at(-1);
     if (last.role === 'tool' && /^(?:rejected|error)|\nerror|Nothing else from this eval was kept/.test(String(last.content)))
       return { calls: [['return_result', { status: 'failed', reason: `Fixture eval failed: ${String(last.content).slice(0, 300)}` }]] };
-    return { text: 'done' };
+    return { calls: [['return_result', { status: 'success' }]] };
   };
   return { driver, openings };
 }

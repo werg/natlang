@@ -45,7 +45,7 @@ export { NativeSession, TypeEnv };
 
 /**
  * A scripted model: `respond(opening)` returns eval code for a natlang invocation (or null to report an
- * error). The driver evaluates it, then replies done.
+ * error). The driver evaluates it, then returns the staged result with return_result.
  */
 export function scriptedModel(respond) {
   const openings = [];
@@ -64,7 +64,8 @@ export function scriptedModel(respond) {
     }
     if (last.role === 'tool' && /^(?:rejected|error)|\nerror|Nothing else from this eval was kept/.test(String(last.content)))
       return { calls: [['return_result', { status: 'failed', reason: `Scripted eval failed: ${String(last.content).slice(0, 300)}` }]] };
-    return { text: 'done' };
+    // The eval staged or finished the result: return_result without a value returns what it staged.
+    return { calls: [['return_result', { status: 'success' }]] };
   };
   return { driver, openings };
 }

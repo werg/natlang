@@ -253,7 +253,7 @@ test('a model that answers a refinement rejection with plain text, never a tool 
   let turns = 0;
   const driver = Object.assign(async () => {
     if (++turns > 40) throw new Error('runaway: the rejected call kept asking for turns');
-    return turns === 1 ? { calls: [['eval', { code: 'return "your fault";' }]] } : { text: 'done' };
+    return turns === 1 ? { calls: [['eval', { code: 'return "your fault";', finish: true }]] } : { text: 'done' };
   }, { decide: async () => ({ log_probs: [Math.log(0.02), Math.log(0.98)] }) });
   const t = run({ driver }, { 'reply.nl': REPLY }, { repairs: 2 }, fn => fn('late parcel'));
   await assert.rejects(t.result(), error => error instanceof RefinementCallError && error.code === 'refinement-unsatisfied');

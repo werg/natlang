@@ -116,7 +116,7 @@ export function declaredResult(opening: string): { returns: Type; env: TypeEnv }
 
 /** The tool list this runtime offers a call of `surface` with declared result `result` (NativeToolAgent.tools). */
 export function servingTools(surface: CallSurface, result?: { returns: Type; env: TypeEnv }): Record<string, unknown>[] {
-  const session = { rememberOfferedTools() {}, runtime: { frame: { adHocDepth: surface.depthLimited ? 1e9 : 0 } },
+  const session = { rememberOfferedTools() {}, codeEditable: () => surface.ownCode, runtime: { frame: { adHocDepth: surface.depthLimited ? 1e9 : 0 } },
     env: result?.env ?? new TypeEnv(),
     lam: { type: result ? { kind: 'lambda', params: { kind: 'object', fields: [] }, returns: result.returns } : { kind: 'opaque' },
       codebase: surface.ownCode ? { f: {} } : {},

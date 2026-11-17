@@ -27,7 +27,7 @@ try {
   if (typeof target !== 'function') throw new Error('target entry is not callable');
   const task = runtime.createNatlangRuntime({ model: {driver: remoteDriver(call => new Promise((resolve, reject) => {
     const id = sequence++; pending.set(id, { resolve, reject }); parentPort!.postMessage({ type: 'request', id, call });
-  }), workerData.decisions === true)}, trace:trace=>parentPort!.postMessage({type:'trace',callId:trace.callId,events:trace.events.filter(event=>event.kind==='action'||event.kind==='model_request'||event.kind==='skill_use')}), services, serviceDeclarations, network: false, codeEdits: 'deny', seed: { mode: 'derived', root: workerData.seed }, limits: workerData.limits });
+  }), workerData.decisions === true, workerData.continuesReplies === true)}, trace:trace=>parentPort!.postMessage({type:'trace',callId:trace.callId,events:trace.events.filter(event=>event.kind==='action'||event.kind==='model_request'||event.kind==='skill_use')}), services, serviceDeclarations, network: false, codeEdits: 'deny', seed: { mode: 'derived', root: workerData.seed }, limits: workerData.limits });
   const folder=workerData.folder?Folder.fromFiles(workerData.folder):undefined;
   const value = await task.run(() => folder ? (typeof (target as unknown as Record<PropertyKey,unknown>)[APPLY_TO_FOLDER]==='function'?folder.apply(target, ...workerData.args):target(folder,...workerData.args)) : target(...workerData.args));
   parentPort!.postMessage({ type: 'result', value: JSON.parse(JSON.stringify(value)),...(folder?{files:Object.fromEntries(folder.filePaths().map(path=>[path,new TextDecoder().decode(folder.readBytesSync(path))]))}:{}) });

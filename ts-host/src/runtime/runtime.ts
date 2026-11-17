@@ -32,6 +32,11 @@ export type ModelDriver = ((request: ModelTurnRequest, signal?: AbortSignal, opt
   decide?: DecisionScorer;
   /** The backend's complete native store, reader identity and available writer; wrappers retain this binding. */
   neuraleseRuntime?: () => Promise<import('../native/neuralese.js').NeuraleseRuntimeOptions | undefined>;
+  /**
+   * The backend continues a reply cut off at its length limit (`ModelTurnRequest.continue`): the agent loop resumes a
+   * cut reply where it stopped instead of starting a new turn. The managed llama.cpp server does (assistant prefill).
+   */
+  continuesReplies?: boolean;
 };
 export type ModelConfig = { driver: ModelDriver;
   promptRendering?: import('../native/system-prompts.js').PromptRendering;

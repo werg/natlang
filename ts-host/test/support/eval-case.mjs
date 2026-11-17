@@ -29,7 +29,7 @@ const driver = async ({ messages }) => {
   const last = String(messages.at(-1).content);
   if (/^(?:rejected|error)|\nerror|Nothing else from this eval was kept/.test(last))
     return { calls: [['return_result', { status: 'failed', reason: `Scripted eval failed: ${last.slice(0, 400)}` }]] };
-  return { text: 'done' };
+  return { calls: [['return_result', { status: 'success' }]] };
 };
 /** A host stream: services and packages may hand eval code async iterables, which `for await` consumes. */
 const feed = { items: n => (async function* () { for (let i = 1; i <= n; i++) { await new Promise(r => setTimeout(r, 1)); yield i; } })() };

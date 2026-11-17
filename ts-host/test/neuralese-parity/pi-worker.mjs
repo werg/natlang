@@ -21,7 +21,7 @@ const executor = async ({ messages }) => {
   const last = messages.at(-1);
   if (last.role === 'tool' && /^(?:rejected|error)|\nerror/.test(String(last.content)))
     return { calls: [['return_result', { status: 'failed', reason: `Scripted eval failed: ${String(last.content).slice(0, 300)}` }]] };
-  return { text: 'done' };
+  return { calls: [['return_result', { status: 'success' }]] };
 };
 
 self.onmessage = async ({ data: { phase, agent, entry } }) => {

@@ -21,7 +21,7 @@ const evaluated = messages => messages.some(message => message.role === 'tool' &
 
 /**
  * A model server that streams: a call's first turn says `Working on NAME.` and calls eval with the function's code;
- * later turns say `done`. `malformedOnce` names a function whose first reply carries unparsable call arguments once.
+ * later turns confirm the staged result with return_result. `malformedOnce` names a function whose first reply carries unparsable call arguments once.
  */
 async function server({ malformedOnce } = {}) {
   const bodies = [];
@@ -37,7 +37,8 @@ async function server({ malformedOnce } = {}) {
       const name = opening.includes('Double n') ? 'addOne' : 'main';
       const code = name === 'addOne' ? 'return 2 * n + 1;' : 'return await addOne(n);';
       let chunks;
-      if (evaluated(body.messages)) chunks = [chunk({ role: 'assistant', content: 'do' }), chunk({ content: 'ne' }, 'stop')];
+      if (evaluated(body.messages)) chunks = [chunk({ role: 'assistant', content: 'do' }), chunk({ content: 'ne' }),
+        chunk({ tool_calls: [{ index: 0, id: `finish_${name}`, type: 'function', function: { name: 'return_result', arguments: '{"status":"success"}' } }] }), chunk({}, 'tool_calls')];
       else {
         const args = JSON.stringify({ code });
         const bad = name === malformedOnce && !malformed;
@@ -100,10 +101,10 @@ test('a natlang call\'s deltas reach the subscriber in order, tagged with the ca
     assert.deepEqual(events.map(event => `${event.name}#${event.turn}:${event.delta.type}`), [
       'main#1:text', 'main#1:text', 'main#1:tool_call', 'main#1:tool_call',
       'addOne#1:text', 'addOne#1:text', 'addOne#1:tool_call', 'addOne#1:tool_call',
-      'addOne#2:text', 'addOne#2:text', 'main#2:text', 'main#2:text']);
+      'addOne#2:text', 'addOne#2:text', 'addOne#2:tool_call', 'main#2:text', 'main#2:text', 'main#2:tool_call']);
     assert.deepEqual(shown(events), { 'main#1': 'Working on main.', 'addOne#1': 'Working on addOne.',
       'addOne#2': 'done', 'main#2': 'done' });
-    const calls = events.filter(event => event.delta.type === 'tool_call' && event.name === 'addOne').map(event => event.delta);
+    const calls = events.filter(event => event.delta.type === 'tool_call' && event.name === 'addOne' && event.turn === 1).map(event => event.delta);
     assert.equal(calls[0].name, 'eval');
     assert.deepEqual(JSON.parse(calls.map(delta => delta.arguments).join('')), { code: 'return 2 * n + 1;' });
     // The call identity is the one the trace records; the turn is the one its model_request events give.
@@ -136,7 +137,7 @@ test('a subscriber that throws does not affect the call; a runtime and a task su
     const runtime = createNatlangRuntime({ model: openAICompatibleModelTurn({ endpoint: model.endpoint, model: 'm' }),
       calls: false, onLive: event => { if (event.type === 'model_delta') a.push(event); throw new Error('observer'); } });
     assert.equal(await runtime.run(() => program()(1), { onLive: event => event.type === 'model_delta' && b.push(event) }), 3);
-    assert.equal(a.length, 12);
+    assert.equal(a.length, 14);
     assert.deepEqual(a, b);
   } finally { await model.close(); }
 });

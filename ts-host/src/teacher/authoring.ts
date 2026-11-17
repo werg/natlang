@@ -188,10 +188,10 @@ async function runAuthoring(files: Record<string, string>, spec: AuthoringSpec, 
     const model = Object.assign(async (request: ModelTurnRequest, _signal?: AbortSignal, options?: ModelTurnOptions): Promise<ModelTurn> => {
       const opening = String((request.messages[1] as { content?: unknown } | undefined)?.content ?? '');
       if (opening.startsWith(`You are inside this call: ${HARNESS}(`)) {
-        // After the eval staged its result, a reply without a tool call returns it; a failed eval ends the call.
+        // After the eval stages its result, return_result confirms it; a failed eval ends the call.
         if (staged) {
           const last = String((request.messages.at(-1) as { content?: unknown } | undefined)?.content ?? '');
-          return /\nStaged /.test(`\n${last}`) || last.includes('Staged ') ? { text: 'done' } :
+          return /\nStaged /.test(`\n${last}`) || last.includes('Staged ') ? { calls: [['return_result', { status: 'success' }]] } :
             { calls: [['return_result', { status: 'failed', reason: `The authored export failed: ${last.slice(0, 400)}` }]] };
         }
         staged = true;

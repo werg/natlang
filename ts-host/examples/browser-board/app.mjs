@@ -20,7 +20,7 @@ async function program() {
 /** Scripted decisions for wiring checks (`?fixture`); they do not assess a model. */
 function fixtureModel(getState, getEvent) {
   return ({ messages }) => {
-    if (natlang.modelTurnsSoFar(messages) > 0) return { text: 'done' };
+    if (natlang.modelTurnsSoFar(messages) > 0) return { calls: [['return_result', { status: 'success' }]] };
     const opening = String(messages[1].content);
     const event = getEvent(), state = getState();
     const value = opening.includes('Interpret the UI event') ?

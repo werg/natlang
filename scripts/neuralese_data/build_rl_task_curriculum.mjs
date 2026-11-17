@@ -44,7 +44,7 @@ export async function buildScaffolds(runtime=resolve(repo,'ts-host')) {
     slice:spec.root?'nested_scoped':'inline_placement',domain:'other',mode:'single_call',inline:'optional',
     evidence:{world:[],retrieved:[],background:[]},assumptions:[],decisive:[],
     plausible_actions:[],minimum_sequence:[],
-    reference:{root:[['eval',{code:root}],['reply',{text:'done'}]],...(children.length?{children}:{})},
+    reference:{root:[['eval',{code:root}],['return_result',{status:'success'}]],...(children.length?{children}:{})},
     rl:{level:spec.level,family:spec.name,qualification:'pending-live-48'},
     ...(spec.root?{trajectory_contract:{version:'natlang.trajectory_contract/1',authored_root_eval:true,
      authored_root_sha256:sha(root),min_child_invocations:0,min_state_edges_from_children:0,min_iteration_steps:0}}:{})},

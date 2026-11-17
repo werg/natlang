@@ -19,7 +19,7 @@ async function chatServer(reply) {
       const answer = reply(requests.length);
       if (answer === null) { response.statusCode = 500; response.end(JSON.stringify({ error: { message: 'down' } })); return; }
       response.setHeader('content-type', 'application/json');
-      response.end(JSON.stringify({ choices: [{ message: { content: answer, tool_calls: [] }, finish_reason: 'stop' }], usage: { completion_tokens: 1 } }));
+      response.end(JSON.stringify({ choices: [{ message: { content: '', tool_calls: [{ id: 'answer', type: 'function', function: { name: 'return_result', arguments: JSON.stringify({ status: 'success', value: JSON.parse(answer) }) } }] }, finish_reason: 'stop' }], usage: { completion_tokens: 1 } }));
     });
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));

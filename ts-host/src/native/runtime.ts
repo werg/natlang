@@ -41,7 +41,6 @@ import { returnErrorText, returnValueRejection, type ReturnErrorText } from './r
 import { literalText } from './pseudo-call.js';
 import { STAGED_RESULT_NOTICE } from './staged-result.js';
 import { modelFacing } from '../runtime/model-facing.js';
-import { TOOL_MARKUP } from './tool-markup.js';
 import type { Platform } from '../runtime/platform.js';
 import ts from 'typescript';
 
@@ -1357,44 +1356,23 @@ export class NativeSession {
       '\nNothing else from this eval was kept; writes to files, services or live values stay done, so check them before writing again.';
   }
 
-  /**
-   * A final reply's text as the result when the declared return type accepts it. Neuralese<string> text goes through
-   * the typed block writer; a bare "done" asks for the already staged value.
-   */
-  /** Whether a plain, complete reply would be this call's result (a text-typed call with nothing staged). */
-  takesTextResult(): boolean {
+  /** The runtime or the bound evaluation policy denies code edits. */
+  codeEditsDenied(): boolean {
+    return this.runtime.frame?.task.runtime.options.codeEdits === 'deny' ||
+      this.runtime.frame?.task.programView?.binding?.artifact.policy.codeEdits === 'deny';
+  }
+
+  /** The call can change code: its program has functions of its own and code edits are not denied (edit_code, diff_code). */
+  codeEditable(): boolean {
+    return Object.keys(this.lam.codebase).length > 0 && !this.codeEditsDenied();
+  }
+
+  /** Whether this call's result is text (a string or Neuralese<string>, with nothing staged). */
+  expectsTextResult(): boolean {
     if (this.lam.type.kind !== 'lambda' || this.lam.return !== MISSING) return false;
     const resolved = this.env.resolve(this.lam.type.returns);
     const element = resolved.kind === 'neuralese' ? this.env.resolve(resolved.element) : resolved;
     return element.kind === 'prim' && element.name === 'string';
-  }
-
-  async acceptTextResult(text: string): Promise<boolean> {
-    const answer = text.trim();
-    if (this.lam.type.kind !== 'lambda' || this.lam.return !== MISSING || !answer || /^done[.!]?$/i.test(answer)) return false;
-    // Tool-call markup is a failed tool call, never the answer.
-    if (TOOL_MARKUP.test(answer)) return false;
-    let value: Value;
-    const returnType = this.lam.type.returns;
-    const resolvedReturn = this.env.resolve(returnType);
-    const element = resolvedReturn.kind === 'neuralese' ? this.env.resolve(resolvedReturn.element) : undefined;
-    if (resolvedReturn.kind === 'neuralese' && element?.kind === 'prim' && element.name === 'string') {
-      try {
-        value = await this.coerceReturn(answer, 'assistant-text-return');
-        this.lam.return = value;
-        return true;
-      } catch { return false; }
-    }
-    try { value = coerce(answer, this.lam.type.returns, this.env, 'return'); } catch { value = MISSING; }
-    if (typeof value === 'string') { this.lam.return = value; return true; }
-    // Any other result may be written as JSON: a reply that is nothing but a value of the declared type (optionally
-    // in a code fence) is that value. Prose around it is a reply, not a result.
-    const body = answer.replace(/^```(?:json)?\s*\n([\s\S]*?)\n?```$/, '$1').trim();
-    let parsed: unknown;
-    try { parsed = JSON.parse(body); } catch { return false; }
-    try { value = coerce(parsed as Value, this.lam.type.returns, this.env, 'return'); } catch { return false; }
-    this.lam.return = value;
-    return true;
   }
 
   /** Complete the invocation if an eval has returned a value of the declared type. */
@@ -1488,7 +1466,7 @@ export class NativeSession {
     return this.callableCache.tree;
   }
 
-  private async writeNeuraleseResult(text: string, wanted: Type, source: 'return_result' | 'eval-return' | 'eval-finish' | 'assistant-text-return',
+  private async writeNeuraleseResult(text: string, wanted: Type, source: 'return_result' | 'eval-return' | 'eval-finish',
     sourceKind: 'typed-text-result' | 'typed-json-result' | 'typed-text-result-field', resultPath?: (string | number)[]): Promise<Value> {
     const callId = this.runtime.currentCallId ?? this.runtime.options.runId;
     const sourceEvent = [...this.runtime.trace.events].reverse().find(event =>
@@ -1505,7 +1483,7 @@ export class NativeSession {
   }
 
   /** Materialize plain text or validated JSON only when the declared Neuralese element type makes that representation exact. */
-  private async coerceReturn(value: unknown, source: 'return_result' | 'eval-return' | 'eval-finish' | 'assistant-text-return',
+  private async coerceReturn(value: unknown, source: 'return_result' | 'eval-return' | 'eval-finish',
     parseJsonFallback = false): Promise<Value> {
     const wanted = this.env.resolve(this.lam.type.kind === 'lambda' ? this.lam.type.returns : parseType('null'));
     const element = wanted.kind === 'neuralese' ? this.env.resolve(wanted.element) : undefined;
@@ -1573,13 +1551,14 @@ export class NativeSession {
   /** Apply one tool call. */
   async applyAsync(name: string, args: Record<string, unknown>, toolCallId?: string): Promise<NativeResult> {
     this.runtime.checkInterruption();
-    if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
+    const record = (result: NativeResult) => this.record(name, args, result, toolCallId);
+    if (this.completed) return record({ kind: 'error', text: 'the task has already finished' });
     if (!NATIVE_TOOLS.includes(name))
-      return this.record(name, args, rejected(new Reject([this.notATool(name, args)])));
+      return record(rejected(new Reject([this.notATool(name, args)])));
     if (this.lam.withheldTools?.includes(name))
-      return this.record(name, args, rejected(new Reject([{ path: name, code: 'withheld-tool', text:
+      return record(rejected(new Reject([{ path: name, code: 'withheld-tool', text:
         `${name} is withheld from calls of ${this.lam.functionName || 'this function'} by its definition; do this step with the tools this call offers` }])));
-    if (this.actionLimitReached()) return this.record(name, args, { kind: 'budget', text: 'action or tool-call budget exhausted' });
+    if (this.actionLimitReached()) return record({ kind: 'budget', text: 'action or tool-call budget exhausted' });
     this.toolCalls++;
     this.actions++; this.lam.steps++;
     try {
@@ -1589,14 +1568,14 @@ export class NativeSession {
           throw new Reject([{ path: 'timeout_ms', code: 'bad-action', expected: 'a positive whole number of milliseconds' }]);
         if (args.finish !== undefined && typeof args.finish !== 'boolean')
           throw new Reject([{ path: 'finish', code: 'bad-action', expected: "a boolean: true completes this eval's fresh typed result" }]);
-        return this.record(name, args, await this.evaluate(String(args.code ?? ''), timeout as number | undefined, args.finish === true, toolCallId), toolCallId);
+        return record(await this.evaluate(String(args.code ?? ''), timeout as number | undefined, args.finish === true, toolCallId));
       }
       if (name === 'return_result' && (args.status ?? 'success') === 'success' && Object.hasOwn(args, 'value') &&
           this.lam.type.kind === 'lambda') {
         const value = await this.coerceReturn(args.value, 'return_result', true);
-        return this.record(name, args, this.scopeTool(name, { ...args, value }), toolCallId);
+        return record(this.scopeTool(name, { ...args, value }));
       }
-      if (CODE_TOOLS.includes(name)) return this.record(name, args, this.functionTool(name, args));
+      if (CODE_TOOLS.includes(name)) return record(this.functionTool(name, args));
       if (name === 'bash') {
         const folder = this.lam.projectTransaction?.folder;
         if (!folder) throw new Reject([{ path: name, code: 'bad-action', expected: 'a folder call' }]);
@@ -1634,7 +1613,7 @@ export class NativeSession {
               return invokeDefinition(this.runtime.frame!, meta.definition, [handle],
                 { folder: { transaction, mode: 'apply' } });
             } });
-        return this.record(name, args, { kind: value.exitCode === 0 ? 'ok' : 'error',
+        return record({ kind: value.exitCode === 0 ? 'ok' : 'error',
           text: this.show(JSON.stringify(value)), value: value as unknown as Value });
       }
       if (name === 'python') {
@@ -1645,7 +1624,7 @@ export class NativeSession {
           throw new Reject([{ path: 'timeout_ms', code: 'bad-action', expected: 'a positive timeout in milliseconds' }]);
         const runFolderPython = this.folderTool('runFolderPython', name);
         const value = await runFolderPython(folder, String(args.code ?? ''), await this.pythonHost(), timeout);
-        return this.record(name, args, { kind: 'ok', text: this.show(JSON.stringify(value)), value: value as unknown as Value });
+        return record({ kind: 'ok', text: this.show(JSON.stringify(value)), value: value as unknown as Value });
       }
       if (name === 'delegate') {
         const folder = this.lam.projectTransaction?.folder;
@@ -1660,15 +1639,15 @@ export class NativeSession {
           body: instructions, params: [], returns: String(args.returns ?? 'unknown'),
           types: this.lam.typesSrc, codebase: this.lam.codebase, subtype: 'directory-reducer',
         }, [handle], { folder: { transaction, mode: 'apply' }, manifest: { delegate: true, path } });
-        return this.record(name, args, { kind: 'ok', text: this.show(JSON.stringify(value) ?? 'null'), value: value as Value });
+        return record({ kind: 'ok', text: this.show(JSON.stringify(value) ?? 'null'), value: value as Value });
       }
-      if (name === 'editor') return this.record(name, args, await this.editorTool(args));
+      if (name === 'editor') return record(await this.editorTool(args));
       if (['list_files', 'search_files', 'read_file', 'write_file', 'edit_file', 'diff_files'].includes(name))
-        return this.record(name, args, await this.fileTool(name, args));
-      return this.record(name, args, this.scopeTool(name, args));
+        return record(await this.fileTool(name, args));
+      return record(this.scopeTool(name, args));
     } catch (error) {
-      if (error instanceof Reject) return this.record(name, args, rejected(error));
-      return this.record(name, args, { kind: 'error', text: error instanceof Error ? error.message : String(error) });
+      if (error instanceof Reject) return record(rejected(error));
+      return record({ kind: 'error', text: error instanceof Error ? error.message : String(error) });
     }
   }
   private async folderCommandCallable(name: string, folder: Folder): Promise<unknown> {
@@ -1970,8 +1949,8 @@ export class NativeSession {
         requested === this.lam.functionName ? `${requested} is the call you are executing: the opening message has all of its ` +
           `signature and instructions. ${SELF_CALL_ADVICE.replace(/\.$/, '')}` :
         inScope.includes(requested) ? `${requested} is a value in this call's eval scope: inspect it with eval, for example console.log(${requested})` :
-        // A text-typed call with no functions of its own (a writer) has nothing to read: its reply is its result.
-        !own.length && this.takesTextResult() ? 'This call returns text: reply with the result itself, without a tool call' :
+        // A text-typed call with no functions of its own (a writer) has nothing to read: it answers with its text.
+        !own.length && this.expectsTextResult() ? 'This call returns text: send the text itself as the value of return_result' :
         undefined;
       throw new Reject([{ path: requested, code: 'no-such-function', expected: what ? `${readable}. ${what}` : readable }]);
     }
@@ -1988,7 +1967,7 @@ export class NativeSession {
       }
       return { kind: 'ok', text: explanation + record.text, value: record.text };
     }
-    if (this.runtime.frame?.task.runtime.options.codeEdits === 'deny' || view?.binding?.artifact.policy.codeEdits === 'deny')
+    if (this.codeEditsDenied())
       throw new Reject([{ path: requested, code: 'bad-action', expected: 'code edits are denied by this evaluation policy' }]);
     if (args.expected_revision !== undefined && args.expected_revision !== expectedRevision)
       throw new Reject([{ path: requested, code: 'bad-action', expected: 'current source revision; reread after a concurrent edit' }]);

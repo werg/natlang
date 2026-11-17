@@ -164,7 +164,7 @@ test('CLI builds and runs TypeScript entries, packs and installs applications, a
     const code = opening.includes('Greet the people') ? 'return "hello " + input.join(" and ")' :
       opening.includes('answer from this codebase') ? 'return helper.helper() + ": " + (await project.file("project-notes.txt").readText())' : undefined;
     if (!code) return null;
-    return turn === 0 ? ['eval', { code }] : null;
+    return turn === 0 ? ['eval', { code }] : ['return_result', { status: 'success' }];
   });
   const cli = join(import.meta.dirname, '..', 'bin', 'natlang.mjs');
   const natlang = (args, options = {}) => execFile(process.execPath, [cli, ...args], { encoding: 'utf8', env, ...options }).then(result => result.stdout);

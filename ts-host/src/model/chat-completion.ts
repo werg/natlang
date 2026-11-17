@@ -62,6 +62,12 @@ export type ChatCompletionOptions = {
    * request that names adapters instead of sending a field the server would ignore.
    */
   adapters?: boolean;
+  /**
+   * The server continues a final assistant message (llama.cpp's assistant prefill, reasoning included) and, asked
+   * without streaming, answers with the whole message parsed from what it was given and what it generated. A request
+   * with `continue` is sent that way; other adapters refuse it.
+   */
+  continuesReplies?: boolean;
 };
 
 /** Tool-call markup (Qwen-style XML or <tool_call> tags, LFM2's pythonic call markers) left in a reply's text. */
@@ -279,7 +285,15 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
     }
     for (const message of messages) for (const call of message.tool_calls ?? [])
       if (call.function?.name && forward[call.function.name]) call.function.name = forward[call.function.name];
-    let attemptMessages: unknown[] = messages, retries = 0;
+    // A continued reply is sent as the final assistant message, which the server extends. Streamed, llama.cpp sends
+    // only what it generated; whole, the message it parsed from both. So the request is not streamed, and what the
+    // continuation added reaches the observer once the message is back.
+    const continued = request.continue;
+    if (continued && !options.continuesReplies)
+      throw new Error('continuation-unsupported: this model backend cannot continue a cut-off reply');
+    let attemptMessages: unknown[] = continued ? [...messages, { role: 'assistant', content: continued.text,
+      ...(continued.reasoning ? { reasoning: continued.reasoning, reasoning_content: continued.reasoning } : {}) }] : messages;
+    let retries = 0;
     let promptTokens = 0, completionTokens = 0, cachedTokens = 0, prefillMs = 0, generationMs = 0;
     let hasPrompt = false, hasCompletion = false, hasCached = false, hasTimings = false;
     const started = Date.now();
@@ -296,7 +310,8 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
     };
     while (true) {
       if (signal?.aborted) throw new Error('model turn aborted');
-      const wireRequest: Json = { ...options.request, messages: attemptMessages, ...(tools.length ? { tools, tool_choice: request.tool_choice ?? 'auto' } : {}) };
+      const wireRequest: Json = { ...options.request, messages: attemptMessages, ...(tools.length ? { tools, tool_choice: request.tool_choice ?? 'auto' } : {}),
+        ...(continued && !retries ? { stream: false } : {}) };
       if (!tools.length) { delete wireRequest.tools; delete wireRequest.tool_choice; }
       if (request.temperature !== undefined) wireRequest.temperature = request.temperature;
       // Weight adapters bound by the calling function's context; only Neuralese transports send them.
@@ -356,6 +371,16 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
         prefillMs += timings.prompt_ms; generationMs += timings.predicted_ms; hasTimings = true;
       }
       const truncated = choice?.finish_reason === 'length';
+      if (continued && !retries) {
+        const text = contentText(message?.content), reasoning = message?.reasoning_content ?? message?.reasoning;
+        const thought = typeof reasoning === 'string' ? reasoning : '';
+        if (!text.startsWith(continued.text) || !thought.startsWith(continued.reasoning ?? ''))
+          throw new Error('continuation-mismatch: the server did not answer with the whole continued reply');
+        if (onDelta) {
+          if (thought.length > (continued.reasoning ?? '').length) onDelta({ type: 'reasoning', text: thought.slice((continued.reasoning ?? '').length) });
+          if (text.length > continued.text.length) onDelta({ type: 'text', text: text.slice(continued.text.length) });
+        }
+      }
       const protocolFailure=nativeProtocolFailure(body);
       if(protocolFailure)return finish({calls:[],text:contentText(message?.content),
         protocol_failure:protocolFailure,...counts(),raw_response:body});
@@ -387,8 +412,11 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
           ...(truncated ? { truncated: true } : {}), ...counts(), raw_response: body });
       } catch (error) {
         // A reply cut off mid tool call is a truncated turn, not a transport failure.
-        if (truncated) return finish({ calls: [], text: contentText(message?.content), truncated: true,
-          ...counts(), raw_response: body });
+        if (truncated) {
+          const reasoning = message?.reasoning_content ?? message?.reasoning;
+          return finish({ calls: [], text: contentText(message?.content), truncated: true, raw_calls: rawCalls,
+            ...(typeof reasoning === 'string' && reasoning.trim() ? { reasoning } : {}), ...counts(), raw_response: body });
+        }
         // Tool-call markup that is no call: the turn carries the reply as sampled and what was wrong with it, so the
         // caller keeps it in the history. `malformed_call` marks it: the markup must never read as the answer.
         if (error instanceof LeakedCall) {
@@ -533,8 +561,10 @@ export function openAIEndpointRoot(endpoint: string): string {
 export function httpChatTransport(options: HttpChatOptions): ChatTransport {
   if (!options.endpoint || !options.model) throw new Error('model endpoint and ID are required');
   const url = options.chatCompletionsUrl ?? openAIEndpointRoot(options.endpoint) + '/v1/chat/completions';
-  const stream = options.stream ?? true;
+  const streams = options.stream ?? true;
   return async (body, signal) => {
+    // A request may ask for one whole body (`stream: false`, a continued reply); otherwise the transport's setting holds.
+    const stream = streams && body.stream !== false;
     let response: Response;
     try {
       response = await fetchModel(url, { method: 'POST', signal, headers: { 'content-type': 'application/json',
