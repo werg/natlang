@@ -3028,3 +3028,27 @@ GPQA-D 0.429 -> 0.465, IFEval strict 0.725 -> 0.721, loose 0.778 -> 0.756.
 - **The real fit** (`progtune-fit3`, attention+conv, exact path) reached step 18/30 before the coordinator stopped it
   (time-slicing slowed SFT 47 -> 74 s/step); its state is resumable but the rerun will be a fresh all-target factored
   fit in a GPU window.
+
+
+**2026-11-17, final canonical Vibestudio pilot qualifies collection and SFT input (no learner exposure).**
+All three live Luna families now pass: GitHub access, server-log briefing and documentation lookup. The docs fix
+ports query intent to the 39th NL function and corrects exact search mechanics; the final episode has 14 real calls,
+zero errors, grounded actionable checkPanel quotes, exact replay and accepted isolated semantic review. Existing
+18 suites/450 cases retain their protected splits. The development failures remain unadmitted evidence, not an
+acceptance-rate estimate or additional independent tasks.
+
+Standard shared extract/replay/build on merged pin efdecc9fe accepts only 3 episodes/39 calls (3 root, 36 child,
+0 unknown), producing 39 LFM3 chains, 55,947 forward / 308 target / 269 weighted target tokens. All three replay
+exactly from original collect pin67a3eb693; the source identity is never relabeled as the newer build pin. Receipt
+and hashes: /home/werg/data/vibestudio-teacher-pilot-20261117/pilot-build-v2-result.json. Data-only owner transfer
+verified all337 selected files/139,355,613 bytes on DGX at identical paths; proposed corpus id
+vibestudio-teacher-pilot-20261117-v2. Only build-v2/chains.pkl is learner input; failed/review/partial records are
+evidence. No optimizer or active training run was changed. Full qualification and exact scope: VIBESTUDIO_SFT_20261117.md.
+
+Concurrent upstream operator/learner work was integrated by normal merge f577c13a8. Full merged6d921fca4 checks
+passed1629 general Python,2229 Neuralese,2618 other TS tests and22 conformance; their sole Pi bundle import failure
+was corrected by separating fingerprint identity from pure canonical JSON (36ca3a313;28 real bundle/fixture checks,
+bothTS and layering pass). Operator-budget bypass efdecc9fe passed23 focused checks; no active affected compaction
+experiment was found. Main quick36ca3a313 passed. The archived full log retains its pre-correction failure; all
+observed failures are acted on and targeted-green. The page capture ABI release blocker is recorded with source
+citations rather than a fake capture implementation. None blocks this hosted text-teacher corpus.
