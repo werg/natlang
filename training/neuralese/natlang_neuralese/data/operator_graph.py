@@ -23,7 +23,7 @@ import copy
 import hashlib
 import json
 
-from ..model.learned_operators import operator, operator_site_messages, registry_sha256
+from ..model.learned_operators import TEXT_PLACEMENTS, operator, operator_site_messages, registry_sha256
 from .operator_seeds import seed_for
 from .native_graph_schema import SCHEMA, parse_graph
 from .port_record_graph import _serving_messages, _target_message, _target_reply
@@ -102,7 +102,7 @@ class OperatorGraphRenderer:
     def site(self, name, *, instructions, source, context=(), tools=None):
         """Token IDs of one operator write site through ``produce_open``: (ids, prompt span).
 
-        The single definition of the site for training graphs and the serving endpoint (engine.native_operator),
+        The single definition of the site for training graphs and rows (scripts/neuralese_data/operator_rows.py),
         which generates the producer span after it. ``source`` is text for 'system' operators and serving messages
         for 'user-suffix' operators.
         """
@@ -110,7 +110,7 @@ class OperatorGraphRenderer:
         prompt_id = _placeholder(f'operator-prompt:{name}')
         messages = operator_site_messages(name, instructions=instructions, source=source, context=context,
                                           prompt_part={'type': 'native_state', 'id': prompt_id})
-        ids, spans = self._render(messages, tools if spec.placement != 'system' else None,
+        ids, spans = self._render(messages, tools if spec.placement not in TEXT_PLACEMENTS else None,
                                   {prompt_id: list(binding['prompt_token_ids'])}, generation=True)
         ids.append(self.role_ids[0])
         return ids, spans[prompt_id]
@@ -130,7 +130,7 @@ class OperatorGraphRenderer:
     def _producer(self, name, index, record, source, tools):
         spec = operator(name)
         context = _serving_messages(record['writer'].get('context') or [])
-        if spec.placement == 'system':
+        if spec.placement in TEXT_PLACEMENTS:
             site_source = source_text(source)
         else:
             if not isinstance(source.get('messages'), list):
@@ -165,7 +165,7 @@ class OperatorGraphRenderer:
             if spec.frame_each and spec.consumer_open and not part.get('inline'):
                 framed.append({'type': 'text', 'text': spec.consumer_open})
             framed.append({key: value for key, value in part.items() if key != 'inline'})
-        if spec.placement == 'system':
+        if spec.placement in TEXT_PLACEMENTS:
             framed.append({'type': 'text', 'text': spec.consumer_close})
             old = messages[first].get('content')
             if isinstance(old, str):

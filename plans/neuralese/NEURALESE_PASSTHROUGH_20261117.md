@@ -107,4 +107,85 @@ state, through the real producer->consumer dependency. The learner no longer rea
   document.
 - Bench, ledger, ≤15 GB: forward+backward tokens/s and CUDA peak on Neuralese chains, pass vs detach.
 
-Results: see the section "Results" (appended when measured).
+## Results (2026-11-17)
+
+Commits:
+- cdb97e649: WeightSync publishes the producer table from the trained embedding. Opt-out `--frozen-producer-table`; a
+  checkpoint with a producer adapter is refused.
+- 993df3f3d: the pass-through in `lfm3_fast_train` / `lower_rollout_turns` / `exp0_sft` / `grpo`, on by default.
+  Opt-out `--no-neuralese-passthrough` in both learners.
+- The capture checks and the bench (`scripts/neuralese_data/passthrough_check.py`) and the SFT data step
+  (`sft_sources.py neuralese-graph`) follow in later commits.
+
+**CPU tests** (`tests/neuralese/test_lfm3_fast_train.py`, tiny LFM3, FP32/FP64):
+- The in-graph state equals an independent capture of the document: stock HF hooks, spliced as the fork does. The
+  consumer's hidden states agree within 1e-4.
+- The consumer's loss reaches the embedding rows of tokens that occur only in the producer document; frozen, it does
+  not. The frozen gradients equal the stored-state path's.
+- On weights acting on the producer, float64 central differences with the state recomputed equal autograd within 2e-3
+  relative, and the frozen gradient differs from them.
+- exp0_sft rows, steps and the prefix-tree split, and the lowering from `execution_graph` (`stop_gradient` imports
+  frozen), are also covered.
+
+**Real captures.** These are grpo-v3/run1 actor-store blocks: text writes of 1-169 tokens served by export ba7a8fed
+(version 10). Because the start-version stores had already been collected, the learner used checkpoint step-00010.
+1. *Per-layer state:* the relative L2 of each layer's K, V and B*x over the span.
+   - Layers 0-2 agree at the BF16 floor (actor vs learner-BF16 0.0006-0.008; learner BF16 vs FP32 0.003-0.008).
+   - From layer 3 on, the first consumer of an attention output, the actor deviates from FP32 about 2.5-3x more than the
+     learner's BF16 does. For the 32-169-token blocks, the median over layers is: actor vs FP32 0.048-0.055, learner
+     BF16 vs FP32 0.017-0.020, actor vs learner 0.047-0.056.
+   - Embedding the span rows with the actor's stale producer table instead of the trained embedding changes nothing
+     measurable at version 10. Ten steps of embedding updates are far below this noise.
+   - Reading: the learner's state is the BF16 state. The actor adds error that starts at its first attention read.
+     That is consistent with its FP8 KV cache (an attested engine choice), but **not verified**: a BF16-KV actor
+     capture needs an SGLang unit of about 24 GB.
+2. *End to end* (6 consumer calls, 628-2,612 sampled tokens each, the actor's recorded log-probabilities). Mean
+   |dlogp| per token:
+
+   | comparison | mean abs dlogp |
+   |---|---|
+   | learner with in-graph state vs learner with the actor's stored block | 0.013-0.019 |
+   | in-graph vs actor | 0.030-0.044 |
+   | stored block vs actor (today's learner) | 0.032-0.044 |
+   | no state (placeholders as plain tokens) vs actor | 0.066-0.151 |
+
+   The in-graph state predicts the actor's tokens as well as the actor's own stored state does.
+
+**Bench.** Forward+backward, BF16, activation budget 3 GB, 6 importing chains of 5.1-7.5k tokens with 10-97-token
+producer documents, steady-state repeats. The DGX GPU was shared with the running SFT, so the absolute rates are low.
+
+| mode | tok/s | CUDA peak |
+|---|---|---|
+| no producer documents (the stored-state path's compute) | 2,204 | 9.21 GB |
+| pass-through | 2,206 | 9.24 GB |
+| frozen | 2,171 | 9.24 GB |
+
+The pass-through costs nothing measurable: the documents are 0.2-1.9% of the tokens.
+
+**Side finding, reported, not investigated.**
+- Compiled `lfm3_fast_train` layers differ from the eager kernels by mean |dlogp| 0.037 (max 0.62) in no-grad mode, and
+  0.009 in grad mode, on a chain **without** imports. They also differ between processes.
+- Eager is deterministic, and there the pass-through and frozen modes are bit-identical. The differing pass/frozen
+  losses in the compiled bench are therefore this compile noise, not the pass-through.
+
+**SFT data.** `sft_sources.py neuralese-graph` built corpus `sft-neuralese-graph-20261117-v1`
+(manifest 7c3342e7). It lowers the own Neuralese successes whole from the archived rollouts, consumer calls after
+imports included, with their recorded producer documents.
+- Funnel: of 449 episodes, 159 admitted over 91 tasks; 271 over the per-task cap of 2; 19 on an unseen surface.
+- No import lacked a recorded write.
+- Contents: 3,421 calls, of which 1,011 consumers; 1,024 chains, of which 413 import; 12.0M forward and 3.91M target
+  tokens (1.0M of them on consumer calls); 94k producer-document tokens.
+- It supersedes `sft-neuralese-text-20261117-v2` for these episodes: it has the same calls plus the consumers, so do
+  not merge both. Not yet trained.
+
+**FALLOW-22:** stale (old surface, native-write spans), not wired.
+
+**Not checked:**
+- a version-0 actor capture (the start policy's store was collected);
+- a BF16-KV actor capture (the FP8 hypothesis);
+- the SGLang import of a block against `import_tensors` beyond the existing parity tests;
+- a GRPO or exp0_sft optimizer step with pass-through on the DGX: the bench ran forward+backward only, no AdamW, because
+  of the 15 GB limit;
+- held-out effect;
+- a native-write span (inside a producer call): none exist today, and `write_sources` refuses sources that import
+  state themselves (counted).

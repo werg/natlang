@@ -1,37 +1,108 @@
 /**
- * The client of a native server's learned Neuralese operators (`POST /v1/neuralese/operator`, capability `operator/1`):
- * the server generates the operator's producer span after its site (greedy, up to the operator's cap) and archives that span's state, returned as a Neuralese value.
+ * The learned operators' in-context capture on engines that write states only from produce spans they sample
+ * (OPERATORS_RESTORE_20261117.md §3.1); `native.capture` servers use model/native-state-client.ts `serverCapture`.
  */
-import { neuraleseRef } from '../native/neuralese.js';
-import type { Compactor } from '../native/operator-frames.js';
+import type { NativeCapture } from '../native/operator-frames.js';
+import { nativeStateBlockMeta } from '../native/neuralese-store.js';
+import { hexDigest } from '../native/hash.js';
 import type { NeuraleseStore } from '../native/neuralese-store.js';
 import { fetchModel } from './chat-completion.js';
-import { serves, type NeuraleseServerInfo } from './neuralese-info.js';
+import type { NeuraleseServerInfo } from './neuralese-info.js';
 import { archiveNativeState } from './native-state-client.js';
 
-export const OPERATOR_CAPABILITY = 'operator/1';
-
-/** The learned operators of one native server that advertises `operator/1`. */
-export function serverCompactor(options: { endpoint: string; headers?: Record<string, string>; store: NeuraleseStore;
-  info: NeuraleseServerInfo }): Compactor {
+/**
+ * The in-context capture on an engine that produces states only from produce spans it samples (the managed
+ * llama-server and the page, which serve neither `native.capture` nor `native.text-write`): the call's own messages
+ * again, with a grammar that forces the exact reply ids up to its content, `produce_open`, the content and
+ * `produce_close` (grammar token syntax `<[id]>`). The engine writes that span as it writes any produce span, so the
+ * state is the same function of the same ids as `native.capture` on the Python engine and SGLang
+ * (OPERATORS_RESTORE_20261117.md §3.1). The reply ids are the sampled ones when the call reported them, else the
+ * tokenization of its reasoning and text.
+ */
+export function grammarCapture(options: { endpoint: string; headers?: Record<string, string>; store: NeuraleseStore;
+  info: NeuraleseServerInfo }): NativeCapture {
   const base = options.endpoint.replace(/\/$/, '');
-  return async site => {
-    if (!serves(options.info, OPERATOR_CAPABILITY))
-      throw Object.assign(new Error('neuralese-operator-unavailable: the server does not serve learned operators'),
-        { code: 'neuralese-operator-unavailable' });
+  const headers = { 'content-type': 'application/json', ...options.headers };
+  const markers = (options.info.native_state as { role_marker_ids?: number[] } | undefined)?.role_marker_ids;
+  const tokenize = async (content: string, special: boolean): Promise<number[]> => {
+    const response = await fetchModel(`${base}/tokenize`, { method: 'POST', headers,
+      body: JSON.stringify({ content, add_special: false, parse_special: special }) });
+    if (!response.ok) throw new Error(`neuralese-native-capture: tokenize failed (${response.status})`);
+    return ((await response.json()) as { tokens: (number | { id: number })[] }).tokens.map(t => typeof t === 'number' ? t : t.id);
+  };
+  const detokenize = async (tokens: number[]): Promise<string> => {
+    const response = await fetchModel(`${base}/detokenize`, { method: 'POST', headers, body: JSON.stringify({ tokens }) });
+    if (!response.ok) throw new Error(`neuralese-native-capture: detokenize failed (${response.status})`);
+    return ((await response.json()) as { content: string }).content;
+  };
+  /** serve/engine.py `selected_span`: the whole tokens covering the one occurrence of `text` as the reply spells it. */
+  const selectedSpan = async (ids: number[], text: string): Promise<[number, number]> => {
+    const ends: number[] = [];
+    for (let i = 0; i < ids.length; i++) ends.push((await detokenize(ids.slice(0, i + 1))).length);
+    const whole = await detokenize(ids);
+    for (const spelling of [...new Set([text, JSON.stringify(text).slice(1, -1)])]) {
+      const first = whole.indexOf(spelling);
+      if (first < 0 || whole.indexOf(spelling, first + 1) >= 0) continue;
+      return [ends.findIndex(end => end > first), ends.findIndex(end => end >= first + spelling.length) + 1];
+    }
+    throw new Error('neuralese-native-capture: the selected text does not occur exactly once in the reply');
+  };
+  const applyTemplate = async (call: { messages: unknown[]; tools: unknown[] }): Promise<string> => {
+    const response = await fetchModel(`${base}/apply-template`, { method: 'POST', headers,
+      body: JSON.stringify({ messages: call.messages, ...(call.tools.length ? { tools: call.tools } : {}) }) });
+    if (!response.ok) throw new Error(`neuralese-native-capture: apply-template failed (${response.status})`);
+    return ((await response.json()) as { prompt: string }).prompt;
+  };
+  let specials: Promise<{ thinkClose: number; ends: Set<number> }> | undefined;
+  const single = (ids: number[], name: string) => {
+    if (ids.length !== 1) throw new Error(`neuralese-native-capture: ${name} is not one token on this server`);
+    return ids[0]!;
+  };
+  return async (call, extra = {}) => {
+    if (!Array.isArray(markers) || markers.length !== 4)
+      throw new Error('neuralese-native-capture-unavailable: the server declares no native role markers');
     if (!options.store.putNativeState || !options.store.getNativeState)
-      throw new Error('neuralese-native-archive-unavailable: learned operators need a native-capable archive');
-    const body = site.operator === 'compact-history'
-      ? { operator: site.operator, messages: site.messages, context: site.context ?? [], tools: site.tools, note: site.note ?? '' }
-      : { operator: site.operator, instructions: site.instructions, value: site.value, note: site.note ?? '' };
-    // model-call-kind: operator-write -- training/model-call-kinds.json
-    const response = await fetchModel(`${base}/v1/neuralese/operator`, { method: 'POST',
-      headers: { 'content-type': 'application/json', ...options.headers }, body: JSON.stringify(body) });
-    if (!response.ok) throw new Error(`native operator failed (${response.status}): ${(await response.text()).slice(0, 1000)}`);
-    const result = await response.json() as { id?: string; operator?: { name?: string } };
-    if (typeof result.id !== 'string' || result.operator?.name !== site.operator)
-      throw new Error('neuralese-operator-integrity: the server did not return this operator\'s native state');
-    await archiveNativeState({ endpoint: options.endpoint, headers: options.headers, store: options.store }, result.id);
-    return neuraleseRef('Neuralese<string>', result.id);
+      throw new Error('neuralese-native-archive-unavailable: captures need a native-capable archive');
+    specials ??= (async () => ({ thinkClose: single(await tokenize('</think>', true), '</think>'),
+      ends: new Set([single(await tokenize('<|im_end|>', true), '<|im_end|>')]) }))();
+    const { thinkClose, ends } = await specials;
+    const reply = call.reply?.length ? call.reply :
+      [...await tokenize(call.reasoning ?? '', false), thinkClose, ...await tokenize(call.text ?? '', false)];
+    const end = reply.findIndex(token => ends.has(token));
+    let stop = end < 0 ? reply.length : end;
+    let start = reply.slice(0, stop).lastIndexOf(thinkClose) + 1;
+    if (call.select !== undefined) [start, stop] = await selectedSpan(reply.slice(0, stop), call.select);
+    const span = reply.slice(start, stop);
+    if (!span.length || span.some(token => markers.includes(token)))
+      throw new Error('neuralese-native-capture: the reply has no content to capture, or carries role markers');
+    const [open, close] = markers as [number, number];
+    const forced = [...reply.slice(0, start), open, ...span, close];
+    // model-call-kind: native-forced-write -- training/model-call-kinds.json
+    const response = await fetchModel(`${base}/v1/chat/completions`, { method: 'POST', headers, body: JSON.stringify({
+      messages: call.messages, ...(call.tools.length ? { tools: call.tools } : {}), temperature: 0,
+      max_tokens: forced.length + 1, grammar: `root ::= ${forced.map(token => `<[${token}]>`).join(' ')}` }) });
+    if (!response.ok) throw new Error(`neuralese-native-capture: forced span failed (${response.status}): ${(await response.text()).slice(0, 500)}`);
+    const result = await response.json() as { native_state?: { blocks?: { id?: string }[] } };
+    const id = result.native_state?.blocks?.[0]?.id;
+    if (typeof id !== 'string' || result.native_state!.blocks!.length !== 1)
+      throw new Error('neuralese-native-capture: the forced reply did not produce exactly one state');
+    // The prompt ids: the call's own when it reported them, else the server's rendering of the same messages (a
+    // captured rollout's sampling law refuses a grammar, so the forced request reports none itself).
+    const prompt = call.prompt?.length ? call.prompt : await tokenize(await applyTemplate(call), true);
+    const artifact = await archiveNativeState({ endpoint: options.endpoint, headers: options.headers, store: options.store }, id);
+    const ids = artifact.tensors.token_ids!, view = new DataView(ids.data.buffer, ids.data.byteOffset, ids.data.byteLength);
+    if (ids.shape[0] !== span.length || span.some((token, index) => BigInt(token) !== view.getBigInt64(index * 8, true)))
+      throw new Error('neuralese-native-capture: the produced state does not hold the forced span');
+    const prefix = [...prompt, ...reply.slice(0, start)];
+    const text = typeof artifact.metadata.text === 'string' ? artifact.metadata.text : '';
+    const meta = nativeStateBlockMeta(artifact);
+    return { ...meta, ...(extra.type ? { type: extra.type } : {}), producer: {
+      source_text_sha256: hexDigest(text), native_source_capture: {
+        policy: { checkpoint_sha256: artifact.metadata.checkpoint_sha256, tokenizer_fingerprint: artifact.metadata.tokenizer_fingerprint,
+          embedding_weight_sha256: artifact.metadata.embedding_weight_sha256, architecture: artifact.metadata.architecture },
+        segments: [{ kind: 'tokens', token_ids: [...prefix, open], producing: [...prefix.map(() => false), false] },
+          { kind: 'tokens', token_ids: span, producing: span.map(() => true) },
+          { kind: 'tokens', token_ids: [close], producing: [false] }],
+        payload_start: prefix.length + 1, payload_stop: prefix.length + 1 + span.length } } };
   };
 }

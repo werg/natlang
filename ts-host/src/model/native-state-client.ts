@@ -10,6 +10,7 @@ import { nativeStateConsumerFromInfo, type NeuraleseRuntimeOptions } from '../na
 export type { NativeAdapterStateConsumption } from '../native/neuralese-store.js';
 
 import type {NativeStateDerivation} from '../native/native-derivative-contract.js';
+import type { NativeCapture } from '../native/operator-frames.js';
 
 export type NativeSourceCapture = { policy: { checkpoint_sha256: string; tokenizer_fingerprint: string;
   embedding_weight_sha256: string; architecture: string };
@@ -20,7 +21,7 @@ export type NativeSourceCapture = { policy: { checkpoint_sha256: string; tokeniz
     adapter_state_consumption?: NativeAdapterStateConsumption;state_derivation?:NativeStateDerivation;
   }[] };
 export type NativeTextResult = { id: string; native_state: Record<string, unknown>; source_capture: NativeSourceCapture;
-  source_text_sha256: string; init?: Record<string, unknown>; gate?: null };
+  source_text_sha256: string; source_text?: string; init?: Record<string, unknown>; gate?: null };
 export type NativeClientOptions = { endpoint: string; headers?: Record<string, string>; store: NeuraleseStore;
   info?: NeuraleseServerInfo };
 
@@ -43,11 +44,12 @@ export async function nativeStateRuntimeOptions(options: NativeClientOptions, se
   const nativeStateConsumer = nativeStateConsumerFromInfo(info);
   if (!nativeStateConsumer)
     return failure('neuralese-native-state-unavailable', 'the server must declare native identity and consumption modes');
-  const { serverCompactor, OPERATOR_CAPABILITY } = await import('./native-operator.js');
-  const compactor = serves(info, OPERATOR_CAPABILITY) ? serverCompactor({ ...options, info }) : undefined;
+  const { grammarCapture } = await import('./native-operator.js');
+  const capture = serves(info, 'native.capture') ? serverCapture({ ...options, info }) :
+    (native as { production?: boolean }).production ? grammarCapture({ ...options, info }) : undefined;
   return { store: options.store, dialect, nativeStateConsumer,
     nativeStateConsumerForCall: async () => nativeStateConsumerFromInfo(await neuraleseServerInfo(options.endpoint, { headers: options.headers })),
-    ...(port ? { port } : {}), ...(compactor ? { compactor } : {}) };
+    ...(port ? { port } : {}), ...(capture ? { capture } : {}) };
 }
 
 const failure = (code: string, detail: string): never => { throw Object.assign(new Error(`${code}: ${detail}`), { code }); };
@@ -97,10 +99,15 @@ function validateSource(result: NativeTextResult, artifact: NativeStateArtifact,
     return failure('neuralese-native-source-integrity', 'captured payload tokens do not match the actual producer source span');
 }
 
-export async function nativeTextOperation(options: NativeClientOptions, operation: 'write-text' | 'init-body',
-    body: Record<string, unknown> & { text: string }): Promise<{ result: NativeTextResult; meta: NeuraleseBlockMeta }> {
+/**
+ * A forced native write: `write-text` (text from position 0), `init-body` (text at its rendered position in a call) or
+ * `capture` (a sampled reply's content in its own context: `prompt_token_ids`, `reply_token_ids`; the server returns
+ * the captured text; OPERATORS_RESTORE_20261117.md §3.1).
+ */
+export async function nativeTextOperation(options: NativeClientOptions, operation: 'write-text' | 'init-body' | 'capture',
+    body: Record<string, unknown> & { text?: string }): Promise<{ result: NativeTextResult; meta: NeuraleseBlockMeta }> {
   const info = options.info ?? await neuraleseServerInfo(options.endpoint, { headers: options.headers });
-  const capability = operation === 'write-text' ? 'native.text-write' : 'native.init-body';
+  const capability = operation === 'write-text' ? 'native.text-write' : operation === 'capture' ? 'native.capture' : 'native.init-body';
   if (!(info.native_state as { enabled?: boolean } | undefined)?.enabled || !serves(info, capability))
     return failure(`neuralese-${capability.replaceAll('.', '-')}-unavailable`, 'use a native server implementing this exact producer operation');
   if (!options.store.putNativeState || !options.store.getNativeState)
@@ -119,8 +126,10 @@ export async function nativeTextOperation(options: NativeClientOptions, operatio
   const result = await response.json() as NativeTextResult;
   if (!/^nzs1_[a-z2-7]{52}$/.test(result.id)) return failure('neuralese-block-integrity', 'native writer returned no native content address');
   const artifact = await archiveNativeState(options, result.id);
-  validateSource(result, artifact, body.text, info);
-  if (operation === 'write-text' && nativeCanonicalJson(result.source_capture.adapter_binding ?? null) !==
+  const text = operation === 'capture' ? result.source_text : body.text;
+  if (typeof text !== 'string') return failure('neuralese-native-source-integrity', 'native writer must return its exact source text');
+  validateSource(result, artifact, text, info);
+  if (operation !== 'init-body' && nativeCanonicalJson(result.source_capture.adapter_binding ?? null) !==
       nativeCanonicalJson(artifact.metadata.adapter_binding ?? null))
     return failure('neuralese-native-source-integrity', 'text writer actor binding differs from its archived state');
   let logicalPosition = 0;
@@ -180,6 +189,16 @@ export async function nativeTextOperation(options: NativeClientOptions, operatio
   return { result, meta: { ...nativeStateBlockMeta(artifact), ...(typeof body.type === 'string' ? { type: body.type } : {}),
     producer: { ...(body.producer as Record<string, unknown> | undefined), native_source_capture: result.source_capture,
       source_text_sha256: result.source_text_sha256 } } };
+}
+
+/** `native.capture` on a server that implements it: the exact prompt and sampled reply ids, captured server-side. */
+export function serverCapture(options: NativeClientOptions): NativeCapture {
+  return async (call, extra = {}) => {
+    if (!call.prompt?.length || !call.reply?.length)
+      return failure('neuralese-native-capture', 'native.capture needs the call\'s exact prompt and sampled reply ids');
+    return (await nativeTextOperation(options, 'capture', { prompt_token_ids: call.prompt, reply_token_ids: call.reply,
+      ...(call.select !== undefined ? { select: call.select } : {}), ...extra })).meta;
+  };
 }
 
 /** The existing write-port interface, backed by actual native producer execution. */

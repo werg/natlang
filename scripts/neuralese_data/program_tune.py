@@ -16,6 +16,8 @@ Stages (each reads the previous stage's output in DIR):
          successes), and --sources, an `sft_sources.py` work directory (recorded GRPO/teacher successes replayed
          under the current runtime and oracle). A tool call whose result is a runtime error is not a
          target (`rejected`): its turn is dropped and later turns keep it as failed history (prompt weight 0 anyway).
+  teacher-tasks  a teacher_gen.py WORK over the support split (tasks.jsonl, pool.json): API teachers' verified
+         successes, replayed by sft_sources.py, are fit rows (--sources) when no actor is free for on-policy samples.
   plan   DIR/fit/plan.json for `python -m natlang_neuralese.tune.build --plan DIR/fit/plan.json --out DIR/fit/build`:
          one scope node (the whole program), free LoRA of --rank over the LFM3 target table, frozen base in BF16 with
          FP32 adapter parameters, optional GGUF export (--gguf-base-sha256, --hf-config).
@@ -464,6 +466,40 @@ def bank(args):
         _write(out / 'bank-manifest.json', manifest)
 
 
+# ---- teacher tasks ---------------------------------------------------------------------------------------------------
+def teacher_tasks(args):
+    """A `teacher_gen.py` WORK directory over programs' support splits only: WORK/tasks.jsonl (support rows of every
+    --dir, round-robin over the programs, each in split-group hash order, at most --max-tasks per program) and
+    WORK/pool.json (the splits' receipts, pools and held manifest). Teacher successes, replayed through
+    `sft_sources.py` (extract --teacher WORK, replay), become fit rows (`rows --sources`). Dev and confirmation tasks
+    never reach the teachers."""
+    work = Path(args.work)
+    if (work / 'tasks.jsonl').exists():
+        raise SystemExit(f'{work}/tasks.jsonl exists: teacher_gen resumes it as it is')
+    programs, queues = [], []
+    for item in args.dir:
+        directory = Path(item)
+        record = json.loads((directory / 'split.json').read_text())
+        support = read_jsonl(directory / 'support' / 'cases.jsonl')
+        if {row['id'] for row in support} != set(record['ids']['support']):
+            raise SystemExit(f'{directory}: the support manifest differs from split.json')
+        support.sort(key=lambda row: hashlib.sha256(
+            f"teacher:{record['family']}:{split_group(row)}:{row['id']}".encode()).hexdigest())
+        support = support[:args.max_tasks] if args.max_tasks else support
+        queues.append(support)
+        programs.append({'split': str((directory / 'split.json').resolve()), 'sha256': sha256_file(directory / 'split.json'),
+                         'family': record['family'], 'tasks': len(support), 'pools': record['pools'],
+                         'held_manifest': record['held_manifest']})
+    ordered = [queue[i] for i in range(max(map(len, queues))) for queue in queues if i < len(queue)]
+    work.mkdir(parents=True, exist_ok=True)
+    with open(work / 'tasks.jsonl', 'w', encoding='utf-8') as handle:
+        for row in ordered:
+            handle.write(json.dumps({'row': row, 'base_rank': 'support'}) + '\n')
+    (work / 'pool.json').write_text(json.dumps({'schema': 'natlang.program-support-teacher-pool/1', 'split': 'support',
+                                                'programs': programs, 'tasks': len(ordered)}, indent=1) + '\n')
+    print(json.dumps({'work': str(work), 'tasks': len(ordered), 'programs': {p['family']: p['tasks'] for p in programs}}))
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest='command', required=True)
@@ -501,6 +537,10 @@ def main(argv=None):
     p.add_argument('--seed', type=int, default=0)
     p.add_argument('--gguf-base-sha256', help='sha256 of the base GGUF the LoRA exports bind to')
     p.add_argument('--hf-config', help='HF config directory of the base for the GGUF LoRA converter')
+    t = sub.add_parser('teacher-tasks', help='a teacher_gen.py WORK over the support split only')
+    t.add_argument('--dir', action='append', required=True, help='program directory (repeatable)')
+    t.add_argument('--work', required=True)
+    t.add_argument('--max-tasks', type=int, help='at most this many support tasks per program (stable hash order)')
     b = sub.add_parser('bank', help='bank meta-learning over program fits; held programs adapted for the outcome gate')
     b.add_argument('--programs', nargs='+', required=True, help='meta-training program directories (fit/build done)')
     b.add_argument('--held', nargs='*', default=[], help='held program directories (their own fits are references)')
@@ -518,7 +558,7 @@ def main(argv=None):
     b.add_argument('--recipe', help='JSON overrides of meta_bank.MetaRecipe')
     b.add_argument('--seed', type=int, default=0)
     args = parser.parse_args(argv)
-    {'split': split, 'rows': rows, 'plan': plan, 'bank': bank}[args.command](args)
+    {'split': split, 'rows': rows, 'plan': plan, 'teacher-tasks': teacher_tasks, 'bank': bank}[args.command](args)
 
 
 if __name__ == '__main__':

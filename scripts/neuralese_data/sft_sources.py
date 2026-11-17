@@ -1335,6 +1335,147 @@ def neuralese_text(args):
                                              'forward_tokens', 'target_tokens')}, indent=1))
 
 
+def neuralese_graph(args):
+    """Whole Neuralese episodes as whole-graph SFT rows: the verified successes `build` skips for their imported state
+    (`has_native_state`), every call as the actor ran it (the exact prompt and sampled ids of its capture, read again
+    from the run's rollout archive: `lower_rollout_turns.episode_turns`), consumer calls after an import included. An
+    import is a pass-through: its producer document is the episode's recorded write (`write_sources`), which the learner
+    runs in the consumer's forward (`exp0_sft.row_inputs`, plans/neuralese/NEURALESE_PASSTHROUGH_20261117.md), so no
+    stored state is needed and the consumer's loss trains the producer's state. An episode with an import whose
+    write was not recorded is dropped (counted). Validity as `neuralese-text`: oracle success at collection, the held-v3/v2
+    closure, and each call's system prompt and tool schemas equal to ones the current runtime rendered in an exact
+    replay (an episode with a call on an unseen surface is dropped whole: its graph would lose a dependency). Writes
+    OUT/chains.pkl (`exp0_sft.py train --chains`), OUT/rows.jsonl.zst and OUT/build.json."""
+    import random
+    import numpy as np
+    import pickle
+    from natlang_neuralese.common.code_provenance import code_provenance
+    from natlang_neuralese.common.jsonio import read_jsonl
+    from natlang_neuralese.rl.held_eval import exclusion_ids
+    from exp0_sft import MAX_LEN, chains_of, source_tokens
+    from lower_rollout_turns import episode_turns
+    work, out = Path(args.work), Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    rng = random.Random(args.seed)
+    held = held_closure(args.held_manifest)
+    funnel = collections.Counter()
+    surfaces = set()
+    for line in (work / 'replay.jsonl').open():
+        record = json.loads(line) if line.strip() else {}
+        if record.get('exact'):
+            for row in read_jsonl(work / 'replay' / record['name'] / 'rollouts.jsonl'):
+                surfaces.update(surface_key(t) for t in row.get('turns') or ())
+    archives = {}
+    for spec in json.loads((work / 'extract.json').read_text())['rl']:
+        run_dir, archive_dir = spec.split(':')
+        archives['rl:' + '/'.join(Path(run_dir).parts[-2:])] = (run_dir, archive_dir)
+    episodes = [e for e in all_episodes(work) if has_native_state(e) and e.get('source') == 'rl-own']
+    funnel['native_state_episodes'] = len(episodes)
+    excluded = exclusion_ids(args.held_manifest, [e['task'] for e in episodes])
+    kept = []
+    for e in episodes:
+        task = e['task']
+        groups = list(task.get('source_groups') or ()) + [(task.get('curriculum') or {}).get('split_group') or task['id']]
+        if e['task_id'] in excluded or held_hit(e['task_id'], task.get('source_ids') or (), groups, held):
+            funnel['held_excluded'] += 1
+            continue
+        kept.append(e)
+    rng.shuffle(kept)
+    files = {}
+    for label, (run_dir, archive_dir) in archives.items():
+        for name, path, _ in rl_rollout_files(run_dir, archive_dir):
+            files[(label, name)] = path
+    wanted = collections.defaultdict(dict)
+    for e in kept:
+        wanted[(e['run'], e['group'])][e['sample']] = e
+    lowered_of = {}         # key -> (every call on a current surface, lowering counters, calls): rows are not kept
+    for (label, name), samples in sorted(wanted.items()):
+        path = files.get((label, name))
+        if path is None:
+            funnel['rollouts_missing'] += len(samples)
+            continue
+        for line in zstd_lines(path):
+            if line.strip():
+                row = json.loads(line)
+                if row.get('sample') in samples and row.get('task_id') == samples[row['sample']]['task_id']:
+                    counters = collections.Counter()
+                    calls = episode_turns(row, counters)
+                    for call in calls:      # SFT: the own sampled tokens are the target (no importance weights)
+                        for field in ('logp', 'probabilities'):
+                            call.pop(field, None)
+                    lowered_of[samples[row['sample']]['key']] = (
+                        all(surface_key(t) in surfaces for t in row['turns'] if t.get('messages')), counters, calls)
+                del row
+    per_task = collections.Counter()
+    stats = collections.Counter()
+    rows_out = ZstdWriter(out / 'rows.jsonl.zst')
+    sft_episodes, tasks = [], {}
+    for e in kept:
+        if e['key'] not in lowered_of:
+            funnel['rollout_row_missing'] += 1
+            continue
+        if per_task[e['task_id']] >= args.max_per_task:
+            funnel['over_task_cap'] += 1
+            continue
+        current, lowered, calls = lowered_of[e['key']]
+        if not current:
+            funnel['unseen_surface'] += 1
+            continue
+        stats.update(lowered)
+        if lowered['skip_native_state_prompt'] or lowered['skip_native_state_missing']:
+            funnel['import_without_recorded_write'] += 1
+            continue
+        if not any(c['imports'] for c in calls):
+            funnel['no_lowered_import'] += 1
+            continue
+        episode = {'task_id': e['task_id'], 'round': f"rl-neuralese-graph:{e['key']}", 'rows': calls}
+        chains = chains_of([episode])
+        per_task[e['task_id']] += 1
+        funnel['admitted'] += 1
+        tasks[e['task_id']] = e['task']
+        generator = 'bgkit' if e['task_id'].startswith('ext:bgkit:') else 'other'
+        stats[f'{generator}:episodes'] += 1
+        stats[f'{generator}:calls'] += len(calls)
+        stats[f'{generator}:consumer_calls'] += sum(1 for c in calls if c['imports'])
+        stats[f'{generator}:target_tokens'] += sum(len(c['sample']) for c in calls)
+        stats[f'{generator}:consumer_target_tokens'] += sum(len(c['sample']) for c in calls if c['imports'])
+        stats[f'{generator}:forward_tokens'] += sum(len(c['ids']) + source_tokens(c) for c in chains)
+        stats[f'{generator}:producer_document_tokens'] += sum(source_tokens(c) for c in chains)
+        stats[f'{generator}:too_long_calls'] += sum(len(c['prompt']) + len(c['sample']) > MAX_LEN for c in calls)
+        for call in calls:
+            rows_out.write({'episode': e['key'], 'source': 'rl-own-neuralese-graph', 'run': e.get('run'),
+                            'task_id': e['task_id'], 'family': e.get('family') or e['task'].get('family'),
+                            'generator': generator, 'policy': e.get('policy'), 'call': call['index'],
+                            'invocation': call['invocation'], 'imports': [list(i) for i in call['imports']],
+                            'prompt_tokens': len(call['prompt']), 'target_tokens': len(call['sample'])})
+        sft_episodes.append(episode)
+    rows_out.close()
+    chains = chains_of(sft_episodes)
+    rng.shuffle(chains)
+    with (out / 'chains.pkl.partial').open('wb') as handle:
+        pickle.dump({'chains': chains, 'schema': 'natlang.sft-chains/1'}, handle, protocol=4)
+    os.replace(out / 'chains.pkl.partial', out / 'chains.pkl')
+    report = {
+        'schema': 'natlang.sft-sources-neuralese-graph/1', 'code': code_provenance(), 'argv': sys.argv,
+        'inputs': {'episodes': {str(p): sha256_file(p) for p in episode_files(work)},
+                   'replay_sha256': sha256_file(work / 'replay.jsonl'), 'held_manifest': args.held_manifest,
+                   'held_manifest_sha256': sha256_file(args.held_manifest), 'archives': archives},
+        'policy': {'max_per_task': args.max_per_task, 'seed': args.seed, 'current_surfaces': len(surfaces),
+                   'calls': 'every lowered call of the episode, exact actor ids; imports as pass-through producer '
+                            'documents (the recorded write); episodes with an unrecorded write or an unseen surface dropped',
+                   'loss': 'per-call rows: prompt and producer documents zero weight; the own sampled reply weight 1'},
+        'funnel': dict(funnel), 'stats': dict(stats), 'episodes': len(sft_episodes), 'tasks': len(tasks),
+        'chains': len(chains), 'importing_chains': sum(1 for c in chains if c['imports']),
+        'calls': int(sum(len(e['rows']) for e in sft_episodes)),
+        'forward_tokens': int(sum(len(c['ids']) + source_tokens(c) for c in chains)),
+        'target_tokens': int(sum(len(r['sample']) for e in sft_episodes for r in e['rows'])),
+    }
+    (out / 'build.json').write_text(json.dumps(report, indent=1) + '\n')
+    (out / 'cases.jsonl').write_text(''.join(json.dumps(tasks[t]) + '\n' for t in sorted(tasks)))
+    print(json.dumps({k: report[k] for k in ('funnel', 'stats', 'episodes', 'tasks', 'chains', 'importing_chains',
+                                             'calls', 'forward_tokens', 'target_tokens')}, indent=1))
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest='command', required=True)
@@ -1388,11 +1529,17 @@ def main():
     n.add_argument('--held-manifest', default=resolve_str(*OPS, 'held-v3', 'manifest.json'))
     n.add_argument('--max-per-task', type=int, default=4)
     n.add_argument('--seed', type=int, default=20261117)
+    g = sub.add_parser('neuralese-graph', help='whole Neuralese episodes (consumers included) as pass-through graph rows')
+    g.add_argument('--work', required=True)
+    g.add_argument('--out', required=True)
+    g.add_argument('--held-manifest', default=resolve_str(*OPS, 'held-v3', 'manifest.json'))
+    g.add_argument('--max-per-task', type=int, default=2)
+    g.add_argument('--seed', type=int, default=20261117)
     args = p.parse_args()
     if args.command == 'build' and args.teacher_pool is None:
         args.teacher_pool = [resolve_str(*OPS, 'teacher-gen-20261115', 'pool-v1')]
     {'extract': extract, 'replay': replay, 'check-render': check_render, 'build': build,
-     'neuralese-text': neuralese_text}[args.command](args)
+     'neuralese-text': neuralese_text, 'neuralese-graph': neuralese_graph}[args.command](args)
 
 
 if __name__ == '__main__':

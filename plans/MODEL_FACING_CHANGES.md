@@ -2582,3 +2582,14 @@ synthetic actions. Generation receipts remain generation graph nodes. Existing o
 Canonical native-collector/SFT evidence covers the plain JSON target and original transported prompt. Shared authored
 `.nl`/`.nz` barrels also retain their real source functions through module re-exports (5511776be), replacing broken
 runtime `.nl` imports without NL facades or prompt rewrites.
+
+**2026-11-17, learned compaction operators v3 (OPERATORS_RESTORE_20261117.md).** Behind the model-facing variant
+`learned-compaction` (off by default; it enters the held series key). With it, a cut-off tool output or argument
+listing of at least 800 characters gets one extra model call:
+- the call is at the builtin `view`'s site (view's body as system text, then `instructions:` with the receiving
+  call's purpose and `value:` with the whole value), under its own invocation ID `<call>#operator-<n>`;
+- its sampled reply content is captured in its own context as a native state;
+- the consumer sees that state framed (`Compacted value: ` / `Compacted argument: `) beside the unchanged text cut.
+
+compact-value and compact-params now share view's body and site, replacing their own prompts (registry v3). Without
+the variant nothing changes. The variant is measured by held success on vs off before it becomes the default.

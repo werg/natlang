@@ -261,3 +261,46 @@ Interface needs from the pass-through (via the supervisor): none beyond what `lo
 `exp0_sft` `imports`/`sources` already accept (a source document with any token prefix, `{ids[:stop], start, stop}`).
 The cost to watch: operator source documents are the site (value + prompt, up to the site window) rather than 8-91
 tokens.
+
+## 6. Progress (2026-11-17 evening)
+
+Coordinator approval: the v3 design as above. The held filter is mandatory and matches split groups by name. Fork/page
+parity is closed in this stream. Operators join the running GRPO at a resume once the ablation and the held on/off
+check pass; the variant means a new Pop base.
+
+- **Registry v3** (`learned_operators.py`): compact-value and compact-params are `view` at the runtime's sites (view's
+  body, `view.view_site`, placement `view`). Tests: `test_learned_operators.py`.
+- **Rows** (`scripts/neuralese_data/operator_rows.py`):
+  - Each case gives an operator chain (site -> seed reply), a consumer chain with `imports`/`sources` (the in-context
+    document: site + reply up to its content + `produce_open` + content), and, for test cases, a text-cut chain.
+  - The held closure covers held-v3 and held-v2: exact group names, task, source and upstream ids, and 10-word
+    shingles of held inputs. A shingle shared by two held strings is boilerplate and does not count; a text hit needs
+    25 shared shingles or half of a short held string. The smoke dropped 3 of 4 s1-qa-mcq cases on the Gutenberg
+    notice; the shingle rule now excludes that boilerplate.
+  - Tests: `test_operator_rows.py`, including `passthrough_plan` on a real row.
+  - The full build (compact-value, compact-params, extract) is queued as ledger unit `oprows-build-2` (low priority,
+    output `/home/werg/data/natlang-operator-rows-20261117-v1/`). Its `manifest.json` records the held-drop counts by
+    kind and split.
+- **compact-history cases are not lowered.** They train an operator call with HISTORY_PROMPT, but v3's history state
+  is the model's own `compact_history` note captured in its context. Their 30k cases × ~30k tokens would train a site
+  the runtime never runs. They stay on disk for a note-capture rendering later.
+- **Engines** (commit d306de499):
+  - `native.capture` (`POST /v1/neuralese/native-states/capture`) on the Python engine (`native_capture`) and the
+    SGLang actor (`_sglang_native_capture`, the fork's capture request).
+  - The tiny-model test showed that a 2-layer conv+attention state sees its context only through the conv window: the
+    §4 mechanism again. The test varies a token inside the window.
+- **ts-host** (commit d306de499):
+  - `compactRef` runs compact-value/compact-params as an operator call (`<call>#operator-<n>`, view's site,
+    `max_tokens` 2x the cap), then `port.capture` on its sampled ids. A `block_write` node carries the
+    `source_capture`.
+  - 800-character floor; model-facing variant `learned-compaction`.
+  - Tests: `native-operator-compaction.test.mjs` (3 pass); `model-call-kinds.json` gains `operator-call`.
+- **Ablation** (`scripts/neuralese_data/operator_ablation.py`): arms actual / standalone / shuffled / text-cut on the
+  fast forward. It runs when the rows exist and a ≤15 GB GPU slot opens.
+- **Still open:**
+  - The fork/page capture: a client-side grammar-forced span after the same site messages. Its shape is decided; it
+    needs the content split (`</think>` and end ids from the server's tokenizer) and a live check against the
+    natlang-b12081 runtime with the natlang-lfm3-5ff07638 GGUF. Recorded as the open row in `docs/ENGINE_PARITY.md`.
+  - compact-history as note capture.
+  - SFT, then GRPO with the variant.
+  - Held on/off.

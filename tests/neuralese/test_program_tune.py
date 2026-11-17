@@ -172,3 +172,45 @@ def test_bank_from_program_fits_adapts_a_held_program_into_a_servable_release(tm
     served = load_native_engine(str(tmp_path / 'native.pt'), device=engine.device)
     entries = bind_adapter_release(served, bank / 'adapt' / 'held')
     assert served.rl_policy_binding['adapters']['stack'] == entries
+
+
+def test_a_differentiated_adapter_row_leaves_no_cyclic_garbage(tmp_path):
+    """Each fit row's effective weights are freed when its operation ends, not whenever Python's cyclic collector runs
+    (native_actor_graph.release_operation_cycles; on LFM3 the cycles held ~2.5 GB per row until a step ended)."""
+    import gc
+    from natlang_neuralese.tune.rows import lower_rows
+    from natlang_neuralese.tune.trainer import JointTrainer, Recipe
+    engine = engine_fixture(tmp_path, 'lfm', service_template=True)
+    rows, _ = P.episode_turns('task-1', 'k', episode())
+    recipe = Recipe.from_json({'parameterization': 'free-lora', 'ranks': {'tree': 2, 'folder': 0, 'lambda': 0},
+                               'level_lr_scale': {'tree': 1., 'folder': 1., 'lambda': 1.}, 'steps': 1, 'batch_rows': 2})
+    trainer = JointTrainer(engine, P.manifest('fam', {}), lower_rows(engine, rows, prompt_weight=0.), recipe)
+    gc.collect()
+    gc.disable()
+    try:
+        trainer.step()
+        left = gc.collect()
+    finally:
+        gc.enable()
+    assert left < 50, left
+
+
+def test_pop_actor_serves_an_adapter_release_on_sglang_slots():
+    import pop_actor_driver
+    assert pop_actor_driver.adapter_args({}) == ['--sglang-adapter-slots', '0']
+    job = {'adapter_release': {'path': '/eval/adapter-ab', 'rank': 16, 'scale': 1.0, 'result_sha256': 'ab'}}
+    assert pop_actor_driver.adapter_args(job) == ['--adapter-release', '/eval/adapter-ab', '--adapter-scale', '1.0',
+                                                  '--sglang-adapter-slots', '1', '--sglang-adapter-rank', '16']
+
+
+def test_pop_attestation_distinguishes_base_and_adapted_actors(monkeypatch):
+    import io
+    import pop_rl_actor
+    def info(adapters):
+        binding = {'checkpoint_sha256': 'c' * 64, 'actor_export': {'format': 'x'},
+                   **({'adapters': {'result_sha256': adapters}} if adapters else {})}
+        return lambda *_a, **_k: io.BytesIO(json.dumps({'rl_policy_binding': binding}).encode())
+    monkeypatch.setattr(pop_rl_actor.urllib.request, 'urlopen', info(None))
+    assert pop_rl_actor.attested('http://pop', 'c' * 64) and not pop_rl_actor.attested('http://pop', 'c' * 64, 'ab')
+    monkeypatch.setattr(pop_rl_actor.urllib.request, 'urlopen', info('ab'))
+    assert pop_rl_actor.attested('http://pop', 'c' * 64, 'ab') and not pop_rl_actor.attested('http://pop', 'c' * 64)

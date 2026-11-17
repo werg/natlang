@@ -297,10 +297,11 @@ export type NeuraleseRuntimeOptions = {
   view?: ((site: { value: string; instructions?: string }, budget?: { maxRequests: number | null; maxTokens: number | null;
     onUsage: (usage: { requests: number; tokens: number }) => void }) => Promise<NeuraleseRef | undefined>) & { budgeted?: true };
   /**
-   * The learned Neuralese operators of the native server (model/native-operator.ts `serverCompactor`): compacted cut-off
-   * values, argument listings and history carry, used when the agent's `compaction` setting selects them.
+   * The in-context capture of a sampled reply (learned operators, OPERATORS_RESTORE_20261117.md §3.1): a server with
+   * `native.capture` captures the exact sampled ids; the managed llama-server and the page force the same ids as a
+   * produce span with a grammar (model/native-operator.ts `grammarCapture`).
    */
-  compactor?: import('./operator-frames.js').Compactor;
+  capture?: import('./operator-frames.js').NativeCapture;
   /** The agent's `compaction` setting for hosts that configure the runtime through these options (agent.ts). */
   compaction?: import('../runtime/pluggable.js').PluggableSetting;
 };

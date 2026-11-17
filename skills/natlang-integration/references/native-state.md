@@ -40,7 +40,9 @@ An application that calls the student directly with its own tools still sends th
 
 ## Learned compaction
 
-The native agent's `compaction` setting (agent option, `neuralese.compaction`, or `NATLANG_NEURALESE_COMPACTION`)
-selects `crisp` (text cut-offs, the default) or `nl`: on a server advertising `operator/1`, cut-off tool outputs,
-argument listings and compacted history also carry a Neuralese summary state. The full value always stays reachable
-from eval, `read_page` and `transcript`.
+The native agent's `compaction` setting (agent option, `neuralese.compaction`, `NATLANG_NEURALESE_COMPACTION`, or the
+model-facing variant `learned-compaction`) selects `crisp` (text cut-offs, the default) or `nl`. Under `nl`, on a
+Neuralese server, cut-off tool outputs and argument listings of at least 800 characters also carry a Neuralese state:
+the reply of one extra model call that views the whole value, captured in its own context. A `compact_history` note also
+carries its own state, captured in place. The full value always stays reachable from eval, `read_page` and
+`transcript`; a failed capture keeps the text.

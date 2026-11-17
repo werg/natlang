@@ -204,7 +204,9 @@ def test_exported_stack_equals_the_native_effective_weights(tmp_path):
     # The release stack the runtime sends: family with its gate as scale, then the ancestry.
     entries = [{'id': family.id, 'scale': members[0].scale}] + [
         {'id': trainer.state['node_artifacts'][node], 'scale': 1.} for node in ('tree:', 'folder:a', 'lambda:x')]
-    effective = run_native(engine, lambda: {name: value.detach().clone() for name, value in target_parameters(engine.shared_model).items()}, entries)
+    # Forward-only: the substituted effective weights (a differentiated operation applies the delta factored instead).
+    with torch.no_grad():
+        effective = run_native(engine, lambda: {name: value.detach().clone() for name, value in target_parameters(engine.shared_model).items()}, entries)
     for name in trainer.target_names:
         torch.testing.assert_close(stack[name].dense(targets[name]).double(), (effective[name] - available[name]).double(),
                                    rtol=1e-4, atol=1e-6)

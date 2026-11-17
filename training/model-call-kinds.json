@@ -11,6 +11,14 @@
    "rl": {"status": "covered", "evidence": ["training/neuralese/natlang_neuralese/rl/native_replay.py", "tests/neuralese/test_rl_episode_graph.py"]},
    "parity": {"status": "covered", "evidence": ["tests/neuralese/test_serving_prompt_rebuild.py", "tests/neuralese/test_lfm3_format.py", "ts-host/test/prompt-pieces-export.test.mjs"]}
   },
+  "operator-call": {
+   "summary": "A learned operator write's model call (compact-value, compact-params; plans/neuralese/OPERATORS_RESTORE_20261117.md): an ordinary sampled call at view's site under its own invocation ID '<call>#operator-<n>', whose reply content is then captured in its own context (native-states/capture, or a grammar-forced span on the managed llama-server and the page). compact-history needs no call: its note is captured in place.",
+   "model_output": "generated",
+   "endpoints": ["/v1/chat/completions"],
+   "sft": {"status": "covered", "evidence": ["scripts/neuralese_data/operator_rows.py", "tests/neuralese/test_operator_rows.py"]},
+   "rl": {"status": "covered", "evidence": ["training/neuralese/natlang_neuralese/rl/native_replay.py", "tests/neuralese/test_rl_episode_graph.py"]},
+   "parity": {"status": "covered", "evidence": ["ts-host/test/native-operator-compaction.test.mjs", "tests/neuralese/test_learned_operators.py"]}
+  },
   "runtime-authored-call": {
    "summary": "A natlang call whose instructions the runtime or a host tool writes: refinement:holds (no scoring driver), the iterateOn progress judge (builtin progressJudge), bash ask, natlang ask (CLI), nl@python, the delegate tool's directory reducer, the specializer's compareBehaviors judge, read(value) of a Neuralese value when no standard library is configured (natlang.read). Each runs as tool-loop turns, so the generic mechanisms apply; their data coverage is measured in the audit.",
    "model_output": "generated",
@@ -72,18 +80,10 @@
    "rl": {"status": "gap", "owner": "legacy-sweep", "section": "view-write"},
    "parity": {"status": "not-applicable", "reason": "the server renders the view site itself (view.py); nothing in ts-host constructs serverViewer"}
   },
-  "operator-write": {
-   "summary": "A learned Neuralese operator site (compact-value, compact-params, compact-history, extract): one prefill of the operator's learned prompt rows, the value or conversation, and K learned slot positions whose native state is returned (POST /v1/neuralese/operator; model/learned_operators.py).",
-   "model_output": "forced",
-   "endpoints": ["/v1/neuralese/operator"],
-   "sft": {"status": "covered", "evidence": ["training/neuralese/natlang_neuralese/data/operator_graph.py", "tests/neuralese/test_operator_graph.py"]},
-   "rl": {"status": "not-applicable", "reason": "no sampled tokens: the slots are forced positions trained only through the consumers that import them"},
-   "parity": {"status": "covered", "evidence": ["tests/neuralese/test_learned_operators.py"]}
-  },
   "native-forced-write": {
-   "summary": "Forced producers: write-text materializes a string as native state (Neuralese<string> arguments, soft-body placeholders); init-body encodes a soft body in its real rendered call context.",
+   "summary": "Forced producers: write-text materializes a string as native state (Neuralese<string> arguments, soft-body placeholders); init-body encodes a soft body in its real rendered call context; capture encodes an already sampled reply in context, through native.capture or a grammar-forced span on the chat route.",
    "model_output": "forced",
-   "endpoints": ["/v1/neuralese/native-states/write-text", "/v1/neuralese/native-states/init-body"],
+   "endpoints": ["/v1/neuralese/native-states/write-text", "/v1/neuralese/native-states/init-body", "/v1/neuralese/native-states/capture", "/v1/chat/completions"],
    "sft": {"status": "not-applicable", "reason": "forced text has no sampled target; its state is trained through the consumers that import it"},
    "rl": {"status": "gap", "owner": "rl", "section": "native-forced-write"},
    "parity": {"status": "covered", "evidence": ["tests/neuralese/test_lfm3_format.py"]}
@@ -110,14 +110,14 @@
   }
  },
  "endpoints": {
-  "/v1/chat/completions": {"kinds": ["tool-loop-turn", "runtime-authored-call", "decision-generation"]},
+  "/v1/chat/completions": {"kinds": ["tool-loop-turn", "runtime-authored-call", "operator-call", "decision-generation", "native-forced-write"]},
   "/v1/neuralese/decide": {"kinds": ["decision-readout", "refinement-judge-scored"]},
   "/v1/neuralese/decide_many": {"kinds": ["decision-readout", "refinement-judge-scored"]},
   "/v1/natlang/score": {"kinds": ["decision-readout", "refinement-judge-scored"]},
   "/v1/neuralese/view": {"kinds": ["view-write"]},
-  "/v1/neuralese/operator": {"kinds": ["operator-write"]},
   "/v1/neuralese/native-states/write-text": {"kinds": ["native-forced-write"]},
   "/v1/neuralese/native-states/init-body": {"kinds": ["native-forced-write"]},
+  "/v1/neuralese/native-states/capture": {"kinds": ["native-forced-write"]},
   "/health": {"model_facing": false, "reason": "liveness"},
   "/metrics": {"model_facing": false, "reason": "metrics"},
   "/v1/health": {"model_facing": false, "reason": "liveness"},

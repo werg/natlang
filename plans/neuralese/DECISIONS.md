@@ -2877,3 +2877,154 @@ a controlled tool-loop opt-out. Invalid generation is a recorded failure; no pro
 invented. The corrected32 readout/onboarding/canonical tests pass with both TS configurations. Next measurement is the
 pinned hosted fixture pilot and source-bound admission, followed by a bounded collect/train/paired held cycle; no claim
 of model gain follows from these mechanism checks. The full final gate runs on the combined immutable core commit.
+
+**2026-11-17 18:30, Neuralese pass-through in the learners (pass-through agent; NEURALESE_PASSTHROUGH_20261117.md).**
+- **What every state is today.** It is a text write: the producer returns text, and the host runs `[produce_open] +
+  text` from position 0 through the actor. Each rollout's `execution_graph` `block_write` keeps that exact
+  `source_capture`.
+- **Decision: the learners compute the imported state in-graph** from that document, on by default with an opt-out.
+  The document joins the consumer's packed forward, and every layer gathers its own K/V/B*x at the span rows into the
+  import rows. The consumer's loss then trains the weights that computed the state, and the actor store is no longer
+  needed.
+  - Commits: 993df3f3d (exp0_sft + grpo, `--no-neuralese-passthrough`).
+- **Actor fix:** the actor's producer table now follows the trained embedding (cdb97e649, `--frozen-producer-table`).
+  It had been frozen at the start values, while embed_tokens trained, in every run from grpo-v1 on.
+- **Why on by default.** It is first principles: the actor builds the state from the same weights, so the gradient
+  through it is the true gradient of the consumer's loss.
+  - Measured on real grpo-v3/run1 blocks: in-graph vs stored-state consumer log-probabilities agree to mean |dlogp|
+    0.013-0.019, below the learner-actor gap of 0.03-0.04, which is the same with either state.
+  - Cost: none measurable (2,206 vs 2,204 tok/s, +0.03 GB peak).
+- **Open.**
+  - From layer 3 on, the actor's captured state deviates from FP32 about 3x more than the learner's BF16 state.
+    Hypothesis: the actor's FP8 KV. Unverified.
+  - The compiled `lfm3_fast_train` path differs from eager on chains without imports (side finding, reported to the
+    supervisor).
+  - The FALLOW-22 graphs are stale and not wired.
+
+**2026-11-17 19:30, program tuning and LoRA-bank meta-learning back on the LFM3 stack (tuning agent).** Owner: "the
+tuning / LoRA approach as well [is very important]." Inventory and design: `TUNING_RESTORE_20261117.md`. What the w5
+deletion (60d2c1209, 5500b44fb) broke: the bank meta-learning driver and its task-outcome gate (`bank_stage.py`,
+`bank_outcomes.py`, with `rl/production.collect`), the setter of the engines' default adapter stack, and the recipe
+stages; `tune/` and `tune/learned/` themselves import and run. Rebuilt on today's stack:
+- **Driver** `scripts/neuralese_data/program_tune.py` (b86250b3c, a6897a8ba): a GRPO-pool family is a program; split
+  groups hashed into support/dev/confirm (60/25/15; held-v3/v2 closure, errata and an optional exposure list out),
+  each split a held_eval manifest with the held engine pin; fit rows = verified support successes (on-policy samples
+  of the support manifest via `held_eval measure`, and `sft_sources` replays), one `natlang.tune-turn/v1` row per call,
+  tool calls whose result is a runtime error not targets (failed history kept as context); a one-scope free-LoRA
+  `tune.build` plan; `bank`: `meta_bank.BankMetaLearner` initialized from the programs' own fits (PCA of the fits =
+  mixture labels are projections of actual fits), Meta-SGD steps on their support worlds, held programs adapted by
+  the bank's inner fit into servable releases.
+- **Serving** (b86250b3c): `serve_native_checkpoint.py --adapter-release DIR` sets the default stack (SGLang slots or
+  the native engine) and records it in `rl_policy_binding.adapters`; `held_eval.policy_id_of` makes an adapted actor's
+  policy id `CHECKPOINT+stack digest`, so `measure`/`compare` pair base and adapter on the same dev manifest.
+  `check_tuned_lora_llama_parity.py RELEASE` checks a real fit's GGUF LoRA on llama-server against the native forward.
+- **Stale items fixed:** tune engines load the checkpoint's own dtype (an FP32 read of LFM3 was a whole-model cast;
+  adapter parameters stay FP32); trainer step lines are `progress:` lines `natlang tune` forwards; the vLLM tuning
+  backend is removed (274ff8c8c; no profile or config used it); learned-optimizer README, `lane.py`, learned
+  DECOMPOSITION and TUNING.md follow today's entry points (250523f95).
+- **Defect found and fixed (shared mechanism):** a differentiated native adapter operation leaves its carrier autograd
+  contexts and cotangent scope in reference cycles, so each fit row's FP32 deltas and effective weights stayed on the
+  GPU until Python's cyclic collector ran: +2.5 GB per row on LFM3 (attention+conv targets), 37.5 GB for a batch of 8
+  (ledger preemption at 15 GB). Memory snapshot: the live blocks were `rounded_weight_carrier` outputs (2.49 GB) and
+  `_effective_replacements` deltas (1.82 GB) after two rows; `gc.collect()` returned allocation to 3.24 GB each row.
+  `native_actor_graph.release_operation_cycles` (grad-enabled operations only) now runs at the end of
+  `run_invocation_actors` and of `run_native`'s substituted path: every native adapter gradient consumer (tune
+  trainer, learned fit/growth/subspace/controls/episode/trainer, tune RL, the server's native_grad) gets it;
+  inference is unaffected; `lfm3_fast_train` does not use this path (grep: no `native_adapters` import).
+- **Memory of the native fit path:** the exact substitution materializes each target's FP32 delta and its gradient,
+  so a fit over every LFM3 target (MLP included) peaked at 21.6 GB CUDA on one 13k-token row; attention + conv
+  projections peak at 9.1 GB. Fits run with `--targets attention conv-projection` under the 15 GB envelope; a factored
+  `x A^T B^T` application for training would lift that limit (not built).
+- **Data:** `ext_decisions_route` (549 pool rows): support 315 / dev 155 / confirm 75 tasks; existing verified
+  successes cover only 3 support tasks (31 episodes, 79 rows): fits need on-policy support sampling (the support
+  manifest) before a capability claim.
+- **Not yet measured:** no task-outcome comparison (dev, base vs adapter) has run; no LFM3 GGUF LoRA has been served by
+  llama-server or wllama; SGLang adapter-slot parity was not rerun on a real fit.
+
+**2026-11-17 19:00, operators v3 built on main (operators agent).** Approved by the coordinator; details in
+OPERATORS_RESTORE_20261117.md §6.
+- **Built:**
+  - compact-value and compact-params are `view` at the runtime's sites (registry v3);
+  - `native.capture` on the Python engine and the SGLang actor;
+  - the ts-host operator call plus capture, behind the model-facing variant `learned-compaction`;
+  - case rows with a mandatory held-v3/v2 filter (name-level groups, ids, shingles net of held boilerplate);
+  - the use ablation.
+- **compact-history cases are not lowered:** v3's history state is the model's own note captured in context.
+- **Fork/page capture is open** and recorded in ENGINE_PARITY.
+- **Next:** rows build (queued) -> step-0 ablation -> SFT -> held on/off -> GRPO at a resume.
+
+## 2026-11-17: Akahsizrr/voltron-1-mini as a candidate base or merge partner (voltron agent)
+
+Owner 2026-11-17: evaluate https://huggingface.co/Akahsizrr/voltron-1-mini; if it holds up on held-v3, merge it with
+our work or take it as the replacement base. Training data and method are undocumented (the card mentions DPO). The
+card's own benchmarks vs LFM3-1.7B: LCB pass@1 0.201 -> 0.243, HumanEval 0.640 -> 0.671, AIME2026 0.408 -> 0.442,
+GPQA-D 0.429 -> 0.465, IFEval strict 0.725 -> 0.721, loose 0.778 -> 0.756.
+
+- **Registry and license (fact).** The license is "other" (LFM Open License, per the card, the same terms as
+  LiquidAI/LFM3-1.7B: base snapshot `LICENSE`, "LFM Open License v1.0"). The repository has no LICENSE file. There is
+  no external base-model registry: `training/neuralese_corpora.json` is for repo-relative data and preserved artifacts,
+  and LFM3-1.7B itself is not listed in it. So the model is recorded here.
+- **Identity.** Hub revision 664b0c4548cf2f167072188f47978724338fc1df (lastModified 2026-11-14), downloaded read-only to
+  `/mnt/external/natlang-development-data/external-models/voltron-1-mini/hf-664b0c45/`. Every file's sha256 is in
+  `../SHA256SUMS.hf-664b0c45`. `model.safetensors` sha256 is 0377c4cc...1d2b, equal to the Hub LFS oid. 1,728,801,536
+  BF16 parameters in 286 tensors, the same names, shapes and dtypes as LFM3-1.7B, with a tied head.
+  - Its Python files are byte-identical to the base's and were never executed.
+- **Rendering inputs are unchanged.** `chat_template.jinja` is byte-identical. `tokenizer.json` is semantically
+  identical (only the trailing newline differs). `tokenizer_config.json` adds only save-time keys (`is_local`,
+  `local_files_only`, `model_specific_special_tokens`) and reorders the response-schema keys. `config.json` differs
+  only in `initializer_range`, `use_cache` false and `transformers_version`. `generation_config.json` differs only in
+  `transformers_version`. Our harness renders from the base snapshot, so nothing the model sees changes.
+- **Movement from LFM3-1.7B.** Global ||dW||/||W|| is 0.0079 and 57% of elements changed. All linear maps moved, and
+  attention moved most: k/v/gate_proj have relative change about 0.02 (layer 18 k_proj 0.070, v_proj 0.067); the FFN
+  moved 0.006-0.012 (w2 the most); conv in/out_proj moved 0.003-0.005. Per layer, the relative change is
+  0.005-0.013 (layers 18 and 20 the most). Left untouched or nearly so: the embeddings and tied head (rel 6e-6, 0.06% of
+  elements, one-ulp changes), all norms (83 tensors bit-identical) and the conv kernels (4e-5). This pattern fits a
+  merged adapter or a frozen-embedding fine-tune; the rank of the deltas was not checked.
+- **Native checkpoint.** `/mnt/external/natlang-development-data/external-models/voltron-1-mini/native/checkpoint.pt`,
+  sha256 a19c8c9b0fcf32690c22c0131d933b2a9b835536b1447863d0d558eb0067c5e2. Recipe in `checkpoint.pt.json`. It was
+  produced by `scripts/neuralese_data/merge_checkpoint.py convert` (commit 1a28cca88).
+  - It uses the pruned layout of `exp0_sft.write_checkpoint`, with fresh-init 5ff07638's model_config, interface and
+    embedding rows at the interface ids.
+  - fresh-init's backbone is bit-identical to the LFM3-1.7B safetensors, so this is the HF->native path 5ff07638 took
+    with the weights swapped.
+  - Voltron's own rows at token_override ids 124901/124902 differed from the base by 3e-5 (L2) and were replaced by
+    the base rows; its rows at the 4 marker ids are unchanged.
+- **Forward sanity (our port, `exp0_sft.load_model`, BF16, whole-sequence NLL).** Base vs voltron per text:
+  - 3 chat exchanges: 6.83/2.81/3.63 vs 5.53/2.28/3.13;
+  - a natlang program: 4.19 vs 4.16;
+  - prose: 1.45 vs 1.46.
+  - Both answer "Canberra" greedily with a `<think>` block (voltron's is shorter).
+- **Held-v3 on Pop (prepared, not run).** Run it once `popheld-base-v4c` has finished, because `serve-checkpoint`
+  stops Pop's actors. It pairs with `ops/grpo-v4/held-base-pop` (same pin, sampling, engine, slots and PRIOR):
+  `systemd-run --user --unit popheld-voltron-v4 /bin/sh -c 'SLOTS=20 MAX_RUNNING=20 PRIOR=$D/ops/grpo-v3/run1/held/step-00008/result.json
+  $D/ops/grpo-v4/pop-held.sh $D/ops/grpo-v4/pin-383bd4ed3651 ckpt $D/ops/grpo-v4/held-voltron-pop 4 /mnt/external/natlang-development-data/external-models/voltron-1-mini/native/checkpoint.pt > $D/ops/grpo-v4/held-voltron-pop.log 2>&1'`
+  with D=/home/werg/data/lfm3-rl-dgx-20261029. Then run `pop-held.sh PIN compare $D/ops/grpo-v4/held-base-pop
+  $D/ops/grpo-v4/held-voltron-pop`.
+  - Success: a held gain with p < 0.05, after which voltron is adopted as the start policy or merge partner at the
+    next pin. Failure: no gain or a significant regression.
+- **Merge option.** `merge_checkpoint.py merge --base BASE --term CK=a [--term ...] --out OUT` computes
+  `base + sum a_i (ck_i - base)` per tensor in FP32 and rounds to BF16, recording the recipe.
+  - Interpolation: `--base fresh-init --term voltron=a`.
+  - Task arithmetic with the SFT run: `--base fresh-init --term voltron=1 --term ops/sft-v3/run1/checkpoint.pt=1`.
+
+**2026-11-17 19:00, tuning: factored LoRA in training, teacher support data, Pop dev command (tuning agent).**
+- **Factored LoRA (FALLOW T4, coordinator call):** `NATLANG_FACTORED_LORA` (default on, `0` opts out). A
+  differentiated adapted operation (`run_native`, `NativeInvocationActors`) wraps each target Linear (every alias,
+  by weight identity) in `FactoredLoRALinear`: base projection through `shared_state._linear` unchanged, delta
+  `(x A^T) B^T` in FP32 from `lowrank_factors` (free LoRA and subspace/bank adapters; 3-D expert banks and reference
+  arithmetic keep the substitution), sum rounded once. No materialized FP32 `W + B A` or its gradient; ordinary
+  autograd fills the adapter leaves. Forward-only operations keep the exact substitution (inference cache; SGLang slots
+  and llama.cpp LoRA serve factored anyway). Tests: loss and coefficient gradients equal the substitution (FP32 to
+  rounding, BF16 base within its rounding) for free LoRA and subspace adapters; tie/export tests read substituted
+  weights forward-only. The LFM3 all-target memory probe was cancelled (no GPU units until SFT ends): unmeasured.
+- **Support data from API teachers:** `program_tune.py teacher-tasks` -> `ops/teacher-gen-20261115/pool-progtune-decisions`
+  (160 support tasks each of ext_decisions_route / verdict / tally, ext_bgkit_pubmed_reading; dev/confirm never
+  reach a teacher), pool-v2-rich's `launch-multi.sh` with only `--work` changed, unit `tgen-progtune-2` (low, 7 GB;
+  preempted and requeued by the ledger at 277/640).
+- **Pop dev measurement:** `pop_rl_actor.py start|serve-checkpoint --adapter-release DIR` (release copied to Pop,
+  one SGLang adapter slot of its rank, attestation and reuse keyed by the release's result.json digest);
+  `/home/werg/data/program-tune-20261117/program-dev-pop.sh PIN P base|adapter|compare` (2 samples, grpo-v4's Pop
+  engine flags, policy ids from the binding).
+- **The real fit** (`progtune-fit3`, attention+conv, exact path) reached step 18/30 before the coordinator stopped it
+  (time-slicing slowed SFT 47 -> 74 s/step); its state is resumable but the rerun will be a fresh all-target factored
+  fit in a GPU window.

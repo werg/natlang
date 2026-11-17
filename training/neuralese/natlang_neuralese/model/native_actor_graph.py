@@ -8,7 +8,7 @@ from __future__ import annotations
 import contextvars
 import torch
 from .native_adapters import (_ACTIVE, _Operation, NativeAdapterError, target_parameters,
-    resolve_adapters, effective_identity, _effective_replacements)
+    resolve_adapters, effective_identity, _effective_replacements, factored_factors, factored_lora_modules)
 
 _BANKS = contextvars.ContextVar('natlang_native_invocation_actors', default=())
 
@@ -69,6 +69,14 @@ class NativeInvocationActors:
             key=(identity['checkpoint_sha256'], tuple(isinstance(entry,dict) and entry.get('stop_gradient',False) for entry in entries or []))
             if key not in cache:
                 binding=[{'id':ident,'scale_hex':scale.hex()} for ident,scale,*_ in resolved]
+                factors=None if self.reference_lifetime else factored_factors(resolved)
+                if factors is not None:
+                    # Factored training: the delta runs beside the unchanged base projection (no materialized W+BA).
+                    frame=(engine,identity,binding,entries,set(),{},gradient_precision,self.lifecycle)
+                    cache[key]=(frame,factors,None)
+                    frame,replacement,selected=cache[key]
+                    self.actors[name]=((*frame[:3],entries,*frame[4:]),replacement,selected)
+                    continue
                 replacement,dtypes=_effective_replacements(self.parameters,resolved,gradient_precision)
                 frame=(engine,identity,binding,entries,set(map(id,replacement.values())),dtypes,gradient_precision,self.lifecycle)
                 selected=[self.parameters[key.removeprefix('model.')] for key in replacement]
@@ -101,6 +109,9 @@ class NativeInvocationActors:
         try:
             if not replacement:
                 return callback()
+            if selected is None:   # factored actor: replacement holds its {target: (B, A)}
+                with factored_lora_modules(self.engine.shared_model,replacement):
+                    return callback()
             from ..common.native_higher_order import active_reference_arithmetic
             from .native_weight_carrier import active_cotangent_scope
             if (self.precision=='fp32' or active_reference_arithmetic() is not None
@@ -125,6 +136,16 @@ class NativeInvocationActors:
         for row,owner in enumerate(plan.node_ids):
             groups[owners[owner]][1].append(row)
         return [(name,torch.tensor(rows,device=device,dtype=torch.long)) for name,rows in groups.values() if rows]
+
+
+def release_operation_cycles():
+    """Free a differentiated operation's effective weights now. Its carrier autograd contexts and cotangent scope form
+    reference cycles, so after backward the FP32 deltas and effective weights (GBs on a real model: ~2.5 GB per row of
+    an LFM3 attention+conv fit) stay allocated until Python's cyclic collector happens to run; a fit's rows then piled
+    up within one step. Inference (no grad) creates no such cycles and skips this."""
+    if torch.is_grad_enabled():
+        import gc
+        gc.collect()
 
 
 def run_invocation_actors(engine,names,bindings,callback,*,default=None,leaves=None,gradient_precision='storage',source_names=None,
@@ -158,6 +179,8 @@ def run_invocation_actors(engine,names,bindings,callback,*,default=None,leaves=N
             finally:
                 if not bank.reference_lifetime:bank.lifecycle['active']=False
                 _BANKS.reset(token);_ACTIVE.reset(active)
+                del bank
+                release_operation_cycles()
 
 
 def validate_invocation_actor_receipt(receipt,base):

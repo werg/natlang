@@ -221,7 +221,29 @@ standard tooling, minimal code). The product `natlang tune` stays the user-facin
 4. Fits for >= 8 families, then the bank loop and its outcome gate.
 5. DECISIONS.md and FALLOW_REGISTER rows at each milestone.
 
-## 4. Not checked in this inventory
+## 4. Running state (2026-11-17 evening)
+
+- **Programs:** `/home/werg/data/program-tune-20261117/<family>/` for `ext_decisions_route` (support 315 / dev 155 /
+  confirm 75), `ext_decisions_verdict` (315/122/80), `ext_decisions_tally` (241/100/54), `ext_bgkit_pubmed_reading`
+  (718/332/184).
+- **Support data from API teachers** (no actor free): `program_tune.py teacher-tasks` wrote
+  `ops/teacher-gen-20261115/pool-progtune-decisions/` (160 support tasks per program, round-robin; dev/confirm never
+  reach a teacher); `launch-multi.sh` there is pool-v2-rich's with only `--work` changed; ledger unit
+  `tgen-progtune-2` (low, 7 GB). Then: `sft_sources.py extract --teacher WORK --out-name episodes-progtune`, `replay`,
+  and `program_tune.py rows --dir P --sources WORK_SFT` per program, refit.
+- **Factored LoRA in training** (`NATLANG_FACTORED_LORA`, default on, `0` opts out): a differentiated adapted
+  operation runs each target's delta as `x A^T B^T` (FP32) beside the unchanged base projection
+  (`native_adapters.FactoredLoRALinear` / `factored_lora_modules`, used by `run_native` and the invocation actors)
+  instead of materializing `W + B A` and its FP32 gradient. Forward-only operations keep the exact substitution
+  (inference cache, serving parity). Equal loss and coefficient gradients to the substitution on FP32 and BF16
+  fixtures (test); the serving engines (SGLang slots, llama.cpp LoRA) apply adapters factored too.
+- **Dev measurement on Pop** (`program-dev-pop.sh` in the programs root): one pin
+  (`scripts/pin_checkout.py create COMMIT /home/werg/data/program-tune-20261117/pin-<c12>`), then
+  `program-dev-pop.sh PIN P base 2`, `program-dev-pop.sh PIN P adapter 2`, `program-dev-pop.sh PIN P compare`.
+  `pop_rl_actor.py start|serve-checkpoint --adapter-release DIR` copies the fit to Pop and serves it on one SGLang
+  adapter slot of its rank; attestation and the reuse check include the release's result.json digest.
+
+## 5. Not checked in this inventory
 
 Nothing was run beyond imports: no pytest, no model load, no CLI `--help`. Not read in detail: `tune/trainer.py`
 internals, `tune/learned/{trainer,writer,episode,views}.py`, the SGLang fork's adapter code, the llama.cpp fork's

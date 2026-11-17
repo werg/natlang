@@ -18,8 +18,8 @@ Agents decide and keep the work moving. Restarts, resets to base, objective or b
 or changing a plan are agents' decisions. Decide, record why in `plans/neuralese/DECISIONS.md` and keep going. Raise
 with the owner only what is truly theirs. Waiting for an OK on a technical course change is a defect.
 
-- **A finding is not done until it is acted on.** A defect or a better setup becomes the change of the next
-  experiment. A recommendation or a list of "proposed experiments" is unfinished work. Changes that are sound from
+- **A finding is not done until it is acted on.** A defect or a better setup enters the running work as soon as it
+  is ready. A recommendation or a list of "proposed experiments" is unfinished work. Changes that are sound from
   first principles (harness and model-facing bug fixes, sampling, reward and loss-weighting fixes) ship as the new
   default with an opt-out and targeted tests. The next held eval shows any regression.
 - **Fix the mechanism everywhere it lives.** A defect or design change found in one place is first generalised: what
@@ -34,6 +34,10 @@ with the owner only what is truly theirs. Waiting for an OK on a technical cours
   and integrates or deliberately discards it.
 - **Diagnose surprises immediately.** An unexpected number, failure or regression gets a root-cause investigation in
   the same session.
+- **Fix what an investigation turns up, cause or not (owner 2026-11-17).** Anything found while investigating a
+  problem that is wrong on first principles (lost precision, nondeterminism, a stale value, a mismatch with the
+  reference, an untested path) is fixed immediately, as the default with an opt-out and targeted tests, without waiting
+  to learn whether it caused the symptom. The investigation continues alongside and is closed by its own evidence.
 - **Keep the machines doing useful work** for the experiments in flight (collection, training, held eval, diagnosis).
 
 # Experiments: how results are made trustworthy

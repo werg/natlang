@@ -1641,9 +1641,9 @@ def family_round_robin(rows, rng):
     queues = [by_family[f] for f in families]
     out, index = [], 0
     while len(out) < len(rows):
-        for queue in queues:
-            if index < len(queue):
-                out.append(queue[index])
+        for lane in queues:
+            if index < len(lane):
+                out.append(lane[index])
         index += 1
     return out
 
@@ -1821,6 +1821,7 @@ def train(args):
     model.train()
     lfm3_fast_train.prepare(model)
     forward = lfm3_fast_train.hidden
+    pack_tokens = args.pack_tokens if args.pack_tokens > 0 else exp0_sft.resident_tokens(model, args.activation_gb)
     live = dict(model.named_parameters())
     reference = None
     if args.kl_beta > 0:          # the start policy, BF16, frozen: a file, loaded into the policy for the reference pass
@@ -2409,15 +2410,15 @@ def train(args):
         rng = random.Random(args.seed + step)
         rng.shuffle(chains)
         # Shared prefixes (the system prompt across groups, a group's opening prompt, an episode's earlier calls) are
-        # computed once per pass: a prefix tree over the step's chains (`--share-prefix-tokens`; chains reading imported
-        # native state stay whole), exact gradients (lfm3_fast_train.run_prefix_tree).
-        shareable = [i for i, c in enumerate(chains) if not c.get('imports')]
-        nodes = lfm3_fast_train.remap_tree(lfm3_fast_train.prefix_tree([chains[i]['ids'] for i in shareable],
-                                                       [chains[i]['segs'][0][0] - 1 for i in shareable],
-                                                       args.share_prefix_tokens), shareable)
-        nodes += [{'start': 0, 'index': i} for i, c in enumerate(chains) if c.get('imports')]
+        # computed once per pass and every batch is packed: a prefix tree over the step's chains (`--share-prefix-tokens`;
+        # chains reading imported native state stay whole), exact gradients (lfm3_fast_train.run_prefix_tree).
+        share_prefix_tokens, tree_mode = exp0_sft.prefix_tree_settings(args)
+        nodes = exp0_sft.step_tree(chains, share_prefix_tokens)
+
+        def tokens_of(index, start):
+            return len(chains[index]['ids']) - start + exp0_sft.source_tokens(chains[index])
         chain_tokens = sum(len(c['ids']) for c in chains)
-        computed_tokens = lfm3_fast_train.tree_tokens(nodes, [len(c['ids']) for c in chains])
+        computed_tokens = lfm3_fast_train.tree_tokens(nodes, [tokens_of(i, 0) for i in range(len(chains))])
         cuda_ids = {}
 
         def ids_of(index, start, end):
@@ -2436,24 +2437,21 @@ def train(args):
         def stored_states(net):
             return lambda spans: lfm3_fast_train.import_tensors(net, chain_states(spans))
 
-        def chain_inputs(net, index, start):
-            """(ids, positions, targets, imports, lengths) of chain ``index`` from ``start`` (its rows before are a past).
-            A consumer call's imported Neuralese state is computed in the same forward from its producer document
-            (``exp0_sft.row_inputs``; the documents follow the chain, which then starts at 0); a block without one is
-            the actor's stored state as fixed context."""
-            chain = chains[index]
-            if chain.get('imports'):
-                ids, positions, targets, _, lengths, imports = exp0_sft.row_inputs(
-                    [chain], 'cuda', not args.no_neuralese_passthrough, stored_states(net))
-                return ids, positions, targets, imports, lengths if len(lengths) > 1 else None
-            ids, positions, targets = exp0_sft.chain_tensors(chain, 'cuda')
-            return ids[start:], positions - start, targets, None, None
+        def batch_inputs(net, items):
+            """(ids, positions, targets, imports, lengths, per-leaf target counts) of one packed leaf batch [(index,
+            start)] (each chain from ``start``; its rows before are a computed prefix). A consumer call's imported
+            Neuralese state is computed in the same forward from its producer document (``exp0_sft.row_inputs``: the
+            documents follow the batch's chains); a block without one is the actor's stored state as fixed context."""
+            ids, positions, targets, _, lengths, imports = exp0_sft.row_inputs(
+                [chains[index] for index, _ in items], 'cuda', not args.no_neuralese_passthrough, stored_states(net),
+                starts=[start for _, start in items])
+            counts = [exp0_sft.chain_loss_tokens(chains[index]) for index, _ in items]
+            return ids, positions, targets, imports, lengths, counts
 
-        def all_checkpointed(net):
-            return lambda tokens: exp0_sft.set_checkpointing(net, tokens, 0)
-
-        def leaf_budget(start):
-            return exp0_sft.leaf_activation_gb(model, args.activation_gb, start)
+        def run_tree(leaf, backward=True):
+            return lfm3_fast_train.run_prefix_tree(model, nodes, ids_of, leaf, tokens_of, pack_tokens, args.activation_gb,
+                                                   backward, mode=tree_mode if share_prefix_tokens > 0 else 'levels',
+                                                   batch_tokens=args.tree_batch_tokens)
 
         refs = {}
         # Sampled decisions: log pi(chosen) = log_softmax(s / T)[chosen], s_o the summed log-probability of option o's
@@ -2483,14 +2481,14 @@ def train(args):
             t = time.time()
             reference.load_into(live)
             try:
-                def reference_chain(index, start, past):
-                    ids, positions, targets, imports, lengths = chain_inputs(model, index, start)
-                    exp0_sft.set_checkpointing(model, len(ids), leaf_budget(start))
-                    refs[index] = -exp0_sft.token_nll(model, forward(model, ids, lengths, imports, past=past),
-                                                      positions, targets).detach()
+                def reference_leaves(items, run):
+                    # the same batches as the policy pass below: each row's rounding is the policy's
+                    ids, positions, targets, imports, lengths, counts = batch_inputs(model, items)
+                    logp = -exp0_sft.token_nll(model, run(ids, lengths, imports), positions, targets).detach()
+                    for (index, _), part in zip(items, logp.split(counts)):
+                        refs[index] = part
                 with torch.enable_grad():
-                    lfm3_fast_train.run_prefix_tree(model, nodes, ids_of, reference_chain,
-                                                    all_checkpointed(model), backward=False)
+                    run_tree(reference_leaves, backward=False)
                 for batch in batches:
                     ids, _, scores_of = decision_inputs(batch)
                     exp0_sft.set_checkpointing(model, len(ids), args.activation_gb)
@@ -2507,65 +2505,67 @@ def train(args):
         record['episodes_in_flight']['policy_start'] = collector.running
         policy_started = time.time()
 
-        def train_chain(index, start, past):
+        def train_leaves(items, run):
             nonlocal rho_pre_max, rho_post_max, forward_tokens, progress_mark
-            chain = chains[index]
-            ids, positions, targets, imports, lengths = chain_inputs(model, index, start)
-            actor = torch.from_numpy(np.concatenate([row['logp'] for _, _, row in chain['segs']])).cuda().float()
-            token_scale = scales[chain['episode']][0]
-            ref = refs.pop(index, None)
-            exp0_sft.set_checkpointing(model, len(ids), leaf_budget(start))
-            h = forward(model, ids, lengths, imports, past=past)
+            ids, positions, targets, imports, lengths, counts = batch_inputs(model, items)
+            h = run(ids, lengths, imports)
             if args.top_p < 1:
                 # Top-p: the policy is the learner's distribution on its own nucleus (a constant set that always holds
                 # the sampled token), so the policy term's log-probability is logp - log(nucleus mass); the KL term
                 # and rho keep the untruncated logp (the actor's record is untruncated too: rho is the ratio of the two
                 # truncated laws with the actor's nucleus mass taken as the learner's, |d log rho| <= -log(top_p)).
                 nll, nucleus_nll, outside = exp0_sft.token_nll_nucleus(model, h, positions, targets, args.top_p)
-                logp, policy_logp = -nll, -nucleus_nll
+                logp_rows, policy_rows = -nll, -nucleus_nll
                 sums['outside_nucleus'] += int(outside.sum())
-                sums['nucleus_log_mass'] += (logp.detach() - policy_logp.detach()).sum().item()
+                sums['nucleus_log_mass'] += (logp_rows.detach() - policy_rows.detach()).sum().item()
             else:
-                logp = policy_logp = -exp0_sft.token_nll(model, h, positions, targets)
-            with torch.no_grad():
-                log_rho = logp.detach() - actor
-                rho = log_rho.clamp(max=20).exp()
-                weight, tail = policy_weight(rho, actor, chain['advantage'], args.rho_cap, args.tail_logp_floor)
-                # gradient mass of the policy term per token (its factor times the logit-gradient norm scale 1 - p),
-                # split into reasoning and post-</think> tokens
-                mass = token_scale * abs(chain['advantage']) * weight * (1 - policy_logp.detach().exp())
-                thinking = torch.from_numpy(np.concatenate([think_mask(row['sample'], think_close)
-                                                            for _, _, row in chain['segs']])).cuda()
-                sums['mass_think'] += mass[thinking].sum().item()
-                sums['mass_post_think'] += mass[~thinking].sum().item()
-                sums['tail_masked'] += int(tail.sum())
-            loss_terms = -(weight * chain['advantage'] * policy_logp)
-            if ref is not None:
-                d = ref - logp
-                loss_terms = loss_terms + args.kl_beta * kl_term(d, args.kl_estimator)
-                kl_stats(sums, d)
-            (loss_terms.sum() * token_scale).backward()
-            sums['rho'] += rho.sum().item()
-            if chain.get('role') == 'teacher':   # JOLT+ student form: pi(a|s) / mu(a|s, guidance) of the teacher's tokens
-                teacher_log_rho.append(log_rho.float().cpu().numpy())
-            sums['rho_capped'] += (rho > args.rho_cap).sum().item()
-            sums['abs_log_rho'] += log_rho.abs().sum().item()
-            if chain.get('imports'):    # learner-actor agreement on calls that read imported Neuralese state
-                consumer = torch.from_numpy(np.concatenate([np.full(n, bool(row.get('imports')))
-                                                            for _, n, row in chain['segs']])).cuda()
-                sums['consumer_tokens'] += int(consumer.sum())
-                sums['consumer_abs_log_rho'] += log_rho.abs()[consumer].sum().item()
-            sums['logp'] += logp.detach().sum().item()
-            rho_pre_max = max(rho_pre_max, rho.max().item())
-            rho_post_max = max(rho_post_max, weight.max().item())
+                logp_rows = policy_rows = -exp0_sft.token_nll(model, h, positions, targets)
+            loss = 0.
+            for (index, _), logp, policy_logp in zip(items, logp_rows.split(counts), policy_rows.split(counts)):
+                chain = chains[index]
+                actor = torch.from_numpy(np.concatenate([row['logp'] for _, _, row in chain['segs']])).cuda().float()
+                token_scale = scales[chain['episode']][0]
+                ref = refs.pop(index, None)
+                with torch.no_grad():
+                    log_rho = logp.detach() - actor
+                    rho = log_rho.clamp(max=20).exp()
+                    weight, tail = policy_weight(rho, actor, chain['advantage'], args.rho_cap, args.tail_logp_floor)
+                    # gradient mass of the policy term per token (its factor times the logit-gradient norm scale 1 - p),
+                    # split into reasoning and post-</think> tokens
+                    mass = token_scale * abs(chain['advantage']) * weight * (1 - policy_logp.detach().exp())
+                    thinking = torch.from_numpy(np.concatenate([think_mask(row['sample'], think_close)
+                                                                for _, _, row in chain['segs']])).cuda()
+                    sums['mass_think'] += mass[thinking].sum().item()
+                    sums['mass_post_think'] += mass[~thinking].sum().item()
+                    sums['tail_masked'] += int(tail.sum())
+                loss_terms = -(weight * chain['advantage'] * policy_logp)
+                if ref is not None:
+                    d = ref - logp
+                    loss_terms = loss_terms + args.kl_beta * kl_term(d, args.kl_estimator)
+                    kl_stats(sums, d)
+                loss = loss + loss_terms.sum() * token_scale
+                sums['rho'] += rho.sum().item()
+                if chain.get('role') == 'teacher':   # JOLT+ student form: pi(a|s) / mu(a|s, guidance) of the teacher's tokens
+                    teacher_log_rho.append(log_rho.float().cpu().numpy())
+                sums['rho_capped'] += (rho > args.rho_cap).sum().item()
+                sums['abs_log_rho'] += log_rho.abs().sum().item()
+                if chain.get('imports'):    # learner-actor agreement on calls that read imported Neuralese state
+                    consumer = torch.from_numpy(np.concatenate([np.full(n, bool(row.get('imports')))
+                                                                for _, n, row in chain['segs']])).cuda()
+                    sums['consumer_tokens'] += int(consumer.sum())
+                    sums['consumer_abs_log_rho'] += log_rho.abs()[consumer].sum().item()
+                sums['logp'] += logp.detach().sum().item()
+                rho_pre_max = max(rho_pre_max, rho.max().item())
+                rho_post_max = max(rho_post_max, weight.max().item())
+            loss.backward()
             forward_tokens += len(ids)
-            del h, logp, policy_logp, loss_terms
+            del h, logp_rows, policy_rows, loss
             if time.time() - progress_mark > 300:
                 progress_mark = time.time()
                 log_line(log, {'event': 'learner progress', 'step': step + 1, 'leaf_tokens': forward_tokens,
                                'policy_s': round(time.time() - policy_started), 'meminfo_gb': meminfo(),
                                'swap_pages': {k: v - swap0[k] for k, v in vmstat().items()}})
-        lfm3_fast_train.run_prefix_tree(model, nodes, ids_of, train_chain, all_checkpointed(model))
+        record['prefix_tree'] = run_tree(train_leaves)
         torch.cuda.synchronize()
         phase['policy_forward_backward'] = time.time() - policy_started
         forward_tokens = computed_tokens
@@ -2873,6 +2873,11 @@ def main():
     t.add_argument('--share-prefix-tokens', type=int, default=256,
                    help='a prompt prefix this long or longer that several of a step\'s chains share is computed once per '
                         'pass, exact gradients (lfm3_fast_train.prefix_tree); 0: every chain whole')
+    import exp0_sft                  # the learners' shared prefix-tree flags
+    exp0_sft.add_prefix_tree_args(t)
+    t.add_argument('--pack-tokens', type=int, default=-1,
+                   help='pack the learner\'s chains (and the prefix tree\'s nodes and continuations) into varlen batches of '
+                        'at most this many tokens; default: the longest row --activation-gb holds without recompute')
     t.add_argument('--decision-batch-tokens', type=int, default=16384,
                    help='sampled decisions are scored in packed batches of about this many tokens (all options of each)')
     t.add_argument('--max-sequence-tokens', type=int, default=65536,
