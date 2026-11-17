@@ -42,15 +42,16 @@ from natlang_neuralese.data.operator_graph import (IMITATION_LABELS, OperatorCas
                                                    _placeholder, cut_text, source_text)
 from natlang_neuralese.data.operator_seeds import seed_for  # noqa: E402
 from natlang_neuralese.data.port_record_graph import _serving_messages, _target_message, _target_reply  # noqa: E402
+from natlang_neuralese.common.paths import resolve  # noqa: E402
 from natlang_neuralese.model.learned_operators import (TEXT_PLACEMENTS, bind_tokens, operator,  # noqa: E402
                                                        operator_site_messages, registry_sha256)
 
 SCHEMA = 'natlang.operator-rows/1'
-CASES_ROOT = Path('/mnt/external/natlang-compaction-operators-20261103/cases')
-HELD_OPS = Path('/home/werg/data/lfm3-rl-dgx-20261029/ops')
+CASES_ROOT = resolve('data_hdd', 'natlang-compaction-operators-20261103', 'cases')
+HELD_OPS = resolve('data_nvme', 'lfm3-rl-dgx-20261029', 'ops')
 HELD_SETS = (HELD_OPS / 'held-v3/cases.jsonl', HELD_OPS / 'held-v2/cases.jsonl')
-LFM3_BASE = ('/home/werg/.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/'
-             '40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd')
+LFM3_BASE = str(Path.home() / '.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/'
+                '40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd')
 SHINGLE = 10
 TEXT_MIN = 25
 _WORD = re.compile(r'\w+')
