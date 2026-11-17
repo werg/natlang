@@ -184,3 +184,15 @@ def test_task_constructs_names_held_constructs_and_wrappers():
     names, wrapper = s.task_constructs(neuralese)
     assert 'neuralese_result' in names and 'multi_function' in names and not wrapper
     assert s.task_constructs({'no': 'semantics'}) == ((), False)
+
+
+def test_neuralese_text_keeps_calls_without_an_import_and_compares_surfaces():
+    plain = {'messages': [SYSTEM, USER], 'tools': [{'function': {'name': 'eval'}}]}
+    imported = {'messages': [SYSTEM, USER, {'role': 'tool', 'content': [
+        {'type': 'text', 'text': 'Stored local plan = '}, {'type': 'native_state', 'id': 'nzs1_x'}]}],
+        'tools': plain['tools']}
+    assert s.neuralese_parts(plain['messages']) == 0
+    assert s.neuralese_parts(imported['messages']) == 1
+    assert s.surface_key(plain) == s.surface_key(imported)
+    other = {'messages': [{'role': 'system', 'content': 'new system prompt'}, USER], 'tools': plain['tools']}
+    assert s.surface_key(other) != s.surface_key(plain)

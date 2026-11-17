@@ -1126,6 +1126,144 @@ def build(args):
                                              'target_tokens')}, indent=1))
 
 
+def neuralese_parts(messages):
+    """Number of native_state parts (imported Neuralese state) in a call's messages."""
+    return sum(isinstance(m.get('content'), list) and sum(isinstance(part, dict) and part.get('type') == 'native_state'
+                                                          for part in m['content']) for m in messages)
+
+
+def surface_key(turn):
+    """(system prompt, tool schemas) of a call: what the runtime surface renders around the task."""
+    system = ''.join(m['content'] if isinstance(m['content'], str) else json.dumps(m['content'])
+                     for m in turn['messages'] if m.get('role') == 'system')
+    return (hashlib.sha256(system.encode()).hexdigest()[:16],
+            hashlib.sha256(json.dumps(turn.get('tools'), sort_keys=True).encode()).hexdigest()[:16])
+
+
+def neuralese_text(args):
+    """Text rows of the verified successes the build skips for their Neuralese state (`has_native_state`): every call
+    whose messages hold no imported native state, i.e. the Neuralese producer invocations (the prompted calls whose
+    returned text becomes the state) and the consumer's calls before its first import. A call after an import needs the
+    imported state as context (no text rendering is exact) and is counted, not written. No replay is possible for these
+    episodes (their states lived only in the actor's store), so validity is: oracle success at collection, the held-v3/v2
+    closure, and each call's system prompt and tool schemas equal to ones the current runtime rendered in an exact replay
+    (calls with an unseen surface are dropped). Writes OUT/chains.pkl (`exp0_sft.py train --chains`, the build's format),
+    OUT/rows.jsonl.zst and OUT/build.json."""
+    import random
+    import numpy as np
+    import pickle
+    from natlang_neuralese.common.code_provenance import code_provenance
+    from natlang_neuralese.common.jsonio import read_jsonl
+    from natlang_neuralese.rl.held_eval import exclusion_ids
+    from exp0_sft import MAX_LEN, chains_of
+    work, out = Path(args.work), Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    rng = random.Random(args.seed)
+    held = held_closure(args.held_manifest)
+    funnel = collections.Counter()
+    # the current runtime's surfaces: every call of every exact replay
+    surfaces = set()
+    for line in (work / 'replay.jsonl').open():
+        record = json.loads(line) if line.strip() else {}
+        if record.get('exact'):
+            path = work / 'replay' / record['name'] / 'rollouts.jsonl'
+            for row in read_jsonl(path):
+                surfaces.update(surface_key(t) for t in row.get('turns') or ())
+    episodes = [e for e in all_episodes(work) if has_native_state(e)]
+    funnel['native_state_episodes'] = len(episodes)
+    excluded = exclusion_ids(args.held_manifest, [e['task'] for e in episodes])
+    kept = []
+    for e in episodes:
+        task = e['task']
+        groups = list(task.get('source_groups') or ()) + [(task.get('curriculum') or {}).get('split_group') or task['id']]
+        if e['task_id'] in excluded or held_hit(e['task_id'], task.get('source_ids') or (), groups, held):
+            funnel['held_excluded'] += 1
+            continue
+        kept.append(e)
+    rng.shuffle(kept)
+    per_task = collections.Counter()
+    renderer = TemplateRenderer(args.tokenizer)
+    rows_out = ZstdWriter(out / 'rows.jsonl.zst')
+    sft_episodes, tasks = [], {}
+    stats = collections.defaultdict(collections.Counter)
+    for e in kept:
+        if per_task[e['task_id']] >= args.max_per_task:
+            funnel['over_task_cap'] += 1
+            continue
+        generator = 'bgkit' if e['task_id'].startswith('ext:bgkit:') else 'other'
+        root = e['turns'][0].get('invocation_id')
+        rows, written = [], []
+        for index, turn in enumerate(e['turns']):
+            role = 'root' if turn.get('invocation_id') == root else 'child'
+            s = stats[f'{generator}:{role}']
+            if neuralese_parts(turn['messages']):
+                s['calls_after_import'] += 1
+                s['target_tokens_after_import'] += turn.get('completion_tokens') or 0
+                continue
+            if surface_key(turn) not in surfaces:
+                s['calls_unseen_surface'] += 1
+                continue
+            try:
+                prompt, target = renderer.render(turn['messages'], turn['tools'], turn['target'])
+            except Exception as error:
+                s['render_error'] += 1
+                print(json.dumps({'event': 'render error', 'key': e['key'], 'call': index, 'error': repr(error)[:300]}),
+                      flush=True)
+                continue
+            row_id = hashlib.sha256(f"{e['key']}#{index}".encode()).hexdigest()[:24]
+            rows.append({'id': row_id, 'invocation': turn.get('invocation_id') or '', 'index': index,
+                         'prompt': np.asarray(prompt, np.int32), 'sample': np.asarray(target, np.int32)})
+            written.append({'id': row_id, 'episode': e['key'], 'source': 'rl-own-neuralese', 'run': e.get('run'),
+                            'task_id': e['task_id'], 'family': e.get('family') or e['task'].get('family'),
+                            'generator': generator, 'role': role, 'policy': e.get('policy'), 'call': index,
+                            'invocation': turn.get('invocation_id'), 'messages': turn['messages'],
+                            'tools': turn['tools'], 'target': turn['target'], 'prompt_tokens': len(prompt),
+                            'target_tokens': len(target), 'loss_from': 0,
+                            'too_long': len(prompt) + len(target) > MAX_LEN})
+            s['calls'] += 1
+            s['target_tokens'] += len(target)
+            s['call_tokens'] += len(prompt) + len(target)
+            s['too_long_calls'] += len(prompt) + len(target) > MAX_LEN
+        if not rows:
+            funnel['no_text_calls'] += 1
+            continue
+        per_task[e['task_id']] += 1
+        funnel['admitted'] += 1
+        funnel[f'admitted_{generator}'] += 1
+        tasks[e['task_id']] = e['task']
+        for row in written:
+            rows_out.write(row)
+        episode = {'task_id': e['task_id'], 'round': f"rl-neuralese:{e['key']}", 'rows': rows}
+        stats[generator]['forward_tokens'] += sum(len(c['ids']) for c in chains_of([episode]))
+        stats[generator]['episodes'] += 1
+        sft_episodes.append(episode)
+    rows_out.close()
+    chains = chains_of(sft_episodes)
+    rng.shuffle(chains)
+    with (out / 'chains.pkl.partial').open('wb') as handle:
+        pickle.dump({'chains': chains, 'schema': 'natlang.sft-chains/1'}, handle, protocol=4)
+    os.replace(out / 'chains.pkl.partial', out / 'chains.pkl')
+    report = {
+        'schema': 'natlang.sft-sources-neuralese-text/1', 'code': code_provenance(), 'argv': sys.argv,
+        'inputs': {'episodes': {str(p): sha256_file(p) for p in episode_files(work)},
+                   'replay_sha256': sha256_file(work / 'replay.jsonl'), 'held_manifest': args.held_manifest,
+                   'held_manifest_sha256': sha256_file(args.held_manifest), 'renderer': renderer.identity},
+        'policy': {'max_per_task': args.max_per_task, 'seed': args.seed, 'current_surfaces': len(surfaces),
+                   'calls': 'no native_state part in the messages (producer invocations; consumer calls before the '
+                            'first import); system prompt and tools equal to an exact replay\'s',
+                   'loss': 'per-call rows: prompt zero weight; the own sampled reply weight 1'},
+        'funnel': dict(funnel), 'stats': {k: dict(v) for k, v in sorted(stats.items())},
+        'episodes': len(sft_episodes), 'tasks': len(tasks), 'chains': len(chains),
+        'calls': int(sum(len(e['rows']) for e in sft_episodes)),
+        'forward_tokens': int(sum(len(c['ids']) for c in chains)),
+        'target_tokens': int(sum(len(r['sample']) for e in sft_episodes for r in e['rows'])),
+    }
+    (out / 'build.json').write_text(json.dumps(report, indent=1) + '\n')
+    (out / 'cases.jsonl').write_text(''.join(json.dumps(tasks[t]) + '\n' for t in sorted(tasks)))
+    print(json.dumps({k: report[k] for k in ('funnel', 'stats', 'episodes', 'tasks', 'chains', 'calls',
+                                             'forward_tokens', 'target_tokens')}, indent=1))
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest='command', required=True)
@@ -1172,10 +1310,18 @@ def main():
     b.add_argument('--october-passes', type=int, default=4,
                    help='selection passes: each renders, measures actual forward tokens and refills toward the budget')
     b.add_argument('--october-family-share', type=float, default=0.05)
+    n = sub.add_parser('neuralese-text', help='text rows (producers, calls before an import) of Neuralese successes')
+    n.add_argument('--work', required=True)
+    n.add_argument('--out', required=True)
+    n.add_argument('--tokenizer', required=True)
+    n.add_argument('--held-manifest', default=resolve_str(*OPS, 'held-v3', 'manifest.json'))
+    n.add_argument('--max-per-task', type=int, default=4)
+    n.add_argument('--seed', type=int, default=20261117)
     args = p.parse_args()
     if args.command == 'build' and args.teacher_pool is None:
         args.teacher_pool = [resolve_str(*OPS, 'teacher-gen-20261115', 'pool-v1')]
-    {'extract': extract, 'replay': replay, 'check-render': check_render, 'build': build}[args.command](args)
+    {'extract': extract, 'replay': replay, 'check-render': check_render, 'build': build,
+     'neuralese-text': neuralese_text}[args.command](args)
 
 
 if __name__ == '__main__':

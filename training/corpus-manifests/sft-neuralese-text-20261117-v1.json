@@ -1,0 +1,30 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "sft-neuralese-text-20261117-v1",
+  "owner": "dgx",
+  "path": "runs/sft-neuralese-text-20261117-v1",
+  "files": [
+    {
+      "path": "build.json",
+      "bytes": 2942,
+      "sha256": "244bdbadf45dd59956a09acd537a217da7c9415bdf6444194f7a75b7f48e213d"
+    },
+    {
+      "path": "cases.jsonl",
+      "bytes": 1328891,
+      "sha256": "ed3eb73579a737fd9f5073c778165258c4011342a42b4fe248eea2b8b3e820e7",
+      "lines": 94
+    },
+    {
+      "path": "chains.pkl",
+      "bytes": 194041670,
+      "sha256": "eec8f473773c01e37ce7106d010397a859017b647c475e6b6ff4f3602fa845db"
+    },
+    {
+      "path": "rows.jsonl.zst",
+      "bytes": 5264607,
+      "sha256": "243fcf04b7a9c9e520e5fbf9319b72aea65cbc1d5fa1014a3c81ef0b9560969d"
+    }
+  ],
+  "bytes": 200638110
+}

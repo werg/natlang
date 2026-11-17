@@ -248,6 +248,27 @@ e.g. context `'</think>'`, target `'<tool_call>\n<function=eval>…'`).
 Training the empty block would teach the student to close its reasoning at once, and no verified outcome selects that.
 The student's own replies keep every sampled token.
 
+## Neuralese successes as text rows (`sft-neuralese-text-20261117-v1`)
+
+`build` drops the 449 own successes with imported Neuralese state whole. `sft_sources.py neuralese-text --work W --out
+OUT --tokenizer W/tokenizer` keeps every call of them whose messages hold no `native_state` part:
+- the producer invocations (`f(...): Neuralese<T>`): the actor captures the state over the producer's own sampled value
+  span (`sglang_actor._sglang_capture`, ids[start:end] of the producer's sequence), so these rows train exactly the
+  tokens whose keys and values the consumer imports;
+- the consumer's calls before its first import.
+
+A call after an import needs the imported state as context; it is counted (`calls_after_import`), not written.
+
+| | episodes | tasks | calls | target tokens | forward tokens | calls after import (skipped) |
+|---|---|---|---|---|---|---|
+| bgkit KR readers | 115 | | 1,642 | 2.03M | 5.22M | 820 (0.86M target) |
+| composed Neuralese and other | 148 | | 2,164 | 2.79M | 6.49M | 916 (0.84M target) |
+| total | 263 | 94 | 3,806 | 4.82M | 11.7M (1,115 chains) | 1,736 |
+
+Validity: oracle success at collection (grpo-v2 run1/run2, grpo-v3 run1); held-v3/v2 closure (0 hits); each call's
+system prompt and tool schemas equal ones the current runtime rendered in an exact replay (0 mismatches); per-task cap 4
+(186 over the cap). Not replayed: the imported states lived only in the actor store.
+
 ## Held exclusion
 
 - **GRPO-pool tasks:** `held_eval.exclusion_ids(held-v3)` (which covers held-v2) plus `held_closure`: the held tasks'
