@@ -583,6 +583,9 @@ def run_native(engine, callback, entries=None, *, leaves=None, gradient_precisio
             if reference is None:lifecycle['active'] = False
             _LIVE_LEAVES.reset(leaves_token)
             _ACTIVE.reset(token)
+            if resolved and cache is None:
+                from .native_actor_graph import release_operation_cycles
+                release_operation_cycles()
 
 
 def optimize_adapter(engine, gradient, options, state_id, owner=None):

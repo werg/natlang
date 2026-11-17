@@ -2824,3 +2824,43 @@ compact-history is the model's own `compact_history` note captured in context; t
   - The compiled `lfm3_fast_train` path differs from eager on chains without imports (side finding, reported to the
     supervisor).
   - The FALLOW-22 graphs are stale and not wired.
+
+**2026-11-17 19:30, program tuning and LoRA-bank meta-learning back on the LFM3 stack (tuning agent).** Owner: "the
+tuning / LoRA approach as well [is very important]." Inventory and design: `TUNING_RESTORE_20261117.md`. What the w5
+deletion (60d2c1209, 5500b44fb) broke: the bank meta-learning driver and its task-outcome gate (`bank_stage.py`,
+`bank_outcomes.py`, with `rl/production.collect`), the setter of the engines' default adapter stack, and the recipe
+stages; `tune/` and `tune/learned/` themselves import and run. Rebuilt on today's stack:
+- **Driver** `scripts/neuralese_data/program_tune.py` (b86250b3c, a6897a8ba): a GRPO-pool family is a program; split
+  groups hashed into support/dev/confirm (60/25/15; held-v3/v2 closure, errata and an optional exposure list out),
+  each split a held_eval manifest with the held engine pin; fit rows = verified support successes (on-policy samples
+  of the support manifest via `held_eval measure`, and `sft_sources` replays), one `natlang.tune-turn/v1` row per call,
+  tool calls whose result is a runtime error not targets (failed history kept as context); a one-scope free-LoRA
+  `tune.build` plan; `bank`: `meta_bank.BankMetaLearner` initialized from the programs' own fits (PCA of the fits =
+  mixture labels are projections of actual fits), Meta-SGD steps on their support worlds, held programs adapted by
+  the bank's inner fit into servable releases.
+- **Serving** (b86250b3c): `serve_native_checkpoint.py --adapter-release DIR` sets the default stack (SGLang slots or
+  the native engine) and records it in `rl_policy_binding.adapters`; `held_eval.policy_id_of` makes an adapted actor's
+  policy id `CHECKPOINT+stack digest`, so `measure`/`compare` pair base and adapter on the same dev manifest.
+  `check_tuned_lora_llama_parity.py RELEASE` checks a real fit's GGUF LoRA on llama-server against the native forward.
+- **Stale items fixed:** tune engines load the checkpoint's own dtype (an FP32 read of LFM3 was a whole-model cast;
+  adapter parameters stay FP32); trainer step lines are `progress:` lines `natlang tune` forwards; the vLLM tuning
+  backend is removed (274ff8c8c; no profile or config used it); learned-optimizer README, `lane.py`, learned
+  DECOMPOSITION and TUNING.md follow today's entry points (250523f95).
+- **Defect found and fixed (shared mechanism):** a differentiated native adapter operation leaves its carrier autograd
+  contexts and cotangent scope in reference cycles, so each fit row's FP32 deltas and effective weights stayed on the
+  GPU until Python's cyclic collector ran: +2.5 GB per row on LFM3 (attention+conv targets), 37.5 GB for a batch of 8
+  (ledger preemption at 15 GB). Memory snapshot: the live blocks were `rounded_weight_carrier` outputs (2.49 GB) and
+  `_effective_replacements` deltas (1.82 GB) after two rows; `gc.collect()` returned allocation to 3.24 GB each row.
+  `native_actor_graph.release_operation_cycles` (grad-enabled operations only) now runs at the end of
+  `run_invocation_actors` and of `run_native`'s substituted path: every native adapter gradient consumer (tune
+  trainer, learned fit/growth/subspace/controls/episode/trainer, tune RL, the server's native_grad) gets it;
+  inference is unaffected; `lfm3_fast_train` does not use this path (grep: no `native_adapters` import).
+- **Memory of the native fit path:** the exact substitution materializes each target's FP32 delta and its gradient,
+  so a fit over every LFM3 target (MLP included) peaked at 21.6 GB CUDA on one 13k-token row; attention + conv
+  projections peak at 9.1 GB. Fits run with `--targets attention conv-projection` under the 15 GB envelope; a factored
+  `x A^T B^T` application for training would lift that limit (not built).
+- **Data:** `ext_decisions_route` (549 pool rows): support 315 / dev 155 / confirm 75 tasks; existing verified
+  successes cover only 3 support tasks (31 episodes, 79 rows): fits need on-policy support sampling (the support
+  manifest) before a capability claim.
+- **Not yet measured:** no task-outcome comparison (dev, base vs adapter) has run; no LFM3 GGUF LoRA has been served by
+  llama-server or wllama; SGLang adapter-slot parity was not rerun on a real fit.

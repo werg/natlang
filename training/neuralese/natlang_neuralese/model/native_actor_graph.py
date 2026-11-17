@@ -127,6 +127,16 @@ class NativeInvocationActors:
         return [(name,torch.tensor(rows,device=device,dtype=torch.long)) for name,rows in groups.values() if rows]
 
 
+def release_operation_cycles():
+    """Free a differentiated operation's effective weights now. Its carrier autograd contexts and cotangent scope form
+    reference cycles, so after backward the FP32 deltas and effective weights (GBs on a real model: ~2.5 GB per row of
+    an LFM3 attention+conv fit) stay allocated until Python's cyclic collector happens to run; a fit's rows then piled
+    up within one step. Inference (no grad) creates no such cycles and skips this."""
+    if torch.is_grad_enabled():
+        import gc
+        gc.collect()
+
+
 def run_invocation_actors(engine,names,bindings,callback,*,default=None,leaves=None,gradient_precision='storage',source_names=None,
                           track_adapter_cotangents=True,adapter_cotangent_target_ids=None,
                           cotangent_parameter_ids=None):
@@ -158,6 +168,8 @@ def run_invocation_actors(engine,names,bindings,callback,*,default=None,leaves=N
             finally:
                 if not bank.reference_lifetime:bank.lifecycle['active']=False
                 _BANKS.reset(token);_ACTIVE.reset(active)
+                del bank
+                release_operation_cycles()
 
 
 def validate_invocation_actor_receipt(receipt,base):
