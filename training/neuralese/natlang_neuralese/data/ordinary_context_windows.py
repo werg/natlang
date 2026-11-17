@@ -33,7 +33,7 @@ def _ordinary(row):
             or set(nodes[0])-{'name','token_ids','target_weights'}):
         raise ValueError('context windows require one ordinary node without imports, decisions or producer state')
     conversion=row.get('conversion') or {}
-    if conversion.get('ordinary_context_windows') or conversion.get('static_native_context'):
+    if conversion.get('ordinary_context_windows'):
         raise ValueError('an already transformed row cannot be transformed again')
     if conversion.get('role_interpretation') not in ('ordinary-text','whole-trajectory-chat-roles'):
         raise ValueError('context windows require an explicit ordinary text role contract')

@@ -67,8 +67,8 @@ def graph_row(index, seed=None, *, name='compact-value', prompt=(10, 11, 12)):
 
 
 def test_bind_tokens_round_trips_prompt_and_binds_the_span_cap():
-    binding = bind_tokens(CharTokenizer(), 'compact-history', tokenizer_fingerprint=FINGERPRINT)
-    spec = OPERATORS['compact-history']
+    binding = bind_tokens(CharTokenizer(), 'extract', tokenizer_fingerprint=FINGERPRINT)
+    spec = OPERATORS['extract']
     assert CharTokenizer().decode(binding['prompt_token_ids']) == spec.prompt
     assert binding['seed_cap'] == spec.seed_cap and 'slot_token_ids' not in binding
 

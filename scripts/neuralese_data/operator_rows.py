@@ -24,6 +24,8 @@ Held data: every case whose split groups, ids or input text meet the held-v3 / h
 
     operator_rows.py build --cases ROOT_OR_FILE [...] --out DIR [--limit N] [--operators a,b] [--context-tokens N]
 
+Sites render as under the model-facing variant `learned-compaction`: values over 8,000 characters are compacted.
+
 Needs the built ts-host dist (`npm run build:node`) and node on PATH.
 """
 from __future__ import annotations
@@ -142,7 +144,7 @@ class RowBuilder:
     """Per-call rows of one case under one tokenizer (the renderer's exact site, seed and consumer rendering)."""
 
     def __init__(self, tokenizer, role_ids, fingerprint, *, max_tokens=32000, seed_weight=1.0, sites=None,
-                 context_tokens=None):
+                 context_tokens=131072):
         self.context_tokens = context_tokens
         self.renderer = TokenRenderer(tokenizer, role_ids=role_ids)
         self.sites = sites or RuntimeSites()
@@ -430,8 +432,9 @@ def main():
     p.add_argument('--max-tokens', type=int, default=32000)
     p.add_argument('--seed-weight', type=float, default=1.0)
     p.add_argument('--splits', nargs='+', default=['train', 'test'], choices=['train', 'test'])
-    p.add_argument('--context-tokens', type=int, default=None,
-                   help="the call's context budget the runtime sizes its shown page from (default: the page floor)")
+    p.add_argument('--context-tokens', type=int, default=131072,
+                   help="the call's context budget the runtime sizes its shown page from (GRPO's; with the learned-compaction "
+                        "threshold of 8,000 characters the page is that threshold)")
     m = sub.add_parser('merge')
     m.add_argument('--rows', required=True)
     m.add_argument('--out', required=True)

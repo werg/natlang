@@ -103,43 +103,13 @@ def outline(text: str, budget: int) -> str:
     return _clip('\n'.join(parts), budget)
 
 
-def history_outline(messages: list, budget: int) -> str:
-    """A mechanical account of a conversation stretch: actions taken, paths touched, errors, and its last steps."""
-    actions, paths, errors = [], [], []
-    for message in messages:
-        for call in message.get('tool_calls') or []:
-            function = call.get('function') or call
-            arguments = str(function.get('arguments') or '')
-            actions.append(f"{function.get('name')}({arguments[:80]})")
-        content = message.get('content') if isinstance(message.get('content'), str) else ''
-        paths.extend(re.findall(r'(?:/[\w.-]+){2,}(?::\d+)?', content))
-        errors.extend(line.strip() for line in content.splitlines()
-                      if re.search(r'\b(Error|Exception|Traceback|FAILED|failed)\b', line))
-    last = next((message.get('content') for message in reversed(messages)
-                 if message.get('role') == 'assistant' and isinstance(message.get('content'), str) and message['content'].strip()), '')
-    parts = [f'{len(messages)} messages, {len(actions)} tool calls.']
-    if actions:
-        parts.append('Actions: ' + '; '.join(actions[-20:]))
-    if paths:
-        parts.append('Paths: ' + ', '.join(list(dict.fromkeys(paths))[:30]))
-    if errors:
-        parts.append('Errors: ' + ' | '.join(list(dict.fromkeys(errors))[:8]))
-    if last:
-        parts.append('Last step: ' + last.strip()[:600])
-    return _clip('\n'.join(parts), budget)
-
-
 def mechanical_seed(operator: str, source: dict, *, question: str = '', answers=(), target: str = '') -> dict:
     """The deterministic seed of one source when no gold/checked span exists: {text, provenance}.
 
-    Chosen per value type: a conversation gets a history outline; otherwise the answer-bearing lines, else the
+    Chosen per value type: the answer-bearing lines, else the
     sentences overlapping the question/target, else (for exact-recall operators) the identifiers present, else the
     structure outline with head and tail. The length budget scales with the input size.
     """
-    if isinstance(source.get('messages'), list):
-        text = json.dumps(source['messages'], ensure_ascii=False)
-        return {'text': history_outline(source['messages'], budget_chars(len(text), ceiling=4000)),
-                'provenance': 'mechanical:history-outline'}
     text = source.get('text') or ''
     budget = budget_chars(len(text))
     seed = answer_lines(text, answers, budget)
@@ -155,24 +125,6 @@ def mechanical_seed(operator: str, source: dict, *, question: str = '', answers=
         return {'text': _clip((seed + '\n' + structure) if seed else structure, budget),
                 'provenance': 'mechanical:identifiers-outline' if seed else 'mechanical:outline'}
     return {'text': outline(text, budget), 'provenance': 'mechanical:outline'}
-
-
-def chunk_summary_seed(text: str, question: str = '') -> dict:
-    """A deterministic summary of one chunk of a long text: {text, provenance, parts}.
-
-    The question-selected sentences when a question is known (the spans the consumer needs most), then the exact
-    identifiers, paths, numbers and names present, then the structure outline (headings, definitions, head/tail).
-    The budget scales with the chunk size like every mechanical seed; a source is never left without one.
-    """
-    budget = budget_chars(len(text))
-    chosen = []
-    for part, seed in (('question-overlap', overlap_sentences(text, question, budget // 2) if question else None),
-                       ('identifiers', identifiers(text, budget // 4)),
-                       ('outline', outline(text, max(200, budget // 2)))):
-        if seed:
-            chosen.append((part, seed))
-    return {'text': _clip('\n'.join(seed for _, seed in chosen), budget),
-            'provenance': 'mechanical:chunk-summary', 'parts': [part for part, _ in chosen]}
 
 
 # Fact kinds the mechanical guidance seed leads with, and how it introduces each. Feedback/failure kinds describe a

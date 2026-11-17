@@ -6,8 +6,8 @@
  * without it, and whether the runtime would compact the value at all.
  */
 import { listingLine, renderValue } from './agent.js';
-import { shownCharsFor, SCOPE_VALUE_CHARS } from './cutoff.js';
-import { framedState, OPERATOR_MIN_CHARS, argumentInstructions, operatorPurpose, valueInstructions, viewSiteMessages,
+import { SCOPE_VALUE_CHARS } from './cutoff.js';
+import { compactionPageChars, framedState, OPERATOR_COMPACT_CHARS, OPERATOR_MIN_CHARS, argumentInstructions, operatorPurpose, valueInstructions, viewSiteMessages,
   type ValueOperator } from './operator-frames.js';
 import { PageStore } from './pages.js';
 import { viewNote } from './prompt.js';
@@ -25,6 +25,8 @@ export type OperatorSiteRequest = {
   argument?: { name: string; type: string };
   /** The call's context budget in prompt tokens (sizes the shown page; null or absent: the floor). */
   context_tokens?: number | null;
+  /** The learned-compaction threshold (default OPERATOR_COMPACT_CHARS, as under the variant `learned-compaction`). */
+  compaction_chars?: number;
   /** compact-value: the result's index in the call's transcript (names where all of it is). */
   entry?: number;
 };
@@ -33,7 +35,7 @@ const STATE_ID = 'nzs1_' + 'a'.repeat(52);
 
 /** One operator site as the runtime renders it. */
 export function operatorSite(request: OperatorSiteRequest) {
-  const budget = shownCharsFor(request.context_tokens);
+  const budget = compactionPageChars(request.context_tokens, request.compaction_chars ?? OPERATOR_COMPACT_CHARS);
   const purpose = operatorPurpose(request.purpose);
   const ref = { $neuralese: { id: STATE_ID } } as unknown as NeuraleseRef;
   const sentinel = neuraleseRefSentinel(ref);

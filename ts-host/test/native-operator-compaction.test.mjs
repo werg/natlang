@@ -56,11 +56,13 @@ test('the crisp default keeps the text cut and never calls the operator', async 
   assert.match(request, /cut off/);
 });
 
-test('view\'s site and the consumer frames equal the Python definitions', async () => {
+test('view\'s site equals the pinned write site the Python engine\'s view write renders (tests/fixtures/view-site.json)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const fixture = JSON.parse(readFileSync(new URL('../../tests/fixtures/view-site.json', import.meta.url), 'utf8'));
+  assert.deepEqual(viewSiteMessages(fixture.site.value, fixture.site.instructions), fixture.messages);
+  assert.deepEqual(viewSiteMessages(fixture.site.value), fixture.faithful);
+  assert.equal(fixture.messages[0].content, VIEW_PROMPT);
   assert.equal(OPERATOR_FRAMES['compact-history'].close, '\n\nContinue from the most recent steps.');
-  assert.deepEqual(viewSiteMessages('V', 'I'), [{ role: 'system', content: VIEW_PROMPT },
-    { role: 'user', content: 'instructions:\nI\n\nvalue:\nV' }]);
-  assert.deepEqual(viewSiteMessages('V')[1], { role: 'user', content: 'value:\nV' });
 });
 
 test('the grammar capture forces the exact reply ids around produce markers and records the source capture', async () => {
@@ -136,4 +138,19 @@ test('operator generation uses the shared token reservation and never captures a
  assert.equal(requests.length,1);assert.equal(requests[0].max_tokens,3);
  assert.match(requests[0].invocation_id,/#operator-1$/);assert.equal(captured,overrun?0:1);
  }
+});
+
+test('learned compaction cuts and compacts values over its threshold whatever the context budget', async () => {
+  const { compactionPageChars, OPERATOR_COMPACT_CHARS } = await import('../dist/native/operator-frames.js');
+  const { operatorSite } = await import('../dist/native/operator-site.js');
+  assert.equal(OPERATOR_COMPACT_CHARS, 8000);
+  assert.equal(compactionPageChars(131072), 57344);
+  assert.equal(compactionPageChars(131072, OPERATOR_COMPACT_CHARS), 8000);
+  const output = 'line of data\n'.repeat(800);
+  const site = operatorSite({ operator: 'compact-value', value: output, purpose: 'count lines', tool: 'bash', context_tokens: 131072 });
+  assert.ok(site.compacted && site.text.includes('<<cut off:'));
+  assert.deepEqual(site.messages, viewSiteMessages(output, 'Read this bash result for: count lines'));
+  assert.ok(site.state.before.endsWith(OPERATOR_FRAMES['compact-value'].open));
+  const small = operatorSite({ operator: 'compact-value', value: 'line\n'.repeat(1000), purpose: 'p', context_tokens: 131072 });
+  assert.equal(small.compacted, false);
 });

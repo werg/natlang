@@ -23,19 +23,12 @@ def test_overlap_then_identifiers_then_outline():
     value = mechanical_seed('compact-value', {'text': code})
     assert value['provenance'] == 'mechanical:identifiers-outline' and 'src/app/config.yaml' in value['text']
     data = json.dumps([{'id': i, 'name': f'n{i}'} for i in range(300)])
-    outline = mechanical_seed('compact-history', {'text': data})
+    outline = mechanical_seed('compact-params', {'text': data})
     assert outline['provenance'] == 'mechanical:outline' and 'JSON array of 300 items' in outline['text']
     assert len(outline['text']) <= budget_chars(len(data))
 
 
-def test_history_outline_and_budget_scaling():
-    messages = [{'role': 'assistant', 'content': 'Reading /repo/src/app.py now.',
-                 'tool_calls': [{'function': {'name': 'read', 'arguments': '{"path": "/repo/src/app.py"}'}}]},
-                {'role': 'tool', 'content': 'Traceback: ValueError in /repo/src/app.py:40'},
-                {'role': 'assistant', 'content': 'Fix the parser next.'}]
-    seed = mechanical_seed('compact-history', {'messages': messages})
-    assert seed['provenance'] == 'mechanical:history-outline'
-    assert '/repo/src/app.py' in seed['text'] and 'Fix the parser next.' in seed['text'] and 'read(' in seed['text']
+def test_budget_scaling():
     assert budget_chars(100) == 200 and budget_chars(10**7) == 2400 and budget_chars(10_000) == 800
 
 

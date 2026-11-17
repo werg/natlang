@@ -393,7 +393,23 @@ what ts-host renders at the compaction sites. Now:
 - **Spot check** (6 cases each of 5 sources, `scripts/neuralese_data/operator_rows.py` `RowBuilder` against the old
   Python site): tool-digest sites are identical (6/6); the others differ only as above. Schema
   `natlang.operator-rows/2`; manifests record `runtime_code`.
-- **Open:** the runtime sizes the shown page from the call's context budget (`shownCharsFor`: 1/8 of the context at 3.5
-  chars/token). At GRPO's 131072-token budget a tool output or argument is cut only above ~57k characters, so most
-  cases (2k-57k characters) would not be compacted in grpo-v4's calls. Rows default to the page floor (`--context-tokens`
-  unset, 2,000 characters), the regime the operator cases were made for.
+- **Context budget:** the runtime sized the shown page from the call's context budget alone (`shownCharsFor`), so at
+  GRPO's 131072 tokens values were cut only above ~57k characters. Resolved in §10.
+
+## 10. Compaction threshold, and removals (2026-11-17, coordinator decisions)
+
+- **Threshold.** Under `learned-compaction` the runtime cuts and compacts any value over 8,000 characters, whatever
+  the call's context budget (`OPERATOR_COMPACT_CHARS`, `compactionPageChars`; a setting of the pluggable `compaction`
+  part: `compactionChars` option, env `NATLANG_NEURALESE_COMPACTION_CHARS`). Rows render their sites at that threshold
+  with GRPO's budget (`operator_rows.py --context-tokens 131072`, the default), so the page is 8,000 characters.
+  MODEL_FACING_CHANGES.md 2026-11-17.
+- **Removed:** the compact-history registry operator (its 'user-suffix' site, `HISTORY_PROMPT` and the history-outline
+  seed; note capture replaced it, and the runtime's frame and cap live in operator-frames.ts only); the registry
+  fields only the Python consumer framing read (`frame_each`, `inline_below_chars`, `consumer_separator`);
+  `data/static_native_context.py` (no current data path builds its graphs) and `chunk_summary_seed`.
+- **view.py `view_site` stays a pinned copy.** The Python engine's `/v1/neuralese/view` owns a token-windowed plan
+  (one site, or part sites plus a combine site, sized with the engine's tokenizer per write) inside the serving process.
+  Calling ts-host per write would put a node process in the engine's serving path for a two-message template. Both sides
+  are pinned to `tests/fixtures/view-site.json`: Python `tests/neuralese/test_view.py`, and ts-host
+  `viewSiteMessages` in `test/native-operator-compaction.test.mjs` (new; before, only the listing instructions were
+  pinned on the ts side).

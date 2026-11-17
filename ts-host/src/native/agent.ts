@@ -15,7 +15,7 @@ import { AUTOMATIC_NOTE, COMPACTION_NOTICE, directoryReducerPrompt, scopedFileTo
 import { canGenerateNl, runInFrame } from '../runtime/context.js';
 import { adoptImportedNativeArtifacts } from './nz-file.js';
 import { FileHandle, FolderHandle, fileListingText, type Folder } from './scoped-fs.js';
-import { SHOWN_CHARS, SCOPE_VALUE_CHARS, SMALL_VALUE_CHARS, literalFits, shownCharsFor, note as cutNote } from './cutoff.js';
+import { SHOWN_CHARS, SCOPE_VALUE_CHARS, SMALL_VALUE_CHARS, literalFits, note as cutNote } from './cutoff.js';
 import type { TrainingGuidance } from './training-guidance.js';
 
 /** Scope and input values show at least SCOPE_VALUE_CHARS, and never less than a tool output of the call may. */
@@ -35,9 +35,9 @@ async function pinNativeProgramGuidance(store: NeuraleseStore, id: string): Prom
   await pending;
 }
 import { listingViewInstructions, viewNote } from './prompt.js';
-import { pluggable, type PluggableSetting } from '../runtime/pluggable.js';
+import { pluggable, pluggableMode, type PluggableSetting } from '../runtime/pluggable.js';
 import { modelFacing } from '../runtime/model-facing.js';
-import { argumentInstructions, framedState, OPERATOR_MIN_CHARS, operatorPurpose, valueInstructions, OPERATOR_REASONING_TOKENS, OPERATOR_SPAN_CAPS, viewSiteMessages, type CompactSite } from './operator-frames.js';
+import { argumentInstructions, compactionPageChars, framedState, OPERATOR_COMPACT_CHARS, OPERATOR_MIN_CHARS, operatorPurpose, valueInstructions, OPERATOR_REASONING_TOKENS, OPERATOR_SPAN_CAPS, viewSiteMessages, type CompactSite } from './operator-frames.js';
 import { neuraleseRef, type NeuraleseRef } from './neuralese.js';
 import { untrustedBlock, type UntrustedRegistry } from './untrusted.js';
 import { writtenReturnResult } from './pseudo-call.js';
@@ -539,6 +539,11 @@ export class NativeToolAgent {
        */
       compaction?: PluggableSetting;
       /**
+       * With `compaction` resolving to `nl` (or `shadow`), values longer than this many characters are cut and compacted
+       * whatever the context budget (default OPERATOR_COMPACT_CHARS, 8,000; env NATLANG_NEURALESE_COMPACTION_CHARS).
+       */
+      compactionChars?: number;
+      /**
        * Receives the deltas of the call's model turns as they stream (plans/STREAMING.md §1.6), with the turn's number
        * (as its `model_request` trace events give it). A turn taken again after a failed request first gets a `reset`.
        * Without it the driver is called with no turn options.
@@ -587,6 +592,15 @@ export class NativeToolAgent {
     if (ref) session.runtime.trace.emit('operator', { call_id: session.runtime.currentCallId ?? null, operator: site.operator,
       representation: 'neuralese', block: ref.$neuralese.id, chars });
     return ref;
+  }
+
+  /** The characters a message shows of one output: the budget's page, capped at the compaction threshold when learned
+   * compaction can run (operator-frames.ts `compactionPageChars`). */
+  private pageChars(budget: number | null | undefined): number {
+    const learned = this.options.neuralese?.capture && supportsNeuralese(this.driver) &&
+      pluggableMode(this.compactionSetting(), 'crisp') !== 'crisp';
+    const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.NATLANG_NEURALESE_COMPACTION_CHARS;
+    return compactionPageChars(budget, learned ? this.options.compactionChars ?? (env ? Number(env) : OPERATOR_COMPACT_CHARS) : undefined);
   }
 
   /** The `compaction` setting: the agent option, the runtime option, NATLANG_NEURALESE_COMPACTION, else `nl` under the
@@ -1739,7 +1753,7 @@ export class NativeToolAgent {
     if (this.options.neuralese?.store) await adoptImportedNativeArtifacts(this.options.neuralese.store);
     // The context budget sizes compaction and, from the start (the opening's reads included), the tool-output page.
     let budget = this.options.contextTokens === undefined ? await defaultContextBudget(this.driver) : this.options.contextTokens;
-    session.pages.budget = shownCharsFor(budget);
+    session.pages.budget = this.pageChars(budget);
     // The program's guidance, in the call's opening message (which the decision readout reuses too).
     const guidance = [renderAuthoredTextGuidance(this.options.authoredTextGuidance) +
       await this.runtimeProgramGuidance(guidanceForCall(this.options.programGuidance, session.lam.functionName)),
@@ -1855,7 +1869,7 @@ export class NativeToolAgent {
       if (next.contextTokens !== undefined && next.contextTokens !== null)
         budget = budget === null ? next.contextTokens : Math.min(budget, next.contextTokens);
       statedWindow = null; tokensPerChar = 1 / 3.5; compactedAt = 0;
-      session.pages.budget = shownCharsFor(budget);
+      session.pages.budget = this.pageChars(budget);
       fallbackIndex++;
       session.runtime.trace.emit('model_escalation', { call_id: session.runtime.currentCallId ?? null, from, to: currentActor.id,
         profile: next.name, report, turn: turns });

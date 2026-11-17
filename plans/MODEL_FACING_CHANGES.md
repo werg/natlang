@@ -2652,3 +2652,16 @@ Not changed: the writer still sees τ* whole when it fits the argument page budg
 the writer's choice. Tests: `ts-host/test/training-guidance.test.mjs` (check cases, and a copied value sent back then
 the corrected hint becoming the state), `tests/neuralese/test_grpo_jolt.py` (result value).
 
+
+### 2026-11-17: learned compaction cuts values over 8,000 characters (operators agent)
+
+Under the variant `learned-compaction`, a tool output or argument longer than 8,000 characters (~2k tokens) is cut and
+compacted whatever the call's context budget. Before, the cut came from the budget's page (`shownCharsFor`, 1/8 of the
+context: ~57k characters at GRPO's 131k), so learned compaction waited until a value would nearly overflow, which
+defeats its purpose of keeping large values out of the context. The threshold is a setting of the pluggable
+`compaction` part: agent option `compactionChars`, env `NATLANG_NEURALESE_COMPACTION_CHARS`, default
+`OPERATOR_COMPACT_CHARS` (operator-frames.ts `compactionPageChars`). It applies only when the part resolves to `nl` or
+`shadow` and a capture is configured. Without the variant nothing changes. Correction to the entry above: the
+argument listing shows a compacted argument as `name: type = <state>  // view of the value; name holds all of it`
+(agent.ts `views`/`inputsListing`), not with a "Compacted argument: " frame. Operator rows render their sites at this
+threshold (ts-host native/operator-site.ts).
