@@ -15,9 +15,11 @@ import torch
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT / 'scripts/neuralese_data'), str(ROOT / 'tests/neuralese')]
 import lfm3_fast_train  # noqa: E402
+from natlang_neuralese.common.paths import resolve_str  # noqa: E402
 
 # the start policy 5ff07638 (grpo-v3's --checkpoint)
-START = '/mnt/external/natlang-development-data/archive/data/lfm3-rl-dgx-20261029/fresh-init/checkpoint.pt'
+START = resolve_str('data_hdd', 'natlang-development-data', 'archive', 'data', 'lfm3-rl-dgx-20261029', 'fresh-init',
+                    'checkpoint.pt')
 cuda = pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA kernel check')
 
 
