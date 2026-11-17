@@ -2780,3 +2780,11 @@ waits up to 4 h for memory): pin 7321761d4, base 5ff07638, 12 low-pass tasks (6 
 `ops/restore-smoke/report.py` prints the teacher rho distribution, teacher advantage counts, memetic wall times and
 guidance bindings, and the writeHint hints with their overlap with their own vs other tasks' prompts. Its result
 decides entry into grpo-v5.
+
+**2026-11-17 18:10, improvements enter when they are ready (owner).** "That rule does not come from me. I want it
+removed. Improvements enter when they are ready!" AGENTS.md's "Improvements enter at the next pin, never
+mid-measurement" is replaced: a running experiment takes a ready improvement at a resume on a new pin. The mechanism
+already supports it: `held_eval compare` pairs by scoring series, engine and sampling law, not by commit, so a
+learner-only change keeps the base; a harness or scoring change re-measures the base on its series (grpo moves the old
+step 0 aside). Applied now: the packed prefix tree (in progress) and any restored capability that passes its smoke
+enter grpo-v4 at a resume as soon as they are ready.

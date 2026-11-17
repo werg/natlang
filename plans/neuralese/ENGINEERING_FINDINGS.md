@@ -826,7 +826,7 @@ so w5 is retired (data kept, never resumed) and the base is the start policy.
   commit (actor, harness, scorer, learner and evaluator all run it; record the SHA), changes exactly one thing
   against its baseline, declares its success criterion before it runs, and is judged by paired held-out eval.
   Experiments are small (hours). Record each with its result in `plans/neuralese/DECISIONS.md`.
-- **Improvements enter at the next experiment, never mid-measurement.** Code landing on main does not reach a
+- **(Superseded 2026-11-17 by the owner: improvements enter when they are ready, AGENTS.md.) Improvements enter at the next experiment, never mid-measurement.** Code landing on main does not reach a
   running experiment: a pinned run uses its own copy of its commit (a detached checkout or a pinned copy of
   `ts-host`; no commits are made there, and it is removed afterwards). A measured win becomes the baseline of the
   following experiments, with an opt-out switch. A correctness bug found in a running experiment invalidates it:

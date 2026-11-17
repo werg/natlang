@@ -39,8 +39,8 @@ with the owner only what is truly theirs. Waiting for an OK on a technical cours
 # Experiments: how results are made trustworthy
 
 - **Bounded controlled experiments decide.** One experiment is one collect -> train -> eval cycle of hours, not days.
-  It runs on one pinned commit: actor, harness, scorer, learner and evaluator all run that commit, and the SHA is
-  recorded. This is engineering, not a scientific study (owner 2026-11-17): each run bundles every change likely to
+  It runs from a pinned commit (actor, harness, scorer, learner and evaluator together), and each step records the
+  SHA it ran. This is engineering, not a scientific study (owner 2026-11-17): each run bundles every change likely to
   move the needle (fixes, data, sampling, LR, start policy, speed) and skips what is unlikely to; attribution is not a
   goal. It declares its success and failure criteria before it runs. Paired held-out eval against the base judges it;
   when a bundle regresses, bisect it with branch states and the fast diagnostics below. Record each experiment and its result in `plans/neuralese/DECISIONS.md`. The
@@ -49,10 +49,12 @@ with the owner only what is truly theirs. Waiting for an OK on a technical cours
   Launch that copy's scripts with the pin as the ledger `--workdir` and `NATLANG_REPO`/`PYTHONPATH` bound to it.
   `grpo.py` refuses a live checkout unless `--unpinned`. No commits are made in a pin.
   `pin_checkout.py remove DEST` deletes it when the experiment ends.
-- **Improvements enter at the next pin, never mid-measurement.** A measured win becomes the baseline of the following
-  experiments, with an opt-out switch. Sizing changes at a resume (slots, memory, KV) leave the treatment unchanged.
-  Anything that changes what the model sees or how it is trained is a new pin and a re-measured start policy. A
-  correctness bug found in a running experiment invalidates it: stop it, fix it, rerun it.
+- **Improvements enter when they are ready (owner 2026-11-17).** A running experiment picks up a ready improvement
+  (speed, fixes, data, objective) at a resume on a new pin; nothing waits for the next experiment. Each improvement
+  ships with an opt-out switch and its targeted tests. Held results pair within one scoring series (ts-host tree,
+  scoring sources, model-facing variants), engine and sampling law: a learner-only change keeps the base, and a pin
+  whose harness or scoring differs re-measures the base on its series (`grpo.py` moves the old step 0 aside). A
+  correctness bug found in a running experiment invalidates the steps it affected: fix it and resume or rerun.
 - **A significant unexplained held regression ends the experiment at that eval.** If a paired held result falls below
   the declared failure threshold with p < 0.05 and its cause is unknown, stop the run and start the bug hunt on the
   freed machine. The declared failure rule is a last resort, not permission to keep running. When a learner sentinel
