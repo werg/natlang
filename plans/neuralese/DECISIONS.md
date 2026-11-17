@@ -2600,3 +2600,10 @@ independent refreshing session.
 85 to 56 of 512 (-5.7 pts; see ran_out_paired in compare-vs-step0.json). Series: +4.7 (A/A), +1.2, +2.5, +3.7, +3.9.
 Steps 7-8 had no sentinel (grad_norm 0.82-1.0x the median, KL 5.5-6.2e-4). The run continues; its verdict is the 4 vs 4
 final eval (00:40 entry).
+
+**2026-11-17 08:45, grpo-v3-run1 held step 8 (Pop, 2 vs 2 samples; supervisor).** Per-task pass rate 47.5% -> 51.6%,
++4.1 pts, permutation p 0.080, CI [-0.4, +8.4]; 51 tasks up, 38 down. Episodes that ran out of model calls fell from
+85 to 46 of 512 (McNemar p < 0.001). Series: +4.7 (A/A), +1.2, +2.5, +3.7, +3.9, +4.1. Steps 9-10 had no sentinel
+(grad_norm 0.80-1.02x the median, KL up to 1.4e-3 at LR 3e-6). The memory guard stopped teacher generation in learner
+phases and the ledger relaunched it every 2-4 min; requeues now back off (f208ffa29). The run continues to its 4 vs 4
+final eval; step 10 is on Pop.
