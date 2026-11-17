@@ -84,6 +84,19 @@ def test_identical_inputs_cannot_cross_splits_under_other_group_names():
     assert v.admit([train], manifest(train, protected), EMPTY_HELD)[1]['input_crosses_splits'] == 1
 
 
+def test_identical_inputs_remain_protected_after_suite_rebuild_and_group_rename():
+    train, protected = episode(), episode('protected', 'test', 'old-group')
+    protected['suite']['hash'] = '9' * 64
+    protected['case']['input_sha256'] = train['case']['input_sha256']
+    assert v.admit([train], manifest(train, protected), EMPTY_HELD)[1]['input_crosses_splits'] == 1
+
+
+def test_case_ids_with_colons_still_share_the_stable_suite_namespace():
+    train, protected = episode('family:new'), episode('other:old', 'test', 'old-group')
+    protected['case']['input_sha256'] = train['case']['input_sha256']
+    assert v.admit([train], manifest(train, protected), EMPTY_HELD)[1]['input_crosses_splits'] == 1
+
+
 def test_split_and_provenance_cannot_be_relabelled():
     row = episode()
     inventory = manifest(copy.deepcopy(row))
@@ -166,6 +179,8 @@ def test_build_is_consumable_by_ordinary_sft_and_masks_context(tmp_path):
     assert result['outputs']['chains.pkl'] == v.sha256_file(args.out / 'chains.pkl')
     semantic = json.loads(next(v.zstd_lines(args.out / 'rows.jsonl.zst')))
     assert semantic['provenance']['program_sha256'] == 'd' * 64
+    assert semantic['function'] == 'unknown'
+    assert result['target_mass']['by_role']['unknown']['weighted_target_tokens'] == 2
     with pytest.raises(ValueError, match='already exists'):
         v.build(args, Renderer())
 
@@ -279,3 +294,30 @@ def test_collection_binds_each_episode_source_teacher_and_suite(tmp_path, field,
     args.manifest.write_text(json.dumps(collection))
     with pytest.raises(ValueError, match=f'episode {field} identity does not match'):
         v.load_collections(args)
+
+
+def test_actual_supervised_mass_distinguishes_root_and_child_functions(tmp_path):
+    args = build_inputs(tmp_path)
+    row = json.loads(args.episodes.read_text())
+    child = copy.deepcopy(row['turns'][0])
+    child['invocation_id'] = 'child'
+    child['parent_call_id'] = 'root'
+    row['turns'].append(child)
+    row['replay']['request_hashes'].append(v.request_hash(child))
+    row['evaluation'] = {'traces': [
+        {'callId': 'root', 'name': 'briefLog', 'definitionId': 'root-definition', 'parentCallId': None},
+        {'callId': 'child', 'name': 'classify', 'definitionId': 'child-definition', 'parentCallId': 'root'}]}
+    args.episodes.write_text(json.dumps(row) + '\n')
+    collection = json.loads(args.manifest.read_text())
+    collection['episodes']['sha256'] = v.sha256_file(args.episodes)
+    args.manifest.write_text(json.dumps(collection))
+    result = v.build(args, Renderer())
+    roles = result['target_mass']['by_role']
+    assert roles['root'] == roles['child'] == {'calls': 1, 'target_tokens': 3, 'weighted_target_tokens': 2}
+    assert roles['unknown']['calls'] == 0
+    functions = result['target_mass']['by_suite_function']
+    assert {(item['function'], item['role']) for item in functions} == {('briefLog', 'root'), ('classify', 'child')}
+    rows = [json.loads(line) for line in v.zstd_lines(args.out / 'rows.jsonl.zst')]
+    assert rows[1]['function'] == 'classify'
+    assert rows[1]['definition_id'] == 'child-definition'
+    assert rows[1]['parent_invocation'] == 'root'

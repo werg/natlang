@@ -79,6 +79,9 @@ recipe decision, not a change to an in-flight learner.
 Admission excludes every nontraining split, training groups shared with protected
 splits, identical inputs crossing splits and held-v3/v2 ids/source groups/source
 ids. Exact duplicate demonstrations and excessive attempts per case are removed.
+Identical-input protection uses the stable template/suite source namespace across
+suite build hashes, so a rebuild and renamed group cannot move a protected input
+into training.
 Malformed provenance, mutated inputs, missing split inventory or changed episode
 files fail the build. Calls are admitted whole: an oversized call fails explicitly
 instead of being truncated or silently dropping part of a successful trajectory.
@@ -117,6 +120,14 @@ observation and harness message is zero-weight context. An empty think block
 inserted by the LFM3 template for a teacher with no visible reasoning is also
 zero-weight, using the existing `sft_sources.reasoning_free_context` mechanism.
 Teacher probabilities are neither required nor fabricated for SFT.
+
+`build.json.target_mass` reports calls, target tokens and weighted target tokens
+by suite/function/root-or-child and totals for root, child and unknown calls.
+Function names, definition ids and parent invocation ids come from the actual
+evaluation traces, and are retained in semantic rows. Missing traces are labelled
+unknown; the report never guesses that a call is a root. This census measures the
+actual trained mass of forwarding wrappers versus semantic child calls without
+introducing any new weighting.
 
 Targeted verification: `tests/neuralese/test_vibestudio_sft.py` checks outcome and
 replay admission, source-group and identical-input split closure, held lineage,

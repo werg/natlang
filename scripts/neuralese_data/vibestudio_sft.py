@@ -68,6 +68,16 @@ def case_key(case):
     return suite['id'], suite['hash'], case['id']
 
 
+def input_key(case):
+    # A new suite build or renamed case/group does not create a new held world.
+    # Preserve the source namespace (template + stable suite id) across hashes.
+    suffix = ':' + case['id']
+    namespaces = tuple(sorted({value[:-len(suffix)] for value in case['source_ids'] if value.endswith(suffix)}))
+    if not namespaces:
+        raise ValueError('case source ids must bind a stable namespace and the complete case id')
+    return namespaces, case['input_sha256']
+
+
 def inventory(manifest):
     if manifest.get('schema') != MANIFEST_SCHEMA:
         raise ValueError(f'expected {MANIFEST_SCHEMA}')
@@ -90,7 +100,7 @@ def inventory(manifest):
         known[key] = case
         for group in case['source_groups']:
             groups[group].add(case['split'])
-        inputs[(key[:2], case['input_sha256'])].add(case['split'])
+        inputs[input_key(case)].add(case['split'])
     contaminated = {group for group, splits in groups.items() if len(splits) > 1}
     duplicate_inputs = {key for key, splits in inputs.items() if len(splits) > 1}
     return known, contaminated, duplicate_inputs
@@ -134,7 +144,7 @@ def episode_reason(episode, cases, contaminated, duplicate_inputs, held):
         return 'protected_split'
     if set(episode['source_groups']) & contaminated:
         return 'source_group_crosses_splits'
-    if (key[:2], case['input_sha256']) in duplicate_inputs:
+    if input_key(expected) in duplicate_inputs:
         return 'input_crosses_splits'
     if any(held_hit(task_id, episode['source_ids'], episode['source_groups'], held)
            for task_id in [case['id'], *episode['source_ids']]):
@@ -258,6 +268,40 @@ def load_collections(args):
     return episodes, {'schema': MANIFEST_SCHEMA, 'cases': list(inventories.values())}, bindings
 
 
+def invocation_metadata(episode):
+    """Name calls only from actual execution traces, with explicit unknowns."""
+    traces = (episode.get('evaluation') or {}).get('traces') or []
+    known = {}
+    for trace in traces:
+        call_id = trace.get('callId')
+        if not isinstance(call_id, str) or not call_id:
+            continue
+        metadata = {'function': trace.get('name') or 'unknown',
+                    'definition_id': trace.get('definitionId') or None,
+                    'parent_invocation': trace.get('parentCallId'),
+                    'invocation_role': ('unknown' if 'parentCallId' not in trace else
+                                        'root' if trace['parentCallId'] is None else 'child')}
+        if call_id in known and metadata != known[call_id]:
+            raise ValueError(f'conflicting invocation trace identities: {call_id}')
+        known[call_id] = metadata
+    return known
+
+
+def target_mass(rows):
+    """Actual supervised mass after rendering/masking, without changing weights."""
+    by_function = collections.defaultdict(collections.Counter)
+    by_role = {role: collections.Counter(calls=0, target_tokens=0, weighted_target_tokens=0)
+               for role in ('root', 'child', 'unknown')}
+    for row in rows:
+        counts = {'calls': 1, 'target_tokens': row['target_tokens'],
+                  'weighted_target_tokens': row['target_tokens'] - row['loss_from']}
+        by_function[(row['family'], row['function'], row['invocation_role'])].update(counts)
+        by_role[row['invocation_role']].update(counts)
+    return {'by_suite_function': [{'suite': suite, 'function': function, 'role': role, **counts}
+                                   for (suite, function, role), counts in sorted(by_function.items())],
+            'by_role': {role: dict(counts) for role, counts in by_role.items()}}
+
+
 def build(args, renderer=None):
     import numpy as np
     from exp0_sft import MAX_LEN, chains_of
@@ -288,7 +332,11 @@ def build(args, renderer=None):
     try:
         for episode in accepted:
             token_rows, semantic_rows = [], []
+            invocations = invocation_metadata(episode)
             for index, turn in enumerate(episode['turns']):
+                metadata = invocations.get(turn['invocation_id'],
+                                          {'function': 'unknown', 'definition_id': None,
+                                           'parent_invocation': None, 'invocation_role': 'unknown'})
                 prompt, target = renderer.render(turn['messages'], turn['tools'], turn['target'])
                 if not target or len(prompt) + len(target) > MAX_LEN:
                     raise ValueError(f'{episode["id"]}: a complete call cannot fit the learner; no silent truncation')
@@ -305,6 +353,7 @@ def build(args, renderer=None):
                                       'task_id': episode['source_ids'][0], 'family': episode['suite']['id'],
                                       'teacher': episode['teacher'], 'call': index,
                                       'invocation': turn['invocation_id'], 'messages': turn['messages'],
+                                      **metadata,
                                       'tools': turn['tools'], 'target': turn['target'],
                                       'prompt_tokens': len(prompt), 'target_tokens': len(target), 'loss_from': context,
                                       'source_ids': episode['source_ids'], 'source_groups': episode['source_groups'],
@@ -331,6 +380,7 @@ def build(args, renderer=None):
                   'forward_tokens': sum(len(c['ids']) for c in chains),
                   'target_tokens': sum(r['target_tokens'] for r in rows),
                   'weighted_target_tokens': sum(r['target_tokens'] - r['loss_from'] for r in rows),
+                  'target_mass': target_mass(rows),
                   'outputs': {name: sha256_file(out / name) for name in ('rows.jsonl.zst', 'chains.pkl')}}
         (out / 'build.json').write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n')
         return report
