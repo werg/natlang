@@ -14,7 +14,7 @@ from natlang_neuralese.common.hashing import sha256_file_hex_cached
 from natlang_neuralese.serve import load_native_engine
 from natlang_neuralese.serve.http import serve
 
-# n-gram speculative chain length (--sglang-spec-draft): plans/neuralese/SPECULATIVE_DECODING_20261117.md bench.
+# n-gram speculative chain length (--sglang-spec-draft; the fork's NATLANG_FORK.md, sglang_bench speculative).
 SPEC_DRAFT = 4
 
 
