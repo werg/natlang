@@ -8,6 +8,7 @@ import threading
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts/neuralese_data"))
@@ -226,3 +227,11 @@ def test_engine_side_requests_accept_the_hint_writer():
     assert _request_parts(request)[1] == 'import'
     with pytest.raises(ValueError):
         _request_parts({**request, 'writer': {'function': 'somethingElse', 'sha256': 'h'}})
+
+
+def test_teacher_rho_summary_reads_the_student_form_ratio():
+    import math
+    assert grpo.teacher_rho_summary([], 2.) is None
+    summary = grpo.teacher_rho_summary([np.array([math.log(.01), 0., math.log(3.)])], 2.)
+    assert summary['tokens'] == 3 and summary['rho_below_0.1'] == pytest.approx(1 / 3, abs=1e-3)
+    assert summary['rho_capped'] == pytest.approx(1 / 3, abs=1e-3) and summary['log_rho_p50'] == 0.

@@ -1383,6 +1383,19 @@ def decision_tensors(batch, device):
     return as_long(ids), lengths, as_long(positions), as_long(targets), as_long(owner), counts, imports, sources
 
 
+def teacher_rho_summary(parts, cap):
+    """Distribution of rho over the step's teacher tokens in student form (JOLT+): how much of the guided run the unguided
+    policy finds plausible. None without teacher tokens."""
+    if not parts:
+        return None
+    log_rho = np.concatenate(parts)
+    q = lambda p: round(float(np.quantile(log_rho, p)), 4)
+    return {'tokens': int(log_rho.size), 'log_rho_p01': q(.01), 'log_rho_p10': q(.1), 'log_rho_p50': q(.5),
+            'log_rho_p90': q(.9), 'log_rho_p99': q(.99), 'rho_mean': round(float(np.exp(np.minimum(log_rho, 20)).mean()), 4),
+            'rho_below_0.1': round(float((log_rho < math.log(.1)).mean()), 4),
+            'rho_capped': round(float((log_rho > math.log(cap)).mean()), 4)}
+
+
 def group_advantages(rewards):
     mean = sum(rewards) / len(rewards)
     std = math.sqrt(sum((r - mean) ** 2 for r in rewards) / len(rewards))
@@ -2270,6 +2283,7 @@ def train(args):
                 for chain in kept:
                     chain['advantage'] = advantage
                     chain['episode'] = key
+                    chain['role'] = episode.get('role', 'student')
                     chains.append(chain)
                 for d in episode['decisions']:
                     # every option is scored as its own copy of the prompt, so a decision is one forward of K prompts:
@@ -2343,6 +2357,7 @@ def train(args):
             phase_totals['collect_tokens'] += learn_tokens0 - phase_mark['tokens']
         sums = collections.Counter()
         rho_pre_max, rho_post_max, forward_tokens = 0., 0., 0
+        teacher_log_rho = []   # per-chain arrays of the teacher tokens' log rho (``teacher_rho_summary``)
         rng = random.Random(args.seed + step)
         rng.shuffle(chains)
         # Shared prefixes (the system prompt across groups, a group's opening prompt, an episode's earlier calls) are
@@ -2483,6 +2498,8 @@ def train(args):
                 kl_stats(sums, d)
             (loss_terms.sum() * token_scale).backward()
             sums['rho'] += rho.sum().item()
+            if chain.get('role') == 'teacher':   # JOLT+ student form: pi(a|s) / mu(a|s, guidance) of the teacher's tokens
+                teacher_log_rho.append(log_rho.float().cpu().numpy())
             sums['rho_capped'] += (rho > args.rho_cap).sum().item()
             sums['abs_log_rho'] += log_rho.abs().sum().item()
             if chain.get('imports'):    # learner-actor agreement on calls that read imported Neuralese state
@@ -2668,6 +2685,7 @@ def train(args):
             decision_rho_mean=round(sums['decision_rho'] / n_dec, 4), decision_abs_log_rho_mean=round(sums['decision_abs_log_rho'] / n_dec, 5),
             decision_mean_logpi=round(sums['decision_logpi'] / n_dec, 4),
             decision_abs_dscore_mean=round(sums['decision_abs_dscore'] / n_dec, 4),
+            teacher_rho=teacher_rho_summary(teacher_log_rho, args.rho_cap),
             rho_mean=round(sums['rho'] / max(1, loss_tokens), 4), rho_pre_cap_max=round(rho_pre_max, 3),
             rho_post_cap_max=round(rho_post_max, 3), rho_capped_fraction=round(sums['rho_capped'] / max(1, loss_tokens), 5),
             abs_log_rho_mean=round(sums['abs_log_rho'] / max(1, loss_tokens), 5),
