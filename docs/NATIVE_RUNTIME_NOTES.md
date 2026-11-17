@@ -575,3 +575,8 @@ suite. Combining the override with an adaptation candidate is refused. Capture r
 the owned evaluation; use a generation-only teacher driver to exercise the ordinary finite-result tool loop. Default
 evaluation and all serving protocols are unchanged. Captured turns are evidence, not training admission: retain root
 score/gates and per-call outcomes, replay the actual actions, and preserve source-family split custody before training.
+
+Fixture asset paths use `FixtureContext.programRoot`, populated by suite preparation from the authored program root
+and passed through preflight, evaluation and `improvement/suite-execution.ts`. This is fixture-only filesystem plumbing:
+the model receives no new binding or authority. Workers import emitted suite JavaScript from `.natlang/`; the original
+asset directory remains explicit, without copying assets or rewriting `import.meta.url`.

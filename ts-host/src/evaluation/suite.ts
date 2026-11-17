@@ -62,7 +62,7 @@ export async function prepareEvaluationSuite(suite: EvaluationSuite, moduleURL: 
     cases, selected, identity: suite.executorIdentity, policy: suite.policy ?? { codeEdits: 'deny', settings: {} },
     fixture: suite.fixture.create.toString(), score: suite.score.toString(), feedback: suite.feedback?.toString() ?? null,
     gates: suite.requiredGates ?? [], selection: suite.selection ?? null, services: suite.services ?? null, systemPrompt: suite.systemPrompt ?? null });
-  return { suite, moduleURL, cases, program, suiteHash, components: selected.sort(), compiledEntry: pathToFileURL(entry).href };
+  return { suite, moduleURL, cases, program, programRoot: root, suiteHash, components: selected.sort(), compiledEntry: pathToFileURL(entry).href };
 }
 export async function loadEvaluationSuite(path: string): Promise<PreparedSuite> {
   const sourcePath = resolve(path);

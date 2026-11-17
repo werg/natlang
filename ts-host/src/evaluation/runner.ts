@@ -16,7 +16,7 @@ export class EvaluationInfrastructureError extends Error {
 export async function preflightEvaluation(prepared: PreparedSuite): Promise<{ cases: number; suiteHash: string }> {
   const gateway = new UsageGateway({ maxRollouts: prepared.cases.length, maxProposals: 0, maxModelCalls: 0 });
   for (const testCase of prepared.cases) {
-    await runWorker({ moduleURL: prepared.moduleURL, compiledEntry: prepared.compiledEntry, program: prepared.program,
+    await runWorker({ moduleURL: prepared.moduleURL, compiledEntry: prepared.compiledEntry, program: prepared.program, programRoot: prepared.programRoot,
       testCase, artifact: null, seed: 0, replicate: 0, id: 'preflight:' + testCase.id, preflight: true },
     () => { throw new Error('paid inference is unavailable during fixture preflight'); }, gateway);
   }
@@ -47,7 +47,7 @@ export async function evaluate(prepared: PreparedSuite, options: EvaluateOptions
     let attempt = 0;
     while (true) {
       gateway.reserve('rollouts', 1, options.signal);
-      try { results.push(await runWorker({ moduleURL: prepared.moduleURL, compiledEntry: prepared.compiledEntry, program: prepared.program,
+      try { results.push(await runWorker({ moduleURL: prepared.moduleURL, compiledEntry: prepared.compiledEntry, program: prepared.program, programRoot: prepared.programRoot,
         testCase, artifact, seed, replicate: options.replicate ?? 0, id,
         ...(options.capture ? { capture: true } : {}), ...(options.executorIdentity ? { executorIdentity: options.executorIdentity } : {}) },
       options.driver, gateway, options.signal, options.timeoutMs, options.judge)); break; }

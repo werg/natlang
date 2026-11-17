@@ -79,6 +79,25 @@ test('suite split leakage and malformed independent metrics are rejected', () =>
   assert.throws(() => validateMetrics({ quality: 1, metrics: { latency: Infinity } }), /finite/);
 });
 
+test('fixture assets resolve from the authored program root through preflight and emitted worker execution', async () => {
+  const fixture = fixtureSuite();
+  writeFileSync(join(fixture.root, 'fixture.json'), JSON.stringify({ train: 'urgent help', valid: 'ordinary task', test: 'held-out text' }));
+  const emitted = join(fixture.root, '.natlang', 'relocated-suite');
+  mkdirSync(emitted, { recursive: true });
+  const relocatedSuite = join(emitted, 'suite.mjs');
+  writeFileSync(relocatedSuite, `import { readFileSync } from 'node:fs'; import { join } from 'node:path';\n` +
+    readFileSync(fixture.path, 'utf8')
+      .replace("program: { root: '.'", `program: { root: ${JSON.stringify(fixture.root)}`)
+      .replace('const app = await context.loadFreshProgram();',
+        'if(context.programRoot.includes(".natlang"))throw new Error("fixture root is an emitted directory"); const inputs=JSON.parse(readFileSync(join(context.programRoot,"fixture.json"),"utf8")); const app = await context.loadFreshProgram();')
+      .replace('app.run(testCase.input)', 'app.run(inputs[testCase.id])'));
+  const prepared = await loadEvaluationSuite(relocatedSuite);
+  assert.equal(prepared.programRoot, fixture.root);
+  assert.deepEqual(await preflightEvaluation(prepared), { cases: 3, suiteHash: prepared.suiteHash });
+  const batch = await evaluate(prepared, { split: 'validation', driver: scriptedModel(() => 'return value.split(" ")[0]').driver });
+  assert.equal(batch.quality, 1);
+});
+
 test('evaluation imports application state afresh, scores real runtime execution, and observes coverage/unknown tokens', async () => {
   const fixture = fixtureSuite();
   const suite = await loadEvaluationSuite(fixture.path);

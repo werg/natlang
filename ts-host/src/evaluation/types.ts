@@ -22,6 +22,8 @@ export type BudgetLimits = { maxRollouts: number; maxProposals: number; maxModel
   pricing?: { inputPerMillion: number; outputPerMillion: number };
   requestBounds?: { maxInputTokens: number; maxOutputTokens: number } };
 export type FixtureContext = { runtime: NatlangRuntime; program: ProgramDescriptor; seed: number; signal: AbortSignal;
+  /** Original authored program directory; fixture assets live here, not beside emitted JavaScript. */
+  readonly programRoot: string;
   observations: import('./fixtures.js').FixtureObservationStore;
   judge(request: ModelTurnRequest): Promise<ModelTurn>;
   loadFreshProgram(): Promise<Record<string, unknown>> };
@@ -42,7 +44,7 @@ export type EvaluationSuite<I = unknown, E = unknown> = {
   selection?: { tieBreak?: 'baseline' | 'modelCalls' | 'latency' | 'cost'; maxMeanLatencyMs?: number; maxModelCalls?: number; maxCost?: number };
 };
 export type PreparedSuite = { suite: EvaluationSuite; moduleURL: string; cases: readonly EvaluationCase[];
-  program: ProgramDescriptor; suiteHash: string; components: readonly string[]; compiledEntry: string };
+  program: ProgramDescriptor; readonly programRoot: string; suiteHash: string; components: readonly string[]; compiledEntry: string };
 export type EvaluateOptions = { split?: Split; caseIds?: readonly string[]; candidate?: Candidate; seed?: number; replicate?: number;
   driver: ModelDriver; signal?: AbortSignal; timeoutMs?: number; retries?: number; runId?: string;
   /** Retain exact generated executor requests/replies for verified teacher collection. */

@@ -26,7 +26,7 @@ export function suiteExecution(prepared:PreparedSuite,directory:string,driver:Mo
       if(!result.ok)throw new Error(formatDiagnostics(result.diagnostics));
       built={program:result.manifest.adaptation!,compiledEntry:pathToFileURL(join(outDir,prepared.suite.program.entry.replace(/\.m?ts$/,'.js'))).href};builds.set(folder.digest,built);
     }
-    const result=await runWorker({moduleURL:prepared.moduleURL,compiledEntry:built.compiledEntry,program:built.program,testCase,artifact:null,seed,replicate:0,
+    const result=await runWorker({moduleURL:prepared.moduleURL,compiledEntry:built.compiledEntry,program:built.program,programRoot:prepared.programRoot,testCase,artifact:null,seed,replicate:0,
       id:fingerprint({source:folder.digest,suite:prepared.suiteHash,case:row.id,seed})},driver,gateway,options.signal,options.timeoutMs,options.judge);
     if(result.status!=='scored' || result.quality===null)throw new Error('fixture execution did not produce an independent score');
     return {value:result.outcome.value,...(result.outcome.kind==='threw'?{error:result.outcome.error?.message}:{}),score:{quality:result.quality,gates:result.gates}};

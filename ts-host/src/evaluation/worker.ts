@@ -7,6 +7,7 @@ import type { EvaluationCase, EvaluationResult } from './types.js';
 import { UsageGateway, decisionDeclined, decisionUsage, type ModelRole } from './usage.js';
 export type WorkerInput = { moduleURL: string; compiledEntry: string; testCase: EvaluationCase; program: ProgramDescriptor;
   artifact: AdaptationArtifact | null; seed: number; replicate: number; id: string; preflight?: boolean;
+  programRoot?: string;
   capture?: boolean; executorIdentity?: ExecutorIdentity;
   /** Set by `runWorker`: the executor driver scores decision readouts, so the worker's driver does too (model/driver.ts `remoteDriver`). */
   decisions?: boolean;

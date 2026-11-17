@@ -1,4 +1,6 @@
 import { parentPort, workerData } from 'node:worker_threads';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createNatlangRuntime, NatlangCallError } from '../index.js';
 import { bindAdaptation } from '../adaptation/compatibility.js';
 import { validateMetrics } from './metrics.js';
@@ -54,7 +56,9 @@ async function run(): Promise<void> {
   let result: unknown; const start = Date.now();
   const observations = new FixtureObservationStore();
   try {
-    fixture = await suite.fixture.create(input.testCase, { runtime, program: input.program, seed: input.seed, signal: abort.signal, observations,
+    fixture = await suite.fixture.create(input.testCase, { runtime, program: input.program,
+      programRoot: input.programRoot ?? resolve(dirname(fileURLToPath(input.moduleURL)), suite.program.root),
+      seed: input.seed, signal: abort.signal, observations,
       judge: request => requestModel('judge', { kind: 'turn', request }) as Promise<ModelTurn>,
       loadFreshProgram: () => import(input.compiledEntry) });
     if (input.preflight) {
