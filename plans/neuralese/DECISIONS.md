@@ -2801,3 +2801,20 @@ capture of `native.init-body`), recorded as a `block_write` with `source_capture
 lowers. compact-value and compact-params are `view` at the runtime's sites (one summarizer family, 2026-10-09);
 compact-history is the model's own `compact_history` note captured in context; the arm is the model-facing variant
 `learned-compaction` (enters the held series key). The v1 slot smoke's null (actual ≈ shuffled): two independent investigators found no implementation bug in capture, import or ablation. The cause is v1's design: the slots held one constant phrase, about 95% of the slot state is row-invariant (CPU probe), and the design is already gone. Cases (about 118k train, text port records) render byte-identically today but were never filtered against held-v3; the row lowering filters them. Next: cases -> exp0_sft rows, the v3 write on every engine, ablation, then SFT and GRPO on the pass-through.
+
+
+**2026-11-17, Vibestudio teacher collection bridge (owner requested implementation).**
+The initial collection inventory is 18 executable skill suites / 38 `.nl` files / 450 cases (186 train, 128 validation,
+136 test). Existing small-executor adoption gates do not block teacher generation. A hosted Luna teacher executes the
+actual natlang calls; collection retains full per-call requests/replies, root/child identity and outcome evidence.
+Admission requires full suite quality, every gate, exact-request fixture replay, nonempty executor turns, clean source
+pins and a separate accepted semantic review. Judge calls are not training targets; native RL probabilities are not
+fabricated. Initial admission excludes failed actions/children even if a root recovered. The shared existing SFT
+renderer/think-prefix mask/prefix chains are reused by `vibestudio_sft.py`; immutable raw snapshots, held closure,
+full protected split inventories, deduplication and corpus publication are enforced. No live learner is modified.
+Nine suite roots formerly bypassed their `.nl` wrapper. Corrected them; research/memory now receive explicit snapshot
+times. Fixture asset access is bound to the original source root instead of the emitted module directory. Inventory,
+limitations and commands: `~/vibestudio/docs/natlang-teacher-coverage.md` and `VIBESTUDIO_SFT_20261117.md`.
+Validation and live pilot results will be recorded after completion; this entry does not assert collection readiness
+or learner exposure. Existing authored/previously inspected test cases remain protected regression sets; unseen
+transfer claims need new source-group-separated scenarios. Broad catalog-app conversion remains separate work.

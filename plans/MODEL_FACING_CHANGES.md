@@ -2537,3 +2537,15 @@ of silently marking their outcomes unverified (`tune-pipeline.test.mjs`).
 -35), so the writer answers in plain text and the host writes that text as the native state its consumer imports. It
 is run only inside training collections (JOLT+ teacher attempts with a verified run, `grpo.py
 --hindsight-trajectories`); it has no live sample yet, and its first teacher attempts are its first measurement.
+
+
+### 2026-11-17: Vibestudio teacher fixture root execution and explicit observation times
+
+The teacher campaign executes the actual named `.nl` roots instead of bypassing them through crisp callable children
+in nine skill suites (claims, documentation, VCS summaries, research, GitHub troubleshooting, memory, local-model
+readiness, server logs and system-test triage). Helper-specific recovery/proposal cases retain their distinct entry.
+Research citation time and memory staleness now consume one host-selected snapshot timestamp, fixed explicitly in
+fixtures, instead of reading the live clock inside a child. Inventory: roots, helpers, public wrapper defaults,
+suite inputs, generated `.d.nl.ts`, skill docs and decomposition notes in the Base and Personal templates.
+The public wrappers retain current-time defaults. This removes nonreplayable fixture behavior; source identities
+and outcomes are retained with each teacher episode. No serving protocol or engine sampling change.
