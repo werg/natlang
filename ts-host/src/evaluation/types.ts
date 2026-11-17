@@ -6,11 +6,15 @@ export type EvaluationCase<I = unknown, E = unknown> = { id: string; group: stri
 export type MetricResult = { quality: number; gates?: Record<string, boolean>; metrics?: Record<string, number>; feedback?: string;
   judge?: 'accepted' | 'rejected' | 'uncertain' | 'unavailable' };
 export type Usage = { modelCalls: number; inputTokens: number | null; outputTokens: number | null; cost: number | null };
+/** A real executor exchange, captured before scoring; judge exchanges are never training targets. */
+export type EvaluationModelTurn = { invocation_id: string | null; parent_call_id: string | null; turn: number;
+  request: ModelTurnRequest; reply: ModelTurn };
 export type EvaluationResult = { id: string; caseId: string; split: Split; status: 'scored' | 'candidate-invalid' | 'infrastructure-error' | 'cancelled';
   quality: number | null; gates: Record<string, boolean>; metrics: Record<string, number>; feedback: string;
   outcome: { kind: 'returned' | 'threw'; value?: unknown; error?: { name: string; message: string; outcome?: string } };
   observation?: unknown; observations?: Readonly<Record<string, unknown>>;
-  coverage: readonly string[]; usage: Usage; latencyMs: number; traces: readonly InvocationTrace[] };
+  coverage: readonly string[]; usage: Usage; latencyMs: number; traces: readonly InvocationTrace[];
+  modelTurns?: readonly EvaluationModelTurn[] };
 export type EvaluationBatch = { results: readonly EvaluationResult[]; quality: number | null; gatesPassed: boolean; digest: string };
 export type BudgetLimits = { maxRollouts: number; maxProposals: number; maxModelCalls: number;
   maxInputTokens?: number; maxOutputTokens?: number; maxElapsedMs?: number; maxCost?: number;
@@ -41,5 +45,9 @@ export type PreparedSuite = { suite: EvaluationSuite; moduleURL: string; cases: 
   program: ProgramDescriptor; suiteHash: string; components: readonly string[]; compiledEntry: string };
 export type EvaluateOptions = { split?: Split; caseIds?: readonly string[]; candidate?: Candidate; seed?: number; replicate?: number;
   driver: ModelDriver; signal?: AbortSignal; timeoutMs?: number; retries?: number; runId?: string;
+  /** Retain exact generated executor requests/replies for verified teacher collection. */
+  capture?: boolean;
+  /** Actual executor of this measurement, e.g. a teacher running the student's authored program. */
+  executorIdentity?: ExecutorIdentity;
   judge?: ModelDriver;
   gateway?: import('./usage.js').UsageGateway };

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -112,6 +112,68 @@ test('a driver that scores decision readouts answers them for the evaluation wor
   await gateway.score(driver.decide, { messages: [], options: ['"a"', '"b"'] });
   assert.equal(gateway.ledger.usage.modelCalls, 1);
   await assert.rejects(gateway.score(driver.decide, { messages: [], options: ['"a"', '"b"'] }), error => error instanceof BudgetExhausted && error.dimension === 'modelCalls');
+});
+
+test('teacher capture preserves exact executor exchanges and actual identity without changing the suite identity', async () => {
+  const prepared = await loadEvaluationSuite(fixtureSuite().path);
+  const requests = [], replies = [];
+  const scripted = scriptedModel(() => 'return value.split(" ")[0]');
+  const driver = async request => {
+    requests.push(structuredClone(request));
+    const reply = await scripted.driver(request);
+    replies.push(structuredClone(reply));
+    return reply;
+  };
+  const executorIdentity = { id: 'teacher', configuration: { model: 'scripted-teacher' } };
+  const batch = await evaluate(prepared, { split: 'validation', capture: true, executorIdentity, driver });
+  assert.equal(batch.quality, 1);
+  const result = batch.results[0];
+  assert.equal(prepared.suite.executorIdentity.id, 'scripted');
+  assert.deepEqual(result.modelTurns.map(turn => turn.request), requests);
+  assert.deepEqual(result.modelTurns.map(turn => turn.reply), replies);
+  assert.deepEqual(result.modelTurns.map(turn => turn.turn), [1, 2]);
+  assert.ok(result.modelTurns.every(turn => turn.invocation_id === result.traces[0].callId && turn.parent_call_id === null));
+  const ordinary = await evaluate(prepared, { split: 'validation', driver });
+  assert.equal(ordinary.results[0].modelTurns, undefined);
+  assert.notEqual(result.id, ordinary.results[0].id);
+  await assert.rejects(evaluate(prepared, { executorIdentity, candidate: {}, driver }), /override cannot be combined/);
+});
+
+test('teacher capture refuses scored decisions instead of silently omitting training targets', async () => {
+  const fixture = fixtureSuite();
+  writeFileSync(join(fixture.root, 'classify.nl'), '---\nreadout: decision\nargs: { value: string }\nreturns: \'"ordinary" | "urgent"\'\n---\nAnswer urgent when value asks for help, otherwise ordinary.\n');
+  const prepared = await loadEvaluationSuite(fixture.path);
+  const driver = Object.assign(() => { throw new Error('unexpected generated turn'); }, {
+    decide: async request => ({ log_probs: request.options.map(() => -1) }),
+  });
+  await assert.rejects(evaluate(prepared, { capture: true, driver }), /teacher capture needs generated executor turns/);
+});
+
+test('teacher capture binds nested invocations and excludes the independent judge', async () => {
+  const fixture = fixtureSuite();
+  mkdirSync(join(fixture.root, 'classify'));
+  writeFileSync(join(fixture.root, 'classify.nl'), '---\nargs: { value: string }\nreturns: string\n---\nCall child with value and return its result.\n');
+  writeFileSync(join(fixture.root, 'classify/child.nl'), '---\nargs: { value: string }\nreturns: string\n---\nReturn the first word of value.\n');
+  writeFileSync(fixture.path, readFileSync(fixture.path, 'utf8').replace(
+    'execute: () => context.runtime.run(() => app.run(testCase.input)),',
+    'execute: async () => { await context.judge({messages: [], tools: [], seed: null, max_tokens: null}); return context.runtime.run(() => app.run(testCase.input)); },'));
+  const prepared = await loadEvaluationSuite(fixture.path);
+  const model = scriptedModel(opening => opening.includes('Call child with value')
+    ? 'return await child(value)' : 'return value.split(" ")[0]');
+  let judged = 0;
+  const batch = await evaluate(prepared, { capture: true, driver: model.driver,
+    judge: async () => { judged++; return { text: 'independent judge reply' }; } });
+  assert.equal(batch.quality, 1);
+  assert.equal(judged, 1);
+  const result = batch.results[0];
+  assert.equal(result.modelTurns.length, 4);
+  for (const trace of result.traces) {
+    const turns = result.modelTurns.filter(turn => turn.invocation_id === trace.callId);
+    assert.deepEqual(turns.map(turn => turn.turn), [1, 2]);
+    assert.ok(turns.every(turn => turn.parent_call_id === trace.parentCallId));
+  }
+  assert.ok(result.traces.some(trace => trace.parentCallId !== null));
+  assert.ok(result.modelTurns.every(turn => turn.reply.text !== 'independent judge reply'));
 });
 
 test('the CLI evaluation driver of a model session scores decision readouts in the evaluation', async () => {

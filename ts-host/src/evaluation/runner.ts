@@ -33,6 +33,8 @@ export function candidateArtifact(prepared: PreparedSuite, candidate: Candidate,
   artifact.digest = artifactDigest(artifact); return artifact;
 }
 export async function evaluate(prepared: PreparedSuite, options: EvaluateOptions): Promise<EvaluationBatch> {
+  if (options.executorIdentity && options.candidate)
+    throw new Error('executorIdentity override cannot be combined with an adaptation candidate');
   const cases = prepared.cases.filter(testCase => options.caseIds ? options.caseIds.includes(testCase.id) : testCase.split === (options.split ?? 'validation'));
   if (!cases.length || options.caseIds?.some(id => !cases.some(testCase => testCase.id === id))) throw new Error('requested evaluation cases are missing');
   const candidate = options.candidate;
@@ -40,12 +42,15 @@ export async function evaluate(prepared: PreparedSuite, options: EvaluateOptions
   const gateway = options.gateway ?? new UsageGateway(prepared.suite.budget); const results: EvaluationResult[] = [];
   for (const testCase of cases.sort((a, b) => a.id.localeCompare(b.id))) {
     const seed = parseInt(fingerprint({ seed: options.seed ?? 0, case: testCase.id, replicate: options.replicate ?? 0 }).slice(0, 8), 16) >>> 0;
-    const id = fingerprint({ suite: prepared.suiteHash, case: testCase.id, candidate: candidate ?? null, seed, replicate: options.replicate ?? 0, policy: prepared.suite.policy ?? null });
+    const id = fingerprint({ suite: prepared.suiteHash, case: testCase.id, candidate: candidate ?? null, seed, replicate: options.replicate ?? 0, policy: prepared.suite.policy ?? null,
+      ...(options.executorIdentity ? { executorIdentity: options.executorIdentity } : {}) });
     let attempt = 0;
     while (true) {
       gateway.reserve('rollouts', 1, options.signal);
       try { results.push(await runWorker({ moduleURL: prepared.moduleURL, compiledEntry: prepared.compiledEntry, program: prepared.program,
-        testCase, artifact, seed, replicate: options.replicate ?? 0, id }, options.driver, gateway, options.signal, options.timeoutMs, options.judge)); break; }
+        testCase, artifact, seed, replicate: options.replicate ?? 0, id,
+        ...(options.capture ? { capture: true } : {}), ...(options.executorIdentity ? { executorIdentity: options.executorIdentity } : {}) },
+      options.driver, gateway, options.signal, options.timeoutMs, options.judge)); break; }
       catch (error) {
         if (error instanceof BudgetExhausted || options.signal?.aborted) throw error;
         if (attempt++ < (options.retries ?? 0)) continue;

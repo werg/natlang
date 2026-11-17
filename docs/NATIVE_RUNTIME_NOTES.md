@@ -556,3 +556,22 @@ native-state server (`--neuralese-server`); a `writeGuidance returned text witho
 one recorded writer call` fallback means the writer ran outside its consumer (report it as a runtime bug);
 `guidance-writer-missing` means set
 `NATLANG_GUIDANCE_WRITER` to the package directory.
+
+## Evaluation teacher capture
+
+Mechanism inventory (2026-11-17): `evaluation/worker-entry.ts` dispatches executor and independent-judge requests through
+`runtime/driver.ts`'s `DriverCall`/`remoteDriver`; `evaluation/worker.ts` forwards that existing request to the configured
+backend. `tune/collect.ts` already captures the current invocation from `currentFrame().parentCallId` at this boundary.
+`native/model-recording.ts` separately records native graph/gradient receipts and is unchanged: semantic teacher SFT
+capture does not claim a native sampling receipt. Managed llama.cpp, browser wllama, Python native and SGLang keep the
+same serving requests and responses; this addition stores the backend-independent executor exchange inside the Node
+evaluation worker (`runtime/driver.ts:18-29`, `evaluation/worker.ts:33-43`), so it adds no serving protocol feature.
+
+`EvaluateOptions.capture` retains generated executor requests/replies as `EvaluationResult.modelTurns`, with the current
+invocation ID, its completed trace's parent ID and an ordinal within that invocation. Request snapshots are taken before
+dispatch, reply snapshots before independent scoring; judge requests are not targets. `executorIdentity` overrides the
+runtime's executor attribution and evaluation result identity for a teacher measurement without mutating the authored
+suite. Combining the override with an adaptation candidate is refused. Capture refuses a scored decision and cancels
+the owned evaluation; use a generation-only teacher driver to exercise the ordinary finite-result tool loop. Default
+evaluation and all serving protocols are unchanged. Captured turns are evidence, not training admission: retain root
+score/gates and per-call outcomes, replay the actual actions, and preserve source-family split custody before training.
