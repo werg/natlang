@@ -40,8 +40,10 @@ with the owner only what is truly theirs. Waiting for an OK on a technical cours
 
 - **Bounded controlled experiments decide.** One experiment is one collect -> train -> eval cycle of hours, not days.
   It runs on one pinned commit: actor, harness, scorer, learner and evaluator all run that commit, and the SHA is
-  recorded. It changes exactly one thing against its baseline and declares its success and failure criteria before it
-  runs. Paired held-out eval judges it. Record each experiment and its result in `plans/neuralese/DECISIONS.md`. The
+  recorded. This is engineering, not a scientific study (owner 2026-11-17): each run bundles every change likely to
+  move the needle (fixes, data, sampling, LR, start policy, speed) and skips what is unlikely to; attribution is not a
+  goal. It declares its success and failure criteria before it runs. Paired held-out eval against the base judges it;
+  when a bundle regresses, bisect it with branch states and the fast diagnostics below. Record each experiment and its result in `plans/neuralese/DECISIONS.md`. The
   latest entries there are the current state of the work.
 - **Pinning.** `scripts/pin_checkout.py create COMMIT WORK/pin-<c12>` makes a detached worktree with ts-host rebuilt.
   Launch that copy's scripts with the pin as the ledger `--workdir` and `NATLANG_REPO`/`PYTHONPATH` bound to it.
@@ -165,11 +167,10 @@ is the plan this approach came from.
   (`scripts/rl_tasks/measure_repetition.py`, `simulate_selection.py`); never pad scarce behaviours by repetition.
 - **Breadth from more natlang domains** (chat and writing included) rather than anchor KL or broad mixing; forgetting
   general ability outside natlang is acceptable.
-- **Additions enter one at a time with a paired measurement.** Off by default today: Neuralese-declaring task variants
+- **Additions are bundled by expected merit**, not entered one at a time. Off by default today: Neuralese-declaring task variants
   (`--neuralese-variants`), whole-graph Neuralese gradients and use bonus, the JOLT+ teacher and privileged twin,
-  memetic guidance programs, interleaved SFT and QAT. An addition stacked on a baseline that does not improve cannot be
-  measured, so the base loop comes first; the order after that is a judgement call (Neuralese task variants are cheap:
-  they are data).
+  memetic guidance programs, interleaved SFT and QAT. Turn one on in the next run when it is likely to raise held
+  task success (Neuralese task variants are cheap: they are data); leave it off when it is not.
 - **Never upweight a few tokens without per-token evidence**, and check an update's direction against its gradient
   before blaming the objective (a boundary weight of 32 and stale Muon momentum each once dominated updates).
 
