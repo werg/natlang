@@ -37,7 +37,7 @@ async function pinNativeProgramGuidance(store: NeuraleseStore, id: string): Prom
 import { listingViewInstructions, viewNote } from './prompt.js';
 import { pluggable, type PluggableSetting } from '../runtime/pluggable.js';
 import { modelFacing } from '../runtime/model-facing.js';
-import { framedState, OPERATOR_MIN_CHARS, OPERATOR_SPAN_CAPS, viewSiteMessages, type CompactSite } from './operator-frames.js';
+import { framedState, OPERATOR_MIN_CHARS, OPERATOR_REASONING_TOKENS, OPERATOR_SPAN_CAPS, viewSiteMessages, type CompactSite } from './operator-frames.js';
 import { neuraleseRef, type NeuraleseRef } from './neuralese.js';
 import { untrustedBlock, type UntrustedRegistry } from './untrusted.js';
 import { writtenReturnResult } from './pseudo-call.js';
@@ -663,7 +663,8 @@ export class NativeToolAgent {
       messages: viewSiteMessages(site.value, site.instructions), tools: [],
       seed: session.runtime.seedPolicy.mode === 'backend' ? null :
         deriveSeed(session.runtime.seedPolicy.root!, runSeedKey(session.runtime.options), session.lam.attempts, `operator-${index}`, 0),
-      max_tokens: 2 * OPERATOR_SPAN_CAPS[site.operator] };
+      // Reasoning and reply share the actual request allowance; the shared graph reservation below may lower it.
+      max_tokens: OPERATOR_REASONING_TOKENS + OPERATOR_SPAN_CAPS[site.operator] };
     // Only this sampled operator call consumes a graph generation reservation. Capturing its existing reply is
     // deterministic materialization, not another sampled decision or a fabricated native turn.
     const reservation = await this.options.modelBudget?.reserve(request.max_tokens ?? null, session.runtime.signal);
@@ -677,6 +678,7 @@ export class NativeToolAgent {
     reservation?.finish(response.completion_tokens);
     if (reservation?.limit != null && response.completion_tokens !== undefined && response.completion_tokens > reservation.limit)
       throw new Error('operator model response exceeded its graph token reservation');
+
     return this.capturedRef(session, site.operator, request.invocation_id!, capture, request, response);
   }
 

@@ -190,6 +190,9 @@ def episode_turns(task_id, key, turns):
     """natlang.tune-turn/v1 rows of one verified successful episode, and per-turn dispositions."""
     rows, dispositions = [], []
     failed = False
+    # A call's last turn ends that invocation (a nested call's result goes to its caller, not to a later turn of its
+    # own): in a verified exact episode its actions are judged by the episode's outcome, as the root's last turn is.
+    last_of = {turn.get('invocation_id'): index for index, turn in enumerate(turns)}
     for index, turn in enumerate(turns):
         target = turn['target']
         later = [t['messages'] for t in turns[index + 1:]]
@@ -202,7 +205,7 @@ def episode_turns(task_id, key, turns):
             arguments = json.loads(arguments) if isinstance(arguments, str) and arguments else (arguments or {})
             events.append({'toolCallId': call.get('id') or f'call_{len(events)}', 'name': function['name'],
                            'argumentsSha256': canonical_json_sha256_hex(arguments),
-                           'outcome': call_outcome(function['name'], result, final=index == len(turns) - 1)})
+                           'outcome': call_outcome(function['name'], result, final=index == len(turns) - 1 or last_of[turn.get('invocation_id')] == index)})
         outcomes = {e['outcome'] for e in events}
         disposition = 'rejected' if 'rejected' in outcomes else 'unverified' if 'unverified' in outcomes else 'admissible'
         dispositions.append(disposition)
@@ -528,8 +531,7 @@ def main(argv=None):
     p.add_argument('--store-scratch')
     p.add_argument('--rank', type=int, default=16)
     p.add_argument('--targets', nargs='+', choices=('attention', 'conv-projection', 'mlp'),
-                   help='target classes (default: all). The native engine applies an adapter by substituting each '
-                        'target\'s full effective weight (FP32 delta + its gradient), so memory grows with the targets')
+                   help='target classes (default: all; training applies the adapter factored, NATLANG_FACTORED_LORA)')
     p.add_argument('--lr', type=float, default=2e-3)
     p.add_argument('--batch-rows', type=int, default=8)
     p.add_argument('--epochs', type=float)

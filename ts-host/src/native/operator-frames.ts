@@ -43,6 +43,9 @@ export function framedState(operator: CompactSite['operator'] | 'compact-history
 export const OPERATOR_SPAN_CAPS: Record<CompactSite['operator'] | 'compact-history', number> = {
   'compact-value': 512, 'compact-params': 384, 'compact-history': 1024, 'extract': 256 };
 
+/** Reasoning room of an operator call beyond its reply cap (tokens). */
+export const OPERATOR_REASONING_TOKENS = 2048;
+
 /** Values shorter than this keep the text cut only: a structural cut of a small value does not spend an operator call
  * (the case floor, COMPACTION_OPERATOR_CONVERTERS.md §3b). */
 export const OPERATOR_MIN_CHARS = 800;

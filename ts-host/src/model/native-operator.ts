@@ -53,7 +53,7 @@ export function grammarCapture(options: { endpoint: string; headers?: Record<str
     if (!response.ok) throw new Error(`neuralese-native-capture: apply-template failed (${response.status})`);
     return ((await response.json()) as { prompt: string }).prompt;
   };
-  let specials: Promise<{ thinkClose: number; ends: Set<number> }> | undefined;
+  let specials: Promise<{ thinkOpen: number; thinkClose: number; ends: Set<number> }> | undefined;
   const single = (ids: number[], name: string) => {
     if (ids.length !== 1) throw new Error(`neuralese-native-capture: ${name} is not one token on this server`);
     return ids[0]!;
@@ -63,15 +63,18 @@ export function grammarCapture(options: { endpoint: string; headers?: Record<str
       throw new Error('neuralese-native-capture-unavailable: the server declares no native role markers');
     if (!options.store.putNativeState || !options.store.getNativeState)
       throw new Error('neuralese-native-archive-unavailable: captures need a native-capable archive');
-    specials ??= (async () => ({ thinkClose: single(await tokenize('</think>', true), '</think>'),
+    specials ??= (async () => ({ thinkOpen: single(await tokenize('<think>', true), '<think>'),
+      thinkClose: single(await tokenize('</think>', true), '</think>'),
       ends: new Set([single(await tokenize('<|im_end|>', true), '<|im_end|>')]) }))();
-    const { thinkClose, ends } = await specials;
+    const { thinkOpen, thinkClose, ends } = await specials;
     const reply = call.reply?.length ? call.reply :
       [...await tokenize(call.reasoning ?? '', false), thinkClose, ...await tokenize(call.text ?? '', false)];
     const end = reply.findIndex(token => ends.has(token));
     let stop = end < 0 ? reply.length : end;
     let start = reply.slice(0, stop).lastIndexOf(thinkClose) + 1;
     if (call.select !== undefined) [start, stop] = await selectedSpan(reply.slice(0, stop), call.select);
+    else if (!start && call.reply?.length && call.prompt?.at(-1) === thinkOpen)
+      throw new Error('neuralese-native-capture: the reply ended inside its reasoning: no content to capture');
     const span = reply.slice(start, stop);
     if (!span.length || span.some(token => markers.includes(token)))
       throw new Error('neuralese-native-capture: the reply has no content to capture, or carries role markers');

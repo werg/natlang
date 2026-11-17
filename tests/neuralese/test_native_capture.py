@@ -58,3 +58,12 @@ def test_capture_select_takes_the_note_tokens_in_place(tmp_path):
     ids = [t for segment in capture['segments'] for t in segment['token_ids']]
     assert ids[capture['payload_start']:capture['payload_stop']] == [13, 14]
     assert ids[:capture['payload_start']] == [4, 9, 7, 12, engine.role_tokens.produce_open]
+
+
+def test_capture_refuses_a_reply_that_ended_inside_its_reasoning(tmp_path):
+    engine = actor(tmp_path, 'lfm', lexical=True, words=THINK)
+    stop = sorted(engine.stop_ids)[0]
+    # The prompt opens the reasoning (<think> = 6); a reply cut off before </think> has no content.
+    with pytest.raises(RequestError, match='inside its reasoning'):
+        engine.native_capture([4, 9, 6], [12, 13, 14])
+    assert engine.native_capture([4, 9, 6], [12, 7, 13, stop])['source_capture']['payload_stop'] > 0

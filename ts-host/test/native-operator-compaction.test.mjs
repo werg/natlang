@@ -38,7 +38,7 @@ test('compact-params is an operator call at view\'s site plus the in-context cap
   assert.equal(operatorCalls.length, 1);
   const [call] = operatorCalls;
   assert.match(call.invocation_id, /#operator-1$/);
-  assert.equal(call.max_tokens, 768);
+  assert.equal(call.max_tokens, 2048 + 384);
   assert.deepEqual(call.tools, []);
   assert.equal(call.messages[0].content, VIEW_PROMPT);
   assert.match(call.messages[1].content, /^instructions:\nThe call that receives this argument as value \(string\) answers: Count the lines of value\.\n\nvalue:\n"line of data/);
@@ -72,7 +72,7 @@ test('the grammar capture forces the exact reply ids around produce markers and 
     const body = init?.body ? JSON.parse(init.body) : undefined;
     requests.push({ url: String(url), body });
     if (String(url).endsWith('/tokenize'))
-      return new Response(JSON.stringify({ tokens: body.content === '</think>' ? [7] : body.content === '<|im_end|>' ? [2] : [50, 51] }));
+      return new Response(JSON.stringify({ tokens: body.content === '<think>' ? [6] : body.content === '</think>' ? [7] : body.content === '<|im_end|>' ? [2] : [50, 51] }));
     return new Response(JSON.stringify({ error: 'stop here' }), { status: 500 });
   };
   try {

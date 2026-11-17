@@ -948,6 +948,10 @@ class Engine:
         else:
             think_close = self.tokenizer.convert_tokens_to_ids("</think>")
             start = max((i + 1 for i, token in enumerate(reply[:end]) if token == think_close), default=0)
+            # A prompt that opens the reasoning and a reply that never closes it has no content: it ran out inside
+            # its reasoning, which is not the value's view.
+            if not start and prompt_token_ids and prompt_token_ids[-1] == self.tokenizer.convert_tokens_to_ids("<think>"):
+                raise RequestError("neuralese-native-capture", "the reply ended inside its reasoning: no content to capture")
         span = reply[start:end]
         markers = set(self.role_tokens.ids)
         if not span or markers.intersection(span) or markers.intersection(prompt_token_ids):

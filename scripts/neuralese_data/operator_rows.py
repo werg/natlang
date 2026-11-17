@@ -319,6 +319,41 @@ def build(args):
     (out / 'manifest.json').write_text(json.dumps(summary, indent=1, sort_keys=True) + '\n')
 
 
+def merge(args):
+    """One exp0_sft `--chains` pickle of every train file (operator and consumer chains) and one `--val-chains` pickle
+    of up to --val-per-source test consumer chains per source, with a manifest of their sha256 and counts."""
+    rows = Path(args.rows)
+    manifest = json.loads((rows / 'manifest.json').read_text())
+    train, val, counts = [], [], {}
+    for name, entry in sorted(manifest['sources'].items()):
+        files = entry.get('files') or {}
+        got = {}
+        if 'train' in files:
+            chains = pickle.load(open(files['train']['path'], 'rb'))['chains']
+            if args.max_chains_per_source:
+                chains = chains[:args.max_chains_per_source]
+            train += chains
+            got['train'] = len(chains)
+        if 'test' in files and args.val_per_source:
+            consumers = [c for c in pickle.load(open(files['test']['path'], 'rb'))['chains']
+                         if c['segs'][0][2].get('kind') == 'consumer'][:args.val_per_source]
+            val += consumers
+            got['val'] = len(consumers)
+        counts[name] = got
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    summary = {'schema': SCHEMA + '#merge', 'rows': str(rows), 'sources': counts}
+    for label, chains in (('chains', train), ('val', val)):
+        path = out / f'{label}.pkl'
+        with open(path, 'wb') as handle:
+            pickle.dump({'schema': SCHEMA, 'chains': chains}, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        summary[label] = {'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest(), 'chains': len(chains),
+                          'tokens': int(sum(len(c['ids']) + sum(len(d['ids']) for d in c['sources'].values()) for c in chains)),
+                          'loss_tokens': int(sum(length for c in chains for _, length, _ in c['segs']))}
+    (out / 'merge.json').write_text(json.dumps(summary, indent=1) + '\n')
+    print(json.dumps({k: v for k, v in summary.items() if k != 'sources'}))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest='command', required=True)
@@ -332,9 +367,16 @@ def main():
     p.add_argument('--max-tokens', type=int, default=32000)
     p.add_argument('--seed-weight', type=float, default=1.0)
     p.add_argument('--splits', nargs='+', default=['train', 'test'], choices=['train', 'test'])
+    m = sub.add_parser('merge')
+    m.add_argument('--rows', required=True)
+    m.add_argument('--out', required=True)
+    m.add_argument('--max-chains-per-source', type=int, default=0)
+    m.add_argument('--val-per-source', type=int, default=32)
     args = parser.parse_args()
     if args.command == 'build':
         build(args)
+    elif args.command == 'merge':
+        merge(args)
 
 
 if __name__ == '__main__':

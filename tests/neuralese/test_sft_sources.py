@@ -50,6 +50,19 @@ def test_replay_marks_a_different_tool_output_as_drift():
     assert episode.log[-1]['kind'] == 'drifted' and episode.log[-1]['first_difference'] == 2
 
 
+def test_replay_declines_a_decision_readout_as_the_recorded_teacher_did():
+    """A teacher that cannot score replies ran the tool loop; the replay answers the readout's scoring requests with no
+    prompt_logprobs (decision-unsupported) and serves the recorded tool-loop turns after it."""
+    first = turn([SYSTEM, USER], content='"yes"')
+    episode = s.ReplayEpisode([first])
+    scoring = {'messages': [SYSTEM, USER, {'role': 'user', 'content': 'Answer this call now'},
+                            {'role': 'assistant', 'content': '"yes"'}], 'prompt_logprobs': 0, 'max_tokens': 1}
+    reply = episode.answer(scoring)
+    assert 'prompt_logprobs' not in reply and episode.served == [False]
+    assert episode.answer({'messages': [SYSTEM, USER]})['choices'][0]['message']['content'] == '"yes"'
+    assert [e['kind'] for e in episode.log] == ['scoring-declined', 'exact']
+
+
 def test_native_state_episodes_are_recognized():
     native = {'role': 'tool', 'content': [{'type': 'text', 'text': 'x = '}, {'type': 'native_state', 'id': 'nzs1_a'}]}
     assert s.has_native_state({'turns': [turn([SYSTEM, USER, native])]})

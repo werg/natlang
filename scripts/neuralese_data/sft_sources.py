@@ -419,6 +419,15 @@ class ReplayEpisode:
         self.log = []
 
     def answer(self, body):
+        if 'prompt_logprobs' in body:
+            # A decision readout's scoring request (ts-host/src/model/decision-scoring.ts). The recorded teacher could
+            # not score replies, so its run declined the readout and ran the call's tool loop: answer as it did, with no
+            # prompt_logprobs (the runtime reads that as decision-unsupported), and the tool-loop turns replay after it.
+            with self.lock:
+                self.log.append({'kind': 'scoring-declined', 'turn': None, 'messages': len(body.get('messages') or [])})
+            return {'id': 'replay-unscored', 'object': 'chat.completion', 'model': body.get('model', 'replay'),
+                    'choices': [{'index': 0, 'message': {'role': 'assistant', 'content': ''}, 'finish_reason': 'length'}],
+                    'usage': {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0}}
         messages = body.get('messages') or []
         key, opening = visible_key(messages), opening_key(messages)
         length = sum(m.get('role') != 'system' for m in messages)
@@ -434,6 +443,8 @@ class ReplayEpisode:
                         match, kind = i, 'drifted'
                         break
             entry = {'kind': kind, 'turn': match, 'messages': length}
+            if match is None:   # what the runtime asked that no recorded call saw (its last two visible messages)
+                entry['now'] = str(json.loads(key)[-2:])[:1200]
             if match is not None:
                 self.served[match] = True
                 recorded = self.turns[match]
@@ -576,7 +587,7 @@ def replay_episode(args, server, episode, env):
               'system_changed': sum(1 for e in replay.log if e.get('system_same') is False),
               'tools_changed': sum(1 for e in replay.log if e.get('tools_same') is False),
               'log': replay.log[:64]}
-    record['exact'] = (outcome == SUCCESS and record['unserved'] == 0 and kinds == {'exact': len(episode['turns'])}
+    record['exact'] = (outcome == SUCCESS and record['unserved'] == 0 and {k: v for k, v in kinds.items() if k != 'scoring-declined'} == {'exact': len(episode['turns'])}
                        and turns == len(episode['turns']))
     for path in directory.iterdir():   # keep the verdict, the replayed record and the logs; drop the job scratch
         if path.is_dir():

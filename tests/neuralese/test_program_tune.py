@@ -71,6 +71,15 @@ def test_a_call_without_a_recorded_result_is_unverified_unless_final():
     assert dispositions[0] == 'unverified'
 
 
+def test_a_nested_calls_last_turn_is_judged_by_the_episode():
+    turns = episode()[:2]
+    turns[1]['messages'] = turns[1]['messages'][:2]   # no later turn shows the first reply's result ...
+    nested = {**turns[0], 'invocation_id': 'child'}   # ... because it was a nested call's last turn
+    root = {**turns[1], 'invocation_id': 'root'}
+    _, dispositions = P.episode_turns('task-1', 'k', [nested, root])
+    assert dispositions[0] != 'unverified'
+
+
 def test_rows_lower_and_fit_through_the_tuner(tmp_path):
     from natlang_neuralese.tune.rows import lower_rows
     from natlang_neuralese.tune.trainer import JointTrainer, Recipe
