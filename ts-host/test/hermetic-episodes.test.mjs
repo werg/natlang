@@ -1,4 +1,4 @@
-// Collector episodes are hermetic (machine-store.ts runInEpisodeCallStore, teacher/collector.ts hermeticEpisode): each
+// Collector episodes are hermetic (runtime/episode-call-store.ts runInEpisodeCallStore, teacher/collector.ts hermeticEpisode): each
 // runs with a fresh call store of its own, nothing another episode or run stored changes what it does, compiled cases
 // never serve its calls, and its own records stay readable within it.
 import assert from 'node:assert/strict';
@@ -7,7 +7,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { executeProgram } from '../dist/teacher/collector.js';
-import { episodeCallStoreRoot, openMachineStore } from '../dist/machine-store.js';
+import { openMachineStore } from '../dist/machine-store.js';
+import { episodeCallStoreRoot } from '../dist/runtime/episode-call-store.js';
 import { currentFrame } from '../dist/runtime/context.js';
 import { caseHashes, createNatlangRuntime, loadVirtualNatlang } from '../dist/index.js';
 import { TOOLS_PROMPT } from '../dist/native/prompt.js';

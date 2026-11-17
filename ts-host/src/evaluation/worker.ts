@@ -1,4 +1,4 @@
-import { episodeCallStoreRoot } from '../machine-store.js';
+import { episodeCallStoreRoot } from '../runtime/episode-call-store.js';
 import { Worker } from 'node:worker_threads';
 import type { AdaptationArtifact, ExecutorIdentity, ProgramDescriptor } from '../adaptation/types.js';
 import type { ModelDriver } from '../runtime/runtime.js';

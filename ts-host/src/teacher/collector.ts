@@ -1,5 +1,6 @@
 import { compactCaptures, trajectoryTurn } from '../runtime/trajectory.js';
-import { createEpisodeCallStore, episodeCallStoreRoot, episodeCallStoreShared, runInEpisodeCallStore } from '../machine-store.js';
+import { createEpisodeCallStore, episodeCallStoreShared } from '../machine-store.js';
+import { episodeCallStoreRoot, runInEpisodeCallStore } from '../runtime/episode-call-store.js';
 import { checkRequiredActions } from './required-actions.js';
 import { checkRequiredServiceReceipt } from './service-receipt.js';
 import { checkReportCompleteness, type ReportCompletenessSpec } from './report-completeness.js';

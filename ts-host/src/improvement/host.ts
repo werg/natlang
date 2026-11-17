@@ -1,4 +1,4 @@
-import { episodeCallStoreRoot } from '../machine-store.js';
+import { episodeCallStoreRoot } from '../runtime/episode-call-store.js';
 import {SYSTEM_PROMPT} from '../native/prompt.js';
 import { OperationJournal } from './operations.js';
 import { NATLANG_COMPILE_VERSION } from '../compiler/intrinsics.js';

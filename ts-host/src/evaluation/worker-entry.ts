@@ -1,5 +1,5 @@
 import { parentPort, workerData } from 'node:worker_threads';
-import { enterEpisodeCallStore } from '../machine-store.js';
+import { enterEpisodeCallStore } from '../runtime/episode-call-store.js';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createNatlangRuntime, NatlangCallError } from '../index.js';

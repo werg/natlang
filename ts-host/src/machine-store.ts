@@ -3,7 +3,6 @@
  * `XDG_DATA_HOME`, `NATLANG_SPECIALIZATION`) and the home directory are read here and handed to the store as options;
  * the stores themselves (calls/) read neither.
  */
-import { AsyncLocalStorage } from 'node:async_hooks';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -23,21 +22,9 @@ export function openMachineStore(root: string, env: Environment = process.env): 
   return CallStore.open(root, { mode: () => env.NATLANG_SPECIALIZATION });
 }
 
-/**
- * Hermetic episodes. A collector episode (training, held evaluation, replay, teacher generation) runs with a fresh call
- * store of its own: what earlier episodes or runs stored (compiled cases, tier outputs, iterateOn statistics,
- * refinement verdicts) can never change what this one does, while its own records stay readable within it (the
- * item-result binding reads its host captures). Every runtime first used inside `runInEpisodeCallStore`, worker threads
- * started with `episodeCallStoreRoot()` in their data included, records to it instead of the machine's store. Its
- * settings switch specialization off, so nothing compiled within the episode serves its later calls either.
- */
-const episodeStore = new AsyncLocalStorage<string>();
-/** The episode store's root when the caller runs inside one. */
-export function episodeCallStoreRoot(): string | undefined { return episodeStore.getStore(); }
-/** Run `body` with the store at `root` as the default store of every runtime it creates. */
-export function runInEpisodeCallStore<T>(root: string, body: () => T): T { return episodeStore.run(root, body); }
-/** A worker thread joins its parent's episode store for the rest of its life. */
-export function enterEpisodeCallStore(root: string | undefined): void { if (root) episodeStore.enterWith(root); }
+// Hermetic episodes: a collector episode (training, held evaluation, replay, teacher generation) runs with a fresh call
+// store of its own, created here; runtime/episode-call-store.ts holds which episode store the caller runs in.
+
 /**
  * `NATLANG_EPISODE_CALL_STORE=machine` (debugging only): collector episodes record to the machine's store as before,
  * with specialization still off.

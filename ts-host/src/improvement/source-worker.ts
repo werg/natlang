@@ -1,6 +1,6 @@
 /** Fresh realm per target case. The evaluator capability is never installed here. */
 import { parentPort, workerData } from 'node:worker_threads';
-import { enterEpisodeCallStore } from '../machine-store.js';
+import { enterEpisodeCallStore } from '../runtime/episode-call-store.js';
 import * as runtime from '../runtime/node.js';
 import * as targetRuntime from './target-runtime.js';
 import ts from 'typescript';
@@ -8,7 +8,7 @@ import { Folder,APPLY_TO_FOLDER } from '../native/scoped-fs.js';
 import { loadVirtualNatlang } from '../runtime/virtual-project.js';
 import { compileVirtualProject } from '../runtime/node.js';
 import { remoteDriver } from '../runtime/driver.js';
-// A worker started inside a collector episode records to that episode's store (machine-store.ts).
+// A worker started inside a collector episode records to that episode's store (runtime/episode-call-store.ts).
 enterEpisodeCallStore(workerData.episodeCallStore);
 class FixtureError extends Error {}
 const pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();

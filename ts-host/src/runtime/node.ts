@@ -9,7 +9,8 @@ import { WorkspaceModules, findPackageWorkspace } from '../workspace-modules.js'
 import type { ReturnErrorText } from '../native/return-errors.js';
 import type { ContextStore, Frame } from './context.js';
 import type { Platform } from './platform.js';
-import { episodeCallStoreRoot, machineStoreRoot, openMachineStore } from '../machine-store.js';
+import { machineStoreRoot, openMachineStore } from '../machine-store.js';
+import { episodeCallStoreRoot } from './episode-call-store.js';
 import { learningModule } from '../neuralese/learning.js';
 import { neuraleseModule } from '../neuralese/combinators.js';
 import { runFolderPython as runPython, type PythonHost } from '../native/folder-python.js';
@@ -45,7 +46,7 @@ function createNodePlatform(): Platform {
     environment: options => new TypeScriptEnvironment({ workspace: options.workspace, network: options.network }),
     moduleRealm: () => new TypeScriptEnvironment({ mode: 'retained' }),
     // Every runtime records to the machine's call store unless it says otherwise (NATLANG_CALL_STORE=off disables it);
-    // inside a collector episode, to the episode's own store (machine-store.ts runInEpisodeCallStore).
+    // inside a collector episode, to the episode's own store (episode-call-store.ts runInEpisodeCallStore).
     callStore: () => { const root = episodeCallStoreRoot() ?? machineStoreRoot(); return root ? openMachineStore(root) : undefined; },
     builtinModules: { 'natlang:learning': () => learningModule, 'natlang:neuralese': () => neuraleseModule, 'natlang:gepa': () => gepaModule },
     packageLoader: (specifier, task) => {
