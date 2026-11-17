@@ -45,6 +45,8 @@ export type ManagedModelSession = { prepare(): Promise<ManagedModelStatus>;
   /** The backend is one of natlang's servers (the native server or the managed llama.cpp fork): it applies guided
    * generation (the `guidance` request field). */
   readonly guidance?: boolean;
+  /** The backend continues a reply cut off at its length limit (`ModelTurnRequest.continue`): the managed llama.cpp server. */
+  readonly continuesReplies?: boolean;
   neuraleseRuntime?(): Promise<import('../native/neuralese.js').NeuraleseRuntimeOptions | undefined>;
   vllmStacks?(names: Iterable<string>): void;
   /** One turn; `options` carry the driver's turn options (`onDelta`) and, for a Pi provider backend, `onProgress`. */
@@ -166,7 +168,7 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
   // an upstream server answers 404 there and decisions fall back to prompt_logprobs, which it does not serve.
   const openai = (options: OpenAICompatibleOptions) => openAICompatibleModelTurn({ ...options, concurrency: scheduler,
     scoreEndpoint: choice.kind === 'pi-provider' ? undefined : choice.batching?.scoreEndpoint ?? (choice.kind === 'managed-local' || undefined),
-    ...(choice.kind === 'managed-local' ? { scoreAll: true } : {}),
+    ...(choice.kind === 'managed-local' ? { scoreAll: true, continuesReplies: true } : {}),
     ...(choice.kind === 'managed-local' ? { tunedRequest, nativeStates: () => llama!.nativeStatesLoaded } : external?.vllm ? { tunedRequest: vllmTunedRequest } : {}) });
   // One driver per server: its scheduler, request limit and decision coalescer are what turns and readouts that
   // arrive together share, so they are not rebuilt per request.
@@ -242,6 +244,7 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
     nativeArtifacts() { return external?.neuraleseServer ? nativeDriver().artifacts : undefined; },
     neuralese: !!external?.neuraleseServer,
     guidance: !!external?.neuraleseServer || choice.kind === 'managed-local',
+    continuesReplies: choice.kind === 'managed-local',
     async neuraleseRuntime() {
       if (!external?.neuraleseServer) return undefined;
       await start(); return nativeDriver().neuraleseRuntime();

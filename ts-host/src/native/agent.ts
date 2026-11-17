@@ -10,7 +10,7 @@ import { COMPACTION_NOTE_CHARS, runSeedKey, type NativeResult, type NativeSessio
 import { undeclaredServiceType } from './introspection.js';
 import type { DecisionScorer, ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
 import { deriveSeed } from './trace.js';
-import { AUTOMATIC_NOTE, COMPACTION_NOTICE, directoryReducerPrompt, scopedFileToolNames, FUNCTION_TOOLS_PROMPT, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN,
+import { AUTOMATIC_NOTE, COMPACTION_NOTICE, directoryReducerPrompt, scopedFileToolNames, FUNCTION_TOOLS_PROMPT, FUNCTION_TOOLS_PROMPT_READ_ONLY, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN,
   LAST_TURN_NOTICE, NL_DEPTH_LIMIT_NOTICE, SYSTEM_PROMPT, type FileToolSurface } from './prompt.js';
 import { canGenerateNl, runInFrame } from '../runtime/context.js';
 import { adoptImportedNativeArtifacts } from './nz-file.js';
@@ -116,8 +116,9 @@ export const NL_DEPTH_LIMIT_BUILT_INS_LINE = 'Eval has iterateOn, transcript and
  * calls for training (native/serving-request.ts) both compose it here.
  */
 export function callNotes(call: { guidance?: string; ownCode: boolean; allowAdHoc: boolean; rendering?: PromptRendering;
+  /** The call may edit its functions (edit_code is offered); default when it has its own code. */ codeEdits?: boolean;
   folder?: { fileTools?: FileToolSurface; writable: boolean; withheld?: readonly string[] } }): string {
-  const runtime = [call.ownCode ? FUNCTION_TOOLS_PROMPT : '',
+  const runtime = [call.ownCode ? call.codeEdits === false ? FUNCTION_TOOLS_PROMPT_READ_ONLY : FUNCTION_TOOLS_PROMPT : '',
     call.folder ? directoryReducerPrompt(call.folder.fileTools, call.allowAdHoc, call.folder.writable, call.folder.withheld) : '',
     call.allowAdHoc ? '' : NL_DEPTH_LIMIT_NOTICE].map(text => text.trim()).filter(Boolean).join('\n\n');
   return [call.guidance?.trim() ?? '', renderSystemPrompt(runtime, call.rendering)].filter(Boolean).join('\n\n');
@@ -141,6 +142,8 @@ export type NativeModelDriver = ((request: ModelTurnRequest, signal?: AbortSigna
   readonly requiresResultContract?: boolean;
   /** Optional decision readout (contracts.ts `DecisionRequest`); without it the call runs the tool loop. */
   decide?: DecisionScorer;
+  /** The backend continues a cut-off reply (`ModelTurnRequest.continue`; runtime.ts `ModelDriver`). */
+  readonly continuesReplies?: boolean;
   neuraleseRuntime?: () => Promise<NeuraleseRuntimeOptions | undefined> };
 
 const tool = (name: string, description: string, properties: Record<string, unknown>, required: string[]) => ({
@@ -364,9 +367,11 @@ const isPlainRecord = (value: object) => Object.prototype.toString.call(value) =
  * Undefined when no expression produces the value (an opaque host object).
  */
 function scopeExpression(value: unknown, root: Folder | undefined, holder?: string, budget = SHOWN_CHARS,
-  state: { nodes: number; depth: number; untrusted?: UntrustedRegistry } = { nodes: 0, depth: 0 }): string | undefined {
+  state: { nodes: number; depth: number; cuts?: number; untrusted?: UntrustedRegistry } = { nodes: 0, depth: 0 }): string | undefined {
+  // Every note this rendering leaves is counted, so a caller can tell a whole literal from a shortened one.
+  const cut = (what: string, where: { holder?: string }) => { state.cuts = (state.cuts ?? 0) + 1; return cutNote(what, where); };
   if (++state.nodes > 8192 || state.depth >= 64)
-    return cutNote('inspection limit reached', { holder });
+    return cut('inspection limit reached', { holder });
   // A small value is shown whole, whatever share of the budget is left for it.
   if (budget < SMALL_VALUE_CHARS && literalFits(value, SMALL_VALUE_CHARS)) budget = SMALL_VALUE_CHARS;
   state.depth++;
@@ -382,7 +387,7 @@ function scopeExpression(value: unknown, root: Folder | undefined, holder?: stri
       shown.push(text); used += text.length + 2;
     }
     if (shown.length === count) return `${open}${shown.join(', ')}${close}`;
-    return `${open}${shown.join(', ')}${shown.length ? ', ' : ''}${cutNote(`cut off: ${count - shown.length} of ${count} ${noun} not shown`, { holder })}${close}`;
+    return `${open}${shown.join(', ')}${shown.length ? ', ' : ''}${cut(`cut off: ${count - shown.length} of ${count} ${noun} not shown`, { holder })}${close}`;
   };
   if (value === null || typeof value === 'boolean') return String(value);
   if (typeof value === 'number') return Number.isFinite(value) ? JSON.stringify(value) : String(value);
@@ -391,13 +396,13 @@ function scopeExpression(value: unknown, root: Folder | undefined, holder?: stri
     const source = state.untrusted?.sourceOf(value);
     if (source !== undefined) {
       if (value.length <= Math.max(16, budget)) return untrustedBlock(value, source);
-      return `${untrustedBlock(value.slice(0, Math.max(0, budget)), source)}${cutNote(`cut off: ${value.length - Math.max(0, budget)} of ${value.length} characters not shown`, { holder })}`;
+      return `${untrustedBlock(value.slice(0, Math.max(0, budget)), source)}${cut(`cut off: ${value.length - Math.max(0, budget)} of ${value.length} characters not shown`, { holder })}`;
     }
     // Long record keys can exhaust the preview budget before their values.
     // Preserve tiny labels such as "0"/"1" rather than showing an empty string
     // with a truncation note; the literal is shorter than that note anyway.
     if (value.length <= Math.max(16, budget)) return JSON.stringify(value);
-    return `${JSON.stringify(value.slice(0, Math.max(0, budget)))} ${cutNote(`cut off: ${value.length - Math.max(0, budget)} of ${value.length} characters not shown`, { holder })}`;
+    return `${JSON.stringify(value.slice(0, Math.max(0, budget)))} ${cut(`cut off: ${value.length - Math.max(0, budget)} of ${value.length} characters not shown`, { holder })}`;
   }
   if (typeof value !== 'object' || value === undefined) return undefined;
   if (value instanceof FileHandle || value instanceof FolderHandle) {
@@ -431,10 +436,19 @@ function scopeExpression(value: unknown, root: Folder | undefined, holder?: stri
     if (entries.length < (Number.isFinite(budget) ? 24 : 8192)) entries.push([key, (value as Record<string, unknown>)[key]]);
     fieldCount++;
   }
-  // Give ordinary argument records an overview, rather than allowing a large first field
-  // to hide every later field. Tiny nested records show their keys and a precise holder.
-  if (Number.isFinite(budget) && budget < 128 && entries.length > 2)
-    return `{ ${cutNote('fields: '+entries.map(([key])=>key).join(', ')+(fieldCount>entries.length?', …':'')+'; values not shown', {holder})} }`;
+  // A record that does not fit a small budget is shown by its keys and a precise holder, rather than letting its first
+  // fields take the room and hide the later ones. A record that fits is shown whole, however small its budget: a parent
+  // whose budget is just its own length hands each item exactly what it needs (2026-11-13, a 3-field file record was
+  // replaced by its keys in every vcs digest).
+  if (Number.isFinite(budget) && budget < 128 && entries.length > 2) {
+    const cuts = state.cuts ?? 0;
+    const whole = recordText();
+    if (whole !== undefined && whole.length <= budget && (state.cuts ?? 0) === cuts) return whole;
+    state.cuts = cuts;
+    return `{ ${cut('fields: '+entries.map(([key])=>key).join(', ')+(fieldCount>entries.length?', …':'')+'; values not shown', {holder})} }`;
+  }
+  return recordText();
+  function recordText(): string | undefined {
   const visible = entries;
   const overhead = visible.reduce((sum,[key])=>sum+key.length+4,0);
   const available = budget - overhead;
@@ -466,10 +480,14 @@ function scopeExpression(value: unknown, root: Folder | undefined, holder?: stri
     if(text===undefined)return undefined;
     shown.push(field.label+': '+text);
   }
-  if(visible.length<fieldCount)shown.push(cutNote('cut off: '+(fieldCount-visible.length)+' of '+fieldCount+' fields not shown',{holder}));
+  if(visible.length<fieldCount)shown.push(cut('cut off: '+(fieldCount-visible.length)+' of '+fieldCount+' fields not shown',{holder}));
   return '{ '+shown.join(', ')+' }';
+  }
   } finally { state.depth--; }
 }
+
+/** What a reply without a tool call is told when a complete result is staged: it is sent with return_result. */
+const STAGED_ANSWER = 'A complete typed result is staged. Call return_result with {status: "success"} and omit value to return that exact result.';
 
 /** The native model loop. Program state stays in NativeSession, never in the model history. */
 export class NativeToolAgent {
@@ -1119,14 +1137,14 @@ export class NativeToolAgent {
       'Hand this executing call to the next configured model when you cannot reliably finish. State the evidence and work already done; the next model continues in this same scope and must not repeat completed effects.',
       { reason: { type: 'string' }, evidence: { type: 'string' }, attempted_work: { type: 'string' },
         remaining_subproblem: { type: 'string' } }, ['reason', 'evidence', 'attempted_work', 'remaining_subproblem']));
-    // One code-tool set for every call (an edit without code of the call's own is refused with the reason), so the tool
-    // list, like the system prompt, is the same for every call and their openings share one cached prefix.
-    tools.splice(2, 0,
-      tool('read_code', READ_CODE_DESCRIPTION, { name: { type: 'string' } }, ['name']),
-      tool('edit_code', EDIT_CODE_DESCRIPTION,
+    // read_code is part of the call protocol. edit_code and diff_code are offered only to a call that can change code
+    // (functions of its own, edits not denied): elsewhere they were 200 tokens of schema for tools that could only be
+    // refused (2026-11-13). So openings come in two tool lists, with and without them, each sharing one cached prefix.
+    tools.splice(2, 0, tool('read_code', READ_CODE_DESCRIPTION, { name: { type: 'string' } }, ['name']),
+      ...(session.codeEditable() ? [tool('edit_code', EDIT_CODE_DESCRIPTION,
         { name: { type: 'string' }, find: { type: 'string' }, replace_with: { type: 'string' }, fuzzy: { type: 'boolean' } },
         ['name', 'find', 'replace_with']),
-      tool('diff_code', DIFF_CODE_DESCRIPTION, {}, []));
+      tool('diff_code', DIFF_CODE_DESCRIPTION, {}, [])] : []));
     if (session.lam.projectTransaction) {
       const writableFolder = session.lam.projectTransaction.folder.access !== 'read';
       const fileTools = [
@@ -1358,8 +1376,7 @@ export class NativeToolAgent {
   missing(session: NativeSession): string {
     const lam = session.lam;
     if (lam.type.kind !== 'lambda') return '';
-    if (lam.return === MISSING) return `There is no result yet. Call return_result with status "success" and a ${formatType(lam.type.returns)}, ` +
-      'or return it from an eval (return value;) and then reply done.';
+    if (lam.return === MISSING) return `There is no result yet. Answer with return_result: status "success" and a ${formatType(lam.type.returns)}.`;
     const holes = problems(lam.return, lam.type.returns, session.env, 'return').holes;
     return holes.length ? `The staged result is incomplete: ${holes.map(hole => `${hole.path} (${hole.expected ?? ''})`).join(', ')}.` : '';
   }
@@ -1552,7 +1569,7 @@ export class NativeToolAgent {
     // (guidance, the function-tools and folder paragraphs, the nesting-limit notice) is in the call's opening message.
     const systemPrompt = () =>
       typeof this.options.systemPrompt === 'function' ? this.options.systemPrompt() : this.options.systemPrompt ?? SYSTEM_PROMPT;
-    const notes = callNotes({ guidance, ownCode: Object.keys(session.lam.codebase).length > 0,
+    const notes = callNotes({ guidance, ownCode: Object.keys(session.lam.codebase).length > 0, codeEdits: session.codeEditable(),
       folder: session.lam.projectTransaction ? { fileTools: this.options.fileTools,
         writable: session.lam.projectTransaction.folder.access !== 'read', withheld: session.lam.withheldTools } : undefined,
       allowAdHoc: canGenerateNl(session.runtime.frame), rendering: this.options.promptRendering });
@@ -1695,23 +1712,32 @@ export class NativeToolAgent {
     // do after each one; without a bound, a model that never follows that (or a driver that cannot offer tools) runs
     // without end, growing the conversation by a turn each time. The fourth such reply in a row ends the call.
     let repliesWithoutAction = 0;
+    // A reply cut off at its length limit before any tool call, which the next request continues (the driver's
+    // `continuesReplies`): `tokens` is what the message has used so far, `requests` how many requests it took.
+    let continuing: { text: string; reasoning?: string; tokens: number; requests: number } | undefined;
     const timedOut = () => deadline !== null && Date.now() >= deadline;
     const exhausted = () => (maxTurns !== undefined && turns >= maxTurns) ||
       (maxTokens !== undefined && tokens >= maxTokens) || timedOut();
+    // The reply tokens one request may take: the turn limit, else a quarter of the context budget (one turn may not take
+    // the window: without a limit a model can think for most of it in a single reply; this is the reply room the budget
+    // keeps free below), and never more than the call has left. A call bounded only by its total (maxTokens) still
+    // takes it a request at a time.
     const allowance = (): number | null => {
       const remaining = maxTokens === undefined ? null : maxTokens - tokens;
-      if (currentTurnTokens === undefined) return remaining;
-      return remaining === null ? currentTurnTokens : Math.min(currentTurnTokens, remaining);
+      const perTurn = currentTurnTokens ?? (budget === null ? null : Math.floor(budget / 4));
+      return remaining === null ? perTurn : perTurn === null ? remaining : Math.min(perTurn, remaining);
     };
     while (true) {
       if (exhausted()) return budgetStop('episode turn, token, or wall-clock budget exhausted');
+      // This request continues the previous one's reply: the conversation stays exactly as it was, and the turn is the same.
+      const continued = continuing;
+      continuing = undefined;
+      const turn = continued ? turns : turns + 1;
       messages[0]!.content = systemPrompt();
-      // One turn may not take the window: without a limit a model can think for most of it in a single reply. The default
-      // is the reply room the budget keeps free below.
-      const limit = allowance() ?? (budget === null ? null : Math.floor(budget / 4));
+      const limit = allowance();
       // On the last turn of a budget only return_result is offered: the call ends with a result or an honest
       // blocked or failed status, not by running out.
-      const lastTurn = maxTurns !== undefined && maxTurns - turns === 1;
+      const lastTurn = maxTurns !== undefined && maxTurns - (turn - 1) === 1;
       const allTools = this.tools(session).filter(item => (fallbackIndex < (this.options.fallbacks?.length ?? 0) ||
         (item as { function?: { name?: string } }).function?.name !== 'escalate'));
       session.rememberOfferedTools(allTools);
@@ -1727,7 +1753,7 @@ export class NativeToolAgent {
       const reply = budget === null ? 0 : Math.min(limit ?? Math.floor(budget / 4), Math.floor(budget / 4));
       // Compaction can only remove what lies between the opening (with the pinned note) and the latest exchange; when
       // nothing does, asking for it would only ask again on every turn.
-      const compactable = messages.length - protectedLength > 2;
+      const compactable = !continued && messages.length - protectedLength > 2;
       const nearLimit = budget !== null && compactable && compactedTurn !== turns && estimate(allTools) >
         Math.min(budget - reply, Math.max(budget * 0.75, compactedAt + budget * 0.25));
       const availableTools = lastTurn ? only('return_result') : nearLimit ? only('compact_history') : allTools;
@@ -1750,25 +1776,34 @@ export class NativeToolAgent {
           messages[messages.length - 1] = { ...latest, content: latest.content + COMPACTION_NOTICE };
       };
       explainCompaction();
-      if (budget !== null && estimate(offered) > budget - reply) {
+      if (!continued && budget !== null && estimate(offered) > budget - reply) {
         // A request never exceeds the budget: if the model has not compacted, the conversation is shortened for it,
         // with a note saying where the earlier turns are.
-        const removed = pinNote(null) + collapseHistory(messages, protectedLength);
+        // The note says earlier turns were moved to transcript, so it is pinned only when some were (a large opening
+        // alone used to get it before the first turn, and the model then reasoned about a context error that never was).
+        const removed = collapseHistory(messages, protectedLength);
+        if (removed) pinNote(null);
         // Keep the latest action and observation. Its reasoning is already in transcript and
         // can itself make that otherwise irreducible exchange exceed the context window.
+        let unreasoned = 0;
         if (estimate(offered) > budget - reply) {
           for (let index = protectedLength; index < messages.length; index++) {
             const message = messages[index]!;
             if (message.role === 'assistant' && 'reasoning_content' in message) {
               const { reasoning_content, ...withoutReasoning } = message;
               messages[index] = withoutReasoning;
+              unreasoned++;
             }
           }
         }
-        compactedAt = estimate(allTools);
-        explainCompaction();
-        session.runtime.trace.emit('compaction', { call_id: session.runtime.currentCallId ?? null, turn: turns + 1,
-          elided: removed, note: null, estimated_tokens: Math.round(estimate(offered)) });
+        // Nothing to shorten (only the opening so far, whose size the first estimate cannot know yet): not a compaction.
+        if (removed || unreasoned) {
+          compactedAt = estimate(allTools);
+          explainCompaction();
+          session.runtime.trace.emit('compaction', { call_id: session.runtime.currentCallId ?? null, turn,
+            elided: removed, ...(unreasoned ? { reasoning_removed: unreasoned } : {}), note: null,
+            estimated_tokens: Math.round(estimate(offered)) });
+        }
       }
       const sentChars = requestChars(offered);
       const callId = session.runtime.currentCallId ?? null;
@@ -1779,12 +1814,12 @@ export class NativeToolAgent {
         guidanceReady = true;
       }
       const started = performance.now();
-      session.runtime.trace.emit('model_request', { call_id: callId, phase: 'start', turn: turns + 1,
-        actor: currentActor,
+      session.runtime.trace.emit('model_request', { call_id: callId, phase: 'start', turn,
+        ...(continued ? { continuation: continued.requests } : {}), actor: currentActor,
         tool_schema_bytes: new TextEncoder().encode(JSON.stringify(currentRendering === 'program-header' ? [] : offered)).length,
         messages: messages.length });
       let response: ModelTurn;
-      let templatedWriteAttempt = false;
+      let templatedWriteAttempt = false, templated = false;
       let graphMessages: readonly unknown[] = messages;
       let reencodedInputs: { node: string; port: string }[] = [];
       let reservation: Awaited<ReturnType<ModelBudget['reserve']>>;
@@ -1816,7 +1851,7 @@ export class NativeToolAgent {
         templatedWriteAttempt = template?.value === 'write';
         retryProtocolWriteTemplate = false;
         if (template) session.runtime.trace.emit('template_readout', { call_id: callId, value: template.value });
-        const observer = this.options.onDelta, turn = turns + 1;
+        const observer = this.options.onDelta;
         const turnOptions: ModelTurnOptions | undefined = observer || currentDriver.requiresResultContract ? {
           ...(observer ? { onDelta: (delta: ModelTurnDelta) => { streamed = true; observer(turn, delta); } } : {}),
           ...(currentDriver.requiresResultContract ? { acceptsResult: (value: unknown): boolean => {
@@ -1841,9 +1876,12 @@ export class NativeToolAgent {
           ...(availableTools !== allTools && currentRendering !== 'program-header' ? { tool_choice: 'required' as const } : {}),
           ...(currentTemperature === undefined ? {} : { temperature: currentTemperature }),
           seed: session.runtime.seedPolicy.mode === 'backend' ? null :
-            deriveSeed(session.runtime.seedPolicy.root!, runSeedKey(session.runtime.options), session.lam.attempts, 'model-turn', turns),
+            deriveSeed(session.runtime.seedPolicy.root!, runSeedKey(session.runtime.options), session.lam.attempts,
+              continued ? `model-turn-continuation-${continued.requests}` : 'model-turn', turn - 1),
+          ...(continued ? { continue: { text: continued.text, ...(continued.reasoning ? { reasoning: continued.reasoning } : {}) } } : {}),
           max_tokens: statedWindow === null ? limit :
-            Math.max(1, Math.min(limit ?? statedWindow, statedWindow - Math.ceil(estimate(offered)) - REPLY_MARGIN)) };
+            Math.max(1, Math.min(limit ?? statedWindow, statedWindow - Math.ceil(estimate(offered)) - (continued?.tokens ?? 0) - REPLY_MARGIN)) };
+        templated = !!turnRequest.template;
         // Drivers read the invocation's tuned stack from the current frame when called; browsers keep no frame
         // across the awaits above, so the call starts inside its own frame on every platform.
         reservation = await this.options.modelBudget?.reserve(turnRequest.max_tokens ?? null, session.runtime.signal);
@@ -1861,8 +1899,8 @@ export class NativeToolAgent {
       } catch (error) {
         reservation?.finish();
         // What the failed request streamed belongs to an abandoned attempt, whether the turn is taken again or not.
-        if (streamed) { streamed = false; this.options.onDelta!(turns + 1, { type: 'reset' }); }
-        session.runtime.trace.emit('model_request', { call_id: callId, phase: 'error', turn: turns + 1,
+        if (streamed) { streamed = false; this.options.onDelta!(turn, { type: 'reset' }); }
+        session.runtime.trace.emit('model_request', { call_id: callId, phase: 'error', turn,
           actor: currentActor,
           duration_ms: Math.round(performance.now() - started),
           error: `${error instanceof Error ? error.name : 'Error'}: ${error instanceof Error ? error.message : String(error)}` });
@@ -1887,7 +1925,7 @@ export class NativeToolAgent {
         throw error;
       }
       overflowRetries = 0;
-      session.runtime.trace.emit('model_request', { call_id: callId, phase: 'end', turn: turns + 1,
+      session.runtime.trace.emit('model_request', { call_id: callId, phase: 'end', turn,
         actor: currentActor,
         duration_ms: Math.round(performance.now() - started),
         prompt_tokens: response.prompt_tokens ?? null, completion_tokens: response.completion_tokens ?? null,
@@ -1896,7 +1934,7 @@ export class NativeToolAgent {
         ...(response.scheduling ? { batch_id: response.scheduling.batch_id, batch_size: response.scheduling.batch_size,
           in_flight: response.scheduling.in_flight, queue_wait_ms: response.scheduling.queue_wait_ms,
           schedule_priority: response.scheduling.priority } : {}) });
-      const turnNode = await this.modelTurnNode(session, graphMessages, response, turns + 1, undefined, currentActor,
+      const turnNode = await this.modelTurnNode(session, graphMessages, response, turn, undefined, currentActor,
         [...reencodedInputs, ...(handoffNode ? [{ node: handoffNode, port: 'handoff' }] : [])], currentTemperature);
       if (turnNode && guidancePolicy?.function === 'writeGuidance' && callId) trainingGuidance!.noteWriterTurn(callId, turnNode,
         [...(session.runtime.frame?.chain ?? []), ...(session.runtime.options.parentCallId ? [session.runtime.options.parentCallId] : [])]);
@@ -1909,10 +1947,11 @@ export class NativeToolAgent {
         ...(this.options.actor ? { initial_actor: { ...this.options.actor } } : {}), ...(turnNode ? { graph_turn: turnNode } : {}),
         reply: { role: 'assistant', content: response.text ?? null,
           ...(response.raw_calls ? { tool_calls: structuredClone(response.raw_calls) } : response.calls?.length ? {
-            tool_calls: response.calls.map(([name, args], index) => ({ id: `call_${turns + 1}_${index}`, type: 'function',
+            tool_calls: response.calls.map(([name, args], index) => ({ id: `call_${turn}_${index}`, type: 'function',
               function: { name, arguments: JSON.stringify(args) } })) } : {}) }, blocks: [] });
-      if (response.prompt_tokens !== undefined && sentChars > 0) tokensPerChar = response.prompt_tokens / sentChars;
-      turns++;
+      // A continued request's prompt also holds the reply so far, which `sentChars` does not count.
+      if (response.prompt_tokens !== undefined && sentChars > 0 && !continued) tokensPerChar = response.prompt_tokens / sentChars;
+      if (!continued) turns++;
       session.runtime.checkInterruption();
       if (exceededGraphReservation) {
         await this.nativeWriteOrigins(response, session, turns, turnNode,
@@ -1965,14 +2004,37 @@ export class NativeToolAgent {
       if (!exactEmptyEos || calls.length || response.truncated) consecutiveEmptyEosWithoutResult = 0;
       // The turn's reasoning too, so a long or misdirected thought can be read after the fact (traces show, the dashboard).
       session.runtime.trace.emit('proposal', { call_id: session.runtime.currentCallId ?? null,
-        phase: 'generated', turn: turns, calls, text: response.text ?? '', ...(response.reasoning ? { reasoning: response.reasoning } : {}) });
-      tokens += response.completion_tokens === undefined ? limit ?? 0 : Math.max(1, response.completion_tokens);
+        phase: 'generated', turn: turns, calls, text: response.text ?? '', ...(response.reasoning ? { reasoning: response.reasoning } : {}),
+        ...(continued ? { continuation: continued.requests } : {}) });
+      const generated = response.completion_tokens === undefined ? limit ?? 0 : Math.max(1, response.completion_tokens);
+      tokens += generated;
       if (timedOut() || (maxTokens !== undefined && tokens > maxTokens))
         return budgetStop('episode token or wall-clock budget exhausted');
+      // A reply cut off at its length limit before any tool call is a thought in progress: the next request continues it
+      // where it stopped, as the same turn, instead of closing it and starting the turn over (2026-11-13: LFM3 thinks
+      // 800-1,500 tokens before acting, and a fresh turn after each cut restated the task and lost the work). The call's
+      // token budget bounds it, and so does the context: a reply continues only while the conversation, the reply so far
+      // and the next request's reply room fit in the window. A turn that had to compact or return, or a templated
+      // readout, ends as before.
+      const messageTokens = (continued?.tokens ?? 0) + generated;
+      if (response.truncated && !response.calls?.length && currentDriver.continuesReplies && availableTools === allTools &&
+          !lastTurn && !templated && budget !== null && !exhausted()) {
+        const nextReply = Math.min(allowance() ?? budget, Math.floor(budget / 4));
+        const nextPrompt = response.prompt_tokens !== undefined ? response.prompt_tokens + generated :
+          estimate(offered) + messageTokens;
+        if (nextPrompt + nextReply <= budget) {
+          continuing = { text: response.text ?? '', ...(response.reasoning ? { reasoning: response.reasoning } : {}),
+            tokens: messageTokens, requests: (continued?.requests ?? 0) + 1 };
+          session.runtime.trace.emit('continuation', { call_id: callId, turn, request: continuing.requests,
+            message_tokens: messageTokens });
+          continue;
+        }
+      }
       if (!response.calls?.length && availableTools !== allTools && !lastTurn && !response.truncated) {
         // The compaction turn was answered without the tool: its text is not a result. Compact without a note.
         consecutiveEmptyEosWithoutResult = 0;
-        const elided = pinNote(null) + collapseHistory(messages, protectedLength);
+        const elided = collapseHistory(messages, protectedLength);
+        if (elided) pinNote(null);
         compactedAt = estimate(allTools);
         session.runtime.trace.emit('compaction', { call_id: session.runtime.currentCallId ?? null, turn: turns,
           elided, note: null, estimated_tokens: Math.round(estimate(allTools)) });
@@ -1992,9 +2054,9 @@ export class NativeToolAgent {
         continue;
       }
       if (!response.calls?.length) {
-        // A reply without a tool call ends the turn: it returns the staged result, or, for a string-typed
-        // call with nothing staged, the reply's text is the result.
-        if (!response.truncated) await session.acceptTextResult(response.text ?? '');
+        // A reply without a tool call ends the turn without answering: return_result is the one way to answer
+        // (owner, 2026-11-13; a plain reply used to be a string call's result, and a thinking-capped LFM3 wrote its
+        // deliberation there). The model is told what to do next.
         const missing = this.missing(session);
         if (!response.truncated && exactEmptyEos && missing) {
           consecutiveEmptyEosWithoutResult++;
@@ -2010,30 +2072,13 @@ export class NativeToolAgent {
         // this count a model that only says "done" is nudged for ever (a scripted or stuck model never runs out of turns).
         if (!response.truncated && missing && lastRefinementFailure && this.options.refinement &&
             ++refinementRepairs > this.options.refinement.checker.repairBudget(this.options.maxFailureRepairs)) return lastRefinementFailure;
-        if (!response.truncated && !missing && this.options.refinement) {
-          const failures = await this.refinementGate(session);
-          if (failures) {
-            // The staged result does not satisfy its refinement: unstage it and tell the model, within the repair budget.
-            session.lam.return = MISSING;
-            lastRefinementFailure = `${failures[0]!.code}: ${failures[0]!.message}`;
-            if (++refinementRepairs > this.options.refinement.checker.repairBudget(this.options.maxFailureRepairs))
-              return `${failures[0]!.code}: ${failures[0]!.message}`;
-            messages.push({ role: 'assistant', content: response.text ?? '', ...thought(response.reasoning) },
-              { role: 'user', content: failureFeedback(failures).replace(/^rejected\n/, '') });
-            continue;
-          }
-        }
-        if (!response.truncated && !missing && session.finish()) { session.lam.note = response.text ?? ''; return; }
         // Code written into a reply has not run; saying so is what a model that wrote its eval out as text needs.
         const unrun = /```(?:ts|typescript|js|javascript)?\s*\n/.test(response.text ?? '') ?
           'The code in your reply was not run: code runs only when you call eval with it. ' : '';
-        const feedback = response.truncated ? `Your reply was cut off ${limit === null ? 'at the length limit' : `at the ${limit}-token limit`} before any tool call. ` +
-          (session.lam.return !== MISSING && !missing ? 'A complete typed result is already staged. Call return_result with {status: "success"} and omit value to return that exact result, or reply "done" to return it without a tool call.' :
-            // A text-typed call returns its plain reply: a model that thinks aloud in the reply must be told that the
-            // reply itself is the result, so it answers short instead of writing on (writer runaways, 2026-11-04).
-            session.takesTextResult() ? 'This call returns text: your next reply, complete and without a tool call, is returned as the result, so reply with only the result, shorter than the limit.' :
-            'Take the next step with one tool call.') :
-          unrun + (missing || 'The staged result is incomplete.');
+        const feedback = response.truncated ? (continued ? `Your reply was cut off after ${messageTokens} tokens before any tool call, and this conversation has no room left to continue it. ` :
+          `Your reply was cut off ${limit === null ? 'at the length limit' : `at the ${limit}-token limit`} before any tool call. `) +
+          (missing ? 'Take the next step with one tool call.' : STAGED_ANSWER) :
+          unrun + (missing || STAGED_ANSWER);
         if (response.truncated && ++failureRepairs > (this.options.maxFailureRepairs ?? Infinity)) {
           session.runtime.trace.emit('model_incomplete', { call_id: callId, turn: turns,
             reason: 'truncated_without_action', evidence: 'completed_truncated_reply_without_executable_action',

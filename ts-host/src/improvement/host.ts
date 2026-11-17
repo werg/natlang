@@ -238,7 +238,7 @@ export class SourceEvaluator implements ProgramEvaluator {
       const bootstrap = new URL('data:text/javascript,' + encodeURIComponent('import ' + JSON.stringify(entry) + ';'));
       const worker = new Worker(bootstrap, { workerData: { files: sourceFiles(folder), contract: this.contract, args: row.args, services: row.services, folder: row.folder, seed,
         limits: { maxEpisodes: 30, maxActions: 100, ...(this.options.excludeModelWaitFromTimeout ? {} : {timeoutMs: this.options.timeoutMs ?? 120000}) },
-        decisions: typeof this.driver.decide === 'function' } });
+        decisions: typeof this.driver.decide === 'function', continuesReplies: this.driver.continuesReplies === true } });
       const lifetime = new AbortController();
       const signal = this.options.signal ? AbortSignal.any([lifetime.signal, this.options.signal]) : lifetime.signal;
       let closed = false,modelCalls=0;

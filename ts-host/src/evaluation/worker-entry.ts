@@ -28,7 +28,7 @@ async function run(): Promise<void> {
     executorIdentity: suite.executorIdentity, serviceDeclarations: suite.services?.declarations,
     serviceScopes: suite.services?.scopes as Record<string, string[]> | undefined,
     signal: abort.signal, isolateModules: true, codeEdits: suite.policy?.codeEdits ?? 'deny', trace: trace => traces.push(trace),
-    seed: { mode: 'derived', root: input.seed }, model: { ...suite.policy?.settings, driver: remoteDriver(call => requestModel('executor', call), input.decisions === true) } });
+    seed: { mode: 'derived', root: input.seed }, model: { ...suite.policy?.settings, driver: remoteDriver(call => requestModel('executor', call), input.decisions === true, input.continuesReplies === true) } });
   let fixture: Awaited<ReturnType<EvaluationSuite['fixture']['create']>> | undefined;
   let outcome: EvaluationResult['outcome'] = { kind: 'returned' };
   let result: unknown; const start = Date.now();

@@ -21,7 +21,10 @@ export type DriverCall = { kind: 'turn'; request: ModelTurnRequest } | { kind: '
  * The host's driver as a worker thread sees it: `call` carries each request across the thread boundary. The worker
  * scores replies exactly when the host's driver does (`decisions`), so a call's readout is the host's, not a guess.
  */
-export function remoteDriver(call: (call: DriverCall) => Promise<unknown>, decisions: boolean): ModelDriver {
-  const turn = (request: ModelTurnRequest) => call({ kind: 'turn', request }) as Promise<ModelTurn>;
+export function remoteDriver(call: (call: DriverCall) => Promise<unknown>, decisions: boolean,
+  /** The host's driver continues cut-off replies (`ModelDriver.continuesReplies`), so the worker's does too. */
+  continuesReplies = false): ModelDriver {
+  const turn = Object.assign((request: ModelTurnRequest) => call({ kind: 'turn', request }) as Promise<ModelTurn>,
+    continuesReplies ? { continuesReplies: true } : {});
   return decisions ? Object.assign(turn, { decide: (request: DecisionRequest) => call({ kind: 'decision', request }) as Promise<DecisionScores> }) : turn;
 }

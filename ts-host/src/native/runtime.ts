@@ -1357,44 +1357,23 @@ export class NativeSession {
       '\nNothing else from this eval was kept; writes to files, services or live values stay done, so check them before writing again.';
   }
 
-  /**
-   * A final reply's text as the result when the declared return type accepts it. Neuralese<string> text goes through
-   * the typed block writer; a bare "done" asks for the already staged value.
-   */
-  /** Whether a plain, complete reply would be this call's result (a text-typed call with nothing staged). */
+  /** The runtime or the bound evaluation policy denies code edits. */
+  codeEditsDenied(): boolean {
+    return this.runtime.frame?.task.runtime.options.codeEdits === 'deny' ||
+      this.runtime.frame?.task.programView?.binding?.artifact.policy.codeEdits === 'deny';
+  }
+
+  /** The call can change code: its program has functions of its own and code edits are not denied (edit_code, diff_code). */
+  codeEditable(): boolean {
+    return Object.keys(this.lam.codebase).length > 0 && !this.codeEditsDenied();
+  }
+
+  /** Whether this call's result is text (a string or Neuralese<string>, with nothing staged). */
   takesTextResult(): boolean {
     if (this.lam.type.kind !== 'lambda' || this.lam.return !== MISSING) return false;
     const resolved = this.env.resolve(this.lam.type.returns);
     const element = resolved.kind === 'neuralese' ? this.env.resolve(resolved.element) : resolved;
     return element.kind === 'prim' && element.name === 'string';
-  }
-
-  async acceptTextResult(text: string): Promise<boolean> {
-    const answer = text.trim();
-    if (this.lam.type.kind !== 'lambda' || this.lam.return !== MISSING || !answer || /^done[.!]?$/i.test(answer)) return false;
-    // Tool-call markup is a failed tool call, never the answer.
-    if (TOOL_MARKUP.test(answer)) return false;
-    let value: Value;
-    const returnType = this.lam.type.returns;
-    const resolvedReturn = this.env.resolve(returnType);
-    const element = resolvedReturn.kind === 'neuralese' ? this.env.resolve(resolvedReturn.element) : undefined;
-    if (resolvedReturn.kind === 'neuralese' && element?.kind === 'prim' && element.name === 'string') {
-      try {
-        value = await this.coerceReturn(answer, 'assistant-text-return');
-        this.lam.return = value;
-        return true;
-      } catch { return false; }
-    }
-    try { value = coerce(answer, this.lam.type.returns, this.env, 'return'); } catch { value = MISSING; }
-    if (typeof value === 'string') { this.lam.return = value; return true; }
-    // Any other result may be written as JSON: a reply that is nothing but a value of the declared type (optionally
-    // in a code fence) is that value. Prose around it is a reply, not a result.
-    const body = answer.replace(/^```(?:json)?\s*\n([\s\S]*?)\n?```$/, '$1').trim();
-    let parsed: unknown;
-    try { parsed = JSON.parse(body); } catch { return false; }
-    try { value = coerce(parsed as Value, this.lam.type.returns, this.env, 'return'); } catch { return false; }
-    this.lam.return = value;
-    return true;
   }
 
   /** Complete the invocation if an eval has returned a value of the declared type. */
@@ -1970,8 +1949,8 @@ export class NativeSession {
         requested === this.lam.functionName ? `${requested} is the call you are executing: the opening message has all of its ` +
           `signature and instructions. ${SELF_CALL_ADVICE.replace(/\.$/, '')}` :
         inScope.includes(requested) ? `${requested} is a value in this call's eval scope: inspect it with eval, for example console.log(${requested})` :
-        // A text-typed call with no functions of its own (a writer) has nothing to read: its reply is its result.
-        !own.length && this.takesTextResult() ? 'This call returns text: reply with the result itself, without a tool call' :
+        // A text-typed call with no functions of its own (a writer) has nothing to read: it answers with its text.
+        !own.length && this.takesTextResult() ? 'This call returns text: send the text itself as the value of return_result' :
         undefined;
       throw new Reject([{ path: requested, code: 'no-such-function', expected: what ? `${readable}. ${what}` : readable }]);
     }
@@ -1988,7 +1967,7 @@ export class NativeSession {
       }
       return { kind: 'ok', text: explanation + record.text, value: record.text };
     }
-    if (this.runtime.frame?.task.runtime.options.codeEdits === 'deny' || view?.binding?.artifact.policy.codeEdits === 'deny')
+    if (this.codeEditsDenied())
       throw new Reject([{ path: requested, code: 'bad-action', expected: 'code edits are denied by this evaluation policy' }]);
     if (args.expected_revision !== undefined && args.expected_revision !== expectedRevision)
       throw new Reject([{ path: requested, code: 'bad-action', expected: 'current source revision; reread after a concurrent edit' }]);

@@ -70,3 +70,33 @@ test('integers beyond 2^53 are JS numbers in typed slots, as their inferred type
   assert.deepEqual(coerce([569731104070115300], parseType('number[]'), new TypeEnv()), [569731104070115300]);
   for (const bad of [Infinity, NaN]) assert.throws(() => coerce(bad, parseType('number'), new TypeEnv()), Reject);
 });
+
+// writing-failures 2026-11-13: a record under 128 characters with more than two fields was replaced by its keys
+// ("fields: …; values not shown") whenever its parent handed it a budget equal to its own length, so every vcs digest
+// lost one or more of its file records, including the only file of a one-file change.
+test('a record that fits its budget is shown whole, however small the budget', () => {
+  const row = { a: 'xxxxxxxxxxxx', b: 'yyyyyyyyyyyy', c: 'zzzzzzzzzz' };
+  const rows = { rows: [row, { ...row }], n: 1 };
+  const literal = '{ a: "xxxxxxxxxxxx", b: "yyyyyyyyyyyy", c: "zzzzzzzzzz" }';
+  assert.equal(renderValue(rows, { holder: 'r', budget: 4096 }), `{ rows: [${literal}, ${literal}], n: 1 }`);
+  assert.equal(renderValue([row, row], { holder: 'r', budget: 4096 }), `[${literal}, ${literal}]`);
+  assert.equal(renderValue(row, { holder: 'r', budget: literal.length }), literal);
+  const file = (path, change, status) => ({ path, change, unit: 'packages/shared', status });
+  const digest = { units: [{ unit: 'packages/shared', files: [file('packages/shared/src/rpc.ts', 'edited', 'conflict'),
+    file('packages/shared/README.md', 'edited', 'composed'), file('packages/shared/src/ids.ts', 'added', 'adopt')],
+  intents: [{ text: 'Rename the rpc envelope fields', tier: 'stated' }] }], fileCount: 3, truncated: false };
+  for (const budget of [4096, 20000]) {
+    const shown = renderValue(digest, { holder: 'digest', budget });
+    assert.doesNotMatch(shown, /<</);
+    for (const path of ['rpc.ts', 'README.md', 'ids.ts']) assert.match(shown, new RegExp(`path: "packages/shared/(src/)?${path.replace('.', '\\.')}"`));
+  }
+  const single = { units: [{ unit: 'workers/pubsub', files: [{ path: 'workers/pubsub/index.ts', change: 'edited', unit: 'workers/pubsub',
+    status: 'adopt' }] }], fileCount: 1, truncated: false };
+  assert.match(renderValue(single, { holder: 'digest', budget: 3584 }), /files: \[\{ path: "workers\/pubsub\/index\.ts", change: "edited", unit: "workers\/pubsub", status: "adopt" \}\]/);
+});
+
+test('a record that does not fit a small budget is still shown by its keys', () => {
+  const row = { first: 'a'.repeat(60), second: 'b'.repeat(60), third: 'c'.repeat(60) };
+  assert.equal(renderValue(row, { holder: 'row', budget: 100 }),
+    '{ <<fields: first, second, third; values not shown; row holds all of it>> }');
+});
