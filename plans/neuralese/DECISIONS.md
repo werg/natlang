@@ -3064,3 +3064,9 @@ citations rather than a fake capture implementation. None blocks this hosted tex
   corpus build should rerun `replay` on those keys with 89ddedce7.
 - Rows: a nested call's last turn now counts as final (068085501); tally went from 257 to 1,182 rows. Fits for the
   four programs are planned (all targets, factored) and wait for a GPU window (`fit-all.sh`).
+
+**2026-11-18, retire component-only Vibestudio teacher pilot.** The owner requested a replacement corpus of
+whole user tasks in Natlang codebases that operate on live Vibestudio workspaces. Removed the 39-chain skill pilot
+from the training registry and its active manifest. Source records and diagnostics stay available as historical
+evidence. The pilot has no known learner exposure and is not an input to the new corpus. Qualify live, stateful
+task outcomes and capture the exact model-facing calls before admitting the replacement.
