@@ -168,9 +168,15 @@ The pass-through costs nothing measurable: the documents are 0.2-1.9% of the tok
 - Eager is deterministic, and there the pass-through and frozen modes are bit-identical. The differing pass/frozen
   losses in the compiled bench are therefore this compile noise, not the pass-through.
 
-**SFT data.** `sft_sources.py neuralese-graph` (see `build.json` of `runs/sft-neuralese-graph-20261117-v1`) lowers the
-own Neuralese successes whole from the archived rollouts, consumer calls after imports included, with their recorded
-producer documents.
+**SFT data.** `sft_sources.py neuralese-graph` built corpus `sft-neuralese-graph-20261117-v1`
+(manifest 7c3342e7). It lowers the own Neuralese successes whole from the archived rollouts, consumer calls after
+imports included, with their recorded producer documents.
+- Funnel: of 449 episodes, 159 admitted over 91 tasks; 271 over the per-task cap of 2; 19 on an unseen surface.
+- No import lacked a recorded write.
+- Contents: 3,421 calls, of which 1,011 consumers; 1,024 chains, of which 413 import; 12.0M forward and 3.91M target
+  tokens (1.0M of them on consumer calls); 94k producer-document tokens.
+- It supersedes `sft-neuralese-text-20261117-v2` for these episodes: it has the same calls plus the consumers, so do
+  not merge both. Not yet trained.
 
 **FALLOW-22:** stale (old surface, native-write spans), not wired.
 

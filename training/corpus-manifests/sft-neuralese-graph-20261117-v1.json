@@ -1,0 +1,30 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "sft-neuralese-graph-20261117-v1",
+  "owner": "dgx",
+  "path": "runs/sft-neuralese-graph-20261117-v1",
+  "files": [
+    {
+      "path": "build.json",
+      "bytes": 2674,
+      "sha256": "d6b67369a57237b7041c209a198ed4ac711c48dd45757ff131591ab289953d21"
+    },
+    {
+      "path": "cases.jsonl",
+      "bytes": 1302604,
+      "sha256": "3bedc524fb95ea873894f0a4c802fbb45497d4a25254598e2c32448446bcd3a1",
+      "lines": 91
+    },
+    {
+      "path": "chains.pkl",
+      "bytes": 193912804,
+      "sha256": "bccf00a5e8470168e9dfdd7405e458cbc2c93beb4f363295746bb50c1d528452"
+    },
+    {
+      "path": "rows.jsonl.zst",
+      "bytes": 74786,
+      "sha256": "2262d26f4c7f5233353209cab87b37436c3b73d73dfdb23f2ab1da73128f51d3"
+    }
+  ],
+  "bytes": 195292868
+}
