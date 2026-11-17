@@ -2594,3 +2594,9 @@ independent refreshing session.
 - **Gap closed:** `natlang.rollout/1` records now name the code that produced them (`task_rollouts.score`, next pin).
 - **Launch:** the launch build re-extracts the growing teacher pool first.
 - **Details:** sources, every filter's counts, exclusions, and what was not verified: `SFT_SOURCES_20261117.md`.
+
+**2026-11-17 03:50, grpo-v3-run1 held step 7 (Pop, 2 vs 2 samples; supervisor).** Per-task pass rate 47.5% -> 51.4%,
++3.9 pts, permutation p 0.080, CI [-0.2, +8.0]; 49 tasks up, 35 down. Episodes that ran out of model calls fell from
+85 to 56 of 512 (-5.7 pts; see ran_out_paired in compare-vs-step0.json). Series: +4.7 (A/A), +1.2, +2.5, +3.7, +3.9.
+Steps 7-8 had no sentinel (grad_norm 0.82-1.0x the median, KL 5.5-6.2e-4). The run continues; its verdict is the 4 vs 4
+final eval (00:40 entry).
