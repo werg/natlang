@@ -3091,3 +3091,26 @@ citations rather than a fake capture implementation. None blocks this hosted tex
 - **The GPU pass-through smoke passes.**
 - **Next:** `ops/operators-v1/operator-stage.sh` (merge done → sft → held-base under `learned-compaction` → grpo).
   It enters at the first grpo-v4 resume with a pin at or after 0ea0e43b0 and a Pop base window.
+
+**2026-11-17 22:40, restore smoke result (restore agent; `ops/restore-smoke/run1`, grpo-v4 pin c57e7be28, base
+5ff07638, 2 steps, 12 low-pass tasks, group 4; `report.py`).**
+- **JOLT+:** 4 all-fail groups got 2 teacher attempts each (3 with hindsight trajectories). Of the 8, 1 succeeded where
+  its 4 students failed (desk-banking77-106, hindsight), 3 failed, 2 hit the smoke's 900 s wall (the writer's single turn
+  sampled ~5k tokens), 2 were still running at the stop. Step 2 lowered 18 teacher calls in student form (306 privileged
+  tokens removed) and trained the one success (`teacher_episodes_trained` 1). Student-form rho over its 9,307 tokens:
+  log rho p01 -0.46, p10 -0.09, p50 0.00, p90 +0.07, p99 +0.36; rho < 0.1 on 0.03%, capped on 0.26%. The unguided
+  policy finds the guided actions about as likely as the guided one did: the signal is not lost to the ratio.
+- **Hindsight:** `writeHint` wrote 3 hints, all input-specific (exact request ids, herds, deltas, cow ids, file names of
+  that task); word overlap with their own task prompt 0.75-0.88 vs 0.61-0.75 for the other tasks' prompts (shared system
+  prompt). Defects: no eval exploration (one long turn), ~1.5-2k characters (target <= 64 tokens), they copy the run's
+  result details, one hint states a wrong step (acting on an undo request) that another hint for the same task gets
+  right, and the first echoes the function signature line.
+- **Memetic:** not demonstrated. 0 of 5 memetic groups was admitted: support success was 0 or 1 on 2 support worlds x 2
+  samples (support 0.0/1.0/1.0/1.0/1.0, two half-resolved), so the workspace refused to load and the episodes ended
+  unresolved; preparation took 85-603 s. No supervisor turn, no guidance binding. Cause: 595 of 602 rows had no base rate
+  and 2 support worlds almost never land in [0.1, 0.85]. Fix before it enters: support 4 worlds and rows only from
+  programs whose support worlds have a measured base rate in band.
+- **Self-distillation:** step 1 buffered 2 rare successes, step 2 replayed 2 (11,568 tokens) as the positive term.
+- **Recommendation for grpo-v4 at its resume:** `--teacher-attempts 2 --hindsight-trajectories
+  /home/werg/data/hindsight-index-20261117/index.jsonl --sd-weight 0.1`; memetic stays off until the fix and a
+  re-smoke. Not measured: any effect on held success (1 trained teacher episode, 2 replayed episodes).
