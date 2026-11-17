@@ -266,3 +266,6 @@ a regression is bisected by branch states with the flags off.
 
 Implemented in this round (sections 1-3, pass-through independent parts): see DECISIONS.md, entry "2026-11-17:
 JOLT+, hindsight writer and memetic rows rebuilt on the per-call stack", and FALLOW_REGISTER rows P3, P5, P6.
+
+2026-11-18: hint check, top-level telemetry, memetic support 4 with measured rates and the re-smoke launcher
+(`ops/restore-smoke/resmoke.sh`); DECISIONS entry "2026-11-18 00:30, restore fixes for grpo-v4's resume".

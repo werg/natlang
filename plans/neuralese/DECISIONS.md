@@ -3114,3 +3114,28 @@ citations rather than a fake capture implementation. None blocks this hosted tex
 - **Recommendation for grpo-v4 at its resume:** `--teacher-attempts 2 --hindsight-trajectories
   /home/werg/data/hindsight-index-20261117/index.jsonl --sd-weight 0.1`; memetic stays off until the fix and a
   re-smoke. Not measured: any effect on held success (1 trained teacher episode, 2 replayed episodes).
+
+**2026-11-18 00:30, restore fixes for grpo-v4's resume (restore agent).** First-principles fixes, on main:
+- **writeHint (df2db4ab0).** Root cause of the contradictory "undo" hints: tau* classified R-24 (`Please undo: R-21.`)
+  as `undo` and left it in requests/ (the task carries out only `apply`); its last step listed it as remaining. The
+  writer saw all of tau* (50 KB) in its opening argument listing, answered in one turn, and step 4 asked for "exact
+  values" and "the mistake to avoid": two hints invented an action tau* never took (revert north by -0.5; "trigger an
+  undo"), one got it right. Fix: crisp `applications/guidance-writer/hintCheck.ts` (64-token budget at 4 chars/token, no
+  `writeHint(` echo, no value tau* returned or computed), applied by the agent where the writer proposes its result
+  (`return_result` and eval results) as the tool error `hint-rejected: <one sentence>`, and once more in
+  `TrainingGuidance.compute`; `writeHint.nl` steps 4-6 ask for procedure plus evidence, only what tau* did;
+  `rl/hindsight.py` records each call's returned value. On the smoke's 3 hints: echo, 334 and 272 tokens, all rejected.
+  Not done: forcing eval exploration (the argument listing shows tau* whole when it fits the page budget; changing that
+  is runtime-wide). MODEL_FACING_CHANGES entry.
+- **Telemetry (e2efa1597).** `train.jsonl` per step: `teacher` {groups, episodes, successes, episodes_trained,
+  calls_student_form, privileged_tokens_removed, policy_calls_removed} while `--teacher-attempts` > 0, `sd` {added,
+  episodes, tokens, buffer, skip_imports} while `--sd-weight` > 0 (zeros when nothing happened), `teacher_rho` (log-rho
+  quantiles) as before.
+- **Memetic (dd11a0395).** Support 4 worlds; a program enters only when every support world has >= 2 scored base
+  episodes and their mean is in [0.1, 0.85] (`no_rate` now skips). Measured rates covered 1 of 561 programs' 4 support
+  worlds, so `memetic_tasks measure` lists the unmeasured ones: 301 worlds of 80 programs (one per family,
+  `/home/werg/data/memetic-tasks-20261117/rates-v1/cases.jsonl`). `ops/restore-smoke/resmoke.sh` (needs a DGX window,
+  ~2 h): pin origin/main, serve the base, collect 2 samples per world (~600 episodes), rates, build rows, then the 2-step
+  smoke (`run2`, memetic share 0.5, teacher + hindsight + SD). Criteria: >= 3 memetic groups admitted, a guidance binding
+  bound, hints pass the check within the repair budget.
+- Not shipped to grpo-v4 yet: it runs pin c57e7be28; these enter at its next resume on a new pin.
