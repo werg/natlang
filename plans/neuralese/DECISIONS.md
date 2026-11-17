@@ -3152,3 +3152,48 @@ citations rather than a fake capture implementation. None blocks this hosted tex
   stale. They are rebuilt with the runtime sites before the operator stage's SFT. Details and the context-budget
   question: OPERATORS_RESTORE_20261117.md §9.
 
+
+**2026-11-18 00:00, grpo: dynamic sampling, construct-weighted exploration, teacher demonstrations (ae1f7dacb).** Three
+defaults with opt-outs; they reach grpo-v4 at its next pin (it has not started yet: the waiter runs on pin c57e7be28).
+- **Dynamic sampling** (`--dynamic-sampling-max-spread 0.1`, 0 off). A group of a task likely to agree on every sample
+  runs a first wave of k (`wave_plan`: k maximizes the expected samples saved; split only when >= 1 sample is expected
+  to be saved). The prior (`PassRatePrior`) is the task's own latest group, else its base rate, on a Beta with the
+  family's leave-one-out mean task rate and a beta-binomial ML concentration over all measured tasks. When the whole
+  wave has finished and agrees (binary and the advantage reward; any unscored sample runs the rest) and
+  P(the rest would still give spread) <= 0.1, the rest never start; otherwise they run ahead of every other group. The
+  stopped group is scored with what ran, so its task's pass rate updates (`cancelled.jsonl` keeps the rest). Waiting for
+  the whole wave instead of the first finishers: early finishers are biased to short episodes, and nothing is in
+  flight to kill. JOLT+ teacher attempts still follow an all-fail stop.
+  Offline replay on grpo-v3-run1's 571 groups (exp1 base rates + the run's own groups in order): 232 groups split, 107
+  stopped (69 all-pass, 38 all-fail), **8.6% fewer samples, 7.8% fewer generated tokens, 18 of 405 spread groups
+  (4.4%) lost**; net about +4% spread groups per collection hour (saved samples at the run's 71% spread rate minus the
+  lost ones). The prior is optimistic about 1.6x (expected 11.4 lost vs 18 actual; policy drift and selection):
+  max-spread 0.05: 3.3% samples, 1.0% lost; 0.15: 13.2%, 7.9%; 0.2: 16.2%, 10.4%. 0.1 chosen because lost groups are
+  disproportionately the rare-success (1/8, 7/8) groups SD and JOLT+ feed on. `entry_outcome` (the scorer's
+  classification read per entry before the group completes) agrees with `score` on all 84 restore-smoke episodes.
+- **Exploration weighting** (`--explore-wrapper-share 0.15`, `--explore-held-weight 3`; 1/1 off). `ExploreWalk`
+  takes a row declaring a held construct (`sft_sources.task_constructs`, minus `multi_function`: pool 69% vs held 75%)
+  always, others at 1/3, dataset wrappers while <= 15% of explored rows; composes with `--explore-order family`.
+  `simulate_selection.py --grpo` (the collector's real `_pick`, latent outcomes, 2,000 groups, current pools, family
+  order): explored wrappers 35.7% -> 14.8%, rows declaring a held construct 49.8% -> 76.5%, folder reducers 12.5% ->
+  22.9%, iterateOn 5.7% -> 10.5%, decide 3.1% -> 7.1%, depth >= 3 24.8% -> 32.4%, Neuralese results 12.5% -> 21.1%,
+  arguments 5.1% -> 8.8%; groups with spread 71.1% -> 71.7%. (Neuralese variants come on top in grpo-v4.)
+- **Teacher demonstrations in the SD replay** (`--sd-teacher-weight 0.05`, 8 a step, <= 4 per task; 0 off).
+  `TeacherDemos`: sft_sources exact-replay-verified teacher successes (`verified_episodes`) on eligible pool tasks,
+  held closure re-applied (`held_excluded_ids`), teacher models taking turns per task; each step one per task in the
+  pass band or at 0 successes (own latest group, else base rate), least replayed first, rendered by `call_row` on the
+  replayed turns with the actor export's tokenizer (the student-form prompt; an empty think block at weight 0).
+  **Rho:** a teacher episode has no actor log-probabilities, so the importance ratio pi/mu is undefined (the teacher
+  model's own probabilities are of another vocabulary and are not recorded). It trains as a ratio-free cross-entropy
+  (rho = 1: the learner's detached logp stands in, `behaviour_logp`) at its own small weight: 0.05, half the own-SD
+  design weight, because without the rho cap nothing bounds the per-token gradient of off-policy tokens; the tail floor
+  then masks tokens the learner itself gives < e^-7, which bounds it the same way the floor does for positive own
+  episodes; the KL term applies as to every chain. Telemetry: `sd` gains own/teacher episodes and tokens, teacher
+  candidates, render errors. Real-data check: the 2026-11-17 WORK yields 4,301 verified pool-v1 demonstrations on
+  4,301 eligible tasks (index 40 s at startup); 176 of the 402 tasks in band or all-fail by base rate have one.
+  Data: `/home/werg/data/sft-teacher-demos-20261118` (pool-v1 and pool-v2-rich, 6,757 + 2,193 successes) extracting
+  and replaying under pin ae1f7dacb (`prepare.sh`, unit `sdteacher-prep-1`, low priority); until its replay.jsonl
+  exists TeacherDemos logs it missing and uses the 2026-11-17 WORK (pool-v1, replayed at aa1bd8467).
+- Not checked: any held or training effect of the three (no GPU run); dynamic sampling's wave latency against
+  `--max-staleness` in a live run (grpo-v3 staleness never exceeded 1; the default max-outstanding now leaves room for
+  slots/2 groups); the rho statistics include the teacher demonstrations' rho = 1 tokens (8 of ~600 episodes a step).
