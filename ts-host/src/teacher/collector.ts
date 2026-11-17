@@ -1,4 +1,5 @@
 import { compactCaptures, trajectoryTurn } from '../runtime/trajectory.js';
+import { createEpisodeCallStore, episodeCallStoreRoot, episodeCallStoreShared, runInEpisodeCallStore } from '../machine-store.js';
 import { checkRequiredActions } from './required-actions.js';
 import { checkRequiredServiceReceipt } from './service-receipt.js';
 import { checkReportCompleteness, type ReportCompletenessSpec } from './report-completeness.js';
@@ -1503,12 +1504,12 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       };
     }
     let run: ProgramRun;
-    try { run = await (config.execution?.run ?? executeProgram)(item.record, driver,
+    try { run = await hermeticEpisode({}, () => (config.execution?.run ?? executeProgram)(item.record, driver,
       { ...config, systemPrompt: effectiveSystemPrompt(config), runId: executionRunId, signal: providerParentSignal(),
         onPartialExecution: async snapshot => appendEvidence(partialExecutionRecords({ ...snapshot,
           logical_run_id: runId, execution_attempt_id: partial.execution_attempt_id }), 'execution_interrupted'),
         ...(valueRuntime ? { neuralese: valueRuntime } : {}),
-        ...(judge ? { judge } : {}) }); }
+        ...(judge ? { judge } : {}) })); }
     catch (error) { throw fatalCollectionError ?? fatalProviderDeadline ?? error; }
     throwIfCollectionFatal();
     // The provider response is journaled before runtime decoding for crash safety. Once the exact
@@ -1617,7 +1618,7 @@ export type ExecuteOptions = { systemPrompt: string; contextTokens: number;
   maxTurns?: number; temperature?: number; rootSeed: number; signal?: AbortSignal; fileTools?: FileToolSurface;
   /** The root call's ID, unique per run; `runLabel` is the logical name runs of one kind share (NativeRuntimeOptions). */
   runId: string; runLabel?: string;
-  /** Explicitly disable or provide the call store for bounded replays; default collection still records normally. */
+  /** Disable (`false`) or provide the call store; by default each episode records to a fresh store of its own (hermeticEpisode). */
   calls?: import('../runtime/runtime.js').NatlangRuntimeOptions['calls'];
   /** Scripted source/type replay only: its direct canonical return does not certify model-run child lineage. */
   sourceReferenceOnly?: boolean;
@@ -1703,7 +1704,24 @@ function finalFunctionSource(root: LambdaNode, runtime: NodeNativeRuntime | unde
   return (view ? view.record(found.record) : found.record).text;
 }
 
+/**
+ * Run a collector episode hermetically: with a fresh call store of its own (machine-store.ts), unless the caller gave
+ * one (`calls`), the episode already runs in one, or `NATLANG_EPISODE_CALL_STORE=machine` asks for the machine's store
+ * (debugging only). Nothing another episode or run stored can change what this one does.
+ */
+export async function hermeticEpisode<T>(options: { calls?: unknown }, body: () => Promise<T>): Promise<T> {
+  if (options.calls !== undefined || episodeCallStoreShared() || episodeCallStoreRoot()) return body();
+  const episode = createEpisodeCallStore();
+  try { return await runInEpisodeCallStore(episode.root, body); }
+  finally { episode.dispose(); }
+}
+
 export async function executeProgram(record: ProgramRecord, driver:(request: ModelTurnRequest) => Promise<ModelTurn>,
+  options: ExecuteOptions): Promise<ProgramRun> {
+  return hermeticEpisode(options, () => executeProgramInEpisode(record, driver, options));
+}
+
+async function executeProgramInEpisode(record: ProgramRecord, driver:(request: ModelTurnRequest) => Promise<ModelTurn>,
   options: ExecuteOptions): Promise<ProgramRun> {
   if (record.kind === 'evaluation_fixture' || record.semantics.evaluation_fixture) {
     validateFocusedRecord(record);
@@ -1778,6 +1796,8 @@ export async function executeProgram(record: ProgramRecord, driver:(request: Mod
   runtime = new NodeNativeRuntime({ environment, agent: session => agent.run(session), services, declarations,
     modelId: typeof driverModel === 'string' && driverModel ? driverModel : `undeclared:${driver.name || 'teacher-driver'}`,
     ...(options.calls !== undefined ? { calls: options.calls } : {}),
+    // The policy answers every call of a collector episode: no compiled case serves one, whatever the store holds.
+    specialization: 'off',
     ...(serviceScopes ? { serviceScopes } : {}),
     ...(options.neuralese ? { neuralese: options.neuralese } : {}),
     ...(stepMarkers.length ? { traceStepStates: true } : {}),

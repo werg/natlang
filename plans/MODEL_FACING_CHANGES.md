@@ -2604,3 +2604,24 @@ capture of an already sampled reply is not counted as another sampled decision. 
 retains its established text-cut fallback; the ordinary caller then observes the same exhausted graph budget.
 Unbounded operator request content and capture remain unchanged. This is shared TypeScript runtime plumbing across
 all engines, not a new sampling protocol. Zero-request, token-limit and overrun regressions cover the exact boundary.
+
+### 2026-11-17: collector episodes are hermetic (fresh call store per episode, specialization off)
+
+Every collector episode (GRPO collection and JOLT+ teacher attempts, held eval on DGX and Pop, `pop_rl_actor`,
+`teacher_gen`, `sft_sources replay`, memetic/improvement fixtures; all reach `teacher/collector.ts` `nativeJobRunner`
+-> `executeProgram`) used to record to the machine's shared call store and read it back: compiled crisp cases could serve
+its calls instead of the policy (`runtime/kernel.ts` 676-700), the tier ladder read stored specializer output (447-461),
+`iterateOn` progress-review timing read site statistics accumulated by earlier episodes (`runtime/iterate.ts` 107-115,
+249-251), and `Is<T, P>` checks reused verdicts cached by other processes (`runtime/runtime.ts` 509). Now each episode
+runs with a fresh, empty store of its own (`machine-store.ts` `createEpisodeCallStore`/`runInEpisodeCallStore`,
+`collector.ts` `hermeticEpisode`; worker threads of evaluation fixtures and the improvement evaluator join it through
+their worker data), removed with the episode, with specialization off in its settings and on the collector runtime.
+Within the episode the store keeps its own records, so the item-result binding still reads its host captures
+(`collector.ts` `itemResultInvocationLedger`). `NATLANG_EPISODE_CALL_STORE=machine` records to the shared store again,
+for debugging only (specialization stays off). Product runtimes keep the machine store. Tests:
+`ts-host/test/hermetic-episodes.test.mjs` (two concurrent episodes isolated, own records readable, an active compiled
+case that serves a product call never serves a collector call, also under the opt-out). Not readers of the store
+(checked): `read_code` and the traces the model sees (`native/agent.ts`, no call-store reference anywhere in
+`ts-host/src/native`), hindsight and in-run guidance (passed explicitly per job: `teacher/cli.ts` 147,
+`native/training-guidance.ts`), Neuralese state (content-addressed blocks fetched by exact ID from the actor's block
+store, `ts-host/src/neuralese`, no call-store reference).

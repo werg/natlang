@@ -1,3 +1,4 @@
+import { episodeCallStoreRoot } from '../machine-store.js';
 import { Worker } from 'node:worker_threads';
 import type { AdaptationArtifact, ExecutorIdentity, ProgramDescriptor } from '../adaptation/types.js';
 import type { ModelDriver } from '../runtime/runtime.js';
@@ -20,7 +21,8 @@ export function runWorker(input: WorkerInput, driver: ModelDriver, gateway: Usag
   return new Promise((resolve, reject) => {
     const lifetime = new AbortController();
     const requestSignal = signal ? AbortSignal.any([signal, lifetime.signal]) : lifetime.signal;
-    const worker = new Worker(new URL('./worker-entry.js', import.meta.url), { workerData: { ...input, decisions: typeof driver.decide === 'function',
+    const worker = new Worker(new URL('./worker-entry.js', import.meta.url), { workerData: { ...input, episodeCallStore: episodeCallStoreRoot(),
+      decisions: typeof driver.decide === 'function',
       continuesReplies: driver.continuesReplies === true } });
     let result: EvaluationResult | undefined, finished = false, transportError: Error | undefined;
     const usage = { modelCalls: 0, inputTokens: 0 as number | null, outputTokens: 0 as number | null, cost: gateway.limits.pricing ? 0 as number | null : null };

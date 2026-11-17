@@ -3064,3 +3064,19 @@ citations rather than a fake capture implementation. None blocks this hosted tex
   corpus build should rerun `replay` on those keys with 89ddedce7.
 - Rows: a nested call's last turn now counts as final (068085501); tally went from 257 to 1,182 rows. Fits for the
   four programs are planned (all targets, factored) and wait for a GPU window (`fit-all.sh`).
+
+**2026-11-17 22:30, collector episodes made hermetic; call store bounded on disk (call-store agent).**
+- Call store: the DGX store held 80 GB under a 2 GiB bound (eviction ran only after 200 writes by one process, measured
+  text bytes not disk, never shrank the database). Fixed bc728cf7a, cc58be42d, fe490855d (bound on blob files as
+  allocated + database pages + WAL, checked every write; incremental vacuum). Reclaimed ~70 GB on DGX `/`.
+- Hermetic episodes (first-principles fix, no A/B; plans/MODEL_FACING_CHANGES.md 2026-11-17): every collector episode
+  gets a fresh private call store, specialization off. Default at the next pin; grpo-v4 picks it up at its next pin, so
+  it starts a new held series and a new Pop base.
+- Exposure of results so far: compiled cases served 3 calls and handed off 16 on the DGX, all 2026-10-08/09 (the
+  specializer demo programs support.nl, scheduler/pass.nl, harness/boundary.nl; `cases.served`/`handed_off` counters,
+  which outlive evicted call rows); Pop's store has no compilations and no crisp calls. So no grpo-v2/v3 training or
+  held episode was served crisp. Cache influence did exist: the DGX store's iterateOn statistics are keyed by task
+  program sites (notebook/index.ts, triage.ts, cell.ts, src/app.ts, migration, build, authoring_check/search.ts,
+  program-improver/v1; 32 keys, last written 2026-11-16/17), so episodes of tasks using those sites had their progress-
+  review timing set by earlier episodes; Pop has 3 such keys (2026-10-14). 4 cached refinement verdicts (2026-10-09, 10-28).
+  Per-series counts of affected held episodes cannot be recovered: the call rows were evicted.
