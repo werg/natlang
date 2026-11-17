@@ -30,8 +30,12 @@ import time
 import urllib.request
 from pathlib import Path, PurePosixPath
 
-os.environ.pop('NATLANG_REPO', None)
-os.environ.pop('PYTHONPATH', None)
+# A direct control-plane CLI resolves Pop's canonical machine paths rather than
+# inheriting a learner pin. Importing its helpers runs inside that learner's
+# process and must preserve the learner's checkout and child-process bindings.
+if __name__ == '__main__':
+    os.environ.pop('NATLANG_REPO', None)
+    os.environ.pop('PYTHONPATH', None)
 REPO = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(REPO / 'training/neuralese'), str(REPO)]
 

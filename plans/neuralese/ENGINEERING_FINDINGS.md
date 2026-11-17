@@ -2,6 +2,22 @@
 
 Moved from AGENTS.md on 2026-11-09 (owner). Still binding for the code they describe; read the relevant section before changing it.
 
+## Pop actor helper imports preserve pinned caller bindings (2026-11-17)
+
+The full check on detached `9cd48a60d` exposed two historical-dispatch attestation failures: the verifier resolved
+`/home/werg/natlang` while the test artifact belonged to the detached checkout. The cause was
+`scripts/neuralese_data/pop_rl_actor.py` clearing `NATLANG_REPO` and `PYTHONPATH` at import. Both
+`tests/neuralese/test_held_dispatch.py` and the production GRPO `pop_held_loop` import its `pop_sglang` helper.
+Cleanup now runs only for direct CLI execution; helper imports preserve the caller's environment. This is subprocess
+and provenance plumbing, with no serving protocol, model input or training objective change.
+
+Static scope checked: GRPO's `pinned_env()` explicitly restores both bindings, and Pop status/serve/held measure/compare
+children receive it (`grpo.py`, `pop_held_loop`). No wrong live policy or held outcome was demonstrated. Live process
+environments and active run artifacts were not audited in this integration task; no live job was stopped or changed.
+A fresh history-attestation-only run passed before the fix, identifying order dependence; the combined held-dispatch
+and provider-source files pass after the fix, including a fresh-process import-preservation regression. Full-check
+failure evidence remains distinct from the targeted correction checks.
+
 ## Digest-cache maintenance stays bounded and off the source filesystem (engineering, 2026-11-02)
 
 The shared append-only digest cache reached606.5MB and2.30million entries;

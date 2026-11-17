@@ -2818,3 +2818,13 @@ limitations and commands: `~/vibestudio/docs/natlang-teacher-coverage.md` and `V
 Validation and live pilot results will be recorded after completion; this entry does not assert collection readiness
 or learner exposure. Existing authored/previously inspected test cases remain protected regression sets; unseen
 transfer claims need new source-group-separated scenarios. Broad catalog-app conversion remains separate work.
+
+**2026-11-17, integration check: preserve the caller's pin when importing Pop actor helpers.** The full isolated
+`9cd48a60d` check found two provider-campaign history-attestation failures after the held-dispatch tests imported
+`pop_rl_actor`: its module bootstrap deleted `NATLANG_REPO` and `PYTHONPATH`, so subsequent source verification used
+canonical main instead of the detached checkout. The same helper is imported by GRPO's remote-held loop. Scope the
+existing cleanup to direct CLI execution; imports must preserve their caller. Add a fresh-process environment
+regression and run held-dispatch then provider-source checks together. Static review finds the GRPO child launches
+explicitly rebuild both bindings through `pinned_env()`; no wrong live policy, training exposure or held result has
+been demonstrated, and live process environments/artifacts were not checked here. Leave live training unchanged.
+Details and checked scope: `ENGINEERING_FINDINGS.md`, "Pop actor helper imports preserve pinned caller bindings".
