@@ -2412,7 +2412,8 @@ def train(args):
         # Shared prefixes (the system prompt across groups, a group's opening prompt, an episode's earlier calls) are
         # computed once per pass and every batch is packed: a prefix tree over the step's chains (`--share-prefix-tokens`;
         # chains reading imported native state stay whole), exact gradients (lfm3_fast_train.run_prefix_tree).
-        nodes = exp0_sft.step_tree(chains, args.share_prefix_tokens)
+        share_prefix_tokens, tree_mode = exp0_sft.prefix_tree_settings(args)
+        nodes = exp0_sft.step_tree(chains, share_prefix_tokens)
 
         def tokens_of(index, start):
             return len(chains[index]['ids']) - start + exp0_sft.source_tokens(chains[index])
@@ -2449,7 +2450,8 @@ def train(args):
 
         def run_tree(leaf, backward=True):
             return lfm3_fast_train.run_prefix_tree(model, nodes, ids_of, leaf, tokens_of, pack_tokens, args.activation_gb,
-                                                   backward)
+                                                   backward, mode=tree_mode if share_prefix_tokens > 0 else 'levels',
+                                                   batch_tokens=args.tree_batch_tokens)
 
         refs = {}
         # Sampled decisions: log pi(chosen) = log_softmax(s / T)[chosen], s_o the summed log-probability of option o's
@@ -2871,6 +2873,8 @@ def main():
     t.add_argument('--share-prefix-tokens', type=int, default=256,
                    help='a prompt prefix this long or longer that several of a step\'s chains share is computed once per '
                         'pass, exact gradients (lfm3_fast_train.prefix_tree); 0: every chain whole')
+    import exp0_sft                  # the learners' shared prefix-tree flags
+    exp0_sft.add_prefix_tree_args(t)
     t.add_argument('--pack-tokens', type=int, default=-1,
                    help='pack the learner\'s chains (and the prefix tree\'s nodes and continuations) into varlen batches of '
                         'at most this many tokens; default: the longest row --activation-gb holds without recompute')

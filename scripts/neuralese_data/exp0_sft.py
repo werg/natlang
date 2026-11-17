@@ -333,11 +333,28 @@ def step_tree(chains, share_prefix_tokens):
     return nodes + [{'start': 0, 'index': i} for i, chain in enumerate(chains) if chain.get('imports')]
 
 
+def add_prefix_tree_args(parser):
+    """The prefix tree's flags, shared by both learners (exp0_sft, grpo)."""
+    parser.add_argument('--prefix-tree-mode', choices=lfm3_fast_train.PREFIX_TREE_MODES, default='levels',
+                        help='shared prefixes: tree-mask (each batch one flattened forward, every token attending and '
+                        'convolving along its own path), levels (level-by-level packed continuations over cached state), '
+                        'off (every chain whole; as --share-prefix-tokens 0)')
+    parser.add_argument('--tree-batch-tokens', type=int, default=-1,
+                        help='tree-mask batch (prefixes once plus their continuations); default: what --activation-gb '
+                        'holds with every layer recomputed (lfm3_fast_train.tree_batch_tokens)')
+
+
+def prefix_tree_settings(args):
+    """(share_prefix_tokens, mode) of the learner flags (``off``: no shared prefix)."""
+    return (0, 'levels') if args.prefix_tree_mode == 'off' else (args.share_prefix_tokens, args.prefix_tree_mode)
+
+
 def step_backward(model, forward, chains, denominator, pack_tokens, activation_gb, share_prefix_tokens, fast=True,
-                  mark=None, passthrough=True):
+                  mark=None, passthrough=True, mode='levels', tree_batch_tokens=None):
     """Forward and backward of one optimizer step's chains, the loss sum(weight * nll) / ``denominator``. Prefixes of at
     least ``share_prefix_tokens`` tokens that several chains share are computed once and every batch is packed into
-    varlen rows of ``pack_tokens`` (`lfm3_fast_train.run_prefix_tree`, exact gradients); 0: every chain whole, packed.
+    varlen rows of ``pack_tokens`` (`lfm3_fast_train.run_prefix_tree` in ``mode``, exact gradients); 0: every chain
+    whole, packed.
     Chains that import Neuralese state stay whole and carry their producer documents in the same forward (``row_inputs``:
     the consumer's loss reaches the producer's state; ``passthrough`` False: detached).
     Returns (sum of weighted nll, tokens computed)."""
@@ -385,7 +402,8 @@ def step_backward(model, forward, chains, denominator, pack_tokens, activation_g
         clock['end'] = mark('loss_backward', t)
         total_nll += nll.sum().item()
     clock['start'] = time.time()
-    lfm3_fast_train.run_prefix_tree(model, nodes, ids_of, leaf, tokens, pack_tokens or 1, activation_gb)
+    lfm3_fast_train.run_prefix_tree(model, nodes, ids_of, leaf, tokens, pack_tokens or 1, activation_gb,
+                                    mode=mode if share_prefix_tokens > 0 else 'levels', batch_tokens=tree_batch_tokens)
     if clock['end'] is not None:
         mark('prefix_backward', clock['end'])
     return total_nll, lfm3_fast_train.tree_tokens(nodes, [tokens(i, 0) for i in range(len(chains))])
@@ -512,7 +530,8 @@ def train(args):
     embedding_name = next(n for n, p in live.items() if p is model.get_input_embeddings().weight)
     embedding_master = masters[embedding_name]
     saved_rows = embedding_master[special_index].clone()
-    if args.share_prefix_tokens and args.stock_model:
+    share_prefix_tokens, tree_mode = prefix_tree_settings(args)
+    if share_prefix_tokens and args.stock_model:
         raise SystemExit('--share-prefix-tokens needs the lfm3_fast_train path (pass 0 with --stock-model)')
     importing = sum(1 for chain in chains if chain.get('imports'))
     adapter = sorted(k for k in state['interface_state'] if k.startswith('adapter.'))
@@ -520,13 +539,13 @@ def train(args):
         # the producer documents embed their span with the producer table, which is the embedding only without an adapter
         raise SystemExit(f'{importing} chains import Neuralese state: needs the fast path and a checkpoint without a '
                          f'producer adapter (has {adapter})')
-    grouped = args.batch_order == 'grouped' or (args.batch_order == 'auto' and args.share_prefix_tokens > 0)
+    grouped = args.batch_order == 'grouped' or (args.batch_order == 'auto' and share_prefix_tokens > 0)
     steps = step_groups(chains, args.epochs, args.batch_loss_tokens, args.seed, grouped)
     total = len(steps)
     if args.max_steps:
         steps = steps[:args.max_steps]
     print(json.dumps({'optimizer_steps': total, 'lr': args.lr, 'batch_loss_tokens': args.batch_loss_tokens,
-                      'share_prefix_tokens': args.share_prefix_tokens, 'batch_order': 'grouped' if grouped else 'random'}),
+                      'share_prefix_tokens': share_prefix_tokens, 'prefix_tree_mode': tree_mode, 'batch_order': 'grouped' if grouped else 'random'}),
           flush=True)
     log = open(Path(args.out_dir) / 'train.jsonl', 'a')
     if val_sets:
@@ -563,8 +582,9 @@ def train(args):
         step_started = time.time()
         torch.cuda.reset_peak_memory_stats()
         total_nll, computed = step_backward(model, forward, [chains[i] for i in group], denominator, pack_tokens,
-                                            args.activation_gb, args.share_prefix_tokens, fast=not args.stock_model,
-                                            mark=mark, passthrough=not args.no_neuralese_passthrough)
+                                            args.activation_gb, share_prefix_tokens, fast=not args.stock_model,
+                                            mark=mark, passthrough=not args.no_neuralese_passthrough, mode=tree_mode,
+                                            tree_batch_tokens=args.tree_batch_tokens)
         forward_tokens += computed
         t = time.time()
         embedding_master.grad[special_index] = 0
@@ -716,6 +736,7 @@ def main():
     p.add_argument('--share-prefix-tokens', type=int, default=256,
                    help='compute a prefix that several of a step\'s chains share (system prompt, task prompt, earlier calls) '
                    'once when it is at least this long (exact gradients, lfm3_fast_train.prefix_tree); 0: every chain whole')
+    add_prefix_tree_args(p)
     p.add_argument('--no-neuralese-passthrough', action='store_true',
                    help='imported Neuralese state as fixed context: the same in-graph state from the producer document, '
                    'detached (default: the consumer\'s loss reaches the producer\'s state, NEURALESE_PASSTHROUGH_20261117)')

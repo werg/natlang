@@ -332,7 +332,7 @@ def test_prefix_tree_covers_every_sequence_once_within_caps():
     assert lfm3_fast_train.tree_tokens(lfm3_fast_train.prefix_tree(seqs, caps, 0), lengths) == sum(lengths)
 
 
-def _tree_run(model, seqs, caps, weights, pack_tokens, backward=True, budget=None):
+def _tree_run(model, seqs, caps, weights, pack_tokens, backward=True, budget=None, mode='levels'):
     """run_prefix_tree over ``seqs`` with the loss sum(h[cap:] * weight): {index: h[cap:]} and the batches seen."""
     actual, batches = {}, []
 
@@ -350,7 +350,8 @@ def _tree_run(model, seqs, caps, weights, pack_tokens, backward=True, budget=Non
             loss.backward()
     nodes = lfm3_fast_train.prefix_tree(seqs, caps, 2)
     stats = lfm3_fast_train.run_prefix_tree(model, nodes, lambda i, a, b: torch.from_numpy(seqs[i][a:b]).long(), leaf,
-                                            lambda i, s: len(seqs[i]) - s, pack_tokens, budget, backward)
+                                            lambda i, s: len(seqs[i]) - s, pack_tokens, budget, backward, mode=mode,
+                                            batch_tokens=pack_tokens)
     return actual, batches, stats
 
 
@@ -380,6 +381,35 @@ def test_prefix_tree_gradients_equal_separate_sequences():
     without, _, _ = _tree_run(tree, seqs, caps, weights, 12, backward=False)   # the KL reference pass's walk
     for index in expected:
         torch.testing.assert_close(without[index], expected[index], rtol=1e-4, atol=1e-5)
+    # tree-mask: one flattened forward per batch; small batches split subtrees (each with its own copy of the path)
+    for batch_tokens in (1, 9, 20, 1000):
+        _, tree = _pair()
+        tree.load_state_dict(flat.state_dict())
+        actual, batches, stats = _tree_run(tree, seqs, caps, weights, batch_tokens, mode='tree-mask')
+        assert sorted(i for batch in batches for i, _ in batch) == list(range(len(seqs)))   # every chain once
+        if batch_tokens == 1000:
+            assert stats['batches'] == 1
+        for index in expected:
+            torch.testing.assert_close(actual[index], expected[index], rtol=1e-4, atol=1e-5)
+        _grads_close(flat, tree, f'tree-mask batch {batch_tokens}')
+
+
+def test_tree_layout_paths_positions_and_conv_predecessors():
+    """Path positions continue the parent's; a document's first taps read its parent's last tokens (several levels up
+    when the parent is shorter than the conv), never a sibling's; roots read zeros."""
+    import numpy as np
+    lengths, parents = [4, 2, 3, 5, 1], [-1, 0, 0, 1, -1]      # 3 continues 1 (2 tokens) continues 0
+    pos, doc, pred, ancestors = lfm3_fast_train.tree_layout(lengths, parents, 4)
+    assert pos.tolist() == [0, 1, 2, 3, 4, 5, 4, 5, 6, 6, 7, 8, 9, 10, 0]
+    assert ancestors[3].tolist() == [True, True, False, True, False] and not ancestors[1, 2]
+    rows = {d: np.flatnonzero(doc == d) for d in range(5)}
+    zero = len(doc)
+    assert pred[:, rows[2][0]].tolist() == [3, 2, 1]                           # doc 2's first token: doc 0's last three
+    assert pred[:, rows[3][0]].tolist() == [5, 4, 3]                           # doc 3: doc 1's two, then doc 0's last
+    assert pred[:, rows[3][1]].tolist() == [rows[3][0], 5, 4]
+    assert pred[:, rows[0][1]].tolist() == [0, zero, zero] and pred[:, rows[4][0]].tolist() == [zero] * 3
+
+
 
 
 def test_prefix_tree_continuation_cotangents_accumulate_in_fp32():
@@ -433,10 +463,13 @@ def test_exp0_step_with_shared_prefixes_equals_whole_chains():
     _, tree = _pair()
     tree.load_state_dict(whole.state_dict())
     expected, plain_tokens = exp0_sft.step_backward(whole, lfm3_fast_train.hidden, chains, denominator, 13, 1., 0)
-    actual, tree_tokens = exp0_sft.step_backward(tree, lfm3_fast_train.hidden, chains, denominator, 13, 1., 2)
-    assert plain_tokens == sum(len(c['ids']) for c in chains) and tree_tokens < plain_tokens
-    assert abs(actual - expected) <= 1e-5 * abs(expected)
-    _grads_close(whole, tree, 'exp0 prefix tree')
+    for mode in ('levels', 'tree-mask'):
+        tree.zero_grad()
+        actual, tree_tokens = exp0_sft.step_backward(tree, lfm3_fast_train.hidden, chains, denominator, 13, 1., 2,
+                                                     mode=mode, tree_batch_tokens=30)
+        assert plain_tokens == sum(len(c['ids']) for c in chains) and tree_tokens < plain_tokens
+        assert abs(actual - expected) <= 1e-5 * abs(expected)
+        _grads_close(whole, tree, f'exp0 prefix tree {mode}')
 
 
 def test_exp0_step_groups_cover_every_chain_once_per_epoch():
@@ -595,13 +628,15 @@ def test_exp0_rows_and_steps_carry_producer_documents():
         exp0_sft.row_inputs([{**importing, 'sources': {}}], 'cpu')
     chains = [importing, other, {**other, 'task': 'v'}]
     denominator = sum(exp0_sft.chain_mass(c) for c in chains)
-    for pack_tokens in (0, 64):                       # one sequence per forward, and packed batches
+    # one sequence per forward, packed batches, and the tree-mask's flattened batch (prefix rows shift the imports)
+    for pack_tokens, mode in ((0, 'levels'), (64, 'levels'), (64, 'tree-mask')):
         fast.zero_grad()
-        total, computed = exp0_sft.step_backward(fast, lfm3_fast_train.hidden, chains, denominator, pack_tokens, 1., 4)
+        total, computed = exp0_sft.step_backward(fast, lfm3_fast_train.hidden, chains, denominator, pack_tokens, 1., 4,
+                                                 mode=mode, tree_batch_tokens=200)
         if pack_tokens == 0:
             grads = {name: p.grad.clone() for name, p in fast.named_parameters()}
-    for name, p in fast.named_parameters():
-        assert (grads[name] - p.grad).norm() <= 1e-4 * p.grad.norm() + 1e-12, name
+        for name, p in fast.named_parameters():
+            assert (grads[name] - p.grad).norm() <= 1e-4 * p.grad.norm() + 1e-12, (mode, name)
     h = _passthrough_forward(fast, consumer, start, sources)
     direct = exp0_sft.token_nll(fast, h, torch.arange(11, 11 + len(sample)), torch.as_tensor(sample, dtype=torch.long))
     direct = direct.sum().item() + sum(exp0_sft.token_nll(fast, lfm3_fast_train.hidden(fast, torch.as_tensor(c['ids'], dtype=torch.long)),

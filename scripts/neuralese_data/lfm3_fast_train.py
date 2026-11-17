@@ -98,9 +98,20 @@ def _varlen_gqa():
 _GQA = _varlen_gqa()
 
 
-def _attend(q, k, v, docs, window):
-    """Causal attention within each document, keys at most ``window`` positions back (-1: unbounded). (T, H, D) -> same."""
+def _attend(q, k, v, docs, window, tree_mask=None):
+    """Causal attention within each document, keys at most ``window`` positions back (-1: unbounded). (T, H, D) -> same.
+    ``tree_mask`` (a flattened prefix tree, ``tree_masks``): each query sees its own path instead, a flex-attention
+    ``BlockMask`` on CUDA, the same mask as a dense bool (T, T) on the CPU."""
     scale = q.shape[-1] ** -0.5
+    if tree_mask is not None:
+        if q.is_cuda:
+            from torch.nn.attention.flex_attention import flex_attention
+            out = flex_attention(q.transpose(0, 1)[None], k.transpose(0, 1)[None], v.transpose(0, 1)[None],
+                                 block_mask=tree_mask, scale=scale, enable_gqa=q.shape[1] != k.shape[1])
+            return out[0].transpose(0, 1)
+        out = F.scaled_dot_product_attention(q.transpose(0, 1)[None], k.transpose(0, 1)[None], v.transpose(0, 1)[None],
+                                             attn_mask=tree_mask, scale=scale, enable_gqa=q.shape[1] != k.shape[1])
+        return out[0].transpose(0, 1)
     cu, max_len, doc, pos = docs
     if q.is_cuda:
         from torch.nn.attention.varlen import varlen_attn
@@ -134,11 +145,13 @@ def _ffn(x, ffn_norm, w1, w3, w2, post_ffn_norm, eps):
 
 def conv_layer(x, pos, operator_norm, in_proj, conv_weight, out_proj, post_operator_norm,
                ffn_norm, w1, w3, w2, post_ffn_norm, eps: float, import_rows=None, import_bx=None,
-               pass_rows=None, pass_source=None, pass_frozen=None):
+               pass_rows=None, pass_source=None, pass_frozen=None, pred=None):
     """`Lfm3DecoderLayer` with `Lfm3ShortConv` on (T, D): the depthwise width-7 causal conv as seven shifted fp32
     multiply-adds (as the inference kernel accumulates), each tap only inside the token's document (``pos``: position
     within the document; ``import_rows``: rows whose B*x is the imported ``import_bx``; ``pass_rows``: rows whose B*x
-    is this layer's own B*x at ``pass_source``, the producer span in the same forward: ``passthrough``)."""
+    is this layer's own B*x at ``pass_source``, the producer span in the same forward: ``passthrough``). ``pred``
+    (taps - 1, T) (a flattened prefix tree): tap ``back``'s row is ``pred[back - 1]``, the token ``back`` steps back
+    along the token's own path (T: none, a zero row), in place of the shifted rows."""
     length = x.shape[0]
     taps = conv_weight.shape[-1]
     h = _rms(x, operator_norm, eps)
@@ -149,11 +162,17 @@ def conv_layer(x, pos, operator_norm, in_proj, conv_weight, out_proj, post_opera
     if pass_rows is not None:
         bx = bx.index_put((pass_rows,), _passed(bx, pass_source, pass_frozen))
     weight = conv_weight.reshape(conv_weight.shape[0], taps).float()
-    padded = F.pad(bx.float(), (0, 0, taps - 1, 0))
-    acc = padded[taps - 1:taps - 1 + length] * weight[:, taps - 1]
-    for back in range(1, taps):                         # the tap ``back`` positions before the token
-        k = taps - 1 - back
-        acc = acc + (padded[k:k + length] * weight[:, k]) * (pos >= back)[:, None]
+    if pred is None:
+        padded = F.pad(bx.float(), (0, 0, taps - 1, 0))
+        acc = padded[taps - 1:taps - 1 + length] * weight[:, taps - 1]
+        for back in range(1, taps):                     # the tap ``back`` positions before the token
+            k = taps - 1 - back
+            acc = acc + (padded[k:k + length] * weight[:, k]) * (pos >= back)[:, None]
+    else:
+        padded = F.pad(bx.float(), (0, 0, 0, 1))       # row T: zero (before the path's start)
+        acc = padded[:length] * weight[:, taps - 1]
+        for back in range(1, taps):                     # the same multiply-adds in the same order
+            acc = acc + padded[pred[back - 1]] * weight[:, taps - 1 - back]
     y = F.linear(c * acc.to(bx.dtype), out_proj)
     if post_operator_norm is not None:
         y = _rms(y, post_operator_norm, eps)
@@ -163,7 +182,7 @@ def conv_layer(x, pos, operator_norm, in_proj, conv_weight, out_proj, post_opera
 def attention_layer(x, cos, sin, cu, max_len: int, doc, pos, operator_norm, wq, wk, wv, wo, wg, q_norm, k_norm,
                     post_operator_norm, ffn_norm, w1, w3, w2, post_ffn_norm, eps: float, head_dim: int, window: int,
                     import_rows=None, import_k=None, import_v=None, pass_rows=None, pass_source=None,
-                    pass_frozen=None):
+                    pass_frozen=None, tree_mask=None):
     """`Lfm3DecoderLayer` with `Lfm3Attention` on (T, D): QK-norm, fp32 RoPE, flash attention, sigmoid head gate
     (``import_rows``: rows whose normed pre-RoPE keys and values are the imported ``import_k``/``import_v``;
     ``pass_rows``: rows whose normed pre-RoPE keys and values are this layer's own at ``pass_source``)."""
@@ -179,7 +198,7 @@ def attention_layer(x, cos, sin, cu, max_len: int, doc, pos, operator_norm, wq, 
         k = k.index_put((pass_rows,), _passed(k, pass_source, pass_frozen))
         v = v.index_put((pass_rows,), _passed(v, pass_source, pass_frozen))
     q, k = _rope(q, cos, sin), _rope(k, cos, sin)
-    o = _attend(q, k, v, (cu, max_len, doc, pos), window)
+    o = _attend(q, k, v, (cu, max_len, doc, pos), window, tree_mask)
     o = (o * torch.sigmoid(F.linear(h, wg))[..., None]).reshape(length, -1)
     y = F.linear(o, wo)
     if post_operator_norm is not None:
@@ -545,11 +564,69 @@ def _hidden_past(model, ids, lengths, pasts, compiled, keep):
     return _rms(x, norm.weight, norm.variance_epsilon), None
 
 
-def hidden(model, ids, lengths=None, imports=None, pasts=None):
+def tree_layout(lengths, parents, taps):
+    """A flattened prefix tree: documents back to back (``lengths``), document d continuing the path of
+    ``parents[d]`` (an earlier document, or -1: a root) from its end. -> (per token: path position (int64), document,
+    the (taps - 1, T) conv predecessors, T for none), the ancestor-or-self matrix (docs x docs, bool)), numpy."""
+    import numpy as np
+    lengths = [int(n) for n in lengths]
+    count = len(lengths)
+    rows = np.cumsum([0] + lengths[:-1])
+    starts = []
+    for d, p in enumerate(parents):
+        if not -1 <= p < d:
+            raise ValueError(f'document {d}: parent {p} is not an earlier document')
+        starts.append(0 if p < 0 else starts[p] + lengths[p])
+    total = int(sum(lengths))
+    doc = np.repeat(np.arange(count), lengths)
+    pos = np.concatenate([s + np.arange(n) for s, n in zip(starts, lengths)]) if count else np.zeros(0, np.int64)
+    ancestors = np.zeros((count, count), bool)
+    for d in range(count):
+        a = d
+        while a >= 0:
+            ancestors[d, a] = True
+            a = parents[a]
+    pred = np.empty((taps - 1, total), np.int64)
+    flat = np.arange(total)
+    for back in range(1, taps):
+        pred[back - 1] = flat - back
+    for d in range(count):
+        for offset in range(min(taps - 1, lengths[d])):
+            for back in range(offset + 1, taps):         # taps that reach before the document: walk up its path
+                target, a = starts[d] + offset - back, parents[d]
+                while a >= 0 and target < starts[a]:
+                    a = parents[a]
+                pred[back - 1, rows[d] + offset] = total if a < 0 or target < 0 else rows[a] + target - starts[a]
+    return pos.astype(np.int64), doc, pred, ancestors
+
+
+def tree_masks(pos, doc, ancestors, windows, device):
+    """Per attention window (-1: full): the path mask of a flattened tree (query q sees key k when k's document is an
+    ancestor-or-self of q's and k is at most ``window`` path positions before q): a flex-attention ``BlockMask`` on CUDA,
+    a dense bool (T, T) elsewhere."""
+    pos, doc, ancestors = (torch.as_tensor(t, device=device) for t in (pos, doc, ancestors))
+    total = pos.shape[0]
+    masks = {}
+    for window in set(windows):
+        def mask_mod(b, h, q, k, window=window):
+            seen = ancestors[doc[q], doc[k]] & (pos[k] <= pos[q])
+            return seen & (pos[q] - pos[k] <= window) if window >= 0 else seen
+        if torch.device(device).type == 'cuda':
+            from torch.nn.attention.flex_attention import create_block_mask
+            masks[window] = create_block_mask(mask_mod, None, None, total, total, device=device, _compile=True)
+        else:
+            i = torch.arange(total, device=device)
+            masks[window] = mask_mod(None, None, i[:, None], i[None, :])
+    return masks
+
+
+def hidden(model, ids, lengths=None, imports=None, pasts=None, parents=None):
     """Final hidden states (T, D) of ``ids`` (1-D): one causal document, or ``lengths`` documents packed back to back
     (each attends and convolves only within itself, positions restart at 0). ``imports``: ``import_tensors`` (rows are
     indices into ``ids``). ``pasts``: a ``Past`` (or None) per leading document, which then continues that history (its
-    positions after it; documents beyond the list start fresh): the prefix tree's packed continuations."""
+    positions after it; documents beyond the list start fresh): the prefix tree's packed continuations (``levels``).
+    ``parents``: a flattened prefix tree (``tree_layout``): document d continues document ``parents[d]``'s path, each
+    token attending and convolving along its own path (``tree-mask``)."""
     config = model.model.config
     fast = getattr(model, '_lfm3_fast', None)
     compiled = fast is not None and fast['compile']
@@ -559,7 +636,18 @@ def hidden(model, ids, lengths=None, imports=None, pasts=None):
         lengths = [int(ids.shape[0])] if lengths is None else [int(n) for n in lengths]
         pasts = [Past(p or ()) for p in pasts] + [Past()] * (len(lengths) - len(pasts))
         return _hidden_past(model, ids, lengths, pasts, compiled, keep=False)[0]
+    tree = None
+    if parents is not None and any(p >= 0 for p in parents):
+        lengths = [int(ids.shape[0])] if lengths is None else [int(n) for n in lengths]
+        parents = list(parents) + [-1] * (len(lengths) - len(parents))
+        taps = next(layer.conv.conv.weight.shape[-1] for layer in model.model.layers if not layer.is_attention_layer)
+        tree_pos, tree_doc, pred, ancestors = tree_layout(lengths, parents, taps)
+        windows = [key[1] for key in _layer_keys(model) if key[0] == 'attention']
+        tree = {'pred': torch.from_numpy(pred).to(ids.device),
+                'masks': tree_masks(tree_pos, tree_doc, ancestors, windows, ids.device)}
     pos, doc, cu, max_len = _documents(ids, lengths)
+    if tree is not None:
+        pos = torch.from_numpy(tree_pos).to(ids.device)       # path positions: RoPE, the conv taps' reach
     x = model.model.embed_tokens(ids)
     tables = _rope_tables(model, pos, x.dtype)
     grad = torch.is_grad_enabled()
@@ -572,6 +660,8 @@ def hidden(model, ids, lengths=None, imports=None, pasts=None):
             cos, sin = tables[config.layer_types[index]]
             args = (x, cos, sin, cu, max_len, doc, pos) + static
         kwargs = {}
+        if tree is not None:
+            kwargs.update(pred=tree['pred']) if kind == 'conv' else kwargs.update(tree_mask=tree['masks'][static[-1]])
         if imports is not None:
             if imports.get('rows') is not None:
                 fields = ('import_bx',) if kind == 'conv' else ('import_k', 'import_v')
@@ -671,7 +761,77 @@ def _pack(items, size, limit):
     return batches
 
 
-def run_prefix_tree(model, nodes, ids_of, leaf, tokens, pack_tokens, activation_gb=None, backward=True):
+PREFIX_TREE_MODES = ('tree-mask', 'levels', 'off')
+
+
+def tree_units(nodes, tokens, limit):
+    """Batches of a ``prefix_tree`` forest for ``tree-mask``: lists of subtrees of at most ``limit`` tokens each (a
+    prefix's own tokens once per batch, a leaf's ``tokens(index, start)``). A subtree over the limit is split among its
+    children's batches, each with its own copy of the prefix (exact: each copy gets the gradient of its own
+    continuations); a single leaf over the limit is a batch alone."""
+    def size(node):
+        if 'index' in node:
+            return tokens(node['index'], node['start'])
+        return node['end'] - node['start'] + sum(size(child) for child in node['children'])
+
+    def units(node):            # pruned copies of ``node`` that together hold each of its leaves once
+        if 'index' in node or size(node) <= limit:
+            return [node]
+        own = node['end'] - node['start']
+        parts = [unit for child in node['children'] for unit in units(child)]
+        return [dict(node, children=group) for group in _pack(parts, size, max(1, limit - own))]
+    return _pack([unit for node in nodes for unit in units(node)], size, limit)
+
+
+def tree_batch_tokens(model, activation_gb):
+    """The default ``tree-mask`` batch: the tokens whose layer inputs (every layer recomputed) and one layer's
+    activations fit ``activation_gb``."""
+    per_token = len(model.model.layers) * model.config.hidden_size * 2 + ACTIVATION_BYTES_PER_TOKEN_LAYER
+    return int(activation_gb * 2**30 // per_token)
+
+
+def _run_tree_mask(model, nodes, ids_of, leaf, tokens, batch_tokens, activation_gb):
+    """``run_prefix_tree``'s ``tree-mask`` mode: each batch of ``tree_units`` is one flattened forward (its prefixes'
+    tokens once, then the leaves' rows as the caller builds them) and the caller's one backward."""
+    batches = tree_units(nodes, tokens, batch_tokens)
+    for batch in batches:
+        prefixes, items, leaf_parent = [], [], []
+
+        def walk(node, parent):
+            if 'index' in node:
+                items.append((node['index'], node['start']))
+                leaf_parent.append(parent)
+                return
+            prefixes.append((node, parent))
+            here = len(prefixes) - 1
+            for child in node['children']:
+                walk(child, here)
+        for node in batch:
+            walk(node, -1)
+        prefix_ids = [ids_of(node['first'], node['start'], node['end']) for node, _ in prefixes]
+
+        def forward(ids, lengths=None, imports=None):
+            lengths = [int(ids.shape[0])] if lengths is None else [int(n) for n in lengths]
+            offset = sum(int(t.shape[0]) for t in prefix_ids)
+            if activation_gb is not None:
+                set_checkpointing(model, offset + int(ids.shape[0]), activation_gb)
+            if not prefixes:
+                return hidden(model, ids, lengths, imports)
+            flat = torch.cat(prefix_ids + [ids])
+            parents = [p for _, p in prefixes] + leaf_parent + [-1] * (len(lengths) - len(items))
+            if imports is not None:
+                imports = dict(imports)
+                for key in ('rows', 'pass_rows', 'pass_source'):
+                    if imports.get(key) is not None:
+                        imports[key] = imports[key] + offset
+            return hidden(model, flat, [int(t.shape[0]) for t in prefix_ids] + lengths, imports,
+                          parents=parents)[offset:]
+        leaf(items, forward)
+    return {'mode': 'tree-mask', 'batches': len(batches)}
+
+
+def run_prefix_tree(model, nodes, ids_of, leaf, tokens, pack_tokens, activation_gb=None, backward=True,
+                    mode='levels', batch_tokens=None):
     """Compute a ``prefix_tree``'s sequences packed, each shared prefix once, with exactly the whole sequences' gradients.
 
     Prefix nodes run level by level, each level's nodes packed into varlen batches of at most ``pack_tokens`` tokens
@@ -687,7 +847,17 @@ def run_prefix_tree(model, nodes, ids_of, leaf, tokens, pack_tokens, activation_
     ``activation_gb`` (None: the layers' recompute flags are left as they are) budgets saved activations: the prefixes'
     retained graphs (layer inputs and segments) come first, each leaf batch gets the rest, and what the largest leaf batch
     leaves unused keeps prefix layers unrecomputed. Returns the plan: batch counts, prefix tokens, the retained and
-    leaf budgets (GB) and the prefix layer-tokens recomputed."""
+    leaf budgets (GB) and the prefix layer-tokens recomputed.
+    ``mode`` 'tree-mask': each batch of whole subtrees (``tree_units``, at most ``batch_tokens``, default
+    ``tree_batch_tokens``) is one flattened forward whose tokens attend and convolve along their own path
+    (``hidden(parents=...)``), with one backward (the caller's); ``leaf`` and ``forward`` are called the same way.
+    'levels': the level-by-level continuations above. 'off' is the caller's (no shared prefix: a forest of leaves)."""
+    if mode == 'tree-mask':
+        if batch_tokens is None or batch_tokens <= 0:
+            batch_tokens = tree_batch_tokens(model, activation_gb) if activation_gb is not None else pack_tokens
+        return _run_tree_mask(model, nodes, ids_of, leaf, tokens, batch_tokens, activation_gb)
+    if mode not in ('levels', 'off'):
+        raise ValueError(f'prefix tree mode {mode!r}: one of {PREFIX_TREE_MODES}')
     layers = model.model.layers
     hidden_size = model.config.hidden_size
     # key (= value) width summed over the full-attention layers: the history rows a continuation's attention saves
