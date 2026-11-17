@@ -1318,6 +1318,26 @@ def probe_actor_nll(sglang_url, chains):
     return total / max(1, count)
 
 
+def family_round_robin(rows, rng):
+    """``rows`` (already shuffled) reordered so that the exploration walk visits families in turn: each family keeps its
+    shuffled order, the families' order is drawn from ``rng``, and the walk takes one row of each remaining family per
+    round. Exploration then spends the same share on every family instead of a share proportional to its row count
+    (TASK_SUPPLY_20261117: a 25-row family in the 33k-row pool is otherwise explored about once per run)."""
+    by_family = {}
+    for row in rows:
+        by_family.setdefault(str(row.get('family') or ''), []).append(row)
+    families = sorted(by_family)
+    rng.shuffle(families)
+    queues = [by_family[f] for f in families]
+    out, index = [], 0
+    while len(out) < len(rows):
+        for queue in queues:
+            if index < len(queue):
+                out.append(queue[index])
+        index += 1
+    return out
+
+
 def load_tasks(args, work=None):
     """The shuffled train tasks of the pools (first occurrence of an id wins) minus the held set: its tasks, every row of
     a held ``split_group`` (``held_eval.exclusion_ids``) and every row sharing a ``source_groups`` entry with those.
@@ -1349,6 +1369,8 @@ def load_tasks(args, work=None):
     eligible = [r for r in rows if r['id'] not in excluded and r['id'] not in errata and r.get('split', 'train') == 'train'
                 and not (broken and broken.search(str(r.get('family') or '')))]
     random.Random(args.seed).shuffle(eligible)
+    if getattr(args, 'explore_order', 'row') == 'family':
+        eligible = family_round_robin(eligible, random.Random(args.seed))
     if work is not None:
         record = {'pools': [{'path': str(p), 'sha256': sha256_file_hex_cached(Path(p))} for p in args.pool],
                   'held_manifest': args.held_manifest, 'held_manifest_sha256': sha256_file_hex_cached(Path(args.held_manifest)),
@@ -1359,7 +1381,8 @@ def load_tasks(args, work=None):
                   'excluded_errata': [{'path': str(p), 'sha256': sha256_file_hex_cached(Path(p))} for p in errata_paths],
                   'excluded_errata_ids': len(errata & {r['id'] for r in rows}),
                   'selection': {'pass_rates': args.pass_rates, 'band': args.pass_band, 'min_scored': args.pass_min_scored,
-                                'explore': args.explore, 'own_outcomes': 'latest scored group per task replaces its rate'},
+                                'explore': args.explore, 'explore_order': getattr(args, 'explore_order', 'row'),
+                                'own_outcomes': 'latest scored group per task replaces its rate'},
                   'episode_budget': {'max_model_requests': args.max_model_requests, 'case_seconds': args.case_seconds,
                                      'generated_tokens': None}}
         (Path(work) / 'pool.json').write_text(json.dumps(record, indent=1) + '\n')
@@ -2425,6 +2448,10 @@ def main():
                    help='share of groups from unmeasured pool tasks (TASK_SUPPLY_20261113: a learnable-task group leaves '
                         'the band at 0/8 or 8/8 about 22%% of the time and an explored group enters it about 40%%, so '
                         'below ~0.35 the learnable set shrinks)')
+    t.add_argument('--explore-order', choices=('row', 'family'), default='row',
+                   help='order of the unmeasured-task walk: row (the shuffled pool, so a family is explored in proportion '
+                        'to its rows) or family (round robin over families, each in shuffled order; equal exploration per '
+                        'family, so small new families are reached; TASK_SUPPLY_20261117)')
     t.add_argument('--neuralese-variants', help='Neuralese-declaring variants of pool tasks (cases.jsonl from '
                    'scripts/rl_tasks/neuralese_variants.py; off by default: a controlled addition)')
     t.add_argument('--neuralese-variant-share', type=float, default=0.5,
