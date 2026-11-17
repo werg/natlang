@@ -304,3 +304,39 @@ check pass; the variant means a new Pop base.
   - compact-history as note capture.
   - SFT, then GRPO with the variant.
   - Held on/off.
+
+## 7. Step-0 ablation, fork parity, held filter audit and the stage command (2026-11-17 night)
+
+- **Step-0 ablation** (5ff07638, seeded states, 64 test consumers per source;
+  `/home/werg/data/natlang-operator-rows-20261117-test-v1/ablation-step0-5ff07638.json`).
+  - The in-context state beats a shuffled donor by 0.7-2.7 nats/token on every source with power.
+  - It beats the same span written standalone by 0.6-2.6 nats/token on 18 of 20 sources, so the in-context capture
+    carries more than its tokens.
+  - It beats the text cut on compact-params and compact-value. It is about even on extract, whose documents are
+    short, so their "cut" is the whole text.
+  - Caveat: these are seeds, not the model's own operator replies, and mechanical seeds bear the answer.
+- **Fork/page capture parity** (natlang-b12081 Q8_0 vs Python BF16, same ids): same 38 tensors, relative L2 median
+  0.025 and largest 0.048, the Q8 floor. The `docs/ENGINE_PARITY.md` row is removed. The live run found two defects,
+  both fixed:
+  - a grammar together with an RL capture is refused;
+  - replies cut off inside their reasoning were captured. They are now refused, and operator calls get 2048 tokens of
+    reasoning room.
+- **Held filter audit.** s1-qa-long-context dropped 609 of 4,000 train cases (15.2%; the source's whole reject rate is
+  611 of 4,300 = 14.2%, plus 2 over the token cap).
+  - 447 of the drops share passages of one held triviaqa task's input: the Wikipedia "Antarctica" page, whose 8,257
+    shingles are shared 59-101 at a time by chatqa2_long_sft documents quoting the same article. 129 share whole
+    paragraphs of two held musique tasks (79 of 79 shingles, i.e. the full held paragraph). The rest share passages
+    of squad-based held tasks.
+  - The shared-shingle quantiles are 21 (half of a short held string), 71-185, and 4,829 at most. None of the
+    inspected matches was boilerplate. The boilerplate exemption only removes shingles that two or more held strings
+    share; here the shared text is genuine held input.
+  - Decision: keep dropping. A held passage in training is the worse error.
+- **Stage command:** `/home/werg/data/lfm3-rl-dgx-20261029/ops/operators-v1/operator-stage.sh`.
+  - `merge`: rows -> one `--chains` pickle and a `--val-chains` pickle of 32 test consumers per source
+    (`operator_rows.py merge`).
+  - `sft PIN CKPT`: operator-rows SFT continuation through `grpo-v4/launch-sft.sh` (LR 3e-6, one epoch).
+  - `held-base PIN`: Pop 4-sample base of 5ff07638 under `NATLANG_MODEL_FACING=effect-receipt,learned-compaction`.
+  - `grpo PIN`: GRPO from the SFT checkpoint with the variant, new WORK `ops/grpo-v4/run2-operators`, held base above.
+  - The grpo-v4 launchers are used unchanged. The variant enters their ledger env through a generated copy that adds
+    one variable to the env line.
+  - The pin must contain main at or after this commit.

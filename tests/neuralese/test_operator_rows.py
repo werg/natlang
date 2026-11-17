@@ -118,3 +118,19 @@ def test_ablation_arms_splice_donor_spans_and_standalone_documents():
     assert list(alone['ids']) == list(a['ids'])
     result = paired([1., 1.2, 0.8, 1.1])
     assert result['mean'] > 0 and result['better_share'] == 1.0 and result['ci95'][0] > 0
+
+
+def test_merge_joins_train_files_and_caps_val_consumers(tmp_path):
+    import json, pickle
+    from types import SimpleNamespace
+    from operator_rows import merge
+    a, b = _consumer('a', [11, 12]), _consumer('b', [21])
+    op = {**_consumer('c', [5]), 'segs': [(2, 2, {'kind': 'operator', 'sample': a['segs'][0][2]['sample']})]}
+    for name, chains in (('train', [op, a]), ('test', [a, b])):
+        pickle.dump({'chains': chains}, open(tmp_path / f'{name}.pkl', 'wb'))
+    (tmp_path / 'manifest.json').write_text(json.dumps({'sources': {'compact-value/x': {'files': {
+        'train': {'path': str(tmp_path / 'train.pkl')}, 'test': {'path': str(tmp_path / 'test.pkl')}}}}}))
+    merge(SimpleNamespace(rows=str(tmp_path), out=str(tmp_path / 'm'), max_chains_per_source=0, val_per_source=1))
+    summary = json.loads((tmp_path / 'm/merge.json').read_text())
+    assert summary['chains']['chains'] == 2 and summary['val']['chains'] == 1
+    assert pickle.load(open(tmp_path / 'm/val.pkl', 'rb'))['chains'][0]['task'] == 'a'
