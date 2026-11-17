@@ -106,13 +106,14 @@ test('training guidance travels on the wire only to a native server', async () =
  * One episode: the root calls helper("child-question") in its first turn and returns in its second; helper answers in
  * one turn. The fake driver answers the guidance policy's calls by their `guidance_policy`.
  */
-async function episode({ role = 'teacher', selection, select = ids => ids, writer = 'write', writerSetting, trajectory } = {}) {
+async function episode({ role = 'teacher', selection, select = ids => ids, writer = 'write', writerSetting, trajectory, hints = [HINT_TEXT] } = {}) {
   const store = new MemoryNeuraleseStore(), artifact = await store.putNativeState(nativeStateFixture());
   const writes = [];
   const fixturePort = createNativeStateFixturePort(store);
   const port = { dialect: fixturePort.dialect, async write(text, options) { writes.push({ text, options }); return fixturePort.write(text, options); } };
   const neuralese = { store, dialect: 'native-state/fixture', port };
   const requests = [];
+  let hintTurns = 0;
   const driver = Object.assign(async request => {
     requests.push(structuredClone(request));
     const policy = request.guidance_policy?.function;
@@ -121,7 +122,7 @@ async function episode({ role = 'teacher', selection, select = ids => ids, write
       const visible = FACTS.map(fact => fact.id).filter(id => shown.includes(JSON.stringify(id)));
       return { calls: [['return_result', { status: 'success', value: select(visible) }]] };
     }
-    if (policy === 'writeHint') return { calls: [['return_result', { status: 'success', value: HINT_TEXT }]] };
+    if (policy === 'writeHint') return { calls: [['return_result', { status: 'success', value: hints[Math.min(hintTurns++, hints.length - 1)] }]] };
     if (policy === 'writeGuidance') {
       if (writer === 'fail') return { calls: [['return_result', { status: 'failed', reason: 'The writer could not write.' }]] };
       return { calls: [['return_result', { status: 'success', value: GUIDANCE_TEXT }]] };
@@ -177,6 +178,25 @@ test('a teacher with a verified run gets writeHint\'s hint at its root and fact 
   assert.equal(root[0].privileged_context.mode, 'import');
   const node = recorder.graphNodes.get(root[0].privileged_context.state.source_occurrence);
   assert.ok(node.turn.startsWith(hints[0].invocation_id), 'the state is the hint writer\'s own text');
+});
+
+test('a hint that copies a produced value, echoes the signature or overruns its budget is sent back with one sentence', async () => {
+  const { checkHint } = pkg;
+  const tau = { ...TRAJECTORY, steps: [{ turn: 0, tool: 'read_file', arguments: { path: 'a.md' }, status: 'ok', output: 'Milk: 27.5' },
+    { turn: 1, tool: 'eval', code: 'x', arguments: {}, status: 'ok', output: 'C-101: 27.5 -> 28.0 <<cut off: 3 of 9 items not shown>>' },
+    { turn: 2, tool: 'return_result', arguments: { value: 5 }, status: 'ok', output: '' }] };
+  assert.equal(checkHint('1. Read a.md; add the change to Milk 27.5.\n2. Count the changed records.', tau), undefined);
+  assert.match(checkHint('Return 5.', tau), /gives 5, which execution produced/);
+  assert.match(checkHint('Set C-101 to 28.0.', tau), /gives 28/);
+  assert.equal(checkHint('Skip 3 and 9 of them.', tau), undefined, 'cut-off notes are not values of the run');
+  assert.match(checkHint('writeHint(consumer): string\nRead a.md.', tau), /without this function's name or signature/);
+  assert.match(checkHint('x'.repeat(300), tau), /over its 64-token limit/);
+  const { result, requests, writes } = await episode({ trajectory: TRAJECTORY, hints: ['Return "7" at once.', HINT_TEXT] });
+  assert.equal(result.outcome.kind, 'done', result.outcome.detail);
+  const turns = policyTurns(requests, 'writeHint');
+  assert.equal(turns.length, 2);
+  assert.ok(requestText(turns[1].messages).includes('hint-rejected: The hint gives 7, which execution produced'));
+  assert.equal(writes.filter(write => write.text === HINT_TEXT).length, 1, 'the accepted hint is the state');
 });
 
 test('a hindsight trajectory is refused for students and in the wrong shape', () => {

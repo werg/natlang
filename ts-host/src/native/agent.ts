@@ -1766,7 +1766,16 @@ export class NativeToolAgent {
         { role: 'tool', tool_call_id: 'scope_1', content: this.folderListing(session) }] : [])];
     };
     const refinement = this.options.refinement;
-    if (refinement) session.refinementCheck = async (value, type, path) => {
+    // A hindsight hint writer's result has an exact check (guidance-writer hintCheck.ts): budget, no signature echo, no
+    // value the verified run produced. It is applied where a result is proposed, with a one-sentence error.
+    const hintGuard = this.options.trainingGuidance?.hintGuard(session.lam);
+    const hintFailure = (value: unknown) => {
+      const message = hintGuard?.(value);
+      return message ? { code: 'hint-rejected', message } : undefined;
+    };
+    if (refinement || hintGuard) session.refinementCheck = async (value, type, path) => {
+      if (path === 'return' && hintFailure(value)) return hintFailure(value);
+      if (!refinement) return undefined;
       const failures = await refinement.checker.checkValue(value, type, session.env,
         { phase: 'return', judge: refinement.judge, escalation: refinement.escalation, callId: session.runtime.currentCallId ?? null,
           signal: session.runtime.signal, trace: session.runtime.trace, emit: (kind, data) => { session.runtime.trace.emit(kind, data); } }, path);
@@ -2346,6 +2355,14 @@ export class NativeToolAgent {
           continue;
         }
         let appliedArgs = args;
+        if (name === 'return_result' && hintGuard && (appliedArgs.status ?? 'success') === 'success') {
+          const failure = hintFailure(appliedArgs.value);
+          if (failure) {
+            results.push({ kind: 'rejected', text: `${failure.code}: ${failure.message}`, codes: [failure.code] });
+            stoppedAt ??= index;
+            continue;
+          }
+        }
         if (name === 'return_result' && this.options.refinement && (appliedArgs.status ?? 'success') === 'success') {
           const failures = await this.refinementGate(session, appliedArgs);
           if (failures) {

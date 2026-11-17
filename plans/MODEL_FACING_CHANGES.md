@@ -2625,3 +2625,30 @@ case that serves a product call never serves a collector call, also under the op
 `ts-host/src/native`), hindsight and in-run guidance (passed explicitly per job: `teacher/cli.ts` 147,
 `native/training-guidance.ts`), Neuralese state (content-addressed blocks fetched by exact ID from the actor's block
 store, `ts-host/src/neuralese`, no call-store reference).
+
+### 2026-11-17: hindsight hints are checked: 64-token budget, no signature echo, no produced values
+
+The restore smoke's three `writeHint` hints (ops/restore-smoke/run1, groups g000003 and g000011, one task) ran
+1.1-1.5k characters, copied what the verified run produced ("Total cow records changed: 5", every new Milk figure),
+one began with the writer's own signature, and two invented an action for request R-24 ("Please undo: R-21") that τ*
+never took: τ* classified it `undo`, left it in requests/ (the task applies only `apply` requests) and its final
+verification listed it as remaining; one hint said to revert the north herd by -0.5, another to "trigger an undo",
+the third correctly to leave it. Cause: the writer saw all of τ* in its opening argument listing (50 KB fit the page
+budget), answered in one turn, and step 4 asked for "the exact names, values and calls that matter" and "the mistake to
+avoid", which it filled with values and an invented mistake. Changes:
+- `applications/guidance-writer/hintCheck.ts` (crisp, new): a hint fails when empty, when it contains `writeHint(`, when
+  it is over 64 tokens (characters / 4), or when it gives a value τ* produced (its returned value's leaves, or a number
+  shown by a non-reading step that neither the prompt nor a reading step showed; cut-off notes and 0/1 ignored).
+- `native/agent.ts`: for a writeHint call (`TrainingGuidance.hintGuard`), the check runs where a result is proposed
+  (the `return_result` tool, and eval results through `session.refinementCheck`); a failure is the tool error
+  `hint-rejected: <one sentence>` within the ordinary repair budget. `training-guidance.ts compute()` applies it once more
+  to the returned text (a failure falls back as any writer failure does).
+- `writeHint.nl` steps 4-6: a short procedure with the evidence each step rests on, only what execution did, at most 64
+  tokens, how to find each value rather than the value, only the hint text.
+- `rl/hindsight.py`: a call's `result` now carries its final `return_result` status and value (it was always
+  `{status: success}`), so the check sees the returned value. Existing indexes get it from the last step.
+Not changed: the writer still sees τ* whole when it fits the argument page budget (the general argument listing,
+`agent.ts` `inputsListing`; making one argument's listing shorter is a runtime-wide change), so exploring by eval stays
+the writer's choice. Tests: `ts-host/test/training-guidance.test.mjs` (check cases, and a copied value sent back then
+the corrected hint becoming the state), `tests/neuralese/test_grpo_jolt.py` (result value).
+

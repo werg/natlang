@@ -193,6 +193,8 @@ def test_trajectory_value_is_the_writer_input_shape():
     assert value['steps'][0]['code'] == 'x = 1' and value['steps'][0]['output'] == 'x = 1'
     assert value['steps'][0]['reasoning'] == 'read inputs'
     assert value['children'][0]['call'] == 'child' and value['children'][0]['steps'][0]['tool'] == 'reply'
+    assert value['result'] == {'status': 'success', 'value': 42}, 'the hint check reads the returned value'
+    assert value['children'][0]['result'] == {'status': 'success'}
 
 
 def test_index_keeps_the_shortest_run_per_task_and_excludes_held(tmp_path):
