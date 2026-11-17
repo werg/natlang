@@ -33,7 +33,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
-sys.path[:0] = [str(REPO / 'training/neuralese'), str(REPO), str(HERE)]
+sys.path[:0] = [str(REPO / 'training/neuralese'), str(REPO), str(HERE), str(REPO / 'scripts/rl_tasks')]
 
 from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file  # noqa: E402
 from natlang_neuralese.common.paths import resolve_str  # noqa: E402
@@ -865,6 +865,33 @@ def capped(candidates, rng, funnel, cap_of, family_share, order):
     return final
 
 
+# Program constructs the held set tests heavily (held-v3: 30% Neuralese results, 30% folder reducers, 18% iterateOn,
+# 11% decide, 75% several functions) while dataset wrappers were 53% of v2's pool tasks and 9% of held-v3's.
+HELD_CONSTRUCTS = ('neuralese_result', 'neuralese_argument', 'decide_call', 'folder_reducer', 'iterate',
+                   'readout_decision', 'call_depth_ge_3', 'multi_function')
+
+
+def task_constructs(task):
+    """(held constructs the task's program declares, whether it is a one-function dataset wrapper)."""
+    from measure_repetition import program_features
+    try:
+        features = program_features(task)
+    except (KeyError, TypeError, AttributeError):
+        return (), False
+    return tuple(k for k in HELD_CONSTRUCTS if features.get(k)), bool(features.get('dataset_wrapper'))
+
+
+def wrapper_capped(selected, rng, funnel, is_wrapper, share):
+    """Keep dataset-wrapper episodes to at most `share` of the selection."""
+    wrappers = [c for c in selected if is_wrapper(c)]
+    rest = [c for c in selected if not is_wrapper(c)]
+    limit = int(share / (1 - share) * len(rest)) if share < 1 else len(wrappers)
+    rng.shuffle(wrappers)
+    for c in wrappers[limit:]:
+        funnel[c['source']]['over_wrapper_share'] += 1
+    return rest + wrappers[:limit]
+
+
 def build(args):
     import random
     import numpy as np
@@ -898,10 +925,14 @@ def build(args):
         else:
             unique.append(c)
 
+    constructs = {task_id: task_constructs(task) for task_id, task in tasks.items()}
+
     def core_cap(task_id):
+        top = args.rich_max_per_task if constructs.get(task_id, ((), False))[0] else args.max_per_task
         p = base_rate(task_id)
-        return args.max_per_task if p is None else max(1, round(1 + (args.max_per_task - 1) * (1 - p)))
+        return top if p is None else max(1, round(1 + (top - 1) * (1 - p)))
     core = capped(unique, rng, funnel, core_cap, args.max_family_share, lambda c: 0 if c['source'] == 'teacher' else 1)
+    core = wrapper_capped(core, rng, funnel, lambda c: constructs.get(c['task_id'], ((), False))[1], args.wrapper_share)
 
     renderer = TemplateRenderer(args.tokenizer)
     rows_out = ZstdWriter(out / 'rows.jsonl.zst')
@@ -1063,7 +1094,10 @@ def build(args):
                    'october': args.october, 'held_manifest': args.held_manifest,
                    'held_manifest_sha256': sha256_file(args.held_manifest), 'base_rates': args.base_rates,
                    'renderer': renderer.identity},
-        'policy': {'max_per_task': args.max_per_task, 'cap_rule': 'round(1 + (max_per_task - 1) * (1 - base pass rate))',
+        'policy': {'max_per_task': args.max_per_task, 'rich_max_per_task': args.rich_max_per_task,
+                   'held_constructs': HELD_CONSTRUCTS, 'wrapper_share': args.wrapper_share,
+                   'cap_rule': 'round(1 + (cap - 1) * (1 - base pass rate)); cap = rich_max_per_task for a task '
+                               'declaring a held construct, else max_per_task',
                    'max_family_share': args.max_family_share, 'dup_threshold': args.dup_threshold, 'seed': args.seed,
                    'october_share': args.october_share, 'october_max_per_task': args.october_max_per_task,
                    'october_family_share': args.october_family_share,
@@ -1119,6 +1153,10 @@ def main():
     b.add_argument('--base-rates', default=resolve_str(*OPS, 'exp1-rft', 'base-pass-rates.json'))
     b.add_argument('--max-per-task', type=int, default=4,
                    help='episodes of a task the start policy never solves; a task it always solves keeps 1')
+    b.add_argument('--rich-max-per-task', type=int, default=8,
+                   help='the per-task cap for tasks whose program declares a held construct (HELD_CONSTRUCTS)')
+    b.add_argument('--wrapper-share', type=float, default=0.15,
+                   help='dataset-wrapper episodes kept to at most this share of the GRPO-pool selection (1 = no cap)')
     b.add_argument('--max-family-share', type=float, default=0.05)
     b.add_argument('--dup-threshold', type=float, default=0.8)
     b.add_argument('--seed', type=int, default=20261117)

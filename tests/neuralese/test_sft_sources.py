@@ -164,3 +164,23 @@ def test_a_teacher_reply_without_reasoning_trains_only_the_action_after_the_empt
     assert s.reasoning_free_context(renderer, 'teacher', {**no_reasoning, 'reasoning_content': 'plan'},
                                     [7, 1, 3, 4, 5, 6]) == 0
     assert s.reasoning_free_context(renderer, 'rl-own', no_reasoning, target) == 0
+
+
+def test_wrapper_cap_keeps_dataset_wrappers_to_their_share_of_the_selection():
+    import collections
+    import random
+    selected = [{'source': 'teacher', 'task_id': f'w{i}', 'w': True} for i in range(50)] + \
+               [{'source': 'teacher', 'task_id': f'r{i}', 'w': False} for i in range(30)]
+    funnel = collections.defaultdict(collections.Counter)
+    kept = s.wrapper_capped(selected, random.Random(0), funnel, lambda c: c['w'], 0.25)
+    assert sum(not c['w'] for c in kept) == 30 and sum(c['w'] for c in kept) == 10
+    assert funnel['teacher']['over_wrapper_share'] == 40
+
+
+def test_task_constructs_names_held_constructs_and_wrappers():
+    neuralese = {'semantics': {'root': 'main.nl', 'files': {
+        'main.nl': '---\nargs: text: string\nreturns: string\n---\nUse helper.',
+        'helper.nl': '---\nargs: text: string\nreturns: Neuralese<string>\n---\nSummarize.'}}}
+    names, wrapper = s.task_constructs(neuralese)
+    assert 'neuralese_result' in names and 'multi_function' in names and not wrapper
+    assert s.task_constructs({'no': 'semantics'}) == ((), False)
