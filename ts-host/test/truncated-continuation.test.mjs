@@ -34,7 +34,7 @@ test('executed successful eval resets the no-action failures, malformed proposal
 test('no new default repair cap; successful ordinary results and a pending decode remain allowed', async () => {
   const unlimited = await runReplies(index => index < 5 ? truncated(index) : done, { maxTurns: 8 });
   assert.equal(unlimited.result.value, 1); assert.equal(unlimited.requests.length, 5);
-  const text = await runReplies(index => index === 1 ? truncated(0) : { text: '1', completion_tokens: 1 }, { maxFailureRepairs: 1 });
+  const text = await runReplies(index => index === 1 ? truncated(0) : done, { maxFailureRepairs: 1 });
   assert.equal(text.result.value, 1);
   let release, calls = 0;
   const pending = runReplies(() => { calls++; return new Promise(resolve => { release = () => resolve(done); }); }, { maxFailureRepairs: 0 });
@@ -61,21 +61,21 @@ test('collector progress receipts come from actual successful execution, excludi
   assert.equal(completedActionProgress('not-running'), undefined);
 });
 
-test('a text-typed call is told that its next complete reply is the result, and that reply returns', async () => {
+test('a truncated text-typed call recovers with return_result', async () => {
   const requests = [];
   const agent = new NativeToolAgent(request => { requests.push(structuredClone(request));
-    return requests.length === 1 ? truncated(0) : { text: 'Brief guidance.', completion_tokens: 3 }; }, { maxFailureRepairs: 1 });
+    return requests.length === 1 ? truncated(0) : { calls: [['return_result', { status: 'success', value: 'Brief guidance.' }]], completion_tokens: 3 }; }, { maxFailureRepairs: 1 });
   const result = await interpreter({ agent: session => agent.run(session) }).run(lambda({ type: '() => string', instructions: 'Write brief guidance.' }));
-  assert.match(requests[1].messages.at(-1).content, /This call returns text: your next reply, complete and without a tool call, is returned as the result/);
+  assert.match(requests[1].messages.at(-1).content, /Take the next step with one tool call/);
   assert.equal(result.value, 'Brief guidance.');
 });
 
-test('a text-typed call reading a function it does not have is told that its reply is the result', async () => {
+test('a text-typed call reading an absent function is told to use return_result', async () => {
   const requests = [];
   const agent = new NativeToolAgent(request => { requests.push(structuredClone(request));
     return requests.length === 1 ? { calls: [['read_code', { name: 'assign' }]], completion_tokens: 3 } :
-      { text: 'Brief guidance.', completion_tokens: 3 }; });
+      { calls: [['return_result', { status: 'success', value: 'Brief guidance.' }]], completion_tokens: 3 }; });
   const result = await interpreter({ agent: session => agent.run(session) }).run(lambda({ type: '() => string', instructions: 'Write brief guidance.' }));
-  assert.match(JSON.stringify(requests[1].messages.slice(-2)), /no-such-function[^"]*This call returns text: reply with the result itself, without a tool call/);
+  assert.match(JSON.stringify(requests[1].messages.slice(-2)), /no-such-function[^"]*This call returns text: send the text itself as the value of return_result/);
   assert.equal(result.value, 'Brief guidance.');
 });

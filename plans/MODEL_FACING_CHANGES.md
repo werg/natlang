@@ -2524,3 +2524,9 @@ editing when the tool is offered; code edit tools are offered only to editable c
 prompt does not claim that nonexistent history was moved to transcript. These change the ts-host held series;
 existing pinned experiments retain their own code. Scripted authoring, corpus replay and application fixtures now
 confirm staged results with `return_result`; new reference programs emit that same tool directly.
+
+
+The completion migration also exposed missing tool-call IDs on async actions outside eval and value-bearing
+return_result. All async outcomes now use one recording callback with the original tool-call ID, including staged
+result confirmations and failures. This keeps successful confirmations admissible in tuning trajectories instead
+of silently marking their outcomes unverified (`tune-pipeline.test.mjs`).
