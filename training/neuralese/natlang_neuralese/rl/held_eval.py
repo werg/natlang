@@ -31,7 +31,7 @@ import threading
 import time
 from pathlib import Path
 
-from ..common.jsonio import read_jsonl, write_json_durable
+from ..common.jsonio import read_jsonl, iter_jsonl_rows, write_json_durable
 
 MANIFEST_SCHEMA = 'natlang.rl-held-eval-manifest/1'
 RESULT_SCHEMA = 'natlang.rl-held-eval-result/1'
@@ -1083,6 +1083,8 @@ def main(argv=None):
     p.add_argument('--dry-run', action='store_true')
     y = sub.add_parser('verify', help='check a pinned manifest against training exposure (ids and split/source groups)')
     y.add_argument('--manifest', type=Path, required=True)
+    y.add_argument('--pool', type=Path,
+                   help='relocated exact source pool; its SHA256 must match the original immutable manifest')
     y.add_argument('--avoid-ids', type=Path, action='append', default=[])
     y.add_argument('--avoid-groups', type=Path, action='append', default=[])
     y.add_argument('--avoid-from', type=Path, action='append', default=[])
@@ -1206,7 +1208,7 @@ def main(argv=None):
         (args.dir / 'exclusion-ids.json').write_text(json.dumps(ids, indent=0) + '\n')
         print(json.dumps({'manifest_sha256': sha, 'exclusion_ids': len(ids), **summary}, indent=1))
     elif args.command == 'verify':
-        report = verify(args.manifest, _avoid_set(args), _avoid_group_set(args))
+        report = verify(args.manifest, _avoid_set(args), _avoid_group_set(args), pool_path=args.pool)
         print(json.dumps(report, indent=1))
         if report['overlap_ids'] or report['overlap_groups']:
             raise SystemExit(1)
@@ -1224,19 +1226,30 @@ def _avoid_group_set(args):
     return set(read_ids(args.avoid_groups))
 
 
-def verify(manifest_path, avoid, avoid_groups=()):
+def verify(manifest_path, avoid, avoid_groups=(), *, pool_path=None):
     """Held tasks of a pinned manifest that training saw: ids in ``avoid``, or a split/source group shared with an avoided
     pool row or listed in ``avoid_groups``."""
     manifest = json.loads(Path(manifest_path).read_text())
-    rows = {row['id']: row for row in read_jsonl(Path(manifest_path).parent / manifest['cases']['path'])}
+    cases_path = Path(manifest_path).parent / manifest['cases']['path']
+    cases_sha = _sha256(cases_path)
+    if cases_sha != manifest['cases']['sha256']:
+        raise ValueError('held cases changed since the manifest was pinned')
+    actual_pool = Path(pool_path) if pool_path is not None else Path(manifest['pool']['path'])
+    pool_sha = _sha256(actual_pool)
+    if pool_sha != manifest['pool']['sha256']:
+        raise ValueError('source pool differs from the original immutable manifest')
+    rows = {row['id']: row for row in read_jsonl(cases_path)}
     groups = set(avoid_groups)
-    for row in read_jsonl(manifest['pool']['path']):
+    for _, row in iter_jsonl_rows(actual_pool):
         if row.get('id') in avoid:
             groups.add(_split_group(row))
             groups |= _source_groups(row)
     held = [t['id'] for t in manifest['tasks']]
     overlap_groups = sorted(i for i in held if _split_group(rows[i]) in groups or _source_groups(rows[i]) & groups)
-    return {'manifest': str(manifest_path), 'held': len(held), 'avoid_ids': len(avoid), 'avoid_groups': len(groups),
+    return {'manifest': str(manifest_path), 'manifest_sha256': _sha256(manifest_path),
+            'source_pool': {'original_path': manifest['pool']['path'], 'verified_path': str(actual_pool),
+                            'sha256': pool_sha, 'relocated': actual_pool != Path(manifest['pool']['path'])},
+            'cases_sha256': cases_sha, 'held': len(held), 'avoid_ids': len(avoid), 'avoid_groups': len(groups),
             'overlap_ids': sorted(set(held) & set(avoid)), 'overlap_groups': overlap_groups}
 
 if __name__ == '__main__':
