@@ -342,6 +342,59 @@ def test_prefix_tree_gradients_equal_separate_sequences():
         torch.testing.assert_close(without[index], expected[index], rtol=1e-4, atol=1e-5)
 
 
+
+def _sft_chains():
+    """exp0_sft chains over `_shared_sequences` (one to three supervised segments, partial loss weights)."""
+    import numpy as np
+    seqs, caps = _shared_sequences()
+    rng = np.random.default_rng(1)
+    chains = []
+    for index, (seq, cap) in enumerate(zip(seqs, caps)):
+        segs, start = [], cap + 1
+        while start < len(seq):
+            length = min(len(seq) - start, 2 + index % 2)
+            row = {'sample': seq[start:start + length]}
+            if index % 2:
+                row['weight'] = rng.uniform(0, 1, length).astype(np.float32)
+            segs.append((start, length, row))
+            start += length + 1
+        chains.append({'ids': seq, 'segs': segs, 'imports': [], 'task': f't{index % 3}', 'round': f'r{index}'})
+    return chains
+
+
+def test_exp0_step_with_shared_prefixes_equals_whole_chains():
+    import exp0_sft
+    chains = _sft_chains()
+    denominator = sum(exp0_sft.chain_mass(c) for c in chains)
+    _, whole = _pair()
+    _, tree = _pair()
+    tree.load_state_dict(whole.state_dict())
+    expected, plain_tokens = exp0_sft.step_backward(whole, lfm3_fast_train.hidden, chains, denominator, 13, 1., 0)
+    actual, tree_tokens = exp0_sft.step_backward(tree, lfm3_fast_train.hidden, chains, denominator, 13, 1., 2)
+    assert plain_tokens == sum(len(c['ids']) for c in chains) and tree_tokens < plain_tokens
+    assert abs(actual - expected) <= 1e-5 * abs(expected)
+    _grads_close(whole, tree, 'exp0 prefix tree')
+
+
+def test_exp0_step_groups_cover_every_chain_once_per_epoch():
+    import exp0_sft
+    chains = _sft_chains() * 7
+    for i, chain in enumerate(chains):
+        chains[i] = {**chain, 'round': f'r{i % 11}'}
+    for grouped in (True, False):
+        steps = exp0_sft.step_groups(chains, 3, 9, 5, grouped)
+        assert steps == exp0_sft.step_groups(chains, 3, 9, 5, grouped)          # reproducible from the seed
+        assert steps != exp0_sft.step_groups(chains, 3, 9, 6, grouped)
+        if grouped:
+            flat = [i for step in steps for i in step]
+            assert sorted(flat) == sorted(list(range(len(chains))) * 3)
+            seen, epoch = 0, 0
+            for step in steps:                      # epochs do not mix: each prefix of whole epochs is a permutation
+                seen += len(step)
+                if seen % len(chains) == 0:
+                    assert sorted(flat[:seen]) == sorted(list(range(len(chains))) * (seen // len(chains)))
+            assert all(sum(exp0_sft.chain_loss_tokens(chains[i]) for i in step) >= 9 // 2 for step in steps)
+
 @pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA kernel check')
 def test_nucleus_nll_on_bf16_logits_matches_the_reference_pass_bitwise():
     """The nucleus NLL's log-probability is linear_nll's own kernel (what the KL reference pass computes): at equal weights

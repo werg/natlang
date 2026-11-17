@@ -249,6 +249,127 @@ def chain_mass(chain):
     return float(sum(row['weight'].sum() if 'weight' in row else length for _, length, row in chain['segs']))
 
 
+def leaf_activation_gb(model, activation_gb, start):
+    """A prefix-tree leaf's activation budget after ``start`` prefix tokens: the prefixes' graphs (every layer
+    recomputed, its input saved) stay alive until their last child, so they come out of the leaf's budget."""
+    return max(0., activation_gb - start * len(model.model.layers) * model.config.hidden_size * 2 / 2**30)
+
+
+def chain_loss_tokens(chain):
+    return sum(length for _, length, _ in chain['segs'])
+
+
+def step_groups(chains, epochs, batch_loss_tokens, seed, grouped):
+    """Optimizer steps (lists of chain indices) of at least ``batch_loss_tokens`` loss tokens each.
+    Random order (``grouped`` False): one shuffled list over all epochs, cut in order; a last group under half a batch
+    is dropped. Grouped: per epoch, episodes (task, round) in lexicographic order of their first chain's tokens (so the
+    chains that share a system prompt, task prompt or earlier calls are neighbours; ties and the cut offset random) with
+    each episode's chains in order, cut into steps (a remainder under half a batch joins the epoch's last step) whose
+    order is then shuffled: every chain exactly once per epoch, reproducible from ``seed``."""
+    rng = random.Random(seed)
+    if not grouped:
+        order = []
+        for _ in range(epochs):
+            epoch = list(range(len(chains)))
+            rng.shuffle(epoch)
+            order += epoch
+        steps, group, tokens = [], [], 0
+        for index in order:
+            group.append(index)
+            tokens += chain_loss_tokens(chains[index])
+            if tokens >= batch_loss_tokens:
+                steps.append(group)
+                group, tokens = [], 0
+        if group and tokens >= batch_loss_tokens // 2:
+            steps.append(group)
+        return steps
+    episodes = collections.defaultdict(list)
+    for index, chain in enumerate(chains):
+        episodes[(chain['task'], chain['round'])].append(index)
+    first = {key: chains[members[0]]['ids'].astype('>i4').tobytes() for key, members in episodes.items()}
+    steps = []
+    for _ in range(epochs):
+        keys = list(episodes)
+        rng.shuffle(keys)
+        keys.sort(key=first.__getitem__)          # stable: identical first chains stay in random order
+        shift = rng.randrange(len(keys)) if keys else 0
+        keys = keys[shift:] + keys[:shift]         # batch boundaries differ between epochs
+        epoch, group, tokens = [], [], 0
+        for key in keys:
+            for index in episodes[key]:
+                group.append(index)
+                tokens += chain_loss_tokens(chains[index])
+                if tokens >= batch_loss_tokens:
+                    epoch.append(group)
+                    group, tokens = [], 0
+        if group:
+            if tokens >= batch_loss_tokens // 2 or not epoch:
+                epoch.append(group)
+            else:
+                epoch[-1] += group
+        rng.shuffle(epoch)
+        steps += epoch
+    return steps
+
+
+def step_backward(model, forward, chains, denominator, pack_tokens, activation_gb, share_prefix_tokens, fast=True,
+                  mark=None):
+    """Forward and backward of one optimizer step's chains, the loss sum(weight * nll) / ``denominator``. Prefixes of at
+    least ``share_prefix_tokens`` tokens that several chains share are computed once (`lfm3_fast_train.prefix_tree`, exact
+    gradients); the chains that share nothing are packed into rows of ``pack_tokens``. 0: every chain whole, packed.
+    Returns (sum of weighted nll, tokens computed)."""
+    mark = mark or (lambda name, since: time.time())
+    total_nll, computed = 0., 0
+    if share_prefix_tokens > 0:
+        if any(chain.get('imports') for chain in chains):
+            raise ValueError('exp0_sft trains no imported native state (lower without a NativeStates reader)')
+        nodes = lfm3_fast_train.prefix_tree([chain['ids'] for chain in chains],
+                                            [chain['segs'][0][0] - 1 for chain in chains], share_prefix_tokens)
+        alone = [chains[node['index']] for node in nodes if 'index' in node]
+        shared = [node for node in nodes if 'index' not in node]
+    else:
+        alone, shared = chains, []
+    for row in packed_rows(alone, pack_tokens):
+        t = time.time()
+        ids, positions, targets, weights, lengths = row_tensors(row, model.lm_head.weight.device)
+        if fast:
+            set_checkpointing(model, len(ids), activation_gb)
+        h = forward(model, ids, lengths) if len(row) > 1 else forward(model, ids)
+        t = mark('forward', t)
+        nll = token_nll(model, h, positions, targets) * weights
+        (nll.sum() / denominator).backward()
+        mark('loss_backward', t)
+        total_nll += nll.sum().item()
+        computed += len(ids)
+        del h, nll
+    if shared:
+        device = model.lm_head.weight.device
+        cuda_ids = {}
+
+        def ids_of(index, start, end):
+            if index not in cuda_ids:
+                cuda_ids[index] = torch.from_numpy(chains[index]['ids'].astype(np.int64)).to(device)
+            return cuda_ids[index][start:end]
+
+        def leaf(index, start, past):
+            nonlocal total_nll
+            chain = chains[index]
+            ids, positions, targets = chain_tensors(chain, device)
+            weights = chain_weights(chain, device)
+            set_checkpointing(model, len(ids) - start, leaf_activation_gb(model, activation_gb, start))
+            h = lfm3_fast_train.hidden(model, ids[start:], past=past)
+            nll = token_nll(model, h, positions - start, targets) * weights
+            (nll.sum() / denominator).backward()
+            total_nll += nll.sum().item()
+            del h, nll
+        t = time.time()
+        lfm3_fast_train.run_prefix_tree(model, shared, ids_of, leaf,
+                                        lambda tokens: set_checkpointing(model, tokens, 0))
+        mark('prefix_tree', t)
+        computed += lfm3_fast_train.tree_tokens(shared, [len(chain['ids']) for chain in chains])
+    return total_nll, computed
+
+
 def load_chains(path):
     with open(path, 'rb') as handle:
         return pickle.load(handle)['chains']
@@ -353,6 +474,16 @@ def train(args):
     parameters = [masters[name] for name in live]
     for master in parameters:
         master.grad = torch.zeros_like(master)
+
+    # Each backward's BF16 gradient is added into its FP32 master gradient as soon as autograd finishes it, then freed
+    # (as grpo.py does): a prefix tree's leaves and prefixes each backpropagate separately.
+    def into_master(master):
+        def hook(param):
+            master.grad.add_(param.grad)
+            param.grad = None
+        return hook
+    for name, p in live.items():
+        p.register_post_accumulate_grad_hook(into_master(masters[name]))
     decay = [p for p in parameters if p.ndim >= 2]
     no_decay = [p for p in parameters if p.ndim < 2]
     optimizer = torch.optim.AdamW([{'params': decay, 'weight_decay': args.weight_decay}, {'params': no_decay, 'weight_decay': 0.}],
@@ -360,26 +491,16 @@ def train(args):
     embedding_name = next(n for n, p in live.items() if p is model.get_input_embeddings().weight)
     embedding_master = masters[embedding_name]
     saved_rows = embedding_master[special_index].clone()
-    rng = random.Random(args.seed)
-    order = []
-    for _ in range(args.epochs):
-        epoch = list(range(len(chains)))
-        rng.shuffle(epoch)
-        order += epoch
-    # optimizer steps: groups of sequences with at least `batch_loss_tokens` loss tokens
-    steps, group, tokens = [], [], 0
-    for index in order:
-        group.append(index)
-        tokens += sum(length for _, length, _ in chains[index]['segs'])
-        if tokens >= args.batch_loss_tokens:
-            steps.append(group)
-            group, tokens = [], 0
-    if group and tokens >= args.batch_loss_tokens // 2:
-        steps.append(group)
+    if args.share_prefix_tokens and args.stock_model:
+        raise SystemExit('--share-prefix-tokens needs the lfm3_fast_train path (pass 0 with --stock-model)')
+    grouped = args.batch_order == 'grouped' or (args.batch_order == 'auto' and args.share_prefix_tokens > 0)
+    steps = step_groups(chains, args.epochs, args.batch_loss_tokens, args.seed, grouped)
     total = len(steps)
     if args.max_steps:
         steps = steps[:args.max_steps]
-    print(json.dumps({'optimizer_steps': total, 'lr': args.lr, 'batch_loss_tokens': args.batch_loss_tokens}), flush=True)
+    print(json.dumps({'optimizer_steps': total, 'lr': args.lr, 'batch_loss_tokens': args.batch_loss_tokens,
+                      'share_prefix_tokens': args.share_prefix_tokens, 'batch_order': 'grouped' if grouped else 'random'}),
+          flush=True)
     log = open(Path(args.out_dir) / 'train.jsonl', 'a')
     if val_sets:
         model.eval()
@@ -412,25 +533,12 @@ def train(args):
         for g in optimizer.param_groups:
             g['lr'] = args.lr * scale
         denominator = sum(chain_mass(chains[i]) for i in group)
-        total_nll, correct = 0., 0
         step_started = time.time()
-        for row in packed_rows([chains[i] for i in group], pack_tokens):
-            t = time.time()
-            ids, positions, targets, weights, lengths = row_tensors(row, 'cuda')
-            if not args.stock_model:
-                set_checkpointing(model, len(ids), args.activation_gb)
-            h = forward(model, ids, lengths) if len(row) > 1 else forward(model, ids)
-            t = mark('forward', t)
-            nll = token_nll(model, h, positions, targets) * weights
-            (nll.sum() / denominator).backward()
-            t = mark('loss_backward', t)
-            torch._foreach_add_([masters[name].grad for name in live], [p.grad for p in live.values()])
-            for p in live.values():
-                p.grad = None
-            total_nll += nll.sum().item()
-            forward_tokens += len(ids)
-            del h, nll
-            t = mark('accumulate', t)
+        torch.cuda.reset_peak_memory_stats()
+        total_nll, computed = step_backward(model, forward, [chains[i] for i in group], denominator, pack_tokens,
+                                            args.activation_gb, args.share_prefix_tokens, fast=not args.stock_model,
+                                            mark=mark)
+        forward_tokens += computed
         t = time.time()
         embedding_master.grad[special_index] = 0
         norm = torch.nn.utils.clip_grad_norm_(parameters, args.clip).item()
@@ -442,6 +550,7 @@ def train(args):
         mark('optimizer', t)
         record = {'step': step + 1, 'of': total, 'loss': total_nll / denominator, 'lr': args.lr * scale, 'grad_norm': norm,
                   'sequences': len(group), 'loss_tokens': denominator, 'elapsed_s': round(time.time() - started, 1),
+                  'chain_tokens': int(sum(len(chains[i]['ids']) for i in group)), 'computed_tokens': computed,
                   'forward_tokens_per_s': round(forward_tokens / (time.time() - started)),
                   'step_seconds': round(time.time() - step_started, 1),
                   'phase_seconds': {k: round(v, 1) for k, v in phase.items()},
@@ -577,6 +686,12 @@ def main():
     p.add_argument('--activation-gb', type=float, default=20., help='saved-activation budget per sequence; layers beyond it are recomputed')
     p.add_argument('--pack-tokens', type=int, default=-1, help='pack a step\'s chains back to back into rows of at most this many tokens (documents stay separate); default: the longest row --activation-gb holds without recompute (about 10k at 20 GB); 0: one chain per forward')
     p.add_argument('--max-steps', type=int, default=0, help='stop after this many optimizer steps without writing a checkpoint')
+    p.add_argument('--share-prefix-tokens', type=int, default=256,
+                   help='compute a prefix that several of a step\'s chains share (system prompt, task prompt, earlier calls) '
+                   'once when it is at least this long (exact gradients, lfm3_fast_train.prefix_tree); 0: every chain whole')
+    p.add_argument('--batch-order', choices=('auto', 'grouped', 'random'), default='auto',
+                   help='grouped: steps from neighbouring episodes in token order (shared prefixes in one step), step order '
+                   'shuffled; random: chains shuffled; auto: grouped when --share-prefix-tokens > 0')
     p.add_argument('--out-dir', required=True)
     p.add_argument('--epochs', type=int, default=3)
     p.add_argument('--lr', type=float, default=1e-5)
