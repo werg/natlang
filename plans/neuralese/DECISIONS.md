@@ -2788,3 +2788,16 @@ already supports it: `held_eval compare` pairs by scoring series, engine and sam
 learner-only change keeps the base; a harness or scoring change re-measures the base on its series (grpo moves the old
 step 0 aside). Applied now: the packed prefix tree (in progress) and any restored capability that passes its smoke
 enter grpo-v4 at a resume as soon as they are ready.
+
+**2026-11-17 17:30, learned compaction operators restored on today's stack: design v3 (operators agent).** Owner:
+"operator converters and training operators is very important." Inventory and design in
+`OPERATORS_RESTORE_20261117.md`. Findings: the operator endpoint (`/v1/neuralese/operator`, Python engine; SGLang by
+inheritance on the resident native model; neither llama fork nor page) writes a greedy span after `produce_open`
+with no RL capture and no `source_capture`, so neither GRPO nor the pass-through could train it, and the unlearned
+close marker (C6) makes untrained spans run to the cap. Decision: an operator write is (1) an ordinary RL-captured
+call at the operator's site whose reply is plain text under the run's sampling law, ending with the ordinary end of
+turn, then (2) the reply's state captured in its own context (`site + produce_open + reply`, the existing contextual
+capture of `native.init-body`), recorded as a `block_write` with `source_capture` that the pass-through already
+lowers. compact-value and compact-params are `view` at the runtime's sites (one summarizer family, 2026-10-09);
+compact-history is the model's own `compact_history` note captured in context; the arm is the model-facing variant
+`learned-compaction` (enters the held series key). The v1 slot smoke's null (actual ≈ shuffled): two independent investigators found no implementation bug in capture, import or ablation. The cause is v1's design: the slots held one constant phrase, about 95% of the slot state is row-invariant (CPU probe), and the design is already gone. Cases (about 118k train, text port records) render byte-identically today but were never filtered against held-v3; the row lowering filters them. Next: cases -> exp0_sft rows, the v3 write on every engine, ablation, then SFT and GRPO on the pass-through.
