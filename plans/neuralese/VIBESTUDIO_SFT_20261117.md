@@ -124,3 +124,36 @@ license provenance, then transfer to the actual DGX/Pop owner. Registration is n
 learner exposure. Adopt the corpus at the next experiment pin; never change data
 inside a measured live run. Judge task success on paired held-v3 evaluation and
 separate unseen Vibestudio scenarios, not training loss or fixture case counts.
+
+## Source held separation checked, 2026-11-17
+
+Ledger unit `vibe-teacher-held-source-verify-20261117` ran the standard
+`held_eval verify` on Tick against all 18 preflight-exported canonical source
+pools: 186 training roots/source ids and 219 split/source groups. New source alone
+has **0 held task-id and 0 held-group overlaps** against both held-v3 and its
+held-v2 predecessor. Combined with the original held-v3 exposure snapshot, 9,613
+ids and 1,608 groups likewise have **0/0 overlaps** against held-v3. The preceding
+baseline snapshot check independently found 0/0 for 9,427 ids and 1,389 groups.
+
+The immutable held manifests were unchanged (v3 `45471060`, v2 `dfe0a915`). To
+verify on a machine without DGX's external mount, `held_eval verify --pool PATH`
+now accepts relocation only when the file SHA256 equals the original manifest's
+pool SHA256; held case bytes are also checked. The data-only relocated source
+pool is 341,446,694 bytes, SHA256
+`b3fef4c7dcd36e0bedbd03c67353634b5d7323ad0468ac1d0f73533f2e5de966`.
+No protected inputs were sent to a model. No job was launched on the DGX.
+
+Full per-source input hashes, original exposure artifact hashes, relocated pool
+identity and the three actual verifier reports are in
+`/home/werg/data/held-verification-20261117/source-verification.json` (SHA256
+`576c26d079cc2eccbe35cd7cb305b32b9abe4dbf4c46a2a6086ecc6109f8bba2`).
+The source paths are under
+`/home/werg/.cache/natlang/vibe-teacher-ir-preflight-20261117/`; the receipt binds
+each `pool.jsonl` and full `inventory.jsonl`. Some early descriptor schemas were
+subsequently amended; their source ids, source groups and inputs were unchanged.
+This verifies the source exposure closure, not final descriptor execution or
+learned quality. Final-schema canonical collection exports fresh pinned IR.
+
+Verifier relocation/integrity tests and the existing curriculum tests passed:
+45 tests in ledger unit `held-source-relocation-tests-20261117`. The actual
+three-report source verification completed successfully with a 403 MB peak.
