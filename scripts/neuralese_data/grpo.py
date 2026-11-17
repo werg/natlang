@@ -232,6 +232,13 @@ class Collector:
         from lower_rollout_turns import NativeStates
         self.states = NativeStates(args.actor_store or work / 'actor')   # imported Neuralese state of consumer calls
         self.custody, self.trajectories = None, None
+        self.memetic_rows, self.memetic_cursor = [], 0   # "improve program P" rows (--memetic-tasks)
+        if getattr(args, 'memetic_tasks', None) and getattr(args, 'memetic_share', 0) > 0:
+            from natlang_neuralese.common.jsonio import read_jsonl
+            self.memetic_rows = list(read_jsonl(args.memetic_tasks))
+            random.Random(args.seed).shuffle(self.memetic_rows)
+        # the memetic world's Python (ts-host world-bridge.ts kind memetic): this interpreter, not the pin's missing venv
+        self.env['NATLANG_MEMETIC_PYTHON'] = sys.executable
         if getattr(args, 'teacher_attempts', 0) > 0:   # JOLT+ teacher attempts (``_teachers``)
             from natlang_neuralese.common.custody import ProtectedWorlds
             from natlang_neuralese.rl.jolt import teacher_fact_kinds
@@ -244,19 +251,28 @@ class Collector:
     def _new_group(self):
         from natlang_neuralese.rl import task_rollouts
         from natlang_neuralese.common.jsonio import read_jsonl
-        row = self._pick()
-        variant = self.variants.get(row['id'])
-        if variant is not None and self.rng.random() < self.args.neuralese_variant_share:
-            row = variant   # its outcomes are its own (never the original's band rate)
+        a = self.args
+        memetic = bool(self.memetic_rows) and self.rng.random() < a.memetic_share
+        if memetic:
+            row = self.memetic_rows[self.memetic_cursor % len(self.memetic_rows)]
+            self.memetic_cursor += 1
+        else:
+            row = self._pick()
+            variant = self.variants.get(row['id'])
+            if variant is not None and self.rng.random() < self.args.neuralese_variant_share:
+                row = variant   # its outcomes are its own (never the original's band rate)
         group = self.next_group
         self.next_group += 1
         directory = self.work / 'groups' / f'g{group:06d}'
         directory.mkdir(parents=True, exist_ok=True)
+        if memetic:
+            row = self._bind_memetic(row, directory)
         (directory / 'cases.jsonl').write_text(json.dumps(row) + '\n')
-        a = self.args
         task_rollouts.prepare(SimpleNamespace(
-            cases=directory / 'cases.jsonl', out=directory, rows=1, offset=0, group=a.group, temperature=1.,
-            case_seconds=a.case_seconds, max_model_requests=a.max_model_requests, max_turns=a.max_turns,
+            cases=directory / 'cases.jsonl', out=directory, rows=1, offset=0,
+            group=a.memetic_group if memetic else a.group, temperature=1.,
+            case_seconds=a.case_seconds, max_model_requests=a.memetic_model_requests if memetic else a.max_model_requests,
+            max_turns=a.max_turns,
             seed_base=a.seed_base + 100 * group, root_mode='student', match_seeds_from=None,
             policy_checkpoint_sha256=self.policy_sha))
         entries = list(read_jsonl(directory / 'queue.jsonl'))
@@ -267,6 +283,22 @@ class Collector:
                               'created': time.time()}
         self.outstanding += 1
         self.pending.extend((group, entry) for entry in entries)
+
+    def _bind_memetic(self, row, directory):
+        """A memetic row bound to this group (RESTORE_MEMETIC_JOLT_HINDSIGHT_20261117.md section 3): its episode spec,
+        copied into the group directory with the run's actor, runtime and sampling controls, so the group's samples share
+        one preparation (evidence and anchor baselines) measured under the policy version that samples them."""
+        import copy
+        import hashlib
+        world = row['semantics']['world']
+        spec = json.loads(Path(world['task']).read_text())
+        spec.update(out=str(directory / 'memetic'), endpoint=self.args.actor, runtime=str(self.runtime),
+                    sampling_config=str(self.work / 'sampling-config.json'))
+        path = directory / 'memetic-spec.json'
+        path.write_text(json.dumps(spec, ensure_ascii=False, sort_keys=True) + '\n')
+        row = copy.deepcopy(row)
+        row['semantics']['world'] = {**world, 'task': str(path), 'spec_sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
+        return row
 
     def _record_outcome(self, directory):
         """The task's latest scored group (``--group`` samples of the policy then served) replaces any earlier measurement
@@ -624,7 +656,9 @@ def load_group(collector, group, stats):
         quality = float(reward['quality'])
         graded = reward.get('graded')
         binary = getattr(getattr(collector, 'args', None), 'reward', 'graded') == 'binary'
+        memetic = reward.get('memetic') or {}
         episodes.append({'reward': quality if binary or graded is None else float(graded),
+                         **({'anchor': float(memetic['anchor'])} if 'anchor' in memetic else {}),
                          'quality': quality, 'rows': rows, 'decisions': decisions,
                          'task_id': row['task_id'], 'round': group,
                          'outcome': row.get('outcome'), 'role': role})
@@ -636,6 +670,17 @@ def episode_advantages(episodes, stats=None):
     Without teacher attempts: plain GRPO over the group (``group_advantages``). With them (JOLT+): students keep the plain
     advantage over the students alone and teachers get ``rl/jolt.py guided_advantages`` (their reward against the
     students' mean, never negative); a teacher with advantage 0 does not train."""
+    anchors = [e['anchor'] for e in episodes if e.get('anchor') is not None]
+    if anchors and len(episodes) >= 2:
+        # memetic episodes: centred on max(group mean, the best trivial improvement), so a change set that does not beat
+        # doing the trivial thing never earns a positive advantage (rl/memetic_workspace.py memetic_reward)
+        rewards = [e['reward'] for e in episodes]
+        mean = sum(rewards) / len(rewards)
+        std = math.sqrt(sum((r - mean) ** 2 for r in rewards) / len(rewards))
+        if std < 1e-6:
+            return None
+        base = max(mean, max(anchors))
+        return [(r - base) / (std + 1e-6) for r in rewards]
     if not any(e.get('role') == 'teacher' for e in episodes):
         return group_advantages([e['reward'] for e in episodes]) if len(episodes) >= 2 else None
     from natlang_neuralese.rl.jolt import guided_advantages
@@ -2735,6 +2780,12 @@ def main():
                    help='attempts per group: crisp (--teacher-attempts each) or the NL planTeacherAttempts')
     t.add_argument('--hindsight-trajectories', help='hindsight index (rl/hindsight.py index): a teacher attempt of a task '
                    'with a verified run is guided by writeHint over that run')
+    t.add_argument('--memetic-tasks', help='memetic "improve program P" rows (python -m natlang_neuralese.rl.memetic_tasks '
+                   'build: DIR/cases.jsonl); RESTORE_MEMETIC_JOLT_HINDSIGHT_20261117.md section 3')
+    t.add_argument('--memetic-share', type=float, default=0.,
+                   help='fraction of new groups that are memetic episodes (each about 13 ordinary groups of rollouts)')
+    t.add_argument('--memetic-group', type=int, default=4)
+    t.add_argument('--memetic-model-requests', type=int, default=64)
     t.add_argument('--reward', choices=('graded', 'binary'), default='graded',
                    help='advantage reward: graded (task_rollouts.graded_reward: partial credit for the file effects an '
                         'episode with only answer/file checks failed achieved; owner 2026-11-13) or binary acceptance. '

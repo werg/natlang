@@ -643,6 +643,41 @@ def _budget_terminated_prefix(entry: dict[str, Any], task: dict[str, Any], finis
                             if cut is not None else {})}}
 
 
+def memetic_outcome(task: dict[str, Any], result: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The graded outcome of a memetic improvement episode (``natlang.memetic-outcome/1`` in the world score the
+    collector records), or None for every other task. An episode that ended without one (a crash or budget stop before
+    scoring) is a failed improvement, scored 0 against its group's anchor (the group's shared preparation)."""
+    world = (task.get("semantics") or {}).get("world") or {}
+    if world.get("kind") != "memetic" or not result:
+        return None
+    memetic = ((result.get("outcome") or {}).get("world") or {}).get("memetic")
+    if isinstance(memetic, dict) and memetic.get("schema") == "natlang.memetic-outcome/1":
+        quality = memetic.get("quality")
+        if type(quality) not in (int, float) or not 0 <= quality <= 1:
+            raise ValueError("memetic outcome quality must be in [0, 1]")
+        return memetic
+    anchor = 0.
+    try:
+        spec = json.loads(Path(world["task"]).read_text())
+        prepared = Path(spec["out"]) / "prepared.json"
+        baselines = json.loads(prepared.read_text())["baselines"] if prepared.exists() else {}
+        anchor = max([item["success"] for item in baselines.values() if item and item.get("success") is not None],
+                     default=0.)
+    except (OSError, KeyError, TypeError, ValueError):
+        pass
+    return {"schema": "natlang.memetic-outcome/1", "quality": 0., "anchor": anchor, "gain": -anchor, "cost": 0.,
+            "query_success": 0., "unscored_workspace": True}
+
+
+def memetic_reward_record(memetic: dict[str, Any]) -> dict[str, Any]:
+    """The reward fields the learner reads (grpo.py ``episode_advantages``): the trivial-improvement anchor and the
+    measured gain, cost and query success, with where the committed set and its query runs are."""
+    return {"anchor": float(memetic["anchor"]), "gain": float(memetic["gain"]), "cost": float(memetic["cost"]),
+            "query_success": float(memetic["query_success"]), "query_dir": memetic.get("query_dir"),
+            "committed": memetic.get("committed"), "unscored_workspace": bool(memetic.get("unscored_workspace")),
+            "score_path": memetic.get("score_path")}
+
+
 def build_queue(packet: Path, rows: int, group: int, out: Path, *, temperature: float, case_seconds: int,
                 max_model_requests: int, max_turns: int, seed_base: int) -> list[dict[str, Any]]:
     if group < 2:
@@ -655,12 +690,16 @@ def build_queue(packet: Path, rows: int, group: int, out: Path, *, temperature: 
         raise ValueError("queue row count must match the authenticated task packet")
     entries = []
     for index in range(rows):
+        # A memetic improvement episode runs its program on support (and, at the end, query) worlds inside the
+        # episode; its world declares the wall budget that needs (rl.memetic_tasks).
+        world = ((packet_tasks[index].get("semantics") or {}).get("world") or {}) if packet_tasks else {}
+        seconds = max(case_seconds, int(world.get("case_seconds") or 0)) if world.get("kind") == "memetic" else case_seconds
         for sample in range(group):
             case = out / f"row-{index:03d}" / f"sample-{sample:02d}"
             entries.append({
                 "key": f"s7-task-{index:03d}-{sample:02d}", "index": index, "count": 1, "source": str(packet),
                 "seed": seed_base + 1000 * index + sample, "temperature": temperature,
-                "case_seconds": case_seconds, "max_model_requests": max_model_requests, "max_turns": max_turns,
+                "case_seconds": seconds, "max_model_requests": max_model_requests, "max_turns": max_turns,
                 "jobs": str(case / "jobs"), "log": str(case / "collector.log"), "output": str(case / "results.jsonl"),
                 "group": index, "sample": sample,
                 **({"task_id": packet_tasks[index]["id"], "packet_sha256": packet_sha256}
@@ -766,7 +805,14 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0,
             if result is None and outcome == "budget_exhaustion" and \
             (finishes.get(entry["key"]) or {}).get("resource_limit_reason") == "model_request_budget" else None
         task = packet[entry["index"]]
-        graded = graded_reward(outcome, reward, result, task.get("semantics"))
+        memetic = memetic_outcome(task, result)
+        if memetic is not None and memetic.get("unscored_workspace") and reward is None:
+            memetic = None   # no workspace score and an unresolved run (wall clock, infrastructure): no measurement
+        if memetic is not None:
+            # An improvement episode's outcome is graded: its committed change set's success on held query worlds
+            # (rl.memetic_workspace.Workspace.score), anchored on the best trivial improvement.
+            outcome, reward = "memetic_scored", memetic["quality"]
+        graded = memetic["quality"] if memetic is not None else graded_reward(outcome, reward, result, task.get("semantics"))
         if emit is not None and (entry.get("task_id") != task.get("id") or
                                  entry.get("packet_sha256") != packet_sha256):
             raise ValueError(f"queue entry {entry.get('key')} is not bound to its exact task packet row")
@@ -811,6 +857,7 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0,
                             "reward": None if training_reward is None else {"quality": training_reward,
                                 "graded": graded,
                                 **({"neuralese_bonus": episode_bonus} if episode_bonus else {}),
+                                **({"memetic": memetic_reward_record(memetic)} if memetic is not None else {}),
                                 "execution_efficiency": efficiency},
                             "unscored": ("budget_prefix_capture_unavailable" if result is None and reward is not None and
                                          budget_prefix is None else outcome if reward is None else None),
