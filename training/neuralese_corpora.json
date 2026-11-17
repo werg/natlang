@@ -741254,6 +741254,21 @@
         "task-helpers.jsonl"
       ],
       "note": "Neuralese-declaring variants (neuralese-helper framing: one callable Neuralese<string> helper and a root note) of 1,381 eligible GRPO pool tasks in 47 families, 112 of them measured mid-range (base pass rate in [0.1, 0.9]); inputs, oracle, checks, reference, split and source groups are the originals'. Built by scripts/rl_tasks/neuralese_variants.py (generator helpers read from the pool's own neuralese-framed rows, 14 script-authored family helpers, 97 per-task helpers authored by Haiku subagents); all 1,381 qualified by verify.mjs reference/negative/alias replay (3,866 wrong controls rejected, 0 alias rejections). Held-v2 closure: no variant or original excluded. Selectable only through grpo.py --neuralese-variants (off by default); enters as its own controlled addition with a paired held-v2 measurement. plans/neuralese/TASK_SUPPLY_20261113.md."
+    },
+    {
+      "id": "sft-verified-20261117-v1",
+      "owner": "dgx",
+      "path": "runs/sft-verified-20261117-v1",
+      "include": [
+        "build.json",
+        "cases.jsonl",
+        "chains.pkl",
+        "rows.jsonl.zst",
+        "repetition.json"
+      ],
+      "admission": "sft-experiment-input",
+      "license_provenance": "Own LFM3 GRPO rollouts (project-generated); teacher episodes of nvidia/nemotron-3-ultra-550b-a55b (free and paid NVIDIA API), gpt-6-luna (openai-codex), gemini-3.5/3.7-flash, glm-4.7-flash on the project's GRPO pool; October corpora rows keep their registered sources' license provenance (Luna/Qwen/Bonsai teacher curricula; SWE-rebench OpenHands Qwen3-Coder trajectories, OpenResearcher web sessions, CooperBench) as recorded per row in rows.jsonl.zst provenance.",
+      "note": "SFT set for the base-checkpoint (5ff07638) SFT experiment: 2,220 trajectories over 1,945 tasks, 6,226 exp0_sft --chains sequences, 47.7M forward / 5.76M target tokens (one epoch ~2.4 h at 5.5k tok/s). GRPO own successes (grpo-v2 run1/run2, grpo-v3 run1) and teacher-generation successes (teacher-gen-20261115/pool-v1, as of 2026-11-17 02:40), each replayed through the current runtime and oracle (pin aa1bd846) and admitted only on an exact replay with task success; October teacher/acquired rows rebuilt for the current surface with compiled eval actions, 40% of forward tokens. Held-v3/v2 closure excluded; per-task caps by base pass rate, near-duplicates removed, producers alternate within a task; reasoning-free teacher replies keep the empty think block as zero-weight context. Built by scripts/neuralese_data/sft_sources.py build; plans/neuralese/SFT_SOURCES_20261117.md."
     }
   ],
   "coverage_backlog": [

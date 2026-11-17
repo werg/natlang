@@ -2577,3 +2577,20 @@ Credential: natlang's openai-codex store is an access-only copy of the Codex CLI
 as on 10-31); refreshed 2026-11-16 via one `codex exec` and synced, expiring 2026-11-26 ~22:25 UTC. After that Luna's
 episodes defer (no verdicts lost) until it is re-synced, or the owner runs `natlang auth login openai-codex` for an
 independent refreshing session.
+
+**2026-11-17 03:40, SFT-from-base data set built (sft-verified-20261117-v1; data agent).**
+- **What it is:** the input of the next experiment: SFT of 5ff07638, judged by paired held-v3.
+- **Size:** 2,220 trajectories over 1,945 tasks; 47.7M forward and 5.76M target tokens; about 2.4 h per epoch.
+- **Own GRPO successes:** 520 trajectories, 72% of weighted target tokens.
+- **Teacher-pool successes:** 998 trajectories, 14.5% (Luna 671, Nemotron 310, others 17).
+- **October rows:** 702 trajectories, 13.2%; capped at 40% of forward tokens.
+- **Admission:**
+  - Own and teacher episodes enter only on an exact replay of their recorded decisions through the current runtime and
+    oracle (pin aa1bd846).
+  - October rows enter only when rebuilt for today's tool surface with compiled eval actions.
+  - Held-v3/v2 closure excluded.
+  - Per-task caps by base pass rate, with producers taking turns within a task; MinHash near-duplicates removed.
+  - Reasoning-free teacher replies keep the empty think block as zero-weight context.
+- **Gap closed:** `natlang.rollout/1` records now name the code that produced them (`task_rollouts.score`, next pin).
+- **Launch:** the launch build re-extracts the growing teacher pool first.
+- **Details:** sources, every filter's counts, exclusions, and what was not verified: `SFT_SOURCES_20261117.md`.

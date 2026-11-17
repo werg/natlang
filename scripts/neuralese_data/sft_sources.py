@@ -989,35 +989,63 @@ def build(args):
         sizes = collections.Counter()
         for c in selected:
             sizes[c['group']] += c['size']
-        budgets = water_fill(sizes, weights, october_budget)
         rng.shuffle(selected)
-        chosen, used = {}, collections.Counter()
-        for c in selected:
-            if used[c['group']] + c['size'] <= budgets.get(c['group'], 0):
-                used[c['group']] += c['size']
-                chosen[c['key']] = c
-            else:
-                funnel[c['source']]['over_budget'] += 1
-        october_report = {'weights': weights, 'estimated_group_tokens': {g: round(v) for g, v in sizes.items()},
-                          'budgets': {g: round(v) for g, v in budgets.items()},
-                          'chars_per_token_estimate': CHARS_PER_TOKEN}
-        # second pass: render the chosen trajectories, one group at a time (rows of a trajectory kept in file order)
         root = Path(args.october)
-        for group in sorted(weights):
-            pending = collections.defaultdict(list)
-            for line in zstd_lines(root / f'{group}.jsonl.zst'):
-                row = json.loads(line)
-                key = f"october:{group}:{(row.get('provenance') or {}).get('trajectory') or row.get('task_id')}"
-                if key in chosen:
-                    pending[key].append(row)
-            for key, rows in pending.items():
-                c = chosen[key]
-                turns = [{'id': r['id'], 'messages': r['messages'], 'tools': r['tools'], 'target': r['target'],
-                          'invocation_id': (r.get('provenance') or {}).get('invocation') or key} for r in rows]
-                c['run'] = group
-                if not admit(c, turns):
-                    funnel[c['source']]['render_error'] += 1
-            del pending
+        scale = collections.defaultdict(lambda: 1.)        # actual forward tokens per estimated token, per group
+        actual, estimated_done, admitted_keys = collections.Counter(), collections.Counter(), set()
+        passes = []
+        for attempt in range(args.october_passes):
+            # budgets on the current size estimates (sizes still open, scaled), less what earlier passes used
+            open_sizes = collections.Counter()
+            for c in selected:
+                if c['key'] not in admitted_keys:
+                    open_sizes[c['group']] += c['size'] * scale[c['group']]
+            budgets = water_fill({g: open_sizes[g] + actual[g] for g in weights if open_sizes[g] + actual[g] > 0},
+                                 weights, october_budget)
+            chosen, planned = {}, collections.Counter()
+            for c in selected:
+                g = c['group']
+                if c['key'] in admitted_keys:
+                    continue
+                estimate = c['size'] * scale[g]
+                if actual[g] + planned[g] + estimate <= budgets.get(g, 0):
+                    planned[g] += estimate
+                    chosen[c['key']] = c
+            if not chosen:
+                break
+            # render the chosen trajectories, one group at a time (rows of a trajectory kept in file order)
+            for group in sorted({c['group'] for c in chosen.values()}):
+                pending = collections.defaultdict(list)
+                for line in zstd_lines(root / f'{group}.jsonl.zst'):
+                    row = json.loads(line)
+                    key = f"october:{group}:{(row.get('provenance') or {}).get('trajectory') or row.get('task_id')}"
+                    if key in chosen:
+                        pending[key].append(row)
+                for key, rows in pending.items():
+                    c = chosen[key]
+                    turns = [{'id': r['id'], 'messages': r['messages'], 'tools': r['tools'], 'target': r['target'],
+                              'invocation_id': (r.get('provenance') or {}).get('invocation') or key} for r in rows]
+                    c['run'] = group
+                    before = stats[c['source']]['forward_tokens']
+                    admitted_keys.add(key)
+                    if not admit(c, turns):
+                        funnel[c['source']]['render_error'] += 1
+                        continue
+                    actual[group] += stats[c['source']]['forward_tokens'] - before
+                    estimated_done[group] += c['size']
+                del pending
+            for g in estimated_done:
+                scale[g] = actual[g] / estimated_done[g] if estimated_done[g] else 1.
+            passes.append({'chosen': len(chosen), 'actual_forward': dict(actual), 'budgets': {g: round(v) for g, v in budgets.items()}})
+            if sum(actual.values()) >= 0.95 * october_budget:
+                break
+        for c in selected:
+            if c['key'] not in admitted_keys:
+                funnel[c['source']]['over_budget'] += 1
+        october_report = {'weights': weights, 'budget_forward_tokens': round(october_budget),
+                          'estimated_group_tokens': {g: round(v) for g, v in sizes.items()},
+                          'actual_per_estimated_token': {g: round(v, 3) for g, v in scale.items()},
+                          'passes': passes, 'chars_per_token_estimate': CHARS_PER_TOKEN}
 
     rows_out.close()
     chains = chains_of(sft_episodes)
@@ -1103,6 +1131,8 @@ def main():
     b.add_argument('--october-share', type=float, default=0.4,
                    help='October share of the forward tokens (prompt + reply of every call)')
     b.add_argument('--october-max-per-task', type=int, default=1)
+    b.add_argument('--october-passes', type=int, default=4,
+                   help='selection passes: each renders, measures actual forward tokens and refills toward the budget')
     b.add_argument('--october-family-share', type=float, default=0.05)
     args = p.parse_args()
     if args.command == 'build' and args.teacher_pool is None:
