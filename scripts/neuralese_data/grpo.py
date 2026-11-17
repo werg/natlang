@@ -231,6 +231,15 @@ class Collector:
         self.env['NATLANG_MODEL_FACING'] = series()['model_facing']
         from lower_rollout_turns import NativeStates
         self.states = NativeStates(args.actor_store or work / 'actor')   # imported Neuralese state of consumer calls
+        self.custody, self.trajectories = None, None
+        if getattr(args, 'teacher_attempts', 0) > 0:   # JOLT+ teacher attempts (``_teachers``)
+            from natlang_neuralese.common.custody import ProtectedWorlds
+            from natlang_neuralese.rl.jolt import teacher_fact_kinds
+            teacher_fact_kinds(args.teacher_fact_kinds)   # refuse unknown kinds before the first group
+            self.custody = ProtectedWorlds.load()      # every protected source, failing closed (~14 s)
+            if getattr(args, 'hindsight_trajectories', None):
+                from natlang_neuralese.rl.hindsight import load_index
+                self.trajectories = load_index(args.hindsight_trajectories)
 
     def _new_group(self):
         from natlang_neuralese.rl import task_rollouts
@@ -268,7 +277,7 @@ class Collector:
             rows = list(read_jsonl(directory / 'rewards.jsonl'))
         except OSError:
             return
-        scored = [row for row in rows if row.get('reward') is not None]
+        scored = [row for row in rows if row.get('reward') is not None and row.get('jolt_role', 'student') == 'student']
         if scored:
             self.own[scored[0]['task_id']] = (sum(row['reward'] == 1.0 for row in scored), len(scored))
             self.rates_changed = True
@@ -412,7 +421,49 @@ class Collector:
         (directory / 'versions.json').write_text(json.dumps(info['versions']) + '\n')
         with self.lock:
             self._record_outcome(directory)
+        if self._teachers(group):
+            return   # scored again with its teacher attempts once they finish
         self.ready.put(group)
+
+    def _teachers(self, group):
+        """JOLT+ (RESTORE_MEMETIC_JOLT_HINDSIGHT_20261117.md section 1): a group whose students succeeded at most
+        ``--teacher-max-successes`` times gets ``--teacher-attempts`` privileged teacher attempts of the same task, queued
+        first. Each runs with the task's custody-checked facts of ``--teacher-fact-kinds`` (or, with
+        ``--hindsight-trajectories``, a verified run of it) for the in-run guidance writer; the group reaches the learner
+        when they finish. Returns the number of attempts queued (0: the group is complete)."""
+        from natlang_neuralese.common.jsonio import read_jsonl
+        from natlang_neuralese.rl import jolt
+        a, info = self.args, self.groups[group]
+        if getattr(a, 'teacher_attempts', 0) <= 0 or 'teachers' in info:
+            return 0
+        info['teachers'] = 0
+        directory = info['dir']
+        students = [row for row in read_jsonl(directory / 'rollouts.jsonl') if row.get('jolt_role', 'student') == 'student']
+        scored = [row for row in students if row.get('reward') is not None and not row.get('unscored')]
+        if not scored or sum(row['reward']['quality'] == 1.0 for row in scored) > a.teacher_max_successes:
+            return 0
+        entries = [entry for entry in read_jsonl(directory / 'queue.jsonl') if entry.get('jolt_role', 'student') == 'student']
+        result = jolt.teacher_entries(
+            entries, scored, cases=directory / 'packet.jsonl', config=self.work / 'sampling-config.json', out=directory,
+            attempts=a.teacher_attempts, seed_base=a.seed_base + 100 * group, custody=self.custody,
+            selection=a.teacher_selection, writer='native', fact_kinds=jolt.teacher_fact_kinds(a.teacher_fact_kinds),
+            plan_command=jolt.plan_command(a.actor) if a.teacher_plan == 'nl' else None, trajectories=self.trajectories)
+        teachers = result['entries']
+        if not teachers:
+            print(json.dumps({'event': 'no teacher attempts', 'group': group, 'refusal': result.get('refusal')}), flush=True)
+            return 0
+        for entry in teachers:
+            entry['rl_endpoint'] = a.actor
+        with (directory / 'queue.jsonl').open('a') as handle:
+            handle.write(''.join(json.dumps(entry, sort_keys=True) + '\n' for entry in teachers))
+        with self.lock:
+            info['teachers'] = len(teachers)
+            info['size'] += len(teachers)
+            self.pending.extendleft((group, entry) for entry in reversed(teachers))
+        print(json.dumps({'event': 'teacher attempts', 'group': group, 'task_id': info['task_id'],
+                          'attempts': len(teachers), 'hindsight': sum(bool(e.get('hindsight')) for e in teachers),
+                          'plan': result.get('plan')}), flush=True)
+        return len(teachers)
 
     def reuse_scored(self, step, max_staleness):
         """Offer again the scored groups a stop left untrained (rollouts and versions on disk, not ``retired``) whose
@@ -553,9 +604,13 @@ def load_group(collector, group, stats):
     """(task_id, [episode dicts with 'reward', 'rows'], versions) of one scored group."""
     from natlang_neuralese.common.jsonio import read_jsonl
     from lower_rollout_turns import decision_turns, episode_turns
+    from natlang_neuralese.rl.jolt import student_form
     info = collector.groups[group]
     episodes = []
     for row in read_jsonl(info['dir'] / 'rollouts.jsonl'):
+        role = row.get('jolt_role', 'student')
+        if role == 'teacher':   # JOLT+: the guided run's actions under the unguided prompt (rl/jolt.py student_form)
+            row = student_form(row, stats)
         reward = row.get('reward')
         rows = (trainable_rows(episode_turns(row, stats, collector.states), stats, collector.args.top_p)
                 if row.get('turns') else [])
@@ -572,8 +627,31 @@ def load_group(collector, group, stats):
         episodes.append({'reward': quality if binary or graded is None else float(graded),
                          'quality': quality, 'rows': rows, 'decisions': decisions,
                          'task_id': row['task_id'], 'round': group,
-                         'outcome': row.get('outcome')})
+                         'outcome': row.get('outcome'), 'role': role})
     return info['task_id'], episodes, info['versions']
+
+
+def episode_advantages(episodes, stats=None):
+    """Advantage of each episode of one group, None for an episode that does not train; None when nothing trains.
+    Without teacher attempts: plain GRPO over the group (``group_advantages``). With them (JOLT+): students keep the plain
+    advantage over the students alone and teachers get ``rl/jolt.py guided_advantages`` (their reward against the
+    students' mean, never negative); a teacher with advantage 0 does not train."""
+    if not any(e.get('role') == 'teacher' for e in episodes):
+        return group_advantages([e['reward'] for e in episodes]) if len(episodes) >= 2 else None
+    from natlang_neuralese.rl.jolt import guided_advantages
+    students = [e for e in episodes if e.get('role') != 'teacher']
+    teachers = [e for e in episodes if e.get('role') == 'teacher']
+    student, teacher = guided_advantages([e['reward'] for e in students], [e['reward'] for e in teachers])
+    if stats is not None:
+        stats['teacher_groups'] += 1
+        stats['teacher_episodes'] += len(teachers)
+        stats['teacher_successes'] += sum(e['quality'] == 1.0 for e in teachers)
+        stats['teacher_episodes_trained'] += sum(1 for value in teacher or () if value > 0)
+    if student is None and teacher is None:
+        return None
+    by_id = {id(e): value for e, value in zip(students, student or [None] * len(students))}
+    by_id.update({id(e): (value or None) for e, value in zip(teachers, teacher or [None] * len(teachers))})
+    return [by_id[id(e)] for e in episodes]
 
 
 def collect_blocks(store_dir, cutoff):
@@ -2124,16 +2202,18 @@ def train(args):
                 for episode in episodes:
                     episode['reward'] = synthetic_reward(args.synthetic_reward, episode)
             stale = step - min(versions) if versions else 0
-            rewards += [e['reward'] for e in episodes]
+            rewards += [e['reward'] for e in episodes if e.get('role') != 'teacher']   # the students' own reward
             if stale > args.max_staleness:
                 dropped_stale += 1
                 continue
             staleness.append(stale)
-            advantages = group_advantages([e['reward'] for e in episodes]) if len(episodes) >= 2 else None
+            advantages = episode_advantages(episodes, stats)
             if advantages is None:
                 continue
             spread += 1
             for index, (episode, advantage) in enumerate(zip(episodes, advantages)):
+                if advantage is None:
+                    continue
                 if args.call_fraction < 1:
                     episode = subsample_calls(episode, args.call_fraction,
                                               random.Random(f'{args.seed}:{step}:{group}:{index}'), stats)
@@ -2643,6 +2723,18 @@ def main():
                    'scripts/rl_tasks/neuralese_variants.py; off by default: a controlled addition)')
     t.add_argument('--neuralese-variant-share', type=float, default=0.5,
                    help='share of the groups of a task with a variant that run the variant')
+    t.add_argument('--teacher-attempts', type=int, default=0,
+                   help='JOLT+: privileged teacher attempts of the same task for a group whose students succeeded at most '
+                        '--teacher-max-successes times, trained in student form (RESTORE_MEMETIC_JOLT_HINDSIGHT_20261117.md)')
+    t.add_argument('--teacher-max-successes', type=int, default=0)
+    t.add_argument('--teacher-fact-kinds', default=None, help='comma list of fact kinds that guide a teacher (default: rl/jolt.py '
+                   'TEACHER_FACT_KINDS, no answers); "all" keeps every kind')
+    t.add_argument('--teacher-selection', choices=('crisp', 'nl'), default='crisp',
+                   help='selectGuidanceFacts implementation (crisp: no extra model call)')
+    t.add_argument('--teacher-plan', choices=('crisp', 'nl'), default='crisp',
+                   help='attempts per group: crisp (--teacher-attempts each) or the NL planTeacherAttempts')
+    t.add_argument('--hindsight-trajectories', help='hindsight index (rl/hindsight.py index): a teacher attempt of a task '
+                   'with a verified run is guided by writeHint over that run')
     t.add_argument('--reward', choices=('graded', 'binary'), default='graded',
                    help='advantage reward: graded (task_rollouts.graded_reward: partial credit for the file effects an '
                         'episode with only answer/file checks failed achieved; owner 2026-11-13) or binary acceptance. '

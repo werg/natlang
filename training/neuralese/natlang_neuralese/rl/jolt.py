@@ -523,20 +523,25 @@ TEACHER_SEED_OFFSET = 900
 GUIDANCE_RUN_SCHEMA = 'natlang.guidance-run/1'
 
 
-def guidance_controls(base, *, role, custody_receipt, facts, selection=None, writer=None):
+def guidance_controls(base, *, role, custody_receipt, facts, selection=None, writer=None, trajectory=None):
     """Run-level chat controls of one JOLT+ episode: the world's custody-checked facts for the in-run guidance writer.
 
     The natlang runtime (``applications/guidance-writer``) filters them by visibility per invocation, selects with
     ``selectGuidanceFacts`` (``selection``: the pluggable setting, ``nl`` by default) and runs ``writeGuidance``;
     a teacher attempt imports the written state, a student attempt writes it without importing it (OPSD twin).
+    ``trajectory`` (a ``TrajectoryCall``, rl/hindsight.py): the root call's guidance is a hindsight hint that
+    ``writeHint`` writes from this verified run (teacher attempts only).
     """
     if role not in ('teacher', 'student'):
         raise ValueError('guidance role is teacher or student')
+    if trajectory is not None and role != 'teacher':
+        raise ValueError('a hindsight trajectory guides teacher attempts only')
     from .privileged_context import fact_request
     return {**base, 'x_natlang_guidance': {'schema': GUIDANCE_RUN_SCHEMA, 'role': role, 'custody': custody_receipt,
                                            'facts': [fact_request(fact) for fact in facts],
                                            **({'selection': selection} if selection is not None else {}),
-                                           **({'writer': writer} if writer is not None else {})}}
+                                           **({'writer': writer} if writer is not None else {}),
+                                           **({'trajectory': trajectory} if trajectory is not None else {})}}
 
 
 def _load_custody(custody):
@@ -581,6 +586,86 @@ def student_guidance(student_entries, *, ids, cases, config, out, custody=None, 
                                                    selection=selection,writer=writer))
         entry['chat_request_config'] = str(path)
     return None
+
+
+# Fact kinds a teacher attempt is guided by when nothing else is declared (RESTORE_MEMETIC_JOLT_HINDSIGHT_20261117.md
+# section 1): procedures and evidence, never the answer. A teacher handed the expected result, file contents, effects or
+# a child's value can return it without doing the work, and training that run in student form would teach the student
+# to answer without the work.
+ANSWER_FACT_KINDS = ('expected_result', 'expected_stop', 'expected_files', 'expected_effects', 'child_value')
+TEACHER_FACT_KINDS = ('reference_solution', 'minimum_sequence', 'decisive', 'reference_failure', 'attempt_feedback',
+                      'teacher_trajectory')
+
+
+def teacher_fact_kinds(value=None):
+    """The fact kinds a teacher is guided by: ``TEACHER_FACT_KINDS`` for None, every kind for ``all``, else the given
+    kinds (each a known fact kind)."""
+    from .privileged_context import FACT_KINDS
+    if value is None:
+        return TEACHER_FACT_KINDS
+    kinds = tuple(value.split(',')) if isinstance(value, str) else tuple(value)
+    if kinds == ('all',):
+        return None
+    unknown = sorted(set(kinds) - set(FACT_KINDS))
+    if unknown or not kinds:
+        raise ValueError('teacher fact kinds are among ' + ', '.join(FACT_KINDS) + (f' (unknown: {", ".join(unknown)})'
+                                                                                 if unknown else ''))
+    return kinds
+
+
+def kept_facts(facts, kinds):
+    """``facts`` of the given kinds (all when ``kinds`` is None), in their order."""
+    return tuple(facts) if kinds is None else tuple(fact for fact in facts if fact.kind in kinds)
+
+
+def guided_advantages(students, teachers, eps=1e-6):
+    """(student advantages or None, teacher advantages or None) of one group with teacher attempts.
+
+    Students keep the plain GRPO advantage over the students alone (None without spread), so adding teachers never
+    changes a student update. A teacher attempt's advantage is its reward against the students' mean, on the scale of the
+    whole group's spread, and never negative: a guided success where the students failed is a demonstration, a guided
+    failure is no evidence about the unguided policy. None when no teacher advantage is non-zero."""
+    def spread(values):
+        mean = sum(values) / len(values)
+        return mean, math.sqrt(sum((v - mean) ** 2 for v in values) / len(values))
+    student = None
+    if len(students) >= 2:
+        mean, std = spread(students)
+        if std >= eps:
+            student = [(r - mean) / (std + eps) for r in students]
+    teacher = None
+    if teachers and students:
+        mean = sum(students) / len(students)
+        _, std = spread(list(students) + list(teachers))
+        if std >= eps:
+            teacher = [max(0., (r - mean) / (std + eps)) for r in teachers]
+            if not any(teacher):
+                teacher = None
+    return student, teacher
+
+
+def student_form(rollout, stats=None):
+    """A teacher attempt's rollout with every privileged prompt segment removed from its sampling captures: each
+    consumer call as the unguided policy would have seen it (the guidance turn and any imported guidance state are the
+    only segments the actor flags ``privileged``; the writer's own calls carry none and stay as sampled). The actor's
+    recorded log-probabilities stay those of the guided draw, so the learner's ratio is pi(a | s) / mu(a | s, guidance).
+    Returns a new row; the input is not changed."""
+    import copy
+    row = copy.deepcopy(rollout)
+    for turn in row.get('turns') or ():
+        sampling = turn.get('sampling')
+        if not isinstance(sampling, dict):
+            continue
+        prompt = sampling.get('prompt') or []
+        kept = [segment for segment in prompt if not segment.get('privileged')]
+        if len(kept) != len(prompt) or sampling.get('privileged') is not None:
+            if stats is not None:
+                stats['teacher_calls_student_form'] += 1
+                stats['teacher_privileged_tokens_removed'] += sum(len(segment.get('token_ids') or ())
+                                                                  for segment in prompt if segment.get('privileged'))
+            sampling['prompt'] = kept
+            sampling.pop('privileged', None)
+    return row
 
 
 PLAN_POLICY_PATH = 'applications/guidance-writer/planTeacherAttempts.nl'
@@ -628,7 +713,7 @@ def plan_teacher_attempts(groups, *, default, budget, command=None):
 
 
 def teacher_entries(student_entries, student_rows, *, cases, config, out, attempts, seed_base, custody=None,
-                    selection=None, writer=None, plan_command=None, carry=0):
+                    selection=None, writer=None, plan_command=None, carry=0, fact_kinds=None, trajectories=None):
     """JOLT+ teacher-attempt collector entries for the scored student groups of one collection.
 
     Each attempt samples the same world after its group's students with ``guidance_controls`` (role teacher): the
@@ -639,6 +724,9 @@ def teacher_entries(student_entries, student_rows, *, cases, config, out, attemp
     ``plan_command`` (``plan_command(endpoint)``) runs the NL ``planTeacherAttempts`` that may skip or add attempts.
     ``carry`` is unspent budget of earlier batches of the same round (teacher_feed plans finished groups as they
     complete): this call's budget is ``attempts`` per planned group plus ``carry``; ``accounting`` reports it.
+    ``fact_kinds``: the fact kinds a teacher may be guided by (``TEACHER_FACT_KINDS`` excludes answers); None keeps all.
+    ``trajectories``: ``{task_id: TrajectoryCall}`` of verified successful runs (rl/hindsight.py): a world with one
+    gets a hindsight teacher (``writeHint`` over it) instead of fact guidance.
     """
     import copy
     from ..common.jsonio import iter_jsonl_rows, write_json_durable
@@ -665,6 +753,7 @@ def teacher_entries(student_entries, student_rows, *, cases, config, out, attemp
             _, facts = case_facts(case, custody=custody)
         except CustodyError:
             continue
+        facts = kept_facts(facts, fact_kinds)
         if not facts:
             continue
         qualities = [row['reward']['quality'] for row in members if row.get('reward') is not None]
@@ -685,13 +774,16 @@ def teacher_entries(student_entries, student_rows, *, cases, config, out, attemp
                                             attempt_feedback=group_feedback(case, members, sample))
             except CustodyError:
                 break
+            facts = kept_facts(facts, fact_kinds)
             if not facts:
                 break
+            trajectory = (trajectories or {}).get(case['id'])
             directory = out / f"row-{first['group']:03d}" / f'teacher-{attempt:02d}'
             directory.mkdir(parents=True, exist_ok=True)
             controls = directory / 'chat-request-config.json'
             write_json_durable(controls, guidance_controls(base, role='teacher', custody_receipt=receipt,
-                                                           facts=facts, selection=selection,writer=writer))
+                                                           facts=facts, selection=selection, writer=writer,
+                                                           trajectory=trajectory))
             entry = copy.deepcopy(first)
             entry.pop('rl_endpoint', None)
             entry.pop('chat_request_config', None)
@@ -699,7 +791,7 @@ def teacher_entries(student_entries, student_rows, *, cases, config, out, attemp
                          seed=seed_base + 1000 * first['group'] + TEACHER_SEED_OFFSET + attempt,
                          jobs=str(directory / 'jobs'), log=str(directory / 'collector.log'),
                          output=str(directory / 'results.jsonl'), chat_request_config=str(controls),
-                         jolt_role='teacher')
+                         jolt_role='teacher', **({'hindsight': True} if trajectory is not None else {}))
             entries.append(entry)
     return {'entries': entries, 'refusal': None, 'plan': record,
             'accounting': {'budget': budget, 'planned': len(entries)}}
