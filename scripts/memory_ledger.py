@@ -70,6 +70,8 @@ PRIORITY_OOM = {'high': 200, 'medium': 600, 'low': 900}
 DEFAULT_PRIORITY = {'experiment': 'medium', 'collection': 'medium', 'service': 'high'}
 WAITER_TTL = 90  # a waiting `run` refreshes its queue entry every 30 s; older entries are abandoned
 REQUEUE_DELAY = 120  # seconds after a preemption/pressure stop before the unit may be relaunched
+REQUEUE_DELAY_MAX = 3600  # a unit stopped again soon after its relaunch waits twice as long each time, up to this
+REQUEUE_SETTLED = 1800  # a relaunched unit that ran this long starts its backoff over
 # A unit backfilled behind a waiting head is not preempted for that same head for this long (see backfill_hold).
 BACKFILL_HOLD = RAMP_SECONDS
 UNREACHABLE_WARN_SECONDS = 600  # the guard repeats a high head's 'cannot fit' event at most this often
@@ -662,8 +664,13 @@ def requeue_spec(state, unit, now=None, containers=()):
     if not claim.get('spec'):
         state['events'].append({'time': now, 'event': 'stopped without launch spec; owner must restart', 'unit': unit})
         return False
+    # A relaunch into memory that falls short again moments later (a learner's phases swing by tens of GB) was
+    # stopped and relaunched every 2-4 minutes on 2026-11-17: back off while the unit keeps being stopped early.
+    delay = REQUEUE_DELAY
+    if claim.get('requeue_delay') and now - claim.get('admitted', 0) < REQUEUE_SETTLED:
+        delay = min(REQUEUE_DELAY_MAX, 2 * claim['requeue_delay'])
     state.setdefault('waiting', {})[unit] = {'priority': PRIORITY_NAMES[priority_of(claim)], 'since': now,
-                                             'requeued': True, 'not_before': now + REQUEUE_DELAY,
+                                             'requeued': True, 'not_before': now + delay, 'delay': delay,
                                              'budget': claim['budget'], 'reserve': spec_reserve(claim['spec'], claim['budget']),
                                              'spec': claim['spec']}
     if containers:
@@ -1278,6 +1285,8 @@ def guard(args):
                     behind = head
                     head, wanted = backfill if backfill else (head, wanted)
                     state['claims'][head] = claim_for(wanted['spec'])
+                    if wanted.get('delay'):
+                        state['claims'][head]['requeue_delay'] = wanted['delay']
                     if backfill:
                         state['claims'][head]['backfilled_behind'] = behind
                     state['waiting'].pop(head)

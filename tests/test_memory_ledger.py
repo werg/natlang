@@ -505,6 +505,19 @@ def test_a_stopped_resumable_unit_is_requeued_with_its_spec_and_a_service_is_not
     assert not ledger.requeue_spec({'claims': {'old.service': claim('experiment', 1, 0, 0)}, 'events': []}, 'old.service')  # legacy claim: no spec
 
 
+def test_a_unit_stopped_again_soon_after_its_relaunch_backs_off_and_a_settled_one_starts_over():
+    state = {'claims': {'render.service': running('collection', 20, 10, priority='low')}, 'events': []}
+    state['claims']['render.service'].update(admitted=1000.0, requeue_delay=ledger.REQUEUE_DELAY)
+    assert ledger.requeue_spec(state, 'render.service', now=1100.0)
+    assert state['waiting']['render.service']['not_before'] == 1100 + 2 * ledger.REQUEUE_DELAY
+    state['claims']['render.service'].update(requeue_delay=ledger.REQUEUE_DELAY_MAX)
+    ledger.requeue_spec(state, 'render.service', now=1100.0)
+    assert state['waiting']['render.service']['delay'] == ledger.REQUEUE_DELAY_MAX
+    later = 1000.0 + ledger.REQUEUE_SETTLED + 1
+    ledger.requeue_spec(state, 'render.service', now=later)
+    assert state['waiting']['render.service']['not_before'] == later + ledger.REQUEUE_DELAY
+
+
 def test_the_guard_preempts_for_the_queue_head_then_relaunches_when_room_returns(monkeypatch, tmp_path):
     monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
     monkeypatch.setattr(ledger, 'CHECKPOINT_WRITES', str(tmp_path / 'none'))
