@@ -340,3 +340,30 @@ def test_prefix_tree_gradients_equal_separate_sequences():
                                     backward=False)
     for index in expected:
         torch.testing.assert_close(without[index], expected[index], rtol=1e-4, atol=1e-5)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA kernel check')
+def test_nucleus_nll_on_bf16_logits_matches_the_reference_pass_bitwise():
+    """The nucleus NLL's log-probability is linear_nll's own kernel (what the KL reference pass computes): at equal weights
+    the two agree bit for bit; the nucleus read from the bf16 logits (top-k and the wide paths) equals the fp32 one's."""
+    torch.manual_seed(0)
+    rows, vocab, width = 300, 5000, 64
+    h = torch.randn(rows, width, device='cuda').to(torch.bfloat16)
+    weight = (torch.randn(vocab, width, device='cuda') * .4).to(torch.bfloat16)
+    target = torch.randint(0, vocab, (rows,), device='cuda')
+    plain = lfm3_fast_train.linear_nll(h, weight, target)
+    lf = F.linear(h, weight).float()
+    lse = torch.logsumexp(lf, -1)
+    for top_k, wide_k in ((4, 8), (4, 16384), (1024, 16384)):
+        lfm3_fast_train.NUCLEUS_WIDE_K, saved = wide_k, lfm3_fast_train.NUCLEUS_WIDE_K
+        try:
+            nll, nucleus, outside = lfm3_fast_train.linear_nll_nucleus(h, weight, target, .95, chunk=128, top_k=top_k)
+            want_cut, want_inside = lfm3_fast_train._nucleus_cut_lse(lf, lse, .95, top_k)
+            cut, inside = lfm3_fast_train._nucleus_cut_lse(F.linear(h, weight), lse, .95, top_k)
+        finally:
+            lfm3_fast_train.NUCLEUS_WIDE_K = saved
+        assert torch.equal(nll, plain)
+        assert torch.equal(cut, want_cut) and torch.equal(inside, want_inside)
+        own = lf.gather(-1, target[:, None])[:, 0]
+        assert torch.equal(outside, own < want_cut)
+        assert torch.allclose(nucleus, torch.where(outside, torch.logaddexp(want_inside, own), want_inside) - own, atol=1e-5)
