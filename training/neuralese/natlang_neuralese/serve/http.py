@@ -526,9 +526,9 @@ def make_handler(engine: Engine):
             guidance_policy=body.get('x_natlang_guidance_policy')
             if guidance_policy is not None and (not isinstance(guidance_policy, dict)
                     or set(guidance_policy) != {'function', 'sha256'}
-                    or guidance_policy['function'] not in ('writeGuidance', 'selectGuidanceFacts')
+                    or guidance_policy['function'] not in ('writeGuidance', 'writeHint', 'selectGuidanceFacts')
                     or not isinstance(guidance_policy['sha256'], str) or body.get('x_natlang_rl_capture') is not True):
-                raise RequestError('bad-request', 'x_natlang_guidance_policy is {function: writeGuidance|'
+                raise RequestError('bad-request', 'x_natlang_guidance_policy is {function: writeGuidance|writeHint|'
                                    'selectGuidanceFacts, sha256} alongside x_natlang_rl_capture')
             request = GenerationRequest(
                 messages=body.get("messages") or [], tools=body.get("tools"),

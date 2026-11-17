@@ -5,7 +5,7 @@ args:
   execution: TrajectoryCall
   overview: TrajectoryOverview
   facts: GuidanceFact[]
-returns: Neuralese<string>
+returns: string
 ---
 1. consumer is a call about to run; execution is a verified successful execution of the same call. consumer reads your hint as context before it starts; it does not see execution.
 2. overview lists execution's own steps with their tools, statuses and sizes, and its child calls. facts are verified facts about this call.

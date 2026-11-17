@@ -2530,3 +2530,10 @@ The completion migration also exposed missing tool-call IDs on async actions out
 return_result. All async outcomes now use one recording callback with the original tool-call ID, including staged
 result confirmations and failures. This keeps successful confirmations admissible in tuning trajectories instead
 of silently marking their outcomes unverified (`tune-pipeline.test.mjs`).
+
+**2026-11-17, hindsight hint writer returns text (RESTORE_MEMETIC_JOLT_HINDSIGHT_20261117.md section 2).**
+`applications/guidance-writer/writeHint.nl` returns `string` instead of `Neuralese<string>`, the span-basis fix
+`writeGuidance` got in b069f6061: the model could not close a native producer span (close marker log-prob -18 to
+-35), so the writer answers in plain text and the host writes that text as the native state its consumer imports. It
+is run only inside training collections (JOLT+ teacher attempts with a verified run, `grpo.py
+--hindsight-trajectories`); it has no live sample yet, and its first teacher attempts are its first measurement.

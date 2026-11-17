@@ -1930,7 +1930,7 @@ export class NativeToolAgent {
         [...reencodedInputs, ...(handoffNode ? [{ node: handoffNode, port: 'handoff' }] : [])], currentTemperature,
         { ordinal: ++requests, ...(continued ? { continuation: continued.requests } : {}) });
       lastModelTurn = turnNode;
-      if (turnNode && guidancePolicy?.function === 'writeGuidance' && callId) trainingGuidance!.noteWriterTurn(callId, turnNode,
+      if (turnNode && (guidancePolicy?.function === 'writeGuidance' || guidancePolicy?.function === 'writeHint') && callId) trainingGuidance!.noteWriterTurn(callId, turnNode,
         [...(session.runtime.frame?.chain ?? []), ...(session.runtime.options.parentCallId ? [session.runtime.options.parentCallId] : [])]);
       const recorder = activeRecorder();
       const recordedTurn = response.raw_response?.x_natlang_recorded_turn;

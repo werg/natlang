@@ -106,7 +106,7 @@ test('training guidance travels on the wire only to a native server', async () =
  * One episode: the root calls helper("child-question") in its first turn and returns in its second; helper answers in
  * one turn. The fake driver answers the guidance policy's calls by their `guidance_policy`.
  */
-async function episode({ role = 'teacher', selection, select = ids => ids, writer = 'write', writerSetting } = {}) {
+async function episode({ role = 'teacher', selection, select = ids => ids, writer = 'write', writerSetting, trajectory } = {}) {
   const store = new MemoryNeuraleseStore(), artifact = await store.putNativeState(nativeStateFixture());
   const writes = [];
   const fixturePort = createNativeStateFixturePort(store);
@@ -121,6 +121,7 @@ async function episode({ role = 'teacher', selection, select = ids => ids, write
       const visible = FACTS.map(fact => fact.id).filter(id => shown.includes(JSON.stringify(id)));
       return { calls: [['return_result', { status: 'success', value: select(visible) }]] };
     }
+    if (policy === 'writeHint') return { calls: [['return_result', { status: 'success', value: HINT_TEXT }]] };
     if (policy === 'writeGuidance') {
       if (writer === 'fail') return { calls: [['return_result', { status: 'failed', reason: 'The writer could not write.' }]] };
       return { calls: [['return_result', { status: 'success', value: GUIDANCE_TEXT }]] };
@@ -132,7 +133,7 @@ async function episode({ role = 'teacher', selection, select = ids => ids, write
     return { calls: [['return_result', { status: 'success', value: '7' }]] };
   }, { neuralese: true });
   const run = { schema: 'natlang.guidance-run/1', role, custody, facts: FACTS, ...(selection ? { selection } : {}),
-    ...(writerSetting ? { writer: writerSetting } : {}) };
+    ...(writerSetting ? { writer: writerSetting } : {}), ...(trajectory ? { trajectory } : {}) };
   const guidance = new TrainingGuidance(run, pkg);
   const agent = new NativeToolAgent(driver, { maxTurns: 6, neuralese, trainingGuidance: guidance });
   const recorder = new ModelTurnRecorder();
@@ -152,6 +153,38 @@ async function episode({ role = 'teacher', selection, select = ids => ids, write
 
 const consumerTurns = requests => requests.filter(request => !request.guidance_policy);
 const policyTurns = (requests, name) => requests.filter(request => request.guidance_policy?.function === name);
+
+const HINT_SHA = sha(readFileSync(`${DIR}/writeHint.nl`));
+const HINT_TEXT = '1. Ask helper("child-question"). 2. Return its answer.';
+const TRAJECTORY = { call: 'tau-root', function: 'askHelper', role: 'root', prompt: 'Ask the helper (verified run).',
+  steps: [{ turn: 0, tool: 'eval', code: 'const answer = await helper("child-question");', arguments: {}, status: 'ok', output: '"7"' },
+    { turn: 1, tool: 'return_result', arguments: { value: '7' }, status: 'ok', output: '' }],
+  result: { status: 'success' }, children: [] };
+
+test('a teacher with a verified run gets writeHint\'s hint at its root and fact guidance in its children', async () => {
+  const { result, requests, recorder, writes } = await episode({ trajectory: TRAJECTORY });
+  assert.equal(result.outcome.kind, 'done', result.outcome.detail);
+  const hints = policyTurns(requests, 'writeHint');
+  assert.equal(hints.length, 1);
+  assert.equal(policyTurns(requests, 'writeGuidance').length, 1, 'the child call keeps fact guidance');
+  assert.equal(hints[0].guidance_policy.sha256, HINT_SHA);
+  const hintPrompt = requestText(hints[0].messages);
+  assert.ok(hintPrompt.includes('Ask the helper (verified run).'), 'the run is the writer\'s input value');
+  assert.ok(hintPrompt.includes('return_result'), 'the overview lists the run\'s steps');
+  assert.equal(writes.filter(write => write.text === HINT_TEXT).length, 1);
+  const root = consumerTurns(requests).filter(request => request.invocation_id === 'run-1');
+  assert.deepEqual(root[0].privileged_context.writer, { function: 'writeHint', sha256: HINT_SHA });
+  assert.equal(root[0].privileged_context.mode, 'import');
+  const node = recorder.graphNodes.get(root[0].privileged_context.state.source_occurrence);
+  assert.ok(node.turn.startsWith(hints[0].invocation_id), 'the state is the hint writer\'s own text');
+});
+
+test('a hindsight trajectory is refused for students and in the wrong shape', () => {
+  const run = { schema: 'natlang.guidance-run/1', role: 'student', custody, facts: FACTS, trajectory: TRAJECTORY };
+  assert.throws(() => new TrainingGuidance(run, pkg), /teacher attempts only/);
+  assert.throws(() => new TrainingGuidance({ ...run, role: 'teacher', trajectory: { call: 'x' } }, pkg), /TrajectoryCall/);
+});
+
 
 test('each consumer\'s first turn runs selection then the writer; every consumer turn carries the exact request', async () => {
   const { result, requests, recorder, artifact } = await episode();

@@ -1,6 +1,6 @@
 /**
  * Loads the guidance-writer package (applications/guidance-writer) as a callable folder, the way the runtime loads any
- * natlang package: its two `.nl` definitions (with the sha256 of each file's bytes, the policy identity the engine
+ * natlang package: its `.nl` definitions (selectGuidanceFacts, writeGuidance, writeHint) (with the sha256 of each file's bytes, the policy identity the engine
  * records) and its crisp helpers (visibility.ts, crispSelection.ts) run by the runtime's module loader. Node only.
  */
 import { createHash } from 'node:crypto';
@@ -38,8 +38,10 @@ export function loadGuidanceWriter(directory = guidanceWriterDirectory()): Guida
     Pick<GuidanceWriterPackage, 'crispSelection'> & { CRISP_SELECTION_IDENTITY: string };
   if (typeof visibleFacts !== 'function' || typeof crispSelection !== 'function' || typeof CRISP_SELECTION_IDENTITY !== 'string')
     throw new Error('guidance-writer-missing: visibility.ts or crispSelection.ts lacks its exports');
+  const { trajectoryOverview } = tree.trajectoryOverview as Pick<GuidanceWriterPackage, 'trajectoryOverview'>;
+  if (typeof trajectoryOverview !== 'function') throw new Error('guidance-writer-missing: trajectoryOverview.ts lacks its export');
   const loaded: GuidanceWriterPackage = { selection: definition('selectGuidanceFacts'), writer: definition('writeGuidance'),
-    visibleFacts, crispSelection, crispSha256: sha256(CRISP_SELECTION_IDENTITY) };
+    hint: definition('writeHint'), trajectoryOverview, visibleFacts, crispSelection, crispSha256: sha256(CRISP_SELECTION_IDENTITY) };
   cache.set(directory, loaded);
   return loaded;
 }

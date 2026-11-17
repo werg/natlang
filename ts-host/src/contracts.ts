@@ -36,7 +36,7 @@ export type ModelTurnRequest = { invocation_id?: string; messages: unknown[]; to
    */
   privileged_context?: Record<string, unknown>;
   /** This turn belongs to the in-run guidance policy (native servers only; `x_natlang_guidance_policy`). */
-  guidance_policy?: { function: 'selectGuidanceFacts' | 'writeGuidance'; sha256: string };
+  guidance_policy?: { function: 'selectGuidanceFacts' | 'writeGuidance' | 'writeHint'; sha256: string };
   /** Host-side exact teacher target for native forced replay; sent only as transport metadata, never in messages. */
   native_teacher_forced_turn?: { schema:'natlang.native-teacher-forced-turn/1'; assistant: Record<string,unknown>;
     source_receipt: Record<string,unknown>; native_text_spans?: { path:(string|number)[]; marker:string; text:string }[] };

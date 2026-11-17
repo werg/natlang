@@ -213,3 +213,16 @@ def test_a_task_with_a_verified_run_gets_a_hindsight_teacher(tmp_path):
     assert all(e['hindsight'] for e in teachers)
     guidance = json.loads(Path(teachers[0]['chat_request_config']).read_text())['x_natlang_guidance']
     assert guidance['trajectory']['steps'][0]['tool'] == 'eval'
+
+
+def test_engine_side_requests_accept_the_hint_writer():
+    from natlang_neuralese.rl.privileged_context import _request_parts
+    from natlang_neuralese.common.custody import CUSTODY_SCHEMA
+    request = {'schema': 'natlang.guidance-request/1', 'invocation': {'name': 'run-1', 'role': 'root'}, 'mode': 'import',
+               'custody': {'schema': CUSTODY_SCHEMA, 'split': 'train'},
+               'facts': [{'id': 'reference_solution:0', 'kind': 'reference_solution', 'text': 'A verified reference solution'}],
+               'selection': {'implementation': 'crisp', 'sha256': 'c'},
+               'writer': {'function': 'writeHint', 'sha256': 'h'}, 'state': {'id': 'nzs1_x'}}
+    assert _request_parts(request)[1] == 'import'
+    with pytest.raises(ValueError):
+        _request_parts({**request, 'writer': {'function': 'somethingElse', 'sha256': 'h'}})

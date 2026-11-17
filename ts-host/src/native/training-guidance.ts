@@ -34,13 +34,20 @@ export type GuidanceRun = { schema: typeof GUIDANCE_RUN_SCHEMA; role: 'teacher' 
   custody: Record<string, unknown>; facts: GuidanceFact[]; selection?: PluggableMode; budgetTokens?: number;
   /** `off` (opt-out, the measurement baseline): no writer; a teacher gets the selected facts as text, a student has the
    * same text turn recorded for its OPSD twin (`text-twin`) and sees nothing. */
-  writer?: 'native' | 'off' };
-export type GuidancePolicyFunction = { function: 'selectGuidanceFacts' | 'writeGuidance'; sha256: string };
+  writer?: 'native' | 'off';
+  /** Hindsight (teacher only): a verified successful run of the task as a `TrajectoryCall`
+   * (applications/guidance-writer/types.ts); the root call's guidance is the hint `writeHint` writes from it. */
+  trajectory?: Record<string, unknown> };
+export type GuidancePolicyFunction = { function: 'selectGuidanceFacts' | 'writeGuidance' | 'writeHint'; sha256: string };
 
 /** The guidance-writer package as loaded by the host: its two natural-language definitions and its crisp parts. */
 export type GuidanceWriterPackage = {
   selection: { definition: CallableDefinition; sha256: string };
   writer: { definition: CallableDefinition; sha256: string };
+  /** writeHint.nl (hindsight hints from a verified run). */
+  hint: { definition: CallableDefinition; sha256: string };
+  /** trajectoryOverview.ts `trajectoryOverview`: the crisp cold-start view of a run the hint writer opens with. */
+  trajectoryOverview(call: unknown): unknown;
   /** visibility.ts `visibleFacts`. */
   visibleFacts(consumer: GuidanceConsumer, facts: readonly GuidanceFact[]): GuidanceFact[];
   /** crispSelection.ts `crispSelection`. */
@@ -59,7 +66,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 export function guidanceRun(value: unknown): GuidanceRun {
   if (!isRecord(value) || value.schema !== GUIDANCE_RUN_SCHEMA) fail(`x_natlang_guidance is {schema: ${GUIDANCE_RUN_SCHEMA}, ...}`);
   const run = value as Record<string, unknown>;
-  const extra = Object.keys(run).filter(key => !['schema', 'role', 'custody', 'facts', 'selection', 'budgetTokens', 'writer'].includes(key));
+  const extra = Object.keys(run).filter(key => !['schema', 'role', 'custody', 'facts', 'selection', 'budgetTokens', 'writer', 'trajectory'].includes(key));
   if (extra.length) fail(`unsupported fields ${extra.join(', ')}`);
   if (run.role !== 'teacher' && run.role !== 'student') fail('role is teacher or student');
   if (!isRecord(run.custody)) fail('custody is the custody receipt object of the training world');
@@ -81,6 +88,13 @@ export function guidanceRun(value: unknown): GuidanceRun {
   if (run.selection !== undefined && !['crisp', 'nl', 'shadow'].includes(run.selection as string))
     fail('selection is crisp, nl or shadow');
   if (run.writer !== undefined && run.writer !== 'native' && run.writer !== 'off') fail('writer is native or off');
+  if (run.trajectory !== undefined) {
+    const call = run.trajectory as Record<string, unknown>;
+    if (!isRecord(call) || typeof call.call !== 'string' || typeof call.prompt !== 'string' || !Array.isArray(call.steps) ||
+        !Array.isArray(call.children) || !isRecord(call.result))
+      fail('trajectory is a TrajectoryCall {call, function, role, prompt, steps, result, children}');
+    if (run.role !== 'teacher') fail('a hindsight trajectory guides teacher attempts only');
+  }
   if (run.budgetTokens !== undefined && (!Number.isSafeInteger(run.budgetTokens) || (run.budgetTokens as number) < 1))
     fail('budgetTokens is a positive integer');
   return value as GuidanceRun;
@@ -118,7 +132,8 @@ export class TrainingGuidance {
   /** The policy function a call runs, by its exact definition (name and instructions), and remembers the call. */
   policyOf(lam: LambdaNode, callId: string | null): GuidancePolicyFunction | undefined {
     const body = lam.originalBody ?? lam.body;
-    for (const [name, part] of [['selectGuidanceFacts', this.writerPackage.selection], ['writeGuidance', this.writerPackage.writer]] as const) {
+    for (const [name, part] of [['selectGuidanceFacts', this.writerPackage.selection], ['writeGuidance', this.writerPackage.writer],
+      ['writeHint', this.writerPackage.hint]] as const) {
       if (lam.functionName === part.definition.name && body === part.definition.body) {
         if (callId) this.policyCalls.add(callId);
         return { function: name, sha256: part.sha256 };
@@ -186,18 +201,24 @@ export class TrainingGuidance {
     const base = { schema: GUIDANCE_REQUEST_SCHEMA, invocation: { name: callId, role }, custody: this.run.custody,
       facts: facts.map(fact => structuredClone(fact)), selection };
     let state: { id: string; source_occurrence?: string } | undefined, failure: string | undefined;
+    let writer: { function: 'writeGuidance' | 'writeHint'; sha256: string } = { function: 'writeGuidance', sha256: pkg.writer.sha256 };
     if (this.run.writer === 'off') failure = WRITER_OFF;
     else try {
       // model-call-kind: runtime-authored-call (writeGuidance, guidance policy) -- training/model-call-kinds.json
       const known = new Set(this.writerTurns.keys());
-      const written = await runInFrame(frame, () => invokeDefinition(frame!, pkg.writer.definition, [{ ...consumer, text: ownText }, facts]));
+      // Hindsight: the root call of a teacher attempt with a verified run gets writeHint's hint over that run.
+      const trajectory = role === 'root' ? this.run.trajectory : undefined;
+      writer = trajectory ? { function: 'writeHint', sha256: pkg.hint.sha256 } : writer;
+      const written = await runInFrame(frame, () => trajectory
+        ? invokeDefinition(frame!, pkg.hint.definition, [{ ...consumer, text: ownText }, trajectory, pkg.trajectoryOverview(trajectory), facts])
+        : invokeDefinition(frame!, pkg.writer.definition, [{ ...consumer, text: ownText }, facts]));
       if (typeof written === 'string' && written.trim()) {
         // Span basis: the writer answers in its own plain text (an ordinary string result, measured to work on full67
         // where a native producer span and a forced template value did not); the configured writer materializes that
         // exact text as the native state, a typed-text-result producer span bound to the writer's final model turn.
         // The writer runs as a child call of this consumer; concurrent consumers' writers are told apart by call id.
         const own = [...this.writerTurns].filter(([id, entry]) => !known.has(id) && entry.ancestors.includes(callId));
-        if (own.length !== 1) throw new Error('writeGuidance returned text without exactly one recorded writer call');
+        if (own.length !== 1) throw new Error(`${writer.function} returned text without exactly one recorded writer call`);
         const turn = own[0]![1].node;
         const ref = await session.runtime.writeNeuraleseText(written, parseType('Neuralese<string>'), {
           sourceKind: 'typed-text-result', source: 'return_result', markerContext: 'return-result',
@@ -207,12 +228,12 @@ export class TrainingGuidance {
         else failure = 'the configured writer returned no native state';
       } else if (isNeuraleseRef(written)) state = { id: written.$neuralese.id,
         ...(written.$neuralese.source_occurrence ? { source_occurrence: written.$neuralese.source_occurrence } : {}) };
-      else failure = 'writeGuidance returned no guidance text';
-    } catch (error) { failure = `writeGuidance failed: ${errorText(error)}`; }
+      else failure = `${writer.function} returned no guidance text`;
+    } catch (error) { failure = `${writer.function} failed: ${errorText(error)}`; }
     if (state) {
       const mode = this.run.role === 'teacher' ? 'import' : 'write-only';
-      emit('written', { mode, state: state.id, facts: ids, selection: implementation });
-      return { ...base, mode, writer: { function: 'writeGuidance', sha256: pkg.writer.sha256 }, state };
+      emit('written', { mode, state: state.id, facts: ids, selection: implementation, writer: writer.function });
+      return { ...base, mode, writer, state };
     }
     // Text fallback: a teacher gets the selected facts as a text turn; a student's engine renders the same turn and only
     // records it (`text-twin`: token ids and insertion point in the capture receipt) for the learner's OPSD twin.

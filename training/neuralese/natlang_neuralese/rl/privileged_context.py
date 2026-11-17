@@ -39,6 +39,8 @@ BLOCK_SCHEMA = 'natlang.jolt-privileged-block/2'
 REQUEST_SCHEMA = 'natlang.guidance-request/1'
 RENDERING_SCHEMA = 'natlang.jolt-privileged-rendering/2'
 WRITER_FUNCTION = 'writeGuidance'
+HINT_FUNCTION = 'writeHint'   # hindsight: a hint written from a verified run (rl/hindsight.py)
+WRITERS = (WRITER_FUNCTION, HINT_FUNCTION)
 SELECTION_FUNCTION = 'selectGuidanceFacts'
 MODES = ('import', 'write-only', 'text', 'text-twin')
 TEXT_MODES = ('text', 'text-twin')
@@ -538,7 +540,7 @@ def _request_parts(request):
     else:
         writer = request.get('writer')
         if (not isinstance(state, dict) or set(state) - {'id', 'source_occurrence'} or not isinstance(state.get('id'), str)
-                or not isinstance(writer, dict) or writer.get('function') != WRITER_FUNCTION
+                or not isinstance(writer, dict) or writer.get('function') not in WRITERS
                 or not isinstance(writer.get('sha256'), str)):
             raise ValueError('import and write-only guidance carry the writer {function, sha256} and its state {id}')
         if request.get('fallback') is not None:
