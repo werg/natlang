@@ -1,3 +1,4 @@
+import { episodeCallStoreRoot } from '../runtime/episode-call-store.js';
 import {SYSTEM_PROMPT} from '../native/prompt.js';
 import { OperationJournal } from './operations.js';
 import { NATLANG_COMPILE_VERSION } from '../compiler/intrinsics.js';
@@ -236,7 +237,7 @@ export class SourceEvaluator implements ProgramEvaluator {
       // A data-URL ESM bootstrap remains valid for parents started with --input-type.
       const entry = new URL('./source-worker.js', import.meta.url).href;
       const bootstrap = new URL('data:text/javascript,' + encodeURIComponent('import ' + JSON.stringify(entry) + ';'));
-      const worker = new Worker(bootstrap, { workerData: { files: sourceFiles(folder), contract: this.contract, args: row.args, services: row.services, folder: row.folder, seed,
+      const worker = new Worker(bootstrap, { workerData: { episodeCallStore: episodeCallStoreRoot(), files: sourceFiles(folder), contract: this.contract, args: row.args, services: row.services, folder: row.folder, seed,
         limits: { maxEpisodes: 30, maxActions: 100, ...(this.options.excludeModelWaitFromTimeout ? {} : {timeoutMs: this.options.timeoutMs ?? 120000}) },
         decisions: typeof this.driver.decide === 'function', continuesReplies: this.driver.continuesReplies === true } });
       const lifetime = new AbortController();

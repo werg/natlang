@@ -12,6 +12,7 @@ selectGuidanceFacts.nl  natural-language side: which visible facts, most useful 
 writeGuidance.nl        the guidance as plain text (string); the host writes that exact text as the native state
 writeHint.nl            hindsight hint for one hinted call (the root, or a long child as its own pass) from its verified execution, explored with eval (DECOMPOSITION.md)
 trajectoryOverview.ts   crisp: one call's structural overview the hint writer opens with
+hintCheck.ts            crisp: the hint's exact check (64-token budget, no signature echo, no value the verified run produced); a failure is the writer's tool error
 planTeacherAttempts.nl  how many privileged teacher attempts each scored student group gets (JOLT+ controller)
 ```
 

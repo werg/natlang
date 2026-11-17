@@ -8,6 +8,7 @@
  * native agent (a pluggable part: `crisp` keeps the cut, `nl` uses the learned operator).
  */
 import { VIEW_PROMPT } from '../builtin/index.js';
+import { shownCharsFor } from './cutoff.js';
 import { neuraleseRefSentinel, type NeuraleseRef } from './neuralese.js';
 
 export type ValueOperator = 'compact-value' | 'compact-params' | 'extract';
@@ -46,6 +47,21 @@ export const OPERATOR_SPAN_CAPS: Record<CompactSite['operator'] | 'compact-histo
 /** Reasoning room of an operator call beyond its reply cap (tokens). */
 export const OPERATOR_REASONING_TOKENS = 2048;
 
+/**
+ * With learned compaction selected, a tool output or argument longer than this many characters (~2k tokens) is cut and
+ * compacted, whatever the call's context budget: learned compaction keeps large values out of the context, so it does
+ * not wait until a value would overflow the budget's page (OPERATORS_RESTORE_20261117.md §10). The agent option
+ * `compactionChars` and env NATLANG_NEURALESE_COMPACTION_CHARS set it.
+ */
+export const OPERATOR_COMPACT_CHARS = 8000;
+
+/** The characters a message shows of one output: the budget's page (`shownCharsFor`), and with learned compaction
+ * selected at most `compactionChars`. */
+export function compactionPageChars(contextTokens: number | null | undefined, compactionChars?: number): number {
+  const page = shownCharsFor(contextTokens);
+  return compactionChars === undefined ? page : Math.min(page, compactionChars);
+}
+
 /** Values shorter than this keep the text cut only: a structural cut of a small value does not spend an operator call
  * (the case floor, COMPACTION_OPERATOR_CONVERTERS.md §3b). */
 export const OPERATOR_MIN_CHARS = 800;
@@ -59,3 +75,20 @@ export function viewSiteMessages(value: string, instructions?: string): { role: 
   return [{ role: 'system', content: VIEW_PROMPT },
     { role: 'user', content: `${instructions ? `instructions:\n${instructions}\n\n` : ''}value:\n${value}` }];
 }
+
+/** The purpose of a compact-value site: a cut-off tool or service output read for the calling function's purpose. */
+export function valueInstructions(tool: string, purpose: string): string {
+  return `Read this ${tool} result for: ${purpose}`;
+}
+
+/** The purpose of a compact-params site: a cut-off argument of the call that receives it. */
+export function argumentInstructions(name: string, type: string, purpose: string): string {
+  return `The call that receives this argument as ${name} (${type}) answers: ${purpose}`;
+}
+
+/** A call's instructions as an operator's purpose text (bounded). */
+export function operatorPurpose(body: string): string {
+  const text = body.replace(/\n+$/, '');
+  return text.length > 2000 ? text.slice(0, 2000) : text;
+}
+

@@ -622,3 +622,11 @@ Learned compaction's sampled operator call uses the task's shared model request/
 prevents dispatch; token caps and reported completion usage follow the same contract as ordinary generation. A response
 over its reservation is not captured as a successful operator result. Capture of that existing reply remains deterministic
 state materialization, without another sampled decision or fabricated probabilities. Operator failure keeps the text cut.
+
+## Collector episodes are hermetic
+
+Each collector episode (`teacher/collector.ts` `executeProgram`, every queue job) records to a fresh call store of its
+own, removed with the episode, with specialization off: no compiled case, tier output, iterateOn statistic or cached
+refinement verdict from another episode or run changes what it does, and the policy answers every call. Its own records
+stay readable within it (the item-result binding reads them). `NATLANG_EPISODE_CALL_STORE=machine` records collector
+episodes to the machine store instead, for debugging only.

@@ -41,13 +41,14 @@ export class FileMedium implements StoreMedium {
   readonly process = { pid: process.pid, scope: PROCESS_SCOPE };
   constructor(readonly root: string, private readonly mode?: () => string | undefined) { mkdirSync(join(root, 'blobs'), { recursive: true }); }
   private blobPath(hash: string): string { return join(this.root, 'blobs', hash.slice(0, 2), hash.slice(2)); }
-  putBlob(hash: string, text: string): void {
+  putBlob(hash: string, text: string): boolean {
     const path = this.blobPath(hash);
-    if (existsSync(path)) return;
+    if (existsSync(path)) return false;
     mkdirSync(dirname(path), { recursive: true });
     const temporary = `${path}.${process.pid}.${Math.random().toString(36).slice(2)}`;
     writeFileSync(temporary, text);
     renameSync(temporary, path);
+    return true;
   }
   blob(hash: string): string | undefined {
     try { return readFileSync(this.blobPath(hash), 'utf8'); } catch { return undefined; }
@@ -58,8 +59,16 @@ export class FileMedium implements StoreMedium {
   freeBytes(): number { const stats = statfsSync(this.root); return Number(stats.bavail) * Number(stats.bsize); }
   databaseBytes(): number {
     let bytes = 0;
-    for (const name of ['calls.sqlite', 'calls.sqlite-wal']) try { bytes += statSync(join(this.root, name)).size; } catch { /* absent */ }
+    for (const name of ['calls.sqlite', 'calls.sqlite-wal', 'calls.sqlite-shm']) try { bytes += statSync(join(this.root, name)).size; } catch { /* absent */ }
     return bytes;
+  }
+  blobBlockBytes(): number { return Number(statfsSync(this.root).bsize) || 4096; }
+  /** The WAL and its index as they are, at least the WAL's truncation size (JOURNAL_SIZE_LIMIT) plus the index. */
+  logBytes(): number {
+    let wal = 0, shm = 0;
+    try { wal = statSync(join(this.root, 'calls.sqlite-wal')).size; } catch { /* absent */ }
+    try { shm = statSync(join(this.root, 'calls.sqlite-shm')).size; } catch { /* absent */ }
+    return Math.max(wal, JOURNAL_SIZE_LIMIT) + Math.max(shm, 32768);
   }
   modeOverride(): string | undefined { return this.mode?.(); }
   /**
@@ -75,6 +84,9 @@ export class FileMedium implements StoreMedium {
   }
 }
 
+/** Bytes the WAL is truncated to after a checkpoint (it reaches about this at SQLite's 1000-page autocheckpoint). */
+const JOURNAL_SIZE_LIMIT = 4 * 2 ** 20;
+
 const opened = new Map<string, CallStore>();
 /** The store at `root` (one instance per root per process; `mode` is the specialization override of the first open). */
 export function openCallStore(root: string, options: { mode?: () => string | undefined } = {}): CallStore {
@@ -83,7 +95,10 @@ export function openCallStore(root: string, options: { mode?: () => string | und
   if (store) return store;
   const medium = new FileMedium(absolute, options.mode);
   const db = new (sqlite())(join(absolute, 'calls.sqlite'));
-  db.exec('PRAGMA busy_timeout = 10000; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;');
+  // A new database gets incremental auto-vacuum, so eviction gives freed pages back (`CallStore.compact` converts an
+  // older one); the WAL is truncated to 4 MiB after checkpoints instead of staying at its largest size.
+  db.exec('PRAGMA busy_timeout = 60000; PRAGMA auto_vacuum = INCREMENTAL; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; ' +
+    `PRAGMA journal_size_limit = ${JOURNAL_SIZE_LIMIT};`);
   store = new CallStore(absolute, db, medium);
   store.onClose = () => opened.delete(absolute);
   opened.set(absolute, store);

@@ -9,7 +9,7 @@ import type { SiteStatistics } from '../runtime/iterate.js';
 /** Store methods the page may call by name (reads and the store's own maintenance). */
 export const QUERY_METHODS = ['calls', 'call', 'value', 'blob', 'events', 'children', 'hot', 'annotations', 'compilations', 'compilation', 'caseCalls',
   'callCases', 'caseStats', 'declines', 'jobs', 'pendingJobs', 'settings', 'writeSettings', 'pin', 'setTier', 'setCompilationStatus',
-  'evict', 'totalBytes', 'diskBytes', 'countCalls', 'agentCalls'] as const;
+  'evict', 'compact', 'totalBytes', 'storeBytes', 'diskBytes', 'countCalls', 'agentCalls'] as const;
 export type QueryMethod = typeof QUERY_METHODS[number];
 
 export type ToWorker =

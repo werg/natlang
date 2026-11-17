@@ -79,6 +79,17 @@ def call_steps(messages, target):
     return steps
 
 
+def _result(steps):
+    """How a verified call finished: its last ``return_result`` step's status and value (the writer's hint check
+    rejects a hint that copies that value), else success with no value."""
+    final = next((step for step in reversed(steps) if step['tool'] == 'return_result'), None)
+    arguments = final['arguments'] if final else {}
+    result = {'status': arguments.get('status') if isinstance(arguments.get('status'), str) else 'success'}
+    if 'value' in arguments:
+        result['value'] = arguments['value']
+    return result
+
+
 def trajectory_value(episode):
     """``TrajectoryCall`` of a verified episode (``sft_sources`` episode or a scored rollout row: ``turns`` with
     ``messages``, ``target`` and ``invocation_id``). The root is the first turn's invocation; every other invocation
@@ -98,9 +109,9 @@ def trajectory_value(episode):
     def call(name, role):
         turn = last[name]
         prompt = '\n'.join(_content(m) for m in turn['messages'] if m.get('role') == 'user')
+        steps = call_steps(turn['messages'], turn.get('target'))
         return {'call': name, 'function': function if role == 'root' else name.rsplit('/', 1)[-1], 'role': role,
-                'prompt': _clip(prompt, PROMPT_CHARS), 'steps': call_steps(turn['messages'], turn.get('target')),
-                'result': {'status': 'success'}, 'children': []}
+                'prompt': _clip(prompt, PROMPT_CHARS), 'steps': steps, 'result': _result(steps), 'children': []}
     root = call(order[0], 'root')
     root['children'] = [call(name, 'child') for name in order[1:]]
     return root

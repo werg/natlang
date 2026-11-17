@@ -3,7 +3,14 @@ import json
 from natlang_neuralese.common.jsonio import write_jsonl_text
 from scripts.neuralese_data.parallel_native_graph_index import parallel_rows
 from scripts.neuralese_data.acquired_content_review import content_review
-from test_static_native_context import row,objective,FP
+from test_own_output_supervision import objective,turn,USER,ASSISTANT,FP
+
+
+def row():
+    ids=turn(USER,[20]*25+[21]*25+[22]*25)+turn(ASSISTANT,[23,24,25])
+    return {'schema':'natlang.neuralese-native-graph/1','id':'original','split':'train','source_groups':['world'],
+      'tokenizer_fingerprint':FP,'nodes':[{'name':'text','token_ids':ids,'target_weights':[0.]+[.05]*(len(ids)-1)}],
+      'conversion':{'role_interpretation':'whole-trajectory-chat-roles','runtime_opening_assistant_turns':0}}
 
 
 def test_content_review_detects_exact_tokens_without_equating_new_id():

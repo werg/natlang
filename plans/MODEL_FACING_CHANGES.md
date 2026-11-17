@@ -2604,3 +2604,64 @@ capture of an already sampled reply is not counted as another sampled decision. 
 retains its established text-cut fallback; the ordinary caller then observes the same exhausted graph budget.
 Unbounded operator request content and capture remain unchanged. This is shared TypeScript runtime plumbing across
 all engines, not a new sampling protocol. Zero-request, token-limit and overrun regressions cover the exact boundary.
+
+### 2026-11-17: collector episodes are hermetic (fresh call store per episode, specialization off)
+
+Every collector episode (GRPO collection and JOLT+ teacher attempts, held eval on DGX and Pop, `pop_rl_actor`,
+`teacher_gen`, `sft_sources replay`, memetic/improvement fixtures; all reach `teacher/collector.ts` `nativeJobRunner`
+-> `executeProgram`) used to record to the machine's shared call store and read it back: compiled crisp cases could serve
+its calls instead of the policy (`runtime/kernel.ts` 676-700), the tier ladder read stored specializer output (447-461),
+`iterateOn` progress-review timing read site statistics accumulated by earlier episodes (`runtime/iterate.ts` 107-115,
+249-251), and `Is<T, P>` checks reused verdicts cached by other processes (`runtime/runtime.ts` 509). Now each episode
+runs with a fresh, empty store of its own (`machine-store.ts` `createEpisodeCallStore`, `runtime/episode-call-store.ts` `runInEpisodeCallStore`,
+`collector.ts` `hermeticEpisode`; worker threads of evaluation fixtures and the improvement evaluator join it through
+their worker data), removed with the episode, with specialization off in its settings and on the collector runtime.
+Within the episode the store keeps its own records, so the item-result binding still reads its host captures
+(`collector.ts` `itemResultInvocationLedger`). `NATLANG_EPISODE_CALL_STORE=machine` records to the shared store again,
+for debugging only (specialization stays off). Product runtimes keep the machine store. Tests:
+`ts-host/test/hermetic-episodes.test.mjs` (two concurrent episodes isolated, own records readable, an active compiled
+case that serves a product call never serves a collector call, also under the opt-out). Not readers of the store
+(checked): `read_code` and the traces the model sees (`native/agent.ts`, no call-store reference anywhere in
+`ts-host/src/native`), hindsight and in-run guidance (passed explicitly per job: `teacher/cli.ts` 147,
+`native/training-guidance.ts`), Neuralese state (content-addressed blocks fetched by exact ID from the actor's block
+store, `ts-host/src/neuralese`, no call-store reference).
+
+### 2026-11-17: hindsight hints are checked: 64-token budget, no signature echo, no produced values
+
+The restore smoke's three `writeHint` hints (ops/restore-smoke/run1, groups g000003 and g000011, one task) ran
+1.1-1.5k characters, copied what the verified run produced ("Total cow records changed: 5", every new Milk figure),
+one began with the writer's own signature, and two invented an action for request R-24 ("Please undo: R-21") that τ*
+never took: τ* classified it `undo`, left it in requests/ (the task applies only `apply` requests) and its final
+verification listed it as remaining; one hint said to revert the north herd by -0.5, another to "trigger an undo",
+the third correctly to leave it. Cause: the writer saw all of τ* in its opening argument listing (50 KB fit the page
+budget), answered in one turn, and step 4 asked for "the exact names, values and calls that matter" and "the mistake to
+avoid", which it filled with values and an invented mistake. Changes:
+- `applications/guidance-writer/hintCheck.ts` (crisp, new): a hint fails when empty, when it contains `writeHint(`, when
+  it is over 64 tokens (characters / 4), or when it gives a value τ* produced (its returned value's leaves, or a number
+  shown by a non-reading step that neither the prompt nor a reading step showed; cut-off notes and 0/1 ignored).
+- `native/agent.ts`: for a writeHint call (`TrainingGuidance.hintGuard`), the check runs where a result is proposed
+  (the `return_result` tool, and eval results through `session.refinementCheck`); a failure is the tool error
+  `hint-rejected: <one sentence>` within the ordinary repair budget. `training-guidance.ts compute()` applies it once more
+  to the returned text (a failure falls back as any writer failure does).
+- `writeHint.nl` steps 4-6: a short procedure with the evidence each step rests on, only what execution did, at most 64
+  tokens, how to find each value rather than the value, only the hint text.
+- `rl/hindsight.py`: a call's `result` now carries its final `return_result` status and value (it was always
+  `{status: success}`), so the check sees the returned value. Existing indexes get it from the last step.
+Not changed: the writer still sees τ* whole when it fits the argument page budget (the general argument listing,
+`agent.ts` `inputsListing`; making one argument's listing shorter is a runtime-wide change), so exploring by eval stays
+the writer's choice. Tests: `ts-host/test/training-guidance.test.mjs` (check cases, and a copied value sent back then
+the corrected hint becoming the state), `tests/neuralese/test_grpo_jolt.py` (result value).
+
+
+### 2026-11-17: learned compaction cuts values over 8,000 characters (operators agent)
+
+Under the variant `learned-compaction`, a tool output or argument longer than 8,000 characters (~2k tokens) is cut and
+compacted whatever the call's context budget. Before, the cut came from the budget's page (`shownCharsFor`, 1/8 of the
+context: ~57k characters at GRPO's 131k), so learned compaction waited until a value would nearly overflow, which
+defeats its purpose of keeping large values out of the context. The threshold is a setting of the pluggable
+`compaction` part: agent option `compactionChars`, env `NATLANG_NEURALESE_COMPACTION_CHARS`, default
+`OPERATOR_COMPACT_CHARS` (operator-frames.ts `compactionPageChars`). It applies only when the part resolves to `nl` or
+`shadow` and a capture is configured. Without the variant nothing changes. Correction to the entry above: the
+argument listing shows a compacted argument as `name: type = <state>  // view of the value; name holds all of it`
+(agent.ts `views`/`inputsListing`), not with a "Compacted argument: " frame. Operator rows render their sites at this
+threshold (ts-host native/operator-site.ts).

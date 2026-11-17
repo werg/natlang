@@ -15,7 +15,7 @@ import { AUTOMATIC_NOTE, COMPACTION_NOTICE, directoryReducerPrompt, scopedFileTo
 import { canGenerateNl, runInFrame } from '../runtime/context.js';
 import { adoptImportedNativeArtifacts } from './nz-file.js';
 import { FileHandle, FolderHandle, fileListingText, type Folder } from './scoped-fs.js';
-import { SHOWN_CHARS, SCOPE_VALUE_CHARS, SMALL_VALUE_CHARS, literalFits, shownCharsFor, note as cutNote } from './cutoff.js';
+import { SHOWN_CHARS, SCOPE_VALUE_CHARS, SMALL_VALUE_CHARS, literalFits, note as cutNote } from './cutoff.js';
 import type { TrainingGuidance } from './training-guidance.js';
 
 /** Scope and input values show at least SCOPE_VALUE_CHARS, and never less than a tool output of the call may. */
@@ -35,9 +35,9 @@ async function pinNativeProgramGuidance(store: NeuraleseStore, id: string): Prom
   await pending;
 }
 import { listingViewInstructions, viewNote } from './prompt.js';
-import { pluggable, type PluggableSetting } from '../runtime/pluggable.js';
+import { pluggable, pluggableMode, type PluggableSetting } from '../runtime/pluggable.js';
 import { modelFacing } from '../runtime/model-facing.js';
-import { framedState, OPERATOR_MIN_CHARS, OPERATOR_REASONING_TOKENS, OPERATOR_SPAN_CAPS, viewSiteMessages, type CompactSite } from './operator-frames.js';
+import { argumentInstructions, compactionPageChars, framedState, OPERATOR_COMPACT_CHARS, OPERATOR_MIN_CHARS, operatorPurpose, valueInstructions, OPERATOR_REASONING_TOKENS, OPERATOR_SPAN_CAPS, viewSiteMessages, type CompactSite } from './operator-frames.js';
 import { neuraleseRef, type NeuraleseRef } from './neuralese.js';
 import { untrustedBlock, type UntrustedRegistry } from './untrusted.js';
 import { writtenReturnResult } from './pseudo-call.js';
@@ -172,8 +172,13 @@ export function inputsListing(session: NativeSession, views: Readonly<Record<str
       try { return `\n  // File contents:\n${JSON.stringify(new TextDecoder('utf-8', { fatal: true }).decode(root!.readBytesSync(value.path)))}`; }
       catch { return '  // Binary file: use file.readBytes() before answering.'; }
     })() : '';
-    return `${field.name}: ${formatType(field.type)}${field.optional ? ' | undefined' : ''} = ${shown}${opening}`;
+    return listingLine(field.name, formatType(field.type) + (field.optional ? ' | undefined' : ''), shown) + opening;
   }).join('\n');
+}
+
+/** One argument's line of the opening listing: its name, type and value as shown. */
+export function listingLine(name: string, type: string, shown: string): string {
+  return `${name}: ${type} = ${shown}`;
 }
 
 /** The folder handle API a directory reducer's eval sees, as TypeScript declarations. */
@@ -534,6 +539,11 @@ export class NativeToolAgent {
        */
       compaction?: PluggableSetting;
       /**
+       * With `compaction` resolving to `nl` (or `shadow`), values longer than this many characters are cut and compacted
+       * whatever the context budget (default OPERATOR_COMPACT_CHARS, 8,000; env NATLANG_NEURALESE_COMPACTION_CHARS).
+       */
+      compactionChars?: number;
+      /**
        * Receives the deltas of the call's model turns as they stream (plans/STREAMING.md §1.6), with the turn's number
        * (as its `model_request` trace events give it). A turn taken again after a failed request first gets a `reset`.
        * Without it the driver is called with no turn options.
@@ -582,6 +592,15 @@ export class NativeToolAgent {
     if (ref) session.runtime.trace.emit('operator', { call_id: session.runtime.currentCallId ?? null, operator: site.operator,
       representation: 'neuralese', block: ref.$neuralese.id, chars });
     return ref;
+  }
+
+  /** The characters a message shows of one output: the budget's page, capped at the compaction threshold when learned
+   * compaction can run (operator-frames.ts `compactionPageChars`). */
+  private pageChars(budget: number | null | undefined): number {
+    const learned = this.options.neuralese?.capture && supportsNeuralese(this.driver) &&
+      pluggableMode(this.compactionSetting(), 'crisp') !== 'crisp';
+    const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.NATLANG_NEURALESE_COMPACTION_CHARS;
+    return compactionPageChars(budget, learned ? this.options.compactionChars ?? (env ? Number(env) : OPERATOR_COMPACT_CHARS) : undefined);
   }
 
   /** The `compaction` setting: the agent option, the runtime option, NATLANG_NEURALESE_COMPACTION, else `nl` under the
@@ -684,8 +703,7 @@ export class NativeToolAgent {
 
   /** The call's instructions as an operator's purpose text (bounded). */
   private purpose(session: NativeSession): string {
-    const body = typeof session.lam.body === 'string' ? session.lam.body.replace(/\n+$/, '') : '';
-    return body.length > 2000 ? body.slice(0, 2000) : body;
+    return operatorPurpose(typeof session.lam.body === 'string' ? session.lam.body : '');
   }
 
   private async views(session: NativeSession): Promise<Record<string, string>> {
@@ -704,7 +722,7 @@ export class NativeToolAgent {
         try { text = JSON.stringify(value); } catch { text = undefined; }
         if (text === undefined) continue;
         const ref = await this.compactRef(session, { operator: 'compact-params', value: text,
-          instructions: `The call that receives this argument as ${field.name} (${formatType(field.type)}) answers: ${this.purpose(session)}` });
+          instructions: argumentInstructions(field.name, formatType(field.type), this.purpose(session)) });
         if (ref) out[field.name] = ref.$neuralese.id;
       }
       if (Object.keys(out).length) return out;
@@ -1735,7 +1753,7 @@ export class NativeToolAgent {
     if (this.options.neuralese?.store) await adoptImportedNativeArtifacts(this.options.neuralese.store);
     // The context budget sizes compaction and, from the start (the opening's reads included), the tool-output page.
     let budget = this.options.contextTokens === undefined ? await defaultContextBudget(this.driver) : this.options.contextTokens;
-    session.pages.budget = shownCharsFor(budget);
+    session.pages.budget = this.pageChars(budget);
     // The program's guidance, in the call's opening message (which the decision readout reuses too).
     const guidance = [renderAuthoredTextGuidance(this.options.authoredTextGuidance) +
       await this.runtimeProgramGuidance(guidanceForCall(this.options.programGuidance, session.lam.functionName)),
@@ -1766,7 +1784,16 @@ export class NativeToolAgent {
         { role: 'tool', tool_call_id: 'scope_1', content: this.folderListing(session) }] : [])];
     };
     const refinement = this.options.refinement;
-    if (refinement) session.refinementCheck = async (value, type, path) => {
+    // A hindsight hint writer's result has an exact check (guidance-writer hintCheck.ts): budget, no signature echo, no
+    // value the verified run produced. It is applied where a result is proposed, with a one-sentence error.
+    const hintGuard = this.options.trainingGuidance?.hintGuard(session.lam);
+    const hintFailure = (value: unknown) => {
+      const message = hintGuard?.(value);
+      return message ? { code: 'hint-rejected', message } : undefined;
+    };
+    if (refinement || hintGuard) session.refinementCheck = async (value, type, path) => {
+      if (path === 'return' && hintFailure(value)) return hintFailure(value);
+      if (!refinement) return undefined;
       const failures = await refinement.checker.checkValue(value, type, session.env,
         { phase: 'return', judge: refinement.judge, escalation: refinement.escalation, callId: session.runtime.currentCallId ?? null,
           signal: session.runtime.signal, trace: session.runtime.trace, emit: (kind, data) => { session.runtime.trace.emit(kind, data); } }, path);
@@ -1842,7 +1869,7 @@ export class NativeToolAgent {
       if (next.contextTokens !== undefined && next.contextTokens !== null)
         budget = budget === null ? next.contextTokens : Math.min(budget, next.contextTokens);
       statedWindow = null; tokensPerChar = 1 / 3.5; compactedAt = 0;
-      session.pages.budget = shownCharsFor(budget);
+      session.pages.budget = this.pageChars(budget);
       fallbackIndex++;
       session.runtime.trace.emit('model_escalation', { call_id: session.runtime.currentCallId ?? null, from, to: currentActor.id,
         profile: next.name, report, turn: turns });
@@ -2346,6 +2373,14 @@ export class NativeToolAgent {
           continue;
         }
         let appliedArgs = args;
+        if (name === 'return_result' && hintGuard && (appliedArgs.status ?? 'success') === 'success') {
+          const failure = hintFailure(appliedArgs.value);
+          if (failure) {
+            results.push({ kind: 'rejected', text: `${failure.code}: ${failure.message}`, codes: [failure.code] });
+            stoppedAt ??= index;
+            continue;
+          }
+        }
         if (name === 'return_result' && this.options.refinement && (appliedArgs.status ?? 'success') === 'success') {
           const failures = await this.refinementGate(session, appliedArgs);
           if (failures) {
@@ -2378,7 +2413,7 @@ export class NativeToolAgent {
         // A cut-off output also shows the learned compact-value state of all of it, when that operator is selected.
         for (const full of result.cutOff ?? []) {
           const ref = await this.compactRef(session, { operator: 'compact-value', value: full,
-            instructions: `Read this ${name} result for: ${this.purpose(session)}` });
+            instructions: valueInstructions(name, this.purpose(session)) });
           if (ref) content += '\n\n' + framedState('compact-value', ref).trimEnd();
         }
         messages.push({ role: 'tool', tool_call_id: id, content: content + (index === results.length - 1 ? notice : '') });

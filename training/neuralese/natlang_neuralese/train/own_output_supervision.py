@@ -553,7 +553,7 @@ def graph_weights(row, objective, *, factor_report=None):
     """Own-output weights and categories for a complete authenticated native graph row (all nodes, flat)."""
     weights, categories = _graph_weights(row, objective, factor_report=factor_report)
     conversion = row.get('conversion') or {}
-    if conversion.get('static_native_context') is not None or conversion.get('ordinary_context_windows') is not None:
+    if conversion.get('ordinary_context_windows') is not None:
         return weights, categories  # derived from their parent row's graph_weights, which applied the floor
     return apply_boundary_weights(row, list(weights), objective), categories
 
@@ -563,9 +563,6 @@ def _graph_weights(row, objective, *, factor_report=None):
     if row.get('tokenizer_fingerprint') != role_tokens['tokenizer_fingerprint']:
         raise ValueError('own-output role tokens belong to a different tokenizer than this graph')
     conversion = row.get('conversion') or {}
-    if conversion.get('static_native_context') is not None:
-        from ..data.static_native_context import static_supervision
-        return static_supervision(row, objective)
     if conversion.get('ordinary_context_windows') is not None:
         from ..data.ordinary_context_windows import window_supervision
         return window_supervision(row, objective)

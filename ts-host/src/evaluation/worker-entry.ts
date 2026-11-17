@@ -1,4 +1,5 @@
 import { parentPort, workerData } from 'node:worker_threads';
+import { enterEpisodeCallStore } from '../runtime/episode-call-store.js';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createNatlangRuntime, NatlangCallError } from '../index.js';
@@ -13,6 +14,8 @@ import { remoteDriver, type DriverCall } from '../runtime/driver.js';
 import { currentFrame } from '../runtime/context.js';
 import type { WorkerInput } from './worker.js';
 const input = workerData as WorkerInput;
+// A worker started inside a collector episode records to that episode's store (machine-store.ts).
+enterEpisodeCallStore((workerData as { episodeCallStore?: string }).episodeCallStore);
 const abort = new AbortController();
 let sequence = 0;
 const pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();

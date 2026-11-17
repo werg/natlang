@@ -160,6 +160,7 @@ dashes) before sending it.
 | `template`, `template.value-type`, `template.argument-path` | `neuralese_template` and its `value_type` and `argument_path` fields. |
 | `parts.value-type` | Template-written parts carry `value_type` in tool-call arguments. |
 | `guidance`, `guidance.check` | The `guidance` request field; `POST /v1/neuralese/guidance/check`. |
+| `training-guidance` | The `x_natlang_privileged_context` and `x_natlang_guidance_policy` request fields: the engine renders and records the training guidance turn (rl/privileged_context `guidance_plan`). Clients refuse those fields (`training-guidance-unavailable`) to a server that does not list it. |
 | `decide`, `score` | `POST /v1/neuralese/decide`; `POST /v1/neuralese/decide_many` and `POST /v1/natlang/score`. |
 | `render` | `POST /v1/neuralese/render`. |
 | `view` | `POST /v1/neuralese/view`. |

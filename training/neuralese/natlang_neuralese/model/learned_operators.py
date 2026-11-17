@@ -5,7 +5,8 @@ outputs, collections, documents), carries compressed state between model runs, a
 Neuralese-prompted extractor feeds a parent that must use it. Design and decision record:
 plans/neuralese/LEARNED_COMPACTION_OPERATORS.md.
 
-An operator is one write site (the shared ``operator_site_messages``) followed by a **generated producer span**:
+An operator is one write site (view-placement operators: the runtime's own site, ts-host native/operator-site.ts;
+others: ``operator_site_messages``) followed by a **generated producer span**:
 
 * **prompt rows**, one per token of the operator's prompt text, at the prompt's actual position in the rendered
   site, initialized from the pinned embedding rows of exactly those tokens (step 0 computes exactly what the text
@@ -33,8 +34,6 @@ import torch
 from torch import nn
 
 SCHEMA = 'natlang.learned-operator/1'
-# Placements whose site reads one text value (the others read conversation messages).
-TEXT_PLACEMENTS = ('system', 'view')
 ROW_FIELD = 'operators'
 SPAN_KINDS = ('prompt', 'seed')
 
@@ -46,10 +45,10 @@ class Operator:
     # The natural-language prompt. Model-facing; changes require a version bump and a live measurement
     # (plans/MODEL_FACING_CHANGES.md).
     prompt: str
-    # 'view': the site of the builtin view (view.view_site: the prompt as system text, the instructions and
-    # ``value:`` in the user message); 'system': the prompt is the site's system text; 'user-suffix': a final user message after the input
-    # conversation (history compaction keeps the conversation's own system/user messages in place); 'call': the site is
-    # a recorded real call of a natlang function whose rendered instructions are the prompt text (the guidance writer).
+    # 'view': the site of the builtin view, rendered by the runtime (ts-host native/operator-site.ts); 'system': the
+    # prompt is the site's system text; 'call': the site is a recorded real call of a natlang function whose rendered
+    # instructions are the prompt text (the guidance writer). compact-history is no registry operator: the runtime
+    # captures the model's own compact_history note in place (OPERATORS_RESTORE_20261117.md §3).
     placement: str
     # Longest producer span in tokens: seeds are clipped to it and serving stops generating at it.
     seed_cap: int
@@ -59,27 +58,17 @@ class Operator:
     # Starting target of dedicated training examples (owner: about 20-30k each).
     data_target: int
     purpose: str
-    # How a consumer is shown the imported state(s): open + state (+ separator + state ...) + close. For 'user-suffix'
-    # operators the frame is its own user message after the first user message; for 'call' operators it is its own
+    # How a consumer is shown the imported state(s): open + state (+ separator + state ...) + close. For 'call'
+    # operators it is its own
     # system message after the leading system message; otherwise it opens the first user message.
     consumer_open: str = ''
     consumer_close: str = '\n\n'
-    consumer_separator: str = '\n'
-    # True: ``consumer_open`` precedes every state (one framed entry per argument); False: once before all states.
-    frame_each: bool = False
-    # Sources shorter than this are shown to the consumer in full, without an operator site, as the runtime shows
-    # arguments its listing does not cut (ts-host native/cutoff.ts SCOPE_VALUE_CHARS); 0 compacts every source.
-    inline_below_chars: int = 0
 
 
 # compact-value and compact-params are the builtin `view(value, instructions)` at the runtime's sites (DECISIONS.md
 # 2026-10-09 "one summarizer family"; OPERATORS_RESTORE_20261117.md): view's body is their prompt and view.view_site
 # their site, so the two operators and every other view share one write and one trained prompt.
-from ..view import INSTRUCTIONS as VIEW_PROMPT, view_site as _view_site  # noqa: E402
-HISTORY_PROMPT = (
-    "Write Neuralese that stands in for the conversation above. Work continues from it, the task statement and the "
-    "most recent steps only. Keep what has been done and found, the exact files, identifiers, commands and values "
-    "involved, what failed and why, and what is left to do.")
+from ..view import INSTRUCTIONS as VIEW_PROMPT  # noqa: E402
 EXTRACT_PROMPT = (
     "Write Neuralese holding what the stated task needs from the document in the next message. A parent call "
     "combines this from several documents to complete its task and never sees the documents. Keep the facts the "
@@ -109,11 +98,7 @@ OPERATORS = {operator.name: operator for operator in (
     Operator('compact-params', 3, VIEW_PROMPT, 'view', 384,
              ('document', 'passage', 'file', 'record', 'schema', 'tool_output'), 'per-source', 25_000,
              "A call's large arguments in its opening listing (inputsListing); one site per cut argument.",
-             'Compacted argument: ', frame_each=True, inline_below_chars=4096),
-    Operator('compact-history', 2, HISTORY_PROMPT, 'user-suffix', 1024,
-             ('trajectory',), 'one', 25_000,
-             'Context carried between model runs (compact_history and the automatic near-limit compaction).',
-             'Earlier steps of this session, compacted: ', '\n\nContinue from the most recent steps.'),
+             'Compacted argument: '),
     Operator('extract', 2, EXTRACT_PROMPT, 'system', 256,
              ('document', 'passage', 'record', 'file', 'tool_output'), 'per-source', 30_000,
              'Neuralese-prompted extractor/summarizer whose state a parent lambda must use (bottleneck).',
@@ -136,8 +121,8 @@ def operator_site_messages(name: str, *, instructions: str, source=None, context
     """The operator's write site as serving messages, before the assistant reply (the producer span).
 
     ``prompt_part`` stands in for the prompt text (a native-state placeholder part when rendering to tokens; the
-    prompt text itself when None). ``source`` is the site's input text, or for 'user-suffix' operators the list of
-    conversation messages compacted. The shared definition for the graph renderer and the serving endpoint.
+    prompt text itself when None). ``source`` is the site's input text ('system'), or the recorded call's messages
+    ('call').
     """
     spec = operator(name)
     prompt = spec.prompt if prompt_part is None else prompt_part
@@ -146,19 +131,12 @@ def operator_site_messages(name: str, *, instructions: str, source=None, context
     if spec.placement == 'call':
         return call_site_messages(name, source, prompt_part)
     if spec.placement == 'view':
-        if not isinstance(source, str):
-            raise ValueError(f'operator {name} reads one text value')
-        system, user = _view_site(content(prompt) if prompt_part is not None else prompt, source, instructions or None)
-        return [system, *[dict(message) for message in context], user]
-    if spec.placement == 'system':
-        if not isinstance(source, str):
-            raise ValueError(f'operator {name} reads one text input')
-        return [{'role': 'system', 'content': content(prompt)}, *[dict(message) for message in context],
-                {'role': 'user', 'content': f'{instructions}\n\n{source}' if instructions else source}]
-    if not isinstance(source, list):
-        raise ValueError(f'operator {name} compacts a list of conversation messages')
-    return [*[dict(message) for message in context], *[dict(message) for message in source],
-            {'role': 'user', 'content': content(prompt)}]
+        raise ValueError(f'operator {name} is rendered by the runtime at its site (ts-host native/operator-site.ts, '
+                         'scripts/operator-sites.mjs)')
+    if not isinstance(source, str):
+        raise ValueError(f'operator {name} reads one text input')
+    return [{'role': 'system', 'content': content(prompt)}, *[dict(message) for message in context],
+            {'role': 'user', 'content': f'{instructions}\n\n{source}' if instructions else source}]
 
 
 def call_site_messages(name: str, messages, prompt_part=None):

@@ -373,6 +373,11 @@ export class BrowserLocalModel {
 
   readonly turn = Object.assign(async (request: ModelTurnRequest, signal?: AbortSignal): Promise<ModelTurn> => {
     if (!this.loaded) throw new Error('load a local GGUF model before running a natural-language lambda');
+    // Training guidance is rendered and recorded by the training engines only (docs/ENGINE_PARITY.md): refused here
+    // rather than dropped.
+    if (request.privileged_context || request.guidance_policy)
+      throw Object.assign(new Error('training-guidance-unavailable: the in-page model does not render training guidance; ' +
+        'collect this run through the Python native engine or the SGLang actor'), { code: 'training-guidance-unavailable' });
     // The calling invocation's own stack, read before queueing.
     const tuned = perRequestLora(this.loraIndex, 'the in-page model');
     return this.queued(async () => {

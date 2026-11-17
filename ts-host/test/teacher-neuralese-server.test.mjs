@@ -22,7 +22,7 @@ test('interrupted collector replays a sampled guided decision without another re
   const server = createServer(async (request, response) => {
     if (request.url === '/v1/neuralese/info') {
       response.setHeader('content-type', 'application/json');
-      response.end(JSON.stringify({dialects:['native-state/fixture'], stream:false, capabilities:['chat'],
+      response.end(JSON.stringify({dialects:['native-state/fixture'], stream:false, capabilities:['chat','training-guidance'],
         native_state:{enabled:true,...block.metadata,consumption_modes:['exact-native-state']}})); return;
     }
     if (request.url.startsWith('/v1/neuralese/native-states/')) {

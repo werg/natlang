@@ -46,7 +46,14 @@ One process runs the whole loop; nothing else (no controller, custody or transit
 * task selection: ``--explore`` of groups from unmeasured pool tasks, the rest cycling tasks whose pass rate lies in
   ``--pass-band``: the run's own latest scored group of a task where it has one (current policy), else the measured base
   rate (``--pass-rates``). ``--neuralese-variants`` (off by default): a picked task that has a Neuralese-declaring variant
-  (``scripts/rl_tasks/neuralese_variants.py``) runs as that variant in ``--neuralese-variant-share`` of its groups.
+  (``scripts/rl_tasks/neuralese_variants.py``) runs as that variant in ``--neuralese-variant-share`` of its groups. The
+  unmeasured-task walk prefers tasks declaring a construct the held set tests and caps dataset wrappers at
+  ``--explore-wrapper-share`` of explored groups (``ExploreWalk``).
+* dynamic sampling (``--dynamic-sampling-max-spread``): a group of a task likely to pass or fail every sample runs a first
+  wave of k samples; when they agree and the posterior chance that the rest would still give reward spread is small, the
+  rest never start (``wave_plan``, ``PassRatePrior``, ``Collector._after_wave``) and the slots go to other groups.
+* self-distillation: ``--sd-weight`` replays the run's own rare verified successes; ``--sd-teacher-weight`` adds verified
+  teacher-pool successes of tasks in the pass band or all-fail as a ratio-free term (``TeacherDemos``).
 
 * pin: the run executes from its own pinned copy of one commit (``scripts/pin_checkout.py create COMMIT W/pin-<c12>``,
   then launch ``W/pin-<c12>/scripts/neuralese_data/grpo.py`` with that copy as workdir); every child (actor, episodes,
@@ -98,6 +105,9 @@ POOLS = [resolve_str('data_hdd', 'natlang-rl-composed-20261103', 'memetic-progra
 HELD = resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'held-v3', 'manifest.json')
 # Start-policy calls scored after every step (behaviour_probe.py; built from grpo-v2-run1's version-0 groups)
 BEHAVIOUR_PROBE = resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'grpo-v2', 'behaviour-probe-v1.json')
+# sft_sources WORKs of verified teacher successes (TeacherDemos): teacher-gen pool-v1 and pool-v2-rich replayed under
+# the 2026-11-18 runtime first, then the 2026-11-17 SFT corpus WORK (pool-v1, replayed at aa1bd8467)
+SD_TEACHER_SOURCES = [resolve_str('data_nvme', 'sft-teacher-demos-20261118'), resolve_str('data_nvme', 'sft-sources-20261117')]
 # Pool rows known to be wrong (an oracle's expected answer, a garbled task): every *.jsonl here is excluded by default.
 ERRATA = resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'pool-errata')
 
@@ -214,9 +224,15 @@ class Collector:
         self.next_group, self.cursor = first_group, cursor
         self.version = 0                            # the policy version the actor serves now
         self.by_id = {row['id']: row for row in tasks}
+        self.walk = ExploreWalk(tasks, getattr(args, 'explore_wrapper_share', 1.), getattr(args, 'explore_held_weight', 1.))
+        if work is not None:
+            (Path(work) / 'explore-constructs.json').write_text(json.dumps(self.walk.pool_report(), indent=1) + '\n')
         self.learnable_ids, self.learnable_order, self.measured, self.rates_read = [], [], set(), 0.
         self.base_rates, self.own, self.rates_changed = {}, {}, True
         self.variants = {}                          # original task id -> its Neuralese-declaring variant row
+        # dynamic sampling (``wave_plan``): the pass-rate prior, rebuilt at most every 2 min after the rates change
+        self.prior, self.prior_built, self.prior_stale = None, 0., True
+        self.dynamic = collections.Counter()        # groups split / stopped / released, samples saved (train.jsonl)
         for directory in sorted((work / 'groups').glob('g*')):   # a resumed run keeps its own measurements
             self._record_outcome(directory)
         self.rng = random.Random(args.seed + first_group)
@@ -279,10 +295,84 @@ class Collector:
         for entry in entries:
             entry.update(prompt_rendering='full', context_tokens=a.context_tokens, rl_endpoint=a.actor)
         (directory / 'queue.jsonl').write_text(''.join(json.dumps(e, sort_keys=True) + '\n' for e in entries))
+        wave = None if memetic else self._wave(row['id'], len(entries))
         self.groups[group] = {'dir': directory, 'size': len(entries), 'done': 0, 'versions': [], 'task_id': row['id'],
-                              'created': time.time()}
+                              'created': time.time(), 'wave': wave, 'held_back': entries[wave:] if wave else []}
         self.outstanding += 1
-        self.pending.extend((group, entry) for entry in entries)
+        self.pending.extend((group, entry) for entry in entries[:wave])
+
+    def _wave(self, task_id, size):
+        """Dynamic sampling: the first-wave size of a new group of ``task_id`` (``wave_plan`` on its ``PassRatePrior``),
+        or None to start all its samples at once. The rest wait until the whole first wave has finished, so the decision
+        reads a fixed set of samples (never the first to finish, which are biased to short episodes) and a cancelled
+        sample was never started (nothing in flight to kill)."""
+        a = self.args
+        limit = getattr(a, 'dynamic_sampling_max_spread', 0.)
+        if not limit or limit <= 0 or size < 4:
+            return None
+        if self.prior is None or (self.prior_stale and time.time() - self.prior_built >= 120):
+            rates = {k: (v['successes'], v['scored']) for k, v in self.base_rates.items() if v.get('scored')}
+            rates.update(self.own)
+            family = {k: v.get('family') for k, v in self.base_rates.items()}
+
+            def family_of(task_id):
+                row = self.by_id.get(task_id)
+                return row.get('family') if row is not None else family.get(task_id)
+            self.prior, self.prior_built, self.prior_stale = PassRatePrior(rates, family_of), time.time(), False
+        wave, _, _ = wave_plan(*self.prior.beta(task_id), size, limit)
+        if wave:
+            self.dynamic['groups_split'] += 1
+        return wave
+
+    def _after_wave(self, group):
+        """The first wave of a split group has finished: cancel its held-back samples when the wave agrees (every sample
+        scored, one binary outcome and one advantage reward) and the posterior chance that the rest would still give
+        the group reward spread is at most ``--dynamic-sampling-max-spread``; otherwise start them, ahead of every other
+        group. A cancelled group is scored with the samples it ran (its task's pass rate updates from them) and its
+        queue keeps only those; the cancelled entries go to ``cancelled.jsonl``. Returns True when the group is complete."""
+        from natlang_neuralese.common.jsonio import read_jsonl
+        from natlang_neuralese.rl.task_rollouts import entry_outcome
+        info = self.groups[group]
+        directory = info['dir']
+        held = {entry['key'] for entry in info['held_back']}
+        stop = False
+        try:
+            entries = [e for e in read_jsonl(directory / 'queue.jsonl') if e['key'] not in held]
+            packet = list(read_jsonl(directory / 'packet.jsonl'))
+            outcomes = []
+            for entry in entries:
+                journal = directory / 'workers' / f"{entry['key']}.journal.jsonl"
+                finish = next((r for r in (read_jsonl(journal) if journal.exists() else ())
+                               if r.get('event') == 'finish' and r.get('key') == entry['key']), None)
+                outcomes.append(entry_outcome(entry, packet[entry['index']], finish))
+            binary = {reward for _, reward, _ in outcomes}
+            graded = {graded for _, _, graded in outcomes}
+            advantage_rewards = binary if getattr(self.args, 'reward', 'graded') == 'binary' else graded
+            if len(binary) == 1 and None not in binary and len(advantage_rewards) == 1 and self.prior is not None:
+                success = binary.pop() == 1.0
+                a, b = self.prior.beta(info['task_id'])
+                chance = spread_after(a, b, info['size'], len(entries), success)
+                stop = chance <= self.args.dynamic_sampling_max_spread
+        except Exception as error:   # an unreadable wave runs the rest: never a group lost to the shortcut
+            print(json.dumps({'event': 'dynamic sampling check failed', 'group': group, 'error': repr(error)[:300]}),
+                  flush=True)
+        with self.lock:
+            if info.get('abandoned'):
+                return False
+            if stop:
+                cancelled = info['held_back']
+                with (directory / 'cancelled.jsonl').open('w') as handle:
+                    handle.write(''.join(json.dumps(e, sort_keys=True) + '\n' for e in cancelled))
+                (directory / 'queue.jsonl').write_text(''.join(json.dumps(e, sort_keys=True) + '\n' for e in entries))
+                info['size'], info['held_back'] = info['done'], []
+                self.dynamic['groups_stopped'] += 1
+                self.dynamic['samples_saved'] += len(cancelled)
+                self.dynamic['stopped_all_' + ('pass' if success else 'fail')] += 1
+                return True
+            self.pending.extendleft((group, entry) for entry in reversed(info['held_back']))
+            info['held_back'] = []
+            self.dynamic['groups_released'] += 1
+            return False
 
     def _bind_memetic(self, row, directory):
         """A memetic row bound to this group (RESTORE_MEMETIC_JOLT_HINDSIGHT_20261117.md section 3): its episode spec,
@@ -312,7 +402,7 @@ class Collector:
         scored = [row for row in rows if row.get('reward') is not None and row.get('jolt_role', 'student') == 'student']
         if scored:
             self.own[scored[0]['task_id']] = (sum(row['reward'] == 1.0 for row in scored), len(scored))
-            self.rates_changed = True
+            self.rates_changed = self.prior_stale = True
 
     def _learnable(self):
         """Pool rows whose pass rate lies in ``--pass-band`` with at least ``--pass-min-scored`` scored samples, shuffled:
@@ -323,7 +413,7 @@ class Collector:
             self.rates_read = time.time()
             try:
                 self.base_rates = json.loads(Path(a.pass_rates).read_text())
-                self.rates_changed = True
+                self.rates_changed = self.prior_stale = True
             except (OSError, ValueError):
                 pass
         if not self.rates_changed:
@@ -352,11 +442,8 @@ class Collector:
                 self.learnable_order = list(self.learnable_ids)
                 self.rng.shuffle(self.learnable_order)
             return self.by_id[self.learnable_order.pop()]
-        while True:
-            row = self.tasks[self.cursor % len(self.tasks)]
-            self.cursor += 1
-            if row['id'] not in self.measured or self.cursor > 2 * len(self.tasks):
-                return row
+        row, self.cursor = self.walk.next(self.cursor, self.measured, self.rng)
+        return row
 
     def _take(self):
         if self.paused.is_set():
@@ -412,7 +499,10 @@ class Collector:
                     continue
                 info['done'] += 1
                 info['versions'].append(started)
-                complete = info['done'] == info['size']
+                wave_done = bool(info.get('held_back')) and info['done'] == info['wave']
+                complete = info['done'] == info['size'] and not info.get('held_back')
+            if wave_done:
+                complete = self._after_wave(group)
             if complete:
                 try:
                     self._score(group)
@@ -1413,6 +1503,135 @@ def sd_take(buffer, step, args, stats):
     return [item['episode'] for item in chosen]
 
 
+def renderer_tokenizer(export_dir, out):
+    """A tokenizer directory for ``sft_sources.TemplateRenderer`` from the actor's HF export (its tokenizer, template and
+    model type), so teacher calls render with the exact ids the actor serves."""
+    out.mkdir(parents=True, exist_ok=True)
+    for name in ('tokenizer.json', 'tokenizer_config.json', 'chat_template.jinja', 'special_tokens_map.json'):
+        if (Path(export_dir) / name).exists():
+            shutil.copyfile(Path(export_dir) / name, out / name)
+    config = json.loads((Path(export_dir) / 'config.json').read_text())
+    (out / 'model_type.json').write_text(json.dumps({'model_type': config['model_type'], 'source': str(export_dir)}) + '\n')
+    return out
+
+
+class TeacherDemos:
+    """Verified teacher-pool successes for the self-distillation replay (``--sd-teacher-weight``): every success of the
+    sft_sources WORKs (``--sd-teacher-source``; first WORK wins a key) of source ``teacher`` whose replay under that WORK's
+    runtime was exact (``sft_sources.verified_episodes``), on an eligible pool task (the run's task list, held closure
+    applied) and outside the held closure again (``sft_sources.held_excluded_ids``), at most ``max_per_task`` per task
+    (teacher models taking turns, as ``sft_sources.capped``). ``take`` lowers the chosen ones with sft_sources' own
+    rendering (``call_row`` on the replayed turns: the student-form prompt the runtime builds, the teacher's reply as
+    target, an empty think block at weight 0)."""
+
+    def __init__(self, works, by_id, held_manifest, tokenizer, max_per_task, seed, log=print):
+        import random as _random
+        from sft_sources import TemplateRenderer, held_closure, held_excluded_ids, verified_episodes
+        self.renderer = TemplateRenderer(tokenizer)
+        self.funnel = collections.defaultdict(collections.Counter)
+        self.rng = _random.Random(seed)
+        found, tasks = {}, {}
+        for work in works:
+            if not (Path(work) / 'replay.jsonl').exists():
+                log({'event': 'sd teacher source missing', 'work': str(work)})
+                continue
+            for episode, record in verified_episodes(work, self.funnel, sources={'teacher'}):
+                if episode['task_id'] not in by_id or episode['key'] in found:
+                    continue
+                tasks[episode['task_id']] = episode['task']
+                found[episode['key']] = {'key': episode['key'], 'work': str(work), 'name': record['name'],
+                                         'task_id': episode['task_id'],
+                                         'teacher': (episode.get('teacher') or {}).get('model_id') or ''}
+        excluded = held_excluded_ids(held_manifest, tasks, held_closure(held_manifest))
+        by_task = collections.defaultdict(list)
+        for item in found.values():
+            if item['task_id'] in excluded:
+                self.funnel['teacher']['held_excluded'] += 1
+            else:
+                by_task[item['task_id']].append(item)
+        self.by_task = {}
+        for task_id, items in sorted(by_task.items()):
+            lanes = collections.defaultdict(list)
+            for item in sorted(items, key=lambda item: item['key']):
+                lanes[item['teacher']].append(item)
+            queues = [lanes[k] for k in sorted(lanes)]
+            for lane in queues:
+                self.rng.shuffle(lane)
+            kept = []
+            while any(queues) and len(kept) < max_per_task:
+                for lane in queues:
+                    if lane and len(kept) < max_per_task:
+                        kept.append(lane.pop())
+            self.funnel['teacher']['over_task_cap'] += len(items) - len(kept)
+            for item in kept:
+                item['uses'] = 0
+            self.by_task[task_id] = kept
+        self.episodes = sum(len(v) for v in self.by_task.values())
+        log({'event': 'sd teacher demonstrations', 'tasks': len(self.by_task), 'episodes': self.episodes,
+             'funnel': {k: dict(v) for k, v in self.funnel.items()}, 'renderer': self.renderer.identity})
+
+    def take(self, eligible, count, stats):
+        """Up to ``count`` lowered teacher episodes of the ``eligible`` task ids, one per task, least replayed first
+        (ties at random); a render error drops that episode for the run."""
+        from sft_sources import call_row, replayed_turns
+        candidates = [item for task_id in eligible for item in self.by_task.get(task_id, ())]
+        stats['sd_teacher_candidates'] = len(candidates)
+        self.rng.shuffle(candidates)
+        candidates.sort(key=lambda item: item['uses'])
+        out, tasks = [], set()
+        for item in candidates:
+            if len(out) >= count:
+                break
+            if item['task_id'] in tasks:
+                continue
+            try:
+                rows = [call_row(self.renderer, 'teacher', item['key'], index, turn)[0]
+                        for index, turn in enumerate(replayed_turns(item['work'], item['name']))]
+            except Exception as error:
+                stats['sd_teacher_render_error'] += 1
+                print(json.dumps({'event': 'sd teacher render error', 'key': item['key'], 'error': repr(error)[:300]}),
+                      flush=True)
+                self.by_task[item['task_id']].remove(item)
+                continue
+            for row in rows:
+                row['teacher'] = True            # no actor log-probabilities: a ratio-free term (train loop)
+            item['uses'] += 1
+            tasks.add(item['task_id'])
+            out.append({'task_id': item['task_id'], 'round': item['key'], 'rows': rows, 'decisions': [],
+                        'reward': 1., 'quality': 1., 'role': 'sd_teacher'})
+        return out
+
+
+def sd_teacher_tasks(collector, band):
+    """Tasks whose current pass rate (the run's latest group, else the measured base rate) is in the pass band or 0
+    (all-fail): where a verified demonstration can still raise the success rate."""
+    rates = {k: (v['successes'], v['scored']) for k, v in collector.base_rates.items() if v.get('scored')}
+    rates.update(collector.own)
+    low, high = band
+    return sorted(k for k, (s, n) in rates.items() if n and (s == 0 or low <= s / n <= high))
+
+
+TEACHER_FIELDS = ('groups', 'episodes', 'successes', 'episodes_trained', 'calls_student_form',
+                  'privileged_tokens_removed', 'policy_calls_removed')
+SD_FIELDS = ('added', 'episodes', 'tokens', 'buffer', 'skip_imports', 'own_episodes', 'own_tokens', 'teacher_episodes',
+             'teacher_tokens', 'teacher_candidates', 'teacher_render_error')
+
+
+def restore_telemetry(stats, args):
+    """Top-level per-step fields of the restored methods for train.jsonl (the heartbeat reads these; ``lowering``
+    keeps the raw counters): ``teacher`` (JOLT+ attempts lowered this step: groups, episodes, successes, episodes
+    trained with a positive advantage, calls in student form, privileged tokens and policy calls removed) and ``sd``
+    (self-distillation replay: added to the buffer, replayed episodes and tokens, buffer size). Every key is present
+    (0 when nothing happened) while the method is on; the block is absent when it is off. The teacher tokens' rho
+    quantiles are ``teacher_rho``, logged after the learner."""
+    out = {}
+    if getattr(args, 'teacher_attempts', 0):
+        out['teacher'] = {key: int(stats.get('teacher_' + key, 0)) for key in TEACHER_FIELDS}
+    if getattr(args, 'sd_weight', 0) or getattr(args, 'sd_teacher_weight', 0):
+        out['sd'] = {key: int(stats.get('sd_' + key, 0)) for key in SD_FIELDS}
+    return out
+
+
 def teacher_rho_summary(parts, cap):
     """Distribution of rho over the step's teacher tokens in student form (JOLT+): how much of the guided run the unguided
     policy finds plausible. None without teacher tokens."""
@@ -1424,6 +1643,95 @@ def teacher_rho_summary(parts, cap):
             'log_rho_p90': q(.9), 'log_rho_p99': q(.99), 'rho_mean': round(float(np.exp(np.minimum(log_rho, 20)).mean()), 4),
             'rho_below_0.1': round(float((log_rho < math.log(.1)).mean()), 4),
             'rho_capped': round(float((log_rho > math.log(cap)).mean()), 4)}
+
+
+def _log_beta(a, b):
+    return math.lgamma(a) + math.lgamma(b) - math.lgamma(a + b)
+
+
+def all_equal_probability(a, b, m, success):
+    """P(the next ``m`` samples all succeed (``success``) or all fail) for a pass rate ~ Beta(a, b): E[p^m] or
+    E[(1-p)^m], the beta-binomial's end mass."""
+    if m <= 0:
+        return 1.
+    return math.exp(_log_beta(a + m, b) - _log_beta(a, b) if success else _log_beta(a, b + m) - _log_beta(a, b))
+
+
+def spread_after(a, b, n, k, success):
+    """P(a group of ``n`` has reward spread | its first ``k`` samples all succeeded (or all failed)) for a pass rate
+    ~ Beta(a, b) before them: 1 - P(the other n - k agree | the first k agree)."""
+    first = all_equal_probability(a, b, k, success)
+    return 1. - all_equal_probability(a, b, n, success) / first if first > 0 else 1.
+
+
+def wave_plan(a, b, n, max_spread, min_saving=1.):
+    """Dynamic sampling (DAPO-style, decided before the samples run): the first-wave size k of a group of ``n`` for a
+    task whose pass rate is ~ Beta(a, b), or None to run all n at once. After a first wave of k that all agree, the other
+    n - k are cancelled when the posterior chance they would still break the tie (``spread_after``) is at most
+    ``max_spread``; otherwise they run. k maximizes the expected samples saved, sum over s of P(first k all s) *
+    [spread_after <= max_spread] * (n - k); a split costs one wave of latency, so it is planned only when that
+    expectation is at least ``min_saving`` samples. Returns (k, expected saving, expected spread groups lost)."""
+    best = (None, 0., 0.)
+    for k in range(2, n - 1):
+        saved = lost = 0.
+        for success in (True, False):
+            first = all_equal_probability(a, b, k, success)
+            spread = spread_after(a, b, n, k, success)
+            if spread <= max_spread:
+                saved += first * (n - k)
+                lost += first * spread
+        if saved > best[1]:
+            best = (k, saved, lost)
+    return best if best[1] >= min_saving else (None, 0., 0.)
+
+
+class PassRatePrior:
+    """Empirical-Bayes pass-rate prior per task (dynamic sampling): the task's own measurement (the run's latest scored
+    group, else the measured base rate) on top of a Beta(c m, c (1 - m)) whose mean m is the task's family's mean task
+    rate (shrunk to the pool's with 2 pseudo-tasks; the task itself left out) and whose concentration c maximizes the
+    beta-binomial likelihood of the measured tasks' outcomes (each against its own leave-one-out family mean; a grid over
+    0.1-50). A pool whose tasks mostly pass or fail every sample fits a small c: a few agreeing samples are strong
+    evidence; tasks of mixed outcome fit a large one."""
+
+    GRID = tuple(round(0.1 * 1.2 ** i, 4) for i in range(35))   # 0.1 .. ~49
+
+    def __init__(self, rates, family_of, min_scored=2):
+        rates = {k: (s, n) for k, (s, n) in rates.items() if n >= min_scored}
+        self.rates, self.family_of = rates, family_of
+        values = [s / n for s, n in rates.values()]
+        self.mean = (sum(values) + 1.) / (len(values) + 2.)
+        self.families = {}
+        for task_id, (s, n) in rates.items():
+            family = self.families.setdefault(family_of(task_id), [0., 0])
+            family[0] += s / n
+            family[1] += 1
+        self.concentration = 2.
+        if len(rates) >= 20:
+            means = [(self.family_mean(task_id), s, n) for task_id, (s, n) in rates.items()]
+
+            def loglik(c):
+                total = 0.
+                for m, s, n in means:
+                    a, b = max(c * m, 1e-3), max(c * (1 - m), 1e-3)
+                    total += _log_beta(a + s, b + n - s) - _log_beta(a, b)   # the binomial coefficient is constant in c
+                return total
+            self.concentration = max(self.GRID, key=loglik)
+
+    def family_mean(self, task_id):
+        total, count = self.families.get(self.family_of(task_id), (0., 0))
+        own = self.rates.get(task_id)
+        if own is not None:
+            total, count = total - own[0] / own[1], count - 1
+        return min(max((total + 2. * self.mean) / (count + 2.), 1e-3), 1 - 1e-3)
+
+    def beta(self, task_id):
+        """(a, b) of the task's pass rate."""
+        m = self.family_mean(task_id)
+        a, b = self.concentration * m, self.concentration * (1. - m)
+        own = self.rates.get(task_id)
+        if own is not None:
+            a, b = a + own[0], b + own[1] - own[0]
+        return a, b
 
 
 def group_advantages(rewards):
@@ -1498,6 +1806,20 @@ def policy_weight(rho, actor_logp, advantage, rho_cap, tail_floor):
         return weight, torch.zeros_like(weight, dtype=torch.bool)
     masked = actor_logp < tail_floor
     return weight.masked_fill(masked, 0.), masked
+
+
+def behaviour_logp(chain, logp):
+    """(log-probabilities of the law that produced the chain's tokens, per-token row weights or None) for the policy
+    term. An actor sample: the actor's recorded logp. A teacher demonstration (role ``sd_teacher``) has none: the
+    learner's own (detached) logp stands in, so rho = 1 (a ratio-free cross-entropy at its advantage) and the tail floor
+    reads the learner's probability; its rows' weights (an empty think block at 0) multiply the term."""
+    import torch
+    if chain.get('role') != 'sd_teacher':
+        return torch.from_numpy(np.concatenate([row['logp'] for _, _, row in chain['segs']])).to(logp.device).float(), None
+    import exp0_sft
+    weights = (exp0_sft.chain_weights(chain, logp.device) if any('weight' in row for _, _, row in chain['segs'])
+               else None)
+    return logp.detach().float(), weights
 
 
 def reasoning_style(chains, close_id):
@@ -1626,6 +1948,64 @@ def probe_actor_nll(sglang_url, chains):
         total -= sum(items[p + 1][0] for p in positions)
         count += len(positions)
     return total / max(1, count)
+
+
+def task_features(tasks):
+    """id -> (held constructs the task's program declares, whether it is a one-function dataset wrapper):
+    ``sft_sources.task_constructs`` (``measure_repetition.program_features``), the one implementation."""
+    sys.path.insert(0, str(REPO / 'scripts/rl_tasks'))
+    from sft_sources import task_constructs
+    return {row['id']: task_constructs(row) for row in tasks}
+
+
+class ExploreWalk:
+    """The walk over unmeasured pool tasks (the ``--explore`` share of groups), in the pool's order (``--explore-order``),
+    weighted toward the constructs the held set tests (held-v3: 30% Neuralese results, 30% folder reducers, 18% iterateOn,
+    18% call depth >= 3, 11% decide, 9% one-function dataset wrappers). A row declaring a held construct
+    (``sft_sources.HELD_CONSTRUCTS`` except ``multi_function``, which the pool has as often as the held set: 69% vs 75%)
+    is always taken when the walk reaches it; any other row is taken with probability 1 / ``held_weight``, and a dataset
+    wrapper only while wrappers stay at most ``wrapper_share`` of the rows taken. A row passed over stays unmeasured and
+    comes round again. ``held_weight`` 1 and ``wrapper_share`` 1: the plain walk."""
+
+    COMMON = frozenset({'multi_function'})
+
+    def __init__(self, tasks, wrapper_share=1., held_weight=1.):
+        self.tasks, self.wrapper_share, self.held_weight = tasks, wrapper_share, held_weight
+        self.weighted = wrapper_share < 1 or held_weight != 1
+        self.features = task_features(tasks) if self.weighted and tasks else {}
+        self.counts = collections.Counter()      # rows taken: all, wrappers, declaring a held construct
+
+    def pool_report(self):
+        report = {'wrapper_share': self.wrapper_share, 'held_weight': self.held_weight, 'rows': len(self.tasks)}
+        if self.features:
+            constructs = collections.Counter(k for held, _ in self.features.values() for k in held)
+            report.update(wrappers=sum(w for _, w in self.features.values()),
+                          declaring_held=sum(bool(set(held) - self.COMMON) for held, _ in self.features.values()),
+                          constructs=dict(sorted(constructs.items())))
+        return report
+
+    def next(self, cursor, measured, rng):
+        """(the next row to explore, the new cursor). After two passes over the pool (everything measured) any row."""
+        n, scanned = len(self.tasks), 0
+        while True:
+            row = self.tasks[cursor % n]
+            cursor += 1
+            exhausted = cursor > 2 * n
+            if row['id'] in measured and not exhausted:
+                continue
+            scanned += 1
+            held, wrapper = self.features.get(row['id'], ((), False))
+            held = set(held) - self.COMMON
+            take = exhausted or scanned > n or not self.weighted
+            if not take:
+                if wrapper and self.counts['wrappers'] + 1 > self.wrapper_share * (self.counts['taken'] + 1):
+                    continue
+                take = bool(held) or rng.random() < 1. / self.held_weight
+            if take:
+                self.counts['taken'] += 1
+                self.counts['wrappers'] += wrapper
+                self.counts['declaring_held'] += bool(held)
+                return row, cursor
 
 
 def family_round_robin(rows, rng):
@@ -1933,6 +2313,11 @@ def train(args):
     else:
         collector = Collector(args, tasks, work, source_sha, runtime, first_group=first_group, cursor=cursor)
         collector.variants = load_variants(args, tasks, work)
+    teacher_demos = None
+    if args.sd_teacher_weight > 0 and args.sd_teacher_episodes > 0 and not args.replay:
+        teacher_demos = TeacherDemos(args.sd_teacher_source or SD_TEACHER_SOURCES, collector.by_id, args.held_manifest,
+                                     renderer_tokenizer(args.actor_export, work / 'sd-teacher-tokenizer'),
+                                     args.sd_teacher_max_per_task, args.seed, log=lambda r: log_line(log, r))
     collector.version = step
     if args.resume and not args.replay:      # a replay offers archived groups, never this run's own
         reused, left_out = collector.reuse_scored(step, args.max_staleness)
@@ -2328,21 +2713,31 @@ def train(args):
                         episode_units[key][2] += 1
                         decisions.append({'row': d, 'advantage': advantage, 'group': group, 'task_id': task_id,
                                           'stale': stale, 'actor_version': step - stale, 'episode': key})
+        replays = []
         if args.sd_weight > 0:
             # self-distillation: verified rare successes of the last --sd-window steps again, as a positive-advantage
             # (truncated-IS cross-entropy) term of weight --sd-weight on their own exact actor calls
-            for episode in sd_take(sd_buffer, step, args, stats):
-                kept = exp0_sft.chains_of([episode], max_len=args.max_sequence_tokens)
-                if not kept:
-                    continue
-                key = len(episode_units)
-                episode_advantage[key] = args.sd_weight
-                episode_units[key] = [sum(n for c in kept for _, n, _ in c['segs']), sum(len(c['segs']) for c in kept), 0]
-                stats['sd_episodes'] += 1
-                stats['sd_tokens'] += episode_units[key][0]
-                for chain in kept:
-                    chain.update(advantage=args.sd_weight, episode=key, role='sd')
-                    chains.append(chain)
+            replays += [(episode, args.sd_weight, 'sd', 'own') for episode in sd_take(sd_buffer, step, args, stats)]
+        if teacher_demos is not None:
+            # verified teacher-pool successes of tasks in the pass band or all-fail, in student form; no actor
+            # log-probabilities, so a ratio-free cross-entropy of weight --sd-teacher-weight (rho = 1: the learner's
+            # own log-probability stands in for the actor's)
+            replays += [(episode, args.sd_teacher_weight, 'sd_teacher', 'teacher') for episode in teacher_demos.take(
+                sd_teacher_tasks(collector, args.pass_band), args.sd_teacher_episodes, stats)]
+        for episode, weight, role, source in replays:
+            kept = exp0_sft.chains_of([episode], max_len=args.max_sequence_tokens)
+            if not kept:
+                continue
+            key = len(episode_units)
+            episode_advantage[key] = weight
+            episode_units[key] = [sum(n for c in kept for _, n, _ in c['segs']), sum(len(c['segs']) for c in kept), 0]
+            stats['sd_episodes'] += 1
+            stats['sd_tokens'] += episode_units[key][0]
+            stats[f'sd_{source}_episodes'] += 1
+            stats[f'sd_{source}_tokens'] += episode_units[key][0]
+            for chain in kept:
+                chain.update(advantage=weight, episode=key, role=role)
+                chains.append(chain)
         if args.advantage_control != 'none':
             control_advantages([*chains, *decisions], episode_advantage, args.advantage_control,
                                random.Random(args.seed + step))
@@ -2371,7 +2766,9 @@ def train(args):
                   if rollouts_archive is not None and rollouts_archive.exists() else None,
                   'actor_version': versions_live['actor'], 'imported_state_mb': round(imported_state_mb, 1),
                   'neuralese_passthrough': not args.no_neuralese_passthrough,
-                  'producer_document_tokens': sum(exp0_sft.source_tokens(c) for c in chains)}
+                  'producer_document_tokens': sum(exp0_sft.source_tokens(c) for c in chains),
+                  'dynamic_sampling': dict(getattr(collector, 'dynamic', {})) or None,   # cumulative since this process started
+                  **restore_telemetry(stats, args)}
         style = reasoning_style(chains, think_close)
         record.update(style, **({} if args.replay else style_shift(work, style)))   # replayed reasoning is not the policy's
         if record.get('reasoning_shift'):
@@ -2523,13 +2920,15 @@ def train(args):
             loss = 0.
             for (index, _), logp, policy_logp in zip(items, logp_rows.split(counts), policy_rows.split(counts)):
                 chain = chains[index]
-                actor = torch.from_numpy(np.concatenate([row['logp'] for _, _, row in chain['segs']])).cuda().float()
+                actor, row_weight = behaviour_logp(chain, logp)
                 token_scale = scales[chain['episode']][0]
                 ref = refs.pop(index, None)
                 with torch.no_grad():
                     log_rho = logp.detach() - actor
                     rho = log_rho.clamp(max=20).exp()
                     weight, tail = policy_weight(rho, actor, chain['advantage'], args.rho_cap, args.tail_logp_floor)
+                    if row_weight is not None:
+                        weight = weight * row_weight
                     # gradient mass of the policy term per token (its factor times the logit-gradient norm scale 1 - p),
                     # split into reasoning and post-</think> tokens
                     mass = token_scale * abs(chain['advantage']) * weight * (1 - policy_logp.detach().exp())
@@ -2821,6 +3220,13 @@ def main():
                    help="measured base pass rates per task (re-read every 10 min; a task's own latest group replaces its "
                    'rate); empty: own outcomes only')
     t.add_argument('--pass-band', type=float, nargs=2, default=(0.1, 0.9))
+    t.add_argument('--dynamic-sampling-max-spread', type=float, default=0.1,
+                   help='dynamic sampling (Collector._wave/_after_wave, wave_plan): a group whose task is likely to pass or '
+                        'fail every sample (empirical-Bayes PassRatePrior from --pass-rates, the run\'s own groups and the '
+                        'task\'s family) runs a first wave of k samples; when they all agree and the posterior chance that '
+                        'the other n - k would still give reward spread is at most this, those are never started. '
+                        'grpo-v3-run1 replayed offline at 0.1: 8.6%% fewer samples (7.8%% of generated tokens), 4.4%% of '
+                        'spread groups lost (DECISIONS 2026-11-18). 0: off')
     t.add_argument('--pass-min-scored', type=int, default=2)
     t.add_argument('--explore', type=float, default=0.4,
                    help='share of groups from unmeasured pool tasks (TASK_SUPPLY_20261113: a learnable-task group leaves '
@@ -2830,6 +3236,13 @@ def main():
                    help='order of the unmeasured-task walk: row (the shuffled pool, so a family is explored in proportion '
                         'to its rows) or family (round robin over families, each in shuffled order; equal exploration per '
                         'family, so small new families are reached; TASK_SUPPLY_20261117)')
+    t.add_argument('--explore-wrapper-share', type=float, default=0.15,
+                   help='explored groups that are one-function dataset wrappers, at most this share (ExploreWalk; held-v3 '
+                        'has 9%% wrappers, a family-ordered walk over the pool ~36%%); 1: no cap')
+    t.add_argument('--explore-held-weight', type=float, default=3.,
+                   help='an unmeasured task declaring a construct the held set tests (sft_sources.HELD_CONSTRUCTS: '
+                        'Neuralese results/arguments, decide, folder reducers, iterateOn, readouts, call depth >= 3, '
+                        'several functions) is explored this many times as readily as one declaring none (ExploreWalk); 1: off')
     t.add_argument('--neuralese-variants', help='Neuralese-declaring variants of pool tasks (cases.jsonl from '
                    'scripts/rl_tasks/neuralese_variants.py; off by default: a controlled addition)')
     t.add_argument('--neuralese-variant-share', type=float, default=0.5,
@@ -2853,6 +3266,16 @@ def main():
     t.add_argument('--sd-episodes', type=int, default=16, help='replayed episodes per step at most')
     t.add_argument('--sd-max-success', type=float, default=0.25,
                    help="a group's successes are rare when its students' success share is at most this")
+    t.add_argument('--sd-teacher-weight', type=float, default=0.05,
+                   help='teacher demonstrations in the SD replay: verified teacher-pool successes (TeacherDemos) of tasks '
+                        'in the pass band or all-fail, as a ratio-free cross-entropy term of this weight (they have no actor '
+                        'log-probabilities: rho = 1, tail floor on the learner\'s logp, KL as for every chain); 0: off')
+    t.add_argument('--sd-teacher-episodes', type=int, default=8, help='teacher demonstrations per step at most (one per task)')
+    t.add_argument('--sd-teacher-max-per-task', type=int, default=4,
+                   help='distinct verified teacher episodes kept per task (teacher models taking turns)')
+    t.add_argument('--sd-teacher-source', action='append', default=None,
+                   help='sft_sources WORK whose extracted, replayed teacher successes are the demonstrations (repeatable; '
+                        'default SD_TEACHER_SOURCES)')
     t.add_argument('--memetic-tasks', help='memetic "improve program P" rows (python -m natlang_neuralese.rl.memetic_tasks '
                    'build: DIR/cases.jsonl); RESTORE_MEMETIC_JOLT_HINDSIGHT_20261117.md section 3')
     t.add_argument('--memetic-share', type=float, default=0.,
@@ -3006,7 +3429,9 @@ def main():
         from natlang_neuralese.common.cuda_context import ensure_context
         ensure_context()   # GB10: a context can fail to create under host-memory fragmentation; retried
         args.pool = args.pool or POOLS
-        args.max_outstanding = args.max_outstanding or args.max_groups + -(-args.slots // args.group)
+        # a split group (dynamic sampling) holds as few as 2 slots: room for slots / 2 groups in flight
+        args.max_outstanding = args.max_outstanding or args.max_groups + -(-args.slots // (
+            2 if args.dynamic_sampling_max_spread > 0 else args.group))
         train(args)
 
 

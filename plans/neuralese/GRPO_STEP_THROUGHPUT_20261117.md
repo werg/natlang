@@ -171,6 +171,67 @@ small).
   the k2 term as defined.
 
 
+## Prefix tree packed: levels and tree-mask (2026-11-17)
+
+The shared learner prefix tree (`lfm3_fast_train.run_prefix_tree`, both learners) ran every prefix node and every leaf
+as its own forward and backward: on `sft-v3-run1` steps the leaves are short (median 360-1,500 tokens) continuations of
+~5k-token histories, so a step was 60-280 small forwards and as many backwards (backward 70-80% of the time).
+Two packed modes now exist (`--prefix-tree-mode`, both learners):
+
+- `levels` (992237193): each tree level's nodes, then the leaves in tree order, run as varlen batches of
+  `--pack-tokens` that continue their prefixes' cached keys, values and conv inputs (`cu_seqlens_k` longer than
+  `cu_seqlens_q`). A node's state is held as FP32 leaves (`Segment`), so all continuations' cotangents add up in FP32
+  and each prefix batch backpropagates once, deepest level first.
+- `tree-mask` (e9037c976, a601339f6, ba661f8cf; owner directive): each batch of whole subtrees is one flattened tensor,
+  one forward and one backward. `hidden(parents=...)`: RoPE positions along each token's own path, the conv's taps
+  gathered by a per-token path-predecessor index (a branch's first tokens read the parent's last ones, never a
+  sibling's), attention under the path mask (ancestor-or-self, causal along the path, the sliding window along the
+  path) as a flex-attention `BlockMask` built from the tree's structure (no T x T evaluation; `create_block_mask`
+  recompiled per sequence length, 2-17 s each). Imports and pass-through producer documents ride in the same batch.
+  Batches (`tree_units`) are whole subtrees up to a cap; an oversize subtree splits among its children, each batch with
+  its own copy of the path. The default cap (`plan_tree_batches`) scores prefix copies against layer recompute.
+
+Bug found on the way: the sliding-window `mask_mod` took the window as a default argument; flex tells a mask_mod from a
+score_mod by arity, so the sliding layers' mask was wrong on CUDA (0.73 relative error vs SDPA with the dense mask).
+Fixed (a601339f6) with a CUDA test (flex == dense mask in FP32 at 1e-4).
+
+Measured (real LFM3-1.7B, `sft-v3-run1` step groups, exp0 `step_backward`, `--activation-gb 6`, pack 3050, FP32
+master accumulation as the trainer, GPU time-sliced with other jobs; arms of one row ran back to back in one process
+after a compile warmup; scratchpad `pack/pbench.py`). Step seconds (computed tok/s):
+
+| group (chains, chain tok, computed tok) | whole chains | per-node (8364ef22e) | levels | tree-mask |
+|---|---|---|---|---|
+| 1 (72, 447k, 64k) | 211 s (2,113) | 107 s (595) | 45 s (1,402) | 47 s (1,343) |
+| 5 (39, 483k, 151k) | 234 s (2,064) | 114 s (1,326) | 82 s (1,848) | 104 s (1,455) |
+| 4 (240, 1.46M, 255k) | ~690 s (old code) | 208 s (1,228) | 130 s (1,964) | 209 s (1,220) |
+
+Levels: 1.6-2.4x the per-node path, 2.9-5.3x whole chains per step. Computed tok/s reaches 0.9-0.95x whole chains on the
+larger groups (the leaves attend to ~5k-token histories, extra attention work per computed token). Tree-mask does not
+beat levels: under a fixed activation budget a one-forward subtree batch recomputes ~23 of 24 layers on every token
+(`plan_tree_batches` on these groups: 22.5-23.6 mean recomputed layers, +6-44% prefix copies at ACT 4-6, 0-5% at
+ACT 16), while levels recomputes only the prefix rows and keeps its leaf batches resident. Default stays `levels`;
+`tree-mask` is opt-in. Saved activations per token and layer are the same on both paths (conv 85.0 KB, attention
+80.2 KB, `pack/layermem.py`); tree-mask's per-batch CUDA peak on group 5 was 9.3-13.0 GB allocated without masters.
+
+Gradients vs whole chains (relative L2 of FP32-master gradients, embedding / layer 0 w1 / layer 2 k_proj; layers 22-23
+at 1-2% for every path): group 1 per-node 5.2/6.1/5.5%, levels 4.3/5.0/4.6%, tree-mask 7.4/8.4/7.5%; group 5 per-node
+8.5/12.7/14.6%, levels 6.2/8.2/8.8%, tree-mask 9.0/12.8/15.0%. Whole chains are not the reference to trust on long
+chains: on the 24.8k-token chain (`pack/diag2.py`, FP32 masters) whole vs a second whole run 1.2% (flash dQ atomics),
+whole vs stock HF 19.9%, levels vs stock 9.9%, tree-mask vs stock 8.4%, tree-mask vs levels 9.1%: solving the pairwise
+distances for independent errors puts the fast whole path at ~19-22% and stock/levels/tree-mask at 5-7%. The earlier
+"tree gradient 1.4x further from whole" was the whole path's own noise. An FP32 reference (stock HF in FP32) of the same chain is queued to confirm which path is closest to exact.
+
+GRPO learner bench (grpo-v3-run1 group 31 replayed 2 steps from the base, `--activation-gb 4`, KL on, `packbench/`):
+levels: step 2 reference pass 9.3 s, policy pass 10.4 s (18.3k computed of 53.5k chain tokens; 1 prefix batch, 8 leaf
+batches), `kl_mean` exactly 0 at step 1 (reference and policy passes round identically with packed batches), policy
+peak 35.8 GB allocated at step 2 (22.8 at step 1). The per-node, tree-mask and off arms are queued for a free window
+(each needs ~40 GB beside grpo-v4/SFT; the ledger stopped two attempts).
+
+Not checked yet: the GRPO arms beyond levels; the FP32 truth; a solo-GPU (unshared) measurement; levels' own CUDA peak
+exceeds `--activation-gb` by several GB on group 5 (24.2 GB allocated with 10.2 GB static at ACT 6: the history keys
+and values a continuation batch gathers are only roughly costed in `effective`).
+
+
 ## SGLang overlap scheduler defect: investigation (open, 2026-11-17)
 
 Observation (LFM3_RL_ACTOR_ENGINE_20261028.md, 2026-11-03): on the DGX GB10 with the overlapped scheduler, CUDA-graph

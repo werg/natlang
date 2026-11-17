@@ -13,7 +13,7 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, rmSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -187,19 +187,19 @@ for (const variant of variants) {
 
   scenario('eviction drops events of unpinned calls first, then unpinned calls, and never pinned or case-linked ones', ({ store }) => {
     store.writeSettings({ minFreeBytes: 0 });
-    for (let index = 0; index < 10; index++) put(store, `e/${index}`, { n: index, events: 1000, padding: 2000 });
+    for (let index = 0; index < 10; index++) put(store, `e/${index}`, { n: index, events: 20_000, padding: 2000 });
     store.annotate('e/0', 'keep', true);                   // pinned by annotation
     store.linkCase('case-x', 'e/1', 'training');           // protected by its case link
-    const before = store.totalBytes();
+    const before = store.storeBytes();
     assert.equal(store.evict(before), 0, 'nothing to do under the bound');
-    const freed = store.evict(before - 3000);
-    assert.ok(freed >= 3000, `freed ${freed}`);
+    const freed = store.evict(before - 1);                // down to 90% of what the store takes
+    assert.ok(freed >= before * 0.1 - 1, `freed ${freed} of ${before}`);
     assert.equal(store.calls({ limit: 100 }).length, 10, 'events went first; every call row is still there');
     assert.equal(store.events('e/2'), undefined, 'the oldest unpinned call lost its event stream first');
     assert.ok(store.events('e/9')?.length, 'eviction stopped once the bound was met, so the newest keeps its events');
     assert.ok(store.events('e/0')?.length, 'the pinned call keeps its events');
     assert.ok(store.events('e/1')?.length, 'a case-linked call keeps its events');
-    assert.equal(store.totalBytes(), before - freed);
+    assert.equal(store.storeBytes(), before - freed);
 
     store.evict(0);
     assert.deepEqual(store.calls({ limit: 100 }).map(row => row.call_id).sort(), ['e/0', 'e/1']);
@@ -210,23 +210,49 @@ for (const variant of variants) {
   });
 
   scenario('the configured bound limits the store as calls arrive', ({ store }) => {
-    store.writeSettings({ maxStoreBytes: 20_000, minFreeBytes: 0 });
-    assert.equal(store.bound(), 20_000);
-    for (let index = 0; index < 400; index++) put(store, `b/${String(index).padStart(3, '0')}`, { n: index, output: `value-${index}-${'v'.repeat(200)}` });
-    assert.ok(store.totalBytes() <= 20_000, `store is ${store.totalBytes()} bytes`);
+    store.writeSettings({ minFreeBytes: 0 });
+    const bound = store.storeBytes() + 8 * 2 ** 20 + store.medium.logBytes();
+    store.writeSettings({ maxStoreBytes: bound });
+    assert.equal(store.bound(), bound - store.medium.logBytes(), 'the room of the log is left out');
+    for (let index = 0; index < 400; index++) put(store, `b/${String(index).padStart(3, '0')}`, { n: index, padding: 20_000 + index, events: 2000 });
+    assert.ok(store.storeBytes() <= bound, `store is ${store.storeBytes()} bytes, bound ${bound}`);
     const remaining = store.calls({ limit: 1000 }).map(row => row.call_id);
     assert.ok(remaining.length > 0 && remaining.length < 400, `${remaining.length} calls remain`);
     assert.equal(remaining[0], 'b/399', 'the newest call survives');
     assert.ok(!remaining.includes('b/000'), 'the oldest call was evicted');
   });
 
+  scenario('the blob byte counters follow every insert and delete', ({ store }) => {
+    store.writeSettings({ minFreeBytes: 0 });
+    for (let index = 0; index < 20; index++) put(store, `c/${index}`, { n: index, padding: 100 * index, events: 50 });
+    const sum = () => Number(store.db.prepare('SELECT COALESCE(SUM(bytes), 0) AS n FROM blobs').get().n);
+    assert.equal(store.totalBytes(), sum());
+    store.evict(0);
+    assert.equal(store.totalBytes(), sum());
+    assert.equal(store.totalBytes(), 0, 'no call is protected, so no blob is left');
+  });
+
+  scenario('a store opened before the byte counters existed starts them from its blobs', ({ store, reopen }) => {
+    for (let index = 0; index < 10; index++) put(store, `o/${index}`, { n: index, padding: 1000 * index + 1 });
+    const block = Number(store.db.prepare("SELECT value FROM meta WHERE key = 'blob_block_bytes'").get().value);
+    const expected = store.db.prepare(`SELECT SUM(bytes) AS bytes, SUM(CASE WHEN ${block} = 0 THEN 0 ELSE (bytes + ${block} - 1) / ${block} * ${block} END) AS disk
+      FROM blobs`).get();
+    store.db.exec("DROP TRIGGER blobs_count_insert; DROP TRIGGER blobs_count_delete; DELETE FROM meta WHERE key IN ('blob_bytes', 'blob_disk_bytes', 'blob_block_bytes');");
+    const next = reopen();
+    assert.equal(next.totalBytes(), Number(expected.bytes));
+    assert.equal(next.diskBytes() - next.medium.databaseBytes(), Number(expected.disk));
+    put(next, 'o/after', { n: 99, padding: 3000 });
+    assert.equal(next.totalBytes(), Number(next.db.prepare('SELECT SUM(bytes) AS n FROM blobs').get().n), 'the triggers are back');
+  });
+
   scenario('eviction collects unlinked blobs without deleting referenced values', ({ store }) => {
     store.writeSettings({ minFreeBytes: 0 });
     put(store, 'orphan/kept');
-    const retained = store.totalBytes();
-    store.putBlob('unlinked'.repeat(1000));
-    store.evict(Math.ceil(retained / 0.9));
-    assert.equal(store.totalBytes(), retained);
+    const retained = store.storeBytes();
+    const orphan = store.putBlob('unlinked'.repeat(100_000));
+    assert.ok(store.storeBytes() >= retained + 700_000);
+    store.evict(Math.ceil(retained / 0.9) + 8192);          // target: what the kept call needs, so only the orphan goes
+    assert.equal(store.blob(orphan), undefined);
     assert.equal(store.call('orphan/kept').call_id, 'orphan/kept');
     assert.equal(store.value(store.call('orphan/kept').definition.instructions), 'Look up the price.');
   });
@@ -246,14 +272,35 @@ for (const variant of variants) {
     assert.ok(store.value(store.call('bounded/1').output));
   });
 
+  scenario('progress collects the event stream it replaces, and a discarded call leaves no blobs', ({ store }) => {
+    const definition = { id: 'x', name: 'x', source: null, key: 'k', interface: 'i', site: 'named' };
+    store.begin({ callId: 'g/1', parentCallId: null, parentActionIndex: null, taskId: 'g', programId: null, programRoot: null,
+      definition, modelId: null, startedAt: at(1), auditOf: null });
+    const base = store.totalBytes();
+    store.progress('g/1', events('g/1', 1000));
+    store.progress('g/1', events('g/1', 2000));
+    assert.equal(store.totalBytes(), base + Buffer.byteLength(events('g/1', 2000)), 'only the latest stream is kept');
+    assert.equal(store.events('g/1')[1].text.length, 2000);
+    store.discard('g/1');
+    assert.equal(store.totalBytes(), base);
+  });
+
+  scenario('a record that fails leaves no blob files behind', ({ store }) => {
+    const call = makeCall('fail/1', { padding: 5000 });
+    const broken = { ...call.record, cost: undefined };      // fails inside the transaction, after the blobs are written
+    assert.throws(() => store.record(broken, call.blobs));
+    for (const hash of call.blobs.keys()) assert.equal(store.blob(hash), undefined, `blob ${hash.slice(0, 8)} was removed`);
+    assert.equal(store.totalBytes(), 0);
+  });
+
   scenario('free space lowers the bound', ({ store }) => {
-    store.writeSettings({ maxStoreBytes: 1_000_000, minFreeBytes: 1000 });
+    store.writeSettings({ maxStoreBytes: 100_000_000, minFreeBytes: 1000 });
     put(store, 'f/1', { padding: 5000 });
-    const total = store.totalBytes();
+    const total = store.storeBytes();
     store.medium.freeBytes = () => 400;
     assert.equal(store.bound(), total - 600, 'drops by the shortfall in free bytes');
     store.medium.freeBytes = () => { throw new Error('unknown'); };
-    assert.equal(store.bound(), 1_000_000, 'an unknown free size does not shrink the bound');
+    assert.equal(store.bound(), 100_000_000 - store.medium.logBytes(), 'an unknown free size does not shrink the bound');
   });
 
   scenario('running calls show up, and those of a writer that is gone become interrupted', ({ store, orphan, reopen }) => {
@@ -417,6 +464,69 @@ for (const variant of variants) {
     assert.equal(next.currentCompilation('price-key').files['cases.ts'], 'x');
   });
 }
+
+/** Bytes the files under `root` occupy on disk (allocated blocks, the write-ahead log included), directories aside. */
+function allocatedBytes(root) {
+  let bytes = 0;
+  const walk = dir => { for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) walk(path); else bytes += statSync(path).blocks * 512;
+  } };
+  walk(root);
+  return bytes;
+}
+
+test('call store contract [node-file]: many short-lived writers keep the files on disk within the bound', () => {
+  // The machine store is written by many processes that each record a few calls (collector episodes, replays); the
+  // bound must hold on disk (blob files as allocated plus the database files) however few calls each one records.
+  const handle = variants[0].open();
+  try {
+    const bound = 16 * 2 ** 20;
+    handle.store.writeSettings({ maxStoreBytes: bound, minFreeBytes: 0 });
+    for (let writer = 0; writer < 100; writer++) {
+      const store = handle.sibling();
+      for (let index = 0; index < 8; index++) {
+        const n = writer * 8 + index;
+        put(store, `d/${String(n).padStart(4, '0')}`, { n, padding: 60_000 + n, events: 9000 });
+      }
+      store.close();
+    }
+    const disk = allocatedBytes(handle.root);
+    assert.ok(disk <= bound, `the store takes ${disk} bytes on disk, bound ${bound}`);
+    const wal = statSync(join(handle.root, 'calls.sqlite-wal')).size;
+    assert.ok(wal <= 8 * 2 ** 20, `the write-ahead log stays small (${wal} bytes)`);
+    assert.ok(handle.store.storeBytes() + handle.store.medium.logBytes() <= bound, 'the store and its log fit the bound together');
+    assert.ok(disk >= bound * 0.5, `eviction kept the store near its bound, not empty (${disk} bytes)`);
+    const remaining = handle.store.calls({ limit: 1000 }).map(row => row.call_id);
+    assert.equal(remaining[0], 'd/0799', 'the newest call survives');
+    assert.ok(remaining.length < 400, `${remaining.length} calls remain of 800 (~55 MB written)`);
+    assert.ok(Math.abs(handle.store.diskBytes() - disk) < 2 ** 20, `diskBytes ${handle.store.diskBytes()} vs allocated ${disk}`);
+  } finally { handle.cleanup(); }
+});
+
+test('call store contract [node-file]: compact converts an older database and returns evicted pages to the disk', () => {
+  const root = mkdtempSync(join(tmpdir(), 'natlang-store-compact-'));
+  try {
+    const db = new DatabaseSync(join(root, 'calls.sqlite'));
+    db.exec('PRAGMA journal_mode = WAL;');                 // an older store: no auto-vacuum
+    const store = new CallStore(root, db, new FileMedium(root));
+    store.writeSettings({ minFreeBytes: 0 });
+    for (let index = 0; index < 300; index++) put(store, `v/${index}`, { n: index, events: 3000, input: `in-${index}-${'i'.repeat(3000)}` });
+    assert.equal(db.prepare('PRAGMA auto_vacuum').get().auto_vacuum, 0);
+    store.evict(0);
+    const before = statSync(join(root, 'calls.sqlite')).size;
+    assert.ok(db.prepare('PRAGMA freelist_count').get().freelist_count * 4096 > before / 2, 'evicted pages are free, though the file has not shrunk');
+    store.compact();
+    assert.equal(db.prepare('PRAGMA auto_vacuum').get().auto_vacuum, 2, 'converted to incremental auto-vacuum');
+    assert.ok(statSync(join(root, 'calls.sqlite')).size < before / 2, 'the database file shrank');
+    for (let index = 0; index < 300; index++) put(store, `w/${index}`, { n: 1000 + index, events: 3000 });
+    const grown = statSync(join(root, 'calls.sqlite')).size;
+    store.evict(0);
+    db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+    assert.ok(statSync(join(root, 'calls.sqlite')).size < grown, 'later evictions shrink the file without another compact');
+    store.close();
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
 
 test('call store contract [node-file]: concurrent writers in one process share a database', () => {
   const handle = variants[0].open();

@@ -48,6 +48,8 @@ export type GuidanceWriterPackage = {
   hint: { definition: CallableDefinition; sha256: string };
   /** trajectoryOverview.ts `trajectoryOverview`: the crisp cold-start view of a run the hint writer opens with. */
   trajectoryOverview(call: unknown): unknown;
+  /** hintCheck.ts `checkHint`: why a hint is rejected (one sentence), or undefined. */
+  checkHint(hint: unknown, execution: unknown): string | undefined;
   /** visibility.ts `visibleFacts`. */
   visibleFacts(consumer: GuidanceConsumer, facts: readonly GuidanceFact[]): GuidanceFact[];
   /** crispSelection.ts `crispSelection`. */
@@ -142,6 +144,16 @@ export class TrainingGuidance {
     return undefined;
   }
 
+  /**
+   * The exact check of a writeHint call's result (hintCheck.ts) against the run's verified trajectory, or undefined for
+   * any other call. The agent applies it where a result is proposed; a failure is the writer's one-sentence tool error.
+   */
+  hintGuard(lam: LambdaNode): ((value: unknown) => string | undefined) | undefined {
+    const trajectory = this.run.trajectory;
+    if (!trajectory || this.policyOf(lam, null)?.function !== 'writeHint') return undefined;
+    return value => this.writerPackage.checkHint(value, trajectory);
+  }
+
   /** The agent records each writeGuidance model turn as it is taken (its graph node). */
   noteWriterTurn(callId: string, node: string, ancestors: readonly string[]): void { this.writerTurns.set(callId, { node, ancestors }); }
 
@@ -212,6 +224,10 @@ export class TrainingGuidance {
       const written = await runInFrame(frame, () => trajectory
         ? invokeDefinition(frame!, pkg.hint.definition, [{ ...consumer, text: ownText }, trajectory, pkg.trajectoryOverview(trajectory), facts])
         : invokeDefinition(frame!, pkg.writer.definition, [{ ...consumer, text: ownText }, facts]));
+      // The hint's check also holds a result proposed past the agent's gate (the agent applies it to return_result and
+      // to eval results; this is the last word).
+      const rejected = trajectory && typeof written === 'string' ? pkg.checkHint(written, trajectory) : undefined;
+      if (rejected) throw new Error(`hint-rejected: ${rejected}`);
       if (typeof written === 'string' && written.trim()) {
         // Span basis: the writer answers in its own plain text (an ordinary string result, measured to work on full67
         // where a native producer span and a forced template value did not); the configured writer materializes that

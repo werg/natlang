@@ -193,6 +193,8 @@ def test_trajectory_value_is_the_writer_input_shape():
     assert value['steps'][0]['code'] == 'x = 1' and value['steps'][0]['output'] == 'x = 1'
     assert value['steps'][0]['reasoning'] == 'read inputs'
     assert value['children'][0]['call'] == 'child' and value['children'][0]['steps'][0]['tool'] == 'reply'
+    assert value['result'] == {'status': 'success', 'value': 42}, 'the hint check reads the returned value'
+    assert value['children'][0]['result'] == {'status': 'success'}
 
 
 def test_index_keeps_the_shortest_run_per_task_and_excludes_held(tmp_path):
@@ -235,6 +237,17 @@ def test_teacher_rho_summary_reads_the_student_form_ratio():
     summary = grpo.teacher_rho_summary([np.array([math.log(.01), 0., math.log(3.)])], 2.)
     assert summary['tokens'] == 3 and summary['rho_below_0.1'] == pytest.approx(1 / 3, abs=1e-3)
     assert summary['rho_capped'] == pytest.approx(1 / 3, abs=1e-3) and summary['log_rho_p50'] == 0.
+
+
+def test_restore_telemetry_is_top_level_while_each_method_is_on():
+    stats = collections.Counter(teacher_successes=1, teacher_episodes_trained=1, sd_episodes=2, sd_tokens=900, sd_buffer=3)
+    on = grpo.restore_telemetry(stats, SimpleNamespace(teacher_attempts=2, sd_weight=.1))
+    assert on['teacher'] == {'groups': 0, 'episodes': 0, 'successes': 1, 'episodes_trained': 1, 'calls_student_form': 0,
+                             'privileged_tokens_removed': 0, 'policy_calls_removed': 0}
+    assert on['sd'] == {'added': 0, 'episodes': 2, 'tokens': 900, 'buffer': 3, 'skip_imports': 0, 'own_episodes': 0,
+                        'own_tokens': 0, 'teacher_episodes': 0, 'teacher_tokens': 0, 'teacher_candidates': 0,
+                        'teacher_render_error': 0}
+    assert grpo.restore_telemetry(stats, SimpleNamespace(teacher_attempts=0, sd_weight=0)) == {}
 
 
 def test_self_distillation_replays_rare_successes_in_later_steps():

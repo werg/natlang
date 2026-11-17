@@ -545,6 +545,12 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     const nativeRecording=(!!recorder||scopedNativeStates.length>0)&&(capabilities?.native_state as {enabled?:boolean}|undefined)?.enabled===true;
     if(nativeRecording)body={...body,x_natlang_native_recording:true};
     if(Array.isArray(capabilities?.capabilities)&&capabilities.capabilities.includes('native.protocol-recovery'))body={...body,x_natlang_native_protocol_recovery:true};
+    // Training guidance (`x_natlang_privileged_context`, `x_natlang_guidance_policy`) is rendered and recorded by the
+    // engine (rl/privileged_context `guidance_plan`); a server that does not list `training-guidance` would drop it
+    // silently, so the request is refused instead (docs/ENGINE_PARITY.md).
+    if ((body.x_natlang_privileged_context || body.x_natlang_guidance_policy) && !(capabilities && serves(capabilities, 'training-guidance')))
+      throw Object.assign(new Error('training-guidance-unavailable: this model server does not render training guidance; ' +
+        'collect this run through the Python native engine or the SGLang actor'), { code: 'training-guidance-unavailable' });
     if (body.guidance && capabilities && !serves(capabilities, 'guidance'))
       throw Object.assign(new Error('neuralese-guidance-unavailable: this model server does not implement the requested guidance; use a server with guidance support'), { code: 'neuralese-guidance-unavailable' });
     if (body.neuralese_template && (body.neuralese_template as { optional?: true }).optional) {
@@ -726,8 +732,15 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     if(!response.ok)throw new Error(`neuralese decide HTTP ${response.status}: ${(await response.text()).slice(0,2000)}`);
     return await response.json() as DecisionScores;
   });
+  // A decision readout's training guidance, like a generated turn's, goes only to a server that renders it.
+  const guidanceServed=async(item:Item):Promise<Item>=>{
+    if(item.x_natlang_privileged_context&&!serves((await serverInfo(false))??{},'training-guidance'))
+      throw Object.assign(new Error('training-guidance-unavailable: this model server does not render training guidance; '+
+        'collect this run through the Python native engine or the SGLang actor'),{code:'training-guidance-unavailable'});
+    return item;
+  };
   const decide:DecisionScorer=async(request,signal)=>{
-    const scope=scopeOf(request),item=privileged(await prepare(request.messages,request.options,request.adapters,scope,request.native_recording===true),request);
+    const scope=scopeOf(request),item=await guidanceServed(privileged(await prepare(request.messages,request.options,request.adapters,scope,request.native_recording===true),request));
     return finish(item,scope,await issue(item,signal));
   };
   const perItem=(items:Item[],signal?:AbortSignal)=>Promise.allSettled(items.map(item=>issue(item,signal)));
@@ -736,7 +749,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     const prepared:({index:number;item:Item;scope:Scope;key:string}|undefined)[]=[],results:Settled[]=new Array(items.length);
     await Promise.all(items.map(async(original,index)=>{
       try{
-        const scope=scopeOf(original),item=privileged(await prepare(original.messages,original.options,original.adapters,scope,original.native_recording===true),original);
+        const scope=scopeOf(original),item=await guidanceServed(privileged(await prepare(original.messages,original.options,original.adapters,scope,original.native_recording===true),original));
         await restore(item,async()=>({log_probs:[]}));
         prepared[index]={index,item,scope,key:JSON.stringify([item.messages,item.adapters])};
       }catch(error){results[index]={status:'rejected',reason:error};}

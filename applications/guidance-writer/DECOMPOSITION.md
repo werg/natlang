@@ -14,7 +14,7 @@ context. Its only full appearance is as the self-teacher's teacher-forced target
 | Accompanying facts | existing `selectGuidanceFacts` (NL pluggable) over the world's visible facts, without the trajectory itself | The same selection as `writeGuidance`. |
 | Which parts of τ* matter, and reading them | policy: `writeHint` steps 3 to 4, through eval | Which steps decided the outcome is a judgment. Reading is ordinary eval code the writer writes. |
 | The hint | policy: `writeHint` result, `Neuralese<string>`; the configured writer re-encodes the returned text as the producer span | A natural-language result. Its state is what the consumer imports. |
-| How short, and what not to copy | policy text (step 5), plus training: the rate penalty and the reconstruction reward (crisp math, `rl/hindsight.py`) | The model learns the trade-off from the reward. Instructions only state the intent. |
+| How short, and what not to copy | policy text (step 5) states the intent; crisp verifier `hintCheck.ts` enforces it where the writer proposes its result (64-token budget, no signature echo, no value τ* returned or computed), and its one-sentence failure is the writer's tool error | Budget and copying are exact properties of the text against τ*, so they are checked, not judged. Which procedure and evidence to name stays policy. |
 | Custody of τ* and facts | crisp verifier (`common.custody.ProtectedWorlds`, `rl/hindsight.py`) | Train worlds only; fails closed. |
 
 `writeHint` runs once per hinted call: the root, and each long child as an independent pass over its own subtree

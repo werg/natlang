@@ -40,8 +40,10 @@ export function loadGuidanceWriter(directory = guidanceWriterDirectory()): Guida
     throw new Error('guidance-writer-missing: visibility.ts or crispSelection.ts lacks its exports');
   const { trajectoryOverview } = tree.trajectoryOverview as Pick<GuidanceWriterPackage, 'trajectoryOverview'>;
   if (typeof trajectoryOverview !== 'function') throw new Error('guidance-writer-missing: trajectoryOverview.ts lacks its export');
+  const { checkHint } = tree.hintCheck as Pick<GuidanceWriterPackage, 'checkHint'>;
+  if (typeof checkHint !== 'function') throw new Error('guidance-writer-missing: hintCheck.ts lacks its export');
   const loaded: GuidanceWriterPackage = { selection: definition('selectGuidanceFacts'), writer: definition('writeGuidance'),
-    hint: definition('writeHint'), trajectoryOverview, visibleFacts, crispSelection, crispSha256: sha256(CRISP_SELECTION_IDENTITY) };
+    hint: definition('writeHint'), trajectoryOverview, checkHint, visibleFacts, crispSelection, crispSha256: sha256(CRISP_SELECTION_IDENTITY) };
   cache.set(directory, loaded);
   return loaded;
 }

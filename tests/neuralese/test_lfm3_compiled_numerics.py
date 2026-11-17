@@ -69,6 +69,8 @@ def test_compiled_logprobs_match_eager_unbiased_in_both_grad_modes():
 _CHILD = """
 import sys, torch
 sys.path[:0] = {paths!r}
+from natlang_neuralese.common.cuda_context import ensure_context
+ensure_context()   # a fresh process's CUDA context: retried after compaction on GB10 fragmentation
 from test_lfm3_compiled_numerics import _model, _logp
 import lfm3_fast_train
 model = _model()

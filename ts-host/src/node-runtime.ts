@@ -10,7 +10,7 @@ import { NatlangRuntime, NatlangTask, type NatlangRuntimeOptions } from './runti
 import { nodePlatform } from './runtime/node.js';
 
 export type NodeNativeRuntimeOptions = Partial<NativeRuntimeOptions> & Pick<NatlangRuntimeOptions,
-  'neuralese' | 'nativeProgramGuidance' | 'program' | 'adaptation' | 'executorIdentity' | 'traceStepStates'> & {
+  'neuralese' | 'nativeProgramGuidance' | 'program' | 'adaptation' | 'executorIdentity' | 'traceStepStates' | 'specialization'> & {
   /** The call store the root run is recorded in: the machine's by default, `false` for none (§3.2). */
   calls?: CallStoreLike | false;
   /** The model the agent runs, for the root's call record (its children name their own). */
@@ -37,6 +37,7 @@ export class NodeNativeRuntime extends PlatformRuntime {
       seed: options.seedPolicy,
       nativeProgramGuidance: options.nativeProgramGuidance, program: options.program, adaptation: options.adaptation,
       executorIdentity: options.executorIdentity,
+      ...(options.specialization ? { specialization: options.specialization } : {}),
       ...(options.calls !== undefined ? { calls: options.calls } : {}) }),
       { serviceDeclarations: options.declarations, serviceScopes: options.serviceScopes }).frame;
     // This standalone invocation is the caller of its kernel children. Without its

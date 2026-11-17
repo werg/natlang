@@ -766,22 +766,24 @@ def water_fill(sizes, weights, budget):
     return budgets
 
 
-def core_candidates(args, work, funnel, held):
-    """Replay-verified successes (exact replay, current oracle success), held closure removed: metadata and signatures
-    only (the turns are read again when rendering)."""
-    from natlang_neuralese.rl.held_eval import exclusion_ids
+def verified_episodes(work, funnel, extracted=None, sources=None):
+    """(episode, replay record) of every extracted success of WORK (of ``sources`` only, when given) whose replay under
+    the replaying runtime was exact and succeeded (fixture tasks still admitted); counted per source in ``funnel``.
+    ``extracted`` (a set) collects every extracted key."""
+    work = Path(work)
     replays = {}
     for line in (work / 'replay.jsonl').open():
         if line.strip():
             record = json.loads(line)
             if 'key' in record:
                 replays[record['key']] = record
-    candidates, tasks = [], {}
-    extracted = set()
     admission_cache = {}
     for episode in all_episodes(work):
-        extracted.add(episode['key'])
+        if extracted is not None:
+            extracted.add(episode['key'])
         source = episode['source']
+        if sources is not None and source not in sources:
+            continue
         f = funnel[source]
         f['successes'] += 1
         from teacher_admission import check_record, fixture_task
@@ -809,6 +811,28 @@ def core_candidates(args, work, funnel, held):
             f['replay_inexact'] += 1
             continue
         f['replayed_exact'] += 1
+        yield episode, record
+
+
+def held_excluded_ids(held_manifest, tasks, held):
+    """Task ids among ``tasks`` ({id: task row}) in the held closure: ``held_eval.exclusion_ids`` (held tasks and their
+    split groups) plus every row sharing a source group or source id with a held row (``held``: ``held_closure``)."""
+    from natlang_neuralese.rl.held_eval import exclusion_ids
+    excluded = set(exclusion_ids(held_manifest, list(tasks.values())))
+    for task_id, task in tasks.items():
+        groups = list(task.get('source_groups') or ()) + [(task.get('curriculum') or {}).get('split_group') or task['id']]
+        if held_hit(task_id, task.get('source_ids') or (), groups, held):
+            excluded.add(task_id)
+    return excluded
+
+
+def core_candidates(args, work, funnel, held):
+    """Replay-verified successes (exact replay, current oracle success), held closure removed: metadata and signatures
+    only (the turns are read again when rendering)."""
+    candidates, tasks = [], {}
+    extracted = set()
+    for episode, record in verified_episodes(work, funnel, extracted):
+        source = episode['source']
         task = episode['task']
         tasks[episode['task_id']] = task
         candidates.append({'key': episode['key'], 'source': source, 'run': episode.get('run'),
@@ -822,12 +846,10 @@ def core_candidates(args, work, funnel, held):
     if missing and not args.allow_stale_teacher:
         raise SystemExit(f'{len(missing)} of {total} teacher successes in the pool manifests are not extracted yet '
                          f'(e.g. {missing[0]}): run extract --teacher POOL --out-name episodes-teacher and replay first')
-    excluded = exclusion_ids(args.held_manifest, list(tasks.values()))
+    excluded = held_excluded_ids(args.held_manifest, tasks, held)
     kept = []
     for c in candidates:
-        task = tasks[c['task_id']]
-        groups = list(task.get('source_groups') or ()) + [(task.get('curriculum') or {}).get('split_group') or task['id']]
-        if c['task_id'] in excluded or held_hit(c['task_id'], task.get('source_ids') or (), groups, held):
+        if c['task_id'] in excluded:
             funnel[c['source']]['held_excluded'] += 1
             continue
         kept.append(c)
@@ -942,6 +964,28 @@ def task_constructs(task):
     return tuple(k for k in HELD_CONSTRUCTS if features.get(k)), bool(features.get('dataset_wrapper'))
 
 
+def call_row(renderer, source, key, index, turn):
+    """One verified call as a learner row: {'id', 'invocation', 'index', 'prompt', 'sample'[, 'weight']} (int32 token ids
+    from the chat template; a teacher reply without reasoning has its empty think block at weight 0). Raises on a
+    render error. Also returns (prompt length, target length, zero-weight lead)."""
+    import numpy as np
+    prompt, target = renderer.render(turn['messages'], turn['tools'], turn['target'])
+    row_id = turn.get('id') or hashlib.sha256(f"{key}#{index}".encode()).hexdigest()[:24]
+    row = {'id': row_id, 'invocation': turn.get('invocation_id') or '', 'index': index,
+           'prompt': np.asarray(prompt, np.int32), 'sample': np.asarray(target, np.int32)}
+    context = reasoning_free_context(renderer, source, turn['target'], target)
+    if context:
+        row['weight'] = (np.arange(len(target)) >= context).astype(np.float32)
+    return row, context
+
+
+def replayed_turns(work, name):
+    """The semantic turns of a replayed episode (WORK/replay/NAME/rollouts.jsonl, the replaying runtime's record)."""
+    with (Path(work) / 'replay' / name / 'rollouts.jsonl').open() as handle:
+        replayed = [json.loads(line) for line in handle if line.strip()][0]
+    return [semantic_turn(t, False) for t in replayed['turns']]
+
+
 def wrapper_capped(selected, rng, funnel, is_wrapper, share):
     """Keep dataset-wrapper episodes to at most `share` of the selection."""
     wrappers = [c for c in selected if is_wrapper(c)]
@@ -1022,7 +1066,7 @@ def build(args):
         source, rows, written = c['source'], [], []
         for index, turn in enumerate(turns):
             try:
-                prompt, target = renderer.render(turn['messages'], turn['tools'], turn['target'])
+                row, context = call_row(renderer, source, c['key'], index, turn)
             except Exception as error:
                 stats[source]['render_error_calls'] += 1
                 print(json.dumps({'event': 'render error', 'key': c['key'], 'call': index,
@@ -1030,14 +1074,9 @@ def build(args):
                 if c['source'] in ('rl-own', 'teacher'):
                     return False   # a verified episode is admitted whole or not at all
                 continue
-            row_id = turn.get('id') or hashlib.sha256(f"{c['key']}#{index}".encode()).hexdigest()[:24]
-            row = {'id': row_id, 'invocation': turn.get('invocation_id') or '', 'index': index,
-                   'prompt': np.asarray(prompt, np.int32), 'sample': np.asarray(target, np.int32)}
-            context = reasoning_free_context(renderer, source, turn['target'], target)
-            if context:
-                row['weight'] = (np.arange(len(target)) >= context).astype(np.float32)
+            prompt, target = row['prompt'], row['sample']
             rows.append(row)
-            written.append({'id': row_id, 'episode': c['key'], 'source': source, 'run': c['run'],
+            written.append({'id': row['id'], 'episode': c['key'], 'source': source, 'run': c['run'],
                             'task_id': c['task_id'], 'family': c['family'], 'domain': c['domain'],
                             'teacher': c['teacher'], 'policy': c['policy'], 'call': index,
                             'invocation': turn.get('invocation_id'), 'messages': turn['messages'],
@@ -1077,8 +1116,7 @@ def build(args):
         return True
 
     for c in core:
-        replayed = [json.loads(l) for l in (work / 'replay' / c['name'] / 'rollouts.jsonl').open() if l.strip()][0]
-        if not admit(c, [semantic_turn(t, False) for t in replayed['turns']]):
+        if not admit(c, replayed_turns(work, c['name'])):
             funnel[c['source']]['render_error'] += 1
     core_forward = sum(stats[s]['forward_tokens'] for s in ('rl-own', 'teacher'))
 

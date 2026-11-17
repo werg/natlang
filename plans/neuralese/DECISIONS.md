@@ -3065,6 +3065,151 @@ citations rather than a fake capture implementation. None blocks this hosted tex
 - Rows: a nested call's last turn now counts as final (068085501); tally went from 257 to 1,182 rows. Fits for the
   four programs are planned (all targets, factored) and wait for a GPU window (`fit-all.sh`).
 
+**2026-11-17 22:30, collector episodes made hermetic; call store bounded on disk (call-store agent).**
+- Call store: the DGX store held 80 GB under a 2 GiB bound (eviction ran only after 200 writes by one process, measured
+  text bytes not disk, never shrank the database). Fixed bc728cf7a, cc58be42d, fe490855d (bound on blob files as
+  allocated + database pages + WAL, checked every write; incremental vacuum). Reclaimed ~70 GB on DGX `/`.
+- Hermetic episodes (first-principles fix, no A/B; plans/MODEL_FACING_CHANGES.md 2026-11-17): every collector episode
+  gets a fresh private call store, specialization off. Default at the next pin; grpo-v4 picks it up at its next pin, so
+  it starts a new held series and a new Pop base.
+- Exposure of results so far: compiled cases served 3 calls and handed off 16 on the DGX, all 2026-10-08/09 (the
+  specializer demo programs support.nl, scheduler/pass.nl, harness/boundary.nl; `cases.served`/`handed_off` counters,
+  which outlive evicted call rows); Pop's store has no compilations and no crisp calls. So no grpo-v2/v3 training or
+  held episode was served crisp. Cache influence did exist: the DGX store's iterateOn statistics are keyed by task
+  program sites (notebook/index.ts, triage.ts, cell.ts, src/app.ts, migration, build, authoring_check/search.ts,
+  program-improver/v1; 32 keys, last written 2026-11-16/17), so episodes of tasks using those sites had their progress-
+  review timing set by earlier episodes; Pop has 3 such keys (2026-10-14). 4 cached refinement verdicts (2026-10-09, 10-28).
+  Per-series counts of affected held episodes cannot be recovered: the call rows were evicted.
+
+**2026-11-17 23:00, operators stage ready (operators agent).** Details in OPERATORS_RESTORE_20261117.md §6-8.
+- **Fork/page capture** is at parity, the Q8 floor against the Python engine; its ENGINE_PARITY row is removed.
+- **compact-history** is the model's own note captured in place.
+- **Step-0 ablation:** seeded in-context states are used by their consumers and beat the same span written
+  standalone on 17 of 21 sources.
+- **Rows:** 87,477 train cases after 764 held drops. The audit found genuine held Wikipedia passages, so the filter
+  keeps dropping.
+- **The GPU pass-through smoke passes.**
+- **Next:** `ops/operators-v1/operator-stage.sh` (merge done → sft → held-base under `learned-compaction` → grpo).
+  It enters at the first grpo-v4 resume with a pin at or after 0ea0e43b0 and a Pop base window.
+
+**2026-11-17 22:40, restore smoke result (restore agent; `ops/restore-smoke/run1`, grpo-v4 pin c57e7be28, base
+5ff07638, 2 steps, 12 low-pass tasks, group 4; `report.py`).**
+- **JOLT+:** 4 all-fail groups got 2 teacher attempts each (3 with hindsight trajectories). Of the 8, 1 succeeded where
+  its 4 students failed (desk-banking77-106, hindsight), 3 failed, 2 hit the smoke's 900 s wall (the writer's single turn
+  sampled ~5k tokens), 2 were still running at the stop. Step 2 lowered 18 teacher calls in student form (306 privileged
+  tokens removed) and trained the one success (`teacher_episodes_trained` 1). Student-form rho over its 9,307 tokens:
+  log rho p01 -0.46, p10 -0.09, p50 0.00, p90 +0.07, p99 +0.36; rho < 0.1 on 0.03%, capped on 0.26%. The unguided
+  policy finds the guided actions about as likely as the guided one did: the signal is not lost to the ratio.
+- **Hindsight:** `writeHint` wrote 3 hints, all input-specific (exact request ids, herds, deltas, cow ids, file names of
+  that task); word overlap with their own task prompt 0.75-0.88 vs 0.61-0.75 for the other tasks' prompts (shared system
+  prompt). Defects: no eval exploration (one long turn), ~1.5-2k characters (target <= 64 tokens), they copy the run's
+  result details, one hint states a wrong step (acting on an undo request) that another hint for the same task gets
+  right, and the first echoes the function signature line.
+- **Memetic:** not demonstrated. 0 of 5 memetic groups was admitted: support success was 0 or 1 on 2 support worlds x 2
+  samples (support 0.0/1.0/1.0/1.0/1.0, two half-resolved), so the workspace refused to load and the episodes ended
+  unresolved; preparation took 85-603 s. No supervisor turn, no guidance binding. Cause: 595 of 602 rows had no base rate
+  and 2 support worlds almost never land in [0.1, 0.85]. Fix before it enters: support 4 worlds and rows only from
+  programs whose support worlds have a measured base rate in band.
+- **Self-distillation:** step 1 buffered 2 rare successes, step 2 replayed 2 (11,568 tokens) as the positive term.
+- **Recommendation for grpo-v4 at its resume:** `--teacher-attempts 2 --hindsight-trajectories
+  /home/werg/data/hindsight-index-20261117/index.jsonl --sd-weight 0.1`; memetic stays off until the fix and a
+  re-smoke. Not measured: any effect on held success (1 trained teacher episode, 2 replayed episodes).
+
+**2026-11-18 00:30, restore fixes for grpo-v4's resume (restore agent).** First-principles fixes, on main:
+- **writeHint (df2db4ab0).** Root cause of the contradictory "undo" hints: tau* classified R-24 (`Please undo: R-21.`)
+  as `undo` and left it in requests/ (the task carries out only `apply`); its last step listed it as remaining. The
+  writer saw all of tau* (50 KB) in its opening argument listing, answered in one turn, and step 4 asked for "exact
+  values" and "the mistake to avoid": two hints invented an action tau* never took (revert north by -0.5; "trigger an
+  undo"), one got it right. Fix: crisp `applications/guidance-writer/hintCheck.ts` (64-token budget at 4 chars/token, no
+  `writeHint(` echo, no value tau* returned or computed), applied by the agent where the writer proposes its result
+  (`return_result` and eval results) as the tool error `hint-rejected: <one sentence>`, and once more in
+  `TrainingGuidance.compute`; `writeHint.nl` steps 4-6 ask for procedure plus evidence, only what tau* did;
+  `rl/hindsight.py` records each call's returned value. On the smoke's 3 hints: echo, 334 and 272 tokens, all rejected.
+  Not done: forcing eval exploration (the argument listing shows tau* whole when it fits the page budget; changing that
+  is runtime-wide). MODEL_FACING_CHANGES entry.
+- **Telemetry (e2efa1597).** `train.jsonl` per step: `teacher` {groups, episodes, successes, episodes_trained,
+  calls_student_form, privileged_tokens_removed, policy_calls_removed} while `--teacher-attempts` > 0, `sd` {added,
+  episodes, tokens, buffer, skip_imports} while `--sd-weight` > 0 (zeros when nothing happened), `teacher_rho` (log-rho
+  quantiles) as before.
+- **Memetic (dd11a0395).** Support 4 worlds; a program enters only when every support world has >= 2 scored base
+  episodes and their mean is in [0.1, 0.85] (`no_rate` now skips). Measured rates covered 1 of 561 programs' 4 support
+  worlds, so `memetic_tasks measure` lists the unmeasured ones: 301 worlds of 80 programs (one per family,
+  `/home/werg/data/memetic-tasks-20261117/rates-v1/cases.jsonl`). `ops/restore-smoke/resmoke.sh` (needs a DGX window,
+  ~2 h): pin origin/main, serve the base, collect 2 samples per world (~600 episodes), rates, build rows, then the 2-step
+  smoke (`run2`, memetic share 0.5, teacher + hindsight + SD). Criteria: >= 3 memetic groups admitted, a guidance binding
+  bound, hints pass the check within the repair budget.
+- Not shipped to grpo-v4 yet: it runs pin c57e7be28; these enter at its next resume on a new pin.
+
+## 2026-11-17: operator rows take their sites from the runtime's rendering code (operators agent)
+
+- Owner concern: operator rows rendered the operator site and the consumer blocks in Python, a second implementation
+  of the runtime's compaction sites. Decision: one implementation. `ts-host/src/native/operator-site.ts` renders a site
+  with the agent's own helpers (agent.ts now calls the same `valueInstructions`, `argumentInstructions`,
+  `operatorPurpose`, `listingLine`). `ts-host/scripts/operator-sites.mjs` is its batch entry point, and
+  `operator_rows.py` (schema `natlang.operator-rows/2`) its client. The Python view site, `OperatorGraphRenderer` and
+  the `cutText` port are removed. Consumer conversations stay case data.
+- Consequence: the rows built and merged earlier (`natlang-operator-rows-20261117-v1`, `ops/operators-v1/merged`) are
+  stale. They are rebuilt with the runtime sites before the operator stage's SFT. Details and the context-budget
+  question: OPERATORS_RESTORE_20261117.md §9.
+
+
+**2026-11-18 00:00, grpo: dynamic sampling, construct-weighted exploration, teacher demonstrations (ae1f7dacb).** Three
+defaults with opt-outs; they reach grpo-v4 at its next pin (it has not started yet: the waiter runs on pin c57e7be28).
+- **Dynamic sampling** (`--dynamic-sampling-max-spread 0.1`, 0 off). A group of a task likely to agree on every sample
+  runs a first wave of k (`wave_plan`: k maximizes the expected samples saved; split only when >= 1 sample is expected
+  to be saved). The prior (`PassRatePrior`) is the task's own latest group, else its base rate, on a Beta with the
+  family's leave-one-out mean task rate and a beta-binomial ML concentration over all measured tasks. When the whole
+  wave has finished and agrees (binary and the advantage reward; any unscored sample runs the rest) and
+  P(the rest would still give spread) <= 0.1, the rest never start; otherwise they run ahead of every other group. The
+  stopped group is scored with what ran, so its task's pass rate updates (`cancelled.jsonl` keeps the rest). Waiting for
+  the whole wave instead of the first finishers: early finishers are biased to short episodes, and nothing is in
+  flight to kill. JOLT+ teacher attempts still follow an all-fail stop.
+  Offline replay on grpo-v3-run1's 571 groups (exp1 base rates + the run's own groups in order): 232 groups split, 107
+  stopped (69 all-pass, 38 all-fail), **8.6% fewer samples, 7.8% fewer generated tokens, 18 of 405 spread groups
+  (4.4%) lost**; net about +4% spread groups per collection hour (saved samples at the run's 71% spread rate minus the
+  lost ones). The prior is optimistic about 1.6x (expected 11.4 lost vs 18 actual; policy drift and selection):
+  max-spread 0.05: 3.3% samples, 1.0% lost; 0.15: 13.2%, 7.9%; 0.2: 16.2%, 10.4%. 0.1 chosen because lost groups are
+  disproportionately the rare-success (1/8, 7/8) groups SD and JOLT+ feed on. `entry_outcome` (the scorer's
+  classification read per entry before the group completes) agrees with `score` on all 84 restore-smoke episodes.
+- **Exploration weighting** (`--explore-wrapper-share 0.15`, `--explore-held-weight 3`; 1/1 off). `ExploreWalk`
+  takes a row declaring a held construct (`sft_sources.task_constructs`, minus `multi_function`: pool 69% vs held 75%)
+  always, others at 1/3, dataset wrappers while <= 15% of explored rows; composes with `--explore-order family`.
+  `simulate_selection.py --grpo` (the collector's real `_pick`, latent outcomes, 2,000 groups, current pools, family
+  order): explored wrappers 35.7% -> 14.8%, rows declaring a held construct 49.8% -> 76.5%, folder reducers 12.5% ->
+  22.9%, iterateOn 5.7% -> 10.5%, decide 3.1% -> 7.1%, depth >= 3 24.8% -> 32.4%, Neuralese results 12.5% -> 21.1%,
+  arguments 5.1% -> 8.8%; groups with spread 71.1% -> 71.7%. (Neuralese variants come on top in grpo-v4.)
+- **Teacher demonstrations in the SD replay** (`--sd-teacher-weight 0.05`, 8 a step, <= 4 per task; 0 off).
+  `TeacherDemos`: sft_sources exact-replay-verified teacher successes (`verified_episodes`) on eligible pool tasks,
+  held closure re-applied (`held_excluded_ids`), teacher models taking turns per task; each step one per task in the
+  pass band or at 0 successes (own latest group, else base rate), least replayed first, rendered by `call_row` on the
+  replayed turns with the actor export's tokenizer (the student-form prompt; an empty think block at weight 0).
+  **Rho:** a teacher episode has no actor log-probabilities, so the importance ratio pi/mu is undefined (the teacher
+  model's own probabilities are of another vocabulary and are not recorded). It trains as a ratio-free cross-entropy
+  (rho = 1: the learner's detached logp stands in, `behaviour_logp`) at its own small weight: 0.05, half the own-SD
+  design weight, because without the rho cap nothing bounds the per-token gradient of off-policy tokens; the tail floor
+  then masks tokens the learner itself gives < e^-7, which bounds it the same way the floor does for positive own
+  episodes; the KL term applies as to every chain. Telemetry: `sd` gains own/teacher episodes and tokens, teacher
+  candidates, render errors. Real-data check: the 2026-11-17 WORK yields 4,301 verified pool-v1 demonstrations on
+  4,301 eligible tasks (index 40 s at startup); 176 of the 402 tasks in band or all-fail by base rate have one.
+  Data: `/home/werg/data/sft-teacher-demos-20261118` (pool-v1 and pool-v2-rich, 6,757 + 2,193 successes) extracting
+  and replaying under pin ae1f7dacb (`prepare.sh`, unit `sdteacher-prep-1`, low priority); until its replay.jsonl
+  exists TeacherDemos logs it missing and uses the 2026-11-17 WORK (pool-v1, replayed at aa1bd8467).
+- Not checked: any held or training effect of the three (no GPU run); dynamic sampling's wave latency against
+  `--max-staleness` in a live run (grpo-v3 staleness never exceeded 1; the default max-outstanding now leaves room for
+  slots/2 groups); the rho statistics include the teacher demonstrations' rho = 1 tokens (8 of ~600 episodes a step).
+
+## 2026-11-17 23:50, grpo-v4 launches on pin 6e56280aa (improvements entered before launch)
+
+grpo-v4-run1 had not started yet (it waits for the SFT continuation `sft-v3-cont`, ~01:00), so its waiter moves from pin
+c57e7be28 to 6e56280aa. That pin adds: dynamic sampling, teacher demonstrations in in-loop SD and construct-weighted
+exploration (ae1f7dacb, defaults), the writeHint checker (df2db4ab0, so hindsight is back in the launch features beside
+`--teacher-attempts 2 --sd-weight 0.1`), memetic row admission (dd11a0395; memetic share stays 0 until its re-smoke),
+per-step teacher/SD telemetry (e2efa1597) and runtime-rendered operator sites (1f87344ca). ts-host changed, so the
+scoring series changed: the Pop base was restarted on the new pin (`popheld-base-v4e`, 4 samples, ~7 h; the c57e7be28
+base was 23% done and is kept aside as `held-base-pop-pinc57-stopped`), and voltron-1-mini's eval follows it on the same
+pin. grpo-v4 launches without held evals (`HELD_ARGS="--held-every-hours 0"`); they start at the resume after voltron
+releases Pop. Success/failure rules are unchanged from the grpo-v4 PREP entry.
+
 **2026-11-18, retire component-only Vibestudio teacher pilot.** The owner requested a replacement corpus of
 whole user tasks in Natlang codebases that operate on live Vibestudio workspaces. Removed the 39-chain skill pilot
 from the training registry and its active manifest. Source records and diagnostics stay available as historical

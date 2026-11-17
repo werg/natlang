@@ -43,7 +43,8 @@ export class DatabaseMedium implements StoreMedium {
     db.exec(MEDIUM_SCHEMA);
     this.process = { pid: null, scope };
   }
-  putBlob(hash: string, text: string): void { this.db.prepare('INSERT OR IGNORE INTO blob_texts (hash, text) VALUES (?, ?)').run(hash, text); }
+  /** A row of the same transaction: a rollback removes it, so nothing is left to clean up. */
+  putBlob(hash: string, text: string): boolean { this.db.prepare('INSERT OR IGNORE INTO blob_texts (hash, text) VALUES (?, ?)').run(hash, text); return false; }
   blob(hash: string): string | undefined {
     return (this.db.prepare('SELECT text FROM blob_texts WHERE hash = ?').get(hash) as { text: string } | undefined)?.text;
   }
@@ -57,6 +58,9 @@ export class DatabaseMedium implements StoreMedium {
       .run(JSON.stringify(config));
   }
   freeBytes(): number { return this.free; }
+  blobBlockBytes(): number { return 0; }
+  /** The database's journal is not kept beside it here (in memory, or OPFS rolled back in place). */
+  logBytes(): number { return 0; }
   databaseBytes(): number {
     const pages = this.db.prepare('PRAGMA page_count').get() as { page_count: number };
     const size = this.db.prepare('PRAGMA page_size').get() as { page_size: number };
@@ -70,6 +74,7 @@ export class DatabaseMedium implements StoreMedium {
 export function wasmCallStore(root: string, db: WasmDb, options: { scope?: string; mode?: () => string | undefined } = {}):
   { store: CallStore; medium: DatabaseMedium } {
   const sql = wasmDatabase(db);
+  sql.exec('PRAGMA auto_vacuum = INCREMENTAL');   // takes effect for a new database: eviction gives freed pages back
   const medium = new DatabaseMedium(sql, options.scope, options.mode);
   return { store: new CallStore(root, sql, medium), medium };
 }
