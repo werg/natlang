@@ -668,6 +668,19 @@ def student_form(rollout, stats=None):
     return row
 
 
+def student_episode(rollout, stats=None):
+    """A teacher attempt as SFT data in student form: ``student_form`` (no guidance turn in any consumer prompt) and
+    without the guidance policy's own calls (``selectGuidanceFacts``/``writeGuidance``/``writeHint``, captured with
+    ``guidance_policy``), whose prompts carry the privileged facts and which an unguided run of the task never makes."""
+    row = student_form(rollout, stats)
+    turns = row.get('turns') or []
+    kept = [turn for turn in turns if not (turn.get('sampling') or {}).get('guidance_policy')]
+    if stats is not None:
+        stats['teacher_policy_calls_removed'] += len(turns) - len(kept)
+    row['turns'] = kept
+    return row
+
+
 PLAN_POLICY_PATH = 'applications/guidance-writer/planTeacherAttempts.nl'
 MAX_ATTEMPTS_PER_GROUP = 2
 

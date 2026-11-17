@@ -11,6 +11,8 @@ Stages (each reads the previous stage's output under WORK; read-only on every so
            the build refuses manifest successes that no extraction covers):
            the task row (natlang.program/2, from the group's cases.jsonl), the semantic turns ({messages, tools, target})
            and, for student episodes, the exact actor prompt/sample token ids of each call (renderer check only).
+           A JOLT+ teacher attempt's success enters as `rl-own` (`role: teacher`) in student form
+           (`rl/jolt.py student_episode`: guidance turn and the guidance policy's calls removed).
   replay   each episode's task runs again under this checkout's runtime (`task_rollouts.prepare`, `run_bonsai_queue.py`,
            `task_rollouts.score`, the teacher_gen path) against a replay server that answers every model request with
            the recorded reply of the same call (matched by its visible messages); WORK/replay/<key>/rollouts.jsonl is the
@@ -149,7 +151,15 @@ def extract(args):
                     c['success_without_task_row'] += 1
                     continue
                 c['successes'] += 1
+                role = row.get('jolt_role', 'student')
+                if role == 'teacher':
+                    # a JOLT+ teacher success trains in student form: its consumer calls without the guidance turn,
+                    # without the guidance policy's own calls (RESTORE_MEMETIC_JOLT_HINDSIGHT_20261117.md section 4)
+                    from natlang_neuralese.rl.jolt import student_episode
+                    row = student_episode(row, c)
+                    c['teacher_attempt_successes'] += 1
                 out.write({'key': f"{label}:{name}:{row['sample']}", 'source': 'rl-own', 'run': label, 'group': name,
+                           **({'role': 'teacher'} if role == 'teacher' else {}),
                            'sample': row['sample'], 'seed': row.get('seed'), 'task_id': row['task_id'],
                            'family': row.get('family'), 'policy': (row.get('policy') or {}).get('checkpoint_sha256'),
                            'task': task, 'turns': [semantic_turn(t, True) for t in row['turns']],

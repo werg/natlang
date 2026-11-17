@@ -196,3 +196,37 @@ def test_neuralese_text_keeps_calls_without_an_import_and_compares_surfaces():
     assert s.surface_key(plain) == s.surface_key(imported)
     other = {'messages': [{'role': 'system', 'content': 'new system prompt'}, USER], 'tools': plain['tools']}
     assert s.surface_key(other) != s.surface_key(plain)
+
+
+def test_extract_takes_teacher_successes_in_student_form(tmp_path):
+    """A JOLT+ teacher attempt's success enters as an own episode without its guidance turn and without the guidance
+    policy's own calls; a student success is unchanged."""
+    import types
+    run, archive = tmp_path / 'run', tmp_path / 'archive'
+    group = run / 'groups' / 'g000001'
+    group.mkdir(parents=True)
+    archive.mkdir()
+    task = {'id': 't', 'family': 'f', 'split': 'train'}
+    (group / 'cases.jsonl').write_text(json.dumps(task) + '\n')
+    (group / 'score.json').write_text('{}')
+    capture = lambda prompt, **extra: {'prompt': prompt, 'samples': [{'token_id': 5, 'logp': -0.1}], **extra}
+    plain = [{'kind': 'tokens', 'token_ids': [1, 2]}]
+    guided = plain + [{'kind': 'tokens', 'token_ids': [9], 'privileged': True}]
+    consumer = {'messages': [{'role': 'user', 'content': 'q'}], 'target': {'role': 'assistant', 'content': 'a'},
+                'invocation_id': 'root'}
+    rows = [{'task_id': 't', 'sample': 0, 'outcome': 'task_success', 'reward': {'quality': 1.0},
+             'turns': [{**consumer, 'sampling': capture(plain)}]},
+            {'task_id': 't', 'sample': 8, 'outcome': 'task_success', 'reward': {'quality': 1.0}, 'jolt_role': 'teacher',
+             'turns': [{**consumer, 'invocation_id': 'writer', 'sampling': capture(plain, guidance_policy={
+                 'function': 'writeGuidance', 'sha256': 'w'})},
+                       {**consumer, 'sampling': capture(guided, privileged={'mode': 'import'})}]}]
+    (group / 'rollouts.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in rows))
+    work = tmp_path / 'work'
+    s.extract(types.SimpleNamespace(work=str(work), rl=[f'{run}:{archive}'], teacher=[], out_name='episodes'))
+    episodes = [json.loads(line) for line in s.zstd_lines(work / 'episodes.jsonl.zst')]
+    student, teacher = episodes
+    assert 'role' not in student and teacher['role'] == 'teacher' and teacher['source'] == 'rl-own'
+    assert [t['invocation_id'] for t in teacher['turns']] == ['root']           # the writer's call is gone
+    assert teacher['turns'][0]['exact']['prompt_ids'] == [1, 2]                  # the guidance turn is gone
+    census = json.loads((work / 'episodes-extract.json').read_text())['sources']
+    assert list(census.values())[0]['teacher_attempt_successes'] == 1
