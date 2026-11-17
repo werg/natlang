@@ -3210,6 +3210,11 @@ base was 23% done and is kept aside as `held-base-pop-pinc57-stopped`), and volt
 pin. grpo-v4 launches without held evals (`HELD_ARGS="--held-every-hours 0"`); they start at the resume after voltron
 releases Pop. Success/failure rules are unchanged from the grpo-v4 PREP entry.
 
+**2026-11-18, retire component-only Vibestudio teacher pilot.** The owner requested a replacement corpus of
+whole user tasks in Natlang codebases that operate on live Vibestudio workspaces. Removed the 39-chain skill pilot
+from the training registry and its active manifest. Source records and diagnostics stay available as historical
+evidence. The pilot has no known learner exposure and is not an input to the new corpus. Qualify live, stateful
+task outcomes and capture the exact model-facing calls before admitting the replacement.
 ## 2026-11-18: the training guidance turn is one runtime-built system message (operators agent)
 
 - **Decision (supervisor-approved route).** ts-host builds the guidance turn once, as an ordinary system message
