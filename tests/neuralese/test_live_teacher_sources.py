@@ -39,7 +39,8 @@ def fixture(root):
                          'executor': {'kind': 'agent'}, 'definition': {'id': 'definition-one', 'name': 'createDraft'},
                          'model_turns': [exchange, {**exchange, 'kind': 'score'}]}}
     verification = {'schema': 'natlang.live-task-verification/1', 'task_id': 'live-draft',
-                    'run_id': 'outer-world-run', 'status': 'passed', 'checks': {'draft_contents': True},
+                    'run_id': 'outer-world-run', 'world': {'instance': 'test-owned-instance', 'run_id': 'outer-world-run'},
+                    'status': 'passed', 'checks': {'draft_contents': True},
                     'calls': [copy.deepcopy(summary)],
                     'validator': artifact(root, 'validator.json', {'code': 'independent validator source'}),
                     'evidence': [{**artifact(root, 'readback.json', {'before': None, 'after': 'hello'}),
@@ -78,7 +79,7 @@ def test_actual_context_and_tool_ids_are_preserved_without_score_targets(tmp_pat
     assert s.replay_episode(None, None, episode, None)['exact'] is False
 
 
-@pytest.mark.parametrize('mutation', ['owner', 'eval-run', 'outer-run', 'effect', 'checks', 'kind', 'split', 'tool-id', 'tool-args', 'raw-id', 'text', 'coverage'])
+@pytest.mark.parametrize('mutation', ['owner', 'eval-run', 'outer-run', 'effect', 'checks', 'kind', 'split', 'tool-id', 'tool-args', 'raw-id', 'text', 'coverage', 'instance'])
 def test_rehashed_wrong_scope_effect_or_target_is_rejected(tmp_path, mutation):
     path, spec, detail, verification = fixture(tmp_path)
     if mutation == 'owner':
@@ -87,6 +88,8 @@ def test_rehashed_wrong_scope_effect_or_target_is_rejected(tmp_path, mutation):
         detail['summary']['run_id'] = 'outer-world-run'
     elif mutation == 'outer-run':
         verification['run_id'] = 'foreign-world-run'
+    elif mutation == 'instance':
+        spec['world']['instance'] = 'foreign-instance'
     elif mutation == 'effect':
         verification['evidence'][0]['kind'] = 'model-claim'
     elif mutation == 'checks':

@@ -37,7 +37,7 @@ format. A portable ProgramRecord may accompany tested code, but is not invented 
 unmodified raw detail `{callId,summary,record,...}` exported by natlang.trace. All model-executed calls in the selected
 validator scope must be present; call records outside that scope are refused.
 
-The bound `natlang.live-task-verification/1` receipt contains matching `task_id` and outer `run_id`, `status:"passed"`,
+The bound `natlang.live-task-verification/1` receipt contains matching `task_id`, outer `run_id`, and the complete manifest `world`, `status:"passed"`,
 nonempty `checks` whose values are true, a bound `validator:{path,sha256}` (scoped validator source/evidence),
 `calls:[{call_id,owner_kind,owner_key,run_id}]` with actual authoritative EvalDO identities, and bound
 `evidence:[{kind:"workspace"|"cdp",path,sha256}]`. Evidence must include every required effect kind: actual before/after
