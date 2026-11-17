@@ -2720,3 +2720,49 @@ privileged twins on every graph): whole-graph pass-through gradients in the shar
 NEURALESE_PASSTHROUGH_20261117.md), then memetic, JOLT+, hindsight and distillation on it
 (RESTORE_MEMETIC_JOLT_HINDSIGHT_20261117.md). Simplification may park a product-core capability, never delete it, and
 no gate may depend on a result the current method may never produce.
+
+## 2026-11-17: JOLT+, hindsight writer and memetic rows rebuilt on the per-call stack (restore agent)
+
+Owner: "I definitely want memetic learning, JOLT+, hindsight and distillation to be brought back." Design:
+`RESTORE_MEMETIC_JOLT_HINDSIGHT_20261117.md` (83619e706). Implemented the parts that do not need the pass-through; all
+are flags on `grpo.py`, **default off** until each runs once end to end on a pinned actor (the in-run guidance path and
+the memetic world have not run since 11-12), then on in the next bundle.
+
+- **JOLT+ (2734e2c44).** `--teacher-attempts K`: a group whose students succeeded at most `--teacher-max-successes`
+  (0) times gets K teacher attempts of the same task, queued first; the group trains when they finish. Guidance comes
+  from the task's custody-checked facts of `--teacher-fact-kinds` (default: reference solution, minimum sequence,
+  decisive evidence, reference failures, attempt feedback, teacher trajectories; **no answers**: a teacher told the
+  expected result could return it without the work, and student form would reinforce that) through the in-run
+  `writeGuidance` (crisp selection, no extra call). The learner lowers teacher attempts in **student form**
+  (privileged segments dropped, the actor's guided log-probabilities kept: `rho = pi(a|s)/mu(a|s,g)`, truncated at 2
+  as for students). Advantages: students keep plain GRPO over the students alone; a teacher gets
+  `max(0, (r - mean_students) / std_all)`, so an all-fail group (12.6% of grpo-v3/run1's groups, zero gradient so far)
+  trains on its guided successes; zero-advantage teachers do not train. Pass rates read students only. This is the
+  review 2.5 waste removed (K attempts inside the group with a non-zero advantage; no twin on every graph). Estimated
+  cost at K = 4: about +6% step time. Not built: the OPSD dense term (`beta_s` on guided groups' student calls),
+  which needs a twin through the learner's import path.
+- **Hindsight writer (6fda3e52d, fe03be898).** `writeHint` returns text (the writeGuidance span-basis fix); the run
+  control carries an optional `trajectory`, and the root call of such a teacher attempt gets `writeHint`'s hint over
+  that verified run (children keep fact guidance). Both engine-side checks (`privileged_context`, `http.py`) accept
+  the writer. Index: `python -m natlang_neuralese.rl.hindsight index`, built at
+  `/home/werg/data/hindsight-index-20261117/index.jsonl`: 4,776 tasks (4,518 teacher runs, 258 own runs) from
+  sft-sources-20261117, held closure excluded (0 hits). `--hindsight-trajectories INDEX` with `--teacher-attempts`.
+  Not built: the phase-1 reconstruction objective (writer trained through the hint state; pass-through).
+- **Memetic (e23d63c21, 7780040ee).** `rl/memetic_workspace.py` (typed checked changes, nested-collection evaluation on
+  the episode's own actor, guidance as a native program-guidance state, host-only query score), `rl/memetic_tasks.py
+  build` (programs `family@sha12` from the pool minus the held closure and protected worlds, components, dedupe,
+  support 2 / query 6, base-rate band), world-bridge kind `memetic`, `task_rollouts.memetic_outcome`, and
+  `grpo.py --memetic-tasks --memetic-share F --memetic-group 4` (each group gets its own spec copy; groups centred on
+  max(mean, anchor)). A group is ~108 nested rollouts (~13 ordinary groups).
+- **Self-distillation.** Nothing new: `sft_sources` `rl-own` is live; the in-loop term and teacher successes in
+  student form are designed (section 4) and wait for the pass-through's loss path.
+- **Tests.** `test_grpo_jolt.py` (15), `test_memetic.py` (13, incl. the real natlang loader check),
+  `training-guidance.test.mjs` 26/26 (2 new); grpo/jolt/privileged/rollout suites pass (106 and 68). `check-main.sh
+  --quick` exit 0 before each push.
+- **Not checked.** No live episode of any of the three on a model: teacher attempts with written guidance, `writeHint`
+  on a real tau*, a memetic episode on the rebuilt workspace (nested collection, program-guidance binding under an
+  in-place-updated actor, wall time). The full `check-main.sh` was not run (CPU suites only). Whether student-form
+  teacher tokens have usable `rho` (if most are tiny the teacher signal is weak) is a telemetry question for the
+  smoke: `lowering.teacher_*` counters and the step's rho statistics.
+- **Next.** A smoke on the next DGX gap (medium, <= 15 GB): `grpo.py train --max-steps 1` on a small task list with
+  `--teacher-attempts 2 --hindsight-trajectories ... --memetic-tasks ... --memetic-share 0.2`, then the grpo-v5 bundle.
