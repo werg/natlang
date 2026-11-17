@@ -3197,3 +3197,15 @@ defaults with opt-outs; they reach grpo-v4 at its next pin (it has not started y
 - Not checked: any held or training effect of the three (no GPU run); dynamic sampling's wave latency against
   `--max-staleness` in a live run (grpo-v3 staleness never exceeded 1; the default max-outstanding now leaves room for
   slots/2 groups); the rho statistics include the teacher demonstrations' rho = 1 tokens (8 of ~600 episodes a step).
+
+## 2026-11-17 23:50, grpo-v4 launches on pin 6e56280aa (improvements entered before launch)
+
+grpo-v4-run1 had not started yet (it waits for the SFT continuation `sft-v3-cont`, ~01:00), so its waiter moves from pin
+c57e7be28 to 6e56280aa. That pin adds: dynamic sampling, teacher demonstrations in in-loop SD and construct-weighted
+exploration (ae1f7dacb, defaults), the writeHint checker (df2db4ab0, so hindsight is back in the launch features beside
+`--teacher-attempts 2 --sd-weight 0.1`), memetic row admission (dd11a0395; memetic share stays 0 until its re-smoke),
+per-step teacher/SD telemetry (e2efa1597) and runtime-rendered operator sites (1f87344ca). ts-host changed, so the
+scoring series changed: the Pop base was restarted on the new pin (`popheld-base-v4e`, 4 samples, ~7 h; the c57e7be28
+base was 23% done and is kept aside as `held-base-pop-pinc57-stopped`), and voltron-1-mini's eval follows it on the same
+pin. grpo-v4 launches without held evals (`HELD_ARGS="--held-every-hours 0"`); they start at the resume after voltron
+releases Pop. Success/failure rules are unchanged from the grpo-v4 PREP entry.
