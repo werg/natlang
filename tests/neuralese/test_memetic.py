@@ -32,7 +32,7 @@ def steps(monkeypatch):
 
 
 def spec(tmp_path, evaluations=2):
-    worlds = memetic_tasks.split([world(i) for i in range(8)], memetic_tasks.DEFAULTS)
+    worlds = memetic_tasks.split([world(i) for i in range(10)], memetic_tasks.DEFAULTS)
     value = memetic_tasks.episode_spec('fam@abc', worlds, settings={**memetic_tasks.DEFAULTS, 'evaluations': evaluations})
     value['out'] = str(tmp_path / 'memetic')
     return value
@@ -60,10 +60,10 @@ def workspace(tmp_path, evaluations=2, run='r0'):
 
 def test_preparation_is_shared_by_the_group_and_anchors_on_the_trivial_improvements(tmp_path):
     w, evaluator = workspace(tmp_path)
-    assert w.baseline() == {'attempts': 2, 'success': 0.25}
+    assert w.baseline() == {'attempts': 4, 'success': 0.25}
     names = [name for name, *_ in evaluator.calls]
     assert names == ['baseline-support', 'baseline-query-none', 'baseline-query-default']
-    assert evaluator.calls[1][1] == [f'w{i}' for i in range(2, 8)]          # query worlds, never shown as evidence
+    assert evaluator.calls[1][1] == [f'w{i}' for i in range(4, 10)]          # query worlds, never shown as evidence
     other, other_evaluator = workspace(tmp_path, run='r1')
     assert other.baseline()['success'] == 0.25 and other_evaluator.calls == []   # read from the shared preparation
     prepared = json.loads((tmp_path / 'memetic/prepared.json').read_text())
@@ -138,21 +138,29 @@ def test_memetic_reward_never_rewards_the_trivial_thing():
 
 def test_programs_split_related_worlds_apart_and_skip_held_and_small_programs(tmp_path):
     settings = memetic_tasks.DEFAULTS
-    cases = [world(i) for i in range(10)]
+    cases = [world(i) for i in range(12)]
     cases[1]['source_groups'] = ['g0']                      # related to w0: one component
     cases += [world(i + 100, family='small') for i in range(3)]
     pool = memetic_tasks.programs(cases, settings=settings, excluded=frozenset({'w9'}))
     (key, worlds), = pool.items()
-    assert key.startswith('fam@') and len(worlds) == 8
+    assert key.startswith('fam@') and len(worlds) == 10
     assert not {'w0', 'w1'} <= {w['id'] for w in worlds} and 'w9' not in {w['id'] for w in worlds}
+    support = memetic_tasks.split(worlds, settings)['support']
+    assert [c['id'] for c in memetic_tasks.unmeasured(cases, excluded=frozenset({'w9'}))] == [w['id'] for w in support]
     rates = {w['id']: {'successes': 1, 'scored': 2} for w in worlds}
+    assert memetic_tasks.unmeasured(cases, excluded=frozenset({'w9'}), pass_rates=rates) == []
+    unrated = {**rates, support[0]['id']: {'successes': 1, 'scored': 1}}
+    assert memetic_tasks.build(cases, tmp_path / 'none', excluded=frozenset({'w9'}), pass_rates=unrated,
+                               log=lambda _: None)['skipped']['no_rate'] == 1, 'every support world needs a rate'
+    assert memetic_tasks.merge_rates([{'a': {'successes': 1, 'scored': 2}}, {'a': {'successes': 0, 'scored': 2}}]) == \
+        {'a': {'successes': 1, 'scored': 4}}
     receipt = memetic_tasks.build(cases, tmp_path / 'out', excluded=frozenset({'w9'}), pass_rates=rates, log=lambda _: None)
     assert receipt['rows'] == 1
     row = json.loads((tmp_path / 'out/cases.jsonl').read_text())
     assert row['family'] == 'memetic_improve' and row['semantics']['root'] == 'improve_program.nl'
     assert 'improve_program.nl' in row['semantics']['files'] and row['semantics']['world']['kind'] == 'memetic'
     spec_value = json.loads(Path(row['semantics']['world']['task']).read_text())
-    assert len(spec_value['support']) == 2 and len(spec_value['query']) == 6
+    assert len(spec_value['support']) == 4 and len(spec_value['query']) == 6
     assert not {w['id'] for w in spec_value['support']} & {w['id'] for w in spec_value['query']}
     hard = {w['id']: {'successes': 0, 'scored': 4} for w in worlds}
     assert memetic_tasks.build(cases, tmp_path / 'out2', pass_rates=hard, log=lambda _: None)['rows'] == 0

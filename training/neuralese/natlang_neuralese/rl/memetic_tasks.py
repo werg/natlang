@@ -10,10 +10,14 @@ are measured inside each GRPO group by the workspace (``rl.memetic_workspace.pre
 - Meta-training programs come from the GRPO pool minus the held-v3/v2 closure and the registered memetic held families
   (``training/memetic-held-programs.json``, a protection source). Support worlds are the supervisor's evidence; query
   worlds are its reward and never shown.
-- With base pass rates (``--pass-rates``), a program enters only when its support worlds' mean base rate lies in
-  [min_success, max_success]: a program the policy always or never solves gives the improver nothing to measure.
+- A program enters only when every support world has a measured base rate (at least ``min_rate_samples`` scored
+  episodes, ``--pass-rates``, repeatable and summed) and their mean lies in [min_success, max_success]: a program the
+  policy always or never solves gives the improver nothing to measure (restore smoke 2026-11-17: 0 of 5 groups admitted
+  from unmeasured programs). ``measure`` writes the support worlds still lacking a rate as cases for
+  ``scripts/neuralese_data/exp1_collect.py``; ``exp1_pass_rates.py`` turns that collection into a rates file.
 
-    python -m natlang_neuralese.rl.memetic_tasks build --out DIR [--pool cases.jsonl ...]
+    python -m natlang_neuralese.rl.memetic_tasks measure --out DIR/cases.jsonl [--programs N] [--pass-rates R ...]
+    python -m natlang_neuralese.rl.memetic_tasks build --out DIR [--pool cases.jsonl ...] [--pass-rates R ...] [--set NAME=VALUE]
 """
 from __future__ import annotations
 
@@ -28,8 +32,8 @@ FAMILY = 'memetic_improve'
 STAGE_SCHEMA = 'natlang.memetic-tasks/1'
 PACKAGE = Path(__file__).resolve().parents[4] / 'applications' / 'memetic-improver'
 # Lean sizes (one group of 4 samples is ~108 nested rollouts, about 13 ordinary groups; design doc section 3).
-DEFAULTS = {'support': 2, 'query': 6, 'samples': 2, 'query_samples': 2, 'evaluations': 2, 'min_success': 0.1,
-            'max_success': 0.85, 'near_duplicate': 0.9, 'max_worlds_per_program': 40, 'cost_weight': 0.05,
+DEFAULTS = {'support': 4, 'query': 6, 'samples': 2, 'query_samples': 2, 'evaluations': 2, 'min_success': 0.1,
+            'max_success': 0.85, 'min_rate_samples': 2, 'near_duplicate': 0.9, 'max_worlds_per_program': 40, 'cost_weight': 0.05,
             'episode_seconds': 7200, 'workers': 4, 'case_seconds': 900, 'max_model_requests': 40, 'max_turns': 40,
             'seed': 'memetic-v2'}
 
@@ -165,6 +169,54 @@ def episode_case(spec_path, spec, *, settings):
                                     'case_seconds': settings['episode_seconds']}}}
 
 
+def support_rate(support, pass_rates, settings):
+    """Mean base pass rate of the support worlds, or None while any of them has fewer than ``min_rate_samples``
+    scored episodes."""
+    rates = []
+    for case in support:
+        rate = pass_rates.get(case['id']) or {}
+        if (rate.get('scored') or 0) < settings['min_rate_samples']:
+            return None
+        rates.append(rate['successes'] / rate['scored'])
+    return sum(rates) / len(rates)
+
+
+def merge_rates(values):
+    """Sum several ``{task_id: {successes, scored}}`` files' counts per task."""
+    out = {}
+    for value in values:
+        for task_id, rate in value.items():
+            entry = out.setdefault(task_id, {'successes': 0, 'scored': 0})
+            entry['successes'] += rate.get('successes') or 0
+            entry['scored'] += rate.get('scored') or 0
+    return out
+
+
+def unmeasured(cases, *, settings=None, excluded=frozenset(), pass_rates=None, programs_limit=None):
+    """Support worlds still lacking a base rate, for up to ``programs_limit`` programs taken one family at a time
+    (seeded), as task rows for a base-policy collection. Programs whose measured worlds already put them out of band
+    are skipped."""
+    settings = {**DEFAULTS, **(settings or {})}
+    pass_rates = pass_rates or {}
+    by_family = {}
+    for key, program_worlds in programs(cases, settings=settings, excluded=excluded).items():
+        support = split(program_worlds, settings)['support']
+        if support_rate(support, pass_rates, settings) is not None:
+            continue
+        by_family.setdefault(key.split('@')[0], []).append(support)
+    chosen = []
+    families = sorted(by_family, key=lambda family: _hash(settings['seed'], family))
+    while families and (programs_limit is None or len(chosen) < programs_limit):
+        for family in list(families):
+            if programs_limit is not None and len(chosen) >= programs_limit:
+                break
+            chosen.append(by_family[family].pop(0))
+            if not by_family[family]:
+                families.remove(family)
+    need = lambda case: ((pass_rates.get(case['id']) or {}).get('scored') or 0) < settings['min_rate_samples']
+    return [case for support in chosen for case in support if need(case)]
+
+
 def build(cases, out, *, settings=None, excluded=frozenset(), pass_rates=None, log=print):
     """Write one spec and one row per admitted program; returns the receipt."""
     settings = {**DEFAULTS, **(settings or {})}
@@ -175,11 +227,11 @@ def build(cases, out, *, settings=None, excluded=frozenset(), pass_rates=None, l
     for key, program_worlds in pool.items():
         worlds = split(program_worlds, settings)
         if pass_rates is not None:
-            rates = [pass_rates.get(case['id']) for case in worlds['support']]
-            rates = [r['successes'] / r['scored'] for r in rates if r and r.get('scored')]
-            if not rates:
+            rate = support_rate(worlds['support'], pass_rates, settings)
+            if rate is None:
                 skipped['no_rate'] += 1
-            elif not settings['min_success'] <= sum(rates) / len(rates) <= settings['max_success']:
+                continue
+            if not settings['min_success'] <= rate <= settings['max_success']:
                 skipped['out_of_band'] += 1
                 continue
         spec = episode_spec(key, worlds, settings=settings)
@@ -203,32 +255,47 @@ def main(argv=None):
     sub = parser.add_subparsers(dest='command', required=True)
     b = sub.add_parser('build')
     b.add_argument('--out', required=True)
-    b.add_argument('--pool', action='append', help='task pool cases.jsonl (default: grpo.POOLS)')
-    b.add_argument('--held-manifest', help='held manifest whose closure is excluded (default: grpo.HELD)')
-    b.add_argument('--pass-rates', help='base pass rates {task_id: {successes, scored}} (default: grpo --pass-rates)')
-    b.add_argument('--no-pass-rates', action='store_true')
+    b.add_argument('--set', action='append', default=[], metavar='NAME=VALUE',
+                   help='override a DEFAULTS setting (JSON value), e.g. --set query=2 --set evaluations=1 for a smoke')
+    m = sub.add_parser('measure', help='support worlds lacking a base rate, as cases for exp1_collect.py')
+    m.add_argument('--out', required=True, help='cases.jsonl to write')
+    m.add_argument('--programs', type=int, help='at most this many programs (one family at a time)')
+    for p in (b, m):
+        p.add_argument('--pool', action='append', help='task pool cases.jsonl (default: grpo.POOLS)')
+        p.add_argument('--held-manifest', help='held manifest whose closure is excluded (default: grpo.HELD)')
+        p.add_argument('--pass-rates', action='append',
+                       help='base pass rates {task_id: {successes, scored}}, repeatable and summed (default: exp1-rft)')
     args = parser.parse_args(argv)
     repo = Path(__file__).resolve().parents[4]
     sys.path.insert(0, str(repo / 'scripts/neuralese_data'))
     import grpo
-    from ..common.custody import ProtectedWorlds
+    from ..common.custody import CustodyError, ProtectedWorlds
     from ..common.jsonio import read_jsonl
+    from ..common.paths import resolve_str
     from .held_eval import exclusion_ids
     cases = [row for pool in (args.pool or grpo.POOLS) for row in read_jsonl(pool)]
     excluded = set(exclusion_ids(args.held_manifest or grpo.HELD, cases))
     protected = ProtectedWorlds.load()
-    from ..common.custody import CustodyError
     for case in cases:
         try:
             protected.check(case)
         except CustodyError:
             excluded.add(case['id'])
-    rates = None
-    if not args.no_pass_rates:
-        from ..common.paths import resolve_str
-        default = resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'exp1-rft', 'base-pass-rates.json')
-        rates = json.loads(Path(args.pass_rates or default).read_text())
-    build(cases, args.out, excluded=frozenset(excluded), pass_rates=rates)
+    paths = args.pass_rates or [resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'exp1-rft', 'base-pass-rates.json')]
+    rates = merge_rates(json.loads(Path(path).read_text()) for path in paths)
+    if args.command == 'measure':
+        rows = unmeasured(cases, excluded=frozenset(excluded), pass_rates=rates, programs_limit=args.programs)
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out).write_text(''.join(json.dumps(row, ensure_ascii=False) + '\n' for row in rows))
+        print(json.dumps({'worlds': len(rows), 'out': args.out}))
+        return
+    settings = {}
+    for item in args.set:
+        name, _, value = item.partition('=')
+        if name not in DEFAULTS:
+            raise SystemExit(f'--set {name}: not a setting ({", ".join(DEFAULTS)})')
+        settings[name] = json.loads(value)
+    build(cases, args.out, settings=settings, excluded=frozenset(excluded), pass_rates=rates)
 
 
 if __name__ == '__main__':
