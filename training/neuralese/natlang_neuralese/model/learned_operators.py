@@ -5,7 +5,8 @@ outputs, collections, documents), carries compressed state between model runs, a
 Neuralese-prompted extractor feeds a parent that must use it. Design and decision record:
 plans/neuralese/LEARNED_COMPACTION_OPERATORS.md.
 
-An operator is one write site (the shared ``operator_site_messages``) followed by a **generated producer span**:
+An operator is one write site (view-placement operators: the runtime's own site, ts-host native/operator-site.ts;
+others: ``operator_site_messages``) followed by a **generated producer span**:
 
 * **prompt rows**, one per token of the operator's prompt text, at the prompt's actual position in the rendered
   site, initialized from the pinned embedding rows of exactly those tokens (step 0 computes exactly what the text
@@ -33,8 +34,6 @@ import torch
 from torch import nn
 
 SCHEMA = 'natlang.learned-operator/1'
-# Placements whose site reads one text value (the others read conversation messages).
-TEXT_PLACEMENTS = ('system', 'view')
 ROW_FIELD = 'operators'
 SPAN_KINDS = ('prompt', 'seed')
 
@@ -75,7 +74,7 @@ class Operator:
 # compact-value and compact-params are the builtin `view(value, instructions)` at the runtime's sites (DECISIONS.md
 # 2026-10-09 "one summarizer family"; OPERATORS_RESTORE_20261117.md): view's body is their prompt and view.view_site
 # their site, so the two operators and every other view share one write and one trained prompt.
-from ..view import INSTRUCTIONS as VIEW_PROMPT, view_site as _view_site  # noqa: E402
+from ..view import INSTRUCTIONS as VIEW_PROMPT  # noqa: E402
 HISTORY_PROMPT = (
     "Write Neuralese that stands in for the conversation above. Work continues from it, the task statement and the "
     "most recent steps only. Keep what has been done and found, the exact files, identifiers, commands and values "
@@ -146,10 +145,8 @@ def operator_site_messages(name: str, *, instructions: str, source=None, context
     if spec.placement == 'call':
         return call_site_messages(name, source, prompt_part)
     if spec.placement == 'view':
-        if not isinstance(source, str):
-            raise ValueError(f'operator {name} reads one text value')
-        system, user = _view_site(content(prompt) if prompt_part is not None else prompt, source, instructions or None)
-        return [system, *[dict(message) for message in context], user]
+        raise ValueError(f'operator {name} is rendered by the runtime at its site (ts-host native/operator-site.ts, '
+                         'scripts/operator-sites.mjs)')
     if spec.placement == 'system':
         if not isinstance(source, str):
             raise ValueError(f'operator {name} reads one text input')

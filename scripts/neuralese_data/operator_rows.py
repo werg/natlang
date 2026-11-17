@@ -1,25 +1,30 @@
 #!/usr/bin/env python3
-"""Learned-operator cases -> exp0_sft per-call rows (plans/neuralese/OPERATORS_RESTORE_20261117.md §3.2).
+"""Learned-operator cases -> exp0_sft per-call rows (plans/neuralese/OPERATORS_RESTORE_20261117.md §3.2, §9).
 
 A `natlang.port-record/1` operator case (COMPACTION_OPERATOR_CONVERTERS.md) becomes the v3 operator write and its
-consumer, as the runtime runs them:
+consumer. Every prompt string at an operator site comes from the runtime's own rendering code (ts-host
+native/operator-site.ts through scripts/operator-sites.mjs, `RuntimeSites`): the operator call's messages, the block a
+consumer sees with the state in place, the crisp text it sees without it, and whether the runtime compacts the value at
+all (a case none of whose sources the runtime would compact is rejected). compact-value cases are tool outputs;
+compact-params and extract cases are string arguments of the call that answers the case's question.
 
-* **operator chain** (one per compacted source): the operator site (`learned_operators.operator_site_messages`, the
-  prompt as text: text initialization in the real rendered call) with its generation prompt, then the seed as the
-  assistant reply (gold / checked / mechanical, `data/operator_seeds.py`, clipped to the operator's span cap). The
-  reply is the only target; its weight is `--seed-weight`.
-* **consumer chain**: the case's consumer conversation with each compacted source imported (`consume_open`, the
-  span, `consume_close`); the target reply is the only target. `imports` [(row, key)] and `sources` {key: {ids,
-  start, stop}} are the pass-through's format (`lfm3_fast_train.passthrough_plan`, `lower_rollout_turns.write_sources`):
-  the producer document is the site, `produce_open` and the reply's content tokens (the in-context capture), so the
-  consumer's loss reaches the weights that computed the state from the site.
-* **text-cut chain** (test split): the same consumer reading the runtime's text cut of each source: the ablation's
+* **operator chain** (one per compacted source): the runtime's operator call with its generation prompt, then the
+  seed as the assistant reply (gold / checked / mechanical, `data/operator_seeds.py`, clipped to the operator's span
+  cap). The reply is the only target; its weight is `--seed-weight`.
+* **consumer chain**: the case's consumer conversation (data) with each source's runtime block before its first user
+  message, the state imported (`consume_open`, the span, `consume_close`) where the runtime places it; the target
+  reply is the only target. `imports` [(row, key)] and `sources` {key: {ids, start, stop}} are the pass-through's
+  format (`lfm3_fast_train.passthrough_plan`, `lower_rollout_turns.write_sources`): the producer document is the site,
+  the reply up to its content, `produce_open` and the content tokens (the in-context capture).
+* **text-cut chain** (test split): the same consumer reading the runtime's crisp text of each source: the ablation's
   baseline.
 
 Held data: every case whose split groups, ids or input text meet the held-v3 / held-v2 closure is dropped and counted
 (`HeldClosure`: exact group names, task and upstream ids, 10-word shingles of the held tasks' inputs).
 
-    operator_rows.py build --cases ROOT_OR_FILE [...] --out DIR [--limit N] [--operators a,b]
+    operator_rows.py build --cases ROOT_OR_FILE [...] --out DIR [--limit N] [--operators a,b] [--context-tokens N]
+
+Needs the built ts-host dist (`npm run build:node`) and node on PATH.
 """
 from __future__ import annotations
 
@@ -38,15 +43,17 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training/neuralese'))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from natlang_neuralese.data.operator_graph import (IMITATION_LABELS, OperatorCaseError, OperatorGraphRenderer,  # noqa: E402
-                                                   _placeholder, cut_text, source_text)
+from natlang_neuralese.data.operator_graph import (IMITATION_LABELS, OperatorCaseError, TokenRenderer,  # noqa: E402
+                                                   _placeholder, source_text)
 from natlang_neuralese.data.operator_seeds import seed_for  # noqa: E402
 from natlang_neuralese.data.port_record_graph import _serving_messages, _target_message, _target_reply  # noqa: E402
+from natlang_neuralese.common.code_provenance import code_provenance  # noqa: E402
 from natlang_neuralese.common.paths import resolve  # noqa: E402
-from natlang_neuralese.model.learned_operators import (TEXT_PLACEMENTS, bind_tokens, operator,  # noqa: E402
-                                                       operator_site_messages, registry_sha256)
+from natlang_neuralese.model.learned_operators import registry_sha256  # noqa: E402
 
-SCHEMA = 'natlang.operator-rows/1'
+SCHEMA = 'natlang.operator-rows/2'
+REPO = Path(__file__).resolve().parents[2]
+NODE = Path.home() / '.local/share/natlang-dev/node-v24.0.1-linux-arm64/bin/node'
 CASES_ROOT = resolve('data_hdd', 'natlang-compaction-operators-20261103', 'cases')
 HELD_OPS = resolve('data_nvme', 'lfm3-rl-dgx-20261029', 'ops')
 HELD_SETS = (HELD_OPS / 'held-v3/cases.jsonl', HELD_OPS / 'held-v2/cases.jsonl')
@@ -134,11 +141,11 @@ def load_tokenizer(base=LFM3_BASE):
 class RowBuilder:
     """Per-call rows of one case under one tokenizer (the renderer's exact site, seed and consumer rendering)."""
 
-    def __init__(self, tokenizer, role_ids, fingerprint, *, max_tokens=32000, seed_weight=1.0):
-        from natlang_neuralese.model.learned_operators import OPERATORS
-        bindings = {name: bind_tokens(tokenizer, name, tokenizer_fingerprint=fingerprint) for name in OPERATORS}
-        self.renderer = OperatorGraphRenderer(tokenizer, role_ids=role_ids, tokenizer_fingerprint=fingerprint,
-                                              bindings=bindings, max_tokens=max_tokens)
+    def __init__(self, tokenizer, role_ids, fingerprint, *, max_tokens=32000, seed_weight=1.0, sites=None,
+                 context_tokens=None):
+        self.context_tokens = context_tokens
+        self.renderer = TokenRenderer(tokenizer, role_ids=role_ids)
+        self.sites = sites or RuntimeSites()
         self.tokenizer, self.role_ids, self.fingerprint = tokenizer, tuple(role_ids), fingerprint
         self.max_tokens, self.seed_weight = max_tokens, seed_weight
         self.think_close = tokenizer.convert_tokens_to_ids('</think>')
@@ -152,44 +159,33 @@ class RowBuilder:
         start = max((i + 1 for i, token in enumerate(reply[:end]) if token == self.think_close), default=0)
         return start, end
 
-    def operator_site(self, name, record, source, tools):
-        spec = operator(name)
-        context = _serving_messages(record['writer'].get('context') or [])
-        if spec.placement in TEXT_PLACEMENTS:
-            site_source = source_text(source)
-        else:
-            if not isinstance(source.get('messages'), list):
-                raise OperatorCaseError('history-source-without-messages')
-            site_source = _serving_messages(source['messages'])
-        messages = operator_site_messages(name, instructions=record['writer']['instructions'], source=site_source,
-                                          context=context)
-        ids, _ = self.renderer._render(messages, tools if spec.placement not in TEXT_PLACEMENTS else None, {},
-                                       generation=True)
-        return ids
-
     def build(self, record: dict, name: str, key: str):
         """{'operators': [chain], 'consumer': chain, 'text_cut': chain, 'meta': {...}} or OperatorCaseError."""
-        spec = operator(name)
         if record.get('outcome', {}).get('label') not in IMITATION_LABELS:
             raise OperatorCaseError('target-not-imitation-label')
         if 'sources' not in record['consumer'].get('withheld', []):
             raise OperatorCaseError('sources-not-withheld')
         sources = record['sources']
-        if spec.sites == 'one' and len(sources) != 1:
-            raise OperatorCaseError(f'site-count: {len(sources)} sources for a one-site operator')
         tools = record['consumer'].get('tools') or None
-        inline = [bool(spec.inline_below_chars) and len(source_text(source)) < spec.inline_below_chars
-                  for source in sources]
-        if all(inline):
+        sites = [self.sites.site({**site_request(name, record, source, index, len(sources)),
+                                  'context_tokens': self.context_tokens})
+                 for index, source in enumerate(sources)]
+        if not any(site['compacted'] for site in sites):
             raise OperatorCaseError('no-compacted-source')
         try:
             target = _target_reply(self.tokenizer, _target_message(_View(record)), tools)
         except ValueError as error:
             raise OperatorCaseError(f'target-render: {error}') from None
-        operators, documents, seeds = [], {}, []
-        compacted = [source for source, shown in zip(sources, inline) if not shown]
-        for index, source in enumerate(compacted):
-            site = self.operator_site(name, record, source, tools)
+        operators, documents, seeds, parts, cut_parts = [], {}, [], [], []
+        for index, (source, site) in enumerate(zip(sources, sites)):
+            if parts:
+                parts.append({'type': 'text', 'text': '\n'})
+                cut_parts.append({'type': 'text', 'text': '\n'})
+            cut_parts.append({'type': 'text', 'text': site['text']})
+            if not site['compacted']:
+                parts.append({'type': 'text', 'text': site['text']})
+                continue
+            prompt, _ = self.renderer._render(site['messages'], site['tools'] or None, {}, generation=True)
             seed_ids, seed = self.renderer.seed(name, record, source)
             text = self.tokenizer.decode(seed_ids, skip_special_tokens=False)
             try:
@@ -202,34 +198,97 @@ class RowBuilder:
                 raise OperatorCaseError('seed-empty')
             source_key = f'{key}:{index}'
             # The in-context capture: the site, the reply up to its content, produce_open, the content.
-            document = [*site, *reply[:start], self.role_ids[0], *span]
+            document = [*prompt, *reply[:start], self.role_ids[0], *span]
             documents[source_key] = {'ids': np.asarray(document, np.int32), 'start': len(document) - len(span),
                                      'stop': len(document)}
-            operators.append(_chain(site, reply, key, {'kind': 'operator', 'operator': name, 'source_key': source_key,
-                                                       'weight': np.full(len(reply), self.seed_weight, np.float32)}))
-            seeds.append({**seed, 'site_tokens': len(site), 'span_tokens': len(span)})
-        states = [_placeholder(f'operator-state:{key}:{index}') for index in range(len(compacted))]
-        parts, it = [], iter(states)
-        for source, shown in zip(sources, inline):
-            parts.append({'type': 'text', 'text': source_text(source), 'inline': True} if shown
-                         else {'type': 'native_state', 'id': next(it)})
-        messages = self.renderer._consumer_messages(name, record, parts)
-        splices = {state: [self.role_ids[2], *documents[f'{key}:{i}']['ids'][documents[f'{key}:{i}']['start']:],
-                           self.role_ids[3]] for i, state in enumerate(states)}
-        context, spans = self.renderer._render(messages, tools, splices, generation=True)
-        imports = sorted((spans[state][0] + 1, f'{key}:{i}') for i, state in enumerate(states))
+            operators.append(_chain(prompt, reply, key, {
+                'kind': 'operator', 'operator': site['operator'], 'case_operator': name, 'source_key': source_key,
+                'weight': np.full(len(reply), self.seed_weight, np.float32)}))
+            seeds.append({**seed, 'site_tokens': len(prompt), 'span_tokens': len(span)})
+            parts += [{'type': 'text', 'text': site['state']['before']},
+                      {'type': 'native_state', 'id': _placeholder(f'operator-state:{source_key}'), 'key': source_key},
+                      {'type': 'text', 'text': site['state']['after']}]
+        states = {part['id']: part.pop('key') for part in parts if part['type'] == 'native_state'}
+        splices = {state: [self.role_ids[2], *documents[k]['ids'][documents[k]['start']:], self.role_ids[3]]
+                   for state, k in states.items()}
+        context, spans = self.renderer._render(consumer_messages(record, parts), tools, splices, generation=True)
+        imports = sorted((spans[state][0] + 1, k) for state, k in states.items())
         consumer = _chain(context, target, key, {'kind': 'consumer', 'operator': name},
                           imports=imports, sources=documents)
         total = len(consumer['ids']) + sum(len(d['ids']) for d in documents.values())
         if total > self.max_tokens or any(len(c['ids']) > self.max_tokens for c in operators):
             raise OperatorCaseError(f'over-token-cap: {total} > {self.max_tokens}')
-        cut_messages = self.renderer._consumer_messages(name, record, [
-            {'type': 'text', 'text': source_text(source), 'inline': True} if shown
-            else {'type': 'text', 'text': cut_text(source_text(source))} for source, shown in zip(sources, inline)])
-        cut_context, _ = self.renderer._render(cut_messages, tools, {}, generation=True)
+        cut_context, _ = self.renderer._render(consumer_messages(record, cut_parts), tools, {}, generation=True)
         text_cut = _chain(cut_context, target, key, {'kind': 'text-cut', 'operator': name})
         return {'operators': operators, 'consumer': consumer, 'text_cut': text_cut,
                 'meta': {'seeds': seeds, 'target_tokens': len(target), 'consumer_tokens': len(consumer['ids'])}}
+
+
+_PURPOSE = re.compile(r'^(?:Read th(?:is|ese) (?P<tool>\S+) results? for: '
+                      r'|The call that receives (?:this (?P<noun>\w+)|these \d+ arguments \((?P<nouns>\w+)\)) answers: '
+                      r'|Extract what this task needs from the (?P<doc>\w+)\. Task: )(?P<purpose>.*)$', re.S)
+
+
+def site_request(name: str, record: dict, source: dict, index: int, count: int) -> dict:
+    """The runtime site of one case source (ts-host native/operator-site.ts `OperatorSiteRequest`). A compact-value
+    case is its tool's output read for its call's purpose; compact-params and extract cases are string arguments of the
+    call that answers the case's question, named by the case's noun (`passage`, or `passage1`... for several)."""
+    instructions = record['writer'].get('instructions') or ''
+    match = _PURPOSE.match(instructions)
+    purpose = match['purpose'] if match else instructions
+    text = source_text(source)
+    if name == 'compact-value':
+        tool = (source.get('meta') or {}).get('tool') or (match and match['tool']) or 'tool'
+        return {'operator': 'compact-value', 'value': text, 'purpose': purpose, 'tool': tool, 'entry': index}
+    if name in ('compact-params', 'extract'):
+        noun = (match and (match['noun'] or match['nouns'] or match['doc'])) or 'document'
+        return {'operator': 'compact-params', 'value': text, 'purpose': purpose,
+                'argument': {'name': noun if count == 1 else f'{noun}{index + 1}', 'type': 'string'}}
+    raise OperatorCaseError(f'no-runtime-site: {name}')
+
+
+def consumer_messages(record: dict, parts: list) -> list:
+    """The case's consumer conversation (data) with the sources' blocks, as the runtime renders them, before its first
+    user message."""
+    messages = _serving_messages(record['consumer']['context'])
+    first = next((i for i, message in enumerate(messages) if message.get('role') == 'user'), None)
+    if first is None:
+        raise OperatorCaseError('consumer-without-user-message')
+    old = messages[first].get('content')
+    content = [*parts, {'type': 'text', 'text': '\n\n'}]
+    content += [{'type': 'text', 'text': old}] if isinstance(old, str) else list(old or [])
+    merged = []
+    for part in content:
+        if part.get('type') == 'text' and merged and merged[-1].get('type') == 'text':
+            merged[-1] = {'type': 'text', 'text': merged[-1]['text'] + part['text']}
+        elif part.get('type') != 'text' or part['text']:
+            merged.append(dict(part))
+    messages[first]['content'] = merged[0]['text'] if len(merged) == 1 and merged[0]['type'] == 'text' else merged
+    return messages
+
+
+class RuntimeSites:
+    """The runtime's operator sites (ts-host/scripts/operator-sites.mjs over the built dist): one node process, one
+    JSON line per request."""
+
+    def __init__(self, runtime=REPO / 'ts-host', node=None):
+        import shutil
+        import subprocess
+        node = node or shutil.which('node') or str(NODE)
+        self.process = subprocess.Popen([node, str(Path(runtime) / 'scripts/operator-sites.mjs')], stdin=subprocess.PIPE,
+                                        stdout=subprocess.PIPE, text=True, bufsize=1)
+
+    def site(self, request: dict) -> dict:
+        self.process.stdin.write(json.dumps(request) + '\n')
+        self.process.stdin.flush()
+        reply = json.loads(self.process.stdout.readline())
+        if 'error' in reply:
+            raise OperatorCaseError(f"runtime-site: {reply['error']}")
+        return reply
+
+    def close(self):
+        self.process.stdin.close()
+        self.process.wait()
 
 
 class _View:
@@ -254,7 +313,8 @@ def case_files(paths, operators=None):
 
 def build(args):
     tokenizer, roles, fingerprint = load_tokenizer(args.base)
-    builder = RowBuilder(tokenizer, roles, fingerprint, max_tokens=args.max_tokens, seed_weight=args.seed_weight)
+    builder = RowBuilder(tokenizer, roles, fingerprint, max_tokens=args.max_tokens, seed_weight=args.seed_weight,
+                         context_tokens=args.context_tokens)
     held = HeldClosure.from_cases(args.held)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -263,7 +323,8 @@ def build(args):
                'held_sets': {str(p): hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in args.held},
                'held_closure': {'groups': len(held.groups), 'ids': len(held.ids), 'shingles': len(held.owner),
                                 'shingle_words': SHINGLE, 'text_min': TEXT_MIN},
-               'seed_weight': args.seed_weight, 'max_tokens': args.max_tokens, 'splits': args.splits, 'sources': {}}
+               'seed_weight': args.seed_weight, 'max_tokens': args.max_tokens, 'splits': args.splits,
+               'context_tokens': args.context_tokens, 'runtime_code': code_provenance(), 'sources': {}}
     for path in case_files(args.cases, operators):
         name, source_name = path.parent.name, path.name.removesuffix('.port-records.jsonl')
         started = time.time()
@@ -316,6 +377,7 @@ def build(args):
         print(json.dumps({f'{name}/{source_name}': summary['sources'][f'{name}/{source_name}']}), flush=True)
     summary['registry_sha256'] = {name: registry_sha256([name]) for name in
                                   sorted({key.split('/')[0] for key in summary['sources']})}
+    builder.sites.close()
     (out / 'manifest.json').write_text(json.dumps(summary, indent=1, sort_keys=True) + '\n')
 
 
@@ -368,6 +430,8 @@ def main():
     p.add_argument('--max-tokens', type=int, default=32000)
     p.add_argument('--seed-weight', type=float, default=1.0)
     p.add_argument('--splits', nargs='+', default=['train', 'test'], choices=['train', 'test'])
+    p.add_argument('--context-tokens', type=int, default=None,
+                   help="the call's context budget the runtime sizes its shown page from (default: the page floor)")
     m = sub.add_parser('merge')
     m.add_argument('--rows', required=True)
     m.add_argument('--out', required=True)

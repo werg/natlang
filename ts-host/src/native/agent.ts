@@ -37,7 +37,7 @@ async function pinNativeProgramGuidance(store: NeuraleseStore, id: string): Prom
 import { listingViewInstructions, viewNote } from './prompt.js';
 import { pluggable, type PluggableSetting } from '../runtime/pluggable.js';
 import { modelFacing } from '../runtime/model-facing.js';
-import { framedState, OPERATOR_MIN_CHARS, OPERATOR_REASONING_TOKENS, OPERATOR_SPAN_CAPS, viewSiteMessages, type CompactSite } from './operator-frames.js';
+import { argumentInstructions, framedState, OPERATOR_MIN_CHARS, operatorPurpose, valueInstructions, OPERATOR_REASONING_TOKENS, OPERATOR_SPAN_CAPS, viewSiteMessages, type CompactSite } from './operator-frames.js';
 import { neuraleseRef, type NeuraleseRef } from './neuralese.js';
 import { untrustedBlock, type UntrustedRegistry } from './untrusted.js';
 import { writtenReturnResult } from './pseudo-call.js';
@@ -172,8 +172,13 @@ export function inputsListing(session: NativeSession, views: Readonly<Record<str
       try { return `\n  // File contents:\n${JSON.stringify(new TextDecoder('utf-8', { fatal: true }).decode(root!.readBytesSync(value.path)))}`; }
       catch { return '  // Binary file: use file.readBytes() before answering.'; }
     })() : '';
-    return `${field.name}: ${formatType(field.type)}${field.optional ? ' | undefined' : ''} = ${shown}${opening}`;
+    return listingLine(field.name, formatType(field.type) + (field.optional ? ' | undefined' : ''), shown) + opening;
   }).join('\n');
+}
+
+/** One argument's line of the opening listing: its name, type and value as shown. */
+export function listingLine(name: string, type: string, shown: string): string {
+  return `${name}: ${type} = ${shown}`;
 }
 
 /** The folder handle API a directory reducer's eval sees, as TypeScript declarations. */
@@ -684,8 +689,7 @@ export class NativeToolAgent {
 
   /** The call's instructions as an operator's purpose text (bounded). */
   private purpose(session: NativeSession): string {
-    const body = typeof session.lam.body === 'string' ? session.lam.body.replace(/\n+$/, '') : '';
-    return body.length > 2000 ? body.slice(0, 2000) : body;
+    return operatorPurpose(typeof session.lam.body === 'string' ? session.lam.body : '');
   }
 
   private async views(session: NativeSession): Promise<Record<string, string>> {
@@ -704,7 +708,7 @@ export class NativeToolAgent {
         try { text = JSON.stringify(value); } catch { text = undefined; }
         if (text === undefined) continue;
         const ref = await this.compactRef(session, { operator: 'compact-params', value: text,
-          instructions: `The call that receives this argument as ${field.name} (${formatType(field.type)}) answers: ${this.purpose(session)}` });
+          instructions: argumentInstructions(field.name, formatType(field.type), this.purpose(session)) });
         if (ref) out[field.name] = ref.$neuralese.id;
       }
       if (Object.keys(out).length) return out;
@@ -2395,7 +2399,7 @@ export class NativeToolAgent {
         // A cut-off output also shows the learned compact-value state of all of it, when that operator is selected.
         for (const full of result.cutOff ?? []) {
           const ref = await this.compactRef(session, { operator: 'compact-value', value: full,
-            instructions: `Read this ${name} result for: ${this.purpose(session)}` });
+            instructions: valueInstructions(name, this.purpose(session)) });
           if (ref) content += '\n\n' + framedState('compact-value', ref).trimEnd();
         }
         messages.push({ role: 'tool', tool_call_id: id, content: content + (index === results.length - 1 ? notice : '') });

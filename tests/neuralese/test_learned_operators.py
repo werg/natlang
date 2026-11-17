@@ -80,8 +80,8 @@ def test_every_operator_has_dedicated_data_target_distinct_prompt_and_span_cap()
     assert sorted(views) == ['compact-params', 'compact-value'] and all(OPERATORS[n].prompt == INSTRUCTIONS for n in views)
     others = [spec.prompt for spec in OPERATORS.values() if spec.placement != 'view']
     assert len(set(others)) == len(others) and INSTRUCTIONS not in others
-    site = operator_site_messages('compact-value', instructions='for: x', source='VALUE')
-    assert site[0] == {'role': 'system', 'content': INSTRUCTIONS} and site[1]['content'].endswith('value:\nVALUE')
+    with pytest.raises(ValueError, match='rendered by the runtime'):
+        operator_site_messages('compact-value', instructions='for: x', source='VALUE')
     assert all(spec.data_target >= 20_000 and spec.seed_cap >= 128 for spec in OPERATORS.values())
     assert len(registry_sha256()) == 64
 

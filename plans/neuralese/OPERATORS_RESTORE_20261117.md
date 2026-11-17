@@ -361,3 +361,39 @@ check pass; the variant means a new Pop base.
     head's softmax gradient.
 - **Not run:** an optimizer step on the rows. `exp0_sft train` with AdamW needs about 24 GB for its FP32 moments;
   `launch-sft.sh`'s preflight and the ledger budget cover that run.
+
+## 9. Operator sites from the runtime's own rendering (2026-11-17, owner concern)
+
+Owner concern: the rows built the operator site and the consumer blocks in Python (`learned_operators.operator_site_messages`
+view branch, `OperatorGraphRenderer.site/_consumer_messages`, a Python port of `cutText`), a second implementation of
+what ts-host renders at the compaction sites. Now:
+
+- **One implementation.** `ts-host/src/native/operator-site.ts` `operatorSite(request)` renders a site with the code the
+  agent runs there: `viewSiteMessages` with `valueInstructions(tool, purpose)` (compact-value) or
+  `argumentInstructions(name, type, purpose)` and the argument's `JSON.stringify` (compact-params), `operatorPurpose`,
+  the `PageStore.show` cut of a tool output and its `framedState('compact-value')` block, the listing line
+  (`listingLine`, `renderValue`, `viewNote`) of an argument, and whether the runtime compacts the value at all (cut off,
+  >= `OPERATOR_MIN_CHARS`). agent.ts calls the same helpers. `ts-host/scripts/operator-sites.mjs` serves it as a
+  JSON-lines batch call; `operator_rows.RuntimeSites` is its client.
+- **Removed from Python:** the view branch of `operator_site_messages` (it now refuses view-placement operators),
+  `OperatorGraphRenderer` (site, producer, consumer framing, graph render, guidance graph render), `cut_text` and
+  `TEXT_PLACEMENTS`. `data/operator_graph.py` keeps only chat-template tokenization (`TokenRenderer`) and seeds.
+- **Consumer side:** the case's consumer conversation stays data; each source's runtime block (the state between the
+  consume markers where the runtime places its sentinel; the crisp text in the text-cut sibling) goes before its first
+  user message.
+- **Cases mapped to runtime sites:** compact-value cases are tool outputs (`meta.tool`, else the tool word of the
+  case's instructions); compact-params and extract cases are string arguments named by the case's noun (`passage`,
+  `document`, `file`; `passage1..n` for several). The purpose is the question the case's instructions carry.
+- **What changed in the rows (by design, the runtime's wording):** compact-params sites now read "The call that
+  receives this argument as passage (string) answers: ..." with the value JSON-quoted, as the runtime sends it; the
+  consumer sees `passage: string = <state>  // view of the value; passage holds all of it` instead of the retired
+  "Compacted argument: " frame (agent.ts `views` never used it); web compact-value sites read "Read this web result
+  for:". extract cases are mostly not compacted at the runtime's page (their documents are short), so most are rejected
+  (`no-compacted-source`): the runtime has no extract site.
+- **Spot check** (6 cases each of 5 sources, `scripts/neuralese_data/operator_rows.py` `RowBuilder` against the old
+  Python site): tool-digest sites are identical (6/6); the others differ only as above. Schema
+  `natlang.operator-rows/2`; manifests record `runtime_code`.
+- **Open:** the runtime sizes the shown page from the call's context budget (`shownCharsFor`: 1/8 of the context at 3.5
+  chars/token). At GRPO's 131072-token budget a tool output or argument is cut only above ~57k characters, so most
+  cases (2k-57k characters) would not be compacted in grpo-v4's calls. Rows default to the page floor (`--context-tokens`
+  unset, 2,000 characters), the regime the operator cases were made for.

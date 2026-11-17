@@ -59,3 +59,20 @@ export function viewSiteMessages(value: string, instructions?: string): { role: 
   return [{ role: 'system', content: VIEW_PROMPT },
     { role: 'user', content: `${instructions ? `instructions:\n${instructions}\n\n` : ''}value:\n${value}` }];
 }
+
+/** The purpose of a compact-value site: a cut-off tool or service output read for the calling function's purpose. */
+export function valueInstructions(tool: string, purpose: string): string {
+  return `Read this ${tool} result for: ${purpose}`;
+}
+
+/** The purpose of a compact-params site: a cut-off argument of the call that receives it. */
+export function argumentInstructions(name: string, type: string, purpose: string): string {
+  return `The call that receives this argument as ${name} (${type}) answers: ${purpose}`;
+}
+
+/** A call's instructions as an operator's purpose text (bounded). */
+export function operatorPurpose(body: string): string {
+  const text = body.replace(/\n+$/, '');
+  return text.length > 2000 ? text.slice(0, 2000) : text;
+}
+

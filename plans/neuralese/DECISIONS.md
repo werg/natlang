@@ -3139,3 +3139,16 @@ citations rather than a fake capture implementation. None blocks this hosted tex
   smoke (`run2`, memetic share 0.5, teacher + hindsight + SD). Criteria: >= 3 memetic groups admitted, a guidance binding
   bound, hints pass the check within the repair budget.
 - Not shipped to grpo-v4 yet: it runs pin c57e7be28; these enter at its next resume on a new pin.
+
+## 2026-11-17: operator rows take their sites from the runtime's rendering code (operators agent)
+
+- Owner concern: operator rows rendered the operator site and the consumer blocks in Python, a second implementation
+  of the runtime's compaction sites. Decision: one implementation. `ts-host/src/native/operator-site.ts` renders a site
+  with the agent's own helpers (agent.ts now calls the same `valueInstructions`, `argumentInstructions`,
+  `operatorPurpose`, `listingLine`). `ts-host/scripts/operator-sites.mjs` is its batch entry point, and
+  `operator_rows.py` (schema `natlang.operator-rows/2`) its client. The Python view site, `OperatorGraphRenderer` and
+  the `cutText` port are removed. Consumer conversations stay case data.
+- Consequence: the rows built and merged earlier (`natlang-operator-rows-20261117-v1`, `ops/operators-v1/merged`) are
+  stale. They are rebuilt with the runtime sites before the operator stage's SFT. Details and the context-budget
+  question: OPERATORS_RESTORE_20261117.md §9.
+
