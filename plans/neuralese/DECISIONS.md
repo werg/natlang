@@ -2622,3 +2622,16 @@ forward/backward ~1.3 h at ~1,400 learner tokens/s), and ~4.7 h per 2-sample Pop
 - **SFT first** (sft-v3-run1, unchanged plan); GRPO from the SFT checkpoint follows its verdict.
 - **Task supply:** new qualified task families for thinly covered natlang behaviours (TASK_SUPPLY_20261117.md), into
   the v4 pool when ready by the pin, else the next one.
+
+**2026-11-17 09:50, grpo-v3-run1 ends at step 10; faster verdict (supervisor, before any further result).** The 4 vs
+4 verdict as planned would arrive ~2026-11-18 13:30 (base extension 4.5 h + final eval 9 h, all on Pop after the
+23:53 stop), and run1's remaining ~4 steps at LR 3e-6 inform nothing the next run (grpo-v4: higher LR, faster pin)
+needs. Its own in-run evidence agrees: within-task pass rate on revisited training tasks changed +3.0 +- 3.1 pts over
+6-10 versions (43 tasks), first-visit pool tasks are flat from v1 to v10 (v0's 44% is a start-up artefact: v1 differs
+from it by one step at LR 3e-7). Decisions:
+- **Final checkpoint = step 10** (sha 9cd7aa1a61d6). Run1 stops now; the DGX goes to the verdict and then the next pin.
+- **Verdict design: 4 vs 4 samples per task, engine-balanced.** Samples 0-1 of both arms on Pop (base: done; step 10:
+  the running eval resumes), samples 2-3 of both arms on the DGX's pinned held engine (`held_eval measure --checkpoint
+  ... --samples 2 --seed-base 4200002`, the seeds a 4-sample run gives samples 2-3). Each task has the same engine mix
+  in both arms, so the engine cancels in the paired per-task change; Pop-only and DGX-only 2 vs 2 are reported beside
+  it. Success and failure thresholds as declared (00:40 entry). Expected verdict ~13:30 today instead of tomorrow.
