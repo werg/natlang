@@ -91,7 +91,35 @@ def test_engine_attests_the_running_cap_and_compare_refuses_another():
     sixteen = {**result, 'engine': held_eval.engine_of({**binding, 'serving_engine': {'engine': 'sglang', 'max_running': 16}})}
     twenty = {**result, 'engine': held_eval.engine_of(binding)}
     with pytest.raises(ValueError, match='max_running'):
-        held_eval.compare(sixteen, twenty)
+        held_eval.compare(sixteen, twenty, strict_series=True)
+    report = held_eval.compare(sixteen, twenty)   # the running cap alone pairs, with a warning
+    assert report['engine_differences']['max_running'] == [16, 20] and report['warnings']
+
+
+def test_compare_pairs_other_series_and_fork_commits_with_warnings_but_not_other_precision_or_law():
+    def result(tree, fork, *, kv='fp8_e4m3', top_p=0.95, cap=None, commit='c1'):
+        engine = {'engine': 'sglang', 'dtype': 'bfloat16', 'kv_cache_dtype': kv, 'fork_commit': fork,
+                  'export_format': f'x-kv-{kv}', **({'max_running': cap} if cap else {})}
+        return {'samples': [{'task_id': 't', 'sample': 0, 'ran': True, 'reward': 1.0, 'outcome': 'task_success'}],
+                'policy_id': 'p', 'ran': 1, 'scored': 1, 'successes': 1, 'loop_rate': 0, 'engine': engine,
+                'sampling': {'temperature': 1.0, 'top_p': top_p}, 'code': {'git_commit': commit},
+                'series': {'key': tree, 'ts_host_tree': tree, 'model_facing': 'effect-receipt',
+                           'scoring_sources': {'scripts/run_bonsai_queue.py': 'a'}}}
+    base = result('tree-old', 'fork-old')                       # e.g. grpo-v3's Pop base: no attested running cap
+    new = result('tree-new', 'fork-new', cap=20, commit='c2')
+    new['series']['scoring_sources'] = {'scripts/run_bonsai_queue.py': 'b'}
+    report = held_eval.compare(base, new)
+    assert report['primary']['delta'] == 0 and not report['same_series']
+    assert set(report['series_differences']) == {'ts_host_tree', 'scripts/run_bonsai_queue.py', 'git_commit'}
+    assert report['engine_differences'] == {'fork_commit': ['fork-old', 'fork-new'], 'max_running': [None, 20]}
+    assert len(report['warnings']) == 2
+    assert held_eval.compare(base, base)['warnings'] == []
+    with pytest.raises(ValueError, match='scoring series'):
+        held_eval.compare(base, result('tree-new', 'fork-old'), strict_series=True)
+    with pytest.raises(ValueError, match='kv_cache_dtype'):
+        held_eval.compare(base, result('tree-new', 'fork-new', kv='auto'))
+    with pytest.raises(ValueError, match='different laws'):
+        held_eval.compare(base, result('tree-new', 'fork-new', top_p=1.0))
 
 
 def test_pop_actor_start_reuses_a_served_policy_only_with_the_same_engine_settings(monkeypatch):

@@ -12,8 +12,9 @@ bootstrap; a wall-clock timeout counts as a failure, dropping them is reported b
 - ``run`` measures one policy directory; failures and a cut-short run are recorded, and a partial run is still a balanced
   one (sample-major order) and pairs on what it finished.
 - A comparison series is the collector runtime (ts-host tree), the Python sources that run and score episodes
-  (``SCORING_SOURCES``) and the resolved ``NATLANG_MODEL_FACING`` variants, recorded in every result: only results of
-  one series are compared, a change of any starts a new series with its own baseline.
+  (``SCORING_SOURCES``) and the resolved ``NATLANG_MODEL_FACING`` variants, recorded in every result. ``compare`` pairs
+  results of different series by default (owner 2026-11-18: a base re-measured for every ts-host commit cost 3.5-7 h of
+  Pop each time) and records the differences with a warning; ``--strict-series`` pairs only one series and one engine.
 """
 from __future__ import annotations
 
@@ -775,7 +776,35 @@ def _rate_change(a, b, tasks, *, resamples, seed=0):
             'permutation_p': round((1 + extreme) / (1 + resamples), 4)}
 
 
-def compare(first, second, *, resamples=2000, trained_families=None, ignore_ids=()):
+# Engine settings whose difference refuses a pairing even across series: the engine kind, the weight and KV precision,
+# and speculative decoding (its sampling law is checked apart). Other attested differences (fork commit, running cap,
+# overlap, export format) are recorded with a warning; ``strict_series`` refuses them as well.
+PAIRING_ENGINE_FIELDS = ('engine', 'dtype', 'kv_cache_dtype', 'speculative')
+
+
+def pairing_differences(first, second):
+    """(series differences, engine differences) of two results: {field: [first, second]} each."""
+    series_a, series_b = first.get('series') or {}, second.get('series') or {}
+    series = {}
+    for key in ('ts_host_tree', 'model_facing', 'ts_host_dirty', 'scoring_dirty'):
+        if series_a.get(key) != series_b.get(key):
+            series[key] = [series_a.get(key), series_b.get(key)]
+    scoring_a, scoring_b = series_a.get('scoring_sources') or {}, series_b.get('scoring_sources') or {}
+    for path in sorted(set(scoring_a) | set(scoring_b)):
+        if scoring_a.get(path) != scoring_b.get(path):
+            series[path] = [scoring_a.get(path), scoring_b.get(path)]
+    codes = [(r.get('code') or {}).get('git_commit') for r in (first, second)]
+    if codes[0] != codes[1]:
+        series['git_commit'] = codes
+    engines = result_engine(first), result_engine(second)
+    engine = {}
+    if None not in engines:
+        engine = {k: [engines[0].get(k), engines[1].get(k)] for k in sorted(set(engines[0]) | set(engines[1]))
+                  if engines[0].get(k) != engines[1].get(k)}
+    return series, engine
+
+
+def compare(first, second, *, resamples=2000, trained_families=None, ignore_ids=(), strict_series=False):
     """The standalone comparison of two result.json files (``second`` against first).
 
     Primary: the mean per-task pass-rate change over the tasks both measured, with a within-task permutation test (valid
@@ -784,7 +813,12 @@ def compare(first, second, *, resamples=2000, trained_families=None, ignore_ids=
     ``without_ignored`` drops ``ignore_ids`` (structurally-zero or wrong-oracle tasks), and with ``trained_families``
     (families the second policy trained on) ``trained_families``/``untrained_families`` split the tasks. Secondary:
     McNemar and the task sign test on matched scored (task, sample) episodes (``paired``), timeouts, loop and ran-out
-    rates, and whether the two ran under one code commit and series."""
+    rates, and whether the two ran under one code commit and series.
+
+    Results of different series (ts-host tree, scoring sources, model-facing variants, commit) pair by default; the
+    differences are in ``series_differences``/``engine_differences`` and ``warnings``. A different sampling law, context
+    budget or ``PAIRING_ENGINE_FIELDS`` setting is refused; ``strict_series`` also refuses any series or engine
+    difference."""
     budgets = [result.get('context_tokens', LEGACY_CONTEXT_TOKENS) for result in (first, second)]
     if budgets[0] != budgets[1]:
         raise ValueError(f'results measured with different context budgets are not paired: {budgets[0]} vs {budgets[1]}')
@@ -792,10 +826,24 @@ def compare(first, second, *, resamples=2000, trained_families=None, ignore_ids=
     if laws[0] != laws[1]:
         raise ValueError(f'results sampled under different laws are not paired: {laws[0]} vs {laws[1]}')
     engines = result_engine(first), result_engine(second)
-    if None not in engines and engines[0] != engines[1]:
-        raise ValueError('results served by different engine settings are not paired: '
-                         + json.dumps({k: [engines[0].get(k), engines[1].get(k)] for k in engines[0]
-                                       if engines[0].get(k) != engines[1].get(k)}))
+    series_differences, engine_differences = pairing_differences(first, second)
+    def pairing_engine(engine):   # a merged result's engine mix: per sample range
+        if 'engine_parts' in engine:
+            return [[p['samples'], pairing_engine(p['engine'] or {})] for p in engine['engine_parts']]
+        return {k: engine.get(k) for k in PAIRING_ENGINE_FIELDS}
+    refused = {k: v for k, v in engine_differences.items() if strict_series or k in PAIRING_ENGINE_FIELDS}
+    if None not in engines and pairing_engine(engines[0]) != pairing_engine(engines[1]):
+        refused['engine_parts'] = [pairing_engine(engines[0]), pairing_engine(engines[1])]
+    if refused:
+        raise ValueError('results served by different engine settings are not paired: ' + json.dumps(refused))
+    if strict_series and (series_differences or first['series']['key'] != second['series']['key']):
+        raise ValueError('results of different scoring series are not paired (--strict-series): '
+                         + json.dumps(series_differences))
+    warnings = []
+    if first['series']['key'] != second['series']['key'] or series_differences:
+        warnings.append('different code or series (' + ', '.join(sorted(series_differences)) + ')')
+    if engine_differences:
+        warnings.append('engine differs in ' + ', '.join(sorted(engine_differences)))
 
     timed_out = sample_timed_out
 
@@ -835,6 +883,7 @@ def compare(first, second, *, resamples=2000, trained_families=None, ignore_ids=
             'engine_attested': None not in engines, 'same_code': side(first)['code'] == side(second)['code'],
             'same_series': side(first)['series'] == side(second)['series'],
             'same_manifest': first.get('manifest_sha256') == second.get('manifest_sha256'),
+            'series_differences': series_differences, 'engine_differences': engine_differences, 'warnings': warnings,
             'primary': {**change(every), 'statistic': 'mean per-task pass-rate change', 'timeouts': 'failure'},
             'sensitivity_drop_timeouts': {**change(every, 'drop'), 'timeouts': 'dropped'},
             'subsets': subsets,
@@ -1136,6 +1185,9 @@ def main(argv=None):
     c.add_argument('--trained-families', type=Path,
                    help='JSON list of families the second policy trained on: splits the change into trained/untrained')
     c.add_argument('--resamples', type=int, default=2000)
+    c.add_argument('--strict-series', action='store_true',
+                   help='pair only results of one scoring series and one attested engine (fork commit, running cap '
+                        'included); by default other series pair with a warning and the differences recorded')
     g = sub.add_parser('merge', help='one result.json from complete runs of one policy with continuing seeds '
                                      '(e.g. samples 0-1 and, with --seed-base +2, samples 2-3)')
     g.add_argument('out', type=Path, help='result.json to write')
@@ -1146,7 +1198,9 @@ def main(argv=None):
     elif args.command == 'compare':
         report = compare(json.loads(args.first.read_text()), json.loads(args.second.read_text()), resamples=args.resamples,
                          trained_families=json.loads(args.trained_families.read_text()) if args.trained_families else None,
-                         ignore_ids=read_ids(args.ignore_ids))
+                         ignore_ids=read_ids(args.ignore_ids), strict_series=args.strict_series)
+        if report['warnings']:
+            print('held_eval compare WARNING: ' + '; '.join(report['warnings']), file=sys.stderr, flush=True)
         text = json.dumps(report, indent=1)
         if args.out:
             args.out.write_text(text + '\n')
