@@ -44,6 +44,21 @@ from torch.utils.checkpoint import checkpoint as torch_checkpoint
 
 LOGIT_CHUNK = 4096
 
+# Inductor options of every compile here (layers, the cross-entropy and nucleus kernels). ``emulate_precision_casts``:
+# keep eager's BF16 rounding after each BF16 op; by default Inductor computes a fused chain of BF16 ops in FP32 and rounds
+# only what it stores, so the rounding points depended on which values a graph stores: a no-grad (inference) graph stores
+# fewer than a training graph, and compiled no-grad log-probabilities drifted from eager and from the grad-mode graph
+# (2026-11-17). ``deterministic``: no per-process benchmarking of reduction configs, whose choice changes summation order
+# (the same compiled forward differed between processes). Opt-out: NATLANG_FAST_TRAIN_INDUCTOR=fast (Inductor defaults).
+import os as _os
+
+COMPILE_OPTIONS = ({} if _os.environ.get('NATLANG_FAST_TRAIN_INDUCTOR') == 'fast'
+                   else {'emulate_precision_casts': True, 'deterministic': True})
+
+
+def _compile(function, **kwargs):
+    return torch.compile(function, dynamic=True, options=dict(COMPILE_OPTIONS) or None, **kwargs)
+
 
 def _rms(x, weight, eps):
     """`Lfm3RMSNorm.forward`: normalize in fp32, round to the input dtype, multiply by the weight."""
@@ -243,7 +258,7 @@ def _kernel(name, compiled):
         # prefix-tree passes: more than dynamo's default 8 variants, and fullgraph turns the 9th into a hard failure
         # (grpo-v2-run1 died in step 1's KL reference pass on attention_layer, 2026-11-13).
         torch._dynamo.config.recompile_limit = max(torch._dynamo.config.recompile_limit, RECOMPILE_LIMIT)
-        _COMPILED[name] = torch.compile(function, dynamic=True, fullgraph=True)
+        _COMPILED[name] = _compile(function, fullgraph=True)
     return _COMPILED[name]
 
 
@@ -575,7 +590,7 @@ _CE = {}
 
 def _ce(name):
     if name not in _CE:
-        _CE[name] = torch.compile({'forward': _ce_forward, 'backward': _ce_backward}[name], dynamic=True)
+        _CE[name] = _compile({'forward': _ce_forward, 'backward': _ce_backward}[name])
     return _CE[name]
 
 
@@ -688,7 +703,7 @@ def _nucleus_grad_kernel(device_type):
     if device_type != 'cuda':
         return _nucleus_logit_grad
     if 'cuda' not in _NUCLEUS_GRAD:
-        _NUCLEUS_GRAD['cuda'] = torch.compile(_nucleus_logit_grad, dynamic=True)
+        _NUCLEUS_GRAD['cuda'] = _compile(_nucleus_logit_grad)
     return _NUCLEUS_GRAD['cuda']
 
 
