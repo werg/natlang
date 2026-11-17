@@ -190,7 +190,8 @@ test('the SQLite database: requests compile to one transaction; a failing statem
       { semantic: [{ criterion: 'mentions a late delivery', table: 'orders', column: 'note' }] });
     return null;
   });
-  const runtime = createNatlangRuntime({ model: model.driver });
+  // The application wiring fixture supplies eval source, including its SQLite semantic judge.
+  const runtime = createNatlangRuntime({ model: { driver: model.driver, decisionGeneration: 'tool-loop' } });
   const db = new SqliteDatabase(join(root, 'shop.sqlite'), fn => runtime.run(fn), () => '2026-10-07');
   try {
     assert.equal((await db.ask('Keep orders: a note and a total that is never negative.')).kind, 'schema');

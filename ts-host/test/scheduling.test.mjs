@@ -10,7 +10,8 @@ const CRISP = await appCrisp('scheduling');
 /** A runtime whose refinements are decided by the application's crisp checkers; the judge, if asked, accepts. */
 function refined(driver, extra = {}) {
   withJudge(driver);
-  return createNatlangRuntime({ model: driver, calls: false, ...extra });
+  // These wiring fixtures answer with eval source; real JSON decision generation is covered separately.
+  return createNatlangRuntime({ model: { driver, decisionGeneration: 'tool-loop' }, calls: false, ...extra });
 }
 
 const day = {

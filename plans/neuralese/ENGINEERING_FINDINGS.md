@@ -1523,3 +1523,9 @@ actual JSON replies on tool-free decision requests; their old scripted tool-call
 Fresh packed CLI plus adaptation checks passed23 tests; the distributed skill fixture passed3. These corrections change registry plumbing, code location and
 scripted tests, preserving production prompt/reply/outcome behavior from67a3eb693. The pinned full remainder continues;
 these targeted corrections must be reported alongside its exact result, never as an entirely green run of that old pin.
+
+The full TS scan also reached NLDB/scheduling eval-script wiring fixtures whose decision children intentionally return
+code to execute in eval. Those helpers now explicitly choose `decisionGeneration: tool-loop`; the matching workflow
+helper is treated consistently. This keeps their application/effect wiring assertion intact while the default hosted
+JSON surface is exercised by separate actual readout/native-collector/CLI/distributed-skill tests. All30 application
+wiring cases pass. No production runtime option default changed in this test-only correction.
