@@ -2635,3 +2635,10 @@ from it by one step at LR 3e-7). Decisions:
   ... --samples 2 --seed-base 4200002`, the seeds a 4-sample run gives samples 2-3). Each task has the same engine mix
   in both arms, so the engine cancels in the paired per-task change; Pop-only and DGX-only 2 vs 2 are reported beside
   it. Success and failure thresholds as declared (00:40 entry). Expected verdict ~13:30 today instead of tomorrow.
+
+**2026-11-17 10:35, Haiku joins teacher generation (supervisor).** The owner supplied `anthropic.env` (also new:
+`openai.env`, `openrouter-tick.env`). Smoke (`teacher-gen-20261115/haiku-smoke-1`, 12 random pool tasks,
+`claude-haiku-5-5` through the Pi `anthropic` provider, effort medium): 10/12 verified successes, 0 deferrals, 6-56 s
+per task. Its replies carry the model's own visible text between tool calls as `reasoning_content` (not hidden
+reasoning), so it is trained as written. Added to `pool-v1/launch-multi.sh` with 8 slots beside Luna; restarted as
+`tgen-multi-16` (pool-v1 resumes; the pre-change launcher is kept as `launch-multi.sh.pre-haiku-20261117`).
