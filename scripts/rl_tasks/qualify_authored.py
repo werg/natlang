@@ -37,6 +37,11 @@ from measure_repetition import write_text_atomic  # noqa: E402
 
 DEFAULT_RUNTIME = str(resolve('data_hdd', 'natlang-rl-authoring', 'runtime', 'ts-host'))
 UNION = resolve('data_nvme', 'broad-rl-tasks-20261031', 'union_groups_fast.py')
+# The closure script (protection_union.py's head) imports scripts.neuralese_data.build_verified_teacher_trajectory_graphs
+# and build_idiom_mixture, which 60d2c1209 removed from main with the legacy SFT stack. It runs from a frozen copy of
+# that commit's parent (`git archive 60d2c1209^ scripts training`); the held-set sources it reads did not change since.
+UNION_SRC = Path(os.environ.get('NATLANG_PROTECTION_UNION_SRC')
+                 or resolve('data_hdd', 'natlang-rl-authoring', 'protection-cache', 'legacy-src-60d2c1209p'))
 # The protection closure hashes about 10 GB of held/train source bytes to build its union digest. A per-run isolated
 # hash cache made that a fixed ~25 minute cost per qualification; this dedicated persistent cache keeps the same exact
 # device/inode/size/mtime/ctime signature keys (a changed or replaced source misses and is rehashed), so the union
@@ -111,9 +116,12 @@ def main(argv=None):
     if UNION.is_file():
         PROTECTION_HASH_CACHE.parent.mkdir(parents=True, exist_ok=True)
         started = time.time()
+        if not (UNION_SRC / 'scripts' / 'neuralese_data' / 'build_verified_teacher_trajectory_graphs.py').is_file():
+            raise SystemExit(f'protection closure source tree missing: {UNION_SRC} (see UNION_SRC)')
         subprocess.run([sys.executable, str(UNION), str(out / 'cases.jsonl'), str(out / 'protection-union.json')],
-                       check=True, cwd=REPO, env={**env, 'PYTHONPATH': f'{REPO}/training/neuralese:{REPO}',
-                                                  'NATLANG_HASH_CACHE': str(PROTECTION_HASH_CACHE)})
+                       check=True, cwd=UNION_SRC, env={**env, 'PYTHONPATH': f'{UNION_SRC}/training/neuralese:{UNION_SRC}',
+                                                       'NATLANG_HASH_CACHE': str(PROTECTION_HASH_CACHE)})
+        report['steps']['protection_closure_source'] = str(UNION_SRC)
         union = json.loads((out / 'protection-union.json').read_text())
         report['steps']['protection_closure'] = {'seconds': round(time.time() - started, 1),
                                                  'hash_cache': str(PROTECTION_HASH_CACHE),
