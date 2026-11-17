@@ -1327,7 +1327,7 @@ def neuralese_graph(args):
     wanted = collections.defaultdict(dict)
     for e in kept:
         wanted[(e['run'], e['group'])][e['sample']] = e
-    rows_of = {}
+    lowered_of = {}         # key -> (every call on a current surface, lowering counters, calls): rows are not kept
     for (label, name), samples in sorted(wanted.items()):
         path = files.get((label, name))
         if path is None:
@@ -1337,24 +1337,29 @@ def neuralese_graph(args):
             if line.strip():
                 row = json.loads(line)
                 if row.get('sample') in samples and row.get('task_id') == samples[row['sample']]['task_id']:
-                    rows_of[samples[row['sample']]['key']] = row
+                    counters = collections.Counter()
+                    calls = episode_turns(row, counters)
+                    for call in calls:      # SFT: the own sampled tokens are the target (no importance weights)
+                        for field in ('logp', 'probabilities'):
+                            call.pop(field, None)
+                    lowered_of[samples[row['sample']]['key']] = (
+                        all(surface_key(t) in surfaces for t in row['turns'] if t.get('messages')), counters, calls)
+                del row
     per_task = collections.Counter()
     stats = collections.Counter()
     rows_out = ZstdWriter(out / 'rows.jsonl.zst')
     sft_episodes, tasks = [], {}
     for e in kept:
-        row = rows_of.get(e['key'])
-        if row is None:
+        if e['key'] not in lowered_of:
             funnel['rollout_row_missing'] += 1
             continue
         if per_task[e['task_id']] >= args.max_per_task:
             funnel['over_task_cap'] += 1
             continue
-        if any(surface_key(t) not in surfaces for t in row['turns'] if t.get('messages')):
+        current, lowered, calls = lowered_of[e['key']]
+        if not current:
             funnel['unseen_surface'] += 1
             continue
-        lowered = collections.Counter()
-        calls = episode_turns(row, lowered)
         stats.update(lowered)
         if lowered['skip_native_state_prompt'] or lowered['skip_native_state_missing']:
             funnel['import_without_recorded_write'] += 1
@@ -1362,9 +1367,6 @@ def neuralese_graph(args):
         if not any(c['imports'] for c in calls):
             funnel['no_lowered_import'] += 1
             continue
-        for call in calls:      # SFT: the own sampled tokens are the target (no importance weights)
-            for field in ('logp', 'probabilities'):
-                call.pop(field, None)
         episode = {'task_id': e['task_id'], 'round': f"rl-neuralese-graph:{e['key']}", 'rows': calls}
         chains = chains_of([episode])
         per_task[e['task_id']] += 1
