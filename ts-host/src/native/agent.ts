@@ -664,8 +664,19 @@ export class NativeToolAgent {
       seed: session.runtime.seedPolicy.mode === 'backend' ? null :
         deriveSeed(session.runtime.seedPolicy.root!, runSeedKey(session.runtime.options), session.lam.attempts, `operator-${index}`, 0),
       max_tokens: 2 * OPERATOR_SPAN_CAPS[site.operator] };
-    // model-call-kind: operator-call -- training/model-call-kinds.json
-    const response = await runInFrame(session.runtime.frame, () => this.driver(request, session.runtime.signal));
+    // Only this sampled operator call consumes a graph generation reservation. Capturing its existing reply is
+    // deterministic materialization, not another sampled decision or a fabricated native turn.
+    const reservation = await this.options.modelBudget?.reserve(request.max_tokens ?? null, session.runtime.signal);
+    if (this.options.modelBudget && !reservation) throw new Error('operator model request or token budget exhausted');
+    if (reservation) request.max_tokens = reservation.limit;
+    let response: ModelTurn;
+    try {
+      // model-call-kind: operator-call -- training/model-call-kinds.json
+      response = await runInFrame(session.runtime.frame, () => this.driver(request, session.runtime.signal));
+    } catch (error) { reservation?.finish(); throw error; }
+    reservation?.finish(response.completion_tokens);
+    if (reservation?.limit != null && response.completion_tokens !== undefined && response.completion_tokens > reservation.limit)
+      throw new Error('operator model response exceeded its graph token reservation');
     return this.capturedRef(session, site.operator, request.invocation_id!, capture, request, response);
   }
 

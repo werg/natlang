@@ -1531,3 +1531,22 @@ the existing fixture's pure verdict functions to return raw JSON. The former eva
 finite stages are removed, so an unexpected tool-loop path fails instead of masking the new surface. All30 application
 wiring cases pass with unchanged stage/effect assertions and no diagnostic opt-out. No production runtime change was
 needed for these fixture corrections.
+
+### 2026-11-17: incoming operator generation bypassed graph budgets
+
+The merged `native/agent.ts:operatorWrite` directly dispatched its real model call from `views` before the ordinary loop
+or decision generator reserved the task allowance. It could issue a request at maxModelRequests0 and ignore the graph
+token limit. The fix uses existing ModelBudget.reserve/finish, caps the actual request, charges reported usage, and
+refuses successful capture on an overrun. Inventory: compact-value/compact-params reach this one sampled helper;
+compact-history reuses its already sampled note through noteRef/capturedRef. HTTP serverCapture and grammarCapture are
+deterministic state materialization, not extra policy decisions; their sampling/serving protocols are unchanged.
+Both TS configs,23 decision/operator checks and5 model-call-kind guards pass under a2GB ledger unit. Existing unbounded
+operator/capture tests stay unchanged; new cases exercise zero requests,3-token allowance and an overrun.
+
+Read-only DGX ledger/process inspection (2026-11-17 around20:20) found SFT-v3 running pinned2734e2c44ddb exp0_sft,
+without learned-compaction or compaction environment flags, and Pop held collectors pinned383bd4ed3651 explicitly using
+NATLANG_MODEL_FACING=effect-receipt. No live learned-compaction runtime measurement was found among the active inspected
+units; packtree/progtune units had no live processes by the follow-up check. Operator-row generation/check units were
+queued, not live experiments. No GPU job was launched and no unrelated run was stopped. The optional compaction path
+is crisp by default; this fix belongs in the next affected pin. Direct program options of unrelated processes were not
+exhaustively reconstructed; no claim about uninspected jobs or earlier archives follows from this check.

@@ -617,3 +617,8 @@ turn remains a generation node so native generation receipts link correctly. Inv
 fail explicitly with `decision-generation-invalid`. The diagnostic opt-out is `model.decisionGeneration: 'tool-loop'`.
 The existing explicit multi-model handoff/fallback loop retains its prior behavior. No new serving fields are needed on
 managed llama-server, wllama, Python native or SGLang: all use the existing tool-free generation request protocol.
+
+Learned compaction's sampled operator call uses the task's shared model request/token reservation. A zero allowance
+prevents dispatch; token caps and reported completion usage follow the same contract as ordinary generation. A response
+over its reservation is not captured as a successful operator result. Capture of that existing reply remains deterministic
+state materialization, without another sampled decision or fabricated probabilities. Operator failure keeps the text cut.

@@ -2593,3 +2593,14 @@ listing of at least 800 characters gets one extra model call:
 
 compact-value and compact-params now share view's body and site, replacing their own prompts (registry v3). Without
 the variant nothing changes. The variant is measured by held success on vs off before it becomes the default.
+
+### 2026-11-17: operator generation obeys the shared task model budget
+
+Merge review found the new learned-compaction operator's real sampled call dispatched before the ordinary loop's
+reservation, allowing a request with a zero graph-request allowance. `operatorWrite` now uses the same
+`ModelBudget.reserve/finish` contract as other generation: the actual request gets its reserved token cap, reported
+usage consumes that reservation, and an overrun cannot be captured as a successful operator result. Deterministic
+capture of an already sampled reply is not counted as another sampled decision. Without an allowance the operator
+retains its established text-cut fallback; the ordinary caller then observes the same exhausted graph budget.
+Unbounded operator request content and capture remain unchanged. This is shared TypeScript runtime plumbing across
+all engines, not a new sampling protocol. Zero-request, token-limit and overrun regressions cover the exact boundary.
