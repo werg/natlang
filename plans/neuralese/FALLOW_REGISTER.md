@@ -21,19 +21,20 @@ held-v2. Monitoring checks the pinned experiments and machine health; it does no
 
 ## Paused controlled additions (APPROACH_REVIEW 2026-11-11, adopted 2026-11-12)
 
-Switched off when the review was adopted; each returns as its own controlled addition with a paired held measurement,
-one at a time, after two consecutive held gains from plain updates (AGENTS.md "How we train now"). None has returned:
-as of 2026-11-14 no plain update has a held gain (exp0/exp1 no gain; grpo-v1 run2 step 5 +0.4 n.s.; grpo-v2-run1 failed,
-cause under test: episode loss normalization). Reviewed at every experiment boundary; the order below is the return order.
+Switched off when the review was adopted. The "two consecutive held gains" return gate is withdrawn (owner 2026-11-17,
+DECISIONS 16:45: no gate may depend on a result the current method may never produce): P2, P3, P5, P6 and P9 are being
+rebuilt on the per-call stack now (`RESTORE_MEMETIC_JOLT_HINDSIGHT_20261117.md`, `NEURALESE_PASSTHROUGH_20261117.md`)
+and enter runs as flags, bundled by expected merit. Reviewed at every experiment boundary.
 
 | # | Piece | Code now | Fix before it returns | Next action |
 |---|---|---|---|---|
 | P1 | Neuralese-declaring task variants (row N1) | live, `grpo.py --neuralese-variants` (off) | none known | first addition after two held gains (data, not machinery) |
 | P2 | Whole-graph Neuralese gradients | deleted with the w5 learner (60d2c1209); per-call consumer calls train with imported state fixed | rebuild on the per-call learner, producer gradient through the real graph | after P1, once Neuralese use rate is worth training |
-| P3 | JOLT+ teacher and privileged twin | deleted 60d2c1209 (`rl/teacher_feed.py`) | as run in w5 it was cost without signal (review 2.5): student KL `beta_s` 0, one teacher attempt per group so advantage 0, privileged episodes only in the first 1-2 updates of a round, twin doubled forward tokens | redesign (teacher attempts inside the group, nonzero student KL) before its measurement |
+| P3 | JOLT+ teacher attempts (privileged OPSD twin: phase 2) | rebuilt 2026-11-17 (2734e2c44): `grpo.py --teacher-attempts K` (default 0) for groups with at most `--teacher-max-successes` successes, answers excluded from the facts, trained in student form (`rl/jolt.py student_form`), students keep plain GRPO, teachers `guided_advantages` (never negative) | w5 waste fixed: K attempts inside the group with a non-zero advantage against the students; no twin on every graph. OPSD twin (`beta_s` > 0 on guided groups only) needs the learner's import path (pass-through landed 993df3f3d) | one live smoke on a DGX actor (the in-run guidance path has not run since 11-12), then on in the next bundle (`--teacher-attempts 4`) |
 | P4 | Neuralese use bonus (correct episodes only) | reward code remains in `rl/rollout_math.py`; not wired into `grpo.py` | none known | after P2 |
-| P5 | Memetic guidance programs | `applications/memetic-improver`, `applications/guidance-writer` (row C6); trainer stage deleted 60d2c1209 | trains only on a backbone with held gains (AGENTS.md LFM3 direction) | after held gains |
-| P6 | Expert iteration / self-distillation into SFT | deleted 60d2c1209 (`rl/rollout_distillation.py`); exp0 is SFT on own successes | only with a measured win of exp0-style SFT | revisit with exp0's result |
+| P5 | Memetic guidance programs | rebuilt 2026-11-17 (e23d63c21): `rl/memetic_workspace.py`, `rl/memetic_tasks.py build`, world-bridge kind `memetic`, `grpo.py --memetic-tasks --memetic-share` (default 0), anchored advantages | no real episode on the rebuilt path yet (the e2e of 11-04 ran on the deleted stage); fits not offered (no adapter actor) | build rows from the pin's pool, one real episode group on a DGX actor, then `--memetic-share 0.01` in a bundle; next: query runs as guidance-consumer data, held-program measurement |
+| P6 | Self-distillation of own successes | `sft_sources.py` `rl-own` (live: sft-v3-run1, 44% of its target); `rl/rollout_distillation.py` deleted | missing: an in-loop SFT term on recent rare successes in GRPO, teacher-attempt successes in student form in `sft_sources`, Neuralese whole-graph rows | implement after the pass-through lands in the learner loss (design section 4: `--sd-weight`, `--sd-window`) |
+| P9 | Neuralese hindsight hints | `writeHint` returns text and runs for a teacher's root call with a verified run (6fda3e52d); index `rl/hindsight.py index` (`/home/werg/data/hindsight-index-20261117/index.jsonl`, 4,776 tasks); `grpo.py --hindsight-trajectories` | phase 1 reconstruction objective (writer trained through the hint state) needs the pass-through lowering of the hint's producer document | with P3's smoke; then `--hindsight-reconstruction K` |
 | P7 | Pop pre-collection, interleaved SFT windows | deleted 60d2c1209 | Pop is reserved for held evals (owner 2026-11-13) | excluded while that holds |
 | P8 | QAT | off | -- | after the backbone shows held gains |
 
