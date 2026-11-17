@@ -600,6 +600,43 @@ def tree_layout(lengths, parents, taps):
     return pos.astype(np.int64), doc, pred, ancestors
 
 
+TREE_BLOCK = 128
+
+
+def _tree_block_mask(pos, doc, ancestors, window, mask_mod, block=TREE_BLOCK):
+    """The flex-attention ``BlockMask`` of a path mask, classified from the tree's structure (no T x T evaluation, no
+    compile per sequence length: ``create_block_mask`` recompiled for every new length, 2-17 s each): a (query block, key
+    block) tile is skipped only when no query can see a key (no ancestor pair, or every key after every query, or out of
+    the window), full only when every query sees every key, and otherwise partial (``mask_mod`` per element)."""
+    from torch.nn.attention.flex_attention import BlockMask
+    total = pos.shape[0]
+    blocks = -(-total // block)
+    row_block = torch.arange(total, device=pos.device) // block
+    members = torch.zeros(blocks, ancestors.shape[0], device=pos.device)
+    members[row_block, doc] = 1.
+    seen = ancestors.float()
+    any_ancestor = (members @ seen @ members.T) > 0
+    not_ancestor = (members @ (1. - seen) @ members.T) > 0
+    low = torch.full((blocks,), torch.iinfo(torch.int64).max, device=pos.device).scatter_reduce(0, row_block, pos, 'amin')
+    high = torch.full((blocks,), -1, device=pos.device).scatter_reduce(0, row_block, pos, 'amax')
+    q_low, q_high, k_low, k_high = low[:, None], high[:, None], low[None, :], high[None, :]
+    possible = any_ancestor & (k_low <= q_high)
+    full = ~not_ancestor & (k_high <= q_low)
+    if window >= 0:
+        possible &= q_low - k_high <= window
+        full &= q_high - k_low <= window
+    whole = torch.ones(blocks, dtype=torch.bool, device=pos.device)
+    whole[-1] = total % block == 0                     # a last block shorter than ``block`` is never full
+    full &= possible & whole[:, None] & whole[None, :]
+    partial = possible & ~full
+
+    def listed(tiles):
+        order = torch.argsort((~tiles).to(torch.int8), dim=-1, stable=True).to(torch.int32)
+        return tiles.sum(-1).to(torch.int32)[None, None], order[None, None]
+    return BlockMask.from_kv_blocks(*listed(partial), *listed(full), BLOCK_SIZE=block, mask_mod=mask_mod,
+                                    seq_lengths=(total, total))
+
+
 def tree_masks(pos, doc, ancestors, windows, device):
     """Per attention window (-1: full): the path mask of a flattened tree (query q sees key k when k's document is an
     ancestor-or-self of q's and k is at most ``window`` path positions before q): a flex-attention ``BlockMask`` on CUDA,
@@ -607,13 +644,16 @@ def tree_masks(pos, doc, ancestors, windows, device):
     pos, doc, ancestors = (torch.as_tensor(t, device=device) for t in (pos, doc, ancestors))
     total = pos.shape[0]
     masks = {}
-    for window in set(windows):
-        def mask_mod(b, h, q, k, window=window):
+
+    def path_mask(window):                 # a 4-argument mask_mod (flex tells mask_mod from score_mod by arity)
+        def mask_mod(b, h, q, k):
             seen = ancestors[doc[q], doc[k]] & (pos[k] <= pos[q])
             return seen & (pos[q] - pos[k] <= window) if window >= 0 else seen
+        return mask_mod
+    for window in set(windows):
+        mask_mod = path_mask(window)
         if torch.device(device).type == 'cuda':
-            from torch.nn.attention.flex_attention import create_block_mask
-            masks[window] = create_block_mask(mask_mod, None, None, total, total, device=device, _compile=True)
+            masks[window] = _tree_block_mask(pos, doc, ancestors, window, mask_mod)
         else:
             i = torch.arange(total, device=device)
             masks[window] = mask_mod(None, None, i[:, None], i[None, :])

@@ -240,7 +240,7 @@ def test_nucleus_gradient_kernel_casts_inside_bitwise():
     cut, set_lse = lfm3_fast_train._nucleus_cut_lse(lf, lse, .95, 1024)
     target = torch.randint(0, vocab, (rows,), device='cuda')
     grad, grad_nucleus = torch.randn(rows, device='cuda'), torch.randn(rows, device='cuda')
-    old = torch.compile(fp32_kernel, dynamic=True)(lf, target, lse, set_lse, cut, grad, grad_nucleus).to(torch.bfloat16)
+    old = lfm3_fast_train._compile(fp32_kernel)(lf, target, lse, set_lse, cut, grad, grad_nucleus).to(torch.bfloat16)
     new = lfm3_fast_train._nucleus_grad_kernel('cuda')(logits, target, lse, set_lse, cut, grad, grad_nucleus)
     assert new.dtype == torch.bfloat16 and torch.equal(new, old)
 
@@ -392,6 +392,70 @@ def test_prefix_tree_gradients_equal_separate_sequences():
         for index in expected:
             torch.testing.assert_close(actual[index], expected[index], rtol=1e-4, atol=1e-5)
         _grads_close(flat, tree, f'tree-mask batch {batch_tokens}')
+
+
+def test_tree_block_mask_lists_every_visible_tile_and_only_true_full_tiles():
+    """The flex-attention BlockMask built from the tree's structure (CPU tensors, 4-row tiles): a tile with any visible
+    (query, key) pair is listed (partial or full), and a full tile has every pair visible, for full and sliding windows."""
+    lengths, parents = [9, 6, 11, 5, 7, 3, 10], [-1, 0, 0, 1, -1, 4, 2]
+    pos, doc, _, ancestors = lfm3_fast_train.tree_layout(lengths, parents, 4)
+    pos, doc, ancestors = torch.from_numpy(pos), torch.from_numpy(doc), torch.from_numpy(ancestors)
+    fulls = 0
+    for window in (-1, 3, 8):
+        dense = lfm3_fast_train.tree_masks(pos, doc, ancestors, [window], 'cpu')[window]
+
+        def mask_mod(b, h, q, k):
+            seen = ancestors[doc[q], doc[k]] & (pos[k] <= pos[q])
+            return seen & (pos[q] - pos[k] <= window) if window >= 0 else seen
+        mask = lfm3_fast_train._tree_block_mask(pos, doc, ancestors, window, mask_mod, block=4)
+        blocks = -(-len(pos) // 4)
+        listed = {kind: set() for kind in ('partial', 'full')}
+        for kind, num, idx in (('partial', mask.kv_num_blocks, mask.kv_indices),
+                               ('full', mask.full_kv_num_blocks, mask.full_kv_indices)):
+            for q in range(blocks):
+                listed[kind] |= {(q, int(k)) for k in idx[0, 0, q, :num[0, 0, q]]}
+        assert not listed['partial'] & listed['full']
+        for q in range(blocks):
+            for k in range(blocks):
+                tile = dense[4 * q:4 * q + 4, 4 * k:4 * k + 4]
+                if tile.any():
+                    assert (q, k) in listed['partial'] | listed['full'], (window, q, k)
+                if (q, k) in listed['full']:
+                    assert tile.all() and tile.shape == (4, 4), (window, q, k)
+        fulls += len(listed['full'])
+    assert fulls                                                     # the structure finds full tiles at all
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason='flex-attention BlockMask path (CUDA)')
+def test_tree_mask_on_cuda_equals_the_dense_path_mask():
+    """On CUDA the tree mask is a flex-attention BlockMask built from the tree's structure: in FP32 its states and
+    gradients equal the CPU's dense-mask run of the same flattened tree (which equals the whole sequences)."""
+    seqs, caps = _shared_sequences()
+    _, cpu = _pair()
+    _, gpu = _pair()
+    gpu.load_state_dict(cpu.state_dict())
+    gpu.cuda()
+    weights = [torch.randn(len(s) - c, cpu.config.hidden_size) for s, c in zip(seqs, caps)]
+    states = {}
+    for model, device in ((cpu, 'cpu'), (gpu, 'cuda')):
+        actual = states[device] = {}
+
+        def leaf(items, forward, device=device, actual=actual):
+            ids = torch.cat([torch.from_numpy(seqs[i][s:]).long().to(device) for i, s in items])
+            h, loss, offset = forward(ids, [len(seqs[i]) - s for i, s in items]), 0., 0
+            for i, s in items:
+                rows = h[offset + caps[i] - s:offset + len(seqs[i]) - s]
+                actual[i] = rows.detach().cpu()
+                loss = loss + (rows * weights[i].to(device)).sum()
+                offset += len(seqs[i]) - s
+            loss.backward()
+        lfm3_fast_train.run_prefix_tree(model, lfm3_fast_train.prefix_tree(seqs, caps, 2),
+                                        lambda i, a, b, device=device: torch.from_numpy(seqs[i][a:b]).long().to(device),
+                                        leaf, lambda i, s: len(seqs[i]) - s, 1000, mode='tree-mask', batch_tokens=1000)
+    for index in states['cpu']:
+        torch.testing.assert_close(states['cuda'][index], states['cpu'][index], rtol=1e-4, atol=1e-5)
+    for (name, a), (_, b) in zip(cpu.named_parameters(), gpu.named_parameters()):
+        assert (b.grad.cpu() - a.grad).norm() <= 1e-4 * a.grad.norm() + 1e-9, name
 
 
 def test_tree_layout_paths_positions_and_conv_predecessors():
