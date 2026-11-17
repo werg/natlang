@@ -156,7 +156,7 @@ For a teacher running an evaluation suite, `evaluate(prepared, { driver, executo
 actual executor identity without changing the suite's declared student identity. Each result's `modelTurns` contains
 the exact executor `request` and `reply`, `invocation_id`, `parent_call_id` and per-invocation `turn`; independent judge
 requests are excluded. Capture snapshots the request before dispatch and records replies before scoring. A generated-turn
-collection uses a driver without `decide`, so finite readouts run the ordinary tool loop. If a scored decision is attempted
+collection uses a driver without `decide`, so finite readouts generate one JSON value on the same short decision prompt used by scoring. If a scored decision is attempted
 during capture, evaluation fails explicitly; remove the scorer from the collection driver rather than treating missing
 generation as a demonstration. An executor identity override cannot accompany an adaptation candidate: evaluate the
 candidate on its bound executor. Ordinary evaluation keeps its existing behavior and omits `modelTurns`.
@@ -195,3 +195,11 @@ callable, whose JSON arguments must match the declared task inputs. A mismatch f
 correct the input mapping or original fixture. A TypeScript wrapper may use a real NL semantic anchor without forcing
 that anchor to execute. Keep source-root assets explicit with `FixtureContext.programRoot`. Schema and training-facing
 evidence details are in `docs/NATIVE_RUNTIME_NOTES.md` and `plans/VIBESTUDIO_FIXTURE_IR_DECOMPOSITION.md`.
+
+
+When a finite decision driver lacks scoring (or declines with `decision-unsupported`), the runtime generates one offered
+JSON value with no tools, on exactly the scored decision messages. Trace phase `generated` means a sampled choice,
+without a score distribution. `decision-generation-invalid` means the generated reply was incomplete, malformed or
+outside the offered values: return one complete offered JSON value. A tool call cannot replace that reply. For
+controlled diagnosis, `model.decisionGeneration: 'tool-loop'` restores the prior unscored tool loop. Graph request/token
+budgets apply to generated choices; actual token use and generation captures remain actual generation evidence.

@@ -51,6 +51,8 @@ export type ModelConfig = { driver: ModelDriver;
   /** `finite-returns`: every call with a finite result type uses the decision readout when the driver can score
    * replies; `declared` (default): only functions whose frontmatter says `readout: decision`. */
   decisionReadout?: 'declared' | 'finite-returns';
+  /** Explicit diagnostic opt-out from JSON generation when scoring is unavailable. */
+  decisionGeneration?: 'json' | 'tool-loop';
   /** Guided generation (the `guidance` request field) on natlang's reference server and the llama.cpp fork (managed and in
    * the page). A configured runtime (`natlang run`, natlangRuntime()) turns it on for those backends unless the profile's
    * `runtime.guidance` says otherwise; set directly, it is off unless given. Other backends ignore the field. */

@@ -2570,3 +2570,15 @@ semantic anchor; no synthetic NL facade or invented invocation is added. Hosted 
 generated tool-loop actions, preserving their actual model identity, rather than substituting decision scores. This
 changes no serving protocol. Inventory/decomposition: `plans/VIBESTUDIO_FIXTURE_IR_DECOMPOSITION.md`; downstream
 training exposure remains conditional on exact replay, split separation and independent semantic admission.
+
+### 2026-11-17: generated finite decisions use the student's actual decision surface
+
+A hosted teacher without option scoring previously fell back to the full tool loop, producing tool-call targets on a
+prompt the scored student never uses for that function. It now generates the actual JSON choice on exactly the same
+encoded short system/opening/decision messages, with no tools. Actual text is validated against the finite offered
+values; malformed, truncated or unoffered choices fail with a targeted error rather than invented probabilities or
+synthetic actions. Generation receipts remain generation graph nodes. Existing option scores are unchanged;
+`decisionGeneration: tool-loop` is the explicit diagnostic opt-out. Request/token reservations and usage remain exact.
+Canonical native-collector/SFT evidence covers the plain JSON target and original transported prompt. Shared authored
+`.nl`/`.nz` barrels also retain their real source functions through module re-exports (5511776be), replacing broken
+runtime `.nl` imports without NL facades or prompt rewrites.

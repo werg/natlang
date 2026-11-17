@@ -1496,3 +1496,17 @@ data curation, quantization codecs and evaluation packets are in `plans/neurales
 trained now is the top section of this file and `plans/neuralese/APPROACH_REVIEW_20261111.md`. A resume restores its
 run's exact checkpoint and optimizer/RNG state; never substitute base weights into a resume. Qualification is actual
 task behaviour, numerics and recoverable state, not similarity to the base.
+
+### 2026-11-17: hosted decision teachers must match the deployed readout surface
+
+Inspection of `native/agent.ts:decisionReadout` found that a driver without `decide` took the ordinary tool loop,
+whereas scored finite readouts use `DECISION_SYSTEM_PROMPT` and `decisionPrompt` with no tools. Such teacher tool-call
+targets train a different prompt/answer surface. The shared default now generates one real offered JSON value on the
+identical encoded messages; malformed, truncated, unoffered and tool-call replies fail explicitly. Graph budgets use
+actual reservations and reported usage; native captures remain generation nodes, never fabricated option probabilities.
+A diagnostic `decisionGeneration: tool-loop` opt-out preserves the old path. Existing explicit multi-model fallback/
+handoff loops retain their established tool-loop semantics; this fixture campaign has no fallback chain. Inventory and
+excluded live-state boundary are in `plans/VIBESTUDIO_FIXTURE_IR_DECOMPOSITION.md`. Both TS configs and32 targeted
+readout/onboarding/canonical-collector tests passed under a2GB ledger unit after correcting two scripted test fixtures.
+An additional80/82 multi-file regression run passed all other selected evaluator/generic/tuning consumers; its two
+fixture failures are included in the corrected32. No live training run was modified by this fix.

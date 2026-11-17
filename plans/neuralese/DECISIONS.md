@@ -2828,3 +2828,19 @@ regression and run held-dispatch then provider-source checks together. Static re
 explicitly rebuild both bindings through `pinned_env()`; no wrong live policy, training exposure or held result has
 been demonstrated, and live process environments/artifacts were not checked here. Leave live training unchanged.
 Details and checked scope: `ENGINEERING_FINDINGS.md`, "Pop actor helper imports preserve pinned caller bindings".
+
+### 2026-11-17: collect application teachers as canonical programs on their actual decision surface
+
+Portable suite tasks now use `natlang.program/2`, kind `evaluation_fixture`, with separate host fixture/world/oracle
+files, original model source, actual entry inputs and one selected original case. The same native collector emits
+canonical program rows and shared rollout/replay/SFT tooling consumes them. Actual invoked entry arguments are checked
+before execution. Typed wrapper branches keep their real source and explicit NL semantic anchor, with no invented
+model invocation. Admission still requires nonzero real target turns, source-family split custody, exact replay and
+independent semantic acceptance; collection alone does not expose data to the learner.
+
+Before a hosted Luna pilot, static inspection found the no-scorer finite-call tool-loop fallback mismatched the scored
+student's short JSON readout surface. Ship shared JSON generation on the exact scored messages as the default, retaining
+a controlled tool-loop opt-out. Invalid generation is a recorded failure; no probabilities/native decision receipts are
+invented. The corrected32 readout/onboarding/canonical tests pass with both TS configurations. Next measurement is the
+pinned hosted fixture pilot and source-bound admission, followed by a bounded collect/train/paired held cycle; no claim
+of model gain follows from these mechanism checks. The full final gate runs on the combined immutable core commit.

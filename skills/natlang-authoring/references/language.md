@@ -132,3 +132,9 @@ const result = await folder.iterateOn(crispStep, state, policy).withMeasure(s =>
 ## Repository anchors
 
 `ts-host/src/compiler/` (planning, policy, lowering), `ts-host/src/runtime/` (kernel, callables, loader, iterate), `ts-host/src/native/` (interpreter and eval), `ts-host/test/{compiler,runtime,project,interpreter}.test.mjs`, `applications/`, `examples/triage/`, `codebases/`, and `spec/SPEC.md` with its [extensions](https://github.com/werg/natlang/blob/main/spec/ext/neuralese.md).
+
+
+Without a scoring backend, a `readout: decision` function generates one of its offered JSON values on the same short
+readout prompt, without tools. This sampled choice does not supply calibrated probabilities; `decide` still marks it
+`scored: false`. On `decision-generation-invalid`, provide one complete offered JSON value with nothing else. The host
+can explicitly select `model.decisionGeneration: 'tool-loop'` for a controlled comparison with the previous fallback.

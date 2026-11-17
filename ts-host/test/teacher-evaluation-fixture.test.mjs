@@ -78,7 +78,7 @@ test('authored module keeps its semantic anchor without inventing a model invoca
 test('finite decision functions collect real generated turns rather than provider decision scores',async()=>{
  const task=record();task.semantics.files['increment.nl']=task.semantics.files['increment.nl'].replace('returns: number','returns: 4 | 5\nreadout: decision');
  let generated=0;
- const driver=Object.assign(async()=>{generated++;return {calls:[['return_result',{status:'success',value:4}]],completion_tokens:2};},
+ const driver=Object.assign(async()=>{generated++;return {text:'4',calls:[],completion_tokens:2};},
  {model:'finite-teacher',decide:async()=>{throw Error('a teacher demonstration must not substitute decision scores');}});
  const run=await executeProgram(task,driver,options);
  assert.equal(run.outcome.accepted,true,JSON.stringify(run.outcome));assert.equal(generated,1);
@@ -105,14 +105,15 @@ test('repeated canonical execution renders stable real requests and source ident
 });
 
 
-test('native collector emits canonical program IR, actual teacher turns and durable invocation identity',async()=>{
- const server=createServer((request,response)=>{request.resume();request.on('end',()=>{
- response.writeHead(200,{'content-type':'application/json'});response.end(JSON.stringify({choices:[{message:{role:'assistant',content:'',tool_calls:[
- {id:'actual',type:'function',function:{name:'eval',arguments:JSON.stringify({code:'n+1',finish:true})}}]}}],usage:{prompt_tokens:10,completion_tokens:2}}));});});
+test('native collector preserves generated decision requests and plain JSON replies',async()=>{
+ const requests=[];
+ const server=createServer((request,response)=>{let body='';request.setEncoding('utf8');request.on('data',chunk=>body+=chunk);request.on('end',()=>{requests.push(JSON.parse(body));
+ response.writeHead(200,{'content-type':'application/json'});response.end(JSON.stringify({choices:[{message:{role:'assistant',content:'4',tool_calls:[]}}],usage:{prompt_tokens:10,completion_tokens:2}}));});});
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  const directory=await mkdtemp(join(tmpdir(),'fixture-canonical-'));
  try{
- const task=record(),config={jobs:join(directory,'jobs'),output:join(directory,'out.jsonl'),workers:1,
+ const task=record();task.semantics.files['increment.nl']=task.semantics.files['increment.nl'].replace('returns: number','returns: 4 | 5\nreadout: decision');
+ const config={jobs:join(directory,'jobs'),output:join(directory,'out.jsonl'),workers:1,
  modelId:'canonical-teacher',endpoint:`http://127.0.0.1:${server.address().port}`,rootSeed:9,systemPrompt:'Teacher context.',contextTokens:8192,
  maxTurns:3,transportRetries:0,toolSurfaceSha256:await defaultToolSurfaceHash()};
  const status=await collectBatch([{index:0,record:task}],config,nativeJobRunner(config));assert.equal(status.completed,1);
@@ -123,6 +124,8 @@ test('native collector emits canonical program IR, actual teacher turns and dura
  assert.equal(row.trajectory[0].invocation_id,row.outcome.invocation_ledger[0].invocation_id);
  assert.match(JSON.stringify(row.outcome.execution_graph),/canonical-teacher/);
  assert.equal(row.outcome.evaluation.quality,1);
+ assert.deepEqual(row.trajectory[0].tools_offered,[]);assert.equal(row.trajectory[0].model_response.text,'4');
+ if(process.env.NATLANG_TEST_FIXTURE_ROW_OUTPUT){const {writeFile}=await import('node:fs/promises');await writeFile(process.env.NATLANG_TEST_FIXTURE_ROW_OUTPUT,JSON.stringify({row,requests,decision_system_prompt:(await import('../dist/native/decision.js')).DECISION_SYSTEM_PROMPT}));}
  }finally{await new Promise(resolve=>server.close(resolve));await rm(directory,{recursive:true,force:true});}
 });
 

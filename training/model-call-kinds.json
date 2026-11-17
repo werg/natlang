@@ -27,6 +27,35 @@
    "rl": {"status": "covered", "evidence": ["training/neuralese/natlang_neuralese/rl/decision_policy.py", "training/neuralese/natlang_neuralese/rl/native_replay.py", "ts-host/src/tune/rollouts.ts", "tests/neuralese/test_decision_supervision.py"]},
    "parity": {"status": "covered", "evidence": ["tests/neuralese/test_decision_supervision.py"]}
   },
+  "decision-generation": {
+   "summary": "A finite decision generated as one actual JSON choice on the same short decision prompt as scored readouts, when scoring is unavailable or a graph reservation requires generation. No option probabilities are inferred.",
+   "model_output": "generated",
+   "endpoints": [
+    "/v1/chat/completions"
+   ],
+   "sft": {
+    "status": "covered",
+    "evidence": [
+     "ts-host/test/teacher-evaluation-fixture.test.mjs",
+     "tests/neuralese/test_generated_decision_sft.py",
+     "scripts/neuralese_data/sft_sources.py"
+    ]
+   },
+   "rl": {
+    "status": "covered",
+    "evidence": [
+     "training/neuralese/natlang_neuralese/rl/native_replay.py",
+     "ts-host/test/decision-readout.test.mjs"
+    ]
+   },
+   "parity": {
+    "status": "covered",
+    "evidence": [
+     "ts-host/test/decision-readout.test.mjs",
+     "tests/neuralese/test_generated_decision_sft.py"
+    ]
+   }
+  },
   "refinement-judge-scored": {
    "summary": "A refinement predicate (Is<T, P>, refine) judged by one scoring pass over true/false with JUDGE_SYSTEM_PROMPT (native/refinement.ts decisionJudge), when the driver can score.",
    "model_output": "scored-options",

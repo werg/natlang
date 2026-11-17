@@ -123,7 +123,7 @@ export type ModelTurnOptions = { onDelta?: (delta: ModelTurnDelta) => void;
  * `decide: DecisionScorer` property (`Object.assign(driver, { decide })`; wrappers copy it with the driver). The runtime
  * uses it for `readout: decision` functions, `decisionReadout: 'finite-returns'`, refinement judges and `decide(fn, ...)`
  * in eval, wherever the call's result type is finite. A driver without it, or whose `decide` fails with
- * `decision-unsupported`, gets the ordinary tool loop for that call; no other error is swallowed. Endpoint drivers
+ * `decision-unsupported`, generates one offered JSON value on the same decision prompt; no other error is swallowed. Endpoint drivers
  * implement it through `prompt_logprobs` (chat-completion.ts) or the llama.cpp fork's score endpoint (scoring.ts); a
  * gateway driver implements it by asking whatever service owns the model, and may declare `scoreMany` to batch.
  * `log_probs[i]` is the total log-probability of `options[i]`

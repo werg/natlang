@@ -609,3 +609,11 @@ prompt/settings; supplied overrides and their system-prompt hash are applied tog
 canonical program row and rollout, consumed by shared replay/SFT tooling. This is not native on-policy receipt evidence,
 and collection does not itself admit data into training. Live native state/guidance and module-valued call stores are
 explicitly unsupported across this evaluation worker boundary; ordinary generation teachers and `calls: false` work.
+
+Finite teacher decisions without a scorer now generate one actual JSON choice on the student's same encoded short
+decision messages, with no tools. They retain real text/generation captures and graph request/token reservations.
+`decision_readout` phase `generated` carries `scored: false`, never inferred option probabilities; the associated model
+turn remains a generation node so native generation receipts link correctly. Invalid/missing/truncated/unoffered replies
+fail explicitly with `decision-generation-invalid`. The diagnostic opt-out is `model.decisionGeneration: 'tool-loop'`.
+The existing explicit multi-model handoff/fallback loop retains its prior behavior. No new serving fields are needed on
+managed llama-server, wllama, Python native or SGLang: all use the existing tool-free generation request protocol.

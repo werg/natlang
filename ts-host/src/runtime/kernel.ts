@@ -758,7 +758,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     maxTurns: definition.budget?.maxTurns ?? model.maxTurns, maxTokens: definition.budget?.maxTokens ?? model.maxTokens,
     turnTokens: definition.budget?.turnTokens ?? model.turnTokens, temperature: model.temperature,
     maxSeconds: model.maxSeconds, contextTokens: definition.budget?.contextTokens ?? model.contextTokens,
-    maxFailureRepairs: model.maxFailureRepairs, decisionReadout: model.decisionReadout,
+    maxFailureRepairs: model.maxFailureRepairs, decisionReadout: model.decisionReadout, decisionGeneration: model.decisionGeneration,
     guidance: model.guidance, promptRendering: model.promptRendering,
     // Live events (plans/STREAMING.md §1.6): the call's model deltas, tagged with the call; nothing without a subscriber.
     ...(task.live ? { onDelta: liveDeltas(task.live, { taskId: task.id, callId, parentCallId: frame.parentCallId ?? null,

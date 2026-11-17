@@ -139,7 +139,7 @@ export function modelTurnsSoFar(messages: readonly Record<string, unknown>[]): n
 export type NativeModelDriver = ((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => Promise<ModelTurn> | ModelTurn) & {
   /** Scripted host drivers may ask to route fixed answers by the actual native return contract. */
   readonly requiresResultContract?: boolean;
-  /** Optional decision readout (contracts.ts `DecisionRequest`); without it the call runs the tool loop. */
+  /** Optional scored decision readout; without it finite calls generate one JSON choice. */
   decide?: DecisionScorer;
   /** The backend continues a cut-off reply (`ModelTurnRequest.continue`; runtime.ts `ModelDriver`). */
   readonly continuesReplies?: boolean;
@@ -498,6 +498,8 @@ export class NativeToolAgent {
       callAddendum?: string;
       /** Which finite-typed calls answer by decision readout (native/decision.ts); default `declared`. */
       decisionReadout?: 'declared' | 'finite-returns';
+      /** Diagnostic opt-out: retain the ordinary tool loop when the backend cannot score decisions. */
+      decisionGeneration?: 'json' | 'tool-loop';
       /**
        * Guided generation on natlang's own servers (reference and llama.cpp fork; others never receive it): the reply
        * opens a tool call when one is required, call names are checked, and eval code is checked line by line for
@@ -1410,8 +1412,9 @@ export class NativeToolAgent {
     if (!wanted || lam.type.kind !== 'lambda' || lam.subtype !== 'function' || lam.projectTransaction) return false;
     const values = finiteValues(lam.type.returns, session.env);
     const callId = session.runtime.currentCallId ?? null;
-    const decide = decisionScorer(this.driver);
-    if (!values || values.length < 2 || !decide) {
+    const bounded = this.options.modelBudget?.maxRequests !== undefined || this.options.modelBudget?.maxTokens !== undefined;
+    const decide = bounded ? undefined : decisionScorer(this.driver);
+    if (!values || values.length < 2 || (!decide && this.options.decisionGeneration === 'tool-loop')) {
       if (lam.readout === 'decision') session.runtime.trace.emit('decision_readout', { call_id: callId, phase: 'unavailable',
         reason: decide ? 'result type is not finite' : 'model driver cannot score replies' });
       return false;
@@ -1429,6 +1432,8 @@ export class NativeToolAgent {
     if (encoded.blocks && !supportsNeuralese(this.driver))
       throw new NeuraleseUnsupportedError('this model backend cannot carry Neuralese blocks');
     const started = performance.now();
+    const generate = () => this.generatedDecision(session, encoded.messages, values, capturedGuidance, guidancePolicy);
+    if (!decide) return generate();
     let scores;
     try {
       const adapters = adapterCells(lam);
@@ -1447,7 +1452,7 @@ export class NativeToolAgent {
       const message = error instanceof Error ? error.message : String(error);
       if (!message.startsWith('decision-unsupported')) throw error;
       session.runtime.trace.emit('decision_readout', { call_id: callId, phase: 'unavailable', reason: message });
-      return false;
+      return this.options.decisionGeneration === 'tool-loop' ? false : generate();
     }
     if (scores.log_probs.length !== replies.length || scores.log_probs.some(value => !Number.isFinite(value)))
       throw new Error('decision readout returned no finite score for every option');
@@ -1467,6 +1472,86 @@ export class NativeToolAgent {
     lam.return = values[chosen] as Value;
     lam.note = JSON.stringify({ readout: 'decision', probabilities: Object.fromEntries(replies.map((reply, index) => [reply, probabilities[index]])) });
     if (!session.finish()) return 'decision readout chose a value the declared type rejects';
+  }
+
+  /** One recording boundary for actual generation replies, shared by tool turns and JSON decision readouts. */
+  private recordGeneratedTurn(messages: readonly unknown[], tools: unknown[], response: ModelTurn, turn: number,
+    turnNode: string | undefined, driver = this.driver, actor = this.options.actor ?? { id: this.driver.name || 'model', revision: null }): void {
+    const recorder = activeRecorder();
+    const recordedTurn = response.raw_response?.x_natlang_recorded_turn;
+    const recordedNative = response.raw_response?.x_natlang_native_recorded_turn;
+    if (turnNode && typeof recordedTurn === 'string' && recordedTurn !== recordedNative) recorder?.linkTurn?.(recordedTurn, turnNode);
+    if (recorder && !supportsNeuralese(driver)) recorder.record({ messages: structuredClone(messages) as unknown[],
+      tools: structuredClone(tools), actor: { ...actor },
+      ...(this.options.actor ? { initial_actor: { ...this.options.actor } } : {}), ...(turnNode ? { graph_turn: turnNode } : {}),
+      reply: { role: 'assistant', content: response.text ?? null,
+        ...(response.raw_calls ? { tool_calls: structuredClone(response.raw_calls) } : response.calls?.length ? {
+        tool_calls: response.calls.map(([name, args], index) => ({ id: `call_${turn}_${index}`, type: 'function',
+          function: { name, arguments: JSON.stringify(args) } })) } : {}) }, blocks: [] });
+  }
+
+  /** Generate on the very same short JSON decision surface used by the scored student. No probabilities are inferred. */
+  private async generatedDecision(session: NativeSession, messages: unknown[], values: unknown[],
+    privilegedContext?: ModelTurnRequest['privileged_context'], guidancePolicy?: ModelTurnRequest['guidance_policy']): Promise<string | void> {
+    const callId = session.runtime.currentCallId ?? null;
+    const fail = (detail: string): string => {
+      const message = `decision-generation-invalid: ${detail} Reply with one of the offered JSON values and nothing else.`;
+      session.runtime.trace.emit('decision_readout', { call_id: callId, phase: 'rejected', reason: message });
+      return message;
+    };
+    const budgetStop = (): string => {
+      session.runtime.trace.emit('model_incomplete', { call_id: callId, turn: 0, reason: 'budget_exhausted', evidence: 'decision generation model budget exhausted' });
+      return 'budget: decision generation model budget exhausted';
+    };
+    if (this.options.maxTurns === 0 || this.options.maxTokens === 0) return budgetStop();
+    const adapters = adapterCells(session.lam);
+    if (adapters.length && !supportsNeuralese(this.driver)) throw new NeuraleseUnsupportedError('this model backend cannot apply weight adapters');
+    const perTurn = this.options.turnTokens ?? (this.options.contextTokens == null ? null : Math.floor(this.options.contextTokens / 4));
+    const limit = this.options.maxTokens === undefined ? perTurn : perTurn === null ? this.options.maxTokens : Math.min(perTurn, this.options.maxTokens);
+    const request: ModelTurnRequest = { messages, tools: [], max_tokens: limit,
+      ...(callId ? { invocation_id: callId } : {}), ...(adapters.length ? { adapters } : {}),
+      ...(session.executionOccurrence() ? { native_execution_occurrence: session.executionOccurrence() } : {}),
+      ...(privilegedContext ? { privileged_context: privilegedContext } : {}), ...(guidancePolicy ? { guidance_policy: guidancePolicy } : {}),
+      ...(this.options.temperature === undefined ? {} : { temperature: this.options.temperature }),
+      seed: session.runtime.seedPolicy.mode === 'backend' ? null : deriveSeed(session.runtime.seedPolicy.root!, runSeedKey(session.runtime.options), session.lam.attempts, 'model-turn', 0) };
+    const reservation = await this.options.modelBudget?.reserve(request.max_tokens ?? null, session.runtime.signal);
+    if (this.options.modelBudget && !reservation) return budgetStop();
+    if (reservation) request.max_tokens = reservation.limit;
+    const started = performance.now();
+    let response: ModelTurn;
+    session.runtime.trace.emit('model_request', { call_id: callId, phase: 'start', turn: 1, actor: this.options.actor });
+    try {
+      // model-call-kind: decision-generation -- training/model-call-kinds.json
+      response = await runInFrame(session.runtime.frame, () => this.driver(request, session.runtime.signal,
+        this.options.onDelta ? { onDelta: delta => this.options.onDelta!(1, delta) } : undefined));
+      reservation?.finish(response.completion_tokens);
+    } catch (error) {
+      reservation?.finish();
+      session.runtime.trace.emit('model_request', { call_id: callId, phase: 'error', turn: 1,
+        duration_ms: Math.round(performance.now() - started), error: String(error) });
+      throw error;
+    }
+    session.runtime.trace.emit('model_request', { call_id: callId, phase: 'end', turn: 1, actor: this.options.actor,
+      duration_ms: Math.round(performance.now() - started), prompt_tokens: response.prompt_tokens ?? null,
+      completion_tokens: response.completion_tokens ?? null, ...(response.cached_tokens === undefined ? {} : { cached_tokens: response.cached_tokens }) });
+    const turnNode = await this.modelTurnNode(session, messages, response, 1, undefined, this.options.actor ?? { id: this.driver.name || 'model', revision: null });
+    this.recordGeneratedTurn(messages, [], response, 1, turnNode);
+    await this.nativeWriteOrigins(response, session, 1, turnNode);
+    const recorded = response.raw_response?.x_natlang_native_recorded_turn;
+    if (turnNode && typeof recorded === 'string') activeRecorder()?.linkNativeTurn?.(recorded, turnNode);
+    session.runtime.checkInterruption();
+    if (reservation?.limit != null && response.completion_tokens !== undefined && response.completion_tokens > reservation.limit) return budgetStop();
+    if (response.truncated || response.protocol_failure || response.calls?.length || response.raw_calls?.length || typeof response.text !== 'string')
+      return fail('the generated choice must be complete JSON text');
+    let value: unknown;
+    try { value = JSON.parse(response.text); } catch { return fail('the generated choice is not valid JSON'); }
+    const chosen = values.findIndex(option => fingerprint(option) === fingerprint(value));
+    if (chosen < 0) return fail('the generated choice is outside the offered values');
+    session.runtime.trace.emit('decision_readout', { call_id: callId, phase: 'generated', options: values.map(value => JSON.stringify(value)), chosen,
+      duration_ms: Math.round(performance.now() - started), scored: false });
+    session.lam.return = values[chosen] as Value;
+    session.lam.note = JSON.stringify({ readout: 'decision', source: 'generated', scored: false });
+    if (!session.finish()) return fail('the generated choice does not satisfy the declared return type');
   }
 
   /** Encode stored policy against this runtime's exact native reader before any model call. */
@@ -1595,9 +1680,8 @@ export class NativeToolAgent {
     const guidancePolicy = trainingGuidance?.policyOf(session.lam, session.runtime.currentCallId ?? null);
     const guidanceConsumer = !!trainingGuidance && !guidancePolicy && !trainingGuidance.insidePolicy(session);
     let guidanceRequest: Record<string, unknown> | undefined, guidanceReady = false;
-    // A decision scorer has no reply-token reservation contract or handoff tool. Use the ordinary loop when either is needed.
-    const decided = (this.options.fallbacks?.length || this.options.modelBudget?.maxRequests !== undefined ||
-      this.options.modelBudget?.maxTokens !== undefined) ? false : await this.decisionReadout(session, messages);
+    // Bounded decisions use generation reservations; explicit multi-model handoffs retain their ordinary loop.
+    const decided = this.options.fallbacks?.length ? false : await this.decisionReadout(session, messages);
     if (decided !== false) return decided;
     const openingLength = messages.length;
     // Prompt tokens per character of request, calibrated from the server's reported prompt size.
@@ -1932,17 +2016,7 @@ export class NativeToolAgent {
       lastModelTurn = turnNode;
       if (turnNode && (guidancePolicy?.function === 'writeGuidance' || guidancePolicy?.function === 'writeHint') && callId) trainingGuidance!.noteWriterTurn(callId, turnNode,
         [...(session.runtime.frame?.chain ?? []), ...(session.runtime.options.parentCallId ? [session.runtime.options.parentCallId] : [])]);
-      const recorder = activeRecorder();
-      const recordedTurn = response.raw_response?.x_natlang_recorded_turn;
-      const recordedNative = response.raw_response?.x_natlang_native_recorded_turn;
-      if (turnNode && typeof recordedTurn === 'string' && recordedTurn !== recordedNative) recorder?.linkTurn?.(recordedTurn, turnNode);
-      if (recorder && !supportsNeuralese(currentDriver)) recorder.record({ messages: structuredClone(graphMessages) as unknown[],
-        tools: structuredClone(offered), actor: { ...currentActor },
-        ...(this.options.actor ? { initial_actor: { ...this.options.actor } } : {}), ...(turnNode ? { graph_turn: turnNode } : {}),
-        reply: { role: 'assistant', content: response.text ?? null,
-          ...(response.raw_calls ? { tool_calls: structuredClone(response.raw_calls) } : response.calls?.length ? {
-            tool_calls: response.calls.map(([name, args], index) => ({ id: `call_${turn}_${index}`, type: 'function',
-              function: { name, arguments: JSON.stringify(args) } })) } : {}) }, blocks: [] });
+      this.recordGeneratedTurn(graphMessages, offered, response, turn, turnNode, currentDriver, currentActor);
       // A continued request's prompt also holds the reply so far, which `sentChars` does not count.
       if (response.prompt_tokens !== undefined && sentChars > 0 && !continued) tokensPerChar = response.prompt_tokens / sentChars;
       if (!continued) turns++;

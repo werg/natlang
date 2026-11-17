@@ -246,18 +246,18 @@ test('the CLI evaluation driver of a model session scores decision readouts in t
   assert.deepEqual(scored, [['"ordinary"', '"urgent"']]);
 });
 
-test('a driver that declines to score leaves the evaluation worker running the tool loop, charged for the turn only', async () => {
+test('a driver that declines to score generates a JSON decision, charged for the actual request only', async () => {
   const fixture = fixtureSuite();
   writeFileSync(join(fixture.root, 'classify.nl'), '---\nreadout: decision\nargs: { value: string }\nreturns: \'"ordinary" | "urgent"\'\n---\nAnswer urgent when value asks for help, otherwise ordinary.\n');
   const suite = await loadEvaluationSuite(fixture.path);
   const model = scriptedModel(() => 'return "ordinary"');
   let turns = 0;
-  const driver = Object.assign((...args) => { turns++; return model.driver(...args); },
+  const driver = Object.assign((...args) => { turns++; return args[0].tools.length ? model.driver(...args) : {text:'"ordinary"',calls:[],prompt_tokens:10,completion_tokens:3}; },
     { decide: async () => { throw new Error('decision-unsupported: this backend cannot score replies'); } });
   const gateway = new UsageGateway(limits({ maxModelCalls: 20 }));
   const batch = await evaluate(suite, { split: 'validation', driver, gateway });
   assert.equal(batch.results[0].status, 'scored');
-  assert.ok(turns > 0, 'the call ran its tool loop');
+  assert.ok(turns > 0, 'the call generated its actual choice');
   assert.equal(batch.results[0].usage.modelCalls, turns, 'only the turns were requests');
   assert.equal(gateway.ledger.usage.modelCalls, turns);
 });

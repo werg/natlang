@@ -46,3 +46,21 @@ must call that binding with the same JSON inputs; unchanged source traces must b
 Targeted checks cover original host assets, original scorer, actual argument mismatch before model execution,
 provenance, source boundaries, finite generation without scoring, explicit settings and typed zero-model branches.
 The full repository gate runs on an immutable combined commit after these changes and shared compiler fixes settle.
+
+## Decision reply-surface correction
+
+Inventory: `native/agent.ts:decisionReadout` constructs the scored messages; `native/decision.ts` lists finite values;
+`runtime/kernel.ts` propagates scored distributions only from phase `scored`; `calls/recorder.ts` counts actual model
+request end events; `native/model-recording.ts` requires generation receipts to link to a generation graph node without
+`readout: decision`. `contracts.ts`, runtime model options, capture workers and native teacher trajectory recording
+all consume the existing ModelTurn generation contract. Training `model-call-kinds.json` now records the generated
+choice surface; canonical `task_rollouts`/`sft_sources` retain its actual plain JSON reply. No engine-specific wire
+changes: managed llama-server, wllama, Python native and SGLang already generate tool-free chat requests.
+
+The prior no-scorer fallback taught tool calls and a long tool prompt, while the scored student executes a short JSON
+choice prompt. The default now generates one JSON choice on the exact encoded scored messages. Exact finite-set
+validation, generation recording and budget reservations are crisp verifiers/plumbing. There are no synthetic
+probabilities or decision receipts. A real generation graph node is marked as generation; separate decision evidence
+marks phase `generated`. `decisionGeneration: tool-loop` is an explicit diagnostic opt-out. Existing multi-model
+handoff/fallback configuration still owns an ordinary loop, preserving its established handoff semantics; fixture
+teacher collection uses no fallback chain. Native scoring implementations and their probability semantics do not change.
