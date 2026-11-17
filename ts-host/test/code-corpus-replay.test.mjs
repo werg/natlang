@@ -10,11 +10,11 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 const task = () => ({version:'natlang.code_task/1',id:'fixture:double',group_id:'fixture:double',kind:'function',instruction:'Return twice the input.',source:{name:'fixture',license:'MIT'},function:{name:'f',parameters:[{name:'x'}],body:'{ return x * 2; }'},cases:[{args:[3],expected:6,outcome:'return'},{args:[4],expected:8,outcome:'return'}]});
-test('replay produces a real eval turn and a done turn with source-level split groups', async () => {
+test('replay produces eval and return_result turns with source-level split groups', async () => {
   const a = task();
   const row = await replayIsolated(a,0);
   assert.equal(row.outcome.accepted,true);
-  assert.deepEqual(row.outcome.action_ledger.map(e=>e.name),['eval']);
+  assert.deepEqual(row.outcome.action_ledger.map(e=>e.name),['eval','return_result']);
   const result = await materializeCorpus([row]);
   assert.equal(result.turns.length,2);
   assert.deepEqual(result.turns[0].source_groups,['fixture:double']);
