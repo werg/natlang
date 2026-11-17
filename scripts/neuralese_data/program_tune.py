@@ -35,6 +35,7 @@ REPO = HERE.parents[1]
 sys.path[:0] = [str(REPO / 'training/neuralese'), str(REPO), str(HERE)]
 
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex  # noqa: E402
+from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file  # noqa: E402
 
 SPLITS = ('support', 'dev', 'confirm')
 FRACTIONS = (0.6, 0.25, 0.15)
@@ -49,14 +50,6 @@ ERROR_RESULT = re.compile(r'^\s*(?:[A-Z][A-Za-z]*Error\b|Error\b|\d+:\d+ [a-z][a
 def read_jsonl(path):
     with open(path, encoding='utf-8') as handle:
         return [json.loads(line) for line in handle if line.strip()]
-
-
-def sha256_file(path):
-    digest = hashlib.sha256()
-    with open(path, 'rb') as handle:
-        for block in iter(lambda: handle.read(1 << 20), b''):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def split_of(family, group, fractions=FRACTIONS):
