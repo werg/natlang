@@ -93,6 +93,18 @@ def test_canonical_ir_native_result_and_rollout_are_preserved(tmp_path):
     assert native['task']['program_ir']['version'] == 'natlang.program/2'
 
 
+def test_admission_reuses_shared_json_and_hash_helpers_with_strict_finite_json():
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_file_hex
+    from natlang_neuralese.common.jsonio import canonical_json_str
+    assert a.canonical.func is canonical_json_str
+    assert a.digest.func is canonical_json_sha256_hex
+    assert a.file_sha is sha256_file_hex
+    assert a.canonical.keywords == a.digest.keywords == {'allow_nan': False}
+    assert a.canonical({'é': ['☃', 1], 'a': None}) == '{"a":null,"é":["☃",1]}'
+    with pytest.raises(ValueError):
+        a.digest({'not-json': float('nan')})
+
+
 def test_source_snapshot_matches_actual_collection_pin_not_newer_replay_pin(tmp_path):
     record, receipt, *_ = artifacts(tmp_path, {'dirty': False, 'natlang_commit': 'd' * 40})
     replay_path = Path(receipt['samples'][0]['replay']['record']['path'])

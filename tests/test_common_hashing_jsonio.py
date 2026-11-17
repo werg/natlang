@@ -60,6 +60,19 @@ def test_canonical_json_sha256_hex_golden():
     assert canonical_json_sha256_hex(NESTED) == sha256_hex(CANONICAL.encode("utf-8"))
 
 
+def test_strict_canonical_artifact_boundaries_keep_the_same_utf8_bytes_and_digest():
+    assert canonical_json_str(NESTED, allow_nan=False) == CANONICAL
+    assert canonical_json_bytes(NESTED, allow_nan=False) == CANONICAL.encode('utf-8')
+    assert canonical_json_sha256_hex(NESTED, allow_nan=False) == canonical_json_sha256_hex(NESTED)
+    for value in (float('nan'), float('inf'), -float('inf')):
+        for helper in (canonical_json_str, canonical_json_bytes, canonical_json_sha256_hex):
+            with pytest.raises(ValueError):
+                helper({'nested': [value]}, allow_nan=False)
+    # Existing callers retain their historical default; admission explicitly opts
+    # into strict finite JSON without changing another corpus' identity policy.
+    assert canonical_json_str(float('nan')) == 'NaN'
+
+
 def test_sha256_reference_accepts_exact_reference_shapes():
     digest = "a" * 64
     assert sha256_reference({"sha256": digest, "bytes": 12}) == digest

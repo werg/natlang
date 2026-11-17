@@ -8,33 +8,24 @@ renders tokens, builds chains or substitutes a second teacher execution path.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import re
 import sys
+from functools import partial
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(REPO / 'training/neuralese'), str(REPO)]
 
+from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_file_hex as file_sha, sha256_hex
+from natlang_neuralese.common.jsonio import canonical_json_str
+
 SCHEMA = 'natlang.teacher-admission/1'
 SHA = re.compile(r'^[0-9a-f]{64}$')
 
 
-def canonical(value):
-    return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False, allow_nan=False)
-
-
-def digest(value):
-    return hashlib.sha256(canonical(value).encode()).hexdigest()
-
-
-def file_sha(path):
-    h = hashlib.sha256()
-    with Path(path).open('rb') as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b''):
-            h.update(chunk)
-    return h.hexdigest()
+canonical = partial(canonical_json_str, allow_nan=False)
+digest = partial(canonical_json_sha256_hex, allow_nan=False)
 
 
 def rows(path):
@@ -112,7 +103,7 @@ def semantic_review(review, *, case, evaluation):
     if raw is not None:
         if not isinstance(raw, str) or canonical(json.loads(raw)) != canonical(request):
             raise ValueError('semantic request canonical bytes differ from request')
-        request_sha = hashlib.sha256(raw.encode()).hexdigest()
+        request_sha = sha256_hex(raw.encode('utf-8'))
     else:
         request_sha = digest(request)
     if review.get('request_sha256') != request_sha:
