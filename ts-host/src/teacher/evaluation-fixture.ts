@@ -9,7 +9,7 @@ import { formatDiagnostics } from '../compiler/project.js';
 import { evaluationProjectFiles } from '../evaluation/project-files.js';
 import { loadEvaluationSuite } from '../evaluation/suite.js';
 import { evaluate } from '../evaluation/runner.js';
-import { fingerprint } from '../native/canonical-data.js';
+import { fingerprint } from '../native/content-identity.js';
 import type { InvocationTrace, ModelDriver } from '../runtime/runtime.js';
 import type { ProgramRecord, EvaluationFixtureSpec } from './program.js';
 import type { ExecuteOptions, ProgramRun } from './collector.js';

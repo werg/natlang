@@ -1550,3 +1550,16 @@ units; packtree/progtune units had no live processes by the follow-up check. Ope
 queued, not live experiments. No GPU job was launched and no unrelated run was stopped. The optional compaction path
 is crisp by default; this fix belongs in the next affected pin. Direct program options of unrelated processes were not
 exhaustively reconstructed; no claim about uninspected jobs or earlier archives follows from this check.
+
+### 2026-11-17: preserve the dependency-free Pi bundle after shared identity relocation
+
+The merged6d921fca4 full gate passed1629 general Python,2229 Neuralese,2618 TS and22 conformance checks, plus all build,
+type and layering stages; its only failure was the Pi bundle's no-import contract. Relocating fingerprint into the
+otherwise pure native/canonical-data module had added @noble/hashes to a pure JSON consumer's transitive module graph.
+This was a real dependency leak, not a lexical test false positive. Canonical JSON is pure again; one separate
+native/content-identity module holds the unchanged hash implementation, adaptation re-exports its existing API, and
+the teacher frontend imports that lower-layer module directly. Inventory: pure canonical consumers (including Pi),
+adaptation identity exports and teacher binding hashes all retain one implementation and their old bytes. Both TS
+configs, layering and28 real Pi-bundle/canonical-fixture/adaptation tests pass under a2GB ledger unit. The Pi test builds
+and imports its actual bundle without package imports, then exercises scoring and framing. No prompt or task outcome
+changed; this correction pairs with the fully checked remainder of the merged pin.
