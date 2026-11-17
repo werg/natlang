@@ -269,6 +269,18 @@ class TemplateRenderer:
     def specials(self):
         return self._engine.specials.fget(self)
 
+    def think_context_end(self, target_ids):
+        """For a reply with no reasoning: the number of leading target tokens that are the template's empty think block
+        (through `</think>` and the whitespace after it), to be zero-weight context; the action after it is the target."""
+        close = self.tokenizer.convert_tokens_to_ids('</think>')
+        ids = list(target_ids)
+        if close not in ids:
+            return 0
+        end = ids.index(close) + 1
+        while end < len(ids) and not self.tokenizer.decode([ids[end]]).strip():
+            end += 1
+        return end
+
     def render(self, messages, tools, target):
         from natlang_neuralese.serve.targets import target_items
         target = {k: v for k, v in target.items() if v is not None}
@@ -276,6 +288,15 @@ class TemplateRenderer:
         if any(kind != 'tok' for kind, _ in before + rest):
             raise ValueError('native-state blocks in a text-only rendering')
         return [i for _, i in before], [i for _, i in rest]
+
+
+def reasoning_free_context(renderer, source, target_message, target_ids):
+    """Leading target tokens that are context, not loss: a teacher's or October reply without reasoning renders the
+    template's empty think block, and training it would teach the student to close its reasoning at once (no verified
+    outcome selects that). The student's own replies keep every token as sampled."""
+    if source == 'rl-own' or (target_message.get('reasoning_content') or '').strip():
+        return 0
+    return renderer.think_context_end(target_ids)
 
 
 def check_render(args):
@@ -903,14 +924,19 @@ def build(args):
                     return False   # a verified episode is admitted whole or not at all
                 continue
             row_id = turn.get('id') or hashlib.sha256(f"{c['key']}#{index}".encode()).hexdigest()[:24]
-            rows.append({'id': row_id, 'invocation': turn.get('invocation_id') or '', 'index': index,
-                         'prompt': np.asarray(prompt, np.int32), 'sample': np.asarray(target, np.int32)})
+            row = {'id': row_id, 'invocation': turn.get('invocation_id') or '', 'index': index,
+                   'prompt': np.asarray(prompt, np.int32), 'sample': np.asarray(target, np.int32)}
+            context = reasoning_free_context(renderer, source, turn['target'], target)
+            if context:
+                row['weight'] = (np.arange(len(target)) >= context).astype(np.float32)
+            rows.append(row)
             written.append({'id': row_id, 'episode': c['key'], 'source': source, 'run': c['run'],
                             'task_id': c['task_id'], 'family': c['family'], 'domain': c['domain'],
                             'teacher': c['teacher'], 'policy': c['policy'], 'call': index,
                             'invocation': turn.get('invocation_id'), 'messages': turn['messages'],
                             'tools': turn['tools'], 'target': turn['target'], 'prompt_tokens': len(prompt),
-                            'target_tokens': len(target), 'too_long': len(prompt) + len(target) > MAX_LEN})
+                            'target_tokens': len(target), 'loss_from': context,
+                            'too_long': len(prompt) + len(target) > MAX_LEN})
         if not rows:
             return False
         for row in written:
@@ -919,6 +945,8 @@ def build(args):
         s = stats[source]
         s['calls'] += len(rows)
         s['target_tokens'] += sum(len(r['sample']) for r in rows)
+        s['weighted_target_tokens'] += int(sum(float(r['weight'].sum()) if 'weight' in r else len(r['sample'])
+                                               for r in rows))
         s['call_tokens'] += sum(len(r['prompt']) + len(r['sample']) for r in rows)
         s['too_long_calls'] += sum(len(r['prompt']) + len(r['sample']) > MAX_LEN for r in rows)
         families[source][c['family']] += 1
@@ -926,6 +954,9 @@ def build(args):
         producer = f"{source}:{c.get('teacher') or c.get('run') or ''}"
         producers[producer]['episodes'] += 1
         producers[producer]['target_tokens'] += sum(len(r['sample']) for r in rows)
+        producers[producer]['weighted_target_tokens'] += int(sum(float(r['weight'].sum()) if 'weight' in r
+                                                                 else len(r['sample']) for r in rows))
+        producers[producer]['think_context_calls'] += sum('weight' in r for r in rows)
         producers[producer]['reasoning_free_calls'] += sum(not (t['target'].get('reasoning_content') or '').strip()
                                                            for t in turns)
         episode = {'task_id': c['task_id'], 'round': c['key'], 'rows': rows}
@@ -1009,7 +1040,8 @@ def build(args):
                    'october_share': args.october_share, 'october_max_per_task': args.october_max_per_task,
                    'october_family_share': args.october_family_share,
                    'loss': 'per-call rows: prompt (system, task, history, tool output) zero weight; the assistant reply '
-                           '(reasoning, text, tool calls, end token) weight 1'},
+                           '(reasoning, text, tool calls, end token) weight 1; a teacher reply without reasoning: the '
+                           'empty think block (through </think>) zero weight, the action after it weight 1 (row weight)'},
         'october': october_report,
         'funnel': {k: dict(v) for k, v in funnel.items()},
         'stats': {k: dict(v) for k, v in stats.items()},
@@ -1017,8 +1049,8 @@ def build(args):
         'chains': len(chains), 'forward_tokens': forward,
         'target_tokens': int(sum(len(r['sample']) for e in sft_episodes for r in e['rows'])),
         'epoch_hours_at_5500_tokens_per_second': round(forward / 5500 / 3600, 2),
-        'producers': {k: {**dict(v), 'target_token_share': round(v['target_tokens'] / max(1, sum(
-            p['target_tokens'] for p in producers.values())), 4)} for k, v in sorted(producers.items())},
+        'producers': {k: {**dict(v), 'weighted_target_token_share': round(v['weighted_target_tokens'] / max(1, sum(
+            p['weighted_target_tokens'] for p in producers.values())), 4)} for k, v in sorted(producers.items())},
         'families': {k: len(v) for k, v in families.items()},
         'family_counts': {k: dict(v.most_common()) for k, v in families.items()},
         'domain_counts': {k: dict(v.most_common()) for k, v in domains.items()},

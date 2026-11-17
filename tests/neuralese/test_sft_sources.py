@@ -131,3 +131,36 @@ def test_teacher_coverage_names_manifest_successes_not_extracted(tmp_path):
     (pool / 'manifest.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in rows))
     assert s.teacher_coverage([pool], set()) == (1, ['teacher:teacher-gen/pool-v1:t000001:0'])
     assert s.teacher_coverage([pool], {'teacher:teacher-gen/pool-v1:t000001:0'}) == (1, [])
+
+
+class _Tokens:
+    """A tokenizer stand-in: ids index a fixed vocabulary."""
+    vocab = ['<think>', '</think>', '\n\n', '<tool_call>', 'eval', '</tool_call>', '<|im_end|>', 'plan']
+
+    def convert_tokens_to_ids(self, token):
+        return self.vocab.index(token)
+
+    def decode(self, ids):
+        return ''.join(self.vocab[i] for i in ids)
+
+
+def test_a_teacher_reply_without_reasoning_trains_only_the_action_after_the_empty_think_block():
+    renderer = s.TemplateRenderer.__new__(s.TemplateRenderer)
+    renderer.tokenizer = _Tokens()
+    target = [1, 2, 3, 4, 5, 6]          # </think> \n\n <tool_call> eval </tool_call> <|im_end|>
+    no_reasoning = {'role': 'assistant', 'content': '', 'tool_calls': [{'function': {'name': 'eval'}}]}
+    context = s.reasoning_free_context(renderer, 'teacher', no_reasoning, target)
+    assert context == 2                  # </think> and the whitespace after it are context
+    weight = (np.arange(len(target)) >= context).astype(np.float32)
+    assert weight.tolist() == [0, 0, 1, 1, 1, 1]
+    # the same weights reach the loss through exp0_sft's chains (row['weight'])
+    import exp0_sft
+    row = {'prompt': np.array([0], np.int32), 'sample': np.array(target, np.int32), 'weight': weight,
+           'invocation': 'i', 'index': 0}
+    chain = exp0_sft.chains_of([{'task_id': 't', 'round': 'r', 'rows': [row]}])[0]
+    assert exp0_sft.chain_weights(chain, 'cpu').tolist() == [0, 0, 1, 1, 1, 1]
+    # October rows too; a reply with reasoning and the student's own replies keep every token as a target
+    assert s.reasoning_free_context(renderer, 'october:luna-curricula', no_reasoning, target) == 2
+    assert s.reasoning_free_context(renderer, 'teacher', {**no_reasoning, 'reasoning_content': 'plan'},
+                                    [7, 1, 3, 4, 5, 6]) == 0
+    assert s.reasoning_free_context(renderer, 'rl-own', no_reasoning, target) == 0
