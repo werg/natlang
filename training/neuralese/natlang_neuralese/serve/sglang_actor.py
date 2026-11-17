@@ -325,6 +325,25 @@ class SglangEngine(Engine):
                     'payload_start': 1, 'payload_stop': len(ids) + 1, 'adapter_binding': block.adapter_binding},
                 'source_text_sha256': hashlib.sha256(text.encode('utf-8')).hexdigest()}
 
+    def native_capture(self, prompt_token_ids, reply_token_ids, *, value_type=None, adapters=None):
+        if adapters or not self.sglang_url:
+            return self._measure_native_endpoint('capture', lambda: super(SglangEngine, self).native_capture(
+                prompt_token_ids, reply_token_ids, value_type=value_type, adapters=adapters))
+        return self._measure_native_endpoint('capture_sglang', lambda: self._sglang_native_capture(
+            prompt_token_ids, reply_token_ids, value_type))
+
+    def _sglang_native_capture(self, prompt_token_ids, reply_token_ids, value_type):
+        """`_native_capture_impl` on SGLang: one capture request of the reply's content span in its own context."""
+        if not getattr(self, 'native_state_enabled', False):
+            raise RequestError('neuralese-native-state-unavailable', 'native captures require shared-state serving')
+        prefix, span = self.capture_plan(prompt_token_ids, reply_token_ids)
+        ids = [*prefix, *span]
+        text = self.tokenizer.decode(span, skip_special_tokens=False)
+        block, record = self._native_store_capture(span, [{'ids': ids, 'start': len(prefix), 'end': len(ids)}], text=text)
+        with self._sglang_lock:
+            self.sglang_state_writes += 1
+        return self._capture_result(block, record, prefix, span, value_type)
+
     def native_init_body(self, messages, tools, placeholder, text, **kwargs):
         return self._measure_native_endpoint('init_body', lambda: super(SglangEngine, self).native_init_body(
             messages, tools, placeholder, text, **kwargs))

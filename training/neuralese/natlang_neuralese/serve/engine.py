@@ -997,6 +997,57 @@ class Engine:
                              "span_cap": spec.seed_cap, "site_tokens": len(ids), "note": note,
                              "registry_sha256": registry_sha256([name]), "rows": state}}
 
+    def native_capture(self, prompt_token_ids, reply_token_ids, *, value_type=None, adapters=None):
+        """The in-context capture of a sampled reply (an operator write, OPERATORS_RESTORE_20261117.md §3.1): the reply's
+        content (after its reasoning, before its end of turn) as a producer span in its own context."""
+        return self._native_run(lambda: self._native_capture_impl(prompt_token_ids, reply_token_ids,
+                                                                  value_type=value_type), adapters)
+
+    def capture_plan(self, prompt_token_ids, reply_token_ids):
+        """(prefix ids through produce_open, span ids) of a reply captured in place; RequestError when it has no content."""
+        ids = [prompt_token_ids, reply_token_ids]
+        if not all(isinstance(part, list) and all(type(t) is int and t >= 0 for t in part) for part in ids):
+            raise RequestError("neuralese-native-capture", "capture needs the prompt and reply token ids")
+        reply = list(reply_token_ids)
+        end = next((i for i, token in enumerate(reply) if token in self.stop_ids), len(reply))
+        think_close = self.tokenizer.convert_tokens_to_ids("</think>")
+        start = max((i + 1 for i, token in enumerate(reply[:end]) if token == think_close), default=0)
+        span = reply[start:end]
+        markers = set(self.role_tokens.ids)
+        if not span or markers.intersection(span) or markers.intersection(prompt_token_ids):
+            raise RequestError("neuralese-native-capture", "the reply has no content to capture, or carries role markers")
+        prefix = [*prompt_token_ids, *reply[:start], self.role_tokens.produce_open]
+        if len(prefix) + len(span) + 1 >= self.context:
+            raise RequestError("context-length", "captured reply and its context exceed this model context")
+        return prefix, span
+
+    def _capture_result(self, block, record, prefix, span, value_type):
+        text = self.tokenizer.decode(span, skip_special_tokens=False)
+        meta = record.meta()
+        if value_type is not None:
+            meta["type"] = value_type
+        return {"id": record.id, "native_state": meta, "source_text": text,
+                "source_capture": {"policy": self._native_block_identity(block), "segments": [
+                    {"kind": "tokens", "token_ids": list(prefix), "producing": [False] * len(prefix)},
+                    {"kind": "tokens", "token_ids": list(span), "producing": [True] * len(span)},
+                    {"kind": "tokens", "token_ids": [self.role_tokens.produce_close], "producing": [False]}],
+                    "payload_start": len(prefix), "payload_stop": len(prefix) + len(span),
+                    "adapter_binding": block.adapter_binding},
+                "source_text_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest()}
+
+    def _native_capture_impl(self, prompt_token_ids, reply_token_ids, *, value_type=None):
+        if not getattr(self, "native_state_enabled", False):
+            raise RequestError("neuralese-native-state-unavailable", "native captures require shared-state serving")
+        prefix, span = self.capture_plan(prompt_token_ids, reply_token_ids)
+        from ..model.shared_state import native_step
+        with torch.inference_mode():
+            opened = native_step(self.shared_model, torch.tensor([prefix], dtype=torch.long, device=self.device))
+            capture = native_step(self.shared_model, torch.tensor([span], dtype=torch.long, device=self.device),
+                                  opened["cache"], producing=True)
+        text = self.tokenizer.decode(span, skip_special_tokens=False)
+        block, record = self._native_store_capture(span, [capture], text=text)
+        return self._capture_result(block, record, prefix, span, value_type)
+
     def native_write_text(self, text: str, *, value_type: str | None = None, adapters=None):
         return self._native_run(lambda: self._native_write_text_impl(text, value_type=value_type), adapters)
 

@@ -811,4 +811,9 @@ export interface NeuralesePort {
   /** The writer forces the supplied source text and does not sample completion tokens. */
   readonly forcedText?: true;
   write(text: string, options?: { type?: string; producer?: Record<string, unknown>; truncated?: boolean }): Promise<NeuraleseBlockMeta>;
+  /**
+   * The in-context capture of a sampled reply (servers advertising `native.capture`): the reply's content, after its
+   * reasoning and before its end of turn, as a producer span after its own prompt. Learned operators write with it.
+   */
+  capture?(tokens: { prompt: number[]; reply: number[] }, options?: { type?: string; producer?: Record<string, unknown> }): Promise<NeuraleseBlockMeta>;
 }

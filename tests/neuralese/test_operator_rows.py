@@ -91,3 +91,30 @@ def test_rows_feed_the_pass_through_plan():
     plan = lfm3_fast_train.passthrough_plan([(0, consumer['imports'], consumer['sources'])], len(consumer['ids']))
     assert not plan['fixed'] and len(plan['documents']) == 1
     assert np.array_equal(np.asarray(plan['documents'][0]), consumer['sources']['k1:0']['ids'])
+
+
+def _consumer(task, span, before=(1, 2), after=(3, 4), target=(5, 6)):
+    import numpy as np
+    key = f'{task}:0'
+    prompt = [*before, 90, *span, 91, *after]
+    document = {'ids': np.asarray([7, 8, 80, *span], np.int32), 'start': 3, 'stop': 3 + len(span)}
+    return {'ids': np.asarray([*prompt, *target], np.int32),
+            'segs': [(len(prompt), len(target), {'kind': 'consumer', 'sample': np.asarray(target, np.int32)})],
+            'imports': [(len(before) + 1, key)], 'sources': {key: document}, 'task': task, 'round': 0}
+
+
+def test_ablation_arms_splice_donor_spans_and_standalone_documents():
+    import numpy as np
+    from operator_ablation import paired, shuffled, standalone
+    a, b = _consumer('a', [11, 12]), _consumer('b', [21, 22, 23])
+    sa, sb = shuffled([a, b])
+    # a reads b's span (another length): the import rows, the target segment and the source move with it.
+    assert list(sa['ids']) == [1, 2, 90, 21, 22, 23, 91, 3, 4, 5, 6]
+    assert sa['segs'][0][0] == 9 and sa['imports'] == [(3, 'a:0')]
+    assert list(sa['sources']['a:0']['ids']) == [7, 8, 80, 21, 22, 23]
+    assert list(sb['ids'][3:5]) == [11, 12]
+    alone = standalone(a, produce_open=80)
+    assert list(alone['sources']['a:0']['ids']) == [80, 11, 12] and alone['sources']['a:0']['start'] == 1
+    assert list(alone['ids']) == list(a['ids'])
+    result = paired([1., 1.2, 0.8, 1.1])
+    assert result['mean'] > 0 and result['better_share'] == 1.0 and result['ci95'][0] > 0

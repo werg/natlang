@@ -2537,3 +2537,14 @@ of silently marking their outcomes unverified (`tune-pipeline.test.mjs`).
 -35), so the writer answers in plain text and the host writes that text as the native state its consumer imports. It
 is run only inside training collections (JOLT+ teacher attempts with a verified run, `grpo.py
 --hindsight-trajectories`); it has no live sample yet, and its first teacher attempts are its first measurement.
+
+**2026-11-17, learned compaction operators v3 (OPERATORS_RESTORE_20261117.md).** Behind the model-facing variant
+`learned-compaction` (off by default; it enters the held series key). With it, a cut-off tool output or argument
+listing of at least 800 characters gets one extra model call:
+- the call is at the builtin `view`'s site (view's body as system text, then `instructions:` with the receiving
+  call's purpose and `value:` with the whole value), under its own invocation ID `<call>#operator-<n>`;
+- its sampled reply content is captured in its own context as a native state;
+- the consumer sees that state framed (`Compacted value: ` / `Compacted argument: `) beside the unchanged text cut.
+
+compact-value and compact-params now share view's body and site, replacing their own prompts (registry v3). Without
+the variant nothing changes. The variant is measured by held success on vs off before it becomes the default.

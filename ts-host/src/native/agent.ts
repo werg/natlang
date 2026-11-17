@@ -36,8 +36,9 @@ async function pinNativeProgramGuidance(store: NeuraleseStore, id: string): Prom
 }
 import { listingViewInstructions, viewNote } from './prompt.js';
 import { pluggable, type PluggableSetting } from '../runtime/pluggable.js';
-import { framedState, type CompactSite } from './operator-frames.js';
-import type { NeuraleseRef } from './neuralese.js';
+import { modelFacing } from '../runtime/model-facing.js';
+import { framedState, OPERATOR_MIN_CHARS, OPERATOR_SPAN_CAPS, viewSiteMessages, type CompactSite } from './operator-frames.js';
+import { neuraleseRef, type NeuraleseRef } from './neuralese.js';
 import { untrustedBlock, type UntrustedRegistry } from './untrusted.js';
 import { writtenReturnResult } from './pseudo-call.js';
 import { decodeTurnValue, encodeMessages, isContentParts, isNativeAdapterRef, isNeuraleseRef, neuraleseSentinel, neuraleseRefSentinel, nativeStateSentinel, NeuraleseUnsupportedError, supportsGuidance, supportsNeuralese,
@@ -560,15 +561,23 @@ export class NativeToolAgent {
    * text cut. A failed operator keeps the cut and is traced; it never fails the call.
    */
   private async compactRef(session: NativeSession, site: CompactSite): Promise<NeuraleseRef | undefined> {
-    const compactor = this.options.neuralese?.compactor;
-    if (!compactor || !supportsNeuralese(this.driver)) return undefined;
+    const compactor = this.options.neuralese?.compactor, port = this.options.neuralese?.port;
+    const valueSite = site.operator === 'compact-value' || site.operator === 'compact-params';
+    // compact-value/compact-params write by an operator call plus its in-context capture (`native.capture`); the
+    // others still use the server's operator endpoint.
+    if (!(valueSite ? port?.capture : compactor) || !supportsNeuralese(this.driver)) return undefined;
     const setting = this.options.compaction ?? this.options.neuralese?.compaction ??
-      (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.NATLANG_NEURALESE_COMPACTION as PluggableSetting;
+      (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.NATLANG_NEURALESE_COMPACTION as PluggableSetting ??
+      (modelFacing('learned-compaction') ? 'nl' : undefined);
     const chars = site.operator === 'compact-history' ? JSON.stringify(site.messages).length : site.value.length;
+    if (site.operator !== 'compact-history' && chars < OPERATOR_MIN_CHARS) return undefined;
     const run = pluggable<[CompactSite], NeuraleseRef | undefined>({
       crisp: () => undefined,
       nl: async request => {
-        try { return await compactor(request); } catch (error) {
+        try {
+          return request.operator === 'compact-value' || request.operator === 'compact-params'
+            ? await this.operatorWrite(session, request) : await compactor!(request);
+        } catch (error) {
           session.runtime.trace.emit('operator', { call_id: session.runtime.currentCallId ?? null, operator: request.operator,
             representation: 'text', chars, error: String((error as Error)?.message ?? error).slice(0, 300) });
           return undefined;
@@ -580,6 +589,46 @@ export class NativeToolAgent {
     return ref;
   }
 
+  /** Operator calls per invocation, numbering their own invocation IDs. */
+  private readonly operatorCalls = new Map<string, number>();
+
+  /**
+   * One learned operator write (OPERATORS_RESTORE_20261117.md §3.1): an ordinary model call at view's site (sampled
+   * and captured like every call, under its own invocation ID), then the in-context capture of its reply's content.
+   * The write is a `block_write` node with its `source_capture`, so the learners compute the state in-graph from the
+   * site and the reply (the pass-through) and train the operator call as a call of the episode.
+   */
+  private async operatorWrite(session: NativeSession, site: Extract<CompactSite, { value: string }>): Promise<NeuraleseRef> {
+    const port = this.options.neuralese!.port!;
+    const callId = session.runtime.currentCallId ?? session.runtime.options.runId;
+    const index = (this.operatorCalls.get(callId) ?? 0) + 1;
+    this.operatorCalls.set(callId, index);
+    const request: ModelTurnRequest = { invocation_id: `${callId}#operator-${index}`,
+      messages: viewSiteMessages(site.value, site.instructions), tools: [],
+      seed: session.runtime.seedPolicy.mode === 'backend' ? null :
+        deriveSeed(session.runtime.seedPolicy.root!, runSeedKey(session.runtime.options), session.lam.attempts, `operator-${index}`, 0),
+      max_tokens: 2 * OPERATOR_SPAN_CAPS[site.operator] };
+    // model-call-kind: operator-call -- training/model-call-kinds.json
+    const response = await runInFrame(session.runtime.frame, () => this.driver(request, session.runtime.signal));
+    const sampled = response.raw_response?.x_natlang_rl_capture as { prompt?: { kind?: string; token_ids?: number[] }[];
+      generated_inputs?: { token_id?: number }[] } | undefined;
+    if (!sampled?.prompt?.length || !sampled.generated_inputs?.length ||
+        sampled.prompt.some(segment => segment.kind !== 'tokens' || !Array.isArray(segment.token_ids)))
+      throw new Error('neuralese-operator-capture: the operator call returned no sampled token ids');
+    const meta = await port.capture!({ prompt: sampled.prompt.flatMap(segment => segment.token_ids!),
+      reply: sampled.generated_inputs.map(input => input.token_id!) }, { type: 'Neuralese<string>' });
+    const node = graphNode(session.runtime.trace, 'block_write', { call_id: callId, block: meta.id, length: meta.length,
+      turn: '', stops: [], truncated: false, producer: 'operator-capture', source_kind: 'operator-capture',
+      source: site.operator, marker_context: 'operator', operator_invocation_id: request.invocation_id,
+      result_type: 'Neuralese<string>',
+      ...(meta.native_state ? { format: 'native-state', native_identity: {
+        architecture: meta.native_state.architecture, checkpoint_sha256: meta.native_state.checkpoint_sha256,
+        tokenizer_fingerprint: meta.native_state.tokenizer_fingerprint,
+        embedding_weight_sha256: meta.native_state.embedding_weight_sha256 },
+        source_capture: meta.producer?.native_source_capture } : {}) }, []);
+    return neuraleseRef('Neuralese<string>', meta.id, false, node);
+  }
+
   /** The call's instructions as an operator's purpose text (bounded). */
   private purpose(session: NativeSession): string {
     const body = typeof session.lam.body === 'string' ? session.lam.body.replace(/\n+$/, '') : '';
@@ -589,7 +638,7 @@ export class NativeToolAgent {
   private async views(session: NativeSession): Promise<Record<string, string>> {
     const view = this.options.neuralese?.view;
     const lam = session.lam;
-    if (this.options.neuralese?.compactor && supportsNeuralese(this.driver) && lam.type.kind === 'lambda') {
+    if ((this.options.neuralese?.compactor || this.options.neuralese?.port?.capture) && supportsNeuralese(this.driver) && lam.type.kind === 'lambda') {
       // The learned compact-params operator, when selected, writes the listing's state of each argument it would cut.
       const root = lam.projectTransaction?.folder;
       const out: Record<string, string> = {};
