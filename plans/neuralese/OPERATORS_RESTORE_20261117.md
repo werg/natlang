@@ -310,7 +310,7 @@ check pass; the variant means a new Pop base.
 - **Step-0 ablation** (5ff07638, seeded states, 64 test consumers per source;
   `/home/werg/data/natlang-operator-rows-20261117-test-v1/ablation-step0-5ff07638.json`).
   - The in-context state beats a shuffled donor by 0.7-2.7 nats/token on every source with power.
-  - It beats the same span written standalone by 0.6-2.6 nats/token on 18 of 20 sources, so the in-context capture
+  - It beats the same span written standalone by 0.5-2.6 nats/token on 17 of 21 sources (p<0.05), so the in-context capture
     carries more than its tokens.
   - It beats the text cut on compact-params and compact-value. It is about even on extract, whose documents are
     short, so their "cut" is the whole text.
