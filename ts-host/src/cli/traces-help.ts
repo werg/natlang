@@ -28,7 +28,9 @@ export const TRACES_HELP = `The machine's record of natlang calls (NATLANG_CALL_
   natlang traces annotate CALL KIND VALUE    Attach feedback or a judgment to a call.
   natlang traces config [KEY=VALUE...]       maxValueBytes, maxStoreBytes, specialization (off|shadow|on),
                                              auditRate, acceptanceBound, promotionComparisons, minCalls.
-  natlang traces evict [--bytes N] [--work-limit N]
+  natlang traces evict [--bytes N] [--work-limit N] [--no-compact]
+                                             Evict to the bound now, then return free database pages to the disk
+                                             (a database made before incremental auto-vacuum is rewritten once).
 CALL is a call ID, a unique prefix of one, or the same without its task-N- prefix (the first 8 characters
 usually do). Every command takes --store DIR to read another store.
 Every runtime records each call (exact inputs, output, service calls, eval code, cost) unless

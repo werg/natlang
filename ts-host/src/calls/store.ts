@@ -58,9 +58,10 @@ export class FileMedium implements StoreMedium {
   freeBytes(): number { const stats = statfsSync(this.root); return Number(stats.bavail) * Number(stats.bsize); }
   databaseBytes(): number {
     let bytes = 0;
-    for (const name of ['calls.sqlite', 'calls.sqlite-wal']) try { bytes += statSync(join(this.root, name)).size; } catch { /* absent */ }
+    for (const name of ['calls.sqlite', 'calls.sqlite-wal', 'calls.sqlite-shm']) try { bytes += statSync(join(this.root, name)).size; } catch { /* absent */ }
     return bytes;
   }
+  blobBlockBytes(): number { return Number(statfsSync(this.root).bsize) || 4096; }
   modeOverride(): string | undefined { return this.mode?.(); }
   /**
    * A row's process is known gone when the row is from an earlier boot, or from this PID namespace and no process has
@@ -83,7 +84,10 @@ export function openCallStore(root: string, options: { mode?: () => string | und
   if (store) return store;
   const medium = new FileMedium(absolute, options.mode);
   const db = new (sqlite())(join(absolute, 'calls.sqlite'));
-  db.exec('PRAGMA busy_timeout = 10000; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;');
+  // A new database gets incremental auto-vacuum, so eviction gives freed pages back (`CallStore.compact` converts an
+  // older one); the WAL is truncated to 4 MiB after checkpoints instead of staying at its largest size.
+  db.exec('PRAGMA busy_timeout = 60000; PRAGMA auto_vacuum = INCREMENTAL; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; ' +
+    'PRAGMA journal_size_limit = 4194304;');
   store = new CallStore(absolute, db, medium);
   store.onClose = () => opened.delete(absolute);
   opened.set(absolute, store);

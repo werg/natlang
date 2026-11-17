@@ -20,8 +20,10 @@ Values are content-addressed blobs; a value above `maxValueBytes` (1 MiB) is kep
   `new BrowserCallStore({ name })` opens a separate store; pass it as `calls`. Only one tab can hold a store; another
   tab runs its calls without recording (it warns once). Values, events and compilation files are rows in the same
   database; bounds use `navigator.storage.estimate()` for the free space.
-- Bounds: the store evicts when it passes `maxStoreBytes` (50 GiB) or its filesystem has less than `minFreeBytes`
-  (20 GiB) free: first the event streams of the oldest calls, then whole calls. Calls cited by a compilation, annotated,
+- Bounds: the store evicts when what it takes on disk (blob files as allocated plus the database files) passes
+  `maxStoreBytes` (50 GiB) or its filesystem has less than `minFreeBytes` (20 GiB) free: first the event streams of the
+  oldest calls, then whole calls. Every write checks the bound, whichever process writes. `natlang traces evict` does it
+  at once and returns freed database pages to the disk (an older database is converted once to incremental vacuum). Calls cited by a compilation, annotated,
   queued for an audit, or pinned (`natlang traces pin CALL`) are kept.
 - Opt-out per program in `natlang.json`: `"recording": { "exclude": ["auth/*.nl", "login.password"] }` (a definition
   source glob, or `functionName.argument`). Excluded values are recorded by type only; `return` names the result.

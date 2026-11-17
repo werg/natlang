@@ -209,7 +209,7 @@ const TRACES: Record<string, Spec> = {
   good: { values: ['--group', '--program'], flags: ['--dry-run'] },
   bad: { values: ['--expected', '--group', '--program'], flags: ['--dry-run'] },
   fix: { values: ['--expected', '--group', '--program'], flags: ['--dry-run'] },
-  config: {}, evict: { values: ['--bytes', '--work-limit'] },
+  config: {}, evict: { values: ['--bytes', '--work-limit'], flags: ['--no-compact'] },
 };
 const valuedOptions = (specs: Record<string, Spec>) => new Set(['--store', ...Object.values(specs).flatMap(spec => spec.values ?? [])]);
 
@@ -333,9 +333,11 @@ async function traces(action: string, words: string[], args: Args): Promise<numb
     print(Object.keys(changes).length ? store.writeSettings(changes) : store.settings(), true);
     return 0;
   }
-  // evict
-  print(`freed ${store.evict(text(args, '--bytes') ? number(args, '--bytes', 0) : undefined,
-    text(args, '--work-limit') ? number(args, '--work-limit', 0) : undefined)} bytes`, false); return 0;
+  // evict, then give the database's free pages back (converting an older database to incremental auto-vacuum)
+  const freed = store.evict(text(args, '--bytes') ? number(args, '--bytes', 0) : undefined,
+    text(args, '--work-limit') ? number(args, '--work-limit', 0) : undefined);
+  const compacted = args.options.has('--no-compact') ? 0 : store.compact();
+  print(`freed ${freed} bytes; the database shrank by ${compacted} bytes; the store takes ${store.diskBytes()} bytes`, false); return 0;
 }
 
 /** The compilation a word names: an ID, a definition key, name or source. */

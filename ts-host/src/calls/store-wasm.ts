@@ -57,6 +57,7 @@ export class DatabaseMedium implements StoreMedium {
       .run(JSON.stringify(config));
   }
   freeBytes(): number { return this.free; }
+  blobBlockBytes(): number { return 0; }
   databaseBytes(): number {
     const pages = this.db.prepare('PRAGMA page_count').get() as { page_count: number };
     const size = this.db.prepare('PRAGMA page_size').get() as { page_size: number };
@@ -70,6 +71,7 @@ export class DatabaseMedium implements StoreMedium {
 export function wasmCallStore(root: string, db: WasmDb, options: { scope?: string; mode?: () => string | undefined } = {}):
   { store: CallStore; medium: DatabaseMedium } {
   const sql = wasmDatabase(db);
+  sql.exec('PRAGMA auto_vacuum = INCREMENTAL');   // takes effect for a new database: eviction gives freed pages back
   const medium = new DatabaseMedium(sql, options.scope, options.mode);
   return { store: new CallStore(root, sql, medium), medium };
 }
