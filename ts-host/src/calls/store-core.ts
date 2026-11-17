@@ -35,6 +35,11 @@ export interface StoreMedium {
    * live in the database and its pages already count them.
    */
   blobBlockBytes(): number;
+  /**
+   * Room the database's log takes beside its pages (Node: the write-ahead log and its index, at least the size they are
+   * truncated to after a checkpoint, more while a reader holds a longer log); 0 when there is none. The bound leaves it.
+   */
+  logBytes(): number;
   /** A specialization mode set from outside the store (Node: NATLANG_SPECIALIZATION, supplied by the machine-store module). */
   modeOverride(): string | undefined;
   /** This process, for the rows of the calls it runs. */
@@ -480,8 +485,8 @@ export class CallStore {
   }
   /**
    * What the store occupies and eviction can reduce: blob files as allocated (blobs in the database count as its
-   * pages) plus the database pages in use. This is what `maxStoreBytes` bounds. The write-ahead log comes on top; the
-   * Node store truncates it to 4 MiB after each checkpoint (store.ts), and eviction cannot shrink it (it writes to it).
+   * pages) plus the database pages in use. Eviction cannot shrink the write-ahead log (it writes to it), so `bound`
+   * leaves its room (`StoreMedium.logBytes`) out of `maxStoreBytes` instead.
    */
   storeBytes(): number {
     const pages = this.db.prepare('PRAGMA page_count').get() as { page_count: number };
@@ -489,13 +494,18 @@ export class CallStore {
     return this.counter('blob_disk_bytes') + Number(pages.page_count) * Number(size.page_size) - this.freeDatabaseBytes();
   }
 
-  /** The store's bound now: its size limit, lowered so the filesystem keeps `minFreeBytes` free. */
+  /**
+   * The store's bound now (on `storeBytes`): its size limit less the room of the database's log, so the files on disk
+   * stay within `maxStoreBytes`; lowered further so the filesystem keeps `minFreeBytes` free.
+   */
   bound(): number {
     const settings = this.settings();
     let free = Infinity;
     try { free = this.medium.freeBytes(); } catch { /* unknown */ }
     const total = this.storeBytes();
-    return Math.max(0, Math.min(settings.maxStoreBytes, free < settings.minFreeBytes ? total - (settings.minFreeBytes - free) : Infinity));
+    let log = 0;
+    try { log = this.medium.logBytes(); } catch { /* unknown */ }
+    return Math.max(0, Math.min(settings.maxStoreBytes - log, free < settings.minFreeBytes ? total - (settings.minFreeBytes - free) : Infinity));
   }
 
   /**

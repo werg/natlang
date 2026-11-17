@@ -63,6 +63,13 @@ export class FileMedium implements StoreMedium {
     return bytes;
   }
   blobBlockBytes(): number { return Number(statfsSync(this.root).bsize) || 4096; }
+  /** The WAL and its index as they are, at least the WAL's truncation size (JOURNAL_SIZE_LIMIT) plus the index. */
+  logBytes(): number {
+    let wal = 0, shm = 0;
+    try { wal = statSync(join(this.root, 'calls.sqlite-wal')).size; } catch { /* absent */ }
+    try { shm = statSync(join(this.root, 'calls.sqlite-shm')).size; } catch { /* absent */ }
+    return Math.max(wal, JOURNAL_SIZE_LIMIT) + Math.max(shm, 32768);
+  }
   modeOverride(): string | undefined { return this.mode?.(); }
   /**
    * A row's process is known gone when the row is from an earlier boot, or from this PID namespace and no process has
@@ -77,6 +84,9 @@ export class FileMedium implements StoreMedium {
   }
 }
 
+/** Bytes the WAL is truncated to after a checkpoint (it reaches about this at SQLite's 1000-page autocheckpoint). */
+const JOURNAL_SIZE_LIMIT = 4 * 2 ** 20;
+
 const opened = new Map<string, CallStore>();
 /** The store at `root` (one instance per root per process; `mode` is the specialization override of the first open). */
 export function openCallStore(root: string, options: { mode?: () => string | undefined } = {}): CallStore {
@@ -88,7 +98,7 @@ export function openCallStore(root: string, options: { mode?: () => string | und
   // A new database gets incremental auto-vacuum, so eviction gives freed pages back (`CallStore.compact` converts an
   // older one); the WAL is truncated to 4 MiB after checkpoints instead of staying at its largest size.
   db.exec('PRAGMA busy_timeout = 60000; PRAGMA auto_vacuum = INCREMENTAL; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; ' +
-    'PRAGMA journal_size_limit = 4194304;');
+    `PRAGMA journal_size_limit = ${JOURNAL_SIZE_LIMIT};`);
   store = new CallStore(absolute, db, medium);
   store.onClose = () => opened.delete(absolute);
   opened.set(absolute, store);

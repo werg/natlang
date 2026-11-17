@@ -211,9 +211,9 @@ for (const variant of variants) {
 
   scenario('the configured bound limits the store as calls arrive', ({ store }) => {
     store.writeSettings({ minFreeBytes: 0 });
-    const bound = store.storeBytes() + 8 * 2 ** 20;
+    const bound = store.storeBytes() + 8 * 2 ** 20 + store.medium.logBytes();
     store.writeSettings({ maxStoreBytes: bound });
-    assert.equal(store.bound(), bound);
+    assert.equal(store.bound(), bound - store.medium.logBytes(), 'the room of the log is left out');
     for (let index = 0; index < 400; index++) put(store, `b/${String(index).padStart(3, '0')}`, { n: index, padding: 20_000 + index, events: 2000 });
     assert.ok(store.storeBytes() <= bound, `store is ${store.storeBytes()} bytes, bound ${bound}`);
     const remaining = store.calls({ limit: 1000 }).map(row => row.call_id);
@@ -300,7 +300,7 @@ for (const variant of variants) {
     store.medium.freeBytes = () => 400;
     assert.equal(store.bound(), total - 600, 'drops by the shortfall in free bytes');
     store.medium.freeBytes = () => { throw new Error('unknown'); };
-    assert.equal(store.bound(), 100_000_000, 'an unknown free size does not shrink the bound');
+    assert.equal(store.bound(), 100_000_000 - store.medium.logBytes(), 'an unknown free size does not shrink the bound');
   });
 
   scenario('running calls show up, and those of a writer that is gone become interrupted', ({ store, orphan, reopen }) => {
@@ -465,12 +465,12 @@ for (const variant of variants) {
   });
 }
 
-/** Bytes the files under `root` occupy on disk (allocated blocks), directories and the write-ahead log aside. */
+/** Bytes the files under `root` occupy on disk (allocated blocks, the write-ahead log included), directories aside. */
 function allocatedBytes(root) {
   let bytes = 0;
   const walk = dir => { for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const path = join(dir, entry.name);
-    if (entry.isDirectory()) walk(path); else if (!/-(wal|shm)$/.test(entry.name)) bytes += statSync(path).blocks * 512;
+    if (entry.isDirectory()) walk(path); else bytes += statSync(path).blocks * 512;
   } };
   walk(root);
   return bytes;
@@ -495,11 +495,12 @@ test('call store contract [node-file]: many short-lived writers keep the files o
     assert.ok(disk <= bound, `the store takes ${disk} bytes on disk, bound ${bound}`);
     const wal = statSync(join(handle.root, 'calls.sqlite-wal')).size;
     assert.ok(wal <= 8 * 2 ** 20, `the write-ahead log stays small (${wal} bytes)`);
+    assert.ok(handle.store.storeBytes() + handle.store.medium.logBytes() <= bound, 'the store and its log fit the bound together');
     assert.ok(disk >= bound * 0.5, `eviction kept the store near its bound, not empty (${disk} bytes)`);
     const remaining = handle.store.calls({ limit: 1000 }).map(row => row.call_id);
     assert.equal(remaining[0], 'd/0799', 'the newest call survives');
     assert.ok(remaining.length < 400, `${remaining.length} calls remain of 800 (~55 MB written)`);
-    assert.ok(Math.abs(handle.store.diskBytes() - wal - disk) < 2 ** 20, `diskBytes ${handle.store.diskBytes()} vs allocated ${disk}`);
+    assert.ok(Math.abs(handle.store.diskBytes() - disk) < 2 ** 20, `diskBytes ${handle.store.diskBytes()} vs allocated ${disk}`);
   } finally { handle.cleanup(); }
 });
 

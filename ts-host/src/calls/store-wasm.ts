@@ -59,6 +59,8 @@ export class DatabaseMedium implements StoreMedium {
   }
   freeBytes(): number { return this.free; }
   blobBlockBytes(): number { return 0; }
+  /** The database's journal is not kept beside it here (in memory, or OPFS rolled back in place). */
+  logBytes(): number { return 0; }
   databaseBytes(): number {
     const pages = this.db.prepare('PRAGMA page_count').get() as { page_count: number };
     const size = this.db.prepare('PRAGMA page_size').get() as { page_size: number };
