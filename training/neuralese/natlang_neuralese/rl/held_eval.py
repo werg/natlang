@@ -482,6 +482,22 @@ def finalize(directory, spec, started, *, complete):
                         'completion_tokens': (finish or {}).get('completion_tokens'),
                         'model_calls': efficiency.get('model_calls'), 'repeated_actions': efficiency.get('repeated_actions'),
                         'neuralese_exchanges': row.get('neuralese_exchanges', 0)})
+    elapsed = round(time.time() - started, 1)
+    result = {'schema': RESULT_SCHEMA, 'policy_id': spec['policy_id'], 'round': spec.get('round'),
+              'manifest_sha256': spec['manifest_sha256'], 'series': spec['series'], 'code': spec['code'],
+              'endpoint': spec['endpoint'], 'actor': spec.get('actor'), 'engine': spec.get('engine'), 'tasks': spec['tasks'], 'samples_per_task': spec['samples'],
+              'seed_base': spec.get('seed_base', SEED_BASE), 'case_seconds': spec.get('case_seconds'),
+              'context_tokens': spec.get('context_tokens', LEGACY_CONTEXT_TOKENS),
+              'sampling': spec.get('sampling', LEGACY_SAMPLING),
+              'started_at': started, 'finished_at': time.time(), 'elapsed_seconds': elapsed,
+              **aggregate(samples, complete=complete, elapsed=elapsed),
+              'score': {'groups_with_spread': report.get('groups_with_spread')}}
+    write_json_durable(directory / 'result.json', result)
+    return result
+
+
+def aggregate(samples, *, complete, elapsed):
+    """The result fields computed from its samples (``finalize``, ``merge``)."""
     ran = [s for s in samples if s['ran']]
     scored = [s for s in ran if s['reward'] is not None]
     counts = {}
@@ -491,30 +507,54 @@ def finalize(directory, spec, started, *, complete):
     successes = sum(s['reward'] == 1.0 for s in scored)
     timeouts = sum(s['timed_out'] for s in ran)
     tokens = sum(s['completion_tokens'] or 0 for s in ran)
-    elapsed = round(time.time() - started, 1)
-    result = {'schema': RESULT_SCHEMA, 'policy_id': spec['policy_id'], 'round': spec.get('round'),
-              'manifest_sha256': spec['manifest_sha256'], 'series': spec['series'], 'code': spec['code'],
-              'endpoint': spec['endpoint'], 'actor': spec.get('actor'), 'engine': spec.get('engine'), 'tasks': spec['tasks'], 'samples_per_task': spec['samples'],
-              'seed_base': spec.get('seed_base', SEED_BASE), 'case_seconds': spec.get('case_seconds'),
-              'context_tokens': spec.get('context_tokens', LEGACY_CONTEXT_TOKENS),
-              'sampling': spec.get('sampling', LEGACY_SAMPLING),
-              'started_at': started, 'finished_at': time.time(), 'elapsed_seconds': elapsed,
-              'complete': bool(complete and len(ran) == len(samples)), 'ran': len(ran), 'scored': len(scored),
-              'successes': successes, 'success_rate': round(successes / len(scored), 4) if scored else None,
-              # Secondary: the training reward with partial file-effect credit (held is judged on acceptance).
-              'mean_graded_reward': (round(sum(s['graded_reward'] for s in scored) / len(scored), 4)
-                                     if scored and all(s.get('graded_reward') is not None for s in scored) else None),
-              'timeouts': timeouts, 'timeout_rate': round(timeouts / len(ran), 4) if ran else None,
-              'unscored_other': len(ran) - len(scored) - sum(s['timed_out'] and s['reward'] is None for s in ran),
-              'outcome_counts': counts,
-              'loop_rate': (sum(counts.get(k, 0) for k in LOOP) / len(ran)) if ran else None,
-              'ran_out_rate': ran_out_rate({'samples': samples}),
-              'repeated_action_rate': (sum(s['repeated_actions'] or 0 for s in scored) / calls) if calls else None,
-              'neuralese_use_rate': (sum(s['neuralese_exchanges'] > 0 for s in scored) / len(scored)) if scored else None,
-              'completion_tokens': tokens, 'tokens_per_second': round(tokens / elapsed, 1) if elapsed else None,
-              'score': {'groups_with_spread': report.get('groups_with_spread')}, 'samples': samples}
-    write_json_durable(directory / 'result.json', result)
-    return result
+    return {'complete': bool(complete and len(ran) == len(samples)), 'ran': len(ran), 'scored': len(scored),
+            'successes': successes, 'success_rate': round(successes / len(scored), 4) if scored else None,
+            # Secondary: the training reward with partial file-effect credit (held is judged on acceptance).
+            'mean_graded_reward': (round(sum(s['graded_reward'] for s in scored) / len(scored), 4)
+                                   if scored and all(s.get('graded_reward') is not None for s in scored) else None),
+            'timeouts': timeouts, 'timeout_rate': round(timeouts / len(ran), 4) if ran else None,
+            'unscored_other': len(ran) - len(scored) - sum(s['timed_out'] and s['reward'] is None for s in ran),
+            'outcome_counts': counts,
+            'loop_rate': (sum(counts.get(k, 0) for k in LOOP) / len(ran)) if ran else None,
+            'ran_out_rate': ran_out_rate({'samples': samples}),
+            'repeated_action_rate': (sum(s['repeated_actions'] or 0 for s in scored) / calls) if calls else None,
+            'neuralese_use_rate': (sum(s['neuralese_exchanges'] > 0 for s in scored) / len(scored)) if scored else None,
+            'completion_tokens': tokens, 'tokens_per_second': round(tokens / elapsed, 1) if elapsed else None,
+            'samples': samples}
+
+
+def merge(parts):
+    """One result from complete runs of one policy whose seeds continue each other (part k's ``seed_base`` is the
+    first's plus the samples before it: ``measure --samples 2 --seed-base SEED_BASE+2`` measures samples 2-3 of a
+    4-sample run). The samples are renumbered into one series, so ``compare`` reads it as a single run. Parts measured on
+    different engines are allowed: the result's ``engine`` lists them per sample range (``engine_parts``), and ``compare``
+    pairs it only with a result of the same engine mix, where each task sees the same engines in both arms."""
+    first = parts[0]
+    same = ('policy_id', 'manifest_sha256', 'tasks', 'case_seconds', 'context_tokens', 'sampling')
+    offset, samples, engines = 0, [], []
+    for part in parts:
+        for key in same:
+            if part.get(key) != first.get(key):
+                raise ValueError(f'parts differ in {key}: {first.get(key)!r} vs {part.get(key)!r}')
+        if part['series']['key'] != first['series']['key'] or (part.get('code') or {}).get('git_commit') != \
+                (first.get('code') or {}).get('git_commit'):
+            raise ValueError('parts ran different code or scoring series')
+        if not part.get('complete'):
+            raise ValueError('merge takes complete runs only')
+        if part.get('seed_base', SEED_BASE) != first.get('seed_base', SEED_BASE) + offset:
+            raise ValueError(f'part seeds start at {part.get("seed_base")}, not {first.get("seed_base", SEED_BASE) + offset}')
+        samples += [{**s, 'sample': s['sample'] + offset} for s in part['samples']]
+        engines.append({'samples': [offset, offset + part['samples_per_task']], 'engine': result_engine(part)})
+        offset += part['samples_per_task']
+    distinct = {json.dumps(e['engine'], sort_keys=True) for e in engines}
+    elapsed = sum(part.get('elapsed_seconds') or 0 for part in parts)
+    return {**{k: v for k, v in first.items() if k not in ('samples', 'actor', 'endpoint')},
+            'samples_per_task': offset, 'started_at': min(p.get('started_at') or 0 for p in parts),
+            'finished_at': max(p.get('finished_at') or 0 for p in parts), 'elapsed_seconds': elapsed,
+            'engine': first.get('engine') if len(distinct) == 1 else {'engine_parts': engines},
+            'merged_from': [{'seed_base': p.get('seed_base', SEED_BASE), 'samples': p['samples_per_task'],
+                             'finished_at': p.get('finished_at')} for p in parts],
+            **aggregate(samples, complete=True, elapsed=elapsed)}
 
 
 def _level(task):
@@ -963,6 +1003,10 @@ def main(argv=None):
     c.add_argument('--trained-families', type=Path,
                    help='JSON list of families the second policy trained on: splits the change into trained/untrained')
     c.add_argument('--resamples', type=int, default=2000)
+    g = sub.add_parser('merge', help='one result.json from complete runs of one policy with continuing seeds '
+                                     '(e.g. samples 0-1 and, with --seed-base +2, samples 2-3)')
+    g.add_argument('out', type=Path, help='result.json to write')
+    g.add_argument('parts', type=Path, nargs='+', help="result.json files in seed order")
     args = parser.parse_args(argv)
     if args.command == 'run':
         run(args.dir)
@@ -974,6 +1018,11 @@ def main(argv=None):
         if args.out:
             args.out.write_text(text + '\n')
         print(text)
+    elif args.command == 'merge':
+        result = merge([json.loads(path.read_text()) for path in args.parts])
+        write_json_durable(args.out, result)
+        print(json.dumps({k: result[k] for k in ('policy_id', 'samples_per_task', 'ran', 'scored', 'successes',
+                                                 'success_rate', 'ran_out_rate')}))
     elif args.command == 'serve':
         sha = args.checkpoint_sha256 or _sha256(args.checkpoint)
         print(serve(args.checkpoint, sha, args.store, unit=args.unit, budget_gb=args.budget_gb, extra=args.actor_arg,
