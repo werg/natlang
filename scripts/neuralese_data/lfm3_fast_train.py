@@ -8,7 +8,8 @@ linear cross-entropy and a no-grad log-prob pass.
     logp = token_logprobs(model, ids, positions, targets, lengths=...)   # no grad (GRPO old-policy / reference pass)
     nll, nucleus_nll, outside = linear_nll_nucleus(h[positions], weight, targets, top_p)   # + NLL under the top-p nucleus
     h = hidden(model, ids, imports=import_tensors(model, [(start, block)], device))   # imported native state spliced in
-    run_prefix_tree(model, prefix_tree(seqs, caps, 256), ids_of, leaf)   # shared prompts computed once, exact grads
+    run_prefix_tree(model, prefix_tree(seqs, caps, 256), ids_of, leaf, tokens, pack_tokens, activation_gb)
+                                                   # shared prompts computed once, every batch packed, exact grads
 
 The HF decoder layer is replaced by two functions over explicit tensors, one per layer kind (conv, attention), each
 `torch.compile`d (fullgraph, dynamic sequence length) and shared by every layer of its kind, with no HF mask/cache
@@ -19,7 +20,13 @@ Attention is the varlen flash kernel (`torch.nn.attention.varlen`): causal for f
 and packed documents are separate sequences (`cu_seqlens`). The conv reads only taps inside the token's document.
 Rounding points follow HF: RMSNorm in fp32 rounded before its bf16 weight, RoPE in fp32 with bf16 cos/sin, the conv
 accumulated in fp32 from bf16 inputs and rounded once. Layers whose `gradient_checkpointing` flag is set (see
-`exp0_sft.set_checkpointing`) are recomputed in backward.
+`set_checkpointing`) are recomputed in backward.
+
+Shared prefixes (`run_prefix_tree`, plans/neuralese/GRPO_STEP_THROUGHPUT_20261117.md): each level of a prefix tree's
+nodes and then its leaves run as packed varlen batches; a continuation's attention reads its history's cached keys and
+values (``cu_seqlens_k`` longer than ``cu_seqlens_q``, flash's bottom-right causal rule) and its conv the history's last
+B*x rows. The history state is held as FP32 leaves, so the cotangents of all continuations add up in FP32 and reach the
+prefix's graph in one backward.
 
 Imported native Neuralese state (a consumer call's prompt as the SGLang actor fed it, `import_tensors`): at the imported
 rows every attention layer's keys (after the K norm, before RoPE) and values and every conv layer's input B*x are the
@@ -180,68 +187,71 @@ def attention_layer(x, cos, sin, cu, max_len: int, doc, pos, operator_norm, wq, 
     return _ffn(x + y, ffn_norm, w1, w3, w2, post_ffn_norm, eps)
 
 
-def _attend_past(q, k, v, cu_q, cu_k, window):
-    """Attention of ``q`` (the last S of the K key positions) over ``k``/``v`` (K, H, D): causal, keys at most ``window``
-    positions back (-1: unbounded), the queries aligned to the end of the keys (flash's causal rule for S < K).
-    ``cu_q``/``cu_k``: int32 [0, S] / [0, K], made outside the compiled layer like ``hidden``'s ``cu``."""
+def _attend_past(q, k, v, docs, window):
+    """Causal attention of packed documents' queries over their keys (each document's history rows, then its own): keys
+    at most ``window`` positions back (-1: unbounded), each document's queries aligned to the end of its keys (flash's
+    causal rule for fewer queries than keys). ``docs``: (cu_q, cu_k, max_q, max_k, then the CPU reference's query
+    document, query position, key document, key position), made outside the compiled layer like ``hidden``'s ``cu``."""
     scale = q.shape[-1] ** -0.5
-    s, n = q.shape[0], k.shape[0]
+    cu_q, cu_k, max_q, max_k, q_doc, q_pos, k_doc, k_pos = docs
     if q.is_cuda:
         from torch.nn.attention.varlen import varlen_attn
-        return varlen_attn(q, k, v, cu_q, cu_k, s, n, scale=scale, window_size=(window, 0), **_GQA)
-    i = torch.arange(s, device=q.device)[:, None] + (n - s)
-    j = torch.arange(n, device=q.device)[None, :]
-    mask = j <= i
+        return varlen_attn(q, k, v, cu_q, cu_k, max_q, max_k, scale=scale, window_size=(window, 0), **_GQA)
+    mask = (q_doc[:, None] == k_doc[None, :]) & (k_pos[None, :] <= q_pos[:, None])
     if window >= 0:
-        mask &= i - j <= window
+        mask &= q_pos[:, None] - k_pos[None, :] <= window
     out = F.scaled_dot_product_attention(q.transpose(0, 1)[None], k.transpose(0, 1)[None], v.transpose(0, 1)[None],
                                          attn_mask=mask, scale=scale, enable_gqa=q.shape[1] != k.shape[1])
     return out[0].transpose(0, 1)
 
 
-def conv_layer_past(x, past_bx, operator_norm, in_proj, conv_weight, out_proj, post_operator_norm,
-                    ffn_norm, w1, w3, w2, post_ffn_norm, eps: float):
-    """``conv_layer`` for one document that continues a computed prefix: ``past_bx`` (taps - 1, D) is the B*x of the
-    prefix's last taps - 1 tokens (zero rows before the document start). Returns (output, the last taps - 1 B*x)."""
-    length = x.shape[0]
+def conv_layer_past(x, src_bx, past_index, joined_order, own_rows, operator_norm, in_proj, conv_weight, out_proj,
+                    post_operator_norm, ffn_norm, w1, w3, w2, post_ffn_norm, eps: float):
+    """``conv_layer`` for packed documents that continue computed histories (``Past``): ``src_bx`` (S, D) FP32 rows of
+    the histories' B*x (row 0 zero), ``past_index`` each document's taps - 1 history rows in ``src_bx`` (0 before the
+    history's start), ``joined_order`` the rows of [own B*x; history B*x] laid out per document as [its taps - 1 history
+    rows, its own rows], ``own_rows`` the documents' own rows in that layout less taps - 1. Returns (output, B*x)."""
     taps = conv_weight.shape[-1]
     h = _rms(x, operator_norm, eps)
     b, c, xx = F.linear(h, in_proj).chunk(3, dim=-1)
     bx = b * xx
+    joined = torch.cat([bx, src_bx.index_select(0, past_index).to(bx.dtype)]).index_select(0, joined_order)
     weight = conv_weight.reshape(conv_weight.shape[0], taps).float()
-    joined = torch.cat([past_bx, bx])
     padded = joined.float()
-    acc = padded[taps - 1:taps - 1 + length] * weight[:, taps - 1]
-    for back in range(1, taps):
+    rows = padded.shape[0] - (taps - 1)
+    acc = padded[taps - 1:taps - 1 + rows] * weight[:, taps - 1]
+    for back in range(1, taps):                         # the same fp32 multiply-adds in the same order as conv_layer
         k = taps - 1 - back
-        acc = acc + padded[k:k + length] * weight[:, k]
+        acc = acc + padded[k:k + rows] * weight[:, k]
+    acc = acc.index_select(0, own_rows)
     y = F.linear(c * acc.to(bx.dtype), out_proj)
     if post_operator_norm is not None:
         y = _rms(y, post_operator_norm, eps)
-    return _ffn(x + y, ffn_norm, w1, w3, w2, post_ffn_norm, eps), joined[length:]
+    return _ffn(x + y, ffn_norm, w1, w3, w2, post_ffn_norm, eps), bx
 
 
-def attention_layer_past(x, cos, sin, cu_q, cu_k, past_k, past_v, operator_norm, wq, wk, wv, wo, wg, q_norm, k_norm,
-                         post_operator_norm, ffn_norm, w1, w3, w2, post_ffn_norm, eps: float, head_dim: int,
-                         window: int):
-    """``attention_layer`` for one document that continues a computed prefix whose keys (after RoPE) and values are
-    ``past_k``/``past_v`` (a sliding layer's: at least its window's last keys). Returns (output, keys, values) for a
-    continuation of this one (a sliding layer's: the last ``window`` only)."""
+def attention_layer_past(x, cos, sin, src_k, src_v, past_index, key_order, cu_q, cu_k, max_q: int, max_k: int, q_doc,
+                         q_pos, k_doc, k_pos, operator_norm, wq, wk, wv, wo, wg, q_norm, k_norm, post_operator_norm,
+                         ffn_norm, w1, w3, w2, post_ffn_norm, eps: float, head_dim: int, window: int):
+    """``attention_layer`` for packed documents that continue computed histories: ``src_k``/``src_v`` FP32 keys (after
+    RoPE) and values of the histories' rows, ``past_index`` each document's history rows in them (a sliding layer's: its
+    window's last), ``key_order`` the rows of [own keys; history keys] laid out per document as [history, own] (``cu_k``).
+    The history's FP32 rows are rounded back to the BF16 they were: the values are the whole document's. Returns
+    (output, own keys after RoPE, own values)."""
     length = x.shape[0]
     h = _rms(x, operator_norm, eps)
     q = _rms(F.linear(h, wq).view(length, -1, head_dim), q_norm, eps)
     k = _rms(F.linear(h, wk).view(length, -1, head_dim), k_norm, eps)
     v = F.linear(h, wv).view(length, -1, head_dim)
     q, k = _rope(q, cos, sin), _rope(k, cos, sin)
-    keys, values = torch.cat([past_k, k]), torch.cat([past_v, v])
-    o = _attend_past(q, keys, values, cu_q, cu_k, window)
+    keys = torch.cat([k, src_k.index_select(0, past_index).to(k.dtype)]).index_select(0, key_order)
+    values = torch.cat([v, src_v.index_select(0, past_index).to(v.dtype)]).index_select(0, key_order)
+    o = _attend_past(q, keys, values, (cu_q, cu_k, max_q, max_k, q_doc, q_pos, k_doc, k_pos), window)
     o = (o * torch.sigmoid(F.linear(h, wg))[..., None]).reshape(length, -1)
     y = F.linear(o, wo)
     if post_operator_norm is not None:
         y = _rms(y, post_operator_norm, eps)
-    if window >= 0:
-        keys, values = keys[-window:], values[-window:]
-    return _ffn(x + y, ffn_norm, w1, w3, w2, post_ffn_norm, eps), keys, values
+    return _ffn(x + y, ffn_norm, w1, w3, w2, post_ffn_norm, eps), k, v
 
 
 _COMPILED = {}
@@ -392,9 +402,10 @@ def passthrough_tensors(plan, device, fixed=None):
     return imports or None
 
 
-class Past:
-    """A computed prefix that a continuation attends to: ``length`` tokens; per layer (keys after RoPE, values) for
-    attention (a sliding layer keeps its window's last keys) or (B*x of the last taps - 1 tokens,) for conv."""
+class Segment:
+    """One prefix node's own rows of the state its continuations read, per layer: attention (keys after RoPE, values),
+    every row for a full layer and the last ``window`` for a sliding one; conv (the last taps - 1 B*x,). FP32 leaves of
+    the prefix's graph (``Segment.held``): the cotangents of all its continuations accumulate in them in FP32."""
 
     def __init__(self, length, layers):
         self.length, self.layers = length, layers
@@ -402,66 +413,152 @@ class Past:
     def tensors(self):
         return [t for layer in self.layers for t in layer]
 
-    def detached(self, requires_grad):
-        return Past(self.length, [tuple(t.detach().requires_grad_(requires_grad) for t in layer) for layer in self.layers])
+
+class Past(tuple):
+    """The history a document continues: its ancestors' ``Segment``s, oldest first (empty: none)."""
+
+    @property
+    def length(self):
+        return sum(segment.length for segment in self)
 
 
-def _empty_past(model, x):
-    layers = []
+def _layer_keys(model):
+    """Per layer: ('conv', taps - 1) or ('attention', window)."""
+    keys = []
     for layer in model.model.layers:
         if layer.is_attention_layer:
-            attn = layer.self_attn
-            heads = attn.k_proj.weight.shape[0] // attn.head_dim
-            empty = x.new_zeros((0, heads, attn.head_dim))
-            layers.append((empty, empty))
+            window = layer.self_attn.sliding_window
+            keys.append(('attention', -1 if window is None else window - 1))
         else:
-            layers.append((x.new_zeros((layer.conv.conv.weight.shape[-1] - 1, x.shape[-1])),))
-    return Past(0, layers)
+            keys.append(('conv', layer.conv.conv.weight.shape[-1] - 1))
+    return keys
 
 
-def _hidden_past(model, ids, past, compiled):
-    """``hidden`` of one document continuing ``past`` (None: from position 0) -> (hidden (T, D), Past of past + ids)."""
+def _kept_rows(key, length):
+    """How many of a segment's last rows a layer of ``key`` keeps for continuations."""
+    kind, size = key
+    return length if kind == 'attention' and size < 0 else min(length, size)
+
+
+def _past_inputs(model, pasts, lengths, device):
+    """Index tensors and FP32 history sources of one packed continuation forward: ``pasts`` (a ``Past`` per document)
+    and the documents' own ``lengths``."""
+    import numpy as np
+    keys = _layer_keys(model)
+    segments, first = [], {}
+    for past in pasts:
+        for segment in past:
+            if id(segment) not in first:
+                first[id(segment)] = len(segments)
+                segments.append(segment)
+    starts = np.cumsum([0] + lengths[:-1])
+    total = int(sum(lengths))
+    history = [past.length for past in pasts]
+    q_pos = np.concatenate([h + np.arange(n) for h, n in zip(history, lengths)])
+    plans = {}
+    for key in set(keys):
+        kind, size = key
+        rows = [_kept_rows(key, segment.length) for segment in segments]
+        offset = np.cumsum([1 if kind == 'conv' else 0] + rows[:-1])     # conv sources start with a zero row
+        index, order, k_doc, k_pos, past_rows = [], [], [], [], 0
+        for doc, (past, n, start) in enumerate(zip(pasts, lengths, starts)):
+            mine = [offset[first[id(s)]] + np.arange(_kept_rows(key, s.length)) for s in past]
+            mine = np.concatenate(mine) if mine else np.zeros(0, np.int64)
+            if kind == 'conv':
+                mine = np.concatenate([np.zeros(size, np.int64), mine])[-size:] if size else mine
+            elif size >= 0:
+                mine = mine[-size:] if size else mine[:0]
+            index.append(mine)
+            order.append(total + past_rows + np.arange(len(mine)))
+            order.append(start + np.arange(n))
+            k_doc.append(np.full(len(mine) + n, doc))
+            k_pos.append(history[doc] + np.arange(-len(mine), n))
+            past_rows += len(mine)
+        tensor = lambda a: torch.from_numpy(np.ascontiguousarray(np.concatenate(a), dtype=np.int64)).to(device)
+        plan = {'index': tensor(index), 'order': tensor(order)}
+        if kind == 'conv':
+            joined = np.cumsum([0] + [size + n for n in lengths[:-1]])
+            plan['own'] = tensor([j + np.arange(n) for j, n in zip(joined, lengths)])
+        else:
+            counts = [len(i) + n for i, n in zip(index, lengths)]
+            cu_k = torch.zeros(len(lengths) + 1, dtype=torch.int32, device=device)
+            cu_k[1:] = torch.from_numpy(np.cumsum(counts)).to(device)
+            plan.update(cu_k=cu_k, max_k=int(max(counts)), k_doc=tensor(k_doc), k_pos=tensor(k_pos))
+        plan['rows'] = past_rows
+        plans[key] = plan
+    sources = []
+    for index, (layer, key) in enumerate(zip(model.model.layers, keys)):
+        if key[0] == 'conv':
+            width = layer.conv.conv.weight.shape[0]
+            parts = [torch.zeros((1, width), dtype=torch.float32, device=device)]
+            sources.append((torch.cat(parts + [s.layers[index][0] for s in segments]),))
+        else:
+            attn = layer.self_attn
+            empty = torch.zeros((0, attn.k_proj.weight.shape[0] // attn.head_dim, attn.head_dim),
+                                dtype=torch.float32, device=device)
+            sources.append(tuple(torch.cat([empty] + [s.layers[index][field] for s in segments]) for field in (0, 1)))
+    cu_q = torch.zeros(len(lengths) + 1, dtype=torch.int32, device=device)
+    cu_q[1:] = torch.from_numpy(np.cumsum(lengths)).to(device)
+    q_doc = torch.repeat_interleave(torch.arange(len(lengths), device=device),
+                                    torch.tensor(lengths, device=device), output_size=total)
+    return {'keys': keys, 'plans': plans, 'sources': sources, 'cu_q': cu_q, 'max_q': int(max(lengths)), 'q_doc': q_doc,
+            'q_pos': torch.from_numpy(q_pos.astype(np.int64)).to(device)}
+
+
+def _hidden_past(model, ids, lengths, pasts, compiled, keep):
+    """``hidden`` of packed documents continuing their ``pasts`` -> (final hidden (T, D) or None under ``keep``, each
+    document's ``Segment`` under ``keep`` (graph tensors, FP32) or None)."""
     config = model.model.config
+    device = ids.device
+    inputs = _past_inputs(model, pasts, lengths, device)
     x = model.model.embed_tokens(ids)
-    if past is None:
-        past = _empty_past(model, x)
-    pos = torch.arange(past.length, past.length + ids.shape[0], device=ids.device)
-    tables = _rope_tables(model, pos, x.dtype)
-    cu_q = torch.tensor([0, ids.shape[0]], dtype=torch.int32, device=ids.device)
+    tables = _rope_tables(model, inputs['q_pos'], x.dtype)
     grad = torch.is_grad_enabled()
-    layers = []
+    own = [[] for _ in lengths]
+    starts, total = [], 0
+    for n in lengths:
+        starts.append(total)
+        total += n
     for index, layer in enumerate(model.model.layers):
         kind, static = _layer_call(layer, compiled)
         function = _kernel(kind + '_past', compiled)
+        key = inputs['keys'][index]
+        plan = inputs['plans'][key]
         if kind == 'conv':
-            args = (x, past.layers[index][0]) + static
+            args = (x, inputs['sources'][index][0], plan['index'], plan['order'], plan['own']) + static
         else:
             cos, sin = tables[config.layer_types[index]]
-            keys = past.layers[index][0].shape[0] + ids.shape[0]
-            cu_k = torch.tensor([0, keys], dtype=torch.int32, device=ids.device)
-            args = (x, cos, sin, cu_q, cu_k) + tuple(past.layers[index]) + static
+            args = ((x, cos, sin) + inputs['sources'][index] + (plan['index'], plan['order'], inputs['cu_q'],
+                    plan['cu_k'], inputs['max_q'], plan['max_k'], inputs['q_doc'], inputs['q_pos'], plan['k_doc'],
+                    plan['k_pos']) + static)
         if grad and getattr(layer, 'gradient_checkpointing', False):
             x, *state = torch_checkpoint(function, *args, use_reentrant=False)
         else:
             x, *state = function(*args)
-        layers.append(tuple(state))
+        if keep:
+            for doc, (start, n) in enumerate(zip(starts, lengths)):
+                rows = _kept_rows(key, n)
+                own[doc].append(tuple(t[start + n - rows:start + n].float() for t in state))
+    if keep:
+        return None, [Segment(n, layers) for n, layers in zip(lengths, own)]
     norm = model.model.embedding_norm
-    return _rms(x, norm.weight, norm.variance_epsilon), Past(past.length + ids.shape[0], layers)
+    return _rms(x, norm.weight, norm.variance_epsilon), None
 
 
-def hidden(model, ids, lengths=None, imports=None, past=None, keep_past=False):
+def hidden(model, ids, lengths=None, imports=None, pasts=None):
     """Final hidden states (T, D) of ``ids`` (1-D): one causal document, or ``lengths`` documents packed back to back
     (each attends and convolves only within itself, positions restart at 0). ``imports``: ``import_tensors`` (rows are
-    indices into ``ids``). ``past``: a ``Past`` that ``ids`` continue (one document, positions after it); ``keep_past``:
-    return (hidden, Past of the whole document so far) for continuations (``prefix_tree``)."""
+    indices into ``ids``). ``pasts``: a ``Past`` (or None) per leading document, which then continues that history (its
+    positions after it; documents beyond the list start fresh): the prefix tree's packed continuations."""
     config = model.model.config
     fast = getattr(model, '_lfm3_fast', None)
     compiled = fast is not None and fast['compile']
-    if past is not None or keep_past:
-        if lengths is not None or imports is not None:
-            raise ValueError('hidden: a past continues one document without imported state')
-        h, whole = _hidden_past(model, ids, past, compiled)
-        return (h, whole) if keep_past else h
+    if pasts is not None and any(pasts):
+        if imports is not None:
+            raise ValueError('hidden: continuations of a past carry no imported state')
+        lengths = [int(ids.shape[0])] if lengths is None else [int(n) for n in lengths]
+        pasts = [Past(p or ()) for p in pasts] + [Past()] * (len(lengths) - len(pasts))
+        return _hidden_past(model, ids, lengths, pasts, compiled, keep=False)[0]
     pos, doc, cu, max_len = _documents(ids, lengths)
     x = model.model.embed_tokens(ids)
     tables = _rope_tables(model, pos, x.dtype)
@@ -539,34 +636,144 @@ def tree_tokens(nodes, lengths):
                else lengths[n['index']] - n['start'] for n in nodes)
 
 
-def run_prefix_tree(model, nodes, ids_of, leaf, prefix_checkpointing=None, backward=True):
-    """Visit a ``prefix_tree`` depth first: a prefix node computes its tokens once (``ids_of(first, start, end)``)
-    after its parent's ``Past``; each leaf calls ``leaf(index, start, past)`` (past None at start 0), which runs its own
-    forward from ``past`` and, under ``backward``, its own backward. With ``backward`` the children's gradients reach the
-    prefix through detached leaf copies of its Past and the prefix's graph backpropagates them once after its last child
-    (the exact gradient of the unshared computation); without it each prefix's graph is dropped as soon as its Past
-    is detached.
-    ``prefix_checkpointing(tokens)`` sets the layers' recompute before each prefix forward."""
-    def visit(node, past):
+ACTIVATION_BYTES_PER_TOKEN_LAYER = 88e3   # measured 84.8 KB of saved activations per token per layer (2026-11-12)
+
+
+def resident_tokens(model, activation_gb):
+    """The longest sequence whose saved activations fit ``activation_gb`` with no layer recomputed (the default packed
+    row: packing past it trades per-forward overhead for recompute)."""
+    return int(activation_gb * 2**30 // (ACTIVATION_BYTES_PER_TOKEN_LAYER * len(model.model.layers)))
+
+
+def set_checkpointing(model, tokens, activation_gb):
+    """Recompute (gradient-checkpoint) only as many layers as keep the saved activations of a ``tokens`` sequence under
+    ``activation_gb``: a checkpointed layer costs one extra forward (a third of its compute), an unchecked one its
+    activations. Returns the number of recomputed layers."""
+    layers = model.model.layers
+    free = int(min(len(layers), activation_gb * 2**30 // (ACTIVATION_BYTES_PER_TOKEN_LAYER * max(1, tokens))))
+    for index, layer in enumerate(layers):
+        layer.gradient_checkpointing = index >= free
+    return len(layers) - free
+
+
+def _pack(items, size, limit):
+    """Greedy, order-preserving batches of ``items`` of at most ``limit`` total ``size`` (an oversize item alone)."""
+    batches, batch, total = [], [], 0
+    for item in items:
+        n = size(item)
+        if batch and total + n > limit:
+            batches.append(batch)
+            batch, total = [], 0
+        batch.append(item)
+        total += n
+    if batch:
+        batches.append(batch)
+    return batches
+
+
+def run_prefix_tree(model, nodes, ids_of, leaf, tokens, pack_tokens, activation_gb=None, backward=True):
+    """Compute a ``prefix_tree``'s sequences packed, each shared prefix once, with exactly the whole sequences' gradients.
+
+    Prefix nodes run level by level, each level's nodes packed into varlen batches of at most ``pack_tokens`` tokens
+    that continue their parents' state (``ids_of(first, start, end)``: a node's tokens). Each node's state for its
+    continuations becomes a ``Segment`` of FP32 leaves. Then the leaves run packed in tree order: the whole sequences
+    (start 0) in batches of their own, the continuations in batches that attend to their prefixes' cached keys, values
+    and conv inputs. ``leaf(items, forward)`` gets one batch ``items`` [(index, start)] and builds its rows (each leaf's
+    tokens from its start, one document each in order, then any further documents such as pass-through producers),
+    calls ``h = forward(ids, lengths, imports)``, takes its loss and, under ``backward``, its backward.
+    ``tokens(index, start)``: the rows a leaf adds to a batch. With ``backward`` the continuations' gradients collect in
+    the segments in FP32, and each prefix batch backpropagates them once, deepest level first; without it the prefixes'
+    graphs are dropped as soon as their segments exist.
+    ``activation_gb`` (None: the layers' recompute flags are left as they are) budgets saved activations: the prefixes'
+    retained graphs (layer inputs and segments) come first, each leaf batch gets the rest, and what the largest leaf batch
+    leaves unused keeps prefix layers unrecomputed. Returns the plan: batch counts, prefix tokens, the retained and
+    leaf budgets (GB) and the prefix layer-tokens recomputed."""
+    layers = model.model.layers
+    hidden_size = model.config.hidden_size
+    # key (= value) width summed over the full-attention layers: the history rows a continuation's attention saves
+    full = sum(layer.self_attn.k_proj.weight.shape[0] for layer, key in zip(layers, _layer_keys(model))
+               if key == ('attention', -1))
+    levels, continuations, wholes = [], [], []
+
+    def walk(node, depth, parent):
         if 'index' in node:
-            leaf(node['index'], node['start'], past)
+            (wholes if parent is None else continuations).append((node['index'], node['start'], parent))
             return
-        if prefix_checkpointing is not None:
-            prefix_checkpointing(node['end'] - node['start'])
-        _, whole = hidden(model, ids_of(node['first'], node['start'], node['end']), past=past, keep_past=True)
-        # under grad mode the leaves require grad even without a backward: the children then compile the policy's
-        # own training graph (the KL reference pass must round exactly as the policy does)
-        held = whole.detached(requires_grad=torch.is_grad_enabled())
-        if not backward:
-            whole = None
+        node = dict(node, parent=parent)
+        while len(levels) <= depth:
+            levels.append([])
+        levels[depth].append(node)
         for child in node['children']:
-            visit(child, held)
-        if backward:
-            pairs = [(t, h.grad) for t, h in zip(whole.tensors(), held.tensors()) if h.grad is not None]
-            if pairs:
-                torch.autograd.backward([t for t, _ in pairs], [g for _, g in pairs])
+            walk(child, depth + 1, node)
     for node in nodes:
-        visit(node, None)
+        walk(node, 0, None)
+
+    def past_of(node):
+        chain = []
+        while node is not None:
+            chain.append(node['segment'])
+            node = node['parent']
+        return Past(reversed(chain))
+
+    def history(node):
+        return 0 if node is None else node['end']
+
+    prefix_batches = [_pack(level, lambda n: n['end'] - n['start'], pack_tokens) for level in levels]
+    leaf_batches = (_pack(wholes, lambda item: tokens(item[0], item[1]), pack_tokens)
+                    + _pack(continuations, lambda item: tokens(item[0], item[1]), pack_tokens))
+    bytes_gb = ACTIVATION_BYTES_PER_TOKEN_LAYER * len(layers) / 2**30
+
+    def effective(batch):       # leaf rows plus the history keys and values its attention layers save, in token units
+        rows = sum(tokens(index, start) for index, start, _ in batch)
+        past = sum(history(parent) for _, _, parent in batch)
+        return rows + past * full * 2 * 2 / (ACTIVATION_BYTES_PER_TOKEN_LAYER * len(layers))
+    prefix_tokens = sum(n['end'] - n['start'] for level in levels for n in level)
+    retained_gb = prefix_tokens * (len(layers) * hidden_size * 2 + full * 2 * 4) / 2**30
+    leaf_gb = None if activation_gb is None else max(0., activation_gb - retained_gb)
+    spare_gb = None if activation_gb is None else max(
+        0., leaf_gb - max([effective(b) for b in leaf_batches] + [0]) * bytes_gb)
+    grad = torch.is_grad_enabled()
+    compiled = getattr(model, '_lfm3_fast', None) is not None and model._lfm3_fast['compile']
+    graphs, recomputed = [], 0
+    for level in prefix_batches:
+        for batch in level:
+            lengths = [n['end'] - n['start'] for n in batch]
+            if spare_gb is not None:
+                count = set_checkpointing(model, sum(lengths), spare_gb)
+                recomputed += count * sum(lengths)
+                spare_gb = max(0., spare_gb - (len(layers) - count) * sum(lengths) * ACTIVATION_BYTES_PER_TOKEN_LAYER
+                               / 2**30)
+            ids = torch.cat([ids_of(n['first'], n['start'], n['end']) for n in batch])
+            pasts = [past_of(n['parent']) for n in batch]
+            _, segments = _hidden_past(model, ids, lengths, pasts, compiled, keep=True)
+            outputs = []
+            for node, segment in zip(batch, segments):
+                outputs += segment.tensors()
+                # the continuations read detached FP32 leaves (requiring grad under grad mode even without a backward:
+                # they then compile the policy's own training graph, which the KL reference pass must round as)
+                node['segment'] = Segment(segment.length, [tuple(t.detach().requires_grad_(grad) for t in layer)
+                                                           for layer in segment.layers])
+            graphs.append((outputs, [t for n in batch for t in n['segment'].tensors()]) if backward and grad else None)
+    for batch in leaf_batches:
+        items = [(index, start) for index, start, _ in batch]
+        pasts = [Past() if parent is None else past_of(parent) for _, _, parent in batch]
+
+        def forward(ids, lengths=None, imports=None, pasts=pasts, batch=batch):
+            if leaf_gb is not None:
+                set_checkpointing(model, effective(batch), leaf_gb)
+            return hidden(model, ids, lengths, imports, pasts=pasts)
+        leaf(items, forward)
+    for entry in reversed(graphs):
+        if entry is None:
+            continue
+        outputs, held = entry
+        pairs = [(t, h.grad) for t, h in zip(outputs, held) if h.grad is not None]
+        if pairs:
+            torch.autograd.backward([t for t, _ in pairs], [g for _, g in pairs])
+    return {'prefix_batches': sum(len(level) for level in prefix_batches), 'leaf_batches': len(leaf_batches),
+            'prefix_tokens': prefix_tokens, 'retained_gb': round(retained_gb, 2),
+            'leaf_gb': None if leaf_gb is None else round(leaf_gb, 2),
+            'recomputed_prefix_layer_tokens': recomputed}
 
 
 # --- loss ------------------------------------------------------------------------------------------------------------

@@ -156,23 +156,10 @@ def hidden(model, ids, imports=None):
             handle.remove()
 
 
-ACTIVATION_BYTES_PER_TOKEN_LAYER = 88e3   # measured 84.8 KB of saved activations per token per layer with lfm3_fast_train (2026-11-12)
-
-
-def resident_tokens(model, activation_gb):
-    """The longest sequence whose saved activations fit ``activation_gb`` with no layer recomputed (the default packed
-    row: packing past it trades per-forward overhead for recompute)."""
-    return int(activation_gb * 2**30 // (ACTIVATION_BYTES_PER_TOKEN_LAYER * len(model.model.layers)))
-
-
-def set_checkpointing(model, tokens, activation_gb):
-    """Recompute (gradient-checkpoint) only as many layers as keep the saved activations of a ``tokens`` sequence under
-    ``activation_gb``: a checkpointed layer costs one extra forward (a third of its compute), an unchecked one its activations."""
-    layers = model.model.layers
-    free = int(min(len(layers), activation_gb * 2**30 // (ACTIVATION_BYTES_PER_TOKEN_LAYER * tokens)))
-    for index, layer in enumerate(layers):
-        layer.gradient_checkpointing = index >= free
-    return len(layers) - free
+# the activation budget's arithmetic (one implementation, shared with the prefix tree)
+ACTIVATION_BYTES_PER_TOKEN_LAYER = lfm3_fast_train.ACTIVATION_BYTES_PER_TOKEN_LAYER
+resident_tokens = lfm3_fast_train.resident_tokens
+set_checkpointing = lfm3_fast_train.set_checkpointing
 
 
 def _nll(weight, h, target):
@@ -235,15 +222,18 @@ def packed_rows(chains, max_tokens):
     return rows
 
 
-def row_tensors(row, device):
-    """(ids, positions, targets, weights, lengths) of chains packed back to back (`lfm3_fast_train.hidden` lengths)."""
+def row_tensors(row, device, starts=None):
+    """(ids, positions, targets, weights, lengths) of chains packed back to back (`lfm3_fast_train.hidden` lengths).
+    ``starts``: each chain from this row on (its rows before are a prefix tree's past; its targets all after it)."""
+    starts = starts or [0] * len(row)
     parts = [chain_tensors(chain, device) for chain in row]
-    offsets = np.cumsum([0] + [len(chain['ids']) for chain in row[:-1]])
-    ids = torch.cat([p[0] for p in parts])
-    positions = torch.cat([p[1] + int(o) for p, o in zip(parts, offsets)])
+    lengths = [len(chain['ids']) - start for chain, start in zip(row, starts)]
+    offsets = np.cumsum([0] + lengths[:-1])
+    ids = torch.cat([p[0][start:] for p, start in zip(parts, starts)])
+    positions = torch.cat([p[1] + int(o - start) for p, o, start in zip(parts, offsets, starts)])
     targets = torch.cat([p[2] for p in parts])
     weights = torch.cat([chain_weights(chain, device) for chain in row])
-    return ids, positions, targets, weights, [len(chain['ids']) for chain in row]
+    return ids, positions, targets, weights, lengths
 
 
 def source_tokens(chain):
@@ -252,12 +242,15 @@ def source_tokens(chain):
     return sum(len(sources[key]['ids']) for key in {key for _, key in chain.get('imports') or ()} if key in sources)
 
 
-def row_inputs(row, device, passthrough=True, fixed=None):
-    """(ids, positions, targets, weights, lengths, imports) of chains packed back to back (``row_tensors``) with their
-    imports' producer documents appended as more documents and ``hidden``'s pass-through ``imports``
-    (``lfm3_fast_train.passthrough_plan``; ``passthrough`` False: the same state detached). ``fixed``: (rows) ->
-    ``import_tensors`` of imports without a producer document (the actor's stored state); without it they are refused."""
-    ids, positions, targets, weights, lengths = row_tensors(row, device)
+def row_inputs(row, device, passthrough=True, fixed=None, starts=None):
+    """(ids, positions, targets, weights, lengths, imports) of chains packed back to back (``row_tensors``, ``starts``:
+    continuations of a prefix tree's past, which carry no imports) with their imports' producer documents appended as
+    more documents and ``hidden``'s pass-through ``imports`` (``lfm3_fast_train.passthrough_plan``; ``passthrough``
+    False: the same state detached). ``fixed``: (rows) -> ``import_tensors`` of imports without a producer document (the
+    actor's stored state); without it they are refused."""
+    if starts and any(start and chain.get('imports') for chain, start in zip(row, starts)):
+        raise ValueError('a chain that imports Neuralese state is never a continuation of a shared prefix')
+    ids, positions, targets, weights, lengths = row_tensors(row, device, starts)
     offsets = np.cumsum([0] + lengths[:-1])
     plan = lfm3_fast_train.passthrough_plan([(int(o), chain.get('imports') or (), chain.get('sources'))
                                              for o, chain in zip(offsets, row)], len(ids), frozen_all=not passthrough)
@@ -272,12 +265,6 @@ def row_inputs(row, device, passthrough=True, fixed=None):
 
 def chain_mass(chain):
     return float(sum(row['weight'].sum() if 'weight' in row else length for _, length, row in chain['segs']))
-
-
-def leaf_activation_gb(model, activation_gb, start):
-    """A prefix-tree leaf's activation budget after ``start`` prefix tokens: the prefixes' graphs (every layer
-    recomputed, its input saved) stay alive until their last child, so they come out of the leaf's budget."""
-    return max(0., activation_gb - start * len(model.model.layers) * model.config.hidden_size * 2 / 2**30)
 
 
 def chain_loss_tokens(chain):
@@ -337,67 +324,71 @@ def step_groups(chains, epochs, batch_loss_tokens, seed, grouped):
     return steps
 
 
+def step_tree(chains, share_prefix_tokens):
+    """The prefix tree of one step's chains (``lfm3_fast_train.prefix_tree``; 0: every chain whole): chains that import
+    Neuralese state stay whole (they carry their producer documents in the same forward)."""
+    plain = [i for i, chain in enumerate(chains) if not chain.get('imports')]
+    nodes = lfm3_fast_train.remap_tree(lfm3_fast_train.prefix_tree(
+        [chains[i]['ids'] for i in plain], [chains[i]['segs'][0][0] - 1 for i in plain], share_prefix_tokens), plain)
+    return nodes + [{'start': 0, 'index': i} for i, chain in enumerate(chains) if chain.get('imports')]
+
+
 def step_backward(model, forward, chains, denominator, pack_tokens, activation_gb, share_prefix_tokens, fast=True,
                   mark=None, passthrough=True):
     """Forward and backward of one optimizer step's chains, the loss sum(weight * nll) / ``denominator``. Prefixes of at
-    least ``share_prefix_tokens`` tokens that several chains share are computed once (`lfm3_fast_train.prefix_tree`, exact
-    gradients); the chains that share nothing are packed into rows of ``pack_tokens``. 0: every chain whole, packed.
-    Chains that import Neuralese state stay whole (no shared prefix) and carry their producer documents in the same forward
-    (``row_inputs``: the consumer's loss reaches the producer's state; ``passthrough`` False: detached).
+    least ``share_prefix_tokens`` tokens that several chains share are computed once and every batch is packed into
+    varlen rows of ``pack_tokens`` (`lfm3_fast_train.run_prefix_tree`, exact gradients); 0: every chain whole, packed.
+    Chains that import Neuralese state stay whole and carry their producer documents in the same forward (``row_inputs``:
+    the consumer's loss reaches the producer's state; ``passthrough`` False: detached).
     Returns (sum of weighted nll, tokens computed)."""
     mark = mark or (lambda name, since: time.time())
-    total_nll, computed = 0., 0
-    if share_prefix_tokens > 0:
-        plain = [i for i, chain in enumerate(chains) if not chain.get('imports')]
-        nodes = lfm3_fast_train.prefix_tree([chains[i]['ids'] for i in plain],
-                                            [chains[i]['segs'][0][0] - 1 for i in plain], share_prefix_tokens)
-        nodes = lfm3_fast_train.remap_tree(nodes, plain)
-        alone = ([chains[node['index']] for node in nodes if 'index' in node]
-                 + [chain for chain in chains if chain.get('imports')])
-        shared = [node for node in nodes if 'index' not in node]
-    else:
-        alone, shared = chains, []
-    for row in packed_rows(alone, pack_tokens):
+    total_nll = 0.
+    device = model.lm_head.weight.device
+    if not fast:                     # the stock HF path: one chain per forward, no imports
+        for chain in chains:
+            t = time.time()
+            ids, positions, targets, weights, _, imports = row_inputs([chain], device, passthrough)
+            if imports is not None:
+                raise ValueError('imported Neuralese state needs the fast path (lfm3_fast_train)')
+            h = forward(model, ids)
+            t = mark('forward', t)
+            nll = token_nll(model, h, positions, targets) * weights
+            (nll.sum() / denominator).backward()
+            mark('loss_backward', t)
+            total_nll += nll.sum().item()
+            del h, nll
+        return total_nll, sum(len(chain['ids']) for chain in chains)
+    nodes = step_tree(chains, share_prefix_tokens)
+    cuda_ids = {}
+
+    def ids_of(index, start, end):
+        if index not in cuda_ids:
+            cuda_ids[index] = torch.from_numpy(chains[index]['ids'].astype(np.int64)).to(device)
+        return cuda_ids[index][start:end]
+
+    def tokens(index, start):
+        return len(chains[index]['ids']) - start + source_tokens(chains[index])
+
+    clock = {'leaves': None, 'end': None}
+
+    def leaf(items, run):
+        nonlocal total_nll
+        if clock['leaves'] is None:
+            clock['leaves'] = mark('prefix_forward', clock['start'])
         t = time.time()
-        ids, positions, targets, weights, lengths, imports = row_inputs(row, model.lm_head.weight.device, passthrough)
-        if fast:
-            set_checkpointing(model, len(ids), activation_gb)
-        if imports is not None and not fast:
-            raise ValueError('imported Neuralese state needs the fast path (lfm3_fast_train)')
-        h = forward(model, ids, lengths, imports) if imports is not None or len(lengths) > 1 else forward(model, ids)
+        ids, positions, targets, weights, lengths, imports = row_inputs(
+            [chains[index] for index, _ in items], device, passthrough, starts=[start for _, start in items])
+        h = run(ids, lengths, imports)
         t = mark('forward', t)
         nll = token_nll(model, h, positions, targets) * weights
         (nll.sum() / denominator).backward()
-        mark('loss_backward', t)
+        clock['end'] = mark('loss_backward', t)
         total_nll += nll.sum().item()
-        computed += len(ids)
-        del h, nll
-    if shared:
-        device = model.lm_head.weight.device
-        cuda_ids = {}
-
-        def ids_of(index, start, end):
-            if index not in cuda_ids:
-                cuda_ids[index] = torch.from_numpy(chains[index]['ids'].astype(np.int64)).to(device)
-            return cuda_ids[index][start:end]
-
-        def leaf(index, start, past):
-            nonlocal total_nll
-            chain = chains[index]
-            ids, positions, targets = chain_tensors(chain, device)
-            weights = chain_weights(chain, device)
-            set_checkpointing(model, len(ids) - start, leaf_activation_gb(model, activation_gb, start))
-            h = lfm3_fast_train.hidden(model, ids[start:], past=past)
-            nll = token_nll(model, h, positions - start, targets) * weights
-            (nll.sum() / denominator).backward()
-            total_nll += nll.sum().item()
-            del h, nll
-        t = time.time()
-        lfm3_fast_train.run_prefix_tree(model, shared, ids_of, leaf,
-                                        lambda tokens: set_checkpointing(model, tokens, 0))
-        mark('prefix_tree', t)
-        computed += lfm3_fast_train.tree_tokens(shared, [len(chain['ids']) for chain in chains])
-    return total_nll, computed
+    clock['start'] = time.time()
+    lfm3_fast_train.run_prefix_tree(model, nodes, ids_of, leaf, tokens, pack_tokens or 1, activation_gb)
+    if clock['end'] is not None:
+        mark('prefix_backward', clock['end'])
+    return total_nll, lfm3_fast_train.tree_tokens(nodes, [tokens(i, 0) for i in range(len(chains))])
 
 
 def load_chains(path):
