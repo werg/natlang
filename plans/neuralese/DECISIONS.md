@@ -2753,7 +2753,10 @@ the memetic world have not run since 11-12), then on in the next bundle.
   build` (programs `family@sha12` from the pool minus the held closure and protected worlds, components, dedupe,
   support 2 / query 6, base-rate band), world-bridge kind `memetic`, `task_rollouts.memetic_outcome`, and
   `grpo.py --memetic-tasks --memetic-share F --memetic-group 4` (each group gets its own spec copy; groups centred on
-  max(mean, anchor)). A group is ~108 nested rollouts (~13 ordinary groups).
+  max(mean, anchor)). A group is ~108 nested rollouts (~13 ordinary groups). Rows built from the grpo-v4 pool at
+  `/home/werg/data/memetic-tasks-20261117/cases.jsonl`: 622 programs, 602 rows over 152 families (20 programs outside
+  the base-rate band dropped; 595 have no base rate for their support worlds and are admitted unfiltered, so their
+  in-group support measurement decides).
 - **Self-distillation.** Nothing new: `sft_sources` `rl-own` is live; the in-loop term and teacher successes in
   student form are designed (section 4) and wait for the pass-through's loss path.
 - **Tests.** `test_grpo_jolt.py` (15), `test_memetic.py` (13, incl. the real natlang loader check),
