@@ -628,29 +628,46 @@ def held_closure(manifest_path):
     return ids, groups, sources
 
 
-def build(args):
-    import random
-    import numpy as np
-    import pickle
-    from natlang_neuralese.common.code_provenance import code_provenance
+CHARS_PER_TOKEN = 3.3   # estimate for selecting October rows before rendering (calibrated in build.json)
+DEFAULT_OCTOBER_GROUPS = ('luna-curricula=3', 'qwen-s72=2', 'fallow-v13r2=2', 'qwen-campaign=1', 'luna-early-cohorts=1',
+                          'luna-v19-decision-children=1', 'luna-clinc-children=1', 'luna-ep-campaigns=1',
+                          'student-projection=1', 'acq-swe-rebench-openhands=2', 'acq-d32-openresearcher=2',
+                          'acq-d13-cooperbench=1')
+
+
+def held_hit(task_id, source_ids, groups, held):
+    held_ids, held_groups, held_sources = held
+    return task_id in held_ids or bool(set(groups) & held_groups) or bool(set(source_ids) & held_sources)
+
+
+def water_fill(sizes, weights, budget):
+    """Per-group budgets: shares of `budget` by weight; a group with less than its share gives the rest to the others."""
+    budgets, open_groups, left = {}, {g for g in sizes if weights.get(g, 0) > 0}, budget
+    while open_groups:
+        total = sum(weights[g] for g in open_groups)
+        small = {g for g in open_groups if sizes[g] <= left * weights[g] / total}
+        if not small:
+            for g in open_groups:
+                budgets[g] = left * weights[g] / total
+            break
+        for g in small:
+            budgets[g] = sizes[g]
+            left -= sizes[g]
+        open_groups -= small
+    return budgets
+
+
+def core_candidates(args, work, funnel, held):
+    """Replay-verified successes (exact replay, current oracle success), held closure removed: metadata and signatures
+    only (the turns are read again when rendering)."""
     from natlang_neuralese.rl.held_eval import exclusion_ids
-    work, out = Path(args.work), Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
-    rng = random.Random(args.seed)
-    funnel = collections.defaultdict(collections.Counter)
     replays = {}
     for line in (work / 'replay.jsonl').open():
         if line.strip():
             record = json.loads(line)
             if 'key' in record:
                 replays[record['key']] = record
-    # base pass rates: the exp1 measurement of the start policy, else the run groups' own (near-start) outcomes
-    rates = {k: (v['successes'], v['scored']) for k, v in json.loads(Path(args.base_rates).read_text()).items()
-             if v.get('scored')}
-    group_rates = {k: (v['successes'], v['scored']) for k, v in json.loads((work / 'rl-group-rates.json').read_text()).items()}
-    held_ids, held_groups, held_sources = held_closure(args.held_manifest)
-
-    episodes, tasks = [], {}
+    candidates, tasks = [], {}
     for line in zstd_lines(work / 'episodes.jsonl.zst'):
         if not line.strip():
             continue
@@ -672,145 +689,278 @@ def build(args):
             f['replay_inexact'] += 1
             continue
         f['replayed_exact'] += 1
-        replayed = [json.loads(l) for l in (work / 'replay' / record['name'] / 'rollouts.jsonl').open() if l.strip()][0]
-        tasks[episode['task_id']] = episode['task']
-        episodes.append({'key': episode['key'], 'source': source, 'run': episode.get('run'), 'task_id': episode['task_id'],
-                         'family': episode.get('family') or episode['task'].get('family'),
-                         'domain': (episode['task'].get('curriculum') or {}).get('domain'),
-                         'teacher': (episode.get('teacher') or {}).get('model_id'),
-                         'policy': episode.get('policy'),
-                         'turns': [{k: t.get(k) for k in ('messages', 'tools', 'target', 'invocation_id')}
-                                   for t in replayed['turns']]})
+        task = episode['task']
+        tasks[episode['task_id']] = task
+        candidates.append({'key': episode['key'], 'source': source, 'run': episode.get('run'),
+                           'task_id': episode['task_id'], 'family': episode.get('family') or task.get('family'),
+                           'domain': (task.get('curriculum') or {}).get('domain'),
+                           'teacher': (episode.get('teacher') or {}).get('model_id'), 'policy': episode.get('policy'),
+                           'name': record['name'], 'signature': minhash(shingles(action_text(episode['turns'])))})
     excluded = exclusion_ids(args.held_manifest, list(tasks.values()))
     kept = []
-    for episode in episodes:
-        task = tasks[episode['task_id']]
-        groups = set(task.get('source_groups') or ()) | {(task.get('curriculum') or {}).get('split_group') or task['id']}
-        if (episode['task_id'] in excluded or episode['task_id'] in held_ids or groups & held_groups
-                or set(task.get('source_ids') or ()) & held_sources):
-            funnel[episode['source']]['held_excluded'] += 1
+    for c in candidates:
+        task = tasks[c['task_id']]
+        groups = list(task.get('source_groups') or ()) + [(task.get('curriculum') or {}).get('split_group') or task['id']]
+        if c['task_id'] in excluded or held_hit(c['task_id'], task.get('source_ids') or (), groups, held):
+            funnel[c['source']]['held_excluded'] += 1
             continue
-        kept.append(episode)
+        kept.append(c)
+    return kept, tasks
 
-    # near-duplicates: an episode whose actions repeat an admitted episode's (any task) is dropped
-    rng.shuffle(kept)
-    kept.sort(key=lambda e: 0 if e['source'] == 'teacher' else 1)   # stable: teacher first, else shuffled order
-    dedup = NearDuplicates(args.dup_threshold)
-    unique = []
-    for episode in kept:
-        if dedup.seen(minhash(shingles(action_text(episode['turns'])))):
-            funnel[episode['source']]['near_duplicate'] += 1
-            continue
-        unique.append(episode)
 
-    # per-task cap, larger for tasks the start policy rarely solves
+def october_candidates(args, funnel, held, weights):
+    """One pass over the October candidate rows (sft-sources-20261117/october, per-call rows rebuilt for the current
+    runtime): rows whose eval actions do not compile (`ts-host/scripts/check-eval-actions.mjs`), non-teacher rows and
+    held rows are dropped; the rest are grouped into trajectories with a size estimate and an action signature (the
+    MinHash of a union is the element-wise minimum of its parts' MinHashes)."""
+    import numpy as np
+    root = Path(args.october)
+    trajectories = {}
+    for group in sorted(weights):
+        f = funnel['october:' + group]
+        failed = set()
+        check = root / 'eval-check' / f'{group}.jsonl'
+        if check.exists():
+            for line in check.open():
+                row = json.loads(line)
+                if row['failed']:
+                    failed.add(row['id'])
+        elif not group.startswith('acq-'):
+            raise ValueError(f'no eval check for natlang group {group}: run ts-host/scripts/check-eval-actions.mjs')
+        for line in zstd_lines(root / f'{group}.jsonl.zst'):
+            row = json.loads(line)
+            f['rows'] += 1
+            provenance = row.get('provenance') or {}
+            if row['id'] in failed:
+                f['eval_does_not_compile'] += 1
+                continue
+            if group == 'student-projection' and provenance.get('collection_role') != 'teacher':
+                f['not_teacher'] += 1
+                continue
+            if held_hit(row.get('task_id'), row.get('source_ids') or (), row.get('source_groups') or (), held):
+                f['held_excluded'] += 1
+                continue
+            key = f"october:{group}:{provenance.get('trajectory') or row.get('task_id')}"
+            size = (len(json.dumps(row['messages'], ensure_ascii=False)) + len(json.dumps(row['tools'], ensure_ascii=False))
+                    + len(json.dumps(row['target'], ensure_ascii=False))) / CHARS_PER_TOKEN
+            signature = minhash(shingles(action_text([row])))
+            t = trajectories.get(key)
+            if t is None:
+                t = trajectories[key] = {'key': key, 'source': 'october:' + group, 'group': group, 'run': group,
+                                         'task_id': row.get('task_id'), 'family': row.get('family'),
+                                         'domain': row.get('domain'), 'teacher': provenance.get('model') or provenance.get('teacher'),
+                                         'policy': None, 'rows': 0, 'size': 0., 'signature': signature}
+            elif signature is not None:
+                t['signature'] = signature if t['signature'] is None else np.minimum(t['signature'], signature)
+            t['rows'] += 1
+            t['size'] += size
+            f['rows_kept'] += 1
+    return list(trajectories.values())
+
+
+def capped(candidates, rng, funnel, cap_of, family_share, order):
+    """Per-task caps (`cap_of(task_id)`), then a per-family cap of `family_share` of what remains."""
+    by_task = collections.defaultdict(list)
+    for c in candidates:
+        by_task[c['task_id']].append(c)
+    selected = []
+    for task_id, members in sorted(by_task.items(), key=lambda item: str(item[0])):
+        members.sort(key=lambda c: (order(c), rng.random()))
+        cap = cap_of(task_id)
+        selected += members[:cap]
+        for c in members[cap:]:
+            funnel[c['source']]['over_task_cap'] += 1
+    by_family = collections.defaultdict(list)
+    for c in selected:
+        by_family[c['family']].append(c)
+    limit = max(1, int(family_share * len(selected)))
+    final = []
+    for family, members in sorted(by_family.items(), key=lambda item: str(item[0])):
+        rng.shuffle(members)
+        final += members[:limit]
+        for c in members[limit:]:
+            funnel[c['source']]['over_family_cap'] += 1
+    return final
+
+
+def build(args):
+    import random
+    import numpy as np
+    import pickle
+    from natlang_neuralese.common.code_provenance import code_provenance
+    from exp0_sft import MAX_LEN, chains_of
+    work, out = Path(args.work), Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    rng = random.Random(args.seed)
+    funnel = collections.defaultdict(collections.Counter)
+    held = held_closure(args.held_manifest)
+    # base pass rates: the exp1 measurement of the start policy, else the run groups' own (near-start) outcomes
+    rates = {k: (v['successes'], v['scored']) for k, v in json.loads(Path(args.base_rates).read_text()).items()
+             if v.get('scored')}
+    rates.update({k: (v['successes'], v['scored']) for k, v in json.loads((work / 'rl-group-rates.json').read_text()).items()
+                  if k not in rates and v['scored']})
+
     def base_rate(task_id):
-        if task_id in rates:
-            s, n = rates[task_id]
-        elif task_id in group_rates:
-            s, n = group_rates[task_id]
-        else:
-            return None
+        s, n = rates.get(task_id, (None, 0))
         return s / n if n else None
 
-    by_task = collections.defaultdict(list)
-    for episode in unique:
-        by_task[episode['task_id']].append(episode)
-    selected, caps = [], {}
-    for task_id, members in sorted(by_task.items()):
+    # 1. verified successes of the GRPO pool (own and teacher): near-duplicates out, task caps by base pass rate
+    core, tasks = core_candidates(args, work, funnel, held)
+    rng.shuffle(core)
+    core.sort(key=lambda c: 0 if c['source'] == 'teacher' else 1)   # stable: teacher first, else shuffled
+    dedup = NearDuplicates(args.dup_threshold)
+    unique = []
+    for c in core:
+        if dedup.seen(c['signature']):
+            funnel[c['source']]['near_duplicate'] += 1
+        else:
+            unique.append(c)
+
+    def core_cap(task_id):
         p = base_rate(task_id)
-        cap = args.max_per_task if p is None else max(1, round(1 + (args.max_per_task - 1) * (1 - p)))
-        caps[task_id] = (p, cap)
-        members.sort(key=lambda e: (0 if e['source'] == 'teacher' else 1, rng.random()))   # sources mixed: teacher first
-        for i, episode in enumerate(members):
-            if i < cap:
-                selected.append(episode)
-            else:
-                funnel[episode['source']]['over_task_cap'] += 1
+        return args.max_per_task if p is None else max(1, round(1 + (args.max_per_task - 1) * (1 - p)))
+    core = capped(unique, rng, funnel, core_cap, args.max_family_share, lambda c: 0 if c['source'] == 'teacher' else 1)
 
-    # per-family cap: no family above --max-family-share of episodes
-    by_family = collections.defaultdict(list)
-    for episode in selected:
-        by_family[episode['family']].append(episode)
-    limit = max(1, int(args.max_family_share * len(selected)))
-    final = []
-    for family, members in sorted(by_family.items()):
-        members.sort(key=lambda e: (caps[e['task_id']][0] if caps[e['task_id']][0] is not None else 0.5, rng.random()))
-        final += members[:limit]
-        for episode in members[limit:]:
-            funnel[episode['source']]['over_family_cap'] += 1
-
-    # render: per-call rows, prompt zero-weight, the reply the target
     renderer = TemplateRenderer(args.tokenizer)
-    from exp0_sft import MAX_LEN, chains_of
     rows_out = ZstdWriter(out / 'rows.jsonl.zst')
-    sft_episodes, stats = [], collections.defaultdict(collections.Counter)
+    sft_episodes = []
+    stats = collections.defaultdict(collections.Counter)
     families, domains = collections.defaultdict(collections.Counter), collections.defaultdict(collections.Counter)
-    rng.shuffle(final)
-    for episode in final:
-        source = episode['source']
-        rows = []
-        for index, turn in enumerate(episode['turns']):
+
+    def admit(c, turns):
+        """Render one trajectory's calls; write its rows; keep its token rows for the chains."""
+        source, rows, written = c['source'], [], []
+        for index, turn in enumerate(turns):
             try:
                 prompt, target = renderer.render(turn['messages'], turn['tools'], turn['target'])
             except Exception as error:
-                stats[source]['render_error'] += 1
-                print(json.dumps({'event': 'render error', 'key': episode['key'], 'turn': index,
+                stats[source]['render_error_calls'] += 1
+                print(json.dumps({'event': 'render error', 'key': c['key'], 'call': index,
                                   'error': repr(error)[:300]}), flush=True)
-                rows = None
-                break
-            row_id = hashlib.sha256(f"{episode['key']}#{index}".encode()).hexdigest()[:24]
+                if c['source'] in ('rl-own', 'teacher'):
+                    return False   # a verified episode is admitted whole or not at all
+                continue
+            row_id = turn.get('id') or hashlib.sha256(f"{c['key']}#{index}".encode()).hexdigest()[:24]
             rows.append({'id': row_id, 'invocation': turn.get('invocation_id') or '', 'index': index,
                          'prompt': np.asarray(prompt, np.int32), 'sample': np.asarray(target, np.int32)})
-            rows_out.write({'id': row_id, 'episode': episode['key'], 'source': source, 'run': episode['run'],
-                            'task_id': episode['task_id'], 'family': episode['family'], 'domain': episode['domain'],
-                            'teacher': episode['teacher'], 'policy': episode['policy'], 'call': index,
+            written.append({'id': row_id, 'episode': c['key'], 'source': source, 'run': c['run'],
+                            'task_id': c['task_id'], 'family': c['family'], 'domain': c['domain'],
+                            'teacher': c['teacher'], 'policy': c['policy'], 'call': index,
                             'invocation': turn.get('invocation_id'), 'messages': turn['messages'],
-                            'tools': turn['tools'], 'target': turn['target'],
-                            'prompt_tokens': len(prompt), 'target_tokens': len(target),
-                            'too_long': len(prompt) + len(target) > MAX_LEN})
-        if rows is None:
-            funnel[source]['render_error'] += 1
-            continue
+                            'tools': turn['tools'], 'target': turn['target'], 'prompt_tokens': len(prompt),
+                            'target_tokens': len(target), 'too_long': len(prompt) + len(target) > MAX_LEN})
+        if not rows:
+            return False
+        for row in written:
+            rows_out.write(row)
         funnel[source]['admitted'] += 1
-        stats[source]['calls'] += len(rows)
-        stats[source]['target_tokens'] += sum(len(r['sample']) for r in rows)
-        stats[source]['prompt_tokens'] += sum(len(r['prompt']) for r in rows)
-        stats[source]['too_long_calls'] += sum(len(r['prompt']) + len(r['sample']) > MAX_LEN for r in rows)
-        families[source][episode['family']] += 1
-        domains[source][episode['domain']] += 1
-        sft_episodes.append({'task_id': episode['task_id'], 'round': episode['key'], 'rows': rows})
+        s = stats[source]
+        s['calls'] += len(rows)
+        s['target_tokens'] += sum(len(r['sample']) for r in rows)
+        s['call_tokens'] += sum(len(r['prompt']) + len(r['sample']) for r in rows)
+        s['too_long_calls'] += sum(len(r['prompt']) + len(r['sample']) > MAX_LEN for r in rows)
+        families[source][c['family']] += 1
+        domains[source][c['domain']] += 1
+        episode = {'task_id': c['task_id'], 'round': c['key'], 'rows': rows}
+        s['forward_tokens'] += sum(len(chain['ids']) for chain in chains_of([episode]))
+        sft_episodes.append(episode)
+        return True
+
+    for c in core:
+        replayed = [json.loads(l) for l in (work / 'replay' / c['name'] / 'rollouts.jsonl').open() if l.strip()][0]
+        if not admit(c, [{k: t.get(k) for k in ('messages', 'tools', 'target', 'invocation_id')} for t in replayed['turns']]):
+            funnel[c['source']]['render_error'] += 1
+    core_forward = sum(stats[s]['forward_tokens'] for s in ('rl-own', 'teacher'))
+
+    # 2. October trajectories (no replayable task): compiled actions, held out, deduplicated against everything admitted,
+    #    one trajectory per task by default, family caps, then a forward-token budget split by group weights
+    october_budget, october_report = 0, None
+    if args.october and args.october_share > 0:
+        weights = dict((g, float(w)) for g, w in (spec.split('=') for spec in (args.october_group or DEFAULT_OCTOBER_GROUPS)))
+        candidates = october_candidates(args, funnel, held, weights)
+        rng.shuffle(candidates)
+        unique = []
+        for c in candidates:
+            if dedup.seen(c['signature']):
+                funnel[c['source']]['near_duplicate'] += 1
+            else:
+                unique.append(c)
+        selected = capped(unique, rng, funnel, lambda task_id: args.october_max_per_task, args.october_family_share,
+                          lambda c: 0)
+        october_budget = core_forward * args.october_share / (1 - args.october_share)
+        sizes = collections.Counter()
+        for c in selected:
+            sizes[c['group']] += c['size']
+        budgets = water_fill(sizes, weights, october_budget)
+        rng.shuffle(selected)
+        chosen, used = {}, collections.Counter()
+        for c in selected:
+            if used[c['group']] + c['size'] <= budgets.get(c['group'], 0):
+                used[c['group']] += c['size']
+                chosen[c['key']] = c
+            else:
+                funnel[c['source']]['over_budget'] += 1
+        october_report = {'weights': weights, 'estimated_group_tokens': {g: round(v) for g, v in sizes.items()},
+                          'budgets': {g: round(v) for g, v in budgets.items()},
+                          'chars_per_token_estimate': CHARS_PER_TOKEN}
+        # second pass: render the chosen trajectories, one group at a time (rows of a trajectory kept in file order)
+        root = Path(args.october)
+        for group in sorted(weights):
+            pending = collections.defaultdict(list)
+            for line in zstd_lines(root / f'{group}.jsonl.zst'):
+                row = json.loads(line)
+                key = f"october:{group}:{(row.get('provenance') or {}).get('trajectory') or row.get('task_id')}"
+                if key in chosen:
+                    pending[key].append(row)
+            for key, rows in pending.items():
+                c = chosen[key]
+                turns = [{'id': r['id'], 'messages': r['messages'], 'tools': r['tools'], 'target': r['target'],
+                          'invocation_id': (r.get('provenance') or {}).get('invocation') or key} for r in rows]
+                c['run'] = group
+                if not admit(c, turns):
+                    funnel[c['source']]['render_error'] += 1
+            del pending
+
     rows_out.close()
     chains = chains_of(sft_episodes)
+    rng.shuffle(chains)
     with (out / 'chains.pkl.partial').open('wb') as handle:
         pickle.dump({'chains': chains, 'schema': 'natlang.sft-chains/1'}, handle, protocol=4)
     os.replace(out / 'chains.pkl.partial', out / 'chains.pkl')
-    task_rates = [caps[e['task_id']][0] for e in final if caps[e['task_id']][0] is not None]
+    rated = [base_rate(e['task_id']) for e in sft_episodes if e['round'].split(':')[0] in ('rl', 'teacher')]
+    rated = [p for p in rated if p is not None]
+    forward = int(sum(len(c['ids']) for c in chains))
     report = {
         'schema': 'natlang.sft-sources-build/1', 'code': code_provenance(), 'argv': sys.argv,
         'inputs': {'episodes': str(work / 'episodes.jsonl.zst'), 'episodes_sha256': sha256_file(work / 'episodes.jsonl.zst'),
-                   'replay': str(work / 'replay.jsonl'), 'held_manifest': args.held_manifest,
+                   'replay': str(work / 'replay.jsonl'), 'replay_sha256': sha256_file(work / 'replay.jsonl'),
+                   'october': args.october, 'held_manifest': args.held_manifest,
                    'held_manifest_sha256': sha256_file(args.held_manifest), 'base_rates': args.base_rates,
                    'renderer': renderer.identity},
         'policy': {'max_per_task': args.max_per_task, 'cap_rule': 'round(1 + (max_per_task - 1) * (1 - base pass rate))',
                    'max_family_share': args.max_family_share, 'dup_threshold': args.dup_threshold, 'seed': args.seed,
+                   'october_share': args.october_share, 'october_max_per_task': args.october_max_per_task,
+                   'october_family_share': args.october_family_share,
                    'loss': 'per-call rows: prompt (system, task, history, tool output) zero weight; the assistant reply '
                            '(reasoning, text, tool calls, end token) weight 1'},
+        'october': october_report,
         'funnel': {k: dict(v) for k, v in funnel.items()},
         'stats': {k: dict(v) for k, v in stats.items()},
         'episodes': len(sft_episodes), 'tasks': len({e['task_id'] for e in sft_episodes}),
-        'chains': len(chains), 'chain_tokens': int(sum(len(c['ids']) for c in chains)),
+        'chains': len(chains), 'forward_tokens': forward,
         'target_tokens': int(sum(len(r['sample']) for e in sft_episodes for r in e['rows'])),
+        'epoch_hours_at_5500_tokens_per_second': round(forward / 5500 / 3600, 2),
         'families': {k: len(v) for k, v in families.items()},
         'family_counts': {k: dict(v.most_common()) for k, v in families.items()},
         'domain_counts': {k: dict(v.most_common()) for k, v in domains.items()},
-        'base_rate_of_admitted_episodes': {'measured': len(task_rates),
-                                           'mean': round(float(np.mean(task_rates)), 3) if task_rates else None},
+        'core_base_rate': {'measured_episodes': len(rated),
+                           'mean': round(float(np.mean(rated)), 3) if rated else None},
     }
     (out / 'build.json').write_text(json.dumps(report, indent=1) + '\n')
-    (out / 'cases.jsonl').write_text(''.join(json.dumps(tasks[t]) + '\n'
-                                             for t in sorted({e['task_id'] for e in sft_episodes})))
-    print(json.dumps({k: report[k] for k in ('funnel', 'stats', 'episodes', 'tasks', 'chains', 'target_tokens')}, indent=1))
+    (out / 'cases.jsonl').write_text(''.join(json.dumps(tasks[t]) + '\n' for t in sorted(tasks)
+                                             if any(e['task_id'] == t for e in sft_episodes)))
+    print(json.dumps({k: report[k] for k in ('funnel', 'stats', 'episodes', 'tasks', 'chains', 'forward_tokens',
+                                             'target_tokens')}, indent=1))
 
 
 def main():
@@ -842,6 +992,13 @@ def main():
     b.add_argument('--max-family-share', type=float, default=0.05)
     b.add_argument('--dup-threshold', type=float, default=0.8)
     b.add_argument('--seed', type=int, default=20261117)
+    b.add_argument('--october', help='directory of October candidate rows (GROUP.jsonl.zst, eval-check/GROUP.jsonl)')
+    b.add_argument('--october-group', action='append', metavar='GROUP=WEIGHT',
+                   help='October groups taken and their budget weights (default: %s)' % ', '.join(DEFAULT_OCTOBER_GROUPS))
+    b.add_argument('--october-share', type=float, default=0.4,
+                   help='October share of the forward tokens (prompt + reply of every call)')
+    b.add_argument('--october-max-per-task', type=int, default=1)
+    b.add_argument('--october-family-share', type=float, default=0.05)
     args = p.parse_args()
     {'extract': extract, 'replay': replay, 'check-render': check_render, 'build': build}[args.command](args)
 

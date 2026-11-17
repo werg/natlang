@@ -91,3 +91,21 @@ def test_zstd_round_trip(tmp_path):
     writer.close()
     assert [json.loads(line) for line in s.zstd_lines(tmp_path / 'x.jsonl.zst')] == [{'b': 1, 'a': [2]}]
     assert list(json.loads(next(s.zstd_lines(tmp_path / 'x.jsonl.zst')))) == ['b', 'a']   # key order kept (templates)
+
+
+def test_water_fill_gives_a_small_group_all_and_the_rest_by_weight():
+    budgets = s.water_fill({'a': 10, 'b': 1000, 'c': 1000}, {'a': 1, 'b': 1, 'c': 2}, 310)
+    assert budgets['a'] == 10 and round(budgets['b']) == 100 and round(budgets['c']) == 200
+    assert 'd' not in s.water_fill({'d': 5}, {}, 100)
+
+
+def test_capped_keeps_preferred_members_per_task_then_caps_families():
+    import collections
+    import random
+    funnel = collections.defaultdict(collections.Counter)
+    candidates = [{'task_id': f't{i // 3}', 'family': 'f' if i < 30 else f'g{i}', 'source': 'x', 'pref': i % 3}
+                  for i in range(60)]
+    kept = s.capped(candidates, random.Random(0), funnel, lambda task: 1, 0.5, lambda c: c['pref'])
+    assert all(c['pref'] == 0 for c in kept)          # the preferred member of each task
+    assert sum(c['family'] == 'f' for c in kept) <= len([c for c in candidates if c['pref'] == 0]) // 2
+    assert funnel['x']['over_task_cap'] == 40
