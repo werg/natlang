@@ -562,7 +562,8 @@ export function compileProject(options: BuildOptions): BuildResult {
     const natlangImports = (file: ts.SourceFile) => {
       const found = new Set<string>();
       for (const statement of file.statements) {
-        if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+        if ((!ts.isImportDeclaration(statement) && !ts.isExportDeclaration(statement)) ||
+          !statement.moduleSpecifier || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
         const specifier = statement.moduleSpecifier.text;
         if (specifier.endsWith('.nz')) {
           const target = resolve(dirname(file.fileName), specifier);

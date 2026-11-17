@@ -69,11 +69,11 @@ export type LowerOptions = {
   /** Project-relative module path used in call-site IDs. */
   modulePath: string;
   browser?: boolean;
-  /** Project builds: `.nl` imports and runtime specifier rewriting. */
+  /** Project builds: `.nl`/`.nz` module edges and runtime specifier rewriting. */
   module?: {
-    /** `.nl` import specifiers of this file (each loads a generated `<specifier>.js` module). */
+    /** `.nl`/`.nz` import and re-export specifiers of this file (each loads a generated `<specifier>.js` module). */
     natlangImports: ReadonlySet<string>;
-    /** Module specifiers rewritten in emitted imports (for example `@natlang/node` to the running runtime). */
+    /** Module specifiers rewritten in emitted imports and re-exports (for example `@natlang/node` to the running runtime). */
     rewrite?: ReadonlyMap<string, string>;
   };
 };
@@ -608,15 +608,18 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
     const lowered = ts.visitNode(file, visit) as ts.SourceFile;
     const module = options.module;
     if (!module) return lowered;
-    // `.nl` imports load a generated module next to the emitted file; bound runtime specifiers are rewritten.
+    // Source module edges load generated shims; imports and re-exports bind to the same runtime.
     let changed = false;
     const statements = lowered.statements.map(statement => {
-      if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) return statement;
+      if ((!ts.isImportDeclaration(statement) && !ts.isExportDeclaration(statement)) ||
+        !statement.moduleSpecifier || !ts.isStringLiteral(statement.moduleSpecifier)) return statement;
       const specifier = statement.moduleSpecifier.text;
       const target = module.natlangImports.has(specifier) ? `${specifier}.js` : module.rewrite?.get(specifier);
       if (!target) return statement;
       changed = true;
-      return f.updateImportDeclaration(statement, statement.modifiers, statement.importClause, f.createStringLiteral(target), statement.attributes);
+      return ts.isImportDeclaration(statement)
+        ? f.updateImportDeclaration(statement, statement.modifiers, statement.importClause, f.createStringLiteral(target), statement.attributes)
+        : f.updateExportDeclaration(statement, statement.modifiers, statement.isTypeOnly, statement.exportClause, f.createStringLiteral(target), statement.attributes);
     });
     return changed ? f.updateSourceFile(lowered, statements) : lowered;
   };

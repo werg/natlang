@@ -248,6 +248,7 @@ test('.nz files in a folder are context data, and a project imports them with ge
     'package.json': JSON.stringify({ type: 'module' }),
     'app.ts': "import { rubric, triage, limits } from './data/support.nz';\nexport const items: number = limits.maxItems;\n" +
       "export const kept: Neuralese<{ criteria: string[] }> = rubric;\nexport const call: (t: string) => Promise<string> = triage;\n",
+    'barrel.ts': "export { limits as exportedLimits } from './data/support.nz';\nexport * as support from './data/support.nz';\n",
     'bad.ts': "import { rubric } from './data/support.nz';\nexport const peek = rubric.criteria;\n",
   });
   const ctx = await Context.fromFolder(join(root, 'data'), withBytes(root), { store });
@@ -265,6 +266,9 @@ test('.nz files in a folder are context data, and a project imports them with ge
   const clean = buildProject({ project: root, outDir, runtimeModule });
   assert.equal(clean.ok, true, JSON.stringify(clean.diagnostics));
   const app = await import(pathToFileURL(join(outDir, 'app.js')).href);
+  const barrel = await import(pathToFileURL(join(outDir, 'barrel.js')).href);
+  assert.equal(barrel.exportedLimits.maxItems, 20);
+  assert.equal(barrel.support.limits, barrel.exportedLimits);
   assert.equal(app.items, 20);
   assert.equal(typeof app.call, 'function');
   assert.match(app.kept.$neuralese.id, /^nzs1_/);

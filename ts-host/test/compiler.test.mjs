@@ -388,3 +388,25 @@ test('two nl.with type arguments check captures separately from the child result
   assert.deepEqual(repro.plans[0].parameters.map(parameter => parameter.name), ['input']);
   assert.deepEqual(repro.plans[0].captures.map(capture => capture.name), ['notes', 'text', 'context', 'pass', 'constraint']);
 });
+
+test('module-edge lowering preserves export forms and rewrites only registered targets', () => {
+  const source = `export { default as choose } from './choose.nl';
+export * as choices from './choose.nl';
+export * from './data.nz';
+export type { Value } from './data.nz';
+export { nl } from '@natlang/node';
+export * from './ordinary.js';
+const local = 1; export { local };`;
+  const file = ts.createSourceFile('barrel.ts', source, ts.ScriptTarget.Latest, true);
+  const transformed = ts.transform(file, [natlangTransformer({ plans: new Map(), runtime: '__natlang', constrained: false,
+    module: { natlangImports: new Set(['./choose.nl', './data.nz']), rewrite: new Map([['@natlang/node', 'file:///runtime.js']]) } })]);
+  const printed = ts.createPrinter().printFile(transformed.transformed[0]);
+  assert.match(printed, /export \{ default as choose \} from "\.\/choose.nl.js"/);
+  assert.match(printed, /export \* as choices from "\.\/choose.nl.js"/);
+  assert.match(printed, /export \* from "\.\/data.nz.js"/);
+  assert.match(printed, /export type \{ Value \} from "\.\/data.nz.js"/);
+  assert.match(printed, /export \{ nl \} from "file:\/\/\/runtime.js"/);
+  assert.match(printed, /export \* from '\.\/ordinary.js'/);
+  assert.match(printed, /export \{ local \}/);
+  transformed.dispose();
+});
