@@ -6,6 +6,7 @@ import {buildProject} from '../compiler/node-project.js';
 import {formatDiagnostics} from '../compiler/project.js';
 import {fingerprint} from '../adaptation/identity.js';
 import {runWorker} from '../evaluation/worker.js';
+import {evaluationProjectFiles} from '../evaluation/project-files.js';
 import type {PreparedSuite} from '../evaluation/types.js';
 import type {ModelDriver} from '../runtime/runtime.js';
 import {sourceFiles,type SourceCaseExecution} from './host.js';
@@ -21,7 +22,7 @@ export function suiteExecution(prepared:PreparedSuite,directory:string,driver:Mo
       const root=join(directory,folder.digest),outDir=join(root,'build');mkdirSync(root,{recursive:true});
       for(const [path,source] of Object.entries(sourceFiles(folder))){const destination=join(root,path);mkdirSync(join(destination,'..'),{recursive:true});writeFileSync(destination,source);}
       writeFileSync(join(root,'package.json'),JSON.stringify({type:'module'}));
-      const result=buildProject({project:root,programId:prepared.program.id,guidance:prepared.suite.program.guidance,services:prepared.suite.services,outDir,write:true,writeDeclarations:false,constrained:true,
+      const result=buildProject({project:root,files:evaluationProjectFiles,programId:prepared.program.id,guidance:prepared.suite.program.guidance,services:prepared.suite.services,outDir,write:true,writeDeclarations:false,constrained:true,
         runtimeModule:{specifiers:['@natlang/node','@natlang/browser'],url:new URL('./target-runtime.js',import.meta.url).href,types:fileURLToPath(new URL('./target-runtime.d.ts',import.meta.url))}});
       if(!result.ok)throw new Error(formatDiagnostics(result.diagnostics));
       built={program:result.manifest.adaptation!,compiledEntry:pathToFileURL(join(outDir,prepared.suite.program.entry.replace(/\.m?ts$/,'.js'))).href};builds.set(folder.digest,built);

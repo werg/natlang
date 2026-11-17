@@ -397,8 +397,8 @@ export function compileProject(options: BuildOptions): BuildResult {
   // TypeScript program over ordinary project files, with generated `.nl` declarations.
   const configHost: ts.ParseConfigFileHost = { useCaseSensitiveFileNames: true, getCurrentDirectory: () => root,
     fileExists: path => fs.isFile(path), readFile: path => fs.isFile(path) ? fs.read(path) : undefined,
-    readDirectory: (dir, extensions, excludes, includes, depth) => fs.compiler ?
-      ts.sys.readDirectory(dir, extensions, excludes, includes, depth) : walkTs(fs, dir),
+    readDirectory: (dir, extensions, excludes, includes, depth) => fs.compiler?.readDirectory ?
+      fs.compiler.readDirectory(dir, extensions, excludes, includes, depth) : walkTs(fs, dir),
     onUnRecoverableConfigFileDiagnostic: diagnostic => diagnostics.push(fromTypeScript(diagnostic, rel(configPath!))) };
   const parsed = configPath ? ts.getParsedCommandLineOfConfigFile(configPath, {}, configHost) : undefined;
   const compilerOptions: ts.CompilerOptions = { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.NodeNext,
@@ -468,6 +468,13 @@ export function compileProject(options: BuildOptions): BuildResult {
   for (const diagnostic of ts.getPreEmitDiagnostics(program))
     if (diagnostic.category === ts.DiagnosticCategory.Error) diagnostics.push(fromTypeScript(diagnostic, diagnostic.file ? rel(diagnostic.file.fileName) : ''));
   const sources = rootNames.map(path => program.getSourceFile(path)).filter((file): file is ts.SourceFile => !!file);
+  // Discovery determines entry points, not the extent of the application's real
+  // imports. A local source explicitly imported through a tsconfig exclusion or
+  // an evaluation test-file filter still needs lowering and provenance hashing.
+  const discovered = new Set(sources.map(file => file.fileName));
+  for (const file of program.getSourceFiles().filter(file => !discovered.has(file.fileName) && !file.isDeclarationFile &&
+      file.fileName.startsWith(root + sep) && !inFolder(file.fileName) && !rel(file.fileName).split(sep).includes('node_modules') &&
+      /\.(ts|tsx|mts)$/.test(file.fileName)).sort((a, b) => a.fileName.localeCompare(b.fileName))) sources.push(file);
   if (options.constrained) for (const file of sources) diagnostics.push(...checkConstrainedSource(file, { checker: program.getTypeChecker(), displayPath: source => rel(source.fileName) }));
   for (const file of sources) diagnostics.push(...checkSequentialNlLoops(file, source => rel(source.fileName)));
   const revision = (file: ts.SourceFile) => `${rel(file.fileName)}@${file.text.length}`;

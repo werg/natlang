@@ -2549,3 +2549,13 @@ fixtures, instead of reading the live clock inside a child. Inventory: roots, he
 suite inputs, generated `.d.nl.ts`, skill docs and decomposition notes in the Base and Personal templates.
 The public wrappers retain current-time defaults. This removes nonreplayable fixture behavior; source identities
 and outcomes are retained with each teacher episode. No serving protocol or engine sampling change.
+
+### 2026-11-17: preserve actual local imports through evaluation source discovery
+
+Standalone evaluation builds omit neighboring conventional tests/specs and `__tests__` from source discovery, rather
+than compiling host-only validators as application code. Explicit imports remain readable and typechecked. The
+project compiler now lowers and hashes actual local TypeScript imports omitted from root discovery; previously an
+excluded imported helper could emit an unlowered inline `nl` and escape the program source hash. Existing discovered
+source order is retained. The targeted fixture proves both a missing imported dependency still fails and a valid
+explicit test-named helper executes its inline natlang call with its source bound into the program descriptor.
+No serving request or sampling law changes; held checkpoint effects are not measured by these compiler checks.

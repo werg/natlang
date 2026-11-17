@@ -2,6 +2,7 @@ import { readFileSync, mkdirSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { buildProject } from '../compiler/node-project.js';
+import { evaluationProjectFiles } from './project-files.js';
 import { formatDiagnostics } from '../compiler/project.js';
 import { fingerprint, immutable, cloneData } from '../adaptation/identity.js';
 import { parseStrictJSON } from '../adaptation/schema.js';
@@ -46,7 +47,7 @@ export async function prepareEvaluationSuite(suite: EvaluationSuite, moduleURL: 
   const cases = validateCases(typeof suite.cases === 'string' ? readFileSync(resolve(root, suite.cases), 'utf8').split(/\r?\n/)
     .filter(line => line.trim()).map(line => parseStrictJSON(line) as EvaluationCase) : suite.cases);
   const outDir = join(root, '.natlang', 'adaptation', 'build'); mkdirSync(outDir, { recursive: true });
-  const result = buildProject({ project: root, programId: suite.program.id, guidance: suite.program.guidance, services: suite.services, outDir, write: true,
+  const result = buildProject({ project: root, files: evaluationProjectFiles, programId: suite.program.id, guidance: suite.program.guidance, services: suite.services, outDir, write: true,
     writeDeclarations: false, runtimeModule: { specifiers: ['@natlang/node'], url: new URL('../index.js', import.meta.url).href,
       types: fileURLToPath(new URL('../index.d.ts', import.meta.url)) } });
   if (!result.ok) throw new Error(formatDiagnostics(result.diagnostics));
@@ -69,7 +70,7 @@ export async function loadEvaluationSuite(path: string): Promise<PreparedSuite> 
   let moduleURL = pathToFileURL(sourcePath).href;
   if (/\.m?ts$/.test(sourcePath)) {
     const root = dirname(sourcePath), outDir = join(root, '.natlang/adaptation/suite');
-    const result = buildProject({ project: root, outDir, write: true, writeDeclarations: false,
+    const result = buildProject({ project: root, files: evaluationProjectFiles, outDir, write: true, writeDeclarations: false,
       runtimeModule: { specifiers: ['@natlang/node'], url: new URL('../index.js', import.meta.url).href,
         types: fileURLToPath(new URL('../index.d.ts', import.meta.url)) } });
     if (!result.ok) throw new Error(formatDiagnostics(result.diagnostics));

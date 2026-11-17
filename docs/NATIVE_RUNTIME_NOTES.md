@@ -580,3 +580,15 @@ Fixture asset paths use `FixtureContext.programRoot`, populated by suite prepara
 and passed through preflight, evaluation and `improvement/suite-execution.ts`. This is fixture-only filesystem plumbing:
 the model receives no new binding or authority. Workers import emitted suite JavaScript from `.natlang/`; the original
 asset directory remains explicit, without copying assets or rewriting `import.meta.url`.
+
+Evaluation source discovery uses `evaluation/project-files.ts` for both suite and program compilation and for source
+optimization. It filters conventional test/spec files and `__tests__` directories from listing and tsconfig glob
+discovery, not from explicit file reads or imports. The compiler's config parser honors its injected
+`CompilerFiles.readDirectory`; Node's default remains `ts.sys`. Ordinary CLI builds and explicit teacher-IR program
+files retain their existing source boundary. This prevents host-only validator/test dependencies from entering a
+standalone teacher application without hiding a dependency the application actually imports.
+
+The compiler lowers and hashes checked local imports even when root discovery omitted them. Existing discovered
+source order is retained; only actual imported project modules are appended (declarations, node_modules and callable
+folders retain their own handling). A valid imported test-named helper can therefore contain inline `nl` and is bound
+into the program's source provenance; a missing dependency in that helper remains a compile error.
