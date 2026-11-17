@@ -38,6 +38,11 @@ with the owner only what is truly theirs. Waiting for an OK on a technical cours
   problem that is wrong on first principles (lost precision, nondeterminism, a stale value, a mismatch with the
   reference, an untested path) is fixed immediately, as the default with an opt-out and targeted tests, without waiting
   to learn whether it caused the symptom. The investigation continues alongside and is closed by its own evidence.
+- **Coding and agent work never hold back training (owner 2026-11-18).** Training runs while bug hunts, fixes,
+  parity work, smokes and checks proceed in parallel. Once there is any inkling that a problem is fixed, start or resume
+  training with the fix; the hunt continues alongside. Fixes still go everywhere the mechanism lives, but that work
+  enters at a later resume rather than delaying the run. No pre-launch smoke gates a feature: turn it on, read its
+  telemetry, turn it off at a resume if it misbehaves.
 - **Keep the machines doing useful work** for the experiments in flight (collection, training, held eval, diagnosis).
 
 # Experiments: how results are made trustworthy
@@ -285,8 +290,8 @@ is the plan this approach came from.
   discard changes you didn't make, never push mid-rebase or mid-merge, and never stage `node_modules` symlinks. When
   resolving a conflict, keep both sides unless one was removed on purpose. Worktrees are short-lived: merge their
   commits promptly and remove them. Don't copy source trees between machines.
-- **Push gate.** Run `scripts/check-main.sh --quick` before pushing, and the full `check-main.sh` under the ledger
-  after runtime or test changes. Main stays green.
+- **Push gate.** Run `scripts/check-main.sh --quick` before pushing. The full `check-main.sh` runs under the ledger
+  nightly and its failures are fixed promptly; it does not gate pushes. Main stays green.
 - **Lean codebase, economical tests.** Remove legacy infrastructure outside the current direction (code, tests, docs,
   recipes, registry entries, compatibility shims and fallbacks; there are no deployed users to stay compatible with).
   Git history is the archive. Keep source/training data, protected held data and live recovery dependencies. Run the
