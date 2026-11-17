@@ -12,12 +12,14 @@ collection must execute a `natlang.program/2` row, rather than build a second tr
   original scorers. Reuse them. `FixtureContext.programRoot` supplies original-shaped host asset paths, while the
   compiled entry comes only from the isolated model project.
 - `teacher/runtime-capabilities.ts` executes probes, so advertise the new contract only after a real fixture/root/scorer
-  execution. `scripts/neuralese_data/task_roots.py`, `teacher_gen.py`, `task_rollouts.py`, `sft_sources.py` consume the
+  execution. `training/neuralese/natlang_neuralese/common/task_roots.py`, `scripts/neuralese_data/teacher_gen.py`,
+  `training/neuralese/natlang_neuralese/rl/task_rollouts.py` and `scripts/neuralese_data/sft_sources.py` consume the
   canonical task and rollout shapes; preserve actual fixture inputs and use shared replay/admission (parallel strand).
 - The managed llama-server, browser wllama, native Python and SGLang transports consume unchanged ModelTurnRequest/
   ModelTurn contracts through ModelDriver (`runtime/driver.ts`). This adds no serving field/cache/sampling feature:
   selection/materialization and scoring live outside every engine. Hosted teacher demonstrations deliberately expose
-  generation without the optional scoring-only `decide` capability; finite returns use the existing ordinary tool loop.
+  generation without the optional scoring-only `decide` capability; finite returns generate JSON on the scored
+  student's exact short decision prompt, as detailed below.
 - Ordinary CLI builds and nonfixture program kinds keep their existing frontend. Live module-valued call stores and
   native guidance/state are refused by this worker frontend: structured-clone workers cannot transport those live
   objects. No fabricated native sampling receipts or decision scores are substituted.

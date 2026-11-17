@@ -2829,6 +2829,39 @@ explicitly rebuild both bindings through `pinned_env()`; no wrong live policy, t
 been demonstrated, and live process environments/artifacts were not checked here. Leave live training unchanged.
 Details and checked scope: `ENGINEERING_FINDINGS.md`, "Pop actor helper imports preserve pinned caller bindings".
 
+**2026-11-17, correction: Vibestudio training keeps canonical program IR (owner asked explicitly).**
+The initial standalone suite-episode bridge was the wrong durable boundary. Removed its converter and episode
+protocol; no live sample from that path was published or trained. The implemented path is original suite/case ->
+`natlang.program/2` (`evaluation_fixture`) -> standard `teacher_gen`/native collector -> canonical native trajectory
+and `natlang.rollout/1` -> shared `sft_sources` extract/replay/build. Host fixture source, selected-case labels and
+service assets remain outside model files. Original typed wrappers retain their real entries and explicit semantic
+anchors; an exact verifier checks invoked export paths/inputs. Supplemental admission receipts bind original scores,
+actual result/rollout bytes, full protected inventories, exact replay and isolated semantic review. They are not a
+second trajectory format or additional targets. Wrong-case reviews and changed native targets are refused.
+
+Actual Luna pilot on clean Natlang `67a3eb693` produced two accepted episodes (GitHub access and server-log briefing),
+25 actual calls: 2 root and 23 child, with zero unknown attribution. Each passed its suite, independent semantic review
+and exact replay. Shared SFT build with the real LFM3 tokenizer produced 25 ordinary `exp0_sft --chains` sequences,
+28,849 forward tokens, 175 target / 150 weighted target tokens. The failed documentation episode was excluded. Receipt:
+`/home/werg/data/vibestudio-teacher-pilot-20261117/pilot-build-result.json`; build unit
+`vibe-teacher-real-sft-build-20261117` exited zero, peak 772 MB. Canonical source/admission/build evidence was transferred
+as data only to the same DGX paths and all 149 files independently SHA256-verified; no DGX job or learner was launched.
+This is pipeline qualification, not a measured model improvement or whole-application conversion claim.
+
+Two findings became fixes rather than data laundering. No-scorer finite functions now generate their actual JSON
+reply on the exact scored-student decision prompt, rather than teaching tool calls on a different prompt; no scores
+or probabilities are invented. A live documentation failure exposed truncated lexical retrieval and then semantic
+query-focus loss; the Base program is being corrected and recollected, with failures retained outside training.
+
+Full immutable `67a3eb693` checks completed (1627 general Python, 2205 Neuralese and 2601 TS tests passed; 22 conformance).
+The full run also exposed duplicate-helper, endpoint-inventory, layering and stale scripted-model failures. These were
+fixed on main and their targeted checks passed: shared JSON/hash/ratchet 43, both TS configurations and layering,
+5 model-call-kind guards, 10 canonical fixtures, 23 CLI/adaptation, 3 distributed skills and 30 application wiring.
+Scripted finite-stage models now return JSON from actual visible inputs on the production default; diagnostic
+opt-outs do not hide application coverage. Latest main quick gate at `638b05b9c` passed. Full run log:
+`/home/werg/.cache/natlang/vibe-teacher-checks/full-check-canonical-67a3eb693.log` (peak 7.26 GB/10 GB cap). The old full
+run's overall failure is retained; targeted corrections qualify the changed scopes without rerunning unchanged phases.
+
 ### 2026-11-17: collect application teachers as canonical programs on their actual decision surface
 
 Portable suite tasks now use `natlang.program/2`, kind `evaluation_fixture`, with separate host fixture/world/oracle
