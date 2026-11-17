@@ -32,7 +32,8 @@ export type ModelTurnRequest = { invocation_id?: string; messages: unknown[]; to
   guidance?: boolean | Record<string, unknown>;
   /**
    * Training guidance for this turn's call (native servers only; `x_natlang_privileged_context`): the
-   * `natlang.guidance-request/1` built by native/training-guidance.ts, which the engine renders into the prompt.
+   * `natlang.guidance-request/2` built by native/training-guidance.ts: its guidance message, which the engine renders
+   * after the leading system message and marks as the guidance turn.
    */
   privileged_context?: Record<string, unknown>;
   /** This turn belongs to the in-run guidance policy (native servers only; `x_natlang_guidance_policy`). */

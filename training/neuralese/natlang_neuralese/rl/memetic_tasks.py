@@ -10,11 +10,10 @@ are measured inside each GRPO group by the workspace (``rl.memetic_workspace.pre
 - Meta-training programs come from the GRPO pool minus the held-v3/v2 closure and the registered memetic held families
   (``training/memetic-held-programs.json``, a protection source). Support worlds are the supervisor's evidence; query
   worlds are its reward and never shown.
-- A program enters only when every support world has a measured base rate (at least ``min_rate_samples`` scored
-  episodes, ``--pass-rates``, repeatable and summed) and their mean lies in [min_success, max_success]: a program the
-  policy always or never solves gives the improver nothing to measure (restore smoke 2026-11-17: 0 of 5 groups admitted
-  from unmeasured programs). ``measure`` writes the support worlds still lacking a rate as cases for
-  ``scripts/neuralese_data/exp1_collect.py``; ``exp1_pass_rates.py`` turns that collection into a rates file.
+- Every program enters by default (owner 2026-11-18): the group's own preparation skips only a group whose unguided
+  support samples all pass (``memetic_workspace.prepare``). With ``--pass-rates`` (repeatable, summed) a build keeps
+  only programs whose support worlds all have a measured base rate with mean in [min_success, max_success];
+  ``measure`` lists the support worlds still lacking one, as cases for ``scripts/neuralese_data/exp1_collect.py``.
 
     python -m natlang_neuralese.rl.memetic_tasks measure --out DIR/cases.jsonl [--programs N] [--pass-rates R ...]
     python -m natlang_neuralese.rl.memetic_tasks build --out DIR [--pool cases.jsonl ...] [--pass-rates R ...] [--set NAME=VALUE]
@@ -264,7 +263,8 @@ def main(argv=None):
         p.add_argument('--pool', action='append', help='task pool cases.jsonl (default: grpo.POOLS)')
         p.add_argument('--held-manifest', help='held manifest whose closure is excluded (default: grpo.HELD)')
         p.add_argument('--pass-rates', action='append',
-                       help='base pass rates {task_id: {successes, scored}}, repeatable and summed (default: exp1-rft)')
+                       help='base pass rates {task_id: {successes, scored}}, repeatable and summed (build: none, every '
+                            'program enters; measure: exp1-rft)')
     args = parser.parse_args(argv)
     repo = Path(__file__).resolve().parents[4]
     sys.path.insert(0, str(repo / 'scripts/neuralese_data'))
@@ -281,8 +281,9 @@ def main(argv=None):
             protected.check(case)
         except CustodyError:
             excluded.add(case['id'])
-    paths = args.pass_rates or [resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'exp1-rft', 'base-pass-rates.json')]
-    rates = merge_rates(json.loads(Path(path).read_text()) for path in paths)
+    paths = args.pass_rates or ([resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'exp1-rft', 'base-pass-rates.json')]
+                                if args.command == 'measure' else [])
+    rates = merge_rates(json.loads(Path(path).read_text()) for path in paths) if paths else None
     if args.command == 'measure':
         rows = unmeasured(cases, excluded=frozenset(excluded), pass_rates=rates, programs_limit=args.programs)
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)

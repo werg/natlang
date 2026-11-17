@@ -443,11 +443,18 @@ def collection_evaluator(spec):
 
 
 # ---- preparation -------------------------------------------------------------------------------------------------------
+def all_passed(support):
+    """Whether every support sample ran, was scored and passed."""
+    rollouts = support.get('rollouts') or 0
+    return rollouts > 0 and support.get('scored') == rollouts and support.get('success', 0) >= 1.0
+
+
 def prepare(spec, evaluate):
     """Evidence and baselines of one episode group under the current policy, computed once by whichever sample loads
-    first (the others wait on the lock and read it): the unchanged program on the support worlds (admission: success
-    within [min_success, max_success], resolved), then on the query worlds with no change and with the mechanical
-    default guidance (the anchor's two arms). Unscored support runs are no measurement."""
+    first (the others wait on the lock and read it): the unchanged program on the support worlds, then on the query
+    worlds with no change and with the mechanical default guidance (the anchor's two arms). Every group is admitted
+    except one whose unguided support samples all ran and all passed: then there is nothing to improve (owner
+    2026-11-18; an all-fail group is admitted, the improver works from its failures)."""
     path = Path(spec['out']) / 'prepared.json'
     with locked(path):
         if path.exists():
@@ -457,7 +464,7 @@ def prepare(spec, evaluate):
         attempts = [{'digest': attempt_digest(result, attempt_id=f'a{i + 1}', world=world), 'steps': attempt_steps(result)}
                     for i, (world, result) in enumerate(support['results'])]
         resolved = support['scored'] / max(1, support['rollouts'])
-        admitted = resolved >= 0.5 and settings['min_success'] <= support['success'] <= settings['max_success']
+        admitted = not all_passed(support)
         prepared = {'schema': 'natlang.memetic-prepared/1', 'support_success': support['success'],
                     'resolved_fraction': round(resolved, 3), 'attempts': attempts, 'admitted': admitted,
                     'baselines': {'none': None, 'default': None}}
@@ -502,8 +509,8 @@ class Workspace:
         if self._prepared is None:
             self._prepared = self._prepare(self.spec, self.evaluate_cases)
             if not self._prepared['admitted']:
-                raise ValueError('the program has no measurable improvement headroom under this policy (support success '
-                                 f"{self._prepared['support_success']}, resolved {self._prepared['resolved_fraction']})")
+                raise ValueError('every support sample of this program already passes under this policy: '
+                                 'there is nothing to improve')
         return self._prepared
 
     @property

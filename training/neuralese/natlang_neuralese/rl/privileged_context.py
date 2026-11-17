@@ -37,6 +37,10 @@ from ..common.hashing import canonical_json_sha256_hex, sha256_hex
 
 BLOCK_SCHEMA = 'natlang.jolt-privileged-block/2'
 REQUEST_SCHEMA = 'natlang.guidance-request/1'
+# v2 (2026-11-18): the runtime builds the guidance turn once as an ordinary system message (`message`, placed after the
+# leading system message; ts-host native/training-guidance.ts `guidanceMessage`) with the facts it packed and those it
+# left out (`omitted`); every engine renders it with its chat template and marks its span (`message_span`).
+REQUEST_SCHEMA_V2 = 'natlang.guidance-request/2'
 RENDERING_SCHEMA = 'natlang.jolt-privileged-rendering/2'
 WRITER_FUNCTION = 'writeGuidance'
 HINT_FUNCTION = 'writeHint'   # hindsight: a hint written from a verified run (rl/hindsight.py)
@@ -510,9 +514,14 @@ class PrivilegedBlock:
 
 
 def _request_parts(request):
-    if not isinstance(request, dict) or request.get('schema') != REQUEST_SCHEMA:
-        raise ValueError(f'guidance requests use schema {REQUEST_SCHEMA}')
+    if not isinstance(request, dict) or request.get('schema') not in (REQUEST_SCHEMA, REQUEST_SCHEMA_V2):
+        raise ValueError(f'guidance requests use schema {REQUEST_SCHEMA_V2}')
     allowed = {'schema', 'invocation', 'mode', 'custody', 'facts', 'selection', 'writer', 'state', 'fallback'}
+    if request['schema'] == REQUEST_SCHEMA_V2:
+        allowed |= {'message', 'omitted'}
+        message = request.get('message')
+        if not isinstance(message, dict) or message.get('role') != 'system' or set(message) != {'role', 'content'}:
+            raise ValueError('v2 guidance requests carry the guidance turn as one system message')
     if set(request) - allowed:
         raise ValueError('guidance request has unsupported fields: ' + ', '.join(sorted(set(request) - allowed)))
     invocation, mode = request.get('invocation'), request.get('mode')
@@ -550,13 +559,15 @@ def _request_parts(request):
     return invocation, mode, custody, selection, facts, state
 
 
-def guidance_plan(rendering, request, *, token_ids, text):
+def guidance_plan(rendering, request, *, token_ids, text, message_span=None):
     """Engine side: the prompt pieces and receipt of one model turn's guidance request.
 
     ``token_ids``: the turn's own prompt tokens (no guidance); ``text``: its messages' text (visibility). Pieces are
     ``('privileged', tokens)`` and ``('privileged_state', {id, source_occurrence?})``, inserted at ``insert_at``.
     Returns ``(insert_at, pieces, receipt)``; ``pieces`` is empty for write-only and text-twin (recorded for the
     OPSD twin, never sampled: a text-twin receipt carries its ``token_ids``) or when no fact fits the budget.
+    ``message_span`` (v2 requests): ``(insert_at, plan items)`` of the runtime's guidance message as the engine rendered
+    it (`message_span`); the turn's tokens are those, not this module's rendering.
     """
     invocation, mode, custody, selection, facts, state = _request_parts(request)
     visible = {**invocation, 'text': text}
@@ -566,7 +577,27 @@ def guidance_plan(rendering, request, *, token_ids, text):
     insert_at, placement = rendering.insertion_point(token_ids)
     included, omitted, pieces = list(facts), [], []
     recorded = mode in RECORDED_MODES
-    if mode in TEXT_MODES:
+    if message_span is not None:
+        # v2: the engine rendered the runtime's message; its span is the guidance turn (the learner re-verifies it
+        # against `rendering`, verify_captured_block).
+        insert_at, items = message_span
+        omitted = [dict(item) for item in request.get('omitted') or []]
+        states = [index for index, (kind, _) in enumerate(items) if kind != 'tokens']
+        if mode in TEXT_MODES:
+            if states:
+                raise ValueError('a text guidance turn imports no state')
+            tokens = [token for _, value in items for token in value]
+            if not recorded:
+                pieces = [('privileged', tokens)]
+        else:
+            if len(states) != 1 or items[states[0]][1] != (dict(state) if state.get('source_occurrence') else state['id']):
+                raise ValueError('a writer guidance turn imports exactly its writer state')
+            head = [token for _, value in items[:states[0]] for token in value]
+            tail = [token for _, value in items[states[0] + 1:] for token in value]
+            tokens = [*head, rendering.consume_open, rendering.consume_close, *tail]
+            if mode == 'import':
+                pieces = [('privileged', head), ('privileged_state', dict(state)), ('privileged', tail)]
+    elif mode in TEXT_MODES:
         included = []
         for fact in facts:
             if len(rendering.turn([item.text for item in [*included, fact]])) <= rendering.budget_tokens:
@@ -595,6 +626,42 @@ def guidance_plan(rendering, request, *, token_ids, text):
         receipt['writer'] = request['writer']
         receipt['state'] = dict(state)
     return insert_at, pieces, receipt
+
+
+def guidance_messages(messages, message):
+    """The request's messages with the runtime's guidance message after the leading system message (the placement
+    ``PrivilegedRendering.insertion_point`` declares), else first."""
+    messages = list(messages or [])
+    at = 1 if messages and isinstance(messages[0], dict) and messages[0].get('role') == 'system' else 0
+    return [*messages[:at], message, *messages[at:]]
+
+
+def message_span(plan, guided, insert_at):
+    """(insert_at, inserted plan items) of the guidance message: ``guided`` is ``plan`` rendered with the message, which
+    the template places at own-token index ``insert_at`` (``PrivilegedRendering.insertion_point``). Items are
+    ('tokens', ids) and the plan's state entries; the rest of the two plans must agree."""
+    def flat(items):
+        out = []
+        for kind, value in items:
+            out += [(None, token) for token in value] if kind == 'tokens' else [(kind, value)]
+        return out
+    a, b = flat(plan), flat(guided)
+    own, start = 0, len(a)
+    for index, (kind, _) in enumerate(a):
+        if own == insert_at:
+            start = index
+            break
+        own += kind is None
+    extra = len(b) - len(a)
+    if extra <= 0 or b[:start] != a[:start] or b[start + extra:] != a[start:]:
+        raise ValueError('the guidance message did not render as one contiguous insertion at its placement')
+    items = []
+    for kind, value in b[start:start + extra]:
+        if kind is None and items and items[-1][0] == 'tokens':
+            items[-1][1].append(value)
+        else:
+            items.append(('tokens', [value]) if kind is None else (kind, value))
+    return insert_at, items
 
 
 def captured_block(turn):

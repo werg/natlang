@@ -11,6 +11,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts/neuralese_data"))
 import grpo  # noqa: E402
 from natlang_neuralese.rl import memetic_tasks, memetic_workspace as mw  # noqa: E402
+from natlang_neuralese.rl import task_rollouts  # noqa: E402
 from natlang_neuralese.rl.task_rollouts import memetic_outcome  # noqa: E402
 
 ROOT = '---\ndescription: Answer the question.\nargs:\n  question: string\nreturns: string\n---\n1. Read question.\n2. Answer it.\n'
@@ -220,3 +221,26 @@ def test_the_natlang_loader_checks_a_changed_program(monkeypatch):
     assert mw.check_program({'semantics': {'files': FILES}}) == []
     broken = {**FILES, 'answer.nl': '---\nargs: [unclosed\n---\nbody\n'}
     assert mw.check_program({'semantics': {'files': broken}})
+
+
+def test_only_a_group_whose_support_all_passes_is_skipped():
+    assert mw.all_passed({'rollouts': 8, 'scored': 8, 'success': 1.0})
+    assert not mw.all_passed({'rollouts': 8, 'scored': 8, 'success': 0.0}), 'all-fail groups are admitted'
+    assert not mw.all_passed({'rollouts': 8, 'scored': 6, 'success': 1.0}), 'an unscored sample is no pass'
+    assert not mw.all_passed({'rollouts': 0, 'scored': 0, 'success': 0.0})
+
+
+def test_memetic_groups_log_the_guided_against_unguided_gap(tmp_path):
+    record = task_rollouts.memetic_reward_record({'anchor': .4, 'gain': .1, 'cost': 0, 'query_success': .5,
+                                                  'baselines': {'none': {'success': .25}, 'default': None}})
+    assert record['without'] == .25 and record['default'] is None
+    episodes = [{'memetic': {**record, 'query_success': q, 'committed': {'ids': ['c1']}}} for q in (.5, .75)]
+    episodes.append({'memetic': {'query_success': 0., 'unscored_workspace': True, 'without': None}})
+    group = grpo.memetic_group_record(7, 'memetic:x', episodes)
+    assert group['with_guidance'] == .625 and group['without'] == .25 and group['gap'] == .375
+    assert group['scored'] == 2 and group['committed'] == 2 and group['samples'] == 3
+    assert grpo.memetic_group_record(8, 't', [{'reward': 1}]) is None
+    (tmp_path / 'train.jsonl').write_text(json.dumps({'memetic_groups': [{'gap': .125}]}) + '\n')
+    history = list(grpo.memetic_gap_history(tmp_path / 'train.jsonl'))
+    step = grpo.memetic_step_record([group], history)
+    assert step['gap_mean'] == .375 and step['gap_running_mean'] == .25 and step['gap_running_groups'] == 2

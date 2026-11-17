@@ -294,9 +294,12 @@ def test_opt_out_keeps_historical_objective_and_student_guidance_capture_is_refu
         prepare(rollouts(imported.turns), imported, roles, identity)
 
 
-def test_engine_renders_each_guidance_mode_at_the_declared_place(tmp_path):
+@pytest.mark.parametrize('schema', ['v1', 'v2'])
+def test_engine_renders_each_guidance_mode_at_the_declared_place(tmp_path, schema):
+    # v2: the runtime's guidance message (ts-host training-guidance.ts guidanceMessage) rendered by the engine's
+    # template gives the same tokens, places and receipts as the declared rendering.
     from test_native_serving_adapters import engine_fixture
-    from natlang_neuralese.rl.privileged_context import REQUEST_SCHEMA, captured_block
+    from natlang_neuralese.rl.privileged_context import REQUEST_SCHEMA, REQUEST_SCHEMA_V2, captured_block
     from natlang_neuralese.serve.engine import GenerationRequest
     engine = engine_fixture(tmp_path, 'lfm')
     facts = [{'id': 'expected_result:0', 'kind': 'expected_result', 'text': 'The verified result is t6.'},
@@ -313,6 +316,12 @@ def test_engine_renders_each_guidance_mode_at_the_declared_place(tmp_path):
             value['fallback'] = 'writer failed'
         else:
             value.update(writer=writer, state={'id': state})
+        if schema == 'v2':
+            value['schema'] = REQUEST_SCHEMA_V2
+            value['message'] = {'role': 'system', 'content': '\n\n'.join(
+                ['Verified reference for this call (training only):', *[f['text'] for f in value['facts']]])} \
+                if mode in ('text', 'text-twin') else {'role': 'system', 'content': [
+                    {'type': 'text', 'text': 'Guidance for this call (training only):\n'}, {'type': 'native_state', 'id': state}]}
         return value
     def generate(**options):
         return engine.generate(GenerationRequest(messages=messages, temperature=.9, seed=5, max_tokens=4,
@@ -348,6 +357,12 @@ def test_engine_renders_each_guidance_mode_at_the_declared_place(tmp_path):
             assert own(capture['prompt']) == expected and block.state_id == state
             continue
         tokens = spec.state_turn()[0] if mode == 'import' else spec.turn([facts[0]['text']])
+        if schema == 'v2':
+            # This fixture's toy template is not the ChatML the declared rendering assumes (the LFM3 template renders the
+            # message to exactly `spec`'s tokens): the turn is the message as the template rendered it.
+            tokens = list(block.token_ids)
+            assert tokens and (mode != 'import' or (tokens[block.import_offset - 1], tokens[block.import_offset])
+                               == (spec.consume_open, spec.consume_close))
         if mode == 'text-twin':  # the teacher's exact text turn, recorded at the same place, never sampled
             text = replies['text']['x_natlang_rl_capture']['privileged']
             assert list(block.token_ids) == tokens == capture['privileged']['token_ids']
