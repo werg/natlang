@@ -75,6 +75,10 @@ Semantic review is fallible admission evidence, never labelled exact gold and
 never supervised as an executor target. It may use the same model in an isolated
 conversation; this does not alter the stock collector's distinct-model judge
 policy.
+The review request must be exactly one system message and one user message;
+its decoded evidence must match the original selected case and actual native
+fixture outcome, observation and observation store. Rehashing another case's
+accepted review cannot attribute it to this result.
 
 The generic replay helper uses `sft_sources.ReplayServer/replay_episode` and emits
 receipt drafts, not a new trajectory representation:

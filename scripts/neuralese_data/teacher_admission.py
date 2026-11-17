@@ -88,7 +88,7 @@ def protected_inputs(programs):
     return ids, protected
 
 
-def semantic_review(review):
+def semantic_review(review, *, case, evaluation):
     if not isinstance(review, dict) or review.get('verdict') != 'accepted' or not isinstance(review.get('reason'), str) or not review['reason'].strip():
         raise ValueError('semantic review did not accept the trajectory with evidence')
     reviewer = review.get('reviewer') or {}
@@ -97,6 +97,17 @@ def semantic_review(review):
     request, reply = review.get('request'), review.get('reply')
     if not isinstance(request, dict) or not request.get('messages') or not isinstance(reply, dict):
         raise ValueError('semantic review needs its exact request and reply')
+    messages = request['messages']
+    if (not isinstance(messages, list) or len(messages) != 2 or
+            [message.get('role') for message in messages] != ['system', 'user'] or
+            not isinstance(messages[0].get('content'), str) or not messages[0]['content'].strip() or
+            not isinstance(messages[1].get('content'), str)):
+        raise ValueError('semantic review must be an isolated system and user conversation')
+    payload = json.loads(messages[1]['content'])
+    expected = {key: case[key] for key in ('input', 'expected') if key in case}
+    expected.update({key: evaluation[key] for key in ('outcome', 'observation', 'observations') if key in evaluation})
+    if canonical(payload) != canonical(expected):
+        raise ValueError('semantic review payload differs from the actual source case or fixture result')
     raw = review.get('request_canonical')
     if raw is not None:
         if not isinstance(raw, str) or canonical(json.loads(raw)) != canonical(request):
@@ -215,7 +226,8 @@ def check_record(record, pool):
         if (replay_record.get('exact') is not True or replay_record.get('outcome') != 'task_success' or
                 replay_record.get('task_id') != key[0] or replay_record.get('recorded_turns') != len(hashes)):
             raise ValueError('admission requires the shared collector exact replay verdict')
-        semantic_review(sample.get('semantic'))
+        semantic_review(sample.get('semantic'), case=task['semantics']['evaluation_fixture']['case'],
+                        evaluation=evaluation)
         checked[key] = {'path': str(sidecar_path), 'sha256': file_sha(sidecar_path),
                         'sample': sample, 'invocations': invocation_metadata(result)}
     return checked
