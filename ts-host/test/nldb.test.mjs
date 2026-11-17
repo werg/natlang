@@ -8,7 +8,7 @@ import { FolderDatabase, SqliteDatabase } from '../../applications/dist/nldb/ind
 import { judgeStep } from '../../applications/dist/nldb/main.js';
 import { FolderBlockStore, IvfIndex, nativeStateDialect, pooled } from '../../applications/dist/nldb/neuralese.js';
 import { nativeStateFixture } from './fixtures/native-state.mjs';
-import { scriptedModel } from './support/natlang.mjs';
+import { scriptedModel, withGeneratedDecisions } from './support/natlang.mjs';
 
 const CATALOG = { version: 1, tables: { customers: { description: 'A customer of the shop.', key: ['_id'], indexes: ['city'],
   pages: 1, rows: 0, nextId: 1, columns: [
@@ -176,11 +176,6 @@ test('the SQLite database: requests compile to one transaction; a failing statem
   const judged = [];
   const plan = (kind, statements, extra = {}) => `return ${JSON.stringify({ kind, statements, semantic: [], clarification: '', explanation: `${kind}.`, assumptions: [], ...extra })};`;
   const model = scriptedModel(opening => {
-    if (opening.includes('Decide whether value, a value stored in a database, meets criterion')) {
-      const value = /value: string = "([^"]*)"/.exec(opening)[1];
-      judged.push(value);
-      return `return ${/late/.test(value)};`;
-    }
     const request = /request: string = "([^"]*)"/.exec(opening)?.[1] ?? '';
     if (/^Keep/.test(request)) return plan('schema', ['CREATE TABLE orders (id INTEGER PRIMARY KEY, note TEXT NOT NULL, total REAL NOT NULL CHECK (total >= 0))']);
     if (/^Record/.test(request)) return plan('change', ["INSERT INTO orders (note, total) VALUES ('arrived late', 20)", "INSERT INTO orders (note, total) VALUES ('fine', 5)", "INSERT INTO orders (note, total) VALUES ('very late again', 7)"]);
@@ -190,8 +185,9 @@ test('the SQLite database: requests compile to one transaction; a failing statem
       { semantic: [{ criterion: 'mentions a late delivery', table: 'orders', column: 'note' }] });
     return null;
   });
-  // The application wiring fixture supplies eval source, including its SQLite semantic judge.
-  const runtime = createNatlangRuntime({ model: { driver: model.driver, decisionGeneration: 'tool-loop' } });
+  const runtime = createNatlangRuntime({ model: withGeneratedDecisions(model.driver, inputs => {
+    assert.equal(typeof inputs.value, 'string'); judged.push(inputs.value); return /late/.test(inputs.value);
+  }) });
   const db = new SqliteDatabase(join(root, 'shop.sqlite'), fn => runtime.run(fn), () => '2026-10-07');
   try {
     assert.equal((await db.ask('Keep orders: a note and a total that is never negative.')).kind, 'schema');

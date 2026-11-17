@@ -6,14 +6,13 @@ import { join } from 'node:path';
 import { createNatlangRuntime } from '../dist/index.js';
 import { WorkflowDesk, WorkflowService, allowedReview, checkMessage, crispReview, reviewAfter, stepFull, validate } from '../../applications/dist/workflow/index.js';
 import { readFileSync } from 'node:fs';
-import { appCrisp, scriptedModel, withJudge } from './support/natlang.mjs';
+import { appCrisp, scriptedModel, withJudge, withGeneratedDecisions } from './support/natlang.mjs';
 
 const CRISP = await appCrisp('workflow');
 /** A runtime whose refinements are decided by the application's crisp checkers; the judge, if asked, accepts. */
 function refined(driver, extra = {}) {
   withJudge(driver);
-  // These wiring fixtures answer with eval source; real JSON decision generation is covered separately.
-  return createNatlangRuntime({ model: { driver, decisionGeneration: 'tool-loop' }, calls: false, ...extra });
+  return createNatlangRuntime({ model: driver, calls: false, ...extra });
 }
 
 const run = runtime => (fn, options) => runtime.run(fn, options);
@@ -101,18 +100,22 @@ function workflowModel({ override = () => undefined, only = null } = {}) {
       case 'handle': return HANDLE;
       case 'choose': return CHOOSE;
       case 'inform': return INFORM;
-      case 'situation': return call('situation', 'state, event');
       case 'advance': return call('advance', 'state');
-      case 'failure': return call('failure', 'operation');
       case 'compensate': return call('compensate', 'state');
       case 'recover': return call('recover', 'snapshot, limits');
-      case 'moment': return call('moment', 'report');
       case 'facts': return call('facts', 'report, kind');
       case 'compose': return call('compose', 'kind, told');
       default: return null;
     }
   });
-  return { ...model, seen };
+  return { ...model, seen, driver: withGeneratedDecisions(model.driver, (inputs, opening) => {
+    const stage = opening.includes('Decide where the order in state stands') ? 'situation' :
+      opening.includes('is an attempt the remote refused') ? 'failure' : opening.includes('Compare report.before with report.after') ? 'moment' : null;
+    assert.ok(stage && (!only || only.includes(stage)), 'the generated decision must be an enabled fixture stage'); seen.push(stage);
+    if (stage === 'situation') { assert.ok(inputs.state && inputs.event); return impl.situation(inputs.state, inputs.event); }
+    if (stage === 'failure') { assert.ok(inputs.operation); return impl.failure(inputs.operation); }
+    assert.ok(inputs.report); return impl.moment(inputs.report);
+  }) };
 }
 
 async function scenario(events, options = {}) {

@@ -1524,8 +1524,10 @@ Fresh packed CLI plus adaptation checks passed23 tests; the distributed skill fi
 scripted tests, preserving production prompt/reply/outcome behavior from67a3eb693. The pinned full remainder continues;
 these targeted corrections must be reported alongside its exact result, never as an entirely green run of that old pin.
 
-The full TS scan also reached NLDB/scheduling eval-script wiring fixtures whose decision children intentionally return
-code to execute in eval. Those helpers now explicitly choose `decisionGeneration: tool-loop`; the matching workflow
-helper is treated consistently. This keeps their application/effect wiring assertion intact while the default hosted
-JSON surface is exercised by separate actual readout/native-collector/CLI/distributed-skill tests. All30 application
-wiring cases pass. No production runtime option default changed in this test-only correction.
+The full TS scan also reached NLDB/scheduling application wiring fixtures whose decision mocks still emitted eval code.
+An initial test-only diagnostic opt-out was rejected as inadequate default-path coverage and replaced. NLDB, scheduling
+and workflow now retain the production default: tool-free decisions parse the actual displayed argument data and use
+the existing fixture's pure verdict functions to return raw JSON. The former eval-code answer branches for those
+finite stages are removed, so an unexpected tool-loop path fails instead of masking the new surface. All30 application
+wiring cases pass with unchanged stage/effect assertions and no diagnostic opt-out. No production runtime change was
+needed for these fixture corrections.

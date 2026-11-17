@@ -6,6 +6,7 @@ import { TypeEnv } from '../../dist/native/types.js';
 import { buildPending } from '../../dist/native/values.js';
 import { parseModule, parseNatlang, PATH_ONLY } from '../../dist/runtime/loader.js';
 import YAML from 'yaml';
+import { runInNewContext } from 'node:vm';
 import { join } from 'node:path';
 import { existsSync } from 'node:fs';
 import { browserBuildProblems, staleMessage } from '../../scripts/browser-build-freshness.mjs';
@@ -68,6 +69,24 @@ export function scriptedModel(respond) {
     return { calls: [['return_result', { status: 'success' }]] };
   };
   return { driver, openings };
+}
+
+/** Answer actual tool-free decision requests from the shown fixture arguments; ordinary eval stages keep their driver. */
+export function withGeneratedDecisions(driver, answer) {
+  return Object.assign(async (request, ...rest) => {
+    if (request.tools.length) return driver(request, ...rest);
+    const opening = request.messages.map(message => String(message.content ?? '')).join('\n');
+    const shown = request.messages.filter(message => message.role === 'tool' && String(message.tool_call_id).startsWith('scope_'))
+      .map(message => String(message.content)).join('\n');
+    const inputs = {};
+    for (const match of shown.matchAll(/^([A-Za-z_$]\w*): [^\n]*? = ([^\n]+)$/gm)) {
+      // The runtime displays bounded JS data literals. Evaluate only that trusted test fixture's displayed data;
+      // missing/cut-off values fail the stage's assertions instead of borrowing hidden host arguments.
+      try { inputs[match[1]] = runInNewContext('(' + match[2] + ')', Object.create(null), { timeout: 100 }); }
+      catch { /* opaque/untrusted values need a fixture-specific visible-data reader */ }
+    }
+    return { text: JSON.stringify(await answer(inputs, opening)), calls: [] };
+  }, driver);
 }
 
 /**
