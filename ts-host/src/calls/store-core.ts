@@ -20,7 +20,8 @@ export interface SqlDatabase {
 
 /** Where a store keeps what is not rows, and what it knows of its surroundings. */
 export interface StoreMedium {
-  putBlob(hash: string, text: string): void;
+  /** Store a blob outside the database; true when this call created it (a file a rolled-back transaction must remove). */
+  putBlob(hash: string, text: string): boolean;
   blob(hash: string): string | undefined;
   deleteBlob(hash: string): void;
   readConfig(): Partial<CallStoreSettings>;
@@ -242,7 +243,7 @@ export class CallStore {
 
   /** Store `text` under its SHA-256; returns the hash. Existing blobs are not rewritten. */
   putBlob(text: string, hash = hexDigest(text)): string {
-    this.medium.putBlob(hash, text);
+    if (this.medium.putBlob(hash, text)) this.created?.push(hash);
     this.db.prepare('INSERT OR IGNORE INTO blobs (hash, bytes) VALUES (?, ?)').run(hash, byteLength(text));
     return hash;
   }
@@ -261,10 +262,8 @@ export class CallStore {
   /** Store one call record. `blobs` holds the text of every complete value the record references (by hash). */
   record(record: CallRecord, blobs: ReadonlyMap<string, string>, events?: string): void {
     // Publish blobs, the record and its links together: another writer's eviction
-    // must never collect a value between insertion and linking. Acquire the write
-    // lock before doing any reads, avoiding SQLite read-to-write upgrades.
-    this.db.exec('BEGIN IMMEDIATE');
-    try {
+    // must never collect a value between insertion and linking.
+    this.inWrite(() => {
       const kinds = new Map<string, string>();
       for (const [hash, text] of blobs) { this.putBlob(text, hash); kinds.set(hash, 'value'); }
       let eventsHash: string | null = null;
@@ -290,8 +289,7 @@ export class CallStore {
         ...record.capture_writes.map(write => write.after), ...record.effects.flatMap(effect => [effect.args, effect.result]),
         ...(record.folder?.changes.map(change => change.after) ?? [])].flatMap(refHashes);
       for (const hash of new Set(referenced)) if (blobs.has(hash) || kinds.has(hash)) link.run(record.call_id, hash, 'value');
-      this.db.exec('COMMIT');
-    } catch (error) { this.db.exec('ROLLBACK'); throw error; }
+    });
     this.keepBound();
   }
 
@@ -348,14 +346,27 @@ export class CallStore {
     });
     this.keepBound();
   }
-  /** Run `body` under the write lock (taken before any read, so SQLite never upgrades a reader). */
+  /** Blob files the current write transaction created, removed again if it rolls back. */
+  private created: string[] | null = null;
+  /**
+   * Run `body` under the write lock (taken before any read, so SQLite never upgrades a reader). When it fails, the blob
+   * files it created and no committed row names are removed: they would otherwise stay on disk, counted by nothing.
+   */
   private inWrite<T>(body: () => T): T {
     this.db.exec('BEGIN IMMEDIATE');
+    const created: string[] = [];
+    this.created = created;
     try {
       const value = body();
       this.db.exec('COMMIT');
       return value;
-    } catch (error) { this.db.exec('ROLLBACK'); throw error; }
+    } catch (error) {
+      try { this.db.exec('ROLLBACK'); } catch { /* already rolled back */ }
+      for (const hash of created) try {
+        if (!this.db.prepare('SELECT 1 AS ok FROM blobs WHERE hash = ?').get(hash)) this.medium.deleteBlob(hash);
+      } catch { /* left for a later sweep */ }
+      throw error;
+    } finally { this.created = null; }
   }
 
   call(callId: string): CallRecord | undefined {

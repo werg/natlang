@@ -43,7 +43,8 @@ export class DatabaseMedium implements StoreMedium {
     db.exec(MEDIUM_SCHEMA);
     this.process = { pid: null, scope };
   }
-  putBlob(hash: string, text: string): void { this.db.prepare('INSERT OR IGNORE INTO blob_texts (hash, text) VALUES (?, ?)').run(hash, text); }
+  /** A row of the same transaction: a rollback removes it, so nothing is left to clean up. */
+  putBlob(hash: string, text: string): boolean { this.db.prepare('INSERT OR IGNORE INTO blob_texts (hash, text) VALUES (?, ?)').run(hash, text); return false; }
   blob(hash: string): string | undefined {
     return (this.db.prepare('SELECT text FROM blob_texts WHERE hash = ?').get(hash) as { text: string } | undefined)?.text;
   }

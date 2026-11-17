@@ -285,6 +285,14 @@ for (const variant of variants) {
     assert.equal(store.totalBytes(), base);
   });
 
+  scenario('a record that fails leaves no blob files behind', ({ store }) => {
+    const call = makeCall('fail/1', { padding: 5000 });
+    const broken = { ...call.record, cost: undefined };      // fails inside the transaction, after the blobs are written
+    assert.throws(() => store.record(broken, call.blobs));
+    for (const hash of call.blobs.keys()) assert.equal(store.blob(hash), undefined, `blob ${hash.slice(0, 8)} was removed`);
+    assert.equal(store.totalBytes(), 0);
+  });
+
   scenario('free space lowers the bound', ({ store }) => {
     store.writeSettings({ maxStoreBytes: 100_000_000, minFreeBytes: 1000 });
     put(store, 'f/1', { padding: 5000 });

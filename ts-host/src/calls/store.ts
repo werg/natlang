@@ -41,13 +41,14 @@ export class FileMedium implements StoreMedium {
   readonly process = { pid: process.pid, scope: PROCESS_SCOPE };
   constructor(readonly root: string, private readonly mode?: () => string | undefined) { mkdirSync(join(root, 'blobs'), { recursive: true }); }
   private blobPath(hash: string): string { return join(this.root, 'blobs', hash.slice(0, 2), hash.slice(2)); }
-  putBlob(hash: string, text: string): void {
+  putBlob(hash: string, text: string): boolean {
     const path = this.blobPath(hash);
-    if (existsSync(path)) return;
+    if (existsSync(path)) return false;
     mkdirSync(dirname(path), { recursive: true });
     const temporary = `${path}.${process.pid}.${Math.random().toString(36).slice(2)}`;
     writeFileSync(temporary, text);
     renameSync(temporary, path);
+    return true;
   }
   blob(hash: string): string | undefined {
     try { return readFileSync(this.blobPath(hash), 'utf8'); } catch { return undefined; }
