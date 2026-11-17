@@ -311,7 +311,7 @@ def test_prefix_tree_over_a_subset_maps_back_to_the_steps_chains():
     system = np.arange(10)
     chains = [np.concatenate([system, [50 + i] * 4]) for i in range(3)] + [np.arange(30, 40)]
     keep = [0, 2, 3]                      # chain 1 reads imported state: it stays whole
-    nodes = grpo.remap_tree(lfm3_fast_train.prefix_tree([chains[i] for i in keep], [11, 11, 3], 4), keep)
+    nodes = lfm3_fast_train.remap_tree(lfm3_fast_train.prefix_tree([chains[i] for i in keep], [11, 11, 3], 4), keep)
     leaves = []
 
     def walk(node):

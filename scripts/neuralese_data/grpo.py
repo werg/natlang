@@ -12,9 +12,11 @@ One process runs the whole loop; nothing else (no controller, custody or transit
   stragglers. A group sampled more than ``--max-staleness`` policy versions ago is dropped and counted.
 * learner (the Experiment 0 model path, ``exp0_sft`` / ``lfm3_fast_train``): FP32 master weights, AdamW, BF16 compute. Every
   model call is (exact actor prompt ids, sampled ids) (``lower_rollout_turns.episode_turns``; calls of one invocation chain
-  into one sequence as in ``exp0_sft.chains_of``). A consumer call's imported Neuralese state is fixed context read from the
-  actor's block store and spliced into every layer as the actor's SGLang fork did (``lfm3_fast_train.import_tensors``);
-  no gradient reaches the producer, whose own sampled tokens train as its own calls. Loss on sampled tokens only:
+  into one sequence as in ``exp0_sft.chains_of``). A consumer call's imported Neuralese state is a differentiable
+  pass-through: computed in the consumer's own forward from the producer document the episode recorded (the text write's
+  ``[produce_open] + text ids``, ``lfm3_fast_train.passthrough_plan``), so the consumer's loss reaches the weights that
+  computed the state (``--no-neuralese-passthrough``: the same state detached; a block without a recorded document is the
+  actor's stored state, ``lfm3_fast_train.import_tensors``). The producer's own sampled tokens train as its own calls. Loss on sampled tokens only:
   ``-min(rho, C) * A * logp + beta * k2(ref || policy)``, ``rho = exp(logp_learner - logp_actor)`` (truncated importance
   sampling against the actor's own sampling logprobs), ``A`` the group-normalized episode reward on every call of the
   episode, the reference the start policy. Each trained episode weighs the same: its terms are averaged over its units
@@ -1236,15 +1238,17 @@ def decision_batches(items, max_tokens):
 
 def decision_tensors(batch, device):
     """(ids, lengths, positions, targets, option index per target, options per decision, imported state spans
-    [(packed row start, block_id)]) of a decision batch."""
+    [(packed row start, key)], their producer documents {key: document}) of a decision batch."""
     import torch
     ids, lengths, positions, targets, owner, counts, offset, option, imports = [], [], [], [], [], [], 0, 0, []
+    sources = {}
     for item in batch:
         row = item['row']
         counts.append(len(row['options']))
         for continuation in row['options']:
             prompt = len(row['prompt'])
             imports += [(offset + start, block_id) for start, block_id in row.get('imports') or ()]
+            sources.update(row.get('sources') or {})
             ids += [row['prompt'], continuation]
             lengths.append(prompt + len(continuation))
             positions.append(np.arange(offset + prompt - 1, offset + prompt + len(continuation) - 1))
@@ -1253,18 +1257,7 @@ def decision_tensors(batch, device):
             offset += prompt + len(continuation)
             option += 1
     as_long = lambda parts: torch.from_numpy(np.concatenate(parts).astype(np.int64)).to(device)
-    return as_long(ids), lengths, as_long(positions), as_long(targets), as_long(owner), counts, imports
-
-
-def remap_tree(nodes, indices):
-    """A ``prefix_tree`` built over a subset, with its sequence numbers mapped back (``indices[i]``)."""
-    out = []
-    for node in nodes:
-        if 'index' in node:
-            out.append({'start': node['start'], 'index': indices[node['index']]})
-        else:
-            out.append({**node, 'first': indices[node['first']], 'children': remap_tree(node['children'], indices)})
-    return out
+    return as_long(ids), lengths, as_long(positions), as_long(targets), as_long(owner), counts, imports, sources
 
 
 def group_advantages(rewards):
@@ -2188,7 +2181,9 @@ def train(args):
                   'loss_norm': args.loss_norm, 'decision_weight': args.decision_weight, 'episodes_trained': episodes_trained,
                   'rollouts_archive_free_gb': round(shutil.disk_usage(rollouts_archive).free / 2**30, 1)
                   if rollouts_archive is not None and rollouts_archive.exists() else None,
-                  'actor_version': versions_live['actor'], 'imported_state_mb': round(imported_state_mb, 1)}
+                  'actor_version': versions_live['actor'], 'imported_state_mb': round(imported_state_mb, 1),
+                  'neuralese_passthrough': not args.no_neuralese_passthrough,
+                  'producer_document_tokens': sum(exp0_sft.source_tokens(c) for c in chains)}
         style = reasoning_style(chains, think_close)
         record.update(style, **({} if args.replay else style_shift(work, style)))   # replayed reasoning is not the policy's
         if record.get('reasoning_shift'):
@@ -2229,7 +2224,7 @@ def train(args):
         # computed once per pass: a prefix tree over the step's chains (`--share-prefix-tokens`; chains reading imported
         # native state stay whole), exact gradients (lfm3_fast_train.run_prefix_tree).
         shareable = [i for i, c in enumerate(chains) if not c.get('imports')]
-        nodes = remap_tree(lfm3_fast_train.prefix_tree([chains[i]['ids'] for i in shareable],
+        nodes = lfm3_fast_train.remap_tree(lfm3_fast_train.prefix_tree([chains[i]['ids'] for i in shareable],
                                                        [chains[i]['segs'][0][0] - 1 for i in shareable],
                                                        args.share_prefix_tokens), shareable)
         nodes += [{'start': 0, 'index': i} for i, c in enumerate(chains) if c.get('imports')]
@@ -2250,13 +2245,21 @@ def train(args):
                     blocks[block_id] = collector.states.load(block_id)
             return [(row, blocks[block_id]) for row, block_id in spans]
 
+        def stored_states(net):
+            return lambda spans: lfm3_fast_train.import_tensors(net, chain_states(spans))
+
         def chain_inputs(net, index, start):
-            """(ids, positions, targets, imports) of chain ``index`` from ``start`` (its rows before are a past)."""
+            """(ids, positions, targets, imports, lengths) of chain ``index`` from ``start`` (its rows before are a past).
+            A consumer call's imported Neuralese state is computed in the same forward from its producer document
+            (``exp0_sft.row_inputs``; the documents follow the chain, which then starts at 0); a block without one is
+            the actor's stored state as fixed context."""
             chain = chains[index]
+            if chain.get('imports'):
+                ids, positions, targets, _, lengths, imports = exp0_sft.row_inputs(
+                    [chain], 'cuda', not args.no_neuralese_passthrough, stored_states(net))
+                return ids, positions, targets, imports, lengths if len(lengths) > 1 else None
             ids, positions, targets = exp0_sft.chain_tensors(chain, 'cuda')
-            # a consumer call's imported native state: fixed context exactly as the actor fed it (no producer gradient)
-            imports = lfm3_fast_train.import_tensors(net, chain_states(chain.get('imports') or ()))
-            return ids[start:], positions - start, targets, imports
+            return ids[start:], positions - start, targets, None, None
 
         def all_checkpointed(net):
             return lambda tokens: exp0_sft.set_checkpointing(net, tokens, 0)
@@ -2270,8 +2273,14 @@ def train(args):
         batches = list(decision_batches(decisions, args.decision_batch_tokens))
 
         def decision_inputs(batch):
-            ids, lengths, positions, targets, owner, counts, spans = decision_tensors(batch, 'cuda')
-            imports = lfm3_fast_train.import_tensors(model, chain_states(spans))
+            ids, lengths, positions, targets, owner, counts, spans, sources = decision_tensors(batch, 'cuda')
+            plan = lfm3_fast_train.passthrough_plan([(0, spans, sources)], len(ids),
+                                                    frozen_all=args.no_neuralese_passthrough)
+            if plan['documents']:
+                ids = torch.cat([ids] + [torch.from_numpy(np.asarray(d, np.int64)).cuda() for d in plan['documents']])
+                lengths = lengths + [len(d) for d in plan['documents']]
+            stored = lfm3_fast_train.import_tensors(model, chain_states(plan['fixed'])) if plan['fixed'] else None
+            imports = lfm3_fast_train.passthrough_tensors(plan, 'cuda', stored)
             options = sum(counts)
 
             def scores_of(net):
@@ -2287,9 +2296,9 @@ def train(args):
             reference.load_into(live)
             try:
                 def reference_chain(index, start, past):
-                    ids, positions, targets, imports = chain_inputs(model, index, start)
+                    ids, positions, targets, imports, lengths = chain_inputs(model, index, start)
                     exp0_sft.set_checkpointing(model, len(ids), leaf_budget(start))
-                    refs[index] = -exp0_sft.token_nll(model, forward(model, ids, None, imports, past=past),
+                    refs[index] = -exp0_sft.token_nll(model, forward(model, ids, lengths, imports, past=past),
                                                       positions, targets).detach()
                 with torch.enable_grad():
                     lfm3_fast_train.run_prefix_tree(model, nodes, ids_of, reference_chain,
@@ -2313,12 +2322,12 @@ def train(args):
         def train_chain(index, start, past):
             nonlocal rho_pre_max, rho_post_max, forward_tokens, progress_mark
             chain = chains[index]
-            ids, positions, targets, imports = chain_inputs(model, index, start)
+            ids, positions, targets, imports, lengths = chain_inputs(model, index, start)
             actor = torch.from_numpy(np.concatenate([row['logp'] for _, _, row in chain['segs']])).cuda().float()
             token_scale = scales[chain['episode']][0]
             ref = refs.pop(index, None)
             exp0_sft.set_checkpointing(model, len(ids), leaf_budget(start))
-            h = forward(model, ids, None, imports, past=past)
+            h = forward(model, ids, lengths, imports, past=past)
             if args.top_p < 1:
                 # Top-p: the policy is the learner's distribution on its own nucleus (a constant set that always holds
                 # the sampled token), so the policy term's log-probability is logp - log(nucleus mass); the KL term
@@ -2719,6 +2728,9 @@ def main():
                    'outstanding group was created (negative: never)')
     t.add_argument('--no-actor-sync', action='store_true',
                    help='never update the actor (smoke against a shared actor of the start policy; versions advance nominally)')
+    t.add_argument('--no-neuralese-passthrough', action='store_true',
+                   help='imported Neuralese state as fixed context (the in-graph state from the producer document, '
+                   'detached) instead of a pass-through the consumer\'s loss trains (NEURALESE_PASSTHROUGH_20261117)')
     t.add_argument('--frozen-producer-table', action='store_true',
                    help="keep the actor's producer table (the producing input embedding of Neuralese text writes) at "
                    'the export\'s start values instead of publishing it from the trained embedding each step (WeightSync)')

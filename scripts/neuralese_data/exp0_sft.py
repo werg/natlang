@@ -51,9 +51,10 @@ MAX_LEN = 32000
 
 
 def chains_of(episodes, max_len=MAX_LEN):
-    """Sequences: [{'ids': int32[], 'segs': [(start, length, row)], 'imports': [(start, block_id)], 'task', 'round'}];
-    calls of one invocation whose prompt extends the previous call's full text, with the same imported native state at
-    the same positions (``row['imports']``), share a sequence."""
+    """Sequences: [{'ids': int32[], 'segs': [(start, length, row)], 'imports': [(start, key)], 'sources': {key:
+    producer document}, 'task', 'round'}]; calls of one invocation whose prompt extends the previous call's full text,
+    with the same imported native state at the same positions (``row['imports']``), share a sequence. ``sources``: the
+    pass-through producer documents of the imports (``lower_rollout_turns.write_sources``)."""
     chains = []
     for episode in episodes:
         by_invocation = collections.defaultdict(list)
@@ -77,10 +78,12 @@ def chains_of(episodes, max_len=MAX_LEN):
                         current['ids'] = np.concatenate([ids, sample])
                         current['segs'].append((len(ids), len(sample), row))
                         current['imports'] = imports
+                        current['sources'].update(row.get('sources') or {})
                         continue
                     chains.append(current)
                 current = {'ids': np.concatenate([ids, sample]), 'segs': [(len(ids), len(sample), row)],
-                           'imports': imports, 'task': episode['task_id'], 'round': episode['round']}
+                           'imports': imports, 'sources': dict(row.get('sources') or {}),
+                           'task': episode['task_id'], 'round': episode['round']}
             if current is not None:
                 chains.append(current)
     return chains
@@ -221,9 +224,7 @@ def packed_rows(chains, max_tokens):
     alone; ``max_tokens`` 0: one chain per row). Returns lists of chains."""
     rows, row, size = [], [], 0
     for chain in chains:
-        if chain.get('imports'):
-            raise ValueError('exp0_sft trains no imported native state (lower without a NativeStates reader)')
-        n = len(chain['ids'])
+        n = len(chain['ids']) + source_tokens(chain)
         if row and (not max_tokens or size + n > max_tokens):
             rows.append(row)
             row, size = [], 0
@@ -243,6 +244,30 @@ def row_tensors(row, device):
     targets = torch.cat([p[2] for p in parts])
     weights = torch.cat([chain_weights(chain, device) for chain in row])
     return ids, positions, targets, weights, [len(chain['ids']) for chain in row]
+
+
+def source_tokens(chain):
+    """Tokens of the pass-through producer documents a chain's imports add to its forward."""
+    sources = chain.get('sources') or {}
+    return sum(len(sources[key]['ids']) for key in {key for _, key in chain.get('imports') or ()} if key in sources)
+
+
+def row_inputs(row, device, passthrough=True, fixed=None):
+    """(ids, positions, targets, weights, lengths, imports) of chains packed back to back (``row_tensors``) with their
+    imports' producer documents appended as more documents and ``hidden``'s pass-through ``imports``
+    (``lfm3_fast_train.passthrough_plan``; ``passthrough`` False: the same state detached). ``fixed``: (rows) ->
+    ``import_tensors`` of imports without a producer document (the actor's stored state); without it they are refused."""
+    ids, positions, targets, weights, lengths = row_tensors(row, device)
+    offsets = np.cumsum([0] + lengths[:-1])
+    plan = lfm3_fast_train.passthrough_plan([(int(o), chain.get('imports') or (), chain.get('sources'))
+                                             for o, chain in zip(offsets, row)], len(ids), frozen_all=not passthrough)
+    if plan['fixed'] and fixed is None:
+        raise ValueError(f'{len(plan["fixed"])} imports without a producer document and no stored-state reader')
+    if plan['documents']:
+        ids = torch.cat([ids] + [torch.from_numpy(np.asarray(d, np.int64)).to(device) for d in plan['documents']])
+        lengths = lengths + [len(d) for d in plan['documents']]
+    stored = fixed(plan['fixed']) if plan['fixed'] else None
+    return ids, positions, targets, weights, lengths, lfm3_fast_train.passthrough_tensors(plan, device, stored)
 
 
 def chain_mass(chain):
@@ -313,28 +338,33 @@ def step_groups(chains, epochs, batch_loss_tokens, seed, grouped):
 
 
 def step_backward(model, forward, chains, denominator, pack_tokens, activation_gb, share_prefix_tokens, fast=True,
-                  mark=None):
+                  mark=None, passthrough=True):
     """Forward and backward of one optimizer step's chains, the loss sum(weight * nll) / ``denominator``. Prefixes of at
     least ``share_prefix_tokens`` tokens that several chains share are computed once (`lfm3_fast_train.prefix_tree`, exact
     gradients); the chains that share nothing are packed into rows of ``pack_tokens``. 0: every chain whole, packed.
+    Chains that import Neuralese state stay whole (no shared prefix) and carry their producer documents in the same forward
+    (``row_inputs``: the consumer's loss reaches the producer's state; ``passthrough`` False: detached).
     Returns (sum of weighted nll, tokens computed)."""
     mark = mark or (lambda name, since: time.time())
     total_nll, computed = 0., 0
     if share_prefix_tokens > 0:
-        if any(chain.get('imports') for chain in chains):
-            raise ValueError('exp0_sft trains no imported native state (lower without a NativeStates reader)')
-        nodes = lfm3_fast_train.prefix_tree([chain['ids'] for chain in chains],
-                                            [chain['segs'][0][0] - 1 for chain in chains], share_prefix_tokens)
-        alone = [chains[node['index']] for node in nodes if 'index' in node]
+        plain = [i for i, chain in enumerate(chains) if not chain.get('imports')]
+        nodes = lfm3_fast_train.prefix_tree([chains[i]['ids'] for i in plain],
+                                            [chains[i]['segs'][0][0] - 1 for i in plain], share_prefix_tokens)
+        nodes = lfm3_fast_train.remap_tree(nodes, plain)
+        alone = ([chains[node['index']] for node in nodes if 'index' in node]
+                 + [chain for chain in chains if chain.get('imports')])
         shared = [node for node in nodes if 'index' not in node]
     else:
         alone, shared = chains, []
     for row in packed_rows(alone, pack_tokens):
         t = time.time()
-        ids, positions, targets, weights, lengths = row_tensors(row, model.lm_head.weight.device)
+        ids, positions, targets, weights, lengths, imports = row_inputs(row, model.lm_head.weight.device, passthrough)
         if fast:
             set_checkpointing(model, len(ids), activation_gb)
-        h = forward(model, ids, lengths) if len(row) > 1 else forward(model, ids)
+        if imports is not None and not fast:
+            raise ValueError('imported Neuralese state needs the fast path (lfm3_fast_train)')
+        h = forward(model, ids, lengths, imports) if imports is not None or len(lengths) > 1 else forward(model, ids)
         t = mark('forward', t)
         nll = token_nll(model, h, positions, targets) * weights
         (nll.sum() / denominator).backward()
@@ -380,8 +410,8 @@ def validation_loss(model, forward, chains, pack_tokens=0):
     total, mass = 0., 0.
     with torch.no_grad():
         for row in packed_rows(chains, pack_tokens):
-            ids, positions, targets, weights, lengths = row_tensors(row, 'cuda')
-            h = forward(model, ids, lengths) if len(row) > 1 else forward(model, ids)
+            ids, positions, targets, weights, lengths, imports = row_inputs(row, 'cuda')
+            h = forward(model, ids, lengths, imports) if imports is not None or len(lengths) > 1 else forward(model, ids)
             nll = token_nll(model, h, positions, targets)
             total += (nll * weights).sum().item()
             mass += weights.sum().item()
@@ -493,6 +523,12 @@ def train(args):
     saved_rows = embedding_master[special_index].clone()
     if args.share_prefix_tokens and args.stock_model:
         raise SystemExit('--share-prefix-tokens needs the lfm3_fast_train path (pass 0 with --stock-model)')
+    importing = sum(1 for chain in chains if chain.get('imports'))
+    adapter = sorted(k for k in state['interface_state'] if k.startswith('adapter.'))
+    if importing and (adapter or args.stock_model):
+        # the producer documents embed their span with the producer table, which is the embedding only without an adapter
+        raise SystemExit(f'{importing} chains import Neuralese state: needs the fast path and a checkpoint without a '
+                         f'producer adapter (has {adapter})')
     grouped = args.batch_order == 'grouped' or (args.batch_order == 'auto' and args.share_prefix_tokens > 0)
     steps = step_groups(chains, args.epochs, args.batch_loss_tokens, args.seed, grouped)
     total = len(steps)
@@ -537,7 +573,7 @@ def train(args):
         torch.cuda.reset_peak_memory_stats()
         total_nll, computed = step_backward(model, forward, [chains[i] for i in group], denominator, pack_tokens,
                                             args.activation_gb, args.share_prefix_tokens, fast=not args.stock_model,
-                                            mark=mark)
+                                            mark=mark, passthrough=not args.no_neuralese_passthrough)
         forward_tokens += computed
         t = time.time()
         embedding_master.grad[special_index] = 0
@@ -689,6 +725,9 @@ def main():
     p.add_argument('--share-prefix-tokens', type=int, default=256,
                    help='compute a prefix that several of a step\'s chains share (system prompt, task prompt, earlier calls) '
                    'once when it is at least this long (exact gradients, lfm3_fast_train.prefix_tree); 0: every chain whole')
+    p.add_argument('--no-neuralese-passthrough', action='store_true',
+                   help='imported Neuralese state as fixed context: the same in-graph state from the producer document, '
+                   'detached (default: the consumer\'s loss reaches the producer\'s state, NEURALESE_PASSTHROUGH_20261117)')
     p.add_argument('--batch-order', choices=('auto', 'grouped', 'random'), default='auto',
                    help='grouped: steps from neighbouring episodes in token order (shared prefixes in one step), step order '
                    'shuffled; random: chains shuffled; auto: grouped when --share-prefix-tokens > 0')

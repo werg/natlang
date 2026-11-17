@@ -420,3 +420,149 @@ def test_nucleus_nll_on_bf16_logits_matches_the_reference_pass_bitwise():
         own = lf.gather(-1, target[:, None])[:, 0]
         assert torch.equal(outside, own < want_cut)
         assert torch.allclose(nucleus, torch.where(outside, torch.logaddexp(want_inside, own), want_inside) - own, atol=1e-5)
+
+
+def _passthrough_case():
+    """A producer document (a text write: [open] + text ids from position 0, span rows 1..n) and a consumer that
+    imports its state at rows [start, start + n) (placeholders = the span's ids), the two token ranges disjoint."""
+    torch.manual_seed(11)
+    document = torch.cat([torch.tensor([63]), torch.randint(40, 60, (6,))])
+    consumer = torch.randint(0, 40, (15,))
+    start, count = 4, len(document) - 1
+    consumer[start:start + count] = document[1:]
+    sources = {'b': {'ids': document.numpy(), 'start': 1, 'stop': len(document)}}
+    return document, consumer, start, count, sources
+
+
+def _passthrough_forward(model, consumer, start, sources, frozen=False):
+    plan = lfm3_fast_train.passthrough_plan([(0, [(start, 'b')], sources)], len(consumer), frozen_all=frozen)
+    ids = torch.cat([consumer] + [torch.as_tensor(d, dtype=torch.long) for d in plan['documents']])
+    lengths = [len(consumer)] + [len(d) for d in plan['documents']]
+    return lfm3_fast_train.hidden(model, ids, lengths, lfm3_fast_train.passthrough_tensors(plan, 'cpu'))[:len(consumer)]
+
+
+def test_passthrough_state_equals_the_captured_block_and_trains_the_producer():
+    """The in-graph state of the producer document equals the state a capture of it stores (the stock HF forward's
+    normed pre-RoPE K/V and conv B*x at the span rows, spliced as the actor's fork does): the consumer's hidden states
+    agree. The consumer's loss then reaches the embedding rows of tokens that occur only in the producer document; with
+    the state frozen it does not, and the consumer's own gradients equal the stored-state path's."""
+    from types import SimpleNamespace
+    stock, fast = _pair()
+    document, consumer, start, count, sources = _passthrough_case()
+    states = _layer_states(stock, document)
+    block = SimpleNamespace(token_ids=document[1:], layers=tuple(
+        {k: (v[1:] if k != 'kind' else v) for k, v in s.items()} for s in states))
+    stored = lfm3_fast_train.hidden(fast, consumer, imports=lfm3_fast_train.import_tensors(fast, [(start, block)], 'cpu'))
+    passed = _passthrough_forward(fast, consumer, start, sources)
+    torch.testing.assert_close(passed, stored, rtol=1e-4, atol=1e-5)
+    weights = torch.randn_like(passed)
+    weights[:start + count] = 0                      # the loss on the consumer's rows after the import
+    embed = fast.model.embed_tokens.weight
+    producer_only = sorted(set(document.tolist()) - set(consumer[:start].tolist() + consumer[start + count:].tolist()))
+    fast.zero_grad()
+    (passed * weights).sum().backward()
+    assert embed.grad[producer_only].abs().sum(-1).min() > 0
+    fast.zero_grad()
+    (_passthrough_forward(fast, consumer, start, sources, frozen=True) * weights).sum().backward()
+    assert embed.grad[producer_only].abs().max() == 0
+    frozen_grads = {name: p.grad.clone() for name, p in fast.named_parameters()}
+    fast.zero_grad()
+    (stored * weights).sum().backward()
+    for name, p in fast.named_parameters():
+        assert (frozen_grads[name] - p.grad).norm() <= 1e-4 * p.grad.norm() + 1e-12, name
+
+
+def test_passthrough_gradient_matches_finite_differences():
+    """Float64: d(consumer loss)/d(a weight) through the pass-through equals the central difference of the loss with
+    the producer's state recomputed at the perturbed weights (the real dependency), and differs from the frozen-state
+    gradient on weights that act on the producer document. (The conv accumulates in FP32 even in a float64 model, as the
+    inference kernel does: a step of 1e-3 keeps that rounding far below the tolerance.)"""
+    _, fast = _pair()
+    fast.double()
+    document, consumer, start, count, sources = _passthrough_case()
+    weights = torch.randn(len(consumer), fast.config.hidden_size, dtype=torch.float64)
+    weights[:start + count] = 0
+    loss = lambda frozen=False: (_passthrough_forward(fast, consumer, start, sources, frozen) * weights).sum()
+    checked = 0
+    for name in ('model.layers.0.conv.in_proj.weight', 'model.layers.1.self_attn.k_proj.weight'):
+        parameter = dict(fast.named_parameters())[name]
+        fast.zero_grad()
+        loss().backward()
+        analytic = parameter.grad.clone()
+        fast.zero_grad()
+        loss(frozen=True).backward()
+        frozen = parameter.grad.clone()
+        for index in [(0, 0), (3, 5), (7, 2)]:
+            eps = 1e-3
+            with torch.no_grad():
+                original = parameter[index].item()
+                parameter[index] = original + eps
+                up = loss().item()
+                parameter[index] = original - eps
+                down = loss().item()
+                parameter[index] = original
+            numeric = (up - down) / (2 * eps)
+            assert abs(numeric - analytic[index].item()) <= 2e-3 * max(1., abs(numeric)), (name, index, numeric)
+            assert abs(numeric - frozen[index].item()) > 2e-2 * max(1., abs(numeric)) or index != (0, 0), (name, index)
+            checked += 1
+        assert (analytic - frozen).abs().max() > 1e-6, name
+    assert checked == 6
+
+
+def test_exp0_rows_and_steps_carry_producer_documents():
+    """exp0_sft: a chain that imports state packs with others (its producer document follows the row), skips the prefix
+    tree, and its step equals the direct pass-through forward."""
+    import numpy as np
+    import exp0_sft
+    _, fast = _pair()
+    document, consumer, start, count, sources = _passthrough_case()
+    prompt = consumer[:12].numpy().astype(np.int32)
+    sample = consumer[12:].numpy().astype(np.int32)
+    importing = {'ids': consumer.numpy().astype(np.int32), 'segs': [(12, len(sample), {'sample': sample})],
+                 'imports': [(start, 'b')], 'sources': sources, 'task': 't', 'round': 0}
+    other = {'ids': np.arange(9, dtype=np.int32), 'segs': [(5, 4, {'sample': np.arange(5, 9, dtype=np.int32)})],
+             'imports': [], 'sources': {}, 'task': 'u', 'round': 0}
+    assert exp0_sft.source_tokens(importing) == len(document) and exp0_sft.source_tokens(other) == 0
+    ids, positions, targets, weights, lengths, imports = exp0_sft.row_inputs([other, importing], 'cpu')
+    assert lengths == [9, len(consumer), len(document)] and ids[-len(document):].tolist() == document.tolist()
+    assert imports['pass_rows'].tolist() == list(range(9 + start, 9 + start + count))
+    assert imports['pass_source'].tolist() == list(range(9 + len(consumer) + 1, 9 + len(consumer) + len(document)))
+    assert 'pass_frozen' not in imports
+    assert exp0_sft.row_inputs([importing], 'cpu', passthrough=False)[-1]['pass_frozen'].all()
+    with pytest.raises(ValueError, match='without a producer document'):
+        exp0_sft.row_inputs([{**importing, 'sources': {}}], 'cpu')
+    chains = [importing, other, {**other, 'task': 'v'}]
+    denominator = sum(exp0_sft.chain_mass(c) for c in chains)
+    total, computed = exp0_sft.step_backward(fast, lfm3_fast_train.hidden, chains, denominator, 0, 1., 4)
+    h = _passthrough_forward(fast, consumer, start, sources)
+    direct = exp0_sft.token_nll(fast, h, torch.arange(11, 11 + len(sample)), torch.as_tensor(sample, dtype=torch.long))
+    direct = direct.sum().item() + sum(exp0_sft.token_nll(fast, lfm3_fast_train.hidden(fast, torch.as_tensor(c['ids'], dtype=torch.long)),
+                                                         torch.arange(4, 8), torch.arange(5, 9)).sum().item() for c in chains[1:])
+    assert abs(total - direct) <= 1e-5 * abs(direct)
+    assert len(consumer) + len(document) <= computed <= len(consumer) + len(document) + 18
+
+
+def test_rollout_lowering_resolves_imports_to_their_write_sources():
+    import collections
+    import numpy as np
+    from lower_rollout_turns import episode_turns
+    write = {'kind': 'block_write', 'block': 'nzs1_x', 'node': 'p#1', 'source_capture': {
+        'segments': [{'kind': 'tokens', 'token_ids': [63], 'producing': [False]},
+                     {'kind': 'tokens', 'token_ids': [41, 42, 43], 'producing': [True] * 3},
+                     {'kind': 'tokens', 'token_ids': [62], 'producing': [False]}], 'payload_start': 1, 'payload_stop': 4}}
+    sample = [{'token_id': 7, 'logp': -0.5, 'input_role': 'ordinary'}]
+    turn = lambda prompt: {'invocation_id': 'c', 'sampling': {
+        'prompt': prompt, 'samples': sample, 'generated_inputs': [{'sample_index': 0, 'token_id': 7}],
+        'policy': {'checkpoint_sha256': 's'}, 'sampling_law': {'temperature': 1.0}}}
+    prompt = [{'kind': 'tokens', 'token_ids': [1, 61]}, {'kind': 'native_state', 'id': 'nzs1_x', 'source_occurrence': 'p#1'},
+              {'kind': 'tokens', 'token_ids': [60, 5]}]
+    frozen = [{**prompt[1], 'stop_gradient': True}]
+    stats = collections.Counter()
+    rows = episode_turns({'turns': [turn(prompt), turn(frozen)], 'execution_graph': [write]}, stats)
+    assert rows[0]['prompt'].tolist() == [1, 61, 41, 42, 43, 60, 5] and rows[0]['imports'] == [(2, 'nzs1_x')]
+    source = rows[0]['sources']['nzs1_x']
+    assert source['ids'].tolist() == [63, 41, 42, 43] and (source['start'], source['stop']) == (1, 4)
+    assert rows[1]['imports'] == [(0, 'nzs1_x#frozen')] and rows[1]['sources']['nzs1_x#frozen']['frozen']
+    assert stats['passthrough_imports'] == 2
+    stats = collections.Counter()
+    assert episode_turns({'turns': [turn(prompt)]}, stats) == [] and stats['skip_native_state_prompt'] == 1

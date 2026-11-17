@@ -26,6 +26,14 @@ rows every attention layer's keys (after the K norm, before RoPE) and values and
 stored block's, exactly the fork's `NatlangImport`; the rows' own outputs reach nothing. The state is a constant (no
 gradient into the producer); `exp0_sft.hidden` does the same on the stock HF modules through forward hooks.
 
+Pass-through (`passthrough_plan`, plans/neuralese/NEURALESE_PASSTHROUGH_20261117.md): the imported state computed in the
+same forward from the producer's own tokens. Each import's producer document (the block's recorded ``source_capture``:
+for a text write ``[produce_open] + text ids`` from position 0, the span rows 1..n, exactly the actor's capture request)
+rides as one more packed document, and in every layer the import rows' normed pre-RoPE keys, values and conv B*x are
+that layer's own values at the span rows (``index_put`` of a gather: differentiable), so the consumer's loss reaches the
+weights that computed the state. ``frozen`` rows (the opt-out, or a ``stop_gradient`` import) carry the same values
+detached.
+
 The vendored HF sources are hash-pinned (`third_party/lfm3`), so everything here reads instances, never patches files.
 """
 from __future__ import annotations
@@ -85,6 +93,15 @@ def _attend(q, k, v, docs, window):
     return out[0].transpose(0, 1)
 
 
+def _passed(t, source, frozen):
+    """The producer span's own rows of ``t`` for a pass-through import; rows marked in ``frozen`` (bool, one per row, or
+    None) are detached: their state is fixed context with the same values."""
+    value = t[source]
+    if frozen is None:
+        return value
+    return torch.where(frozen.view(-1, *([1] * (value.dim() - 1))), value.detach(), value)
+
+
 def _ffn(x, ffn_norm, w1, w3, w2, post_ffn_norm, eps):
     f = _rms(x, ffn_norm, eps)
     f = F.linear(F.silu(F.linear(f, w1)) * F.linear(f, w3), w2)
@@ -94,10 +111,12 @@ def _ffn(x, ffn_norm, w1, w3, w2, post_ffn_norm, eps):
 
 
 def conv_layer(x, pos, operator_norm, in_proj, conv_weight, out_proj, post_operator_norm,
-               ffn_norm, w1, w3, w2, post_ffn_norm, eps: float, import_rows=None, import_bx=None):
+               ffn_norm, w1, w3, w2, post_ffn_norm, eps: float, import_rows=None, import_bx=None,
+               pass_rows=None, pass_source=None, pass_frozen=None):
     """`Lfm3DecoderLayer` with `Lfm3ShortConv` on (T, D): the depthwise width-7 causal conv as seven shifted fp32
     multiply-adds (as the inference kernel accumulates), each tap only inside the token's document (``pos``: position
-    within the document; ``import_rows``: rows whose B*x is the imported ``import_bx``)."""
+    within the document; ``import_rows``: rows whose B*x is the imported ``import_bx``; ``pass_rows``: rows whose B*x
+    is this layer's own B*x at ``pass_source``, the producer span in the same forward: ``passthrough``)."""
     length = x.shape[0]
     taps = conv_weight.shape[-1]
     h = _rms(x, operator_norm, eps)
@@ -105,6 +124,8 @@ def conv_layer(x, pos, operator_norm, in_proj, conv_weight, out_proj, post_opera
     bx = b * xx
     if import_rows is not None:
         bx = bx.index_put((import_rows,), import_bx)
+    if pass_rows is not None:
+        bx = bx.index_put((pass_rows,), _passed(bx, pass_source, pass_frozen))
     weight = conv_weight.reshape(conv_weight.shape[0], taps).float()
     padded = F.pad(bx.float(), (0, 0, taps - 1, 0))
     acc = padded[taps - 1:taps - 1 + length] * weight[:, taps - 1]
@@ -119,9 +140,11 @@ def conv_layer(x, pos, operator_norm, in_proj, conv_weight, out_proj, post_opera
 
 def attention_layer(x, cos, sin, cu, max_len: int, doc, pos, operator_norm, wq, wk, wv, wo, wg, q_norm, k_norm,
                     post_operator_norm, ffn_norm, w1, w3, w2, post_ffn_norm, eps: float, head_dim: int, window: int,
-                    import_rows=None, import_k=None, import_v=None):
+                    import_rows=None, import_k=None, import_v=None, pass_rows=None, pass_source=None,
+                    pass_frozen=None):
     """`Lfm3DecoderLayer` with `Lfm3Attention` on (T, D): QK-norm, fp32 RoPE, flash attention, sigmoid head gate
-    (``import_rows``: rows whose normed pre-RoPE keys and values are the imported ``import_k``/``import_v``)."""
+    (``import_rows``: rows whose normed pre-RoPE keys and values are the imported ``import_k``/``import_v``;
+    ``pass_rows``: rows whose normed pre-RoPE keys and values are this layer's own at ``pass_source``)."""
     length = x.shape[0]
     h = _rms(x, operator_norm, eps)
     q = _rms(F.linear(h, wq).view(length, -1, head_dim), q_norm, eps)
@@ -130,6 +153,9 @@ def attention_layer(x, cos, sin, cu, max_len: int, doc, pos, operator_norm, wq, 
     if import_rows is not None:
         k = k.index_put((import_rows,), import_k)
         v = v.index_put((import_rows,), import_v)
+    if pass_rows is not None:
+        k = k.index_put((pass_rows,), _passed(k, pass_source, pass_frozen))
+        v = v.index_put((pass_rows,), _passed(v, pass_source, pass_frozen))
     q, k = _rope(q, cos, sin), _rope(k, cos, sin)
     o = _attend(q, k, v, (cu, max_len, doc, pos), window)
     o = (o * torch.sigmoid(F.linear(h, wg))[..., None]).reshape(length, -1)
@@ -311,6 +337,46 @@ def import_tensors(model, spans, device=None):
                              for field in range(len(part[0]))) for part in parts]}
 
 
+def passthrough_plan(parts, total, frozen_all=False):
+    """Producer documents and gather indices for the imports of one packed sequence of ``total`` tokens.
+
+    ``parts``: [(offset, imports, sources)] of the sequences packed in it (``imports`` [(start, key)] relative to the
+    sequence; ``sources`` {key: {'ids': int[], 'start', 'stop', 'frozen'?}}, the producer documents, ``exp0_sft.chains_of``).
+    An import whose key has no source is returned in ``fixed`` [(absolute row, key)] (stored state:
+    ``import_tensors``). Each source is one document appended after the sequence (a source used by several imports once).
+    Returns {'documents': [int arrays], 'rows': [...], 'source': [...], 'frozen': [bool], 'fixed': [...]}."""
+    documents, placed, rows, source, frozen, fixed = [], {}, [], [], [], []
+    end = total
+    for offset, imports, sources in parts:
+        for start, key in imports:
+            spec = (sources or {}).get(key)
+            if spec is None:
+                fixed.append((offset + start, key))
+                continue
+            count = int(spec['stop']) - int(spec['start'])
+            if key not in placed:
+                if not 0 < int(spec['start']) <= int(spec['stop']) <= len(spec['ids']):
+                    raise ValueError(f'source of {key}: span [{spec["start"]}, {spec["stop"]}) outside its document')
+                placed[key] = end + int(spec['start'])
+                documents.append(spec['ids'])
+                end += len(spec['ids'])
+            rows.extend(range(offset + start, offset + start + count))
+            source.extend(range(placed[key], placed[key] + count))
+            frozen.extend([bool(frozen_all or spec.get('frozen'))] * count)
+    return {'documents': documents, 'rows': rows, 'source': source, 'frozen': frozen, 'fixed': fixed}
+
+
+def passthrough_tensors(plan, device, fixed=None):
+    """``hidden``'s ``imports`` from a ``passthrough_plan`` (``fixed``: ``import_tensors`` of its fixed rows), or None."""
+    imports = dict(fixed) if fixed is not None else {}
+    if plan['rows']:
+        imports['pass_rows'] = torch.tensor(plan['rows'], dtype=torch.long, device=device)
+        imports['pass_source'] = torch.tensor(plan['source'], dtype=torch.long, device=device)
+        if any(plan['frozen']):
+            imports['pass_frozen'] = torch.tensor(plan['frozen'], dtype=torch.bool, device=device)
+    return imports or None
+
+
 class Past:
     """A computed prefix that a continuation attends to: ``length`` tokens; per layer (keys after RoPE, values) for
     attention (a sliding layer keeps its window's last keys) or (B*x of the last taps - 1 tokens,) for conv."""
@@ -393,12 +459,18 @@ def hidden(model, ids, lengths=None, imports=None, past=None, keep_past=False):
         else:
             cos, sin = tables[config.layer_types[index]]
             args = (x, cos, sin, cu, max_len, doc, pos) + static
+        kwargs = {}
         if imports is not None:
-            args = args + (imports['rows'],) + imports['layers'][index]
+            if imports.get('rows') is not None:
+                fields = ('import_bx',) if kind == 'conv' else ('import_k', 'import_v')
+                kwargs.update(import_rows=imports['rows'], **dict(zip(fields, imports['layers'][index])))
+            if imports.get('pass_rows') is not None:
+                kwargs.update(pass_rows=imports['pass_rows'], pass_source=imports['pass_source'],
+                              pass_frozen=imports.get('pass_frozen'))
         if grad and getattr(layer, 'gradient_checkpointing', False):
-            x = torch_checkpoint(function, *args, use_reentrant=False)
+            x = torch_checkpoint(function, *args, use_reentrant=False, **kwargs)
         else:
-            x = function(*args)
+            x = function(*args, **kwargs)
     norm = model.model.embedding_norm
     return _rms(x, norm.weight, norm.variance_epsilon)
 
@@ -433,6 +505,17 @@ def prefix_tree(seqs, caps, min_share):
             i = j + 1
         return nodes
     return build(0, len(seqs), 0) if min_share > 0 else [{'start': 0, 'index': i} for i in range(len(seqs))]
+
+
+def remap_tree(nodes, indices):
+    """A ``prefix_tree`` built over a subset, with its sequence numbers mapped back (``indices[i]``)."""
+    out = []
+    for node in nodes:
+        if 'index' in node:
+            out.append({'start': node['start'], 'index': indices[node['index']]})
+        else:
+            out.append({**node, 'first': indices[node['first']], 'children': remap_tree(node['children'], indices)})
+    return out
 
 
 def tree_tokens(nodes, lengths):

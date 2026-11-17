@@ -4,9 +4,10 @@
 Experiment 0 (plans/neuralese/APPROACH_REVIEW_20261111.md section 4): every model call of a successful episode is one
 (prompt token ids as zero-weight context, sampled output token ids as the loss target) row, read from the captured
 rollouts (`turns[*].sampling`), never re-rendered. A call whose prompt imports native Neuralese state (a consumer) is
-lowered when a ``NativeStates`` reader of the actor's block store is given (GRPO): its sampled reply is the target, the
-imported state fixed zero-loss context exactly as the actor fed it (``imports``, see ``prompt_imports``); without a reader
-such calls are skipped and counted (Experiment 0's SFT lowering). Sampled decision calls (no token stream) are lowered separately by ``decision_turns`` (GRPO trains them). Read-only on the rollout files.
+lowered with its sampled reply as the target and the import as ``imports``: a state whose producer document the episode
+recorded (``write_sources``) is computed in the learner's own forward from that document (the pass-through,
+plans/neuralese/NEURALESE_PASSTHROUGH_20261117.md); any other needs a ``NativeStates`` reader of the actor's block store
+(fixed context exactly as the actor fed it) and is skipped and counted without one. Sampled decision calls (no token stream) are lowered separately by ``decision_turns`` (GRPO trains them). Read-only on the rollout files.
 
     lower_rollout_turns.py --out turns.pkl ROUNDDIR [ROUNDDIR ...]
 """
@@ -50,21 +51,60 @@ class NativeStates:
         return read_native_state_file(self.path(block_id), block_id).load()
 
 
-def prompt_imports(segments, states, stats):
-    """(prompt int32[], imports) of a captured prompt, or None when a state is not lowerable.
+def write_sources(row, stats=None):
+    """{block id: producer document} of an episode's Neuralese writes, from its ``execution_graph`` ``block_write`` events:
+    ``source_capture`` is the exact input of the actor's capture (a text write: ``[produce_open] + text ids`` from
+    position 0; ``sglang_actor._sglang_write_text``, ``engine._native_write_text_impl``), the state the rows
+    [payload_start, payload_stop). A document is {'ids': int32[: payload_stop], 'start', 'stop'}. A capture whose
+    segments are not all tokens (a producer that itself imported state) is not a source (counted)."""
+    sources = {}
+    for event in row.get('execution_graph') or ():
+        capture = event.get('source_capture') if event.get('kind') == 'block_write' else None
+        if not capture or not event.get('block'):
+            continue
+        if any(segment.get('kind') != 'tokens' for segment in capture['segments']):
+            if stats is not None:
+                stats['source_not_tokens'] += 1
+            continue
+        ids = [int(i) for segment in capture['segments'] for i in segment['token_ids']]
+        start, stop = int(capture['payload_start']), int(capture['payload_stop'])
+        if not 0 < start <= stop <= len(ids):
+            if stats is not None:
+                stats['source_bad_span'] += 1
+            continue
+        sources[event['block']] = {'ids': np.array(ids[:stop], dtype=np.int32), 'start': start, 'stop': stop}
+    return sources
+
+
+def prompt_imports(segments, states, stats, sources=None):
+    """(prompt int32[], imports, used sources) of a captured prompt, or None when a state is not lowerable.
 
     The SGLang actor feeds an exact imported state (``kind: native_state``) as ``len(block.token_ids)`` placeholder
     positions between the consume markers (which are ordinary token segments); at those positions every attention
     layer's keys (after the K norm, before RoPE) and values and every conv layer's input B*x are the stored ones
     (``sglang-natlang`` ``models/lfm3.py`` ``NatlangImport``), and the placeholder rows' own outputs are never read. The
     lowered prompt carries the block's own token ids at those positions (in vocabulary; their embeddings reach nothing)
-    and ``imports`` [(start, block_id)] for the learner to splice the stored state (``lfm3_fast_train.import_tensors``)."""
-    ids, imports = [], []
+    and ``imports`` [(start, key)]. A block with a recorded producer document (``sources``, ``write_sources``) is a
+    pass-through import: the learner computes its state in-graph (``lfm3_fast_train.passthrough_plan``; a
+    ``stop_gradient`` import under the key ``<id>#frozen``, detached). Otherwise the stored state is read from the actor
+    store (``states``) as fixed context (``lfm3_fast_train.import_tensors``)."""
+    ids, imports, used = [], [], {}
     for segment in segments:
         if segment['kind'] == 'tokens':
             ids.extend(segment['token_ids'])
             continue
-        if segment['kind'] != 'native_state' or states is None:
+        if segment['kind'] != 'native_state':
+            stats['skip_native_state_prompt'] += 1
+            return None
+        source = (sources or {}).get(segment['id'])
+        if source is not None:
+            key = segment['id'] + ('#frozen' if segment.get('stop_gradient') else '')
+            used[key] = {**source, 'frozen': True} if segment.get('stop_gradient') else source
+            imports.append((len(ids), key))
+            ids.extend(int(i) for i in source['ids'][source['start']:source['stop']])
+            stats['passthrough_imports'] += 1
+            continue
+        if states is None:
             stats['skip_native_state_prompt'] += 1
             return None
         if not states.exists(segment['id']):
@@ -73,20 +113,22 @@ def prompt_imports(segments, states, stats):
         block = states(segment['id'])
         imports.append((len(ids), segment['id']))
         ids.extend(int(i) for i in block.token_ids)
-    return np.array(ids, dtype=np.int32), imports
+        stats['stored_state_imports'] += 1
+    return np.array(ids, dtype=np.int32), imports, used
 
 
 def episode_turns(row, stats, states=None):
     """(rows of one episode's usable calls). A row: dict(invocation, index, prompt int32[], sample int32[], logp f32[],
     imports [(start, block_id)]). ``states``: a ``NativeStates`` reader; without it calls importing native state are skipped."""
     rows = []
+    sources = write_sources(row, stats)
     for index, turn in enumerate(row['turns']):
         sampling = turn.get('sampling') or {}
         if 'samples' not in sampling:
             stats['decision_calls' if sampling.get('decision_sample') else 'skip_no_sample_stream'] += 1
             continue
         segments = sampling['prompt']
-        lowered = prompt_imports(segments, states, stats)
+        lowered = prompt_imports(segments, states, stats, sources)
         if lowered is None:
             continue
         if any(any(segment.get('producing') or []) for segment in segments):
@@ -106,7 +148,7 @@ def episode_turns(row, stats, states=None):
             continue
         if lead:
             stats['forced_prefix_calls'] += 1
-        prompt, imports = lowered
+        prompt, imports, used = lowered
         if imports:
             stats['native_state_calls'] += 1
         if lead:
@@ -115,7 +157,7 @@ def episode_turns(row, stats, states=None):
         logp = np.array([item['logp'] for item in sampling['samples']], dtype=np.float32)
         law = sampling.get('sampling_law') or {}
         rows.append({'invocation': turn['invocation_id'], 'index': index, 'prompt': prompt, 'sample': sample, 'logp': logp,
-                     'imports': imports, 'policy': sampling['policy']['checkpoint_sha256'],
+                     'imports': imports, 'sources': used, 'policy': sampling['policy']['checkpoint_sha256'],
                      # the weights actually served: after in-place updates ``policy`` still names the start checkpoint
                      'served': (sampling.get('actor_export') or {}).get('sha256'),
                      'temperature': law.get('temperature'), 'guidance': bool(law.get('guidance')),
@@ -133,18 +175,20 @@ def decision_turns(row, stats, states=None):
     (no receipt) has no behaviour density and is skipped."""
     from natlang_neuralese.rl.decision_policy import validate_decision_sample
     rows = []
+    sources = write_sources(row)
     for index, turn in enumerate(row['turns']):
         sampling = turn.get('sampling') or {}
         if not sampling.get('decision_sample'):
             continue
         skipped = collections.Counter()
-        lowered = prompt_imports(sampling['prompt'], states, skipped)
+        lowered = prompt_imports(sampling['prompt'], states, skipped, sources)
         if lowered is None:
             for key, count in skipped.items():
                 stats['skip_decision_' + key[len('skip_'):]] += count
             continue
         sample = validate_decision_sample(sampling)
         rows.append({'invocation': turn['invocation_id'], 'index': index, 'prompt': lowered[0], 'imports': lowered[1],
+                     'sources': lowered[2],
                      'options': [np.array(ids, dtype=np.int32) for ids in sample['continuations']],
                      'chosen': sample['chosen'], 'temperature': sample['temperature'],
                      'scores': np.array(sampling['decision_sample']['log_probs'], dtype=np.float32),
