@@ -280,6 +280,7 @@ def rollout_turns(result: dict[str, Any] | None) -> list[dict[str, Any]]:
     replayable as `logLikelihood` terms. Host-authored actions (`action_provenance`, e.g. the authored root eval) are
     not policy samples and are skipped."""
     turns = []
+    invocations = {item.get('invocation_id'): item for item in ((result or {}).get('outcome') or {}).get('invocation_ledger') or []}
     for step in expand_captures((result or {}).get("trajectory") or []):
         assistant = step.get("assistant")
         if step.get("phase") != "action" or not isinstance(assistant, dict) or assistant.get("action_provenance") \
@@ -309,9 +310,15 @@ def rollout_turns(result: dict[str, Any] | None) -> list[dict[str, Any]]:
                      for index, call in enumerate(assistant.get("calls") or [])]
             if calls:
                 target["tool_calls"] = calls
+        invocation = invocations.get(step.get('invocation_id')) or {}
+        role = ('unknown' if 'parent_invocation_id' not in invocation else
+                'root' if invocation['parent_invocation_id'] is None else 'child')
         turns.append({"messages": copy.deepcopy(step["context"]),
                       "tools": copy.deepcopy(step.get("tools_offered") or None), "target": target,
                       "invocation_id": step.get("invocation_id"),
+                      'function': invocation.get('name') or 'unknown',
+                      'definition_id': invocation.get('definition_id'),
+                      'parent_invocation': invocation.get('parent_invocation_id'), 'invocation_role': role,
                       **({'response_tools':copy.deepcopy(step['response_tools']), 'native_xml_turn':copy.deepcopy(step)} if native_xml else {}),
                       **({'sampling': copy.deepcopy(response['rl_sampling'])} if response.get('rl_sampling') else {}),
                       **({'usage': copy.deepcopy(response['usage'])} if isinstance(response.get('usage'), dict) else

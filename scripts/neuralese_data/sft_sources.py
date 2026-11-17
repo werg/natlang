@@ -90,6 +90,9 @@ def exact_tokens(turn):
 
 def semantic_turn(turn, keep_exact):
     out = {k: turn.get(k) for k in ('messages', 'tools', 'target', 'invocation_id')}
+    for key in ('function', 'definition_id', 'parent_invocation', 'invocation_role'):
+        if key in turn:
+            out[key] = turn[key]
     out['completion_tokens'] = (turn.get('usage') or {}).get('completion_tokens')
     if keep_exact:
         out['exact'] = exact_tokens(turn)
@@ -174,6 +177,8 @@ def extract(args):
             c['tasks'] += 1
             directory = Path(record['rollouts']).parent
             cases = group_cases(directory)
+            from teacher_admission import check_record, fixture_task
+            reviewed = check_record(record, pool) if record.get('admission') else {}
             for rline in Path(record['rollouts']).open():
                 if not rline.strip():
                     continue
@@ -185,12 +190,24 @@ def extract(args):
                 if task is None:
                     c['success_without_task_row'] += 1
                     continue
+                admission = reviewed.get((row['task_id'], row['sample']))
+                if fixture_task(task) and admission is None:
+                    c['fixture_not_admitted'] += 1
+                    continue
                 c['successes'] += 1
+                turns = []
+                for turn in row['turns']:
+                    metadata = (admission or {}).get('invocations', {}).get(turn.get('invocation_id'), {})
+                    turns.append(semantic_turn({**turn, **metadata}, False))
                 out.write({'key': f"{label}:{directory.name}:{row['sample']}", 'source': 'teacher', 'run': label,
                            'group': directory.name, 'sample': row['sample'], 'seed': row.get('seed'),
                            'task_id': row['task_id'], 'family': row.get('family'), 'teacher': record.get('teacher'),
                            'base_rank': record.get('base_rank'), 'task': task,
-                           'turns': [semantic_turn(t, False) for t in row['turns']],
+                           'root_mode': record.get('root_mode', 'student'),
+                           'turns': turns,
+                           **({'admission': {'path': admission['path'], 'sha256': admission['sha256'],
+                                            'manifest_record': record, 'pool': str(Path(pool).resolve())}}
+                              if admission else {}),
                            'execution_graph_events': len(row.get('execution_graph') or [])})
     out.close()
     if args.rl:
@@ -229,9 +246,16 @@ def teacher_coverage(pools, extracted):
             if not line.strip():
                 continue
             record = json.loads(line)
-            directory = Path(record['rollouts']).parent.name
+            source_directory = Path(record['rollouts']).parent
+            directory = source_directory.name
+            from teacher_admission import fixture_task, check_record
+            cases = group_cases(source_directory)
+            fixture_ids = {task_id for task_id, task in cases.items() if fixture_task(task)}
+            reviewed = check_record(record, pool) if fixture_ids and record.get('admission') else {}
             for episode in record.get('episodes') or ():
                 if episode.get('outcome') == SUCCESS:
+                    if record.get('task_id') in fixture_ids and (record['task_id'], episode['sample']) not in reviewed:
+                        continue
                     total += 1
                     key = f"{label}:{directory}:{episode['sample']}"
                     if key not in extracted:
@@ -513,7 +537,7 @@ def replay_episode(args, server, episode, env):
     task_rollouts.prepare(SimpleNamespace(
         cases=directory / 'cases.jsonl', out=directory, rows=1, offset=0, group=2, temperature=1.0,
         case_seconds=args.case_seconds, max_model_requests=args.max_model_requests, max_turns=128,
-        seed_base=0, root_mode='student', match_seeds_from=None, policy_checkpoint_sha256=None))
+        seed_base=0, root_mode=episode.get('root_mode', 'student'), match_seeds_from=None, policy_checkpoint_sha256=None))
     entry = list(read_jsonl(directory / 'queue.jsonl'))[0]
     entry.update(seed=episode.get('seed') or entry['seed'], prompt_rendering='full', request_retries=0,
                  context_tokens=131072 if episode['source'] == 'rl-own' else 65536)
@@ -562,6 +586,11 @@ def replay_episode(args, server, episode, env):
 
 
 def replay(args):
+    return replay_episodes(args, all_episodes(Path(args.work)))
+
+
+def replay_episodes(args, episodes):
+    """Replay canonical episodes, including staged sources awaiting corpus admission."""
     import concurrent.futures
     import threading
     work = Path(args.work)
@@ -573,7 +602,6 @@ def replay(args):
            'PYTHONPATH': f'{args.runtime_repo}/training/neuralese:{args.runtime_repo}',
            'NATLANG_MODEL_FACING': series()['model_facing'], 'NATLANG_COLLECTOR_SHARED': '0'}
     server = ReplayServer()
-    episodes = all_episodes(work)
     if args.limit:
         import itertools
         episodes = itertools.islice(episodes, args.limit)
@@ -739,11 +767,23 @@ def core_candidates(args, work, funnel, held):
                 replays[record['key']] = record
     candidates, tasks = [], {}
     extracted = set()
+    admission_cache = {}
     for episode in all_episodes(work):
         extracted.add(episode['key'])
         source = episode['source']
         f = funnel[source]
         f['successes'] += 1
+        from teacher_admission import check_record, fixture_task
+        if fixture_task(episode['task']):
+            admission = episode.get('admission') or {}
+            path = admission.get('path')
+            if not path or sha256_file(path) != admission.get('sha256'):
+                raise ValueError('fixture source admission missing or changed after extraction')
+            cache_key = path, admission['sha256']
+            if cache_key not in admission_cache:
+                admission_cache[cache_key] = check_record(admission['manifest_record'], admission['pool'])
+            if (episode['task_id'], episode['sample']) not in admission_cache[cache_key]:
+                raise ValueError('fixture source is no longer admitted')
         record = replays.get(episode['key'])
         if record is None:
             f['not_replayed'] += 1
@@ -902,6 +942,17 @@ def wrapper_capped(selected, rng, funnel, is_wrapper, share):
     return rest + wrappers[:limit]
 
 
+def target_mass_report(mass):
+    """Actual rendered target mass, without introducing another weighting policy."""
+    roles = {role: collections.Counter(calls=0, target_tokens=0, weighted_target_tokens=0)
+             for role in ('root', 'child', 'unknown')}
+    entries = []
+    for (suite, function, role), counts in sorted(mass.items()):
+        entries.append({'suite': suite, 'function': function, 'role': role, **dict(counts)})
+        roles[role].update(counts)
+    return {'by_suite_function': entries, 'by_role': {role: dict(counts) for role, counts in roles.items()}}
+
+
 def build(args):
     import random
     import numpy as np
@@ -914,9 +965,12 @@ def build(args):
     funnel = collections.defaultdict(collections.Counter)
     held = held_closure(args.held_manifest)
     # base pass rates: the exp1 measurement of the start policy, else the run groups' own (near-start) outcomes
-    rates = {k: (v['successes'], v['scored']) for k, v in json.loads(Path(args.base_rates).read_text()).items()
+    rate_data = json.loads(Path(args.base_rates).read_text()) if args.base_rates else {}
+    rates = {k: (v['successes'], v['scored']) for k, v in rate_data.items()
              if v.get('scored')}
-    rates.update({k: (v['successes'], v['scored']) for k, v in json.loads((work / 'rl-group-rates.json').read_text()).items()
+    group_rates = work / 'rl-group-rates.json'
+    own_rates = json.loads(group_rates.read_text()) if group_rates.exists() else {}
+    rates.update({k: (v['successes'], v['scored']) for k, v in own_rates.items()
                   if k not in rates and v['scored']})
 
     def base_rate(task_id):
@@ -950,6 +1004,7 @@ def build(args):
     stats = collections.defaultdict(collections.Counter)
     families, domains = collections.defaultdict(collections.Counter), collections.defaultdict(collections.Counter)
     producers = collections.defaultdict(collections.Counter)
+    target_mass = collections.defaultdict(collections.Counter)
 
     def admit(c, turns):
         """Render one trajectory's calls; write its rows; keep its token rows for the chains."""
@@ -975,6 +1030,9 @@ def build(args):
                             'task_id': c['task_id'], 'family': c['family'], 'domain': c['domain'],
                             'teacher': c['teacher'], 'policy': c['policy'], 'call': index,
                             'invocation': turn.get('invocation_id'), 'messages': turn['messages'],
+                            'function': turn.get('function') or 'unknown', 'definition_id': turn.get('definition_id'),
+                            'parent_invocation': turn.get('parent_invocation'),
+                            'invocation_role': turn.get('invocation_role') or 'unknown',
                             'tools': turn['tools'], 'target': turn['target'], 'prompt_tokens': len(prompt),
                             'target_tokens': len(target), 'loss_from': context,
                             'too_long': len(prompt) + len(target) > MAX_LEN})
@@ -982,6 +1040,8 @@ def build(args):
             return False
         for row in written:
             rows_out.write(row)
+            target_mass[(c['family'], row['function'], row['invocation_role'])].update(
+                calls=1, target_tokens=row['target_tokens'], weighted_target_tokens=row['target_tokens'] - row['loss_from'])
         funnel[source]['admitted'] += 1
         s = stats[source]
         s['calls'] += len(rows)
@@ -1007,7 +1067,7 @@ def build(args):
 
     for c in core:
         replayed = [json.loads(l) for l in (work / 'replay' / c['name'] / 'rollouts.jsonl').open() if l.strip()][0]
-        if not admit(c, [{k: t.get(k) for k in ('messages', 'tools', 'target', 'invocation_id')} for t in replayed['turns']]):
+        if not admit(c, [semantic_turn(t, False) for t in replayed['turns']]):
             funnel[c['source']]['render_error'] += 1
     core_forward = sum(stats[s]['forward_tokens'] for s in ('rl-own', 'teacher'))
 
@@ -1120,6 +1180,7 @@ def build(args):
         'episodes': len(sft_episodes), 'tasks': len({e['task_id'] for e in sft_episodes}),
         'chains': len(chains), 'forward_tokens': forward,
         'target_tokens': int(sum(len(r['sample']) for e in sft_episodes for r in e['rows'])),
+        'target_mass': target_mass_report(target_mass),
         'epoch_hours_at_5500_tokens_per_second': round(forward / 5500 / 3600, 2),
         'producers': {k: {**dict(v), 'weighted_target_token_share': round(v['weighted_target_tokens'] / max(1, sum(
             p['weighted_target_tokens'] for p in producers.values())), 4)} for k, v in sorted(producers.items())},

@@ -242,7 +242,7 @@ class Generator:
         task_rollouts.prepare(SimpleNamespace(
             cases=directory / 'cases.jsonl', out=directory, rows=1, offset=0, group=max(2, a.samples), temperature=a.temperature,
             case_seconds=a.case_seconds, max_model_requests=a.max_model_requests, max_turns=a.max_turns,
-            seed_base=a.seed_base + 100 * index, root_mode='student', match_seeds_from=None,
+            seed_base=a.seed_base + 100 * index, root_mode=a.root_mode, match_seeds_from=None,
             policy_checkpoint_sha256=None))
         # prepare builds GRPO groups (>= 2 samples); a teacher may want one: the queue keeps the first `samples`
         entries = list(read_jsonl(directory / 'queue.jsonl'))[:a.samples]
@@ -271,6 +271,7 @@ class Generator:
         report = task_rollouts.score(directory, directory / 'rollouts.jsonl', neuralese_bonus=0., efficiency_weight=0.)
         rollouts = list(read_jsonl(directory / 'rollouts.jsonl'))
         record = {'index': index, 'task_id': row['id'], 'family': row.get('family'), 'base_rank': task['base_rank'],
+                  'root_mode': a.root_mode,
                   'teacher': teacher_identity(teacher),
                   'seconds': round(time.time() - started, 1),
                   'episodes': [{'sample': r['sample'], 'outcome': r['outcome'],
@@ -320,9 +321,42 @@ class Generator:
                 print(json.dumps({'event': 'task failed', 'index': index, 'error': repr(error)[:400]}), flush=True)
 
 
+def validate_pool_resume(work, args):
+    """An explicit source selection cannot silently reuse another campaign's task queue."""
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    receipt_path = Path(work) / 'inputs.json'
+    if not receipt_path.exists():
+        # Historical default-pool runs already in flight predate this receipt.
+        # Preserve that student route; new explicit source/root requests need
+        # their own authenticated queue, rather than a hand-written tasks.jsonl.
+        if args.pool or args.held_manifest or args.root_mode != 'student':
+            raise ValueError('existing teacher queue has no source receipt; use a fresh --work for explicit pools/root mode')
+        return
+    receipt = json.loads(receipt_path.read_text())
+    if receipt.get('schema') != 'natlang.teacher-pool-inputs/1' or receipt.get('root_mode') != args.root_mode:
+        raise ValueError('teacher pool root mode changed; use a new --work')
+    for name, field in (('tasks.jsonl', 'tasks_sha256'), ('pool.json', 'pool_sha256')):
+        if receipt.get(field) != sha256_file_hex(Path(work) / name):
+            raise ValueError(f'teacher pool input changed: {name}')
+    pool = json.loads((Path(work) / 'pool.json').read_text())
+    if args.pool:
+        requested = [(str(Path(p).resolve()), sha256_file_hex(Path(p))) for p in args.pool]
+        recorded = [(str(Path(p['path']).resolve()), p['sha256']) for p in pool['pools']]
+        if requested != recorded:
+            raise ValueError('requested source pools differ from this campaign; use a new --work')
+    if args.held_manifest and (Path(args.held_manifest).resolve() != Path(pool['held_manifest']).resolve() or
+                              sha256_file_hex(Path(args.held_manifest)) != pool['held_manifest_sha256']):
+        raise ValueError('requested held exclusion manifest differs from this campaign; use a new --work')
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('--work', required=True)
+    p.add_argument('--pool', action='append', default=[],
+                   help='explicit canonical ProgramRecord JSONL pool; repeatable, replaces the default GRPO pools')
+    p.add_argument('--held-manifest', help='held exclusion manifest (default grpo.HELD, including predecessor closure)')
+    p.add_argument('--root-mode', choices=('student', 'authored'), default='student',
+                   help='student executes the real program entry; authored requires its actual reference root eval')
     p.add_argument('--teacher', action='append', default=[], type=json.loads, metavar='JSON',
                    help='one teacher of several in this process (the task list is loaded once): {"model_id", "endpoint", '
                         '"chat_completions_url", "api_key_env", "slots", "chat_config"} or {"model_id", "provider", '
@@ -362,7 +396,8 @@ def main():
     from natlang_neuralese.common.code_provenance import code_provenance
     if not (work / 'tasks.jsonl').exists():
         import grpo
-        pool_args = SimpleNamespace(pool=grpo.POOLS, held_manifest=grpo.HELD, exclude_manifest=[], task_ids=None,
+        pool_args = SimpleNamespace(pool=args.pool or grpo.POOLS, held_manifest=args.held_manifest or grpo.HELD,
+                                    exclude_manifest=[], task_ids=None,
                                     exclude_family_regex=r'^ext_codebase-(py|natlang)_codebase_', exclude_ids=[],
                                     no_default_errata=False, seed=args.seed, pass_rates=args.base_rates,
                                     pass_band=args.pass_band, pass_min_scored=1, explore=None,
@@ -374,6 +409,11 @@ def main():
             for row in ordered:
                 handle.write(json.dumps({'row': row, 'base_rank': ['band', 'base_fails', 'unmeasured', 'base_solves'][rank(row)]}) + '\n')
         os.replace(work / 'tasks.jsonl.tmp', work / 'tasks.jsonl')
+        from natlang_neuralese.common.hashing import sha256_file_hex
+        (work / 'inputs.json').write_text(json.dumps({'schema': 'natlang.teacher-pool-inputs/1',
+            'root_mode': args.root_mode, 'tasks_sha256': sha256_file_hex(work / 'tasks.jsonl'),
+            'pool_sha256': sha256_file_hex(work / 'pool.json')}, indent=2) + '\n')
+    validate_pool_resume(work, args)
     specs = args.teacher or [{'model_id': args.model_id, 'endpoint': args.endpoint, 'api_key_env': args.api_key_env,
                               'chat_completions_url': args.chat_completions_url, 'slots': args.slots,
                               'chat_config': args.chat_config}]
@@ -389,6 +429,7 @@ def main():
     with (work / 'launches.jsonl').open('a') as handle:
         handle.write(json.dumps({'time': time.strftime('%Y-%m-%dT%H:%M:%S%z'), 'argv': sys.argv,
                                  'code': code_provenance(),
+                                 'root_mode': args.root_mode,
                                  'teachers': [{k: v for k, v in vars(t).items() if k not in ('cool_until', 'failures')} for t in teachers]}) + '\n')
     generator = Generator(args)
 

@@ -23,6 +23,19 @@ def authored_root_row(row: dict[str, Any]) -> dict[str, Any]:
     if row.get("split") != "train":
         raise ValueError(f"refusing non-train row for RL rollouts: {row.get('id')} (split={row.get('split')!r})")
     curriculum = dict(row.get("curriculum") or {})
+    if row.get('kind') == 'evaluation_fixture':
+        # The fixture already declares its real authored module/NL entry. A
+        # synthetic reference eval would fabricate another root and erase the
+        # distinction between an entrypoint and a semantic anchor.
+        spec = (row.get('semantics') or {}).get('evaluation_fixture') or {}
+        if spec.get('schema') != 'natlang.evaluation-fixture/1' or not spec.get('entry'):
+            raise ValueError('authored fixture mode requires its actual declared entry')
+        contract = dict(curriculum.get('trajectory_contract') or {})
+        contract.pop('authored_root_eval', None)
+        contract.pop('authored_root_sha256', None)
+        contract.update(version='natlang.trajectory_contract/1', authored_fixture_entry=True)
+        curriculum['trajectory_contract'] = contract
+        return {**row, 'curriculum': curriculum}
     root = next((args for kind, args in ((curriculum.get("reference") or {}).get("root") or []) if kind == "eval"), None)
     if not isinstance(root, dict) or not isinstance(root.get("code"), str) or not root["code"].strip():
         raise ValueError(f"row has no authored reference root eval: {row.get('id')}")

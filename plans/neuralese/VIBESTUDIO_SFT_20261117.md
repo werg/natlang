@@ -1,136 +1,126 @@
-# Vibestudio teacher collection to backbone SFT
+# Vibestudio fixtures through canonical program IR and backbone SFT
 
-The existing Vibestudio skill suites provide typed inputs, service fixtures and
-independent outcome scorers. The teacher executes the actual program through the
-natlang harness; the surrounding Vibestudio agent's answer is not a training target.
+Vibestudio suites are a frontend for `natlang.program/2`, not a separate training
+format. The full model source, real entrypoint, JSON inputs, host fixture source,
+selected case, expected requirements and source lineage remain durable in the IR.
+The standalone Vibestudio episode-to-chains implementation was removed; Git is its
+history. No measured corpus had used that path.
 
-## Mechanism inventory
+## Shared mechanism inventory
 
-| Component | Role in this path |
+| Component | Responsibility |
 | --- | --- |
-| Vibestudio `scripts/natlang-eval.mjs` and teacher collection command | Host-owned source projection, suite fixture creation, teacher execution and exact-request replay. Own the collection manifest and episode provenance. |
-| natlang `ts-host/src/evaluation/` | Isolated execution of each suite case, including inner executor requests/replies. Existing suite `score` remains the independent outcome oracle. |
-| natlang `ts-host/src/teacher/` and `scripts/neuralese_data/teacher_gen.py` | Existing program-IR teacher collection; the suite bridge preserves fixture/scorer semantics rather than replacing them with handwritten task answers. |
-| `scripts/neuralese_data/vibestudio_sft.py` | Verify collection bindings, split/source protection, exact replay evidence and full success; render admitted executor calls. |
-| `scripts/neuralese_data/sft_sources.py` | Shared `TemplateRenderer`, held-v3/v2 closure and reasoning-free teacher prefix masking. Reused directly. |
-| `scripts/neuralese_data/exp0_sft.py` | Shared `chains_of` prefix-sharing representation and the existing FP32-master/BF16 learner. No separate trainer. |
-| Held eval, probes and collectors | No sampling law, scoring contract or live experiment changes. The next experiment pin consumes the built chains and judges held success. |
-| Managed llama-server, wllama, Python native engine, SGLang actor | No serving field, scoring, sampling, cache or native-state change. `vibestudio_sft.py` calls the tokenizer-only `sft_sources.TemplateRenderer` (`render`, no model) and emits local learner data; the engines do not implement or consume the new collection-file schema. See `docs/ENGINE_PARITY.md` for the independent serving protocol. |
+| Vibestudio `scripts/natlang-teacher.mjs` | Export original source and complete split inventory to ProgramRecords, launch the ordinary collector, perform isolated semantic review and bind its evidence. |
+| `ts-host/src/teacher/program.ts`, `evaluation-fixture.ts` | Neutral canonical fixture descriptor and execution frontend; real NL entry or authored TS entry with explicitly identified NL semantic anchor. Host fixtures/scorers stay outside model-owned files. |
+| `scripts/neuralese_data/teacher_gen.py` | Explicit repeatable source pools, held exclusion via `grpo.load_tasks`, root mode, resumable teacher collection. |
+| `ts-host/src/teacher/collector.ts` | Ordinary hosted/native provider execution, request/reply journals, `programRow` and `natlang.teacher_trajectory.native/1` containing `task.program_ir`. Hosted teachers need no native sampling probabilities. |
+| `rl/task_rollouts.py` | Ordinary collector scoring, source-custody binding and `natlang.rollout/1`; real invocation metadata follows the canonical turns. |
+| `scripts/neuralese_data/teacher_admission.py` | Validate supplemental source/review evidence and invoke the existing collector replay. It does not render tokens or produce a second trajectory protocol. |
+| `scripts/neuralese_data/sft_sources.py` | Shared extraction, exact collector replay, held/protected exclusions, rendering, loss masking, selection and function target-mass census. |
+| `scripts/neuralese_data/exp0_sft.py` | Existing FP32-master/BF16 learner consuming the shared builder's `chains.pkl`. |
+| `register_corpora.py`, `sync_training_corpora.py` | Existing immutable registry/manifests and data transport. Collection, admission, staging and learner exposure remain separate. |
 
-## Collection contract
+No engine protocol, scoring, sampling, native-state or cache change is introduced.
+The source adapter emits ordinary canonical teacher/rollout records. Tokenization
+uses `sft_sources.TemplateRenderer` (tokenizer-only, no model); training uses the
+existing `exp0_sft.chains_of` representation. Managed llama-server, wllama, Python
+native serving and SGLang continue to consume their existing serving protocols
+(`docs/ENGINE_PARITY.md`).
 
-The full schema is validated by `vibestudio_sft.inventory` and
-`vibestudio_sft.episode_reason`. A `vibestudio.teacher-collection/1` manifest binds
-the exact episode file (`episodes.path`, relative to the manifest, and
-`episodes.sha256`) and lists **all** suite cases, including validation and test.
-Each case carries `id`, `group`, `split`, `input_sha256`, `suite: {id, hash}` and
-the three source-lineage arrays.
-The manifest's top-level `suite`, `source` and `teacher` identities bind every
-episode, including its program hash and model identity; a rehashed episode file
-cannot silently mix another program revision or teacher into the collection.
+## Canonical collection
 
-A `vibestudio.teacher-episode/1` episode carries the matching case, suite and
-lineage, the pinned clean template/natlang/Vibestudio commits, program SHA256 and
-teacher identity. Each executor turn retains `messages`, `tools`, assistant
-`target` and `invocation_id`. The independent outcome must be returned, quality 1,
-all nonempty gates true and `tool_error_count: 0`. The initial admission is
-conservative: tool-error recovery episodes are retained in collection but not
-supervised until failed actions have explicit zero-weight attribution.
-The separate semantic verification must carry `verdict: "accepted"` and a
-nonempty evidence reason, and the episode must have no rejection.
+The host first exports the **full** source inventory (train, validation and test)
+and a selected training pool. Each ProgramRecord records explicit split, stable
+`source_namespace`, source ids/groups/revisions and the real fixture entry.
+Source inputs include the selected fixture case/world as well as function JSON
+arguments: service-only functions legitimately have empty argument records.
 
-Replay must execute the same fixture/program with recorded replies, independently
-check the outcome again, and attest `verified: true`. Its `request_hashes` are the
-ordered SHA256 digests of canonical compact JSON `{messages, tools}` for each
-recorded call (object keys sorted recursively, UTF-8 Unicode). A flag alone does
-not pass admission: hashes must equal the episode's actual requests.
-These are trusted collector-code attestations and file-integrity checks, not
-cryptographic signatures or a claim of proof against an adversarial producer.
-When `turn.request_canonical` is present its parsed content must match the exact
-messages/tools, and its UTF-8 bytes are hashed directly, preserving JS numeric
-spellings that Python's JSON serializer would otherwise change.
-
-Lineage is namespaced by template and suite:
+Run from the experiment pin through the memory ledger on the DGX:
 
 ```
-source_ids:       ["vibestudio:TEMPLATE:SUITE:CASE"]
-source_groups:    ["vibestudio:TEMPLATE:SUITE:GROUP"]
-source_revisions: ["<exact template commit>"]
+python scripts/neuralese_data/teacher_gen.py --work POOL_WORK \
+  --pool SOURCE_IR.jsonl --held-manifest HELD_V3/manifest.json --root-mode authored \
+  --teacher '{"provider":"openai-codex","model_id":"gpt-6-luna","reasoning_effort":"low","slots":2}'
 ```
 
-## Build and train
+`--pool` is repeatable and replaces the default GRPO pools. Default old campaigns
+retain `--root-mode student`. An evaluation fixture's authored mode preserves its
+real source entry and records `authored_fixture_entry`; it never fabricates a
+reference eval or an NL forwarding wrapper. Tasks and source-pool receipts bind
+resumes; changing explicit pool content, held selection or root mode needs a new
+work directory. Existing default student campaigns predate this receipt and can
+still resume.
 
-Run through the memory ledger on the DGX, with `NATLANG_REPO`/`PYTHONPATH` bound to
-the next experiment's pin:
+Ordinary durable output is `manifest.jsonl`, per-task `cases.jsonl` and queues,
+canonical native teacher results/journals, and scored `rollouts.jsonl`. The native
+teacher result contains the original ProgramRecord, actual requests/replies,
+traces, execution graph and fixture outcome evidence.
 
-```
-python scripts/neuralese_data/vibestudio_sft.py \
-  --manifest COLLECTION/collection.json --episodes COLLECTION/episodes.jsonl \
-  --tokenizer TOKENIZER --held-manifest HELD_V3/manifest.json --out BUILD
-```
+## Supplemental admission
 
-Use repeatable `--collection DIRECTORY` for collection directories containing
-`manifest.json` to build all suites into one `chains.pkl`. Their inventories are
-combined before admission, so protected source-group siblings in another
-collection stay protected. `--manifest FILE` also derives its bound episode path
-when `--episodes` is omitted. Mixing with another existing corpus is a next-pin
-recipe decision, not a change to an in-flight learner.
-
-Admission excludes every nontraining split, training groups shared with protected
-splits, identical inputs crossing splits and held-v3/v2 ids/source groups/source
-ids. Exact duplicate demonstrations and excessive attempts per case are removed.
-Identical-input protection uses the stable template/suite source namespace across
-suite build hashes, so a rebuild and renamed group cannot move a protected input
-into training.
-Malformed provenance, mutated inputs, missing split inventory or changed episode
-files fail the build. Calls are admitted whole: an oversized call fails explicitly
-instead of being truncated or silently dropping part of a successful trajectory.
-
-`BUILD/chains.pkl` is directly consumable by `exp0_sft.py train --chains`.
-`rows.jsonl.zst` retains semantic requests/replies, lineage and provenance for later
-rerendering. `build.json` is the completion receipt, input hashes, tokenizer
-identity, admission funnel and output hashes. The output directory is immutable:
-choose a new path for a new build. Publish the actual collected data addition in
-`training/neuralese_corpora.json` and through `sync_training_corpora.py publish`
-before training; synthetic test fixtures are not a corpus addition. The build
-retains exact collection manifests and episode bytes in `collections/` and checks
-the source again after copying, so the published artifact contains its acquisition
-evidence as well as admitted training rows.
-
-Registration uses the existing shared publisher (including its check-main gate,
-immutable manifests and preservation of unrelated staged work):
+For a fixture task the teacher-pool manifest entry declares
+`admission: {path, sha256}` for a `natlang.teacher-admission/1` sidecar. The generic
+checker is shared by host diagnostics and SFT extraction:
 
 ```
-python scripts/neuralese_data/vibestudio_sft.py register --out BUILD \
-  --register-id vibestudio-teacher-YYYYMMDD-v1 --register-owner dgx
+python scripts/neuralese_data/teacher_admission.py --pool POOL_WORK
 ```
 
-The owner is explicit and must be the machine actually holding the data. A build
-on a different host must be transferred to its owner before this command claims
-DGX/Pop ownership. `--register-id ID --register-owner dgx` can also be appended to
-the build command when building on the owner itself. External data gets a
-gitignored `runs/ID` link through `register_corpora.register`, not a source-tree
-copy. Registration verifies output and raw-input hashes again. Its registry entry
-records collection, admission and rendering counts separately and explicitly says
-that no learner exposure is performed by registration. No test fixture is ever
-automatically published.
+The sidecar binds canonical cases, rollouts, full original ProgramRecord split
+inventory, exact teacher identity, and per-sample native result file hashes and
+collector program-IR digests. Each sample retains the actual suite score/gates,
+full fixture outcome evidence, collector code provenance, exact replay verdict
+and an isolated semantic review with its full request/reply and reviewer identity.
+Semantic review is fallible admission evidence, never labelled exact gold and
+never supervised as an executor target. It may use the same model in an isolated
+conversation; this does not alter the stock collector's distinct-model judge
+policy.
 
-The assistant's own output carries loss. Every prompt, earlier history, service
-observation and harness message is zero-weight context. An empty think block
-inserted by the LFM3 template for a teacher with no visible reasoning is also
-zero-weight, using the existing `sft_sources.reasoning_free_context` mechanism.
-Teacher probabilities are neither required nor fabricated for SFT.
+The generic replay helper uses `sft_sources.ReplayServer/replay_episode` and emits
+receipt drafts, not a new trajectory representation:
 
-`build.json.target_mass` reports calls, target tokens and weighted target tokens
-by suite/function/root-or-child and totals for root, child and unknown calls.
-Function names, definition ids and parent invocation ids come from the actual
-evaluation traces, and are retained in semantic rows. Missing traces are labelled
-unknown; the report never guesses that a call is a root. This census measures the
-actual trained mass of forwarding wrappers versus semantic child calls without
-introducing any new weighting.
+```
+python scripts/neuralese_data/teacher_admission.py replay --pool POOL_WORK \
+  --runtime-repo PIN --work FRESH_REPLAY_WORK --out admission-drafts.json
+```
 
-Targeted verification: `tests/neuralese/test_vibestudio_sft.py` checks outcome and
-replay admission, source-group and identical-input split closure, held lineage,
-provenance, deduplication, file immutability and the actual `exp0_sft` chain format
-with zero-weight prompt and empty-think context. It does not establish learned
-quality; that is the paired next-pin held eval and untouched Vibestudio scenarios.
+The host adds full-inventory bindings and retained semantic reviews to these
+drafts, records rejected samples separately and attaches the sidecar hash to the
+ordinary teacher-pool manifest. Replay resume identity excludes these admission
+links and uses git provenance rather than ephemeral checkout paths.
+
+Admission excludes nontraining splits, protected source-group siblings and
+identical input/world scenarios crossing splits, including renamed groups and
+new program revisions. It requires full fixture success, all gates, no failed
+tool actions, a bound exact replay and accepted semantic review. Review failures
+remain collected evidence, not training targets. File hashes and replay receipts
+are trusted collector-code attestations, not signatures or adversarial proof.
+
+## Shared SFT and the next experiment
+
+```
+python scripts/neuralese_data/sft_sources.py extract --work SFT_WORK --teacher POOL_WORK
+python scripts/neuralese_data/sft_sources.py replay --work SFT_WORK --runtime-repo PIN
+python scripts/neuralese_data/sft_sources.py build --work SFT_WORK --out BUILD \
+  --tokenizer TOKENIZER --held-manifest HELD_V3/manifest.json
+```
+
+Use the normal builder's source-mix, base-rate and budget flags for the experiment
+recipe; there is one renderer, loss objective and trainer. Fixture sources without
+validated sidecars remain unadmitted. Admission evidence is checked again before
+build, and current-runtime exact replay must pass. Held-v3/v2 exclusions apply via
+the existing shared builder. The teacher's own actions and answers carry loss;
+prompts, earlier history, tool observations and an inserted empty think prefix
+carry zero weight under the existing masking mechanism.
+
+`build.json.target_mass` reports actual target and weighted target tokens by
+suite/function/root-or-child and totals for root, child and unknown. Names,
+definition ids and parentage come from actual invocation ledgers. Missing identity
+is explicit unknown; forwarding-wrapper mass is measured, not silently reweighted.
+
+Register the actual source collection and built data through the existing corpus
+registry and immutable manifests, record project-generated/provider/template
+license provenance, then transfer to the actual DGX/Pop owner. Registration is not
+learner exposure. Adopt the corpus at the next experiment pin; never change data
+inside a measured live run. Judge task success on paired held-v3 evaluation and
+separate unseen Vibestudio scenarios, not training loss or fixture case counts.
