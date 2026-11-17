@@ -290,6 +290,11 @@ reference server applies the stack through its exact native adapter path.
 | llama.cpp fork (`--lora-per-sequence`, `--native-state`) | Same | Yes with `tune.softStates: true` (LFM2): exact native state spans | Yes, per-sequence scales, verified bitwise isolation |
 | Native reference server (`neuraleseServer: true` profile) | Exact native coefficient artifacts | Yes | Per request |
 | wllama in the page (vendored build of the fork, `loadBrowserRelease`) | Per-node GGUF LoRA, per-request scales | Yes: the fork's native state spans (`nativeStates`) | No (serialized per stack) |
+| SGLang actor (`serve_native_checkpoint.py --engine sglang`; training and held evals) | A request's native stack summed into resident adapter slots (`--sglang-adapter-slots`, `--sglang-adapter-rank`); `--adapter-release DIR` serves a fit by default | Through the native engine | Yes |
+
+LFM3-1.7B: the tuner's target table, fits (`tune.build`) and native/SGLang adapter serving run on LFM3; the parity
+evidence below is LFM2.5-350M unless stated. Training-side program fits, the bank and their task-outcome measurement
+are `scripts/neuralese_data/program_tune.py` (plans/neuralese/TUNING_RESTORE_20261117.md).
 
 **Soft states on the managed llama.cpp fork.** A soft state is native KV/hybrid state, not text: per position, the
 attention keys (after the key norm, before RoPE) and values, and LFM2's short-convolution gated inputs. With

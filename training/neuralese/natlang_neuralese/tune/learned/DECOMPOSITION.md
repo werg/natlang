@@ -3,20 +3,20 @@
 Implements [plans/neuralese/JOINT_LEARNED_OPTIMIZER.md](../../../../../plans/neuralese/JOINT_LEARNED_OPTIMIZER.md).
 Each responsibility of the plan is listed with its form (Natlang function, one instruction, implicit, or crisp
 helper) and the reason. Natural-language policy lives in the Natlang program
-[`ts-host/src/tune/optimizer/`](../../../../../ts-host/src/tune/optimizer/); this package holds the crisp mechanism
+[`applications/learned-optimizer/`](../../../../../applications/learned-optimizer/); this package holds the crisp mechanism
 it calls through services: exact tensor math, data custody, execution, storage and verification.
 
 | Part | Form | Where | Why |
 | --- | --- | --- | --- |
-| Interpret evidence: focus, key evidence, digests | NL function `interpretEvidence` (350M) | `optimizer/interpretEvidence.nl` | Semantic judgement over failures; trained with hindsight labels and whole-graph gradients |
+| Interpret evidence: focus, key evidence, digests | NL function `interpretEvidence` (350M) | `adapt/interpretEvidence.nl` | Semantic judgement over failures; trained with hindsight labels and whole-graph gradients |
 | Exact evidence facts (pass/fail, first failing binding, error kind, verified vs attempted action, counts) | crisp helper | `evidence.py` | The runtime knows these exactly; no model guesses them |
 | Compact evidence view, permitted-visibility filter | crisp helper | `evidence.py` | Causal visibility is an exact data rule |
 | `keyEvidence` default rule | crisp baseline behind pluggable | `evidence.py` `key_evidence_rule` | Failed items of focused bindings, then their demonstrations; NL variant learns |
-| Choose revision operations per focused binding | NL function `chooseRevision` | `optimizer/chooseRevision.nl` | Policy over contracts and dependency structure |
+| Choose revision operations per focused binding | NL function `chooseRevision` | `adapt/chooseRevision.nl` | Policy over contracts and dependency structure |
 | Write instruction/skill states | native writer (contextual re-encoding) | `writer.py` | Differentiable capture through `native_step` at the target's slots |
 | LoRA mixtures | NL computation: component-token distribution + group gains | `writer.py`, `mixture.py` | One learned untied row per bank component plus a null token, read at the scope's decision position after the available components' keys; masked softmax, top-p truncation, bounded per-group gains (owner decision 2026-10-28: the one parametrization) |
-| Choose operator (learned proposal, retrieval, refinement, stop) | NL policy behind pluggable | `optimizer/chooseOperator.nl`, `policies.py` | Memetic strategy learns; crisp baseline uses the same interface |
-| Stop | NL predicate with structural termination | `optimizer/adapt.nl` (`iterateOn` measure) | Benefit/cost decision; host measures cost exactly |
+| Choose operator (learned proposal, retrieval, refinement, stop) | NL policy behind pluggable | `adapt/chooseOperator.nl`; crisp baseline: `apply.py` (`policy: "crisp-baseline"`) | Memetic strategy learns; crisp baseline uses the same interface |
+| Stop | NL predicate with structural termination | `adapt.nl`, `adapt/shouldStop.nl` (`iterateOn` measure) | Benefit/cost decision; host measures cost exactly |
 | Shared basis, component bank, keys, snapshot IDs | crisp | `bank.py` | Exact math and immutable identity |
 | Gradient subspaces and probes | crisp | `subspace.py` | `U^T G V` from streamed activations and output gradients |
 | Bank views and dropout masks | crisp mechanism, pluggable selection | `views.py` | Exact positional mapping; selection policy pluggable |
@@ -32,7 +32,7 @@ it calls through services: exact tensor math, data custody, execution, storage a
 | Meta-RL estimators (paired reward, shaping, filtered BC, exact expected score over the finite token set) | crisp | `meta_rl.py`, `mixture.py`, `trainer.policy_step` | Exact gradient of the expected score; no sampling estimator |
 | Ceiling ladder, evaluation power, planted controls | crisp | `ladder.py`, `controls.py` | Exact measurements |
 | Outer training step and resumable state | crisp | `trainer.py` | One snapshot, cotangent replay, BF16 rows with stochastic rounding (AdamWSR), exposure |
-| Select training work, adapt loss mixture | NL policy with crisp baseline | `optimizer/scheduleTraining.nl`, `policies.py` | Operations decision; quotas and receipts stay crisp |
+| Select training work, adapt loss mixture | NL policy with crisp baseline | `train/scheduleTraining.nl`; crisp baseline: `apply.py` | Operations decision; quotas and receipts stay crisp |
 | Entrypoint | crisp CLI | `__main__.py`, `natlang tune --learned` | Resume the whole operation from a declared recipe |
 
 ## Gradient path

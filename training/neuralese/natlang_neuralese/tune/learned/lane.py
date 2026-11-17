@@ -1,5 +1,6 @@
 """`python -m natlang_neuralese.tune.learned.lane`: the
-glue of the program-adaptation and learned-optimizer recipe stages (`tune.stage`, `tune.learned.stage`).
+manual steps of a learned-optimizer operation over tuned programs (the recipe stages that chained them, `tune.stage`
+and `tune.learned.stage`, were removed 2026-11-12; plans/neuralese/TUNING_RESTORE_20261117.md).
 
 - ``tune-result --program DIR --out FILE``: one program's tune outcome after ``natlang tune DIR --rounds`` and
   ``natlang tune DIR --evaluate development``: the selected round, its development success, the measured untuned and
@@ -12,7 +13,7 @@ glue of the program-adaptation and learned-optimizer recipe stages (`tune.stage`
   train the optimizer.
 
 - ``outer-next --op DIR``: the next outer-training action (train to the next bank publication, adopt a publication
-  and refit labels against it, or done) with its spec; the lane runs each as its own ledger unit (``outer_next``).
+  and refit labels against it, or done) with its spec; run each as its own ledger unit (``outer_next``).
 
 Nothing here trains or evaluates; every number it records was measured by the tuner.
 """
@@ -201,35 +202,6 @@ def outer_next(op):
     return action
 
 
-def summary(op):
-    """What the operation actually produced: stage statuses, tune results, the optimizer split, outer training
-    (steps, publications, adoptions), the meta-RL round and meta-example counts. No capability claim is derived."""
-    op = Path(op).resolve()
-    status = {path.name[:-len('.status')]: int(path.read_text().strip() or -1) for path in sorted(op.glob('*.status'))}
-    tunes = {}
-    for path in sorted((op / 'tunes').glob('*.json')):
-        item = json.loads(path.read_text())
-        tunes[item['program']] = {'sft_rows': item['sft_rows'], 'best': item['best'], 'development_arms': item['development_arms'],
-                                  'rounds': [(r['kind'], r['status'], r.get('development')) for r in item['rounds']]}
-    failed = [line for line in (op / 'tunes' / 'failed.txt').read_text().splitlines() if line] if (op / 'tunes' / 'failed.txt').exists() else []
-    template = json.loads((op / 'train-template.json').read_text()) if (op / 'train-template.json').exists() else {}
-    state_path = Path(template.get('state', op / 'optimizer' / 'state.json'))
-    state = json.loads(state_path.read_text()) if state_path.exists() else {}
-    records = op / 'outer-rl' / 'records.jsonl'
-    meta = op / 'meta' / 'examples.json'
-    count = lambda path: sum(1 for line in path.read_text().splitlines() if line.strip()) if path.exists() else 0
-    out = {'schema': 'natlang.lopt.lane-summary/1', 'operation': json.loads((op / 'operation.json').read_text()),
-           'stages': status, 'tunes': tunes, 'failed_tunes': failed,
-           'optimizer_split': json.loads((op / 'optimizer-split.json').read_text()) if (op / 'optimizer-split.json').exists() else None,
-           'outer': {'step': state.get('step'), 'bank': state.get('bank'), 'published': len(state.get('published', [])),
-                     'adoptions': [{key: item[key] for key in ('step', 'from', 'to', 'bank_optimizer')} for item in state.get('adoptions', [])],
-                     'labels_stale': state.get('labels_stale'), 'targets_seen': sum(state.get('exposure', {}).values())},
-           'outer_rl_records': count(records), 'meta_examples': len(json.loads(meta.read_text())) if meta.exists() else 0,
-           'note': 'saved artifacts and passing stages are not capability; lift needs development and confirmation outcomes'}
-    print(json.dumps(out, indent=1, sort_keys=True))
-    return out
-
-
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     commands = parser.add_subparsers(dest='command', required=True)
@@ -247,15 +219,11 @@ def main(argv=None):
     many.add_argument('--extra', help='JSON {"*"|spec name: settings merged into the specs} (dry runs)')
     step = commands.add_parser('outer-next')
     step.add_argument('--op', required=True)
-    report = commands.add_parser('summary')
-    report.add_argument('--op', required=True)
     args = parser.parse_args(argv)
     if args.command == 'tune-result':
         tune_result(args.program, args.out, args.family)
     elif args.command == 'outer-next':
         outer_next(args.op)
-    elif args.command == 'summary':
-        summary(args.op)
     else:
         specs(args.op, args.checkpoint, args.templates, base=args.base, held_fraction=args.held_fraction, min_programs=args.min_programs,
               extra=json.loads(args.extra) if args.extra else None)

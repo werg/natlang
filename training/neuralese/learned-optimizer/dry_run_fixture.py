@@ -1,5 +1,5 @@
-"""Tiny fixture for the dry runs of the program-adaptation and learned-optimizer stages (tune.stage, tune.learned.stage
---dry-run): the whole chain on a tiny native LFM checkpoint, CPU, minutes.
+"""Tiny fixture for dry runs of the learned-optimizer operation (README.md): a tiny native LFM checkpoint and supply
+programs, CPU, minutes.
 
     dry_run_fixture.py build --out DIR             tiny checkpoint, supply programs with persisted grouped splits
     dry_run_fixture.py tune --program P --checkpoint CK --out RESULT
