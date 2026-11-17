@@ -940,7 +940,7 @@ class Engine:
     def _native_operator_impl(self, name, *, instructions, value, messages, context, tools, note):
         if not getattr(self, "native_state_enabled", False):
             raise RequestError("neuralese-native-state-unavailable", "learned operators require shared-state serving")
-        from ..model.learned_operators import ResolvedSpan, operator, registry_sha256
+        from ..model.learned_operators import TEXT_PLACEMENTS, ResolvedSpan, operator, registry_sha256
         from ..model.shared_state import native_step
         try:
             spec = operator(name)
@@ -948,10 +948,11 @@ class Engine:
             raise RequestError("neuralese-operator-unknown", str(error)) from error
         if not isinstance(instructions, str) or not isinstance(note, str):
             raise RequestError("neuralese-operator-input", "operator instructions and note must be text")
-        source = value if spec.placement == 'system' else messages
-        if spec.placement == 'system' and not isinstance(value, str):
+        text_site = spec.placement in TEXT_PLACEMENTS
+        source = value if text_site else messages
+        if text_site and not isinstance(value, str):
             raise RequestError("neuralese-operator-input", f"operator {name} reads one text value")
-        if spec.placement != 'system' and not isinstance(messages, list):
+        if not text_site and not isinstance(messages, list):
             raise RequestError("neuralese-operator-input", f"operator {name} compacts a list of messages")
         renderer, rows, state = self._operator_site()
         try:

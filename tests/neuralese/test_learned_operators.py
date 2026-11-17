@@ -3,7 +3,7 @@
 import pytest
 import torch
 
-from natlang_neuralese.model.learned_operators import (OPERATORS, OperatorRows, bind_tokens, load_rows,
+from natlang_neuralese.model.learned_operators import (OPERATORS, OperatorRows, operator_site_messages, bind_tokens, load_rows,
                                                        operator_embeddings, registry_sha256, resolve_spans, save_rows)
 from natlang_neuralese.data.native_graph_schema import SCHEMA, parse_graph
 
@@ -74,7 +74,14 @@ def test_bind_tokens_round_trips_prompt_and_binds_the_span_cap():
 
 
 def test_every_operator_has_dedicated_data_target_distinct_prompt_and_span_cap():
-    assert len({spec.prompt for spec in OPERATORS.values()}) == len(OPERATORS)
+    # compact-value and compact-params are view at the runtime's sites (one summarizer family): view's body and site.
+    from natlang_neuralese.view import INSTRUCTIONS
+    views = [name for name, spec in OPERATORS.items() if spec.placement == 'view']
+    assert sorted(views) == ['compact-params', 'compact-value'] and all(OPERATORS[n].prompt == INSTRUCTIONS for n in views)
+    others = [spec.prompt for spec in OPERATORS.values() if spec.placement != 'view']
+    assert len(set(others)) == len(others) and INSTRUCTIONS not in others
+    site = operator_site_messages('compact-value', instructions='for: x', source='VALUE')
+    assert site[0] == {'role': 'system', 'content': INSTRUCTIONS} and site[1]['content'].endswith('value:\nVALUE')
     assert all(spec.data_target >= 20_000 and spec.seed_cap >= 128 for spec in OPERATORS.values())
     assert len(registry_sha256()) == 64
 

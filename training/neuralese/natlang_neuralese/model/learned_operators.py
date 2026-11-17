@@ -33,6 +33,8 @@ import torch
 from torch import nn
 
 SCHEMA = 'natlang.learned-operator/1'
+# Placements whose site reads one text value (the others read conversation messages).
+TEXT_PLACEMENTS = ('system', 'view')
 ROW_FIELD = 'operators'
 SPAN_KINDS = ('prompt', 'seed')
 
@@ -44,7 +46,8 @@ class Operator:
     # The natural-language prompt. Model-facing; changes require a version bump and a live measurement
     # (plans/MODEL_FACING_CHANGES.md).
     prompt: str
-    # 'system': the prompt is the site's system text; 'user-suffix': a final user message after the input
+    # 'view': the site of the builtin view (view.view_site: the prompt as system text, the instructions and
+    # ``value:`` in the user message); 'system': the prompt is the site's system text; 'user-suffix': a final user message after the input
     # conversation (history compaction keeps the conversation's own system/user messages in place); 'call': the site is
     # a recorded real call of a natlang function whose rendered instructions are the prompt text (the guidance writer).
     placement: str
@@ -69,14 +72,10 @@ class Operator:
     inline_below_chars: int = 0
 
 
-VALUE_PROMPT = (
-    "Write Neuralese that stands in for the value in the next message. A later call reads it in place of the value, "
-    "for the purpose the message states. Keep what that purpose needs: exact identifiers, paths, line numbers, "
-    "names, numbers and values, how the value is organised, and where in it the rest can be found.")
-PARAMS_PROMPT = (
-    "Write Neuralese that stands in for the argument in the next message. The call that receives the argument "
-    "shows it in its opening listing in place of the whole value, and reads the variable itself for exact details. "
-    "Keep what the value is, how it is organised, and what in it bears on that call's instructions.")
+# compact-value and compact-params are the builtin `view(value, instructions)` at the runtime's sites (DECISIONS.md
+# 2026-10-09 "one summarizer family"; OPERATORS_RESTORE_20261117.md): view's body is their prompt and view.view_site
+# their site, so the two operators and every other view share one write and one trained prompt.
+from ..view import INSTRUCTIONS as VIEW_PROMPT, view_site as _view_site  # noqa: E402
 HISTORY_PROMPT = (
     "Write Neuralese that stands in for the conversation above. Work continues from it, the task statement and the "
     "most recent steps only. Keep what has been done and found, the exact files, identifiers, commands and values "
@@ -103,11 +102,11 @@ GUIDANCE_PROMPT = (
 GUIDANCE_HEADER = 'Guidance for this call (training only):'
 
 OPERATORS = {operator.name: operator for operator in (
-    Operator('compact-value', 2, VALUE_PROMPT, 'system', 512,
+    Operator('compact-value', 3, VIEW_PROMPT, 'view', 512,
              ('tool_output', 'file', 'document', 'passage', 'record', 'schema', 'tool_doc'), 'one', 25_000,
              'Large tool/service outputs, documents and collections rendered into a call (renderValue).',
              'Compacted value: '),
-    Operator('compact-params', 2, PARAMS_PROMPT, 'system', 384,
+    Operator('compact-params', 3, VIEW_PROMPT, 'view', 384,
              ('document', 'passage', 'file', 'record', 'schema', 'tool_output'), 'per-source', 25_000,
              "A call's large arguments in its opening listing (inputsListing); one site per cut argument.",
              'Compacted argument: ', frame_each=True, inline_below_chars=4096),
@@ -146,6 +145,11 @@ def operator_site_messages(name: str, *, instructions: str, source=None, context
         return part if isinstance(part, str) else [part]
     if spec.placement == 'call':
         return call_site_messages(name, source, prompt_part)
+    if spec.placement == 'view':
+        if not isinstance(source, str):
+            raise ValueError(f'operator {name} reads one text value')
+        system, user = _view_site(content(prompt) if prompt_part is not None else prompt, source, instructions or None)
+        return [system, *[dict(message) for message in context], user]
     if spec.placement == 'system':
         if not isinstance(source, str):
             raise ValueError(f'operator {name} reads one text input')
