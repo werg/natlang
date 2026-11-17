@@ -218,3 +218,26 @@ serve-measure` with overlap on, c=32 and 64, then `rescore` with the learner ari
 instead of `natlang_conv_decode`, `--mamba-radix-cache-strategy no_buffer` (upstream refuses overlap there),
 flashinfer CUDA-core vs tensor-core decode, adapters/producer features absent. Overlap stays off until the cause is
 found and fixed.
+
+### Detection rerun at fork dbc51ddb72 (2026-11-17 14:10-14:45)
+
+`serve/sglang_bench.py all` (the 2026-11-03 harness, workload-2: 78 real pilot turns) with the fork clone at
+dbc51ddb72, base 5ff07638 (run1's export), the production engine settings (FP8 KV, `extra_buffer` mamba radix cache,
+hybrid SWA ratio 0.1, 64 running, CUDA graphs with padding, flashinfer, vendor projection), sampling c=32 (64
+requests) and c=64 (128 requests), rescored with the learner's arithmetic (native engine). Outputs:
+`ops/overlap-hunt/{on,off}/`.
+
+| arm | turns | tokens | mean abs dlogp | p99 | max | turns > 5 nats | mean turn k3 | out tok/s c32 / c64 |
+|---|---|---|---|---|---|---|---|---|
+| overlap on | 192 | 59,314 | 0.0285 | 0.261 | 1.76 | 0 | 0.0026 | 549 / 1,137 |
+| overlap off | 192 | 53,622 | 0.0306 | 0.257 | 2.97 | 0 | 0.0026 | 506 / 1,020 |
+
+The 2026-11-03 positive run (fork a06adeda40, BF16 KV, full KV for every layer, no extra_buffer, full67, 32 running)
+had 2 of 80 turns at ~16 nats; at that rate 0 of 192 has a probability of about 1%. So the defect does not reproduce
+in the production configuration at dbc51ddb72. Not yet established: whether it is fixed or only masked by the changed
+configuration (KV dtype and layout, mamba radix strategy) or by the base policy instead of full67. Overlap's measured
+gain here is +8-11% output tok/s on these short (prefill-heavy) turns, below the ~20-25% estimated from the scheduler's
+CPU share; long-reply RL collection should sit between the two.
+Next: an overlap-on arm in the 11-03 configuration at dbc51ddb72 (BF16 KV, `--disable-hybrid-swa-memory`, 32
+running); if clean, a ~500-turn overlap-on sample in the production configuration; then overlap on by default at the
+next pin with `--sglang-overlap-schedule` as the switch, with the learner's per-token rho statistics as the guard.
