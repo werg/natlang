@@ -36,8 +36,6 @@ export type ModelProfile = {
   native?: NativeModelSettings;
   /** Next explicitly configured profile for a live invocation handoff (`natlang run|call|ask`). */
   escalate?: string;
-  /** The endpoint is a vLLM server with LoRA enabled: each tuned call is routed to its whole-stack LoRA by name. */
-  vllm?: boolean;
   headers?: Record<string, string>; request?: Record<string, unknown>;
   piOptions?: Record<string, unknown>; piPayload?: Record<string, unknown>;
   piMode?: 'native' | 'simple'; modelOptions?: Record<string, unknown>;
@@ -67,7 +65,7 @@ export type ResolvedModelChoice =
     /** The stock model served (undefined for a configured local.modelPath). */
     release?: LocalModelRelease })
   | (Common & { kind: 'external'; endpoint: string; chatCompletionsUrl?: string; model: string; apiKeyEnv: string; request?: Record<string, unknown>;
-    neuraleseServer?: true; vllm?: true; managedNative?: NativeModelSettings })
+    neuraleseServer?: true; managedNative?: NativeModelSettings })
   | (Common & { kind: 'pi-provider'; provider: string; model: string; apiKeyEnv?: string;
     piOptions?: Record<string, unknown>; piPayload?: Record<string, unknown>;
     piMode: 'native' | 'simple'; modelOptions?: Record<string, unknown> });
@@ -98,8 +96,8 @@ export function resolveModelChoice(profile: ModelProfile): ResolvedModelChoice {
   if (profile.escalate !== undefined && (typeof profile.escalate !== 'string' || !profile.escalate))
     throw new Error('escalate must name another model profile');
   if (profile.native) {
-    if (profile.provider || profile.endpoint || profile.chatCompletionsUrl || profile.local || profile.vllm)
-      throw new Error('a native profile cannot also set provider, endpoint, chatCompletionsUrl, local or vllm');
+    if (profile.provider || profile.endpoint || profile.chatCompletionsUrl || profile.local)
+      throw new Error('a native profile cannot also set provider, endpoint, chatCompletionsUrl or local');
     validateNativeSettings(profile.native);
   }
   if (profile.chatCompletionsUrl !== undefined && !profile.endpoint)
@@ -173,8 +171,7 @@ export function resolveModelChoice(profile: ModelProfile): ResolvedModelChoice {
   if (profile.endpoint) return { ...common, kind: 'external', endpoint: profile.endpoint,
     ...(profile.chatCompletionsUrl ? { chatCompletionsUrl: profile.chatCompletionsUrl } : {}),
     model: profile.model ?? DEFAULT_LOCAL_MODEL.id, apiKeyEnv: profile.apiKeyEnv ?? 'NATLANG_API_KEY',
-    request: profile.request, ...(profile.neuraleseServer ? { neuraleseServer: true as const } : {}),
-    ...(profile.vllm ? { vllm: true as const } : {}) };
+    request: profile.request, ...(profile.neuraleseServer ? { neuraleseServer: true as const } : {}) };
   if (profile.model) throw new Error('a configured model ID needs an endpoint; omit both to use the managed local default');
   // A stock model's own serving settings (greedy decoding, template arguments) apply when the profile runs it; the
   // profile's request overrides them, field by field inside object fields such as chat_template_kwargs.

@@ -544,8 +544,6 @@ async function* serverSentChunks(body: ReadableStream<Uint8Array>): AsyncIterabl
   } finally { reader.releaseLock(); }
 }
 
-const withoutOverride = (body: Json): Json => { const { x_natlang_model_override: _override, ...rest } = body; return rest; };
-
 export type HttpChatOptions = { endpoint: string; model: string; apiKey?: string; headers?: Record<string, string>;
   /** Exact chat-completions URL for APIs whose route is not `{endpoint}/v1/chat/completions`. */
   chatCompletionsUrl?: string;
@@ -569,8 +567,7 @@ export function httpChatTransport(options: HttpChatOptions): ChatTransport {
     try {
       response = await fetchModel(url, { method: 'POST', signal, headers: { 'content-type': 'application/json',
         ...(options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {}), ...options.headers },
-        // A tuned call on a one-adapter-per-request backend names its whole-stack adapter (vLLM LoRA by model name).
-        body: JSON.stringify({ ...withoutOverride(body), model: typeof body.x_natlang_model_override === 'string' ? body.x_natlang_model_override : options.model,
+        body: JSON.stringify({ ...body, model: options.model,
           ...(stream ? { stream: true, stream_options: { include_usage: true } } : {}) }) });
     } catch (error) {
       const cause = error instanceof Error && error.cause instanceof Error ? error.cause : error;

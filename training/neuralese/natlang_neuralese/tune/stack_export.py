@@ -1,26 +1,15 @@
-"""Export each distinct effective stack of a release as one PEFT LoRA, from release files alone (plan §7).
-
-Backends that apply one adapter per request (vLLM) serve a call's whole stack as one exported LoRA, named by the
-runtime's canonical stack identity. The sum is exact: members slicing one canonical basis add in that basis (rank at
-most the largest member's), everything else concatenates (`stack.stack_factors`). No engine is loaded; coefficients
-and bases come from the release's `artifacts/*.nnt`.
-
-`python -m natlang_neuralese.tune.stack_export --release DIR --stacks stacks.json --module-map lfm2|lfm3
---hf-config DIR --out DIR` (the student's `targets.TABLES` family) where stacks.json is ``[{"identity", "entries": [{"id", "scale", "node"}]}]`` (the runtime's resolved
-effective stacks). Writes ``<out>/<identity>/`` PEFT directories and ``<out>/stack-exports.json``.
+"""Stack members from a release's files alone: each runtime stack entry (artifact ID, scale, node) as the trainer's
+`StackMember` with its canonical basis views, decoded from the release's `artifacts/*.nnt` (no engine is loaded).
+Family training reads member releases through these (`tune.families`).
 """
 from __future__ import annotations
 
-import argparse
-import json
 from pathlib import Path
 
 from . import TuneMathError
 from .bases import CanonicalBasis, tensor_digest
-from .export import export_peft
 from .parameterization import FreeLoRADelta, SubspaceDelta
-from .stack import StackMember, stack_factors
-from .targets import TABLES, module_map
+from .stack import StackMember
 
 
 def load_artifacts(directory):
@@ -63,40 +52,3 @@ def members_from_artifacts(artifacts, entries):
         level = entry['node'].split(':', 1)[0]  # family:, tree:, folder:, lambda: scope node IDs
         members.append(StackMember(entry['node'], level, float(entry['scale']), deltas))
     return members, bases, shapes
-
-
-def export_stacks(release, stacks, out, *, family, hf_config, base_identity):
-    artifacts = load_artifacts(Path(release) / 'artifacts')
-    out = Path(out)
-    exported = []
-    for stack in stacks:
-        identity = stack['identity']
-        if not stack['entries']:
-            continue  # the base needs no adapter
-        target = out / identity
-        members, bases, shapes = members_from_artifacts(artifacts, stack['entries'])
-        targets, _ = module_map(sorted(shapes), family=family, classes=None)
-        if not (target / 'natlang-export-receipt.json').exists():
-            export_peft(stack_factors(members, bases, shapes), targets, target, base_identity=base_identity,
-                        base_model_name_or_path=str(hf_config), stack_identity=identity)
-        receipt = json.loads((target / 'natlang-export-receipt.json').read_text())
-        exported.append({'identity': identity, 'directory': identity, 'receipt_sha256': receipt['receipt_sha256'],
-                         'ranks': receipt['ranks'], 'artifacts': [entry['id'] for entry in stack['entries']]})
-    (out / 'stack-exports.json').write_text(json.dumps(exported, indent=1, sort_keys=True))
-    return exported
-
-
-def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    for name in ('--release', '--stacks', '--hf-config', '--out'):
-        parser.add_argument(name, required=True)
-    parser.add_argument('--module-map', required=True, choices=sorted(TABLES))
-    args = parser.parse_args(argv)
-    manifest = json.loads((Path(args.release) / 'natlang.adapters.json').read_text())
-    export_stacks(args.release, json.loads(Path(args.stacks).read_text()), args.out, family=args.module_map,
-                  hf_config=args.hf_config, base_identity=manifest['base'])
-    return 0
-
-
-if __name__ == '__main__':
-    raise SystemExit(main())

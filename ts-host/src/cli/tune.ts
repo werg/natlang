@@ -37,7 +37,7 @@ import { activateRelease, currentManifest, currentRelease, readActive, readRelea
 import { softStateFile } from '../adaptation/weights/manifest.js';
 import { loadTuneSettings, prepareDerivedStudent } from '../tune/settings.js';
 import { ensureNativeServer } from '../model/native-managed.js';
-import { loadVllmStacks, uploadRelease } from '../tuned-serving.js';
+import { uploadRelease } from '../tuned-serving.js';
 import { invalidation } from '../tune/keys.js';
 import { scaffoldManifest } from '../tune/collect.js';
 import { programSites } from '../tune/sites.js';
@@ -148,16 +148,6 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
               [...manifest.artifacts.map(item => item.artifact), ...manifest.families.map(item => item.artifact),
                 ...manifest.softStates.map(item => item.state)], manifest.receipts.inferenceStateMaterializations);
             return { driver: sessionDriver(session), loaded, nativeState: true, close: () => session.close() };
-          }
-          if (settings.backend === 'vllm') {
-            const serving = loadModelConfiguration(settings.servingProfile);
-            if (serving.choice.kind !== 'external' || !serving.choice.vllm)
-              throw new Error('natlang tune: the vllm backend needs a default profile with vllm: true');
-            const session = createResolvedModelSession(serving.choice, process.env, process.stderr);
-            await session.prepare();
-            const loaded = await loadVllmStacks(serving.choice.endpoint, directory, serving.choice.headers ?? {});
-            session.vllmStacks?.(loaded.names);
-            return { driver: sessionDriver(session), loaded: loaded.available, close: () => session.close() };
           }
           const adapters = [...manifest.artifacts, ...manifest.families].filter(item => item.exports?.gguf).map(item => ({ id: item.artifact, path: join(directory, item.exports!.gguf!.file) }));
           const serving = loadModelConfiguration(settings.servingProfile);

@@ -1,6 +1,5 @@
 import { activeNativeAdapters } from '../native/model-recording.js';
 import { perRequestLora } from './lora-scales.js';
-import { stackServingName } from '../adaptation/weights/binding.js';
 import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { DEFAULT_LOCAL_MODEL, type LocalModelRelease } from '../model-catalog.js';
@@ -155,21 +154,12 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
     headers: external!.headers, apiKey: storedApiKey(external!.apiKeyEnv, environment), owner: randomUUID(),
     request: runtimeOptions.rlCapture ? { ...external!.request, x_natlang_rl_capture: true,
       ...(runtimeOptions.rlTopK !== undefined ? { x_natlang_rl_top_k: runtimeOptions.rlTopK } : {}) } : external!.request });
-  // vLLM: a call's whole stack is one loaded LoRA, selected by name; the base model name serves untuned calls.
-  const vllmLoaded = new Set<string>();
-  const vllmTunedRequest = () => {
-    const active = activeNativeAdapters();
-    if (!active.length) return undefined;
-    const name = stackServingName(active);
-    if (!vllmLoaded.has(name)) throw new Error(`weights-unavailable: stack ${name} is not loaded by the vLLM server; rerun natlang tune or restart`);
-    return { x_natlang_model_override: name };
-  };
   // The managed llama.cpp fork scores decisions at /v1/natlang/score (single readouts and per-call LoRA scales too);
   // an upstream server answers 404 there and decisions fall back to prompt_logprobs, which it does not serve.
   const openai = (options: OpenAICompatibleOptions) => openAICompatibleModelTurn({ ...options, concurrency: scheduler,
     scoreEndpoint: choice.kind === 'pi-provider' ? undefined : choice.batching?.scoreEndpoint ?? (choice.kind === 'managed-local' || undefined),
     ...(choice.kind === 'managed-local' ? { scoreAll: true, continuesReplies: true } : {}),
-    ...(choice.kind === 'managed-local' ? { tunedRequest, nativeStates: () => llama!.nativeStatesLoaded } : external?.vllm ? { tunedRequest: vllmTunedRequest } : {}) });
+    ...(choice.kind === 'managed-local' ? { tunedRequest, nativeStates: () => llama!.nativeStatesLoaded } : {}) });
   // One driver per server: its scheduler, request limit and decision coalescer are what turns and readouts that
   // arrive together share, so they are not rebuilt per request.
   const drivers = new Map<string, ReturnType<typeof openai> | ReturnType<typeof nativeDriver>>();
@@ -249,8 +239,6 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
       if (!external?.neuraleseServer) return undefined;
       await start(); return nativeDriver().neuraleseRuntime();
     },
-    /** Record stacks the vLLM server has loaded (by serving name). */
-    vllmStacks(names: Iterable<string>) { for (const name of names) vllmLoaded.add(name); },
     slotPlan() { return llama?.plan() ?? null; },
     async close() {
       closed = true;

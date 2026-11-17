@@ -32,7 +32,7 @@ import { createNatlangRuntime } from '../runtime/node.js';
 import { loadNatlang } from '../runtime/node-files.js';
 import { tuneRuntime } from './execution.js';
 import { armSummary } from './evaluate.js';
-import { evaluateRelease, exportVllmStacks, prepareData, releaseFromBuild, trainRelease, type ReleaseSelector, type TuneOptions } from './pipeline.js';
+import { evaluateRelease, prepareData, releaseFromBuild, trainRelease, type ReleaseSelector, type TuneOptions } from './pipeline.js';
 
 export type LearnedSettings = {
   readonly bank: string; readonly state?: string; readonly store: string; readonly fit_steps?: number;
@@ -127,7 +127,6 @@ export async function scoreProposals(options: TuneOptions, requestPath: string, 
     if (!quality.has(key)) {
       const manifest = releaseFromBuild(options, data, { manifest: data.scaffold, label: 'learned-proposal',
         receipts: { build: 'learned-proposal', target } }, release, fileSha(resolve(release, 'result.json')).slice(0, 24), {});
-      if (options.settings.backend === 'vllm') await exportVllmStacks(options, manifest);
       const summary = armSummary(await evaluateRelease(options, data, manifest, examples, 'learned-proposal', partition, { save: false }));
       quality.set(key, { value: summary.meanScore ?? summary.success, roots: summary.roots });
     }

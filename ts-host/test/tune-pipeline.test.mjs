@@ -330,7 +330,6 @@ test('managed llama.cpp releases train soft states only when declared and carry 
   assert.equal(softStatesServed({ backend: 'managed-local' }), false, 'the upstream server has no native-state import');
   assert.equal(softStatesServed({ backend: 'managed-local', softStates: true }), true);
   assert.equal(softStatesServed({ backend: 'native' }), true);
-  assert.equal(softStatesServed({ backend: 'vllm', softStates: true }), false);
   const root = project();
   try {
     const { id: state, wire } = nativeTuneState(base);

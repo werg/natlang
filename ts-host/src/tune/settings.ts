@@ -60,9 +60,9 @@ export type TuneSettings = {
   /** Several authorized teacher profiles: `natlang tune --calibrate` measures them and `routeTeacher` picks one (§4.2). */
   readonly teachers?: readonly string[];
   readonly teacherRouting: TeacherRouting;
-  readonly backend: 'managed-local' | 'native' | 'vllm';
+  readonly backend: 'managed-local' | 'native';
   /** Train and serve soft instruction/skill states on the managed llama.cpp backend; its server must be the llama.cpp
-   * fork with `--native-state` (the native backend always serves them; vLLM cannot). */
+   * fork with `--native-state` (the native backend always serves them). */
   readonly softStates?: boolean;
   /** Invocation budgets shared by all tune execution arms; recorded in evaluation and RL receipts. */
   readonly execution?: TuneExecution;
@@ -197,6 +197,7 @@ export function loadTuneSettings(environment: NodeJS.ProcessEnv = process.env, o
   for (const profile of [teacher, ...(tune.teachers ?? [])].filter(profile => profile !== SELF_TEACHER))
     if (!config.profiles?.[profile]) throw new TuneSetupError(`teacher profile ${profile} does not exist`);
   const backend = tune.backend ?? 'managed-local';
+  if (backend !== 'managed-local' && backend !== 'native') throw new TuneSetupError(`tune.backend ${JSON.stringify(backend)} is not a backend: use managed-local or native`);
   if (backend === 'managed-local' && !student.baseGgufSha256) throw new TuneSetupError(`tune.students.${name}.baseGgufSha256 is required for the managed-local backend`);
   return { settings: { student: name, students: tune.students!, teacher, backend, ...(tune.teachers?.length ? { teachers: tune.teachers } : {}),
     ...(tune.execution ? { execution: tune.execution } : {}),

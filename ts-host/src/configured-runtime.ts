@@ -237,7 +237,6 @@ export async function natlangRuntime(configuration: NatlangRuntimeConfiguration 
   });
   const closers: (() => Promise<void>)[] = [() => session.close()];
   try {
-    if (tuned.vllmStacks) session.vllmStacks?.(tuned.vllmStacks);
     const driver = sessionDriver(session);
     const student = await runtimeModel(choice, driver);
     const escalateTo = configuration.escalate === false ? undefined : configuration.escalate ?? selection.profile.escalate;

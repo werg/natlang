@@ -12,7 +12,7 @@ import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSy
 import { basename, dirname, join, resolve } from 'node:path';
 import type { ProgramDescriptor } from '../adaptation/types.js';
 import { sealManifest, type WeightArtifact, type WeightManifest, type FamilyVersion, type FamilyMembership, type SoftState } from '../adaptation/weights/manifest.js';
-import { stackServingName, WeightBinding } from '../adaptation/weights/binding.js';
+import { WeightBinding } from '../adaptation/weights/binding.js';
 import { activateRelease, readActive, readRelease, releaseFile, storeRelease, tuneDirectory, tuneJobLock } from '../adaptation/weights/release.js';
 import type { ModelDriver, Services } from '../runtime/runtime.js';
 import { sharedSourceHash, rootDataValid, trainingScaffoldKey } from './keys.js';
@@ -301,7 +301,6 @@ export async function trainRelease(options: TuneOptions, data: TuneData, variant
     }
   }, reused);
   const manifest = await timed(timings, 'export', log, () => releaseFromBuild(options, data, variant, out, trainKey, recipe));
-  if (options.settings.backend === 'vllm') await timed(timings, 'export-stacks', log, () => exportVllmStacks(options, manifest));
   return { manifest, reused, build: out };
 }
 
@@ -362,25 +361,6 @@ export function releaseFromBuild(options: TuneOptions, data: Pick<TuneData, 'dat
   }
   storeRelease(root, sealed);
   return sealed;
-}
-
-/** One whole-stack PEFT LoRA per distinct effective stack (vLLM applies one adapter per request), named canonically. */
-export async function exportVllmStacks(options: TuneOptions, manifest: WeightManifest): Promise<void> {
-  const directory = dirname(releaseFile(options.root, manifest.digest)), out = join(directory, 'vllm');
-  if (existsSync(join(out, 'stack-exports.json'))) return;
-  const binding = new WeightBinding(manifest, {});
-  const stacks = new Map<string, { identity: string; entries: { id: string; scale: number; node: string }[] }>();
-  for (const entry of manifest.bindings) {
-    const effective = binding.resolve(entry.definitionId ?? '', entry.component, entry.contextId).effective;
-    if (effective.length) stacks.set(stackServingName(effective), { identity: stackServingName(effective), entries: effective.map(({ id, scale, node }) => ({ id, scale, node })) });
-  }
-  mkdirSync(out, { recursive: true });
-  const stacksPath = join(out, 'stacks.json');
-  writeFileSync(stacksPath, JSON.stringify([...stacks.values()], null, 1));
-  const { student } = options;
-  if (!student.hfConfigDir) throw new Error('vLLM stack export needs tune.students.<name>.hfConfigDir');
-  await runStudentModule(student, 'natlang_neuralese.tune.stack_export',
-    ['--release', directory, '--stacks', stacksPath, '--module-map', student.moduleMap, '--hf-config', student.hfConfigDir, '--out', out]);
 }
 
 /** GGUF LoRA exports (llama.cpp serving): always on the managed backend, and on the others whenever the student's

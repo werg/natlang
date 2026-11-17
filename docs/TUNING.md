@@ -289,7 +289,6 @@ reference server applies the stack through its exact native adapter path.
 | Managed llama.cpp (upstream runtime) | Per-node GGUF LoRA, per-request scales | No: soft-state bindings run degraded | No (serialized per stack) |
 | llama.cpp fork (`--lora-per-sequence`, `--native-state`) | Same | Yes with `tune.softStates: true` (LFM2): exact native state spans | Yes, per-sequence scales, verified bitwise isolation |
 | Native reference server (`neuraleseServer: true` profile) | Exact native coefficient artifacts | Yes | Per request |
-| vLLM (`vllm: true` profile) | One whole-stack PEFT LoRA per distinct effective stack, loaded at activation | No: soft-state bindings run degraded | Yes (multi-LoRA batching) |
 | wllama in the page (vendored build of the fork, `loadBrowserRelease`) | Per-node GGUF LoRA, per-request scales | Yes: the fork's native state spans (`nativeStates`) | No (serialized per stack) |
 
 **Soft states on the managed llama.cpp fork.** A soft state is native KV/hybrid state, not text: per position, the
@@ -335,7 +334,7 @@ explicit `withNativeAdapters` scopes. Programs without a release are unaffected.
 Implemented: scope compilation, per-call resolution with requested/effective identities and coherent fallback,
 release store with compare-before-activate and rollback, `natlang tune` (collect, split, train, export, validate,
 activate, report, watch), managed llama.cpp and in-page wllama serving with per-request stacks, the joint trainer with nested shared
-bases and free LoRA factors, per-node GGUF export, whole-stack PEFT export for vLLM, and soft instruction/skill states. Placement, sweeps, paired evaluation reports and cross-program families are implemented; large sweeps are run by operations. SFT/RL rounds are implemented as library stages: student rollouts on training roots scored by the root
+bases and free LoRA factors, per-node GGUF export, and soft instruction/skill states. Placement, sweeps, paired evaluation reports and cross-program families are implemented; large sweeps are run by operations. SFT/RL rounds are implemented as library stages: student rollouts on training roots scored by the root
 oracle (`tune/rollouts.ts`, `natlang.tune-rollout/v1`), the trainer's whole-graph policy objective over them, and a
 resumable round scheduler that keeps the best release by development success (`tune/rounds.ts`); the CLI does not run
 them yet. Not yet
