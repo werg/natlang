@@ -10,7 +10,7 @@ import { COMPACTION_NOTE_CHARS, runSeedKey, type NativeResult, type NativeSessio
 import { undeclaredServiceType } from './introspection.js';
 import type { DecisionScorer, ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
 import { deriveSeed } from './trace.js';
-import { AUTOMATIC_NOTE, COMPACTION_NOTICE, directoryReducerPrompt, scopedFileToolNames, FUNCTION_TOOLS_PROMPT, FUNCTION_TOOLS_PROMPT_READ_ONLY, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN,
+import { AUTOMATIC_NOTE, COMPACTION_NOTICE, directoryReducerPrompt, scopedFileToolNames, FUNCTION_TOOLS_PROMPT, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN,
   LAST_TURN_NOTICE, NL_DEPTH_LIMIT_NOTICE, SYSTEM_PROMPT, type FileToolSurface } from './prompt.js';
 import { canGenerateNl, runInFrame } from '../runtime/context.js';
 import { adoptImportedNativeArtifacts } from './nz-file.js';
@@ -116,9 +116,8 @@ export const NL_DEPTH_LIMIT_BUILT_INS_LINE = 'Eval has iterateOn, transcript and
  * calls for training (native/serving-request.ts) both compose it here.
  */
 export function callNotes(call: { guidance?: string; ownCode: boolean; allowAdHoc: boolean; rendering?: PromptRendering;
-  /** The call may edit its functions (edit_code is offered); default when it has its own code. */ codeEdits?: boolean;
   folder?: { fileTools?: FileToolSurface; writable: boolean; withheld?: readonly string[] } }): string {
-  const runtime = [call.ownCode ? call.codeEdits === false ? FUNCTION_TOOLS_PROMPT_READ_ONLY : FUNCTION_TOOLS_PROMPT : '',
+  const runtime = [call.ownCode ? FUNCTION_TOOLS_PROMPT : '',
     call.folder ? directoryReducerPrompt(call.folder.fileTools, call.allowAdHoc, call.folder.writable, call.folder.withheld) : '',
     call.allowAdHoc ? '' : NL_DEPTH_LIMIT_NOTICE].map(text => text.trim()).filter(Boolean).join('\n\n');
   return [call.guidance?.trim() ?? '', renderSystemPrompt(runtime, call.rendering)].filter(Boolean).join('\n\n');
@@ -367,11 +366,9 @@ const isPlainRecord = (value: object) => Object.prototype.toString.call(value) =
  * Undefined when no expression produces the value (an opaque host object).
  */
 function scopeExpression(value: unknown, root: Folder | undefined, holder?: string, budget = SHOWN_CHARS,
-  state: { nodes: number; depth: number; cuts?: number; untrusted?: UntrustedRegistry } = { nodes: 0, depth: 0 }): string | undefined {
-  // Every note this rendering leaves is counted, so a caller can tell a whole literal from a shortened one.
-  const cut = (what: string, where: { holder?: string }) => { state.cuts = (state.cuts ?? 0) + 1; return cutNote(what, where); };
+  state: { nodes: number; depth: number; untrusted?: UntrustedRegistry } = { nodes: 0, depth: 0 }): string | undefined {
   if (++state.nodes > 8192 || state.depth >= 64)
-    return cut('inspection limit reached', { holder });
+    return cutNote('inspection limit reached', { holder });
   // A small value is shown whole, whatever share of the budget is left for it.
   if (budget < SMALL_VALUE_CHARS && literalFits(value, SMALL_VALUE_CHARS)) budget = SMALL_VALUE_CHARS;
   state.depth++;
@@ -387,7 +384,7 @@ function scopeExpression(value: unknown, root: Folder | undefined, holder?: stri
       shown.push(text); used += text.length + 2;
     }
     if (shown.length === count) return `${open}${shown.join(', ')}${close}`;
-    return `${open}${shown.join(', ')}${shown.length ? ', ' : ''}${cut(`cut off: ${count - shown.length} of ${count} ${noun} not shown`, { holder })}${close}`;
+    return `${open}${shown.join(', ')}${shown.length ? ', ' : ''}${cutNote(`cut off: ${count - shown.length} of ${count} ${noun} not shown`, { holder })}${close}`;
   };
   if (value === null || typeof value === 'boolean') return String(value);
   if (typeof value === 'number') return Number.isFinite(value) ? JSON.stringify(value) : String(value);
@@ -396,13 +393,13 @@ function scopeExpression(value: unknown, root: Folder | undefined, holder?: stri
     const source = state.untrusted?.sourceOf(value);
     if (source !== undefined) {
       if (value.length <= Math.max(16, budget)) return untrustedBlock(value, source);
-      return `${untrustedBlock(value.slice(0, Math.max(0, budget)), source)}${cut(`cut off: ${value.length - Math.max(0, budget)} of ${value.length} characters not shown`, { holder })}`;
+      return `${untrustedBlock(value.slice(0, Math.max(0, budget)), source)}${cutNote(`cut off: ${value.length - Math.max(0, budget)} of ${value.length} characters not shown`, { holder })}`;
     }
     // Long record keys can exhaust the preview budget before their values.
     // Preserve tiny labels such as "0"/"1" rather than showing an empty string
     // with a truncation note; the literal is shorter than that note anyway.
     if (value.length <= Math.max(16, budget)) return JSON.stringify(value);
-    return `${JSON.stringify(value.slice(0, Math.max(0, budget)))} ${cut(`cut off: ${value.length - Math.max(0, budget)} of ${value.length} characters not shown`, { holder })}`;
+    return `${JSON.stringify(value.slice(0, Math.max(0, budget)))} ${cutNote(`cut off: ${value.length - Math.max(0, budget)} of ${value.length} characters not shown`, { holder })}`;
   }
   if (typeof value !== 'object' || value === undefined) return undefined;
   if (value instanceof FileHandle || value instanceof FolderHandle) {
@@ -436,19 +433,10 @@ function scopeExpression(value: unknown, root: Folder | undefined, holder?: stri
     if (entries.length < (Number.isFinite(budget) ? 24 : 8192)) entries.push([key, (value as Record<string, unknown>)[key]]);
     fieldCount++;
   }
-  // A record that does not fit a small budget is shown by its keys and a precise holder, rather than letting its first
-  // fields take the room and hide the later ones. A record that fits is shown whole, however small its budget: a parent
-  // whose budget is just its own length hands each item exactly what it needs (2026-11-13, a 3-field file record was
-  // replaced by its keys in every vcs digest).
-  if (Number.isFinite(budget) && budget < 128 && entries.length > 2) {
-    const cuts = state.cuts ?? 0;
-    const whole = recordText();
-    if (whole !== undefined && whole.length <= budget && (state.cuts ?? 0) === cuts) return whole;
-    state.cuts = cuts;
-    return `{ ${cut('fields: '+entries.map(([key])=>key).join(', ')+(fieldCount>entries.length?', …':'')+'; values not shown', {holder})} }`;
-  }
-  return recordText();
-  function recordText(): string | undefined {
+  // Give ordinary argument records an overview, rather than allowing a large first field
+  // to hide every later field. Tiny nested records show their keys and a precise holder.
+  if (Number.isFinite(budget) && budget < 128 && entries.length > 2)
+    return `{ ${cutNote('fields: '+entries.map(([key])=>key).join(', ')+(fieldCount>entries.length?', …':'')+'; values not shown', {holder})} }`;
   const visible = entries;
   const overhead = visible.reduce((sum,[key])=>sum+key.length+4,0);
   const available = budget - overhead;
@@ -480,9 +468,8 @@ function scopeExpression(value: unknown, root: Folder | undefined, holder?: stri
     if(text===undefined)return undefined;
     shown.push(field.label+': '+text);
   }
-  if(visible.length<fieldCount)shown.push(cut('cut off: '+(fieldCount-visible.length)+' of '+fieldCount+' fields not shown',{holder}));
+  if(visible.length<fieldCount)shown.push(cutNote('cut off: '+(fieldCount-visible.length)+' of '+fieldCount+' fields not shown',{holder}));
   return '{ '+shown.join(', ')+' }';
-  }
   } finally { state.depth--; }
 }
 
@@ -1572,7 +1559,7 @@ export class NativeToolAgent {
     // (guidance, the function-tools and folder paragraphs, the nesting-limit notice) is in the call's opening message.
     const systemPrompt = () =>
       typeof this.options.systemPrompt === 'function' ? this.options.systemPrompt() : this.options.systemPrompt ?? SYSTEM_PROMPT;
-    const notes = callNotes({ guidance, ownCode: Object.keys(session.lam.codebase).length > 0, codeEdits: session.codeEditable(),
+    const notes = callNotes({ guidance, ownCode: Object.keys(session.lam.codebase).length > 0,
       folder: session.lam.projectTransaction ? { fileTools: this.options.fileTools,
         writable: session.lam.projectTransaction.folder.access !== 'read', withheld: session.lam.withheldTools } : undefined,
       allowAdHoc: canGenerateNl(session.runtime.frame), rendering: this.options.promptRendering });

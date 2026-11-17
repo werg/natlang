@@ -23,8 +23,8 @@ test('directory campaign starts with executing partial programs and independentl
   const driver=async request=>{
    requests++;const text=request.messages.map(message=>String(message.content)).join('\n');
    if(String(request.messages[1].content).includes('Run the existing workflow with folder'))return {calls:[['eval',{code:'return await workflow.run(folder);',finish:true}]]};
-   if(row.family==='confirmed-meetings')return {text:text.includes('Confirmed: Alice at Library.')?'{"owner":"Alice","place":"Library"}':'null'};
-   return {text:String(positives.some(value=>text.includes(value)))};
+   const value=row.family==='confirmed-meetings' ? (text.includes('Confirmed: Alice at Library.') ? {owner:'Alice',place:'Library'} : null) : positives.some(value=>text.includes(value));
+   return {calls:[['return_result',{status:'success',value}]]};
   };
   const evaluator=new SourceEvaluator(row.contract,row.cases,driver,new UsageGateway({maxModelCalls:20,maxRollouts:2,maxProposals:0}),{executorId:'fixture-labels',timeoutMs:10000});
   const report=await evaluator.evaluate(Folder.fromFiles(row.files).snapshot(),{split:'train',caseIds:[row.cases[0].id]});

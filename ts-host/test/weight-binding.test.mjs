@@ -218,10 +218,10 @@ test('vLLM serving loads whole-stack exports and routes each call to its own sta
       if (request.url.endsWith('/load_lora_adapter')) { loads.push(body); return response.end('{}'); }
       if (request.url.endsWith('/models')) return response.end(JSON.stringify({ data: [{ id: 'base', max_model_len: 8192 }] }));
       models.push(body.model);
-      const tool = body.messages.at(-1).role === 'tool';
+      const tool = body.messages.some(message => message.role === 'assistant' && (message.tool_calls ?? []).some(call => !String(call.id).startsWith('scope_')));
       const opening = String(body.messages[1].content);
       const code = opening.includes('Pass value') ? 'return await inner(value)' : 'return value.toUpperCase()';
-      response.end(JSON.stringify({ choices: [{ index: 0, finish_reason: tool ? 'stop' : 'tool_calls', message: tool ? { role: 'assistant', content: 'done' }
+      response.end(JSON.stringify({ choices: [{ index: 0, finish_reason: tool ? 'stop' : 'tool_calls', message: tool ? { role: 'assistant', content: '', tool_calls: [{ id: 'finish', type: 'function', function: { name: 'return_result', arguments: '{"status":"success"}' } }] }
         : { role: 'assistant', content: '', tool_calls: [{ id: 'c', type: 'function', function: { name: 'eval', arguments: JSON.stringify({ code }) } }] } }] }));
     });
   });

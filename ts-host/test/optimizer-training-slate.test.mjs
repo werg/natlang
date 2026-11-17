@@ -32,9 +32,11 @@ test('each family executes its easy partial implementation against independent e
   const driver=async request=>{
    if(String(request.messages[1].content).includes('Run workflow.run(folder)'))return {calls:[['eval',{code:'return await workflow.run(folder);',finish:true}]]};
    const text=request.messages.map(message=>String(message.content)).join('\n');
-   if(row.family==='corrected-extraction'){const match=text.match(/Confirmed assignment: (\w+) at (\w+)\./);return {text:match?JSON.stringify({owner:match[1],place:match[2]}):'null'};}
-   if(row.family==='semantic-routing')return {text:JSON.stringify(text.includes('invoice charge')?'billing':text.includes('malfunctioning device')?'technical':'account')};
-   return {text:String(!text.includes('No affirmative decision exists'))};
+   let value;
+   if(row.family==='corrected-extraction'){const match=text.match(/Confirmed assignment: (\w+) at (\w+)\./);value=match?{owner:match[1],place:match[2]}:null;}
+   else if(row.family==='semantic-routing')value=text.includes('invoice charge')?'billing':text.includes('malfunctioning device')?'technical':'account';
+   else value=!text.includes('No affirmative decision exists');
+   return {calls:[['return_result',{status:'success',value}]]};
   };
   const evaluator=new SourceEvaluator(row.contract,row.cases,driver,new UsageGateway({maxModelCalls:30,maxRollouts:2,maxProposals:0}),{executorId:'independent-easy-labels',timeoutMs:10000});
   let result;try{result=await evaluator.evaluate(Folder.fromFiles(row.files).snapshot(),{split:'train',caseIds:[row.cases[0].id]});}catch(error){throw Error(row.family+': '+error);}

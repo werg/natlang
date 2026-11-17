@@ -27,7 +27,7 @@ test('browser local inference drives the native tool loop without a server', asy
           name: 'eval', arguments: '{"code":"return 7"}',
         } }],
       } }], usage: { completion_tokens: 9 } } :
-        { choices: [{ finish_reason: 'stop', message: { content: 'done' } }],
+        { choices: [{ finish_reason: 'stop', message: { content: '', tool_calls: [{ id: 'finish', type: 'function', function: { name: 'return_result', arguments: '{"status":"success"}' } }] } }],
           usage: { completion_tokens: 2 } };
     },
   };
@@ -44,7 +44,7 @@ test('browser local inference drives the native tool loop without a server', asy
     assert.ok(Number.isSafeInteger(requests[0].seed));
     assert.equal(requests[0].max_tokens, 4096, 'a turn may use a quarter of the default 16,384-token window');
     assert.equal(requests[0].tool_choice, 'auto');
-    assert.deepEqual(requests[0].tools.map(tool => tool.function.name), ['eval', 'read_page', 'read_code', 'edit_code', 'diff_code', 'compact_history', 'return_result']);
+    assert.deepEqual(requests[0].tools.map(tool => tool.function.name), ['eval', 'read_page', 'read_code', 'compact_history', 'return_result']);
     assert.equal(requests[0].cache_prompt, true);
     assert.equal(requests[1].messages.at(-1).role, 'tool');
     assert.equal(requests[1].messages.at(-1).tool_call_id, 'local_1');
@@ -204,7 +204,7 @@ test('a tuned release loads into the in-page model and each request applies only
     async loadModelFromHF() {}, async loadModelFromUrl(_url, received) { params = received; }, async loadModel() {}, async exit() {},
     async createChatCompletion(request) {
       requests.push(request);
-      if (request.messages.at(-1).role === 'tool') return { choices: [{ finish_reason: 'stop', message: { content: 'done' } }] };
+      if (request.messages.some(message => message.role === 'assistant' && (message.tool_calls ?? []).some(call => !String(call.id).startsWith('scope_')))) return { choices: [{ finish_reason: 'stop', message: { content: '', tool_calls: [{ id: 'finish', type: 'function', function: { name: 'return_result', arguments: '{"status":"success"}' } }] } }] };
       const outer = JSON.stringify(request.messages).includes('Pass value');
       return { choices: [{ finish_reason: 'tool_calls', message: { content: null, tool_calls: [{ id: `c${requests.length}`, type: 'function',
         function: { name: 'eval', arguments: JSON.stringify({ code: outer ? 'return await inner(value)' : 'return value.toUpperCase()' }) } }] } }] };

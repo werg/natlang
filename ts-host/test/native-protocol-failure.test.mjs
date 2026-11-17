@@ -32,7 +32,7 @@ test('runtime records failed actual turn then repairs same call without returnin
   const requests=[];let calls=0;
   const driver=chatCompletionModelTurn(async body=>{
     requests.push(structuredClone(body));
-    return calls++===0?failed():{choices:[{finish_reason:'stop',message:{role:'assistant',content:'fixed'}}],usage:{completion_tokens:1}};
+    return calls++===0?failed():{choices:[{finish_reason:'stop',message:{role:'assistant',content:'',tool_calls:[{id:'fixed',type:'function',function:{name:'return_result',arguments:'{"status":"success","value":"fixed"}'}}]}}],usage:{completion_tokens:1}};
   });
   const session=open({type:'() => string',instructions:'Return fixed.'}).session;
   await new NativeToolAgent(driver,{maxTurns:3}).run(session);

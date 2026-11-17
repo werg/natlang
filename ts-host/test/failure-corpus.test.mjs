@@ -70,8 +70,8 @@ for (const item of failureCases) test(`${item.id}: failed eval exposes debug and
 
 test('teacher collector seeds a real failure and admits only the repair continuation', async () => {
   const caseItem = failureCases[0], record = failureProgramRecords()[0];
-  // The repair eval returns the value; the empty reply after it says done.
-  const replies = [['eval', { code: caseItem.repaired }]];
+  // The repair eval stages the value; return_result then completes the call.
+  const replies = [['eval', { code: caseItem.repaired }], ['return_result', { status: 'success' }]];
   let requests = 0;
   const server = createServer((request, response) => {
     request.resume(); request.on('end', () => {

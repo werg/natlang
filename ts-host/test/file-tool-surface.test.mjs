@@ -6,12 +6,12 @@ import { directoryReducerPrompt, DIRECTORY_REDUCER_PROMPT, scopedFileToolNames, 
 import { BUILT_IN_DOCS } from '../dist/native/runtime.js';
 
 const names = surface => new NativeToolAgent(async () => ({ calls: [] }), surface ? { fileTools: surface } : {})
-  .tools({ runtime: { frame: { adHocDepth: 0 } }, rememberOfferedTools() {}, lam: { codebase: {}, projectTransaction: { folder: { access: 'write' } }, type: { kind: 'prim', name: 'unknown' } } })
+  .tools({ runtime: { frame: { adHocDepth: 0 } }, rememberOfferedTools() {}, codeEditable: () => false, lam: { codebase: {}, projectTransaction: { folder: { access: 'write' } }, type: { kind: 'prim', name: 'unknown' } } })
   .map(item => item.function.name);
 
 test('a directory reducer offers the file tools of its surface, and its prompt names only those', () => {
   const tools = new NativeToolAgent(async () => ({ calls: [] }))
-    .tools({ runtime: { frame: { adHocDepth: 0 } }, rememberOfferedTools() {}, lam: { codebase: {}, projectTransaction: { folder: { access: 'write' } }, type: { kind: 'prim', name: 'unknown' } } });
+    .tools({ runtime: { frame: { adHocDepth: 0 } }, rememberOfferedTools() {}, codeEditable: () => false, lam: { codebase: {}, projectTransaction: { folder: { access: 'write' } }, type: { kind: 'prim', name: 'unknown' } } });
   const delegate = tools.find(item => item.function.name === 'delegate').function;
   assert.match(delegate.parameters.properties.returns.description, /Natlang result type expression/);
   assert.match(delegate.parameters.properties.returns.description, /boolean, string, number/);
@@ -28,7 +28,7 @@ test('a directory reducer offers the file tools of its surface, and its prompt n
 
 test('read-only scoped folders omit mutation tools while writable file and folder scopes retain them', async () => {
   const makeAgent = transaction => new NativeToolAgent(async () => ({ calls: [] })).tools({
-    runtime: { frame: { adHocDepth: 0 } }, rememberOfferedTools() {},
+    runtime: { frame: { adHocDepth: 0 } }, rememberOfferedTools() {}, codeEditable: () => false,
     lam: { codebase: {}, projectTransaction: transaction, type: { kind: 'prim', name: 'unknown' } },
   }).map(item => item.function.name);
   const readBase = Folder.fromFiles({ 'input.txt': 'evidence' }, 'read');

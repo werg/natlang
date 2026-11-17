@@ -1368,7 +1368,7 @@ export class NativeSession {
   }
 
   /** Whether this call's result is text (a string or Neuralese<string>, with nothing staged). */
-  takesTextResult(): boolean {
+  expectsTextResult(): boolean {
     if (this.lam.type.kind !== 'lambda' || this.lam.return !== MISSING) return false;
     const resolved = this.env.resolve(this.lam.type.returns);
     const element = resolved.kind === 'neuralese' ? this.env.resolve(resolved.element) : resolved;
@@ -1949,7 +1949,7 @@ export class NativeSession {
           `signature and instructions. ${SELF_CALL_ADVICE.replace(/\.$/, '')}` :
         inScope.includes(requested) ? `${requested} is a value in this call's eval scope: inspect it with eval, for example console.log(${requested})` :
         // A text-typed call with no functions of its own (a writer) has nothing to read: it answers with its text.
-        !own.length && this.takesTextResult() ? 'This call returns text: send the text itself as the value of return_result' :
+        !own.length && this.expectsTextResult() ? 'This call returns text: send the text itself as the value of return_result' :
         undefined;
       throw new Reject([{ path: requested, code: 'no-such-function', expected: what ? `${readable}. ${what}` : readable }]);
     }
