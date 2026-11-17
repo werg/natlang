@@ -208,3 +208,52 @@ def test_split_siblings_in_another_collection_are_still_protected(tmp_path):
     accepted, census = v.admit(episodes, info, EMPTY_HELD)
     assert not accepted
     assert census['source_group_crosses_splits'] == census['protected_split'] == 1
+
+
+def test_registration_describes_admitted_data_and_preserves_raw_inputs(tmp_path):
+    args = build_inputs(tmp_path)
+    report = v.build(args, Renderer())
+    source = report['inputs']['collections'][0]
+    assert (args.out / source['episodes_snapshot']).read_bytes() == args.episodes.read_bytes()
+    entry, links = v.registration_entry(args.out, 'vibestudio-real-pilot-v1', 'dgx')
+    assert entry['admission'] == 'sft-experiment-input'
+    assert entry['source_collections'][0]['episodes_sha256'] == v.sha256_file(args.episodes)
+    assert entry['stages']['admitted_episodes'] == 1
+    assert 'not performed' in entry['stages']['learner_exposure']
+    assert links == {'runs/vibestudio-real-pilot-v1': str(args.out)}
+
+
+def test_registration_refuses_mutated_training_payload(tmp_path):
+    args = build_inputs(tmp_path)
+    v.build(args, Renderer())
+    (args.out / 'chains.pkl').write_bytes(b'changed')
+    with pytest.raises(ValueError, match='built output changed'):
+        v.registration_entry(args.out, 'corpus-v1', 'dgx')
+
+
+def test_registration_refuses_mutated_raw_collection(tmp_path):
+    args = build_inputs(tmp_path)
+    report = v.build(args, Renderer())
+    raw = args.out / report['inputs']['collections'][0]['episodes_snapshot']
+    raw.write_text('changed\n')
+    with pytest.raises(ValueError, match='snapshot changed'):
+        v.registration_entry(args.out, 'corpus-v1', 'dgx')
+
+
+def test_registration_uses_shared_publisher_without_exposing_test_data(tmp_path, monkeypatch):
+    import register_corpora
+    args = build_inputs(tmp_path)
+    v.build(args, Renderer())
+    captured = []
+
+    def fake_register(entries, message, **kwargs):
+        captured.append((entries, message, kwargs))
+        return [entries[0]['id']]
+
+    monkeypatch.setattr(register_corpora, 'register', fake_register)
+    assert v.register_build(args.out, 'pilot-v1', 'pop') == ['pilot-v1']
+    entries, message, options = captured[0]
+    assert entries[0]['owner'] == 'pop'
+    assert options['links'] == {'runs/pilot-v1': str(args.out)}
+    with pytest.raises(ValueError, match='actual data owner'):
+        v.registration_entry(args.out, 'pilot-v1', 'tick')

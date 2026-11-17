@@ -84,7 +84,28 @@ rerendering. `build.json` is the completion receipt, input hashes, tokenizer
 identity, admission funnel and output hashes. The output directory is immutable:
 choose a new path for a new build. Publish the actual collected data addition in
 `training/neuralese_corpora.json` and through `sync_training_corpora.py publish`
-before training; synthetic test fixtures are not a corpus addition.
+before training; synthetic test fixtures are not a corpus addition. The build
+retains exact collection manifests and episode bytes in `collections/` and checks
+the source again after copying, so the published artifact contains its acquisition
+evidence as well as admitted training rows.
+
+Registration uses the existing shared publisher (including its check-main gate,
+immutable manifests and preservation of unrelated staged work):
+
+```
+python scripts/neuralese_data/vibestudio_sft.py register --out BUILD \
+  --register-id vibestudio-teacher-YYYYMMDD-v1 --register-owner dgx
+```
+
+The owner is explicit and must be the machine actually holding the data. A build
+on a different host must be transferred to its owner before this command claims
+DGX/Pop ownership. `--register-id ID --register-owner dgx` can also be appended to
+the build command when building on the owner itself. External data gets a
+gitignored `runs/ID` link through `register_corpora.register`, not a source-tree
+copy. Registration verifies output and raw-input hashes again. Its registry entry
+records collection, admission and rendering counts separately and explicitly says
+that no learner exposure is performed by registration. No test fixture is ever
+automatically published.
 
 The assistant's own output carries loss. Every prompt, earlier history, service
 observation and harness message is zero-weight context. An empty think block

@@ -17,6 +17,7 @@ import json
 import os
 import pickle
 import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -250,6 +251,18 @@ def build(args, renderer=None):
     if out.exists():
         raise ValueError(f'output already exists; choose a new immutable build path: {out}')
     out.mkdir(parents=True)
+    # Keep the exact closed collection inputs with the published data. No source
+    # hardlinks: ctime changes would disturb readers, and sources may be mutable.
+    for index, binding in enumerate(bindings):
+        directory = out / 'collections' / f'{index:04d}'
+        directory.mkdir(parents=True)
+        for field, filename in (('manifest', 'manifest.json'), ('episodes', 'episodes.jsonl')):
+            source_path, snapshot = Path(binding[field]), directory / filename
+            shutil.copyfile(source_path, snapshot)
+            expected = binding[f'{field}_sha256']
+            if sha256_file(snapshot) != expected or sha256_file(source_path) != expected:
+                raise ValueError(f'collection input changed while snapshotting: {source_path}')
+            binding[f'{field}_snapshot'] = str(snapshot.relative_to(out))
     renderer = renderer or TemplateRenderer(args.tokenizer)
     writer, rows, sft_episodes = ZstdWriter(out / 'rows.jsonl.zst'), [], []
     try:
@@ -309,26 +322,100 @@ def build(args, renderer=None):
         raise
 
 
+def registration_entry(out, ident, owner):
+    """Validate a closed build and describe it to the shared immutable publisher."""
+    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]*', ident):
+        raise ValueError('register id must be one safe corpus path component')
+    if owner not in ('dgx', 'pop'):
+        raise ValueError('registration needs the actual data owner: dgx or pop')
+    out = Path(out).resolve()
+    report = json.loads((out / 'build.json').read_text())
+    if report.get('schema') != 'natlang.vibestudio-sft-build/1' or report.get('episodes', 0) < 1:
+        raise ValueError('registration requires a completed nonempty Vibestudio SFT build')
+    for filename in ('chains.pkl', 'rows.jsonl.zst'):
+        if report.get('outputs', {}).get(filename) != sha256_file(out / filename):
+            raise ValueError(f'built output changed: {filename}')
+    collections_ = report.get('inputs', {}).get('collections')
+    if not isinstance(collections_, list) or not collections_:
+        raise ValueError('build has no immutable collection snapshots')
+    for collection in collections_:
+        for field in ('manifest', 'episodes'):
+            rel = collection.get(f'{field}_snapshot')
+            if not isinstance(rel, str) or not rel or not (out / rel).resolve().is_relative_to(out):
+                raise ValueError('snapshot path must stay inside the corpus')
+            if sha256_file(out / rel) != collection.get(f'{field}_sha256'):
+                raise ValueError(f'closed collection snapshot changed: {rel}')
+    # External NVMe data is addressed through the same gitignored runs link the
+    # rest of the corpus registry uses. Publication handles the link, never copies
+    # machine-specific absolute storage paths into a transported manifest.
+    try:
+        relative = str(out.relative_to(REPO))
+        links = {}
+    except ValueError:
+        relative = f'runs/{ident}'
+        links = {relative: str(out)}
+    entry = {'id': ident, 'owner': owner, 'path': relative,
+             'include': ['build.json', 'chains.pkl', 'rows.jsonl.zst', 'collections/**/*'],
+             'admission': 'sft-experiment-input',
+             'license_provenance': 'Project-generated teacher execution trajectories on Vibestudio template programs '
+                 'and fixture scenarios. Exact template revisions, teacher providers/model identities and source '
+                 'collection manifests are retained in collections/ and per-row provenance; program source licensing '
+                 'follows the corresponding pinned template repositories.',
+             'stages': {'collected_episodes': report['funnel'].get('seen', 0),
+                        'admitted_episodes': report['episodes'], 'rendered_chains': report['chains'],
+                        'learner_exposure': 'not performed by collection, build or registration'},
+             'source_collections': [{key: value for key, value in binding.items() if key.endswith('_sha256')}
+                                    for binding in collections_],
+             'note': f'Vibestudio verified teacher SFT: {report["episodes"]} admitted episodes, '
+                 f'{report["calls"]} executor calls, {report["chains"]} chains, '
+                 f'{report["weighted_target_tokens"]} weighted target tokens. Only train roots, quality 1, '
+                 'independent semantic review, exact fixture replay, no failed tool actions; held-v3/v2 and '
+                 'protected source groups excluded. exp0_sft.py train --chains input for the next experiment pin; '
+                 'registration does not assert actual learner exposure.'}
+    return entry, links
+
+
+def register_build(out, ident, owner):
+    from register_corpora import register
+    entry, links = registration_entry(out, ident, owner)
+    return register([entry], f'Register verified Vibestudio teacher corpus {ident}', links=links)
+
+
 def main():
     from natlang_neuralese.common.paths import resolve_str
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('command', nargs='?', choices=('build', 'register'), default='build')
     parser.add_argument('--collection', action='append', default=[],
                         help='collection directory with manifest.json; repeat to build one corpus across suites')
     parser.add_argument('--episodes', help='explicit episode file (requires --manifest; default its bound path)')
     parser.add_argument('--manifest', help='collection manifest; may be combined with --collection')
     parser.add_argument('--out', required=True)
-    parser.add_argument('--tokenizer', required=True)
+    parser.add_argument('--tokenizer', help='required for build; unused when registering a completed build')
+    parser.add_argument('--register-id', help='publish immutable corpus registry/manifests after build, or with register')
+    parser.add_argument('--register-owner', choices=('dgx', 'pop'),
+                        help='actual machine holding the files; required with --register-id')
     parser.add_argument('--held-manifest', default=resolve_str('data_nvme', 'lfm3-rl-dgx-20261029',
                                                               'ops', 'held-v3', 'manifest.json'))
     parser.add_argument('--max-per-case', type=int, default=4)
     args = parser.parse_args()
+    if bool(args.register_id) != bool(args.register_owner):
+        parser.error('--register-id and --register-owner are required together')
+    if args.command == 'register':
+        if not args.register_id:
+            parser.error('register requires --register-id and --register-owner')
+        print(json.dumps({'registered': register_build(args.out, args.register_id, args.register_owner)}))
+        return
     if args.max_per_case < 1:
         parser.error('--max-per-case must be positive')
     if args.episodes and not args.manifest:
         parser.error('--episodes requires --manifest')
     if not args.collection and not args.manifest:
         parser.error('at least one --collection or --manifest is required')
+    if not args.tokenizer:
+        parser.error('build requires --tokenizer')
     print(json.dumps(build(args), indent=2))
+    if args.register_id:
+        register_build(args.out, args.register_id, args.register_owner)
 
 
 if __name__ == '__main__':
