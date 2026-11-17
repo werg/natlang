@@ -458,6 +458,35 @@ def test_tree_mask_on_cuda_equals_the_dense_path_mask():
         assert (b.grad.cpu() - a.grad).norm() <= 1e-4 * a.grad.norm() + 1e-9, name
 
 
+def test_tree_batch_plan_covers_every_chain_once():
+    """The planned tree-mask batches hold every chain once, within the largest batch the budget allows; with room for
+    the whole tree unrecomputed the plan is one batch."""
+    seqs, caps = _shared_sequences()
+    _, model = _pair()
+    nodes = lfm3_fast_train.prefix_tree(seqs, caps, 2)
+    tokens = lambda i, s: len(seqs[i]) - s
+    total = lfm3_fast_train.tree_tokens(nodes, [len(s) for s in seqs])
+    layers = len(model.model.layers)
+    for budget, batches_expected in ((1.0, 1), (None, None)):
+        if budget is None:                  # resident: 6 rows; the largest batch (every layer recomputed): ~4x that
+            budget = 6 * layers * lfm3_fast_train.ACTIVATION_BYTES_PER_TOKEN_LAYER / 2**30
+        cap, batches = lfm3_fast_train.plan_tree_batches(model, nodes, tokens, budget)
+        seen = []
+
+        def leaves(node):
+            if 'index' in node:
+                seen.append(node['index'])
+            for child in node.get('children', ()):
+                leaves(child)
+        for batch in batches:
+            for node in batch:
+                leaves(node)
+        assert sorted(seen) == list(range(len(seqs)))
+        assert cap <= max(1, lfm3_fast_train.tree_batch_tokens(model, budget))
+        if batches_expected:
+            assert len(batches) == batches_expected and cap >= total
+
+
 def test_tree_layout_paths_positions_and_conv_predecessors():
     """Path positions continue the parent's; a document's first taps read its parent's last tokens (several levels up
     when the parent is shorter than the conv), never a sibling's; roots read zeros."""

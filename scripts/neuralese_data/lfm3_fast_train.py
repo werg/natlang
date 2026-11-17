@@ -810,9 +810,7 @@ def tree_units(nodes, tokens, limit):
     children's batches, each with its own copy of the prefix (exact: each copy gets the gradient of its own
     continuations); a single leaf over the limit is a batch alone."""
     def size(node):
-        if 'index' in node:
-            return tokens(node['index'], node['start'])
-        return node['end'] - node['start'] + sum(size(child) for child in node['children'])
+        return _unit_tokens(node, tokens)
 
     def units(node):            # pruned copies of ``node`` that together hold each of its leaves once
         if 'index' in node or size(node) <= limit:
@@ -824,16 +822,61 @@ def tree_units(nodes, tokens, limit):
 
 
 def tree_batch_tokens(model, activation_gb):
-    """The default ``tree-mask`` batch: the tokens whose layer inputs (every layer recomputed) and one layer's
+    """The largest ``tree-mask`` batch: the tokens whose layer inputs (every layer recomputed) and one layer's
     activations fit ``activation_gb``."""
     per_token = len(model.model.layers) * model.config.hidden_size * 2 + ACTIVATION_BYTES_PER_TOKEN_LAYER
     return int(activation_gb * 2**30 // per_token)
 
 
+def _resident_gb(model, tokens, activation_gb):
+    """The budget left for unrecomputed layers once every layer's saved input (recomputed or not) is counted."""
+    return max(0., activation_gb - tokens * len(model.model.layers) * model.config.hidden_size * 2 / 2**30)
+
+
+def _recomputed(model, tokens, activation_gb):
+    layers = len(model.model.layers)
+    free = int(min(layers, _resident_gb(model, tokens, activation_gb) * 2**30
+                   // (ACTIVATION_BYTES_PER_TOKEN_LAYER * max(1, tokens))))
+    return layers - free
+
+
+def plan_tree_batches(model, nodes, tokens, activation_gb):
+    """The ``tree-mask`` batch cap with the least estimated compute: small batches copy shared prefixes into each batch
+    (``tree_units``), large ones recompute layers (a recomputed layer costs a third more), so each candidate cap
+    (resident rows doubling up to ``tree_batch_tokens``) is scored by its batches' tokens times (1 + recomputed
+    fraction / 3). Returns (cap, batches)."""
+    layers = len(model.model.layers)
+    top = max(1, tree_batch_tokens(model, activation_gb))
+    caps, cap = [], max(1, min(top, resident_tokens(model, activation_gb)))
+    while cap < top:
+        caps.append(cap)
+        cap *= 2
+    caps.append(top)
+    best = None
+    for cap in caps:
+        batches = tree_units(nodes, tokens, cap)
+        cost = 0.
+        for batch in batches:
+            size = sum(_unit_tokens(node, tokens) for node in batch)
+            cost += size * (1 + _recomputed(model, size, activation_gb) / layers / 3)
+        if best is None or cost < best[0]:
+            best = (cost, cap, batches)
+    return best[1], best[2]
+
+
+def _unit_tokens(node, tokens):
+    if 'index' in node:
+        return tokens(node['index'], node['start'])
+    return node['end'] - node['start'] + sum(_unit_tokens(child, tokens) for child in node['children'])
+
+
 def _run_tree_mask(model, nodes, ids_of, leaf, tokens, batch_tokens, activation_gb):
     """``run_prefix_tree``'s ``tree-mask`` mode: each batch of ``tree_units`` is one flattened forward (its prefixes'
     tokens once, then the leaves' rows as the caller builds them) and the caller's one backward."""
-    batches = tree_units(nodes, tokens, batch_tokens)
+    if batch_tokens is None:
+        batch_tokens, batches = plan_tree_batches(model, nodes, tokens, activation_gb)
+    else:
+        batches = tree_units(nodes, tokens, batch_tokens)
     for batch in batches:
         prefixes, items, leaf_parent = [], [], []
 
@@ -854,7 +897,8 @@ def _run_tree_mask(model, nodes, ids_of, leaf, tokens, batch_tokens, activation_
             lengths = [int(ids.shape[0])] if lengths is None else [int(n) for n in lengths]
             offset = sum(int(t.shape[0]) for t in prefix_ids)
             if activation_gb is not None:
-                set_checkpointing(model, offset + int(ids.shape[0]), activation_gb)
+                rows = offset + int(ids.shape[0])
+                set_checkpointing(model, rows, _resident_gb(model, rows, activation_gb))
             if not prefixes:
                 return hidden(model, ids, lengths, imports)
             flat = torch.cat(prefix_ids + [ids])
@@ -867,7 +911,7 @@ def _run_tree_mask(model, nodes, ids_of, leaf, tokens, batch_tokens, activation_
             return hidden(model, flat, [int(t.shape[0]) for t in prefix_ids] + lengths, imports,
                           parents=parents)[offset:]
         leaf(items, forward)
-    return {'mode': 'tree-mask', 'batches': len(batches)}
+    return {'mode': 'tree-mask', 'batches': len(batches), 'batch_tokens': batch_tokens}
 
 
 def run_prefix_tree(model, nodes, ids_of, leaf, tokens, pack_tokens, activation_gb=None, backward=True,
@@ -889,12 +933,12 @@ def run_prefix_tree(model, nodes, ids_of, leaf, tokens, pack_tokens, activation_
     leaves unused keeps prefix layers unrecomputed. Returns the plan: batch counts, prefix tokens, the retained and
     leaf budgets (GB) and the prefix layer-tokens recomputed.
     ``mode`` 'tree-mask': each batch of whole subtrees (``tree_units``, at most ``batch_tokens``, default
-    ``tree_batch_tokens``) is one flattened forward whose tokens attend and convolve along their own path
+    ``plan_tree_batches``) is one flattened forward whose tokens attend and convolve along their own path
     (``hidden(parents=...)``), with one backward (the caller's); ``leaf`` and ``forward`` are called the same way.
     'levels': the level-by-level continuations above. 'off' is the caller's (no shared prefix: a forest of leaves)."""
     if mode == 'tree-mask':
         if batch_tokens is None or batch_tokens <= 0:
-            batch_tokens = tree_batch_tokens(model, activation_gb) if activation_gb is not None else pack_tokens
+            batch_tokens = None if activation_gb is not None else pack_tokens       # None: plan_tree_batches
         return _run_tree_mask(model, nodes, ids_of, leaf, tokens, batch_tokens, activation_gb)
     if mode not in ('levels', 'off'):
         raise ValueError(f'prefix tree mode {mode!r}: one of {PREFIX_TREE_MODES}')

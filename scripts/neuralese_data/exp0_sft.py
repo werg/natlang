@@ -340,8 +340,8 @@ def add_prefix_tree_args(parser):
                         'convolving along its own path), levels (level-by-level packed continuations over cached state), '
                         'off (every chain whole; as --share-prefix-tokens 0)')
     parser.add_argument('--tree-batch-tokens', type=int, default=-1,
-                        help='tree-mask batch (prefixes once plus their continuations); default: what --activation-gb '
-                        'holds with every layer recomputed (lfm3_fast_train.tree_batch_tokens)')
+                        help='tree-mask batch cap (prefixes once plus their continuations); default: the cap with the least '
+                        'estimated compute, prefix copies vs layer recompute (lfm3_fast_train.plan_tree_batches)')
 
 
 def prefix_tree_settings(args):
