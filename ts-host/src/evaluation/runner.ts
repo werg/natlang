@@ -48,7 +48,7 @@ export async function evaluate(prepared: PreparedSuite, options: EvaluateOptions
     while (true) {
       gateway.reserve('rollouts', 1, options.signal);
       try { results.push(await runWorker({ moduleURL: prepared.moduleURL, compiledEntry: prepared.compiledEntry, program: prepared.program, programRoot: prepared.programRoot,
-        testCase, artifact, seed, replicate: options.replicate ?? 0, id,
+        testCase, artifact, ...(options.calls === false ? { calls: false as const } : {}), ...(options.fixtureEntry ? { fixtureEntry: options.fixtureEntry } : {}), seed, replicate: options.replicate ?? 0, id,
         ...(options.capture ? { capture: true } : {}), ...(options.executorIdentity ? { executorIdentity: options.executorIdentity } : {}) },
       options.driver, gateway, options.signal, options.timeoutMs, options.judge)); break; }
       catch (error) {

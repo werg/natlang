@@ -87,8 +87,29 @@ export async function teacherCollectorCapabilities(): Promise<Record<string, unk
       !controllerGraph?.some(event => event.definition?.id === 'nl:entry/advance/step.nl'))
     throw new Error('application controller collector probe did not execute and export its declared Natlang operation');
 
+  const fixtureCase = { id: 'fixture-probe', group: 'fixture-probe', split: 'train' as const, input: 41, expected: 42 };
+  const fixtureRun = await executeProgram({ version: 'natlang.program/2', id: 'fixture-capability', kind: 'evaluation_fixture', split: 'train',
+    semantics: { root: 'step.nl', files: {
+      'step.nl': '---\nargs: { value: number }\nreturns: number\n---\nReturn value plus one.\n',
+      'natlang.ts': 'import step from "./step.nl"; export { step };\n',
+    }, inputs: { value: 41 }, expected: 42, evaluation_fixture: {
+      schema: 'natlang.evaluation-fixture/1', program_root: 'probe', suite_module: 'probe/suite.ts', program_entry: 'natlang.ts',
+      case: fixtureCase, root_role: 'entry', service_inputs: [],
+      entry: { kind: 'natlang-root', module: 'step.nl', export: 'default', export_path: ['step'], input_arguments: ['value'] },
+      host_files: { 'probe/suite.ts': `import { defineEvaluationSuite } from '@workspace/natlang/evaluation';
+export default defineEvaluationSuite<number, number>({ id:'fixture-probe', program:{root:'.',entry:'natlang.ts',id:'probe'}, components:'lambda-only',
+executorIdentity:{id:'probe',configuration:{}},cases:[],budget:{maxRollouts:2,maxModelCalls:3,maxProposals:0},
+fixture:{async create(c,context){ const app=await context.loadFreshProgram() as {step(value:number):Promise<number>};
+return {execute:()=>context.runtime.run(()=>app.step(c.input))};}},
+score(c,observation:any){return {quality:observation.result===c.expected?1:0};}});` },
+    } } }, Object.assign(async () => ({ calls: [['eval', { code: 'return value + 1;', finish: true }] as [string, Record<string, unknown>]] }),
+      { model: 'collector-capability-probe' }),
+    { rootSeed: 5, systemPrompt: '', contextTokens: 4096, maxTurns: 3, calls: false, runId: 'collector-fixture-capability-probe' });
+  if (!fixtureRun.outcome.accepted || fixtureRun.outcome.value !== 42 || !fixtureRun.outcome.evaluation)
+    throw new Error('evaluation fixture collector probe did not execute its declared source and original scorer');
+
   return { schema: 'natlang.teacher-collector-capabilities/1',
     service_aliases: 'natlang.service-aliases/2', service_scopes: 'natlang.service-scopes/1',
-    report_completeness: 'natlang.report-completeness/2', application_controller: 'natlang.application-controller/1',
-    probes: { service_aliases: true, service_scopes: true, report_completeness: true, application_controller: true } };
+    evaluation_fixture: 'natlang.evaluation-fixture/1', report_completeness: 'natlang.report-completeness/2', application_controller: 'natlang.application-controller/1',
+    probes: { evaluation_fixture: true, service_aliases: true, service_scopes: true, report_completeness: true, application_controller: true } };
 }

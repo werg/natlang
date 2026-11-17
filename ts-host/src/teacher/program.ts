@@ -11,8 +11,24 @@ import { formatType, parseType } from '../native/types.js';
 import type { LambdaNode } from '../native/values.js';
 import type { OracleSpec } from './oracle.js';
 import type { TrustedExactVerifier } from './trusted-exact-verifier.js';
+import type { EvaluationCase } from '../evaluation/types.js';
 
 export const PROGRAM_VERSION = 'natlang.program/2';
+
+/** A portable, host-owned evaluation world and verifier, separate from model-owned source. */
+export type EvaluationFixtureSpec = {
+  schema: 'natlang.evaluation-fixture/1';
+  host_files: Record<string, string>;
+  suite_module: string;
+  program_root: string;
+  program_entry: string;
+  case: EvaluationCase;
+  entry: { kind: 'natlang-root' | 'authored-module'; module: string; export: string;
+    export_path: string[]; input_arguments: string[] };
+  root_role: 'entry' | 'semantic-anchor';
+  /** Entry arguments constructed by the trusted fixture, rather than serialized function values. */
+  service_inputs: string[];
+};
 
 export type ProgramSemantics = {
   /** Path of the root `.nl` function within `files`. */
@@ -20,6 +36,8 @@ export type ProgramSemantics = {
   files: Record<string, string>;
   inputs: Record<string, unknown>;
   expected: unknown;
+  /** Existing evaluation fixture frontend for self-contained application tasks. */
+  evaluation_fixture?: EvaluationFixtureSpec;
   /** Evidence strength behind `expected`: exact comparison, normalized comparison, span evidence, or a judgment. */
   oracle?: OracleSpec;
   /** Repository-pinned exact invariant checker, excluded from model-visible files. */

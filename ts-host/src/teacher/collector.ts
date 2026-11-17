@@ -39,6 +39,7 @@ import { checkFunctionEffects } from './function-effects.js';
 import { findCodebaseItem } from '../native/runtime.js';
 import type { LambdaNode, Value } from '../native/values.js';
 import { PROGRAM_VERSION, prepareProgramNode, type ProgramRecord } from './program.js';
+import { validateEvaluationFixture, executeEvaluationFixture } from './evaluation-fixture.js';
 import { fileReturnValue, checkFilesWithJudge, checkFileReturn, DATA_QUALITY_VERSION, FILE_CONTENT_COMPARISON_VERSION, checkOracle } from './oracle.js';
 import { modelOracleJudge } from './model-judge.js';
 import { callMatcher } from './replay.js';
@@ -94,7 +95,8 @@ export function collectedInvocationTraceEvents(runId: string, rootEvents: Record
   childTraces: import('../runtime/runtime.js').InvocationTrace[]): Record<string, unknown>[] {
   const tag = (events: Record<string, unknown>[], invocationId: string, traceRole: 'root' | 'child') =>
     events.map(event => ({ ...event, trace_role: traceRole, trace_invocation_id: invocationId }));
-  return [...tag(rootEvents, runId, 'root'),
+  const actualRoot = rootEvents.find(event => event.kind === 'manifest')?.run_id;
+  return [...tag(rootEvents, typeof actualRoot === 'string' ? actualRoot : runId, 'root'),
     ...childTraces.flatMap(child => tag(child.events, child.callId, 'child'))];
 }
 export type ProvenanceOptions = { modelId: string; rootSeed: number; systemPrompt: string;
@@ -221,13 +223,17 @@ export function effectiveSystemPrompt(options: Pick<ProvenanceOptions, 'systemPr
 }
 
 export function validateFocusedRecord(record: ProgramRecord): void {
-  if (record.version !== PROGRAM_VERSION || !['lambda_graph', 'lambda_source'].includes(record.kind))
+  if (record.version !== PROGRAM_VERSION || !['lambda_graph', 'lambda_source', 'evaluation_fixture'].includes(record.kind))
     throw new Error(`unsupported focused program IR: ${record.version}/${record.kind}`);
   if (!record.id || !record.semantics || typeof record.semantics !== 'object' || typeof record.semantics.root !== 'string' ||
       !record.semantics.root.endsWith('.nl') || !record.semantics.files || typeof record.semantics.files !== 'object' ||
       typeof record.semantics.files[record.semantics.root] !== 'string' || !record.semantics.inputs ||
       !Object.hasOwn(record.semantics, 'expected'))
     throw new Error('invalid focused program IR record');
+  if (record.kind === 'evaluation_fixture' || record.semantics.evaluation_fixture) {
+    validateEvaluationFixture(record);
+    return;
+  }
   if (record.semantics.folder_files &&
       (typeof record.semantics.folder_files !== 'object' || Array.isArray(record.semantics.folder_files) ||
        !Object.values(record.semantics.folder_files).every(value => typeof value === 'string')))
@@ -1432,7 +1438,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
           [request.messages, response.calls, response.text]);
       trajectory.push(trajectoryTurn(request, response));
       return response;
-    }, valueRuntime ? { neuralese: true } : {});
+    }, { model: config.modelId, ...(valueRuntime ? { neuralese: true } : {}) });
     const decisionTransport = (rawSend as unknown as { decide?: (request: DecisionRequest, signal?: AbortSignal) => Promise<DecisionScores> }).decide;
     if (decisionTransport) {
       const savedDecisions = new Map<string, DecisionScores[]>();
@@ -1699,6 +1705,10 @@ function finalFunctionSource(root: LambdaNode, runtime: NodeNativeRuntime | unde
 
 export async function executeProgram(record: ProgramRecord, driver:(request: ModelTurnRequest) => Promise<ModelTurn>,
   options: ExecuteOptions): Promise<ProgramRun> {
+  if (record.kind === 'evaluation_fixture' || record.semantics.evaluation_fixture) {
+    validateFocusedRecord(record);
+    return executeEvaluationFixture(record, driver, options);
+  }
   const root = await prepareProgramNode(record);
   const folderFiles = record.semantics.folder_files;
   if (folderFiles && (root.nodeKind !== 'lambda' || root.subtype !== 'directory-reducer'))

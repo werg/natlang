@@ -2559,3 +2559,14 @@ excluded imported helper could emit an unlowered inline `nl` and escape the prog
 source order is retained. The targeted fixture proves both a missing imported dependency still fails and a valid
 explicit test-named helper executes its inline natlang call with its source bound into the program descriptor.
 No serving request or sampling law changes; held checkpoint effects are not measured by these compiler checks.
+
+### 2026-11-17: canonical fixture teacher programs preserve actual source and input bindings
+
+Portable application fixtures now execute through canonical program IR and the existing evaluator, instead of a
+parallel direct-suite teacher protocol. Original model sources are isolated from oracle/world source and labels.
+The actual loaded entry is checked against declared JSON inputs before execution, and generated executor traces bind
+to original model-source definitions. Authored typed branches retain their real entry and an explicitly marked NL
+semantic anchor; no synthetic NL facade or invented invocation is added. Hosted finite-result teachers use genuine
+generated tool-loop actions, preserving their actual model identity, rather than substituting decision scores. This
+changes no serving protocol. Inventory/decomposition: `plans/VIBESTUDIO_FIXTURE_IR_DECOMPOSITION.md`; downstream
+training exposure remains conditional on exact replay, split separation and independent semantic admission.

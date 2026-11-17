@@ -592,3 +592,20 @@ The compiler lowers and hashes checked local imports even when root discovery om
 source order is retained; only actual imported project modules are appended (declarations, node_modules and callable
 folders retain their own handling). A valid imported test-named helper can therefore contain inline `nl` and is bound
 into the program's source provenance; a missing dependency in that helper remains a compile error.
+
+Canonical `natlang.program/2` also admits `kind: evaluation_fixture` with
+`semantics.evaluation_fixture.schema: natlang.evaluation-fixture/1`. Model-owned `files`, actual JSON `inputs` and the
+real `.nl` root remain separate from portable host fixture source/assets and the one selected original case. A real
+authored TypeScript helper can be the entry with the NL root marked `semantic-anchor`; this does not fabricate an NL
+invocation for a typed branch. The existing evaluation frontend executes the original fixture and scorer. Its
+`outcome.evaluation` retains original outcome, quality, gates, metrics and observations; invocation ledgers retain real
+source identities. Actual `entry.export_path` calls are checked against JSON inputs before dispatch, with live host
+arguments explicitly named in `service_inputs`. Wrong inputs fail before model execution; missing or unsupported
+contracts require correcting the descriptor/source, never constructing a forwarding root.
+
+Hosted fixture teachers use generated turns even when a provider exposes decision scoring. The collector driver
+carries the actual configured model identity through this wrapper. Absent collection overrides preserve authored
+prompt/settings; supplied overrides and their system-prompt hash are applied together. The output remains the existing
+canonical program row and rollout, consumed by shared replay/SFT tooling. This is not native on-policy receipt evidence,
+and collection does not itself admit data into training. Live native state/guidance and module-valued call stores are
+explicitly unsupported across this evaluation worker boundary; ordinary generation teachers and `calls: false` work.

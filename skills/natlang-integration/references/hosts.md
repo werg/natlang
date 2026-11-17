@@ -188,3 +188,10 @@ A reducer call is a transaction: open the folder with `'overlay'` access (writes
 Services, live values, and packages available to eval run with the application's authority. `workspace` selects the `package.json` whose dependencies eval and callable-folder code may import; `network` allows `fetch` in eval. A timeout or failed validation cannot undo an effect that already happened.
 
 To initialize a soft body from text (a soft function, a soft skill, a system-prompt piece, or a standard-library body), use `initBodyInContext({ endpoint, store, text, type, render })` from the runtime package. `render(placeholder, driver)` captures the actual model request with the native-state placeholder; the native server initializes the body in that context and returns an `nzs1` artifact with source-token provenance and exact positional import receipts. The supplied archive retains the native state, and `.nz` files carry native `nzs1` and `nnt1` artifacts. The server must advertise the native text-write and contextual init-body capabilities. A missing producer capability or a render that omits the exact placeholder fails the operation; there is no text-emulation or projected-block fallback.
+
+For a portable fixture teacher task, canonical program IR can declare an `evaluation_fixture` host frontend. The host
+bundle and selected case stay outside model-owned sources; `entry.export_path` identifies the actual application
+callable, whose JSON arguments must match the declared task inputs. A mismatch fails before executing that callable;
+correct the input mapping or original fixture. A TypeScript wrapper may use a real NL semantic anchor without forcing
+that anchor to execute. Keep source-root assets explicit with `FixtureContext.programRoot`. Schema and training-facing
+evidence details are in `docs/NATIVE_RUNTIME_NOTES.md` and `plans/VIBESTUDIO_FIXTURE_IR_DECOMPOSITION.md`.
