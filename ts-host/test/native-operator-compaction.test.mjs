@@ -38,7 +38,7 @@ test('compact-params is an operator call at view\'s site plus the in-context cap
   assert.equal(operatorCalls.length, 1);
   const [call] = operatorCalls;
   assert.match(call.invocation_id, /#operator-1$/);
-  assert.equal(call.max_tokens, 768);
+  assert.equal(call.max_tokens, 2048 + 384);
   assert.deepEqual(call.tools, []);
   assert.equal(call.messages[0].content, VIEW_PROMPT);
   assert.match(call.messages[1].content, /^instructions:\nThe call that receives this argument as value \(string\) answers: Count the lines of value\.\n\nvalue:\n"line of data/);

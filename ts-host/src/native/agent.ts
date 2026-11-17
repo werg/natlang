@@ -37,7 +37,7 @@ async function pinNativeProgramGuidance(store: NeuraleseStore, id: string): Prom
 import { listingViewInstructions, viewNote } from './prompt.js';
 import { pluggable, type PluggableSetting } from '../runtime/pluggable.js';
 import { modelFacing } from '../runtime/model-facing.js';
-import { framedState, OPERATOR_MIN_CHARS, OPERATOR_SPAN_CAPS, viewSiteMessages, type CompactSite } from './operator-frames.js';
+import { framedState, OPERATOR_MIN_CHARS, OPERATOR_REASONING_TOKENS, OPERATOR_SPAN_CAPS, viewSiteMessages, type CompactSite } from './operator-frames.js';
 import { neuraleseRef, type NeuraleseRef } from './neuralese.js';
 import { untrustedBlock, type UntrustedRegistry } from './untrusted.js';
 import { writtenReturnResult } from './pseudo-call.js';
@@ -661,7 +661,9 @@ export class NativeToolAgent {
       messages: viewSiteMessages(site.value, site.instructions), tools: [],
       seed: session.runtime.seedPolicy.mode === 'backend' ? null :
         deriveSeed(session.runtime.seedPolicy.root!, runSeedKey(session.runtime.options), session.lam.attempts, `operator-${index}`, 0),
-      max_tokens: 2 * OPERATOR_SPAN_CAPS[site.operator] };
+      // Room for the reasoning before the reply: the base model reasoned past 400 tokens on a 30-line grep result
+      // (OPERATORS_RESTORE_20261117.md §6), and a reply cut off inside its reasoning writes nothing.
+      max_tokens: OPERATOR_REASONING_TOKENS + OPERATOR_SPAN_CAPS[site.operator] };
     // model-call-kind: operator-call -- training/model-call-kinds.json
     const response = await runInFrame(session.runtime.frame, () => this.driver(request, session.runtime.signal));
     return this.capturedRef(session, site.operator, request.invocation_id!, capture, request, response);
