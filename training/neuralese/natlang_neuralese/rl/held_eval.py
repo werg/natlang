@@ -410,11 +410,17 @@ class Dispatch:
             self.finished[entry['task_id']] = max(self.finished.get(entry['task_id'], 0.), float(seconds))
 
 
-def collect(directory, entries, endpoints, *, repo, runtime, env, stop, log=None, prior=None, order='longest-first'):
+STOP_DRAIN_SECONDS = 120   # after a stop: terminated episodes get this long, then they are killed and collection returns
+
+
+def collect(directory, entries, endpoints, *, repo, runtime, env, stop, log=None, prior=None, order='longest-first',
+            drain_seconds=STOP_DRAIN_SECONDS):
     """Work-stealing slots (``endpoints``: [(url, slots)]) over the sealed ``entries``, one ``run_bonsai_queue`` process per
     episode under ``directory/workers`` (a slow episode never holds a shard of others back). Entries with a finished journal
-    are skipped (resume). The next entry is ``Dispatch``'s choice (``prior``, ``order``). Returns once every entry ran or
-    ``stop`` is set (its running episodes are terminated)."""
+    are skipped (resume). The next entry is ``Dispatch``'s choice (``prior``, ``order``). Returns once every entry ran or,
+    after ``stop``, within ``drain_seconds``: running episodes get SIGTERM, those still alive at half the drain SIGKILL,
+    and a slot thread still blocked at the end is left behind (daemon) with every thread's stack in the log, so the
+    partial result is always written (the 2026-11-17 Pop smoke's measure sat 55 min after its SIGTERM)."""
     directory, repo = Path(directory), Path(repo)
     work = directory / 'workers'
     work.mkdir(exist_ok=True)
@@ -473,21 +479,46 @@ def collect(directory, entries, endpoints, *, repo, runtime, env, stop, log=None
                     log(json.dumps({'held_eval_progress': done[0], 'of': len(todo),
                                     'minutes': round((time.time() - started) / 60, 1)}))
 
+    def signal_children(kill):
+        with lock:
+            alive = [child for child in children if child.poll() is None]
+        for child in alive:   # outside the lock: a slot thread that just reaped its child needs it
+            try:
+                child.kill() if kill else child.terminate()
+            except OSError:
+                pass
+        return len(alive)
+
     def watch():
         stop.wait()
-        with lock:
-            for child in list(children):
-                if child.poll() is None:
-                    child.terminate()
+        signal_children(kill=False)
+        if not stop_drained.wait(drain_seconds / 2):
+            left = signal_children(kill=True)
+            if log and left:
+                log(json.dumps({'event': 'held eval stop', 'killed_episodes': left}))
 
+    stop_drained = threading.Event()
     threading.Thread(target=watch, daemon=True).start()
     threads = [threading.Thread(target=slot, args=(url.rstrip('/'),), daemon=True)
                for url, slots in endpoints for _ in range(max(1, min(slots, len(todo))))]
     for thread in threads:
         thread.start()
-    for thread in threads:
-        while thread.is_alive():
-            thread.join(5)
+    stopped_at = None
+    while any(thread.is_alive() for thread in threads):
+        for thread in threads:
+            thread.join(1)
+        if stop.is_set():
+            stopped_at = stopped_at or time.monotonic()
+            if time.monotonic() - stopped_at > drain_seconds:
+                stuck = [thread for thread in threads if thread.is_alive()]
+                if log:
+                    import traceback
+                    frames = sys._current_frames()
+                    log(json.dumps({'event': 'held eval stop', 'stuck_slots': len(stuck), 'stacks': [
+                        ''.join(traceback.format_stack(frames[thread.ident])) for thread in stuck
+                        if thread.ident in frames]}))
+                break
+    stop_drained.set()
 
 
 def run(directory):
@@ -507,6 +538,8 @@ def run(directory):
     stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     signal.signal(signal.SIGINT, lambda *_: stop.set())
+    import faulthandler
+    faulthandler.register(signal.SIGUSR1, all_threads=True)   # kill -USR1 PID: every thread's stack to stderr
     endpoints = spec.get('endpoints') or [[spec['endpoint'], spec['workers']]]
     env = {**os.environ, 'NATLANG_MODEL_FACING': spec['series']['model_facing']}
     dispatch = spec.get('dispatch') or {}

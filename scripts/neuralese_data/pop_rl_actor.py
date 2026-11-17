@@ -66,7 +66,9 @@ SGLANG_EXPORT_FORMAT = 'sglang-pop-rtx4060-bf16-vendor-projection'
 # running sequences (312 at 7.5, 672 at 16). FP8 KV holds about 180k tokens. FP8 is part of the actor law (attested
 # kv_cache_dtype and the export format suffix): held results pair only within one setting.
 POP_KV_CACHE_DTYPE = 'fp8_e4m3'
-POP_MAX_RUNNING = 16
+# 20 running (2026-11-17 smoke, POP_HELD_THROUGHPUT_20261117.md): decode tokens/s scale with the batch (18.5 ms a step at
+# 1, ~26.5 at 20) and the 280k-token pool at 0.77 held 20 (full usage p99 0.90); attested as max_running.
+POP_MAX_RUNNING = 20
 # SGLang mem-fraction-static on Pop: weights + KV pool fill this share of the 7.62 GiB GPU. At 0.8 the engine kept
 # 0.81 GB after CUDA-graph capture and its prefill transients took the rest: on 2026-11-16 01:3x an 88 MiB allocation
 # in the fork's natlang_conv_prefill OOMed with 99 MiB free. 0.77 moves ~0.23 GB from the FP8 pool (318k -> ~280k

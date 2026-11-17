@@ -224,7 +224,8 @@ is the plan this approach came from.
 - **Held evals.** By default on the training actor (collection pauses): the start policy at 4 samples, then a
   checkpoint at 2 samples every 4 h, compared with step 0 in `WORK/held/step-N/`. `--held-remote pop` keeps the DGX
   training: the start policy is measured once on Pop's engine, then the newest checkpoint back to back
-  (`pop_rl_actor.py serve-checkpoint`, `--held-remote-slots 14`, FP8 KV and 16 running on Pop, `held-pop.log`).
+  (`pop_rl_actor.py serve-checkpoint`, `--held-remote-slots 20`, FP8 KV and 20 running on Pop, attested as
+  `max_running`; longest-expected-first dispatch within a sample, `held-pop.log`; POP_HELD_THROUGHPUT_20261117.md).
 - **Sentinels** (`train.jsonl`): `grad_spike` (> 5x the run's median grad_norm), `reasoning_shift`, k3 `kl_mean` with
   `ref_dlogp_max`, rho statistics, and the behaviour probe after every step (`behaviour_probe.py`,
   `ops/grpo-v2/behaviour-probe-v1.json`: logp change, entropy and `</think>` hazard on 48 start-policy calls, ~42 s,

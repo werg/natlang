@@ -115,3 +115,47 @@ def test_pop_actor_start_reuses_a_served_policy_only_with_the_same_engine_settin
     assert pop_rl_actor.start(args)['endpoint'] == 'http://x'
     with pytest.raises(Replaced):
         pop_rl_actor.start(SimpleNamespace(**{**vars(args), 'max_running': 16}))
+
+
+def _fake_repo(tmp_path, body):
+    (tmp_path / 'scripts').mkdir()
+    (tmp_path / 'scripts/run_bonsai_queue.py').write_text(body)
+    return tmp_path
+
+
+def test_a_stop_returns_within_the_drain_even_when_episodes_ignore_sigterm(tmp_path, monkeypatch):
+    import threading
+    import time as clock
+    repo = _fake_repo(tmp_path, 'import signal, time\nsignal.signal(signal.SIGTERM, signal.SIG_IGN)\ntime.sleep(600)\n')
+    monkeypatch.setattr('natlang_neuralese.rl.actor_client.NativeActorClient.get_bytes', lambda *_a, **_k: b'{}')
+    (tmp_path / 'run').mkdir()
+    stop, lines = threading.Event(), []
+    threading.Timer(1.0, stop.set).start()
+    started = clock.monotonic()
+    held_eval.collect(tmp_path / 'run', entries(['a', 'b', 'c'], 1), [('http://x', 3)], repo=repo, runtime=tmp_path,
+                      env={}, stop=stop, log=lines.append, drain_seconds=4)
+    assert clock.monotonic() - started < 8
+    assert any('"killed_episodes": 3' in line for line in lines)   # SIGKILL at half the drain
+
+
+def test_a_stop_returns_and_dumps_stacks_when_a_slot_thread_is_stuck(tmp_path, monkeypatch):
+    import threading
+    import time as clock
+    repo = _fake_repo(tmp_path, 'import time\ntime.sleep(0.1)\n')
+    monkeypatch.setattr('natlang_neuralese.rl.actor_client.NativeActorClient.get_bytes', lambda *_a, **_k: b'{}')
+    stuck = threading.Event()
+    real = held_eval.Dispatch.done
+
+    def done(self, entry, seconds):   # a slot thread that never comes back after its episode
+        stuck.wait(600)
+        real(self, entry, seconds)
+    monkeypatch.setattr(held_eval.Dispatch, 'done', done)
+    (tmp_path / 'run').mkdir()
+    stop, lines = threading.Event(), []
+    threading.Timer(1.0, stop.set).start()
+    started = clock.monotonic()
+    held_eval.collect(tmp_path / 'run', entries(['a'], 1), [('http://x', 1)], repo=repo, runtime=tmp_path, env={},
+                      stop=stop, log=lines.append, drain_seconds=2)
+    stuck.set()
+    assert clock.monotonic() - started < 6
+    assert any('"stuck_slots": 1' in line and 'stuck.wait' in line for line in lines)

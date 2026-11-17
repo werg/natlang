@@ -2702,17 +2702,18 @@ def main():
     t.add_argument('--held-workers', type=int, default=96, help='collector slots of a held measurement on the training actor')
     t.add_argument('--held-remote', choices=('pop',), help="measure held on Pop's GPU in parallel with training instead of "
                    'pausing collection on the training actor (pop_held_loop)')
-    t.add_argument('--held-remote-slots', type=int, default=14,
-                   help="episodes in flight against Pop's actor: about what its KV pool holds (FP8: ~180k tokens, 11-13k per "
-                        'call), so waiting requests do not evict the prefixes of episodes between calls (BF16 at 20 slots: '
-                        '41%% prefix hit, 13.7 requests waiting)')
+    t.add_argument('--held-remote-slots', type=int, default=20,
+                   help="episodes in flight against Pop's actor, = --pop-max-running: the FP8 hybrid-SWA pool (280k tokens "
+                        'at mem-fraction 0.77) holds 20 running sequences (smoke 2026-11-17: full usage p99 0.90, no queue, '
+                        'no retraction, +28%% tokens/s over 14; POP_HELD_THROUGHPUT_20261117.md)')
     t.add_argument('--pop-kv-cache-dtype', choices=('fp8_e4m3', 'auto'), default='fp8_e4m3',
                    help="Pop actor's KV dtype (auto = BF16, its engine until 2026-11-13); part of the attested engine: "
                         'a start-policy result of another setting is moved aside and re-measured')
     t.add_argument('--held-base', type=Path, help="with --held-remote: the base's held result directory (a result measured by "
                    'its own job, e.g. the pin base on Pop); the loop waits for it to complete instead of measuring the start '
                    'policy, and compares every checkpoint against it')
-    t.add_argument('--pop-max-running', type=int, default=16, help="Pop actor's concurrent sequences (capacity)")
+    t.add_argument('--pop-max-running', type=int, default=20,
+                   help="Pop actor's concurrent sequences; attested (max_running): the base must be measured with the same")
     t.add_argument('--unit-prefix', default='grpo')
     t.add_argument('--replay', help="learner control: train on a finished run's archived groups (its ROLLOUTS dir of "
                    "<group>.rollouts.jsonl.zst, --min-groups a step in group order) instead of collecting; no actor, "
