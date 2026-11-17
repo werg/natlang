@@ -2876,3 +2876,57 @@ OPERATORS_RESTORE_20261117.md §6.
 - **compact-history cases are not lowered:** v3's history state is the model's own note captured in context.
 - **Fork/page capture is open** and recorded in ENGINE_PARITY.
 - **Next:** rows build (queued) -> step-0 ablation -> SFT -> held on/off -> GRPO at a resume.
+
+## 2026-11-17: Akahsizrr/voltron-1-mini as a candidate base or merge partner (voltron agent)
+
+Owner 2026-11-17: evaluate https://huggingface.co/Akahsizrr/voltron-1-mini; if it holds up on held-v3, merge it with
+our work or take it as the replacement base. Training data and method are undocumented (the card mentions DPO). The
+card's own benchmarks vs LFM3-1.7B: LCB pass@1 0.201 -> 0.243, HumanEval 0.640 -> 0.671, AIME2026 0.408 -> 0.442,
+GPQA-D 0.429 -> 0.465, IFEval strict 0.725 -> 0.721, loose 0.778 -> 0.756.
+
+- **Registry and license (fact).** The license is "other" (LFM Open License, per the card, the same terms as
+  LiquidAI/LFM3-1.7B: base snapshot `LICENSE`, "LFM Open License v1.0"). The repository has no LICENSE file. There is
+  no external base-model registry: `training/neuralese_corpora.json` is for repo-relative data and preserved artifacts,
+  and LFM3-1.7B itself is not listed in it. So the model is recorded here.
+- **Identity.** Hub revision 664b0c4548cf2f167072188f47978724338fc1df (lastModified 2026-11-14), downloaded read-only to
+  `/mnt/external/natlang-development-data/external-models/voltron-1-mini/hf-664b0c45/`. Every file's sha256 is in
+  `../SHA256SUMS.hf-664b0c45`. `model.safetensors` sha256 is 0377c4cc...1d2b, equal to the Hub LFS oid. 1,728,801,536
+  BF16 parameters in 286 tensors, the same names, shapes and dtypes as LFM3-1.7B, with a tied head.
+  - Its Python files are byte-identical to the base's and were never executed.
+- **Rendering inputs are unchanged.** `chat_template.jinja` is byte-identical. `tokenizer.json` is semantically
+  identical (only the trailing newline differs). `tokenizer_config.json` adds only save-time keys (`is_local`,
+  `local_files_only`, `model_specific_special_tokens`) and reorders the response-schema keys. `config.json` differs
+  only in `initializer_range`, `use_cache` false and `transformers_version`. `generation_config.json` differs only in
+  `transformers_version`. Our harness renders from the base snapshot, so nothing the model sees changes.
+- **Movement from LFM3-1.7B.** Global ||dW||/||W|| is 0.0079 and 57% of elements changed. All linear maps moved, and
+  attention moved most: k/v/gate_proj have relative change about 0.02 (layer 18 k_proj 0.070, v_proj 0.067); the FFN
+  moved 0.006-0.012 (w2 the most); conv in/out_proj moved 0.003-0.005. Per layer, the relative change is
+  0.005-0.013 (layers 18 and 20 the most). Left untouched or nearly so: the embeddings and tied head (rel 6e-6, 0.06% of
+  elements, one-ulp changes), all norms (83 tensors bit-identical) and the conv kernels (4e-5). This pattern fits a
+  merged adapter or a frozen-embedding fine-tune; the rank of the deltas was not checked.
+- **Native checkpoint.** `/mnt/external/natlang-development-data/external-models/voltron-1-mini/native/checkpoint.pt`,
+  sha256 a19c8c9b0fcf32690c22c0131d933b2a9b835536b1447863d0d558eb0067c5e2. Recipe in `checkpoint.pt.json`. It was
+  produced by `scripts/neuralese_data/merge_checkpoint.py convert` (commit 1a28cca88).
+  - It uses the pruned layout of `exp0_sft.write_checkpoint`, with fresh-init 5ff07638's model_config, interface and
+    embedding rows at the interface ids.
+  - fresh-init's backbone is bit-identical to the LFM3-1.7B safetensors, so this is the HF->native path 5ff07638 took
+    with the weights swapped.
+  - Voltron's own rows at token_override ids 124901/124902 differed from the base by 3e-5 (L2) and were replaced by
+    the base rows; its rows at the 4 marker ids are unchanged.
+- **Forward sanity (our port, `exp0_sft.load_model`, BF16, whole-sequence NLL).** Base vs voltron per text:
+  - 3 chat exchanges: 6.83/2.81/3.63 vs 5.53/2.28/3.13;
+  - a natlang program: 4.19 vs 4.16;
+  - prose: 1.45 vs 1.46.
+  - Both answer "Canberra" greedily with a `<think>` block (voltron's is shorter).
+- **Held-v3 on Pop (prepared, not run).** Run it once `popheld-base-v4c` has finished, because `serve-checkpoint`
+  stops Pop's actors. It pairs with `ops/grpo-v4/held-base-pop` (same pin, sampling, engine, slots and PRIOR):
+  `systemd-run --user --unit popheld-voltron-v4 /bin/sh -c 'SLOTS=20 MAX_RUNNING=20 PRIOR=$D/ops/grpo-v3/run1/held/step-00008/result.json
+  $D/ops/grpo-v4/pop-held.sh $D/ops/grpo-v4/pin-383bd4ed3651 ckpt $D/ops/grpo-v4/held-voltron-pop 4 /mnt/external/natlang-development-data/external-models/voltron-1-mini/native/checkpoint.pt > $D/ops/grpo-v4/held-voltron-pop.log 2>&1'`
+  with D=/home/werg/data/lfm3-rl-dgx-20261029. Then run `pop-held.sh PIN compare $D/ops/grpo-v4/held-base-pop
+  $D/ops/grpo-v4/held-voltron-pop`.
+  - Success: a held gain with p < 0.05, after which voltron is adopted as the start policy or merge partner at the
+    next pin. Failure: no gain or a significant regression.
+- **Merge option.** `merge_checkpoint.py merge --base BASE --term CK=a [--term ...] --out OUT` computes
+  `base + sum a_i (ck_i - base)` per tensor in FP32 and rounds to BF16, recording the recipe.
+  - Interpolation: `--base fresh-init --term voltron=a`.
+  - Task arithmetic with the SFT run: `--base fresh-init --term voltron=1 --term ops/sft-v3/run1/checkpoint.pt=1`.
