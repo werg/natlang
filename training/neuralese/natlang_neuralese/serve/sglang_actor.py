@@ -160,7 +160,7 @@ class SglangEngine(Engine):
 
     def bind_sglang(self, url, *, export_manifest, fork, adapter_slots=0, adapter_rank=32,
                     projection='native', overlap_schedule=False, kv_cache_dtype='auto', kv_layout='full',
-                    max_running=None, warm_openings=None, track_input_end=False):
+                    max_running=None, warm_openings=None, track_input_end=False, speculative=None):
         self.sglang_url = url.rstrip('/')
         # Native adapters on SGLang (fork NatlangAdapters): `adapter_slots` resident stacks of summed rank
         # <= `adapter_rank` per module; the front assigns slots and never reassigns one while a request uses it.
@@ -220,6 +220,9 @@ class SglangEngine(Engine):
                 # SGLang's running-sequence cap (and its decode CUDA-graph batch sizes): batch composition changes the
                 # kernels' batch shapes, so held results pair only within one cap (held_eval.ENGINE_FIELDS)
                 'max_running': None if max_running is None else int(max_running),
+                # n-gram speculative decoding (fork NATLANG_SPECULATIVE_NGRAM): the same sampling law, but the verify
+                # pass's batch shapes differ from plain decode's, so held results pair only within one setting
+                'speculative': None if not speculative else dict(speculative),
                 'banned_token_ids': list(self.sglang_banned)}
             binding['actor_export'] = dict(self.sglang_actor_export)
         return self

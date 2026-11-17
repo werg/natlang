@@ -86,6 +86,9 @@ def test_engine_attests_the_running_cap_and_compare_refuses_another():
                'actor_export': {'format': 'x'}}
     assert held_eval.engine_of(binding)['max_running'] == 20
     assert held_eval.engine_of({**binding, 'serving_engine': {'engine': 'sglang'}})['max_running'] is None
+    speculative = {'serving_engine': {**binding['serving_engine'], 'speculative': {'algorithm': 'ngram', 'draft_tokens': 4}}}
+    assert held_eval.engine_of(speculative)['speculative'] == {'algorithm': 'ngram', 'draft_tokens': 4}
+    assert held_eval.engine_of(binding)['speculative'] is None   # plain decode pairs only with plain decode
     result = {'samples': [{'task_id': 't', 'sample': 0, 'ran': True, 'reward': 1.0, 'outcome': 'task_success'}],
               'policy_id': 'p', 'series': {'key': 's'}, 'ran': 1, 'scored': 1, 'successes': 1, 'loop_rate': 0}
     sixteen = {**result, 'engine': held_eval.engine_of({**binding, 'serving_engine': {'engine': 'sglang', 'max_running': 16}})}
