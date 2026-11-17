@@ -32,8 +32,10 @@ def task(ident='task-one', split='train', group='world-one', value='hello'):
                                                                      'input': {'text': value}, 'expected': value}}}}
 
 
-def artifacts(tmp_path):
+def artifacts(tmp_path, source_snapshot=None):
     row = task()
+    if source_snapshot is not None:
+        row['source_snapshot'] = source_snapshot
     cases = write(tmp_path / 'cases.jsonl', [row], True)
     inventory = write(tmp_path / 'inventory.jsonl', [row, task('protected', 'test', 'other-world', 'else')], True)
     teacher = {'provider': 'openai-codex', 'model_id': 'gpt-6-luna'}
@@ -89,6 +91,26 @@ def test_canonical_ir_native_result_and_rollout_are_preserved(tmp_path):
     assert checked[('task-one', 0)]['invocations']['i']['function'] == 'judge'
     assert checked[('task-one', 0)]['invocations']['i']['invocation_role'] == 'root'
     assert native['task']['program_ir']['version'] == 'natlang.program/2'
+
+
+def test_source_snapshot_matches_actual_collection_pin_not_newer_replay_pin(tmp_path):
+    record, receipt, *_ = artifacts(tmp_path, {'dirty': False, 'natlang_commit': 'd' * 40})
+    replay_path = Path(receipt['samples'][0]['replay']['record']['path'])
+    replay = json.loads(replay_path.read_text())
+    replay['code'] = {'git_commit': 'e' * 40, 'dirty': False}
+    receipt['samples'][0]['replay']['record'] = write(replay_path, replay)
+    update_receipt(tmp_path, record, receipt)
+    assert list(a.check_record(record, tmp_path)) == [('task-one', 0)]
+
+
+@pytest.mark.parametrize('snapshot,match', [
+    ({'dirty': False, 'natlang_commit': '9' * 40}, 'differs from actual collection code'),
+    ({'dirty': True, 'natlang_commit': 'd' * 40}, 'attest clean source'),
+])
+def test_source_snapshot_cannot_claim_a_wrong_collect_pin_or_dirty_source(tmp_path, snapshot, match):
+    record, *_ = artifacts(tmp_path, snapshot)
+    with pytest.raises(ValueError, match=match):
+        a.check_record(record, tmp_path)
 
 
 @pytest.mark.parametrize('field', ['cases', 'rollouts', 'inventory'])

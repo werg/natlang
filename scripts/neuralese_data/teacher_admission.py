@@ -196,6 +196,12 @@ def check_record(record, pool):
         if (not isinstance(code.get('git_commit'), str) or not re.fullmatch(r'[0-9a-f]{40}', code['git_commit']) or
                 code.get('dirty') is not False or code != rollout.get('code')):
             raise ValueError('admission needs clean collector code provenance')
+        snapshot = task.get('source_snapshot')
+        if snapshot is not None:
+            if not isinstance(snapshot, dict) or snapshot.get('dirty') is not False:
+                raise ValueError('fixture source snapshot must attest clean source')
+            if snapshot.get('natlang_commit') is not None and snapshot['natlang_commit'] != code['git_commit']:
+                raise ValueError('fixture source snapshot natlang commit differs from actual collection code')
         outcome = result.get('outcome') or {}
         if outcome.get('accepted') is not True or outcome.get('quality_pending'):
             continue
