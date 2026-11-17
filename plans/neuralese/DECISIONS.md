@@ -2673,3 +2673,14 @@ as written. Sizing in `ops/grpo-v4/launch-grpo.sh`: 64 slots, 64 running, LPS 0 
 `--activation-gb` 4 -> 12 measured only -5.8% of the policy pass for +7.5 GB and stays 4. Next lever: SGLang's overlap
 scheduler (~20-25% of decode time is serial scheduler CPU), blocked on its 2026-11-03 wrong-distribution defect.
 Evidence and what was not checked: `GRPO_STEP_THROUGHPUT_20261117.md`.
+
+**2026-11-17 12:00, grpo-v4 is a bundle (owner: "change everything that makes sense ... an engineering project").**
+AGENTS.md rewritten accordingly (8cfe10b56). Next sequence on the DGX after the run1 verdict's DGX samples: fork move +
+tests, pin, SFT data rebuild with the current teacher pool (incl. Luna and Haiku), **sft-v3-run1** (SFT from the base),
+then immediately **grpo-v4-run1 from the SFT checkpoint** with: peak LR 5e-6; `--explore-order family` over the pool
+incl. natlang-rl-task-supply-20261117; throughput (64 slots, no learner-phase slots, AdamW moments on disk, nucleus
+kernel); memory fixes and fork dbc51ddb72. No separate held eval of the SFT checkpoint: v4's held evals compare against
+the pin's 4-sample Pop base (`--held-base`, e07bf9705; Pop at 20 slots / 20 running if its smoke passes), and a
+regression is bisected with branch states. Success: a positive held change against the base at p < 0.05 on a 4-sample
+read; failure: below -3.5 pts at p < 0.05 (stop and hunt). Not included (unlikely to move held task success now):
+Neuralese variants, memetic guidance, QAT.
