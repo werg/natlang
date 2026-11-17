@@ -342,7 +342,10 @@ def start(args):
     # rehydrates a fresh actor's store.
     previous = read_json(STATE)
     runtime = str(REPO)
-    if previous and previous['policy_id'] == args.policy_id and attested(previous['endpoint'], args.policy_id):
+    sglang, sglang_format = pop_sglang(args.kv_cache_dtype, args.max_running)
+    # ... with the same engine settings (KV dtype, running cap: held results pair only within one attested engine)
+    if (previous and previous['policy_id'] == args.policy_id and previous.get('engine') == args.engine
+            and (args.engine != 'sglang' or previous.get('sglang') == sglang) and attested(previous['endpoint'], args.policy_id)):
         log(event='Pop RL actor already serves the policy', endpoint=previous['endpoint'])
         return previous
     if previous:
@@ -366,7 +369,6 @@ def start(args):
     work = f'{POP_EVAL_ROOT}/rl-actor-{prep["step"]}-{source[:12]}'
     name = f'poprl-{source[:12]}'
     transport_json = json.loads(Path(prep['transport']['path']).read_text())
-    sglang, sglang_format = pop_sglang(args.kv_cache_dtype, args.max_running)
     job = {'mode': 'rl-actor', 'arm': 'rl', 'name': name, 'port': args.port, 'host': host, 'runtime': POP_REPO,
            'code': code['pop'], 'base': POP_BASE, 'image': IMAGE, 'step': prep['step'],
            'source_sha256': source, 'stage': f'{POP_TRANSPORT_ROOT}/{source}', 'view': prep['view']['path'],

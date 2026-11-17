@@ -92,3 +92,26 @@ def test_engine_attests_the_running_cap_and_compare_refuses_another():
     twenty = {**result, 'engine': held_eval.engine_of(binding)}
     with pytest.raises(ValueError, match='max_running'):
         held_eval.compare(sixteen, twenty)
+
+
+def test_pop_actor_start_reuses_a_served_policy_only_with_the_same_engine_settings(monkeypatch):
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts/neuralese_data'))
+    import pop_rl_actor
+    from types import SimpleNamespace
+    settings, _ = pop_rl_actor.pop_sglang('fp8_e4m3', 20)
+    previous = {'policy_id': 'p', 'endpoint': 'http://x', 'engine': 'sglang', 'sglang': settings, 'unit': 'u'}
+    monkeypatch.setattr(pop_rl_actor, 'read_json', lambda *_a, **_k: dict(previous))
+    monkeypatch.setattr(pop_rl_actor, 'attested', lambda *_a: True)
+
+    class Replaced(Exception):
+        pass
+
+    def stop_unit(_state):
+        raise Replaced
+    monkeypatch.setattr(pop_rl_actor, 'stop_unit', stop_unit)
+    args = SimpleNamespace(policy_id='p', engine='sglang', kv_cache_dtype='fp8_e4m3', max_running=20)
+    assert pop_rl_actor.start(args)['endpoint'] == 'http://x'
+    with pytest.raises(Replaced):
+        pop_rl_actor.start(SimpleNamespace(**{**vars(args), 'max_running': 16}))
