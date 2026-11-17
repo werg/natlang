@@ -340,3 +340,24 @@ check pass; the variant means a new Pop base.
   - The grpo-v4 launchers are used unchanged. The variant enters their ledger env through a generated copy that adds
     one variable to the env line.
   - The pin must contain main at or after this commit.
+
+## 8. Rows built, merged, and the GPU pass-through smoke (2026-11-17 late)
+
+- **Rows** (`/home/werg/data/natlang-operator-rows-20261117-v1`, 2.1 GB):
+  - 94,477 cases read; 87,477 train and 6,232 test rows.
+  - 764 held drops (0.8%; s1-qa-long-context 611, broad-musique 76, the rest at most 24 each) and 4 rejects
+    (3 over the token cap, 1 seed render).
+  - 468M forward tokens in the train files.
+- **Merged for the stage** (`ops/operators-v1/merged`, 500 whole cases per source):
+  - 30,465 chains: 81.6M forward tokens and 2.70M loss tokens (sha256 83c02cfe);
+  - val: 587 test consumers (sha256 0a2fc90a).
+- **GPU smoke** (`opr-sftsmoke-1`, medium, 15 GB claim, 12.0 GB peak, 202 s). 18 test chains (operator and consumer
+  rows of tool-digest, s1-qa-trivia and broad-hotpotqa) went through `exp0_sft.row_inputs` and the
+  `lfm3_fast_train` pass-through with a backward pass, base 5ff07638.
+  - Every loss and gradient is finite.
+  - Pass-through and detached losses are identical, so the forward is the same.
+  - The consumer's loss reaches the embedding rows of tokens that occur only in the operator's site: their gradient
+    norm is 1.7-19.0 with the pass-through against 0.01-7.2 detached. The detached remainder is the tied output
+    head's softmax gradient.
+- **Not run:** an optimizer step on the rows. `exp0_sft train` with AdamW needs about 24 GB for its FP32 moments;
+  `launch-sft.sh`'s preflight and the ledger budget cover that run.

@@ -3080,3 +3080,14 @@ citations rather than a fake capture implementation. None blocks this hosted tex
   program-improver/v1; 32 keys, last written 2026-11-16/17), so episodes of tasks using those sites had their progress-
   review timing set by earlier episodes; Pop has 3 such keys (2026-10-14). 4 cached refinement verdicts (2026-10-09, 10-28).
   Per-series counts of affected held episodes cannot be recovered: the call rows were evicted.
+
+**2026-11-17 23:00, operators stage ready (operators agent).** Details in OPERATORS_RESTORE_20261117.md §6-8.
+- **Fork/page capture** is at parity, the Q8 floor against the Python engine; its ENGINE_PARITY row is removed.
+- **compact-history** is the model's own note captured in place.
+- **Step-0 ablation:** seeded in-context states are used by their consumers and beat the same span written
+  standalone on 17 of 21 sources.
+- **Rows:** 87,477 train cases after 764 held drops. The audit found genuine held Wikipedia passages, so the filter
+  keeps dropping.
+- **The GPU pass-through smoke passes.**
+- **Next:** `ops/operators-v1/operator-stage.sh` (merge done → sft → held-base under `learned-compaction` → grpo).
+  It enters at the first grpo-v4 resume with a pin at or after 0ea0e43b0 and a Pop base window.
