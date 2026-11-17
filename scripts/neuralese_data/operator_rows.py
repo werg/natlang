@@ -330,8 +330,9 @@ def merge(args):
         got = {}
         if 'train' in files:
             chains = pickle.load(open(files['train']['path'], 'rb'))['chains']
-            if args.max_chains_per_source:
-                chains = chains[:args.max_chains_per_source]
+            if args.max_cases_per_source:   # whole cases (a case's operator chains and its consumer share 'task')
+                keep = set(list(dict.fromkeys(c['task'] for c in chains))[:args.max_cases_per_source])
+                chains = [c for c in chains if c['task'] in keep]
             train += chains
             got['train'] = len(chains)
         if 'test' in files and args.val_per_source:
@@ -370,7 +371,7 @@ def main():
     m = sub.add_parser('merge')
     m.add_argument('--rows', required=True)
     m.add_argument('--out', required=True)
-    m.add_argument('--max-chains-per-source', type=int, default=0)
+    m.add_argument('--max-cases-per-source', type=int, default=0)
     m.add_argument('--val-per-source', type=int, default=32)
     args = parser.parse_args()
     if args.command == 'build':
