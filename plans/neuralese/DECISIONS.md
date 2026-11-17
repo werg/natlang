@@ -2709,3 +2709,14 @@ natlang to `fork-checks.sh`'s PYTHONPATH), producer parity at the BF16 floor and
 - **sft-v3-run1:** unit `sft-v3-run1`, 266 optimizer steps of 30k loss tokens, LR 5e-6, warmup 10, ~7 h. grpo-v4-run1
   launches from its checkpoint when it ends (`launch-grpo.sh`, bundle as decided above).
 - **Pop:** `popheld-base-v4`, the base at 4 samples on the pin and Pop 20/20 into `ops/grpo-v4/held-base-pop`, ~7 h.
+
+**2026-11-17 16:45, core capabilities come back (owner).** The 11-12 w5 retirement deleted the only whole-graph
+Neuralese trainer (`native_state_sft.py`), memetic learning, JOLT+, hindsight hints and rollout distillation, much of
+it inside the mislabeled commit 60d2c1209; their return gate ("after two held gains") could not open while plain GRPO
+showed no significant gain. Owner: Neuralese is a differentiable pass-through, and "I definitely want memetic
+learning, JOLT+, hindsight and distillation to be brought back." Rebuilt on today's stack (per-call learner, prefix
+tree, SGLang actor), not the old custody machinery and not the measured waste (APPROACH_REVIEW 2.5: beta_s = 0 JOLT+,
+privileged twins on every graph): whole-graph pass-through gradients in the shared learner (agent,
+NEURALESE_PASSTHROUGH_20261117.md), then memetic, JOLT+, hindsight and distillation on it
+(RESTORE_MEMETIC_JOLT_HINDSIGHT_20261117.md). Simplification may park a product-core capability, never delete it, and
+no gate may depend on a result the current method may never produce.
