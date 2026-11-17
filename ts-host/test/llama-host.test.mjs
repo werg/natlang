@@ -336,5 +336,5 @@ test('the llama entry bundles on its own: its closure is the llama directory and
     format: 'esm', write: false, metafile: true, logLevel: 'silent' });
   const inputs = Object.keys(result.metafile.inputs).filter(file => !file.startsWith('node:')).map(file => file.replace(/^.*?dist\//, ''));
   assert.deepEqual(inputs.filter(file => !file.startsWith('llama/')).sort(),
-    ['llama-fork-source.js', 'llama-runtime-release.js', 'model-catalog.js', 'model/warm-opening.js', 'package/directories.js']);
+    ['llama-fork-source.js', 'llama-runtime-release.js', 'model-catalog.js', 'package/directories.js']);
 });

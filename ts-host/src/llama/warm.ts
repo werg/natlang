@@ -23,13 +23,13 @@ import { existsSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, wr
 import { join } from 'node:path';
 import type { WarmPrefix } from '../package/warm.js';
 import type { LlamaHost } from './host.js';
-import { OPENING_PROBES, openingParts, sharedPrefix } from '../model/warm-opening.js';
+import { OPENING_PROBES, openingParts, sharedPrefix } from './warm-opening.js';
 
 export type { WarmPrefix } from '../package/warm.js';
-export { sharedPrefix } from '../model/warm-opening.js';
+export { sharedPrefix } from './warm-opening.js';
 
 export type Opening = { system: { role: 'system'; content: string }; tools: unknown[]; key: string };
-/** A request's opening: its system prompt and tools, keyed by their exact content (model/warm-opening.ts). */
+/** A request's opening: its system prompt and tools, keyed by their exact content (warm-opening.ts). */
 export function openingOf(request: { messages: readonly unknown[]; tools?: readonly unknown[] }): Opening | undefined {
   const parts = openingParts(request);
   return parts && { system: parts.system, tools: parts.tools, key: createHash('sha256').update(parts.text).digest('hex') };

@@ -2,7 +2,7 @@
  * Warm prompt openings of the in-page engine, kept across page reloads (docs/ENGINE_PARITY.md).
  *
  * The page does what the managed server does across restarts (llama/warm.ts): the first time a load serves a
- * function's opening (its system prompt and tools, model/warm-opening.ts), the opening is prefilled on its own in one
+ * function's opening (its system prompt and tools, llama/warm-opening.ts), the opening is prefilled on its own in one
  * slot and that slot's state (KV cache, tokens and context checkpoints, the fork's slot save) is written to the
  * origin-private file system; a later load of the same model, engine build and settings restores it into a slot
  * instead of prefilling the opening again. The next request that starts with the opening continues from it.
@@ -15,7 +15,7 @@
  *
  * Mechanism only: which openings to warm is the page's request stream, nothing here decides policy.
  */
-import { OPENING_PROBES, openingParts, sharedPrefix } from '../model/warm-opening.js';
+import { OPENING_PROBES, openingParts, sharedPrefix } from '../llama/warm-opening.js';
 
 /** The engine calls a warm opening needs (the vendored wllama with `capabilities.slotState`). */
 export type WarmSlotEngine = {
