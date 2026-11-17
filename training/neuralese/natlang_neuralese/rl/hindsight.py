@@ -188,14 +188,21 @@ def main(argv=None):
     index.add_argument('--out', required=True)
     args = parser.parse_args(argv)
     from .held_eval import exclusion_ids
-    episodes = list(_episodes(args.episodes))
     manifest = args.held_manifest
     if manifest is None:
         from ..common.paths import resolve_str
         manifest = resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'held-v3', 'manifest.json')
-    cases = {e['task_id']: e['task'] for e in episodes if isinstance(e.get('task'), dict)}
+    # two streaming passes: the held closure needs only each task's id and split group
+    cases, count = {}, 0
+    for episode in _episodes(args.episodes):
+        count += 1
+        task = episode.get('task')
+        if isinstance(task, dict):
+            cases[episode['task_id']] = {'id': task.get('id'),
+                                         'curriculum': {'split_group': (task.get('curriculum') or {}).get('split_group')}}
     excluded = exclusion_ids(manifest, list(cases.values()))
-    records = build_index(episodes, excluded=excluded)
+    episodes = range(count)
+    records = build_index(_episodes(args.episodes), excluded=excluded)
     out = Path(args.out)
     partial = out.with_suffix(out.suffix + '.partial')
     with partial.open('w') as handle:
