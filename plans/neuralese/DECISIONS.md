@@ -3234,3 +3234,13 @@ task outcomes and capture the exact model-facing calls before admitting the repl
 - **Operator rows v2.** Rebuilt at the 8,000-character threshold: 18,924 train and 1,565 test cases from 94,477 read,
   764 held drops. Most extract and short-value cases are no longer compacted by the runtime. The stage merge uses
   these rows.
+
+**2026-11-18 01:30, memetic on in training (restore agent, owner 2026-11-18; 5d6a3ad29).** No base-rate gate and no
+re-smoke: every program enters (555 rows, 148 families, support 4 / query 6, `/home/werg/data/memetic-tasks-20261118`);
+a group is skipped only when all of its unguided support samples ran and passed. `train.jsonl` logs `memetic_groups`
+(per group: query success with each sample's learned guidance vs the same worlds and seeds unguided, and the gap) and
+`memetic` (step gap mean, run running mean, resumed from the log). The gap is telemetry to watch, never a gate or stop.
+Defaults `--memetic-share 0.02` (~18 ordinary groups of rollouts per memetic group: ~1/4 of actor rollouts),
+`--memetic-max-staleness 8` (memetic episodes run tens of minutes; 2 would drop them all); grpo-v4 `launch-grpo.sh`
+FEATURES carries them (`MEMETIC_SHARE=0` opts out) for its next resume on a pin containing 5d6a3ad29. The 301-world
+measurement and `resmoke.sh` are dropped.
