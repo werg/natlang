@@ -162,6 +162,22 @@ class Sequence:
     cuda_memory_measurement_scope: str | None = None
 
 
+def selected_span(decode, ids, text):
+    """(start, stop) of the fewest whole tokens of ``ids`` whose decoded text covers the one occurrence of ``text`` as
+    the reply spells it (raw or JSON-escaped: a tool call argument; ts-host grammarCapture spells it the same). RequestError when none or several."""
+    if not isinstance(text, str) or not text:
+        raise RequestError("neuralese-native-capture", "capture select must be nonempty text")
+    ends = [len(decode(ids[:i + 1])) for i in range(len(ids))]
+    whole = decode(ids)
+    for spelling in dict.fromkeys([text, json.dumps(text, ensure_ascii=False)[1:-1]]):
+        if whole.count(spelling) == 1:
+            first = whole.index(spelling)
+            start = next(i for i, end in enumerate(ends) if end > first)
+            stop = next(i for i, end in enumerate(ends) if end >= first + len(spelling)) + 1
+            return start, stop
+    raise RequestError("neuralese-native-capture", "the selected text does not occur exactly once in the reply")
+
+
 class Engine:
     # An actor whose arithmetic differs from the learner's device (another GPU) binds this export in every capture; the learner
     # then guards the engine mismatch per episode instead of applying the exact native replay gate (``set_actor_export``).
@@ -913,105 +929,25 @@ class Engine:
         block.validate()
         return block, self.store.put_native_state(block, owner=owner)
 
-    def native_operator(self, name, *, instructions='', value=None, messages=None, context=(), tools=None, note='',
-                        adapters=None):
-        """Run one learned Neuralese operator site (model/learned_operators.py): generate its producer span and archive it."""
-        return self._native_run(lambda: self._native_operator_impl(name, instructions=instructions, value=value,
-            messages=messages, context=context, tools=tools, note=note), adapters)
-
-    def _operator_site(self):
-        cached = getattr(self, '_operator_site_cache', None)
-        if cached is None:
-            from ..data.operator_graph import OperatorGraphRenderer
-            from ..model.learned_operators import OperatorRows
-            fingerprint = self.model_config["tokenizer_fingerprint"]
-            rows = getattr(self.shared_model, 'operator_rows', None)
-            trained = rows is not None
-            if rows is None:
-                # No trained rows in this checkpoint: the text-initialized operator (identical to its text prompt).
-                rows = OperatorRows.text_initialized(self.shared_model.port.embedding_weight, self.tokenizer,
-                                                     tokenizer_fingerprint=fingerprint)
-            renderer = OperatorGraphRenderer(self.tokenizer, role_ids=self.role_tokens.ids,
-                                             tokenizer_fingerprint=fingerprint, bindings=rows.bindings,
-                                             max_tokens=self.context)
-            cached = self._operator_site_cache = (renderer, rows, 'trained' if trained else 'text-initialized')
-        return cached
-
-    def _native_operator_impl(self, name, *, instructions, value, messages, context, tools, note):
-        if not getattr(self, "native_state_enabled", False):
-            raise RequestError("neuralese-native-state-unavailable", "learned operators require shared-state serving")
-        from ..model.learned_operators import TEXT_PLACEMENTS, ResolvedSpan, operator, registry_sha256
-        from ..model.shared_state import native_step
-        try:
-            spec = operator(name)
-        except ValueError as error:
-            raise RequestError("neuralese-operator-unknown", str(error)) from error
-        if not isinstance(instructions, str) or not isinstance(note, str):
-            raise RequestError("neuralese-operator-input", "operator instructions and note must be text")
-        text_site = spec.placement in TEXT_PLACEMENTS
-        source = value if text_site else messages
-        if text_site and not isinstance(value, str):
-            raise RequestError("neuralese-operator-input", f"operator {name} reads one text value")
-        if not text_site and not isinstance(messages, list):
-            raise RequestError("neuralese-operator-input", f"operator {name} compacts a list of messages")
-        renderer, rows, state = self._operator_site()
-        try:
-            ids, prompt = renderer.site(name, instructions=instructions, source=source,
-                                        context=list(context or ()), tools=tools)
-        except ValueError as error:
-            raise RequestError("neuralese-operator-input", str(error)) from error
-        if len(ids) + 2 >= self.context:
-            raise RequestError("context-length", f"operator site of {len(ids)} tokens exceeds this model context")
-        cap = min(spec.seed_cap, self.context - len(ids) - 1)
-        close = self.role_tokens.produce_close
-        banned = [token for token in self.role_tokens.ids if token != close]
-        tensor = torch.tensor([ids], dtype=torch.long, device=self.device)
-        generated, chunks, closed = [], [], False
-        with torch.inference_mode():
-            embeddings = rows.apply(self.shared_model.embed(tensor), [ResolvedSpan(name, 'prompt', 'site', *prompt)])
-            output = native_step(self.shared_model, tensor, embeddings=embeddings)
-            cache = output["cache"]
-            while len(generated) < cap:
-                # Greedy: the operator's span is a deterministic function of its site.
-                logits = self.shared_model.logits(output["h_final"][:, -1])[0].float()
-                logits[banned] = float("-inf")
-                token = int(logits.argmax())
-                if token == close:
-                    closed = True
-                    break
-                output = native_step(self.shared_model, torch.tensor([[token]], dtype=torch.long, device=self.device),
-                                     cache, producing=True)
-                cache = output["cache"]
-                generated.append(token)
-                chunks.append(output)
-            if not chunks:
-                chunks.append(native_step(self.shared_model, torch.empty((1, 0), dtype=torch.long, device=self.device),
-                                          cache, producing=True))
-        # The stored text is the span's own decoded tokens (re-encoding provenance); the caller's note stays separate.
-        block, record = self._native_store_capture(generated, chunks,
-                                                   text=self.tokenizer.decode(generated, skip_special_tokens=False))
-        meta = record.meta()
-        meta["type"] = "Neuralese<string>"
-        return {"id": record.id, "native_state": meta,
-                "operator": {"name": name, "version": spec.version, "span_tokens": len(generated), "closed": closed,
-                             "span_cap": spec.seed_cap, "site_tokens": len(ids), "note": note,
-                             "registry_sha256": registry_sha256([name]), "rows": state}}
-
-    def native_capture(self, prompt_token_ids, reply_token_ids, *, value_type=None, adapters=None):
+    def native_capture(self, prompt_token_ids, reply_token_ids, *, select=None, value_type=None, adapters=None):
         """The in-context capture of a sampled reply (an operator write, OPERATORS_RESTORE_20261117.md §3.1): the reply's
-        content (after its reasoning, before its end of turn) as a producer span in its own context."""
-        return self._native_run(lambda: self._native_capture_impl(prompt_token_ids, reply_token_ids,
+        content (after its reasoning, before its end of turn), or with ``select`` the tokens of that text inside the
+        reply (a ``compact_history`` note in its tool call), as a producer span in its own context."""
+        return self._native_run(lambda: self._native_capture_impl(prompt_token_ids, reply_token_ids, select=select,
                                                                   value_type=value_type), adapters)
 
-    def capture_plan(self, prompt_token_ids, reply_token_ids):
+    def capture_plan(self, prompt_token_ids, reply_token_ids, select=None):
         """(prefix ids through produce_open, span ids) of a reply captured in place; RequestError when it has no content."""
         ids = [prompt_token_ids, reply_token_ids]
         if not all(isinstance(part, list) and all(type(t) is int and t >= 0 for t in part) for part in ids):
             raise RequestError("neuralese-native-capture", "capture needs the prompt and reply token ids")
         reply = list(reply_token_ids)
         end = next((i for i, token in enumerate(reply) if token in self.stop_ids), len(reply))
-        think_close = self.tokenizer.convert_tokens_to_ids("</think>")
-        start = max((i + 1 for i, token in enumerate(reply[:end]) if token == think_close), default=0)
+        if select is not None:
+            start, end = selected_span(lambda part: self.tokenizer.decode(part, skip_special_tokens=False), reply[:end], select)
+        else:
+            think_close = self.tokenizer.convert_tokens_to_ids("</think>")
+            start = max((i + 1 for i, token in enumerate(reply[:end]) if token == think_close), default=0)
         span = reply[start:end]
         markers = set(self.role_tokens.ids)
         if not span or markers.intersection(span) or markers.intersection(prompt_token_ids):
@@ -1035,10 +971,10 @@ class Engine:
                     "adapter_binding": block.adapter_binding},
                 "source_text_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest()}
 
-    def _native_capture_impl(self, prompt_token_ids, reply_token_ids, *, value_type=None):
+    def _native_capture_impl(self, prompt_token_ids, reply_token_ids, *, select=None, value_type=None):
         if not getattr(self, "native_state_enabled", False):
             raise RequestError("neuralese-native-state-unavailable", "native captures require shared-state serving")
-        prefix, span = self.capture_plan(prompt_token_ids, reply_token_ids)
+        prefix, span = self.capture_plan(prompt_token_ids, reply_token_ids, select)
         from ..model.shared_state import native_step
         with torch.inference_mode():
             opened = native_step(self.shared_model, torch.tensor([prefix], dtype=torch.long, device=self.device))

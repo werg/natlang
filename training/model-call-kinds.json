@@ -12,7 +12,7 @@
    "parity": {"status": "covered", "evidence": ["tests/neuralese/test_serving_prompt_rebuild.py", "tests/neuralese/test_lfm3_format.py", "ts-host/test/prompt-pieces-export.test.mjs"]}
   },
   "operator-call": {
-   "summary": "A learned operator write's model call (compact-value, compact-params; plans/neuralese/OPERATORS_RESTORE_20261117.md): an ordinary sampled call at view's site under its own invocation ID '<call>#operator-<n>', whose reply content is then captured in its own context (native-states/capture).",
+   "summary": "A learned operator write's model call (compact-value, compact-params; plans/neuralese/OPERATORS_RESTORE_20261117.md): an ordinary sampled call at view's site under its own invocation ID '<call>#operator-<n>', whose reply content is then captured in its own context (native-states/capture, or a grammar-forced span on the managed llama-server and the page). compact-history needs no call: its note is captured in place.",
    "model_output": "generated",
    "endpoints": ["/v1/chat/completions"],
    "sft": {"status": "covered", "evidence": ["scripts/neuralese_data/operator_rows.py", "tests/neuralese/test_operator_rows.py"]},
@@ -51,14 +51,6 @@
    "rl": {"status": "gap", "owner": "legacy-sweep", "section": "view-write"},
    "parity": {"status": "not-applicable", "reason": "the server renders the view site itself (view.py); nothing in ts-host constructs serverViewer"}
   },
-  "operator-write": {
-   "summary": "A learned Neuralese operator site served by the native server (compact-history, extract; POST /v1/neuralese/operator): greedy generation of the operator's producer span after its site. compact-value and compact-params use operator-call plus native-states/capture instead.",
-   "model_output": "forced",
-   "endpoints": ["/v1/neuralese/operator"],
-   "sft": {"status": "covered", "evidence": ["training/neuralese/natlang_neuralese/data/operator_graph.py", "tests/neuralese/test_operator_graph.py"]},
-   "rl": {"status": "not-applicable", "reason": "greedy span without a sampling receipt; the v3 operator-call replaces it (OPERATORS_RESTORE_20261117.md)"},
-   "parity": {"status": "covered", "evidence": ["tests/neuralese/test_learned_operators.py"]}
-  },
   "native-forced-write": {
    "summary": "Forced producers: write-text materializes a string as native state (Neuralese<string> arguments, soft-body placeholders); init-body encodes a soft body in its real rendered call context.",
    "model_output": "forced",
@@ -94,7 +86,6 @@
   "/v1/neuralese/decide_many": {"kinds": ["decision-readout", "refinement-judge-scored"]},
   "/v1/natlang/score": {"kinds": ["decision-readout", "refinement-judge-scored"]},
   "/v1/neuralese/view": {"kinds": ["view-write"]},
-  "/v1/neuralese/operator": {"kinds": ["operator-write"]},
   "/v1/neuralese/native-states/write-text": {"kinds": ["native-forced-write"]},
   "/v1/neuralese/native-states/init-body": {"kinds": ["native-forced-write"]},
   "/v1/neuralese/native-states/capture": {"kinds": ["native-forced-write"]},

@@ -102,7 +102,7 @@ class OperatorGraphRenderer:
     def site(self, name, *, instructions, source, context=(), tools=None):
         """Token IDs of one operator write site through ``produce_open``: (ids, prompt span).
 
-        The single definition of the site for training graphs and the serving endpoint (engine.native_operator),
+        The single definition of the site for training graphs and rows (scripts/neuralese_data/operator_rows.py),
         which generates the producer span after it. ``source`` is text for 'system' operators and serving messages
         for 'user-suffix' operators.
         """

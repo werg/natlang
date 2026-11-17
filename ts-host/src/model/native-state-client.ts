@@ -10,6 +10,7 @@ import { nativeStateConsumerFromInfo, type NeuraleseRuntimeOptions } from '../na
 export type { NativeAdapterStateConsumption } from '../native/neuralese-store.js';
 
 import type {NativeStateDerivation} from '../native/native-derivative-contract.js';
+import type { NativeCapture } from '../native/operator-frames.js';
 
 export type NativeSourceCapture = { policy: { checkpoint_sha256: string; tokenizer_fingerprint: string;
   embedding_weight_sha256: string; architecture: string };
@@ -43,11 +44,12 @@ export async function nativeStateRuntimeOptions(options: NativeClientOptions, se
   const nativeStateConsumer = nativeStateConsumerFromInfo(info);
   if (!nativeStateConsumer)
     return failure('neuralese-native-state-unavailable', 'the server must declare native identity and consumption modes');
-  const { serverCompactor, OPERATOR_CAPABILITY } = await import('./native-operator.js');
-  const compactor = serves(info, OPERATOR_CAPABILITY) ? serverCompactor({ ...options, info }) : undefined;
+  const { grammarCapture } = await import('./native-operator.js');
+  const capture = serves(info, 'native.capture') ? serverCapture({ ...options, info }) :
+    (native as { production?: boolean }).production ? grammarCapture({ ...options, info }) : undefined;
   return { store: options.store, dialect, nativeStateConsumer,
     nativeStateConsumerForCall: async () => nativeStateConsumerFromInfo(await neuraleseServerInfo(options.endpoint, { headers: options.headers })),
-    ...(port ? { port } : {}), ...(compactor ? { compactor } : {}) };
+    ...(port ? { port } : {}), ...(capture ? { capture } : {}) };
 }
 
 const failure = (code: string, detail: string): never => { throw Object.assign(new Error(`${code}: ${detail}`), { code }); };
@@ -189,6 +191,16 @@ export async function nativeTextOperation(options: NativeClientOptions, operatio
       source_text_sha256: result.source_text_sha256 } } };
 }
 
+/** `native.capture` on a server that implements it: the exact prompt and sampled reply ids, captured server-side. */
+export function serverCapture(options: NativeClientOptions): NativeCapture {
+  return async (call, extra = {}) => {
+    if (!call.prompt?.length || !call.reply?.length)
+      return failure('neuralese-native-capture', 'native.capture needs the call\'s exact prompt and sampled reply ids');
+    return (await nativeTextOperation(options, 'capture', { prompt_token_ids: call.prompt, reply_token_ids: call.reply,
+      ...(call.select !== undefined ? { select: call.select } : {}), ...extra })).meta;
+  };
+}
+
 /** The existing write-port interface, backed by actual native producer execution. */
 export async function nativeStateWritePort(options: NativeClientOptions): Promise<NeuralesePort> {
   const info = options.info ?? await neuraleseServerInfo(options.endpoint, { headers: options.headers });
@@ -198,8 +210,5 @@ export async function nativeStateWritePort(options: NativeClientOptions): Promis
   const dialect = `native-state/${native.architecture}`;
   return { dialect, forcedText: true, async write(text, extra = {}) {
     return (await nativeTextOperation({ ...options, info }, 'write-text', { text, ...extra })).meta;
-  }, ...(serves(info, 'native.capture') ? { async capture(tokens: { prompt: number[]; reply: number[] }, extra = {}) {
-    return (await nativeTextOperation({ ...options, info }, 'capture',
-      { prompt_token_ids: tokens.prompt, reply_token_ids: tokens.reply, ...extra })).meta;
-  } } : {}) };
+  } };
 }

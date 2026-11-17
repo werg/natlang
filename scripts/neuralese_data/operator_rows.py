@@ -263,7 +263,7 @@ def build(args):
                'held_sets': {str(p): hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in args.held},
                'held_closure': {'groups': len(held.groups), 'ids': len(held.ids), 'shingles': len(held.owner),
                                 'shingle_words': SHINGLE, 'text_min': TEXT_MIN},
-               'seed_weight': args.seed_weight, 'max_tokens': args.max_tokens, 'sources': {}}
+               'seed_weight': args.seed_weight, 'max_tokens': args.max_tokens, 'splits': args.splits, 'sources': {}}
     for path in case_files(args.cases, operators):
         name, source_name = path.parent.name, path.name.removesuffix('.port-records.jsonl')
         started = time.time()
@@ -278,6 +278,8 @@ def build(args):
                 counts['read'] += 1
                 record = json.loads(line)
                 split = 'test' if record.get('split') in ('test', 'validation') else 'train'
+                if split not in args.splits:
+                    continue
                 hit = held.hit(record)
                 if hit:
                     held_hits[f'{split}:{hit}'] += 1
@@ -329,6 +331,7 @@ def main():
     p.add_argument('--limit', type=int, default=0, help='cases read per source file (smoke)')
     p.add_argument('--max-tokens', type=int, default=32000)
     p.add_argument('--seed-weight', type=float, default=1.0)
+    p.add_argument('--splits', nargs='+', default=['train', 'test'], choices=['train', 'test'])
     args = parser.parse_args()
     if args.command == 'build':
         build(args)
