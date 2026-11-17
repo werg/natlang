@@ -239,6 +239,15 @@ def test_teacher_rho_summary_reads_the_student_form_ratio():
     assert summary['rho_capped'] == pytest.approx(1 / 3, abs=1e-3) and summary['log_rho_p50'] == 0.
 
 
+def test_restore_telemetry_is_top_level_while_each_method_is_on():
+    stats = collections.Counter(teacher_successes=1, teacher_episodes_trained=1, sd_episodes=2, sd_tokens=900, sd_buffer=3)
+    on = grpo.restore_telemetry(stats, SimpleNamespace(teacher_attempts=2, sd_weight=.1))
+    assert on['teacher'] == {'groups': 0, 'episodes': 0, 'successes': 1, 'episodes_trained': 1, 'calls_student_form': 0,
+                             'privileged_tokens_removed': 0, 'policy_calls_removed': 0}
+    assert on['sd'] == {'added': 0, 'episodes': 2, 'tokens': 900, 'buffer': 3, 'skip_imports': 0}
+    assert grpo.restore_telemetry(stats, SimpleNamespace(teacher_attempts=0, sd_weight=0)) == {}
+
+
 def test_self_distillation_replays_rare_successes_in_later_steps():
     args = SimpleNamespace(sd_max_success=0.25, sd_window=2, sd_episodes=2)
     stats = collections.Counter()

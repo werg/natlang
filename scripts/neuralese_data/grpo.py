@@ -1413,6 +1413,26 @@ def sd_take(buffer, step, args, stats):
     return [item['episode'] for item in chosen]
 
 
+TEACHER_FIELDS = ('groups', 'episodes', 'successes', 'episodes_trained', 'calls_student_form',
+                  'privileged_tokens_removed', 'policy_calls_removed')
+SD_FIELDS = ('added', 'episodes', 'tokens', 'buffer', 'skip_imports')
+
+
+def restore_telemetry(stats, args):
+    """Top-level per-step fields of the restored methods for train.jsonl (the heartbeat reads these; ``lowering``
+    keeps the raw counters): ``teacher`` (JOLT+ attempts lowered this step: groups, episodes, successes, episodes
+    trained with a positive advantage, calls in student form, privileged tokens and policy calls removed) and ``sd``
+    (self-distillation replay: added to the buffer, replayed episodes and tokens, buffer size). Every key is present
+    (0 when nothing happened) while the method is on; the block is absent when it is off. The teacher tokens' rho
+    quantiles are ``teacher_rho``, logged after the learner."""
+    out = {}
+    if getattr(args, 'teacher_attempts', 0):
+        out['teacher'] = {key: int(stats.get('teacher_' + key, 0)) for key in TEACHER_FIELDS}
+    if getattr(args, 'sd_weight', 0):
+        out['sd'] = {key: int(stats.get('sd_' + key, 0)) for key in SD_FIELDS}
+    return out
+
+
 def teacher_rho_summary(parts, cap):
     """Distribution of rho over the step's teacher tokens in student form (JOLT+): how much of the guided run the unguided
     policy finds plausible. None without teacher tokens."""
@@ -2371,7 +2391,8 @@ def train(args):
                   if rollouts_archive is not None and rollouts_archive.exists() else None,
                   'actor_version': versions_live['actor'], 'imported_state_mb': round(imported_state_mb, 1),
                   'neuralese_passthrough': not args.no_neuralese_passthrough,
-                  'producer_document_tokens': sum(exp0_sft.source_tokens(c) for c in chains)}
+                  'producer_document_tokens': sum(exp0_sft.source_tokens(c) for c in chains),
+                  **restore_telemetry(stats, args)}
         style = reasoning_style(chains, think_close)
         record.update(style, **({} if args.replay else style_shift(work, style)))   # replayed reasoning is not the policy's
         if record.get('reasoning_shift'):
