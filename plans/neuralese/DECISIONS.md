@@ -2930,3 +2930,25 @@ GPQA-D 0.429 -> 0.465, IFEval strict 0.725 -> 0.721, loose 0.778 -> 0.756.
   `base + sum a_i (ck_i - base)` per tensor in FP32 and rounds to BF16, recording the recipe.
   - Interpolation: `--base fresh-init --term voltron=a`.
   - Task arithmetic with the SFT run: `--base fresh-init --term voltron=1 --term ops/sft-v3/run1/checkpoint.pt=1`.
+
+**2026-11-17 19:00, tuning: factored LoRA in training, teacher support data, Pop dev command (tuning agent).**
+- **Factored LoRA (FALLOW T4, coordinator call):** `NATLANG_FACTORED_LORA` (default on, `0` opts out). A
+  differentiated adapted operation (`run_native`, `NativeInvocationActors`) wraps each target Linear (every alias,
+  by weight identity) in `FactoredLoRALinear`: base projection through `shared_state._linear` unchanged, delta
+  `(x A^T) B^T` in FP32 from `lowrank_factors` (free LoRA and subspace/bank adapters; 3-D expert banks and reference
+  arithmetic keep the substitution), sum rounded once. No materialized FP32 `W + B A` or its gradient; ordinary
+  autograd fills the adapter leaves. Forward-only operations keep the exact substitution (inference cache; SGLang slots
+  and llama.cpp LoRA serve factored anyway). Tests: loss and coefficient gradients equal the substitution (FP32 to
+  rounding, BF16 base within its rounding) for free LoRA and subspace adapters; tie/export tests read substituted
+  weights forward-only. The LFM3 all-target memory probe was cancelled (no GPU units until SFT ends): unmeasured.
+- **Support data from API teachers:** `program_tune.py teacher-tasks` -> `ops/teacher-gen-20261115/pool-progtune-decisions`
+  (160 support tasks each of ext_decisions_route / verdict / tally, ext_bgkit_pubmed_reading; dev/confirm never
+  reach a teacher), pool-v2-rich's `launch-multi.sh` with only `--work` changed, unit `tgen-progtune-2` (low, 7 GB;
+  preempted and requeued by the ledger at 277/640).
+- **Pop dev measurement:** `pop_rl_actor.py start|serve-checkpoint --adapter-release DIR` (release copied to Pop,
+  one SGLang adapter slot of its rank, attestation and reuse keyed by the release's result.json digest);
+  `/home/werg/data/program-tune-20261117/program-dev-pop.sh PIN P base|adapter|compare` (2 samples, grpo-v4's Pop
+  engine flags, policy ids from the binding).
+- **The real fit** (`progtune-fit3`, attention+conv, exact path) reached step 18/30 before the coordinator stopped it
+  (time-slicing slowed SFT 47 -> 74 s/step); its state is resumable but the rerun will be a fresh all-target factored
+  fit in a GPU window.
