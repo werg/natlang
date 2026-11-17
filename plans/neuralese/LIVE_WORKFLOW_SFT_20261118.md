@@ -17,7 +17,7 @@ format. A portable ProgramRecord may accompany tested code, but is not invented 
 - `sft_sources.extract`, `verified_episodes`, `core_candidates` and `build` handle both sources. Observed-live admission
   reopens the bound source artifacts before build. The shared `held_excluded_ids`, caps, near-duplicate filter,
   `call_row`, `TemplateRenderer`, target census and `exp0_sft.chains_of` remain authoritative. Semantic rows retain
-  world, source manifest, gateway evidence and observed-live verification mode. No probabilities or sampled IDs are
+  world, source manifest, gateway evidence, original root/ancestry attribution and observed-live verification mode. No probabilities or sampled IDs are
   invented; the learner template is a declared rendering of captured semantic contexts, not the teacher's tokenization.
 - Portable collection/replay remains `task_rollouts.prepare/score` and `sft_sources.replay_episode`; the latter returns
   `exact:false` for observed-live episodes before launching any runtime. Live worlds need test-owned live reruns.
@@ -34,11 +34,14 @@ format. A portable ProgramRecord may accompany tested code, but is not invented 
 `source_groups`, `source_revisions`, clean `code:{git_commit,dirty:false}`, `learner_kinds:["natlang-executor"]`,
 `world:{instance,run_id}`, `required_effect_kinds:["workspace","cdp"]` (only effects actually required), and bound
 `calls:[{path,sha256}]` and `verification:{path,sha256}`. Paths resolve relative to this manifest. Each call file is the
-unmodified raw detail `{callId,summary,record,...}` exported by natlang.trace. All model-executed calls in the selected
-validator scope must be present; call records outside that scope are refused.
+unmodified raw detail `{callId,summary,record,...}` exported by natlang.trace. All original calls in the selected
+validator scope must be present, including crisp and failed attempts as evidence. Every parent pointer must resolve
+within the bound tree, without cycles. Call records outside that scope are refused. Only successful `agent` or
+`crisp-agent` records contribute actual generation targets; crisp records need no model turns.
 
 The bound `natlang.live-task-verification/1` receipt contains matching `task_id`, outer `run_id`, and the complete manifest `world`, `status:"passed"`,
 nonempty `checks` whose values are true, a bound `validator:{path,sha256}` (scoped validator source/evidence),
+`root_call_ids` matching the exact roots of the captured call tree,
 `calls:[{call_id,owner_kind,owner_key,run_id}]` with actual authoritative EvalDO identities, and bound
 `evidence:[{kind:"workspace"|"cdp",path,sha256}]`. Evidence must include every required effect kind: actual before/after
 readbacks and typed test assertions belong here. Validation conversations/results are evidence, never executor targets.

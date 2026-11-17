@@ -32,16 +32,16 @@ def fixture(root):
                 'reply': {'text': '', 'raw_calls': [{'id': 'actual-tool-id', 'type': 'function', 'function':
                     {'name': 'eval', 'arguments': json.dumps({'code': 'workspace.write("draft", "hello")'})}}], 'calls': [['eval', {'code': 'workspace.write("draft", "hello")'}]],
                           'raw_response': {'vibestudio': gateway}}}
-    summary = {'call_id': 'call-one', 'task_id': 'internal-task', 'owner_kind': 'eval',
+    summary = {'call_id': 'call-one', 'parent_call_id': None, 'task_id': 'internal-task', 'owner_kind': 'eval',
                'owner_key': 'eval-owner', 'run_id': 'actual-eval-run'}
     detail = {'callId': 'call-one', 'summary': summary,
-              'record': {'version': 'natlang.calls/1', 'call_id': 'call-one', 'task_id': 'internal-task',
+              'record': {'version': 'natlang.calls/1', 'call_id': 'call-one', 'parent_call_id': None, 'outcome': 'done', 'task_id': 'internal-task',
                          'executor': {'kind': 'agent'}, 'definition': {'id': 'definition-one', 'name': 'createDraft'},
                          'model_turns': [exchange, {**exchange, 'kind': 'score'}]}}
     verification = {'schema': 'natlang.live-task-verification/1', 'task_id': 'live-draft',
                     'run_id': 'outer-world-run', 'world': {'instance': 'test-owned-instance', 'run_id': 'outer-world-run'},
                     'status': 'passed', 'checks': {'draft_contents': True},
-                    'calls': [copy.deepcopy(summary)],
+                    'root_call_ids': ['call-one'], 'calls': [copy.deepcopy(summary)],
                     'validator': artifact(root, 'validator.json', {'code': 'independent validator source'}),
                     'evidence': [{**artifact(root, 'readback.json', {'before': None, 'after': 'hello'}),
                                   'kind': 'workspace'}]}
@@ -95,7 +95,7 @@ def test_rehashed_wrong_scope_effect_or_target_is_rejected(tmp_path, mutation):
     elif mutation == 'checks':
         verification['checks']['draft_contents'] = False
     elif mutation == 'kind':
-        detail['record']['executor']['kind'] = 'crisp'
+        detail['record']['executor']['kind'] = 'outer-agent'
     elif mutation == 'split':
         spec['split'] = 'test'
     elif mutation == 'tool-id':
@@ -128,3 +128,54 @@ def test_shared_admission_rechecks_bound_originals_without_replay(tmp_path):
     (tmp_path / 'readback.json').write_text('{}')
     with pytest.raises(ValueError, match='artifact changed'):
         list(s.verified_episodes(tmp_path, funnel))
+
+
+def tree_fixture(root):
+    path, spec, detail, verification = fixture(root)
+    child = copy.deepcopy(detail)
+    child['callId'] = child['record']['call_id'] = child['summary']['call_id'] = 'agent-child'
+    child['record']['parent_call_id'] = child['summary']['parent_call_id'] = 'call-one'
+    child['record']['executor']['kind'] = 'crisp-agent'
+    child['record']['definition']['name'] = 'recoverAndWrite'
+    crisp = copy.deepcopy(child)
+    crisp['callId'] = crisp['record']['call_id'] = crisp['summary']['call_id'] = 'mechanism-child'
+    crisp['record']['executor']['kind'] = 'crisp'
+    del crisp['record']['model_turns']
+    failed = copy.deepcopy(child)
+    failed['callId'] = failed['record']['call_id'] = failed['summary']['call_id'] = 'failed-child'
+    failed['record']['outcome'] = 'failed'
+    spec['calls'] += [artifact(root, 'child.json', child), artifact(root, 'crisp.json', crisp),
+                      artifact(root, 'failed.json', failed)]
+    verification['calls'] += [child['summary'], crisp['summary'], failed['summary']]
+    spec['verification'] = artifact(root, 'verification.json', verification)
+    path.write_text(json.dumps(spec))
+    return path, spec, child, verification
+
+
+def test_whole_tree_keeps_crisp_and_failed_evidence_but_only_successful_agent_targets(tmp_path):
+    path, _, _, _ = tree_fixture(tmp_path)
+    episode = live.load_episode(path)
+    assert len(episode['call_tree']) == 4
+    assert [turn['invocation_id'] for turn in episode['turns']] == ['call-one', 'agent-child']
+    assert episode['turns'][1]['live_exchange']['call_ancestry'] == ['call-one', 'agent-child']
+    assert episode['turns'][1]['live_exchange']['root_call_id'] == 'call-one'
+    assert episode['call_tree'][2]['executor'] == 'crisp'
+    assert episode['call_tree'][3]['outcome'] == 'failed'
+
+
+@pytest.mark.parametrize('mutation', ['missing-parent', 'cycle', 'wrong-root', 'summary-parent'])
+def test_parent_closure_and_verified_root_attribution_are_required(tmp_path, mutation):
+    path, spec, child, verification = tree_fixture(tmp_path)
+    if mutation == 'missing-parent':
+        child['record']['parent_call_id'] = child['summary']['parent_call_id'] = 'omitted-parent'
+    elif mutation == 'cycle':
+        child['record']['parent_call_id'] = child['summary']['parent_call_id'] = 'agent-child'
+    elif mutation == 'wrong-root':
+        verification['root_call_ids'] = ['different-root']
+    elif mutation == 'summary-parent':
+        child['summary']['parent_call_id'] = 'foreign-parent'
+    spec['calls'][1] = artifact(tmp_path, 'child.json', child)
+    spec['verification'] = artifact(tmp_path, 'verification.json', verification)
+    path.write_text(json.dumps(spec))
+    with pytest.raises(ValueError, match='parent|roots'):
+        live.load_episode(path)

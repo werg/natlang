@@ -59,6 +59,7 @@ def load_episode(path):
             raise ValueError('live validation needs exact authoritative eval ownership')
         scopes[scope['call_id']] = scope
     turns, seen, models = [], set(), set()
+    records, details = {}, []
     for binding in spec.get('calls') or []:
         detail = json.loads(bound_file(binding, path.parent).read_text())
         record, summary = detail['record'], detail['summary']
@@ -70,8 +71,38 @@ def load_episode(path):
             raise ValueError('exported call identity differs from original record')
         if any(summary.get(k) != scopes[call_id].get(k) for k in ('owner_kind', 'owner_key', 'run_id')):
             raise ValueError('live call owner/eval run differs from verified scope')
-        if record.get('version') != 'natlang.calls/1' or record.get('executor', {}).get('kind') != 'agent':
-            raise ValueError('live source must contain original model-executed calls')
+        if (record.get('version') != 'natlang.calls/1' or
+                record.get('executor', {}).get('kind') not in ('agent', 'crisp', 'crisp-agent')):
+            raise ValueError('live source must contain original Natlang calls')
+        if ('parent_call_id' not in record or record['parent_call_id'] is not None and
+                (not isinstance(record['parent_call_id'], str) or not record['parent_call_id'])):
+            raise ValueError('live call needs its original explicit parent identity')
+        if summary.get('parent_call_id') != record['parent_call_id']:
+            raise ValueError('live call parent differs from authoritative summary')
+        records[call_id] = record
+        details.append((binding, record))
+    if seen != set(scopes):
+        raise ValueError('workflow call coverage incomplete')
+    roots = {call_id for call_id, record in records.items() if record['parent_call_id'] is None}
+    attested_roots = verification.get('root_call_ids')
+    if (not isinstance(attested_roots, list) or not attested_roots or
+            len(attested_roots) != len(set(attested_roots)) or roots != set(attested_roots)):
+        raise ValueError('live call roots differ from independently verified roots')
+    ancestry = {}
+    for call_id in records:
+        chain, current = [], call_id
+        while current is not None:
+            if current in chain:
+                raise ValueError('live call parent cycle')
+            if current not in records:
+                raise ValueError('live call parent missing from complete workflow tree')
+            chain.append(current)
+            current = records[current]['parent_call_id']
+        ancestry[call_id] = list(reversed(chain))
+    for binding, record in details:
+        call_id = record['call_id']
+        if record['executor']['kind'] == 'crisp' or record.get('outcome') != 'done':
+            continue  # exact mechanism and failed attempts remain evidence, never successful demonstration targets
         for index, exchange in enumerate(record.get('model_turns') or []):
             if exchange.get('schema') != 'natlang.model-exchange/1':
                 raise ValueError('unsupported live model exchange')
@@ -119,6 +150,7 @@ def load_episode(path):
                 'definition_id': definition.get('id'), 'parent_invocation': record.get('parent_call_id'),
                 'invocation_role': 'child' if record.get('parent_call_id') else 'root',
                 'live_exchange': {'call_artifact': binding, 'ordinal': index, 'gateway': gateway,
+                                  'root_call_id': ancestry[call_id][0], 'call_ancestry': ancestry[call_id],
                                   'target_source': 'actual-model-reply', 'student_sampling_claimed': False}})
     if seen != set(scopes) or not turns:
         raise ValueError('workflow call coverage incomplete or has no generated executor targets')
@@ -128,4 +160,8 @@ def load_episode(path):
             'task_id': spec['id'], 'family': spec['family'], 'task': task, 'turns': turns,
             'teacher': {'model_id': ','.join(sorted(models))},
             'verification_mode': 'observed-live', 'live_source': {'path': str(path), 'sha256': sha256_file_hex(path)},
-            'world': world}
+            'world': world, 'call_tree': [
+                {'call_id': r['call_id'], 'parent_call_id': r['parent_call_id'], 'executor': r['executor']['kind'],
+                 'outcome': r.get('outcome'), 'root_call_id': ancestry[r['call_id']][0], 'artifact': binding,
+                 'scope': scopes[r['call_id']]}
+                for binding, r in details]}
