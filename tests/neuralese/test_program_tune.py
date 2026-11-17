@@ -193,3 +193,24 @@ def test_a_differentiated_adapter_row_leaves_no_cyclic_garbage(tmp_path):
     finally:
         gc.enable()
     assert left < 50, left
+
+
+def test_pop_actor_serves_an_adapter_release_on_sglang_slots():
+    import pop_actor_driver
+    assert pop_actor_driver.adapter_args({}) == ['--sglang-adapter-slots', '0']
+    job = {'adapter_release': {'path': '/eval/adapter-ab', 'rank': 16, 'scale': 1.0, 'result_sha256': 'ab'}}
+    assert pop_actor_driver.adapter_args(job) == ['--adapter-release', '/eval/adapter-ab', '--adapter-scale', '1.0',
+                                                  '--sglang-adapter-slots', '1', '--sglang-adapter-rank', '16']
+
+
+def test_pop_attestation_distinguishes_base_and_adapted_actors(monkeypatch):
+    import io
+    import pop_rl_actor
+    def info(adapters):
+        binding = {'checkpoint_sha256': 'c' * 64, 'actor_export': {'format': 'x'},
+                   **({'adapters': {'result_sha256': adapters}} if adapters else {})}
+        return lambda *_a, **_k: io.BytesIO(json.dumps({'rl_policy_binding': binding}).encode())
+    monkeypatch.setattr(pop_rl_actor.urllib.request, 'urlopen', info(None))
+    assert pop_rl_actor.attested('http://pop', 'c' * 64) and not pop_rl_actor.attested('http://pop', 'c' * 64, 'ab')
+    monkeypatch.setattr(pop_rl_actor.urllib.request, 'urlopen', info('ab'))
+    assert pop_rl_actor.attested('http://pop', 'c' * 64, 'ab') and not pop_rl_actor.attested('http://pop', 'c' * 64)

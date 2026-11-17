@@ -77,7 +77,10 @@ def test_native_adapter_cached_graph_gradient_and_exact_restoration(tmp_path,fam
     assert all(torch.equal(value,values[name]) for name,value in model.named_parameters())
     assert torch.equal(model(plan)['h_final'],baseline)
     def fail():
-        assert dict(model.named_parameters())[name] is not originals[name]
+        # The adapter is live: substituted (exact path) or factored beside the base projection (training default).
+        from natlang_neuralese.model.native_adapters import FactoredLoRALinear
+        assert (dict(model.named_parameters())[name] is not originals[name]
+                or any(isinstance(module, FactoredLoRALinear) for module in model.modules()))
         raise RuntimeError('fixture callback failed')
     with pytest.raises(RuntimeError,match='fixture callback failed'):
         run_native(engine,fail,entries)
@@ -247,8 +250,11 @@ def test_native_adapter_preserves_tied_parameters_and_rejects_incomplete_optimiz
                          'embedding_weight_sha256':'3'*64,'architecture':'lfm'})
     adapter,name=nonzero_adapter(engine)
     def inspect_ties():
-        assert port.layers[1].self_attn.q_proj.weight is port.layers[3].self_attn.q_proj.weight
-        assert port.layers[1].self_attn.q_proj.weight is not original
+        # Both aliases of the tied matrix carry the adapter: substituted (exact path) or factored beside the base.
+        from natlang_neuralese.model.native_adapters import FactoredLoRALinear
+        first,second=port.layers[1].self_attn.q_proj,port.layers[3].self_attn.q_proj
+        assert first.weight is second.weight
+        assert (first.weight is not original) or (isinstance(first,FactoredLoRALinear) and isinstance(second,FactoredLoRALinear))
     run_native(engine,inspect_ties,[adapter.id])
     assert port.layers[1].self_attn.q_proj.weight is original
     assert port.layers[3].self_attn.q_proj.weight is original
@@ -304,3 +310,44 @@ def test_adapted_stored_state_import_gradients_require_the_exact_effective_model
     with pytest.raises(RequestError,match='foreign native state checkpoint'):
         native_graph_gradient(engine,{**request,'adapters':None},None)
     engine.store.close()
+
+
+@pytest.mark.parametrize('kind', ['free-lora', 'xs'])
+@pytest.mark.parametrize('dtype', [torch.float32, torch.bfloat16])
+def test_factored_training_equals_the_substituted_effective_weight(tmp_path, monkeypatch, kind, dtype):
+    """NATLANG_FACTORED_LORA (default): a differentiated adapted forward runs the delta as x A^T B^T beside the base
+    projection; loss and coefficient gradients equal the exact W + B A substitution (FP32: to rounding; BF16 base:
+    within the effective weight's BF16 rounding), and no model parameter is replaced."""
+    engine_fixture(tmp_path, 'lfm')
+    engine = load_native_engine(str(tmp_path / 'native.pt'), dtype=dtype)
+    available = target_parameters(engine.shared_model)
+    names = sorted(n for n in available if n.endswith(('q_proj.weight', 'in_proj.weight', 'w1.weight', 'w2.weight')))
+    record = create_adapter(engine, {'kind': kind, 'rank': 2, 'seed': 3, 'parameter_names': names})
+    g = torch.Generator().manual_seed(5)
+    values = {key: torch.randn(value.shape, generator=g) * (.05 if kind == 'free-lora' else .3)
+              for key, value in record.artifact.tensors.items()}
+    adapter = engine.store.put_native_tensor_artifact(replace(record.artifact, tensors=values))
+    model = engine.shared_model
+    plan = compile_graph([Invocation('answer', (4, 5, 6, 7, 8, 9))])
+    originals = dict(model.named_parameters())
+
+    def measure(factored):
+        monkeypatch.setenv('NATLANG_FACTORED_LORA', '1' if factored else '0')
+        leaves = {key: value.clone().requires_grad_(True) for key, value in values.items()}
+        replaced = []
+        def execute():
+            replaced.append(any(dict(model.named_parameters())[n] is not originals[n] for n in names))
+            loss = model.logits(model(plan)['h_final']).float().square().mean()
+            return loss.detach(), torch.autograd.grad(loss, list(leaves.values()))
+        loss, grads = run_native(engine, execute, [{'id': adapter.id, 'scale': .75}], leaves={adapter.id: leaves})
+        return loss, grads, replaced[0]
+
+    exact_loss, exact_grads, exact_replaced = measure(False)
+    loss, grads, replaced = measure(True)
+    assert exact_replaced and not replaced
+    tolerance = dict(rtol=2e-5, atol=1e-6) if dtype == torch.float32 else dict(rtol=3e-2, atol=1e-3)
+    torch.testing.assert_close(loss, exact_loss, **tolerance)
+    for got, want in zip(grads, exact_grads):
+        assert got.norm() > 0
+        torch.testing.assert_close(got, want, **tolerance)
+    assert all(dict(model.named_parameters())[n] is originals[n] for n in names)

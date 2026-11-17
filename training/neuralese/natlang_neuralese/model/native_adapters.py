@@ -270,6 +270,87 @@ def lowrank_factors(resolved):
     return factors
 
 
+def factored_training_enabled():
+    """``NATLANG_FACTORED_LORA`` (default on; ``0`` opts out): a differentiated adapted operation applies each target's
+    low-rank delta as ``x A^T B^T`` beside the unchanged base projection instead of substituting a materialized
+    ``W + B A`` (an FP32 delta per target plus its gradient: 21.6 GB CUDA on one 13k-token LFM3 row over every
+    target). The serving engines (SGLang slots, llama.cpp LoRA) apply adapters factored too."""
+    import os
+    return os.environ.get('NATLANG_FACTORED_LORA', '1') != '0'
+
+
+def factored_factors(resolved):
+    """``{target: (B, A)}`` (differentiable in the adapter leaves) when a grad-enabled operation can run factored,
+    else None (opted out, reference arithmetic, nothing adapted, or a 3-D expert bank target)."""
+    if not resolved or not torch.is_grad_enabled() or not factored_training_enabled():
+        return None
+    from ..common.native_higher_order import active_reference_arithmetic
+    if active_reference_arithmetic() is not None:
+        return None
+    try:
+        return lowrank_factors(resolved)
+    except ValueError:
+        return None
+
+
+class FactoredLoRALinear(nn.Module):
+    """A target Linear plus its low-rank delta: the base projection keeps its own native arithmetic
+    (``shared_state._linear``), the delta ``(x A^T) B^T`` runs in FP32 and the sum is rounded once to the output dtype."""
+
+    def __init__(self, original, factor_b, factor_a):
+        super().__init__()
+        # The original is not a registered submodule; its own parameter objects are registered under their own names,
+        # so the model's parameter inventory (names and identities) is unchanged while the wrapper is installed.
+        object.__setattr__(self, 'original', original)
+        self.register_parameter('weight', original.weight)
+        self.register_parameter('bias', original.bias)
+        self.in_features, self.out_features = original.in_features, original.out_features
+        self.factor_b, self.factor_a = factor_b, factor_a
+
+    def forward(self, x):
+        from .shared_state import _linear
+        out = _linear(self.original, x)
+        low = torch.nn.functional.linear(torch.nn.functional.linear(x.to(self.factor_a.dtype), self.factor_a),
+                                         self.factor_b.to(x.device))
+        return (out.float() + low).to(out.dtype)
+
+
+from contextlib import contextmanager
+
+
+@contextmanager
+def factored_lora_modules(model, factors):
+    """Temporarily replace every Linear alias of each adapted target by its ``FactoredLoRALinear``."""
+    parameters = dict(model.named_parameters())
+    by_weight = {}
+    for name, pair in factors.items():
+        if name not in parameters:
+            raise NativeAdapterError(f'factored adapter target {name} is not a model parameter')
+        by_weight[id(parameters[name])] = (name, pair)
+    changes, found, wrappers = [], set(), {}
+    try:
+        for name, module in list(model.named_modules(remove_duplicate=False)):
+            if not name or id(getattr(module, 'weight', None)) not in by_weight or isinstance(module, FactoredLoRALinear):
+                continue
+            if not isinstance(module, nn.Linear):
+                raise NativeAdapterError(f'factored adapter target {name} is not a Linear layer')
+            target, (factor_b, factor_a) = by_weight[id(module.weight)]
+            wrapper = wrappers.get(id(module))
+            if wrapper is None:
+                wrapper = wrappers[id(module)] = FactoredLoRALinear(module, factor_b, factor_a.to(module.weight.device))
+            parent_name, _, child = name.rpartition('.')
+            parent = model.get_submodule(parent_name) if parent_name else model
+            changes.append((parent, child, module))
+            found.add(target)
+            parent._modules[child] = wrapper
+        if found != set(factors):
+            raise NativeAdapterError(f'factored adapter targets without a Linear: {sorted(set(factors) - found)[:3]}')
+        yield
+    finally:
+        for parent, child, original in reversed(changes):
+            parent._modules[child] = original
+
+
 class bound_execution:
     """The native execution binding of `run_native` (effective identity, adapter binding) for work that runs the
     adapters elsewhere (the SGLang actor): resolves the entries and exposes them; substitutes no parameters."""
@@ -557,6 +638,12 @@ def run_native(engine, callback, entries=None, *, leaves=None, gradient_precisio
                 selected = [parameters[key.removeprefix('model.')] for key in cached_replacement]
                 with carrier_linear_modules(engine.shared_model, selected):
                     return torch.func.functional_call(_Operation(engine.shared_model, callback), cached_replacement, ())
+            factors = factored_factors(resolved)
+            if factors is not None:
+                # The base weights stay the model's own: ordinary autograd carries the delta's gradient to the
+                # adapter leaves and the base projections keep their cotangent routing.
+                with factored_lora_modules(engine.shared_model, factors):
+                    return callback()
             scope_parameters = [(name, parameter) for name, parameter in parameters.items()
                                 if cotangent_parameter_ids is None or id(parameter) in cotangent_parameter_ids]
             from .native_weight_carrier import carrier_backend

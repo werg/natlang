@@ -147,6 +147,17 @@ def transport_args(job, transport, stage, checkpoint):
     return args
 
 
+def adapter_args(job):
+    """SGLang adapter slots: none for a plain checkpoint; one resident slot of the release's rank for a program fit served
+    by default (``job['adapter_release']``: a `tune.build` output on Pop, `serve_native_checkpoint.py --adapter-release`),
+    so adapted turns run on SGLang and never on the CPU front."""
+    release = job.get('adapter_release')
+    if not release:
+        return ['--sglang-adapter-slots', '0']
+    return ['--adapter-release', release['path'], '--adapter-scale', str(release.get('scale', 1.0)),
+            '--sglang-adapter-slots', '1', '--sglang-adapter-rank', str(release['rank'])]
+
+
 def serve_sglang(job, checkpoint, transport, stage, work):
     """The DGX actor's own serving path on Pop's GPU: serve_native_checkpoint.py --engine sglang, run on the host (no
     container) from the fork's venv (~/.local/share/natlang/sglang-natlang-venv, the path training/neuralese/
@@ -169,7 +180,7 @@ def serve_sglang(job, checkpoint, transport, stage, work):
                '--sglang-max-running', str(sglang.get('max_running', 10)),
                '--sglang-max-total-tokens', str(sglang.get('max_total_tokens', 131072)),
                '--sglang-kv-cache-dtype', sglang.get('kv_cache_dtype', 'auto'),
-               '--sglang-adapter-slots', '0', '--hf-export-dir', str(work / 'sglang-hf' / job['source_sha256'][:16]),
+               *adapter_args(job), '--hf-export-dir', str(work / 'sglang-hf' / job['source_sha256'][:16]),
                *sglang.get('extra', [])]
     # FlashInfer JIT-compiles kernels with nvcc: Pop has no system CUDA toolkit, the venv's nvidia-cuda-nvcc wheel is it.
     cuda = '/usr/local/cuda'

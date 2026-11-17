@@ -311,14 +311,17 @@ def pop_host_address():
     return next(line.split()[1] for line in out.splitlines() if line.startswith('hostname '))
 
 
-def attested(endpoint, policy_id):
+def attested(endpoint, policy_id, adapters=None):
+    """The actor's info when it serves checkpoint ``policy_id`` and, with ``adapters`` (a release's result.json sha256),
+    exactly that default adapter release; a plain checkpoint actor must serve no default adapters."""
     try:
         with urllib.request.urlopen(endpoint + '/v1/neuralese/info', timeout=5) as f:
             info = json.load(f)
     except OSError:
         return None
     binding = info.get('rl_policy_binding') or {}
-    if binding.get('checkpoint_sha256') == policy_id and binding.get('actor_export'):
+    served = (binding.get('adapters') or {}).get('result_sha256')
+    if binding.get('checkpoint_sha256') == policy_id and binding.get('actor_export') and served == adapters:
         return info
     return None
 
@@ -337,6 +340,28 @@ def stop_unit(state):
             time.sleep(2)
 
 
+def adapter_release(args):
+    """(release dir, result.json sha256, largest node rank) of ``--adapter-release`` (a program fit, tune.build output)
+    or (None, None, None)."""
+    release = getattr(args, 'adapter_release', None)
+    if not release:
+        return None, None, None
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    release = Path(release)
+    result = json.loads((release / 'result.json').read_text())
+    return release, sha256_file_hex(release / 'result.json'), max(item['rank'] for item in result['artifacts'])
+
+
+def send_adapter_release(job, work, release, adapters, rank):
+    """Copy the release to Pop and name it in the job: the driver serves it by default on one SGLang adapter slot."""
+    remote = f'{work}/adapter-{adapters[:16]}'
+    ssh(shlex.join(['mkdir', '-p', remote]))
+    subprocess.run(['rsync', '-a', '--delete', f'{release}/result.json', f'{release}/artifacts',
+                    *([f'{release}/states'] if (release / 'states').is_dir() else []), f'{POP}:{remote}/'],
+                   check=True, timeout=3600)
+    job['adapter_release'] = {'path': remote, 'rank': rank, 'scale': 1.0, 'result_sha256': adapters}
+
+
 def start(args):
     # A previous actor of this lineage that still serves the same policy (the controller restarted mid-collection)
     # keeps its block store and its code: an actor process keeps the code it started with, and the controller records
@@ -345,9 +370,11 @@ def start(args):
     previous = read_json(STATE)
     runtime = str(REPO)
     sglang, sglang_format = pop_sglang(args.kv_cache_dtype, args.max_running)
+    release, adapters, rank = adapter_release(args)
     # ... with the same engine settings (KV dtype, running cap: held results pair only within one attested engine)
     if (previous and previous['policy_id'] == args.policy_id and previous.get('engine') == args.engine
-            and (args.engine != 'sglang' or previous.get('sglang') == sglang) and attested(previous['endpoint'], args.policy_id)):
+            and (args.engine != 'sglang' or previous.get('sglang') == sglang) and previous.get('adapters') == adapters
+            and attested(previous['endpoint'], args.policy_id, adapters)):
         log(event='Pop RL actor already serves the policy', endpoint=previous['endpoint'])
         return previous
     if previous:
@@ -389,6 +416,10 @@ def start(args):
     remove_pop_work([path for path in earlier if path != work][1:])
     subprocess.run(['scp', '-q', str(REPO / 'scripts/neuralese_data/pop_actor_driver.py'), f'{POP}:{work}/driver.py'],
                    check=True, timeout=120)
+    if release:
+        if args.engine != 'sglang':
+            raise RuntimeError('an adapter release is served on SGLang adapter slots (--engine sglang)')
+        send_adapter_release(job, work, release, adapters, rank)
     _pop_upload_json(job, f'{work}/job.json')
     unit = f'{name}-{int(time.time())}'
     # The SGLang actor runs on Pop's host (the fork's venv); the native one in its container.
@@ -402,7 +433,7 @@ def start(args):
                         '/usr/bin/python3', f'{work}/driver.py', f'{work}/job.json']))
     result = {'endpoint': endpoint, 'unit': unit, 'container': name, 'policy_id': source, 'work': work, 'runtime': runtime,
               'engine': args.engine, **({'sglang': sglang} if args.engine == 'sglang' else {}),
-              'prepared_seconds': round(time.time() - started, 1)}
+              'prepared_seconds': round(time.time() - started, 1), 'adapters': adapters}
     write_json(STATE, result)
     try:
         prune_dgx({source})   # older derived DGX views; the one just sent stays as the next delta base
@@ -413,7 +444,7 @@ def start(args):
         if pop_unit_state(unit).get('ActiveState') in ('inactive', 'failed'):
             tail = ssh(shlex.join(['journalctl', '--user', '-u', unit + '.service', '-n', '20', '--no-pager']), check=False)
             raise RuntimeError('Pop RL actor unit exited before readiness: ' + tail[-1200:])
-        if attested(endpoint, source):
+        if attested(endpoint, source, adapters):
             result['ready_seconds'] = round(time.time() - started, 1)
             write_json(STATE, result)
             log(event='Pop RL actor ready', **result)
@@ -466,9 +497,10 @@ def serve_checkpoint(args):
     """Serve a pruned native checkpoint on Pop's GPU (replacing whatever Pop's actor serves) and wait until it attests."""
     sha, commit = args.policy_id, args.commit
     sglang, sglang_format = pop_sglang(args.kv_cache_dtype, args.max_running)
+    release, adapters, rank = adapter_release(args)   # a program fit served by default (TUNING_RESTORE_20261117.md)
     previous = read_json(STATE)
     if (previous and previous['policy_id'] == sha and previous.get('code') == commit and previous.get('sglang') == sglang
-            and attested(previous['endpoint'], sha)):
+            and previous.get('adapters') == adapters and attested(previous['endpoint'], sha, adapters)):
         log(event='Pop actor already serves the checkpoint', endpoint=previous['endpoint'])
         return previous
     host = args.bind_host or pop_host_address()
@@ -495,6 +527,8 @@ def serve_checkpoint(args):
     ssh(shlex.join(['rm', '-f', f'{work}/driver.py']))
     subprocess.run(['scp', '-q', str(REPO / 'scripts/neuralese_data/pop_actor_driver.py'), f'{POP}:{work}/driver.py'],
                    check=True, timeout=120)
+    if release:
+        send_adapter_release(job, work, release, adapters, rank)
     _pop_upload_json(job, f'{work}/job.json')
     unit = f'{name}-{int(time.time())}'
     # Pop's 15 GB leave 11.4-11.5 GiB admissible: 11 GiB + the 0.5 GiB reserve was refused right after the rsync
@@ -502,14 +536,15 @@ def serve_checkpoint(args):
                     '--budget-gb', str(SGLANG_MEMORY_GB - .5), '--reserve-gb', str(POP_RESERVE_GB), '--class', 'experiment',
                     '--no-resumable', '--wait', '900', '--workdir', work, '--', '/usr/bin/python3', f'{work}/driver.py', f'{work}/job.json']))
     result = {'endpoint': endpoint, 'unit': unit, 'container': name, 'policy_id': sha, 'work': work, 'runtime': runtime,
-              'code': commit, 'engine': 'sglang', 'sglang': sglang, 'copy_seconds': round(copied - started, 1)}
+              'code': commit, 'engine': 'sglang', 'sglang': sglang, 'copy_seconds': round(copied - started, 1),
+              'adapters': adapters}
     write_json(STATE, result)
     deadline = time.monotonic() + args.ready_seconds
     while time.monotonic() < deadline:
         if pop_unit_state(unit).get('ActiveState') in ('inactive', 'failed'):
             tail = ssh(shlex.join(['journalctl', '--user', '-u', unit + '.service', '-n', '20', '--no-pager']), check=False)
             raise RuntimeError('Pop actor unit exited before readiness: ' + tail[-1200:])
-        if attested(endpoint, sha):
+        if attested(endpoint, sha, adapters):
             result['ready_seconds'] = round(time.time() - started, 1)
             write_json(STATE, result)
             log(event='Pop actor ready', **result)
@@ -547,6 +582,7 @@ def main(argv=None):
                    help="Pop's serving engine: the SGLang fork (host venv, see pop_actor_driver.serve_sglang) or the "
                         'native engine in its container')
     s.add_argument('--prepare-wait', type=int, default=900, help='ledger admission bound of the DGX view preparation')
+    s.add_argument('--adapter-release', help='a program fit (tune.build output on the DGX) the actor serves by default')
     c = commands.add_parser('serve-checkpoint', help='serve a pruned native checkpoint on Pop (exits once it attests)')
     for sub in (s, c):
         sub.add_argument('--kv-cache-dtype', choices=('fp8_e4m3', 'auto'), default=POP_KV_CACHE_DTYPE,
@@ -560,6 +596,7 @@ def main(argv=None):
     c.add_argument('--port', type=int, default=RL_PORT)
     c.add_argument('--bind-host')
     c.add_argument('--ready-seconds', type=int, default=1800)
+    c.add_argument('--adapter-release', help='a program fit (tune.build output on the DGX) the actor serves by default')
     commands.add_parser('stop')
     commands.add_parser('status')
     p = commands.add_parser('prepare-view', help=argparse.SUPPRESS)
